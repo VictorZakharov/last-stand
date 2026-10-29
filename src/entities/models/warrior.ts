@@ -1510,7 +1510,7 @@ export function buildWarrior(): Model {
    *  89 degrees past its turn; its fingers ahead on the pommel, the wrist bent 34 degrees past its range.) From play: "keep it stood", with a natural regrip. Stood point down at his side in one fist, the fist had
    *  to turn 120 degrees from how it held it standing, past a wrist's turn: his arm shot straight out ahead and the
    *  blade swept 0.5 to 2 m in a frame. */
-  const BETWEEN = tunable('warriorBetween', { ahead: 0.65, lean: 0.1, top: 0.35, arc: [0.25, 0.15], letGo: 0.7, take: 0.1, slant: 0.6, fingers: 1.6 });
+  const BETWEEN = tunable('warriorBetween', { ahead: 0.65, lean: 0.1, top: 0.35, arc: [0.25, 0.15], letGo: 0.7, take: 0.1, slant: 0.6, fingers: 1.6, lift: 0.35, held: [0.3, 0.3] });
   const LAY = tunable('warriorLay', { at: [-0.5, -0.1], twoAt: [-0.4, -0.4], maulAt: [-0.4, -0.2], arc: [0.25, 0.3], twoArc: [0.35, 0.3], letGo: 0.95 });
   const _plantHand = new THREE.Vector3(), _plantBox = new THREE.Box3(), _plantM = new THREE.Matrix4();
   /** a hand's weapon stood on its end: its grip's place there (world, `q`, `at`), the way from the hand to its
@@ -1712,15 +1712,17 @@ export function buildWarrior(): Model {
     p.at.y += LAY.arc[1] * arc;
     p.q.copy(_pq.slerp(p.q, e));
   }
-  /** A two-hander carried to stand between his feet (`BETWEEN`), `w` of the way, into `p.q` and `p.at` (its grip's
-   *  place): from where the fist had it as he started, in his own frame, turned the same way round all the way. */
+  /** A two-hander carried to stand between his feet (`BETWEEN`), `sat` of the sit, into `p.q` and `p.at` (its grip's
+   *  place), in two plain moves as a person makes them: lifted off his shoulder upright before his chest (`held`, to
+   *  `lift` of the carry), then its point let fall ahead to the floor (each the least turn between the two ways it
+   *  points: turned at once onto how it stands, it swung flat across his face). From `letGo` it's where the fist left
+   *  it, stood upright under his palm about its point. */
   function restBetween(p: Planted, sat: number, weapon: Weapon): void {
     const { grip } = p, w = Math.min(1, sat / BETWEEN.letGo);
-    // (carried in the fist, which it follows, to where its point meets the floor slanting; then from where the fist
-    // left it, upright under the palm: placed on a way of its own, the fist fell short of it, and it went 3.5 m with no
-    // hand on it)
+    // (carried in the fist, which it follows; then from where the fist left it: placed on a way of its own, the fist
+    // fell short of it, and it went 3.5 m with no hand on it)
     p.carried = sat < BETWEEN.letGo;
-    const stand = smooth(ramp(sat, BETWEEN.letGo + BETWEEN.take, 1)), lean = p.carried ? BETWEEN.slant : BETWEEN.lean;
+    const stand = smooth(ramp(sat, BETWEEN.letGo + BETWEEN.take, 1));
     root.updateMatrixWorld(true);
     root.getWorldQuaternion(_rootQ);
     if (p.turn < 0) {
@@ -1730,44 +1732,41 @@ export function buildWarrior(): Model {
     }
     const k = root.scale.x, s = _s5.setFromMatrixScale(grip.matrixWorld).y, [low, far] = reachAlong(weapon, grip);
     const ahead = _s4.set(0, 0, 1).transformDirection(root.matrixWorld).setY(0).normalize(), up = _s3.set(0, 1, 0);
-    // its point down and ahead, its flats to him (the side of them nearer how he held it)
-    const down = _s2.copy(up).multiplyScalar(-Math.cos(lean)).addScaledVector(ahead, Math.sin(lean));
-    const from = _fromQ.copy(_rootQ).multiply(p.startQ);
-    const flat = _s6.copy(ahead).addScaledVector(down, -ahead.dot(down)).normalize();
-    if (p.way === 0) p.way = _s7.set(0, 0, 1).applyQuaternion(from).dot(flat) >= 0 ? 1 : -1;
-    flat.multiplyScalar(p.way);
-    _sm.makeBasis(_s7.crossVectors(down, flat), down, flat);
-    _standQ.setFromRotationMatrix(_sm);
-    // its grip where its point, sunk to reach it, puts it
+    const pointing = (lean: number, out: THREE.Vector3) => out.copy(up).multiplyScalar(-Math.cos(lean)).addScaledVector(ahead, Math.sin(lean));
+    // where its point goes in, sunk as it's stood to bring its pommel down
     const spot = root.localToWorld(_plantHand.set(0, 0, BETWEEN.ahead));
     const floor = groundHeight(spot.x, spot.z), hips = j.hips.getWorldPosition(_s1).y;
-    // (its point on the floor as it's set there, pushed in as it's stood)
     const tall = (far - low) * s * Math.cos(BETWEEN.lean);
     const sink = THREE.MathUtils.clamp(floor + tall - (hips + BETWEEN.top * k), PLANT.deep[0], PLANT.deep[1]) * stand;
     spot.y = floor - sink;
-    _standAt.copy(spot).addScaledVector(down, -far * s);
     weapon.group.userData.stuckIn = sink;
     p.on = weapon;
     if (!p.carried) {
+      const upright = pointing(BETWEEN.lean, _s6);
+      _standAt.copy(spot).addScaledVector(upright, -far * s);
+      _pq.copy(_rootQ).multiply(p.landQ);
+      _standQ.setFromUnitVectors(_s7.set(0, 1, 0).applyQuaternion(_pq), upright).multiply(_pq);
       p.at.copy(p.landAt).applyMatrix4(root.matrixWorld).lerp(_standAt, stand);
-      p.q.copy(_rootQ).multiply(p.landQ).slerp(_standQ, stand);
-      p.up.copy(p.at).addScaledVector(_s2.set(0, 1, 0).applyQuaternion(p.q), low * s);
-      return;
+      p.q.copy(_pq).slerp(_standQ, stand);
+    } else {
+      const from = _fromQ.copy(_rootQ).multiply(p.startQ);
+      // upright before his chest, then its point down ahead
+      const held = _holdQ.setFromUnitVectors(_s7.set(0, 1, 0).applyQuaternion(from), up).multiply(from);
+      const slant = pointing(BETWEEN.slant, _s6);
+      const set = _standQ.setFromUnitVectors(up, slant).multiply(held);
+      const heldAt = p.shoulder.getWorldPosition(_holdAt).addScaledVector(ahead, BETWEEN.held[1] * k);
+      heldAt.y -= BETWEEN.held[0] * k;
+      _standAt.copy(spot).addScaledVector(slant, -far * s);
+      if (w < BETWEEN.lift) {
+        const e = smooth(w / BETWEEN.lift);
+        p.at.copy(p.startAt).applyMatrix4(root.matrixWorld).lerp(heldAt, e);
+        p.q.copy(from).slerp(held, e);
+      } else {
+        const e = smooth((w - BETWEEN.lift) / (1 - BETWEEN.lift));
+        p.at.copy(heldAt).lerp(_standAt, e).addScaledVector(ahead, BETWEEN.arc[0] * Math.sin(Math.PI * e) * k);
+        p.q.copy(held).slerp(set, e);
+      }
     }
-    p.at.copy(p.startAt).applyMatrix4(root.matrixWorld).lerp(_standAt, w);
-    const arc = Math.sin(Math.PI * w) * k;
-    p.at.addScaledVector(ahead, BETWEEN.arc[0] * arc).addScaledVector(up, BETWEEN.arc[1] * arc);
-    // (its tip forward and down about his side to side, as a sword's point is let fall ahead, and onto how it stands:
-    // by the shortest turn from upright, it swung flat across his face)
-    const side = _s1.set(1, 0, 0).transformDirection(root.matrixWorld);
-    const was = _s7.set(0, 1, 0).applyQuaternion(from).projectOnPlane(side).normalize();
-    const to = _s6.copy(down).projectOnPlane(side).normalize();
-    let tip = Math.atan2(side.dot(_s5.crossVectors(was, to)), was.dot(to));
-    if (tip < 0 && was.dot(ahead) <= 0) tip += Math.PI * 2;
-    _wayQ.setFromAxisAngle(side, tip).multiply(from);
-    // the rest of the way onto how it stands, a small turn, eased as the tip goes
-    _turnQ.copy(_standQ).multiply(_pq.copy(_wayQ).invert());
-    p.q.setFromAxisAngle(side, tip * w).multiply(from).premultiply(_pq.identity().slerp(_turnQ, w));
     // its pommel's top, for the hand to rest on
     p.up.copy(p.at).addScaledVector(_s2.set(0, 1, 0).applyQuaternion(p.q), low * s);
   }
