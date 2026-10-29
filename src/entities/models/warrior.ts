@@ -1493,7 +1493,7 @@ export function buildWarrior(): Model {
    *  his hand reaches from a seat, so the hand slides up its haft as he sets it down, to `hold` (m) off the floor and
    *  no nearer its head than `head` (the grip's units): held at the grip to the end, it was let go of 57 cm over the
    *  floor and dropped there in a frame. */
-  const LEAN = tunable('warriorLean', { at: [-0.42, 0.28], lean: 0.3, letGo: 0.8, hold: 0.55, head: 0.15 });
+  const LEAN = tunable('warriorLean', { at: [-0.42, 0.28], lean: 0.3, letGo: 0.8, hold: 0.55, head: 0.15, bend: 0.9, bow: 0.4 });
   const LEANS = new Set(['Axe', 'Mace']);
   const LAY = tunable('warriorLay', { at: [-0.5, -0.1], twoAt: [-0.4, -0.4], maulAt: [-0.4, -0.2], arc: [0.25, 0.3], twoArc: [0.35, 0.3], letGo: 0.95 });
   const _plantHand = new THREE.Vector3(), _plantBox = new THREE.Box3(), _plantM = new THREE.Matrix4();
@@ -2600,6 +2600,10 @@ export function buildWarrior(): Model {
     const legW = sitPose(j, st.sit, t);
     // (on the floor his hands rest empty on his knees, his weapons laid down)
     const floorSit = !!st.sit && onFloor(st.sit);
+    // (leaning a one-hander on a seat, he bends forward to set it down and to take it again: upright, his hand reached
+    // no lower than his thigh, 84 cm off the floor, and the axe's haft stood up to 65)
+    const leanR = !!(st.sit && !floorSit && !fp && st.dead < 0 && held && !two && LEANS.has(held.group.name));
+    if (leanR) j.spine.rotation.x += LEAN.bend * smooth(ramp(st.sit!.w, LEAN.bow, LEAN.letGo)) * (1 - smooth(ramp(st.sit!.w, LEAN.letGo, 1)));
     _sitTurn.roll[0] = offHeld && !sheathed && !floorSit ? SIT_HANDS.roll[0] : 0;
     _sitTurn.roll[1] = held && !floorSit ? SIT_HANDS.roll[1] : 0;
     st.look?.();
@@ -2610,7 +2614,6 @@ export function buildWarrior(): Model {
     if (!(held && plants)) _lifted.push(1);
     if (!(offHeld && !sheathed && plants)) _lifted.push(0);
     const carryTwo = !!(floorSit && two && plants);
-    const leanR = !!(st.sit && !floorSit && plants && held && !two && LEANS.has(held.group.name));
     // (a hand that stands its weapon on a seat is the plant's alone, from the arm fitted holding it: rested first, its
     // arm solved again to a pole of the rest's from the sit's first frame on, the axe in it went 82 cm in that frame)
     _resting.length = 0;
