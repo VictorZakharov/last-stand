@@ -77,6 +77,8 @@ export class Carried {
   private readonly followed: Followed[];
   /** the piece `trace` names, frame by frame: how far its meshes went and turned at most, held or not */
   readonly traced: string[] = [];
+  /** each hand where it was the frame before, for the trace: whether a piece jumped with its hand or in it */
+  private readonly handsWere = new Map<THREE.Object3D, HandAt>();
 
   /** `trace`: a piece to list frame by frame (`lab sit --trace`), by its name */
   constructor(private readonly lab: Lab, private readonly trace?: string) {
@@ -127,7 +129,13 @@ export class Carried {
       each.onJoint = onJoint;
       each.quaternion = quaternion;
     }
-    if (frameOf.seen) this.traced.push(traceLine(frame, frameOf));
+    if (frameOf.seen) this.traced.push(`${traceLine(frame, frameOf)}; ${this.handsMoved()}`);
+  }
+
+  /** How far each hand went and turned since the frame before, as a line's end. */
+  private handsMoved(): string {
+    const hands: [string, THREE.Object3D][] = [['right', this.lab.joints.handR], ['left', this.lab.joints.handL]];
+    return hands.map(([name, hand]) => `${name} hand ${handMoved(hand, this.handsWere)}`).join(', ');
   }
 
   /** Each piece the pose moved (held at some frame, or taken from where it hangs), and what it did: its mesh that
@@ -164,6 +172,23 @@ function traceInto(frame: TraceFrame, went: number, turned: number, held: boolea
   frame.turned = Math.max(frame.turned, turned);
   frame.held ||= held;
   frame.seen = true;
+}
+
+/** A hand's place and turn in the world at a frame. */
+interface HandAt {
+  at: THREE.Vector3;
+  quaternion: THREE.Quaternion;
+}
+
+/** How far a hand went and turned since it was last read, `were` keeping where it was. */
+function handMoved(hand: THREE.Object3D, were: Map<THREE.Object3D, HandAt>): string {
+  const at = hand.getWorldPosition(new THREE.Vector3());
+  const now = { at, quaternion: hand.getWorldQuaternion(new THREE.Quaternion()) };
+  const was = were.get(hand);
+  were.set(hand, now);
+  if (!was) return 'first seen';
+  const went = (now.at.distanceTo(was.at) * 100).toFixed(1);
+  return `${went} cm, ${(now.quaternion.angleTo(was.quaternion) * DEG).toFixed(1)}°`;
 }
 
 /** The traced piece's frame as a line. */
