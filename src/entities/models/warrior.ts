@@ -2688,12 +2688,13 @@ export function buildWarrior(): Model {
     // the other arm within a body's ranges too, its hand where the pose put it
     const grippedL = offHeld && !sheathed && !(plantOff > 0 && floorSit);
     if (plantOff > 0 && floorSit) layDown(plantL, plantOff, offHeld!);
-    if (floorSit && shield.visible) layShield(smooth(st.sit!.w));
-    else if (st.sit && shield.visible) standShield(smooth(st.sit.w));
     if (plantOff > 0 && !floorSit) plantArm(plantL, plantOff, offHeld!);
     else if (!fp && st.dead < 0 && !twoHeld) { slantL = fitArm(j, true, grippedL ? gripTurn(handL, gripL, _vl) : undefined, body, grippedL ? SLANT : undefined).slant; }
     else if (fp && st.dead < 0 && offHeld && !sheathed) slantL = fitInView(true, gripL, gripTurn(handL, gripL, _vl), SLANT, holdL) + holdL * swingSlantL;
     if (fp && st.dead < 0 && offHeld && !sheathed) wristInGrip(true, gripTurn(handL, gripL, _vl, slantL));
+    // (set down once the arm is fitted: the fit moved the hand, and the shield with it, 8 cm into the floor)
+    if (floorSit && shield.visible) layShield(smooth(st.sit!.w));
+    else if (st.sit && shield.visible) standShield(smooth(st.sit.w));
     // (a cut out of a blow turned to the floor and stopped by it, after the fade, fades from the arms as drawn; every
     // other from the pose's own: from the arms as fitted, the cut into a two-handed swing blended two elbows, and the
     // lower grip went 9 cm out of the left arm's reach)
