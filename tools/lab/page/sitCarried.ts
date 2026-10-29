@@ -107,14 +107,15 @@ export class Carried {
         if (!inHand && moved > STILL && farthest(onJoint, each.onJoint) > STILL) {
           each.loose += moved;
           each.looseFrames++;
-          each.looseAt ||= frame;
+          each.looseAt ||= `${meshName(part.mesh)}, from ${frame}`;
         }
         const turned = each.quaternion.angleTo(quaternion) * DEG;
+        const mesh = meshName(part.mesh);
         if (turned > TURN_MOST) {
-          each.jump = worse(each.jump, `turned ${turned.toFixed(0)}°`, turned / TURN_MOST, frame);
+          each.jump = worse(each.jump, `${mesh} turned ${turned.toFixed(0)}°`, turned / TURN_MOST, frame);
         }
         if (moved > THROW_MOST) {
-          each.jump = worse(each.jump, `went ${(moved * 100).toFixed(0)} cm`, moved / THROW_MOST, frame);
+          each.jump = worse(each.jump, `${mesh} went ${(moved * 100).toFixed(0)} cm`, moved / THROW_MOST, frame);
         }
       }
       each.world = world;
@@ -257,10 +258,15 @@ function isUnder(object: THREE.Object3D, over: THREE.Object3D): boolean {
 function nameOver(piece: THREE.Object3D, joints: Map<THREE.Object3D, string>): string {
   if (piece.name) return piece.name;
   let under = '';
-  piece.traverse((object) => {
+  piece.traverseVisible((object) => {
     under ||= object.name;
   });
   return under || `piece on the ${joints.get(piece.parent!) ?? 'body'}`;
+}
+
+/** A mesh's own name, its geometry's, or its kind. */
+function meshName(mesh: THREE.Mesh): string {
+  return mesh.name || mesh.geometry.name || mesh.geometry.type.replace('Geometry', '').toLowerCase() || 'mesh';
 }
 
 /** A box's opposite corners and one across them: enough to see it slide and turn. */
