@@ -1509,7 +1509,7 @@ export function buildWarrior(): Model {
    *  chin.) From play: "keep it stood", with a natural regrip. Stood point down at his side in one fist, the fist had
    *  to turn 120 degrees from how it held it standing, past a wrist's turn: his arm shot straight out ahead and the
    *  blade swept 0.5 to 2 m in a frame. */
-  const BETWEEN = tunable('warriorBetween', { ahead: 0.65, lean: 0.1, top: 0.35, arc: [0.25, 0.15], letGo: 0.8 });
+  const BETWEEN = tunable('warriorBetween', { ahead: 0.65, lean: 0.1, top: 0.35, arc: [0.25, 0.15], letGo: 0.8, fingers: 1.6 });
   const LAY = tunable('warriorLay', { at: [-0.5, -0.1], twoAt: [-0.4, -0.4], maulAt: [-0.4, -0.2], arc: [0.25, 0.3], twoArc: [0.35, 0.3], letGo: 0.95 });
   const _plantHand = new THREE.Vector3(), _plantBox = new THREE.Box3(), _plantM = new THREE.Matrix4();
   /** a hand's weapon stood on its end: its grip's place there (world, `q`, `at`), the way from the hand to its
@@ -1774,7 +1774,8 @@ export function buildWarrior(): Model {
       const rest = top.addScaledVector(lift, PLANT.palm[0] * k).addScaledVector(ahead, -PLANT.palm[1] * k);
       const arc = Math.sin(Math.PI * onTop) * k * BETWEEN.arc[1] * 0.3;
       wrist.lerp(rest, onTop).addScaledVector(lift, arc);
-      const fingers = _s2.copy(ahead).negate();
+      // (its fingers ahead, turned in by `fingers` (rad))
+      const fingers = _s2.copy(ahead).negate().applyAxisAngle(lift, BETWEEN.fingers);
       _restQ.setFromRotationMatrix(_sm.makeBasis(_s6.crossVectors(fingers, lift), fingers, lift));
       _fq.slerp(_restQ, onTop);
     }
