@@ -1884,7 +1884,7 @@ export function buildWarrior(): Model {
       // (the elbow swung round, not thrown: the hand stopped at its wrist's ends, a change of side turned the axe 20 cm
       // in a frame as he got up)
       solveArm(j, p.left, { wrist, hand: _fq.multiply(vis), vis, pole, body, flexion: GRIPPED_FLEXION, maxMove: PLANT_ELBOW, remember: false });
-    } else solveArm(j, p.left, { wrist, hand: _fq, pole, body, flexion: GRIPPED_FLEXION, maxMove: pivots ? PLANT_ELBOW : undefined, remember: false });
+    } else solveArm(j, p.left, { wrist, hand: _fq, pole, body, flexion: GRIPPED_FLEXION, maxMove: pivots ? PLANT_ELBOW : undefined, remember: pivots });
     // (how far its point is in, which the lab's measure of what goes under the floor allows)
     weapon.group.userData.stuckIn = p.carried ? sink * p.pivot : sink;
     p.on = weapon;
@@ -2930,7 +2930,10 @@ export function buildWarrior(): Model {
       grip.quaternion.copy(_pq).multiply(plantR.q);
     }
     if (plant > 0 && !floorSit && !leanR) {
-      const fitted = fitArm(j, false, gripTurn(handR, grip, _vr), body, two ? undefined : SLANT).slant;
+      // (a blade's arm its own solve's from the start, warm-started from its last frame: from the fit's each frame,
+      // which changed sides near standing, the elbow went 11 cm and a greatsword 86 cm in a frame)
+      const own = STANDS[held!.group.name] === 'point' && plantR.turn >= 0;
+      const fitted = own ? plantSlant : fitArm(j, false, gripTurn(handR, grip, _vr), body, two ? undefined : SLANT).slant;
       fittedArm(false, true);
       // (the handle's slant across the palm as it was fitted as he started: refitted each frame, it changed between
       // the few the fit tries as he got up, and a greatsword turned 35 degrees in a frame)
