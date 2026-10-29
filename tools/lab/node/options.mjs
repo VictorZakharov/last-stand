@@ -1553,7 +1553,8 @@ export const COMMANDS = {
       + 'top, his feet down or hanging as its height has them, every joint within its range, glancing round; then '
       + 'asked to act, a tap and a key held: up first each time, a tap left undone, a held key done once he\'s up',
     options: {
-      seats: { kind: 'list', usage: 'a,b', help: 'the seats tried: log, stone, column (all by default)' },
+      seats: { kind: 'list', usage: 'a,b', help: 'the seats tried: log, stone, column, fire, brazier (all by default)' },
+      frames: { kind: 'switch', help: 'list every frame his skirts jerked as he sat (their first 40)' },
       canary: { kind: 'switch', help: 'plant a fault the measure must catch: his body raised off the seat as he sits' },
       ...SETUP_OPTIONS,
       ...COMMON_OPTIONS,
