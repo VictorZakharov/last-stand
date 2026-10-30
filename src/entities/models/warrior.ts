@@ -1510,7 +1510,7 @@ export function buildWarrior(): Model {
    *  89 degrees past its turn; its fingers ahead on the pommel, the wrist bent 34 degrees past its range.) From play: "keep it stood", with a natural regrip. Stood point down at his side in one fist, the fist had
    *  to turn 120 degrees from how it held it standing, past a wrist's turn: his arm shot straight out ahead and the
    *  blade swept 0.5 to 2 m in a frame. */
-  const BETWEEN = tunable('warriorBetween', { ahead: 0.9, lean: 0.1, top: 0.35, arc: [0.25, 0.15], letGo: 0.7, take: 0.1, slant: 0.2, fingers: 1.6, lift: 0.4, held: [0.6, 0.1, 0.15], pace: 1.8 });
+  const BETWEEN = tunable('warriorBetween', { ahead: 0.9, lean: 0.1, top: 0.35, arc: [0.25, 0.15], letGo: 0.7, take: 0.1, slant: 0.2, fingers: 1.6, lift: 0.4, held: [0.6, 0.1, 0.15], aim: 1, pace: 1.8 });
   const LAY = tunable('warriorLay', { at: [-0.5, -0.1], twoAt: [-0.4, -0.4], maulAt: [-0.4, -0.2], arc: [0.25, 0.3], twoArc: [0.35, 0.3], letGo: 0.95 });
   const _plantHand = new THREE.Vector3(), _plantBox = new THREE.Box3(), _plantM = new THREE.Matrix4();
   /** a hand's weapon stood on its end: its grip's place there (world, `q`, `at`), the way from the hand to its
@@ -1841,7 +1841,11 @@ export function buildWarrior(): Model {
     const turns = (1 - onTop) * smooth(ramp(sat, 0, BETWEEN.lift * BETWEEN.letGo));
     const roll = turns > 0 ? { axis: direction, range: Math.PI * turns, at: p.at } : undefined;
     solveArm(j, false, { wrist, hand: _fq, pole, body, flexion: GRIPPED_FLEXION, roll, glide: roll ? 0.3 : undefined });
-    armOf(p).forEach((joint, i) => joint.quaternion.slerpQuaternions(_keyA[i], joint.quaternion, onTop));
+    // (from the fist round its grip: `slerpQuaternions` copies its first before it reads its second)
+    armOf(p).forEach((joint, i) => {
+      _keyB[i].copy(joint.quaternion);
+      joint.quaternion.slerpQuaternions(_keyA[i], _keyB[i], onTop);
+    });
   }
   /** The weapon arm carrying a two-hander, `w` of the way, the fist holding it as it held it on his shoulder: lifted
    *  off it to stand up at his side (`restBetween`'s `liftAt`), then its point tipped ahead into the ground (`setAt`).
@@ -1887,7 +1891,7 @@ export function buildWarrior(): Model {
     // (moved by as far as the arm's ranges left its point from where it's set, and held again: carried to where the
     // arm fell short, its point came down in front of his other leg and slid 39 cm through the ground under his palm)
     const miss = pointOf(p, p.seatSet, _kv).negate().add(_ka.copy(p.setAt).addScaledVector(_s1.set(0, 1, 0).applyQuaternion(p.setQ), p.reach));
-    holdKey(p, _s4.copy(p.setAt).add(miss), p.setQ, _keyB, p.seatSet);
+    if (BETWEEN.aim) holdKey(p, _s4.copy(p.setAt).add(miss), p.setQ, _keyB, p.seatSet);
     const e = smooth((w - BETWEEN.lift) / (1 - BETWEEN.lift));
     armOf(p).forEach((joint, i) => joint.quaternion.slerpQuaternions(_keyA[i], _keyB[i], e));
     p.swung = 1;
