@@ -88,6 +88,14 @@ export function staticShadow(light: THREE.PointLight): void {
   stillShadows.add(light);
 }
 
+/** `object` and all under it standing still for good: their matrices made once, never again each frame (three makes
+ *  every object's again as it renders, still or not: the village's cottages, lamps and walls were most of its 860). */
+export function standStill(object: THREE.Object3D): void {
+  object.updateMatrixWorld(true);
+  object.traverse((part) => { part.matrixAutoUpdate = false; });
+  object.matrixWorldAutoUpdate = false;
+}
+
 /** pooled lights casting still shadows while they're lit at a lamp (`lampShadow`), and how often one has been
  *  asked to be drawn again (`drawLampShadows`) */
 const lampShadows = new Set<THREE.PointLight>();
@@ -781,6 +789,60 @@ export function bakeStaticShadows(group: THREE.Group): void {
   inShadowsOnly(caster);
   caster.name = `${group.name} static shadow caster`;
   group.add(caster);
+}
+
+/** Whether `mesh` can be drawn merged with others of its material (`mergeStill`): a plain mesh standing still, one
+ *  material, nothing run round its draw. */
+function mergeable(mesh: THREE.Mesh): boolean {
+  if (!mesh.isMesh || (mesh as THREE.InstancedMesh).isInstancedMesh || (mesh as THREE.SkinnedMesh).isSkinnedMesh) return false;
+  if (Array.isArray(mesh.material) || mesh.userData.noMerge) return false;
+  if (Object.keys(mesh.geometry.morphAttributes).length) return false;
+  return !mesh.matrixAutoUpdate && mesh.visible && mesh.onBeforeRender === THREE.Object3D.prototype.onBeforeRender;
+}
+
+/** What sets a geometry's merge apart: its material, its attributes, whether it's indexed. */
+function mergeKey(mesh: THREE.Mesh): string {
+  const geometry = mesh.geometry;
+  const attributes = Object.keys(geometry.attributes).sort().join(',');
+  const material = mesh.material as THREE.Material;
+  return `${material.uuid}|${attributes}|${geometry.index ? 'indexed' : 'flat'}|${mesh.receiveShadow}|${mesh.castShadow}`;
+}
+
+/**
+ * Every mesh standing still under `root` (`standStill`) drawn as one with the others of its material: a draw each,
+ * the village's cottages, walls and lamps were most of its 257 draws a frame, and three's work for each (its program,
+ * its uniforms) most of the render's 7 ms on the CPU (`npm run lab -- perf --village --profile=render`). The wall and
+ * the baked shadow caster keep copies of their own, so the originals go; their shadows are the caster's
+ * (`bakeStaticShadows`, run first).
+ */
+export function mergeStill(root: THREE.Object3D): void {
+  root.updateMatrixWorld(true);
+  const groups = new Map<string, THREE.Mesh[]>();
+  root.traverse((object) => {
+    const mesh = object as THREE.Mesh;
+    if (!mergeable(mesh)) return;
+    const key = mergeKey(mesh);
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key)!.push(mesh);
+  });
+  for (const meshes of groups.values()) {
+    if (meshes.length < 2) continue;
+    const parts = meshes.map((mesh) => mesh.geometry.clone().applyMatrix4(mesh.matrixWorld));
+    const merged = mergeGeometries(parts);
+    for (const part of parts) part.dispose();
+    if (!merged) continue;
+    const first = meshes[0];
+    const one = new THREE.Mesh(merged, first.material);
+    one.name = `${root.name} still: ${(first.material as THREE.Material).name || first.name || 'merged'}`;
+    one.receiveShadow = first.receiveShadow;
+    one.castShadow = first.castShadow;
+    one.renderOrder = first.renderOrder;
+    one.layers.mask = first.layers.mask;
+    root.add(one);
+    one.updateMatrixWorld(true);
+    one.matrixAutoUpdate = false;
+    for (const mesh of meshes) mesh.removeFromParent();
+  }
 }
 
 /** Tube along `curve` whose radius tapers linearly from r0 to r1. */

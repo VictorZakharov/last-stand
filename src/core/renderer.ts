@@ -823,6 +823,15 @@ export const gpuMarks = { mark: (_label: string): void => {} };
 /** What is drawn over the finished frame, on the canvas at its own pixel ratio: the world's overlays (ui/overlay). */
 export const overFrame = { draw: (): void => {} };
 
+/** The scene's hidden parts left out of the frame's matrices: three makes every object's world matrix again as it
+ *  renders, shown or not, and the places not shown and the hall's room were a thousand of the village's 1853 objects
+ *  (`npm run lab -- perf --village --profile=render`). A part shown again is made again in that frame's render. */
+function matricesOfShownOnly(scene: THREE.Scene): void {
+  // (the scene itself never moves: its matrix made again each frame marked every object under it changed)
+  scene.matrixAutoUpdate = false;
+  for (const part of scene.children) part.matrixWorldAutoUpdate = part.visible;
+}
+
 export function render(): void {
   // a change the resize event missed: fit, and tell the rest of the page (UI scale...) too
   if (fitViewport()) window.dispatchEvent(new Event('resize'));
@@ -843,6 +852,7 @@ export function render(): void {
   u.uCap.value = (HI_CAP - HI_KNEE) * Math.max(1, hdr.peak / hdr.paper);
   gl.setRenderTarget(sceneRT);
   gpuMarks.mark('scene');
+  matricesOfShownOnly(G.scene);
   gl.render(G.scene, G.camera);
   if (armsFov !== null) { gpuMarks.mark('arms'); drawArmsOver(); }
   composer.render();

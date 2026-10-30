@@ -9,7 +9,7 @@ import { ARENA } from '../data/balance';
 import { BIOME_IDS, type BiomeId, type PlaceId } from '../data/biomes';
 import { groundHeight, setRelief } from './ground';
 import { setAdaptScale } from '../core/renderer';
-import { bakeStaticShadows, compileEnvMaps as compileEach, drawStillShadows, envMap, lampShadowsAsked, type Biome, type BiomeBuilder, type BiomeLook } from './props';
+import { bakeStaticShadows, compileEnvMaps as compileEach, drawStillShadows, envMap, lampShadowsAsked, mergeStill, type Biome, type BiomeBuilder, type BiomeLook } from './props';
 import { cullWhileDrawn, trimShadowCasters } from './culling';
 import { buildCrypt, CRYPT_ENV } from './crypt';
 import { buildForest, FOREST_ENV } from './forest';
@@ -70,6 +70,7 @@ export async function buildArena(scene: THREE.Scene, renderer: THREE.WebGLRender
     bakeStaticShadows(group);
     trimShadowCasters(group, shadowCameraFor(moon, b.look));
     group.visible = false;
+    group.matrixAutoUpdate = false;
     scene.add(group);
     places[id] = { group, b };
   }
@@ -80,7 +81,9 @@ export async function buildArena(scene: THREE.Scene, renderer: THREE.WebGLRender
   village.wall.seal();
   // (its casters aren't trimmed to a shadow camera: the sun goes round it with the hour)
   bakeStaticShadows(villageGroup);
+  mergeStill(villageGroup);
   villageGroup.visible = false;
+  villageGroup.matrixAutoUpdate = false;
   scene.add(villageGroup);
   places.village = { group: villageGroup, b: village };
   // (the hall of heroes' room, shown in the village's place while the hero selection screen is up: `showHall`)
@@ -90,6 +93,8 @@ export async function buildArena(scene: THREE.Scene, renderer: THREE.WebGLRender
   bakeStaticShadows(hallGroup);
   trimShadowCasters(hallGroup, shadowCameraFor(moon, hall.look));
   hallGroup.visible = false;
+  // (none of the places moves: a matrix made again each frame marks all under it changed, `standStill` in props.ts)
+  hallGroup.matrixAutoUpdate = false;
   scene.add(hallGroup);
   if (import.meta.env.DEV) {
     const groups = [...Object.values(places).map((p) => p.group), hallGroup];
