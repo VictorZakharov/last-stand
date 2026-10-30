@@ -41,6 +41,7 @@ import { everyLampCasts } from './villageLampShadows';
 import { hallCulledByDoor } from './villageHallCull';
 import { roadsBendWide } from './villageRoads';
 import { propHoleWhereHidden } from './villageSeeThrough';
+import { hallWallsSteady } from './villageHallSteady';
 
 export interface VillageOptions {
   canary: boolean;
@@ -91,6 +92,7 @@ export async function village(lab: Lab, options: VillageOptions): Promise<Report
     await lampsLitAsTheyCast(lab, options.canary),
     await everyLampCasts(lab, options.canary),
     await hallCulledByDoor(lab, options.canary),
+    await hallWallsSteady(lab, options.canary),
     roadsBendWide(options.canary),
     await propHoleWhereHidden(lab, options.canary),
     await training(lab, options.canary),
