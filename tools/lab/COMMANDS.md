@@ -216,7 +216,11 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   switched over to the torches at its door; `--canary` puts one out as he goes in); the hero's shadow from a lamp at
   midnight, the most the lamps' shadows take of a patch of paving behind him 3 m from it while he casts over what they
   take there while he doesn't, at least 15% (`page/villageHeroShadow.ts`: from play, "no shadows from lights", the
-  lamps' shadows drawn once with him hidden; 0.0% before, 79.5% after; `--canary` stops him casting); the terrace's
+  lamps' shadows drawn once with him hidden; 0.0% before, 79.5% after; `--canary` stops him casting); every street
+  lamp's ground round its foot read from over it lit and put out as the hero walks to each lamp in turn at midnight,
+  the casting lights handed over as his walk hands them, each lamp giving at least 30% of the light there
+  (`page/villageLampsCast.ts`: from play, "why this light is off", a lamp beside him lighting nothing; not reproduced,
+  the least 74%; `--canary` puts each lamp out for both its readings at the last stop); the terrace's
   stair walked up, the body's height on its top (`obj.position.y`:
   the player's `pos.y` is always 0, and a reading of it said 0 m up); in the close view (V), mouse look asking for the
   pointer on the square and letting it go once the hall of heroes is used (`pointerWanted` in `core/input.ts`: its

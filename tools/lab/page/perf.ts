@@ -31,6 +31,8 @@ import { reportRead } from './perfReport';
 import { inVillage, VILLAGE_SPOT } from './draws';
 import { holdHour } from '../../../src/game/clock';
 import { goTo, villageObject } from '../../../src/game/village';
+import { HALL, TERRACE, inHall } from '../../../src/data/village';
+import { groundHeight } from '../../../src/world/ground';
 
 export interface PerfOptions {
   biome: BiomeId;
@@ -85,6 +87,9 @@ const VILLAGE_FRAMES = 120;
 /** the frames the hero is given to walk from the square into the hall of heroes, to its dais (from play: "lag when
  *  entering hall of heroes", frames of 875 and 472 ms as he walked in) */
 const HALL_FRAMES = 900;
+/** where the hero stands in the hall to look out of its door at the square, how far in from the door (m) (from play,
+ *  a perf report "looking at plaza from hall": the render 15 ms of the CPU, 522 draws) */
+const OUT_FROM = 7;
 /** the slowest frames of a phase listed, each with what it spent */
 const SLOWEST_LISTED = 4;
 
@@ -367,7 +372,20 @@ async function villagePhases(lab: Lab): Promise<Phase[]> {
     await intoTheHall(lab),
     // (stood at the dais, the other heroes before him: the hall's own frame, the walk's frames left out)
     await timePhase(lab, 'in the hall', VILLAGE_FRAMES, () => ({})),
+    await lookingOut(lab),
   ];
+}
+
+/** The hero stood in the hall of heroes turned to its door, the square beyond it in view. */
+async function lookingOut(lab: Lab): Promise<Phase> {
+  const at = new THREE.Vector3(TERRACE.x, 0, HALL.door - OUT_FROM);
+  at.y = groundHeight(at.x, at.z);
+  G.player.walkTo = null;
+  // (facing 0 is along +z, out of the door)
+  G.player.place(at, 0);
+  await lab.step(15);
+  if (!inHall(G.player.pos.x, G.player.pos.z)) throw new Error('lab: perf: the hero isn\'t inside the hall');
+  return timePhase(lab, 'looking out of the hall', VILLAGE_FRAMES, () => ({}));
 }
 
 /** The hero walked of himself from the square into the hall of heroes, to its dais's stand. */
