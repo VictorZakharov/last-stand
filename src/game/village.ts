@@ -49,7 +49,7 @@ const PICK_SHARE = 0.55, PICK_MOST = 2.6;
  *  lamps at once (the nearest the hero), the pool's lights held for them (one more, for a lamp fading out as another
  *  fades in), each lamp's light and how fast it fades in or out (a second's share). From play: "lights are lame":
  *  pools drawn on the ground lit nothing round them */
-const LAMPLIGHT = { lit: 3, held: 5, color: 0xffb46a, intensity: 50, distance: 15, below: 0.25, fade: 2.5 };
+const LAMPLIGHT = { lit: 3, held: 5, color: 0xffb46a, intensity: 50, distance: 15, below: 0, fade: 2.5 };
 /** the hall's torches as the pool lights them: brighter and nearer than a street lamp (lit like one, the hall stood
  *  dark round its heroes) */
 const TORCHLIGHT = { intensity: 10, distance: 9, dais: 2, daisIntensity: 16, daisDistance: 8, door: 6 };
