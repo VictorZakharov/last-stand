@@ -28,7 +28,7 @@ import { SEAT_CANARY_CAUGHT, seatCanary, WeaponSeat } from './weaponSeat';
 import { bowOf } from './ranger';
 import { armsInLegs } from './armsInLegs';
 import { armsInBody } from './armsIn';
-import { Carried, heldApart, heldNow, IN_HAND_MOST, LOOSE_MOST, PALM_AT, SLID_MOST, turnHeld } from './sitCarried';
+import { Carried, FIST_OPEN, heldApart, heldNow, IN_HAND_MOST, LOOSE_MOST, PALM_AT, SLID_MOST, turnHeld } from './sitCarried';
 import { legsThrough, legsThroughCanary, THROUGH_FROM, type LegThrough } from './sitCloth';
 import { SitFilm } from './sitFilm';
 import { FRAMED_MOST, neckOnScreen, type Framed } from './sitFraming';
@@ -113,6 +113,9 @@ const DEEPEST_VIEWS: ViewName[] = ['right', 'front', 'left', 'above'];
 const CLOSE = { up: 0.3, distance: 3.2 };
 /** how much deeper (m) a moment goes in than the one pictured before it is pictured in its place */
 const PICTURE_DEEPER = 0.01;
+/** a fist let go of (a two-hander regripped as it's lowered) is pictured close on the hand as it opens and every so
+ *  many frames after while it's open (the frames), at most so many times a sit, from so far (m) */
+const OPEN_SHOTS = { every: 30, most: 4, distance: 1.2 };
 
 /** by a fire, his body's way off the way to it at most (degrees): from review, he sat 30 to 45 off it */
 const FACING_FIRE = 15;
@@ -205,6 +208,8 @@ interface Watch {
   shown: number;
   /** his arms held at two or more of their joints' stops at once ("he would snap his arm") */
   pinned: ArmsPinned;
+  /** a fist let go of: how many times it's been pictured, and the frames since it last was */
+  open: { shots: number; since: number };
   before: ReturnType<typeof heldNow>;
   canary: boolean;
   moments: Pictured[];
@@ -298,7 +303,7 @@ async function trySeat(lab: Lab, c: SeatCase, fixture: Fixture, options: SitOpti
   const watch: Watch = {
     carried: new Carried(lab, options.trace), film: new SitFilm(c.name, [c.views[0], 'third']), through: null,
     seat: [new WeaponSeat(seat, (each) => each.model.tip?.parent), new WeaponSeat(seat, bowApart)],
-    shown: 0, pinned: new ArmsPinned(c.name, ARM_LIMITS),
+    shown: 0, pinned: new ArmsPinned(c.name, ARM_LIMITS), open: { shots: 0, since: OPEN_SHOTS.every },
     before: heldNow(lab), canary: !!options.canary, moments: [],
   };
   const sat = await untilSat(lab, label, c.views.slice(0, 2), out, watch);
@@ -408,6 +413,7 @@ function watchFrame(lab: Lab, name: string, frame: string, watch: Watch, skirts:
   const strain = watch.pinned.observe(bodyBreaches(lab.joints).angles, grippingRanges(lab), frame);
   if (strain) watch.moments.push(closeUp(lab, `${name}: ${describeStrain(strain)} (${frame})`, DEEPEST_VIEWS, false));
   for (const piece of watch.seat) piece.observe(lab, frame);
+  pictureOpenFist(lab, name, frame, watch);
   const through = legsThrough(lab.joints, skirts);
   if (!through || through.depth <= THROUGH_FROM) return;
   if (!watch.through || through.depth > watch.through.depth) watch.through = { ...through, at: frame };
@@ -415,6 +421,25 @@ function watchFrame(lab: Lab, name: string, frame: string, watch: Watch, skirts:
   watch.shown = through.depth;
   const label = `${name}: his ${through.leg} ${cmOf(through.depth)} cm through his ${through.skirt} (${frame})`;
   watch.moments.push(closeUp(lab, label, DEEPEST_VIEWS, false));
+}
+
+/** A fist let go of round its handle (curled under `FIST_OPEN`), as a two-hander is regripped, pictured close on
+ *  the hand as it opens and every `OPEN_SHOTS.every` frames while it's open: the blade swung round in a closed fist
+ *  read as magic, so the regrip must be seen to be one. */
+function pictureOpenFist(lab: Lab, name: string, frame: string, watch: Watch): void {
+  const open = lab.model.fists?.find((fist) => fist.curl < FIST_OPEN);
+  const shots = watch.open;
+  shots.since = open ? shots.since + 1 : OPEN_SHOTS.every;
+  if (!open || shots.since < OPEN_SHOTS.every || shots.shots >= OPEN_SHOTS.most) return;
+  shots.since = 0;
+  shots.shots++;
+  const hand = open.hand === 'left' ? lab.joints.handL : lab.joints.handR;
+  const at = hand.getWorldPosition(new THREE.Vector3());
+  const curled = THREE.MathUtils.radToDeg(open.curl).toFixed(0);
+  const label = `${name}: his ${open.hand} fist let go of, curled ${curled}° (${frame}), what stands round him hidden`;
+  const hides = (part: string) => FIRE_PARTS.includes(part) || PLANTS.test(part) || AROUND.test(part);
+  const options = { at, distance: OPEN_SHOTS.distance, look: 'lit' as const };
+  watch.moments.push(withHidden(hides, () => lab.picture(label, DEEPEST_VIEWS, [], options)));
 }
 
 /** What's followed judged once he's up again: what he carries moved with no hand on it or jumping, his legs

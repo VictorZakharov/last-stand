@@ -352,6 +352,12 @@ export function fistTurn(h: Hand, dir: THREE.Vector3, up: THREE.Vector3, out: TH
  * is as far off it as one beside it), and how far its fingers are curled (their joints' mean bend, rad: 0 straight).
  * `handle` as `seat`'s grip, its +Y along the handle, its origin where the fist holds it.
  */
+/** A hand's fingers let go of what they're wrapped round by `by` (0 to 1: open), their bends eased towards straight:
+ *  a fist loosened for a blade to swing round in it. */
+export function loosen(h: Hand, by: number): void {
+  for (const f of h.f) for (const j of f.j) j.rotation.x *= 1 - by;
+}
+
 export function fistOn(h: Hand, handle: THREE.Object3D, r: number): { off: number; along: number; curl: number } {
   h.vis.updateWorldMatrix(true, false);
   const from = h.vis.localToWorld(_fa.set(0, GRIP_Y, -(r / h.vis.scale.x + GRIP_GAP))).sub(handle.getWorldPosition(_fc));
