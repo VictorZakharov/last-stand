@@ -365,6 +365,8 @@ async function villagePhases(lab: Lab): Promise<Phase[]> {
     await timePhase(lab, 'standing', VILLAGE_FRAMES, () => ({})),
     await timePhase(lab, 'walking', VILLAGE_FRAMES, (f) => ({ keys: f < half ? ['w'] : ['a'] })),
     await intoTheHall(lab),
+    // (stood at the dais, the other heroes before him: the hall's own frame, the walk's frames left out)
+    await timePhase(lab, 'in the hall', VILLAGE_FRAMES, () => ({})),
   ];
 }
 
