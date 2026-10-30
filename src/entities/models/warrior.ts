@@ -1514,7 +1514,7 @@ export function buildWarrior(): Model {
    *  end, and the ring kept loose as it rests on its point and leans about it as he sits, till it's let go of (turned
    *  round in a closed fist, "warrior magically rotates the sword in his hand"; held in the fist with no regrip, no
    *  arm rests its point on the floor, and his arm was held at its stops). */
-  const BETWEEN = tunable('warriorBetween', { ahead: 0.9, side: 0.5, lean: 0.1, top: 0.35, letGo: 0.7, take: 0.1, slant: 0, regrip: [0.12, 0.95], rest: [0.4, 0.5, 0.15, 0.1], clear: [0.3, 0.7], stages: [0.3, 0.45], hands: [2.5, 2.6] });
+  const BETWEEN = tunable('warriorBetween', { ahead: 0.9, side: 0.5, lean: 0.1, top: 0.35, letGo: 0.7, take: 0.1, slant: 0.07, regrip: [0.12, 0.95], rest: [0.4, 0.5, 0.15, 0.1], clear: [0.3, 0.7], stages: [0.3, 0.45], hands: [2.5, 2.6] });
   /** a model's hands with nothing to do as he sits */
   const NO_HANDS = { before: 0, after: 0 };
   /** whether a two-hander is stood between his feet on this sit (on a seat, not by a fire) */
