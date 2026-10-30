@@ -35,6 +35,7 @@ import { lightsNotBlinding } from './villageLights';
 import { lampsSteady } from './villageSteady';
 import { lampsAlike } from './villageLampsAlike';
 import { lampsThroughTheDoor } from './villageDoorLamps';
+import { heroShadowByLamp } from './villageHeroShadow';
 
 export interface VillageOptions {
   canary: boolean;
@@ -80,6 +81,7 @@ export async function village(lab: Lab, options: VillageOptions): Promise<Report
     await lampsSteady(lab, options.canary),
     await lampsAlike(lab, options.canary),
     await lampsThroughTheDoor(lab, options.canary),
+    await heroShadowByLamp(lab, options.canary),
     await training(lab, options.canary),
     await hoursCompileNothing(lab, options.canary),
   ];
@@ -93,7 +95,7 @@ export async function village(lab: Lab, options: VillageOptions): Promise<Report
 }
 
 /** The run left by the pause menu, the lobby's village shown and taking the hero's input. */
-async function toVillage(lab: Lab): Promise<void> {
+export async function toVillage(lab: Lab): Promise<void> {
   await lab.step(1, () => ({ keys: ['escape'] }));
   const abandon = document.getElementById('btn-abandon');
   if (!abandon) throw new Error('lab: no pause menu to leave the run by');

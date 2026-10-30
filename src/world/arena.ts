@@ -11,6 +11,7 @@ import { groundHeight, setRelief } from './ground';
 import { setAdaptScale } from '../core/renderer';
 import { bakeStaticShadows, compileEnvMaps as compileEach, drawStillShadows, envMap, lampShadowsAsked, mergeStill, type Biome, type BiomeBuilder, type BiomeLook } from './props';
 import { cullWhileDrawn, trimShadowCasters } from './culling';
+import { castHeroesOverLamps } from './lampShadows';
 import { buildCrypt, CRYPT_ENV } from './crypt';
 import { buildForest, FOREST_ENV } from './forest';
 import { buildVillage, VILLAGE_ENV, type Village } from './village';
@@ -54,6 +55,7 @@ export async function buildArena(scene: THREE.Scene, renderer: THREE.WebGLRender
   moon.shadow.normalBias = 0.03;
   scene.add(hemi, moon, moon.target);
   cullWhileDrawn(scene, renderer);
+  castHeroesOverLamps(renderer);
   const fog = scene.fog = new THREE.Fog(0);
 
   const places = {} as Record<PlaceId, { group: THREE.Group; b: Biome }>;
