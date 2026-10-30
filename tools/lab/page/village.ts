@@ -46,6 +46,7 @@ import { objectsUsedAgain } from './villageUseAgain';
 import { hallWallsHold } from './villageHallSide';
 import { wallingAligned } from './villageWalling';
 import { windowsLetSunIn } from './villageWindows';
+import { grassRingsUnseen } from './villageGrassRing';
 
 export interface VillageOptions {
   canary: boolean;
@@ -87,6 +88,7 @@ export async function village(lab: Lab, options: VillageOptions): Promise<Report
     await hallWallsHold(lab, options.canary),
     await hallFreesPointer(lab, options.canary),
     await grassSteady(lab, options.canary),
+    await grassRingsUnseen(lab, options.canary),
     await roundCottages(lab, options.canary),
     await walksAcross(lab, options.canary),
     await lightsNotBlinding(lab, options.canary),
