@@ -385,7 +385,12 @@ export interface AnimState {
 
 /** How far a hero is sat (`w`: 0 standing, 1 sat), his hips' pivot over the floor and his feet ahead of it (m), on the
  *  floor where he stood to sit if they reach it. */
-export interface SitState { w: number; hip: number; foot: number }
+/** How far an idle hero has sat (`entities/sitting.ts`): his hands' work before his body goes down (`before`: 0..1,
+ *  `Model.sitHands`), his body's way down (`w`), his hands' work once he's sat (`after`), his hips' height and his
+ *  feet's way ahead (m). Getting up, each runs back in turn. */
+export interface SitHands { before: number; after: number }
+
+export interface SitState { w: number; hip: number; foot: number; before: number; after: number }
 
 /** A foe an overhead blow comes down on (`AnimState.strike`): its middle on the ground, its radius and its top (m). */
 export interface Struck { x: number; z: number; r: number; top: number }
@@ -438,9 +443,10 @@ export interface Model {
   readonly lowerGrip?: LowerGrip | null;
   /** each hand holding a handle, and how it holds it (for the lab) */
   readonly fists?: readonly Fist[];
-  /** how many times as long as the sit's own (`entities/sitting.ts` `SIT`) he takes to sit and to get up, with what
-   *  he has to set down and take up (1 if absent) */
-  readonly sitPace?: number;
+  /** how long his hands take to make ready before he sits (s, standing: a two-hander lowered off his shoulder), and
+   *  once he's sat (a blade stuck into the ground), on a seat or on the floor (`floor`); getting up, the same back in
+   *  turn (none if absent) */
+  sitHands?(floor: boolean): SitHands;
   dispose(): void;
 }
 

@@ -25,7 +25,7 @@ import { angleDamp, damp, hitFlash, rand, smooth } from '../util';
 import { applyShadowDetail } from '../core/quality';
 import { castAsOne, type OneShadow } from './models/castAsOne';
 import { countDown, countHealed, countTaken } from '../game/stats';
-import type { ActionState, CastAnim, ClassDef, DamageType, DerivedStats, Gear, Model, Profile, SitState, SkillDef, SkillKey, Struck } from '../types';
+import type { ActionState, CastAnim, ClassDef, DamageType, DerivedStats, Gear, Model, Profile, SitHands, SitState, SkillDef, SkillKey, Struck } from '../types';
 import type { Enemy } from './enemy';
 
 const _lookFrom = new THREE.Vector3(), _lookAt = new THREE.Vector3(), _neck = new THREE.Vector3(), _aura = new THREE.Vector3();
@@ -116,6 +116,8 @@ export type PlayerOut = 'banked' | 'dead' | null;
 /** how fast a light lit only at full draw eases in, as its glint comes, and out (`damp`'s rates: in over a quarter
  *  second, the glint at full draw's first moments was lit less than main's) */
 const AURA_EASE = { in: 60, out: 12 };
+/** a model's hands with nothing to do as he sits */
+const NO_HANDS: SitHands = { before: 0, after: 0 };
 /** sat, a weapon's tip low by the floor (between these heights over it, m) moves the aura's light to over his head (`over`, m
  *  over his feet): a blade's point set in the ground lit a hot disc round it, and over it, his hand on the pommel */
 const AURA_LOW = { from: 0.5, to: 1.2, over: 2.9 };
@@ -146,7 +148,7 @@ export class Player {
   slot = 0;
   readonly spawn = new THREE.Vector3(0, 0, 3);
   /** a remote player: its latest reported state */
-  readonly remote: RemoteState = { x: 0, z: 3, vx: 0, vz: 0, f: Math.PI, ax: 0, az: 0, sit: { w: 0, hip: 0, foot: 0 } };
+  readonly remote: RemoteState = { x: 0, z: 3, vx: 0, vz: 0, f: Math.PI, ax: 0, az: 0, sit: { w: 0, hip: 0, foot: 0, before: 0, after: 0 } };
 
   readonly pos = new THREE.Vector3(0, 0, 3);
   readonly vel = new THREE.Vector3();
@@ -248,9 +250,9 @@ export class Player {
 
   /** The height the camera frames him by: his own, lowered with his neck as he sits (from play: zoomed in over the
    *  shoulder, the camera closed on where a standing hero's shoulders would be, over a seated one's head). */
-  /** how many times as long as the sit's own he takes to sit and to get up (`Model.sitPace`) */
-  get sitPace(): number {
-    return this.model.sitPace ?? 1;
+  /** how long his hands take before he sits and once he's sat (`Model.sitHands`) */
+  sitHands(floor: boolean): SitHands {
+    return this.model.sitHands?.(floor) ?? NO_HANDS;
   }
 
   framedHeight(): number {
@@ -1076,7 +1078,7 @@ export class Player {
       nocked: this.nocked,
       strike: action?.name === 'chop' ? this.struckAhead() : null,
       look: (weight) => this.lookAtFoe(dt, dead, this.standsIdle(move, action), weight),
-      sit: this.local ? this.sitting.pose : this.remote.sit.w > 0 ? this.remote.sit : null,
+      sit: this.local ? this.sitting.pose : this.remote.sit.w > 0 || this.remote.sit.before > 0 ? this.remote.sit : null,
     });
     // (dev builds: a joint taken past a body's range is reported; through the eyes the arms keep hand-placed poses)
     if (import.meta.env.DEV && this.local && dead < 0 && !this.eyes && this.model.joints) watchBody(this.model.joints, action?.name ?? (move > 0.05 ? 'moving' : 'standing'));

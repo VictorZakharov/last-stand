@@ -11,6 +11,7 @@
 // legs through his skirts (`sitCloth.ts`), with a film of the way down and up (`sitFilm.ts`). The canary raises his
 // body off the seat as he sits, pushes what he holds out of his hand, turns it in his hand as he gets up, and reads
 // a cloth point at his knee.
+import type { SitState } from '../../../src/types';
 import * as THREE from 'three';
 import { G } from '../../../src/state';
 import { groundHeight } from '../../../src/world/ground';
@@ -509,18 +510,20 @@ async function untilSat(lab: Lab, label: string, views: ViewName[], out: Out, wa
     await lab.step(1);
     walked ||= sitting.walking;
     const w = sitting.pose?.w ?? 0;
+    const stage = stageOf(sitting.pose);
     // (the joints past their ranges on the way down, with how far down he was)
     const past = sitting.walking ? undefined : bodyBreaches(lab.joints, grippingSides(lab)).found[0];
     const at = w > 0 ? 0 : 1;
     if (past && (!worst[at] || past.by > worst[at].by)) worst[at] = { by: past.by, name: past.name, w };
-    if (w > 0) into.observe(lab, `${f}, ${(w * 100).toFixed(0)}% down`);
-    watchFrame(lab, label, `frame ${f}, ${(w * 100).toFixed(1)}% down${sitting.walking ? ', walking' : ''}`, watch, skirts);
-    watch.film.take(lab, w, 'down');
+    if (sitting.pose) into.observe(lab, `${f}, ${(w * 100).toFixed(0)}% down${stage}`);
+    const said = `frame ${f}, ${(w * 100).toFixed(1)}% down${stage}${sitting.walking ? ', walking' : ''}`;
+    watchFrame(lab, label, said, watch, skirts);
+    watch.film.take(lab, w, 'down', moving(sitting.pose), shortStage(sitting.pose));
     if (!half && w >= 0.5) {
       half = true;
       out.moments.push(lab.picture(`${label}: half way down`, views));
     }
-    if (w >= 1) {
+    if (satWhole(sitting.pose)) {
       out.text.push(`  ${label}: sat after ${(f / RATE).toFixed(1)} s${walked ? ', walking there' : ''}`);
       const [down, stood] = worst;
       if (down) {
@@ -808,17 +811,51 @@ function slideOf(path: THREE.Vector3[]): number {
   return Math.max(...path.map((p) => Math.hypot(p.x - path[0].x, p.z - path[0].z)));
 }
 
-/** One frame of an ask: how far he's sat, where he is, whether he casts. */
+/** One frame of an ask: how far he's sat (`w`, his body; `left`, the whole sit, his hands' stages too: 0 up), where
+ *  he is, whether he casts. */
 interface AskRead {
   w: number;
+  left: number;
   at: THREE.Vector3;
   cast: boolean;
+}
+
+/** Whether he's sat with all of it done: his body down and his hands' part after it (`SitState.after`). */
+function satWhole(pose: SitState | null): boolean {
+  return !!pose && pose.w >= 1 && pose.after >= 1;
+}
+
+/** Whether his body or his hands are on their way (between their ends) this frame. */
+function moving(pose: SitState | null): boolean {
+  const left = sitLeft(pose);
+  return left > 0 && left < 3;
+}
+
+/** His hands' stage as a film frame's label puts it (`before` 40%: `, h40`; `after`: `, s40`), none at their ends. */
+function shortStage(pose: SitState | null): string {
+  if (!pose) return '';
+  if (pose.before < 1) return `, h${(pose.before * 100).toFixed(0)}`;
+  if (pose.after > 0 && pose.after < 1) return `, s${(pose.after * 100).toFixed(0)}`;
+  return '';
+}
+
+/** How much of the sit there is to undo: his body's share down and his hands' stages (0 up, 3 sat with all done). */
+function sitLeft(pose: SitState | null): number {
+  return pose ? pose.before + pose.w + pose.after : 0;
+}
+
+/** Which of his hands' stages the sit is in, as words after its share down (none while his body moves). */
+function stageOf(pose: SitState | null): string {
+  if (!pose) return '';
+  if (pose.before < 1) return `, his hands ${(pose.before * 100).toFixed(0)}% ready`;
+  if (pose.w >= 1 && pose.after > 0 && pose.after < 1) return `, his hands ${(pose.after * 100).toFixed(0)}% done sat`;
+  return '';
 }
 
 /** He's asked to act from the seat (sat again first if he's up): up before anything, then only a held key's done. */
 async function askOf(lab: Lab, c: SeatCase, ask: Ask, out: Out, watch: Watch): Promise<void> {
   const player = lab.player;
-  const sat = (player.sitting.pose?.w ?? 0) >= 1;
+  const sat = satWhole(player.sitting.pose);
   const again = { ...out, moments: [] };
   if (!sat && !(await untilSat(lab, `${c.name} again`, c.views.slice(0, 2), again, watch))) return;
   const skirts = skirtsOf(lab.model.root);
@@ -829,10 +866,12 @@ async function askOf(lab: Lab, c: SeatCase, ask: Ask, out: Out, watch: Watch): P
   const reads = await lab.step(frames, (f) => (ask.held || f < TAP ? input : { aim }), (frame): AskRead => {
     const w = player.sitting.pose?.w ?? 0;
     // (the way up is followed until he acts: a held attack swings what he holds as it means to)
-    const at = `${(w * 100).toFixed(0)}% down, getting up (${ask.what} tapped, frame ${frame})`;
+    const stage = stageOf(player.sitting.pose);
+    const at = `${(w * 100).toFixed(0)}% down${stage}, getting up (${ask.what} tapped, frame ${frame})`;
     if (!ask.held) watchFrame(lab, c.name, at, watch, skirts);
-    watch.film.take(lab, w, 'up');
-    return { w, at: player.pos.clone(), cast: Boolean(player.casting || player.channel) };
+    watch.film.take(lab, w, 'up', moving(player.sitting.pose), shortStage(player.sitting.pose));
+    const left = sitLeft(player.sitting.pose);
+    return { w, left, at: player.pos.clone(), cast: Boolean(player.casting || player.channel) };
   });
   const what = `the ${c.name}, ${ask.held ? 'held' : 'tapped'} ${ask.what}`;
   judgeAsk(what, ask, reads, out);
@@ -885,8 +924,8 @@ function pushOutOfHand(lab: Lab, frame: number): (() => void) | null {
 
 /** An ask judged: getting up at once, nothing done until he's up, a tap left undone, a held key done. */
 function judgeAsk(what: string, ask: Ask, reads: AskRead[], out: Out): void {
-  const rising = reads.slice(0, RISE_IN + 1).some((r, i) => i > 0 && r.w < reads[i - 1].w);
-  const up = reads.findIndex((r) => r.w <= 0);
+  const rising = reads.slice(0, RISE_IN + 1).some((r, i) => i > 0 && r.left < reads[i - 1].left);
+  const up = reads.findIndex((r) => r.left <= 0);
   const castSat = reads.slice(0, Math.max(0, up)).some((r) => r.cast);
   const after = up < 0 ? [] : reads.slice(up);
   const moved = after.length ? Math.max(...after.map((r) => r.at.distanceTo(after[0].at))) : 0;
