@@ -11,12 +11,12 @@ const focus = { value: new THREE.Vector3() };
  * fade runs out, z the share of pixels dropped at its core (0 turns it off), w how far short of
  * the player it stops. `minY`: nothing lower dissolves (the floor under a prop stays).
  */
-interface Kind { k: { value: THREE.Vector4 }; minY: { value: number } }
+interface Kind { k: { value: THREE.Vector4 }; minY: { value: number }; across: { value: number } }
 const kinds = {
   /** canopies: a wide hole in every view, since the tree line can hide the player top-down */
-  foliage: { k: { value: new THREE.Vector4(2.5, 5, 0.9, 1) }, minY: { value: -1e9 } },
+  foliage: { k: { value: new THREE.Vector4(2.5, 5, 0.9, 1) }, minY: { value: -1e9 }, across: { value: 1 } },
   /** props and walls: a narrow hole round the line to the player, in every view but through the eyes */
-  prop: { k: { value: new THREE.Vector4(1.0, 1.8, 0, 0.25) }, minY: { value: 0.12 } },
+  prop: { k: { value: new THREE.Vector4(1.0, 1.8, 0, 0.25) }, minY: { value: 0.12 }, across: { value: 1 } },
 } satisfies Record<string, Kind>;
 
 /** Props' dissolve strength at full weight: they stay a faint ghost, so the player can still see what they stand behind. */
@@ -25,12 +25,23 @@ const PROP_STRENGTH = 0.7;
  *  size on screen there: at the shoulder's, a stump beside him came apart though it hid nothing of him. */
 const PROP_HOLE_CLOSE = { from: 1.0, to: 1.8 };
 const PROP_HOLE_TOP = { from: 0.55, to: 1.05 };
+/** How much more the props' hole counts an offset across the view (level, aside of the line to him) than up and down
+ *  it, over the shoulder and from above: a body is a third as wide as it is tall (at 3, the wall half a metre beside
+ *  him still came apart in a strip), and a round hole his height across
+ *  took the wall or the cottage he stood beside apart toward the camera, though it hid nothing of him ("should not see
+ *  through here, because I'm in the front"). */
+const PROP_ACROSS = { close: 4, top: 1.2 };
+/** the props' across held by a harness (the round hole as it was, 1), or null */
+let acrossHeld: number | null = null;
+/** whether a harness holds the props' hole shut (a frame drawn as without it) */
+let fadeHeld = false;
 
 /** The fragment side's declarations and `seeFade()`: the share of this fragment to drop (0 where it hides nothing). */
 const SEE_FRAGMENT = `varying vec3 vSeeWp;
 uniform vec3 uSeeFocus;
 uniform vec4 uSeeK;
 uniform float uSeeMinY;
+uniform float uSeeAcross;
 float seeFade() {
   if (uSeeK.z <= 0.0 || vSeeWp.y <= uSeeMinY) return 0.0;
   vec3 seeCa = uSeeFocus - cameraPosition;
@@ -38,7 +49,16 @@ float seeFade() {
   vec3 seeDir = seeCa / seeL, seeCp = vSeeWp - cameraPosition;
   float seeAlong = dot(seeCp, seeDir);
   if (seeAlong <= 0.0 || seeAlong >= seeL - uSeeK.w) return 0.0;
-  return (1.0 - smoothstep(uSeeK.x, uSeeK.y, length(seeCp - seeDir * seeAlong))) * uSeeK.z;
+  // (the offset from the line, its part aside of it, level, counted uSeeAcross times over)
+  vec3 seeOff = seeCp - seeDir * seeAlong, seeLevel = vec3(-seeDir.z, 0.0, seeDir.x);
+  float seeLevelLength = length(seeLevel);
+  vec3 seeSide = seeLevelLength > 1e-3 ? seeLevel / seeLevelLength : vec3(1.0, 0.0, 0.0);
+  float seeAside = dot(seeOff, seeSide);
+  float seeR = length(seeOff + seeSide * seeAside * (uSeeAcross - 1.0));
+  // (a cone from the eye to him, its hole his own size where he stands: what hides him from the eye. A tube as wide all
+  // the way took the eave over the camera and the wall beside it apart, at the frame's edges)
+  seeR /= max(seeAlong / seeL, 0.05);
+  return (1.0 - smoothstep(uSeeK.x, uSeeK.y, seeR)) * uSeeK.z;
 }`;
 
 function bindUniforms(uniforms: Record<string, THREE.IUniform>, kind: keyof typeof kinds): void {
@@ -46,6 +66,7 @@ function bindUniforms(uniforms: Record<string, THREE.IUniform>, kind: keyof type
   uniforms.uSeeFocus = focus;
   uniforms.uSeeK = u.k;
   uniforms.uSeeMinY = u.minY;
+  uniforms.uSeeAcross = u.across;
 }
 
 /** Dissolve `m` where it stands between the camera and the player. Keeps any patch the material already has. */
@@ -95,5 +116,14 @@ export function updateSeeThrough(x: number, y: number, z: number, props: number,
   const k = kinds.prop.k.value;
   k.x = PROP_HOLE_CLOSE.from + (PROP_HOLE_TOP.from - PROP_HOLE_CLOSE.from) * top;
   k.y = PROP_HOLE_CLOSE.to + (PROP_HOLE_TOP.to - PROP_HOLE_CLOSE.to) * top;
-  k.z = PROP_STRENGTH * props;
+  k.z = fadeHeld ? 0 : PROP_STRENGTH * props;
+  kinds.prop.across.value = acrossHeld ?? PROP_ACROSS.close + (PROP_ACROSS.top - PROP_ACROSS.close) * top;
+}
+
+/** For a harness (tools/lab): the props' hole held shut, at once (a frame drawn again as it was, without it), and its
+ *  across held (null: the game's) from the next frame. */
+export function holdPropHole(shut: boolean, across: number | null = null): void {
+  fadeHeld = shut;
+  acrossHeld = across;
+  if (shut) kinds.prop.k.value.z = 0;
 }
