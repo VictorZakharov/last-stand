@@ -3,6 +3,7 @@
 // prop is no seat.
 import * as THREE from 'three';
 import type { Obstacle } from '../types';
+import type { OutlineTarget } from '../ui/overlay/outline';
 import { G } from '../state';
 import { groundHeight } from './ground';
 
@@ -14,6 +15,8 @@ export interface Seat {
   sit: number;
   circles: Obstacle[];
   meshes: THREE.Object3D[];
+  /** what's outlined as the cursor points at it, and what the cursor's ray meets of it (`seatPointed`) */
+  outline: OutlineTarget[];
   ground?: boolean;
 }
 
@@ -43,21 +46,60 @@ const _hits: THREE.Intersection[] = [];
 
 /** A log's or a column's seat: along its middle `half` either way of (`x`, `z`) on its axis turned `yaw`. */
 export function lengthSeat(x: number, z: number, yaw: number, half: number, sit: number, circles: Obstacle[],
-  meshes: THREE.Object3D[]): Seat {
+  meshes: THREE.Object3D[], outline: OutlineTarget[] = meshes.map((root) => ({ root }))): Seat {
   const ux = Math.cos(yaw) * half, uz = -Math.sin(yaw) * half;
-  return { ax: x - ux, az: z - uz, bx: x + ux, bz: z + uz, sit, circles, meshes };
+  return { ax: x - ux, az: z - uz, bx: x + ux, bz: z + uz, sit, circles, meshes, outline };
 }
 
 /** A stone's seat: its rim `sit` from its middle. */
-export function stoneSeat(o: Obstacle, sit: number, meshes: THREE.Object3D[]): Seat {
-  return { ax: o.x, az: o.z, bx: o.x, bz: o.z, sit, circles: [o], meshes };
+export function stoneSeat(o: Obstacle, sit: number, meshes: THREE.Object3D[], outline: OutlineTarget[]): Seat {
+  return { ax: o.x, az: o.z, bx: o.x, bz: o.z, sit, circles: [o], meshes, outline };
 }
 
 /** A fire's seat: the floor round it, his feet as near it as a seat's circles let him (from the owner: "it should be
  *  also possible to sit near fire after idle... just on the ground"). */
-export function fireSeat(o: Obstacle): Seat {
+export function fireSeat(o: Obstacle, outline: OutlineTarget[]): Seat {
   const sit = o.r + SEAT.near + 0.02 + SEAT.ground.foot;
-  return { ax: o.x, az: o.z, bx: o.x, bz: o.z, sit, circles: [o], meshes: [], ground: true };
+  return { ax: o.x, az: o.z, bx: o.x, bz: o.z, sit, circles: [o], meshes: [], outline, ground: true };
+}
+
+/** A seat the cursor points at: where its ray met it. */
+export interface Pointed { seat: Seat; x: number; z: number }
+
+const _pointer = new THREE.Raycaster(), _met: THREE.Intersection[] = [];
+const pointedNow: Pointed = { seat: null as unknown as Seat, x: 0, z: 0 };
+
+/** The seat of `seats` that `ray` (the cursor's) meets first, where it meets it within `reach` (m) of `from`, or none.
+ *  Read again by the next call. */
+export function seatPointed(ray: THREE.Ray, seats: readonly Seat[], from: THREE.Vector3, reach: number): Pointed | null {
+  _pointer.ray.copy(ray);
+  let nearest = Infinity;
+  for (const seat of seats) {
+    if (!seatStands(seat)) continue;
+    const mx = (seat.ax + seat.bx) / 2, mz = (seat.az + seat.bz) / 2;
+    if (Math.hypot(mx - from.x, mz - from.z) > reach + Math.hypot(seat.bx - seat.ax, seat.bz - seat.az)) continue;
+    for (const target of seat.outline) {
+      _met.length = 0;
+      _pointer.intersectObject(target.root, true, _met);
+      const hit = _met.find((each) => target.instance === undefined || each.instanceId === target.instance);
+      if (!hit || hit.distance >= nearest) continue;
+      if (Math.hypot(hit.point.x - from.x, hit.point.z - from.z) > reach) continue;
+      nearest = hit.distance;
+      pointedNow.seat = seat;
+      pointedNow.x = hit.point.x;
+      pointedNow.z = hit.point.z;
+    }
+  }
+  return nearest < Infinity ? pointedNow : null;
+}
+
+/** Where on `seat` a hero coming from `from` sits for a point of it (`x`, `z`: where the cursor met it): there along
+ *  it, on his side of it (or the other, his own taken). */
+export function seatSpotAt(seat: Seat, x: number, z: number, from: THREE.Vector3, radius: number): SeatSpot | null {
+  const { cx, cz } = nearestOn(seat, x, z);
+  const dx = from.x - cx, dz = from.z - cz, d = Math.hypot(dx, dz) || 1;
+  const near = 0.01 / d;
+  return seatSpot(seat, cx + dx * near, cz + dz * near, radius) ?? seatSpot(seat, cx - dx * near, cz - dz * near, radius);
 }
 
 /** Whether the seat's prop still stands. */
