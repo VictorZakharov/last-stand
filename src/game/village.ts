@@ -18,7 +18,8 @@ import { HALL, TERRACE, inHall } from '../data/village';
 import { standHeroes } from './hall';
 import { isWarm } from './warm';
 import { flash, release, type LightSlot } from '../fx/lights';
-import { lampsOut, lightLamp, placeLamps } from '../core/lamps';
+import { lampsOut, lightLamp, placeLamps, type LampPlace } from '../core/lamps';
+import { bakeLampShadows } from '../world/lampAtlas';
 import { drawLampShadows, lampShadow } from '../world/props';
 
 export interface VillageHooks {
@@ -276,12 +277,21 @@ function lampLight(i: number): { intensity: number; reach: number } {
 }
 
 /** Every lamp (the street lamps' and the hall's torches') placed in the lit shaders' list, the hall's inside its
- *  shelter: the torches light it alone, the street lamps all but it. */
-function placeTheLamps(): void {
+ *  shelter: the torches light it alone, the street lamps all but it. Returns their places. */
+function placeTheLamps(): LampPlace[] {
   const village = G.arena.village, n = village.lanterns.length;
   const shelter: [number, number, number, number] = [TERRACE.x - HALL.inHalf, HALL.wall, TERRACE.x + HALL.inHalf, HALL.inFront];
   const all = [...village.lanterns, ...village.hallTorches];
-  placeLamps(shelter, all.map((at, i) => ({ at: at.clone().setY(at.y - LAMPLIGHT.below), reach: lampLight(i).reach, inside: i >= n })));
+  const places = all.map((at, i) => ({ at: at.clone().setY(at.y - LAMPLIGHT.below), reach: lampLight(i).reach, inside: i >= n }));
+  placeLamps(shelter, places);
+  return places;
+}
+
+/** The village's lamps placed in the lit shaders' list and their shadows of what stands still drawn, as the boot
+ *  builds the world (`world/lampAtlas.ts`: a program of its own, compiled there and not at the first frame). */
+export function prepareLamps(renderer: THREE.WebGLRenderer, village: THREE.Object3D): void {
+  bakeLampShadows(renderer, village, placeTheLamps());
+  lampsPlaced = true;
 }
 
 /**

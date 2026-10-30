@@ -29,7 +29,7 @@ import { updateFloaters } from './ui/floaters';
 import { initHud, showHud, buildHotbar, banner, showDecision, hideDecision, resetDecision, updateHud, renderSpoils } from './ui/hud';
 import { initMenus, layOutMenuAhead, showMenu, showSummary, hideSummary, showPause, menuStowed, lobbyPractice, selectedWave, lobbyViewShift, renderMenu, markNew, clearOverlays, openPanels, panelsOpen, showHelp, helpOpen, hideHelp, changeHero as askForHeroes, type Panels } from './ui/menus';
 import { initVillageCard, showVillageCard, villageCardOf } from './ui/villageCard';
-import { initVillage, updateVillage, closedFrom, inYard, villageObject, goUse, goTo, objectNear } from './game/village';
+import { initVillage, prepareLamps, updateVillage, closedFrom, inYard, villageObject, goUse, goTo, objectNear } from './game/village';
 import { initVillageMap, setVillageMap, villageMapOpen, updateVillageMap } from './ui/villageMap';
 import { initTraining, completeStep, restartTraining } from './game/training';
 import { initTrainingTracker, updateTrainingTracker } from './ui/training';
@@ -102,6 +102,8 @@ async function boot() {
   G.arena.setHour(hourNow());
   // (the village's ground a hero can stand on, for his walks to a spot: game/village.ts goTo)
   prepareWalks(HERO_RADIUS);
+  // (and its lamps' shadows of what stands still, drawn once)
+  prepareLamps(renderer, scene.getObjectByName('village')!);
   initQuality();
   // the village shown, and its programs compiled while the hero is built (game/warmup.ts)
   const heroLit = compileTheBiome();
