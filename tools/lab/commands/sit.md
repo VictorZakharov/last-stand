@@ -79,6 +79,9 @@ camera code given `Player.framedHeight`), his neck sits on the screen within 0.1
 it sits standing: "zoom in/out with mouse wheel in 3rd person should zoom in on the seated character, not the
 standing one (if seated)" (by a fire it sat 0.67 under it, the camera at a standing hero's shoulders).
 
+Once its asks are done, each seat is sat on again by E (pressed standing free, he must set off within the time a
+press waits, `SIT.asked`), and pressed sat, E must get him up.
+
 `--canary` raises his body 12 cm off the log as he sits: it must be read as sitting on air; pushes what he holds out
 of his hand, 15 cm and a centimetre further each frame for half a second as he sits, read on its own by a `Carried`
 of its own: at least 15 cm of it must read as moved with no hand on it; turns what he holds 0.5 rad in his hand once

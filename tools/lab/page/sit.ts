@@ -46,6 +46,9 @@ export interface SitOptions {
 }
 
 const RATE = 60;
+/** frames E may take to set him off to sit or get him up, and the longest he may take to sit by it (s) */
+const KEY_TAKES = 2;
+const SIT_KEY_MOST = 15;
 const DEG = 180 / Math.PI;
 /** how far off the seat he stands to begin with (m), and how long he has to have sat by (s) */
 const START_OFF = 3;
@@ -314,6 +317,37 @@ async function trySeat(lab: Lab, c: SeatCase, fixture: Fixture, options: SitOpti
   }
   judgeWatch(c.name, watch, out);
   for (const line of watch.carried.traced) out.text.push(`    ${line}`);
+  await sitKey(lab, c.name, out);
+}
+
+/** Whether `done` comes true within `frames` frames, stepped one at a time until it does. */
+async function within(lab: Lab, done: () => boolean, frames: number): Promise<boolean> {
+  for (let frame = 0; frame < frames; frame++) {
+    if (done()) return true;
+    await lab.step(1);
+  }
+  return done();
+}
+
+/** E pressed standing free sets him off to the seat at once, with no idle wait, and pressed sat gets him up: from
+ *  play, "lets add E to sit ... to speed up the wait of 6 sec". */
+async function sitKey(lab: Lab, name: string, out: Out): Promise<void> {
+  const { player } = lab;
+  await lab.until(() => !player.casting && !player.channel && !player.sitting.pose, 5 * RATE, 'he was still busy');
+  await lab.step(1, () => ({ keys: ['e'] }));
+  // (as he comes free, within the time a press waits: just after a held attack his aim is still held a moment)
+  const going = await within(lab, () => player.sitting.walking || player.sitting.placed, SIT.asked * RATE + KEY_TAKES);
+  if (!going) {
+    out.problems.push(`sit: by the ${name}, E pressed standing free didn't set him off to sit`);
+    return;
+  }
+  const sat = await lab.until(() => satWhole(player.sitting.pose), SIT_KEY_MOST * RATE, `sat after E by the ${name}`);
+  const left = sitLeft(player.sitting.pose);
+  await lab.step(1, () => ({ keys: ['e'] }));
+  await lab.step(KEY_TAKES);
+  const rising = sitLeft(player.sitting.pose) < left;
+  if (!rising) out.problems.push(`sit: by the ${name}, E pressed sat didn't get him up`);
+  out.text.push(`    E: sat in ${(sat / RATE).toFixed(1)} s, ${rising ? 'and up again by it' : 'never up again by it'}`);
 }
 
 /** The over-the-shoulder camera zoomed in all the way: his neck as high on the screen sat as standing. */
