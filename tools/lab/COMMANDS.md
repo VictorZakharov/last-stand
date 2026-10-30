@@ -213,10 +213,17 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   close by, 45.7% apart; `--canary` puts the lamp out in the shaders' list while he's far off); the street lamps'
   light summed frame by frame as the hero walks from the hall's door into it, the list's and the casting lights'
   together, within 1% (`page/villageDoorLamps.ts`: from play, "lights turn off when I enter the hall", the lamps
-  switched over to the torches at its door; `--canary` puts one out as he goes in); the hero's shadow from a lamp at
-  midnight, the most the lamps' shadows take of a patch of paving behind him 3 m from it while he casts over what they
-  take there while he doesn't, at least 15% (`page/villageHeroShadow.ts`: from play, "no shadows from lights", the
-  lamps' shadows drawn once with him hidden; 0.0% before, 79.5% after; `--canary` stops him casting); every street
+  switched over to the torches at its door; `--canary` puts one out as he goes in); the hero's shadow from each
+  street lamp in turn at midnight, the most the lamps' shadows take of a patch behind him 3 m from it (on paving where
+  there's some round it) while he casts over what they take there while he doesn't, at least 15% by every lamp
+  (`page/villageHeroShadow.ts`: from play, "no shadows from lights", the lamps' shadows drawn once with him hidden;
+  0.0% before, 59 to 85% now; `--canary` stops him casting by the last lamp); every street lamp casting, the hero in
+  the hall so none holds a casting light: the ground within 3.5 m of each lamp's foot drawn from four sides 6 m off
+  it and 9 m up, with the lamps' shadows and held off (the shadows' map and the casting lights'), at least 1% of it
+  darker by 30% (`page/villageLampShadows.ts`: from play, "your light test for each light need to test SHADOW, it
+  was missing for half of them"; straight over a lamp the camera stood where its light does and saw every shadow
+  hidden behind its caster; 0.0% for every lamp without the shadows' map, 2.6 to 9.7% with it; `--canary` holds the
+  last lamp's shadows off for both readings); every street
   lamp's ground round its foot read from over it lit and put out as the hero walks to each lamp in turn at midnight,
   the casting lights handed over as his walk hands them, each lamp giving at least 30% of the light there
   (`page/villageLampsCast.ts`: from play, "why this light is off", a lamp beside him lighting nothing; not reproduced,
