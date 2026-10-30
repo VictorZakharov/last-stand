@@ -135,6 +135,7 @@ function standDown(): void {
     castShadows(p, true);
   }
   standing = [];
+  waited.clear();
 }
 
 export const hallOpen = (): boolean => heroes.length > 0;
@@ -204,12 +205,22 @@ export function standHeroes(on: boolean, dt: number, ahead = false): void {
     castShadows(player, false);
     standing.push(player);
   }
-  for (const p of standing) {
+  // (posed in turn, one a frame, each with the time since his last pose: posed every frame, the two heroes on the
+  // dais took 3 to 6 ms of each frame's update in the hall, which dropped to 62 to 80 frames a second, from play "still
+  // FPS drop when entering the hall"; at 144 a second each is still posed 72 times a second, and an idle stance hides it)
+  for (const p of standing) waited.set(p, (waited.get(p) ?? 0) + dt);
+  if (standing.length) {
+    const p = standing[poseTurn++ % standing.length];
     p.glances = true;
-    p.update(dt);
-    haloRound(p, dt);
+    p.update(waited.get(p) ?? dt);
+    waited.set(p, 0);
   }
+  for (const p of standing) haloRound(p, dt);
 }
+
+/** the time each standing hero has waited since he was last posed, and whose turn it is (`standHeroes`) */
+const waited = new Map<Player, number>();
+let poseTurn = 0;
 
 /** One of the other classes' heroes not yet kept built, out of the scene. */
 function buildAhead(): void {
