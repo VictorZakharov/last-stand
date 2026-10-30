@@ -34,7 +34,7 @@ import { buildMeadow, meadowGround, MeadowMask, type MaskUniforms } from './mead
 import { growTree, type TreeKind } from './ezTrees';
 import { TREE_KINDS } from './forest';
 import { leafClusterTexture } from './foliage';
-import { cullInCells, eachInstance, notInMovingShadows } from './culling';
+import { cullInCells, eachInstance } from './culling';
 import { buildFountain, type FountainLight } from './fountain';
 import {
   COTTAGE, PODIUM, SQUARE_R, TOMB, builtAt, footpathOf, fromGap, inWay, insidePalisade, palisadeCurve, palisadePolygon, roadLines, withinVillage,
@@ -971,8 +971,6 @@ function buildPalisade(scene: THREE.Object3D, wall: Wall, M: Mats, rng: () => nu
   }
   for (const mesh of [logs, tips]) {
     mesh.castShadow = mesh.receiveShadow = true;
-    // (round the whole village: within a lamp's reach at the gates alone)
-    notInMovingShadows(mesh);
     scene.add(mesh);
   }
   wall.add(logs, false);

@@ -556,6 +556,7 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   4.1), and its head line says the programs compiled from the run left to the frame drawn, each a problem. Each
   draw's triangles are summed as it's drawn: taken as the last draw's times the draws, a geometry whose draws a lamp's
   faces emptied counted all of them full.
+- `perf [<skills>]`: skills cast in turn as the player casts them (`page/perf.ts`; `maelstrom,glacialNova`), the
 - `trace [code]` and `recorder`: the performance traces slow games send, read back, and what recording them costs:
   in full in [`commands/traces.md`](commands/traces.md).
 - `perf <skills>`: skills cast in turn as the player casts them (`page/perf.ts`; `maelstrom,glacialNova`), the
@@ -576,7 +577,9 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   start to its end, its waits for the page's commands with it; on a desktop the scene pass's GPU time often matches
   the render's CPU time, as the GPU waits on it, so a triangle cut shows smaller there than on a phone whose GPU sets
   the pace. A cast pressed and never made, a shader compiled while it was timed, and frames all read 0 ms are
-  problems. `--canary` runs a round with the hero's update made 2 ms slower (it must read at least 0.8 of that) and
+  problems. `--village`: the lobby's village instead (`--hour` it's lit for), no skills or foes: the hero standing on
+  its square, then walking (120 frames each; `--at`, `--facing`); from the owner's report, 10 to 13 ms of GPU a frame
+  on an RTX 4070 Ti where the goal is a steady 144 frames a second (6.9 ms). `--canary` runs a round with the hero's update made 2 ms slower (it must read at least 0.8 of that) and
   the scene drawn twice (the scene pass's GPU time must read at least 1.3 times more), and the particles twice as
   wide (their fill must read at least 2.5 times more). The machine's load drifts: compare an A/B run `--fresh`, both
   sides then, not one side from the cache and the other now. Then the report as the overlay copies it is read

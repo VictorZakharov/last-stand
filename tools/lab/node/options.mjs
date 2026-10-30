@@ -543,12 +543,23 @@ export const COMMANDS = {
       + 'a shader compiled as it\'s timed and a canary unseen are problems (a phone\'s: --screen 832x384@3.75 '
       + '--quality low@518400 --throttle 4; --class mage)',
     argument: 'skills',
+    mayOmit: true,
     options: {
       biome: {
         kind: 'choice',
         choices: ['crypt', 'forest'],
         usage: 'crypt|forest',
         help: 'the biome (forest by default)',
+      },
+      village: {
+        kind: 'switch',
+        help: 'in the lobby\'s village instead, no skills: the hero standing on its square, then walking (--at, '
+          + '--facing where he stands)',
+      },
+      hour: {
+        kind: 'number',
+        usage: 'h',
+        help: 'with --village, the hour it\'s lit for (0 to 24: by night its lamps are lit)',
       },
       facing: { kind: 'number', usage: 'degrees', help: 'the way the hero faces and casts (0, +z, by default)' },
       at: SETUP_OPTIONS.at,
