@@ -27,6 +27,8 @@ const TILES = 8;
  *  quarter of the blades, and with blades only twice as wide it covered half the ground, the first ring a denser disc
  *  following the view (from play, "there is like a circle of different grass that moves when I move") */
 const WIDTH_IN_CELLS = 0.7;
+/** how much shorter than its blade a strand may be cut (a share of its height) */
+const STRAND_CUT = 0.35;
 /** how far before it the camera's sight is followed onto the ground for the rings' middle (m, at most), and the least
  *  steepness of the sight it's followed by (the sine of its pitch down): followed onto the ground as far as it went,
  *  a sight near level moved it from 2 m to 24 m and back as the head bobbed through the eyes, the dense ring with it,
@@ -226,6 +228,7 @@ const VERTEX_HEAD = /* glsl */ `
   uniform vec2 uOrigin;
   uniform float uCell;
   uniform float uWider;
+  uniform float uCombed;
   uniform int uS;
   uniform vec2 uTiles[${TILES * TILES}];
   uniform vec2 uFocus;
@@ -234,6 +237,7 @@ const VERTEX_HEAD = /* glsl */ `
   ${MEADOW_AT_GLSL}
   varying vec3 vBladeColour;
   varying vec2 vBlade;
+  varying vec2 vStrands;
   uvec2 pcg2d(uvec2 v) {
     v = v * 1664525u + 1013904223u;
     v.x += v.y * 1664525u; v.y += v.x * 1664525u;
@@ -304,7 +308,12 @@ const VERTEX_BLADE = /* glsl */ `
   float t = bv.x, side = bv.y;
   float tilt = 0.12 + fract(h.x * 13.1) * 0.35, bendK = 0.35 + fract(h.y * 7.7) * 0.7;
   float mid = tilt + bendK * t * 0.5, ang = tilt + bendK * t;
-  float w = width * (1.0 - pow(t, 2.5));
+  // (past the first ring a blade stands for as many of the first ring's, a sheet cut into strands of their width as
+  // it's shaded: untapered here, each strand tapered there; drawn whole, the far rings' blades were a lighter, coarser
+  // carpet, four times as wide in the second, and its edge a circle round the view as it moved)
+  float strands = uCombed * uWider * uWider;
+  float w = width * (strands > 1.5 ? 1.0 : 1.0 - pow(t, 2.5));
+  vStrands = vec2(strands, h.x);
   vec3 local = across * (side * w * 0.5) + lean * (t * height * sin(mid)) + vec3(0.0, t * height * cos(mid), 0.0);
   // the wind: gusts rolling across the meadow and a flutter a blade, bending by the square of t
   float roll = sin(uTime * 1.5 - root.x * 0.21 - root.y * 0.14) * 0.5 + 0.5;
@@ -322,6 +331,17 @@ const VERTEX_BLADE = /* glsl */ `
 
 const FRAGMENT_COLOUR = /* glsl */ `
   float along = vBlade.x, acrossB = abs(vBlade.y);
+#ifdef COMBED
+  if (vStrands.x > 1.5) {
+    // a sheet's strands: which one this is across it, where across it, and its own height (cut short at random)
+    float strandAt = (vBlade.y * 0.5 + 0.5) * vStrands.x;
+    float strand = floor(strandAt);
+    acrossB = abs(fract(strandAt) * 2.0 - 1.0);
+    float tall = 1.0 - ${STRAND_CUT.toFixed(2)} * fract(sin(strand * 12.9898 + vStrands.y * 78.233) * 43758.5453);
+    along = vBlade.x / tall;
+    if (along > 1.0 || acrossB > 1.0 - pow(along, 2.5)) discard;
+  }
+#endif
   vec3 bladeColour = vBladeColour * mix(0.3, 1.0, smoothstep(0.0, 0.55, along));
   bladeColour *= 1.0 - acrossB * acrossB * 0.3;
   bladeColour += vec3(0.02, 0.03, 0.0) * (1.0 - smoothstep(0.04, 0.16, acrossB)) * smoothstep(0.1, 0.4, along);
@@ -333,6 +353,7 @@ interface RingUniforms extends MaskUniforms {
   uOrigin: { value: THREE.Vector2 };
   uCell: { value: number };
   uWider: { value: number };
+  uCombed: { value: number };
   uS: { value: number };
   uTiles: { value: THREE.Vector2[] };
   uFocus: { value: THREE.Vector2 };
@@ -340,9 +361,27 @@ interface RingUniforms extends MaskUniforms {
   uTime: { value: number };
 }
 
-/** A ring's material: the standard one, its points placed as its blades (`VERTEX_BLADE`), coloured as grass. */
-function bladeMaterial(u: RingUniforms): THREE.MeshStandardMaterial {
+/** every ring's uniforms, as built, and how far a harness has moved their middle off where the view puts it (m) */
+const rings: RingUniforms[] = [];
+const focusMoved = new THREE.Vector2();
+
+/** For a harness (tools/lab): the rings' middle moved (x, z) m off where the view puts it, the view as it is: what of
+ *  the grass changes as the rings follow the hero, nothing else changed. */
+export function moveMeadowFocus(x: number, z: number): void {
+  focusMoved.set(x, z);
+}
+
+/** For a harness (tools/lab): the far rings' blades cut into strands (or drawn whole, each a wide blade, as they were). */
+export function meadowCombed(on: boolean): void {
+  for (const u of rings) u.uCombed.value = on ? 1 : 0;
+}
+
+/** A ring's material: the standard one, its points placed as its blades (`VERTEX_BLADE`), coloured as grass;
+ *  `combed`, its blades cut into strands, a program of its own (a discard in it would hold the depth test back to
+ *  after the shading for the first ring's dense blades too, which never cut). */
+function bladeMaterial(u: RingUniforms, combed: boolean): THREE.MeshStandardMaterial {
   const m = new THREE.MeshStandardMaterial({ roughness: 0.85, side: THREE.DoubleSide });
+  if (combed) m.defines = { COMBED: '' };
   m.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, u);
     shader.vertexShader = shader.vertexShader
@@ -350,13 +389,13 @@ function bladeMaterial(u: RingUniforms): THREE.MeshStandardMaterial {
       .replace('#include <beginnormal_vertex>', VERTEX_BLADE)
       .replace('#include <begin_vertex>', 'vec3 transformed = bladePos;');
     shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', '#include <common>\nvarying vec3 vBladeColour;\nvarying vec2 vBlade;')
+      .replace('#include <common>', '#include <common>\nvarying vec3 vBladeColour;\nvarying vec2 vBlade;\nvarying vec2 vStrands;')
       .replace('vec4 diffuseColor = vec4( diffuse, opacity );', FRAGMENT_COLOUR)
       // (the face bent up is the lit one from either side: flipped on the back, every blade's back was dark)
       .replace('#include <normal_fragment_begin>',
         THREE.ShaderChunk.normal_fragment_begin.replace('gl_FrontFacing ? 1.0 : - 1.0', '1.0'));
   };
-  m.customProgramCacheKey = () => 'meadow-blades';
+  m.customProgramCacheKey = () => (combed ? 'meadow-blades-combed' : 'meadow-blades');
   return m;
 }
 
@@ -400,6 +439,7 @@ export function buildMeadow(mask: MeadowMask, maskTexture: THREE.Texture, update
       uOrigin: { value: new THREE.Vector2() },
       uCell: { value: ring.cell },
       uWider: { value: ring.cell / RINGS[0].cell },
+      uCombed: { value: 1 },
       uS: { value: S },
       uTiles: { value: Array.from({ length: TILES * TILES }, () => new THREE.Vector2()) },
       uFocus: { value: new THREE.Vector2() },
@@ -409,14 +449,15 @@ export function buildMeadow(mask: MeadowMask, maskTexture: THREE.Texture, update
       uMeadow: { value: maskTexture },
       uMeadowHalf: { value: mask.half },
     };
+    rings.push(u);
     const geo = bladeGeometry(ring.segs);
-    const mesh = new THREE.Mesh(geo, bladeMaterial(u));
+    const mesh = new THREE.Mesh(geo, bladeMaterial(u, k > 0));
     mesh.name = `meadow grass ${k + 1}`;
     // (the tiles are its culling: three's sphere would be round no points)
     mesh.frustumCulled = false;
     mesh.receiveShadow = true;
     mesh.onBeforeRender = (_renderer, _scene, camera) => {
-      const focus = focusOf(camera, u.uFocus.value);
+      const focus = focusOf(camera, u.uFocus.value).add(focusMoved);
       const ox = Math.floor(focus.x / ring.cell) - (N >> 1), oz = Math.floor(focus.y / ring.cell) - (N >> 1);
       u.uOrigin.value.set(ox, oz);
       _frustum.setFromProjectionMatrix(_viewProj.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse));
