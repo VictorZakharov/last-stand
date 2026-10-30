@@ -210,10 +210,27 @@ interface Mats {
  *  as one lit box, the bloom spread each into a blob) */
 const WINDOW_GLOW = 1.3;
 
+/** the maps' chunks whose one read of their map `unrepeated` reads shifted instead, each its map and its uv */
+const UNREPEATED_READS = [
+  ['map_fragment', 'map', 'vMapUv'],
+  ['roughnessmap_fragment', 'roughnessMap', 'vRoughnessMapUv'],
+  ['metalnessmap_fragment', 'metalnessMap', 'vMetalnessMapUv'],
+  ['normal_fragment_maps', 'normalMap', 'vNormalMapUv'],
+  ['aomap_fragment', 'aoMap', 'vAoMapUv'],
+] as const;
+
+/** `chunk` of three's with each read of `map` at `uv` read shifted (`unrep`). */
+function shiftedReads(chunk: keyof typeof THREE.ShaderChunk, map: string, uv: string): string {
+  return THREE.ShaderChunk[chunk].split(`texture2D( ${map}, ${uv} )`).join(`unrep( ${map}, ${uv} )`);
+}
+
 /**
  * `m`, a paving's, shaded in broad patches over the world, some stones darker and some paler, worn and stained, so its
  * tile's own patches don't line up across the square: a tile a metre and a half, repeated, read as a grid of the same
- * blotches (from play, "texture tiling on the ground too obvious"). Its own program, made at the village's warm-up.
+ * blotches (from play, "texture tiling on the ground too obvious"). Its stones don't line up either: every map is
+ * read twice, shifted by one of six offsets and the next as a slow noise over the world picks them (a patch a few
+ * metres across each: changed every half metre, the stones were mush), and blended between (its tile's own stones came round every 1.5 m in rows, "ground texture tiling is still a little too
+ * obvious"). Its own program, made at the village's warm-up.
  */
 function unrepeated<M extends THREE.MeshStandardMaterial>(m: M): M {
   m.onBeforeCompile = (shader) => {
@@ -229,8 +246,21 @@ function unrepeated<M extends THREE.MeshStandardMaterial>(m: M): M {
           vec2 i = floor(p), f = fract(p);
           f = f * f * (3.0 - 2.0 * f);
           return mix(mix(paveH(i), paveH(i + vec2(1, 0)), f.x), mix(paveH(i + vec2(0, 1)), paveH(i + vec2(1, 1)), f.x), f.y);
-        }`)
-      .replace('#include <map_fragment>', `#include <map_fragment>
+        }
+        vec4 unrep(sampler2D s, vec2 uv) {
+          float pick = paveN(vPaveXZ * 0.12) * 6.0;
+          float k = floor(pick);
+          vec2 a = sin(vec2(3.0, 7.0) * k), b = sin(vec2(3.0, 7.0) * (k + 1.0));
+          vec2 dx = dFdx(uv), dy = dFdy(uv);
+          // (blended over a narrow band: the stones lie over each other only there. Led by which of the two stones
+          // stood taller, the two were picked pixel by pixel, and the paving was mush)
+          return mix(textureGrad(s, uv + a, dx, dy), textureGrad(s, uv + b, dx, dy), smoothstep(0.35, 0.65, fract(pick)));
+        }`);
+    for (const [chunk, map, uv] of UNREPEATED_READS) {
+      shader.fragmentShader = shader.fragmentShader.replace(`#include <${chunk}>`, shiftedReads(chunk, map, uv));
+    }
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <color_fragment>', `#include <color_fragment>
         float broad = paveN(vPaveXZ * 0.11) * 0.55 + paveN(vPaveXZ * 0.37 + 4.0) * 0.3 + paveN(vPaveXZ * 1.3 + 9.0) * 0.15;
         float stained = smoothstep(0.55, 0.85, paveN(vPaveXZ * 0.21 + 17.0));
         diffuseColor.rgb *= mix(0.72, 1.18, broad);
