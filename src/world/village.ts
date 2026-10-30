@@ -84,10 +84,10 @@ const GROVES: readonly [number, number, number][] = [
 const WOOD = { n: 130, near: 2.4, far: 30, low: 9, high: 20 };
 /** the lamp posts flanking the stair's foot (x either side, z), their lantern's height and light */
 const LAMPS = { x: 3.5, z: -7.0, high: 3.1, color: 0xffb46a, intensity: 4, distance: 11 };
-/** the street lamps (unlit by a point light, `buildStreetLamps`): how far apart along a road and the first from its
- *  start, how far out past its side (`builtAt` keeps 0.8 m by a road), how clear of any obstacle and of another lamp,
- *  their pool's width on the ground and its strength by night, and how many round the square (m) */
-const STREET = { every: 6, first: 3, off: 1.1, clear: 0.9, apart: 4.5, pool: 7, night: 0.8, square: 8 };
+/** the street lamps (`buildStreetLamps`): how far apart along a road and the first from its start, how far out past
+ *  its side (`builtAt` keeps 0.8 m by a road), how clear of any obstacle and of another lamp, and how many round the
+ *  square (m) */
+const STREET = { every: 6, first: 3, off: 1.1, clear: 0.9, apart: 4.5, square: 8 };
 /** the motes drawn into a portal (`portalMotes`): how many a second, the vortex's middle's height, the rim they
  *  start round (m out from the middle) and how far before the gate's face at most */
 const MOTES = { rate: 70, high: 2.2, rim: 1.0, ahead: 2.8 };
@@ -120,10 +120,8 @@ export interface Village extends Biome {
   setChest(open: boolean): void;
   /** its trees as they stand (the map draws them) */
   trees: readonly { x: number; z: number; height: number }[];
-  /** the street lamps' lanterns (the pooled lights lit at the nearest: game/village.ts `lightLamps`) */
+  /** the street lamps' lanterns, each lit by the lit shaders' lamps (`core/lamps.ts`; game/village.ts `lightLamps`) */
   lanterns: readonly THREE.Vector3[];
-  /** the lanterns' painted pools of light, one instance each in their order, its colour how much of it shows */
-  lampPools: THREE.InstancedMesh;
   /** the hall of heroes' roof, ceiling and front wall (cut away over the hero inside, but through his eyes, as from
    *  above and over his shoulder they hid the room: game/village.ts) */
   hallCutaway: readonly THREE.Object3D[];
@@ -419,7 +417,7 @@ export function buildVillage(scene: THREE.Group): Village {
   stillBuilt(scene, () => buildBenches(scene, M, obstacles));
   stillBuilt(scene, () => buildNoticeBoard(scene, wall, M));
   for (const s of [-1, 1]) lights.push(buildLamp(scene, TERRACE.x + s * LAMPS.x, LAMPS.z, M, obstacles));
-  const { pools, quads: lampPools, lanterns } = stillBuilt(scene, () => buildStreetLamps(scene, M, obstacles));
+  const lanterns = stillBuilt(scene, () => buildStreetLamps(scene, M, obstacles));
   let night = 0;
   updaters.push(contactShadows(scene, obstacles));
   updaters.push(sky.update);
@@ -442,7 +440,6 @@ export function buildVillage(scene: THREE.Group): Village {
     exits,
     trees,
     lanterns,
-    lampPools,
     hallCutaway: hall.cutaway,
     meadow,
     hallTorches: [...hall.dais, ...hall.torches],
@@ -458,7 +455,6 @@ export function buildVillage(scene: THREE.Group): Village {
       M.window.emissiveIntensity = WINDOW_GLOW * (1 - dayness(hour));
       M.lantern.color.copy(LANTERN_PANE.day).lerp(LANTERN_PANE.night, 1 - dayness(hour));
       night = 1 - dayness(hour);
-      pools.opacity = STREET.night * night;
       fountainLight(dayness(hour));
     },
   };
@@ -1515,12 +1511,10 @@ const WHITE = new THREE.Color(1, 1, 1);
 
 /**
  * The street lamps along the roads, a post every `STREET.every` m on alternate sides, each its lantern over the road
- * and a pool of its light on the ground under it (from play: "its dark so we need lights in the village"). The village
- * keeps its 10 point lights (more would compile every lit program again), so the pools are drawn, not lit: one
- * instanced quad a lamp, added to the frame's light and brighter as night falls (`pools.opacity`, `daylight`).
+ * (from play: "its dark so we need lights in the village"), and their lanterns, where the lit shaders' lamps light
+ * (`core/lamps.ts`, game/village.ts `lightLamps`).
  */
-function buildStreetLamps(scene: THREE.Object3D, M: Mats, obstacles: Obstacle[]):
-  { pools: THREE.MeshBasicMaterial; quads: THREE.InstancedMesh; lanterns: THREE.Vector3[] } {
+function buildStreetLamps(scene: THREE.Object3D, M: Mats, obstacles: Obstacle[]): THREE.Vector3[] {
   const spots: { x: number; z: number; turn: number }[] = [];
   // (the stair's lamps, hung by `buildLamp` with their lights, are lamps too)
   const lamps: Spot[] = [-1, 1].map((s) => [TERRACE.x + s * LAMPS.x, LAMPS.z]);
@@ -1556,33 +1550,7 @@ function buildStreetLamps(scene: THREE.Object3D, M: Mats, obstacles: Obstacle[])
     const x = Math.cos(a) * r, z = Math.sin(a) * r;
     place(x, z, a + Math.PI);
   }
-  const pools = new THREE.MeshBasicMaterial({
-    map: lightPool(), color: LAMPS.color, transparent: true, opacity: 0, blending: THREE.AdditiveBlending,
-    depthWrite: false, toneMapped: true,
-  });
-  const quads = new THREE.InstancedMesh(new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2), pools, spots.length);
-  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(STREET.pool, 1, STREET.pool);
-  const lanterns: THREE.Vector3[] = [];
-  for (const [i, spot] of spots.entries()) {
-    const lantern = lampPost(scene, spot.x, spot.z, spot.turn, M, obstacles);
-    quads.setMatrixAt(i, m.compose(new THREE.Vector3(lantern.x, 0.04, lantern.z), q, s));
-    lanterns.push(lantern);
-  }
-  quads.renderOrder = 1;
-  // (each pool's strength its colour: a lamp a held light lights shows that light instead, its shadows in it)
-  for (let i = 0; i < spots.length; i++) quads.setColorAt(i, WHITE);
-  scene.add(quads);
-  return { pools, quads, lanterns };
-}
-
-/** A pool of lamplight on the ground: bright under the lantern, fading out to its rim. */
-function lightPool(): THREE.CanvasTexture {
-  const c = canvasOf(128, 128), g = ctx2d(c);
-  const fall = g.createRadialGradient(64, 64, 0, 64, 64, 64);
-  for (let k = 0; k <= 8; k++) fall.addColorStop(k / 8, `rgba(255,255,255,${Math.pow(1 - k / 8, 2.2).toFixed(3)})`);
-  g.fillStyle = fall;
-  g.fillRect(0, 0, 128, 128);
-  return textureFromCanvas(c);
+  return spots.map((spot) => lampPost(scene, spot.x, spot.z, spot.turn, M, obstacles));
 }
 
 // --- the trees ------------------------------------------------------------------------------------------------------

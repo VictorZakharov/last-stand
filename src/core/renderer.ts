@@ -3,6 +3,7 @@
 // the scene's target itself (`SCENE_READ`), run on plain single-sample targets, since multisampled post targets cost
 // a resolve per pass (very slow on tile-based GPUs such as Apple's).
 import * as THREE from 'three';
+import { lightTheLamps } from './lamps';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
@@ -617,6 +618,7 @@ function unpackStateKnown(renderer: THREE.WebGLRenderer): void {
 export async function initRenderer(container: HTMLElement) {
   loopPointLights();
   shadeEnvironment();
+  lightTheLamps();
   if (WEBGPU) drawOverScene(drawArmsOverPass);
   const renderer = gl = WEBGPU ? await makeWebGPURenderer()
     : new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
