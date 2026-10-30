@@ -24,7 +24,7 @@ const SETTLE = 60;
 const SUNLIT = 0.3;
 const NOT_BLACK = 0.02;
 /** the least share of the frame the sun lights (with the windows shut, the sun through the door and over the walls lit
- *  0.58% of it; open, 1.38%) */
+ *  0.58% of it; open, 1.38% with the panes 8 cm in from each face, 2.0 to 2.2% set back to its middle) */
 const LEAST_LIT = 0.009;
 
 /** The sun's light. */

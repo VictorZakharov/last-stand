@@ -54,7 +54,7 @@ const PICK_SHARE = 0.55, PICK_MOST = 2.6;
 const LAMPLIGHT = { color: 0xffb46a, intensity: 50, distance: 15, below: 0 };
 /** the hall's torches as the pool lights them: brighter and nearer than a street lamp (lit like one, the hall stood
  *  dark round its heroes) */
-const TORCHLIGHT = { intensity: 10, distance: 9, dais: 2, daisIntensity: 16, daisDistance: 8, door: 6, porchIntensity: 6 };
+const TORCHLIGHT = { intensity: 6, distance: 9, dais: 2, daisIntensity: 16, daisDistance: 8, door: 6, porchIntensity: 10 };
 /** how many of the lamps lit, the brightest, cast shadows (from play, "need shadow from lights too"): the village's
  *  two casting lights, the hall's braziers', handed to them while they're lit, so the count every lit program is made
  *  for stays two and nothing compiles */
