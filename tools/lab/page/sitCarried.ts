@@ -9,8 +9,10 @@
 // greatsword swung half round in his fist as he lowered it, 2 degrees a frame, under the jumps' limit), nor slid
 // through it: "ranger uses force pull to grab his bow from seated near fire, when standing up". A palm resting on a
 // piece's end (on a pommel, as a greatsword is stood under it) holds it to the floor, not in a grip: it turns under
-// the palm as it's pushed upright, and isn't counted as turned in the hand.
+// the palm as it's pushed upright, and isn't counted as turned in the hand; nor does an open hand, its fingers let
+// go for the blade to swing round in it as a swordsman regrips (the game's `Model.fists`).
 import * as THREE from 'three';
+import type { Fist } from '../../../src/types';
 import type { Lab } from './lab';
 
 /** a palm this near a piece holds it (m): the fingers round a handle, a strap's width */
@@ -21,6 +23,11 @@ export const PALM_AT = new THREE.Vector3(0, -0.06, -0.02);
  *  fist round its grip: 0.27). Judged by which way the palm faced, a fist round a grip read 0.76 along the blade, as
  *  much as a palm laid on a slanting pommel */
 const END_SHARE = 0.1;
+/** a fist with its fingers curled less than this (rad, their joints' mean bend) is open, gripping nothing: as the eyes'
+ *  measure has it (`eyes.ts`) */
+export const FIST_OPEN = 0.5;
+/** the hands in the order `palmsOf` gives their palms */
+const HANDS = ['left', 'right'] as const;
 /** a mesh moving less than this a frame is still (m) */
 const STILL = 0.002;
 /** a piece judged that went this far in all with no hand on it moved on its own (m) */
@@ -166,7 +173,7 @@ export class Carried {
           each.jump = worse(each.jump, `${mesh} went ${(moved * 100).toFixed(0)} cm`, moved / THROW_MOST, frame);
         }
       }
-      const gripped = inHand && palms.some((palm) => gripsIt(part, palm));
+      const gripped = inHand && palms.some((palm, i) => gripsIt(part, palm, HANDS[i], lab.model.fists));
       followInHand(each, gripped, quaternion, frame);
       each.world = world;
       each.onJoint = onJoint;
@@ -376,7 +383,8 @@ export function turnHeld(lab: Lab, angle: number): (() => void) | null {
   lab.model.root.updateMatrixWorld(true);
   const parts = partsOf(lab);
   const palms = palmsOf(lab);
-  const part = parts.find((each) => shown(each.mesh) && each.inHand && palms.some((palm) => gripsIt(each, palm)));
+  const grips = (part: Part) => palms.some((palm, i) => gripsIt(part, palm, HANDS[i], lab.model.fists));
+  const part = parts.find((each) => shown(each.mesh) && each.inHand && grips(each));
   if (!part) return null;
   part.group.rotateX(angle);
   return () => part.group.rotateX(-angle);
@@ -390,9 +398,12 @@ function palmsOf(lab: Lab): THREE.Vector3[] {
 /** each piece's box in its own frame, every mesh of it */
 const piecesBoxes = new WeakMap<THREE.Object3D, THREE.Box3>();
 
-/** Whether a palm grips a piece: on it, and round it rather than resting on its end. */
-function gripsIt(part: Part, palm: THREE.Vector3): boolean {
-  return palmOn(part.mesh, palm) < HELD_WITHIN && !onItsEnd(part.group, palm);
+/** Whether a hand (its palm at `palm`) grips a piece: on it, round it rather than resting on its end, and not open
+ *  where the game tells that hand's fist (`fists`). */
+function gripsIt(part: Part, palm: THREE.Vector3, hand: Fist['hand'], fists?: readonly Fist[]): boolean {
+  if (palmOn(part.mesh, palm) >= HELD_WITHIN || onItsEnd(part.group, palm)) return false;
+  const fist = fists?.find((each) => each.hand === hand);
+  return !fist || fist.curl >= FIST_OPEN;
 }
 
 /** Whether a palm rests on a piece's end, as on a pommel's top: within `END_SHARE` of either end of its length. */
