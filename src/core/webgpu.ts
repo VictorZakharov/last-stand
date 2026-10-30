@@ -21,8 +21,14 @@ export async function makeWebGPURenderer(): Promise<THREE.WebGLRenderer> {
   gpu = await import('three/webgpu');
   tsl = await import('three/tsl');
   const { WebGPURenderer } = gpu;
-  const renderer = new WebGPURenderer({ antialias: false, powerPreference: 'high-performance', forceWebGL: asked === 'webgpu-gl' });
+  const renderer = new WebGPURenderer({ antialias: false, powerPreference: 'high-performance', forceWebGL: asked === 'webgpu-gl', trackTimestamp: true });
   await renderer.init();
+  // three's GPU-driven drawing (r187): clusters of 64 triangles culled and their detail picked on the GPU, for what
+  // it supports (static meshes and instanced ones in plain node materials); the rest drawn as before
+  if (new URLSearchParams(location.search).get('meshlets') === '1') {
+    const { MeshletDrawingPipeline } = await import('three/addons/pipelines/MeshletDrawingPipeline.js');
+    (renderer as unknown as { drawingPipeline: unknown }).drawingPipeline = new MeshletDrawingPipeline();
+  }
   // (own properties over the class's getters: `compile` is one)
   const stand = (key: string, value: unknown) => Object.defineProperty(renderer, key, { value, writable: true });
   // (TODO: the warm-up's compiles as `compileAsync`; started into its WebGL targets they failed for want of a depth
