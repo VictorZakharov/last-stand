@@ -217,7 +217,11 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   street lamp in turn at midnight, the most the lamps' shadows take of a patch behind him 3 m from it (on paving where
   there's some round it) while he casts over what they take there while he doesn't, at least 15% by every lamp
   (`page/villageHeroShadow.ts`: from play, "no shadows from lights", the lamps' shadows drawn once with him hidden;
-  0.0% before, 59 to 85% now; `--canary` stops him casting by the last lamp); every street lamp casting, the hero in
+  0.0% before, 59 to 85% now; `--canary` stops him casting by the last lamp); his two shadows standing between two lamps,
+  the two nearest him (the two casting lights), the same reading behind him away from each, at least 15% each
+  (from play, "supposed to be 2 shadows here, right ? from both lights": 18 to 54% each; the far lamp's is the faint
+  one, lit by the near lamp; a pair with nowhere to stand between, the fountain, is listed but no fault; `--canary`
+  stops him casting for the last pair's second reading); every street lamp casting, the hero in
   the hall so none holds a casting light: the ground within 3.5 m of each lamp's foot drawn from four sides 6 m off
   it and 9 m up, with the lamps' shadows and held off (the shadows' map and the casting lights'), at least 1% of it
   darker by 30% (`page/villageLampShadows.ts`: from play, "your light test for each light need to test SHADOW, it

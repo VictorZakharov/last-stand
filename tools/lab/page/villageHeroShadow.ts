@@ -186,6 +186,106 @@ export async function heroShadowByLamp(lab: Lab, canary: boolean): Promise<Light
   return shadowsChecked(read, canary);
 }
 
+/** the most two lamps may stand apart for him to be read between them (m: each casting light's reach is 15), where
+ *  along the way from one to the other he's tried (the shares of it, halfway first), and the least patches behind him
+ *  away from each that must be paved (of 20) */
+const BETWEEN_MOST = 24;
+const ALONG = [0.5, 0.4, 0.6, 0.3, 0.7];
+const LEAST_PAVED = 8;
+
+/** Two lamps and the spots between them where those two are the nearest lamps (the two casting there). */
+interface Pair { lamps: [number, number]; spots: THREE.Vector3[] }
+
+/** The patches behind a hero at `spot` away from `lamp` that lie on paving. */
+function pavedBehind(spot: THREE.Vector3, lamp: THREE.Vector3): THREE.Vector3[] {
+  return behind(spot, lamp).filter((at) => paved(at.x, at.z));
+}
+
+/** The spots between lamps `a` and `b` with paving enough behind them away from each, and those two nearest. */
+function spotsBetween(a: number, b: number): THREE.Vector3[] {
+  const lanterns = G.arena.village.lanterns;
+  const off = (lamp: THREE.Vector3, spot: THREE.Vector3): number => Math.hypot(lamp.x - spot.x, lamp.z - spot.z);
+  const spots: THREE.Vector3[] = [];
+  for (const share of ALONG) {
+    const spot = new THREE.Vector3().lerpVectors(lanterns[a], lanterns[b], share);
+    spot.y = groundHeight(spot.x, spot.z);
+    const farthest = Math.max(off(lanterns[a], spot), off(lanterns[b], spot));
+    const nearer = lanterns.some((lamp, i) => i !== a && i !== b && off(lamp, spot) < farthest);
+    const paving = [a, b].every((i) => pavedBehind(spot, lanterns[i]).length >= LEAST_PAVED);
+    if (!nearer && paving) spots.push(spot);
+  }
+  return spots;
+}
+
+/** Every two lamps near each other with spots between them to read him at. */
+function pairsToStandBetween(): Pair[] {
+  const lanterns = G.arena.village.lanterns;
+  const pairs: Pair[] = [];
+  for (let a = 0; a < lanterns.length; a++) {
+    for (let b = a + 1; b < lanterns.length; b++) {
+      if (Math.hypot(lanterns[a].x - lanterns[b].x, lanterns[a].z - lanterns[b].z) > BETWEEN_MOST) continue;
+      const spots = spotsBetween(a, b);
+      if (spots.length) pairs.push({ lamps: [a, b], spots });
+    }
+  }
+  return pairs;
+}
+
+/** Two lamps' readings, the most his shadow takes behind him away from each, as he stands between them. */
+interface BetweenRead { lamps: [number, number]; his: [number, number] | null }
+
+/** The hero halfway between every two lamps near each other at midnight: his shadow from each (from play, "supposed
+ *  to be 2 shadows here, right ? from both lights"). `canary` stops him casting for the last pair's second lamp's
+ *  reading, which must be found. */
+export async function heroShadowBetweenLamps(lab: Lab, canary: boolean): Promise<LightsChecked> {
+  const lanterns = G.arena.village.lanterns;
+  holdHour(0);
+  const casts = new Map<THREE.Object3D, boolean>();
+  const read: BetweenRead[] = [];
+  try {
+    await lab.step(SETTLE);
+    const pairs = pairsToStandBetween();
+    if (!pairs.length) throw new Error('lab: village: no two lamps with paving between them');
+    for (const [k, { lamps: [a, b], spots }] of pairs.entries()) {
+      let stood = null;
+      // (the first spot he can stand on: halfway may be in the fountain)
+      for (const spot of spots) {
+        stood = await standBy(lab, spot, lanterns[b]);
+        if (stood) break;
+      }
+      if (!stood) {
+        read.push({ lamps: [a, b], his: null });
+        continue;
+      }
+      const fromB = pavedBehind(G.player.pos.clone(), lanterns[b]);
+      const planted = canary && k === pairs.length - 1;
+      const hisA = mostHeTakes(lab, pavedBehind(G.player.pos.clone(), lanterns[a]), casts, false);
+      read.push({ lamps: [a, b], his: [hisA, mostHeTakes(lab, fromB, casts, planted)] });
+    }
+  } finally {
+    heroCasts(true, casts);
+    holdHour(null);
+  }
+  return betweenChecked(read, canary);
+}
+
+/** The readings between lamps as lines and problems; with `canary`, whether the last pair's second was missing. */
+function betweenChecked(read: BetweenRead[], canary: boolean): LightsChecked {
+  const each = read.map(({ lamps: [a, b], his }) => his === null ? `${a}|${b} no stand`
+    : `${a}|${b} ${(his[0] * 100).toFixed(0)}%/${(his[1] * 100).toFixed(0)}%`);
+  const line = `hero's two lamp shadows: halfway between two lamps, the most each one's shadows take of a patch `
+    + `behind him away from it while he casts, over while he doesn't: ${each.join(', ')}`;
+  // (a pair he can stand nowhere between, the fountain between them, is no fault of the shadows)
+  const missing = read.filter(({ his }) => his !== null && his.some((take) => take < LEAST_DARKER));
+  if (canary) {
+    const last = read[read.length - 1];
+    const caught = last.his !== null && last.his[1] < LEAST_DARKER && last.his[0] >= LEAST_DARKER;
+    return { lines: [line], problems: [], caught, moments: [] };
+  }
+  const problems = missing.map(({ lamps: [a, b] }) => `${line}: between lamps ${a} and ${b} one shadow is missing`);
+  return { lines: [line], problems, caught: null, moments: [] };
+}
+
 /** The readings by every lamp as lines and problems; with `canary`, whether the last lamp's was found missing. */
 function shadowsChecked(read: ByLamp[], canary: boolean): LightsChecked {
   const each = read.map(({ lamp, his, paved: onPaving }) =>
