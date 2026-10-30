@@ -53,9 +53,6 @@ export const HALL = {
 export const inHall = (x: number, z: number): boolean =>
   Math.abs(x - TERRACE.x) < HALL.inHalf && z > HALL.wall && z < HALL.inFront;
 
-/** The chronicle's platform (the lectern on it): its middle, its half sides, how high; its stair comes down south,
- *  toward the crypt's road */
-export const DAIS_EAST = { x: 12.5, z: -9.8, half: 2.6, high: 0.8 };
 
 /** The training yard: a fenced field (its middle, half sides, turned `turn` rad about y), its gate's half width and
  *  where it opens along its north side (x in its own frame: toward the square, so its road comes straight in). Skills
@@ -139,6 +136,10 @@ export const CAMPFIRE: Spot = [-9.2, 10.4];
 export const NOTICE = { x: -8.6, z: -1.6, facing: 0.25 };
 /** the chest at the hall's entrance: on the terrace, beside the stair's top, and the way it faces */
 export const CHEST = { x: TERRACE.x + 3.8, z: -12.0, facing: 0 };
+/** the chronicle's lectern across the stair's top from the chest, turned to the stair (rad about y: 0 faces +z). On a
+ *  platform of its own east of the square it stood in the way: "lets remove this from here, and move the object near
+ *  hall of heroes, to the left of chest/stash". */
+export const CHRONICLE = { x: TERRACE.x - 3.8, z: -12.0, facing: Math.PI / 2 };
 
 /** The portals' objects: each before its way out's portal, used from in front of it. */
 function portalObject(id: BiomeId, name: string, verb: string): VillageObject {
@@ -169,8 +170,9 @@ export const VILLAGE_OBJECTS: readonly VillageObject[] = [
     name: 'Campfire', verb: 'Play together',
   },
   {
-    id: 'chronicle', use: 'chronicle', at: [DAIS_EAST.x, DAIS_EAST.z], reach: 2.4, stand: [DAIS_EAST.x, DAIS_EAST.z + 1.1],
-    label: 2.4, name: 'Chronicle', verb: 'Save slots',
+    // (stood before it on the stair's top, as the chest's on the other side)
+    id: 'chronicle', use: 'chronicle', at: [CHRONICLE.x, CHRONICLE.z], reach: 2.2, stand: [CHRONICLE.x + 1.2, CHRONICLE.z],
+    label: 1.9, name: 'Chronicle', verb: 'Save slots',
   },
   {
     id: 'notice', use: 'help', at: [NOTICE.x, NOTICE.z], reach: 2.4,

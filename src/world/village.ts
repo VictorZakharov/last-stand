@@ -4,18 +4,18 @@
 // winding from a cobbled square round a fountain, cottages each turned its own way with a footpath worn from its door,
 // sheds, groves of trees inside and a wood round it, lamps along its roads. North, up a broad stair, a terrace where the
 // hall of heroes stands, a building its door opens on the heroes' room (the stash's chest at the stair's top); the yard
-// south-east, fenced, its dummies the only place skills are cast; a campfire, the chronicle's lectern on a platform, a
-// notice board. Its two ways out are places of their own beyond gaps in the palisade (world/villageWays.ts): the crypt's
+// south-east, fenced, its dummies the only place skills are cast; a campfire, the chronicle's lectern across the stair's
+// top from the chest, a notice board. Its two ways out are places of their own beyond gaps in the palisade (world/villageWays.ts): the crypt's
 // walled court and sunken door north-east, the Thornwood's grove south-west, each with its portal. Grass grows wherever
-// nothing's built or trodden (world/meadow.ts, its mask painted from the plan). Its floor has levels (the terrace, the
-// platform: world/ground.ts's relief, and no dais), reached by stairs alone: each ledge is faced by a wall a body is kept
+// nothing's built or trodden (world/meadow.ts, its mask painted from the plan). Its floor has levels (the terrace and
+// the hall's dais: world/ground.ts's relief, and no arena's dais), reached by stairs alone: each ledge is faced by a wall a body is kept
 // off (world/wall.ts outlines), so feet climb the steps one by one; its wall is what's built (`wallShape` 'free'). Its
 // light follows the hour (`daylight`, a uniform's change: nothing compiles), and as a biome it has 10 point lights, two
 // casting the still shadows (the hall's braziers).
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import {
-  CAMPFIRE, CHEST, COTTAGES, DAIS_EAST, DAY, ENTRANCES, GAP_HALF, HALL, NOTICE, STEP_RISE, TERRACE, YARD, portalPlace,
+  CAMPFIRE, CHEST, CHRONICLE, COTTAGES, DAY, ENTRANCES, GAP_HALF, HALL, NOTICE, STEP_RISE, TERRACE, YARD, portalPlace,
   type Cottage, type Spot,
 } from '../data/village';
 import { BIOME_IDS, type BiomeId } from '../data/biomes';
@@ -71,8 +71,13 @@ const DOOR = { frame: 0.32, set: 0.22, straps: [0.5, 1.7, 2.9], open: 1.45 };
 /** the hall's roof: its ridge over the eaves, its slabs' thickness and overhang, its gables' depth, the ceiling's
  *  planks' thickness and the beams' spacing under it (m) */
 const ROOF = { rise: 2.8, thick: 0.24, over: 0.6, gable: 0.5, ceiling: 0.14, beamGap: 1.6 };
-/** the braziers in the portico either side of the door (x, z: the still shadows' lights) and their light */
-const BRAZIERS = { x: 2.2, z: -13.8, glow: 9, flames: 0.7 };
+/** the braziers on the dais behind the heroes, between their plinths (x, z: the still shadows' lights), their light, and their
+ *  slabs against the crypt's (as the selection screen's room has them, world/heroHall.ts: in the portico either side
+ *  of the door they stood in the way, "move these inside the hall, behind heroes, like it was before village feature,
+ *  and replace with wall torches, so we get some space to walk") */
+const BRAZIERS = { x: 1.65, z: -31.9, glow: 5, flames: 0.5, slabs: 0.6 };
+/** the torches on the hall's front wall either side of the door: how far out from its middle, how high (m) */
+const PORCH_TORCH = { x: 2.1, up: 2.5 };
 /** the palisade: its logs' radius, how tall they stand (from, to), and the gates' gap (m either side of a portal) */
 const PALISADE = { radius: 0.17, low: 4.2, high: 5.4 };
 /** the groves in the village: each one's middle and how many trees (scattered round it where nothing's built) */
@@ -130,6 +135,8 @@ export interface Village extends Biome {
   /** the lights on the hall's dais (its first two, lit whenever the hero is inside) and its torches' flames (the
    *  nearest lit), by the pooled lights */
   hallTorches: readonly THREE.Vector3[];
+  /** the torches on the hall's front wall either side of its door, by the pooled lights outside it */
+  porchTorches: readonly THREE.Vector3[];
   /** its two lights casting the still shadows (the hall's braziers), which hand their shadows to the lamps lit by
    *  night (game/village.ts `castFromLamps`) */
   stillLights: readonly THREE.PointLight[];
@@ -430,7 +437,7 @@ export function buildVillage(scene: THREE.Group): Village {
   const hall = stillBuilt(scene, () => buildHall(scene, wall, levels, M, obstacles, updaters));
   for (const part of hall.cutaway) part.traverse((object) => { object.userData.noMerge = true; });
   const lid = buildChest(scene, M, obstacles);
-  stillBuilt(scene, () => buildPlatform(scene, wall, levels, M, obstacles, lights));
+  stillBuilt(scene, () => buildLectern(scene, M, obstacles, lights));
   stillBuilt(scene, () => buildPalisade(scene, wall, M, rng));
   const portals: Portal[] = stillBuilt(scene, () => [buildCryptWay(scene, wall, M, updaters), buildForestWay(scene, wall, updaters)]);
   const exits = {} as Village['exits'];
@@ -476,6 +483,7 @@ export function buildVillage(scene: THREE.Group): Village {
     hallCutaway: hall.cutaway,
     meadow,
     hallTorches: [...hall.dais, ...hall.torches],
+    porchTorches: hall.porch,
     stillLights: castingLights(scene),
     get night() { return night; },
     setCalm() {},
@@ -843,8 +851,6 @@ function meadowMask(trees: readonly TreeSpot[]): MeadowMask {
   // (the hall of heroes' footing past the terrace's back: blades grew under its stone)
   mask.clearRect(X - HALL.half - 0.6, HALL.wall - HALL.half + HALL.inHalf - 0.6, X + HALL.half + 0.6, TERRACE.back);
   mask.clearRect(X - TERRACE.stairHalf - 0.3, TERRACE.front, X + TERRACE.stairHalf + 0.3, TERRACE.stairFoot + 0.4);
-  const { x, z, half } = DAIS_EAST;
-  mask.clearRect(x - half - 0.5, z - half - 0.5, x + half + 0.5, z + half + 1.9);
   mask.clearRect(YARD.x - YARD.halfX, YARD.z - YARD.halfZ, YARD.x + YARD.halfX, YARD.z + YARD.halfZ, 0.4, YARD.turn);
   for (const c of COTTAGES) {
     const w = (COTTAGE.w / 2 + 0.5) * c.size, d = (COTTAGE.d / 2 + 0.5) * c.size;
@@ -940,10 +946,10 @@ function cheek(scene: THREE.Object3D, wall: Wall, M: Mats, x: number, z0: number
 /** The hall of heroes on the terrace, a long hall its heroes are chosen in (the selection screen's room, world/heroHall.ts,
  *  shown in the village's place as its dais is used): a footing past the terrace's back, walls on every side with tall
  *  windows down the long ones, a stone-framed double door standing open in the front one under a portico of four
- *  columns, two rows of columns down the inside to a dais at the far end where the other heroes stand, a roof, and the
- *  two braziers before the door (the still shadows' lights). */
+ *  columns with a torch either side of the door, two rows of columns down the inside to a dais at the far end where
+ *  the other heroes stand, the two braziers behind them (the still shadows' lights), and a roof. */
 function buildHall(scene: THREE.Object3D, wall: Wall, levels: Levels, M: Mats, obstacles: Obstacle[],
-  updaters: Updater[]): { cutaway: THREE.Object3D[]; torches: THREE.Vector3[]; dais: THREE.Vector3[] } {
+  updaters: Updater[]): { cutaway: THREE.Object3D[]; torches: THREE.Vector3[]; dais: THREE.Vector3[]; porch: THREE.Vector3[] } {
   const y0 = TERRACE.high, X = TERRACE.x, half = HALL.half, thick = HALL.half - HALL.inHalf;
   const eaves = 0.72 + COLONNADE.high + COLONNADE.lintel;
   const back = HALL.wall - thick, face = HALL.door, front = COLONNADE.z + 0.5;
@@ -958,7 +964,9 @@ function buildHall(scene: THREE.Object3D, wall: Wall, levels: Levels, M: Mats, o
   for (const s of [-1, 1]) {
     const sideX = X + s * (half - thick / 2), sideLen = face - back;
     wall.add(block(scene, thick, eaves, sideLen, sideX, y0, back + sideLen / 2, M.ashlar), true, 'wall', true);
-    block(scene, 0.35, 0.45, sideLen, sideX + s * 0.47, y0, back + sideLen / 2, M.coping);
+    // (its plinth course in the wall too: drawn alone, the hero walked along the terrace into it, "can pass through
+    // textures here")
+    wall.add(block(scene, 0.35, 0.45, sideLen, sideX + s * 0.47, y0, back + sideLen / 2, M.coping), true, 'wall', true);
     for (let k = 0; k < HALL.columnZ.length - 1; k++) {
       const z = (HALL.columnZ[k] + HALL.columnZ[k + 1]) / 2;
       solid(scene, new THREE.BoxGeometry(thick + 0.04, WINDOWS.high, WINDOWS.wide), M.window).position.set(sideX, y0 + WINDOWS.sill + WINDOWS.high / 2, z);
@@ -973,13 +981,23 @@ function buildHall(scene: THREE.Object3D, wall: Wall, levels: Levels, M: Mats, o
   for (const s of [-1, 1]) {
     const cx = X + s * (dh + wing / 2);
     wall.add(block(frontWall, wing, eaves, thick, cx, y0, face - thick / 2, M.ashlar), true, 'wall', true);
-    block(frontWall, wing - DOOR.frame, 0.45, 0.35, cx + s * DOOR.frame / 2, y0, face + 0.17, M.coping);
+    wall.add(block(frontWall, wing - DOOR.frame, 0.45, 0.35, cx + s * DOOR.frame / 2, y0, face + 0.17, M.coping), true, 'wall', true);
   }
   block(frontWall, dh * 2, eaves - high, thick, X, y0 + high, face - thick / 2, M.ashlar);
   hallDoor(frontWall, M, X, y0, face);
   const ceiling = y0 + eaves - ROOF.ceiling - 0.32;
-  const torches = hallColumns(scene, M, obstacles, ceiling);
+  const look = torchLook();
+  const torches = hallColumns(scene, M, look, obstacles, ceiling);
   const dais = hallDais(scene, levels, M, obstacles);
+  const daisTop = y0 + HALL.daisHigh;
+  for (const s of [-1, 1]) {
+    const x = X + s * BRAZIERS.x;
+    buildBrazier(scene, x, BRAZIERS.z, Math.PI / 2, M.iron, M.granite, updaters, daisTop, BRAZIERS.glow, BRAZIERS.flames,
+      BRAZIERS.slabs);
+    obstacles.push({ x, z: BRAZIERS.z, r: 0.75, h: daisTop + 1.8 });
+  }
+  // the torches either side of the door, on the front wall's face (cut away with it over the hero inside)
+  const porch = [-1, 1].map((s) => wallTorch(frontWall, M, look, X + s * PORCH_TORCH.x, y0 + PORCH_TORCH.up, face, 0, 1));
   // the portico: a pair of columns either side, one entablature across the whole front
   for (const s of [-1, 1]) {
     for (const x of COLONNADE.x) {
@@ -989,23 +1007,18 @@ function buildHall(scene: THREE.Object3D, wall: Wall, levels: Levels, M: Mats, o
       solid(scene, shaft, M.column).position.set(cx, y0 + 0.4 + COLONNADE.high / 2, cz);
       block(scene, 0.95, 0.32, 0.95, cx, y0 + 0.4 + COLONNADE.high, cz, M.granite);
     }
-    buildBrazier(scene, X + s * BRAZIERS.x, BRAZIERS.z, Math.PI / 2, M.iron, M.granite, updaters, y0, BRAZIERS.glow, BRAZIERS.flames);
   }
   block(scene, half * 2, COLONNADE.lintel, 1.0, X, y0 + 0.72 + COLONNADE.high, COLONNADE.z, M.coping);
   const roof = hallRoof(scene, M, y0 + eaves, back, front);
-  return { cutaway: [roof, frontWall], torches, dais };
+  return { cutaway: [roof, frontWall], torches, dais, porch };
 }
 
 /** The hall's two rows of columns down its length, from the door to the dais (each a granite base, a stucco shaft up
  *  to the ceiling's beams, a granite capital), kept off by a circle each; and a torch on each, on its side to the
  *  aisle (an iron bracket, a flame in a cup: lit by the pool's lights as the hero walks past, game/village.ts
- *  `lightLamps`, the hall's own ten being spent outside). Returns where each torch's flame burns. */
-function hallColumns(scene: THREE.Object3D, M: Mats, obstacles: Obstacle[], ceiling: number): THREE.Vector3[] {
+ *  `lightLamps`, the hall's own ten being spent outside). Returns where each torch's light is. */
+function hallColumns(scene: THREE.Object3D, M: Mats, look: TorchLook, obstacles: Obstacle[], ceiling: number): THREE.Vector3[] {
   const y0 = TERRACE.high, torches: THREE.Vector3[] = [];
-  // (a flame of its own, smaller and dimmer than a lantern's glass: passed close, the glass's bloomed into a blob that
-  // hid the heroes behind it; the same kind of material, so the same program)
-  const fire = new THREE.MeshStandardMaterial({ color: 0x2a2014, roughness: 0.3, emissive: 0xffb060, emissiveIntensity: 1.1 });
-  const flameGeo = new THREE.SphereGeometry(0.045, 10, 8).scale(1, 2.2, 1);
   const shaftHigh = ceiling - y0 - 0.35 - 0.3;
   const shaft = new THREE.CylinderGeometry(COLUMN_IN.radius * 0.9, COLUMN_IN.radius, shaftHigh, 18);
   for (const z of HALL.columnZ) {
@@ -1016,20 +1029,40 @@ function hallColumns(scene: THREE.Object3D, M: Mats, obstacles: Obstacle[], ceil
       block(scene, 0.78, 0.3, 0.78, x, ceiling - 0.3, z, M.granite);
       obstacles.push({ x, z, r: 0.5, h: ceiling });
       // the torch on its aisle side, at a man's reach and a half
-      const tx = x - s * (COLUMN_IN.radius + 0.02), y = y0 + 2.7;
-      block(scene, 0.08, 0.5, 0.12, tx, y - 0.55, z, M.iron);
-      block(scene, 0.3, 0.06, 0.06, tx - s * 0.15, y - 0.3, z, M.iron);
-      const cup = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.06, 0.16, 10), M.iron);
-      cup.position.set(tx - s * 0.32, y - 0.2, z);
-      scene.add(cup);
-      const flame = new THREE.Mesh(flameGeo, fire);
-      flame.position.set(tx - s * 0.32, y - 0.04, z);
-      scene.add(flame);
-      // (its light out over the aisle: at its flame, the column beside it burned white)
-      torches.push(new THREE.Vector3(tx - s * 1.1, y + 0.3, z));
+      torches.push(wallTorch(scene, M, look, x - s * (COLUMN_IN.radius + 0.02), y0 + 2.7, z, -s, 0));
     }
   }
   return torches;
+}
+
+/** A torch's flame and what it's drawn in, shared by every torch. */
+interface TorchLook { fire: THREE.Material; flame: THREE.BufferGeometry; cup: THREE.BufferGeometry }
+
+/** The torches' look: a flame of its own, smaller and dimmer than a lantern's glass (passed close, the glass's bloomed
+ *  into a blob that hid the heroes behind it; the same kind of material, so the same program). */
+function torchLook(): TorchLook {
+  return {
+    fire: new THREE.MeshStandardMaterial({ color: 0x2a2014, roughness: 0.3, emissive: 0xffb060, emissiveIntensity: 1.1 }),
+    flame: new THREE.SphereGeometry(0.045, 10, 8).scale(1, 2.2, 1),
+    cup: new THREE.CylinderGeometry(0.11, 0.06, 0.16, 10),
+  };
+}
+
+/** A torch on a wall's face at (x, z), `y` its bracket's top, standing out along (dx, dz) (a unit along x or z): an
+ *  iron bracket, an arm out, a cup, its flame. Returns where its light is: out from it, as at its flame the wall
+ *  beside it burned white. */
+function wallTorch(scene: THREE.Object3D, M: Mats, look: TorchLook, x: number, y: number, z: number, dx: number,
+  dz: number): THREE.Vector3 {
+  const alongX = dx !== 0;
+  block(scene, alongX ? 0.08 : 0.12, 0.5, alongX ? 0.12 : 0.08, x, y - 0.55, z, M.iron);
+  block(scene, alongX ? 0.3 : 0.06, 0.06, alongX ? 0.06 : 0.3, x + dx * 0.15, y - 0.3, z + dz * 0.15, M.iron);
+  const cup = new THREE.Mesh(look.cup, M.iron);
+  cup.position.set(x + dx * 0.32, y - 0.2, z + dz * 0.32);
+  scene.add(cup);
+  const flame = new THREE.Mesh(look.flame, look.fire);
+  flame.position.set(x + dx * 0.32, y - 0.04, z + dz * 0.32);
+  scene.add(flame);
+  return new THREE.Vector3(x + dx * 1.1, y + 0.3, z + dz * 1.1);
 }
 
 /** The dais across the hall's far end, a step up onto it, and on it a plinth for each hero (granite, a coping on its
@@ -1151,33 +1184,14 @@ function buildChest(scene: THREE.Object3D, M: Mats, obstacles: Obstacle[]): THRE
   return hinge;
 }
 
-/** The chronicle's platform east of the square: a block of stone 0.8 m up, its stair on its west side, a lectern with
- *  an open book and a candle on it (its light, one of the village's). */
-function buildPlatform(scene: THREE.Object3D, wall: Wall, levels: Levels, M: Mats, obstacles: Obstacle[], lights: THREE.PointLight[]): void {
-  const { x, z, half, high } = DAIS_EAST;
-  // (the stone up to under its slab of flags: as high as it, its top fought the slab's, "texture z fighting here")
-  block(scene, half * 2, high - 0.06, half * 2, x, 0, z, M.ashlar);
-  const top = block(scene, half * 2 + 0.1, 0.06, half * 2 + 0.1, x, high - 0.06, z, M.flags, 1 / 2.25);
-  top.castShadow = false;
-  levels.paint(x - half, z - half, x + half, z + half, () => high);
-  const t = PARAPET.thick / 2, wallTop = high + 0.6, stairHalf = 1.3;
-  ledgeWall(scene, wall, M, x - half - PARAPET.thick, x + half + PARAPET.thick, z - half - t, wallTop);
-  ledgeWall(scene, wall, M, z - half, z + half, x + half + t, wallTop, true);
-  ledgeWall(scene, wall, M, z - half, z + half, x - half - t, wallTop, true);
-  ledgeWall(scene, wall, M, x - half - PARAPET.thick, x - stairHalf - t, z + half + t, wallTop);
-  ledgeWall(scene, wall, M, x + stairHalf + t, x + half + PARAPET.thick, z + half + t, wallTop);
-  // its stair, coming down south onto the road
-  const foot = z + half + Math.round(high / STEP_RISE) * STEP_RUN;
-  for (let k = 1; k * STEP_RISE <= high + 1e-6; k++) {
-    const z1 = foot - (k - 1) * STEP_RUN, d = z1 - (z + half);
-    block(scene, stairHalf * 2, k * STEP_RISE, d, x, 0, z + half + d / 2, M.flags, 1 / 2.25);
-  }
-  levels.paint(x - stairHalf, z + half, x + stairHalf, foot, (_px, pz) => stepAt(foot - pz, high));
-  // the lectern facing the stair: a post on a foot, its slanted desk, the book open on it, a candle (laid out
-  // facing -x, turned to face +z)
+/** The chronicle's lectern on the terrace across the stair's top from the chest: a post on a foot, its slanted desk,
+ *  the book open on it, a candle (its light, one of the village's). */
+function buildLectern(scene: THREE.Object3D, M: Mats, obstacles: Obstacle[], lights: THREE.PointLight[]): void {
+  const { x, z, facing } = CHRONICLE, high = TERRACE.high;
+  // (laid out facing -x, turned to its facing)
   const lectern = new THREE.Group();
-  lectern.position.set(x, high, z - 0.2);
-  lectern.rotation.y = Math.PI / 2;
+  lectern.position.set(x, high, z);
+  lectern.rotation.y = facing + Math.PI / 2;
   block(lectern, 0.5, 0.08, 0.5, 0, 0, 0, M.timber);
   block(lectern, 0.12, 1.0, 0.12, 0, 0.08, 0, M.timber);
   const desk = block(lectern, 0.62, 0.05, 0.46, 0, 1.06, 0, M.planks);
@@ -1198,7 +1212,7 @@ function buildPlatform(scene: THREE.Object3D, wall: Wall, levels: Levels, M: Mat
   lectern.add(light);
   scene.add(lectern);
   lights.push(light);
-  obstacles.push({ x, z: z - 0.2, r: 0.45, h: high + 1.1 });
+  obstacles.push({ x, z, r: 0.45, h: high + 1.1 });
 }
 
 // --- the palisade, the cottages ------------------------------------------------------------------------

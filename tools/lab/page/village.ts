@@ -42,6 +42,8 @@ import { hallCulledByDoor } from './villageHallCull';
 import { roadsBendWide } from './villageRoads';
 import { propHoleWhereHidden } from './villageSeeThrough';
 import { hallWallsSteady } from './villageHallSteady';
+import { objectsUsedAgain } from './villageUseAgain';
+import { hallWallsHold } from './villageHallSide';
 
 export interface VillageOptions {
   canary: boolean;
@@ -75,10 +77,12 @@ export async function village(lab: Lab, options: VillageOptions): Promise<Report
   await toVillage(lab);
   const checks = [
     await objectsUsable(lab, options.canary),
+    await objectsUsedAgain(lab, options.canary),
     await castingInYard(lab, options.canary),
     await boundsClosed(lab, options.canary),
     await portalsHold(lab, options.canary),
     await stairClimbed(lab, options.canary),
+    await hallWallsHold(lab, options.canary),
     await hallFreesPointer(lab, options.canary),
     await grassSteady(lab, options.canary),
     await roundCottages(lab, options.canary),
