@@ -35,7 +35,7 @@ his glance and is let be). From play, "on log cloth is jerking few times per sec
 cm a frame on the log (162 frames in 7 s) and 54 by a fire, the drape between his raised knees going round one or
 the other as his hanging feet swung and the cloth's flutter moved it a few millimetres (`Skirt.ease`). Then he's
 asked to act from it, a step and an attack, tapped (3 frames) and held: he must begin getting up within 2 frames,
-attack nothing before he's up, be up within 1.2 s, and once up do nothing after a tap (moved 5 cm at most, no
+attack nothing before he's up, be up within the time his body and his hands take back (`riseMost`: 0.8 s and 0.4 to spare bare-handed, about 2.7 with a greatsword planted), and once up do nothing after a tap (moved 5 cm at most, no
 attack: a tap isn't queued) and do a held key (walked off 0.6 m, or attacked). Pictured half way down and sat, from
 the front, the left and above behind, and sat in the game's own views (`top`, `third`); by a fire from his right,
 behind and above, and from ahead with the fire hidden, framed on his knees (`fromBeyond`: through the flames the
