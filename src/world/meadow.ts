@@ -21,8 +21,11 @@ const RINGS = [
 ];
 /** tiles a side over each ring's grid (the most drawn: the uniforms' array) */
 const TILES = 8;
-/** how wide a blade is at its root, in its ring's cells */
-const WIDTH_IN_CELLS = 0.55;
+/** how wide a blade is at its root, in its ring's cells, in the first ring; each ring out its blades wider again by its
+ *  cells' size against the first's, so every ring covers as much of the ground: a ring of cells twice as wide has a
+ *  quarter of the blades, and with blades only twice as wide it covered half the ground, the first ring a denser disc
+ *  following the view (from play, "there is like a circle of different grass that moves when I move") */
+const WIDTH_IN_CELLS = 0.7;
 /** how far before it the camera's sight is followed onto the ground for the rings' middle (m, at most), and the least
  *  steepness of the sight it's followed by (the sine of its pitch down): followed onto the ground as far as it went,
  *  a sight near level moved it from 2 m to 24 m and back as the head bobbed through the eyes, the dense ring with it,
@@ -221,6 +224,7 @@ const VERTEX_HEAD = /* glsl */ `
   attribute vec2 bv;
   uniform vec2 uOrigin;
   uniform float uCell;
+  uniform float uWider;
   uniform int uS;
   uniform vec2 uTiles[${TILES * TILES}];
   uniform vec2 uFocus;
@@ -267,17 +271,28 @@ const VERTEX_BLADE = /* glsl */ `
   float d = length(root - uFocus);
   float band = smoothstep(uBand.x, uBand.y, d) * (1.0 - smoothstep(uBand.z, uBand.w, d));
   float grass = meadowAt(root);
+  // (the mask itself, unwarped: the warp wanders the meadow's edges, but never out past where it grows, or the grass
+  // crept up to 1.4 m onto the paving, "no grass on paved road pls")
+  vec2 maskUv = root / (2.0 * uMeadowHalf) + 0.5;
+  float grows = texture2D(uMeadow, maskUv).r;
   float patchy = noise2(root * 0.15) * 0.65 + noise2(root * 0.55 + 9.1) * 0.35;
-  float chance = band * smoothstep(0.08, 0.6, grass) * mix(0.5, 1.0, smoothstep(0.25, 0.7, patchy));
+  float chance = band * smoothstep(0.08, 0.6, grass) * smoothstep(0.3, 0.7, grows)
+    * mix(0.75, 1.0, smoothstep(0.25, 0.7, patchy));
   // (each blade grows in as its chance rises past its own share, and shrinks away as it falls: switched on and off,
   // the blades in a ring's band, which moves with the hero, came and went in a line ahead of him as he walked, "grass
   // keeps redrawing itself in front of me"); none where its chance is none: faded in below its share, the lowest
   // shares grew on the paved roads, "we dont need grass on paved roads")
   float on = smoothstep(h.z * 0.85, h.z * 0.85 + 0.15, chance);
   float height = on * mix(0.2, 0.46, h.w) * mix(0.55, 1.0, grass) * mix(0.75, 1.25, tuft) * mix(0.8, 1.15, patchy);
-  float width = on * uCell * ${WIDTH_IN_CELLS.toFixed(2)} * mix(0.8, 1.25, fract(h.z * 7.13));
+  float width = on * uCell * uWider * ${WIDTH_IN_CELLS.toFixed(2)} * mix(0.8, 1.25, fract(h.z * 7.13));
   float turn = h.w * 6.2832 + h.x * 3.0;
   vec2 lean2 = vec2(cos(turn), sin(turn));
+  // (at the meadow's edge a blade leans away from it, into the grass: leaning out, they lay over the curbs' tops)
+  float step = 0.35 / (2.0 * uMeadowHalf);
+  vec2 inward = vec2(texture2D(uMeadow, maskUv + vec2(step, 0.0)).r - texture2D(uMeadow, maskUv - vec2(step, 0.0)).r,
+    texture2D(uMeadow, maskUv + vec2(0.0, step)).r - texture2D(uMeadow, maskUv - vec2(0.0, step)).r);
+  float edge = clamp(length(inward) * 3.0, 0.0, 1.0);
+  lean2 = normalize(mix(lean2, normalize(inward + 1e-5), edge * 0.85));
   vec3 lean = vec3(lean2.x, 0.0, lean2.y);
   // seen edge on, a blade turns up to a third of the way to the camera (edge on it's a thin line)
   vec2 toCam = normalize(cameraPosition.xz - root + 1e-4);
@@ -316,6 +331,7 @@ const FRAGMENT_COLOUR = /* glsl */ `
 interface RingUniforms extends MaskUniforms {
   uOrigin: { value: THREE.Vector2 };
   uCell: { value: number };
+  uWider: { value: number };
   uS: { value: number };
   uTiles: { value: THREE.Vector2[] };
   uFocus: { value: THREE.Vector2 };
@@ -382,6 +398,7 @@ export function buildMeadow(mask: MeadowMask, maskTexture: THREE.Texture, update
     const u: RingUniforms = {
       uOrigin: { value: new THREE.Vector2() },
       uCell: { value: ring.cell },
+      uWider: { value: ring.cell / RINGS[0].cell },
       uS: { value: S },
       uTiles: { value: Array.from({ length: TILES * TILES }, () => new THREE.Vector2()) },
       uFocus: { value: new THREE.Vector2() },
