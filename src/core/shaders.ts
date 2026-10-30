@@ -4,6 +4,7 @@
 // The set of distinct programs is small and bounded, so we keep all of them for the
 // whole session, and compile the known ones up front (warmUp) before the first frame.
 import * as THREE from 'three';
+import { WEBGPU } from './webgpu';
 import { G } from '../state';
 import { CROWD_LAYER, WARM_LAYER } from './layers';
 import { drawnInShadowsOnly } from '../world/culling';
@@ -279,7 +280,7 @@ function describeNew(name: string, key: string[]): string {
 /** Logs every program that failed to link, where three checked none as it was first used (production builds: its
  *  checks held the boot up, `initRenderer`), once the game is shown and the programs are long linked. */
 export function checkPrograms(renderer: THREE.WebGLRenderer): void {
-  if (renderer.debug.checkShaderErrors) return;
+  if (WEBGPU || renderer.debug.checkShaderErrors) return;
   const gl = renderer.getContext();
   for (const p of renderer.info.programs ?? []) {
     const program = (p as unknown as { program: WebGLProgram }).program;
@@ -378,6 +379,8 @@ interface Linking { done?: (share: number) => void; poll: Step; step?: Step; giv
  * Whether they all linked: false where one wasn't `giveUpMs` after the commands were done (not from the GPU's cache).
  */
 async function linked(renderer: THREE.WebGLRenderer, materials: Compiled, how: Linking): Promise<boolean> {
+  // (WebGPU's pipelines are compiled by its `compileAsync`, started where `compile` is asked: core/webgpu.ts)
+  if (WEBGPU) return true;
   await commandsDone(renderer, how.poll);
   const programs = new Set<Program>();
   for (const material of materials) {
