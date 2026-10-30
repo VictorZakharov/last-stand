@@ -71,6 +71,14 @@ export class Sitting {
     return this.state.w > 0 || this.state.before > 0 ? this.state : null;
   }
 
+  /** Whether he's on his way to sit or up from it (walking there, turning, his body or his hands between their
+   *  ends): he doesn't glance round then, as he watches what he does (`Player.lookAtFoe`). The sit poses his arms
+   *  from his chest, and a glance turns it: a greataxe held as it rested swung round with his chest, its haft 15 cm
+   *  into it on the low stone; only sat does he look round again. */
+  get staged(): boolean {
+    return this.phase !== null && this.phase !== 'sat';
+  }
+
   /** Whether the sit places him this frame (going down, sat, getting up): nothing else moves him or keeps him off. */
   get placed(): boolean {
     return this.phase === 'turn' || this.phase === 'down' || this.phase === 'sat' || this.phase === 'up';
