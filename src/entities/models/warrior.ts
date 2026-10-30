@@ -1946,8 +1946,9 @@ export function buildWarrior(): Model {
   const LOOSE_EASE = 0.03;
   /** how far a fist let go of opens (its fingers' bends eased this far towards straight): open enough for its handle
    *  to turn flat on the palm under them (`carryArm`'s `flipAxis`), and no further: a ring round it (opened 0.8, the
-   *  hand was a flat tray the grip lay on, "the sword floats") */
-  const LOOSE_MOST = 0.6;
+   *  hand was a flat tray the grip lay on, "the sword floats"; opened 0.3, curled past `lab sit`'s open fist, 0.5 rad,
+   *  it was a fist the blade turned round in) */
+  const LOOSE_MOST = 0.55;
   /** and its index finger, which stays hooked round the handle with the thumb as a ring it turns in, as a swordsman
    *  lets a blade swing in his hand (the four opened alike, half open, the hand read as a flat paddle the grip lay on) */
   const LOOSE_INDEX = 0.1;
