@@ -1514,7 +1514,7 @@ export function buildWarrior(): Model {
    *  end, and the ring kept loose as it rests on its point and leans about it as he sits, till it's let go of (turned
    *  round in a closed fist, "warrior magically rotates the sword in his hand"; held in the fist with no regrip, no
    *  arm rests its point on the floor, and his arm was held at its stops). */
-  const BETWEEN = tunable('warriorBetween', { ahead: 0.9, side: 0.5, lean: 0.1, top: 0.35, letGo: 0.7, take: 0.1, slant: 0.07, regrip: [0.12, 0.95], rest: [0.4, 0.5, 0.15, 0.1], clear: [0.3, 0.7], stages: [0.3, 0.45], hands: [2.5, 2.6] });
+  const BETWEEN = tunable('warriorBetween', { ahead: 0.9, side: 0.4, lean: 0.1, top: 0.35, letGo: 0.7, take: 0.1, slant: 0.07, regrip: [0.12, 0.95], rest: [0.4, 0.5, 0.15, 0.1], clear: [0.3, 0.7], stages: [0.3, 0.45], hands: [2.5, 2.6] });
   /** a model's hands with nothing to do as he sits */
   const NO_HANDS = { before: 0, after: 0 };
   /** whether a two-hander is stood between his feet on this sit (on a seat, not by a fire) */
@@ -1901,7 +1901,9 @@ export function buildWarrior(): Model {
       armOf(p).forEach((joint, i) => joint.quaternion.slerpQuaternions(p.armWas[i], p.restArm[i], e));
       // (eased once, on the stage's own clock: on the lowering's eased clock its tip went 37 cm a frame)
       const through = sat / lowered;
-      p.swung = smooth(ramp(through, from, to));
+      // (half eased, half even: eased alone, its middle went three times as far a moment as its ends, a jump)
+      const swing = ramp(through, from, to);
+      p.swung = (swing + smooth(swing)) / 2;
       // (and left loose from then on, as it rests on its point: closed between the swing and the sit, it leant 22
       // degrees in the fist as he went down)
       p.open = smooth(ramp(through, from - REGRIP_EASE, from));
@@ -1945,7 +1947,10 @@ export function buildWarrior(): Model {
   /** how far a fist let go of opens (its fingers' bends eased this far towards straight): open enough for its handle
    *  to turn flat on the palm under them (`carryArm`'s `flipAxis`), and no further: a ring round it (opened 0.8, the
    *  hand was a flat tray the grip lay on, "the sword floats") */
-  const LOOSE_MOST = 0.5;
+  const LOOSE_MOST = 0.6;
+  /** and its index finger, which stays hooked round the handle with the thumb as a ring it turns in, as a swordsman
+   *  lets a blade swing in his hand (the four opened alike, half open, the hand read as a flat paddle the grip lay on) */
+  const LOOSE_INDEX = 0.1;
   /** The grip's turn in the fist (`seat`, changed in place) leant `w` of the way about the fist so the point is on the
    *  ground the way its rest is from the fist (`restPoint`), as far as its length reaches, with the arm as it's posed:
    *  the hand going down as he sits, its point would go into the ground; its hand going up, it would hang off it.
@@ -3461,7 +3466,7 @@ export function buildWarrior(): Model {
         grip.quaternion.copy(plantR.seatNow);
       }
       // (let go of for the blade to swing or lean round in it: `carryArm`)
-      if (carriedBetween) loosen(handR, LOOSE_MOST * plantR.open);
+      if (carriedBetween) loosen(handR, LOOSE_MOST * plantR.open, LOOSE_INDEX * plantR.open);
     }
     else if (plant > 0) poseHand(handR, restingHand(plant, two), 0.1);
     else if (held) hold(handR, along(grip), held.r, undefined, slantR);
