@@ -11,6 +11,7 @@
 import * as THREE from 'three';
 import { canvasOf, ctx2d, readCtx2d } from '../core/textures';
 import type { Updater } from './props';
+import { hiddenByHallDoor } from './hallPortal';
 
 /** The rings: each cell's size (m), how far out it's drawn (m) and the segments along each blade. */
 const RINGS = [
@@ -432,6 +433,8 @@ export function buildMeadow(mask: MeadowMask, maskTexture: THREE.Texture, update
           _box.min.set(x0 - 0.5, -0.1, z0 - 0.5);
           _box.max.set(x0 + w + 0.5, 0.8, z0 + w + 0.5);
           if (!_frustum.intersectsBox(_box)) continue;
+          // (from inside the hall of heroes, only what its doorway shows)
+          if (hiddenByHallDoor(_box)) continue;
           if (anyGrass(x0, z0, x0 + w, z0 + w)) u.uTiles.value[listed++].set(tx * S, ty * S);
         }
       }

@@ -83,10 +83,12 @@ interface Look {
   geometries: Set<THREE.BufferGeometry>;
 }
 
-/** One frame's draws: by geometry, the scene's by look, and the objects the arms' own camera drew, with their draws. */
+/** One frame's draws: by geometry, the scene's by look and by the scene's part, and the objects the arms' own camera
+ *  drew, with their draws. */
 interface FrameDraws {
   geometries: Map<THREE.BufferGeometry, Drawn>;
   looks: Map<string, Look>;
+  parts: Map<string, number>;
   arms: Map<THREE.Object3D, number>;
 }
 
@@ -148,7 +150,7 @@ function passOf(camera: THREE.Camera, scene: THREE.Scene | null): Pass {
 function recordDraws(): { record: FrameDraws; stop(): void } {
   const gl = G.renderer;
   const own = gl.renderBufferDirect.bind(gl);
-  const record: FrameDraws = { geometries: new Map(), looks: new Map(), arms: new Map() };
+  const record: FrameDraws = { geometries: new Map(), looks: new Map(), parts: new Map(), arms: new Map() };
   gl.renderBufferDirect = (camera, scene, geometry, material, object, group) => {
     const pass = passOf(camera, scene);
     let drawn = record.geometries.get(geometry);
@@ -177,6 +179,8 @@ function recordDraws(): { record: FrameDraws; stop(): void } {
       look.draws++;
       look.geometries.add(geometry);
       record.looks.set(key, look);
+      const part = scenePartOf(object);
+      record.parts.set(part, (record.parts.get(part) ?? 0) + 1);
     }
     own(camera, scene, geometry, material, object, group);
   };
@@ -190,6 +194,17 @@ export function placeOf(object: THREE.Object3D): string {
     path.unshift(at.name || at.type);
   }
   return path.slice(0, 2).join(' > ') + (path.length > 2 ? ' > …' : '');
+}
+
+/** The part of the scene an object is drawn under, by its two outermost named levels (an unnamed group passed over):
+ *  `village > fountain`, `hero warrior > head`; with no name under the first, its own type. */
+function scenePartOf(object: THREE.Object3D): string {
+  const named: string[] = [];
+  for (let at: THREE.Object3D | null = object; at && at !== G.scene; at = at.parent) {
+    if (at.name) named.unshift(at.name);
+  }
+  if (named.length < 2) named.push(object.type);
+  return named.slice(0, 2).join(' > ');
 }
 
 /** A sum over `passes` of a record by pass. */
@@ -300,6 +315,8 @@ function lists(record: FrameDraws, rows: number): string[] {
     .map(offRow);
   const looks = [...record.looks].sort((a, b) => b[1].draws - a[1].draws).slice(0, rows)
     .map(([look, { draws, geometries: drew }]) => `  ${String(draws).padStart(4)}  ${look}  (${drew.size} geometries)`);
+  const parts = [...record.parts].sort((a, b) => b[1] - a[1]).slice(0, rows)
+    .map(([part, draws]) => `  ${String(draws).padStart(4)}  ${part}`);
   return [
     'the geometries drawn most often:', ...often,
     'the geometries that drew the most triangles:', ...heavy,
@@ -309,6 +326,7 @@ function lists(record: FrameDraws, rows: number): string[] {
       + 'reaches the GPU, and the perf overlay counts no draw of it), alike ones together:',
     ...nothingRows(geometries, rows),
     'the scene\'s draws by their material\'s look:', ...looks,
+    'the scene\'s draws by the scene\'s part:', ...parts,
     ...(record.arms.size ? ['what the arms\' own camera drew over the frame (the hero\'s arms and what they hold '
       + 'alone):', ...armsRows(record, rows)] : []),
   ];
