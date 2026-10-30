@@ -32,6 +32,7 @@ import { closeHeroSelect, heroSelectOpen } from '../../../src/ui/heroSelect';
 import { pointerWanted } from '../../../src/core/input';
 import * as renderer from '../../../src/core/renderer';
 import { lightsNotBlinding } from './villageLights';
+import { lampsSteady } from './villageSteady';
 
 export interface VillageOptions {
   canary: boolean;
@@ -74,6 +75,7 @@ export async function village(lab: Lab, options: VillageOptions): Promise<Report
     await roundCottages(lab, options.canary),
     await walksAcross(lab, options.canary),
     await lightsNotBlinding(lab, options.canary),
+    await lampsSteady(lab, options.canary),
     await training(lab, options.canary),
     await hoursCompileNothing(lab, options.canary),
   ];

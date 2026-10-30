@@ -64,6 +64,9 @@ export function flashFree(o: FlashOpts): LightSlot | null {
   return lights.some((l) => l.life <= 0) ? flash(o) : null;
 }
 
+/** The pool's lights (tools/lab reads them: `lab village`'s steady lamps). */
+export const pooledLights = (): readonly THREE.PointLight[] => lights.map((s) => s.light);
+
 export function release(slot: LightSlot | null | undefined): void { if (slot) slot.life = 0; }
 
 export function updateLights(dt: number): void {
@@ -71,7 +74,10 @@ export function updateLights(dt: number): void {
     if (s.life <= 0) { s.light.intensity = 0; continue; }
     if (s.hold > 0) s.hold -= dt; else s.life -= dt;
     const k = Math.max(0, s.life / s.maxLife);
-    s.light.intensity = s.peak * k * (0.9 + Math.random() * 0.1);
+    // (a flash flickers; a light held for good burns steady: the village's lamps shimmered at the frame rate, from
+    // play "lamps have high frequency flicker")
+    const flicker = s.hold === Infinity ? 1 : 0.9 + Math.random() * 0.1;
+    s.light.intensity = s.peak * k * flicker;
     if (s.follow) {
       const p = typeof s.follow === 'function' ? s.follow() : s.follow.position;
       if (p) s.light.position.copy(p);
