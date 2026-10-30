@@ -1,8 +1,9 @@
 // `lab village`'s hero's shadow from a lamp: patches of paving behind him, away from the street lamp he stands by at
 // midnight, each read from straight over it with the lamps' shadows at their strength and held off, while he casts
 // and while he doesn't: what more they take while he casts is his. The lamps' shadows are drawn once of what stands
-// still, and drawn with him hidden he cast none from them (from play: "no shadows from lights"). Read on the grass,
-// the meadow's blades took no lamp's shadow, so only paving is read. `canary` stops him casting, which must be found.
+// still, and drawn with him hidden he cast none from them (from play: "no shadows from lights"). He stands by every
+// lamp in turn, on paving where there is some round it ("it was missing for half of them"). `canary` stops him
+// casting by the last lamp, which must be found.
 import * as THREE from 'three';
 import type { Lab } from './lab';
 import { G } from '../../../src/state';
@@ -111,14 +112,13 @@ function paved(x: number, z: number): boolean {
   return roadLines.some((road) => toPolyline(x, z, road.line) < road.width / 2 - ON_ROAD);
 }
 
-/** The patches of ground behind the hero, away from `lamp`: across a sector of it, near and far. */
-function behind(lamp: THREE.Vector3): THREE.Vector3[] {
-  const p = G.player.pos;
-  const away = Math.atan2(p.x - lamp.x, p.z - lamp.z);
+/** The patches of ground behind a hero at `spot`, away from `lamp`: across a sector of it, near and far. */
+function behind(spot: THREE.Vector3, lamp: THREE.Vector3): THREE.Vector3[] {
+  const away = Math.atan2(spot.x - lamp.x, spot.z - lamp.z);
   const patches: THREE.Vector3[] = [];
   for (const turn of SECTOR) {
     for (const off of OFFS) {
-      const at = new THREE.Vector3(p.x + Math.sin(away + turn) * off, 0, p.z + Math.cos(away + turn) * off);
+      const at = new THREE.Vector3(spot.x + Math.sin(away + turn) * off, 0, spot.z + Math.cos(away + turn) * off);
       at.y = groundHeight(at.x, at.z);
       patches.push(at);
     }
@@ -126,20 +126,27 @@ function behind(lamp: THREE.Vector3): THREE.Vector3[] {
   return patches;
 }
 
-/** The hero stood `BY` m off `lamp` where the ground behind him is paved, and those patches of it. */
-async function standBy(lab: Lab, lamp: THREE.Vector3): Promise<THREE.Vector3[] | null> {
-  for (let k = 0; k < SPOTS; k++) {
+/** Where round `lamp`, `BY` m off it, the hero stands to be read: the first spot with paving behind him, else the
+ *  first of all (on the grass), and whether it's paved. */
+function spotBy(lamp: THREE.Vector3): { spot: THREE.Vector3; paved: boolean } {
+  const spots = Array.from({ length: SPOTS }, (_, k) => {
     const a = (k / SPOTS) * Math.PI * 2;
     const spot = new THREE.Vector3(lamp.x + Math.sin(a) * BY, 0, lamp.z + Math.cos(a) * BY);
     spot.y = groundHeight(spot.x, spot.z);
-    G.player.walkTo = null;
-    G.player.place(spot, a + Math.PI);
-    await lab.step(SETTLE);
-    if (Math.hypot(G.player.pos.x - spot.x, G.player.pos.z - spot.z) > 0.2) continue;
-    const patches = behind(lamp);
-    if (patches.every((at) => paved(at.x, at.z))) return patches;
-  }
-  return null;
+    return spot;
+  });
+  const onPaving = spots.find((spot) => behind(spot, lamp).every((at) => paved(at.x, at.z)));
+  return { spot: onPaving ?? spots[0], paved: Boolean(onPaving) };
+}
+
+/** The hero stood at `spot` facing `lamp`, let settle (the casting lights to take it); the patches behind him, or
+ *  null where he couldn't stand there. */
+async function standBy(lab: Lab, spot: THREE.Vector3, lamp: THREE.Vector3): Promise<THREE.Vector3[] | null> {
+  G.player.walkTo = null;
+  G.player.place(spot, Math.atan2(lamp.x - spot.x, lamp.z - spot.z));
+  await lab.step(SETTLE);
+  if (Math.hypot(G.player.pos.x - spot.x, G.player.pos.z - spot.z) > 0.2) return null;
+  return behind(G.player.pos.clone(), lamp);
 }
 
 /** The most of a patch's light his shadow takes: what the lamps' shadows take there while he casts, less what they
@@ -153,26 +160,43 @@ function mostHeTakes(lab: Lab, patches: THREE.Vector3[], casts: Map<THREE.Object
   return Math.max(...casting.map((take, i) => take - bare[i]));
 }
 
-/** The hero by a street lamp at midnight: the lamps' shadows taking more of the ground behind him while he casts. */
+/** One lamp's reading: the most his shadow takes behind him by it, and whether he stood on paving. */
+interface ByLamp { lamp: number; his: number | null; paved: boolean }
+
+/** The hero by each street lamp in turn at midnight: the lamps' shadows taking more of the ground behind him while he
+ *  casts (from play, "your light test for each light need to test SHADOW, it was missing for half of them"). */
 export async function heroShadowByLamp(lab: Lab, canary: boolean): Promise<LightsChecked> {
-  const lanterns = [...G.arena.village.lanterns].sort((a, b) => Math.hypot(a.x, a.z) - Math.hypot(b.x, b.z));
-  const lamp = lanterns[0];
+  const lanterns = G.arena.village.lanterns;
   holdHour(0);
   const casts = new Map<THREE.Object3D, boolean>();
+  const read: ByLamp[] = [];
   try {
-    // (each spot settled long enough for the lamps' casting lights to take their lamps)
     await lab.step(SETTLE);
     if (!castingLights().length) throw new Error('lab: village: no lamp casting at midnight');
-    const patches = await standBy(lab, lamp);
-    if (!patches) throw new Error('lab: village: no paved ground by a lamp');
-    const his = mostHeTakes(lab, patches, casts, canary);
-    const line = `hero's lamp shadow: the most the lamps' shadows take of a patch of paving behind him ${BY} m `
-      + `from a lamp while he casts, over what they take there while he doesn't: ${(his * 100).toFixed(1)}%`;
-    const missing = his < LEAST_DARKER;
-    const problems = missing && !canary ? [`${line}: he casts no shadow from the lamp`] : [];
-    return { lines: [line], problems, caught: canary ? missing : null, moments: [] };
+    for (let lamp = 0; lamp < lanterns.length; lamp++) {
+      const { spot, paved: onPaving } = spotBy(lanterns[lamp]);
+      const patches = await standBy(lab, spot, lanterns[lamp]);
+      const planted = canary && lamp === lanterns.length - 1;
+      read.push({ lamp, his: patches && mostHeTakes(lab, patches, casts, planted), paved: onPaving });
+    }
   } finally {
     heroCasts(true, casts);
     holdHour(null);
   }
+  return shadowsChecked(read, canary);
+}
+
+/** The readings by every lamp as lines and problems; with `canary`, whether the last lamp's was found missing. */
+function shadowsChecked(read: ByLamp[], canary: boolean): LightsChecked {
+  const each = read.map(({ lamp, his, paved: onPaving }) =>
+    `${lamp} ${his === null ? 'no stand' : `${(his * 100).toFixed(0)}%`}${onPaving ? '' : ' (grass)'}`);
+  const line = `hero's lamp shadow: by each lamp, the most the lamps' shadows take of a patch behind him ${BY} m from `
+    + `it while he casts, over what they take there while he doesn't: ${each.join(', ')}`;
+  const missing = read.filter(({ his }) => his === null || his < LEAST_DARKER);
+  if (canary) {
+    const last = read[read.length - 1].lamp;
+    return { lines: [line], problems: [], caught: missing.some(({ lamp }) => lamp === last), moments: [] };
+  }
+  const problems = missing.map(({ lamp }) => `${line}: he casts no shadow from lamp ${lamp}`);
+  return { lines: [line], problems, caught: null, moments: [] };
 }
