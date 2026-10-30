@@ -332,16 +332,35 @@ function totalsOf(record: FrameDraws): string {
 
 /** The scene's objects as the frame updates their matrices: all of them, those whose own matrix is made again each
  *  frame, and of those the ones off the camera's layer (a crowd's bodies' own meshes, models/crowd.ts: only what reads
- *  them needs them). */
+ *  them needs them). A subtree three leaves alone (`matrixWorldAutoUpdate` off: a hidden place, `matricesOfShownOnly`
+ *  in core/renderer.ts, or what stands still, `standStill`) is counted in all alone: counted made again, the hidden
+ *  biomes read as 1800 of 1861 objects made again in the village. */
 function objectsOf(): string {
   let all = 0, auto = 0, hidden = 0;
-  G.scene.traverse((object) => {
+  const byPart = new Map<string, number>();
+  const visit = (object: THREE.Object3D, updated: boolean, part: string): void => {
     all++;
-    if (!object.matrixAutoUpdate) return;
-    auto++;
-    if (!object.layers.isEnabled(0)) hidden++;
-  });
-  return `${all} objects in the scene, ${auto} made again each frame (${hidden} of them off the camera's layer)`;
+    const own = updated && object.matrixWorldAutoUpdate !== false;
+    if (own && object.matrixAutoUpdate) {
+      auto++;
+      byPart.set(part, (byPart.get(part) ?? 0) + 1);
+      if (!object.layers.isEnabled(0)) hidden++;
+    }
+    for (const child of object.children) visit(child, own, part || partName(child));
+  };
+  visit(G.scene, true, '');
+  const parts = [...byPart].sort((a, b) => b[1] - a[1]).slice(0, PARTS_LISTED);
+  const listed = parts.map(([part, count]) => `${part} ${count}`).join(', ');
+  return `${all} objects in the scene, ${auto} made again each frame (${hidden} of them off the camera's layer; `
+    + `by the scene's part: ${listed})`;
+}
+
+/** the scene's parts whose matrices made again are listed, the most first */
+const PARTS_LISTED = 8;
+
+/** A part of the scene by its name, or its first named child's, or its kind. */
+function partName(object: THREE.Object3D): string {
+  return object.name || object.children.find((child) => child.name)?.name || object.type;
 }
 
 /** the canary's box on the arms' layer */

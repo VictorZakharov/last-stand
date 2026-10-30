@@ -518,7 +518,9 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   which counts GL draws, leaves them out; the rubble's empty pools were 46 a frame), and the scene's draws by their
   material's look (draws of one look, a merge of what doesn't move would make one). Its head line says the draws in
   each pass and how many drew nothing, the triangles and how many lay outside the view, the scene's objects whose
-  matrices are made again each frame, and how many of them are off the camera's layer (a crowd's bodies' own meshes).
+  matrices are made again each frame, by the scene's part, and how many of them are off the camera's layer (a crowd's
+  bodies' own meshes); a subtree three leaves alone (`matrixWorldAutoUpdate` off: a hidden place, what stands still)
+  isn't counted made again (counted, the hidden biomes read as 1,800 of the village's 1,861).
   Through the eyes (`--view first --class warrior`), the arms' own camera's draws are a pass of their own
   (renderer.ts `drawArms`), and what it drew is listed, the hero's and what isn't his. Anything that is neither under the
   hero's model nor his weapons' trail (`fx/swingTrail.ts` `swingTrailsOf`) is a problem, drawn over the frame at the
