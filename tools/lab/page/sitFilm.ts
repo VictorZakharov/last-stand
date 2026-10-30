@@ -1,5 +1,6 @@
 // A film of a sit (tools/lab `sit`): him sitting down the first time and getting up the first time, a frame every
-// few, in a close view and the game's third-person view, each frame labelled with how far down he is. Two moments
+// few, in a close view and the game's third-person view, each frame labelled with how far down he is and how far his
+// hands are through their stages (a greatsword lowered before he goes down and stuck in the ground after). Two moments
 // pictured (half way down, sat) never showed what moves between them: from play, the mage's staff "dropping in a
 // weird way" and turned in his hand once he was up, a bow and weapons "summoned" into the hand.
 import type { Lab, Pictured, Tile, ViewName } from './lab';
@@ -28,14 +29,15 @@ export class SitFilm {
     this.reels = views.map((view) => ({ view, frames: [] }));
   }
 
-  /** Films this frame if he's on his way `way` (`w` between 0 and 1), that way isn't done, and it's one of every
-   *  `EVERY`. */
-  take(lab: Lab, w: number, way: Way): void {
-    if (w <= 0 || w >= 1 || this.done.has(way)) return;
+  /** Films this frame if he's on his way `way` (`moving`: his body or his hands between their ends), that way isn't
+   *  done, and it's one of every `EVERY`; labelled with his body's share down (`w`) and `stage` after it. */
+  take(lab: Lab, w: number, way: Way, moving: boolean, stage = ''): void {
+    if (!moving || this.done.has(way)) return;
     if (this.count++ % EVERY !== 0) return;
     const drawn = lab.drawn(this.reels.map((reel) => reel.view));
+    const text = `${way} ${(w * 100).toFixed(0)}%${stage}`;
     drawn.forEach(({ canvas }, i) => {
-      this.reels[i].frames.push(small(canvas, `${way} ${(w * 100).toFixed(0)}%`, this.reels[i].view));
+      this.reels[i].frames.push(small(canvas, text, this.reels[i].view));
     });
   }
 
