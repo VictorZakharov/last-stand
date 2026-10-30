@@ -34,6 +34,7 @@ import * as renderer from '../../../src/core/renderer';
 import { lightsNotBlinding } from './villageLights';
 import { lampsSteady } from './villageSteady';
 import { lampsAlike } from './villageLampsAlike';
+import { lampsThroughTheDoor } from './villageDoorLamps';
 
 export interface VillageOptions {
   canary: boolean;
@@ -78,6 +79,7 @@ export async function village(lab: Lab, options: VillageOptions): Promise<Report
     await lightsNotBlinding(lab, options.canary),
     await lampsSteady(lab, options.canary),
     await lampsAlike(lab, options.canary),
+    await lampsThroughTheDoor(lab, options.canary),
     await training(lab, options.canary),
     await hoursCompileNothing(lab, options.canary),
   ];
