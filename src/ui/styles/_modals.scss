@@ -28,10 +28,12 @@
 .controls-help .k { font-family: var(--font-display); color: var(--accent); text-align: right; }
 .controls-help.diagrams { display: flex; flex-direction: column; align-items: center; gap: 14px; }
 /* keyboard: the left of a real one, staggered rows; lit keys show what they do (ui/menus.ts keyboardDiagram) */
-.kb { --u: 52px; display: flex; flex-direction: column; gap: 4px; align-self: stretch;
-  -webkit-mask-image: linear-gradient(90deg, #000 90%, transparent); mask-image: linear-gradient(90deg, #000 90%, transparent); }
+/* (keys as narrow as I in its place needs, within its column (the pause menu's: a container), 9.5 keys and their gaps
+   to it and the faded edge after; the rows cut by the box there) */
+.kb { --u: min(46px, (100cqw - 58px) / 9.5); display: flex; flex-direction: column; gap: 4px; align-self: stretch; overflow: hidden;
+  -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 24px), transparent);
+  mask-image: linear-gradient(90deg, #000 calc(100% - 24px), transparent); }
 .kb-row { display: flex; gap: 4px; }
-.kb-gap { flex: none; width: calc(var(--u) * var(--w)); }
 .kb-row:first-child .kb-key { height: 34px; }
 .kb-key { position: relative; flex: none; width: calc(var(--u) * var(--w, 1) + 4px * (var(--w, 1) - 1)); height: 54px; box-sizing: border-box; border-radius: 5px;
   background: linear-gradient(#1c1814, #0e0c0a); border: 1px solid #2e261d; border-bottom-width: 3px; color: #574b3c; }
@@ -87,7 +89,7 @@
 }
 .pause-note { color: $ally-text; font-size: 14px; }
 /* pause menu: forged-steel title, ornamented frame, controls beside the settings */
-.pause-box { position: relative; width: 860px; max-width: calc(94vw / var(--ui, 1)); max-height: calc(94vh / var(--ui, 1)); padding: 18px 34px 16px; gap: 10px;
+.pause-box { position: relative; width: 940px; max-width: calc(94vw / var(--ui, 1)); max-height: calc(94vh / var(--ui, 1)); padding: 18px 34px 16px; gap: 10px;
   background: radial-gradient(ellipse 60% 170px at 50% 0, rgba(150,40,18,.28), transparent), linear-gradient(rgba(22,18,16,.98), rgba(8,7,8,.98)); }
 .pause-box::before { content: ''; position: absolute; inset: 6px; pointer-events: none; border: 1px solid rgba($frame, .22);
   @include corner-brackets; }
@@ -95,8 +97,8 @@
 .pb-title svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
 .pb-title .logo-glow { opacity: .75; }
 .pb-rule { @include diamond-rule; width: min(420px, 80%); margin: -4px auto 2px; }
-.pb-cols { display: grid; grid-template-columns: 1.35fr 1fr; text-align: left; }
-.pb-col { padding: 4px 22px; min-width: 0; }
+.pb-cols { display: grid; grid-template-columns: 1.6fr 1fr; text-align: left; }
+.pb-col { padding: 4px 22px; min-width: 0; container-type: inline-size; }
 .pb-col + .pb-col { border-left: 1px solid; border-image: linear-gradient(transparent, rgba($frame, .5), transparent) 1; }
 .pb-head { @include section-head; margin-bottom: 10px; }
 .pause-box .controls-help { gap: 4px 14px; font-size: 14px; }

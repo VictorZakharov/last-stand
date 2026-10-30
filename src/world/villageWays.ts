@@ -72,6 +72,13 @@ function keepOff(g: THREE.Object3D, wall: Wall, points: readonly [number, number
   return slabs;
 }
 
+/** An unseen wall across way `id` through its portal, `half` m either side: from play, "for village portals, I
+ *  should not be able to walk past them" (round them, and through, he walked on to the court and grove behind). */
+function barPast(g: THREE.Object3D, wall: Wall, id: BiomeId, half: number): void {
+  const at = -ENTRANCES[id].portalOut;
+  keepOff(g, wall, [[-half, at], [half, at]], 2.2, 0.4, null);
+}
+
 // --- the crypt's way ------------------------------------------------------------------------------------------------
 
 /** The crypt's way: its court, graves, the mausoleum and its door down, the crypt's arch with its portal before it. */
@@ -108,6 +115,7 @@ export function buildCryptWay(scene: THREE.Object3D, wall: Wall, M: WayMats, upd
     stoneSlab.rotation.set((rng() - 0.5) * 0.25, (rng() - 0.5) * 0.4, (rng() - 0.5) * 0.2);
   }
   buildTomb(g, wall, M, stone, slate, dark);
+  barPast(g, wall, 'crypt', across + 0.6);
   scene.add(g);
   return buildGate(scene, wall, 0, stone, M.iron, updaters, portalPlace('crypt'));
 }
@@ -235,6 +243,7 @@ export function buildForestWay(scene: THREE.Object3D, wall: Wall, updaters: Upda
   const g = frameOf('forest');
   const rng = mulberry(717);
   keepOff(g, wall, GROVE_EDGE, 2.2, 0.4, null);
+  barPast(g, wall, 'forest', 5.6);
   const rockMat = seeThrough(new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(rock(17), 1, 1.6), color: 0x8a967a, roughness: 0.95 }), 'prop');
   // mossy rocks along the edge, half sunk
   const rocks = new THREE.InstancedMesh(boulderGeo(9, 1), rockMat, 9);

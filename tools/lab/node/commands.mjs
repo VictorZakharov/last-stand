@@ -1153,6 +1153,7 @@ export const COMMANDS = {
         count: options.count === undefined ? undefined : Math.round(options.count),
         rows: options.rows === undefined ? undefined : Math.round(options.rows),
         biome: options.biome,
+        village: Boolean(options.village),
         canary: Boolean(options.canary),
       };
       return side.command('draws', command);

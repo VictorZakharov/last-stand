@@ -26,7 +26,7 @@ import { saveSlot, setSaveSlot } from './loot/saveSlots';
 import { initRun, startRun, updateRun, continueRun, bankRun, abandonRun, playerOut, hostLeft, endRun } from './game/run';
 import { updateFloaters } from './ui/floaters';
 import { initHud, showHud, buildHotbar, banner, showDecision, hideDecision, resetDecision, updateHud, renderSpoils } from './ui/hud';
-import { initMenus, layOutMenuAhead, showMenu, showSummary, hideSummary, showPause, menuStowed, lobbyPractice, selectedWave, lobbyViewShift, renderMenu, markNew, clearOverlays, openPanels, panelsOpen, showHelp, changeHero as askForHeroes, type Panels } from './ui/menus';
+import { initMenus, layOutMenuAhead, showMenu, showSummary, hideSummary, showPause, menuStowed, lobbyPractice, selectedWave, lobbyViewShift, renderMenu, markNew, clearOverlays, openPanels, panelsOpen, showHelp, helpOpen, hideHelp, changeHero as askForHeroes, type Panels } from './ui/menus';
 import { initVillageCard, showVillageCard, villageCardOf } from './ui/villageCard';
 import { initVillage, updateVillage, closedFrom, inYard, villageObject, goUse, goTo, objectNear } from './game/village';
 import { initVillageMap, setVillageMap, villageMapOpen, updateVillageMap } from './ui/villageMap';
@@ -64,7 +64,7 @@ import { preloadStump } from './world/stump';
 import { initSync } from './net/sync';
 import { initSession, joinRoom, invitedRoom, sendLook, sendLobby, sendStart, sendControl, syncAway, updateSession, playSession, partnerInRun } from './net/session';
 import { isCoop, isGuest, isHost, simulates } from './net/role';
-import { initCoop, renderCoop, updateCoopHud, touchReviving, openCoop } from './ui/coop';
+import { initCoop, renderCoop, updateCoopHud, touchReviving, openCoop, coopOpen } from './ui/coop';
 import { updateScoreboard } from './ui/scoreboard';
 import type { BiomeId } from './data/biomes';
 import type { Profile } from './types';
@@ -266,7 +266,7 @@ function leaveObject(o: VillageObject): void {
   if (villageCardOf() === o) showVillageCard(null);
   if (o.use === 'stash' && panelsOpen() === 'chest') openPanels(null);
   if (o.use === 'coop') openCoop(false);
-  if (o.use === 'help') document.getElementById('help')?.classList.add('hidden');
+  if (o.use === 'help') hideHelp();
 }
 
 /** The inventory or the stash opened or put away: the chest's lid follows; put away, the village forgets it. */
@@ -477,13 +477,16 @@ function syncView(): void {
   const phase = G.run?.phase;
   const inRun = G.mode === 'run' && G.player.active && (phase === 'countdown' || phase === 'fighting' || phase === 'cleared');
   const inLobby = G.mode === 'menu' && menuStowed() && !savesOpen() && !villageCardOf() && !villageMapOpen()
-    && !heroSelectOpen();
+    && !heroSelectOpen() && !dialogOpen();
   const look = v !== 'top' && !G.menuOpen && (inRun || inLobby);
   wantPointerLock(look);
   crosshair.classList.toggle('hidden', v === 'top');
   lookHint.classList.toggle('hidden', !look || pointerLocked());
   updateAltCursor();
 }
+
+/** Whether Play together or how to play is up (the campfire's, the notice board's, the pause menu's links). */
+const dialogOpen = (): boolean => coopOpen() || helpOpen();
 
 // --- loop ---------------------------------------------------------------------------
 function handleGlobalKeys() {
@@ -497,6 +500,14 @@ function handleGlobalKeys() {
   // (the village's map, M again or Esc folding it away)
   if (G.mode === 'menu' && !G.menuOpen && G.arena.place === 'village' && wasPressed('m')) setVillageMap(!villageMapOpen());
   if (villageMapOpen() && wasPressed('escape')) { setVillageMap(false); return; }
+  // (and Play together or how to play, wherever they were opened from: from play, "esc on play together should close
+  // play together, not open keys menu")
+  if (dialogOpen() && wasPressed('escape')) {
+    openCoop(false);
+    hideHelp();
+    closedFrom();
+    return;
+  }
   // the Esc that released the mouse-look pointer already paused the game
   if (wasPressed('escape') && performance.now() - lockLostAt < 300) return;
   // (in the village, Esc puts away what an object opened before it pauses)

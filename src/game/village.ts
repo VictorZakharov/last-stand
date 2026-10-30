@@ -34,6 +34,11 @@ const LEAVE = 1.5;
 const LEVEL = 0.9;
 /** how near the hall the hero comes before its heroes are readied, if they aren't yet (m) */
 const HALL_NEAR = 22;
+/** how near the hall's door (m, on the terrace) the other heroes stand on its dais, as inside it: stood from the
+ *  square, their builds' poses and draws took 5 ms of a frame's CPU and 400 draws (a perf report from play) */
+const HALL_SEEN = 7;
+/** how far before the hall's door its portico reaches (m), where a camera looking in sees no grass but through it */
+const PORTICO_DEEP = 3;
 /** how far into the yard the hero must stand to cast (m in from its fence) */
 const YARD_IN = 0.2;
 /** an object's column for the pointer: as wide as its reach's share, and up to its name */
@@ -216,9 +221,40 @@ function hallInside(dt: number): void {
   // too, which the camera stands behind)
   const [roof, front] = village.hallCutaway, view = viewMode();
   roof.visible = !inside || view !== 'top';
-  front.visible = !inside || view === 'first';
+  // (but kept with the camera inside its face: turned to the door, the hall's inside ended at nothing, from play
+  // "should see inner walls from inside the hall")
+  front.visible = !inside || view === 'first' || G.camera.position.z < HALL.inFront;
+  // (from inside, the grass is seen through the doorway alone: walls and roof hid its 750k triangles, drawn all the
+  // same; from above the roof is away, and all of it shows)
+  village.meadow.visible = !(inside && view !== 'top' && cameraInHall() && !doorInView());
+  const onTerrace = p.obj.position.y > TERRACE.high - 0.1;
+  const seen = inside || (onTerrace && Math.hypot(p.pos.x - TERRACE.x, p.pos.z - HALL.door) < HALL_SEEN);
   const near = Math.hypot(p.pos.x - TERRACE.x, p.pos.z - HALL.door) < HALL_NEAR;
-  standHeroes(lobby && near && isWarm('heroes'), dt);
+  standHeroes(lobby && seen && isWarm('heroes'), dt, lobby && near && isWarm('heroes'));
+}
+
+const _door = new THREE.Box3(), _frustum = new THREE.Frustum(), _viewProj = new THREE.Matrix4();
+const _look = new THREE.Vector3();
+
+/** Whether the camera stands inside the hall's walls, or over the portico before them looking in (over the shoulder
+ *  its front wall is away, and before it lies the terrace, bare). */
+function cameraInHall(): boolean {
+  const { x, z } = G.camera.position;
+  return Math.abs(x - TERRACE.x) < HALL.half && z > HALL.wall && z < HALL.door + PORTICO_DEEP;
+}
+
+/** Whether the hall's doorway is in the camera's view: from the portico, whether it looks out of the hall at all
+ *  (looking in, all before it is the terrace's bare stone and the hall; the doorway's box lay before it, and the
+ *  grass's 750k triangles were drawn for nothing). */
+function doorInView(): boolean {
+  const cam = G.camera, y0 = TERRACE.high;
+  if (cam.position.z > HALL.door) return cam.getWorldDirection(_look).z > -0.3;
+  // (wider and deeper than the doorway: the camera's matrices are the last frame's, and turning to it the grass came late)
+  // (and reaching out of the doorway, not into the hall: reaching in, a camera within its depth always saw it)
+  _door.min.set(TERRACE.x - HALL.doorHalf - 1, y0, HALL.door);
+  _door.max.set(TERRACE.x + HALL.doorHalf + 1, y0 + HALL.doorHigh, HALL.door + 1);
+  _frustum.setFromProjectionMatrix(_viewProj.multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse));
+  return _frustum.intersectsBox(_door);
 }
 
 /** the lamps lit now (by lantern index) and how lit each is, and the pool's lights held for them */
