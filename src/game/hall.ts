@@ -21,6 +21,7 @@ import { hallSpot } from '../world/heroHall';
 import { heroDetail } from '../entities/models/armor';
 import { applyShadowDetail, qualityLevel } from '../core/quality';
 import type { Profile } from '../types';
+import { HALL, TERRACE } from '../data/village';
 
 /** the way the heroes face (to the camera) */
 const ROW = { facing: 0 };
@@ -109,6 +110,9 @@ let dragged: number | null = null;
 let upright = false;
 const reduced = (): boolean => matchMedia('(prefers-reduced-motion: reduce)').matches;
 
+/** the other classes' heroes standing on the plinths in the village's hall (`standHeroes`), each on his class's */
+let standing: Player[] = [];
+
 export const hallOpen = (): boolean => heroes.length > 0;
 export const hallHeroes = (): readonly HallHero[] => heroes;
 export const hallFocus = (): number => focus;
@@ -127,6 +131,8 @@ const spot = (i: number): THREE.Vector3 => {
  */
 export function openHall(focusId: string, cut = false): void {
   if (hallOpen()) return;
+  // (those standing in the village's hall go to the room's plinths with the rest)
+  standing = [];
   clearEnemies(); clearProjectiles(); clearEffects(); particles.clear();
   G.player.idle = true;
   G.player.show(false);
@@ -146,6 +152,46 @@ export function openHall(focusId: string, cut = false): void {
   opened = G.time;
   lights = [flash({ ...KEY, life: 1, hold: Infinity }), flash({ ...RIM, life: 1, hold: Infinity })];
   focusHall(Math.max(0, CLASS_IDS.indexOf(focusId)), cut);
+}
+
+/** The other classes' heroes standing on the plinths in the village's hall, each on his class's (the lobby's own
+ *  class's empty: he's walking it), idle and glancing round, while `on` (the hero near it, their programs warm); taken
+ *  out of the scene otherwise. One is built a frame at most (a hero's first build is 100 to 250 ms). */
+export function standHeroes(on: boolean, dt: number): void {
+  if (hallOpen()) return;
+  const want = on ? CLASS_IDS.filter((id) => id !== G.profile.classId) : [];
+  // (those built so far kept while they're the ones wanted: the row is built a hero a frame)
+  if (standing.length > want.length || standing.some((p, i) => p.cls.id !== want[i])) {
+    for (const p of standing) G.scene.remove(p.obj);
+    standing = [];
+  }
+  if (standing.length < want.length) {
+    const id = want[standing.length], i = CLASS_IDS.indexOf(id);
+    const player = heroIn(id, profileOf(id));
+    const at = new THREE.Vector3(TERRACE.x + HALL.plinths[i], 0, HALL.plinthZ);
+    at.y = groundHeight(at.x, at.z);
+    player.spawn.copy(at);
+    player.reset();
+    player.shine = SHINE;
+    // (facing the door, a little in toward the room's middle)
+    place(player, at, -HALL.plinths[i] * 0.06);
+    standing.push(player);
+  }
+  for (const p of standing) {
+    p.glances = true;
+    p.update(dt);
+    haloRound(p, dt);
+  }
+}
+
+/** The class of the hero standing nearest (x, z) in the village's hall, or null. */
+export function standingNear(x: number, z: number): string | null {
+  let best: string | null = null, bestD = Infinity;
+  for (const p of standing) {
+    const d = Math.hypot(p.pos.x - x, p.pos.z - z);
+    if (d < bestD) { best = p.cls.id; bestD = d; }
+  }
+  return best;
 }
 
 /** The profile class `id`'s hero wears in the hall: the lobby's own, else his in the save slot in play; one never
