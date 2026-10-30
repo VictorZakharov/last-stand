@@ -27,6 +27,9 @@ export const SIT = {
   down: 1.1, up: 0.8, handsUp: [1, 0.7], handsFrom: 0.5,
   /** a foe this near gets him up (m) */
   foes: 14,
+  /** how long E asking him to sit waits to be taken, as he comes free (s): taken on its frame alone, a press just
+   *  after an attack, his aim still held, was lost */
+  asked: 1,
   /** after one he can't reach or finds no seat, how long before he looks again (s) */
   retry: 3,
 };
@@ -55,6 +58,8 @@ export class Sitting {
   private spot: SeatSpot | null = null;
   private idleFor = 0;
   private retryIn = 0;
+  /** asked to sit now (E, `ask`): for this long (s), the first frame free to, he goes without his idle's wait */
+  private asked = 0;
   /** walking there: the nearest he has come and for how long he's come no nearer */
   private best = Infinity;
   private noNearer = 0;
@@ -95,8 +100,18 @@ export class Sitting {
     return this.leaving;
   }
 
+  /** Asked to sit now (E; from play: "to speed up the wait of 6 sec"): standing free, he goes to the nearest seat
+   *  at once. Returns whether he wasn't sitting already (on his way, down or getting up: then it's a key that gets him
+   *  up, as any other). */
+  ask(): boolean {
+    if (this.phase !== null) return false;
+    this.asked = SIT.asked;
+    return true;
+  }
+
   /** Given up at once, standing (a respawn, a teleport, the hero placed). */
   clear(): void {
+    this.asked = 0;
     this.phase = null;
     this.spot = null;
     this.leaving = null;
@@ -135,7 +150,9 @@ export class Sitting {
   private wait(me: Sitter, dt: number, idle: boolean): void {
     this.idleFor = idle ? this.idleFor + dt : 0;
     this.retryIn -= dt;
-    if (this.idleFor < SIT.after || this.retryIn > 0) return;
+    const asked = this.asked > 0 && idle;
+    this.asked = asked ? 0 : Math.max(0, this.asked - dt);
+    if (!asked && (this.idleFor < SIT.after || this.retryIn > 0)) return;
     this.spot = nearestSpot(me);
     if (!this.spot) {
       this.retryIn = SIT.retry;
