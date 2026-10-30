@@ -233,7 +233,10 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   hidden behind its caster; 0.0% for every lamp without the shadows' map, 2.6 to 9.7% with it; `--canary` holds the
   last lamp's shadows off for both readings); each road's tightest bend no tighter than its half width and 0.3 m
   for its curb (`page/villageRoads.ts`: the yard's road's inner curb folded into slivers at its gate, 0.9 m against
-  1.6, now 2.9; `--canary` adds that road as it was); every street
+  1.6, now 2.9; `--canary` adds that road as it was); the props' hole (`core/seeThrough.ts`) drawn open and held
+  shut in one frame, the hero beside a cottage's wall over the shoulder (none of the frame outside him may change:
+  from play, "should not see through here, because I'm in the front", 20% did) and behind its roof from above (at
+  least 5% of him must open; `page/villageSeeThrough.ts`, `--canary` the round hole as it was); every street
   lamp's ground round its foot read from over it lit and put out as the hero walks to each lamp in turn at midnight,
   the casting lights handed over as his walk hands them, each lamp giving at least 30% of the light there
   (`page/villageLampsCast.ts`: from play, "why this light is off", a lamp beside him lighting nothing; not reproduced,
