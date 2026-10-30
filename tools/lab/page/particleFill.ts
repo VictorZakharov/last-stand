@@ -13,11 +13,17 @@ type Pool = typeof particles.glow;
 const _at = new THREE.Vector3();
 const _onScreen = new THREE.Vector3();
 
+/** the GPU's largest point (px), asked once: asked every frame, its round trip to the GPU's process was 7% of a
+ *  `perf --village` run's time */
+let largestKept: number | null = null;
+
 /** The GPU's largest point, px. */
 function largestPoint(): number {
+  if (largestKept !== null) return largestKept;
   const gl = G.renderer.getContext();
   const range = gl.getParameter(gl.ALIASED_POINT_SIZE_RANGE) as Float32Array;
-  return range[1];
+  largestKept = range[1];
+  return largestKept;
 }
 
 /** The pixels `pool`'s live points cover in a target `height` px high, those whose disc is in view, every layer. */
