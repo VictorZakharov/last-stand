@@ -46,7 +46,7 @@ export interface DrawsOptions {
 /** the frames run before the one recorded: the camera's glide in and the foes' first frames come to rest */
 const SETTLE_FRAMES = 30;
 /** where the hero stands in the village unless told: on the square, south of the fountain */
-const VILLAGE_SPOT: readonly [number, number] = [0, 6];
+export const VILLAGE_SPOT: readonly [number, number] = [0, 6];
 const ROWS = 16;
 const CANARY_BOXES = 7;
 /** the canary's instanced boxes put far behind the camera, and how far (m) */
@@ -461,7 +461,7 @@ async function recordedFrame(lab: Lab): Promise<FrameDraws> {
 }
 
 /** The run the set-up started left for the village, the hero put at (x, z) facing `facing` and let settle. */
-async function inVillage(lab: Lab, [x, z]: readonly [number, number], facing: number): Promise<void> {
+export async function inVillage(lab: Lab, [x, z]: readonly [number, number], facing: number): Promise<void> {
   await toLobby(lab);
   if (G.arena.place !== 'village') throw new Error('lab: draws: the run never gave way to the village');
   G.player.walkTo = null;

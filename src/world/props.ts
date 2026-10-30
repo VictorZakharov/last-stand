@@ -88,16 +88,39 @@ export function staticShadow(light: THREE.PointLight): void {
   stillShadows.add(light);
 }
 
-/** `light` casting shadows as the still shadows' lights do (their map's size, nearest, bias and softness), of all
- *  round it, drawn again every frame: a pooled light lit at a lamp the hero walks past (the village's,
- *  `game/village.ts`), its shadows his and everything's. */
-export function movingShadow(light: THREE.PointLight): void {
+/** pooled lights casting still shadows while they're lit at a lamp (`lampShadow`), and how often one has been
+ *  asked to be drawn again (`drawLampShadows`) */
+const lampShadows = new Set<THREE.PointLight>();
+let lampsAsked = 0;
+
+/**
+ * `light`, a pooled light lit at a lamp the hero walks past (the village's, `game/village.ts`), casting the still
+ * shadows of what stands round it as a biome's warmest lights do, or no longer (`on`). Drawn every frame of all round
+ * it, the hero too, two lamps' twelve faces were 6 ms of a frame's GPU on a desktop at midnight (`npm run lab -- perf
+ * --village --hour 0`: 8.5 ms of shadows against 2.2 at noon), where the goal is a steady 144 frames a second.
+ */
+export function lampShadow(light: THREE.PointLight, on: boolean): void {
+  light.castShadow = on;
+  if (!on) {
+    lampShadows.delete(light);
+    light.shadow.intensity = 1;
+    return;
+  }
   light.shadow.mapSize.set(STILL_SHADOW.size, STILL_SHADOW.size);
   light.shadow.camera.near = STILL_SHADOW.near;
   light.shadow.bias = STILL_SHADOW.bias;
   light.shadow.radius = STILL_SHADOW.radius;
-  light.shadow.autoUpdate = true;
+  light.shadow.autoUpdate = false;
+  lampShadows.add(light);
 }
+
+/** The lamps' still shadows asked to be drawn again (one moved to another lamp), with the next frame's still ones. */
+export function drawLampShadows(): void {
+  lampsAsked++;
+}
+
+/** How often the lamps' still shadows have been asked to be drawn again (`drawLampShadows`). */
+export const lampShadowsAsked = (): number => lampsAsked;
 
 /** what the still shadows are drawn into: nothing seen, a pixel (`drawStillShadows`) */
 let stillTarget: THREE.WebGLRenderTarget | null = null;
@@ -140,7 +163,7 @@ function hideBodies(parent: THREE.Object3D, shown: THREE.Object3D, hidden: THREE
  */
 export function drawStillShadows(renderer: THREE.WebGLRenderer, scene: THREE.Scene, camera: THREE.Camera,
   shown: THREE.Group, kept: THREE.LightShadow): void {
-  const lights = [...stillShadows].filter((light) => shown.getObjectById(light.id));
+  const lights = [...stillShadows].filter((light) => shown.getObjectById(light.id)).concat([...lampShadows]);
   if (!lights.length) return;
   stillTarget ??= new THREE.WebGLRenderTarget(1, 1);
   const hidden: THREE.Object3D[] = [];

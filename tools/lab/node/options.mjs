@@ -534,12 +534,23 @@ export const COMMANDS = {
       + 'a shader compiled as it\'s timed and a canary unseen are problems (a phone\'s: --screen 832x384@3.75 '
       + '--quality low@518400 --throttle 4; --class mage)',
     argument: 'skills',
+    argumentOptional: true,
     options: {
       biome: {
         kind: 'choice',
         choices: ['crypt', 'forest'],
         usage: 'crypt|forest',
         help: 'the biome (forest by default)',
+      },
+      village: {
+        kind: 'switch',
+        help: 'in the lobby\'s village instead, no skills: the hero standing on its square, then walking (--at, '
+          + '--facing where he stands)',
+      },
+      hour: {
+        kind: 'number',
+        usage: 'h',
+        help: 'with --village, the hour it\'s lit for (0 to 24: by night its lamps are lit)',
       },
       facing: { kind: 'number', usage: 'degrees', help: 'the way the hero faces and casts (0, +z, by default)' },
       at: SETUP_OPTIONS.at,
@@ -2066,7 +2077,9 @@ export function parseCommandLine(argv) {
     }
   }
   checkTogether(options);
-  if (definition.argument && options._.length === 0) throw labError(`${name} needs its ${definition.argument}`);
+  if (definition.argument && !definition.argumentOptional && options._.length === 0) {
+    throw labError(`${name} needs its ${definition.argument}`);
+  }
   if (!definition.argument && options._.length > 0) {
     throw labError(`${name} takes no ${JSON.stringify(options._[0])} (options start with --)`);
   }
@@ -2108,7 +2121,8 @@ export function usage() {
   const lines = ['npm run lab -- <command> [options]', ''];
   for (const [name, definition] of Object.entries(COMMANDS)) {
     if (name === 'help') continue;
-    const head = definition.argument ? `${name} <${definition.argument}>` : name;
+    const head = !definition.argument ? name : definition.argumentOptional ? `${name} [<${definition.argument}>]`
+      : `${name} <${definition.argument}>`;
     lines.push(helpEntry(`  ${head}`, definition.help));
     for (const [optionName, spec] of Object.entries(definition.options)) {
       if (!shared.has(optionName)) lines.push(optionEntry(optionName, spec));

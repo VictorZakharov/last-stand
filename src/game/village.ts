@@ -18,8 +18,7 @@ import { HALL, TERRACE, inHall } from '../data/village';
 import { standHeroes } from './hall';
 import { isWarm } from './warm';
 import { flash, release, type LightSlot } from '../fx/lights';
-import { movingShadow } from '../world/props';
-import { castsMoving } from '../world/culling';
+import { drawLampShadows, lampShadow } from '../world/props';
 
 export interface VillageHooks {
   /** `object` used: its panel, its card or its screen opened */
@@ -295,16 +294,21 @@ function lightLamps(dt: number): void {
   const lanterns = [...village.lanterns, ...village.hallTorches];
   // (in the hall its dais's lights always, the nearest torches with them)
   const dais = inside ? TORCHLIGHT.dais : 0;
-  const wanted = new Set(lamps.map((l, i) => ({ i: base + i, d: i < dais ? -1 : Math.hypot(l.x - p.x, l.z - p.z) }))
-    .sort((a, b) => a.d - b.d).slice(0, LAMPLIGHT.lit + (inside ? 1 : 0)).map((l) => l.i));
+  const nearest = lamps.map((l, i) => ({ i: base + i, d: i < dais ? -1 : Math.hypot(l.x - p.x, l.z - p.z) }))
+    .sort((a, b) => a.d - b.d).slice(0, LAMPLIGHT.lit + (inside ? 1 : 0)).map((l) => l.i);
+  const wanted = new Set(nearest);
   for (const i of wanted) if (!lampLit.has(i)) lampLit.set(i, 0);
   for (const [i, k] of lampLit) {
     const to = wanted.has(i) ? 1 : 0, next = k + Math.sign(to - k) * Math.min(Math.abs(to - k), dt * LAMPLIGHT.fade);
     if (next <= 0 && !to) lampLit.delete(i); else lampLit.set(i, next);
   }
   poolsFor(lampLit);
-  // (each held light on a lit lamp, the brightest first; one more lamp than lights waits dark for one to fade)
-  const lit = [...lampLit].sort((a, b) => b[1] - a[1]);
+  castOnNearest(nearest.slice(0, LAMP_SHADOWS), dt);
+  // (the casting lights on their lamps, each other held light on a lit lamp, the brightest first; one more lamp than
+  // lights waits dark for one to fade)
+  const cast = new Set(casters.map((c) => c.lamp));
+  const rest = [...lampLit].filter(([i]) => !cast.has(i)).sort((a, b) => b[1] - a[1]);
+  const lit = casters.map((c): [number, number] => [c.lamp, lampLit.get(c.lamp) ?? 0]).concat(rest);
   for (const [k, slot] of lampLights.entries()) {
     const [i, share] = lit[k] ?? [-1, 0];
     const n = village.lanterns.length, torch = i >= n, onDais = torch && i < n + TORCHLIGHT.dais;
@@ -337,20 +341,49 @@ function poolsFor(lit: ReadonlyMap<number, number>): void {
   if (changed && pools.instanceColor) pools.instanceColor.needsUpdate = true;
 }
 
-/** whether the brightest lamps' lights cast the shadows, the braziers' not */
+/** whether the lamps' lights cast the shadows, the braziers' not */
 let lampsCast = false;
+/** how fast a lamp's shadow fades in or out (its share a second) */
+const SHADOW_FADE = 2;
+/** the casting lights' lamps (by lantern index, the torches' after; -1: none) and how much of each one's shadow shows
+ *  (the first `LAMP_SHADOWS` held lights) */
+const casters = Array.from({ length: LAMP_SHADOWS }, () => ({ lamp: -1, share: 0 }));
 
-/** The two casting lights' shadows handed to the lamps' brightest held lights, or back to the braziers (each held
- *  light is on the lamp lit brightest after those before it: `lightLamps`). */
+/**
+ * The casting lights kept on the lamps nearest the hero (`near`), each shadow faded out before its light moves to
+ * another lamp, drawn there once of what stands still (`lampShadow`) and faded in: handed at once to whichever two
+ * lamps were lit brightest, the shadows came and went as he walked ("shadows appear and disappear when walking next to
+ * them, it looks lame").
+ */
+function castOnNearest(near: number[], dt: number): void {
+  for (const [k, c] of casters.entries()) {
+    const shadow = lampLights[k].light.shadow;
+    const wanted = c.lamp >= 0 && near.includes(c.lamp) && lampLit.has(c.lamp);
+    if (wanted) c.share = Math.min(1, c.share + dt * SHADOW_FADE);
+    else c.share = Math.max(0, c.share - dt * SHADOW_FADE);
+    if (!wanted && c.share === 0) c.lamp = -1;
+    shadow.intensity = c.share;
+  }
+  for (const lamp of near) {
+    if (casters.some((c) => c.lamp === lamp)) continue;
+    const free = casters.find((c) => c.lamp < 0);
+    if (!free) break;
+    free.lamp = lamp;
+    free.share = 0;
+    // (placed on it as the lights are, below, before its shadow is drawn there with the frame's still ones)
+    drawLampShadows();
+  }
+}
+
+/** The two casting lights' shadows handed to the lamps' (`castOnNearest`), or back to the braziers. */
 function castFromLamps(on: boolean): void {
   if (on === lampsCast) return;
   lampsCast = on;
   for (const light of G.arena.village.stillLights) light.castShadow = !on;
-  for (const [k, slot] of lampLights.entries()) {
-    const casts = on && k < LAMP_SHADOWS;
-    if (casts) movingShadow(slot.light);
-    slot.light.castShadow = casts;
-    castsMoving(slot.light, casts);
+  for (const [k, slot] of lampLights.entries()) if (k < LAMP_SHADOWS) lampShadow(slot.light, on);
+  for (const c of casters) {
+    c.lamp = -1;
+    c.share = 0;
   }
 }
 
