@@ -194,7 +194,10 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   sides, stopped before it (from play: "for village portals, I should not be able to walk past them"; the commit
   before its walls let six of ten past); through the eyes on the square, the view tilted from over level down toward
   the ground, the grass's rings' middle (`focusOf` in `world/meadow.ts`) moving at most 2 m a frame (the old rule
-  threw it 22 m at a sight just under level: "grass a near circle that keeps updating in front of me"); the terrace's
+  threw it 22 m at a sight just under level: "grass a near circle that keeps updating in front of me"); sent across
+  each cottage to a spot behind it, and from each portal to every other object's stand, as a place picked on the map
+  sends him (`goTo`), there within 600 and 1500 frames (walked straight at the spot, he ran into a cottage and stood
+  there: "map waypoints dont work, when path is long and curved... it just runs into obstacles"); the terrace's
   stair walked up, the body's height on its top (`obj.position.y`:
   the player's `pos.y` is always 0, and a reading of it said 0 m up); in the close view (V), mouse look asking for the
   pointer on the square and letting it go once the hall of heroes is used (`pointerWanted` in `core/input.ts`: its
@@ -205,7 +208,8 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   done, and begun again and skipped, Enter there at once; and the village held at six hours of the day, drawn, with
   no program compiled (`G.renderer.info.programs`). `--canary` plants a fault for each (an object's stand moved off it,
   the yard's reading taken outside it, a hero put past the palisade after a walk, one put past a portal, the rings'
-  middle moved 20 m in a frame, the stair
+  middle moved 20 m in a frame, a walk round a cottage and one from a portal walked straight (`routing.on`), the
+  stair
   walked at beside it, the
   pointer asked of the square, the notice board never read, a new material shown at one hour), each listed and each must be caught. It found the
   chest's stand off the terrace's edge, below it, where the hero could never use it.

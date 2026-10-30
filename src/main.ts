@@ -14,7 +14,8 @@ import { initLights, updateLights, clearLights } from './fx/lights';
 import { initEffects, updateEffects, clearEffects } from './fx/effects';
 import { buildArena, compileEnvMaps } from './world/arena';
 import { separateEnemies } from './world/collision';
-import { Player } from './entities/player';
+import { prepareWalks } from './world/walkPath';
+import { HERO_RADIUS, Player } from './entities/player';
 import { viewArms } from './entities/viewModel';
 import { updateSwingTrails } from './fx/swingTrail';
 import { updateEnemies, clearEnemies } from './entities/enemy';
@@ -99,6 +100,8 @@ async function boot() {
   // (built on the maps' canvases as the workers paint them: nothing is drawn till all have come)
   G.arena = await buildArena(scene, renderer);
   G.arena.setHour(hourNow());
+  // (the village's ground a hero can stand on, for his walks to a spot: game/village.ts goTo)
+  prepareWalks(HERO_RADIUS);
   initQuality();
   // the village shown, and its programs compiled while the hero is built (game/warmup.ts)
   const heroLit = compileTheBiome();

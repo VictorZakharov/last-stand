@@ -550,23 +550,20 @@ function buildGround(scene: THREE.Object3D, M: Mats, mask: MaskUniforms): void {
  *  "no grass on paved road pls, if you want, lets have curb, grass will be up to curb") */
 const CURB = { w: 0.2, h: 0.07 };
 
-/** A road's two edges, each point of `line` its width's half out either side, wandering a little (each road its own,
- *  `seed`): the left (-1) and the right (1). */
-function roadEdges(line: readonly Spot[], width: number, seed: number): [Spot[], Spot[]] {
+/** A road's two edges, each point of `line` its width's half out either side: the left (-1) and the right (1). They
+ *  run with its line's curve (a spline, `windingLine`): wandering in and out every 2 m, its curbs were wavy, as
+ *  "nobody makes a curb". */
+function roadEdges(line: readonly Spot[], width: number): [Spot[], Spot[]] {
   const edges: [Spot[], Spot[]] = [[], []];
   line.forEach(([x, z], i) => {
     const [ax, az] = line[Math.max(0, i - 1)], [bx, bz] = line[Math.min(line.length - 1, i + 1)];
     const len = Math.hypot(bx - ax, bz - az) || 1, nx = -(bz - az) / len, nz = (bx - ax) / len;
-    for (const [k, s] of [[0, -1], [1, 1]] as const) {
-      const wander = 0.16 * Math.sin(i * 0.37 + seed * 3.1 + s) + 0.1 * Math.sin(i * 1.13 + seed + s * 2.0);
-      const half = width / 2 + wander;
-      edges[k].push([x + nx * half * s, z + nz * half * s]);
-    }
+    for (const [k, s] of [[0, -1], [1, 1]] as const) edges[k].push([x + (nx * width * s) / 2, z + (nz * width * s) / 2]);
   });
   return edges;
 }
 
-/** Whether (x, z) is paved: on the square or a road (its edges' wander allowed for), road `own` left out (-1: none). */
+/** Whether (x, z) is paved: on the square or a road (a little past its edges), road `own` left out (-1: none). */
 function paved(x: number, z: number, own: number): boolean {
   if (insidePolygon(squareOutline(), x, z)) return true;
   return roadLines.some((road, k) => k !== own
@@ -589,7 +586,7 @@ function curbLines(): { line: Spot[]; out: 1 | -1; road: number }[] {
   const square = squareOutline();
   const lines: { line: Spot[]; out: 1 | -1; road: number }[] = [{ line: [...square, square[0]], out: -1, road: -1 }];
   roadLines.forEach((road, k) => {
-    const [left, right] = roadEdges(road.line, road.width, k);
+    const [left, right] = roadEdges(road.line, road.width);
     lines.push({ line: left, out: -1, road: k }, { line: right, out: 1, road: k });
   });
   return lines;
@@ -668,7 +665,7 @@ function flatPatch(points: readonly Spot[], m: THREE.Material, y: number): THREE
  *  own, `seed`). */
 function roadStrip(line: readonly Spot[], width: number, m: THREE.Material, seed: number): THREE.Mesh {
   const positions: number[] = [], index: number[] = [];
-  const [left, right] = roadEdges(line, width, seed);
+  const [left, right] = roadEdges(line, width);
   line.forEach((_, i) => {
     positions.push(left[i][0], 0, left[i][1], right[i][0], 0, right[i][1]);
     if (i > 0) {
@@ -694,7 +691,7 @@ function meadowMask(trees: readonly TreeSpot[]): MeadowMask {
   // the paving and its curbs, the grass up to them; the footpaths, earth trodden bare down their middles
   mask.clearPolygon(squareOutline());
   roadLines.forEach((road, k) => {
-    const [left, right] = roadEdges(road.line, road.width, k);
+    const [left, right] = roadEdges(road.line, road.width);
     mask.clearPolygon([...left, ...right.reverse()]);
   });
   for (const { line } of curbLines()) mask.clearPath(line, CURB.w * 2 + 0.1);
