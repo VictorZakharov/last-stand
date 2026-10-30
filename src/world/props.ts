@@ -127,6 +127,9 @@ export function drawLampShadows(): void {
   lampsAsked++;
 }
 
+/** The pooled lights casting the lamps' still shadows now (`lampShadow`). */
+export const lampShadowLights = (): ReadonlySet<THREE.PointLight> => lampShadows;
+
 /** How often the lamps' still shadows have been asked to be drawn again (`drawLampShadows`). */
 export const lampShadowsAsked = (): number => lampsAsked;
 

@@ -162,6 +162,19 @@ function cullFor(camera: THREE.Camera): void {
   }
 }
 
+/** The shadow map's own draw: of `lights`' maps, of `scene` as `camera`'s layers show it. */
+export type ShadowDraw = (lights: THREE.Light[], scene: THREE.Scene, camera: THREE.Camera) => void;
+/** Work run after each draw of the shadow map, with that draw to draw more by (`afterShadows`). */
+type AfterShadows = (draw: ShadowDraw, scene: THREE.Scene, camera: THREE.Camera, still: boolean) => void;
+const afterShadow = new Set<AfterShadows>();
+
+/** `after` run after each draw of the shadow map, still or not (`drawingStill`), inside the work round it (a hero's
+ *  shadow cast as one stays set up for it): the lamps' shadows keep their still maps and draw the heroes over them
+ *  (`world/lampShadows.ts`). */
+export function afterShadows(after: AfterShadows): void {
+  afterShadow.add(after);
+}
+
 /** Culls the meshes culled in cells as `renderer` draws `scene`: each render's camera's cells in view packed before
  *  it draws (after the scene's matrices are updated), and the shadow casters shown only while the shadow map draws. */
 export function cullWhileDrawn(scene: THREE.Scene, renderer: THREE.WebGLRenderer): void {
@@ -180,6 +193,7 @@ export function cullWhileDrawn(scene: THREE.Scene, renderer: THREE.WebGLRenderer
     const after = stillOf ? [] : [...aroundShadow].map((around) => around(camera));
     try {
       draw(lights, scene, camera);
+      for (const then of afterShadow) then(draw, scene, camera, stillOf !== null);
     } finally {
       for (const undo of after) undo();
       for (const caster of casters) caster.visible = false;
