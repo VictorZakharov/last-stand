@@ -188,12 +188,19 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   (`--screen 844x390@3`): the stick is drawn at the touch controls' scale, and so is its travel.
 - `village`: the lobby's village as a player walks it (`page/village.ts`; `src/game/village.ts`), the run left for
   the lobby. Each check in turn: every object (the portals, the chest, the hall, the campfire, the chronicle, the
-  notice board) used from where the hero stands to use it, and what it opens shown; his skills armed in the training
-  yard and not on the square; straight walks out from the square at angles round it, and along each way out, stopped
-  inside the palisade or the way's walls; walks along each way at its portal, through its middle and round its
-  sides, stopped before it (from play: "for village portals, I should not be able to walk past them"; the commit
-  before its walls let six of ten past); through the eyes on the square, the view tilted from over level down toward
-  the ground, the grass's rings' middle (`focusOf` in `world/meadow.ts`) moving at most 2 m a frame (the old rule
+  notice board) used from where the hero stands to use it, and what it opens shown; the notice board, the campfire
+  and the chronicle used by E, put away by their own button and used by E again where he stands
+  (`page/villageUseAgain.ts`: from play, "when I press got it, I cannot press E again until I move away", the notice
+  board and the campfire held as open until he walked off; `--canary` leaves the second press out); his skills armed
+  in the training yard and not on the square; straight walks out from the square at angles round it, and along each
+  way out, stopped inside the palisade or the way's walls; walks along each way at its portal, through its middle
+  and round its sides, stopped before it (from play: "for village portals, I should not be able to walk past
+  them"; the commit before its walls let six of ten past); walks on the terrace at the hall's side walls and its front
+  beside the door, the first surface drawn ahead of his middle at a knee's height at least 0.15 m off
+  (`page/villageHallSide.ts`: from
+  play, "can pass through textures here", the plinth course along the hall's foot drawn and not in the wall;
+  `--canary` counts him half a metre further); through the eyes on the square, the view tilted from over level down
+  toward the ground, the grass's rings' middle (`focusOf` in `world/meadow.ts`) moving at most 2 m a frame (the old rule
   threw it 22 m at a sight just under level: "grass a near circle that keeps updating in front of me"); sent across
   each cottage to a spot behind it, and from each portal to every other object's stand, as a place picked on the map
   sends him (`goTo`), there within 600 and 1500 frames (walked straight at the spot, he ran into a cottage and stood
@@ -215,14 +222,14 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   together, within 1% (`page/villageDoorLamps.ts`: from play, "lights turn off when I enter the hall", the lamps
   switched over to the torches at its door; `--canary` puts one out as he goes in); the hero's shadows from each
   street lamp in turn at midnight, 1.5 m and 3 m off it (from play, by the stair's lamp: "no shadows FROM LIGHT, only
-  from moon"), and the moon's at each: the most of a patch's light his shadow takes away from the moon, at least 5% (16 to 82%, 9% by a lamp on the grass, where its light is
-  most of the ground's)
+  from moon"), and the moon's at each: the most of a patch's light his shadow takes away from the moon, at least 5% (16
+  to 82%, 9% by a lamp on the grass, where its light is most of the ground's)
   (the lamps' shadows held off for its readings: "moon shadow always there plus 1 or more shadows from lights"); the
   most the lamps' shadows take of a patch behind him (on paving where
   there's some round it) while he casts over what they take there while he doesn't, at least 15% by every lamp
   (`page/villageHeroShadow.ts`: from play, "no shadows from lights", the lamps' shadows drawn once with him hidden;
-  0.0% before, 59 to 85% now; `--canary` stops him casting by the last lamp); his two shadows standing between two lamps,
-  the two nearest him (the two casting lights), the same reading behind him away from each, at least 15% each
+  0.0% before, 59 to 85% now; `--canary` stops him casting by the last lamp); his two shadows standing between two
+  lamps, the two nearest him (the two casting lights), the same reading behind him away from each, at least 15% each
   (from play, "supposed to be 2 shadows here, right ? from both lights": 18 to 54% each; the far lamp's is the faint
   one, lit by the near lamp; a pair with nowhere to stand between, the fountain, is listed but no fault; `--canary`
   stops him casting for the last pair's second reading); every street lamp casting, the hero in
@@ -259,12 +266,12 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   done, and begun again and skipped, Enter there at once; and the village held at six hours of the day, drawn, with
   no program compiled (`G.renderer.info.programs`). `--canary` plants a fault for each (an object's stand moved off it,
   the yard's reading taken outside it, a hero put past the palisade after a walk, one put past a portal, the rings'
-  middle moved 20 m in a frame, a walk round a cottage and one from a portal walked straight (`routing.on`), an orb far past white hung in the
-  first light, the
+  middle moved 20 m in a frame, a walk round a cottage and one from a portal walked straight (`routing.on`), an orb far
+  past white hung in the first light, the
   stair
   walked at beside it, the
-  pointer asked of the square, the notice board never read, a new material shown at one hour), each listed and each must be caught. It found the
-  chest's stand off the terrace's edge, below it, where the hero could never use it.
+  pointer asked of the square, the notice board never read, a new material shown at one hour), each listed and each must
+  be caught. It found the chest's stand off the terrace's edge, below it, where the hero could never use it.
 - `tap`: every skill of the hero's class aimed by holding (`SkillDef.aimed`: `--class mage` Starfall and Veilstep,
   `ranger` Quarry Mark and Strawman), its touch button pressed by a finger, the other thumb on the move stick
   (`lab.touchDown(at, finger)`), each from a fresh set-up with a training dummy standing clear at the hero's side.

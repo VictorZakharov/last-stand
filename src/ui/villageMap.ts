@@ -7,7 +7,7 @@
 // at a size it hasn't been drawn at.
 import { G } from '../state';
 import {
-  CAMPFIRE, COTTAGES, DAIS_EAST, ENTRANCES, GAP_HALF, HALL, NOTICE, TERRACE, VILLAGE_OBJECTS, YARD, portalPlace, yardToWorld,
+  CAMPFIRE, COTTAGES, ENTRANCES, GAP_HALF, HALL, NOTICE, TERRACE, VILLAGE_OBJECTS, YARD, portalPlace, yardToWorld,
   type Spot, type VillageObject,
 } from '../data/village';
 import { BIOME_IDS, type BiomeId } from '../data/biomes';
@@ -327,7 +327,7 @@ function drawBox(g: CanvasRenderingContext2D, at: At, x: number, z: number, hx: 
   g.stroke();
 }
 
-/** The hall's terrace and its plinths, the chronicle's platform, the cottages and sheds, the yard, the fountain, the
+/** The hall's terrace and its plinths, the cottages and sheds, the yard, the fountain, the
  *  campfire and the notice board. */
 function drawBuildings(g: CanvasRenderingContext2D, at: At, metre: number): void {
   const X = TERRACE.x;
@@ -342,7 +342,6 @@ function drawBuildings(g: CanvasRenderingContext2D, at: At, metre: number): void
   g.strokeStyle = 'rgba(234, 217, 180, 0.6)';
   g.lineWidth = Math.max(1, metre * 0.12);
   g.stroke();
-  drawBox(g, at, DAIS_EAST.x, DAIS_EAST.z, DAIS_EAST.half, DAIS_EAST.half, 0, STONE);
   for (const c of COTTAGES) {
     const hx = (COTTAGE.w / 2 + COTTAGE.eave) * c.size, hz = (COTTAGE.d / 2 + COTTAGE.eave) * c.size;
     drawBox(g, at, c.x, c.z, hx, hz, c.facing, ROOF);
