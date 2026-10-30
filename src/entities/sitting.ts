@@ -6,7 +6,7 @@
 // it and sits (`models/sit.ts` poses him); any key, a foe coming near or a hit gets him up again first, and only a key
 // still held once he's up acts. His look round goes on throughout: sat, he stands idle.
 import * as THREE from 'three';
-import type { SitState } from '../types';
+import type { SitHands, SitState } from '../types';
 import { G } from '../state';
 import { angleDamp } from '../util';
 import { SEAT, seatSpot, seatStands, type Relaxed, type SeatSpot } from '../world/seats';
@@ -20,8 +20,11 @@ export const SIT = {
   /** how fast he turns his back to the seat (1/s), as fast as a person turns at most (rad/s), and how long it may take
    *  (s). (Eased alone, he spun about at up to 21 rad/s, a snap, and the axe in his hand went 42 cm in a frame) */
   turn: 7, turnFastest: 5, turnMost: 1.2,
-  /** the way down and the way up (s) */
-  down: 1.1, up: 0.8,
+  /** the way down and the way up (s), and his hands' getting up as a share of their sitting down, before he stands and
+   *  after (`Model.sitHands`: asked to act, he's up and doing it within about two seconds, a greatsword drawn out of
+   *  the ground and onto his shoulder; at a third of the time, it was swung over the top 40 cm a frame), and how far
+   *  down he still is as they begin again before he stands (`handsFrom`) */
+  down: 1.1, up: 0.8, handsUp: [0.85, 0.3], handsFrom: 0.5,
   /** a foe this near gets him up (m) */
   foes: 14,
   /** after one he can't reach or finds no seat, how long before he looks again (s) */
@@ -43,8 +46,8 @@ export interface Sitter {
   readonly pos: THREE.Vector3;
   facing: number;
   readonly radius: number;
-  /** how many times as long as `SIT`'s he takes to sit and to get up (`Model.sitPace`) */
-  readonly sitPace: number;
+  /** how long his hands take before he goes down and once he's sat, on a seat or the floor (`Model.sitHands`) */
+  sitHands(floor: boolean): SitHands;
 }
 
 export class Sitting {
@@ -61,11 +64,11 @@ export class Sitting {
   private readonly from = new THREE.Vector3();
   /** the seat he got up from, kept off it only as far as he has left it (`relaxed`) */
   private leaving: Relaxed | null = null;
-  private readonly state: SitState = { w: 0, hip: 0, foot: 0 };
+  private readonly state: SitState = { w: 0, hip: 0, foot: 0, before: 0, after: 0 };
 
   /** The pose's share of the sit this frame, or none. */
   get pose(): SitState | null {
-    return this.state.w > 0 ? this.state : null;
+    return this.state.w > 0 || this.state.before > 0 ? this.state : null;
   }
 
   /** Whether the sit places him this frame (going down, sat, getting up): nothing else moves him or keeps him off. */
@@ -92,6 +95,8 @@ export class Sitting {
     this.idleFor = 0;
     this.u = 0;
     this.state.w = 0;
+    this.state.before = 0;
+    this.state.after = 0;
   }
 
   /**
@@ -173,16 +178,28 @@ export class Sitting {
       this.phase = 'up';
       return this.rise(me, dt);
     }
-    this.u = Math.min(1, this.u + dt / (SIT.down * me.sitPace));
-    if (this.u >= 1) this.phase = 'sat';
+    // (his hands first, standing; then his body; then his hands again, sat: lowered as he went down, a greatsword
+    // swept through the log behind him)
+    const st = this.state, hands = me.sitHands(!!this.spot!.seat.ground);
+    if (st.before < 1) st.before = hands.before > 0 ? Math.min(1, st.before + dt / hands.before) : 1;
+    else if (this.u < 1) this.u = Math.min(1, this.u + dt / SIT.down);
+    else st.after = hands.after > 0 ? Math.min(1, st.after + dt / hands.after) : 1;
+    if (st.after >= 1) this.phase = 'sat';
     this.place(me, dt);
     return true;
   }
 
   private rise(me: Sitter, dt: number): boolean {
-    this.u = Math.max(0, this.u - dt / (SIT.up * me.sitPace));
+    // (each back in turn, his hands quicker, `handsUp`, and readied again from half way up: in turn, a greatsword
+    // swung back onto his shoulder in time went 45 cm a frame, and he took 2.6 s to be up)
+    const st = this.state, hands = me.sitHands(!!this.spot!.seat.ground), [before, after] = SIT.handsUp;
+    if (st.after > 0) st.after = hands.after > 0 ? Math.max(0, st.after - dt / (hands.after * after)) : 0;
+    else {
+      if (this.u > 0) this.u = Math.max(0, this.u - dt / SIT.up);
+      if (this.u < SIT.handsFrom) st.before = hands.before > 0 ? Math.max(0, st.before - dt / (hands.before * before)) : 0;
+    }
     this.place(me, dt);
-    if (this.u > 0) return true;
+    if (st.before > 0) return true;
     // (up: let go of the seat only as he leaves it, from as near as he stands, or its circles would throw him off it)
     this.leaving = { circles: this.spot!.seat.circles, r: SEAT.near };
     this.giveUp();
@@ -219,6 +236,8 @@ export class Sitting {
     this.idleFor = 0;
     this.u = 0;
     this.state.w = 0;
+    this.state.before = 0;
+    this.state.after = 0;
   }
 }
 
