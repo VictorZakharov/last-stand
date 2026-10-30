@@ -47,6 +47,8 @@ fire", "bow clipping through body in log sitting"), and the moment any went deep
 right, ahead, his left and above, his skeleton drawn over him and his skirts, the fire, the plants and the rocks
 round him hidden (`IntoBody`, `DEEPEST_VIEWS`): the depth alone didn't say which way an arm went in, and fixes tried
 blind took a minute a round, two agents' worth of them, without converging on the floor pose.
+The same close-up is retained for each later sit before an ask: a second sit on the stone put a greataxe's haft
+15 cm into the chest even though its first sit was clear, and the temporary report discarded that picture.
 
 What he carries is followed from his set-up until he's up again (`page/sitCarried.ts`): every rigid mesh of his model
 (a weapon's, the shield's, the staff's, the bow's, the book's), grouped by the object over it hung from a joint. A
