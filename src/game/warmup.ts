@@ -34,6 +34,7 @@ import { groundSamples } from './groundItems';
 import { compileOutline, warmOutline } from '../ui/overlay/outline';
 import { labelsScene } from '../ui/overlay/layer';
 import { isWarm, markWarm, wanted, warming, warmingRuns, type Need } from './warm';
+import { buildStandingAhead } from './hall';
 import type { Model } from '../types';
 
 /** far outside the arena, past what the lobby's camera sees: where the fight's warm-up stands what it builds */
@@ -193,8 +194,8 @@ export async function warmLobby(heroes = false): Promise<void> {
   const warming = warmUp(G.renderer, G.scene, G.camera, sceneTarget(), {
     objects: extra, leaveOut, before: mapsArrived, also: () => compileOutline(dummies()),
   });
-  // (its compile is made as it's called, the scene walked before the foes are built)
-  const ahead = buildAhead(theFight());
+  // (its compile is made as it's called, the scene walked before the foes are built, then the hall's heroes)
+  const ahead = buildAhead(theFight()).then(() => buildStandingAhead(nextTask));
   const took = await warming;
   performance.measure('warm the lobby', { start, duration: performance.now() - start, detail: took });
   hero.dispose();
