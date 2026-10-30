@@ -7,7 +7,9 @@
 // moves it is a jump. And what he holds is held as before once he's up again: "staff rotated when he stands up". A
 // piece held is turned by the hand that holds it, not in it: "warrior magically rotates the sword in his hand" (the
 // greatsword swung half round in his fist as he lowered it, 2 degrees a frame, under the jumps' limit), nor slid
-// through it: "ranger uses force pull to grab his bow from seated near fire, when standing up".
+// through it: "ranger uses force pull to grab his bow from seated near fire, when standing up". A palm resting on a
+// piece's end (on a pommel, as a greatsword is stood under it) holds it to the floor, not in a grip: it turns under
+// the palm as it's pushed upright, and isn't counted as turned in the hand.
 import * as THREE from 'three';
 import type { Lab } from './lab';
 
@@ -15,6 +17,10 @@ import type { Lab } from './lab';
 const HELD_WITHIN = 0.06;
 /** where a palm's middle is in its hand's frame (rig units): down the hand from the wrist, onto its palm */
 export const PALM_AT = new THREE.Vector3(0, -0.06, -0.02);
+/** a palm within this share of a piece's length of either end rests on it (a greatsword's pommel: 0.03 to 0.06; its
+ *  fist round its grip: 0.27). Judged by which way the palm faced, a fist round a grip read 0.76 along the blade, as
+ *  much as a palm laid on a slanting pommel */
+const END_SHARE = 0.1;
 /** a mesh moving less than this a frame is still (m) */
 const STILL = 0.002;
 /** a piece judged that went this far in all with no hand on it moved on its own (m) */
@@ -126,6 +132,7 @@ export class Carried {
     const lab = this.lab;
     lab.model.root.updateMatrixWorld(true);
     const held = heldPieces(lab, this.followed.map((each) => each.part));
+    const palms = palmsOf(lab);
     const k = lab.joints.root.scale.x;
     const frameOf: TraceFrame = { went: 0, turned: 0, held: false, seen: false };
     for (const each of this.followed) {
@@ -151,6 +158,7 @@ export class Carried {
         const turned = each.quaternion.angleTo(quaternion) * DEG;
         const mesh = meshName(part.mesh);
         if (part.name === this.trace) traceInto(frameOf, moved, turned, inHand);
+        if (part.name === this.trace) frameOf.along = palms.map((palm) => alongPiece(part.group, palm));
         if (turned > TURN_MOST) {
           each.jump = worse(each.jump, `${mesh} turned ${turned.toFixed(0)}°`, turned / TURN_MOST, frame);
         }
@@ -158,7 +166,8 @@ export class Carried {
           each.jump = worse(each.jump, `${mesh} went ${(moved * 100).toFixed(0)} cm`, moved / THROW_MOST, frame);
         }
       }
-      followInHand(each, inHand, quaternion, frame);
+      const gripped = inHand && palms.some((palm) => gripsIt(part, palm));
+      followInHand(each, gripped, quaternion, frame);
       each.world = world;
       each.onJoint = onJoint;
       each.quaternion = quaternion;
@@ -265,6 +274,8 @@ interface TraceFrame {
   turned: number;
   held: boolean;
   seen: boolean;
+  /** each palm's place along the piece (0 to 1 from one end to the other) */
+  along?: number[];
 }
 
 /** One of the traced piece's meshes read into its frame. */
@@ -295,7 +306,8 @@ function handMoved(hand: THREE.Object3D, were: Map<THREE.Object3D, HandAt>): str
 /** The traced piece's frame as a line. */
 function traceLine(at: string, frame: TraceFrame): string {
   const went = `${(frame.went * 100).toFixed(1)} cm`;
-  return `${at}: went ${went}, turned ${frame.turned.toFixed(1)}°${frame.held ? '' : ', no hand on it'}`;
+  const palms = frame.along ? `, palms along it ${frame.along.map((share) => share.toFixed(2)).join(' ')}` : '';
+  return `${at}: went ${went}, turned ${frame.turned.toFixed(1)}°${frame.held ? '' : ', no hand on it'}${palms}`;
 }
 
 /** The worse of a jump and one of `size` (none of size 0). */
@@ -358,20 +370,74 @@ export function heldApart(before: HeldNow, after: HeldNow): HeldApart[] {
   return apart;
 }
 
-/** The canary: the first piece a palm is on now turned by `angle` (rad) in his hand; undone by what's returned. */
+/** The canary: the first piece a palm grips now turned by `angle` (rad) in his hand; undone by what's returned (none
+ *  if no palm grips one: a palm resting on a pommel holds nothing in its grip). */
 export function turnHeld(lab: Lab, angle: number): (() => void) | null {
   lab.model.root.updateMatrixWorld(true);
   const parts = partsOf(lab);
-  const held = heldPieces(lab, parts);
-  const part = parts.find((each) => held.has(each.group) && shown(each.mesh));
+  const palms = palmsOf(lab);
+  const part = parts.find((each) => shown(each.mesh) && each.inHand && palms.some((palm) => gripsIt(each, palm)));
   if (!part) return null;
   part.group.rotateX(angle);
   return () => part.group.rotateX(-angle);
 }
 
+/** Each palm's middle in the world now. */
+function palmsOf(lab: Lab): THREE.Vector3[] {
+  return [lab.joints.handL, lab.joints.handR].map((hand) => hand.localToWorld(PALM_AT.clone()));
+}
+
+/** each piece's box in its own frame, every mesh of it */
+const piecesBoxes = new WeakMap<THREE.Object3D, THREE.Box3>();
+
+/** Whether a palm grips a piece: on it, and round it rather than resting on its end. */
+function gripsIt(part: Part, palm: THREE.Vector3): boolean {
+  return palmOn(part.mesh, palm) < HELD_WITHIN && !onItsEnd(part.group, palm);
+}
+
+/** Whether a palm rests on a piece's end, as on a pommel's top: within `END_SHARE` of either end of its length. */
+function onItsEnd(group: THREE.Object3D, palm: THREE.Vector3): boolean {
+  const along = alongPiece(group, palm);
+  return along < END_SHARE || along > 1 - END_SHARE;
+}
+
+/** Where `palm` is along a piece's length: 0 at one end, 1 at the other. */
+function alongPiece(group: THREE.Object3D, palm: THREE.Vector3): number {
+  const box = pieceBox(group);
+  const local = group.worldToLocal(palm.clone());
+  const axis = lengthAxis(box);
+  const size = box.getSize(new THREE.Vector3());
+  return (local.getComponent(axis) - box.min.getComponent(axis)) / size.getComponent(axis);
+}
+
+/** Which of a box's sides is its longest (0, 1 or 2: x, y, z). */
+function lengthAxis(box: THREE.Box3): number {
+  const size = box.getSize(new THREE.Vector3());
+  if (size.x >= size.y && size.x >= size.z) return 0;
+  return size.y >= size.z ? 1 : 2;
+}
+
+/** A piece's box in its own frame, every mesh of it, made once. */
+function pieceBox(group: THREE.Object3D): THREE.Box3 {
+  const made = piecesBoxes.get(group);
+  if (made) return made;
+  group.updateMatrixWorld(true);
+  const toPiece = group.matrixWorld.clone().invert();
+  const box = new THREE.Box3();
+  group.traverse((object) => {
+    const mesh = object as THREE.Mesh;
+    if (!mesh.isMesh) return;
+    if (!mesh.geometry.boundingBox) mesh.geometry.computeBoundingBox();
+    const inPiece = mesh.matrixWorld.clone().premultiply(toPiece);
+    box.union(mesh.geometry.boundingBox!.clone().applyMatrix4(inPiece));
+  });
+  piecesBoxes.set(group, box);
+  return box;
+}
+
 /** The pieces a palm is on now: of those hung from a hand, any whose mesh a palm is within `HELD_WITHIN` of. */
 function heldPieces(lab: Lab, parts: Part[]): Set<THREE.Object3D> {
-  const palms = [lab.joints.handL, lab.joints.handR].map((hand) => hand.localToWorld(PALM_AT.clone()));
+  const palms = palmsOf(lab);
   const held = new Set<THREE.Object3D>();
   for (const part of parts) {
     if (!part.inHand || held.has(part.group) || !shown(part.mesh)) continue;

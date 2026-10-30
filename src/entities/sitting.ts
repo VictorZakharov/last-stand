@@ -138,6 +138,10 @@ export class Sitting {
     this.asked = SIT.asked;
     this.askedSeat = this.pointedSeat;
     this.askedAt.copy(this.pointedAt);
+    // (its outline gone as he's asked: left lit, it stood round the seat the frame he set off for it)
+    outline(null);
+    this.lit = false;
+    this.pointedFor = 0;
     return true;
   }
 
