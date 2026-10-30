@@ -19,14 +19,15 @@ import { seatSpot, seatTopAt, type Seat } from '../../../src/world/seats';
 import { SIT } from '../../../src/entities/sitting';
 import type { BiomeId } from '../../../src/data/biomes';
 import type { Fixture, Lab, Pictured, Report, ViewName } from './lab';
-import { bodyBreaches, grippingSides } from './range';
+import { ARM_LIMITS, bodyBreaches, grippingRanges, grippingSides } from './range';
+import { ArmsPinned, describeStrain, pinnedCanary } from './armStrain';
 import { cm as cmOf, follow, JERK_FROM, skirtsOf, type Followed } from './coat';
 import { WeaponBody } from './weaponBody';
 import { SEAT_CANARY_CAUGHT, seatCanary, WeaponSeat } from './weaponSeat';
 import { bowOf } from './ranger';
 import { armsInLegs } from './armsInLegs';
 import { armsInBody } from './armsIn';
-import { Carried, heldApart, heldNow, LOOSE_MOST, PALM_AT, turnHeld } from './sitCarried';
+import { Carried, heldApart, heldNow, IN_HAND_MOST, LOOSE_MOST, PALM_AT, SLID_MOST, turnHeld } from './sitCarried';
 import { legsThrough, legsThroughCanary, THROUGH_FROM, type LegThrough } from './sitCloth';
 import { SitFilm } from './sitFilm';
 import { FRAMED_MOST, neckOnScreen, type Framed } from './sitFraming';
@@ -113,6 +114,8 @@ const FACING_FIRE = 15;
 const CANARY_RAISE = 0.12;
 const CANARY_PUSH = { from: 0.15, by: 0.01, frames: [60, 90] };
 const CANARY_TURN = 0.5;
+/** the canary's turn of what he holds in his hand, a little more each frame, sat (rad a frame, over which frames) */
+const CANARY_TWIST = { by: 0.03, frames: [100, 130] };
 
 /** A seat tried: its name, its biome, how it's picked from the biome's, and whether its feet hang. */
 interface SeatCase {
@@ -179,7 +182,7 @@ interface Out {
   moments: Pictured[];
   /** the canary's reads of its own pieces: how far what it pushed went with no hand on it (m), and whether what it
    *  turned in his hand read as held otherwise (each on its own, so a real fault can't pass for it) */
-  canary?: { pushed: number; turned: boolean };
+  canary?: { pushed: number; turned: boolean; twisted: number; pinned: boolean };
 }
 
 /** What's followed on a seat from its set-up until he's up again: what he carries, his legs through his skirts (the
@@ -191,6 +194,8 @@ interface Watch {
   film: SitFilm;
   through: (LegThrough & { at: string }) | null;
   shown: number;
+  /** his arms held at two or more of their joints' stops at once ("he would snap his arm") */
+  pinned: ArmsPinned;
   before: ReturnType<typeof heldNow>;
   canary: boolean;
   moments: Pictured[];
@@ -222,8 +227,9 @@ export async function sit(lab: Lab, options: SitOptions): Promise<Report> {
 
 /** The canary on one seat: his body raised off it as he sits must be caught as sitting on air. */
 async function canaryOn(lab: Lab, c: SeatCase, fixture: Fixture, out: Out): Promise<Report> {
-  out.canary = { pushed: 0, turned: false };
+  out.canary = { pushed: 0, turned: false, twisted: 0, pinned: false };
   await trySeat(lab, { ...c, asks: [{ what: 'step', held: false }] }, fixture, { canary: true }, out);
+  out.canary.pinned = pinnedCanary(bodyBreaches(lab.joints).angles, ARM_LIMITS);
   const problems: string[] = [];
   const pushedTo = CANARY_PUSH.by * (CANARY_PUSH.frames[1] - CANARY_PUSH.frames[0]) / 2;
   const canaries = [
@@ -236,6 +242,11 @@ async function canaryOn(lab: Lab, c: SeatCase, fixture: Fixture, out: Out): Prom
       caught: out.canary.pushed >= pushedTo,
     },
     { what: 'what he holds turned in his hand as he gets up', caught: out.canary.turned },
+    {
+      what: `what he holds turned slowly in his hand, sat (${out.canary.twisted.toFixed(0)}° read)`,
+      caught: out.canary.twisted > IN_HAND_MOST * 2,
+    },
+    { what: 'his right arm held at its stops', caught: out.canary.pinned },
   ];
   for (const canary of canaries) {
     out.text.push(`  canary, ${canary.what}: ${canary.caught ? 'caught' : 'MISSED'}`);
@@ -275,7 +286,7 @@ async function trySeat(lab: Lab, c: SeatCase, fixture: Fixture, options: SitOpti
   const watch: Watch = {
     carried: new Carried(lab, options.trace), film: new SitFilm(c.name, [c.views[0], 'third']), through: null,
     seat: [new WeaponSeat(seat, (each) => each.model.tip?.parent), new WeaponSeat(seat, bowApart)],
-    shown: 0,
+    shown: 0, pinned: new ArmsPinned(c.name, ARM_LIMITS),
     before: heldNow(lab), canary: !!options.canary, moments: [],
   };
   const sat = await untilSat(lab, label, c.views.slice(0, 2), out, watch);
@@ -320,6 +331,8 @@ function judgeFraming(name: string, standing: Framed, sat: Framed, out: Out): vo
 /** A frame of what's followed: what he carries, his legs through his skirts (the deepest pictured as it deepens). */
 function watchFrame(lab: Lab, name: string, frame: string, watch: Watch, skirts: Followed[]): void {
   watch.carried.observe(frame);
+  const strain = watch.pinned.observe(bodyBreaches(lab.joints).angles, grippingRanges(lab), frame);
+  if (strain) watch.moments.push(closeUp(lab, `${name}: ${describeStrain(strain)} (${frame})`, DEEPEST_VIEWS, false));
   for (const piece of watch.seat) piece.observe(lab, frame);
   const through = legsThrough(lab.joints, skirts);
   if (!through || through.depth <= THROUGH_FROM) return;
@@ -342,9 +355,22 @@ function judgeWatch(name: string, watch: Watch, out: Out): void {
     if (found.jump) {
       out.problems.push(`sit: by the ${name}, his ${found.name} ${found.jump.by} in a frame (${found.jump.at})`);
     }
+    const turned = found.turnedInHand, slid = found.slidInHand;
+    if (turned && turned.by > IN_HAND_MOST) {
+      out.problems.push(`sit: by the ${name}, his ${found.name} turned ${turned.by.toFixed(0)}° in his hand `
+        + `(from ${turned.from} to ${turned.to})`);
+    }
+    if (slid && slid.by > SLID_MOST) {
+      out.problems.push(`sit: by the ${name}, his ${found.name} slid ${cmOf(slid.by)} cm through his hand `
+        + `(from ${slid.from} to ${slid.to})`);
+    }
     const jump = found.jump ? `, ${found.jump.by} in a frame` : '';
-    out.text.push(`    his ${found.name}: ${cmOf(found.loose)} cm with no hand on it${jump}`);
+    const turnedBy = turned ? `, turned ${turned.by.toFixed(0)}°` : '';
+    const inHand = turned || slid ? `${turnedBy}, slid ${cmOf(slid?.by ?? 0)} cm in his hand at most` : '';
+    out.text.push(`    his ${found.name}: ${cmOf(found.loose)} cm with no hand on it${jump}${inHand}`);
   }
+  const pinned = watch.pinned.describe();
+  if (pinned) out.problems.push(`sit: by the ${name}, ${pinned} (the stops: ${watch.pinned.tally()})`);
   const through = watch.through;
   if (through) {
     out.problems.push(`sit: by the ${name}, his ${through.leg} ${cmOf(through.depth)} cm through his ${through.skirt} `
@@ -549,12 +575,14 @@ async function readSat(lab: Lab, options: SitOptions, name: string, out: Out, wa
   const skirts = skirtsOf(lab.model.root);
   const into = new IntoBody(name, true);
   const spans = skirts.map((skirt) => new Spans(skirt.last.length));
-  // (the canary's push read on its own, from just before it)
+  // (the canary's push and its turn read on their own, from just before each)
   const pushing = canary ? new Carried(lab) : null;
+  const twisting = canary ? new Carried(lab) : null;
   let frame = 0;
   const reads = await lab.step(SAT_FOR * RATE, undefined, () => {
     if (canary) j.body.position.y += CANARY_RAISE / j.root.scale.x;
     const pushed = canary ? pushOutOfHand(lab, frame) : null;
+    const twisted = canary ? twistInHand(lab, frame) : null;
     const read = readNow(lab);
     into.observe(lab, `${frame}`);
     watchFrame(lab, name, `sat, frame ${frame}`, watch, skirts);
@@ -564,6 +592,13 @@ async function readSat(lab: Lab, options: SitOptions, name: string, out: Out, wa
         out.canary.pushed = Math.max(0, ...pushing.findings().map((found) => found.loose));
       }
     }
+    if (twisting && frame >= CANARY_TWIST.frames[0] - 1 && frame < CANARY_TWIST.frames[1]) {
+      twisting.observe(`${frame}`);
+      if (frame === CANARY_TWIST.frames[1] - 1 && out.canary) {
+        out.canary.twisted = Math.max(0, ...twisting.findings().map((found) => found.turnedInHand?.by ?? 0));
+      }
+    }
+    twisted?.();
     pushed?.();
     // (the first two frames fill each point's last two places)
     for (const skirt of skirts) follow(skirt, frame, frame >= 2, !!options.frames, j);
@@ -897,6 +932,14 @@ function judgeHeldAgain(lab: Lab, what: string, watch: Watch, out: Out): void {
       : `${cmOf(piece.off)} cm off and ${piece.turned.toFixed(0)}° turned from how he held it`;
     out.problems.push(`sit: ${what}, his ${piece.name} ${how} once he was up`);
   }
+}
+
+/** The canary: on `CANARY_TWIST`'s frames, what he holds turned in his hand a little further each frame (and back
+ *  after the frame's reads, by what's returned). */
+function twistInHand(lab: Lab, frame: number): (() => void) | null {
+  const [from, to] = CANARY_TWIST.frames;
+  if (frame < from || frame >= to) return null;
+  return turnHeld(lab, CANARY_TWIST.by * (frame - from + 1));
 }
 
 /** The canary: on `CANARY_PUSH`'s frames, the first piece he holds pushed out of his hand a little further each

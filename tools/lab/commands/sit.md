@@ -60,7 +60,15 @@ corner within 3 cm on its joint and turned under 10°. From play, both passed by
 in a weird way" (the mage let go of it at a fifth of the way down and it went on to the floor on its own, 8 m of
 movement in all), "staff rotated when he stands up" (140° turned in his hand), "he just summons the bow into his hand
 using jedi force", "when warrior sits on a log, weapons are being pulled around with jedi force too, on sit down, and
-on stand up" (his sword flew 113 cm in a frame). His legs are read against his skirts (`page/sitCloth.ts`): every
+on stand up" (his sword flew 113 cm in a frame). A piece held is moved by the hand, not in it: each frame adds the
+lesser of its move in the world and in the hand's frame (with the hand, it moves in the world alone; a palm moved
+over a piece standing still, in the hand's frame alone), frames under 0.5° and 3 mm left out as the grip's own
+fitting, and it may turn 20° and slide 5 cm (its group's origin: a grip, a bow's handle) in all while held. From
+play, both passed every measure: "warrior magically rotates the sword in his hand" (the greatsword swung half round in
+his fist as he lowered it, 2° a frame), "ranger uses force pull to grab his bow from seated near fire" (2.6 m through
+his hand). And no arm may be held at two or more of its joints' stops at once (`page/armStrain.ts`, as `range` reads
+it; pictured at its most): "if a real warrior would put a sword down like that, he would snap his arm" (by the fire,
+the forearm turned to its end and the wrist bent to its). His legs are read against his skirts (`page/sitCloth.ts`): every
 triangle's corners, edges' middles and middle against the thighs' and shins' capsules at their drawn radii, a point
 over 1.5 cm inside one the leg through the cloth, the deepest pictured as it deepens ("knees clipping through robe
 when sitting near fire": the mage's thigh 9 cm through his robe; the skirts' wander and jerks were read, never what
@@ -74,7 +82,9 @@ standing one (if seated)" (by a fire it sat 0.67 under it, the camera at a stand
 `--canary` raises his body 12 cm off the log as he sits: it must be read as sitting on air; pushes what he holds out
 of his hand, 15 cm and a centimetre further each frame for half a second as he sits, read on its own by a `Carried`
 of its own: at least 15 cm of it must read as moved with no hand on it; turns what he holds 0.5 rad in his hand once
-he's up, read against how he held it a moment before: it must read as held otherwise; and reads a cloth point at his
+he's up, read against how he held it a moment before: it must read as held otherwise; turns it 0.03 rad further in
+his hand each frame for half a second, sat, which must read as turned over 40° in it; holds the right arm at its
+stops (`pinnedCanary`); and reads a cloth point at his
 left knee's joint, which must read 4 cm deep or more. The owner's words: "if there is a nearby log or not high stone ... and character is idle,
 they need to walk up to this prop and sit on it, should sit on the closest side", "when user presses any action,
 they should stand up first, then perform the action if user is still pressing it (do not queue)", "while seated,
