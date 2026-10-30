@@ -558,7 +558,8 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   the pace. A cast pressed and never made, a shader compiled while it was timed, and frames all read 0 ms are
   problems. `--village`: the lobby's village instead (`--hour` it's lit for), no skills or foes: the hero standing on
   its square, then walking (120 frames each; `--at`, `--facing`), then walking of himself from the square into the
-  hall of heroes to its dais (900 frames: from play, "lag when entering hall of heroes", frames of 875 and 472 ms);
+  hall of heroes to its dais (900 frames: from play, "lag when entering hall of heroes", frames of 875 and 472 ms),
+  then standing in it (120 frames: from play, "still FPS drop when entering the hall");
   each phase lists its slowest frames, each with its page's work and its slowest stages; from the owner's report, 10 to 13 ms of GPU a frame
   on an RTX 4070 Ti where the goal is a steady 144 frames a second (6.9 ms). `--canary` runs a round with the hero's update made 2 ms slower (it must read at least 0.8 of that) and
   the scene drawn twice (the scene pass's GPU time must read at least 1.3 times more), and the particles twice as
