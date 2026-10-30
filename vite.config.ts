@@ -24,8 +24,10 @@ function buildInfo(): { ref: string; time: string } {
   return { ref: `${pr}${sha ? sha.slice(0, 7) : 'local'}`, time: new Date().toISOString() };
 }
 
-/** three's files only WebGPURenderer uses: its build, the node language's, and the addons made of nodes */
-const WEBGPU_PART = /three\.(webgpu|tsl)|jsm[\\/](tsl|pipelines)[\\/]/;
+/** three's builds: its core and WebGL renderer, which every page loads, and its WebGPU renderer and node language,
+ *  which only `?renderer=webgpu` does (core/webgpu.ts; its addons go with whatever imports them) */
+const THREE_BUILD = /node_modules[\\/]three[\\/]build[\\/]three\.(core|module)\.js/;
+const WEBGPU_BUILD = /node_modules[\\/]three[\\/]build[\\/]three\.(webgpu|tsl)\.js/;
 
 export default defineConfig({
   base: './',              // relative asset paths so dist/ works on any static host (e.g. GitHub Pages)
@@ -38,8 +40,16 @@ export default defineConfig({
   build: {
     chunkSizeWarningLimit: 1200,
     rollupOptions: {
-      // (three's WebGPU build and its node addons apart, fetched only by `?renderer=webgpu`: core/webgpu.ts)
-      output: { manualChunks: (id: string) => (!id.includes('node_modules/three') ? undefined : WEBGPU_PART.test(id) ? 'three-webgpu' : 'three') },
+      // (groups, not `manualChunks`: rolldown's manual chunk took three's WebGPU build into `three` with the rest)
+      output: {
+        codeSplitting: {
+          groups: [
+            // (its dependencies left out: they'd take three's core, which every page loads, along)
+            { name: 'three-webgpu', test: WEBGPU_BUILD, priority: 2, includeDependenciesRecursively: false },
+            { name: 'three', test: THREE_BUILD, priority: 1 },
+          ],
+        },
+      },
     },
   },
   server: { port: 5173, open: false },
