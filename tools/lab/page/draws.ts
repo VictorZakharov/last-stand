@@ -22,6 +22,9 @@ import { crowdPlaces, CROWD_FACING, CROWD_SPOT } from './crowd';
 import { foesAt } from './death';
 import * as swingTrail from '../../../src/fx/swingTrail';
 import { armsLens } from './inFrame';
+import { toLobby } from './hallMoves';
+import { groundHeight } from '../../../src/world/ground';
+import { faceCamera } from '../../../src/core/renderer';
 
 export interface DrawsOptions {
   fixture: Fixture;
@@ -31,11 +34,16 @@ export interface DrawsOptions {
   rows?: number;
   /** the biome (as the page has it when not given) */
   biome?: BiomeId;
+  /** in the lobby's village instead: the run the set-up starts left, no foes, the hero where `fixture` says (the
+   *  square by default) */
+  village?: boolean;
   canary: boolean;
 }
 
 /** the frames run before the one recorded: the camera's glide in and the foes' first frames come to rest */
 const SETTLE_FRAMES = 30;
+/** where the hero stands in the village unless told: on the square, south of the fountain */
+const VILLAGE_SPOT: readonly [number, number] = [0, 6];
 const ROWS = 16;
 const CANARY_BOXES = 7;
 /** the canary's instanced boxes put far behind the camera, and how far (m) */
@@ -442,7 +450,18 @@ async function recordedFrame(lab: Lab): Promise<FrameDraws> {
   }
 }
 
+/** The run the set-up started left for the village, the hero put at (x, z) facing `facing` and let settle. */
+async function inVillage(lab: Lab, [x, z]: readonly [number, number], facing: number): Promise<void> {
+  await toLobby(lab);
+  if (G.arena.place !== 'village') throw new Error('lab: draws: the run never gave way to the village');
+  G.player.walkTo = null;
+  G.player.place(new THREE.Vector3(x, groundHeight(x, z), z), facing);
+  // (the camera turned with him, as back from a run: the view's yaw is the set-up's otherwise)
+  faceCamera(facing);
+}
+
 export async function draws(lab: Lab, options: DrawsOptions): Promise<Report> {
+  if (options.village) return villageDraws(lab, options);
   const count = options.count ?? 38;
   if (options.biome && G.arena.biome !== options.biome) G.arena.setBiome(options.biome);
   G.arena.restoreProps();
@@ -459,6 +478,24 @@ export async function draws(lab: Lab, options: DrawsOptions): Promise<Report> {
   const foes = `${count} ${count === 1 ? 'foe' : 'foes'}`;
   const view = options.fixture.view ?? 'top';
   const head = `${G.player.cls.id}, ${foes}, ${G.arena.biome}, ${view} view: ${totalsOf(record)}; ${objectsOf()}`;
+  const problems = [...strangerProblems(record), ...(options.canary ? canaryProblems(record) : [])];
+  return { text: [head, ...lists(record, options.rows ?? ROWS)].join('\n'), problems };
+}
+
+/** One frame's draws in the village, where the hero stands (`--at`, `--facing`), in the view the set-up asks for. */
+async function villageDraws(lab: Lab, options: DrawsOptions): Promise<Report> {
+  const facing = options.fixture.facing ?? Math.PI;
+  await lab.setup({ ...options.fixture, at: undefined, facing });
+  await inVillage(lab, options.fixture.at ?? VILLAGE_SPOT, facing);
+  const unplant = options.canary ? plantBoxes() : () => {};
+  let record: FrameDraws;
+  try {
+    record = await recordedFrame(lab);
+  } finally {
+    unplant();
+  }
+  const view = options.fixture.view ?? 'top';
+  const head = `${G.player.cls.id}, the village, ${view} view: ${totalsOf(record)}; ${objectsOf()}`;
   const problems = [...strangerProblems(record), ...(options.canary ? canaryProblems(record) : [])];
   return { text: [head, ...lists(record, options.rows ?? ROWS)].join('\n'), problems };
 }

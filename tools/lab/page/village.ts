@@ -1,12 +1,14 @@
 // `lab village`: the village the lobby stands in, as a player walks it (tools/lab). The run is left for the lobby, and:
 // every object is usable from where the hero stands to use it; his skills cast in the training yard and nowhere else;
-// no straight walk out from inside the palisade or along a way out leaves the village; the terrace's stair takes him
+// no straight walk out from inside the palisade or along a way out leaves the village; none along a way out gets past
+// its portal, through it or round it; the terrace's stair takes him
 // up to the hall; in the close view the hall's screen lets the pointer go; the first visit's training ticks off each
 // step as the player takes it (the yard walked into, a dummy struck, the map opened by M, the stash and the notice
 // board used), the portal's card holding its way in until it's done, and skipped it opens the portals at once; and
 // no hour of the day compiles a program.
 // `--canary` plants a fault for each check: an object's stand moved off it, the yard's reading taken outside it, a
-// hero put past the palisade after a walk, the stair walked at beside it into the terrace's wall, the pointer asked
+// hero put past the palisade after a walk, put past a portal after a walk at it, the stair walked at beside it into
+// the terrace's wall, the pointer asked
 // of the square (where mouse look holds it), the notice board never read, a new material shown at one hour.
 import * as THREE from 'three';
 import type { Lab, Report } from './lab';
@@ -42,6 +44,9 @@ const OUT_OF_YARD = 14;
 /** the walks out: from how far in toward the middle each starts (a share of the palisade's distance), how many */
 const WALK_IN = 0.7;
 const WALKS = 16;
+/** the walks at each portal: how far before it they start (m), and how far either side of its middle (m) */
+const PORTAL_BEFORE = 2.5;
+const PORTAL_ACROSS = [0, -2.2, 2.2, -4, 4];
 /** how far past the end of a walk its target lies (m), so he never stops short of the edge on his own */
 const FAR = 70;
 /** the hours of the day shown, each drawn once */
@@ -57,6 +62,7 @@ export async function village(lab: Lab, options: VillageOptions): Promise<Report
     await objectsUsable(lab, options.canary),
     await castingInYard(lab, options.canary),
     await boundsClosed(lab, options.canary),
+    await portalsHold(lab, options.canary),
     await stairClimbed(lab, options.canary),
     await hallFreesPointer(lab, options.canary),
     await training(lab, options.canary),
@@ -168,6 +174,45 @@ async function boundsClosed(lab: Lab, canary: boolean): Promise<Checked> {
   }
   const line = `bounds: ${walksOut().length - leaks.length} of ${walksOut().length} walks out stopped inside`;
   return { lines: [line, ...leaks], problems: leaks, caught };
+}
+
+/** No walk along a way out gets past its portal, straight through it or round its sides (from play: "for village
+ *  portals, I should not be able to walk past them"; a hero put past it after the first walk, with `canary`). */
+async function portalsHold(lab: Lab, canary: boolean): Promise<Checked> {
+  const passed: string[] = [];
+  const problems: string[] = [];
+  let walks = 0;
+  let caught: boolean | null = null;
+  for (const id of BIOME_IDS) {
+    const { gap, out, portalOut } = ENTRANCES[id];
+    const along = (d: number, across: number): Spot => [
+      gap[0] + out[0] * d - out[1] * across,
+      gap[1] + out[1] * d + out[0] * across,
+    ];
+    for (const across of PORTAL_ACROSS) {
+      const planted = canary && walks === 0;
+      walks++;
+      await stand(lab, along(portalOut - PORTAL_BEFORE, across));
+      await walkToward(lab, along(FAR, across));
+      if (planted) putAt(along(portalOut + 1.5, across));
+      const [x, z] = at();
+      const outAlong = (x - gap[0]) * out[0] + (z - gap[1]) * out[1];
+      const past = outAlong > portalOut;
+      if (planted) caught = past;
+      if (past) {
+        const put = planted ? ' (put there)' : '';
+        passed.push(`portals: the ${id} portal walked past ${across} m aside, to ${outAlong.toFixed(1)} m out${put}`);
+        if (!planted) problems.push(passed[passed.length - 1]);
+      }
+    }
+  }
+  const line = `portals: ${walks - passed.length} of ${walks} walks at them stopped before them`;
+  return { lines: [line, ...passed], problems, caught };
+}
+
+/** The hero moved to (x, z) at once, as a fault planted there. */
+function putAt([x, z]: Spot): void {
+  G.player.pos.set(x, 0, z);
 }
 
 /** Up the terrace's stair to the hall's plinths: on the terrace's top by its end (beside it, into the wall, with

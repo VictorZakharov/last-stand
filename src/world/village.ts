@@ -123,6 +123,8 @@ export interface Village extends Biome {
   /** the hall of heroes' roof, ceiling and front wall (cut away over the hero inside, but through his eyes, as from
    *  above and over his shoulder they hid the room: game/village.ts) */
   hallCutaway: readonly THREE.Object3D[];
+  /** the meadow's grass (left undrawn from inside the hall, its doorway out of sight: game/village.ts) */
+  meadow: THREE.Object3D;
   /** the lights on the hall's dais (its first two, lit whenever the hero is inside) and its torches' flames (the
    *  nearest lit), by the pooled lights */
   hallTorches: readonly THREE.Vector3[];
@@ -308,7 +310,8 @@ export function buildVillage(scene: THREE.Group): Village {
   const maskTexture = mask.texture();
   const maskUniforms: MaskUniforms = { uMeadow: { value: maskTexture }, uMeadowHalf: { value: mask.half } };
   buildGround(scene, M, maskUniforms);
-  scene.add(buildMeadow(mask, maskTexture, updaters));
+  const meadow = buildMeadow(mask, maskTexture, updaters);
+  scene.add(meadow);
   buildSquare(scene, M, obstacles, updaters);
   buildTerrace(scene, wall, levels, M);
   const hall = buildHall(scene, wall, levels, M, obstacles, updaters);
@@ -354,6 +357,7 @@ export function buildVillage(scene: THREE.Group): Village {
     trees,
     lanterns,
     hallCutaway: hall.cutaway,
+    meadow,
     hallTorches: [...hall.dais, ...hall.torches],
     get night() { return night; },
     setCalm() {},
@@ -572,6 +576,8 @@ function meadowMask(trees: readonly TreeSpot[]): MeadowMask {
   }
   const X = TERRACE.x;
   mask.clearRect(X - TERRACE.half - 0.6, TERRACE.back - 0.6, X + TERRACE.half + 0.6, TERRACE.front + 0.5);
+  // (the hall of heroes' footing past the terrace's back: blades grew under its stone)
+  mask.clearRect(X - HALL.half - 0.6, HALL.wall - HALL.half + HALL.inHalf - 0.6, X + HALL.half + 0.6, TERRACE.back);
   mask.clearRect(X - TERRACE.stairHalf - 0.3, TERRACE.front, X + TERRACE.stairHalf + 0.3, TERRACE.stairFoot + 0.4);
   const { x, z, half } = DAIS_EAST;
   mask.clearRect(x - half - 0.5, z - half - 0.5, x + half + 0.5, z + half + 1.9);

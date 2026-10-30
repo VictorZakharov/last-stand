@@ -110,8 +110,32 @@ let dragged: number | null = null;
 let upright = false;
 const reduced = (): boolean => matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-/** the other classes' heroes standing on the plinths in the village's hall (`standHeroes`), each on his class's */
+/** the other classes' heroes standing on the plinths in the village's hall (`standHeroes`), each on his class's,
+ *  and the meshes of each that cast a shadow until he stood there (under its roof he casts none: the sun's shadow map
+ *  drew his every part for nothing) */
 let standing: Player[] = [];
+const castersOf = new Map<Player, THREE.Object3D[]>();
+
+/** `p`'s shadows off while he stands in the village's hall, or back as they were. */
+function castShadows(p: Player, on: boolean): void {
+  if (on) {
+    for (const o of castersOf.get(p) ?? []) o.castShadow = true;
+    castersOf.delete(p);
+    return;
+  }
+  const casters: THREE.Object3D[] = [];
+  p.obj.traverse((o) => { if (o.castShadow) { casters.push(o); o.castShadow = false; } });
+  castersOf.set(p, casters);
+}
+
+/** Those standing in the village's hall taken down, their shadows back. */
+function standDown(): void {
+  for (const p of standing) {
+    G.scene.remove(p.obj);
+    castShadows(p, true);
+  }
+  standing = [];
+}
 
 export const hallOpen = (): boolean => heroes.length > 0;
 export const hallHeroes = (): readonly HallHero[] => heroes;
@@ -132,7 +156,7 @@ const spot = (i: number): THREE.Vector3 => {
 export function openHall(focusId: string, cut = false): void {
   if (hallOpen()) return;
   // (those standing in the village's hall go to the room's plinths with the rest)
-  standing = [];
+  standDown();
   clearEnemies(); clearProjectiles(); clearEffects(); particles.clear();
   G.player.idle = true;
   G.player.show(false);
@@ -157,13 +181,15 @@ export function openHall(focusId: string, cut = false): void {
 /** The other classes' heroes standing on the plinths in the village's hall, each on his class's (the lobby's own
  *  class's empty: he's walking it), idle and glancing round, while `on` (the hero near it, their programs warm); taken
  *  out of the scene otherwise. One is built a frame at most (a hero's first build is 100 to 250 ms). */
-export function standHeroes(on: boolean, dt: number): void {
+export function standHeroes(on: boolean, dt: number, ahead = false): void {
   if (hallOpen()) return;
+  // (built ahead as he nears, a hero a frame, out of the scene: built as he came to the door, each held it 100 to
+  // 250 ms the first time)
+  if (!on && ahead) buildAhead();
   const want = on ? CLASS_IDS.filter((id) => id !== G.profile.classId) : [];
   // (those built so far kept while they're the ones wanted: the row is built a hero a frame)
   if (standing.length > want.length || standing.some((p, i) => p.cls.id !== want[i])) {
-    for (const p of standing) G.scene.remove(p.obj);
-    standing = [];
+    standDown();
   }
   if (standing.length < want.length) {
     const id = want[standing.length], i = CLASS_IDS.indexOf(id);
@@ -175,6 +201,7 @@ export function standHeroes(on: boolean, dt: number): void {
     player.shine = SHINE;
     // (facing the door, a little in toward the room's middle)
     place(player, at, -HALL.plinths[i] * 0.06);
+    castShadows(player, false);
     standing.push(player);
   }
   for (const p of standing) {
@@ -182,6 +209,13 @@ export function standHeroes(on: boolean, dt: number): void {
     p.update(dt);
     haloRound(p, dt);
   }
+}
+
+/** One of the other classes' heroes not yet kept built, out of the scene. */
+function buildAhead(): void {
+  const id = CLASS_IDS.find((c) => c !== G.profile.classId && !kept.has(c));
+  if (!id) return;
+  G.scene.remove(heroIn(id, profileOf(id)).obj);
 }
 
 /** The class of the hero standing nearest (x, z) in the village's hall, or null. */
