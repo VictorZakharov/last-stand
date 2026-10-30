@@ -18,12 +18,12 @@ import { mulberry } from '../util';
 import { sfx } from '../core/audio';
 import { completeStep } from '../game/training';
 
-/** what the map shows of the world (m): x and z from, to (the crypt's court reaches 46 m east: at 39 it ran off the
- *  parchment's edge) */
-const VIEW = { x0: -50, x1: 50, z0: -40.4, z1: 40.4 };
+/** what the map shows of the world (m): x and z from, to, the parchment's shape (the crypt's court reaches 46 m east:
+ *  at 39 it ran off the parchment's edge; the palisade goes round the hall of heroes' back at 39 m north) */
+const VIEW = { x0: -54.5, x1: 54.5, z0: -44, z1: 44 };
 /** the hall of heroes' roof as the map draws it (world/village.ts builds it): how far past the back wall's face it
  *  reaches, its front's z and half its width with the eaves' overhang (m) */
-const HALL_ROOF = { back: 1.2, front: -12.3, half: 9.2 };
+const HALL_ROOF = { back: 1.2, front: -12.3, half: HALL.half + 0.6 };
 /** the panels it folds into, and how long it takes to open or fold (s) */
 const PANELS = 4, FOLD_TIME = 0.75;
 /** the ink and washes it's drawn in */
@@ -36,6 +36,8 @@ const PORTAL_INK: Record<BiomeId, string> = { crypt: '#7a2fb0', forest: '#2f9a4a
 export interface VillageMapHooks {
   /** an object picked on the map: the hero walks there and uses it */
   go(o: VillageObject): void;
+  /** a place picked on the map that has nothing to use (the training yard): the hero walks there */
+  walk(x: number, z: number): void;
   /** the trees as they stand (x, z, how tall), drawn as the groves and the wood */
   trees(): readonly { x: number; z: number; height: number }[];
 }
@@ -79,6 +81,20 @@ export function initVillageMap(h: VillageMapHooks): void {
     });
     names.append(b);
   }
+  // (the training yard has nothing to use, but is a place to go: from play, "why I cannot click training yard ?")
+  const yard = document.createElement('button');
+  yard.className = 'vm-name';
+  yard.dataset.use = 'yard';
+  yard.textContent = 'Training Yard';
+  const [yx, yz] = yardToWorld(0, 0), [yu, yv] = toSheet(yx, yz);
+  yard.style.left = `${yu * 100}%`;
+  yard.style.top = `${yv * 100}%`;
+  yard.addEventListener('click', () => {
+    sfx.click();
+    setVillageMap(false);
+    hooks.walk(yx, yz);
+  });
+  names.append(yard);
   you = sheet.querySelector<HTMLElement>('.vm-you')!;
   root.querySelector<HTMLElement>('.vm-close')!.addEventListener('click', () => setVillageMap(false));
   // (a click on the parchment's margin, off the sheet, folds it away)
@@ -368,16 +384,7 @@ function drawBuildings(g: CanvasRenderingContext2D, at: At, metre: number): void
     g.lineWidth = 1.5;
     g.stroke();
   }
-  // its name lettered across it, between its gate and the dummies, turned with it
-  g.save();
-  g.translate(...at(...yardToWorld(0, -1.6)));
-  g.rotate(-YARD.turn);
-  g.font = `700 ${Math.round(metre * 1.05)}px Cinzel, Georgia, serif`;
-  g.textAlign = 'center';
-  g.textBaseline = 'middle';
-  g.fillStyle = INK;
-  g.fillText('Training Yard', 0, 0);
-  g.restore();
+  // (its name is a button over the sheet, as the objects' are: a place to walk to)
   // the fountain (its basin, its upper bowl), the campfire, the notice board
   for (const [radius, fill] of [[FOUNTAIN.r, '#5a7ea0'], [0.85, '#7fa2c0']] as const) {
     g.beginPath();

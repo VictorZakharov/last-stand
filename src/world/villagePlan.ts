@@ -3,7 +3,7 @@
 // mask and the trees all read one plan: grass and trees go wherever nothing's built or trodden.
 import * as THREE from 'three';
 import {
-  CAMPFIRE, COTTAGES, DAIS_EAST, ENTRANCES, GAP_HALF, NOTICE, PALISADE_LINE, ROADS, TERRACE, YARD, worldToYard,
+  CAMPFIRE, COTTAGES, DAIS_EAST, ENTRANCES, GAP_HALF, HALL, NOTICE, PALISADE_LINE, ROADS, TERRACE, YARD, worldToYard,
   type Cottage, type Spot,
 } from '../data/village';
 import { BIOME_IDS, type BiomeId } from '../data/biomes';
@@ -153,6 +153,8 @@ export function builtAt(x: number, z: number, pad = 0): boolean {
   const { half, front, back, stairHalf, stairFoot } = TERRACE;
   if (inBox(x, z, TERRACE.x, (front + back) / 2, half + 0.6, (front - back) / 2 + 0.6, 0, pad)) return true;
   if (inBox(x, z, TERRACE.x, (stairFoot + front) / 2, stairHalf + 0.5, (front - stairFoot) / 2 + 0.5, 0, pad)) return true;
+  // (the hall of heroes runs on past the terrace's back, on a footing of its own)
+  if (inBox(x, z, TERRACE.x, (back + HALL.wall) / 2, HALL.half + 1.2, (back - HALL.wall) / 2 + 1.6, 0, pad)) return true;
   if (inBox(x, z, DAIS_EAST.x, DAIS_EAST.z + 0.8, DAIS_EAST.half + 0.5, DAIS_EAST.half + 1.4, 0, pad)) return true;
   const [yx, yz] = worldToYard(x, z);
   if (Math.abs(yx) < YARD.halfX + 0.6 + pad && Math.abs(yz) < YARD.halfZ + 0.6 + pad) return true;

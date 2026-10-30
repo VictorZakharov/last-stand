@@ -229,7 +229,11 @@ const VERTEX_BLADE = /* glsl */ `
   float grass = meadowAt(root);
   float patchy = noise2(root * 0.15) * 0.65 + noise2(root * 0.55 + 9.1) * 0.35;
   float chance = band * smoothstep(0.08, 0.6, grass) * mix(0.5, 1.0, smoothstep(0.25, 0.7, patchy));
-  float on = step(h.z, chance);
+  // (each blade grows in as its chance rises past its own share, and shrinks away as it falls: switched on and off,
+  // the blades in a ring's band, which moves with the hero, came and went in a line ahead of him as he walked, "grass
+  // keeps redrawing itself in front of me"); none where its chance is none: faded in below its share, the lowest
+  // shares grew on the paved roads, "we dont need grass on paved roads")
+  float on = smoothstep(h.z * 0.85, h.z * 0.85 + 0.15, chance);
   float height = on * mix(0.2, 0.46, h.w) * mix(0.55, 1.0, grass) * mix(0.75, 1.25, tuft) * mix(0.8, 1.15, patchy);
   float width = on * uCell * ${WIDTH_IN_CELLS.toFixed(2)} * mix(0.8, 1.25, fract(h.z * 7.13));
   float turn = h.w * 6.2832 + h.x * 3.0;

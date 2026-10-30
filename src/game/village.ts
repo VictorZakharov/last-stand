@@ -14,7 +14,10 @@ import { ORDER, type Label } from '../ui/overlay/layer';
 import { OUTLINE } from '../ui/overlay/paint';
 import { want } from './warm';
 import { completeStep } from './training';
-import { HALL, TERRACE } from '../data/village';
+import { HALL, TERRACE, inHall } from '../data/village';
+import { standHeroes } from './hall';
+import { isWarm } from './warm';
+import { flash, release, type LightSlot } from '../fx/lights';
 
 export interface VillageHooks {
   /** `object` used: its panel, its card or its screen opened */
@@ -30,11 +33,20 @@ const LEAVE = 1.5;
 /** how far apart in height the hero and an object may stand for him to use it (m: the terrace's chest from under it) */
 const LEVEL = 0.9;
 /** how near the hall the hero comes before its heroes are readied, if they aren't yet (m) */
-const HALL_NEAR = 15;
+const HALL_NEAR = 22;
 /** how far into the yard the hero must stand to cast (m in from its fence) */
 const YARD_IN = 0.2;
 /** an object's column for the pointer: as wide as its reach's share, and up to its name */
 const PICK_SHARE = 0.55, PICK_MOST = 2.6;
+
+/** the street lamps lit by the pool's lights (fx/lights.ts: their count never changes, so nothing compiles): how many
+ *  lamps at once (the nearest the hero), the pool's lights held for them (one more, for a lamp fading out as another
+ *  fades in), each lamp's light and how fast it fades in or out (a second's share). From play: "lights are lame":
+ *  pools drawn on the ground lit nothing round them */
+const LAMPLIGHT = { lit: 3, held: 5, color: 0xffb46a, intensity: 5, distance: 12, below: 0.25, fade: 2.5 };
+/** the hall's torches as the pool lights them: brighter and nearer than a street lamp (lit like one, the hall stood
+ *  dark round its heroes) */
+const TORCHLIGHT = { intensity: 10, distance: 9, dais: 2, daisIntensity: 16, daisDistance: 8, door: 6 };
 
 let hooks: VillageHooks;
 /** the object the hero is near (the one E uses), the pointer's (top view), the one he's walking to use, and the one
@@ -111,6 +123,12 @@ export function goUse(o: VillageObject): void {
   G.player.walkTo = new THREE.Vector3(o.stand[0], 0, o.stand[1]);
 }
 
+/** The hero walked to (x, z), using nothing there (a place picked on the map: the training yard). */
+export function goTo(x: number, z: number): void {
+  going = null;
+  G.player.walkTo = new THREE.Vector3(x, 0, z);
+}
+
 function useNow(o: VillageObject): void {
   going = null;
   G.player.walkTo = null;
@@ -157,7 +175,9 @@ function bindPointer(): void {
 
 /** The village's frame: what the hero is near and may use, his walk to an object, his casting (the yard alone), the
  *  names over the objects; nothing while the lobby isn't up. */
-export function updateVillage(): void {
+export function updateVillage(dt = 0): void {
+  lightLamps(dt);
+  hallInside(dt);
   const on = hooks.active();
   const p = G.player;
   p.armed = !on || inYard(p.pos.x, p.pos.z);
@@ -183,6 +203,70 @@ export function updateVillage(): void {
   // (the other heroes readied as he nears their hall, where the warm-up behind the lobby hasn't yet)
   if (Math.hypot(p.pos.x - TERRACE.x, p.pos.z - HALL.door) < HALL_NEAR) want('heroes');
   syncLabels();
+}
+
+/** The hall of heroes as the hero walks into it: its roof, ceiling and front wall cut away over him (but through his eyes, which
+ *  see them from under), and the other classes' heroes standing on its plinths while he's near and their programs
+ *  are warm (readied as he nears it). */
+function hallInside(dt: number): void {
+  const village = G.arena.village, p = G.player;
+  const lobby = G.mode === 'menu' && G.arena.place === 'village' && !G.arena.hallShown;
+  const inside = lobby && inHall(p.pos.x, p.pos.z) && p.obj.position.y > TERRACE.high - 0.1;
+  // (the roof from above alone: over the shoulder the camera is under its ceiling; the front wall over the shoulder
+  // too, which the camera stands behind)
+  const [roof, front] = village.hallCutaway, view = viewMode();
+  roof.visible = !inside || view !== 'top';
+  front.visible = !inside || view === 'first';
+  const near = Math.hypot(p.pos.x - TERRACE.x, p.pos.z - HALL.door) < HALL_NEAR;
+  standHeroes(lobby && near && isWarm('heroes'), dt);
+}
+
+/** the lamps lit now (by lantern index) and how lit each is, and the pool's lights held for them */
+const lampLit = new Map<number, number>();
+let lampLights: LightSlot[] = [];
+
+/** The street lamps nearest the hero lit by the pool's lights while the village is shown (none by day, none while the
+ *  hall's room or a run is), each fading in and out as he walks; the lights let go otherwise. */
+function lightLamps(dt: number): void {
+  const village = G.arena.village, p = G.player.pos;
+  // (inside the hall, or at its door, the lights on its dais and its torches, by day too: its roof shades it whatever
+  // the hour, and from the door its heroes are seen at the far end)
+  const onTerrace = G.player.obj.position.y > TERRACE.high - 0.1;
+  const atDoor = Math.abs(p.x - TERRACE.x) < HALL.doorHalf * 2 && Math.abs(p.z - HALL.door) < TORCHLIGHT.door;
+  const inside = onTerrace && (inHall(p.x, p.z) || atDoor);
+  const lamps = inside ? village.hallTorches : village.lanterns, strength = inside ? 1 : village.night;
+  const shown = G.mode === 'menu' && G.arena.place === 'village' && !G.arena.hallShown && strength > 0.01;
+  if (!shown) {
+    for (const s of lampLights) release(s);
+    lampLights = [];
+    lampLit.clear();
+    return;
+  }
+  if (!lampLights.length) {
+    lampLights = Array.from({ length: LAMPLIGHT.held }, () => flash({ ...LAMPLIGHT, intensity: 0, life: 1, hold: Infinity }));
+  }
+  // (a lamp is its list's index, the torches' after the lanterns', so walking in fades the lamps out and the torches in)
+  const base = inside ? village.lanterns.length : 0;
+  const lanterns = [...village.lanterns, ...village.hallTorches];
+  // (in the hall its dais's lights always, the nearest torches with them)
+  const dais = inside ? TORCHLIGHT.dais : 0;
+  const wanted = new Set(lamps.map((l, i) => ({ i: base + i, d: i < dais ? -1 : Math.hypot(l.x - p.x, l.z - p.z) }))
+    .sort((a, b) => a.d - b.d).slice(0, LAMPLIGHT.lit + (inside ? 1 : 0)).map((l) => l.i));
+  for (const i of wanted) if (!lampLit.has(i)) lampLit.set(i, 0);
+  for (const [i, k] of lampLit) {
+    const to = wanted.has(i) ? 1 : 0, next = k + Math.sign(to - k) * Math.min(Math.abs(to - k), dt * LAMPLIGHT.fade);
+    if (next <= 0 && !to) lampLit.delete(i); else lampLit.set(i, next);
+  }
+  // (each held light on a lit lamp, the brightest first; one more lamp than lights waits dark for one to fade)
+  const lit = [...lampLit].sort((a, b) => b[1] - a[1]);
+  for (const [k, slot] of lampLights.entries()) {
+    const [i, share] = lit[k] ?? [-1, 0];
+    const n = village.lanterns.length, torch = i >= n, onDais = torch && i < n + TORCHLIGHT.dais;
+    const peak = onDais ? TORCHLIGHT.daisIntensity : torch ? TORCHLIGHT.intensity : LAMPLIGHT.intensity * village.night;
+    slot.peak = i < 0 ? 0 : peak * share;
+    slot.light.distance = onDais ? TORCHLIGHT.daisDistance : torch ? TORCHLIGHT.distance : LAMPLIGHT.distance;
+    if (i >= 0) slot.light.position.copy(lanterns[i]).setY(lanterns[i].y - LAMPLIGHT.below);
+  }
 }
 
 /** Each object's name painted with what it says now: its name, or near it what using it does and how (E: on touch

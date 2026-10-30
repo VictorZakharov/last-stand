@@ -33,9 +33,25 @@ export const TERRACE = { x: -1.5, front: -11, back: -22, half: 10.5, high: 1.6, 
 /** the steps of a stair: how high each rises (m), the same for every stair (a man's step) */
 export const STEP_RISE = 0.16;
 
-/** The hall of heroes on the terrace, a building (its room within is world/heroHall.ts): its back wall's inner face
- *  (z), its front wall's face with the door (z), and the door's half width and height (m) */
-export const HALL = { wall: -20.4, door: -14.7, doorHalf: 1.1, doorHigh: 3.4 };
+/** The hall of heroes on the terrace, a long hall walked into (the selection screen's room is world/heroHall.ts): its
+ *  back wall's inner face (z: past the terrace's back, on a footing of its own), its front wall's face with the door
+ *  (z), the door's half width and height, and its walls' outer half width (m); the dais across its far end (its front's
+ *  z, height) and the plinths on it the other heroes stand on (each one's x from the hall's middle, z, half side,
+ *  height over the dais); its columns in two rows (x either side, z of each pair); and its inside's half width and
+ *  front (m, the walls' inner faces). From play: "I will be able to enter it and see the other 2 heroes, before I
+ *  interact with it to choose anything, it should be a real building", and "hall of heroes need to be longer, like an
+ *  actual hall, so you walk in, and see heroes in the distance, and can marvel at its architecture". */
+export const HALL = {
+  wall: -33.0, door: -14.7, doorHalf: 1.1, doorHigh: 3.4, half: 6.2,
+  daisZ: -28.6, daisHigh: 0.32,
+  plinths: [-3.3, 0, 3.3], plinthZ: -30.6, plinthHalf: 0.7, plinthHigh: 0.3,
+  columnX: 3.7, columnZ: [-17.8, -21.2, -24.6, -28.0],
+  inHalf: 5.6, inFront: -15.3,
+};
+
+/** Whether (x, z) is inside the hall of heroes (between its walls' inner faces). */
+export const inHall = (x: number, z: number): boolean =>
+  Math.abs(x - TERRACE.x) < HALL.inHalf && z > HALL.wall && z < HALL.inFront;
 
 /** The chronicle's platform (the lectern on it): its middle, its half sides, how high; its stair comes down south,
  *  toward the crypt's road */
@@ -65,7 +81,8 @@ export const YARD_DUMMIES: readonly Spot[] = [yardToWorld(-3, 1.7), yardToWorld(
  *  its two ways out open in it (the middles of the gaps) and how wide (m). */
 export const PALISADE_LINE: readonly Spot[] = [
   [29.5, -3], [27, 7], [26, 15], [19, 22.5], [10, 24], [2, 27.5], [-6, 25.5], [-13, 23.5], [-20.5, 19],
-  [-27.5, 8], [-26.5, -1], [-29.5, -9], [-25, -16.5], [-17.5, -21], [-11, -27], [-1, -27.5], [9, -27.8], [16.5, -23.5],
+  [-27.5, 8], [-26.5, -1], [-29.5, -9], [-25, -16.5], [-17.5, -21], [-11.5, -28], [-10.5, -36.5], [-1.5, -38.5], [7.5, -36.5], [9.5, -28.5],
+  [16.5, -23.5],
   [22, -18], [27, -10],
 ];
 export const GAP_HALF = 4.2;
@@ -139,7 +156,9 @@ export const VILLAGE_OBJECTS: readonly VillageObject[] = [
     name: 'Stash', verb: 'Open the stash',
   },
   {
-    id: 'hall', use: 'heroes', at: [TERRACE.x, HALL.door], reach: 3.6, stand: [TERRACE.x, HALL.door + 1.8], label: 3.9,
+    // (inside, before the plinths: walked in through its door)
+    id: 'hall', use: 'heroes', at: [TERRACE.x, HALL.daisZ - 0.6], reach: 3.4, stand: [TERRACE.x, HALL.daisZ + 1.4],
+    label: 3.0,
     name: 'Hall of Heroes', verb: 'Choose your hero',
   },
   {
