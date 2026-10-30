@@ -581,12 +581,17 @@ function update(dt: number): void {
   updateVillageMap(dt);
   updateTrainingTracker(dt, villageActive() && !panelsOpen() && !villageCardOf());
   updateCrestBlow(dt, revealed && G.mode === 'menu' && G.arena.place === 'village' && !heroSelectOpen(), villageMapOpen());
+  // (its own stage: in the player's, a report from the hall of heroes couldn't tell the lamps and the dais's heroes
+  // from the hero's own pose)
+  perfLap('village');
   // the player can move and cast in both the arena and the lobby (sandbox); co-op partners as reported
   G.player.reviving = G.mode === 'run' && !G.menuOpen && (isDown('e') || touchReviving());
   for (const p of G.players) p.update(dt);
-  updateHall(dt);
-  updateGround(dt);
   perfLap('player');
+  updateHall(dt);
+  perfLap('hall');
+  updateGround(dt);
+  perfLap('ground');
   updateProjectiles(dt); perfLap('projectiles');
   // enemies in the arena, training dummies in the lobby
   if (G.mode === 'run') { updateRun(dt); checkRunOver(); }
