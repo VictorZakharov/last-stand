@@ -113,7 +113,10 @@ export const ROADS: readonly { points: readonly Spot[]; width: number }[] = [
   { points: [[5.2, -0.8], [10.5, -2.4], [16, -5.6], [21, -10.6], [24.7, -14.1], [27.5, -15.8]], width: 3.2 },
   { points: [[-5.2, 0.9], [-10.5, 2.4], [-15.5, 5.1], [-20.5, 9.6], [-24.4, 13.3], [-27.5, 15.2]], width: 3.0 },
   { points: [[-0.6, -5.2], [-1.0, -6.6], [-1.5, -8.0]], width: 4.4 },
-  { points: [[4.6, 4.3], [6.3, 5.9], yardToWorld(YARD.gateAt, -6.6), yardToWorld(YARD.gateAt, -5.0)], width: 2.6 },
+  // (the yard's: out of its gate 1.5 m along its way, then round on a 3 m arc to the square; turned 60 degrees in its
+  // last 1.6 m, its inner edge folded back and its curb doubled over into slivers, "lets fix curb near training area")
+  { points: [[5.23, 3.52], [5.91, 3.98], [6.58, 4.43], [7.13, 5.01], [7.51, 5.71], [7.7, 6.49],
+    yardToWorld(YARD.gateAt, -6.5), yardToWorld(YARD.gateAt, -5.0)], width: 2.6 },
 ];
 
 /** The cottages: each one's middle, the way its door faces (rad about y: 0 faces +z) and its size (1 a cottage, under
