@@ -12,6 +12,8 @@ import { QUALITY } from '../../data/quality';
 import { qualityLevel } from '../../core/quality';
 import type { Model } from '../../types';
 import { CROWD_LAYER } from '../../core/layers';
+import { WEBGPU } from '../../core/webgpu';
+import { crowdNodeMaterial } from './crowdNodes';
 
 const ON = typeof location === 'undefined' || !/[?&]crowd=0/.test(location.search);
 
@@ -125,11 +127,14 @@ function kindOf(model: Model, pieces: THREE.Mesh[]): Kind | null {
   parts.forEach((list, slot) => {
     const base = baseOf(model, pieces[slotFrom[slot]].material as THREE.Material)!;
     const geometry = merged(list, rootInv, rootScale, base.vertexColors);
-    const mesh = new THREE.Mesh(geometry, crowdMaterial(base, kind, slot));
+    const material = WEBGPU ? crowdNodeMaterial(base, { texture, joints: inverses.length, looks: LOOKS }, slot)
+      : crowdMaterial(base, kind, slot);
+    const mesh = new THREE.Mesh(geometry, material);
     mesh.castShadow = list.some((p) => castsOf(p.mesh));
     mesh.receiveShadow = true;
     mesh.frustumCulled = false;
-    mesh.customDepthMaterial = depthMaterial(kind);
+    // (on WebGPU the shadow is drawn by the slot's own material, skinned by its position node)
+    if (!WEBGPU) mesh.customDepthMaterial = depthMaterial(kind);
     mesh.visible = false;
     mesh.name = `crowd ${model.root.userData.crowdKind}`;
     kind.slots.push(mesh);
