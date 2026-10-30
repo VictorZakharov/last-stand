@@ -499,7 +499,8 @@ interface Breached {
 const pastOf = (b: Breached) => `${b.name} ${b.by.toFixed(0)}° past its range`;
 
 /** Frames until he's sat, as he stands idle; whether he did. */
-async function untilSat(lab: Lab, label: string, views: ViewName[], out: Out, watch: Watch): Promise<boolean> {
+async function untilSat(lab: Lab, label: string, views: ViewName[], out: Out, watch: Watch,
+  collisionMoments = out.moments): Promise<boolean> {
   const sitting = lab.player.sitting;
   const skirts = skirtsOf(lab.model.root);
   let walked = false, half = false;
@@ -532,7 +533,7 @@ async function untilSat(lab: Lab, label: string, views: ViewName[], out: Out, wa
       }
       if (stood) out.text.push(`    standing idle before it (not the sit's): ${pastOf(stood)}`);
       for (const said of into.problems()) out.problems.push(`sit: by the ${label}, sitting down, ${said}`);
-      if (into.moment) out.moments.push(into.moment);
+      if (into.moment) collisionMoments.push(into.moment);
       return true;
     }
   }
@@ -858,7 +859,8 @@ async function askOf(lab: Lab, c: SeatCase, ask: Ask, out: Out, watch: Watch): P
   const player = lab.player;
   const sat = satWhole(player.sitting.pose);
   const again = { ...out, moments: [] };
-  if (!sat && !(await untilSat(lab, `${c.name} again`, c.views.slice(0, 2), again, watch))) return;
+  // The ordinary repeat pictures stay out of the report, but a new collision needs its own close-up.
+  if (!sat && !(await untilSat(lab, `${c.name} again`, c.views.slice(0, 2), again, watch, out.moments))) return;
   const skirts = skirtsOf(lab.model.root);
   const ahead = new THREE.Vector3(Math.sin(player.facing), 0, Math.cos(player.facing));
   const aim = player.pos.clone().addScaledVector(ahead, 4);
