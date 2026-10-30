@@ -213,8 +213,12 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   close by, 45.7% apart; `--canary` puts the lamp out in the shaders' list while he's far off); the street lamps'
   light summed frame by frame as the hero walks from the hall's door into it, the list's and the casting lights'
   together, within 1% (`page/villageDoorLamps.ts`: from play, "lights turn off when I enter the hall", the lamps
-  switched over to the torches at its door; `--canary` puts one out as he goes in); the hero's shadow from each
-  street lamp in turn at midnight, the most the lamps' shadows take of a patch behind him 3 m from it (on paving where
+  switched over to the torches at its door; `--canary` puts one out as he goes in); the hero's shadows from each
+  street lamp in turn at midnight, 1.5 m and 3 m off it (from play, by the stair's lamp: "no shadows FROM LIGHT, only
+  from moon"), and the moon's at each: the most of a patch's light his shadow takes away from the moon, at least 5% (16 to 82%, 9% by a lamp on the grass, where its light is
+  most of the ground's)
+  (the lamps' shadows held off for its readings: "moon shadow always there plus 1 or more shadows from lights"); the
+  most the lamps' shadows take of a patch behind him (on paving where
   there's some round it) while he casts over what they take there while he doesn't, at least 15% by every lamp
   (`page/villageHeroShadow.ts`: from play, "no shadows from lights", the lamps' shadows drawn once with him hidden;
   0.0% before, 59 to 85% now; `--canary` stops him casting by the last lamp); his two shadows standing between two lamps,
