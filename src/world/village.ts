@@ -13,6 +13,7 @@
 // light follows the hour (`daylight`, a uniform's change: nothing compiles), and as a biome it has 10 point lights, two
 // casting the still shadows (the hall's braziers).
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import {
   CAMPFIRE, CHEST, COTTAGES, DAIS_EAST, DAY, ENTRANCES, GAP_HALF, HALL, NOTICE, STEP_RISE, TERRACE, YARD, portalPlace,
   type Cottage, type Spot,
@@ -101,7 +102,7 @@ const CANDLE = { color: 0xffc070, intensity: 2.2, distance: 6 };
 
 /** the village's light at each height of the sun (its sine): the night's, the twilight's and the day's */
 // (a bright moonlit night, a golden evening, a clear spring day)
-const NIGHT = { fog: 0x1c2640, sky: [0.02, 0.03, 0.08] as RGB, hemi: 0x6a7cb8, ground: 0x18201a, hemiI: 1.1, light: 0xbcccff, lightI: 2.1, env: 0.32, adapt: 1 };
+const NIGHT = { fog: 0x1c2640, sky: [0.02, 0.03, 0.08] as RGB, hemi: 0x6a7cb8, ground: 0x18201a, hemiI: 1.0, light: 0xbcccff, lightI: 1.4, env: 0.32, adapt: 1 };
 const TWILIGHT = { fog: 0xc89a80, sky: [0.16, 0.2, 0.42] as RGB, hemi: 0xd8b49a, ground: 0x3a3418, hemiI: 1.0, light: 0xffaa60, lightI: 2.8, env: 0.5, adapt: 1.5 };
 const NOON = { fog: 0xb4cce0, sky: [0.16, 0.38, 0.78] as RGB, hemi: 0xd8e8ff, ground: 0x4a5a28, hemiI: 1.45, light: 0xfff4e2, lightI: 4.0, env: 0.75, adapt: 2.3 };
 /** how far the key light (the sun, or by night the moon) stands from the middle, along its way (m) */
@@ -563,13 +564,6 @@ function roadEdges(line: readonly Spot[], width: number): [Spot[], Spot[]] {
   return edges;
 }
 
-/** Whether (x, z) is paved: on the square or a road (a little past its edges), road `own` left out (-1: none). */
-function paved(x: number, z: number, own: number): boolean {
-  if (insidePolygon(squareOutline(), x, z)) return true;
-  return roadLines.some((road, k) => k !== own
-    && road.line.some(([lx, lz]) => Math.hypot(lx - x, lz - z) < road.width / 2 + 0.3));
-}
-
 /** Whether (x, z) is inside the polygon through `points`. */
 function insidePolygon(points: readonly Spot[], x: number, z: number): boolean {
   let inside = false;
@@ -580,45 +574,116 @@ function insidePolygon(points: readonly Spot[], x: number, z: number): boolean {
   return inside;
 }
 
-/** Every edge of the paving as a curb's line, each with the way out from the paving (1: to its left as it goes, -1:
- *  to its right). */
-function curbLines(): { line: Spot[]; out: 1 | -1; road: number }[] {
-  const square = squareOutline();
-  const lines: { line: Spot[]; out: 1 | -1; road: number }[] = [{ line: [...square, square[0]], out: -1, road: -1 }];
-  roadLines.forEach((road, k) => {
-    const [left, right] = roadEdges(road.line, road.width);
-    lines.push({ line: left, out: -1, road: k }, { line: right, out: 1, road: k });
-  });
-  return lines;
+/** A curb's run: its line along the paving's edge, the way out from the paving (1: to its left as it goes, -1: to its
+ *  right), whether it closes on itself, and how much higher than a curb it stands (m). */
+interface CurbRun { line: Spot[]; out: 1 | -1; closed: boolean; lift: number }
+
+/** the square's curb stands this much over the roads' (m): where a road's meets it their tops overlap, and at one
+ *  height they flickered through each other */
+const SQUARE_CURB_LIFT = 0.006;
+
+/** The parts of `line` (closed: a loop) outside every polygon of `pavings`, each cut where it crosses one's edge. */
+function uncovered(line: readonly Spot[], closed: boolean, pavings: readonly Spot[][]): Spot[][] {
+  const covered = ([x, z]: Spot): boolean => pavings.some((p) => insidePolygon(p, x, z));
+  const crossing = (a: Spot, b: Spot): Spot => {
+    // (halved till it's within a millimetre: a's side and b's differ)
+    let lo = 0, hi = 1;
+    const inA = covered(a);
+    for (let k = 0; k < 12; k++) {
+      const t = (lo + hi) / 2;
+      if (covered([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]) === inA) lo = t;
+      else hi = t;
+    }
+    const t = (lo + hi) / 2;
+    return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+  };
+  const runs: Spot[][] = [];
+  let run: Spot[] | null = covered(line[0]) ? null : [line[0]];
+  for (let i = 1; i < line.length; i++) {
+    const a = line[i - 1], b = line[i], inB = covered(b);
+    if (run && inB) {
+      run.push(crossing(a, b));
+      runs.push(run);
+      run = null;
+    } else if (!run && !inB) run = [crossing(a, b), b];
+    else if (run) run.push(b);
+  }
+  if (run) runs.push(run);
+  // (a loop cut open: its last run goes on into its first)
+  if (closed && runs.length > 1 && !covered(line[0])) runs[0] = [...runs.pop()!, ...runs[0].slice(1)];
+  return runs.filter((r) => r.length > 1);
 }
 
-/** The curbs: a low stone strip out from each edge of the paving (`curbLines`), left out where its middle lies on
- *  other paving (a road's mouth on the square, where two roads meet). One mesh, standing still. */
+/** Every edge of the paving as a curb's runs: the square's round it and each road's along its sides, each cut off
+ *  where it runs onto other paving (a road's mouth on the square, where two roads meet). */
+function curbLines(): CurbRun[] {
+  const square = squareOutline();
+  const roads = roadLines.map((road) => roadEdges(road.line, road.width));
+  const pavings = [square, ...roads.map(([left, right]) => [...left, ...[...right].reverse()])];
+  const edges: (Omit<CurbRun, 'closed'> & { own: number; closed: boolean })[] = [
+    { line: [...square, square[0]], out: -1, own: 0, closed: true, lift: SQUARE_CURB_LIFT },
+  ];
+  roads.forEach(([left, right], k) => {
+    edges.push({ line: left, out: -1, own: k + 1, closed: false, lift: 0 });
+    edges.push({ line: right, out: 1, own: k + 1, closed: false, lift: 0 });
+  });
+  return edges.flatMap(({ line, out, own, closed, lift }) => {
+    const runs = uncovered(line, closed, pavings.filter((_, i) => i !== own));
+    const whole = runs.length === 1 && runs[0].length === line.length;
+    return runs.map((run): CurbRun => ({ line: run, out, closed: closed && whole, lift }));
+  });
+}
+
+/** Each point's way out of a run, its segments' outward normals met in a mitre (so the curb's outer side is one line
+ *  round a bend: square ends on each segment left a notch at every corner of the square), `w` long across. */
+function mitred({ line, out, closed }: CurbRun, w: number): Spot[] {
+  const n = line.length;
+  const normal = (i: number): Spot => {
+    const [ax, az] = line[i], [bx, bz] = line[i + 1];
+    const len = Math.hypot(bx - ax, bz - az) || 1;
+    return [(-(bz - az) / len) * out, ((bx - ax) / len) * out];
+  };
+  return line.map((_, i): Spot => {
+    const ends = closed && (i === 0 || i === n - 1);
+    const before = i > 0 ? normal(i - 1) : ends ? normal(n - 2) : normal(0);
+    const after = i < n - 1 ? normal(i) : ends ? normal(0) : normal(n - 2);
+    const mx = before[0] + after[0], mz = before[1] + after[1], len = Math.hypot(mx, mz) || 1;
+    const cos = Math.max(0.5, (mx / len) * after[0] + (mz / len) * after[1]);
+    return [(mx / len / cos) * w, (mz / len / cos) * w];
+  });
+}
+
+/** The curbs: a low stone strip out from each edge of the paving (`curbLines`), mitred round its bends and capped at
+ *  its ends. One mesh, standing still. */
 function curbs(m: THREE.Material): THREE.Mesh {
   const positions: number[] = [], uvs: number[] = [];
   const quad = (a: number[], b: number[], c: number[], d: number[], along0: number, along1: number): void => {
     positions.push(...a, ...b, ...c, ...a, ...c, ...d);
     uvs.push(along0, 0, along1, 0, along1, 1, along0, 0, along1, 1, along0, 1);
   };
-  for (const { line, out, road } of curbLines()) {
+  for (const run of curbLines()) {
+    const { line } = run;
+    const off = mitred(run, CURB.w);
+    const h = CURB.h + run.lift;
+    // (each point's inner foot and top, outer top and foot)
+    const ring = (i: number): number[][] => {
+      const [x, z] = line[i], [ox, oz] = off[i];
+      return [[x, 0, z], [x, h, z], [x + ox, h, z + oz], [x + ox, 0, z + oz]];
+    };
     let along = 0;
     for (let i = 1; i < line.length; i++) {
-      const [ax, az] = line[i - 1], [bx, bz] = line[i];
-      const len = Math.hypot(bx - ax, bz - az);
-      if (len < 1e-4) continue;
-      // (out from the paving: to the segment's left or right)
-      const ox = (-(bz - az) / len) * out * CURB.w, oz = ((bx - ax) / len) * out * CURB.w;
-      const mx = (ax + bx) / 2 + ox * 1.5, mz = (az + bz) / 2 + oz * 1.5;
-      const next = along + len;
-      if (!paved(mx, mz, road)) {
-        const { h } = CURB;
-        // its face to the paving, its top, its face to the grass
-        quad([ax, 0, az], [bx, 0, bz], [bx, h, bz], [ax, h, az], along, next);
-        quad([ax, h, az], [bx, h, bz], [bx + ox, h, bz + oz], [ax + ox, h, az + oz], along, next);
-        quad([ax + ox, h, az + oz], [bx + ox, h, bz + oz], [bx + ox, 0, bz + oz], [ax + ox, 0, az + oz], along, next);
-      }
+      const next = along + Math.hypot(line[i][0] - line[i - 1][0], line[i][1] - line[i - 1][1]);
+      const [a0, a1, a2, a3] = ring(i - 1), [b0, b1, b2, b3] = ring(i);
+      // its face to the paving, its top, its face to the grass
+      quad(a0, b0, b1, a1, along, next);
+      quad(a1, b1, b2, a2, along, next);
+      quad(a2, b2, b3, a3, along, next);
       along = next;
     }
+    if (run.closed) continue;
+    const [s0, s1, s2, s3] = ring(0), [e0, e1, e2, e3] = ring(line.length - 1);
+    quad(s3, s2, s1, s0, 0, CURB.w);
+    quad(e0, e1, e2, e3, 0, CURB.w);
   }
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
@@ -1307,23 +1372,94 @@ function castingLights(scene: THREE.Object3D): THREE.PointLight[] {
 /** A lamp post at (x, z), its lantern hung on an arm toward `turn` (rad about y: 0 toward +x); returns where its
  *  light is lit: out past the lantern's middle, away from the post (lit from the lantern's middle, 0.4 m off it, the
  *  post's shaft shone as a neon tube once the light was bright enough to light the ground, a review). */
+/** A street lamp's parts, made once and shared by every lamp: its cast-iron column turned on a lathe (a flared foot,
+ *  collars, a knob on top), its bracket scrolled out from the post, and its lantern, six panes of lit glass in an
+ *  iron frame under a crown and its finial, a cup under it (from play: "can we have fancier streetlights ?"; a
+ *  timber post, a bar and a cone over a glowing tube before). The lantern hangs from the bracket's end at `LANTERN`. */
+const LANTERN = { out: 0.52, y: -0.16, top: 0.15, bottom: 0.11, high: 0.3 };
+let lampParts: { column: THREE.BufferGeometry; bracket: THREE.BufferGeometry; frame: THREE.BufferGeometry;
+  panes: THREE.BufferGeometry } | null = null;
+
+function lampGeometries(): NonNullable<typeof lampParts> {
+  if (lampParts) return lampParts;
+  const H = LAMPS.high;
+  // (radius at each height, from the plinth's top up)
+  const profile: [number, number][] = [
+    [0.001, 0.3], [0.12, 0.3], [0.12, 0.36], [0.095, 0.4], [0.07, 0.52], [0.058, 0.68], [0.075, 0.71], [0.075, 0.76],
+    [0.05, 0.8], [0.046, H - 0.3], [0.062, H - 0.27], [0.062, H - 0.22], [0.044, H - 0.19], [0.04, H + 0.02],
+    [0.06, H + 0.06], [0.05, H + 0.13], [0.001, H + 0.16],
+  ];
+  const column = new THREE.LatheGeometry(profile.map(([r, y]) => new THREE.Vector2(r, y)), 10);
+  const arm = new THREE.CatmullRomCurve3([
+    new THREE.Vector3(0.03, H - 0.02, 0), new THREE.Vector3(0.22, H + 0.06, 0), new THREE.Vector3(0.42, H + 0.08, 0),
+    new THREE.Vector3(LANTERN.out, H + 0.02, 0), new THREE.Vector3(LANTERN.out, H - 0.04, 0),
+  ]);
+  // (the scroll under the arm: out from the post, up and curled into itself under the arm's middle)
+  const scroll = new THREE.CatmullRomCurve3(Array.from({ length: 14 }, (_, k) => {
+    const t = k / 13;
+    const a = Math.PI * 1.1 + t * Math.PI * 2.2, r = 0.13 * (1 - t * 0.7);
+    return new THREE.Vector3(0.2 + Math.cos(a) * r * (1 - t) + t * 0.06, H - 0.12 + Math.sin(a) * r, 0);
+  }));
+  const brace = new THREE.CatmullRomCurve3([
+    new THREE.Vector3(0.03, H - 0.42, 0), new THREE.Vector3(0.12, H - 0.3, 0), new THREE.Vector3(0.2, H - 0.25, 0),
+  ]);
+  const bracket = mergeGeometries([
+    new THREE.TubeGeometry(arm, 20, 0.022, 6), new THREE.TubeGeometry(scroll, 28, 0.014, 5),
+    new THREE.TubeGeometry(brace, 8, 0.016, 5),
+  ].map((g) => g.toNonIndexed()));
+  const { out, y, top, bottom, high } = LANTERN;
+  const at = (g: THREE.BufferGeometry, gx: number, gy: number, gz: number): THREE.BufferGeometry => g.translate(gx, gy, gz);
+  const ly = H + y;
+  const pieces: THREE.BufferGeometry[] = [
+    // (the crown, its finial and the ring it hangs by; the rims round the glass's top and foot; the cup under it)
+    at(new THREE.ConeGeometry(top + 0.06, 0.13, 6), out, ly + high / 2 + 0.065, 0),
+    at(new THREE.CylinderGeometry(top + 0.065, top + 0.065, 0.03, 6), out, ly + high / 2, 0),
+    at(new THREE.SphereGeometry(0.03, 6, 4), out, ly + high / 2 + 0.16, 0),
+    at(new THREE.TorusGeometry(0.025, 0.007, 4, 8), out, ly + high / 2 + 0.2, 0),
+    at(new THREE.CylinderGeometry(bottom + 0.02, bottom + 0.02, 0.025, 6), out, ly - high / 2, 0),
+    at(new THREE.ConeGeometry(bottom, 0.1, 6).rotateX(Math.PI), out, ly - high / 2 - 0.06, 0),
+  ];
+  // (an iron bar up each corner of the glass, leaning out with it)
+  for (let k = 0; k < 6; k++) {
+    const a = (k / 6) * TAU;
+    const lean = Math.atan2(top - bottom, high);
+    const r = (top + bottom) / 2 + 0.004;
+    const bar = new THREE.BoxGeometry(0.014, high, 0.014).rotateZ(-lean).rotateY(-a);
+    pieces.push(at(bar, out + Math.cos(a) * r, ly, Math.sin(a) * r));
+  }
+  const frame = mergeGeometries(pieces.map((g) => (g.index ? g.toNonIndexed() : g)).map((g) => {
+    g.deleteAttribute('uv');
+    return g;
+  }));
+  const panes = at(new THREE.CylinderGeometry(top, bottom, high, 6, 1, true), out, ly, 0);
+  lampParts = { column, bracket: stripUVs(bracket), frame, panes };
+  return lampParts;
+}
+
+/** `g` with its uvs left out (merged with parts that have none). */
+function stripUVs(g: THREE.BufferGeometry): THREE.BufferGeometry {
+  g.deleteAttribute('uv');
+  return g;
+}
+
 function lampPost(scene: THREE.Object3D, x: number, z: number, turn: number, M: Mats, obstacles: Obstacle[]): THREE.Vector3 {
   const g = new THREE.Group();
   g.position.set(x, 0, z);
   g.rotation.y = -turn;
   scene.add(g);
-  block(g, 0.4, 0.3, 0.4, 0, 0, 0, M.ashlar);
-  block(g, 0.14, LAMPS.high, 0.14, 0, 0.3, 0, M.timber);
-  block(g, 0.55, 0.08, 0.08, 0.24, LAMPS.high + 0.1, 0, M.iron);
-  const lantern = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.11, 0.32, 6), M.glass);
-  lantern.position.set(0.48, LAMPS.high - 0.12, 0);
-  g.add(lantern);
-  const cap = new THREE.Mesh(new THREE.ConeGeometry(0.17, 0.16, 6), M.iron);
-  cap.position.set(0.48, LAMPS.high + 0.1, 0);
-  g.add(cap);
+  // (a stepped stone plinth)
+  block(g, 0.42, 0.16, 0.42, 0, 0, 0, M.ashlar);
+  block(g, 0.32, 0.14, 0.32, 0, 0.16, 0, M.ashlar);
+  const parts = lampGeometries();
+  for (const [geo, m] of [[parts.column, M.iron], [parts.bracket, M.iron], [parts.frame, M.iron], [parts.panes, M.glass]] as const) {
+    const mesh = new THREE.Mesh(geo, m);
+    mesh.castShadow = m !== M.glass;
+    mesh.receiveShadow = true;
+    g.add(mesh);
+  }
   obstacles.push({ x, z, r: 0.35, h: LAMPS.high });
   g.updateMatrixWorld(true);
-  return g.localToWorld(new THREE.Vector3(0.48 + LAMP_LIGHT_OUT, LAMPS.high - 0.12, 0));
+  return g.localToWorld(new THREE.Vector3(LANTERN.out + LAMP_LIGHT_OUT, LAMPS.high + LANTERN.y, 0));
 }
 
 /** how far past the lantern's middle, away from the post, its light is lit (m) */
