@@ -18,6 +18,7 @@ import { HALL, TERRACE, inHall } from '../data/village';
 import { standHeroes } from './hall';
 import { isWarm } from './warm';
 import { flash, release, type LightSlot } from '../fx/lights';
+import { lampsGlow, lightLamp, placeLamps, LAMP_REACH } from '../core/lamps';
 import { drawLampShadows, lampShadow } from '../world/props';
 
 export interface VillageHooks {
@@ -49,7 +50,7 @@ const PICK_SHARE = 0.55, PICK_MOST = 2.6;
  *  lamps at once (the nearest the hero), the pool's lights held for them (one more, for a lamp fading out as another
  *  fades in), each lamp's light and how fast it fades in or out (a second's share). From play: "lights are lame":
  *  pools drawn on the ground lit nothing round them */
-const LAMPLIGHT = { lit: 3, held: 5, color: 0xffb46a, intensity: 50, distance: 15, below: 0, fade: 2.5 };
+const LAMPLIGHT = { lit: 3, held: 5, color: 0xffb46a, intensity: 50, distance: LAMP_REACH, below: 0, fade: 2.5 };
 /** the hall's torches as the pool lights them: brighter and nearer than a street lamp (lit like one, the hall stood
  *  dark round its heroes) */
 const TORCHLIGHT = { intensity: 10, distance: 9, dais: 2, daisIntensity: 16, daisDistance: 8, door: 6 };
@@ -262,14 +263,29 @@ function doorInView(): boolean {
   return _frustum.intersectsBox(_door);
 }
 
-/** the lamps lit now (by lantern index) and how lit each is, and the pool's lights held for them */
+/** the lamps lit now by the pool's lights (by lantern index) and how lit each is, and the pool's lights held for them */
 const lampLit = new Map<number, number>();
 let lampLights: LightSlot[] = [];
+/** the street lamps' colour, how much of their light the lit shaders' lamps give (0 to 1: out by the hall's door, as
+ *  the torches come in), and whether their places are set */
+const STREET_LIGHT = new THREE.Color(LAMPLIGHT.color);
+let streetLit = 0;
+let lampsPlaced = false;
 
-/** The street lamps nearest the hero lit by the pool's lights while the village is shown (none by day, none while the
- *  hall's room or a run is), each fading in and out as he walks; the lights let go otherwise. */
+/**
+ * Every street lamp lit by night while the village is shown (none while the hall's room or a run is), by the lit
+ * shaders' lamps (`core/lamps.ts`: its light at any distance, as a point light there lights; lit by the pool's lights
+ * at the three nearest the hero and drawn as painted pools on the ground elsewhere, each turned into lit ground as he
+ * walked up, "it looks lame"), but the two nearest him, whose shadows the pool's casting lights draw (`castOnNearest`):
+ * each of those takes its lamp's light over as it comes, its list's share given back as it goes, so the light stays the
+ * same and only its shadow fades in. In the hall, its dais's lights and the torches nearest him, the lamps out.
+ */
 function lightLamps(dt: number): void {
   const village = G.arena.village, p = G.player.pos;
+  if (!lampsPlaced) {
+    placeLamps(village.lanterns.map((l) => l.clone().setY(l.y - LAMPLIGHT.below)));
+    lampsPlaced = true;
+  }
   // (inside the hall, or at its door, the lights on its dais and its torches, by day too: its roof shades it whatever
   // the hour, and from the door its heroes are seen at the far end)
   const onTerrace = G.player.obj.position.y > TERRACE.high - 0.1;
@@ -282,7 +298,8 @@ function lightLamps(dt: number): void {
     for (const s of lampLights) release(s);
     lampLights = [];
     lampLit.clear();
-    poolsFor(lampLit);
+    streetLit = 0;
+    lampsGlow(STREET_LIGHT, 0);
     return;
   }
   if (!lampLights.length) {
@@ -295,15 +312,18 @@ function lightLamps(dt: number): void {
   // (in the hall its dais's lights always, the nearest torches with them)
   const dais = inside ? TORCHLIGHT.dais : 0;
   const nearest = lamps.map((l, i) => ({ i: base + i, d: i < dais ? -1 : Math.hypot(l.x - p.x, l.z - p.z) }))
-    .sort((a, b) => a.d - b.d).slice(0, LAMPLIGHT.lit + (inside ? 1 : 0)).map((l) => l.i);
+    .sort((a, b) => a.d - b.d).slice(0, inside ? LAMPLIGHT.lit + 1 : LAMP_SHADOWS).map((l) => l.i);
   const wanted = new Set(nearest);
   for (const i of wanted) if (!lampLit.has(i)) lampLit.set(i, 0);
   for (const [i, k] of lampLit) {
     const to = wanted.has(i) ? 1 : 0, next = k + Math.sign(to - k) * Math.min(Math.abs(to - k), dt * LAMPLIGHT.fade);
     if (next <= 0 && !to) lampLit.delete(i); else lampLit.set(i, next);
   }
-  poolsFor(lampLit);
   castOnNearest(nearest.slice(0, LAMP_SHADOWS), dt);
+  // (each lamp by the list as far as the pool's light doesn't light it; all out in the hall, fading as its door's walked)
+  streetLit = Math.max(0, Math.min(1, streetLit + (inside ? -1 : 1) * dt * LAMPLIGHT.fade));
+  lampsGlow(STREET_LIGHT, LAMPLIGHT.intensity * village.night * streetLit);
+  for (let i = 0; i < village.lanterns.length; i++) lightLamp(i, 1 - (lampLit.get(i) ?? 0));
   // (the casting lights on their lamps, each other held light on a lit lamp, the brightest first; one more lamp than
   // lights waits dark for one to fade)
   const cast = new Set(casters.map((c) => c.lamp));
@@ -317,28 +337,6 @@ function lightLamps(dt: number): void {
     slot.light.distance = onDais ? TORCHLIGHT.daisDistance : torch ? TORCHLIGHT.distance : LAMPLIGHT.distance;
     if (i >= 0) slot.light.position.copy(lanterns[i]).setY(lanterns[i].y - LAMPLIGHT.below);
   }
-}
-
-/** each lantern's painted pool as last shown (its share, 1 whole) */
-const poolShown = new Map<number, number>();
-const _pool = new THREE.Color();
-
-/** The lanterns' painted pools faded out as much as a held light lights each (`lit`: by lantern index, its share):
- *  painted over everything, a pool lit the ground through the fence and the hero's own shadow alike (a review: "the
- *  fence rails and posts right beside the lamp cast no visible shadow onto the lit dirt pool"). */
-function poolsFor(lit: ReadonlyMap<number, number>): void {
-  const pools = G.arena.village.lampPools;
-  let changed = false;
-  const show = (i: number, share: number): void => {
-    if ((poolShown.get(i) ?? 1) === share) return;
-    pools.setColorAt(i, _pool.setScalar(share));
-    if (share === 1) poolShown.delete(i);
-    else poolShown.set(i, share);
-    changed = true;
-  };
-  for (const i of [...poolShown.keys()]) if (!lit.has(i)) show(i, 1);
-  for (const [i, share] of lit) if (i < pools.count) show(i, 1 - share);
-  if (changed && pools.instanceColor) pools.instanceColor.needsUpdate = true;
 }
 
 /** whether the lamps' lights cast the shadows, the braziers' not */

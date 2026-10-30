@@ -3,6 +3,7 @@
 // run on plain single-sample targets, since multisampled post targets cost a resolve per
 // pass (very slow on tile-based GPUs such as Apple's).
 import * as THREE from 'three';
+import { lightTheLamps } from './lamps';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
@@ -459,6 +460,7 @@ function firstVertexProvokes(context: WebGLRenderingContext | WebGL2RenderingCon
 export function initRenderer(container: HTMLElement) {
   loopPointLights();
   shadeEnvironment();
+  lightTheLamps();
   const renderer = gl = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
   renderer.setPixelRatio(canvasRatio());
   renderer.setSize(window.innerWidth, window.innerHeight);
