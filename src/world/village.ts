@@ -83,7 +83,7 @@ const GROVES: readonly [number, number, number][] = [
 /** the wood round the palisade: how many trees, from how far past it to how far, and how tall (m) */
 const WOOD = { n: 130, near: 2.4, far: 30, low: 9, high: 20 };
 /** the lamp posts flanking the stair's foot (x either side, z), their lantern's height and light */
-const LAMPS = { x: 3.5, z: -7.0, high: 3.1, color: 0xffb46a, intensity: 4, distance: 11 };
+const LAMPS = { x: 3.5, z: -7.0, high: 3.1, color: 0xffb46a };
 /** the street lamps (`buildStreetLamps`): how far apart along a road and the first from its start, how far out past
  *  its side (`builtAt` keeps 0.8 m by a road), how clear of any obstacle and of another lamp, and how many round the
  *  square (m) */
@@ -446,8 +446,11 @@ export function buildVillage(scene: THREE.Group): Village {
   obstacles.push({ x: CAMPFIRE[0], z: CAMPFIRE[1], r: 1.0, h: 0.5 });
   stillBuilt(scene, () => buildBenches(scene, M, obstacles));
   stillBuilt(scene, () => buildNoticeBoard(scene, wall, M));
-  for (const s of [-1, 1]) lights.push(buildLamp(scene, TERRACE.x + s * LAMPS.x, LAMPS.z, M, obstacles));
-  const lanterns = stillBuilt(scene, () => buildStreetLamps(scene, M, obstacles));
+  const stair = [-1, 1].map((s) => buildLamp(scene, TERRACE.x + s * LAMPS.x, LAMPS.z, M, obstacles));
+  for (const { light } of stair) lights.push(light);
+  // (the stair's lamps lit as the street lamps are, and casting as they do: lit by a point light of their own, dim
+  // and never casting, the hero by one cast "no shadows FROM LIGHT, only from moon")
+  const lanterns = [...stair.map(({ lantern }) => lantern), ...stillBuilt(scene, () => buildStreetLamps(scene, M, obstacles))];
   let night = 0;
   updaters.push(contactShadows(scene, obstacles));
   updaters.push(sky.update);
@@ -1422,13 +1425,15 @@ function buildNoticeBoard(scene: THREE.Object3D, wall: Wall, M: Mats): void {
   wall.add(board, false, 'wall', true);
 }
 
-/** A lamp post at (x, z): a post, an arm and a lantern of glass with its light (one of the village's). */
-function buildLamp(scene: THREE.Object3D, x: number, z: number, M: Mats, obstacles: Obstacle[]): THREE.PointLight {
-  const at = lampPost(scene, x, z, x < 0 ? 0 : Math.PI, M, obstacles);
-  const light = new THREE.PointLight(LAMPS.color, LAMPS.intensity, LAMPS.distance, 2);
-  light.position.set(at.x, at.y - 0.18, at.z);
+/** A lamp post at (x, z) by the stair: where its lantern is lit (lit by the lit shaders' lamps, as a street lamp),
+ *  and a point light there of no strength, one of the village's 10 (a count every lit program is made for). */
+function buildLamp(scene: THREE.Object3D, x: number, z: number, M: Mats,
+  obstacles: Obstacle[]): { light: THREE.PointLight; lantern: THREE.Vector3 } {
+  const lantern = lampPost(scene, x, z, x < 0 ? 0 : Math.PI, M, obstacles);
+  const light = new THREE.PointLight(LAMPS.color, 0, 1, 2);
+  light.position.copy(lantern);
   scene.add(light);
-  return light;
+  return { light, lantern };
 }
 
 /** The point lights under `scene` that cast shadows. */
