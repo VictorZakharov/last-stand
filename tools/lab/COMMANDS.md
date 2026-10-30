@@ -204,7 +204,10 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   (`page/villageLights.ts`, each pictured in the close view in `out/village/sheet.png`): over 12% of its box blown out
   (its brightest channel past 0.97) or 2% of the ring round it out to 2.5 times as far fails it as blinding (from
   play: "lights too bright, can't see geometry even", "we should always check all lights for blinding": the lantern
-  read 18.6%; a new kind of light gets a case there); the terrace's
+  read 18.6%; a new kind of light gets a case there); the pool's lights lit at midnight with the hero standing
+  still, none changing by over 1% a frame (`page/villageSteady.ts`: from play, "lamps have high frequency flicker",
+  every pooled light shaken by a random tenth a frame, 10.1%; a fire's own light swells with its flames and isn't
+  read; `--canary` shakes one by a tenth); the terrace's
   stair walked up, the body's height on its top (`obj.position.y`:
   the player's `pos.y` is always 0, and a reading of it said 0 m up); in the close view (V), mouse look asking for the
   pointer on the square and letting it go once the hall of heroes is used (`pointerWanted` in `core/input.ts`: its
