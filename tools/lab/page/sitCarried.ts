@@ -359,8 +359,11 @@ export interface HeldApart {
   gone: boolean;
 }
 
-/** What was held before and isn't held as it was now. */
-export function heldApart(before: HeldNow, after: HeldNow): HeldApart[] {
+/** What was held before and isn't held as it was now: off over `offMost` (m) on its joint or turned over
+ *  `turnedMost` (degrees). */
+export function heldApart(
+  before: HeldNow, after: HeldNow, offMost = REHELD_MOST, turnedMost = RETURNED_MOST,
+): HeldApart[] {
   const apart: HeldApart[] = [];
   for (const [name, was] of before) {
     const now = after.get(name);
@@ -370,7 +373,7 @@ export function heldApart(before: HeldNow, after: HeldNow): HeldApart[] {
     }
     const off = Math.max(...was.map((mesh, i) => farthest(now[i].onJoint, mesh.onJoint)));
     const turned = Math.max(...was.map((mesh, i) => now[i].quaternion.angleTo(mesh.quaternion) * DEG));
-    if (off > REHELD_MOST || turned > RETURNED_MOST) apart.push({ name, off, turned, gone: false });
+    if (off > offMost || turned > turnedMost) apart.push({ name, off, turned, gone: false });
   }
   return apart;
 }

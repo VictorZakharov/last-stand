@@ -55,8 +55,11 @@ What he carries is followed from his set-up until he's up again (`page/sitCarrie
 piece the pose moves (one hung from a hand that a palm is on at some frame, within 6 cm of its box, or one taken over
 15 cm from where it hangs) may move only in a hand or lie still: one that went over 3 cm in all with no palm on it,
 moving in the world and on the joint it hangs from, moved on its own; and any mesh turned over 25° or thrown over 12 cm
-in a frame jumped. Once a tap has left him up and still, what he held before he sat must be held as it was, every
-corner within 3 cm on its joint and turned under 10°. From play, both passed by every measure before: "staff dropping
+in a frame jumped. Once a tap has left him up and still, what he held as he began to sit must be held as it was,
+every corner within 3 cm on its joint and turned under 10°; a hold the walk to the seat moved is said apart, as
+the walk's (`as he began to sit, his bow ... before he walked there`: read from the set-up, before the walk, the
+ranger's bow by the fire had moved 6 cm in his hand on the way from the stone's set-up, and he got up holding it as
+he sat down with it). From play, both passed by every measure before: "staff dropping
 in a weird way" (the mage let go of it at a fifth of the way down and it went on to the floor on its own, 8 m of
 movement in all), "staff rotated when he stands up" (140° turned in his hand), "he just summons the bow into his hand
 using jedi force", "when warrior sits on a log, weapons are being pulled around with jedi force too, on sit down, and
@@ -72,7 +75,7 @@ hand's fist (`Model.fists`), not open: its fingers curled 0.5 rad or more, as `e
 in a hand let go of, as a swordsman regrips one; each time a fist opens, and every 30 frames while it's open (four
 times a sit at most), it's pictured close on the hand (`his right fist let go of, curled N°`): opened too far, the
 blade swung past a flat palm, held by nothing. The trace (`--trace`) says each frame where each palm is along the
-piece. And no arm may be held at two or more of its joints' stops at once (`page/armStrain.ts`, as `range` reads
+piece, each frame an arm was at its stops, and the hold as he began to sit however little it moved on the walk. And no arm may be held at two or more of its joints' stops at once (`page/armStrain.ts`, as `range` reads
 it; pictured at its most): "if a real warrior would put a sword down like that, he would snap his arm" (by the fire,
 the forearm turned to its end and the wrist bent to its). His legs are read against his skirts (`page/sitCloth.ts`): every
 triangle's corners, edges' middles and middle against the thighs' and shins' capsules at their drawn radii, a point
