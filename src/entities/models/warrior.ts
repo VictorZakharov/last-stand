@@ -1510,7 +1510,7 @@ export function buildWarrior(): Model {
    *  89 degrees past its turn; its fingers ahead on the pommel, the wrist bent 34 degrees past its range.) From play: "keep it stood", with a natural regrip. Stood point down at his side in one fist, the fist had
    *  to turn 120 degrees from how it held it standing, past a wrist's turn: his arm shot straight out ahead and the
    *  blade swept 0.5 to 2 m in a frame. */
-  const BETWEEN = tunable('warriorBetween', { ahead: 0.9, lean: 0.1, top: 0.35, arc: [0.25, 0.15], letGo: 0.7, take: 0.1, slant: 0.2, fingers: 1.6, lift: 0.4, rest: [0.3, 0.4, 0.15, 0.1], clear: [0.2, 0.15], stages: [0.3, 0.45], hands: [1.3, 2.6] });
+  const BETWEEN = tunable('warriorBetween', { ahead: 0.9, lean: 0.1, top: 0.35, arc: [0.25, 0.15], letGo: 0.7, take: 0.1, slant: 0.2, fingers: 1.6, lift: 0.4, rest: [0.4, 0.5, 0.15, 0.1], clear: [0.3, 0.7], stages: [0.3, 0.45], hands: [1.8, 2.6] });
   /** a model's hands with nothing to do as he sits */
   const NO_HANDS = { before: 0, after: 0 };
   /** whether a two-hander is stood between his feet on this sit (on a seat, not by a fire) */
@@ -1895,7 +1895,10 @@ export function buildWarrior(): Model {
       // (and which way round: the one that has its point up and ahead halfway, over the top as a blade is brought off
       // the shoulder; the shorter way, its point went down behind him, through the log he'd sit on, 76 cm)
       const mid = _s1.set(0, 0, 1).transformDirection(root.matrixWorld).setY(0).normalize().add(_s2.set(0, 1, 0)).normalize();
-      armOf(p).forEach((joint, i) => joint.quaternion.slerpQuaternions(p.armWas[i], _keyA[i], 0.5));
+      // (halfway from the arm that held it to the one that rests it: the last way tried's arm, the axe and the maul
+      // went round the short way, their heads 76 cm into the log)
+      holdKey(p, p.liftAt, p.liftQ, p.restArm, p.seatSet);
+      armOf(p).forEach((joint, i) => joint.quaternion.slerpQuaternions(p.armWas[i], p.restArm[i], 0.5));
       p.joint.updateWorldMatrix(true, false);
       p.joint.getWorldQuaternion(_kg);
       let best = -Infinity;
@@ -1904,7 +1907,6 @@ export function buildWarrior(): Model {
         const along = _s3.set(0, 1, 0).applyQuaternion(seat).applyQuaternion(_kg).dot(mid);
         if (along > best) { best = along; p.flipSign = sign; }
       }
-      holdKey(p, p.liftAt, p.liftQ, p.restArm, p.seatSet);
     }
     // standing, lowered off his shoulder to rest on its point beside his foot, as a staff is held
     if (sat < lowered) {

@@ -5,8 +5,11 @@
 // weird way" and turned in his hand once he was up, a bow and weapons "summoned" into the hand.
 import type { Lab, Pictured, Tile, ViewName } from './lab';
 
-/** a frame filmed every this many while he goes down or up */
+/** a frame filmed every this many while he goes down or up, at first */
 const EVERY = 5;
+/** the most frames a view's film keeps: past it, every other one goes and it's filmed half as often. (A two-hander
+ *  lowered, then planted, over seconds, filmed every 5th frame, made a report too big for the page to send) */
+const MOST = 64;
 /** each frame's width in the film (px), and frames a row of the sheet */
 const WIDTH = 360;
 const COLUMNS = 8;
@@ -24,21 +27,29 @@ export class SitFilm {
   private readonly reels: Reel[];
   private readonly done = new Set<Way>();
   private count = 0;
+  private every = EVERY;
 
   constructor(private readonly name: string, views: ViewName[]) {
     this.reels = views.map((view) => ({ view, frames: [] }));
   }
 
   /** Films this frame if he's on his way `way` (`moving`: his body or his hands between their ends), that way isn't
-   *  done, and it's one of every `EVERY`; labelled with his body's share down (`w`) and `stage` after it. */
+   *  done, and it's one of every `every`; labelled with his body's share down (`w`) and `stage` after it. */
   take(lab: Lab, w: number, way: Way, moving: boolean, stage = ''): void {
     if (!moving || this.done.has(way)) return;
-    if (this.count++ % EVERY !== 0) return;
+    if (this.count++ % this.every !== 0) return;
+    if (this.reels[0].frames.length >= MOST) this.thin();
     const drawn = lab.drawn(this.reels.map((reel) => reel.view));
     const text = `${way} ${(w * 100).toFixed(0)}%${stage}`;
     drawn.forEach(({ canvas }, i) => {
       this.reels[i].frames.push(small(canvas, text, this.reels[i].view));
     });
+  }
+
+  /** Every other frame dropped, and frames filmed half as often from now. */
+  private thin(): void {
+    for (const reel of this.reels) reel.frames = reel.frames.filter((_, i) => i % 2 === 0);
+    this.every *= 2;
   }
 
   /** No more of `way` filmed (the first is filmed; the sits after it are its repeats). */

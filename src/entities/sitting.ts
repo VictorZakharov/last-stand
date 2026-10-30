@@ -21,10 +21,10 @@ export const SIT = {
    *  (s). (Eased alone, he spun about at up to 21 rad/s, a snap, and the axe in his hand went 42 cm in a frame) */
   turn: 7, turnFastest: 5, turnMost: 1.2,
   /** the way down and the way up (s), and his hands' getting up as a share of their sitting down, before he stands and
-   *  after (`Model.sitHands`: asked to act, he's up and doing it within about two seconds, a greatsword drawn out of
-   *  the ground and onto his shoulder; at a third of the time, it was swung over the top 40 cm a frame), and how far
+   *  after (`Model.sitHands`: asked to act, the whole slow reverse, the owner's choice: up and doing it in about
+   *  2.3 s, a greatsword drawn out of the ground and onto his shoulder; at a third of the time, it was swung over the top 40 cm a frame), and how far
    *  down he still is as they begin again before he stands (`handsFrom`) */
-  down: 1.1, up: 0.8, handsUp: [0.85, 0.3], handsFrom: 0.5,
+  down: 1.1, up: 0.8, handsUp: [1, 0.7], handsFrom: 0.5,
   /** a foe this near gets him up (m) */
   foes: 14,
   /** after one he can't reach or finds no seat, how long before he looks again (s) */

@@ -16,6 +16,7 @@ import * as THREE from 'three';
 import { G } from '../../../src/state';
 import { groundHeight } from '../../../src/world/ground';
 import { seatSpot, seatTopAt, type Seat } from '../../../src/world/seats';
+import { SIT } from '../../../src/entities/sitting';
 import type { BiomeId } from '../../../src/data/biomes';
 import type { Fixture, Lab, Pictured, Report, ViewName } from './lab';
 import { bodyBreaches, grippingSides } from './range';
@@ -66,8 +67,8 @@ const GLANCED = 15;
 const TAP = 3;
 const RISE_IN = 2;
 const AFTER_UP = 1.2;
-/** the longest getting up may take (s): `SIT.up` with room to spare */
-const RISE_MOST = 1.2;
+/** the room getting up is given over its own time (s, `riseMost`) */
+const RISE_ROOM = 0.4;
 /** how far he may move after a tap once he's up (m), and how far a held step takes him at least */
 const STILL_AFTER = 0.05;
 const WALKS_OFF = 0.6;
@@ -862,7 +863,8 @@ async function askOf(lab: Lab, c: SeatCase, ask: Ask, out: Out, watch: Watch): P
   const ahead = new THREE.Vector3(Math.sin(player.facing), 0, Math.cos(player.facing));
   const aim = player.pos.clone().addScaledVector(ahead, 4);
   const input = ask.what === 'step' ? { keys: ['w'] } : { m0: true, aim };
-  const frames = Math.round((RISE_MOST + AFTER_UP) * RATE);
+  const most = riseMost(lab, c);
+  const frames = Math.round((most + AFTER_UP) * RATE);
   const reads = await lab.step(frames, (f) => (ask.held || f < TAP ? input : { aim }), (frame): AskRead => {
     const w = player.sitting.pose?.w ?? 0;
     // (the way up is followed until he acts: a held attack swings what he holds as it means to)
@@ -874,7 +876,7 @@ async function askOf(lab: Lab, c: SeatCase, ask: Ask, out: Out, watch: Watch): P
     return { w, left, at: player.pos.clone(), cast: Boolean(player.casting || player.channel) };
   });
   const what = `the ${c.name}, ${ask.held ? 'held' : 'tapped'} ${ask.what}`;
-  judgeAsk(what, ask, reads, out);
+  judgeAsk(what, ask, reads, out, most);
   if (!ask.held) judgeHeldAgain(lab, what, watch, out);
 }
 
@@ -922,8 +924,19 @@ function pushOutOfHand(lab: Lab, frame: number): (() => void) | null {
   };
 }
 
+/** The longest getting up may take (s): his hands' stage sat undone, then his body up (`SIT.up`) and his hands'
+ *  stage standing undone from `SIT.handsFrom` of the way, whichever ends last, with `RISE_ROOM` to spare. (The owner
+ *  chose the whole slow reverse when a key gets him up: a greatsword out of the ground, then up, then onto his
+ *  shoulder, about 2.3 s; with nothing in his hands, 0.8 s) */
+function riseMost(lab: Lab, c: SeatCase): number {
+  const hands = lab.player.sitHands(!!c.pick(G.arena.seats)?.ground);
+  const [before, after] = SIT.handsUp;
+  const body = Math.max(SIT.up, SIT.up * (1 - SIT.handsFrom) + hands.before * before);
+  return hands.after * after + body + RISE_ROOM;
+}
+
 /** An ask judged: getting up at once, nothing done until he's up, a tap left undone, a held key done. */
-function judgeAsk(what: string, ask: Ask, reads: AskRead[], out: Out): void {
+function judgeAsk(what: string, ask: Ask, reads: AskRead[], out: Out, most: number): void {
   const rising = reads.slice(0, RISE_IN + 1).some((r, i) => i > 0 && r.left < reads[i - 1].left);
   const up = reads.findIndex((r) => r.left <= 0);
   const castSat = reads.slice(0, Math.max(0, up)).some((r) => r.cast);
@@ -932,7 +945,7 @@ function judgeAsk(what: string, ask: Ask, reads: AskRead[], out: Out): void {
   const cast = after.some((r) => r.cast);
   const problems: string[] = [];
   if (!rising) problems.push(`sit: ${what}, he didn't begin getting up within ${RISE_IN} frames`);
-  if (up < 0) problems.push(`sit: ${what}, he wasn't up after ${RISE_MOST} s`);
+  if (up < 0 || up / RATE > most) problems.push(`sit: ${what}, he wasn't up after ${most.toFixed(2)} s`);
   if (castSat) problems.push(`sit: ${what}, he attacked before he was up`);
   if (!ask.held && (cast || moved > STILL_AFTER)) {
     problems.push(`sit: ${what}, the tap was done once he was up (queued)`);
