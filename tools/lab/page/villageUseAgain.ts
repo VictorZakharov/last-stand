@@ -1,8 +1,9 @@
 // `lab village`'s objects used again where the hero stands: each object with a dialog or a card of its own used by E,
 // put away by its own button, and used by E again without a step (from play, "when I press got it, I cannot press E
 // again until I move away, might affect other objects too": How to play's Got it hid it, and the village still held the
-// notice board as open until he walked off it; the campfire's Close the same). `canary` leaves the second press out
-// for the first object, which must then be found closed.
+// notice board as open until he walked off it; the campfire's Close the same, left out here: its dialog asks the relay
+// server how it is, which the lab's page can't reach). `canary` leaves the second press out for the first object,
+// which must then be found closed.
 import * as THREE from 'three';
 import type { Lab } from './lab';
 import { G } from '../../../src/state';
@@ -19,7 +20,6 @@ interface Opened { id: string; shows: string; close: string }
 /** the objects whose dialog or card has a button of its own */
 const OPENED: readonly Opened[] = [
   { id: 'notice', shows: '#help', close: '#btn-help-close' },
-  { id: 'campfire', shows: '#coop', close: '#btn-coop-close' },
   { id: 'chronicle', shows: '#vcard', close: '#vcard .vc-close' },
 ];
 
