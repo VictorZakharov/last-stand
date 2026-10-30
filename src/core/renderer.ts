@@ -825,7 +825,6 @@ export function render(): void {
   if (fitViewport()) window.dispatchEvent(new Event('resize'));
   if (WEBGPU) {
     renderWebGPU();
-    overFrame.draw();
     return;
   }
   grade.uniforms.uTime.value = G.time;
