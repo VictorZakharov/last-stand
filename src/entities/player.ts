@@ -470,8 +470,11 @@ export class Player {
     // the touch stick is analog: a small push walks
     if (!mx && !mz) { mx = input.stick.x; mz = input.stick.y; }
     const len = Math.hypot(mx, mz);
+    // (E sits him down at once, and gets him up again; a partner down within reach is raised by it instead)
+    const sitKey = this.local && wasPressed('e') && !this.downedNear() && !this.sitting.ask();
     // (sat or getting up: any key gets him up, and nothing else is done until he's up; a key still held then acts)
-    if (this.sitting.update(this, dt, this.freeToSit(), len > 0 || SKILL_KEYS.some((k) => isDown(k) || wasPressed(k)))) {
+    const acted = sitKey || len > 0 || SKILL_KEYS.some((k) => isDown(k) || wasPressed(k));
+    if (this.sitting.update(this, dt, this.freeToSit(), acted)) {
       this.goal.set(0, 0, 0);
       this.vel.set(0, 0, 0);
       this.steered = true;
@@ -1032,6 +1035,12 @@ export class Player {
    *  speed) */
   private standsIdle(move: number, action: ActionState | null): boolean {
     return this.glances && move < 0.05 && !action && !this.dash && !this.aiming && this.aimHold <= 0;
+  }
+
+  /** Whether a partner is down within reach of his revive (E raises him then, and doesn't sit). */
+  private downedNear(): boolean {
+    return G.players.some((p) => p !== this && p.downed && p.inRun
+      && Math.hypot(p.pos.x - this.pos.x, p.pos.z - this.pos.z) < COOP.reviveRange);
   }
 
   /** Whether he could go and sit (or stay sat): nothing cast, aimed or held, no foe near, not hurt, not through the eyes
