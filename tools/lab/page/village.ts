@@ -15,13 +15,14 @@ import * as THREE from 'three';
 import type { Lab, Report } from './lab';
 import { G } from '../../../src/state';
 import {
-  ENTRANCES, HALL, TERRACE, VILLAGE_OBJECTS, YARD_DUMMIES, yardToWorld, type Spot, type VillageObject,
+  COTTAGES, ENTRANCES, HALL, TERRACE, VILLAGE_OBJECTS, YARD_DUMMIES, yardToWorld, type Spot, type VillageObject,
 } from '../../../src/data/village';
 import { BIOME_IDS } from '../../../src/data/biomes';
-import { inWay, insidePalisade, palisadePolygon } from '../../../src/world/villagePlan';
+import { COTTAGE, inWay, insidePalisade, palisadePolygon } from '../../../src/world/villagePlan';
 import { groundHeight } from '../../../src/world/ground';
 import { focusOf } from '../../../src/world/meadow';
-import { goUse, objectNear, villageObject } from '../../../src/game/village';
+import { goTo, goUse, objectNear, villageObject } from '../../../src/game/village';
+import { routing } from '../../../src/world/walkPath';
 import { restartTraining, skipTraining, stepDone, trainingPending } from '../../../src/game/training';
 import { TRAINING } from '../../../src/data/training';
 import { holdHour } from '../../../src/game/clock';
@@ -68,6 +69,8 @@ export async function village(lab: Lab, options: VillageOptions): Promise<Report
     await stairClimbed(lab, options.canary),
     await hallFreesPointer(lab, options.canary),
     await grassSteady(lab, options.canary),
+    await roundCottages(lab, options.canary),
+    await walksAcross(lab, options.canary),
     await training(lab, options.canary),
     await hoursCompileNothing(lab, options.canary),
   ];
@@ -211,6 +214,97 @@ async function portalsHold(lab: Lab, canary: boolean): Promise<Checked> {
   }
   const line = `portals: ${walks - passed.length} of ${walks} walks at them stopped before them`;
   return { lines: [line, ...passed], problems, caught };
+}
+
+/** how far before and behind a cottage the hero is sent across it (m past its walls), and the frames he has to
+ *  get there round it (a walk of 15 m or so at his pace takes about 200) */
+const ROUND_OUT = 2.5;
+const ROUND_FRAMES = 600;
+
+/** Sent to a spot on the far side of each cottage from where he stands, as a place picked on the map sends him
+ *  (`goTo`): there round it within `ROUND_FRAMES`, not stuck on its wall (walked straight, with `canary`, he must
+ *  not get there; from play, "map waypoints dont work, when path is long and curved... it just runs into
+ *  obstacles"). */
+async function roundCottages(lab: Lab, canary: boolean): Promise<Checked> {
+  const lines: string[] = [];
+  const problems: string[] = [];
+  let caught: boolean | null = null;
+  let arrived = 0;
+  for (const [k, c] of COTTAGES.entries()) {
+    const out = (COTTAGE.d / 2) * c.size + ROUND_OUT;
+    const ax = Math.sin(c.facing), az = Math.cos(c.facing);
+    const from: Spot = [c.x + ax * out, c.z + az * out], to: Spot = [c.x - ax * out, c.z - az * out];
+    const planted = canary && k === 0;
+    routing.on = !planted;
+    try {
+      await stand(lab, from);
+      goTo(to[0], to[1]);
+      await lab.step(ROUND_FRAMES);
+    } finally {
+      routing.on = true;
+      G.player.walkTo = null;
+    }
+    const [x, z] = at();
+    const off = Math.hypot(x - to[0], z - to[1]);
+    const there = off < 1;
+    if (planted) {
+      caught = !there;
+      continue;
+    }
+    if (there) arrived++;
+    else problems.push(`route: sent round cottage ${k + 1}, he stopped ${off.toFixed(1)} m short of the spot`);
+  }
+  const counted = COTTAGES.length - (canary ? 1 : 0);
+  lines.push(`route: ${arrived} of ${counted} walks round a cottage got there`, ...problems);
+  return { lines, problems, caught };
+}
+
+/** the frames a walk across the village has to get there (from a portal to the hall of heroes, up its stair and in,
+ *  is 50 m or so: about 700 frames), stepped a chunk at a time and stopped once he's there */
+const ACROSS_FRAMES = 1500;
+const ACROSS_CHUNK = 30;
+
+/** The hero stepped until he stands within a metre of `to` or `ACROSS_FRAMES` have gone: how far off he ended. */
+async function walkedTo(lab: Lab, to: Spot): Promise<number> {
+  const off = (): number => Math.hypot(G.player.pos.x - to[0], G.player.pos.z - to[1]);
+  for (let f = 0; f < ACROSS_FRAMES && off() >= 1; f += ACROSS_CHUNK) await lab.step(ACROSS_CHUNK);
+  return off();
+}
+
+/** Sent from each portal to each of the other objects' stands, as a place picked on the map sends him (`goTo`): there
+ *  within `ACROSS_FRAMES` (walked straight, with `canary`, the first walk must not get there; from play, "I tried
+ *  from portal to hall of heroes, he ran into the house and stopped"). */
+async function walksAcross(lab: Lab, canary: boolean): Promise<Checked> {
+  const problems: string[] = [];
+  let caught: boolean | null = null;
+  let arrived = 0;
+  let counted = 0;
+  const portals = VILLAGE_OBJECTS.filter((o) => o.use === 'portal');
+  const others = VILLAGE_OBJECTS.filter((o) => o.use !== 'portal');
+  for (const p of portals) {
+    for (const o of others) {
+      const planted = canary && caught === null;
+      routing.on = !planted;
+      let off: number;
+      try {
+        await stand(lab, p.stand);
+        goTo(o.stand[0], o.stand[1]);
+        off = await walkedTo(lab, o.stand);
+      } finally {
+        routing.on = true;
+        G.player.walkTo = null;
+      }
+      if (planted) {
+        caught = off >= 1;
+        continue;
+      }
+      counted++;
+      if (off < 1) arrived++;
+      else problems.push(`route: from the ${p.id} portal to the ${o.id}, he stopped ${off.toFixed(1)} m short`);
+    }
+  }
+  return { lines: [`route: ${arrived} of ${counted} walks from a portal to an object got there`, ...problems], problems,
+    caught };
 }
 
 /** The hero moved to (x, z) at once, as a fault planted there. */
