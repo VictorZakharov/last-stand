@@ -77,7 +77,9 @@ const ROOF = { rise: 2.8, thick: 0.24, over: 0.6, gable: 0.5, ceiling: 0.14, bea
  *  and replace with wall torches, so we get some space to walk") */
 const BRAZIERS = { x: 1.65, z: -31.9, glow: 5, flames: 0.5, slabs: 0.6 };
 /** the torches on the hall's front wall either side of the door: how far out from its middle, how high (m) */
-const PORCH_TORCH = { x: 2.1, up: 2.5 };
+/** the porch's torches: off the door, up the wall, and how far out from it their light is (at 1.1 m, by the portico's
+ *  columns, it burned their edges white) */
+const PORCH_TORCH = { x: 2.1, up: 2.5, out: 0.6 };
 /** the palisade: its logs' radius, how tall they stand (from, to), and the gates' gap (m either side of a portal) */
 const PALISADE = { radius: 0.17, low: 4.2, high: 5.4 };
 /** the groves in the village: each one's middle and how many trees (scattered round it where nothing's built) */
@@ -236,7 +238,7 @@ interface Mats {
 const WINDOW_GLOW = 1.3;
 /** the hall's windows' panes seen from inside: the sky's light through them by day and by night (their glow, the
  *  sky's colour) */
-const SKY_PANE = { day: 6, night: 0.4, color: 0xdce6ff };
+const SKY_PANE = { day: 1.3, night: 0.15, color: 0xdce6ff };
 
 /** the maps' chunks whose one read of their map `unrepeated` reads shifted instead, each its map and its uv */
 const UNREPEATED_READS = [
@@ -324,9 +326,11 @@ function makeMats(): Mats {
       map: panes.glass, roughness: 0.25, metalness: 0.2, emissive: 0xffd0a0, emissiveMap: panes.lit, emissiveIntensity: 0,
     }),
     // (the same panes from inside the hall, lit by the sky through them: its glow the hour sets, `daylight`; the same
-    // program as the window's)
+    // program as the window's; matte, as glossy as the window's one sash a pane caught the sun's panel in the sky's map
+    // and burned white over its leads; its picture the sky's too, darkened: the day's glass's pale corner, lit by the
+    // room over the sky's glow, burned each window's upper sash white)
     skyPane: new THREE.MeshStandardMaterial({
-      map: panes.glass, roughness: 0.25, metalness: 0.2, emissive: SKY_PANE.color, emissiveMap: panes.glass, emissiveIntensity: 0,
+      map: panes.sky, color: 0x303030, roughness: 1, metalness: 0, emissive: SKY_PANE.color, emissiveMap: panes.sky, emissiveIntensity: 0,
     }),
     glass: new THREE.MeshStandardMaterial({ color: 0x2a2014, roughness: 0.3, emissive: 0xffc070, emissiveIntensity: 2.2 }),
     paper: new THREE.MeshStandardMaterial({ map: noticePaper(), roughness: 0.9 }),
@@ -396,11 +400,18 @@ function lanternPane(): THREE.CanvasTexture {
   return t;
 }
 
-function windowPanes(): { glass: THREE.CanvasTexture; lit: THREE.CanvasTexture } {
+function windowPanes(): { glass: THREE.CanvasTexture; lit: THREE.CanvasTexture; sky: THREE.CanvasTexture } {
   const W = 128, H = 112, bar = 8, lead = 1.5;
-  const draw = (lit: boolean): THREE.CanvasTexture => {
+  const draw = (lit: boolean, sky = false): THREE.CanvasTexture => {
     const c = canvasOf(W, H), g = ctx2d(c), rng = mulberry(lit ? 31 : 37);
-    if (lit) {
+    if (sky) {
+      // (the sky's light through the glass, seen from inside: even and pale, a little brighter up it; the day's
+      // glass's dark sheen lit by the sky read as a dusk in the noon's windows)
+      const day = g.createLinearGradient(0, 0, 0, H);
+      day.addColorStop(0, '#d8dde2');
+      day.addColorStop(1, '#b8bcc0');
+      g.fillStyle = day;
+    } else if (lit) {
       const glow = g.createRadialGradient(W / 2, H * 0.8, 4, W / 2, H * 0.7, W * 0.75);
       glow.addColorStop(0, '#fff2d0');
       glow.addColorStop(0.45, '#e09040');
@@ -414,8 +425,8 @@ function windowPanes(): { glass: THREE.CanvasTexture; lit: THREE.CanvasTexture }
       g.fillStyle = sheen;
     }
     g.fillRect(0, 0, W, H);
-    // (each pane a shade of its own: old glass is never even)
-    for (let px = 0; px < 2; px++) for (let py = 0; py < 2; py++) {
+    // (each pane a shade of its own: old glass is never even; but the sky's, its lightest sash bloomed white)
+    for (let px = 0; px < 2 && !sky; px++) for (let py = 0; py < 2; py++) {
       g.fillStyle = `rgba(0,0,0,${rng() * 0.25})`;
       g.fillRect(px * W / 2, py * H / 2, W / 2, H / 2);
     }
@@ -431,7 +442,7 @@ function windowPanes(): { glass: THREE.CanvasTexture; lit: THREE.CanvasTexture }
     g.strokeRect(bar / 2, bar / 2, W - bar, H - bar);
     return textureFromCanvas(c);
   };
-  return { glass: draw(false), lit: draw(true) };
+  return { glass: draw(false), lit: draw(true), sky: draw(false, true) };
 }
 
 // --- the builder ----------------------------------------------------------------------------------------------------
@@ -983,7 +994,9 @@ function buildHall(scene: THREE.Object3D, wall: Wall, levels: Levels, M: Mats, o
   // its footing past the terrace's back, as high as the terrace, and its floor on it
   const past = TERRACE.back - back;
   block(scene, half * 2 + 0.6, y0, past + 0.3, X, 0, back - 0.3 + (past + 0.3) / 2, M.ashlar, 0.5).receiveShadow = true;
-  const floor = block(scene, HALL.inHalf * 2, 0.05, TERRACE.back - HALL.wall, X, y0 - 0.045, (TERRACE.back + HALL.wall) / 2, M.flags, 1 / 2.25);
+  // (its edges in the walls: on their inner faces, its sides fought them in a sawtooth along their feet)
+  const floor = block(scene, HALL.inHalf * 2 + 0.1, 0.05, TERRACE.back - HALL.wall + 0.05, X, y0 - 0.045,
+    (TERRACE.back + HALL.wall - 0.05) / 2, M.flags, 1 / 2.25);
   floor.receiveShadow = true;
   levels.paint(X - HALL.inHalf, HALL.wall, X + HALL.inHalf, TERRACE.back, () => y0);
   // the back and side walls, a plinth course along their feet outside, tall windows down the long ones
@@ -1020,7 +1033,8 @@ function buildHall(scene: THREE.Object3D, wall: Wall, levels: Levels, M: Mats, o
     obstacles.push({ x, z: BRAZIERS.z, r: 0.75, h: daisTop + 1.8 });
   }
   // the torches either side of the door, on the front wall's face (cut away with it over the hero inside)
-  const porch = [-1, 1].map((s) => wallTorch(frontWall, M, look, X + s * PORCH_TORCH.x, y0 + PORCH_TORCH.up, face, 0, 1));
+  const porch = [-1, 1].map((s) => wallTorch(frontWall, M, look, X + s * PORCH_TORCH.x, y0 + PORCH_TORCH.up, face, 0, 1, true,
+    PORCH_TORCH.out));
   // the portico: a pair of columns either side, one entablature across the whole front
   for (const s of [-1, 1]) {
     for (const x of COLONNADE.x) {
@@ -1057,11 +1071,17 @@ function hallSideWall(scene: THREE.Object3D, wall: Wall, M: Mats, sideX: number,
   add(face - back, eaves - top, y0 + top, (back + face) / 2);
   const edges = [back, ...windowsAlong().flatMap((z) => [z - wide / 2, z + wide / 2]), face];
   for (let k = 0; k < edges.length; k += 2) add(edges[k + 1] - edges[k], high, y0 + sill, (edges[k] + edges[k + 1]) / 2);
+  // (set back to the wall's middle, each side's reveal its own: at 8 cm in from each face, the panes read as pictures
+  // on the wall, "the windows are still pictures painted on the wall")
   const pane = new THREE.BoxGeometry(0.04, high, wide);
   for (const z of windowsAlong()) {
+    // (a limestone lining round the opening, the wall's depth shown by it: in the brick's own colour the reveals read
+    // as none, "no reveal, jamb, depth or wall thickness")
+    for (const side of [-1, 1]) block(scene, thick + 0.02, high, 0.08, sideX, y0 + sill, z + side * (wide / 2 - 0.04), M.coping);
+    block(scene, thick + 0.02, 0.1, wide, sideX, y0 + top - 0.1, z, M.coping);
     for (const [material, off] of [[M.window, 1], [M.skyPane, -1]] as const) {
       const mesh = solid(scene, pane, material);
-      mesh.position.set(sideX + s * off * (thick / 2 - 0.08), y0 + sill + high / 2, z);
+      mesh.position.set(sideX + s * off * 0.03, y0 + sill + high / 2, z);
       mesh.castShadow = false;
     }
   }
@@ -1083,21 +1103,53 @@ function hallColumns(scene: THREE.Object3D, M: Mats, look: TorchLook, obstacles:
       block(scene, 0.78, 0.3, 0.78, x, ceiling - 0.3, z, M.granite);
       obstacles.push({ x, z, r: 0.5, h: ceiling });
       // the torch on its aisle side, at a man's reach and a half
-      torches.push(wallTorch(scene, M, look, x - s * (COLUMN_IN.radius + 0.02), y0 + 2.7, z, -s, 0));
+      torches.push(wallTorch(scene, M, look, x - s * (COLUMN_IN.radius + 0.02), y0 + 2.7, z, -s, 0, false));
+      // (held by an iron band round the shaft: a flat plate on it stood off its curve at one edge and cut into it at
+      // the other)
+      const band = solid(scene, new THREE.CylinderGeometry(COLUMN_IN.radius * 0.97, COLUMN_IN.radius * 0.97, 0.1, 18),
+        M.iron);
+      band.position.set(x, y0 + 2.4, z);
+      band.castShadow = false;
     }
   }
   return torches;
 }
 
 /** A torch's flame and what it's drawn in, shared by every torch. */
-interface TorchLook { fire: THREE.Material; flame: THREE.BufferGeometry; cup: THREE.BufferGeometry }
+interface TorchLook {
+  fire: THREE.Material; flame: THREE.BufferGeometry; glow: THREE.Material; halo: THREE.BufferGeometry;
+  cup: THREE.BufferGeometry;
+}
 
-/** The torches' look: a flame of its own, smaller and dimmer than a lantern's glass (passed close, the glass's bloomed
- *  into a blob that hid the heroes behind it; the same kind of material, so the same program). */
+/** A flame's outline turned round its axis, `r` its widest and `h` its height: round at its foot, drawn in to a tip
+ *  (`lean` puts its tip off its axis along x, as a draught bends it). */
+function flameGeometry(r: number, h: number, lean: number): THREE.BufferGeometry {
+  const outline: THREE.Vector2[] = [];
+  for (let k = 0; k <= 12; k++) {
+    const t = k / 12;
+    // (a round foot to its widest a fifth up, then in to the tip by a curve)
+    const wide = t < 0.2 ? Math.sin((t / 0.2) * Math.PI / 2) : Math.pow(1 - (t - 0.2) / 0.8, 1.6);
+    outline.push(new THREE.Vector2(Math.max(r * wide, 0.0005), h * t));
+  }
+  const g = new THREE.LatheGeometry(outline, 10);
+  const at = g.attributes.position;
+  for (let i = 0; i < at.count; i++) at.setX(i, at.getX(i) + lean * (at.getY(i) / h) ** 2);
+  g.computeVertexNormals();
+  return g;
+}
+
+/** The torches' look: a flame of its own, a pointed tongue a hot core and a soft glow round it, smaller and dimmer than
+ *  a lantern's glass (passed close, the glass's bloomed into a blob that hid the heroes behind it; the same kind of
+ *  material, so the same program). Drawn as a lit egg, a review read each as "a solid light bulb". */
 function torchLook(): TorchLook {
   return {
-    fire: new THREE.MeshStandardMaterial({ color: 0x2a2014, roughness: 0.3, emissive: 0xffb060, emissiveIntensity: 1.1 }),
-    flame: new THREE.SphereGeometry(0.045, 10, 8).scale(1, 2.2, 1),
+    fire: new THREE.MeshStandardMaterial({ color: 0x2a2014, roughness: 0.3, emissive: 0xffc070, emissiveIntensity: 1.1 }),
+    flame: flameGeometry(0.035, 0.17, 0.012),
+    glow: new THREE.MeshBasicMaterial({
+      // (faint: at 0.35, over a torch's own lit wall the ring round it was 2.3% blown out, `lab village`'s lights)
+      color: 0xff8a30, transparent: true, opacity: 0.18, blending: THREE.AdditiveBlending, depthWrite: false,
+    }),
+    halo: flameGeometry(0.06, 0.27, 0.025),
     cup: new THREE.CylinderGeometry(0.11, 0.06, 0.16, 10),
   };
 }
@@ -1106,17 +1158,23 @@ function torchLook(): TorchLook {
  *  iron bracket, an arm out, a cup, its flame. Returns where its light is: out from it, as at its flame the wall
  *  beside it burned white. */
 function wallTorch(scene: THREE.Object3D, M: Mats, look: TorchLook, x: number, y: number, z: number, dx: number,
-  dz: number): THREE.Vector3 {
+  dz: number, plated = true, out = 1.1): THREE.Vector3 {
   const alongX = dx !== 0;
-  block(scene, alongX ? 0.08 : 0.12, 0.5, alongX ? 0.12 : 0.08, x, y - 0.55, z, M.iron);
-  block(scene, alongX ? 0.3 : 0.06, 0.06, alongX ? 0.06 : 0.3, x + dx * 0.15, y - 0.3, z + dz * 0.15, M.iron);
+  const plate = plated ? block(scene, alongX ? 0.08 : 0.12, 0.5, alongX ? 0.12 : 0.08, x, y - 0.55, z, M.iron) : null;
+  const arm = block(scene, alongX ? 0.3 : 0.06, 0.06, alongX ? 0.06 : 0.3, x + dx * 0.15, y - 0.3, z + dz * 0.15, M.iron);
   const cup = new THREE.Mesh(look.cup, M.iron);
   cup.position.set(x + dx * 0.32, y - 0.2, z + dz * 0.32);
   scene.add(cup);
   const flame = new THREE.Mesh(look.flame, look.fire);
-  flame.position.set(x + dx * 0.32, y - 0.04, z + dz * 0.32);
+  flame.position.set(x + dx * 0.32, y - 0.14, z + dz * 0.32);
   scene.add(flame);
-  return new THREE.Vector3(x + dx * 1.1, y + 0.3, z + dz * 1.1);
+  const halo = new THREE.Mesh(look.halo, look.glow);
+  halo.position.set(x + dx * 0.32, y - 0.17, z + dz * 0.32);
+  scene.add(halo);
+  // (its own light is out from it: cast into the lamps' shadows, the bracket and cup threw a hole of shadow round the
+  // torch on its own wall)
+  for (const part of [plate, arm]) if (part) part.castShadow = false;
+  return new THREE.Vector3(x + dx * out, y + 0.3, z + dz * out);
 }
 
 /** The dais across the hall's far end, a step up onto it, and on it a plinth for each hero (granite, a coping on its
