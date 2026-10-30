@@ -20,6 +20,7 @@ import type { Fixture, Lab, Pictured, Report, ViewName } from './lab';
 import { bodyBreaches, grippingSides } from './range';
 import { cm as cmOf, follow, JERK_FROM, skirtsOf, type Followed } from './coat';
 import { WeaponBody } from './weaponBody';
+import { SEAT_CANARY_CAUGHT, seatCanary, WeaponSeat } from './weaponSeat';
 import { bowOf } from './ranger';
 import { armsInLegs } from './armsInLegs';
 import { armsInBody } from './armsIn';
@@ -183,6 +184,8 @@ interface Out {
  *  deepest, pictured), the film; and what he held before he sat. */
 interface Watch {
   carried: Carried;
+  /** the weapon in his hand and the bow against the seat */
+  seat: WeaponSeat[];
   film: SitFilm;
   through: (LegThrough & { at: string }) | null;
   shown: number;
@@ -236,6 +239,13 @@ async function canaryOn(lab: Lab, c: SeatCase, fixture: Fixture, out: Out): Prom
     out.text.push(`  canary, ${canary.what}: ${canary.caught ? 'caught' : 'MISSED'}`);
     if (!canary.caught) problems.push(`sit: the canary (${canary.what}) was missed`);
   }
+  const seat = c.pick(G.arena.seats), weapon = lab.model.tip?.parent;
+  if (seat && !seat.ground && weapon) {
+    const read = seatCanary(seat, weapon, 0.15);
+    const caught = read >= SEAT_CANARY_CAUGHT;
+    out.text.push(`  canary, the weapon 15 cm into the seat: ${caught ? 'caught' : 'MISSED'} (${cmOf(read)} cm)`);
+    if (!caught) problems.push('sit: the canary (the weapon in the seat) was missed');
+  }
   const cloth = legsThroughCanary(lab.joints);
   out.text.push(`  canary, legs through the skirts: ${cloth}`);
   if (!cloth.startsWith('caught')) problems.push(`sit: the canary (a cloth point at the knee) was missed`);
@@ -262,6 +272,7 @@ async function trySeat(lab: Lab, c: SeatCase, fixture: Fixture, options: SitOpti
   const label = `${c.name} (top ${seatTopAt(seat, spot.x, spot.z).toFixed(2)} m)`;
   const watch: Watch = {
     carried: new Carried(lab, options.trace), film: new SitFilm(c.name, [c.views[0], 'third']), through: null,
+    seat: [new WeaponSeat(seat, (each) => each.model.tip?.parent), new WeaponSeat(seat, bowApart)],
     shown: 0,
     before: heldNow(lab), canary: !!options.canary, moments: [],
   };
@@ -307,6 +318,7 @@ function judgeFraming(name: string, standing: Framed, sat: Framed, out: Out): vo
 /** A frame of what's followed: what he carries, his legs through his skirts (the deepest pictured as it deepens). */
 function watchFrame(lab: Lab, name: string, frame: string, watch: Watch, skirts: Followed[]): void {
   watch.carried.observe(frame);
+  for (const piece of watch.seat) piece.observe(lab, frame);
   const through = legsThrough(lab.joints, skirts);
   if (!through || through.depth <= THROUGH_FROM) return;
   if (!watch.through || through.depth > watch.through.depth) watch.through = { ...through, at: frame };
@@ -319,6 +331,7 @@ function watchFrame(lab: Lab, name: string, frame: string, watch: Watch, skirts:
 /** What's followed judged once he's up again: what he carries moved with no hand on it or jumping, his legs
  *  through his skirts, and the film. */
 function judgeWatch(name: string, watch: Watch, out: Out): void {
+  for (const piece of watch.seat) if (piece.depth > 0) out.problems.push(`sit: by the ${name}, ${piece.describe()}`);
   for (const found of watch.carried.findings()) {
     if (found.loose > LOOSE_MOST) {
       out.problems.push(`sit: by the ${name}, his ${found.name} moved ${cmOf(found.loose)} cm with no hand on it `
