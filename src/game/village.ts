@@ -29,6 +29,8 @@ export interface VillageHooks {
   leave(object: VillageObject): void;
   /** whether the village takes the hero's input now (the lobby up, nothing over it) */
   active(): boolean;
+  /** whether what `object` opened is still up (its panel, card or dialog) */
+  shows(object: VillageObject): boolean;
 }
 
 /** how far past an object's reach the hero may walk before what it opened is put away (m) */
@@ -52,7 +54,7 @@ const PICK_SHARE = 0.55, PICK_MOST = 2.6;
 const LAMPLIGHT = { color: 0xffb46a, intensity: 50, distance: 15, below: 0 };
 /** the hall's torches as the pool lights them: brighter and nearer than a street lamp (lit like one, the hall stood
  *  dark round its heroes) */
-const TORCHLIGHT = { intensity: 10, distance: 9, dais: 2, daisIntensity: 16, daisDistance: 8, door: 6 };
+const TORCHLIGHT = { intensity: 10, distance: 9, dais: 2, daisIntensity: 16, daisDistance: 8, door: 6, porchIntensity: 6 };
 /** how many of the lamps lit, the brightest, cast shadows (from play, "need shadow from lights too"): the village's
  *  two casting lights, the hall's braziers', handed to them while they're lit, so the count every lit program is made
  *  for stays two and nothing compiles */
@@ -201,6 +203,9 @@ export function updateVillage(dt = 0): void {
   }
   if (!p.walkTo) going = null;
   near = nearest();
+  // (what it opened put away by its own button: E opens it again where he stands, as he hadn't walked off it, "when I
+  // press got it, I cannot press E again until I move away")
+  if (opened && !hooks.shows(opened)) opened = null;
   if (going && distanceTo(going) < going.reach) useNow(going);
   else if (near && wasPressed('e') && opened !== near) useNow(near);
   if (opened && distanceTo(opened) > opened.reach + LEAVE) {
@@ -267,22 +272,35 @@ let lampLights: LightSlot[] = [];
 const LAMP_COLOR = new THREE.Color(LAMPLIGHT.color);
 let lampsPlaced = false;
 
-/** Lamp `i`'s light (the street lamps', then the hall's torches', its dais's two first): its intensity now and its
- *  reach (m). */
+/** Every lamp in the list's order: the street lamps, the hall's torches (its dais's two first), the torches either
+ *  side of its door. */
+function allLamps(): THREE.Vector3[] {
+  const village = G.arena.village;
+  return [...village.lanterns, ...village.hallTorches, ...village.porchTorches];
+}
+
+/** Whether lamp `i` lights the hall's inside (its torches) or all round it (the street lamps, the door's torches). */
+function lampInside(i: number): boolean {
+  const village = G.arena.village, n = village.lanterns.length;
+  return i >= n && i < n + village.hallTorches.length;
+}
+
+/** Lamp `i`'s light (in `allLamps`' order): its intensity now and its reach (m). */
 function lampLight(i: number): { intensity: number; reach: number } {
   const village = G.arena.village, n = village.lanterns.length;
   if (i < n) return { intensity: LAMPLIGHT.intensity * village.night, reach: LAMPLIGHT.distance };
   if (i < n + TORCHLIGHT.dais) return { intensity: TORCHLIGHT.daisIntensity, reach: TORCHLIGHT.daisDistance };
-  return { intensity: TORCHLIGHT.intensity, reach: TORCHLIGHT.distance };
+  if (lampInside(i)) return { intensity: TORCHLIGHT.intensity, reach: TORCHLIGHT.distance };
+  return { intensity: TORCHLIGHT.porchIntensity, reach: TORCHLIGHT.distance };
 }
 
 /** Every lamp (the street lamps' and the hall's torches') placed in the lit shaders' list, the hall's inside its
  *  shelter: the torches light it alone, the street lamps all but it. Returns their places. */
 function placeTheLamps(): LampPlace[] {
-  const village = G.arena.village, n = village.lanterns.length;
   const shelter: [number, number, number, number] = [TERRACE.x - HALL.inHalf, HALL.wall, TERRACE.x + HALL.inHalf, HALL.inFront];
-  const all = [...village.lanterns, ...village.hallTorches];
-  const places = all.map((at, i) => ({ at: at.clone().setY(at.y - LAMPLIGHT.below), reach: lampLight(i).reach, inside: i >= n }));
+  const places = allLamps().map((at, i) => ({
+    at: at.clone().setY(at.y - LAMPLIGHT.below), reach: lampLight(i).reach, inside: lampInside(i),
+  }));
   placeLamps(shelter, places);
   return places;
 }
@@ -335,10 +353,10 @@ function lightLamps(dt: number): void {
   if (casting) castOnNearest(nearest, dt);
   // (each lamp by the list, but what its casting light takes)
   const taken = new Map(casters.filter((c) => c.lamp >= 0).map((c) => [c.lamp, c.share]));
-  for (let i = 0; i < n + village.hallTorches.length; i++) {
+  const all = allLamps();
+  for (let i = 0; i < all.length; i++) {
     lightLamp(i, LAMP_COLOR, lampLight(i).intensity * (1 - (taken.get(i) ?? 0)));
   }
-  const all = [...village.lanterns, ...village.hallTorches];
   for (const [k, slot] of lampLights.entries()) {
     const { lamp, share } = casters[k];
     const light = lamp < 0 ? { intensity: 0, reach: LAMPLIGHT.distance } : lampLight(lamp);

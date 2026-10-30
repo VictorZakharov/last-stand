@@ -121,6 +121,8 @@
 #help .modal-box:has(.diagrams) { width: 960px; max-width: calc(94vw / var(--ui, 1)); max-height: calc(94vh / var(--ui, 1)); }
 .help-cols:has(.diagrams) { display: grid; grid-template-columns: auto 1fr; gap: 24px; align-items: center; }
 @media (max-width: 720px) { .help-cols:has(.diagrams) { grid-template-columns: 1fr; } }
+/* its Got it at the box's right, where a dialog's way on is read ("lets move got it button to the right") */
+#btn-help-close { display: block; margin-left: auto; }
 /* short screens (phones held sideways): everything tighter so it fits without scrolling */
 @media (max-height: 520px) {
   .pause-box { padding: 10px 22px 10px; gap: 6px; }

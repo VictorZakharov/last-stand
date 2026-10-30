@@ -137,7 +137,7 @@ async function boot() {
   initRun({ banner, showDecision, hideDecision, resetDecision, showSummary });
   // (the lobby shows before the fight's programs are warm: pressed early, what needs them goes ahead once they are)
   initMenus({ start: whenWarm(['fight'], start, READYING.fight), toMenu, resume, abandon, profileChanged, changeHero, summaryDone, lobbyChanged: sendLobbyChoice, panels: panelsChanged });
-  initVillage({ use: useObject, leave: leaveObject, active: villageActive });
+  initVillage({ use: useObject, leave: leaveObject, active: villageActive, shows: objectShows });
   initVillageCard((o) => closedFrom(o));
   initVillageMap({ go: goUse, walk: goTo, trees: () => G.arena.village.trees });
   initTrainingTracker();
@@ -276,6 +276,17 @@ function leaveObject(o: VillageObject): void {
   if (o.use === 'stash' && panelsOpen() === 'chest') openPanels(null);
   if (o.use === 'coop') openCoop(false);
   if (o.use === 'help') hideHelp();
+}
+
+/** Whether what `o` opened is still up (the hall's screen is told closed by its own close). */
+function objectShows(o: VillageObject): boolean {
+  switch (o.use) {
+    case 'portal': case 'chronicle': return villageCardOf() === o;
+    case 'stash': return panelsOpen() === 'chest';
+    case 'coop': return coopOpen();
+    case 'help': return helpOpen();
+    case 'heroes': return true;
+  }
 }
 
 /** The inventory or the stash opened or put away: the chest's lid follows; put away, the village forgets it. */
