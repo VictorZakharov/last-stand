@@ -1226,6 +1226,11 @@ export const COMMANDS = {
         usage: 'crypt|forest',
         help: 'the biome (as the page has it by default)',
       },
+      hour: {
+        kind: 'number',
+        usage: 'h',
+        help: 'with --village, the hour it\'s lit for (0 to 24: by night its lamps are lit, two casting shadows)',
+      },
       village: {
         kind: 'switch',
         help: 'in the lobby\'s village instead (the run the set-up starts left, no foes; --at and --facing where the '

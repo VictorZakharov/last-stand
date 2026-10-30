@@ -34,8 +34,8 @@ import { buildMeadow, meadowGround, MeadowMask, type MaskUniforms } from './mead
 import { growTree, type TreeKind } from './ezTrees';
 import { TREE_KINDS } from './forest';
 import { leafClusterTexture } from './foliage';
-import { cullInCells, eachInstance } from './culling';
-import { buildFountain } from './fountain';
+import { cullInCells, eachInstance, notInMovingShadows } from './culling';
+import { buildFountain, type FountainLight } from './fountain';
 import {
   COTTAGE, PODIUM, SQUARE_R, TOMB, builtAt, footpathOf, fromGap, inWay, insidePalisade, palisadeCurve, palisadePolygon, roadLines, withinVillage,
 } from './villagePlan';
@@ -120,6 +120,8 @@ export interface Village extends Biome {
   trees: readonly { x: number; z: number; height: number }[];
   /** the street lamps' lanterns (the pooled lights lit at the nearest: game/village.ts `lightLamps`) */
   lanterns: readonly THREE.Vector3[];
+  /** the lanterns' painted pools of light, one instance each in their order, its colour how much of it shows */
+  lampPools: THREE.InstancedMesh;
   /** the hall of heroes' roof, ceiling and front wall (cut away over the hero inside, but through his eyes, as from
    *  above and over his shoulder they hid the room: game/village.ts) */
   hallCutaway: readonly THREE.Object3D[];
@@ -128,6 +130,9 @@ export interface Village extends Biome {
   /** the lights on the hall's dais (its first two, lit whenever the hero is inside) and its torches' flames (the
    *  nearest lit), by the pooled lights */
   hallTorches: readonly THREE.Vector3[];
+  /** its two lights casting the still shadows (the hall's braziers), which hand their shadows to the lamps lit by
+   *  night (game/village.ts `castFromLamps`) */
+  stillLights: readonly THREE.PointLight[];
   /** how far into the night its hour is: 0 by day, 1 by night */
   readonly night: number;
   /** each portal's way out into the village, by its battleground: where a hero coming back stands, and his facing */
@@ -312,7 +317,7 @@ export function buildVillage(scene: THREE.Group): Village {
   buildGround(scene, M, maskUniforms);
   const meadow = buildMeadow(mask, maskTexture, updaters);
   scene.add(meadow);
-  buildSquare(scene, M, obstacles, updaters);
+  const fountainLight = buildSquare(scene, M, obstacles, updaters);
   buildTerrace(scene, wall, levels, M);
   const hall = buildHall(scene, wall, levels, M, obstacles, updaters);
   const lid = buildChest(scene, M, obstacles);
@@ -333,7 +338,7 @@ export function buildVillage(scene: THREE.Group): Village {
   buildBenches(scene, M, obstacles);
   buildNoticeBoard(scene, wall, M);
   for (const s of [-1, 1]) lights.push(buildLamp(scene, TERRACE.x + s * LAMPS.x, LAMPS.z, M, obstacles));
-  const { pools, lanterns } = buildStreetLamps(scene, M, obstacles);
+  const { pools, quads: lampPools, lanterns } = buildStreetLamps(scene, M, obstacles);
   let night = 0;
   updaters.push(contactShadows(scene, obstacles));
   updaters.push(sky.update);
@@ -356,9 +361,11 @@ export function buildVillage(scene: THREE.Group): Village {
     exits,
     trees,
     lanterns,
+    lampPools,
     hallCutaway: hall.cutaway,
     meadow,
     hallTorches: [...hall.dais, ...hall.torches],
+    stillLights: castingLights(scene),
     get night() { return night; },
     setCalm() {},
     update(dt, t) { for (const u of updaters) u(dt, t); },
@@ -370,6 +377,7 @@ export function buildVillage(scene: THREE.Group): Village {
       M.window.emissiveIntensity = WINDOW_GLOW * (1 - dayness(hour));
       night = 1 - dayness(hour);
       pools.opacity = STREET.night * night;
+      fountainLight(dayness(hour));
     },
   };
 }
@@ -612,8 +620,8 @@ function wayPoint(id: BiomeId, across: number, out: number): Spot {
 }
 
 /** The fountain in the middle of the square (world/fountain.ts). */
-function buildSquare(scene: THREE.Object3D, M: Mats, obstacles: Obstacle[], updaters: Updater[]): void {
-  buildFountain(scene, { stone: M.ashlar, coping: M.coping }, obstacles, updaters);
+function buildSquare(scene: THREE.Object3D, M: Mats, obstacles: Obstacle[], updaters: Updater[]): FountainLight {
+  return buildFountain(scene, { stone: M.ashlar, coping: M.coping }, obstacles, updaters);
 }
 
 // --- the terrace, its stair, the hall of heroes ---------------------------------------------------------------------
@@ -961,7 +969,12 @@ function buildPalisade(scene: THREE.Object3D, wall: Wall, M: Mats, rng: () => nu
     m.compose(at.set(p.x, h, p.z), q, s.set(1, 1, 1));
     tips.setMatrixAt(i, m);
   }
-  for (const mesh of [logs, tips]) { mesh.castShadow = mesh.receiveShadow = true; scene.add(mesh); }
+  for (const mesh of [logs, tips]) {
+    mesh.castShadow = mesh.receiveShadow = true;
+    // (round the whole village: within a lamp's reach at the gates alone)
+    notInMovingShadows(mesh);
+    scene.add(mesh);
+  }
   wall.add(logs, false);
 }
 
@@ -1167,8 +1180,16 @@ function buildLamp(scene: THREE.Object3D, x: number, z: number, M: Mats, obstacl
   return light;
 }
 
-/** A lamp post at (x, z), its lantern hung on an arm toward `turn` (rad about y: 0 toward +x); returns the lantern's
- *  middle. */
+/** The point lights under `scene` that cast shadows. */
+function castingLights(scene: THREE.Object3D): THREE.PointLight[] {
+  const found: THREE.PointLight[] = [];
+  scene.traverse((o) => { if ((o as THREE.PointLight).isPointLight && o.castShadow) found.push(o as THREE.PointLight); });
+  return found;
+}
+
+/** A lamp post at (x, z), its lantern hung on an arm toward `turn` (rad about y: 0 toward +x); returns where its
+ *  light is lit: out past the lantern's middle, away from the post (lit from the lantern's middle, 0.4 m off it, the
+ *  post's shaft shone as a neon tube once the light was bright enough to light the ground, a review). */
 function lampPost(scene: THREE.Object3D, x: number, z: number, turn: number, M: Mats, obstacles: Obstacle[]): THREE.Vector3 {
   const g = new THREE.Group();
   g.position.set(x, 0, z);
@@ -1185,8 +1206,14 @@ function lampPost(scene: THREE.Object3D, x: number, z: number, turn: number, M: 
   g.add(cap);
   obstacles.push({ x, z, r: 0.35, h: LAMPS.high });
   g.updateMatrixWorld(true);
-  return lantern.getWorldPosition(new THREE.Vector3());
+  return g.localToWorld(new THREE.Vector3(0.48 + LAMP_LIGHT_OUT, LAMPS.high - 0.12, 0));
 }
+
+/** how far past the lantern's middle, away from the post, its light is lit (m) */
+const LAMP_LIGHT_OUT = 0.25;
+
+/** a pool of lamplight shown whole */
+const WHITE = new THREE.Color(1, 1, 1);
 
 /**
  * The street lamps along the roads, a post every `STREET.every` m on alternate sides, each its lantern over the road
@@ -1195,7 +1222,7 @@ function lampPost(scene: THREE.Object3D, x: number, z: number, turn: number, M: 
  * instanced quad a lamp, added to the frame's light and brighter as night falls (`pools.opacity`, `daylight`).
  */
 function buildStreetLamps(scene: THREE.Object3D, M: Mats, obstacles: Obstacle[]):
-  { pools: THREE.MeshBasicMaterial; lanterns: THREE.Vector3[] } {
+  { pools: THREE.MeshBasicMaterial; quads: THREE.InstancedMesh; lanterns: THREE.Vector3[] } {
   const spots: { x: number; z: number; turn: number }[] = [];
   // (the stair's lamps, hung by `buildLamp` with their lights, are lamps too)
   const lamps: Spot[] = [-1, 1].map((s) => [TERRACE.x + s * LAMPS.x, LAMPS.z]);
@@ -1244,8 +1271,10 @@ function buildStreetLamps(scene: THREE.Object3D, M: Mats, obstacles: Obstacle[])
     lanterns.push(lantern);
   }
   quads.renderOrder = 1;
+  // (each pool's strength its colour: a lamp a held light lights shows that light instead, its shadows in it)
+  for (let i = 0; i < spots.length; i++) quads.setColorAt(i, WHITE);
   scene.add(quads);
-  return { pools, lanterns };
+  return { pools, quads, lanterns };
 }
 
 /** A pool of lamplight on the ground: bright under the lantern, fading out to its rim. */

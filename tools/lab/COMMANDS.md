@@ -192,7 +192,10 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   yard and not on the square; straight walks out from the square at angles round it, and along each way out, stopped
   inside the palisade or the way's walls; walks along each way at its portal, through its middle and round its
   sides, stopped before it (from play: "for village portals, I should not be able to walk past them"; the commit
-  before its walls let six of ten past); the terrace's stair walked up, the body's height on its top (`obj.position.y`:
+  before its walls let six of ten past); through the eyes on the square, the view tilted from over level down toward
+  the ground, the grass's rings' middle (`focusOf` in `world/meadow.ts`) moving at most 2 m a frame (the old rule
+  threw it 22 m at a sight just under level: "grass a near circle that keeps updating in front of me"); the terrace's
+  stair walked up, the body's height on its top (`obj.position.y`:
   the player's `pos.y` is always 0, and a reading of it said 0 m up); in the close view (V), mouse look asking for the
   pointer on the square and letting it go once the hall of heroes is used (`pointerWanted` in `core/input.ts`: its
   screen kept the lock and the mouse was gone over its cards, from play); the first visit's training begun afresh
@@ -201,7 +204,8 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   M pressed, the chest and the notice board used) and ticked, the crypt's portal card warning with no Enter till it's
   done, and begun again and skipped, Enter there at once; and the village held at six hours of the day, drawn, with
   no program compiled (`G.renderer.info.programs`). `--canary` plants a fault for each (an object's stand moved off it,
-  the yard's reading taken outside it, a hero put past the palisade after a walk, one put past a portal, the stair
+  the yard's reading taken outside it, a hero put past the palisade after a walk, one put past a portal, the rings'
+  middle moved 20 m in a frame, the stair
   walked at beside it, the
   pointer asked of the square, the notice board never read, a new material shown at one hour), each listed and each must be caught. It found the
   chest's stand off the terrace's edge, below it, where the hero could never use it.
@@ -515,7 +519,11 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   foes), the hero at `--at` facing `--facing` (the square by default) and the camera turned his way: through the eyes
   on the square it was 203 draws and 1.7 million triangles, the hall's heroes standing and the grass over the square
   drawn, and inside the hall over the shoulder 1.63 million, the meadow drawn behind its walls (now 174 and 1.35, and
-  0.85; `src/world/AGENTS.md`'s village).
+  0.85; `src/world/AGENTS.md`'s village). `--hour` lights it for an hour (by night two lamps cast shadows: 1.4
+  million triangles at noon, 2.0 at midnight, where before their faces left out what spreads over the village it was
+  4.1), and its head line says the programs compiled from the run left to the frame drawn, each a problem. Each
+  draw's triangles are summed as it's drawn: taken as the last draw's times the draws, a geometry whose draws a lamp's
+  faces emptied counted all of them full.
 - `perf <skills>`: skills cast in turn as the player casts them (`page/perf.ts`; `maelstrom,glacialNova`), the
   biome's foes coming at the hero (`--foes`, 10), every frame timed as the game's performance report times it
   (`ui/perfHud.ts`, on the browser's clock: `perfClock`) and summed by phase: standing (60 frames), then from each

@@ -1154,6 +1154,7 @@ export const COMMANDS = {
         rows: options.rows === undefined ? undefined : Math.round(options.rows),
         biome: options.biome,
         village: Boolean(options.village),
+        hour: options.hour,
         canary: Boolean(options.canary),
       };
       return side.command('draws', command);
