@@ -20,7 +20,13 @@ and the first session of the port, under two hours, got this far:
 - **The renderer** (`core/webgpu.ts`): made and given what the WebGL code around it asks of a `WebGLRenderer`;
   its post chain is a node pipeline (the scene's pass plus `bloom()`, tone mapped on the way out).
 - **The crowds are ported to TSL** (`entities/models/crowdNodes.ts`): each body is skinned from its row of the
-  float texture by `instanceIndex`, its normals with it, and each material's glow is the body's own.
+  float texture by `instanceIndex`, its normals with it, and each material's glow is the body's own. The kit's
+  looks come from the same row: dissolve with its glowing edge, frost, char and hit flash. They were checked by
+  setting them on a wave's foes and looking.
+- **The particle pools draw as instanced quads** (`fx/particleNodes.ts`, three's sprite path of
+  `PointsNodeMaterial`), since WebGPU draws points a pixel wide. They keep the same size in the scene's pixels,
+  the same soft disc, the fade near the lens, and the near glow for the additive pool. They were checked with
+  bursts and a smoke puff spawned by hand: casting from the pane didn't reach the game.
 - **The WebGL-only machinery is skipped under WebGPU:** program pinning, link waits and fences, the env maps'
   compiles, the shadow map's wrap, the perf overlay's GPU timers, HDR.
 - **Three's meshlet pipeline is behind `&meshlets=1`.** In the forest lobby it takes the static props: the
@@ -36,14 +42,14 @@ and the first session of the port, under two hours, got this far:
 
 **Not ported yet** (each shows as missing, not broken):
 
-- **Every `ShaderMaterial`:** fires, particles and skill effects, the gates' membranes, aim lasers, swing trails.
-  `glslFn` doesn't run on WebGPU.
+- **Every other `ShaderMaterial`** (about 30): fires, skill effects (firestorm, rift bolts, void lance...), the
+  gates' membranes, aim lasers, swing trails, the dazed stars, foliage. `glslFn` doesn't run on WebGPU.
 - **The world's overlays** (damage numbers, bars, names) and the outline:
   - A first try is in the history (commit, then revert).
   - Its render after the pipeline blacked out the frame.
   - The atlas's canvas reached the GPU as a 1 px wide texture.
-- **The kit's looks**, all GLSL `onBeforeCompile`:
-  - dissolve, frost, char, hit flash, near glow, see-through
+- **The kit's looks off the crowds** (the heroes, dummies, props), all GLSL `onBeforeCompile`:
+  - dissolve, frost, char, hit flash, near glow, rim, see-through
   - the floors' relief and dampness (the dais draws as a dark square)
   - triplanar, fur sway, dual-quaternion hands
 - **The grade:** exposure areas, glare, low Health, HDR, sanitize.
