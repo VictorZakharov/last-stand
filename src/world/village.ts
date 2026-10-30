@@ -226,13 +226,17 @@ interface Mats {
   yardFloor: THREE.Material; cobbles: THREE.Material; flags: THREE.Material;
   ashlar: THREE.Material; coping: THREE.Material; granite: THREE.Material; column: THREE.Material;
   plaster: THREE.Material; timber: THREE.Material; planks: THREE.Material; logs: THREE.Material; roof: THREE.Material;
-  iron: THREE.Material; window: THREE.MeshStandardMaterial; glass: THREE.MeshStandardMaterial; paper: THREE.Material;
+  iron: THREE.Material; window: THREE.MeshStandardMaterial; skyPane: THREE.MeshStandardMaterial;
+  glass: THREE.MeshStandardMaterial; paper: THREE.Material;
   lantern: THREE.MeshBasicMaterial; lanternIron: THREE.MeshBasicMaterial;
 }
 
 /** how bright a cottage's window burns at night: its candlelit panes as a room's glow, short of a lamp's flame (at 2.4
  *  as one lit box, the bloom spread each into a blob) */
 const WINDOW_GLOW = 1.3;
+/** the hall's windows' panes seen from inside: the sky's light through them by day and by night (their glow, the
+ *  sky's colour) */
+const SKY_PANE = { day: 6, night: 0.4, color: 0xdce6ff };
 
 /** the maps' chunks whose one read of their map `unrepeated` reads shifted instead, each its map and its uv */
 const UNREPEATED_READS = [
@@ -319,6 +323,11 @@ function makeMats(): Mats {
     window: new THREE.MeshStandardMaterial({
       map: panes.glass, roughness: 0.25, metalness: 0.2, emissive: 0xffd0a0, emissiveMap: panes.lit, emissiveIntensity: 0,
     }),
+    // (the same panes from inside the hall, lit by the sky through them: its glow the hour sets, `daylight`; the same
+    // program as the window's)
+    skyPane: new THREE.MeshStandardMaterial({
+      map: panes.glass, roughness: 0.25, metalness: 0.2, emissive: SKY_PANE.color, emissiveMap: panes.glass, emissiveIntensity: 0,
+    }),
     glass: new THREE.MeshStandardMaterial({ color: 0x2a2014, roughness: 0.3, emissive: 0xffc070, emissiveIntensity: 2.2 }),
     paper: new THREE.MeshStandardMaterial({ map: noticePaper(), roughness: 0.9 }),
     // (the street lamps' panes: their own picture, lit by nothing, as bright as the hour sets, `daylight`)
@@ -327,7 +336,7 @@ function makeMats(): Mats {
     // crown's rim white)
     lanternIron: new THREE.MeshBasicMaterial({ color: 0x141214 }),
   };
-  for (const m of [mats.ashlar, mats.coping, mats.column, mats.plaster, mats.timber, mats.planks, mats.logs, mats.roof, mats.iron, mats.window]) {
+  for (const m of [mats.ashlar, mats.coping, mats.column, mats.plaster, mats.timber, mats.planks, mats.logs, mats.roof, mats.iron, mats.window, mats.skyPane]) {
     seeThrough(m, 'prop');
   }
   return mats;
@@ -511,6 +520,7 @@ export function buildVillage(scene: THREE.Group): Village {
       sky.set(hour);
       // (the windows lit as the light goes; the lanterns' glass burns the same at any hour)
       M.window.emissiveIntensity = WINDOW_GLOW * (1 - dayness(hour));
+      M.skyPane.emissiveIntensity = SKY_PANE.night + (SKY_PANE.day - SKY_PANE.night) * dayness(hour);
       M.lantern.color.copy(LANTERN_PANE.day).lerp(LANTERN_PANE.night, 1 - dayness(hour));
       night = 1 - dayness(hour);
       fountainLight(dayness(hour));
@@ -980,15 +990,11 @@ function buildHall(scene: THREE.Object3D, wall: Wall, levels: Levels, M: Mats, o
   wall.add(walling(scene, half * 2, eaves, thick, X, y0, HALL.wall - thick / 2, M.ashlar), true, 'wall', true);
   for (const s of [-1, 1]) {
     const sideX = X + s * (half - thick / 2), sideLen = face - back;
-    wall.add(walling(scene, thick, eaves, sideLen, sideX, y0, back + sideLen / 2, M.ashlar), true, 'wall', true);
+    hallSideWall(scene, wall, M, sideX, s, thick, eaves, back, face);
     // (its plinth course in the wall too: drawn alone, the hero walked along the terrace into it, "can pass through
     // textures here")
     wall.add(block(scene, 0.35, 0.45, sideLen, sideX + s * 0.47, y0, back + sideLen / 2, M.coping), true, 'wall', true);
-    for (let k = 0; k < HALL.columnZ.length - 1; k++) {
-      const z = (HALL.columnZ[k] + HALL.columnZ[k + 1]) / 2;
-      solid(scene, new THREE.BoxGeometry(thick + 0.04, WINDOWS.high, WINDOWS.wide), M.window).position.set(sideX, y0 + WINDOWS.sill + WINDOWS.high / 2, z);
-      block(scene, thick + 0.3, 0.1, WINDOWS.wide + 0.3, sideX, y0 + WINDOWS.sill - 0.1, z, M.coping);
-    }
+    for (const z of windowsAlong()) block(scene, thick + 0.3, 0.1, WINDOWS.wide + 0.3, sideX, y0 + WINDOWS.sill - 0.1, z, M.coping);
   }
   // the front wall either side of the door and over it, its plinth course, the door in its stone frame (a group of
   // their own: cut away with the roof over the hero inside, as from above they hid the room)
@@ -1028,6 +1034,37 @@ function buildHall(scene: THREE.Object3D, wall: Wall, levels: Levels, M: Mats, o
   block(scene, half * 2, COLONNADE.lintel, 1.0, X, y0 + 0.72 + COLONNADE.high, COLONNADE.z, M.coping);
   const roof = hallRoof(scene, M, y0 + eaves, back, front);
   return { cutaway: [roof, frontWall], torches, dais, porch };
+}
+
+/** Where the windows stand down each long wall (z, from the back): between each pair of columns. */
+function windowsAlong(): number[] {
+  return HALL.columnZ.slice(1).map((z, k) => (HALL.columnZ[k] + z) / 2).sort((a, b) => a - b);
+}
+
+/** A long wall of the hall at `sideX` (`s` the side: -1 west, 1 east), from `back` to `face` (z), its windows open
+ *  through it: a course under them, one over them and piers between, the panes in each opening casting nothing, so
+ *  the sun and the moon light the hall through them (from play, "windows need to be real, and let sun/moonlight
+ *  through": a pane's picture on a whole wall, they let none in). Each pane is leaded glass, lit from within by night
+ *  outside and by the sky inside: clear, the hall would show the village through them, where it draws outside only
+ *  what its doorway shows (`hallPortal.ts`). */
+function hallSideWall(scene: THREE.Object3D, wall: Wall, M: Mats, sideX: number, s: number, thick: number, eaves: number,
+  back: number, face: number): void {
+  const y0 = TERRACE.high, { sill, high, wide } = WINDOWS, top = sill + high;
+  const add = (len: number, h: number, y: number, z: number): void => {
+    wall.add(walling(scene, thick, h, len, sideX, y, z, M.ashlar), true, 'wall', true);
+  };
+  add(face - back, sill, y0, (back + face) / 2);
+  add(face - back, eaves - top, y0 + top, (back + face) / 2);
+  const edges = [back, ...windowsAlong().flatMap((z) => [z - wide / 2, z + wide / 2]), face];
+  for (let k = 0; k < edges.length; k += 2) add(edges[k + 1] - edges[k], high, y0 + sill, (edges[k] + edges[k + 1]) / 2);
+  const pane = new THREE.BoxGeometry(0.04, high, wide);
+  for (const z of windowsAlong()) {
+    for (const [material, off] of [[M.window, 1], [M.skyPane, -1]] as const) {
+      const mesh = solid(scene, pane, material);
+      mesh.position.set(sideX + s * off * (thick / 2 - 0.08), y0 + sill + high / 2, z);
+      mesh.castShadow = false;
+    }
+  }
 }
 
 /** The hall's two rows of columns down its length, from the door to the dais (each a granite base, a stucco shaft up

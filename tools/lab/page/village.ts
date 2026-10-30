@@ -45,6 +45,7 @@ import { hallWallsSteady } from './villageHallSteady';
 import { objectsUsedAgain } from './villageUseAgain';
 import { hallWallsHold } from './villageHallSide';
 import { wallingAligned } from './villageWalling';
+import { windowsLetSunIn } from './villageWindows';
 
 export interface VillageOptions {
   canary: boolean;
@@ -100,6 +101,7 @@ export async function village(lab: Lab, options: VillageOptions): Promise<Report
     await hallWallsSteady(lab, options.canary),
     roadsBendWide(options.canary),
     wallingAligned(options.canary),
+    await windowsLetSunIn(lab, options.canary),
     await propHoleWhereHidden(lab, options.canary),
     await training(lab, options.canary),
     await hoursCompileNothing(lab, options.canary),
