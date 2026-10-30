@@ -29,7 +29,7 @@ import { bannerGeo, buildBrazier } from './crypt';
 import { CLASSES, CLASS_IDS } from '../data/classes/index';
 import { buildBonfire } from './forest';
 import { buildFire } from './fire';
-import { boxWithUV, contactShadows, setInstance, type Biome, type BiomeLook, type EnvColours, type Portal, type RGB, type Updater } from './props';
+import { boxWithUV, contactShadows, setInstance, standStill, type Biome, type BiomeLook, type EnvColours, type Portal, type RGB, type Updater } from './props';
 import { buildMeadow, meadowGround, MeadowMask, type MaskUniforms } from './meadow';
 import { growTree, type TreeKind } from './ezTrees';
 import { TREE_KINDS } from './forest';
@@ -137,6 +137,14 @@ export interface Village extends Biome {
   readonly night: number;
   /** each portal's way out into the village, by its battleground: where a hero coming back stands, and his facing */
   exits: Record<BiomeId, { at: THREE.Vector3; facing: number }>;
+}
+
+/** What `build` adds to `scene`, built to stand still, frozen as it stands (`standStill`); returns what it returns. */
+function stillBuilt<T>(scene: THREE.Object3D, build: () => T): T {
+  const from = scene.children.length;
+  const built = build();
+  for (const part of scene.children.slice(from)) standStill(part);
+  return built;
 }
 
 /** A mesh casting and taking shadows, added to `group`. */
@@ -314,15 +322,16 @@ export function buildVillage(scene: THREE.Group): Village {
   const mask = meadowMask(trees);
   const maskTexture = mask.texture();
   const maskUniforms: MaskUniforms = { uMeadow: { value: maskTexture }, uMeadowHalf: { value: mask.half } };
-  buildGround(scene, M, maskUniforms);
+  // (what never moves frozen as it's built, `stillBuilt`: nothing of it is used, struck or animated)
+  stillBuilt(scene, () => buildGround(scene, M, maskUniforms));
   const meadow = buildMeadow(mask, maskTexture, updaters);
   scene.add(meadow);
   const fountainLight = buildSquare(scene, M, obstacles, updaters);
-  buildTerrace(scene, wall, levels, M);
+  stillBuilt(scene, () => buildTerrace(scene, wall, levels, M));
   const hall = buildHall(scene, wall, levels, M, obstacles, updaters);
   const lid = buildChest(scene, M, obstacles);
-  buildPlatform(scene, wall, levels, M, obstacles, lights);
-  buildPalisade(scene, wall, M, rng);
+  stillBuilt(scene, () => buildPlatform(scene, wall, levels, M, obstacles, lights));
+  stillBuilt(scene, () => buildPalisade(scene, wall, M, rng));
   const portals: Portal[] = [buildCryptWay(scene, wall, M, updaters), buildForestWay(scene, wall, updaters)];
   const exits = {} as Village['exits'];
   for (const id of BIOME_IDS) {
@@ -330,15 +339,15 @@ export function buildVillage(scene: THREE.Group): Village {
     const at = new THREE.Vector3(p.x + Math.sin(p.facing) * 3.3, 0, p.z + Math.cos(p.facing) * 3.3);
     exits[id] = { at, facing: p.facing };
   }
-  for (const c of COTTAGES) buildCottage(scene, wall, M, c, rng);
-  buildTrees(scene, wall, obstacles, trees);
+  stillBuilt(scene, () => { for (const c of COTTAGES) buildCottage(scene, wall, M, c, rng); });
+  stillBuilt(scene, () => buildTrees(scene, wall, obstacles, trees));
   buildYard(scene, wall, M, updaters);
   buildBonfire(scene, CAMPFIRE[0], CAMPFIRE[1], M.ashlar, M.logs, updaters, false);
   obstacles.push({ x: CAMPFIRE[0], z: CAMPFIRE[1], r: 1.0, h: 0.5 });
-  buildBenches(scene, M, obstacles);
-  buildNoticeBoard(scene, wall, M);
+  stillBuilt(scene, () => buildBenches(scene, M, obstacles));
+  stillBuilt(scene, () => buildNoticeBoard(scene, wall, M));
   for (const s of [-1, 1]) lights.push(buildLamp(scene, TERRACE.x + s * LAMPS.x, LAMPS.z, M, obstacles));
-  const { pools, quads: lampPools, lanterns } = buildStreetLamps(scene, M, obstacles);
+  const { pools, quads: lampPools, lanterns } = stillBuilt(scene, () => buildStreetLamps(scene, M, obstacles));
   let night = 0;
   updaters.push(contactShadows(scene, obstacles));
   updaters.push(sky.update);
