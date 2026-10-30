@@ -9,7 +9,7 @@ import { ARENA } from '../data/balance';
 import { BIOME_IDS, type BiomeId, type PlaceId } from '../data/biomes';
 import { groundHeight, setRelief } from './ground';
 import { setAdaptScale } from '../core/renderer';
-import { bakeStaticShadows, compileEnvMaps as compileEach, drawStillShadows, envMap, type Biome, type BiomeBuilder, type BiomeLook } from './props';
+import { bakeStaticShadows, compileEnvMaps as compileEach, drawStillShadows, envMap, lampShadowsAsked, type Biome, type BiomeBuilder, type BiomeLook } from './props';
 import { cullWhileDrawn, trimShadowCasters } from './culling';
 import { buildCrypt, CRYPT_ENV } from './crypt';
 import { buildForest, FOREST_ENV } from './forest';
@@ -109,7 +109,7 @@ export async function buildArena(scene: THREE.Scene, renderer: THREE.WebGLRender
   let shown: PlaceId = 'village';
   let active = places.village.b;
   /** the place and the props' revision its still shadows were last drawn for (`drawStillShadows`) */
-  const stillDrawn = { place: null as PlaceId | 'hall' | null, rev: -1 };
+  const stillDrawn = { place: null as PlaceId | 'hall' | null, rev: -1, lamps: 0 };
   /** whether the hall of heroes' room stands in the place's stead */
   let hallShown = false;
   /** the village's look now (`setHour`: it changes with the hour, applied every frame while it's shown) */
@@ -205,10 +205,13 @@ export async function buildArena(scene: THREE.Scene, renderer: THREE.WebGLRender
       }
       // (the still shadows of its warmest lights, drawn again when what stands in it changed: shown, broken, rolled)
       const now = hallShown ? 'hall' : shown;
-      if (stillDrawn.place !== now || stillDrawn.rev !== propState.rev) {
+      // (and a lamp's, as it takes a casting light: `lampShadow`)
+      const lamps = lampShadowsAsked();
+      if (stillDrawn.place !== now || stillDrawn.rev !== propState.rev || stillDrawn.lamps !== lamps) {
         drawStillShadows(renderer, scene, G.camera, hallShown ? hallGroup : places[shown].group, moon.shadow);
         stillDrawn.place = now;
         stillDrawn.rev = propState.rev;
+        stillDrawn.lamps = lamps;
       }
     },
   };

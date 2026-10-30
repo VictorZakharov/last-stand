@@ -50,49 +50,6 @@ export function aroundShadows(around: AroundShadows): () => void {
   return () => aroundShadow.delete(around);
 }
 
-/** the shadow cameras of the lights casting moving shadows (`castsMoving`: the village's lamps) */
-const movingCameras = new Set<THREE.Camera>();
-
-/** `light`'s shadow taken as a moving one (drawn every frame, of what stands within its reach), or let go. */
-export function castsMoving(light: THREE.PointLight, on: boolean): void {
-  if (on) movingCameras.add(light.shadow.camera);
-  else movingCameras.delete(light.shadow.camera);
-}
-
-/**
- * `object`'s draw emptied in the faces of the moving shadows (`castsMoving`) but those `drawn` keeps: a caster spread
- * over a whole place (a kind of tree's every instance, the palisade) was drawn whole into each of a lamp's six faces,
- * 2.9 million triangles a frame for two lamps (`npm run lab -- draws --village --hour 0`). three tests a light's
- * shadow camera against nothing but the frustum, by a sphere round all of it.
- */
-export function notInMovingShadows(object: THREE.Mesh, drawn?: (camera: THREE.Camera) => boolean): void {
-  let kept = -1;
-  object.onBeforeShadow = (_renderer, _object, _camera, shadowCamera, geometry) => {
-    if (!movingCameras.has(shadowCamera) || drawn?.(shadowCamera)) return;
-    if ((object as THREE.InstancedMesh).isInstancedMesh) {
-      kept = (object as THREE.InstancedMesh).count;
-      (object as THREE.InstancedMesh).count = 0;
-    } else {
-      kept = geometry.drawRange.count;
-      geometry.drawRange.count = 0;
-    }
-  };
-  object.onAfterShadow = (_renderer, _object, _camera, _shadowCamera, geometry) => {
-    if (kept < 0) return;
-    if ((object as THREE.InstancedMesh).isInstancedMesh) (object as THREE.InstancedMesh).count = kept;
-    else geometry.drawRange.count = kept;
-    kept = -1;
-  };
-}
-
-const _faceFrustum = new THREE.Frustum(), _faceMatrix = new THREE.Matrix4();
-
-/** Whether `sphere` is in the view of a shadow camera as it stands for the face it draws. */
-export function inFace(camera: THREE.Camera, sphere: THREE.Sphere): boolean {
-  _faceMatrix.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
-  return _faceFrustum.setFromProjectionMatrix(_faceMatrix).intersectsSphere(sphere);
-}
-
 const _m = new THREE.Matrix4(), _p = new THREE.Vector3(), _c = new THREE.Color(), _sphere = new THREE.Sphere();
 
 /** A mesh of `mesh`'s geometry and material casting its shadow, every instance of it, drawn by the shadow map alone. */
@@ -107,7 +64,6 @@ function shadowCasterOf(mesh: THREE.InstancedMesh): THREE.InstancedMesh {
   }
   caster.name = `${mesh.name}: shadows`;
   caster.castShadow = true;
-  notInMovingShadows(caster);
   caster.computeBoundingSphere();
   inShadowsOnly(caster);
   return caster;

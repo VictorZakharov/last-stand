@@ -6,7 +6,9 @@
 // standing before the first press, then from each press to the next, the last one to the effects' end. Run it on a
 // phone's screen, quality and CPU with `--screen 832x384@3.75 --quality low@518400 --throttle 4`. (The owner's report
 // from a phone, #243: frames of 42 to 67 ms after Maelstrom and Glacial Nova, on a canvas of 3120x1440 with the scene
-// drawn at 0.52 Mpx.)
+// drawn at 0.52 Mpx.) With `--village`, the lobby's village instead, at an hour (`--hour`): the hero standing on its
+// square, then walking, no skill cast (the owner's report, 2026-10-30: 10 to 13 ms of GPU a frame on an RTX 4070 Ti,
+// the shadows half of it, where the goal is a steady 144 frames a second).
 import * as THREE from 'three';
 import type { Frame, Lab, Report } from './lab';
 import type { BiomeId } from '../../../src/data/biomes';
@@ -26,6 +28,8 @@ import { standIn } from './light';
 import { quantile } from './timing';
 import { particleFill } from './particleFill';
 import { reportRead } from './perfReport';
+import { inVillage, VILLAGE_SPOT } from './draws';
+import { holdHour } from '../../../src/game/clock';
 
 export interface PerfOptions {
   biome: BiomeId;
@@ -51,6 +55,10 @@ export interface PerfOptions {
   frames: boolean;
   /** plant a cost the measure must see */
   canary: boolean;
+  /** in the lobby's village instead: standing and walking, no foes, no casts */
+  village?: boolean;
+  /** with `village`, the hour it's lit for (the page's own when not given) */
+  hour?: number;
 }
 
 /** how far ahead of the hero the aim is (m): Maelstrom roams to it, into the foes coming */
@@ -71,6 +79,8 @@ const CANARY_WIDER = 2;
 const CANARY_FILL = 2.5;
 /** the update's stages listed for a phase, the slowest first */
 const STAGES_LISTED = 5;
+/** the village's frames timed standing, and walking (half of them ahead, half to the side) */
+const VILLAGE_FRAMES = 120;
 
 /** A frame timed: the frame by the browser's clock (the page's work and the GPU's in turn), the page's work, its
  *  update and render (ms), each update stage's, and what it drew and held. */
@@ -330,6 +340,23 @@ async function castPhases(lab: Lab, options: PerfOptions, aim: THREE.Vector3): P
   return { phases, uncast };
 }
 
+/** The hero standing in the village, then walking ahead and to his side, each a phase. */
+async function villagePhases(lab: Lab): Promise<Phase[]> {
+  const half = VILLAGE_FRAMES / 2;
+  return [
+    await timePhase(lab, 'standing', VILLAGE_FRAMES, () => ({})),
+    await timePhase(lab, 'walking', VILLAGE_FRAMES, (f) => ({ keys: f < half ? ['w'] : ['a'] })),
+  ];
+}
+
+/** The run the set-up starts left for the village, at the hour `options` asks for, the hero where it says. */
+async function setUpVillage(lab: Lab, options: PerfOptions): Promise<void> {
+  const facing = options.facing * Math.PI / 180;
+  await lab.setup({ view: options.view, facing, gear: options.gear, fresh: Boolean(options.quality) });
+  if (options.hour !== undefined) holdHour(options.hour);
+  await inVillage(lab, options.at ?? VILLAGE_SPOT, facing);
+}
+
 /**
  * The quality `options` asks for put to use before the hero is set up, so he's built at its level's detail
  * (`heroDetail`) as a device whose Auto settled on it builds him at boot; returns what puts the page's level back,
@@ -377,13 +404,14 @@ export async function perf(lab: Lab, options: PerfOptions): Promise<Report> {
 async function perfAtQuality(lab: Lab, options: PerfOptions): Promise<Report> {
   G.arena.restoreProps();
   const scenario = { biome: options.biome, view: options.view, facing: options.facing, gear: options.gear };
-  await standIn(lab, { ...scenario, at: options.at, fresh: Boolean(options.quality) });
+  if (options.village) await setUpVillage(lab, options);
+  else await standIn(lab, { ...scenario, at: options.at, fresh: Boolean(options.quality) });
   const hero = G.player;
   for (const wanted of options.casts) bindKnown(wanted);
   hero.cooldowns.clear();
   const aim = hero.pos.clone().add(new THREE.Vector3(Math.sin(hero.facing), 0, Math.cos(hero.facing))
     .multiplyScalar(AIM_AHEAD));
-  if (options.foes) await foesAhead(lab, options.biome, options.foes);
+  if (options.foes && !options.village) await foesAhead(lab, options.biome, options.foes);
   const restore = await measuring(lab, options);
   const compiled = programsCompiledInGame();
   const lines: string[] = [];
@@ -391,8 +419,11 @@ async function perfAtQuality(lab: Lab, options: PerfOptions): Promise<Report> {
   try {
     lines.push(screenLine());
     const cpu = options.throttle === 1 ? 'the CPU as it is' : `the CPU ${options.throttle} times slower`;
-    lines.push(`${options.biome}, the ${options.view} view, ${cpu}`);
-    const { phases, uncast } = await castPhases(lab, options, aim);
+    const hour = options.hour === undefined ? '' : ` at ${options.hour}:00`;
+    const where = options.village ? `the village${hour}` : options.biome;
+    lines.push(`${where}, the ${options.view} view, ${cpu}`);
+    const { phases, uncast } = options.village ? { phases: await villagePhases(lab), uncast: [] }
+      : await castPhases(lab, options, aim);
     for (const phase of phases) lines.push(...phaseLines(phase), ...(options.frames ? frameLines(phase) : []));
     for (const name of uncast) problems.push(`${name} was pressed and never cast`);
     if (phases.every((phase) => phase.frames.every((frame) => frame.cpu === 0))) {

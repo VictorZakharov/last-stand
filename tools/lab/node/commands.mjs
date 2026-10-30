@@ -665,10 +665,11 @@ export const COMMANDS = {
       if (options.after !== undefined && !(options.after > 0)) throw labError('perf --after: more than 0 s');
       if (options.throttle !== undefined && !(options.throttle >= 1)) throw labError('perf --throttle: 1 or more');
       if (options.quality !== undefined) qualityOf(options.quality);
+      if (!options.village && options._.length === 0) throw labError('perf needs its skills (or --village)');
     },
     each(side, options) {
       const command = {
-        casts: options._[0].split(','),
+        casts: options._[0]?.split(',') ?? [],
         biome: options.biome ?? 'forest',
         view: options.view ?? 'top',
         facing: options.facing ?? 0,
@@ -681,6 +682,8 @@ export const COMMANDS = {
         throttle: options.throttle ?? 1,
         frames: Boolean(options.frames),
         canary: Boolean(options.canary),
+        village: Boolean(options.village),
+        hour: options.hour,
       };
       return side.command('perf', command);
     },
