@@ -222,11 +222,19 @@ export function standHeroes(on: boolean, dt: number, ahead = false): void {
 const waited = new Map<Player, number>();
 let poseTurn = 0;
 
-/** One of the other classes' heroes not yet kept built, out of the scene. */
-function buildAhead(): void {
+/** One of the other classes' heroes not yet kept built, out of the scene; false once every one is. */
+function buildAhead(): boolean {
   const id = CLASS_IDS.find((c) => c !== G.profile.classId && !kept.has(c));
-  if (!id) return;
+  if (!id) return false;
   G.scene.remove(heroIn(id, profileOf(id)).obj);
+  return true;
+}
+
+/** The heroes standing in the village's hall built before the lobby shows, a hero a task (`next` between them), as
+ *  its warm-up waits on the GPU (`game/warmup.ts`): built as the hero neared the hall, even a hero a frame, each held
+ *  the village up 90 to 240 ms (from play: "entering the hall", frames of 250 and 90 ms). */
+export async function buildStandingAhead(next: () => Promise<unknown>): Promise<void> {
+  do await next(); while (buildAhead());
 }
 
 /** The class of the hero standing nearest (x, z) in the village's hall, or null. */
