@@ -9,25 +9,25 @@
 import * as THREE from 'three';
 import { createKit } from '../../core/materials';
 import { leather, oiled, wool as woolMaps, felt as feltMaps, wood, bowWood as bowWoodMaps, pbrMaterialMaps } from '../../core/textures';
-import { SKIRT_TUCK, floorUnder, onFloor, restHands, satBy, sitPose, type RestTurn } from './sit';
+import { SKIRT_TUCK, WRIST_INSIDE, floorUnder, onFloor, restHands, satBy, sitPose, type RestTurn } from './sit';
 import { tunable } from '../../core/tuning';
-import { buildHumanoid, joint, part, resetPose, walkCycle, idle, deathFall, groundFeet, disposeGeometries } from './rig';
+import { buildHumanoid, joint, part, resetPose, walkCycle, idle, deathFall, groundFeet, disposeGeometries, ramp } from './rig';
 import { Sculpt, stripRig, limb, lathe } from './shapes';
 import { belt, buckle, strap, plate, edgeTube, taperTube, stitches, Skirt, SkirtLimbs, armOffThigh, lod, type JointPoint } from './armor';
 import { onTunic, tunicFront, tunicBack, tunicCut, armholeEdge, SetInShoulders, ARMHOLE, WAIST, type ArmBlend } from './tunic';
 import { buildHead, buildNeck, toGroup, handSkin, HEAD_MM, type Head } from './head';
 import { EYE } from './face';
-import { buildHand, hold, fistReach, fistTurn, poseHand, SLANT, type Hand } from './hands';
+import { buildHand, hold, fistOn, fistReach, fistTurn, loosen, poseHand, SLANT, type Hand } from './hands';
 import { LegIK } from './ik';
-import { fitArm, solveArm } from './armIK';
-import { bodyShape } from './anatomy';
+import { fitArm, recall, remembered, solveArm, type ArmMemory } from './armIK';
+import { bodyShape, clampWrist, GRIPPED_FLEXION } from './anatomy';
 import { buildFlask, drink, holdFlask } from './flask';
 import { buildBoot } from './boot';
 import { Bow, pullAt, arrowGeometry, arrowPieces, fanHold, ARROW, FAN_PITCH, REST_Y, GRIP, GRIP_R } from './bow';
 import { fromEyes, dirFromEyes, toEyes } from '../viewModel';
 import { angleDamp, clamp, damp, lerp, smooth, TAU } from '../../util';
 import { groundHeight } from '../../world/ground';
-import type { AnimState, Model } from '../../types';
+import type { AnimState, Fist, Model } from '../../types';
 
 /** sat, how his hands turn as they rest on his thighs (`models/sit.ts`, `restHands`): what they hold lies as a man
  *  resting lays it */
@@ -38,7 +38,11 @@ const SIT_HANDS: RestTurn = tunable('rangerSit', { roll: [0, 0], bend: [0, 0] })
  *  face sat. */
 /** sat on the floor, how far the quiver tips back off it (rad) */
 const QUIVER_TIP = 0.4;
-const BOW_SIT = tunable('rangerBowSit', { lap: [0.95, 0.07], floor: [0.75, -0.05, 0.03], layBy: 0.5 });
+/** By a fire, the bow carried down in his fist over `lay[0]` to `lay[1]` of the way down to the floor beside his left
+ *  hip (`floor`: out, ahead, over it, rig units), then let go of once he's sat, over `hands` s (`Model.sitHands`): his
+ *  fingers open (to `tip[0]` of that), it tips over flat (to `tip[1]`) and his hand goes to his knee over an arc `arc`
+ *  up; the reverse as he gets up (`layBow`). */
+const BOW_SIT = tunable('rangerBowSit', { lap: [0.95, 0.07], floor: [0.4, 0.1, 0.1], lay: [0.2, 1], tip: [0.08, 0.35], arc: 0.12, hands: 1.5, elbow: [0.3, -0.2, -1] });
 
 /** the broadhead's middle, back from the arrow's point (m) */
 const HEAD_MIDDLE = 0.035;
@@ -545,6 +549,10 @@ export function buildRanger(): Model {
   // the bow, in the left hand; the arrow the right hand carries from the quiver to the string
   const bow = new Bow({ riser: riserWood, limb: limbWood, grip: hide, string: cord, arrow: fletched, horn, brass: bowBrass, serving, yarn, inlay });
   bow.group.userData.bow = bow;   // (the lab's handle on it: tools/lab carry)
+  // (its grip's middle, the handle `Model.fists` reads the left fist round)
+  const bowGrip = new THREE.Object3D();
+  bowGrip.position.copy(GRIP);
+  bow.group.add(bowGrip);
   // (the carried bow's frame in the hero's, standing: its arrow along CARRY_ARROW, its top limb CARRY_TOP made square to it)
   const carryTop = CARRY_TOP.clone().addScaledVector(CARRY_ARROW, -CARRY_TOP.dot(CARRY_ARROW)).normalize();
   const carryQ = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(V(0, 0, 0).crossVectors(carryTop, CARRY_ARROW), carryTop, CARRY_ARROW));
@@ -668,7 +676,7 @@ export function buildRanger(): Model {
     _e.copy(_d).sub(_c).normalize();
     fistReach(handL, _y, _e, GRIP_R, _a);
     fistTurn(handL, _y, _e, _gq);
-    const fit = solveArm(j, true, { wrist: _b.copy(_c).sub(_a), hand: _gq, pole: elbowTo, keep: 20, body, roll: { axis: _y, range: 0.6, at: _c }, slant: [-SLANT, BOW_SLANT], glide: 1 - Math.exp(-GLIDE * dtNow), free: fp, wristW: fp ? FP_WRIST : 0 });
+    const fit = solveArm(j, true, { wrist: _b.copy(_c).sub(_a), hand: _gq, pole: elbowTo, keep: 20, body, roll: { axis: _y, range: 0.6, at: _c }, slant: [-SLANT, BOW_SLANT], glide: 1 - Math.exp(-GLIDE * dtNow), free: fp, wristW: fp ? FP_WRIST : 0, flexion: GRIPPED_FLEXION });
     root.updateMatrixWorld(true);
     // the bow where the fist has it: turned as far as the wrist and the forearm turned the hand (the hand joint against
     // the turn asked of it, its turn about the grip aside), its grip where the fist closes (a slanted fist closes a
@@ -699,26 +707,131 @@ export function buildRanger(): Model {
     bp.p.lerp(_lapAt, w);
     bp.q.slerp(_lapQ, w);
   };
-  /** the bow in the fist as `placeBow` last had it (the hand's frame), and laid on the floor by a fire: eased from that
-   *  by `w` out of the hand, flat beside him along his way, the hand let go of it resting on his knee */
+  /** the bow as `placeBow` last had it in the fist (the hand's frame) */
   const heldBow = { p: new THREE.Vector3(), q: new THREE.Quaternion(), s: new THREE.Vector3(1, 1, 1) };
-  const _laidP = new THREE.Vector3(), _laidQ = new THREE.Quaternion(), _laidS = new THREE.Vector3();
-  const laidBow = (w: number) => {
-    const s = sc(), [out, ahead, thick] = BOW_SIT.floor;
+  /** where its grip is set down by a fire (world, into `out`): beside his left hip (`BOW_SIT.floor`: out, ahead, over
+   *  the floor, rig units) */
+  const floorAt = (out: THREE.Vector3) => {
+    const [side, ahead, over] = BOW_SIT.floor;
     root.updateMatrixWorld(true);
-    const at = root.localToWorld(_laidP.set(out, 0, ahead));
-    at.y = groundHeight(at.x, at.z) + thick * s;
+    root.localToWorld(out.set(side, 0, ahead));
+    out.y = groundHeight(out.x, out.z) + over * sc();
+    return out;
+  };
+  /** By a fire, the bow laid down beside him as a seated man lays one: carried down in his fist `down` of the way, the
+   *  arm hanging, the bow tipped forward in it to stand on its edge along his way beside his hip; then let go of, `free`
+   *  of the way, the fingers opening as it tips over flat (`BOW_SIT.tip` of it), and his hand going to his knee as the
+   *  arm is posed (`fitArm`'s). Getting up, the reverse. (Laid flat in his fist, no arm reached it: the palm had to face
+   *  down with the forearm level on the floor, and the wrist went 40 to 85 degrees past its range; eased out of his
+   *  hand while the hand went to his knee, nothing carried it, "ranger uses force pull to grab his bow from seated
+   *  near fire", 1.2 m in a frame as he stood) */
+  const _restL = [new THREE.Quaternion(), new THREE.Quaternion(), new THREE.Quaternion()];
+  const _laidS = new THREE.Vector3(), _gripW = new THREE.Vector3(), _dirW = new THREE.Vector3(), _visWas = new THREE.Quaternion();
+  const _edgeQ = new THREE.Quaternion(), _tipQ = new THREE.Quaternion(), _edgeAt = new THREE.Vector3(), _down = new THREE.Vector3();
+  /** The left hand `w` of the way from where the arm has it now to where it rests on his knee (`_restL`'s arm), on an
+   *  arc `BOW_SIT.arc` up (rig units), the arm solved to it within the body's ranges and out of his legs. */
+  const _fromAt = new THREE.Vector3(), _fromQ = new THREE.Quaternion(), _kneeAt = new THREE.Vector3(), _kneeQ = new THREE.Quaternion();
+  const towardKnee = (w: number, elbowTo: THREE.Vector3) => {
+    const arm = [j.shoulderL, j.elbowL, j.handL];
+    root.updateMatrixWorld(true);
+    j.handL.getWorldPosition(_fromAt);
+    j.handL.getWorldQuaternion(_fromQ);
+    _keyL.forEach((q, i) => q.copy(arm[i].quaternion));
+    arm.forEach((joint, i) => joint.quaternion.copy(_restL[i]));
+    root.updateMatrixWorld(true);
+    j.handL.getWorldPosition(_kneeAt);
+    j.handL.getWorldQuaternion(_kneeQ);
+    arm.forEach((joint, i) => joint.quaternion.copy(_keyL[i]));
+    root.updateMatrixWorld(true);
+    const at = _fromAt.lerp(_kneeAt, w).addScaledVector(UP, BOW_SIT.arc * sc() * Math.sin(Math.PI * w));
+    solveArm(j, true, { wrist: at, hand: _fromQ.slerp(_kneeQ, w), pole: elbowTo, keep: 20, body, free: fp });
+    // (and as it rests there, the arm as it rests)
+    if (w >= 1) arm.forEach((joint, i) => joint.quaternion.copy(_restL[i]));
+  };
+  const _keyL = [new THREE.Quaternion(), new THREE.Quaternion(), new THREE.Quaternion()];
+  const _layPole = new THREE.Vector3();
+  /** the bow in the fist (the hand's frame) as he begins to lay it down by a fire, which it's carried in */
+  const inFist: BowPose = { p: new THREE.Vector3(), q: new THREE.Quaternion() };
+  /** the face it's laid on by a fire: its own +x up (1) or down (-1) */
+  let tipFace = 1;
+  /** what the standing hold's solves remembered as the lay began, for it to take up again (`recall`) */
+  let holdMemory: ArmMemory | null = null;
+  const layBow = (bp: BowPose, down: number, free: number, elbowTo: THREE.Vector3) => {
+    const arm = [j.shoulderL, j.elbowL, j.handL];
+    arm.forEach((joint, i) => _restL[i].copy(joint.quaternion));
+    if (down <= 0) {
+      placeBow(bp, elbowTo);
+      inFist.p.copy(heldBow.p);
+      inFist.q.copy(heldBow.q);
+      return;
+    }
+    const s = sc();
+    // the grip from where he holds it to the floor, its length eased from how he holds it to along his way; the fist
+    // turned from that and the way to his shoulder, as `placeBow` turns it, and the bow where the fist has it
+    const grip = _gripW.copy(GRIP).multiplyScalar(s).applyQuaternion(bp.q).add(bp.p).lerp(floorAt(_c), down);
+    const was = _dirW.set(0, 1, 0).applyQuaternion(bp.q);
     const along = _lapY.set(0, 0, 1).transformDirection(root.matrixWorld).setY(0).normalize();
-    _laidQ.setFromRotationMatrix(_m.makeBasis(UP, along, _z.crossVectors(UP, along)));
-    // (laid by its grip's middle)
-    at.sub(_c.copy(GRIP).multiplyScalar(s).applyQuaternion(_laidQ));
-    j.handL.updateWorldMatrix(true, false);
-    _m.compose(at, _laidQ, _s.setScalar(s));
-    _m2.copy(j.handL.matrixWorld).invert().multiply(_m).decompose(_laidP, _laidQ, _laidS);
-    bow.group.position.lerpVectors(heldBow.p, _laidP, w);
-    bow.group.quaternion.slerpQuaternions(heldBow.q, _laidQ, w);
-    bow.group.scale.lerpVectors(heldBow.s, _laidS, w);
-    poseHand(handL, 0.35, 0.1);
+    if (was.dot(along) < 0) along.negate();
+    _q.setFromUnitVectors(was, along);
+    const dir = was.applyQuaternion(_q3.identity().slerp(_q, down));
+    j.shoulderL.getWorldPosition(_d);
+    _e.copy(_d).sub(grip).normalize();
+    fistReach(handL, dir, _e, GRIP_R, _a);
+    fistTurn(handL, dir, _e, _gq);
+    // (its elbow from where the bow's held towards behind him, as an arm hangs: kept out and down as for holding the bow
+    // up, the arm hanging to the floor was at its shoulder's and forearm's stops)
+    const pole = _layPole.fromArray(BOW_SIT.elbow).normalize().transformDirection(root.matrixWorld).lerp(elbowTo, 1 - down).normalize();
+    solveArm(j, true, { wrist: _b.copy(grip).sub(_a), hand: _gq, pole, keep: 20, body, free: fp, flexion: GRIPPED_FLEXION });
+    root.updateMatrixWorld(true);
+    bow.group.position.copy(inFist.p);
+    bow.group.quaternion.copy(inFist.q);
+    bow.group.updateWorldMatrix(true, false);
+    bow.group.matrixWorld.decompose(_edgeAt, _edgeQ, _laidS);
+    // (the fist closed round its grip as it lies in the hand now: left as it was round it standing, the hand as drawn
+    // was bent 36 degrees past the wrist's range as the arm hung)
+    hold(handL, _y.set(0, 1, 0).applyQuaternion(_edgeQ), GRIP_R, _e.copy(_d).sub(grip).normalize());
+    // (which face it falls onto, taken while it's held: taken as it fell, the face stood level on its edge and it went
+    // over one way a frame and the other the next, half a turn)
+    if (free <= 0) {
+      tipFace = _e.set(1, 0, 0).applyQuaternion(_edgeQ).dot(UP) >= 0 ? 1 : -1;
+      return;
+    }
+    // let go of: its fingers opening as it tips over about its length to lie flat, falling the way it's nearer, and down
+    // onto the floor
+    const length = _dirW.set(0, 1, 0).applyQuaternion(_edgeQ);
+    const face = _e.set(1, 0, 0).applyQuaternion(_edgeQ);
+    const up = _down.copy(UP).multiplyScalar(tipFace);
+    const across = _x.crossVectors(face, up);
+    const tipBy = Math.sign(across.dot(length) || 1) * face.angleTo(up);
+    // (the fingers open before it goes over and close after it's up: closing as it rose into them, it turned 37
+    // degrees in the fist)
+    const [opens, tips] = BOW_SIT.tip;
+    const fall = ramp(free, opens, tips) ** 2;
+    _tipQ.setFromAxisAngle(length, tipBy * fall);
+    const flatAt = floorAt(_c).addScaledVector(_y.copy(GRIP).multiplyScalar(s).applyQuaternion(_q.copy(_tipQ).multiply(_edgeQ)), -1);
+    // (about its grip, lowered to the floor as it goes over)
+    const gripAt = _gripW.copy(GRIP).multiplyScalar(s).applyQuaternion(_edgeQ).add(_edgeAt);
+    _edgeAt.sub(gripAt).applyQuaternion(_tipQ).add(gripAt);
+    _edgeAt.y = lerp(_edgeAt.y, flatAt.y, fall);
+    _edgeQ.premultiply(_tipQ);
+    // (the arm stays on it as it opens, then the hand goes from there to his knee on an arc up over his shin, the arm
+    // solved to it: turned joint by joint, the hand went 7 cm through the shin)
+    _visWas.copy(handL.vis.quaternion);
+    const rest = smooth(ramp(free, tips, 1));
+    if (rest > 0) towardKnee(rest, elbowTo);
+    if (rest > 0) {
+      poseHand(handL, 0.35, 0.1);
+      handL.vis.quaternion.copy(_visWas).slerp(_q.identity(), rest);
+    } else loosen(handL, 0.7 * smooth(ramp(free, 0, opens)));
+    // (the hand as drawn kept within the wrist's range on its way: turned joint by joint from its fist round the bow on
+    // the floor to his knee, it bent 38 degrees past it to the thumb's side; and short of its ends, as a resting hand's
+    // is: clamped to them, it was held at two stops at once the last of its way to the knee)
+    _q.copy(j.handL.quaternion).multiply(handL.vis.quaternion);
+    if (clampWrist(_q, true, _q3, undefined, WRIST_INSIDE) > 0) j.handL.quaternion.copy(_q3).multiply(_q.copy(handL.vis.quaternion).invert());
+    root.updateMatrixWorld(true);
+    _m.compose(_edgeAt, _edgeQ, _s.setScalar(s));
+    _m2.copy(j.handL.matrixWorld).invert().multiply(_m).decompose(bow.group.position, bow.group.quaternion, _laidS);
+    bow.group.scale.copy(_laidS);
   };
   /** the draw hand's turn hooked on the string of a bow posed `q` (world, into `out`): its fingers forward along the arrow
    *  and the string across them, the palm to the face, the index finger on top, the hand coming down a little to it from
@@ -1018,15 +1131,26 @@ export function buildRanger(): Model {
     const elbowTo = _x.set(1, 0, 0).applyQuaternion(shown.q).addScaledVector(UP, -0.35).normalize().lerp(elbowPoleFK.normalize(), 1 - Math.max(aim, stowIn)).clone();
     const sitW = st.sit && !fp && hasBow ? smooth(st.sit.w) : 0, bowDown = sitW > 0 && onFloor(st.sit!);
     if (sitW > 0 && !bowDown) lapBow(shown, sitW);
+    // (stood up from the floor, the hold taken up again as he let it go: kept from the carry's elbow and his crouch, it
+    // settled on another as he stood, the bow 5 to 10 cm and 11 to 24 degrees off how he held it before he sat)
+    if (hasBow && !bowDown && holdMemory) {
+      recall(j.shoulderL, holdMemory);
+      holdMemory = null;
+    }
     if (hasBow && !bowDown) placeBow(shown, elbowTo);
     else if (hasBow) {
+      // (the hold he stood with remembered as he begins to sit, for it to be taken up again once he's up)
+      holdMemory ??= remembered(j.shoulderL);
       // (his arm within its ranges as his hand rests on his knee, the bow out of it: left as reached there, the wrist
       // bent 13 degrees past its range)
+      // (fitted only once he lets go of the bow, which it's turned to: fitted while it carried it too, the carry's solve
+      // began from the knee's elbow each frame, and the elbow flipped 78 degrees in a frame)
       root.updateMatrixWorld(true);
-      fitArm(j, true, undefined, body);
-      // (on the floor by `layBy` of the way down: laid over the whole of it, the bow swung from his hand to the floor
-      // across his rising shin, 6 cm through it)
-      laidBow(Math.min(1, sitW / BOW_SIT.layBy));
+      if (st.sit!.after > 0) fitArm(j, true, undefined, body);
+      // (let go of once he's sat, over his hands' own time: at the end of the way down, it tipped over in 3 frames and
+      // the hand went to his knee in 5)
+      const [from, set] = BOW_SIT.lay;
+      layBow(shown, smooth(ramp(sitW, from, set)), st.sit!.after, elbowTo);
     }
     // the arrows on the string (a fan side by side in the flat bow's window), and where the shot leaves (the nocked arrow's middle)
     const n = arrows;
@@ -1129,7 +1253,9 @@ export function buildRanger(): Model {
       // a runner's hand before the chest took the shoulder's turn to its end and the elbow flipped up and out level with
       // it, the forearm hanging)
       if (onW === 0 && !shooting) {
-        if (!fp) fitArm(j, false, undefined, body);
+        // (sat, a resting hand's wrist kept short of its ends: fitted to them, it went to two stops at once on the way
+        // down)
+        if (!fp) fitArm(j, false, undefined, body, undefined, st.sit ? WRIST_INSIDE : 0);
       } else if (onW < 1) {
         const pole = fkPole.normalize().lerp(linePole, onW);
         // (the hand rides its forearm until the elbow is up and out, then turns onto the string: turned onto it with the
@@ -1201,6 +1327,12 @@ export function buildRanger(): Model {
   }
   return {
     root, kit, joints: j, hands: { L: handL, R: handR }, animate, tip, palm, arrowHead, height: 2,
+    // (the left fist round the bow's grip: let go of on the floor by a fire, its fingers open)
+    get fists(): Fist[] {
+      return hasBow && !fp ? [{ hand: 'left', ...fistOn(handL, bowGrip, GRIP_R * sc()) }] : [];
+    },
+    // (by a fire, the bow let go of on the floor and taken again: `layBow`)
+    sitHands: (floor: boolean) => ({ before: 0, after: floor && hasBow ? BOW_SIT.hands : 0 }),
     firstPerson(on) { fp = on; }, reset() { legs.reset(); aimT = 0; raise = 0; strung = 0; fetchFrom = -1; kHook = -1; stowT = -1; },
     setGear(gear) { hasBow = !!gear.weapon; bow.group.visible = hasBow; cap.visible = gear.helm; for (const h of head.hair.slice(1)) h.visible = !gear.helm; },
     dispose() { kit.dispose(); disposeGeometries(root, arrowGeometry()); },

@@ -210,7 +210,10 @@ interface Watch {
   pinned: ArmsPinned;
   /** a fist let go of: how many times it's been pictured, and the frames since it last was */
   open: { shots: number; since: number };
+  /** what he held, as he held it as he began to sit (before he walked to the seat, until then) */
   before: ReturnType<typeof heldNow>;
+  /** whether a piece is traced (`--trace`) */
+  traced: boolean;
   canary: boolean;
   moments: Pictured[];
 }
@@ -304,7 +307,7 @@ async function trySeat(lab: Lab, c: SeatCase, fixture: Fixture, options: SitOpti
     carried: new Carried(lab, options.trace), film: new SitFilm(c.name, [c.views[0], 'third']), through: null,
     seat: [new WeaponSeat(seat, (each) => each.model.tip?.parent), new WeaponSeat(seat, bowApart)],
     shown: 0, pinned: new ArmsPinned(c.name, ARM_LIMITS), open: { shots: 0, since: OPEN_SHOTS.every },
-    before: heldNow(lab), canary: !!options.canary, moments: [],
+    before: heldNow(lab), canary: !!options.canary, traced: !!options.trace, moments: [],
   };
   const sat = await untilSat(lab, label, c.views.slice(0, 2), out, watch);
   watch.film.end('down');
@@ -331,6 +334,8 @@ async function trySeat(lab: Lab, c: SeatCase, fixture: Fixture, options: SitOpti
   }
   judgeWatch(c.name, watch, out);
   for (const line of watch.carried.traced) out.text.push(`    ${line}`);
+  // (and, traced, each frame an arm was at its stops)
+  if (options.trace) out.text.push(...watch.pinned.listed);
   await sitKey(lab, c, seat, out);
 }
 
@@ -624,11 +629,23 @@ interface Breached {
 const pastOf = (b: Breached) => `${b.name} ${b.by.toFixed(0)}° past its range`;
 
 /** Frames until he's sat, as he stands idle; whether he did. */
+/** What he held, said where it's held otherwise as he begins to sit than before he walked to the seat: a hold the walk
+ *  left elsewhere, not the sit's, which is judged from there on (`traced`: said however little, to tell a hold he got
+ *  up with from one he sat with). */
+function sayHeldAsBegun(lab: Lab, label: string, watch: Watch, out: Out, traced: boolean): void {
+  const most = traced ? [0, 0] : [];
+  for (const piece of heldApart(watch.before, heldNow(lab), ...most)) {
+    const how = piece.gone ? 'no longer in his hand'
+      : `${cmOf(piece.off)} cm off and ${piece.turned.toFixed(0)}° turned from how he held it`;
+    out.text.push(`    ${label}: as he began to sit, his ${piece.name} ${how} before he walked there`);
+  }
+}
+
 async function untilSat(lab: Lab, label: string, views: ViewName[], out: Out, watch: Watch,
   collisionMoments = out.moments): Promise<boolean> {
   const sitting = lab.player.sitting;
   const skirts = skirtsOf(lab.model.root);
-  let walked = false, half = false;
+  let walked = false, half = false, began = false;
   // (the worst joint past its range sitting down, and standing idle before it: said, not the sit's; and the weapon in
   // his hand through his legs or trunk as he sets it down: from review, a maul's haft through his hip by a fire)
   const worst: (Breached | null)[] = [null, null];
@@ -643,6 +660,14 @@ async function untilSat(lab: Lab, label: string, views: ViewName[], out: Out, wa
     const at = w > 0 ? 0 : 1;
     if (past && (!worst[at] || past.by > worst[at].by)) worst[at] = { by: past.by, name: past.name, w };
     if (sitting.pose) into.observe(lab, `${f}, ${(w * 100).toFixed(0)}% down${stage}`);
+    if (sitting.pose && !began) {
+      began = true;
+      sayHeldAsBegun(lab, label, watch, out, watch.traced);
+      // (held again once he's up as he held it as he began, the sit's own: read before he walked there, from a set-up
+      // whose hold the seat before had left still settling, the walk moved the ranger's bow 6 cm in his hand by the
+      // fire, and he got up holding it as he sat down)
+      watch.before = heldNow(lab);
+    }
     const said = `frame ${f}, ${(w * 100).toFixed(1)}% down${stage}${sitting.walking ? ', walking' : ''}`;
     watchFrame(lab, label, said, watch, skirts);
     watch.film.take(lab, w, 'down', moving(sitting.pose), shortStage(sitting.pose));
