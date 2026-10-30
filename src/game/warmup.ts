@@ -81,6 +81,10 @@ function warmedBuilds(): string[] {
   }
 }
 
+/** Whether this build warmed its programs on this machine before (its GPU's cache has them): not on a first visit,
+ *  nor on the first after a deploy. */
+export const warmedHereBefore = (): boolean => warmedBuilds().includes(BUILD);
+
 /** This build kept as one that warmed the fight here. */
 function rememberWarmed(): void {
   try {
