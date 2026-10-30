@@ -12,3 +12,5 @@ export const ARMS_LAYER = 2;
 export const CROWD_LAYER = 3;
 /** what a warm-up behind the lobby draws, alone, for its programs (core/shaders.ts `warmUp`) */
 export const WARM_LAYER = 4;
+/** the heroes, besides the world's, drawn alone over the lamps' still shadows (world/lampShadows.ts) */
+export const HERO_SHADOW_LAYER = 5;
