@@ -1,14 +1,15 @@
 // `lab village`: the village the lobby stands in, as a player walks it (tools/lab). The run is left for the lobby, and:
 // every object is usable from where the hero stands to use it; his skills cast in the training yard and nowhere else;
 // no straight walk out from inside the palisade or along a way out leaves the village; none along a way out gets past
-// its portal, through it or round it; the terrace's stair takes him
+// its portal, through it or round it; the grass's rings stay put through the eyes as the view tilts; the terrace's
+// stair takes him
 // up to the hall; in the close view the hall's screen lets the pointer go; the first visit's training ticks off each
 // step as the player takes it (the yard walked into, a dummy struck, the map opened by M, the stash and the notice
 // board used), the portal's card holding its way in until it's done, and skipped it opens the portals at once; and
 // no hour of the day compiles a program.
 // `--canary` plants a fault for each check: an object's stand moved off it, the yard's reading taken outside it, a
-// hero put past the palisade after a walk, put past a portal after a walk at it, the stair walked at beside it into
-// the terrace's wall, the pointer asked
+// hero put past the palisade after a walk, put past a portal after a walk at it, the rings' middle moved 20 m in a
+// frame, the stair walked at beside it into the terrace's wall, the pointer asked
 // of the square (where mouse look holds it), the notice board never read, a new material shown at one hour.
 import * as THREE from 'three';
 import type { Lab, Report } from './lab';
@@ -19,6 +20,7 @@ import {
 import { BIOME_IDS } from '../../../src/data/biomes';
 import { inWay, insidePalisade, palisadePolygon } from '../../../src/world/villagePlan';
 import { groundHeight } from '../../../src/world/ground';
+import { focusOf } from '../../../src/world/meadow';
 import { goUse, objectNear, villageObject } from '../../../src/game/village';
 import { restartTraining, skipTraining, stepDone, trainingPending } from '../../../src/game/training';
 import { TRAINING } from '../../../src/data/training';
@@ -65,6 +67,7 @@ export async function village(lab: Lab, options: VillageOptions): Promise<Report
     await portalsHold(lab, options.canary),
     await stairClimbed(lab, options.canary),
     await hallFreesPointer(lab, options.canary),
+    await grassSteady(lab, options.canary),
     await training(lab, options.canary),
     await hoursCompileNothing(lab, options.canary),
   ];
@@ -260,6 +263,46 @@ async function hallFreesPointer(lab: Lab, canary: boolean): Promise<Checked> {
   await pressV(lab);
   await lab.step(SETTLE);
   return { lines: [line], problems: canary ? [] : problems, caught: canary ? held : null };
+}
+
+/** frames the view is tilted up through the eyes, then down, and how far a frame (px of mouse look) */
+const TILT_UP = 30;
+const TILT_DOWN = 150;
+const TILT_PX = 4;
+/** how much of its sight's steepness the tilt must sweep through (the sine of its pitch: from level down) */
+const TILT_SWEPT = 0.3;
+/** the most the grass's rings' middle may move in a frame as the view tilts (m: it follows the sight 0.6 m a frame
+ *  at this tilt; the jump it's for was 22) */
+const FOCUS_STEP = 2;
+/** how far a canary moves the rings' middle in a frame (m) */
+const FOCUS_JUMP = 20;
+
+/** Through the eyes, the view tilted from over level down toward the ground: the grass's rings' middle (`focusOf`)
+ *  moves a little a frame (from play, "grass a near circle that keeps updating in front of me": a sight crossing
+ *  just under level threw it from 2 m to 24 m before him; moved 20 m in a frame, with `canary`). */
+async function grassSteady(lab: Lab, canary: boolean): Promise<Checked> {
+  await stand(lab, [0, 4.5]);
+  await pressV(lab);
+  await pressV(lab);
+  if (renderer.viewMode() !== 'first') throw new Error('lab: V never took the village through the eyes');
+  const at = new THREE.Vector2(), last = new THREE.Vector2(), sight = new THREE.Vector3();
+  let most = 0, steepest = 0, highest = -1, frames = 0;
+  const tilt = (frame: number) => ({ look: [0, frame < TILT_UP ? -TILT_PX : TILT_PX] as [number, number] });
+  await lab.step(TILT_UP + TILT_DOWN, tilt, (frame) => {
+    focusOf(G.camera, at);
+    if (canary && frame === TILT_UP + TILT_DOWN / 2) at.x += FOCUS_JUMP;
+    if (frames++) most = Math.max(most, at.distanceTo(last));
+    last.copy(at);
+    const down = -G.camera.getWorldDirection(sight).y;
+    steepest = Math.max(steepest, down);
+    highest = Math.max(highest, -down);
+  });
+  if (highest < 0 || steepest < TILT_SWEPT) throw new Error('lab: the view never tilted from over level down');
+  await pressV(lab);
+  const line = `grass: the rings' middle moved at most ${most.toFixed(2)} m a frame as the view tilted through the eyes`
+    + (canary ? ' (one moved there)' : '');
+  const problems = most > FOCUS_STEP ? [`grass: the rings' middle jumped ${most.toFixed(1)} m in a frame`] : [];
+  return { lines: [line], problems: canary ? [] : problems, caught: canary ? most > FOCUS_STEP : null };
 }
 
 /** The portal's card as it stands: its way in shown, or the training's warning in its place. */

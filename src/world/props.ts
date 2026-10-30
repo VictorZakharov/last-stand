@@ -88,6 +88,17 @@ export function staticShadow(light: THREE.PointLight): void {
   stillShadows.add(light);
 }
 
+/** `light` casting shadows as the still shadows' lights do (their map's size, nearest, bias and softness), of all
+ *  round it, drawn again every frame: a pooled light lit at a lamp the hero walks past (the village's,
+ *  `game/village.ts`), its shadows his and everything's. */
+export function movingShadow(light: THREE.PointLight): void {
+  light.shadow.mapSize.set(STILL_SHADOW.size, STILL_SHADOW.size);
+  light.shadow.camera.near = STILL_SHADOW.near;
+  light.shadow.bias = STILL_SHADOW.bias;
+  light.shadow.radius = STILL_SHADOW.radius;
+  light.shadow.autoUpdate = true;
+}
+
 /** what the still shadows are drawn into: nothing seen, a pixel (`drawStillShadows`) */
 let stillTarget: THREE.WebGLRenderTarget | null = null;
 
