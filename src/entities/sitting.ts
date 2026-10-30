@@ -9,7 +9,8 @@ import * as THREE from 'three';
 import type { SitHands, SitState } from '../types';
 import { G } from '../state';
 import { angleDamp } from '../util';
-import { SEAT, seatSpot, seatStands, type Relaxed, type SeatSpot } from '../world/seats';
+import { SEAT, seatPointed, seatSpot, seatSpotAt, seatStands, type Relaxed, type Seat, type SeatSpot } from '../world/seats';
+import { outline } from '../ui/overlay/outline';
 
 export const SIT = {
   /** how long he stands idle before he goes to sit (s), and how far off a seat may be (m, to where he'd sit) */
@@ -30,11 +31,17 @@ export const SIT = {
   /** how long E asking him to sit waits to be taken, as he comes free (s): taken on its frame alone, a press just
    *  after an attack, his aim still held, was lost */
   asked: 1,
+  /** how long the cursor rests on a seat before it's outlined and E sits him on it (s), and how far off it may be (m):
+   *  "E sits only when pointed at a sittable object for more than 2 sec", "12m max distance" */
+  look: 2, reach: 12,
   /** after one he can't reach or finds no seat, how long before he looks again (s) */
   retry: 3,
 };
 
 type Phase = 'walk' | 'turn' | 'down' | 'sat' | 'up';
+
+/** the outline round the seat E would sit him on */
+const POINTED = 0xffffff;
 
 /** `facing` turned towards `yaw` over `dt` as he turns to his seat: eased, no faster than `SIT.turnFastest`. */
 function turnedTo(facing: number, yaw: number, dt: number): number {
@@ -58,8 +65,16 @@ export class Sitting {
   private spot: SeatSpot | null = null;
   private idleFor = 0;
   private retryIn = 0;
-  /** asked to sit now (E, `ask`): for this long (s), the first frame free to, he goes without his idle's wait */
+  /** asked to sit now (E, `ask`): for this long (s), the first frame free to, he goes to the seat pointed at
+   *  (`askedSeat`, where the cursor met it) without his idle's wait */
   private asked = 0;
+  private askedSeat: Seat | null = null;
+  private readonly askedAt = new THREE.Vector3();
+  /** the seat the cursor rests on, where it meets it and for how long (s), and whether it's outlined (`point`) */
+  private pointedSeat: Seat | null = null;
+  private readonly pointedAt = new THREE.Vector3();
+  private pointedFor = 0;
+  private lit = false;
   /** walking there: the nearest he has come and for how long he's come no nearer */
   private best = Infinity;
   private noNearer = 0;
@@ -100,18 +115,38 @@ export class Sitting {
     return this.leaving;
   }
 
-  /** Asked to sit now (E; from play: "to speed up the wait of 6 sec"): standing free, he goes to the nearest seat
-   *  at once. Returns whether he wasn't sitting already (on his way, down or getting up: then it's a key that gets him
-   *  up, as any other). */
+  /** The seat the cursor points at, followed a frame (`ray`: the cursor's, none on touch; `peace`: no wave under way):
+   *  outlined white once it has rested there `SIT.look`, when E sits him on it. */
+  point(me: Sitter, ray: THREE.Ray | null, dt: number, peace: boolean): void {
+    const hit = peace && ray && this.phase === null ? seatPointed(ray, G.arena.seats, me.pos, SIT.reach) : null;
+    const seat = hit?.seat ?? null;
+    this.pointedFor = seat && seat === this.pointedSeat ? this.pointedFor + dt : 0;
+    this.pointedSeat = seat;
+    if (hit) this.pointedAt.set(hit.x, 0, hit.z);
+    const ready = !!seat && this.pointedFor >= SIT.look;
+    if (ready) outline(seat!.outline, POINTED, 1);
+    else if (this.lit) outline(null);
+    this.lit = ready;
+  }
+
+  /** Asked to sit now (E; from play: "to speed up the wait of 6 sec", "E sits only when pointed at a sittable object
+   *  for more than 2 sec, any distance, at peace time"): on the seat outlined, there along it. Returns whether he
+   *  wasn't sitting already (on his way, down or getting up: then it's a key that gets him up, as any other). */
   ask(): boolean {
     if (this.phase !== null) return false;
+    if (!this.lit) return true;
     this.asked = SIT.asked;
+    this.askedSeat = this.pointedSeat;
+    this.askedAt.copy(this.pointedAt);
     return true;
   }
 
   /** Given up at once, standing (a respawn, a teleport, the hero placed). */
   clear(): void {
     this.asked = 0;
+    this.pointedSeat = null;
+    if (this.lit) outline(null);
+    this.lit = false;
     this.phase = null;
     this.spot = null;
     this.leaving = null;
@@ -153,9 +188,10 @@ export class Sitting {
     const asked = this.asked > 0 && idle;
     this.asked = asked ? 0 : Math.max(0, this.asked - dt);
     if (!asked && (this.idleFor < SIT.after || this.retryIn > 0)) return;
-    this.spot = nearestSpot(me);
+    const at = this.askedAt;
+    this.spot = asked ? seatSpotAt(this.askedSeat!, at.x, at.z, me.pos, me.radius) : nearestSpot(me);
     if (!this.spot) {
-      this.retryIn = SIT.retry;
+      if (!asked) this.retryIn = SIT.retry;
       return;
     }
     this.phase = 'walk';
