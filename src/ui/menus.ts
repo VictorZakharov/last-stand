@@ -73,7 +73,10 @@ export function renderControlsHelp(): void {
   if (isTouch()) {
     const rows = [['Left half', 'Drag to move'], ['Big button', 'Attack (hold to keep attacking)'],
       ['Skill buttons', 'Tap: cast at the nearest foe'], ['', 'Drag, then let go: cast where you aim'], ['', 'Hold a channelled skill to keep it going'],
-      ['Pinch', 'Zoom'], ['❚❚', 'Pause'], ['Bank / Continue', 'The buttons after each wave'], ['Revive', 'Hold it by a downed partner (co-op)']];
+      ['Pinch', 'Zoom'], ['❚❚', 'Pause'],
+      ...(G.mode === 'menu'
+        ? [['Use', 'What the hero is near (a tap on it walks him there)'], ['Bag', 'The inventory'], ['Map', "The village's map"]]
+        : [['Bank / Continue', 'The buttons after each wave'], ['Revive', 'Hold it by a downed partner (co-op)']])];
     const html = rows.map(([k, v]) => `<span class="k">${k}</span><span>${v}</span>`).join('');
     document.querySelectorAll('.controls-help').forEach((el) => { el.classList.remove('diagrams'); el.innerHTML = html; });
     return;
@@ -105,6 +108,18 @@ function keyboardDiagram(): string {
     tab: { icon: '☰', cap: 'Scores', tip: "The party's scores and pings", hold: true },
     alt: { icon: '⇱', cap: 'Cursor', tip: 'A cursor for the HUD over mouse look, the view held still', hold: true },
   };
+  // (in the village E uses what the hero is near, I and M open the inventory and the map, and a wave's keys do nothing)
+  const village = G.mode === 'menu';
+  if (village) {
+    delete used.b;
+    delete used.c;
+    delete used.tab;
+    Object.assign(used, {
+      e: { icon: '✋', cap: 'Use', tip: 'Use what the hero is near (a click on it walks him there)' },
+      i: { icon: '⛉', cap: 'Inventory', tip: 'Inventory: equipment, attributes and skills' },
+      m: { icon: '⌖', cap: 'Map', tip: "The village's map" },
+    });
+  }
   for (const k of SKILL_KEYS) {
     if (k.startsWith('mouse')) continue;
     const sk = skillOn(k);
@@ -116,9 +131,11 @@ function keyboardDiagram(): string {
     [{ k: 'tab', w: 1.5 }, ...'qwerty'.split('').map((k) => ({ k }))],
     [{ k: 'caps', w: 1.75 }, ...'asdfgh'.split('').map((k) => ({ k }))],
     [{ k: 'shift', w: 2.25 }, ...'zxcvbn'.split('').map((k) => ({ k }))],
-    [{ k: 'ctrl', w: 1.25 }, { k: 'win', w: 1.25 }, { k: 'alt', w: 1.25 }],
+    // (the village's I and M beside Alt, apart from it: in their places the rows ran past the diagram's faded edge)
+    [{ k: 'ctrl', w: 1.25 }, { k: 'win', w: 1.25 }, { k: 'alt', w: 1.25 }, ...(village ? [{ k: ' ', w: 0.5 }, { k: 'i' }, { k: 'm' }] : [])],
   ];
   const cap = (c: Cap): string => {
+    if (c.k === ' ') return `<span class="kb-gap" style="--w:${c.w}"></span>`;
     const u = used[c.k];
     const label = c.k.length > 1 ? c.k[0].toUpperCase() + c.k.slice(1) : c.k.toUpperCase();
     const style = `--w:${c.w ?? 1}${u?.color ? `;--c:${u.color}` : ''}`;
@@ -412,7 +429,7 @@ function renderStart(): void {
 }
 
 // Starting wave: any wave up to the best one cleared and banked in the portal's biome, defaulting to that best and
-// jumping back to it when the biome or best changes.
+// jumping back to it when the biome or best changes. « and » go to the first and the best (a step of ±1000, clamped).
 let startWave = 1, maxWave = 1, seen = '';
 export const selectedWave = (): number => startWave;
 

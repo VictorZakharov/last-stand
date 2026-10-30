@@ -1,9 +1,9 @@
 // Entry point: boots every system, owns the main loop and the lobby (the village) <-> run flow.
 import * as THREE from 'three';
 import { G } from './state';
-import { initRenderer, updateCamera, render, zoomBy, orbitBy, lookBy, setZoom, sceneTarget, setViewShift, setView, viewMode, viewSettled, VIEWS, type ViewMode } from './core/renderer';
+import { initRenderer, updateCamera, render, zoomBy, orbitBy, lookBy, setZoom, sceneTarget, setViewShift, setView, faceCamera, viewMode, viewSettled, VIEWS, type ViewMode } from './core/renderer';
 import { CAMERA } from './data/balance';
-import { YARD_DUMMIES, type VillageObject } from './data/village';
+import { HALL, TERRACE, YARD_DUMMIES, inHall, type VillageObject } from './data/village';
 import { initInput, updateInputRay, endInputFrame, input, isDown, wasPressed, wantPointerLock, pointerLocked, onPointerLockLost, lockLostAt, releaseInput } from './core/input';
 import { initAudio, sfx } from './core/audio';
 import { updateMusic, type MusicWanted } from './core/music';
@@ -28,7 +28,7 @@ import { updateFloaters } from './ui/floaters';
 import { initHud, showHud, buildHotbar, banner, showDecision, hideDecision, resetDecision, updateHud, renderSpoils } from './ui/hud';
 import { initMenus, layOutMenuAhead, showMenu, showSummary, hideSummary, showPause, menuStowed, lobbyPractice, selectedWave, lobbyViewShift, renderMenu, markNew, clearOverlays, openPanels, panelsOpen, showHelp, changeHero as askForHeroes, type Panels } from './ui/menus';
 import { initVillageCard, showVillageCard, villageCardOf } from './ui/villageCard';
-import { initVillage, updateVillage, closedFrom, inYard, villageObject, goUse, objectNear } from './game/village';
+import { initVillage, updateVillage, closedFrom, inYard, villageObject, goUse, goTo, objectNear } from './game/village';
 import { initVillageMap, setVillageMap, villageMapOpen, updateVillageMap } from './ui/villageMap';
 import { initTraining, completeStep, restartTraining } from './game/training';
 import { initTrainingTracker, updateTrainingTracker } from './ui/training';
@@ -55,7 +55,7 @@ import { holdQuality, initQuality, sampleQuality } from './core/quality';
 import { updateLowLife } from './core/lowLife';
 import { checkPrograms, markLoaded, pinPrograms, steadyShadowPrograms, watchPrograms } from './core/shaders';
 import { BIOMES, BIOME_IDS } from './data/biomes';
-import { CLASSES } from './data/classes/index';
+import { CLASSES, CLASS_IDS } from './data/classes/index';
 import { loadingStep, loadingDone, loadingFailed, loadingLeft, lobbyLaidOut } from './ui/loading';
 import { prepareWind } from './ui/logoWind';
 import { preloadTextures } from './core/textures';
@@ -134,7 +134,7 @@ async function boot() {
   initMenus({ start: whenWarm(['fight'], start, READYING.fight), toMenu, resume, abandon, profileChanged, changeHero, summaryDone, lobbyChanged: sendLobbyChoice, panels: panelsChanged });
   initVillage({ use: useObject, leave: leaveObject, active: villageActive });
   initVillageCard((o) => closedFrom(o));
-  initVillageMap({ go: goUse, trees: () => G.arena.village.trees });
+  initVillageMap({ go: goUse, walk: goTo, trees: () => G.arena.village.trees });
   initTrainingTracker();
   initCrestBlow();
   initHeroSelect({ choose: chooseHero, closed: heroSelectClosed });
@@ -161,7 +161,7 @@ async function boot() {
   window.addEventListener('keydown', unlockAudio);
 
   // dev-only handle for debugging and automated screenshots (stripped from production builds)
-  if (import.meta.env.DEV) Object.assign(window, { __G: G, __dev: { spawnEnemy, THREE, allWarm: isAllWarm, hurry, holdHour, restartTraining } });
+  if (import.meta.env.DEV) Object.assign(window, { __G: G, __dev: { spawnEnemy, THREE, allWarm: isAllWarm, hurry, holdHour, restartTraining, faceCamera } });
 
   await loadingStep('Conjuring spells', 0.55);
   enterMenu();
@@ -222,6 +222,7 @@ function enterMenu() {
   if (cameThrough) {
     const exit = G.arena.village.exits[cameThrough];
     G.player.place(exit.at, exit.facing);
+    faceCamera(exit.facing);
   }
   G.player.sandbox = true;   // lobby: try skills freely in the yard while a panel is up
   practising = false;
@@ -391,7 +392,10 @@ function abandon() {
 function changeHero() {
   if (G.mode !== 'menu' || heroSelectOpen()) return;
   showMenu(false);
-  openHeroSelect(G.player.cls.id);
+  // (inside the hall, the hero whose plinth he stands nearest in focus; his own class's empty one is his)
+  const p = G.player.pos;
+  const plinth = HALL.plinths.reduce((best, x, i) => (Math.abs(TERRACE.x + x - p.x) < Math.abs(TERRACE.x + HALL.plinths[best] - p.x) ? i : best), 0);
+  openHeroSelect(inHall(p.x, p.z) ? CLASS_IDS[plinth] : G.player.cls.id);
 }
 
 /** A hero chosen on the selection screen: the new class brings its own profile (gear, stash, records) and loadout; a
@@ -553,7 +557,7 @@ function update(dt: number): void {
   // co-op: the partners' reports (and on a guest the host's fight) played out to the moment shown
   playSession(dt);
   // (the village: what the hero is near and walks to, and whether he may cast there)
-  updateVillage();
+  updateVillage(dt);
   updateVillageMap(dt);
   updateTrainingTracker(dt, villageActive() && !panelsOpen() && !villageCardOf());
   updateCrestBlow(dt, revealed && G.mode === 'menu' && G.arena.place === 'village' && !heroSelectOpen(), villageMapOpen());
@@ -584,7 +588,7 @@ function update(dt: number): void {
   const vs = heroSelectOpen() ? heroSelectShift() : view === 'top' || input.touchMode ? lobbyViewShift() : { x: 0, y: 0 };
   setViewShift(vs.x, vs.y);
   const focus = focusPlayer();
-  updateCamera(dt, focus.pos, focus.model.height);
+  updateCamera(dt, focus.pos, focus.model.height, focus.obj.position.y);
   updateLowLife(dt);
   // through the eyes the body would fill the view (it still casts, animates and blocks): only the
   // arms and what they hold show

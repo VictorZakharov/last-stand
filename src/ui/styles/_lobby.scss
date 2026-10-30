@@ -45,10 +45,10 @@
 .rec-label { font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--ink-dim); }
 .biome-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .br-label { font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--ink-dim); }
-#opt-wave button { font-size: 18px; line-height: 1; padding: 5px 12px; }
+#opt-wave button { font-size: 18px; line-height: 1; padding: 5px 10px; }
 #opt-wave button:disabled { cursor: $cursor; opacity: .35; }
 #opt-wave button:disabled:hover { color: var(--ink-dim); }
-#opt-wave .wv-val { min-width: 7.5em; padding: 6px 8px; text-align: center; font-size: 15px; color: #ffe7b0; border-left: 1px solid rgba($frame, .35);
+#opt-wave .wv-val { min-width: 6.5em; padding: 6px 8px; text-align: center; font-size: 15px; color: #ffe7b0; border-left: 1px solid rgba($frame, .35);
   background: $well; user-select: none; }
 #opt-wave .wv-val small { color: var(--accent); }
 .menu-links { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 0 6px; }
