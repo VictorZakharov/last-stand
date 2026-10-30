@@ -8,8 +8,6 @@ import { G } from '../../state';
 import { overFrame } from '../../core/renderer';
 import { uiScales } from '../scale';
 import { drawOutline } from './outline';
-import { WEBGPU } from '../../core/webgpu';
-import { labelsNodeMaterial, type LabelsLook } from './layerNodes';
 import {
   atlasCrowded, atlasSide, atlasTexture, clearAtlas, fits, freeSlot, paintCanvas, takeSlot, uploadSlot, type Slot,
 } from './atlas';
@@ -108,9 +106,7 @@ let fontLoads = 0;
 if (typeof document !== 'undefined') document.fonts?.addEventListener('loadingdone', () => { fontLoads++; });
 
 // --- drawing: one instanced quad a label, its box in canvas pixels and its slot's corners in the atlas
-let mesh: THREE.Mesh<THREE.InstancedBufferGeometry, THREE.Material> | null = null;
-/** on WebGPU, the labels' node material and what is set on it each frame (layerNodes.ts) */
-let nodeLook: LabelsLook | null = null;
+let mesh: THREE.Mesh<THREE.InstancedBufferGeometry, THREE.ShaderMaterial> | null = null;
 let rects: THREE.InstancedBufferAttribute, uvs: THREE.InstancedBufferAttribute, alphas: THREE.InstancedBufferAttribute;
 const scene = new THREE.Scene(), camera = new THREE.OrthographicCamera();
 /** drawn once at load whatever is shown, so its program compiles then (as every other does) */
@@ -120,8 +116,6 @@ function makeMesh(room: number): void {
   const geo = new THREE.InstancedBufferGeometry();
   geo.setAttribute('position', new THREE.Float32BufferAttribute([0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 1, 0], 3));
   geo.setIndex([0, 2, 1, 1, 2, 3]);
-  // (none till laid out: three's default, Infinity, WebGL clamps and WebGPU refuses)
-  geo.instanceCount = 0;
   rects = new THREE.InstancedBufferAttribute(new Float32Array(room * 4), 4).setUsage(THREE.DynamicDrawUsage);
   uvs = new THREE.InstancedBufferAttribute(new Float32Array(room * 4), 4).setUsage(THREE.DynamicDrawUsage);
   alphas = new THREE.InstancedBufferAttribute(new Float32Array(room), 1).setUsage(THREE.DynamicDrawUsage);
@@ -133,8 +127,7 @@ function makeMesh(room: number): void {
     mesh.geometry = geo;
     return;
   }
-  if (WEBGPU) nodeLook = labelsNodeMaterial(atlasTexture());
-  const mat = nodeLook?.material ?? new THREE.ShaderMaterial({
+  const mat = new THREE.ShaderMaterial({
     uniforms: { uAtlas: { value: atlasTexture() }, uView: { value: new THREE.Vector2(1, 1) } },
     vertexShader: /* glsl */ `
       attribute vec4 aRect;
@@ -244,15 +237,9 @@ function drawLabels(): void {
   warmed = true;
   const gl = G.renderer;
   gl.getDrawingBufferSize(view);
+  mesh!.material.uniforms.uView.value.copy(view);
   // (the atlas is made again, larger, as labels take more canvas pixels: a higher ratio, a larger UI)
-  if (nodeLook) {
-    nodeLook.view.copy(view);
-    nodeLook.atlas.value = atlasTexture();
-  } else {
-    const uniforms = (mesh!.material as THREE.ShaderMaterial).uniforms;
-    uniforms.uView.value.copy(view);
-    uniforms.uAtlas.value = atlasTexture();
-  }
+  mesh!.material.uniforms.uAtlas.value = atlasTexture();
   const auto = gl.autoClear;
   gl.autoClear = false;
   gl.setRenderTarget(null);
@@ -262,8 +249,7 @@ function drawLabels(): void {
 }
 // (an outline round what a held skill would take, under the labels: a foe's bar and numbers stay over it)
 overFrame.draw = () => {
-  // (the outline's mask and edge are GLSL still: none on WebGPU yet)
-  if (!WEBGPU) drawOutline();
+  drawOutline();
   drawLabels();
 };
 
