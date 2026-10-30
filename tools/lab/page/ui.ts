@@ -40,6 +40,7 @@ import { openSaves } from '../../../src/ui/saves';
 import { openBook } from '../../../src/ui/loadoutEditor';
 import { hideTooltip, itemTooltip, showTooltipAt } from '../../../src/ui/tooltip';
 import { hdrOutput } from './hdrOutput';
+import { closePauseLobby, HOUR_CANARY, hourHiddenInRun, hourShown, openPauseLobby } from './uiHour';
 import { panelsBack, showPanels } from './lobbyPanels';
 import { battleLog } from './battleLog';
 import { digitsShown } from './digits';
@@ -56,7 +57,7 @@ import {
 export type UiState =
   | 'lobby' | 'tooltip' | 'glow' | 'help' | 'saves' | 'heroes' | 'readying' | 'readyingHeroes' | 'clicked' | 'views'
   | 'behindProps'
-  | 'logLobby'
+  | 'logLobby' | 'pauseLobby'
   | 'skillTipsTouch' | 'sheetTouch' | 'litTouch' | 'run' | 'scores' | 'perf'
   | 'decision' | 'pause' | 'summary' | 'skillTips' | 'log' | 'logTouch' | 'hudTouch' | 'decisionTouch';
 
@@ -923,6 +924,7 @@ const STEPS: Record<UiState, Steps> = {
   views: { open: switchViews, close: standBack, check: labelsThroughSwitches },
   behindProps: { open: () => undefined, close: () => undefined, check: labelsBehindProps },
   logLobby: { open: openLogLobby, close: closeLog, check: logShown },
+  pauseLobby: { open: openPauseLobby, close: closePauseLobby, check: hourShown },
   skillTipsTouch: { open: openSkillTipsTouch, close: closeSkillTipsTouch, check: skillTipsShown },
   sheetTouch: { open: openSheetTouch, close: closeSheetTouch, check: sheetTouchShown },
   litTouch: {
@@ -933,7 +935,7 @@ const STEPS: Record<UiState, Steps> = {
   scores: { open: (lab) => lab.step(SCORES_FRAMES, () => TAB), close: (lab) => lab.step(1), held: TAB },
   perf: { open: () => setPerfHud(true, false), close: () => setPerfHud(false, false) },
   decision: { open: showDecision, close: closeDecision, check: decisionShown },
-  pause: { open: () => showPause(true), close: () => showPause(false) },
+  pause: { open: () => showPause(true), close: () => showPause(false), check: hourHiddenInRun },
   summary: { open: openSummary, close: hideSummary },
   skillTips: { open: openSkillTips, close: closeSkillTips, check: skillTipsShown },
   log: { open: openLog, close: closeLog, check: logShown },
@@ -1009,6 +1011,11 @@ export async function ui(lab: Lab, options: UiOptions): Promise<Report> {
     const seen = through ? 'caught' : 'went unseen';
     lines.push(`  canary: the labels beside the columns ${seen}`);
     if (!through) missed.push(`${state}: the canary's labels beside the columns went unseen`);
+  }
+  if (state === 'pauseLobby') {
+    const caught = found.problems.some((problem) => problem.includes(HOUR_CANARY.name));
+    lines.push(`  canary: ${HOUR_CANARY.what} ${caught ? 'caught' : 'went unseen'}`);
+    if (!caught) missed.push(`${state}: the canary's ${HOUR_CANARY.what} went unseen`);
   }
   if (state === 'decision') {
     const caught = found.problems.some((problem) => problem.includes(DECISION_CANARY.name));

@@ -13,6 +13,9 @@ let fixed = ((): number | null => {
 /** The hour held whatever the clock says (the lab's pictures at set hours), or null to follow the clock again. */
 export function holdHour(h: number | null): void { fixed = h === null ? null : ((h % 24) + 24) % 24; }
 
+/** The hour held (`holdHour`, `?hour=`), or null while the clock is followed. */
+export const heldHour = (): number | null => fixed;
+
 /** The co-op host's time zone (its `getTimezoneOffset`), or null to go by the player's own clock again. */
 export function setHostOffset(minutes: number | null): void { hostOffset = minutes; }
 

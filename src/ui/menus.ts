@@ -29,6 +29,7 @@ import { hdrSettings, hdrStatus, onHdrChange, setHdrSettings, type HdrMode, type
 import { QUALITY, type QualitySetting } from '../data/quality';
 import { BIOMES } from '../data/biomes';
 import { whenWarm } from '../game/warm';
+import { heldHour, holdHour, hourNow } from '../game/clock';
 import { READYING } from './readying';
 import { isCoop, isGuest, isHost } from '../net/role';
 import { session, partnerInRun } from '../net/session';
@@ -191,6 +192,12 @@ export function initMenus(h: MenuHooks): void {
   $<HTMLInputElement>('#opt-perf').onchange = (e) => setPerfHud((e.target as HTMLInputElement).checked);
   $<HTMLInputElement>('#opt-net').onchange = (e) => setNetHud((e.target as HTMLInputElement).checked);
   $<HTMLInputElement>('#opt-blog').onchange = (e) => setBattleLog((e.target as HTMLInputElement).checked);
+  // (the slider's first step, under the hours, is Auto: the clock followed again)
+  $<HTMLInputElement>('#opt-hour').oninput = (e) => {
+    const h = Number((e.target as HTMLInputElement).value);
+    holdHour(h < 0 ? null : h);
+    renderHourOption();
+  };
   document.querySelectorAll<HTMLElement>('#opt-quality button').forEach((b) => {
     b.onclick = () => { sfx.click(); setQuality(b.dataset.q as QualitySetting); renderQualityOptions(); };
   });
@@ -800,6 +807,15 @@ function renderHdrOptions(): void {
   $('#opt-hdr-peak-value').textContent = `${Math.max(s.peak, s.paper).toFixed(1)}×`;
 }
 
+/** The time of day's slider and its value: the hour held, or Auto with the clock's hour. */
+function renderHourOption(): void {
+  const held = heldHour();
+  const h = held ?? hourNow();
+  const clock = `${Math.floor(h)}:${String(Math.floor((h % 1) * 60)).padStart(2, '0')}`;
+  $<HTMLInputElement>('#opt-hour').value = String(held ?? -0.5);
+  $('#opt-hour-value').textContent = held === null ? `Auto ${clock}` : clock;
+}
+
 export function showPause(v: boolean): void {
   if (v) {
     renderControlsHelp();
@@ -808,6 +824,9 @@ export function showPause(v: boolean): void {
     $<HTMLInputElement>('#opt-blog').checked = battleLogEnabled();
     renderQualityOptions();
     renderHdrOptions();
+    // the hour is the village's alone (a biome keeps its own light)
+    $('.hour-row').classList.toggle('hidden', G.arena.place !== 'village' || G.mode === 'run');
+    renderHourOption();
     // in the lobby there is no run to abandon; in co-op it leaves the others to it
     $('#btn-abandon').classList.toggle('hidden', G.mode !== 'run');
     $('#btn-abandon').textContent = isCoop() ? 'Leave the run (lose spoils)' : 'Abandon run (lose spoils)';
