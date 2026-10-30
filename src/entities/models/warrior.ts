@@ -1595,11 +1595,12 @@ export function buildWarrior(): Model {
   const PLANT_ROLL = Math.PI / 2, PLANT_GLIDE = 0.2;
   /** an arm's joints as fitted holding its weapon standing (shoulder, elbow, hand), to ease the plant in from */
   const _fittedArm = [new THREE.Quaternion(), new THREE.Quaternion(), new THREE.Quaternion()];
+  const _rightArm = [j.shoulderR, j.elbowR, j.handR], _leftArm = [j.shoulderL, j.elbowL, j.handL];
   /** The arm fitted holding its weapon kept (`keep`), or eased back to by `1 - by` once it's planted. (From the arm the
    *  fit held it in to the plant's own solve in a frame: that solve's elbow and the hand's turn on the forearm differ,
    *  and the axe in the fist went 82 cm in the sit's first frame) */
   function fittedArm(left: boolean, keep: boolean, by = 1): void {
-    const arm = left ? [j.shoulderL, j.elbowL, j.handL] : [j.shoulderR, j.elbowR, j.handR];
+    const arm = left ? _leftArm : _rightArm;
     arm.forEach((joint, i) => (keep ? _fittedArm[i].copy(joint.quaternion) : joint.quaternion.slerp(_fittedArm[i], 1 - by)));
   }
   /** a weapon's box in its grip's space (the grip's units) */
@@ -2004,7 +2005,7 @@ export function buildWarrior(): Model {
   const _kq = new THREE.Quaternion(), _kw = new THREE.Quaternion(), _kg = new THREE.Quaternion(), _kv = new THREE.Vector3(), _ka = new THREE.Vector3();
   /** a weapon arm's joints, shoulder to hand */
   function armOf(p: Planted): THREE.Object3D[] {
-    return p.left ? [j.shoulderL, j.elbowL, j.handL] : [j.shoulderR, j.elbowR, j.handR];
+    return p.left ? _leftArm : _rightArm;
   }
   /** a weapon carried to where it leans kept from going under the floor, its end on it at the lowest: the fist falls a
    *  few cm short of its haft's top (let go of there and set on the floor, it moved 4 cm as the hand left it) */
@@ -3266,8 +3267,16 @@ export function buildWarrior(): Model {
     }
     if (plant > 0 && leanR) carryDown(plantR, plant, held!, st.sit!, true);
     if (plant > 0 && between) {
+      // The carry moves with idle breathing while he sits. Fit it again near the handover so the frozen start eases
+      // onto the current standing pose instead of jumping to it once the sit state disappears.
+      const toCarry = st.sit!.w === 0 ? 1 - smooth(ramp(plant, 0, BETWEEN.stages[0] * 0.3)) : 0;
+      if (toCarry > 0) {
+        fitArm(j, false, gripTurn(handR, grip, _vr), body);
+        fittedArm(false, true);
+      }
       restBetween(plantR, plant, held!);
       fistOnGrip(plantR, plant, held!);
+      if (toCarry > 0) fittedArm(false, false, 1 - toCarry);
     }
     // (carried to where it's set down, it turns as the fist does: `carryArm`)
     if (carryingTwo && carriedBetween) {
