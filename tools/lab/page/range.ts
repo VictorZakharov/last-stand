@@ -73,10 +73,10 @@ export function grippingSides(lab: Lab): Side[] {
 }
 
 /** the body's limits for an arm, as anatomy.ts has them, for `ArmsPinned` */
-const ARM_LIMITS: ArmLimits = { ranges: ROM, elevationLimit, rotationRange };
+export const ARM_LIMITS: ArmLimits = { ranges: ROM, elevationLimit, rotationRange };
 
 /** The ranges each gripping hand's wrist is judged by (`GRIPPING`), for `ArmsPinned`. */
-function grippingRanges(lab: Lab): Partial<Record<Side, Ranges>> {
+export function grippingRanges(lab: Lab): Partial<Record<Side, Ranges>> {
   return Object.fromEntries(grippingSides(lab).map((side) => [side, GRIPPING]));
 }
 
