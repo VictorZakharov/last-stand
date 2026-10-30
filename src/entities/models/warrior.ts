@@ -1514,7 +1514,7 @@ export function buildWarrior(): Model {
    *  end, and the ring kept loose as it rests on its point and leans about it as he sits, till it's let go of (turned
    *  round in a closed fist, "warrior magically rotates the sword in his hand"; held in the fist with no regrip, no
    *  arm rests its point on the floor, and his arm was held at its stops). */
-  const BETWEEN = tunable('warriorBetween', { ahead: 0.9, side: 0.4, lean: 0.1, top: 0.35, letGo: 0.7, take: 0.1, slant: 0.07, regrip: [0.12, 0.95], rest: [0.4, 0.5, 0.15, 0.1], clear: [0.3, 0.7], stages: [0.3, 0.45], hands: [2.5, 2.6] });
+  const BETWEEN = tunable('warriorBetween', { ahead: 0.9, side: 0.4, lean: 0.1, top: 0.35, letGo: 0.7, take: 0.1, slant: 0.07, regrip: [0.12, 0.95], rest: [0.42, 0.5, 0.15, 0.1], clear: [0.3, 0.7], stages: [0.3, 0.45], hands: [2.5, 2.6] });
   /** a model's hands with nothing to do as he sits */
   const NO_HANDS = { before: 0, after: 0 };
   /** whether a two-hander is stood between his feet on this sit (on a seat, not by a fire) */
@@ -1562,6 +1562,8 @@ export function buildWarrior(): Model {
     restArm: THREE.Quaternion[]; seatRest: THREE.Quaternion;
     /** how far the fist carrying it is let go of (0 to 1: open), for it to swing or lean round in it (`carryArm`) */
     open: number;
+    /** the arm as it carried it to be set the frame before, and the sit's clock then (`carryArm`; -1: not carrying) */
+    carryWas: THREE.Quaternion[]; carrySat: number;
     /** where its point rests on the ground beside his foot (the world's: taken standing) */
     restPoint: THREE.Vector3;
     /** how far it has swung there (0..1) */
@@ -1587,7 +1589,7 @@ export function buildWarrior(): Model {
       left, hand, joint: left ? j.handL : j.handR, grip, shoulder: left ? j.shoulderL : j.shoulderR,
       q: new THREE.Quaternion(), at: new THREE.Vector3(), up: new THREE.Vector3(), on: null, carried: false, turn: -1,
       landAt: new THREE.Vector3(), landQ: new THREE.Quaternion(), handAt: new THREE.Vector3(), handQ: new THREE.Quaternion(),
-      startAt: new THREE.Vector3(), startQ: new THREE.Quaternion(), armWas: [new THREE.Quaternion(), new THREE.Quaternion(), new THREE.Quaternion()], liftAt: new THREE.Vector3(), liftQ: new THREE.Quaternion(), gripWas: new THREE.Quaternion(), gripAtWas: new THREE.Vector3(), setAt: new THREE.Vector3(), setQ: new THREE.Quaternion(), reach: 0, flipWay: -1, flipSign: 1, flipAxis: new THREE.Vector3(), seatSet: new THREE.Quaternion(), seatNow: new THREE.Quaternion(), restArm: [new THREE.Quaternion(), new THREE.Quaternion(), new THREE.Quaternion()], seatRest: new THREE.Quaternion(), restPoint: new THREE.Vector3(), open: 0, swung: 0, split: -1, liftedAt: new THREE.Vector3(), liftedQ: new THREE.Quaternion(), slide: 0, leant: false, pivot: 0, standQ: new THREE.Quaternion(), drawWay: new THREE.Vector3(), drawWas: null, restTurn: -1, way: 0,
+      startAt: new THREE.Vector3(), startQ: new THREE.Quaternion(), armWas: [new THREE.Quaternion(), new THREE.Quaternion(), new THREE.Quaternion()], liftAt: new THREE.Vector3(), liftQ: new THREE.Quaternion(), gripWas: new THREE.Quaternion(), gripAtWas: new THREE.Vector3(), setAt: new THREE.Vector3(), setQ: new THREE.Quaternion(), reach: 0, flipWay: -1, flipSign: 1, flipAxis: new THREE.Vector3(), seatSet: new THREE.Quaternion(), seatNow: new THREE.Quaternion(), restArm: [new THREE.Quaternion(), new THREE.Quaternion(), new THREE.Quaternion()], seatRest: new THREE.Quaternion(), restPoint: new THREE.Vector3(), open: 0, carryWas: [new THREE.Quaternion(), new THREE.Quaternion(), new THREE.Quaternion()], carrySat: -1, swung: 0, split: -1, liftedAt: new THREE.Vector3(), liftedQ: new THREE.Quaternion(), slide: 0, leant: false, pivot: 0, standQ: new THREE.Quaternion(), drawWay: new THREE.Vector3(), drawWas: null, restTurn: -1, way: 0,
     };
   }
   const _standQ = new THREE.Quaternion(), _standAt = new THREE.Vector3(), _holdQ = new THREE.Quaternion();
@@ -1775,6 +1777,7 @@ export function buildWarrior(): Model {
       p.handQ.copy(_rootQ).invert().multiply(p.joint.getWorldQuaternion(_pq));
       p.flipWay = -1;
       p.split = -1;
+      p.carrySat = -1;
       p.turn = 0;
     }
     const k = root.scale.x, s = _s5.setFromMatrixScale(grip.matrixWorld).y, [low, far] = reachAlong(weapon, grip);
@@ -1916,6 +1919,7 @@ export function buildWarrior(): Model {
     // its point 90 cm)
     p.swung = 1;
     armOf(p).forEach((joint, i) => joint.quaternion.copy(p.restArm[i]));
+    carryPace(p, sat);
     onGround(p, p.seatNow.copy(p.seatSet), 1);
     // (the fist loose as he goes down for the blade to lean in it, and as it's carried upright to be set, till it's
     // let go of: closed while it leant, it turned 27 degrees in the fist)
@@ -1938,7 +1942,27 @@ export function buildWarrior(): Model {
     p.seatNow.slerpQuaternions(p.seatRest, p.seatSet, e);
     _carryQ.copy(p.seatNow);
     holdKey(p, at, q, _keyB, _carryQ, true, true);
+    carryPace(p, sat);
   }
+  /** The arm as posed turned from the frame before's no further than `CARRY_TURN` for the clock's step, from where he
+   *  rests the weapon on its point to where it's set and back: the arm's solve changed its mind in a frame as the
+   *  carry began, and between the rest's arm and the solve's first, the hand turned 9 degrees and a maul's end went
+   *  20 to 27 cm in a frame. */
+  function carryPace(p: Planted, sat: number): void {
+    const step = Math.abs(sat - p.carrySat);
+    const arm = armOf(p);
+    if (p.carrySat >= 0 && step < 0.05) {
+      arm.forEach((joint, i) => {
+        const to = _kq.copy(joint.quaternion);
+        joint.quaternion.copy(p.carryWas[i]).rotateTowards(to, CARRY_TURN * step);
+      });
+    }
+    arm.forEach((joint, i) => p.carryWas[i].copy(joint.quaternion));
+    p.carrySat = sat;
+  }
+  /** how far (rad) an arm joint carrying a two-hander to be set may turn for the whole of the sit's clock: about 2.5
+   *  times the most it turns between where it rests and where it's set */
+  const CARRY_TURN = 25;
   const _carryQ = new THREE.Quaternion();
   /** the share of the lowering over which the fist opens before the blade swings */
   const REGRIP_EASE = 0.1;
