@@ -207,7 +207,10 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   read 18.6%; a new kind of light gets a case there); the pool's lights lit at midnight with the hero standing
   still, none changing by over 1% a frame (`page/villageSteady.ts`: from play, "lamps have high frequency flicker",
   every pooled light shaken by a random tenth a frame, 10.1%; a fire's own light swells with its flames and isn't
-  read; `--canary` shakes one by a tenth); the terrace's
+  read; `--canary` shakes one by a tenth); a street lamp's ground read from one camera over it with the hero 24 m off
+  and 4.5 m off, the point lights' shadows held off, within 8% (`page/villageLampsAlike.ts`: from play, "I dont like
+  when lights change from low quality to high quality when I come close", a painted pool far off and a pooled light
+  close by, 45.7% apart; `--canary` puts the lamp out in the shaders' list while he's far off); the terrace's
   stair walked up, the body's height on its top (`obj.position.y`:
   the player's `pos.y` is always 0, and a reading of it said 0 m up); in the close view (V), mouse look asking for the
   pointer on the square and letting it go once the hall of heroes is used (`pointerWanted` in `core/input.ts`: its

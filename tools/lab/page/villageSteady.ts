@@ -18,7 +18,8 @@ const MOST_CHANGE = 0.01;
 /** the least a light must give to count as lit */
 const LIT = 0.5;
 
-/** The pool's lights lit now, each by its light (the lamps' and torches': a fire's own light swells with its flames). */
+/** The pool's lights lit now, each by its light (the lamps' and torches': a fire's own light swells with its
+ *  flames). */
 function litLights(): Map<THREE.PointLight, number> {
   const lit = new Map<THREE.PointLight, number>();
   for (const light of pooledLights()) if (light.intensity > LIT) lit.set(light, light.intensity);
