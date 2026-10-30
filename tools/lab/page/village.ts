@@ -11,9 +11,9 @@
 // hero put past the palisade after a walk, put past a portal after a walk at it, the rings' middle moved 20 m in a
 // frame, the stair walked at beside it into the terrace's wall, the pointer asked
 // of the square (where mouse look holds it), the notice board never read, a new material shown at one hour; walks to
-// a spot walked straight; an orb far past white hung in a lamp's lantern.
+// a spot walked straight; an orb far past white hung in the first light read.
 import * as THREE from 'three';
-import type { Lab, Report } from './lab';
+import type { Lab, Pictured, Report } from './lab';
 import { G } from '../../../src/state';
 import {
   COTTAGES, ENTRANCES, HALL, TERRACE, VILLAGE_OBJECTS, YARD_DUMMIES, yardToWorld, type Spot, type VillageObject,
@@ -31,7 +31,7 @@ import { villageMapOpen } from '../../../src/ui/villageMap';
 import { closeHeroSelect, heroSelectOpen } from '../../../src/ui/heroSelect';
 import { pointerWanted } from '../../../src/core/input';
 import * as renderer from '../../../src/core/renderer';
-import { lampsNotBlinding } from './villageLamps';
+import { lightsNotBlinding } from './villageLights';
 
 export interface VillageOptions {
   canary: boolean;
@@ -58,7 +58,7 @@ const FAR = 70;
 const HOURS = [0, 6, 9, 12, 18, 21];
 
 /** One check's lines, its problems, and whether its canary was caught (null: no canary ran). */
-interface Checked { lines: string[]; problems: string[]; caught: boolean | null }
+interface Checked { lines: string[]; problems: string[]; caught: boolean | null; moments?: Pictured[] }
 
 /** The village checked as a player walks it. */
 export async function village(lab: Lab, options: VillageOptions): Promise<Report> {
@@ -73,13 +73,14 @@ export async function village(lab: Lab, options: VillageOptions): Promise<Report
     await grassSteady(lab, options.canary),
     await roundCottages(lab, options.canary),
     await walksAcross(lab, options.canary),
-    await lampsNotBlinding(lab, options.canary),
+    await lightsNotBlinding(lab, options.canary),
     await training(lab, options.canary),
     await hoursCompileNothing(lab, options.canary),
   ];
   const lines = checks.flatMap((c) => c.lines);
+  const moments = checks.flatMap((c) => c.moments ?? []);
   const caught = checks.map((c) => c.caught);
-  if (!options.canary) return { text: lines.join('\n'), problems: checks.flatMap((c) => c.problems) };
+  if (!options.canary) return { text: lines.join('\n'), problems: checks.flatMap((c) => c.problems), moments };
   lines.push(`canaries: ${caught.filter(Boolean).length} of ${caught.length} caught`);
   const missed = caught.includes(false) ? ['canary: a planted fault went unseen'] : [];
   return { text: lines.join('\n'), problems: missed };

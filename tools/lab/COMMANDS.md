@@ -197,11 +197,14 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   threw it 22 m at a sight just under level: "grass a near circle that keeps updating in front of me"); sent across
   each cottage to a spot behind it, and from each portal to every other object's stand, as a place picked on the map
   sends him (`goTo`), there within 600 and 1500 frames (walked straight at the spot, he ran into a cottage and stood
-  there: "map waypoints dont work, when path is long and curved... it just runs into obstacles"); a street lamp at
-  midnight from 3 m off, looked at in each close view, its lantern's pixels read back from the frame
-  (`page/villageLamps.ts`): over 12% of its box blown out (its brightest channel past 0.97) or 2% of the ring round
-  it out to 2.5 times as far fails it as blinding (from play: "lights too bright, can't see geometry even", "we
-  should always check all lights for blinding": it read 18.6%); the terrace's
+  there: "map waypoints dont work, when path is long and curved... it just runs into obstacles"); every kind of light
+  the village has at midnight (a street lamp's lantern, a hall torch, a cottage's window, and each of its own ten
+  point lights: the portals, the hall's braziers, the stair's lamps, the campfire, the chronicle's candle, the yard's),
+  stood by from a few metres off and looked at in each close view, its pixels read back from the frame
+  (`page/villageLights.ts`, each pictured in the close view in `out/village/sheet.png`): over 12% of its box blown out
+  (its brightest channel past 0.97) or 2% of the ring round it out to 2.5 times as far fails it as blinding (from
+  play: "lights too bright, can't see geometry even", "we should always check all lights for blinding": the lantern
+  read 18.6%; a new kind of light gets a case there); the terrace's
   stair walked up, the body's height on its top (`obj.position.y`:
   the player's `pos.y` is always 0, and a reading of it said 0 m up); in the close view (V), mouse look asking for the
   pointer on the square and letting it go once the hall of heroes is used (`pointerWanted` in `core/input.ts`: its
@@ -213,7 +216,7 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   no program compiled (`G.renderer.info.programs`). `--canary` plants a fault for each (an object's stand moved off it,
   the yard's reading taken outside it, a hero put past the palisade after a walk, one put past a portal, the rings'
   middle moved 20 m in a frame, a walk round a cottage and one from a portal walked straight (`routing.on`), an orb far past white hung in the
-  lantern, the
+  first light, the
   stair
   walked at beside it, the
   pointer asked of the square, the notice board never read, a new material shown at one hour), each listed and each must be caught. It found the

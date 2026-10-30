@@ -1124,8 +1124,12 @@ export const COMMANDS = {
     each(side, options) {
       return side.command('village', { canary: Boolean(options.canary) });
     },
+    finish(results, options, session) {
+      return textWithMoments(results, session.outFor('village'), session.browser);
+    },
     textOf: asText,
     problemsOf: problemsIn,
+    pictures: picturePairs,
   },
 
   columns: {
