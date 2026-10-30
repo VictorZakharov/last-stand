@@ -58,9 +58,13 @@ and the first session of the port, under two hours, got this far:
   - The shadow-only casters (`world/culling.ts`).
   - The perf overlay's GPU timing.
   - The lab.
-- **Bundle size:** rolldown still puts three's WebGPU build into the `three` chunk that WebGL players download
-  (1.59 MB, with only 69 kB of addons split out; that chunk's size on `main` wasn't measured). This must be
-  fixed before it leaves draft.
+- **Bundle size:** a WebGL page loads none of the WebGPU code. Checked on the production build: its page fetches
+  `index` and `three` (737 kB) alone.
+  - Three's WebGPU build (751 kB), the meshlet pipeline (138 kB) and the bloom node are chunks of their own,
+    fetched by `?renderer=webgpu`. That takes rolldown's chunk groups, not `manualChunks`, which pulled the
+    WebGPU build into `three`.
+  - The offline worker still precaches every built file, so an install downloads the WebGPU chunks in the
+    background (about 900 kB). Leave them out of its list before this leaves draft.
 
 ## The short answer (the estimate as first written)
 
