@@ -1024,7 +1024,8 @@ export class Player {
       if (d < bd) { bd = d; best = e; }
     }
     _lookFrom.set(this.pos.x, this.obj.position.y, this.pos.z);
-    look.update(dt, _lookFrom, this.facing, best ? _lookAt.set(best.pos.x, best.obj.position.y + best.height * 0.6, best.pos.z) : null, weight, idle);
+    const at = best ? _lookAt.set(best.pos.x, best.obj.position.y + best.height * 0.6, best.pos.z) : null;
+    look.update(dt, _lookFrom, this.facing, at, weight, idle && !this.sitting.staged);
   }
 
   /** standing still with nothing cast, aimed or held on an aim: free to glance round (`move` the pose's share of his
