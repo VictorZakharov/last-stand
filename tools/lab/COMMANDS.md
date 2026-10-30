@@ -188,8 +188,8 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   (`--screen 844x390@3`): the stick is drawn at the touch controls' scale, and so is its travel.
 - `village`: the lobby's village as a player walks it (`page/village.ts`; `src/game/village.ts`), the run left for
   the lobby. Each check in turn: every object (the portals, the chest, the hall, the campfire, the chronicle, the
-  notice board) used from where the hero stands to use it, and what it opens shown; the notice board, the campfire
-  and the chronicle used by E, put away by their own button and used by E again where he stands
+  notice board) used from where the hero stands to use it, and what it opens shown; the notice board and the
+  chronicle used by E, put away by their own button and used by E again where he stands
   (`page/villageUseAgain.ts`: from play, "when I press got it, I cannot press E again until I move away", the notice
   board and the campfire held as open until he walked off; `--canary` leaves the second press out); his skills armed
   in the training yard and not on the square; straight walks out from the square at angles round it, and along each
