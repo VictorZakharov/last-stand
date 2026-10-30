@@ -12,6 +12,7 @@ import { setAdaptScale } from '../core/renderer';
 import { bakeStaticShadows, compileEnvMaps as compileEach, drawStillShadows, envMap, lampShadowsAsked, mergeStill, type Biome, type BiomeBuilder, type BiomeLook } from './props';
 import { cullWhileDrawn, trimShadowCasters } from './culling';
 import { castHeroesOverLamps } from './lampShadows';
+import { cullOutsideHall } from './hallPortal';
 import { buildCrypt, CRYPT_ENV } from './crypt';
 import { buildForest, FOREST_ENV } from './forest';
 import { buildVillage, VILLAGE_ENV, type Village } from './village';
@@ -87,6 +88,7 @@ export async function buildArena(scene: THREE.Scene, renderer: THREE.WebGLRender
   villageGroup.visible = false;
   villageGroup.matrixAutoUpdate = false;
   scene.add(villageGroup);
+  cullOutsideHall(scene, villageGroup, village.hallCutaway);
   places.village = { group: villageGroup, b: village };
   // (the hall of heroes' room, shown in the village's place while the hero selection screen is up: `showHall`)
   const hallGroup = new THREE.Group();

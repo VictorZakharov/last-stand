@@ -220,7 +220,11 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   lamp's ground round its foot read from over it lit and put out as the hero walks to each lamp in turn at midnight,
   the casting lights handed over as his walk hands them, each lamp giving at least 30% of the light there
   (`page/villageLampsCast.ts`: from play, "why this light is off", a lamp beside him lighting nothing; not reproduced,
-  the least 74%; `--canary` puts each lamp out for both its readings at the last stop); the terrace's
+  the least 74%; `--canary` puts each lamp out for both its readings at the last stop); from inside the hall of
+  heroes over the shoulder, turned to its door (V pressed: the village's top view is its panels'), the frame drawn
+  with what stands outside culled by the doorway (`world/hallPortal.ts`) and drawn whole, at midnight and noon:
+  the scene's draws must fall and at most 0.05% of the pixels change (`page/villageHallCull.ts`: 425 draws to
+  297, none changed; `--canary` culls all outside the hall, the doorway or not: 0.74% changed); the terrace's
   stair walked up, the body's height on its top (`obj.position.y`:
   the player's `pos.y` is always 0, and a reading of it said 0 m up); in the close view (V), mouse look asking for the
   pointer on the square and letting it go once the hall of heroes is used (`pointerWanted` in `core/input.ts`: its
@@ -532,7 +536,8 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   nothing, alike ones together, saying why (an instanced mesh of no instances, a range of nothing: the renderer's work
   for a draw each on the CPU, though an instanced mesh of none never reaches the GPU, so the perf overlay's count,
   which counts GL draws, leaves them out; the rubble's empty pools were 46 a frame), and the scene's draws by their
-  material's look (draws of one look, a merge of what doesn't move would make one). Its head line says the draws in
+  material's look (draws of one look, a merge of what doesn't move would make one), and by the scene's part (its two
+  outermost named levels: `village > fountain`, `dummy > Mesh`). Its head line says the draws in
   each pass and how many drew nothing, the triangles and how many lay outside the view, the scene's objects whose
   matrices are made again each frame, by the scene's part, and how many of them are off the camera's layer (a crowd's
   bodies' own meshes); a subtree three leaves alone (`matrixWorldAutoUpdate` off: a hidden place, what stands still)
@@ -575,7 +580,8 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   problems. `--village`: the lobby's village instead (`--hour` it's lit for), no skills or foes: the hero standing on
   its square, then walking (120 frames each; `--at`, `--facing`), then walking of himself from the square into the
   hall of heroes to its dais (900 frames: from play, "lag when entering hall of heroes", frames of 875 and 472 ms),
-  then standing in it (120 frames: from play, "still FPS drop when entering the hall");
+  then standing in it (120 frames: from play, "still FPS drop when entering the hall"), then 7 m in from its door
+  turned to it over the shoulder (120 frames: from play, "looking at plaza from hall", the render 15 ms of the CPU);
   each phase lists its slowest frames, each with its page's work and its slowest stages; from the owner's report, 10 to 13 ms of GPU a frame
   on an RTX 4070 Ti where the goal is a steady 144 frames a second (6.9 ms). `--canary` runs a round with the hero's update made 2 ms slower (it must read at least 0.8 of that) and
   the scene drawn twice (the scene pass's GPU time must read at least 1.3 times more), and the particles twice as
