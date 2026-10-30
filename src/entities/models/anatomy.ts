@@ -321,10 +321,12 @@ export function wristAngles(q: THREE.Quaternion, left: boolean): { pronation: nu
 export const GRIPPED_FLEXION = [-70, 30] as const;
 
 /** the hand turned on its forearm (twist · swing) with the forearm's turn and the wrist's bend each within range (its
- *  flexion within `flexion`), into `out`; the degrees it was outside them */
-export function clampWrist(q: THREE.Quaternion, left: boolean, out: THREE.Quaternion, flexion: readonly [number, number] = ROM['wrist.flexion']): number {
+ *  flexion within `flexion`; each `inside` degrees short of its ends), into `out`; the degrees it was outside them */
+export function clampWrist(q: THREE.Quaternion, left: boolean, out: THREE.Quaternion, flexion: readonly [number, number] = ROM['wrist.flexion'], inside = 0): number {
   const w = wristAngles(q, left);
-  const [p0, p1] = ROM['forearm.pronation'], [f0, f1] = flexion, [r0, r1] = ROM['wrist.radial'];
+  const [p0, p1] = ROM['forearm.pronation'].map((end, i) => end + (i ? -inside : inside));
+  const [f0, f1] = flexion.map((end, i) => end + (i ? -inside : inside));
+  const [r0, r1] = ROM['wrist.radial'].map((end, i) => end + (i ? -inside : inside));
   const p = Math.max(p0, Math.min(p1, w.pronation)), f = Math.max(f0, Math.min(f1, w.flexion)), r = Math.max(r0, Math.min(r1, w.radial));
   const by = Math.abs(p - w.pronation) + Math.abs(f - w.flexion) + Math.abs(r - w.radial);
   if (!by) { out.copy(q); return 0; }

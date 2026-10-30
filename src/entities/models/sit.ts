@@ -5,6 +5,7 @@
 import * as THREE from 'three';
 import type { SitState } from '../../types';
 import { reachArm, type Joints } from './rig';
+import { clampWrist } from './anatomy';
 import { groundHeight } from '../../world/ground';
 import { tunable } from '../../core/tuning';
 import { SEAT } from '../../world/seats';
@@ -59,6 +60,8 @@ export interface RestTurn { roll: number[]; bend: number[] }
 
 /** The leg chain's angles (rad): the thigh forward from straight down, the knee's bend, the ankle's. */
 const _leg = { thigh: 0, knee: 0, ankle: 0 };
+/** how far short of its ends (degrees) a resting hand's wrist is kept */
+export const WRIST_INSIDE = 5;
 
 /**
  * The pose sat as far as `s` has him, over the pose as it stands (call after the stance and the arms, before the look and
@@ -183,6 +186,10 @@ export function restHands(
     hand.parent!.updateWorldMatrix(true, false);
     hand.parent!.getWorldQuaternion(_q).invert().multiply(_bone);
     hand.quaternion.slerp(_q, w);
+    // (and its wrist a little short of its ends: laid along the knee by a fire, it rested at the end of its bend and
+    // to the little finger's side at once, an arm held at its stops all the while he sat; a turned hand holds what it
+    // holds, which a clamp would turn in the world: the warrior's shield went 50 cm with no hand on it)
+    clampWrist(hand.quaternion, left, hand.quaternion, undefined, WRIST_INSIDE);
   }
 }
 
