@@ -356,7 +356,7 @@ export const buildForest: BiomeBuilder = (scene) => {
     buildBonfire(g, x, z, stone, bonfireBark, updaters);
     obstacles.push({ x, z, r: 0.9, h: 1 });
     breakable.add(obstacles.length - 1, 12, 0x5a4a38, groupLook(g, updaters, u0), 'ember');
-    seats.push(fireSeat(obstacles[obstacles.length - 1]));
+    seats.push(fireSeat(obstacles[obstacles.length - 1], [{ root: g }]));
   }
 
   // --- Floor obstacles: stumps, fallen logs, boulders -------------------------------
@@ -406,7 +406,7 @@ export const buildForest: BiomeBuilder = (scene) => {
     for (const u of [-1.6, 0, 1.6]) obstacles.push({ x: x + Math.cos(yaw) * u, z: z - Math.sin(yaw) * u, r: 0.55, h: 0.9 });
     breakable.add(n0, 10, 0x4a3520, meshLook(...parts), 'wood');
     // (sat on along its middle, a little past its top on the side sat on: the fungus and the ends left out)
-    seats.push(lengthSeat(x, z, yaw, 1.4, 0.22, obstacles.slice(n0), parts.slice(0, 3)));
+    seats.push(lengthSeat(x, z, yaw, 1.4, 0.22, obstacles.slice(n0), parts.slice(0, 3), parts.map((root) => ({ root }))));
   }
 
   const boulderSpots = [[24, 0.75, 1.1], [16, 2.75, 0.8], [23, 3.6, 1.2], [13, 5.2, 0.7], [24, 5.2, 1.0], [8, 3.9, 0.6], [17, 1.55, 0.7]];
@@ -418,7 +418,8 @@ export const buildForest: BiomeBuilder = (scene) => {
     obstacles.push({ x, z, r: s * 0.95, h: s * 1.05 });
     breakable.add(obstacles.length - 1, 6 + s * 4, 0x6a7060, instanceLook(boulders, i));
     // (a stone of a seat's height, sat on at its rim: a smaller one is a step, a bigger one a ledge)
-    if (s >= 0.6 && s <= 0.8) seats.push(stoneSeat(obstacles[obstacles.length - 1], s * 0.7, [boulders]));
+    const stone = obstacles[obstacles.length - 1];
+    if (s >= 0.6 && s <= 0.8) seats.push(stoneSeat(stone, s * 0.7, [boulders], [{ root: boulders, instance: i }]));
   });
   boulders.castShadow = boulders.receiveShadow = true;
   boulders.name = 'boulders';

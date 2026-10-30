@@ -128,6 +128,8 @@ export async function buildArena(scene: THREE.Scene, renderer: THREE.WebGLRender
     get obstacles() { return active.obstacles; },
     /** what an idle hero sits on (none while the hall is shown) */
     get seats(): readonly Seat[] { return hallShown ? [] : active.seats ?? []; },
+    /** every biome's seats, shown or not (their outlines warmed at load) */
+    allSeats(): Seat[] { return BIOME_IDS.flatMap((id) => biomes[id].b.seats ?? []); },
     /** the breakable ones (`world/destructible.ts`) */
     get props() { return active.props; },
     /** every biome's props whole again (a new run, the lobby) */

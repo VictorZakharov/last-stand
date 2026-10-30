@@ -17,6 +17,7 @@ import { G } from '../../../src/state';
 import { groundHeight } from '../../../src/world/ground';
 import { seatSpot, seatTopAt, type Seat } from '../../../src/world/seats';
 import { SIT } from '../../../src/entities/sitting';
+import { outlinedLook } from '../../../src/ui/overlay/outline';
 import type { BiomeId } from '../../../src/data/biomes';
 import type { Fixture, Lab, Pictured, Report, ViewName } from './lab';
 import { ARM_LIMITS, bodyBreaches, grippingRanges, grippingSides } from './range';
@@ -48,6 +49,10 @@ export interface SitOptions {
 const RATE = 60;
 /** frames E may take to set him off to sit or get him up, and the longest he may take to sit by it (s) */
 const KEY_TAKES = 2;
+/** how long the mouse is over a seat before E is first pressed, short of `SIT.look` (s), and how high over the floor
+ *  a fire is pointed at (m) */
+const KEY_EARLY = 1.5;
+const FIRE_AIM = 0.4;
 const SIT_KEY_MOST = 15;
 const DEG = 180 / Math.PI;
 /** how far off the seat he stands to begin with (m), and how long he has to have sat by (s) */
@@ -317,7 +322,7 @@ async function trySeat(lab: Lab, c: SeatCase, fixture: Fixture, options: SitOpti
   }
   judgeWatch(c.name, watch, out);
   for (const line of watch.carried.traced) out.text.push(`    ${line}`);
-  await sitKey(lab, c.name, out);
+  await sitKey(lab, c, seat, out);
 }
 
 /** Whether `done` comes true within `frames` frames, stepped one at a time until it does. */
@@ -329,18 +334,49 @@ async function within(lab: Lab, done: () => boolean, frames: number): Promise<bo
   return done();
 }
 
-/** E pressed standing free sets him off to the seat at once, with no idle wait, and pressed sat gets him up: from
- *  play, "lets add E to sit ... to speed up the wait of 6 sec". */
-async function sitKey(lab: Lab, name: string, out: Out): Promise<void> {
-  const { player } = lab;
+/** The point of a seat the mouse is put over: its middle, on its top (a fire's a little over the floor). */
+function seatMiddle(seat: Seat): THREE.Vector3 {
+  const x = (seat.ax + seat.bx) / 2, z = (seat.az + seat.bz) / 2;
+  const y = seat.ground ? groundHeight(x, z) + FIRE_AIM : seatTopAt(seat, x, z);
+  return new THREE.Vector3(x, y, z);
+}
+
+/** Whether the seat is outlined white round its first target. */
+function seatLit(seat: Seat): boolean {
+  const look = outlinedLook();
+  return !!look && look.root === seat.outline[0]?.root && look.color === 0xffffff;
+}
+
+/** E sits him on the seat the mouse rests on and gets him up: "E sits only when pointed at a sittable object for
+ *  more than 2 sec", "it should highlight the object with outline ... but white". The mouse over it a while short of
+ *  that: no outline, and E does nothing; over it past that: outlined, pictured, and E sets him off at once, with no
+ *  idle wait; sat, E gets him up. */
+async function sitKey(lab: Lab, c: SeatCase, seat: Seat, out: Out): Promise<void> {
+  const { player } = lab, name = c.name;
   await lab.until(() => !player.casting && !player.channel && !player.sitting.pose, 5 * RATE, 'he was still busy');
+  // (the mouse left over it from here to the next set-up, which puts it back ahead of him)
+  lab.aim = seatMiddle(seat);
+  await lab.step(Math.round(KEY_EARLY * RATE));
+  if (seatLit(seat)) out.problems.push(`sit: the ${name} was outlined after ${KEY_EARLY} s pointed at`);
   await lab.step(1, () => ({ keys: ['e'] }));
-  // (as he comes free, within the time a press waits: just after a held attack his aim is still held a moment)
-  const going = await within(lab, () => player.sitting.walking || player.sitting.placed, SIT.asked * RATE + KEY_TAKES);
-  if (!going) {
-    out.problems.push(`sit: by the ${name}, E pressed standing free didn't set him off to sit`);
+  await lab.step(KEY_TAKES);
+  if (player.sitting.walking || player.sitting.placed) {
+    out.problems.push(`sit: by the ${name}, E set him off to sit after ${KEY_EARLY} s pointed at`);
     return;
   }
+  const lit = await within(lab, () => seatLit(seat), Math.round((SIT.look - KEY_EARLY) * RATE) + KEY_TAKES);
+  if (!lit) {
+    out.problems.push(`sit: the ${name} wasn't outlined white after ${SIT.look} s pointed at`);
+    return;
+  }
+  out.moments.push(await lab.screen(`${name}: pointed at, outlined`));
+  await lab.step(1, () => ({ keys: ['e'] }));
+  const going = await within(lab, () => player.sitting.walking || player.sitting.placed, KEY_TAKES);
+  if (!going) {
+    out.problems.push(`sit: by the ${name}, E pressed pointed at it didn't set him off to sit`);
+    return;
+  }
+  if (outlinedLook()) out.problems.push(`sit: the ${name} still outlined as he set off to sit on it`);
   const sat = await lab.until(() => satWhole(player.sitting.pose), SIT_KEY_MOST * RATE, `sat after E by the ${name}`);
   const left = sitLeft(player.sitting.pose);
   await lab.step(1, () => ({ keys: ['e'] }));

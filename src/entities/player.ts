@@ -14,7 +14,7 @@ import { BLOCK, COOP, FULL_DRAW } from '../data/balance';
 import { SKILL_KEYS, loadLoadout, saveLoadout, defaultLoadout, usableWith, resolveFor, weaponStyle, forStyle, type Loadout, type WeaponStyle } from '../loot/loadout';
 import { groundHeight } from '../world/arena';
 import { resolveProps } from '../world/collision';
-import { input, isDown, wasPressed } from '../core/input';
+import { cursorRay, input, isDown, wasPressed } from '../core/input';
 import { flashHurt, addShake, cameraYaw, lookFacing, viewMode, viewSettled, seenFromArms } from '../core/renderer';
 import { floatText } from '../ui/floaters';
 import { particles, col } from '../fx/particles';
@@ -453,6 +453,9 @@ export class Player {
 
   // --- input & skills -------------------------------------------------------------
   handleInput(dt: number): void {
+    // (the seat the cursor rests on, outlined once E would sit him on it: none through the eyes, paused, in a wave)
+    const peace = G.mode !== 'run' || G.run?.phase !== 'fighting';
+    if (this.local) this.sitting.point(this, this.eyes || this.idle ? null : cursorRay(), dt, peace);
     if (this.idle) {
       // the co-op pause menu: stand still and let go of any channel
       this.goal.set(0, 0, 0);

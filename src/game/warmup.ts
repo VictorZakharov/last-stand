@@ -31,7 +31,7 @@ import { riftBoltSamples } from '../fx/riftBolts';
 import { vineSamples } from '../fx/vine';
 import { swingTrailSamples } from '../fx/swingTrail';
 import { groundSamples } from './groundItems';
-import { compileOutline, warmOutline } from '../ui/overlay/outline';
+import { compileOutline, warmOutline, type OutlineTarget } from '../ui/overlay/outline';
 import { labelsScene } from '../ui/overlay/layer';
 import { isWarm, markWarm, wanted, warming, warmingRuns, type Need } from './warm';
 import type { Model } from '../types';
@@ -169,8 +169,10 @@ export function compileTheLobby(): void {
   compileOutline([]);
 }
 
-/** the lobby's dummies' bodies, which its warm-up outlines */
+/** the lobby's dummies' bodies, which its warm-up outlines, and every biome's seats, outlined as E would sit on
+ *  them */
 const dummies = (): THREE.Object3D[] => G.enemies.map((e) => e.obj);
+const outlined = (): (THREE.Object3D | OutlineTarget)[] => [...dummies(), ...G.arena.allSeats().flatMap((s) => s.outline)];
 
 /** What the lobby shows and can do, warmed before it shows (the lobby's dummies already stand in it, its effects,
  *  loot and skills made with its hero: `compileTheLobby`); the fight's foes built meanwhile (`buildAhead`). With
@@ -187,7 +189,7 @@ export async function warmLobby(heroes = false): Promise<void> {
   const leaveOut = otherBiomes().map((id) => G.arena.groupOf(id));
   const start = performance.now();
   const warming = warmUp(G.renderer, G.scene, G.camera, sceneTarget(), {
-    objects: extra, leaveOut, before: mapsArrived, also: () => compileOutline(dummies()),
+    objects: extra, leaveOut, before: mapsArrived, also: () => compileOutline(outlined()),
   });
   // (its compile is made as it's called, the scene walked before the foes are built)
   const ahead = buildAhead(theFight());
@@ -200,7 +202,7 @@ export async function warmLobby(heroes = false): Promise<void> {
     markWarm('heroes');
   }
   // (the outline a held skill draws round a foe: the dummies' meshes drawn into its mask)
-  warmOutline(dummies());
+  warmOutline(outlined());
   clearEffects(); clearLights(); particles.clear();
   await ahead;
 }
