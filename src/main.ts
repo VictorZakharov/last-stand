@@ -49,7 +49,7 @@ import { initPerfHud, perfBeginFrame, perfEndFrame, perfSplit, perfLap, perfCloc
 import { initNetHud } from './ui/netHud';
 import { drawBattleLog, initBattleLog } from './ui/battleLog';
 import { initAltCursor, updateAltCursor } from './ui/altCursor';
-import { compileTheBiome, compileTheLobby, warmLobby, warmTheRest } from './game/warmup';
+import { compileTheBiome, compileTheLobby, warmedHereBefore, warmLobby, warmTheRest } from './game/warmup';
 import { hurry, isAllWarm, isWarming, whenWarm } from './game/warm';
 import { initReadying, READYING } from './ui/readying';
 import { holdQuality, initQuality, sampleQuality } from './core/quality';
@@ -173,9 +173,13 @@ async function boot() {
   initTraining(firstVisit);
   if (!firstVisit) lobbyLaidOut();
   // the lobby's shaders compiled before it shows, the fight's and the other heroes' behind it (game/warmup.ts); on a
-  // first visit every hero is shown on the screen it opens on: theirs warmed with the lobby's, under the loading screen
-  if (firstVisit) await loadingStep('Gathering the heroes', 0.6);
-  await warmLobby(firstVisit);
+  // first visit every hero is shown on the screen it opens on: theirs warmed with the lobby's, under the loading screen.
+  // So too where this build is new to the machine (the first visit after a deploy): its heroes' programs aren't in the
+  // GPU's cache, and asked for as the hero neared the hall of heroes they were compiled at once, holding the village
+  // up 0.5 to 0.9 s (from play, "lag when entering hall of heroes")
+  const heroesNow = firstVisit || !warmedHereBefore();
+  if (heroesNow) await loadingStep('Gathering the heroes', 0.6);
+  await warmLobby(heroesNow);
   const rest = warmTheRest(loadingLeft);
   if (firstVisit) {
     openHeroSelect(G.player.cls.id, true);
