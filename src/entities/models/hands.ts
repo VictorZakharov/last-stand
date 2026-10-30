@@ -354,8 +354,10 @@ export function fistTurn(h: Hand, dir: THREE.Vector3, up: THREE.Vector3, out: TH
  */
 /** A hand's fingers let go of what they're wrapped round by `by` (0 to 1: open), their bends eased towards straight:
  *  a fist loosened for a blade to swing round in it. */
-export function loosen(h: Hand, by: number): void {
-  for (const f of h.f) for (const j of f.j) j.rotation.x *= 1 - by;
+export function loosen(h: Hand, by: number, index = by): void {
+  h.f.forEach((f, i) => {
+    for (const j of f.j) j.rotation.x *= 1 - (i === 0 ? index : by);
+  });
 }
 
 export function fistOn(h: Hand, handle: THREE.Object3D, r: number): { off: number; along: number; curl: number } {
