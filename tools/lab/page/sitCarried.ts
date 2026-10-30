@@ -14,6 +14,7 @@
 import * as THREE from 'three';
 import type { Fist } from '../../../src/types';
 import type { Lab } from './lab';
+import { FIST_OPEN } from './range';
 
 /** a palm this near a piece holds it (m): the fingers round a handle, a strap's width */
 const HELD_WITHIN = 0.06;
@@ -23,9 +24,6 @@ export const PALM_AT = new THREE.Vector3(0, -0.06, -0.02);
  *  fist round its grip: 0.27). Judged by which way the palm faced, a fist round a grip read 0.76 along the blade, as
  *  much as a palm laid on a slanting pommel */
 const END_SHARE = 0.1;
-/** a fist with its fingers curled less than this (rad, their joints' mean bend) is open, gripping nothing: as the eyes'
- *  measure has it (`eyes.ts`) */
-export const FIST_OPEN = 0.5;
 /** the hands in the order `palmsOf` gives their palms */
 const HANDS = ['left', 'right'] as const;
 /** a mesh moving less than this a frame is still (m) */
@@ -398,12 +396,14 @@ function palmsOf(lab: Lab): THREE.Vector3[] {
 /** each piece's box in its own frame, every mesh of it */
 const piecesBoxes = new WeakMap<THREE.Object3D, THREE.Box3>();
 
-/** Whether a hand (its palm at `palm`) grips a piece: on it, round it rather than resting on its end, and not open
- *  where the game tells that hand's fist (`fists`). */
+/** Whether a hand (its palm at `palm`) grips a piece: on it, round it rather than resting on its end, and, on a game
+ *  that tells its fists (`fists`), with a fist for that hand curled `FIST_OPEN` or more. (A hand with no fist told
+ *  read as gripping: the ranger's opening off his bow laid on the floor "slid" 20 cm through it.) */
 function gripsIt(part: Part, palm: THREE.Vector3, hand: Fist['hand'], fists?: readonly Fist[]): boolean {
   if (palmOn(part.mesh, palm) >= HELD_WITHIN || onItsEnd(part.group, palm)) return false;
-  const fist = fists?.find((each) => each.hand === hand);
-  return !fist || fist.curl >= FIST_OPEN;
+  if (!fists) return true;
+  const fist = fists.find((each) => each.hand === hand);
+  return !!fist && fist.curl >= FIST_OPEN;
 }
 
 /** Whether a palm rests on a piece's end, as on a pommel's top: within `END_SHARE` of either end of its length. */
