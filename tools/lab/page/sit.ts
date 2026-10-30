@@ -190,7 +190,8 @@ interface Out {
   moments: Pictured[];
   /** the canary's reads of its own pieces: how far what it pushed went with no hand on it (m), and whether what it
    *  turned in his hand read as held otherwise (each on its own, so a real fault can't pass for it) */
-  canary?: { pushed: number; turned: boolean; twisted: number; pinned: boolean };
+  /** what each canary read; `gripped`: whether a palm gripped anything to turn, sat */
+  canary?: { pushed: number; turned: boolean; twisted: number; gripped: boolean; pinned: boolean };
 }
 
 /** What's followed on a seat from its set-up until he's up again: what he carries, his legs through his skirts (the
@@ -235,7 +236,7 @@ export async function sit(lab: Lab, options: SitOptions): Promise<Report> {
 
 /** The canary on one seat: his body raised off it as he sits must be caught as sitting on air. */
 async function canaryOn(lab: Lab, c: SeatCase, fixture: Fixture, out: Out): Promise<Report> {
-  out.canary = { pushed: 0, turned: false, twisted: 0, pinned: false };
+  out.canary = { pushed: 0, turned: false, twisted: 0, gripped: false, pinned: false };
   await trySeat(lab, { ...c, asks: [{ what: 'step', held: false }] }, fixture, { canary: true }, out);
   out.canary.pinned = pinnedCanary(bodyBreaches(lab.joints).angles, ARM_LIMITS);
   const problems: string[] = [];
@@ -250,12 +251,15 @@ async function canaryOn(lab: Lab, c: SeatCase, fixture: Fixture, out: Out): Prom
       caught: out.canary.pushed >= pushedTo,
     },
     { what: 'what he holds turned in his hand as he gets up', caught: out.canary.turned },
-    {
-      what: `what he holds turned slowly in his hand, sat (${out.canary.twisted.toFixed(0)}° read)`,
-      caught: out.canary.twisted > IN_HAND_MOST * 2,
-    },
     { what: 'his right arm held at its stops', caught: out.canary.pinned },
   ];
+  // (sat with a two-hander, his palm rests on its pommel and grips nothing: nothing is in a hand to turn in it)
+  if (out.canary.gripped) {
+    canaries.push({
+      what: `what he holds turned slowly in his hand, sat (${out.canary.twisted.toFixed(0)}° read)`,
+      caught: out.canary.twisted > IN_HAND_MOST * 2,
+    });
+  } else out.text.push('  canary, what he holds turned slowly in his hand, sat: not run, nothing gripped sat');
   for (const canary of canaries) {
     out.text.push(`  canary, ${canary.what}: ${canary.caught ? 'caught' : 'MISSED'}`);
     if (!canary.caught) problems.push(`sit: the canary (${canary.what}) was missed`);
@@ -653,6 +657,7 @@ async function readSat(lab: Lab, options: SitOptions, name: string, out: Out, wa
     if (canary) j.body.position.y += CANARY_RAISE / j.root.scale.x;
     const pushed = canary ? pushOutOfHand(lab, frame) : null;
     const twisted = canary ? twistInHand(lab, frame) : null;
+    if (twisted && out.canary) out.canary.gripped = true;
     const read = readNow(lab);
     into.observe(lab, `${frame}`);
     watchFrame(lab, name, `sat, frame ${frame}`, watch, skirts);
