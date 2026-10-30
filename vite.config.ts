@@ -24,6 +24,9 @@ function buildInfo(): { ref: string; time: string } {
   return { ref: `${pr}${sha ? sha.slice(0, 7) : 'local'}`, time: new Date().toISOString() };
 }
 
+/** three's files only WebGPURenderer uses: its build, the node language's, and the addons made of nodes */
+const WEBGPU_PART = /three\.(webgpu|tsl)|jsm[\\/](tsl|pipelines)[\\/]/;
+
 export default defineConfig({
   base: './',              // relative asset paths so dist/ works on any static host (e.g. GitHub Pages)
   plugins: [ezTreeTextures(), pwa()],
@@ -35,7 +38,8 @@ export default defineConfig({
   build: {
     chunkSizeWarningLimit: 1200,
     rollupOptions: {
-      output: { manualChunks: (id: string) => (id.includes('node_modules/three') ? 'three' : undefined) },
+      // (three's WebGPU build and its node addons apart, fetched only by `?renderer=webgpu`: core/webgpu.ts)
+      output: { manualChunks: (id: string) => (!id.includes('node_modules/three') ? undefined : WEBGPU_PART.test(id) ? 'three-webgpu' : 'three') },
     },
   },
   server: { port: 5173, open: false },

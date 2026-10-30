@@ -2,13 +2,65 @@
 
 Asked when three r187 (#330) brought GPU-driven meshlet drawing (`MeshletDrawingPipeline`,
 `VisibilityBufferDrawingPipeline`, mrdoob/three.js#35191, merged 2026-10-29). These pipelines run only on
-`WebGPURenderer`. Its WebGL backend falls back to the standard pipeline. This is an estimate, not a port. It
-records the state on 2026-10-30, three 0.185.1 on `main`.
+`WebGPURenderer`. Its WebGL backend falls back to the standard pipeline. It began as an estimate (three 0.185.1
+on `main`, 2026-10-30), and the port began the same evening on #330's three 0.187.
 
-## The short answer
+## Where the port stands (2026-10-30, evening)
+
+The day-count estimate further down was far too high. The owner pointed out the whole game took about a month,
+and the first session of the port, under two hours, got this far:
+
+**Working:**
+
+- **The game boots and plays on `WebGPURenderer` behind `?renderer=webgpu`.** WebGL stays the default, unchanged
+  (`?renderer=webgpu-gl` is three's WebGL 2 backend). In a forest run on WebGPU:
+  - the hall of heroes, the lobby in both biomes, and a run in the forest all draw
+  - the heroes, props, trees, shadows and bloom
+  - the foes walking and fighting
+- **The renderer** (`core/webgpu.ts`): made and given what the WebGL code around it asks of a `WebGLRenderer`;
+  its post chain is a node pipeline (the scene's pass plus `bloom()`, tone mapped on the way out).
+- **The crowds are ported to TSL** (`entities/models/crowdNodes.ts`): each body is skinned from its row of the
+  float texture by `instanceIndex`, its normals with it, and each material's glow is the body's own.
+- **The WebGL-only machinery is skipped under WebGPU:** program pinning, link waits and fences, the env maps'
+  compiles, the shadow map's wrap, the perf overlay's GPU timers, HDR.
+- **Three's meshlet pipeline is behind `&meshlets=1`.** In the forest lobby it takes the static props: the
+  stumps (460k triangles over two frames' passes), logs, roots, the gates' roots and arches, bonfire stones and
+  the heroes' rigid pieces. Skinned meshes and every `ShaderMaterial` stay on the standard path.
+
+**Not verified:**
+
+- Whether the meshlet pipeline really draws those props as clusters: its own statistics (`info.clusters`) read 0,
+  and `renderer.info` shows the same 436k triangles and 379 draws with and without it.
+- No timing is trustworthy: the machine was busy with other work. Under the standard pipeline the GPU's
+  timestamps read about 1.2 ms for the lobby, which looks low enough to question.
+
+**Not ported yet** (each shows as missing, not broken):
+
+- **Every `ShaderMaterial`:** fires, particles and skill effects, the gates' membranes, aim lasers, swing trails.
+  `glslFn` doesn't run on WebGPU.
+- **The world's overlays** (damage numbers, bars, names) and the outline:
+  - A first try is in the history (commit, then revert).
+  - Its render after the pipeline blacked out the frame.
+  - The atlas's canvas reached the GPU as a 1 px wide texture.
+- **The kit's looks**, all GLSL `onBeforeCompile`:
+  - dissolve, frost, char, hit flash, near glow, see-through
+  - the floors' relief and dampness (the dais draws as a dark square)
+  - triplanar, fur sway, dual-quaternion hands
+- **The grade:** exposure areas, glare, low Health, HDR, sanitize.
+- **Other gaps:**
+  - The warm-up: no `compileAsync` yet, so pipelines are made as they're first drawn.
+  - The shadow-only casters (`world/culling.ts`).
+  - The perf overlay's GPU timing.
+  - The lab.
+- **Bundle size:** rolldown still puts three's WebGPU build into the `three` chunk that WebGL players download
+  (1.59 MB, with only 69 kB of addons split out; that chunk's size on `main` wasn't measured). This must be
+  fixed before it leaves draft.
+
+## The short answer (the estimate as first written)
 
 - **A full move to `WebGPURenderer` + TSL is about 55–85 agent-days** (about 67 expected). It would be a rewrite
-  of every shader we own, the post chain, the warm-up and a quarter of the lab.
+  of every shader we own, the post chain, the warm-up and a quarter of the lab. (Far too high: the section above
+  says how far a first session got.)
 - **The meshlet pipeline would buy little on a desktop frame today.**
   - The 38-foe forest frame is 2.07 M triangles. Its GPU time barely follows them: taking the 38 foes out
     removes 1.2 M triangles and saves 1.4 ms of the 10.4 ms GPU frame.
