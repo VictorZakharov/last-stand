@@ -1,6 +1,7 @@
 // Optional performance overlay: FPS history graph, frame / CPU / GPU timings and
 // renderer stats. Off by default; toggled from the pause menu, persisted in a cookie.
 import * as THREE from 'three';
+import { WEBGPU } from '../core/webgpu';
 import { G } from '../state';
 import { particles } from '../fx/particles';
 import { readCookie, writeCookie } from '../core/cookies';
@@ -81,6 +82,14 @@ export function initPerfHud(r: THREE.WebGLRenderer): void {
   el = $('#perf');
   // postprocessing issues several render calls per frame: count them all, reset per frame
   renderer.info.autoReset = false;
+  // (on WebGPU no GPU timing yet, its timestamp queries: core/webgpu.ts)
+  if (WEBGPU) {
+    gpuName = 'WebGPU';
+    el.onclick = copyReport;
+    watchLongFrames();
+    setPerfHud(readCookie(COOKIE) === '1', false);
+    return;
+  }
   gl = renderer.getContext() as WebGL2RenderingContext;
   timerExt = gl.getExtension('EXT_disjoint_timer_query_webgl2');
   gpuMarks.mark = gpuMark;

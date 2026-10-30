@@ -171,6 +171,9 @@ export function cullWhileDrawn(scene: THREE.Scene, renderer: THREE.WebGLRenderer
     cullFor(args[2]);
   };
   const shadows = renderer.shadowMap;
+  // (WebGPU's renderer draws its shadow maps as passes of its own, with no `render` to wrap: its shadow-only
+  // casters stay hidden there for now, docs/research/webgpu.md)
+  if (!shadows.render) return;
   const draw = shadows.render.bind(shadows);
   shadows.render = (lights, scene, camera) => {
     // (a biome's still shadows draw its own casters alone: a hero's shadow cast as one, shown for them, stayed in the
