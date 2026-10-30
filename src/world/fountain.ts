@@ -5,7 +5,8 @@
 // more of a mirror at a glancing angle, its normal bent by rings running out from where water falls on it; the basin's
 // floor under it is lit by caustics drifting over it. The falling water is a streaked picture scrolled along thin
 // shells and tubes, the foam a picture turning where it lands: their textures' offsets and the game's clock are all
-// that move, so nothing compiles after the village's warm-up.
+// that move, so nothing compiles after the village's warm-up. What of its light is the sky's (the caustics, the falling
+// water's glow) follows the hour (`FountainLight`): by night it's lit by the lamps alone.
 import * as THREE from 'three';
 import { canvasOf, ctx2d } from '../core/textures';
 import { mulberry } from '../util';
@@ -29,8 +30,38 @@ const STONE_TILE = 0.6;
 /** what the fountain is built of: the village's own stone */
 export interface FountainMats { stone: THREE.Material; coping: THREE.Material }
 
+/** the falling water's and the foam's glow at full day (the sky's light scattered through them), and the least of
+ *  their glow and of the caustics by night (a share of the day's): from play, "I dont think water reflects light
+ *  correctly", its curtains and its floor's web shone cyan at midnight */
+const FALLING_GLOW = 0x2a3c42;
+const NIGHT_LEAST = 0.06;
+/** the share of the falling water's and the foam's whiteness left by night: a sheet of water scatters little of a
+ *  light that isn't the sky's, and near white it took the moon and the lamps as paint does */
+const NIGHT_WHITE = 0.3;
+/** the share of the water's tint and its pale floor's colour left by night: lit by the night's blue sky light, the
+ *  basin read as a lit cyan disc (a review: "bright, opaque cyan that looks lit from inside") */
+const NIGHT_POOL = 0.25;
+
+/** the share of the sky's light the water mirrors (`mirroredSky`): the environment is the day's sky whatever the hour,
+ *  and the scene's intensity for it, which three sets on every material taking it, is the village's at night too, so
+ *  by night its mirror of it shone cyan, the lamps' glints lost in it */
+let skyLight = { value: 1 };
+
+/** `shader`'s light from the environment (what it mirrors and what it's lit by from round it) scaled by `skyLight`. */
+function mirroredSky(shader: THREE.WebGLProgramParametersWithUniforms): void {
+  shader.uniforms.uSkyLight = skyLight;
+  shader.fragmentShader = shader.fragmentShader
+    .replace('#include <common>', '#include <common>\nuniform float uSkyLight;')
+    .replace('#include <lights_fragment_maps>', '#include <lights_fragment_maps>\nradiance *= uSkyLight;\n'
+      + 'iblIrradiance *= uSkyLight;');
+}
+
+/** The fountain's light set for how much of the day's there is (0 by night, 1 by full day). */
+export type FountainLight = (day: number) => void;
+
 /** The fountain at (0, 0) of `scene`, an obstacle round its basin; its water moving by `updaters`. */
-export function buildFountain(scene: THREE.Object3D, M: FountainMats, obstacles: Obstacle[], updaters: Updater[]): void {
+export function buildFountain(scene: THREE.Object3D, M: FountainMats, obstacles: Obstacle[],
+  updaters: Updater[]): FountainLight {
   const g = new THREE.Group();
   g.name = 'fountain';
   scene.add(g);
@@ -51,8 +82,12 @@ export function buildFountain(scene: THREE.Object3D, M: FountainMats, obstacles:
   }
   // the floor under the water, its caustics, and the water
   const inside = r - rim;
-  flat(g, octagon(inside), floor, causticFloor(time));
-  flat(g, octagon(inside), water, waterMaterial(time, 0x3d6f78));
+  const sunlit = { value: 1 };
+  skyLight = sunlit;
+  const floorMat = causticFloor(time, sunlit);
+  flat(g, octagon(inside), floor, floorMat);
+  const pools = [waterMaterial(time, 0x3d6f78), waterMaterial(time, 0x3d6f78), waterMaterial(time, 0x3d6f78)];
+  flat(g, octagon(inside), water, pools[0]);
   // the pedestal, its four spouts
   lathe(g, [[0.55, floor], [0.42, 0.22], [0.26, 0.34], [0.22, 0.9], [0.3, 1.0], [0.24, 1.08], [0.2, BOWL.foot]], M.stone, 32);
   for (let k = 0; k < 4; k++) {
@@ -65,12 +100,12 @@ export function buildFountain(scene: THREE.Object3D, M: FountainMats, obstacles:
   // the middle bowl, scalloped round its rim, and its water
   scallop(lathe(g, [[0.2, BOWL.foot], [0.5, BOWL.foot + 0.06], [BOWL.r - 0.05, BOWL.water - 0.02], [BOWL.r, BOWL.water + 0.06],
     [BOWL.r - 0.07, BOWL.water + 0.06], [BOWL.r - 0.1, BOWL.water - 0.04], [0, BOWL.water - 0.04]], M.coping, 64), 0.35);
-  flat(g, circle(BOWL.r - 0.1), BOWL.water, waterMaterial(time, 0x3d6f78));
+  flat(g, circle(BOWL.r - 0.1), BOWL.water, pools[1]);
   // the top bowl on its stem, its water, the finial over it
   lathe(g, [[0.14, BOWL.water - 0.04], [0.1, BOWL.water + 0.2], [0.09, TOP.foot - 0.1], [0.16, TOP.foot]], M.stone, 16);
   scallop(lathe(g, [[0.16, TOP.foot], [0.3, TOP.foot + 0.05], [TOP.r - 0.03, TOP.water - 0.01], [TOP.r, TOP.water + 0.04],
     [TOP.r - 0.05, TOP.water + 0.04], [TOP.r - 0.07, TOP.water - 0.03], [0, TOP.water - 0.03]], M.coping, 48), 0.2);
-  flat(g, circle(TOP.r - 0.07), TOP.water, waterMaterial(time, 0x3d6f78));
+  flat(g, circle(TOP.r - 0.07), TOP.water, pools[2]);
   lathe(g, [[0.09, TOP.water - 0.03], [0.07, TOP.water + 0.08], [0.12, TOP.water + 0.18], [0.13, TOP.water + 0.26],
     [0.08, TOP.tip - 0.08], [0.04, TOP.tip - 0.02], [0, TOP.tip]], M.coping, 16);
   // the falling water: curtains over each bowl's rim, the jet from the finial's tip, the spouts' arcs
@@ -84,7 +119,7 @@ export function buildFountain(scene: THREE.Object3D, M: FountainMats, obstacles:
   for (let k = 0; k < 4; k++) g.add(arc(k * Math.PI / 2, jetMat));
   // the foam where the curtain strikes the basin, and where each arc lands, turning slowly
   const foamMat = new THREE.MeshStandardMaterial({
-    color: 0xeef6f8, emissive: 0x2a3c42, roughness: 0.3, alphaMap: foamTexture(), transparent: true, opacity: 0.6,
+    color: 0xeef6f8, emissive: FALLING_GLOW, roughness: 0.3, alphaMap: foamTexture(), transparent: true, opacity: 0.6,
     depthWrite: false, side: THREE.DoubleSide,
   });
   const foam = new THREE.Mesh(new THREE.RingGeometry(BOWL.r + 0.12, BOWL.r + 0.75, 48, 1).rotateX(-Math.PI / 2), foamMat);
@@ -113,6 +148,17 @@ export function buildFountain(scene: THREE.Object3D, M: FountainMats, obstacles:
     foam.rotation.y = t * 0.15;
     splashes.forEach((s, k) => { s.rotation.y = -t * 0.6 + k; });
   });
+  const whites = [curtain, jetMat, foamMat].map((m) => m.color.clone());
+  const tints = [...pools, floorMat].map((m) => m.color.clone());
+  return (day) => {
+    const lit = NIGHT_LEAST + (1 - NIGHT_LEAST) * day;
+    const white = NIGHT_WHITE + (1 - NIGHT_WHITE) * day;
+    const tint = NIGHT_POOL + (1 - NIGHT_POOL) * day;
+    [curtain, jetMat, foamMat].forEach((m, k) => m.color.copy(whites[k]).multiplyScalar(white));
+    [...pools, floorMat].forEach((m, k) => m.color.copy(tints[k]).multiplyScalar(tint));
+    sunlit.value = lit;
+    for (const m of [curtain, jetMat, foamMat]) m.emissiveIntensity = lit;
+  };
 }
 
 /** A solid turned about y from its profile's points (radius, height), from `start` round. */
@@ -200,9 +246,10 @@ function arc(a: number, m: THREE.Material): THREE.Mesh {
  */
 function waterMaterial(time: { value: number }, colour: number): THREE.MeshStandardMaterial {
   const m = new THREE.MeshStandardMaterial({
-    color: colour, roughness: 0.04, metalness: 0.1, transparent: true, depthWrite: false,
+    color: colour, roughness: 0.1, metalness: 0.1, transparent: true, depthWrite: false,
   });
   m.onBeforeCompile = (shader) => {
+    mirroredSky(shader);
     shader.uniforms.uRippleTime = time;
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', '#include <common>\nvarying vec2 vRipple;')
@@ -229,15 +276,17 @@ function waterMaterial(time: { value: number }, colour: number): THREE.MeshStand
  * The basin's floor: pale stone with the light the water above focuses drifting over it, a web of bright lines that
  * shifts as the ripples do (two warped grids of waves, their troughs' meeting lit), on the game's clock.
  */
-function causticFloor(time: { value: number }): THREE.MeshStandardMaterial {
+function causticFloor(time: { value: number }, sunlit: { value: number }): THREE.MeshStandardMaterial {
   const m = new THREE.MeshStandardMaterial({ color: 0x8f9a92, roughness: 0.85 });
   m.onBeforeCompile = (shader) => {
     shader.uniforms.uCausticTime = time;
+    shader.uniforms.uCausticLight = sunlit;
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', '#include <common>\nvarying vec2 vFloor;')
       .replace('#include <begin_vertex>', '#include <begin_vertex>\nvFloor = position.xz;');
     shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', '#include <common>\nvarying vec2 vFloor;\nuniform float uCausticTime;')
+      .replace('#include <common>', '#include <common>\nvarying vec2 vFloor;\nuniform float uCausticTime;\n'
+        + 'uniform float uCausticLight;')
       .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
         {
           float t = uCausticTime;
@@ -250,7 +299,7 @@ function causticFloor(time: { value: number }): THREE.MeshStandardMaterial {
             p = p * 1.6 + vec2(1.7, 9.2);
             t *= 1.3;
           }
-          totalEmissiveRadiance += diffuseColor.rgb * light * 0.35;
+          totalEmissiveRadiance += diffuseColor.rgb * light * 0.35 * uCausticLight;
         }`);
   };
   m.customProgramCacheKey = () => 'fountain-caustics';
@@ -263,10 +312,13 @@ function fallingWater(streaks: THREE.Texture, around: number, opacity: number): 
   const map = streaks.clone();
   map.repeat.set(around, 1);
   map.needsUpdate = true;
-  return new THREE.MeshStandardMaterial({
-    color: 0xdfeef2, emissive: 0x2a3c42, roughness: 0.2, alphaMap: map, transparent: true, opacity, depthWrite: false,
+  const m = new THREE.MeshStandardMaterial({
+    color: 0xdfeef2, emissive: FALLING_GLOW, roughness: 0.85, alphaMap: map, transparent: true, opacity, depthWrite: false,
     side: THREE.DoubleSide,
   });
+  m.onBeforeCompile = mirroredSky;
+  m.customProgramCacheKey = () => 'fountain-falling';
+  return m;
 }
 
 /** The falling water's streaks: thin threads down a tile, feathered across, each broken into runs that fade in and out

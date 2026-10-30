@@ -23,6 +23,7 @@ import { foesAt } from './death';
 import * as swingTrail from '../../../src/fx/swingTrail';
 import { armsLens } from './inFrame';
 import { toLobby } from './hallMoves';
+import { holdHour } from '../../../src/game/clock';
 import { groundHeight } from '../../../src/world/ground';
 import { faceCamera } from '../../../src/core/renderer';
 
@@ -37,6 +38,8 @@ export interface DrawsOptions {
   /** in the lobby's village instead: the run the set-up starts left, no foes, the hero where `fixture` says (the
    *  square by default) */
   village?: boolean;
+  /** with `village`, the hour it's lit for (the page's own when not given) */
+  hour?: number;
   canary: boolean;
 }
 
@@ -60,13 +63,14 @@ const PASSES: Pass[] = ['scene', 'arms', 'shadow', 'other'];
 const WORLD_PASSES: Pass[] = ['scene', 'arms', 'shadow'];
 const noDraws = (): Record<Pass, number> => ({ scene: 0, arms: 0, shadow: 0, other: 0 });
 
-/** What one geometry cost the frame: its draws in each pass, the vertices and triangles each drew, those of them
- *  outside the view of the pass that drew them, in each pass, and what drew it. */
+/** What one geometry cost the frame: its draws in each pass, the most vertices and triangles a draw of it drew, the
+ *  triangles it drew in each pass and those of them outside the view of the pass that drew them, and what drew it. */
 interface Drawn {
   geometry: THREE.BufferGeometry;
   draws: Record<Pass, number>;
   vertices: number;
   triangles: number;
+  drew: Record<Pass, number>;
   off: Record<Pass, number>;
   objects: Set<THREE.Object3D>;
   material: THREE.Material;
@@ -149,16 +153,22 @@ function recordDraws(): { record: FrameDraws; stop(): void } {
     const pass = passOf(camera, scene);
     let drawn = record.geometries.get(geometry);
     if (!drawn) {
-      drawn = { geometry, draws: noDraws(), vertices: 0, triangles: 0, off: noDraws(), objects: new Set(), material,
-        object };
+      drawn = {
+        geometry, draws: noDraws(), vertices: 0, triangles: 0, drew: noDraws(), off: noDraws(), objects: new Set(),
+        material, object,
+      };
       record.geometries.set(geometry, drawn);
     }
     drawn.draws[pass]++;
     if (pass === 'arms') record.arms.set(object, (record.arms.get(object) ?? 0) + 1);
-    drawn.vertices = verticesOf(geometry, object);
-    drawn.triangles = trianglesOf(geometry, object);
+    // (summed draw by draw: a draw emptied for one camera alone, a lamp's face, drew nothing there; taken as the
+    // last draw's times the draws, two lamps' shadows counted 2.9 million triangles they never drew)
+    const triangles = trianglesOf(geometry, object);
+    drawn.vertices = Math.max(drawn.vertices, verticesOf(geometry, object));
+    drawn.triangles = Math.max(drawn.triangles, triangles);
+    drawn.drew[pass] += triangles;
     const instances = (object as THREE.InstancedMesh).count;
-    if (instances) drawn.off[pass] += (instancesOff(object, geometry, camera) * drawn.triangles) / instances;
+    if (instances) drawn.off[pass] += (instancesOff(object, geometry, camera) * triangles) / instances;
     drawn.objects.add(object);
     if (pass === 'scene') {
       drawn.material = material;
@@ -188,14 +198,14 @@ const sumOf = (byPass: Record<Pass, number>, passes: Pass[]): number =>
 /** A geometry's draws in all its passes. */
 const drawsOf = (drawn: Drawn): number => sumOf(drawn.draws, PASSES);
 /** The triangles a geometry drew in the frame, in the scene, the arms' pass and the shadows. */
-const trianglesIn = (drawn: Drawn): number => drawn.triangles * sumOf(drawn.draws, WORLD_PASSES);
+const trianglesIn = (drawn: Drawn): number => sumOf(drawn.drew, WORLD_PASSES);
 
 /** A geometry's row: its draws (and each pass's), the triangles, its material, and what drew it. */
 function geometryRow(drawn: Drawn): string {
   const passes = PASSES.filter((pass) => drawn.draws[pass]).map((pass) => `${drawn.draws[pass]} ${pass}`).join(', ');
   const objects = drawn.objects.size > 1 ? `, ${drawn.objects.size} objects` : '';
   return `  ${String(drawsOf(drawn)).padStart(4)} (${passes})  ${trianglesIn(drawn)} triangles (${drawn.triangles} `
-    + `each)  ${lookOf(drawn.material)}  ${drawn.object.type} in ${placeOf(drawn.object)}${objects}`;
+    + `the most a draw)  ${lookOf(drawn.material)}  ${drawn.object.type} in ${placeOf(drawn.object)}${objects}`;
 }
 
 /** The triangles a geometry drew outside the view of the pass that drew them, in the passes that draw the world. */
@@ -204,7 +214,7 @@ const offIn = (drawn: Drawn): number => Math.round(sumOf(drawn.off, WORLD_PASSES
 /** A geometry's row of what it drew outside the view: in the scene and in the shadow map (and the arms' pass if it
  *  drew there), of all it drew in each. */
 function offRow(drawn: Drawn): string {
-  const of = (pass: Pass) => `${Math.round(drawn.off[pass])} of ${drawn.triangles * drawn.draws[pass]} in the ${pass}`;
+  const of = (pass: Pass) => `${Math.round(drawn.off[pass])} of ${drawn.drew[pass]} in the ${pass}`;
   const passes = WORLD_PASSES.filter((pass) => pass !== 'arms' || drawn.draws.arms).map(of).join(', ');
   return `  ${String(offIn(drawn)).padStart(7)} (${passes})  ${lookOf(drawn.material)}  `
     + `${drawn.object.type} in ${placeOf(drawn.object)}`;
@@ -482,10 +492,17 @@ export async function draws(lab: Lab, options: DrawsOptions): Promise<Report> {
   return { text: [head, ...lists(record, options.rows ?? ROWS)].join('\n'), problems };
 }
 
+/** The programs the renderer has compiled so far. */
+const programCount = (): number => G.renderer.info.programs?.length ?? 0;
+
 /** One frame's draws in the village, where the hero stands (`--at`, `--facing`), in the view the set-up asks for. */
 async function villageDraws(lab: Lab, options: DrawsOptions): Promise<Report> {
   const facing = options.fixture.facing ?? Math.PI;
   await lab.setup({ ...options.fixture, at: undefined, facing });
+  if (options.hour !== undefined) holdHour(options.hour);
+  // (the programs compiled from the run left to the frame drawn: by night the lamps' shadows draw what the braziers'
+  // never did, the hero among it)
+  const before = programCount();
   await inVillage(lab, options.fixture.at ?? VILLAGE_SPOT, facing);
   const unplant = options.canary ? plantBoxes() : () => {};
   let record: FrameDraws;
@@ -495,7 +512,11 @@ async function villageDraws(lab: Lab, options: DrawsOptions): Promise<Report> {
     unplant();
   }
   const view = options.fixture.view ?? 'top';
-  const head = `${G.player.cls.id}, the village, ${view} view: ${totalsOf(record)}; ${objectsOf()}`;
-  const problems = [...strangerProblems(record), ...(options.canary ? canaryProblems(record) : [])];
+  const hour = options.hour === undefined ? '' : ` at ${options.hour}:00`;
+  const compiled = programCount() - before;
+  const head = `${G.player.cls.id}, the village${hour}, ${view} view: ${totalsOf(record)}; ${objectsOf()}; `
+    + `${compiled} programs compiled in it`;
+  const late = compiled ? [`draws: ${compiled} programs compiled in the village`] : [];
+  const problems = [...strangerProblems(record), ...late, ...(options.canary ? canaryProblems(record) : [])];
   return { text: [head, ...lists(record, options.rows ?? ROWS)].join('\n'), problems };
 }

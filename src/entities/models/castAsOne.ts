@@ -8,7 +8,7 @@
 // casting or gives it back; a piece whose shape changes after all is let go of to cast on its own. `?castAsOne=0`
 // casts each piece on its own, for A/B.
 import * as THREE from 'three';
-import { aroundShadows, inShadowsOnly, outOfShadowsOnly } from '../../world/culling';
+import { aroundShadows, inFace, inShadowsOnly, notInMovingShadows, outOfShadowsOnly } from '../../world/culling';
 import { SKIN_DEPTH } from './shapes';
 
 /** Whether the hero's pieces are cast as one (`?castAsOne=0`: each on its own; the lab's `shadows` flips it). */
@@ -100,6 +100,18 @@ function mergedOf(pieces: THREE.Mesh[]): THREE.BufferGeometry {
  * sorts the model's meshes into the body it hides and the arms it shows once, as it first shows them
  * (`entities/viewModel.ts`), and the mesh would be put on their layers.
  */
+/** the sphere round a body standing where its holder is (m: its middle's height, its reach round it) */
+const BODY = { middle: 1, reach: 1.6 };
+const _body = new THREE.Sphere();
+
+/** The sphere round the body `holder` holds, as it stands now. */
+function bodySphere(holder: THREE.Object3D): THREE.Sphere {
+  holder.getWorldPosition(_body.center);
+  _body.center.y += BODY.middle;
+  _body.radius = BODY.reach;
+  return _body;
+}
+
 export function castAsOne(root: THREE.Object3D, holder: THREE.Object3D): OneShadow {
   const candidates: THREE.Mesh[] = [];
   root.traverse((object) => {
@@ -122,9 +134,15 @@ export function castAsOne(root: THREE.Object3D, holder: THREE.Object3D): OneShad
     mesh = null;
   };
 
+  // (into a lamp's faces that see him alone: three can't cull what it can't bound, posed as it is, and drawn into all
+  // six faces of two lamps his shadow was 0.8 million triangles a frame, and his skinned pieces' 0.45)
+  const seesHim = (camera: THREE.Camera): boolean => inFace(camera, bodySphere(holder));
   /** Merged again of the candidates shown now. */
   const make = (): void => {
     letGo();
+    root.traverse((part) => {
+      if ((part as THREE.Mesh).isMesh && !part.frustumCulled) notInMovingShadows(part as THREE.Mesh, seesHim);
+    });
     pieces = candidates.filter((_, i) => shown[i]);
     versions.clear();
     for (const piece of pieces) versions.set(piece, versionOf(piece));
@@ -141,6 +159,7 @@ export function castAsOne(root: THREE.Object3D, holder: THREE.Object3D): OneShad
     // (nothing aims at it: three's own test would pose every vertex)
     mesh.raycast = NOTHING;
     holder.add(mesh);
+    notInMovingShadows(mesh, seesHim);
     mesh.bind(skeleton, new THREE.Matrix4());
     inShadowsOnly(mesh);
     // (made as the shadow map draws, after it showed what it alone draws: shown for this draw too, or the gear's swap

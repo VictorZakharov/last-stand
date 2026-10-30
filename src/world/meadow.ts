@@ -23,8 +23,12 @@ const RINGS = [
 const TILES = 8;
 /** how wide a blade is at its root, in its ring's cells */
 const WIDTH_IN_CELLS = 0.55;
-/** how far before it the camera's sight is followed onto the ground for the rings' middle (m, at most) */
+/** how far before it the camera's sight is followed onto the ground for the rings' middle (m, at most), and the least
+ *  steepness of the sight it's followed by (the sine of its pitch down): followed onto the ground as far as it went,
+ *  a sight near level moved it from 2 m to 24 m and back as the head bobbed through the eyes, the dense ring with it,
+ *  from play "grass a near circle that keeps updating in front of me" */
 const FOCUS_MOST = 24;
+const FOCUS_STEEP = 0.35;
 /** the mask's alpha (0 to 255) under which no blade shows (`meadowAt` under 0.08: `chance` is none) */
 const GRASS_SEEN = 16;
 /** the grid of where any grass grows, read from the mask once: its cells (m), and how far round each it reaches (m) */
@@ -342,11 +346,12 @@ function bladeMaterial(u: RingUniforms): THREE.MeshStandardMaterial {
 const _forward = new THREE.Vector3(), _frustum = new THREE.Frustum(), _viewProj = new THREE.Matrix4();
 const _box = new THREE.Box3();
 
-/** Where the camera looks on the ground: along its sight onto the floor, at most `FOCUS_MOST` m before it. */
-function focusOf(camera: THREE.Camera, out: THREE.Vector2): THREE.Vector2 {
+/** Where the camera looks on the ground: along its sight onto the floor, at most `FOCUS_MOST` m before it, and from
+ *  a sight near level as far as one `FOCUS_STEEP` down would meet it (the camera's height over that). */
+export function focusOf(camera: THREE.Camera, out: THREE.Vector2): THREE.Vector2 {
   camera.getWorldDirection(_forward);
   const p = camera.position;
-  const along = _forward.y < -0.05 && p.y > 0 ? Math.min(FOCUS_MOST, p.y / -_forward.y) : 2;
+  const along = Math.min(FOCUS_MOST, Math.max(p.y, 0) / Math.max(-_forward.y, FOCUS_STEEP));
   return out.set(p.x + _forward.x * along, p.z + _forward.z * along);
 }
 
