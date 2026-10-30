@@ -6,7 +6,6 @@
 // just runs into obstacles").
 import { G } from '../state';
 import type { Obstacle } from '../types';
-import { state as propState } from './destructible';
 import { MARGIN } from './navigation';
 
 /** a cell of the grid (m) */
@@ -17,7 +16,7 @@ const STANDS = 0.01;
 /** A grid of where a body of `radius` can stand, for the place's wall and obstacles as they were when it was made. */
 interface StandGrid {
   obstacles: Obstacle[];
-  rev: number;
+  standing: string;
   radius: number;
   n: number;
   half: number;
@@ -40,10 +39,24 @@ function stands(x: number, z: number, radius: number): boolean {
   return Math.hypot(at.x - x, at.z - z) < STANDS;
 }
 
-/** The grid for the place shown now and a body of `radius`, made again when its obstacles or props change. */
+/** What of the place's obstacles a body walks round, as a key: the props' revision changes as they're restored after
+ *  every run, the village's standing as they were, and made again by it the first walk after each run took 170 ms. */
+function standingOf(obstacles: readonly Obstacle[]): string {
+  let sum = 0;
+  let count = 0;
+  for (const o of obstacles) {
+    if (o.h < 0.3) continue;
+    count++;
+    sum += o.x * 3.1 + o.z * 7.7 + o.r * 13.3;
+  }
+  return `${count}:${sum.toFixed(3)}`;
+}
+
+/** The grid for the place shown now and a body of `radius`, made again when what stands in it changes. */
 function gridFor(radius: number): StandGrid {
   const obstacles = G.arena.obstacles;
-  if (grid && grid.obstacles === obstacles && grid.rev === propState.rev && grid.radius === radius) return grid;
+  const standing = standingOf(obstacles);
+  if (grid && grid.obstacles === obstacles && grid.standing === standing && grid.radius === radius) return grid;
   const n = Math.ceil((2 * G.arena.wall.most) / CELL) + 2;
   const half = (n * CELL) / 2;
   const open = new Uint8Array(n * n);
@@ -52,7 +65,7 @@ function gridFor(radius: number): StandGrid {
       open[j * n + i] = stands((i + 0.5) * CELL - half, (j + 0.5) * CELL - half, radius) ? 1 : 0;
     }
   }
-  grid = { obstacles, rev: propState.rev, radius, n, half, open };
+  grid = { obstacles, standing, radius, n, half, open };
   return grid;
 }
 

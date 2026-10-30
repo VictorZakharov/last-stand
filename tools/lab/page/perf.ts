@@ -30,6 +30,7 @@ import { particleFill } from './particleFill';
 import { reportRead } from './perfReport';
 import { inVillage, VILLAGE_SPOT } from './draws';
 import { holdHour } from '../../../src/game/clock';
+import { goTo, villageObject } from '../../../src/game/village';
 
 export interface PerfOptions {
   biome: BiomeId;
@@ -81,6 +82,11 @@ const CANARY_FILL = 2.5;
 const STAGES_LISTED = 5;
 /** the village's frames timed standing, and walking (half of them ahead, half to the side) */
 const VILLAGE_FRAMES = 120;
+/** the frames the hero is given to walk from the square into the hall of heroes, to its dais (from play: "lag when
+ *  entering hall of heroes", frames of 875 and 472 ms as he walked in) */
+const HALL_FRAMES = 900;
+/** the slowest frames of a phase listed, each with what it spent */
+const SLOWEST_LISTED = 4;
 
 /** A frame timed: the frame by the browser's clock (the page's work and the GPU's in turn), the page's work, its
  *  update and render (ms), each update stage's, and what it drew and held. */
@@ -223,7 +229,19 @@ function phaseLines(phase: Phase): string[] {
   }
   const stages = stagesOf(phase).slice(0, STAGES_LISTED).map(([stage, spread]) => `${stage} ${spreadWords(spread)}`);
   lines.push(`  the update by stage: ${stages.join(', ')}`);
+  lines.push(`  the slowest frames: ${slowestFrames(phase).join('; ')}`);
   return lines;
+}
+
+/** A phase's slowest frames by the browser's clock, each with its page's work and its slowest stages. */
+function slowestFrames(phase: Phase): string[] {
+  const indexed = phase.frames.map((frame, f) => ({ frame, f }));
+  indexed.sort((a, b) => b.frame.frame - a.frame.frame);
+  return indexed.slice(0, SLOWEST_LISTED).map(({ frame, f }) => {
+    const stages = Object.entries(frame.stages).sort((a, b) => b[1] - a[1]).slice(0, 2);
+    const top = stages.map(([stage, took]) => `${stage} ${ms(took)}`).join(', ');
+    return `${f}: ${ms(frame.frame)} (the page's ${ms(frame.cpu)}: ${ms(frame.update)} + ${ms(frame.render)}, ${top})`;
+  });
 }
 
 /** Every frame of a phase as a line. */
@@ -346,7 +364,23 @@ async function villagePhases(lab: Lab): Promise<Phase[]> {
   return [
     await timePhase(lab, 'standing', VILLAGE_FRAMES, () => ({})),
     await timePhase(lab, 'walking', VILLAGE_FRAMES, (f) => ({ keys: f < half ? ['w'] : ['a'] })),
+    await intoTheHall(lab),
   ];
+}
+
+/** The hero walked of himself from the square into the hall of heroes, to its dais's stand. */
+async function intoTheHall(lab: Lab): Promise<Phase> {
+  const hall = villageObject('hall');
+  if (!hall) throw new Error('lab: perf: the village has no hall of heroes');
+  const square = new THREE.Vector3(VILLAGE_SPOT[0], 0, VILLAGE_SPOT[1]);
+  G.player.place(square, G.player.facing);
+  await lab.step(15);
+  goTo(hall.stand[0], hall.stand[1]);
+  const phase = await timePhase(lab, 'into the hall', HALL_FRAMES, () => ({}));
+  G.player.walkTo = null;
+  const left = Math.hypot(G.player.pos.x - hall.stand[0], G.player.pos.z - hall.stand[1]);
+  if (left > 1.5) throw new Error(`lab: perf: the hero stopped ${left.toFixed(1)} m short of the hall's dais`);
+  return phase;
 }
 
 /** The run the set-up starts left for the village, at the hour `options` asks for, the hero where it says. */
