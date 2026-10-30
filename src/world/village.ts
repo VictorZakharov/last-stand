@@ -38,7 +38,8 @@ import { leafClusterTexture } from './foliage';
 import { cullInCells, eachInstance } from './culling';
 import { buildFountain, type FountainLight } from './fountain';
 import {
-  COTTAGE, PODIUM, SQUARE_R, TOMB, builtAt, footpathOf, fromGap, inWay, insidePalisade, palisadeCurve, palisadePolygon, roadLines, withinVillage,
+  COTTAGE, PODIUM, SQUARE_R, TOMB, builtAt, footpathOf, fromGap, inWay, insidePalisade, palisadeCurve, palisadePolygon, roadLines, solidAt,
+  withinVillage,
 } from './villagePlan';
 import { buildCryptWay, buildForestWay, groveTrees } from './villageWays';
 import { Wall } from './wall';
@@ -617,7 +618,8 @@ const SQUARE_CURB_LIFT = 0.006;
 
 /** The parts of `line` (closed: a loop) outside every polygon of `pavings`, each cut where it crosses one's edge. */
 function uncovered(line: readonly Spot[], closed: boolean, pavings: readonly Spot[][]): Spot[][] {
-  const covered = ([x, z]: Spot): boolean => pavings.some((p) => insidePolygon(p, x, z));
+  // (a curb stops where paving or anything built stands: it ran on into the terrace's front wall)
+  const covered = ([x, z]: Spot): boolean => solidAt(x, z) || pavings.some((p) => insidePolygon(p, x, z));
   const crossing = (a: Spot, b: Spot): Spot => {
     // (halved till it's within a millimetre: a's side and b's differ)
     let lo = 0, hi = 1;

@@ -131,10 +131,20 @@ for (const c of COTTAGES) {
 }
 
 /** Whether (x, z) is in a box of half sides (hx, hz) round (cx, cz), turned `turn` rad about y, `pad` m round it. */
-function inBox(x: number, z: number, cx: number, cz: number, hx: number, hz: number, turn: number, pad: number): boolean {
+export function inBox(x: number, z: number, cx: number, cz: number, hx: number, hz: number, turn: number, pad: number): boolean {
   const dx = x - cx, dz = z - cz, c = Math.cos(turn), s = Math.sin(turn);
   const lx = dx * c - dz * s, lz = dx * s + dz * c;
   return Math.abs(lx) < hx + pad && Math.abs(lz) < hz + pad;
+}
+
+/** Whether (x, z) lies under stone or walls built on the ground: the terrace, its stair, the chronicle's platform,
+ *  a cottage (their own footprints, unpadded: what a curb runs into). */
+export function solidAt(x: number, z: number): boolean {
+  const { half, front, back, stairHalf, stairFoot } = TERRACE;
+  if (inBox(x, z, TERRACE.x, (front + back) / 2, half, (front - back) / 2, 0, 0)) return true;
+  if (inBox(x, z, TERRACE.x, (stairFoot + front) / 2, stairHalf, (stairFoot - front) / 2, 0, 0)) return true;
+  if (inBox(x, z, DAIS_EAST.x, DAIS_EAST.z, DAIS_EAST.half, DAIS_EAST.half, 0, 0)) return true;
+  return COTTAGES.some((c) => inBox(x, z, c.x, c.z, (COTTAGE.w / 2) * c.size, (COTTAGE.d / 2) * c.size, c.facing, 0));
 }
 
 /** Whether (x, z) is in a way out's own ground (its walk from the gap to its portal and round it), `pad` m round it. */
