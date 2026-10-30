@@ -4,7 +4,10 @@
 // dropping in a weird way" (the mage let go of it at a fifth of the way down and it went on to the floor on its own),
 // "he just summons the bow into his hand using jedi force", "when warrior sits on a log, weapons are being pulled
 // around with jedi force too, on sit down, and on stand up". A mesh turned or thrown further in a frame than a hand
-// moves it is a jump. And what he holds is held as before once he's up again: "staff rotated when he stands up".
+// moves it is a jump. And what he holds is held as before once he's up again: "staff rotated when he stands up". A
+// piece held is turned by the hand that holds it, not in it: "warrior magically rotates the sword in his hand" (the
+// greatsword swung half round in his fist as he lowered it, 2 degrees a frame, under the jumps' limit), nor slid
+// through it: "ranger uses force pull to grab his bow from seated near fire, when standing up".
 import * as THREE from 'three';
 import type { Lab } from './lab';
 
@@ -25,6 +28,14 @@ const THROW_MOST = 0.12;
 /** once he's up, what he held is held this near as before he sat (m at any corner, degrees) */
 const REHELD_MOST = 0.03;
 const RETURNED_MOST = 10;
+/** how far a held piece may turn in the hand holding it while it's held (degrees), and slide in it (m): a loose
+ *  grip's give */
+export const IN_HAND_MOST = 20;
+export const SLID_MOST = 0.05;
+/** a frame's turn (degrees) or slide (m) in the hand under this is the grip's own fitting, and isn't counted: added
+ *  up, a weapon held still in the hand read 830 degrees and 23 m over a walk to a log and a sit */
+const IN_HAND_FROM = 0.5;
+const SLID_FROM = 0.003;
 /** cloth, followed as cloth elsewhere (`coat.ts`), never a rigid piece */
 const CLOTHS = ['skirt', 'hood'];
 const DEG = 180 / Math.PI;
@@ -60,6 +71,24 @@ interface Followed {
   looseFrames: number;
   looseAt: string;
   jump: Jump | null;
+  /** its turn in its joint's frame the frame before, while held, and how far it has turned in the hand since it was
+   *  taken (degrees), the most it did and where */
+  inHandWas: THREE.Quaternion | null;
+  /** where the piece's own middle (its group's origin: a grip, a bow's handle) was the frame before, in the world and
+   *  in its joint's frame (m), while held */
+  originWas: { world: THREE.Vector3; onJoint: THREE.Vector3 } | null;
+  inHand: number;
+  slid: number;
+  inHandFrom: string;
+  turnedInHand: InHand | null;
+  slidInHand: InHand | null;
+}
+
+/** How far a piece turned (degrees) or slid (m) in the hand holding it, from which frame to which. */
+export interface InHand {
+  by: number;
+  from: string;
+  to: string;
 }
 
 /** What a piece did, as `Carried.findings` says it: how far it went with no hand on it (m), on how many frames,
@@ -70,6 +99,8 @@ export interface CarriedFinding {
   looseFrames: number;
   looseAt: string;
   jump: Jump | null;
+  turnedInHand: InHand | null;
+  slidInHand: InHand | null;
 }
 
 /** Every rigid piece of the hero, followed frame by frame. */
@@ -85,6 +116,8 @@ export class Carried {
     this.followed = partsOf(lab).map((part) => ({
       part, world: null, onJoint: null, start: null, quaternion: null, heldEver: false, movedFrom: 0,
       loose: 0, looseFrames: 0, looseAt: '', jump: null,
+      inHandWas: null, originWas: null, inHand: 0, slid: 0, inHandFrom: '',
+      turnedInHand: null, slidInHand: null,
     }));
   }
 
@@ -125,11 +158,21 @@ export class Carried {
           each.jump = worse(each.jump, `${mesh} went ${(moved * 100).toFixed(0)} cm`, moved / THROW_MOST, frame);
         }
       }
+      followInHand(each, inHand, quaternion, frame);
       each.world = world;
       each.onJoint = onJoint;
       each.quaternion = quaternion;
     }
-    if (frameOf.seen) this.traced.push(`${traceLine(frame, frameOf)}; ${this.handsMoved()}`);
+    if (frameOf.seen) this.traced.push(`${traceLine(frame, frameOf)}; ${this.inHandNow()}; ${this.handsMoved()}`);
+  }
+
+  /** How far the traced piece has turned and slid in its hand so far, the most of its meshes, and on which joint. */
+  private inHandNow(): string {
+    const traced = this.followed.filter((each) => each.part.name === this.trace);
+    const turned = Math.max(0, ...traced.map((each) => each.inHand));
+    const slid = Math.max(0, ...traced.map((each) => each.slid));
+    const joint = traced[0]?.part.joint.name ?? '';
+    return `in his ${joint} turned ${turned.toFixed(1)}°, slid ${(slid * 100).toFixed(1)} cm`;
   }
 
   /** How far each hand and elbow went and turned since the frame before, as a line's end. */
@@ -152,13 +195,68 @@ export class Carried {
     for (const each of judged) {
       const was = byName.get(each.part.name);
       const jump = worse(was?.jump ?? null, each.jump?.by ?? '', each.jump?.size ?? 0, each.jump?.at ?? '');
+      const turnedInHand = mostInHand(was?.turnedInHand ?? null, each.turnedInHand);
+      const slidInHand = mostInHand(was?.slidInHand ?? null, each.slidInHand);
       const { name } = each.part;
       if (!was || each.loose > was.loose) {
-        byName.set(name, { name, loose: each.loose, looseFrames: each.looseFrames, looseAt: each.looseAt, jump });
-      } else was.jump = jump;
+        const { loose, looseFrames, looseAt } = each;
+        byName.set(name, { name, loose, looseFrames, looseAt, jump, turnedInHand, slidInHand });
+      } else {
+        was.jump = jump;
+        was.turnedInHand = turnedInHand;
+        was.slidInHand = slidInHand;
+      }
     }
     return [...byName.values()];
   }
+}
+
+/**
+ * How far a held piece has turned and slid in its hand, followed a frame (`quaternion`: its turn in the world now; read
+ * before `each` takes it). Each frame adds the lesser of its move in the world and its move in the hand's frame: a
+ * piece moved with the hand moves in the world alone, and a palm moved over a piece that stands still moves in the
+ * hand's frame alone (a palm going onto a pommel), but a piece turned or pulled through the fist does both. Its slide
+ * is its own middle's (its group's origin): its corners' went round with its turn. Let go of, it's taken afresh. A piece
+ * turning on its own mount (a staff's crystal, `userData.sitAnimated`) is passed over.
+ */
+function followInHand(each: Followed, held: boolean, quaternion: THREE.Quaternion, frame: string): void {
+  const { mesh, joint, group } = each.part;
+  if (!held || mesh.userData.sitAnimated || mesh.parent?.userData.sitAnimated) {
+    each.inHandWas = null;
+    each.originWas = null;
+    each.inHand = 0;
+    each.slid = 0;
+    return;
+  }
+  const inJoint = joint.getWorldQuaternion(new THREE.Quaternion()).invert().multiply(quaternion);
+  const world = group.getWorldPosition(new THREE.Vector3());
+  const onJoint = joint.worldToLocal(world.clone()).multiply(joint.getWorldScale(new THREE.Vector3()));
+  const origin = { world, onJoint };
+  if (!each.inHandWas || !each.quaternion || !each.originWas) each.inHandFrom = frame;
+  else {
+    const inWorld = each.quaternion.angleTo(quaternion) * DEG;
+    const turned = Math.min(inWorld, each.inHandWas.angleTo(inJoint) * DEG);
+    const was = each.originWas;
+    const slid = Math.min(origin.world.distanceTo(was.world), origin.onJoint.distanceTo(was.onJoint));
+    if (turned >= IN_HAND_FROM) each.inHand += turned;
+    if (slid >= SLID_FROM) each.slid += slid;
+    each.turnedInHand = further(each.turnedInHand, each.inHand, each.inHandFrom, frame);
+    each.slidInHand = further(each.slidInHand, each.slid, each.inHandFrom, frame);
+  }
+  each.inHandWas = inJoint;
+  each.originWas = origin;
+}
+
+/** `was`, or a stretch of `by` from `from` to `to` if it went further. */
+function further(was: InHand | null, by: number, from: string, to: string): InHand | null {
+  return by > (was?.by ?? 0) ? { by, from, to } : was;
+}
+
+/** The more turned in its hand of two. */
+function mostInHand(a: InHand | null, b: InHand | null): InHand | null {
+  if (!a) return b;
+  if (!b) return a;
+  return b.by > a.by ? b : a;
 }
 
 /** A traced piece's frame: the most any of its meshes went (m) and turned (degrees), and whether a hand held it. */
