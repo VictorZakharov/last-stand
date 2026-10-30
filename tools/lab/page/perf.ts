@@ -33,6 +33,7 @@ import { holdHour } from '../../../src/game/clock';
 import { goTo, villageObject } from '../../../src/game/village';
 import { HALL, TERRACE, inHall } from '../../../src/data/village';
 import { groundHeight } from '../../../src/world/ground';
+import { viewBy } from './villageHallCull';
 
 export interface PerfOptions {
   biome: BiomeId;
@@ -376,13 +377,16 @@ async function villagePhases(lab: Lab): Promise<Phase[]> {
   ];
 }
 
-/** The hero stood in the hall of heroes turned to its door, the square beyond it in view. */
+/** The hero stood in the hall of heroes turned to its door, the square beyond it in view over his shoulder (from
+ *  above its roof is cut away, and all of the village shows). */
 async function lookingOut(lab: Lab): Promise<Phase> {
   const at = new THREE.Vector3(TERRACE.x, 0, HALL.door - OUT_FROM);
   at.y = groundHeight(at.x, at.z);
   G.player.walkTo = null;
   // (facing 0 is along +z, out of the door)
   G.player.place(at, 0);
+  await viewBy(lab, 'third');
+  renderer.faceCamera(0);
   await lab.step(15);
   if (!inHall(G.player.pos.x, G.player.pos.z)) throw new Error('lab: perf: the hero isn\'t inside the hall');
   return timePhase(lab, 'looking out of the hall', VILLAGE_FRAMES, () => ({}));
