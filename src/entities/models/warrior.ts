@@ -1510,7 +1510,7 @@ export function buildWarrior(): Model {
    *  89 degrees past its turn; its fingers ahead on the pommel, the wrist bent 34 degrees past its range.) From play: "keep it stood", with a natural regrip. Stood point down at his side in one fist, the fist had
    *  to turn 120 degrees from how it held it standing, past a wrist's turn: his arm shot straight out ahead and the
    *  blade swept 0.5 to 2 m in a frame. */
-  const BETWEEN = tunable('warriorBetween', { ahead: 0.9, lean: 0.1, top: 0.35, arc: [0.25, 0.15], letGo: 0.7, take: 0.1, slant: 0.2, fingers: 1.6, lift: 0.4, held: [0.6, 0.1, 0.15], aim: 1, pace: 1.8 });
+  const BETWEEN = tunable('warriorBetween', { ahead: 0.9, lean: 0.1, top: 0.35, arc: [0.25, 0.15], letGo: 0.7, take: 0.1, slant: 0.2, fingers: 1.6, lift: 0.4, held: [0.6, 0.1, 0.25], clear: [0.2, 0.15], pace: 1.8 });
   const LAY = tunable('warriorLay', { at: [-0.5, -0.1], twoAt: [-0.4, -0.4], maulAt: [-0.4, -0.2], arc: [0.25, 0.3], twoArc: [0.35, 0.3], letGo: 0.95 });
   const _plantHand = new THREE.Vector3(), _plantBox = new THREE.Box3(), _plantM = new THREE.Matrix4();
   /** a hand's weapon stood on its end: its grip's place there (world, `q`, `at`), the way from the hand to its
@@ -1891,9 +1891,19 @@ export function buildWarrior(): Model {
     // (moved by as far as the arm's ranges left its point from where it's set, and held again: carried to where the
     // arm fell short, its point came down in front of his other leg and slid 39 cm through the ground under his palm)
     const miss = pointOf(p, p.seatSet, _kv).negate().add(_ka.copy(p.setAt).addScaledVector(_s1.set(0, 1, 0).applyQuaternion(p.setQ), p.reach));
-    if (BETWEEN.aim) holdKey(p, _s4.copy(p.setAt).add(miss), p.setQ, _keyB, p.seatSet);
+    holdKey(p, _s4.copy(p.setAt).add(miss), p.setQ, _keyB, p.seatSet);
     const e = smooth((w - BETWEEN.lift) / (1 - BETWEEN.lift));
-    armOf(p).forEach((joint, i) => joint.quaternion.slerpQuaternions(_keyA[i], _keyB[i], e));
+    // (and on the way, its point lifted clear of his leg ahead of him (`clear`: up, ahead), as it's brought round from
+    // his side: from one hold to the other, its point swept through his right shin, 8 cm into it)
+    const ahead = _s1.set(0, 0, 1).transformDirection(root.matrixWorld).setY(0).normalize();
+    const midAt = _s4.copy(p.liftAt).lerp(p.setAt, 0.5).addScaledVector(ahead, BETWEEN.clear[1] * root.scale.x);
+    midAt.y += BETWEEN.clear[0] * root.scale.x;
+    holdKey(p, midAt, _kf.copy(p.liftQ).slerp(p.setQ, 0.5), _keyC, p.seatSet);
+    armOf(p).forEach((joint, i) => {
+      // (through it without a stop: eased in each half, it went twice as fast, 35 cm a frame)
+      if (e < 0.5) joint.quaternion.slerpQuaternions(_keyA[i], _keyC[i], e * 2);
+      else joint.quaternion.slerpQuaternions(_keyC[i], _keyB[i], e * 2 - 1);
+    });
     p.swung = 1;
     p.seatNow.copy(p.seatSet);
   }
@@ -1932,6 +1942,7 @@ export function buildWarrior(): Model {
   }
   const _keyA = [new THREE.Quaternion(), new THREE.Quaternion(), new THREE.Quaternion()];
   const _keyB = [new THREE.Quaternion(), new THREE.Quaternion(), new THREE.Quaternion()];
+  const _keyC = [new THREE.Quaternion(), new THREE.Quaternion(), new THREE.Quaternion()];
   const _kq = new THREE.Quaternion(), _kw = new THREE.Quaternion(), _kg = new THREE.Quaternion(), _kv = new THREE.Vector3(), _ka = new THREE.Vector3();
   /** a weapon arm's joints, shoulder to hand */
   function armOf(p: Planted): THREE.Object3D[] {
