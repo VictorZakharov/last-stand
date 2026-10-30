@@ -93,7 +93,8 @@ function readOver(lab: Lab, foot: THREE.Vector3): number {
  *  (`core/lamps.ts`: imported, a commit without it couldn't load `lab village`); nothing where there's no list. */
 function putOut(index: number): void {
   const list = THREE.ShaderLib.standard.uniforms.lamps?.value as Float32Array | undefined;
-  if (list) list[(index + 1) * 4 + 3] = 0;
+  // (each lamp two entries after the shelter: its place, then its light, whose fourth is the side it lights, 0 out)
+  if (list) list[(2 + index * 2) * 4 + 3] = 0;
 }
 
 /** A street lamp's ground at midnight, the hero far off and close by: lit alike. */
