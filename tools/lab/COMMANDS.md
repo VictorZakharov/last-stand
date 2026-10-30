@@ -201,7 +201,11 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   play, "can pass through textures here", the plinth course along the hall's foot drawn and not in the wall;
   `--canary` counts him half a metre further); the hall's front wall's blocks of walling, their maps read at each corner
   against its place, one grid at most 1% of a tile apart (`page/villageWalling.ts`: from play, "misaligned texture",
-  the block over the door a part course off the wings, 45%; `--canary` moves one block's map a third of a tile); through
+  the block over the door a part course off the wings, 45%; `--canary` moves one block's map a third of a tile); at 9:30
+  from the middle of the hall turned to the dais, the hero hidden, at least 0.9% of the frame lit by the sun, drawn with
+  it and without it
+  (`page/villageWindows.ts`: from play, "windows need to be real, and let sun/moonlight through"; with them shut
+  0.58%, open 1.38%; `--canary` draws both without the sun); through
   the eyes on the square, the view tilted from over level down toward the ground, the grass's rings' middle (`focusOf`
   in `world/meadow.ts`) moving at most 2 m a frame (the old rule
   threw it 22 m at a sight just under level: "grass a near circle that keeps updating in front of me"); sent across
