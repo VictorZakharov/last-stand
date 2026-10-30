@@ -70,6 +70,8 @@ export interface ArmGoal {
    *  the open hand's by default. (Solved within the open hand's, a two-hander's lower fist flexed 50 to 75 degrees
    *  round its grip, through the eyes and out of them, where a fist can't stay closed) */
   flexion?: readonly [number, number];
+  /** how far short of its ends (degrees) the wrist is kept, a resting hand's (`models/sit.ts` `WRIST_INSIDE`) */
+  inside?: number;
   /** the hand turned as asked whatever the forearm's and the wrist's ranges (the elbow still chosen to keep them): through
    *  the eyes, the bow hand, so the bow stays as it's posed (stopped at the wrist's end, the fist turned the bow with the
    *  elbow, and a frame's other elbow coming in for a fan turned it 40 px in the view) */
@@ -109,6 +111,24 @@ const Z = new THREE.Vector3(0, 0, 1), _sz = new THREE.Quaternion(), _sa = new TH
 const eased = (g: ArmGoal, rel: THREE.Quaternion): THREE.Quaternion => (g.ease ? rel.copy(_ez.copy(g.ease.rest).slerp(rel, g.ease.w)) : rel);
 /** the girdle's raises and forward turns tried (degrees) */
 const G_ELEV = [GIRDLE.elevation[0], 0, 12, 24, GIRDLE.elevation[1]], G_PRO = [GIRDLE.protraction[0], -12, 0, 12, GIRDLE.protraction[1]];
+
+/** What an arm's solves remember from frame to frame (its elbow in its shoulder's parent's frame, girdle, slant on a
+ *  handle and turn about it), for `recall` to set back. */
+export interface ArmMemory { elbow?: THREE.Vector3; girdle?: [number, number]; slant?: number; roll?: number }
+/** What the arm `sh` (its shoulder) remembers now. */
+export function remembered(sh: THREE.Object3D): ArmMemory {
+  const girdle = lastG.get(sh);
+  return { elbow: last.get(sh)?.clone(), girdle: girdle && [girdle[0], girdle[1]], slant: lastS.get(sh), roll: lastR.get(sh) };
+}
+/** The arm `sh` remembering `memory` again, as if its last solve had left it (a hold taken up again after another
+ *  solve has held the arm meanwhile, from where it was as it was let go). */
+export function recall(sh: THREE.Object3D, memory: ArmMemory): void {
+  const pairs: [WeakMap<THREE.Object3D, unknown>, unknown][] = [[last, memory.elbow?.clone()], [lastG, memory.girdle && [...memory.girdle]], [lastS, memory.slant], [lastR, memory.roll]];
+  for (const [map, value] of pairs) {
+    if (value === undefined) map.delete(sh);
+    else map.set(sh, value);
+  }
+}
 
 /** Pose the arm (`left` or right) for `g`. The arm's joints are set, not their world matrices. */
 export function solveArm(j: Joints, left: boolean, g: ArmGoal): ArmResult {
@@ -197,7 +217,7 @@ export function solveArm(j: Joints, left: boolean, g: ArmGoal): ArmResult {
     bad = 0;
     if (want && ROM_ON) {
       eased(g, _rel.copy(_Qf).invert().multiply(want));
-      cost += 2 * clampWrist(_rel, left, _cl, g.flexion);
+      cost += 2 * clampWrist(_rel, left, _cl, g.flexion, g.inside);
       if (g.wristW) cost += g.wristW * Math.acos(Math.max(-1, Math.min(1, _wy.set(0, 1, 0).applyQuaternion(_rel).y))) * 57.3;
     }
     if (solids && ROM_ON) {
@@ -281,7 +301,7 @@ export function solveArm(j: Joints, left: boolean, g: ArmGoal): ArmResult {
     return [roll, slant, bestC];
   };
   /** what the ranges leave over for the elbow found (degrees), the arm as `at` last left it */
-  const over = (): number => ROM_ON ? shoulderExcess(_Qu, left, gNow) + (want ? clampWrist(eased(g, _rel.copy(_Qf).invert().multiply(want)), left, _cl, g.flexion) : 0) : 0;
+  const over = (): number => ROM_ON ? shoulderExcess(_Qu, left, gNow) + (want ? clampWrist(eased(g, _rel.copy(_Qf).invert().multiply(want)), left, _cl, g.flexion, g.inside) : 0) : 0;
 
   const pr = lastR.get(sh);
   /** the turn and slant found, gliding from the last solve's */
@@ -368,7 +388,7 @@ export function solveArm(j: Joints, left: boolean, g: ArmGoal): ArmResult {
   // (the visible hand's turn on the forearm: as wanted, or as it was)
   if (want) eased(g, _rel.copy(_Qf).invert().multiply(want));
   else { _rel.copy(hd.quaternion); if (vis) _rel.multiply(vis); }
-  if (ROM_ON && !g.free) excess += clampWrist(_rel, left, _rel, g.flexion);
+  if (ROM_ON && !g.free) excess += clampWrist(_rel, left, _rel, g.flexion, g.inside);
   hd.quaternion.copy(_rel);
   // (the hand joint under the visible hand: its turn on the joint, and the slant)
   if (vis || slant) hd.quaternion.multiply(_hx.copy(vis ?? _sz.identity()).multiply(_sz.setFromAxisAngle(Z, slant)).invert());
@@ -381,12 +401,13 @@ export function solveArm(j: Joints, left: boolean, g: ArmGoal): ArmResult {
  * turn the hand will be given on its joint this frame (`gripTurn` for a held weapon), none for a hand that isn't
  * turned, and a hand so turned grips what it holds: its wrist within a gripping wrist's range. (It reads the joints'
  * world matrices through their parents, so needs no update of the whole model first.)
+ * `inside`: how far short of its ends (degrees) the wrist is kept.
  */
-export function fitArm(j: Joints, left: boolean, vis?: THREE.Quaternion, body?: BodyShape, slant?: number): ArmResult {
+export function fitArm(j: Joints, left: boolean, vis?: THREE.Quaternion, body?: BodyShape, slant?: number, inside?: number): ArmResult {
   const sh = left ? j.shoulderL : j.shoulderR, el = left ? j.elbowL : j.elbowR, hd = left ? j.handL : j.handR;
   const wrist = hd.getWorldPosition(new THREE.Vector3());
   const hand = hd.getWorldQuaternion(new THREE.Quaternion());
   if (vis) hand.multiply(vis);
   const pole = el.getWorldPosition(new THREE.Vector3()).sub(sh.getWorldPosition(new THREE.Vector3()));
-  return solveArm(j, left, { wrist, hand, vis, pole, body, slant, flexion: vis ? GRIPPED_FLEXION : undefined });
+  return solveArm(j, left, { wrist, hand, vis, pole, body, slant, flexion: vis ? GRIPPED_FLEXION : undefined, inside });
 }
