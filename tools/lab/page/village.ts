@@ -36,6 +36,7 @@ import { lampsSteady } from './villageSteady';
 import { lampsAlike } from './villageLampsAlike';
 import { lampsThroughTheDoor } from './villageDoorLamps';
 import { heroShadowByLamp } from './villageHeroShadow';
+import { lampsLitAsTheyCast } from './villageLampsCast';
 
 export interface VillageOptions {
   canary: boolean;
@@ -82,6 +83,7 @@ export async function village(lab: Lab, options: VillageOptions): Promise<Report
     await lampsAlike(lab, options.canary),
     await lampsThroughTheDoor(lab, options.canary),
     await heroShadowByLamp(lab, options.canary),
+    await lampsLitAsTheyCast(lab, options.canary),
     await training(lab, options.canary),
     await hoursCompileNothing(lab, options.canary),
   ];
