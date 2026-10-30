@@ -199,7 +199,8 @@ export class Sitting {
       if (this.u < SIT.handsFrom) st.before = hands.before > 0 ? Math.max(0, st.before - dt / (hands.before * before)) : 0;
     }
     this.place(me, dt);
-    if (st.before > 0) return true;
+    // Hands without a separate stage finish halfway up; the body must finish too, or its weapon jumps to standing.
+    if (this.u > 0 || st.before > 0) return true;
     // (up: let go of the seat only as he leaves it, from as near as he stands, or its circles would throw him off it)
     this.leaving = { circles: this.spot!.seat.circles, r: SEAT.near };
     this.giveUp();
