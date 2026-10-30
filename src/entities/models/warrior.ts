@@ -1943,8 +1943,9 @@ export function buildWarrior(): Model {
   /** the share of the sit's clock over which the loose fist closes before it's let go of */
   const LOOSE_EASE = 0.03;
   /** how far a fist let go of opens (its fingers' bends eased this far towards straight): open enough for its handle
-   *  to turn flat on the palm under them (`carryArm`'s `flipAxis`) */
-  const LOOSE_MOST = 0.8;
+   *  to turn flat on the palm under them (`carryArm`'s `flipAxis`), and no further: a ring round it (opened 0.8, the
+   *  hand was a flat tray the grip lay on, "the sword floats") */
+  const LOOSE_MOST = 0.5;
   /** The grip's turn in the fist (`seat`, changed in place) leant `w` of the way about the fist so the point is on the
    *  ground the way its rest is from the fist (`restPoint`), as far as its length reaches, with the arm as it's posed:
    *  the hand going down as he sits, its point would go into the ground; its hand going up, it would hang off it.
