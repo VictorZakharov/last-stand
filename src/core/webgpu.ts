@@ -8,6 +8,9 @@ const asked = new URLSearchParams(location.search).get('renderer');
 export const WEBGPU = asked === 'webgpu' || asked === 'webgpu-gl';
 
 let pipeline: RenderPipeline | null = null;
+/** three's WebGPU build and its node language, loaded with the renderer: what node materials are made from */
+export let gpu: typeof import('three/webgpu');
+export let tsl: typeof import('three/tsl');
 
 /**
  * A WebGPURenderer, initialised, typed as the WebGLRenderer the rest of the game takes. What it lacks of one is
@@ -15,7 +18,9 @@ let pipeline: RenderPipeline | null = null;
  * are WebGL's) and the anisotropy asked at boot. (Its own `debug` stays: its node builder reads hooks off it.)
  */
 export async function makeWebGPURenderer(): Promise<THREE.WebGLRenderer> {
-  const { WebGPURenderer } = await import('three/webgpu');
+  gpu = await import('three/webgpu');
+  tsl = await import('three/tsl');
+  const { WebGPURenderer } = gpu;
   const renderer = new WebGPURenderer({ antialias: false, powerPreference: 'high-performance', forceWebGL: asked === 'webgpu-gl' });
   await renderer.init();
   // (own properties over the class's getters: `compile` is one)
