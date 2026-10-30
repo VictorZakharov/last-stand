@@ -1543,6 +1543,9 @@ export function buildWarrior(): Model {
     flipWay: number; flipSign: number; seatSet: THREE.Quaternion; seatNow: THREE.Quaternion;
     /** how far it has swung there (0..1) */
     swung: number;
+    /** the share of the way from its side to the ground taken to where its point is lifted clear (`carryArm`), chosen
+     *  once a sit (-1 till then) */
+    split: number;
     /** how far up its haft from its grip the fist has slid (the grip's units), leaning it on a seat */
     slide: number;
     /** leant where it is, let go of */
@@ -1561,7 +1564,7 @@ export function buildWarrior(): Model {
       left, hand, joint: left ? j.handL : j.handR, grip, shoulder: left ? j.shoulderL : j.shoulderR,
       q: new THREE.Quaternion(), at: new THREE.Vector3(), up: new THREE.Vector3(), on: null, carried: false, turn: -1,
       landAt: new THREE.Vector3(), landQ: new THREE.Quaternion(), handAt: new THREE.Vector3(), handQ: new THREE.Quaternion(),
-      startAt: new THREE.Vector3(), startQ: new THREE.Quaternion(), armWas: [new THREE.Quaternion(), new THREE.Quaternion(), new THREE.Quaternion()], liftAt: new THREE.Vector3(), liftQ: new THREE.Quaternion(), gripWas: new THREE.Quaternion(), gripAtWas: new THREE.Vector3(), setAt: new THREE.Vector3(), setQ: new THREE.Quaternion(), reach: 0, flipWay: -1, flipSign: 1, seatSet: new THREE.Quaternion(), seatNow: new THREE.Quaternion(), swung: 0, liftedAt: new THREE.Vector3(), liftedQ: new THREE.Quaternion(), slide: 0, leant: false, pivot: 0, standQ: new THREE.Quaternion(), drawWay: new THREE.Vector3(), drawWas: null, restTurn: -1, way: 0,
+      startAt: new THREE.Vector3(), startQ: new THREE.Quaternion(), armWas: [new THREE.Quaternion(), new THREE.Quaternion(), new THREE.Quaternion()], liftAt: new THREE.Vector3(), liftQ: new THREE.Quaternion(), gripWas: new THREE.Quaternion(), gripAtWas: new THREE.Vector3(), setAt: new THREE.Vector3(), setQ: new THREE.Quaternion(), reach: 0, flipWay: -1, flipSign: 1, seatSet: new THREE.Quaternion(), seatNow: new THREE.Quaternion(), swung: 0, split: -1, liftedAt: new THREE.Vector3(), liftedQ: new THREE.Quaternion(), slide: 0, leant: false, pivot: 0, standQ: new THREE.Quaternion(), drawWay: new THREE.Vector3(), drawWas: null, restTurn: -1, way: 0,
     };
   }
   const _standQ = new THREE.Quaternion(), _standAt = new THREE.Vector3(), _holdQ = new THREE.Quaternion();
@@ -1745,6 +1748,7 @@ export function buildWarrior(): Model {
       // (and the fist as it held it, which it eases from)
       p.handQ.copy(_rootQ).invert().multiply(p.joint.getWorldQuaternion(_pq));
       p.flipWay = -1;
+      p.split = -1;
       p.turn = 0;
     }
     const k = root.scale.x, s = _s5.setFromMatrixScale(grip.matrixWorld).y, [low, far] = reachAlong(weapon, grip);
@@ -1899,10 +1903,21 @@ export function buildWarrior(): Model {
     const midAt = _s4.copy(p.liftAt).lerp(p.setAt, 0.5).addScaledVector(ahead, BETWEEN.clear[1] * root.scale.x);
     midAt.y += BETWEEN.clear[0] * root.scale.x;
     holdKey(p, midAt, _kf.copy(p.liftQ).slerp(p.setQ, 0.5), _keyC, p.seatSet);
+    // (through it without a stop, each half its share of the time by how far the arm turns in it: eased in each half,
+    // it went twice as fast, 35 cm a frame; in even halves, three times as fast in the second, 23 cm)
+    // (taken once: worked out afresh each frame, the time's mapping shifted under it, 39 cm in a frame)
+    if (p.split < 0) {
+      let first = 0, second = 0;
+      for (let i = 0; i < 3; i++) {
+        first += _keyA[i].angleTo(_keyC[i]);
+        second += _keyC[i].angleTo(_keyB[i]);
+      }
+      p.split = first + second > 0 ? first / (first + second) : 0.5;
+    }
+    const split = p.split;
     armOf(p).forEach((joint, i) => {
-      // (through it without a stop: eased in each half, it went twice as fast, 35 cm a frame)
-      if (e < 0.5) joint.quaternion.slerpQuaternions(_keyA[i], _keyC[i], e * 2);
-      else joint.quaternion.slerpQuaternions(_keyC[i], _keyB[i], e * 2 - 1);
+      if (e < split) joint.quaternion.slerpQuaternions(_keyA[i], _keyC[i], e / split);
+      else joint.quaternion.slerpQuaternions(_keyC[i], _keyB[i], (e - split) / (1 - split));
     });
     p.swung = 1;
     p.seatNow.copy(p.seatSet);
