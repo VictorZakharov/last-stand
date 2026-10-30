@@ -1510,7 +1510,7 @@ export function buildWarrior(): Model {
    *  89 degrees past its turn; its fingers ahead on the pommel, the wrist bent 34 degrees past its range.) From play: "keep it stood", with a natural regrip. Stood point down at his side in one fist, the fist had
    *  to turn 120 degrees from how it held it standing, past a wrist's turn: his arm shot straight out ahead and the
    *  blade swept 0.5 to 2 m in a frame. */
-  const BETWEEN = tunable('warriorBetween', { ahead: 0.9, lean: 0.1, top: 0.35, arc: [0.25, 0.15], letGo: 0.7, take: 0.1, slant: 0.2, fingers: 1.6, lift: 0.4, rest: [0.4, 0.5, 0.15, 0.1], clear: [0.3, 0.7], stages: [0.3, 0.45], hands: [1.8, 2.6] });
+  const BETWEEN = tunable('warriorBetween', { ahead: 0.9, lean: 0.1, top: 0.35, arc: [0.25, 0.15], letGo: 0.7, take: 0.1, slant: 0.2, fingers: 1.6, lift: 0.4, rest: [0.4, 0.5, 0.15, 0.1], clear: [0.3, 0.7], stages: [0.3, 0.45], hands: [2.1, 2.6] });
   /** a model's hands with nothing to do as he sits */
   const NO_HANDS = { before: 0, after: 0 };
   /** whether a two-hander is stood between his feet on this sit (on a seat, not by a fire) */
