@@ -9,7 +9,7 @@ and every one show again with the columns gone. `--canary` plants each column 3 
 label shows through, which must be caught.
 
 `ui`: the game's UI as the player sees it, in its states (`--states lobby,tooltip,glow,help,saves,heroes,readying,
-readyingHeroes,clicked,views,behindProps,logLobby,skillTipsTouch,sheetTouch,litTouch,run,scores,perf,decision,pause,summary,skillTips,log,logTouch,hudTouch,decisionTouch`, every one by default:
+readyingHeroes,clicked,views,behindProps,logLobby,pauseLobby,skillTipsTouch,sheetTouch,litTouch,run,scores,perf,decision,pause,summary,skillTips,log,logTouch,hudTouch,decisionTouch`, every one by default:
 the lobby, an item's tooltip, the stash given 60 items (more than its view shows, on most screens) and a weapon
 among them hovered by the mouse, those that fit its slot lit (`page/uiGlow.ts`: a short screen's rail turned to the
 gear first; pictured round the stash, its tooltip put away, at 400, 1000 and 1600 ms into the
@@ -76,7 +76,10 @@ opened with the light; the moment after the stash weapon's is pictured, card and
 bar and damage numbers over it, the scores, the performance overlay, the choice after a wave (each button's label on one line, `page/uiDecision.ts`:
 narrowed on a short screen, the mouse's labels, their keys beside them, wrapped onto two; `--canary` makes it too
 narrow for them, which must be found; put away at once as it closes: folded back into the badge on the browser's own
-timers, it was still half shown in the next state's picture), the pause menu, the
+timers, it was still half shown in the next state's picture), the pause menu (with no time of day in a run's;
+`pauseLobby` the village's, `page/uiHour.ts`: its time of day shown within the window, the slider moved to 21:30
+holding the hour and saying so, and its first step, Auto, giving the clock back; `--canary` leaves the hour held at
+Auto, which must be found), the
 run's summary, each skill's tooltip on the hotbar opened by the mouse moved over its slot (within the window, the
 tallest pictured; `--canary` makes each as tall as the window, which must be found past it: issue #256's damage
 lines made them taller), the battle log with each skill on a key struck at the foe twice and its blows on the hero

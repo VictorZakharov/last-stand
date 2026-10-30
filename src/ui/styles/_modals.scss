@@ -110,6 +110,8 @@
 .hdr-levels { display: flex; flex-direction: column; gap: 4px; width: 100%; }
 .hdr-level { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--ink-dim); cursor: $cursor-hand; }
 .hdr-level > span { width: 76px; }
+.hour-row .hdr-level { width: 100%; }
+.hour-row .hdr-level output { width: 72px; }
 .opt-row .hdr-level input { flex: 1; width: auto; min-width: 0; height: 16px; }
 .hdr-level output { width: 40px; text-align: right; color: var(--ink); font-variant-numeric: lining-nums tabular-nums; }
 .pb-actions { margin-top: auto; display: flex; flex-direction: column; gap: 10px; padding-top: 8px; }
