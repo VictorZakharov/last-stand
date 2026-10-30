@@ -45,6 +45,12 @@ lampShadowMap.clone = () => lampShadowMap;
 const list = new Float32Array((1 + LAMPS_MOST * 2 + 1) * 4);
 /** the last entry's first float: whether the shadows' map is drawn */
 const SHADOWS_ON = (1 + LAMPS_MOST * 2) * 4;
+/** the last entry's second: how far off a surface its side of the shelter is read (a lab may read it on the surface) */
+const SHELTER_READ = SHADOWS_ON + 1;
+/** how far off a surface, along its normal, its side of the shelter is read (m) */
+const SHELTER_OFF = 0.05;
+list[SHELTER_READ] = SHELTER_OFF;
+
 /** lamp `i`'s first float, and its light's */
 const placeOf = (i: number): number => (1 + i * 2) * 4;
 const lightOf = (i: number): number => placeOf(i) + 4;
@@ -54,8 +60,13 @@ const LAMPS_LIT = `
 #if defined( RE_Direct )
 	{
 		vec3 seen = transpose( mat3( viewMatrix ) ) * ( geometryPosition - viewMatrix[ 3 ].xyz );
+		vec3 seenNormal = transpose( mat3( viewMatrix ) ) * geometryNormal;
 		vec4 shelter = lamps[ 0 ];
-		float side = all( greaterThan( seen.xz, shelter.xy ) ) && all( lessThan( seen.xz, shelter.zw ) ) ? 1.0 : - 1.0;
+		// (its side read a little off the surface, along its normal: the hall's inner walls stand on the shelter's edge,
+		// and read on them each pixel's side flipped as the view moved a hair, the walls flickering between the torches'
+		// light and the street lamps', "this wall in hall of heroes is z-fighting / flickering")
+		vec2 sideAt = seen.xz + seenNormal.xz * lamps[ LAMPS_SHADOWS ].y;
+		float side = all( greaterThan( sideAt, shelter.xy ) ) && all( lessThan( sideAt, shelter.zw ) ) ? 1.0 : - 1.0;
 		for ( int i = 0; i < LAMPS_MOST; i ++ ) {
 			vec4 lampLight = lamps[ 2 + i * 2 ];
 			if ( lampLight.w != side ) continue;
@@ -65,7 +76,6 @@ const LAMPS_LIT = `
 			if ( lampDistance >= lamp.w ) continue;
 			float lampLit = 1.0;
 			if ( lamps[ LAMPS_SHADOWS ].x > 0.0 ) {
-				vec3 seenNormal = transpose( mat3( viewMatrix ) ) * geometryNormal;
 				lampLit = lampShadowAt( i, seen + seenNormal * ${SHADOW_OUT.toFixed(3)} - lamp.xyz );
 				if ( lampLit <= 0.0 ) continue;
 			}
@@ -152,11 +162,17 @@ export function placeLamps(shelter: [number, number, number, number], places: re
   const shadows = list[SHADOWS_ON];
   list.fill(0);
   list[SHADOWS_ON] = shadows;
+  list[SHELTER_READ] = SHELTER_OFF;
   list.set(shelter, 0);
   insides = places.slice(0, LAMPS_MOST).map((place) => place.inside);
   for (const [i, place] of places.slice(0, LAMPS_MOST).entries()) {
     list.set([place.at.x, place.at.y, place.at.z, place.reach], placeOf(i));
   }
+}
+
+/** For a harness (tools/lab): each surface's side of the shelter read on it, as it was (or off it again). */
+export function readShelterOnSurface(on: boolean): void {
+  list[SHELTER_READ] = on ? 0 : SHELTER_OFF;
 }
 
 /** Lamp `i` (in `placeLamps`' order) lit in `color` at `intensity` (a point light's, in candela); 0 puts it out. */
