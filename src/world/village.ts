@@ -199,6 +199,7 @@ interface Mats {
   ashlar: THREE.Material; coping: THREE.Material; granite: THREE.Material; column: THREE.Material;
   plaster: THREE.Material; timber: THREE.Material; planks: THREE.Material; logs: THREE.Material; roof: THREE.Material;
   iron: THREE.Material; window: THREE.MeshStandardMaterial; glass: THREE.MeshStandardMaterial; paper: THREE.Material;
+  lantern: THREE.MeshBasicMaterial; lanternIron: THREE.MeshBasicMaterial;
 }
 
 /** how bright a cottage's window burns at night: its candlelit panes as a room's glow, short of a lamp's flame (at 2.4
@@ -262,6 +263,11 @@ function makeMats(): Mats {
     }),
     glass: new THREE.MeshStandardMaterial({ color: 0x2a2014, roughness: 0.3, emissive: 0xffc070, emissiveIntensity: 2.2 }),
     paper: new THREE.MeshStandardMaterial({ map: noticePaper(), roughness: 0.9 }),
+    // (the street lamps' panes: their own picture, lit by nothing, as bright as the hour sets, `daylight`)
+    lantern: new THREE.MeshBasicMaterial({ map: lanternPane(), color: LANTERN_PANE.day }),
+    // (the lantern's frame, crown and cup, dark against its glass: lit, the lamp's light 15 cm off them burned the
+    // crown's rim white)
+    lanternIron: new THREE.MeshBasicMaterial({ color: 0x141214 }),
   };
   for (const m of [mats.ashlar, mats.coping, mats.column, mats.plaster, mats.timber, mats.planks, mats.logs, mats.roof, mats.iron, mats.window]) {
     seeThrough(m, 'prop');
@@ -297,6 +303,32 @@ function noticePaper(): THREE.CanvasTexture {
  *  light by night (each pane lit warm from a room's candle low in the middle, the mullions' cross and the leads dark).
  *  As one glowing box the windows bloomed into blobs on a dark band: from play, "this is not how windows supposed to
  *  look". */
+/** how bright a street lamp's panes are drawn by day and by night (their picture's colours times these): drawn in
+ *  a lit glowing material with the lamp's light 0.25 m off them, they burned white and the bloom hid the whole
+ *  lantern ("lights too bright, can't see geometry even"; `lab village`'s lamps check) */
+const LANTERN_PANE = { day: new THREE.Color(0.22, 0.2, 0.18), night: new THREE.Color(0.5, 0.47, 0.44) };
+
+/** A street lamp's pane as lit from within (one of six round the lantern, `repeat` 6 across): warm and brightest
+ *  low in its middle, where the flame burns, amber to its edges, its frame's dark edge round it. */
+function lanternPane(): THREE.CanvasTexture {
+  const W = 32, H = 64;
+  const c = canvasOf(W, H), g = ctx2d(c);
+  const glow = g.createRadialGradient(W / 2, H * 0.62, 2, W / 2, H * 0.55, H * 0.6);
+  glow.addColorStop(0, '#ffe7b0');
+  glow.addColorStop(0.35, '#f0a850');
+  glow.addColorStop(1, '#6a3412');
+  g.fillStyle = glow;
+  g.fillRect(0, 0, W, H);
+  g.strokeStyle = '#1a120c';
+  g.lineWidth = 3;
+  g.strokeRect(0, 0, W, H);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.wrapS = THREE.RepeatWrapping;
+  t.repeat.set(6, 1);
+  return t;
+}
+
 function windowPanes(): { glass: THREE.CanvasTexture; lit: THREE.CanvasTexture } {
   const W = 128, H = 112, bar = 8, lead = 1.5;
   const draw = (lit: boolean): THREE.CanvasTexture => {
@@ -415,6 +447,7 @@ export function buildVillage(scene: THREE.Group): Village {
       sky.set(hour);
       // (the windows lit as the light goes; the lanterns' glass burns the same at any hour)
       M.window.emissiveIntensity = WINDOW_GLOW * (1 - dayness(hour));
+      M.lantern.color.copy(LANTERN_PANE.day).lerp(LANTERN_PANE.night, 1 - dayness(hour));
       night = 1 - dayness(hour);
       pools.opacity = STREET.night * night;
       fountainLight(dayness(hour));
@@ -1378,7 +1411,7 @@ function castingLights(scene: THREE.Object3D): THREE.PointLight[] {
  *  timber post, a bar and a cone over a glowing tube before). The lantern hangs from the bracket's end at `LANTERN`. */
 const LANTERN = { out: 0.52, y: -0.16, top: 0.15, bottom: 0.11, high: 0.3 };
 let lampParts: { column: THREE.BufferGeometry; bracket: THREE.BufferGeometry; frame: THREE.BufferGeometry;
-  panes: THREE.BufferGeometry } | null = null;
+  cup: THREE.BufferGeometry; panes: THREE.BufferGeometry } | null = null;
 
 function lampGeometries(): NonNullable<typeof lampParts> {
   if (lampParts) return lampParts;
@@ -1417,8 +1450,9 @@ function lampGeometries(): NonNullable<typeof lampParts> {
     at(new THREE.SphereGeometry(0.03, 6, 4), out, ly + high / 2 + 0.16, 0),
     at(new THREE.TorusGeometry(0.025, 0.007, 4, 8), out, ly + high / 2 + 0.2, 0),
     at(new THREE.CylinderGeometry(bottom + 0.02, bottom + 0.02, 0.025, 6), out, ly - high / 2, 0),
-    at(new THREE.ConeGeometry(bottom, 0.1, 6).rotateX(Math.PI), out, ly - high / 2 - 0.06, 0),
   ];
+  // (casting nothing: the lamp's light burns inside the glass, and the cup under it threw a dark disc 3 m across)
+  const cup = stripUVs(at(new THREE.ConeGeometry(bottom, 0.1, 6).rotateX(Math.PI), out, ly - high / 2 - 0.06, 0));
   // (an iron bar up each corner of the glass, leaning out with it)
   for (let k = 0; k < 6; k++) {
     const a = (k / 6) * TAU;
@@ -1432,7 +1466,7 @@ function lampGeometries(): NonNullable<typeof lampParts> {
     return g;
   }));
   const panes = at(new THREE.CylinderGeometry(top, bottom, high, 6, 1, true), out, ly, 0);
-  lampParts = { column, bracket: stripUVs(bracket), frame, panes };
+  lampParts = { column, bracket: stripUVs(bracket), frame, cup, panes };
   return lampParts;
 }
 
@@ -1451,19 +1485,20 @@ function lampPost(scene: THREE.Object3D, x: number, z: number, turn: number, M: 
   block(g, 0.42, 0.16, 0.42, 0, 0, 0, M.ashlar);
   block(g, 0.32, 0.14, 0.32, 0, 0.16, 0, M.ashlar);
   const parts = lampGeometries();
-  for (const [geo, m] of [[parts.column, M.iron], [parts.bracket, M.iron], [parts.frame, M.iron], [parts.panes, M.glass]] as const) {
+  const pieces = [[parts.column, M.iron], [parts.bracket, M.iron], [parts.frame, M.lanternIron], [parts.cup, M.lanternIron],
+    [parts.panes, M.lantern]] as const;
+  for (const [geo, m] of pieces) {
     const mesh = new THREE.Mesh(geo, m);
-    mesh.castShadow = m !== M.glass;
+    mesh.castShadow = geo !== parts.panes && geo !== parts.cup;
     mesh.receiveShadow = true;
     g.add(mesh);
   }
   obstacles.push({ x, z, r: 0.35, h: LAMPS.high });
   g.updateMatrixWorld(true);
-  return g.localToWorld(new THREE.Vector3(LANTERN.out + LAMP_LIGHT_OUT, LAMPS.high + LANTERN.y, 0));
+  // (its light at the middle of its glass: 0.25 m out from it, it lit the iron and the glass from a hand's breadth)
+  return g.localToWorld(new THREE.Vector3(LANTERN.out, LAMPS.high + LANTERN.y, 0));
 }
 
-/** how far past the lantern's middle, away from the post, its light is lit (m) */
-const LAMP_LIGHT_OUT = 0.25;
 
 /** a pool of lamplight shown whole */
 const WHITE = new THREE.Color(1, 1, 1);

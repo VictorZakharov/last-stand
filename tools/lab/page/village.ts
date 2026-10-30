@@ -10,7 +10,8 @@
 // `--canary` plants a fault for each check: an object's stand moved off it, the yard's reading taken outside it, a
 // hero put past the palisade after a walk, put past a portal after a walk at it, the rings' middle moved 20 m in a
 // frame, the stair walked at beside it into the terrace's wall, the pointer asked
-// of the square (where mouse look holds it), the notice board never read, a new material shown at one hour.
+// of the square (where mouse look holds it), the notice board never read, a new material shown at one hour; walks to
+// a spot walked straight; an orb far past white hung in a lamp's lantern.
 import * as THREE from 'three';
 import type { Lab, Report } from './lab';
 import { G } from '../../../src/state';
@@ -30,6 +31,7 @@ import { villageMapOpen } from '../../../src/ui/villageMap';
 import { closeHeroSelect, heroSelectOpen } from '../../../src/ui/heroSelect';
 import { pointerWanted } from '../../../src/core/input';
 import * as renderer from '../../../src/core/renderer';
+import { lampsNotBlinding } from './villageLamps';
 
 export interface VillageOptions {
   canary: boolean;
@@ -71,6 +73,7 @@ export async function village(lab: Lab, options: VillageOptions): Promise<Report
     await grassSteady(lab, options.canary),
     await roundCottages(lab, options.canary),
     await walksAcross(lab, options.canary),
+    await lampsNotBlinding(lab, options.canary),
     await training(lab, options.canary),
     await hoursCompileNothing(lab, options.canary),
   ];
