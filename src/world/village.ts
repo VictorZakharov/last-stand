@@ -176,6 +176,23 @@ function block(group: THREE.Object3D, w: number, h: number, d: number, x: number
   return mesh;
 }
 
+/** A block of walling at (x, y0, z) as `block` lays it, unturned, its courses laid by the world's place, not the block's
+ *  corner (a tile `1 / texel` m): each block's own ran from its corner, and the one over the hall's door met the wings
+ *  beside it a part course off, its joints across theirs ("misaligned texture"). */
+function walling(group: THREE.Object3D, w: number, h: number, d: number, x: number, y0: number, z: number,
+  material: THREE.Material, texel = 0.5): THREE.Mesh {
+  const mesh = block(group, w, h, d, x, y0, z, material, texel);
+  const g = mesh.geometry, at = g.attributes.position, uv = g.attributes.uv, n = g.attributes.normal;
+  for (let i = 0; i < uv.count; i++) {
+    const px = at.getX(i) + x, py = at.getY(i) + y0 + h / 2, pz = at.getZ(i) + z;
+    const ax = Math.abs(n.getX(i)), ay = Math.abs(n.getY(i));
+    // (across a face its side's way, up it the height; a top across x and z)
+    const u = ax > 0.5 ? pz : px, v = ay > 0.5 ? pz : py;
+    uv.setXY(i, u * texel, v * texel);
+  }
+  return mesh;
+}
+
 // --- the floor's levels ---------------------------------------------------------------------------------------------
 
 /** The relief the village's levels make, painted into its grid by `paint` (each cell's height its highest). */
@@ -960,10 +977,10 @@ function buildHall(scene: THREE.Object3D, wall: Wall, levels: Levels, M: Mats, o
   floor.receiveShadow = true;
   levels.paint(X - HALL.inHalf, HALL.wall, X + HALL.inHalf, TERRACE.back, () => y0);
   // the back and side walls, a plinth course along their feet outside, tall windows down the long ones
-  wall.add(block(scene, half * 2, eaves, thick, X, y0, HALL.wall - thick / 2, M.ashlar), true, 'wall', true);
+  wall.add(walling(scene, half * 2, eaves, thick, X, y0, HALL.wall - thick / 2, M.ashlar), true, 'wall', true);
   for (const s of [-1, 1]) {
     const sideX = X + s * (half - thick / 2), sideLen = face - back;
-    wall.add(block(scene, thick, eaves, sideLen, sideX, y0, back + sideLen / 2, M.ashlar), true, 'wall', true);
+    wall.add(walling(scene, thick, eaves, sideLen, sideX, y0, back + sideLen / 2, M.ashlar), true, 'wall', true);
     // (its plinth course in the wall too: drawn alone, the hero walked along the terrace into it, "can pass through
     // textures here")
     wall.add(block(scene, 0.35, 0.45, sideLen, sideX + s * 0.47, y0, back + sideLen / 2, M.coping), true, 'wall', true);
@@ -980,10 +997,10 @@ function buildHall(scene: THREE.Object3D, wall: Wall, levels: Levels, M: Mats, o
   scene.add(frontWall);
   for (const s of [-1, 1]) {
     const cx = X + s * (dh + wing / 2);
-    wall.add(block(frontWall, wing, eaves, thick, cx, y0, face - thick / 2, M.ashlar), true, 'wall', true);
+    wall.add(walling(frontWall, wing, eaves, thick, cx, y0, face - thick / 2, M.ashlar), true, 'wall', true);
     wall.add(block(frontWall, wing - DOOR.frame, 0.45, 0.35, cx + s * DOOR.frame / 2, y0, face + 0.17, M.coping), true, 'wall', true);
   }
-  block(frontWall, dh * 2, eaves - high, thick, X, y0 + high, face - thick / 2, M.ashlar);
+  walling(frontWall, dh * 2, eaves - high, thick, X, y0 + high, face - thick / 2, M.ashlar);
   hallDoor(frontWall, M, X, y0, face);
   const ceiling = y0 + eaves - ROOF.ceiling - 0.32;
   const look = torchLook();

@@ -44,6 +44,7 @@ import { propHoleWhereHidden } from './villageSeeThrough';
 import { hallWallsSteady } from './villageHallSteady';
 import { objectsUsedAgain } from './villageUseAgain';
 import { hallWallsHold } from './villageHallSide';
+import { wallingAligned } from './villageWalling';
 
 export interface VillageOptions {
   canary: boolean;
@@ -98,6 +99,7 @@ export async function village(lab: Lab, options: VillageOptions): Promise<Report
     await hallCulledByDoor(lab, options.canary),
     await hallWallsSteady(lab, options.canary),
     roadsBendWide(options.canary),
+    wallingAligned(options.canary),
     await propHoleWhereHidden(lab, options.canary),
     await training(lab, options.canary),
     await hoursCompileNothing(lab, options.canary),
