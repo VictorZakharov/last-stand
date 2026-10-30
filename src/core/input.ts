@@ -48,6 +48,23 @@ let lockWanted = false, lockTried = 0;
 export let lockLostAt = -1;
 let onLockLost: () => void = () => {};
 export const pointerLocked = (): boolean => !!canvasEl && document.pointerLockElement === canvasEl;
+/** A move under the lock this large (css px) and this many times the one before it is the browser's own, not the hand's:
+ *  Chrome on Windows sends one now and then, about half the window across, as it puts its hidden cursor back, and a
+ *  long spin turned the view by about 180 degrees at once, back again spun the other way (#318; `lab spin`). A hand's
+ *  move grows over a few events. */
+const LOOK_JUMP = { least: 200, times: 6 };
+/** the size of the last move under the lock (css px) */
+let lastLook = 0;
+/** A move under the lock taken as mouse look, unless it's the browser's own jump. */
+function lookMove(e: MouseEvent): void {
+  const size = Math.hypot(e.movementX, e.movementY);
+  const jump = size > LOOK_JUMP.least && size > lastLook * LOOK_JUMP.times;
+  // (kept whether taken or not: a flick begun fast loses its first move at the most)
+  lastLook = size;
+  if (jump) return;
+  input.look.x += e.movementX;
+  input.look.y += e.movementY;
+}
 function requestLock(): void {
   lockTried = performance.now();
   try { Promise.resolve(canvasEl.requestPointerLock()).catch(() => {}); } catch { /* not allowed right now */ }
@@ -177,7 +194,7 @@ export function initInput(canvas: HTMLCanvasElement): void {
   window.addEventListener('blur', releaseInput);
   window.addEventListener('mousemove', (e) => {
     if (input.touchMode) return;
-    if (pointerLocked()) { input.look.x += e.movementX; input.look.y += e.movementY; input.mouse.overUI = false; return; }
+    if (pointerLocked()) { lookMove(e); input.mouse.overUI = false; return; }
     input.mouse.x = e.clientX; input.mouse.y = e.clientY;
     input.mouse.overUI = e.target !== canvas;
     // the drag keeps rotating over the UI; `buttons` catches a release outside the window

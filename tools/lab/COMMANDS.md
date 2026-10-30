@@ -453,6 +453,15 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   change would be: its hits must be found above what it states, and what was given off it. On `--ab` against a
   commit before it, every tooltip states no damage.
   (Issue #256: the tooltips showed the base damage alone, not what the hero deals with his gear.)
+- `spin`: mouse look turned one way for 240 frames in each close view (`--views third,first`), then the other way,
+  24 px a frame, the pointer locked as the player's click takes it (`page/spin.ts`; `src/core/input.ts` `lookMove`).
+  Chrome on Windows sends a move of its own under the lock now and then, about half the window across in one event,
+  as it puts its hidden cursor back: taken as the hand's, it turned the view by about 180 degrees at once, and back
+  again spun the other way (#318, from play: "the jump will happen if rotating to one side for the while"). Mid-spin
+  that move is sent as Chrome sends it, and no frame may turn the view past three times the spin's steady turn
+  (main: 141 degrees in a frame, each way in each view). `--canary` sends that move twice running (the second, the size
+  of the one before, is taken as the hand's): the view turns round in a frame, which must be found each way in each
+  view.
 - `cursor`: the cursor drawn over mouse look while Alt is held (`src/ui/altCursor.ts`, `page/cursor.ts`). In each
   close view (`--views third,first`) the battle log is filled past its height and the pointer is locked as the
   player's click takes it: the lab's browser plays the lock (`lab.pointerLock`, `noCapture` in `node/browser.mjs`),

@@ -819,6 +819,28 @@ export const COMMANDS = {
       ...COMMON_OPTIONS,
     },
   },
+  spin: {
+    help: 'mouse look turned one way for a long while in each close view, then the other, the pointer locked as the '
+      + 'player\'s click takes it: mid-spin the browser\'s own move under the lock (Chrome on Windows sends one now '
+      + 'and then, half the window across, as it puts its hidden cursor back) must not turn the view: no frame may '
+      + 'turn it past three times the spin\'s steady turn (#318)',
+    options: {
+      views: {
+        kind: 'list',
+        usage: 'a,b',
+        choices: ['third', 'first'],
+        default: 'third,first',
+        help: 'the close views: third, first',
+      },
+      canary: {
+        kind: 'switch',
+        help: 'turn the view round by 180 degrees in a frame mid-spin, which must be found each way in each view',
+      },
+      at: SETUP_OPTIONS.at,
+      facing: SETUP_OPTIONS.facing,
+      ...COMMON_OPTIONS,
+    },
+  },
   cursor: {
     help: 'the cursor drawn over mouse look while Alt is held: in each close view the pointer locked as the player\'s '
       + 'click takes it (the lab\'s browser plays the lock, every event of the mouse sent to the game\'s canvas while '
