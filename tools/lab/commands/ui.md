@@ -9,8 +9,8 @@ and every one show again with the columns gone. `--canary` plants each column 3 
 label shows through, which must be caught.
 
 `ui`: the game's UI as the player sees it, in its states (`--states lobby,tooltip,glow,help,saves,heroes,readying,
-readyingHeroes,clicked,views,behindProps,logLobby,perfAsk,skillTipsTouch,sheetTouch,litTouch,run,scores,perf,decision,
-perfAskBreak,pause,pauseSettings,pauseAbandon,summary,skillTips,log,logTouch,hudTouch,decisionTouch,perfAskTouch,buttonsTouch,buttonsRunTouch`, every one by default (the
+readyingHeroes,clicked,views,behindProps,logLobby,perfAsk,pauseLobby,skillTipsTouch,sheetTouch,litTouch,run,scores,perf,decision,
+perfAskBreak,pause,pauseSettings,pauseAbandon,summary,skillTips,log,logTouch,hudTouch,decisionTouch,perfAskTouch`, every one by default (the
 performance report's prompt, `page/uiPerfAsk.ts`: over the lobby, under the choice after a wave and so on touch, inside
 the window, each button on one line, a finger's 28 px tall on touch, over none of the choice, the wave's badge, the
 bars or the touch HUD's corners; `--canary` moves it down onto the choice, which must be found):
@@ -81,7 +81,7 @@ bar and damage numbers over it, the scores, the performance overlay, the choice 
 narrowed on a short screen, the mouse's labels, their keys beside them, wrapped onto two; `--canary` makes it too
 narrow for them, which must be found; put away at once as it closes: folded back into the badge on the browser's own
 timers, it was still half shown in the next state's picture), the pause menu on its Controls tab (`pause`, as it
-opens every time) and its Settings tab (`pauseSettings`), each fitting the window without scrolling, the box inside
+opens every time) and its Settings tab (`pauseSettings`, with no time of day in a run's; `pauseLobby` the village's, `page/uiHour.ts`: its time of day shown within the window, the slider moved to 21:30 holding the hour and saying so, and its first step, Auto, giving the clock back; `--canary` leaves the hour held at Auto, which must be found), each fitting the window without scrolling, the box inside
 the window, Resume, Abandon, the title and the tabs inside the box (`page/uiPause.ts`: the controls and the settings side by side scrolled on a phone held sideways;
 `--canary` makes a settings row 600 px tall, which must make it scroll), Abandon run held as a player holds it
 (`pauseAbandon`, with `lab.mouseDown`/`mouseUp`: clicked, it says to hold and stays; held a second and let go, it

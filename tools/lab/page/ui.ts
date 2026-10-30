@@ -40,6 +40,7 @@ import { openSaves } from '../../../src/ui/saves';
 import { openBook } from '../../../src/ui/loadoutEditor';
 import { hideTooltip, itemTooltip, showTooltipAt } from '../../../src/ui/tooltip';
 import { hdrOutput } from './hdrOutput';
+import { closePauseLobby, HOUR_CANARY, hourHiddenInRun, hourShown, openPauseLobby } from './uiHour';
 import { panelsBack, showPanels } from './lobbyPanels';
 import { battleLog } from './battleLog';
 import { digitsShown } from './digits';
@@ -59,12 +60,18 @@ import {
   SHEET_CANARIES, sheetTouchShown,
 } from './uiSheet';
 
+/** Two checks' lines and problems as one. */
+const joinFound = (a: { lines: string[]; problems: string[] }, b: { lines: string[]; problems: string[] }) => ({
+  lines: [...a.lines, ...b.lines],
+  problems: [...a.problems, ...b.problems],
+});
+
 /** The states pictured, in the order they run (tools/lab/node/options.mjs `UI_STATES`). */
 export type UiState =
   | 'lobby' | 'tooltip' | 'glow' | 'help' | 'saves' | 'heroes' | 'readying' | 'readyingHeroes' | 'clicked' | 'views'
   | 'behindProps'
-  | 'logLobby' | 'perfAsk'
-  | 'heroesWarming' | 'skillTipsTouch' | 'sheetTouch' | 'litTouch' | 'buttonsTouch' | 'run' | 'scores' | 'perf'
+  | 'logLobby' | 'perfAsk' | 'pauseLobby'
+  | 'skillTipsTouch' | 'sheetTouch' | 'litTouch' | 'run' | 'scores' | 'perf'
   | 'decision' | 'perfAskBreak' | 'pause' | 'pauseSettings' | 'pauseAbandon' | 'summary' | 'skillTips' | 'log' | 'logTouch' | 'hudTouch' | 'decisionTouch'
   | 'perfAskTouch' | 'buttonsRunTouch';
 
@@ -935,6 +942,7 @@ const STEPS: Record<UiState, Steps> = {
   behindProps: { open: () => undefined, close: () => undefined, check: labelsBehindProps },
   logLobby: { open: openLogLobby, close: closeLog, check: logShown },
   perfAsk: { open: openPerfAsk, close: closePerfAsk, check: (canary) => perfAskShown('perfAsk', canary) },
+  pauseLobby: { open: openPauseLobby, close: closePauseLobby, check: hourShown },
   skillTipsTouch: { open: openSkillTipsTouch, close: closeSkillTipsTouch, check: skillTipsShown },
   heroesWarming: { open: openHeroesWarming, close: closeHeroesWarming, check: heroesWarmingShown },
   sheetTouch: { open: openSheetTouch, close: closeSheetTouch, check: sheetTouchShown },
@@ -950,7 +958,8 @@ const STEPS: Record<UiState, Steps> = {
   perfAskBreak: { open: openPerfAskBreak, close: closePerfAsk, check: (canary) => perfAskShown('perfAskBreak', canary) },
   pause: { open: () => openPause('controls', canaryAsked), close: closePause, check: () => pauseShown('controls') },
   pauseSettings: {
-    open: () => openPause('settings', canaryAsked), close: closePause, check: () => pauseShown('settings'),
+    open: () => openPause('settings', canaryAsked), close: closePause,
+    check: () => joinFound(pauseShown('settings'), hourHiddenInRun()),
   },
   // (held through, it abandons the run: the next run state sets one up again)
   pauseAbandon: {
@@ -1046,6 +1055,11 @@ export async function ui(lab: Lab, options: UiOptions): Promise<Report> {
     const seen = through ? 'caught' : 'went unseen';
     lines.push(`  canary: the labels beside the columns ${seen}`);
     if (!through) missed.push(`${state}: the canary's labels beside the columns went unseen`);
+  }
+  if (state === 'pauseLobby') {
+    const caught = found.problems.some((problem) => problem.includes(HOUR_CANARY.name));
+    lines.push(`  canary: ${HOUR_CANARY.what} ${caught ? 'caught' : 'went unseen'}`);
+    if (!caught) missed.push(`${state}: the canary's ${HOUR_CANARY.what} went unseen`);
   }
   if (state === 'decision') {
     const caught = found.problems.some((problem) => problem.includes(DECISION_CANARY.name));

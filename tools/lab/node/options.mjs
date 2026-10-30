@@ -24,8 +24,8 @@ const KINDS = [
 export const UI_STATES = [
   'lobby', 'tooltip', 'glow', 'help', 'saves', 'heroes', 'readying', 'readyingHeroes', 'clicked', 'views',
   'behindProps',
-  'logLobby', 'perfAsk',
-  'heroesWarming', 'skillTipsTouch', 'sheetTouch', 'litTouch', 'buttonsTouch',
+  'logLobby', 'perfAsk', 'pauseLobby',
+  'skillTipsTouch', 'sheetTouch', 'litTouch',
   'run', 'scores', 'perf', 'decision', 'perfAskBreak', 'pause', 'pauseSettings', 'pauseAbandon', 'summary', 'skillTips', 'log', 'logTouch',
   'hudTouch', 'decisionTouch', 'perfAskTouch', 'buttonsRunTouch',
 ];
@@ -373,7 +373,8 @@ export const COMMANDS = {
           + 'mouse, within the window; the tallest pictured; skillTipsTouch: the lobby\'s by a finger\'s tap), log '
           + '(the battle log with hits dealt and taken: every '
           + 'line shown, within the screen, over nothing of the HUD), logLobby (the same over the lobby, clear of its '
-          + 'panels), '
+          + 'panels), pauseLobby (the pause menu in the village: its time of day shown, holding the hour it is '
+          + 'moved to and giving the clock back at Auto; none in the pause menu of a run), '
           + 'logTouch (the same in touch mode: clear of the touch HUD, touches let through), hudTouch (the touch '
           + 'HUD\'s top corners at the screen\'s edges, none of its corners\' controls over another; --insets for a '
           + 'phone\'s cutout), decisionTouch (the choice after a wave in touch mode: on a short screen within its top '
