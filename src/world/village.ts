@@ -204,12 +204,42 @@ interface Mats {
  *  as one lit box, the bloom spread each into a blob) */
 const WINDOW_GLOW = 1.3;
 
+/**
+ * `m`, a paving's, shaded in broad patches over the world, some stones darker and some paler, worn and stained, so its
+ * tile's own patches don't line up across the square: a tile a metre and a half, repeated, read as a grid of the same
+ * blotches (from play, "texture tiling on the ground too obvious"). Its own program, made at the village's warm-up.
+ */
+function unrepeated<M extends THREE.MeshStandardMaterial>(m: M): M {
+  m.onBeforeCompile = (shader) => {
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec2 vPaveXZ;')
+      .replace('#include <project_vertex>',
+        '#include <project_vertex>\nvPaveXZ = (modelMatrix * vec4(transformed, 1.0)).xz;');
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', `#include <common>
+        varying vec2 vPaveXZ;
+        float paveH(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+        float paveN(vec2 p) {
+          vec2 i = floor(p), f = fract(p);
+          f = f * f * (3.0 - 2.0 * f);
+          return mix(mix(paveH(i), paveH(i + vec2(1, 0)), f.x), mix(paveH(i + vec2(0, 1)), paveH(i + vec2(1, 1)), f.x), f.y);
+        }`)
+      .replace('#include <map_fragment>', `#include <map_fragment>
+        float broad = paveN(vPaveXZ * 0.11) * 0.55 + paveN(vPaveXZ * 0.37 + 4.0) * 0.3 + paveN(vPaveXZ * 1.3 + 9.0) * 0.15;
+        float stained = smoothstep(0.55, 0.85, paveN(vPaveXZ * 0.21 + 17.0));
+        diffuseColor.rgb *= mix(0.72, 1.18, broad);
+        diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(0.78, 0.74, 0.66), stained * 0.6);`);
+  };
+  m.customProgramCacheKey = () => 'paving-unrepeated';
+  return m;
+}
+
 function makeMats(): Mats {
   // (the biomes' own recipes, at the same arguments: their maps and their programs are theirs, nothing made afresh)
   const stoneMaps = ashlar(21, 6, 3), flagMaps = flagstone(47, 5), panes = windowPanes();
   const mats: Mats = {
     yardFloor: new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(soil(), 8, 0.8), color: 0xc8b090 }),
-    cobbles: new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(cobblestone(), 1, 1.1), color: 0xfff4e4 }),
+    cobbles: unrepeated(new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(cobblestone(), 1, 1.1), color: 0xfff4e4 })),
     flags: new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(flagMaps, 1, 1.2), color: 0xd0c8bc }),
     ashlar: new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(stoneMaps, 1, 1.2), color: 0xd0c4b0 }),
     coping: new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(limestone(11), 2, 1.2), color: 0x9c968c }),
@@ -513,6 +543,95 @@ function buildGround(scene: THREE.Object3D, M: Mats, mask: MaskUniforms): void {
   // draw the same)
   scene.add(flatPatch(squareOutline(), M.cobbles, 0.012));
   roadLines.forEach((road, k) => scene.add(roadStrip(road.line, road.width, M.cobbles, k)));
+  scene.add(curbs(M.coping));
+}
+
+/** the curbs along the roads' and the square's edges: how wide and how high (m); the grass grows up to them (from play,
+ *  "no grass on paved road pls, if you want, lets have curb, grass will be up to curb") */
+const CURB = { w: 0.2, h: 0.07 };
+
+/** A road's two edges, each point of `line` its width's half out either side, wandering a little (each road its own,
+ *  `seed`): the left (-1) and the right (1). */
+function roadEdges(line: readonly Spot[], width: number, seed: number): [Spot[], Spot[]] {
+  const edges: [Spot[], Spot[]] = [[], []];
+  line.forEach(([x, z], i) => {
+    const [ax, az] = line[Math.max(0, i - 1)], [bx, bz] = line[Math.min(line.length - 1, i + 1)];
+    const len = Math.hypot(bx - ax, bz - az) || 1, nx = -(bz - az) / len, nz = (bx - ax) / len;
+    for (const [k, s] of [[0, -1], [1, 1]] as const) {
+      const wander = 0.16 * Math.sin(i * 0.37 + seed * 3.1 + s) + 0.1 * Math.sin(i * 1.13 + seed + s * 2.0);
+      const half = width / 2 + wander;
+      edges[k].push([x + nx * half * s, z + nz * half * s]);
+    }
+  });
+  return edges;
+}
+
+/** Whether (x, z) is paved: on the square or a road (its edges' wander allowed for), road `own` left out (-1: none). */
+function paved(x: number, z: number, own: number): boolean {
+  if (insidePolygon(squareOutline(), x, z)) return true;
+  return roadLines.some((road, k) => k !== own
+    && road.line.some(([lx, lz]) => Math.hypot(lx - x, lz - z) < road.width / 2 + 0.3));
+}
+
+/** Whether (x, z) is inside the polygon through `points`. */
+function insidePolygon(points: readonly Spot[], x: number, z: number): boolean {
+  let inside = false;
+  for (let i = 0, j = points.length - 1; i < points.length; j = i++) {
+    const [xi, zi] = points[i], [xj, zj] = points[j];
+    if ((zi > z) !== (zj > z) && x < ((xj - xi) * (z - zi)) / (zj - zi) + xi) inside = !inside;
+  }
+  return inside;
+}
+
+/** Every edge of the paving as a curb's line, each with the way out from the paving (1: to its left as it goes, -1:
+ *  to its right). */
+function curbLines(): { line: Spot[]; out: 1 | -1; road: number }[] {
+  const square = squareOutline();
+  const lines: { line: Spot[]; out: 1 | -1; road: number }[] = [{ line: [...square, square[0]], out: -1, road: -1 }];
+  roadLines.forEach((road, k) => {
+    const [left, right] = roadEdges(road.line, road.width, k);
+    lines.push({ line: left, out: -1, road: k }, { line: right, out: 1, road: k });
+  });
+  return lines;
+}
+
+/** The curbs: a low stone strip out from each edge of the paving (`curbLines`), left out where its middle lies on
+ *  other paving (a road's mouth on the square, where two roads meet). One mesh, standing still. */
+function curbs(m: THREE.Material): THREE.Mesh {
+  const positions: number[] = [], uvs: number[] = [];
+  const quad = (a: number[], b: number[], c: number[], d: number[], along0: number, along1: number): void => {
+    positions.push(...a, ...b, ...c, ...a, ...c, ...d);
+    uvs.push(along0, 0, along1, 0, along1, 1, along0, 0, along1, 1, along0, 1);
+  };
+  for (const { line, out, road } of curbLines()) {
+    let along = 0;
+    for (let i = 1; i < line.length; i++) {
+      const [ax, az] = line[i - 1], [bx, bz] = line[i];
+      const len = Math.hypot(bx - ax, bz - az);
+      if (len < 1e-4) continue;
+      // (out from the paving: to the segment's left or right)
+      const ox = (-(bz - az) / len) * out * CURB.w, oz = ((bx - ax) / len) * out * CURB.w;
+      const mx = (ax + bx) / 2 + ox * 1.5, mz = (az + bz) / 2 + oz * 1.5;
+      const next = along + len;
+      if (!paved(mx, mz, road)) {
+        const { h } = CURB;
+        // its face to the paving, its top, its face to the grass
+        quad([ax, 0, az], [bx, 0, bz], [bx, h, bz], [ax, h, az], along, next);
+        quad([ax, h, az], [bx, h, bz], [bx + ox, h, bz + oz], [ax + ox, h, az + oz], along, next);
+        quad([ax + ox, h, az + oz], [bx + ox, h, bz + oz], [bx + ox, 0, bz + oz], [ax + ox, 0, az + oz], along, next);
+      }
+      along = next;
+    }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(uvs.map((v, k) => (k % 2 ? v * 0.3 : v)), 2));
+  g.computeVertexNormals();
+  const mesh = new THREE.Mesh(g, m);
+  mesh.name = 'curbs';
+  mesh.receiveShadow = true;
+  mesh.userData.noBake = true;
+  return mesh;
 }
 
 /** The square's edge: round the fountain, wandering in and out. */
@@ -549,14 +668,9 @@ function flatPatch(points: readonly Spot[], m: THREE.Material, y: number): THREE
  *  own, `seed`). */
 function roadStrip(line: readonly Spot[], width: number, m: THREE.Material, seed: number): THREE.Mesh {
   const positions: number[] = [], index: number[] = [];
-  line.forEach(([x, z], i) => {
-    const [ax, az] = line[Math.max(0, i - 1)], [bx, bz] = line[Math.min(line.length - 1, i + 1)];
-    const len = Math.hypot(bx - ax, bz - az) || 1, nx = -(bz - az) / len, nz = (bx - ax) / len;
-    for (const s of [-1, 1]) {
-      const wander = 0.16 * Math.sin(i * 0.37 + seed * 3.1 + s) + 0.1 * Math.sin(i * 1.13 + seed + s * 2.0);
-      const half = width / 2 + wander;
-      positions.push(x + nx * half * s, 0, z + nz * half * s);
-    }
+  const [left, right] = roadEdges(line, width, seed);
+  line.forEach((_, i) => {
+    positions.push(left[i][0], 0, left[i][1], right[i][0], 0, right[i][1]);
     if (i > 0) {
       const a = (i - 1) * 2;
       index.push(a, a + 1, a + 2, a + 1, a + 3, a + 2);
@@ -577,14 +691,13 @@ function roadStrip(line: readonly Spot[], width: number, m: THREE.Material, seed
  *  yard, round the campfire, the trees' feet). */
 function meadowMask(trees: readonly TreeSpot[]): MeadowMask {
   const mask = new MeadowMask(48);
-  const square = squareOutline();
-  mask.clearPolygon(square);
-  mask.clearPath([...square, square[0]], 1.6, 0.5);
-  // the roads, worn along their edges; the footpaths, earth trodden bare down their middles
-  for (const road of roadLines) {
-    mask.clearPath(road.line, road.width + 1.4, 0.55);
-    mask.clearPath(road.line, road.width - 0.1);
-  }
+  // the paving and its curbs, the grass up to them; the footpaths, earth trodden bare down their middles
+  mask.clearPolygon(squareOutline());
+  roadLines.forEach((road, k) => {
+    const [left, right] = roadEdges(road.line, road.width, k);
+    mask.clearPolygon([...left, ...right.reverse()]);
+  });
+  for (const { line } of curbLines()) mask.clearPath(line, CURB.w * 2 + 0.1);
   for (const c of COTTAGES) {
     const path = footpathOf(c);
     if (!path) continue;
