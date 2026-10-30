@@ -141,11 +141,16 @@ export interface Village extends Biome {
   exits: Record<BiomeId, { at: THREE.Vector3; facing: number }>;
 }
 
-/** What `build` adds to `scene`, built to stand still, frozen as it stands (`standStill`); returns what it returns. */
+/** What `build` adds to `scene`, built to stand still, frozen as it stands (`standStill`), but for a part holding a
+ *  light (a brazier's sways with its fire, and three places a light by its matrix); returns what it returns. */
 function stillBuilt<T>(scene: THREE.Object3D, build: () => T): T {
   const from = scene.children.length;
   const built = build();
-  for (const part of scene.children.slice(from)) standStill(part);
+  for (const part of scene.children.slice(from)) {
+    let lit = false;
+    part.traverse((object) => { if ((object as THREE.Light).isLight) lit = true; });
+    if (!lit) standStill(part);
+  }
   return built;
 }
 
@@ -392,11 +397,14 @@ export function buildVillage(scene: THREE.Group): Village {
   scene.add(meadow);
   const fountainLight = buildSquare(scene, M, obstacles, updaters);
   stillBuilt(scene, () => buildTerrace(scene, wall, levels, M));
-  const hall = buildHall(scene, wall, levels, M, obstacles, updaters);
+  // (the hall stands still too: its 300 parts' matrices were made again every frame; its roof and front wall,
+  // hidden over the hero inside, are kept out of the merge)
+  const hall = stillBuilt(scene, () => buildHall(scene, wall, levels, M, obstacles, updaters));
+  for (const part of hall.cutaway) part.traverse((object) => { object.userData.noMerge = true; });
   const lid = buildChest(scene, M, obstacles);
   stillBuilt(scene, () => buildPlatform(scene, wall, levels, M, obstacles, lights));
   stillBuilt(scene, () => buildPalisade(scene, wall, M, rng));
-  const portals: Portal[] = [buildCryptWay(scene, wall, M, updaters), buildForestWay(scene, wall, updaters)];
+  const portals: Portal[] = stillBuilt(scene, () => [buildCryptWay(scene, wall, M, updaters), buildForestWay(scene, wall, updaters)]);
   const exits = {} as Village['exits'];
   for (const id of BIOME_IDS) {
     const p = portalPlace(id);
