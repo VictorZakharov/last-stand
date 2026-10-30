@@ -199,8 +199,11 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   beside the door, the first surface drawn ahead of his middle at a knee's height at least 0.15 m off
   (`page/villageHallSide.ts`: from
   play, "can pass through textures here", the plinth course along the hall's foot drawn and not in the wall;
-  `--canary` counts him half a metre further); through the eyes on the square, the view tilted from over level down
-  toward the ground, the grass's rings' middle (`focusOf` in `world/meadow.ts`) moving at most 2 m a frame (the old rule
+  `--canary` counts him half a metre further); the hall's front wall's blocks of walling, their maps read at each corner
+  against its place, one grid at most 1% of a tile apart (`page/villageWalling.ts`: from play, "misaligned texture",
+  the block over the door a part course off the wings, 45%; `--canary` moves one block's map a third of a tile); through
+  the eyes on the square, the view tilted from over level down toward the ground, the grass's rings' middle (`focusOf`
+  in `world/meadow.ts`) moving at most 2 m a frame (the old rule
   threw it 22 m at a sight just under level: "grass a near circle that keeps updating in front of me"); sent across
   each cottage to a spot behind it, and from each portal to every other object's stand, as a place picked on the map
   sends him (`goTo`), there within 600 and 1500 frames (walked straight at the spot, he ran into a cottage and stood
