@@ -1226,6 +1226,11 @@ export const COMMANDS = {
         usage: 'crypt|forest',
         help: 'the biome (as the page has it by default)',
       },
+      village: {
+        kind: 'switch',
+        help: 'in the lobby\'s village instead (the run the set-up starts left, no foes; --at and --facing where the '
+          + 'hero stands there, the square by default)',
+      },
       canary: {
         kind: 'switch',
         help: 'stand seven boxes of one geometry before the hero, which must come out as seven draws of it, seven '

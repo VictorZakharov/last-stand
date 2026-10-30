@@ -108,12 +108,9 @@ function keyboardDiagram(): string {
     tab: { icon: '☰', cap: 'Scores', tip: "The party's scores and pings", hold: true },
     alt: { icon: '⇱', cap: 'Cursor', tip: 'A cursor for the HUD over mouse look, the view held still', hold: true },
   };
-  // (in the village E uses what the hero is near, I and M open the inventory and the map, and a wave's keys do nothing)
-  const village = G.mode === 'menu';
-  if (village) {
-    delete used.b;
-    delete used.c;
-    delete used.tab;
+  // (in the village E uses what the hero is near, I and M open the inventory and the map; a run's keys shown still,
+  // as the game's: left out there, B and C were missed beside the rules' Bank and Continue)
+  if (G.mode === 'menu') {
     Object.assign(used, {
       e: { icon: '✋', cap: 'Use', tip: 'Use what the hero is near (a click on it walks him there)' },
       i: { icon: '⛉', cap: 'Inventory', tip: 'Inventory: equipment, attributes and skills' },
@@ -125,17 +122,18 @@ function keyboardDiagram(): string {
     const sk = skillOn(k);
     used[k] = sk ? { skill: sk.icon, art: sk.art, color: sk.color, cap: sk.name, tip: sk.name, hold: sk.hold } : { cap: '—', tip: 'No skill bound' };
   }
+  // (as far as I and M, in their places, each row on to the diagram's faded edge: from play, I and M set beside Alt
+  // were "not a real keyboard layout")
+  const keys = (s: string): Cap[] => s.split('').map((k) => ({ k }));
   const rows: Cap[][] = [
     [{ k: 'esc' }],
-    [{ k: '`' }, ...'123456'.split('').map((k) => ({ k }))],
-    [{ k: 'tab', w: 1.5 }, ...'qwerty'.split('').map((k) => ({ k }))],
-    [{ k: 'caps', w: 1.75 }, ...'asdfgh'.split('').map((k) => ({ k }))],
-    [{ k: 'shift', w: 2.25 }, ...'zxcvbn'.split('').map((k) => ({ k }))],
-    // (the village's I and M beside Alt, apart from it: in their places the rows ran past the diagram's faded edge)
-    [{ k: 'ctrl', w: 1.25 }, { k: 'win', w: 1.25 }, { k: 'alt', w: 1.25 }, ...(village ? [{ k: ' ', w: 0.5 }, { k: 'i' }, { k: 'm' }] : [])],
+    [{ k: '`' }, ...keys('1234567890')],
+    [{ k: 'tab', w: 1.5 }, ...keys('qwertyuiop')],
+    [{ k: 'caps', w: 1.75 }, ...keys('asdfghjkl')],
+    [{ k: 'shift', w: 2.25 }, ...keys('zxcvbnm,.')],
+    [{ k: 'ctrl', w: 1.25 }, { k: 'win', w: 1.25 }, { k: 'alt', w: 1.25 }, { k: 'space', w: 6 }],
   ];
   const cap = (c: Cap): string => {
-    if (c.k === ' ') return `<span class="kb-gap" style="--w:${c.w}"></span>`;
     const u = used[c.k];
     const label = c.k.length > 1 ? c.k[0].toUpperCase() + c.k.slice(1) : c.k.toUpperCase();
     const style = `--w:${c.w ?? 1}${u?.color ? `;--c:${u.color}` : ''}`;
@@ -293,6 +291,12 @@ export function showHelp(): void {
   renderControlsHelp();
   $('#help').classList.remove('hidden');
 }
+
+/** Whether how to play is up. */
+export const helpOpen = (): boolean => !$('#help').classList.contains('hidden');
+
+/** How to play put away. */
+export function hideHelp(): void { $('#help').classList.add('hidden'); }
 
 /** What the lobby's panels show now (`Panels`). */
 export function panelsOpen(): Panels {

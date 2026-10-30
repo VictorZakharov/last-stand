@@ -55,6 +55,9 @@ async function checkServer(): Promise<void> {
   renderCoop();
 }
 
+/** Whether the room dialog is up. */
+export const coopOpen = (): boolean => !$('#coop').classList.contains('hidden');
+
 export function openCoop(open: boolean): void {
   $('#coop').classList.toggle('hidden', !open);
   if (!open) return;

@@ -9,7 +9,7 @@
 // gather in tufts and patches, bend along an arc, turn a little to the camera seen edge on and sway in the wind.
 // Nothing here changes a program as the camera moves: the tiles, the grids' origins and the count are uniforms.
 import * as THREE from 'three';
-import { canvasOf, ctx2d } from '../core/textures';
+import { canvasOf, ctx2d, readCtx2d } from '../core/textures';
 import type { Updater } from './props';
 
 /** The rings: each cell's size (m), how far out it's drawn (m) and the segments along each blade. */
@@ -25,6 +25,10 @@ const TILES = 8;
 const WIDTH_IN_CELLS = 0.55;
 /** how far before it the camera's sight is followed onto the ground for the rings' middle (m, at most) */
 const FOCUS_MOST = 24;
+/** the mask's alpha (0 to 255) under which no blade shows (`meadowAt` under 0.08: `chance` is none) */
+const GRASS_SEEN = 16;
+/** the grid of where any grass grows, read from the mask once: its cells (m), and how far round each it reaches (m) */
+const GRASS_GRID = { cell: 0.5, margin: 1.6 };
 
 /** Where grass grows over a square of the world (1 grass, 0 none, worn between), painted at build. */
 export class MeadowMask {
@@ -35,7 +39,8 @@ export class MeadowMask {
   /** a mask over (-half..half) on x and z, `size` px a side, grass everywhere until painted out */
   constructor(readonly half: number, readonly size = 512) {
     this.canvas = canvasOf(size);
-    this.g = ctx2d(this.canvas);
+    // (read back once, on the CPU, for where grass grows at all: `grassCells`)
+    this.g = readCtx2d(this.canvas);
     this.perMetre = size / (half * 2);
     this.g.fillStyle = '#fff';
     this.g.fillRect(0, 0, size, size);
@@ -108,6 +113,37 @@ export class MeadowMask {
   private wear(left: number): void {
     this.g.globalCompositeOperation = 'destination-out';
     this.g.fillStyle = `rgba(0,0,0,${1 - left})`;
+  }
+
+  /** Where any grass grows, in cells of `cell` m over the mask's square (row by row from its -x, -z corner), each
+   *  cell grown by `margin` m round it: the grass reads the mask a metre or so aside (`meadowAt`), and its blades lean
+   *  half a metre off their cells. */
+  grassCells(cell: number, margin: number): { has: Uint8Array; n: number; cell: number } {
+    const n = Math.ceil((this.half * 2) / cell);
+    const pixels = this.g.getImageData(0, 0, this.size, this.size).data;
+    const bare = new Uint8Array(n * n);
+    for (let py = 0; py < this.size; py++) {
+      for (let px = 0; px < this.size; px++) {
+        // (grass is the mask's alpha: what clears it paints it out)
+        if (pixels[(py * this.size + px) * 4 + 3] < GRASS_SEEN) continue;
+        const cx = Math.min(n - 1, Math.floor(px / this.perMetre / cell));
+        const cz = Math.min(n - 1, Math.floor(py / this.perMetre / cell));
+        bare[cz * n + cx] = 1;
+      }
+    }
+    const reach = Math.ceil(margin / cell), has = new Uint8Array(n * n);
+    for (let cz = 0; cz < n; cz++) {
+      for (let cx = 0; cx < n; cx++) {
+        if (!bare[cz * n + cx]) continue;
+        for (let dz = -reach; dz <= reach; dz++) {
+          for (let dx = -reach; dx <= reach; dx++) {
+            const x = cx + dx, z = cz + dz;
+            if (x >= 0 && z >= 0 && x < n && z < n) has[z * n + x] = 1;
+          }
+        }
+      }
+    }
+    return { has, n, cell };
   }
 
   /** The mask as a texture, its edges softened (`blur` m): read by the grass and by the ground under it. */
@@ -323,6 +359,16 @@ export function buildMeadow(mask: MeadowMask, maskTexture: THREE.Texture, update
   group.userData.maskTexture = maskTexture;
   const time = { value: 0 };
   updaters.push((_dt, t) => { time.value = t; });
+  // (a tile with no grass in it is never drawn: over the square, the roads and what's built, every blade of it was
+  // drawn as nothing, its vertices shaded all the same)
+  const grown = mask.grassCells(GRASS_GRID.cell, GRASS_GRID.margin);
+  const anyGrass = (x0: number, z0: number, x1: number, z1: number): boolean => {
+    const at = (v: number): number => Math.max(0, Math.min(grown.n - 1, Math.floor((v + mask.half) / grown.cell)));
+    for (let cz = at(z0); cz <= at(z1); cz++) {
+      for (let cx = at(x0); cx <= at(x1); cx++) if (grown.has[cz * grown.n + cx]) return true;
+    }
+    return false;
+  };
   RINGS.forEach((ring, k) => {
     const inner = k === 0 ? 0 : RINGS[k - 1].radius;
     // (cells a side a tile: the ring's square across, in whole tiles)
@@ -363,7 +409,8 @@ export function buildMeadow(mask: MeadowMask, maskTexture: THREE.Texture, update
           // (a blade leans and bends up to half a metre off its cell)
           _box.min.set(x0 - 0.5, -0.1, z0 - 0.5);
           _box.max.set(x0 + w + 0.5, 0.8, z0 + w + 0.5);
-          if (_frustum.intersectsBox(_box)) u.uTiles.value[listed++].set(tx * S, ty * S);
+          if (!_frustum.intersectsBox(_box)) continue;
+          if (anyGrass(x0, z0, x0 + w, z0 + w)) u.uTiles.value[listed++].set(tx * S, ty * S);
         }
       }
       geo.instanceCount = listed * S * S;
