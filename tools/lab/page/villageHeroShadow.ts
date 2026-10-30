@@ -14,8 +14,9 @@ import { castingAsOne } from '../../../src/entities/models/castAsOne';
 import { roadLines, SQUARE_R, toPolyline } from '../../../src/world/villagePlan';
 import type { LightsChecked } from './villageLights';
 
-/** how far from the lamp he stands (m) */
-const BY = 3;
+/** how far from the lamp he stands (m): near it, and further off (from play, by a lamp at the stair: "no shadows
+ *  FROM LIGHT, only from moon") */
+const BYS = [1.5, 3];
 /** the patches of ground read behind him: their turns off the line from the lamp through him (radians), how far
  *  behind him each lies and how far across it is (m), and the camera's height over them */
 const SECTOR = [-0.3, -0.15, 0, 0.15, 0.3];
@@ -25,6 +26,10 @@ const OVER = 8;
 /** the least his shadow must take of a patch's light, the spots round the lamp tried for paving behind him, and the
  *  frames he's given at each (the casting lights to settle) */
 const LEAST_DARKER = 0.15;
+/** the least share of a patch's light his moon shadow must take, the lamps' shadows held off (the moon's shadow
+ *  always there: "moon shadow always there plus 1 or more shadows from lights"): 1.5 m from a lamp its light is most
+ *  of the ground's, and his moon shadow took 9% of it on the grass; none takes nothing */
+const LEAST_MOON = 0.05;
 const SPOTS = 32;
 /** how far inside a road's edge the ground read must lie (m): the meadow's blades over the grass take no lamp's
  *  shadow */
@@ -126,12 +131,12 @@ function behind(spot: THREE.Vector3, lamp: THREE.Vector3): THREE.Vector3[] {
   return patches;
 }
 
-/** Where round `lamp`, `BY` m off it, the hero stands to be read: the first spot with paving behind him, else the
+/** Where round `lamp`, `by` m off it, the hero stands to be read: the first spot with paving behind him, else the
  *  first of all (on the grass), and whether it's paved. */
-function spotBy(lamp: THREE.Vector3): { spot: THREE.Vector3; paved: boolean } {
+function spotBy(lamp: THREE.Vector3, by: number): { spot: THREE.Vector3; paved: boolean } {
   const spots = Array.from({ length: SPOTS }, (_, k) => {
     const a = (k / SPOTS) * Math.PI * 2;
-    const spot = new THREE.Vector3(lamp.x + Math.sin(a) * BY, 0, lamp.z + Math.cos(a) * BY);
+    const spot = new THREE.Vector3(lamp.x + Math.sin(a) * by, 0, lamp.z + Math.cos(a) * by);
     spot.y = groundHeight(spot.x, spot.z);
     return spot;
   });
@@ -160,8 +165,41 @@ function mostHeTakes(lab: Lab, patches: THREE.Vector3[], casts: Map<THREE.Object
   return Math.max(...casting.map((take, i) => take - bare[i]));
 }
 
-/** One lamp's reading: the most his shadow takes behind him by it, and whether he stood on paving. */
-interface ByLamp { lamp: number; his: number | null; paved: boolean }
+/** The moon, the village's light that casts as the sun does. */
+function theMoon(): THREE.DirectionalLight {
+  let moon: THREE.DirectionalLight | null = null;
+  G.scene.traverse((o) => {
+    const light = o as THREE.DirectionalLight;
+    if (light.isDirectionalLight && light.castShadow) moon = light;
+  });
+  if (!moon) throw new Error('lab: village: no moon casting');
+  return moon;
+}
+
+/** The patches behind a hero at `spot` away from the moon: where its shadow of him falls. */
+function behindFromMoon(spot: THREE.Vector3): THREE.Vector3[] {
+  const moon = theMoon();
+  const toMoon = moon.position.clone().sub(moon.target.position).setY(0).normalize();
+  return behind(spot, spot.clone().add(toMoon));
+}
+
+/** The most of a patch's light his moon shadow takes: what it darkens there while he casts, over the patch's light
+ *  while he doesn't, the lamps' shadows held off throughout (with `canary`, read while he casts nothing). As a share
+ *  of the moon's own light it read over 100%: the moon's shadow dims the sky's light there too (`AMBIENT_IN_SHADOW`
+ *  in `core/renderer.ts`), and with the lamps' shadows his lamp shadows were in it. */
+function mostOfTheMoon(lab: Lab, patches: THREE.Vector3[], casts: Map<THREE.Object3D, boolean>,
+  canary: boolean): number {
+  if (canary) heroCasts(false, casts);
+  const casting = patches.map((at) => readOver(lab, at, 0));
+  heroCasts(false, casts);
+  const bare = patches.map((at) => readOver(lab, at, 0));
+  heroCasts(true, casts);
+  return Math.max(...patches.map((_, i) => 1 - casting[i] / Math.max(bare[i], 1e-3)));
+}
+
+/** One lamp's reading: the most his shadow takes behind him by it at each of `BYS`, the most his moon shadow takes
+ *  of a patch's light there, and whether he stood on paving. */
+interface ByLamp { lamp: number; his: (number | null)[]; moon: (number | null)[]; paved: boolean }
 
 /** The hero by each street lamp in turn at midnight: the lamps' shadows taking more of the ground behind him while he
  *  casts (from play, "your light test for each light need to test SHADOW, it was missing for half of them"). */
@@ -174,10 +212,17 @@ export async function heroShadowByLamp(lab: Lab, canary: boolean): Promise<Light
     await lab.step(SETTLE);
     if (!castingLights().length) throw new Error('lab: village: no lamp casting at midnight');
     for (let lamp = 0; lamp < lanterns.length; lamp++) {
-      const { spot, paved: onPaving } = spotBy(lanterns[lamp]);
-      const patches = await standBy(lab, spot, lanterns[lamp]);
       const planted = canary && lamp === lanterns.length - 1;
-      read.push({ lamp, his: patches && mostHeTakes(lab, patches, casts, planted), paved: onPaving });
+      const reading: ByLamp = { lamp, his: [], moon: [], paved: true };
+      for (const by of BYS) {
+        const { spot, paved: onPaving } = spotBy(lanterns[lamp], by);
+        reading.paved &&= onPaving;
+        const patches = await standBy(lab, spot, lanterns[lamp]);
+        reading.his.push(patches && mostHeTakes(lab, patches, casts, planted));
+        const fromMoon = patches && behindFromMoon(G.player.pos.clone());
+        reading.moon.push(fromMoon && mostOfTheMoon(lab, fromMoon, casts, planted));
+      }
+      read.push(reading);
     }
   } finally {
     heroCasts(true, casts);
@@ -231,8 +276,9 @@ function pairsToStandBetween(): Pair[] {
   return pairs;
 }
 
-/** Two lamps' readings, the most his shadow takes behind him away from each, as he stands between them. */
-interface BetweenRead { lamps: [number, number]; his: [number, number] | null }
+/** Two lamps' readings, the most his shadow takes behind him away from each, as he stands between them, and the
+ *  most his moon shadow takes of a patch's light there. */
+interface BetweenRead { lamps: [number, number]; his: [number, number] | null; moon: number | null }
 
 /** The hero halfway between every two lamps near each other at midnight: his shadow from each (from play, "supposed
  *  to be 2 shadows here, right ? from both lights"). `canary` stops him casting for the last pair's second lamp's
@@ -254,13 +300,15 @@ export async function heroShadowBetweenLamps(lab: Lab, canary: boolean): Promise
         if (stood) break;
       }
       if (!stood) {
-        read.push({ lamps: [a, b], his: null });
+        read.push({ lamps: [a, b], his: null, moon: null });
         continue;
       }
       const fromB = pavedBehind(G.player.pos.clone(), lanterns[b]);
       const planted = canary && k === pairs.length - 1;
       const hisA = mostHeTakes(lab, pavedBehind(G.player.pos.clone(), lanterns[a]), casts, false);
-      read.push({ lamps: [a, b], his: [hisA, mostHeTakes(lab, fromB, casts, planted)] });
+      const hisB = mostHeTakes(lab, fromB, casts, planted);
+      const moon = mostOfTheMoon(lab, behindFromMoon(G.player.pos.clone()), casts, false);
+      read.push({ lamps: [a, b], his: [hisA, hisB], moon });
     }
   } finally {
     heroCasts(true, casts);
@@ -271,12 +319,14 @@ export async function heroShadowBetweenLamps(lab: Lab, canary: boolean): Promise
 
 /** The readings between lamps as lines and problems; with `canary`, whether the last pair's second was missing. */
 function betweenChecked(read: BetweenRead[], canary: boolean): LightsChecked {
-  const each = read.map(({ lamps: [a, b], his }) => his === null ? `${a}|${b} no stand`
-    : `${a}|${b} ${(his[0] * 100).toFixed(0)}%/${(his[1] * 100).toFixed(0)}%`);
-  const line = `hero's two lamp shadows: halfway between two lamps, the most each one's shadows take of a patch `
-    + `behind him away from it while he casts, over while he doesn't: ${each.join(', ')}`;
+  const each = read.map(({ lamps: [a, b], his, moon }) => his === null ? `${a}|${b} no stand`
+    : `${a}|${b} ${his.map(percent).join('/')} moon ${percent(moon)}`);
+  const line = `hero's two lamp shadows: between two lamps, the most each one's shadows take of a patch behind him `
+    + `away from it while he casts, over while he doesn't, and the most his moon shadow takes of a patch's light: `
+    + `${each.join(', ')}`;
   // (a pair he can stand nowhere between, the fountain between them, is no fault of the shadows)
-  const missing = read.filter(({ his }) => his !== null && his.some((take) => take < LEAST_DARKER));
+  const missing = read.filter(({ his, moon }) => his !== null
+    && (his.some((take) => take < LEAST_DARKER) || moon === null || moon < LEAST_MOON));
   if (canary) {
     const last = read[read.length - 1];
     const caught = last.his !== null && last.his[1] < LEAST_DARKER && last.his[0] >= LEAST_DARKER;
@@ -286,17 +336,25 @@ function betweenChecked(read: BetweenRead[], canary: boolean): LightsChecked {
   return { lines: [line], problems, caught: null, moments: [] };
 }
 
+/** A share as a whole percentage, or why there is none. */
+const percent = (share: number | null): string => share === null ? 'no stand' : `${(share * 100).toFixed(0)}%`;
+
+/** Whether a lamp's readings show his shadow missing, from the lamp or from the moon. */
+const shadowMissing = ({ his, moon }: ByLamp): boolean => his.some((take) => take === null || take < LEAST_DARKER)
+  || moon.some((take) => take === null || take < LEAST_MOON);
+
 /** The readings by every lamp as lines and problems; with `canary`, whether the last lamp's was found missing. */
 function shadowsChecked(read: ByLamp[], canary: boolean): LightsChecked {
-  const each = read.map(({ lamp, his, paved: onPaving }) =>
-    `${lamp} ${his === null ? 'no stand' : `${(his * 100).toFixed(0)}%`}${onPaving ? '' : ' (grass)'}`);
-  const line = `hero's lamp shadow: by each lamp, the most the lamps' shadows take of a patch behind him ${BY} m from `
-    + `it while he casts, over what they take there while he doesn't: ${each.join(', ')}`;
-  const missing = read.filter(({ his }) => his === null || his < LEAST_DARKER);
+  const each = read.map(({ lamp, his, moon, paved: onPaving }) => `${lamp} ${his.map(percent).join('/')} `
+    + `moon ${moon.map(percent).join('/')}${onPaving ? '' : ' (grass)'}`);
+  const line = `hero's lamp and moon shadows: by each lamp, ${BYS.join(' and ')} m off it, the most the lamps' `
+    + `shadows take of a patch behind him while he casts, over what they take there while he doesn't; and the most his `
+    + `moon shadow takes of a patch's light away from the moon: ${each.join(', ')}`;
+  const missing = read.filter(shadowMissing);
   if (canary) {
     const last = read[read.length - 1].lamp;
     return { lines: [line], problems: [], caught: missing.some(({ lamp }) => lamp === last), moments: [] };
   }
-  const problems = missing.map(({ lamp }) => `${line}: he casts no shadow from lamp ${lamp}`);
+  const problems = missing.map(({ lamp }) => `${line}: by lamp ${lamp} a shadow of his is missing`);
   return { lines: [line], problems, caught: null, moments: [] };
 }
