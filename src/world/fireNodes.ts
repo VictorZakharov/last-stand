@@ -1,10 +1,11 @@
 // A fire's flames on WebGPU (core/webgpu.ts): fire.ts's ray march as WGSL functions (`wgslFn`), written line for line
 // from its GLSL, the node material's whole output as `gl_FragColor` was. The noise is read at its first level
 // (`textureSampleLevel`): WGSL samples with gradients only where every pixel takes the same path, and the march stops
-// early. Not yet ported: the flames' fade as the prop under them dissolves (`seeThroughFade`), and the bed's and the
-// logs' char and embers (`emberMat`, a GLSL hook: they draw as plain lit stuff).
+// early. The flames fade as the prop under them dissolves (`seeThroughFade`, core/shaderPorts.ts `seeKept`). Not yet
+// ported: the bed's and the logs' char and embers (`emberMat`, a GLSL hook: they draw as plain lit stuff).
 import * as THREE from 'three';
 import { gpu, tsl } from '../core/webgpu';
+import { seeKept, seeUniforms } from '../core/shaderPorts';
 
 // (untyped: TSL's types don't follow its conversions across these calls yet)
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -213,12 +214,15 @@ export function flameMaterial(uniforms: FlameUniforms, shape: FlameShape): THREE
   const material = new gpu.MeshBasicNodeMaterial({
     transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
   });
-  material.fragmentNode = marchFor(shape)({
+  const light = marchFor(shape)({
     world: positionWorld, eyeWorld: cameraPosition, centre: read('uCentre', 'vec3'), pixel: screenCoordinate.xy,
     noise, noiseAt: sampler(noise), radius: read('uRadius', 'float'),
     top: read('uHeight', 'float').mul(read('uPuff', 'float')), reach: read('uBox', 'vec3').x,
     rise: read('uRise', 'vec2'), seed: read('uSeed', 'vec3'), glow: read('uGlow', 'float'),
     foot: bowlPart(uniforms, 0), belly: bowlPart(uniforms, 1), rim: bowlPart(uniforms, 2),
   });
+  // (the flames fade with the prop under them, `seeThroughFade`: fire.ts binds its uniforms first)
+  const see = uniforms as unknown as Record<string, { value: unknown }>;
+  material.fragmentNode = see.uSeeK ? light.mul(tsl.vec4(tsl.vec3(seeKept(seeUniforms(see))), 1)) : light;
   return material;
 }

@@ -53,7 +53,8 @@ const HELP = {
     + 'where given its every visit\'s, so two variants\' end pictures show the same)'],
   cast: ['key@ms', 'boot: its end pictured with this key held this long (a skill cast: 600 ms by default), its '
     + 'look seen in the picture'],
-  hero: ['name', `the hero chosen in the lobby: ${HEROES.join(', ')} (a first boot's by default)`],
+  hero: ['name', `the hero chosen in the lobby: ${HEROES.join(', ')} (a first boot's by default; ${BOOT}: chosen `
+    + 'on its first visit\'s hero screen)'],
   stash: ['n', `the hero's stash filled with this many items, copies of his own (0 to ${STASH_MOST}: 0 by default)`],
   'item-ms': ['ms', `how long a sweep over the stash stays over each item (${SWEEP_ITEM_MS} by default)`],
   'press-ms': ['ms', `how often stow presses Space (${STOW_PRESS_MS} by default)`],

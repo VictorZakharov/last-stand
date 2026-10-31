@@ -1,9 +1,10 @@
 // The gates' portals on WebGPU (core/webgpu.ts): `portalMembrane`'s two shaders (props.ts), the swirling membrane and
 // the light it spills over the floor, as WGSL functions (`wgslFn`) written line for line from the GLSL, each a node
-// material's whole output as `gl_FragColor` was. Not yet ported: the membrane's fade as the gate round it dissolves
-// (`seeThroughFade`).
+// material's whole output as `gl_FragColor` was, the membrane fading as the gate round it dissolves
+// (`seeThroughFade`, core/shaderPorts.ts `seeKept`).
 import * as THREE from 'three';
 import { gpu, tsl } from '../core/webgpu';
+import { seeKept, seeUniforms } from '../core/shaderPorts';
 
 // (untyped: TSL's types don't follow its conversions across these calls yet)
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -102,7 +103,10 @@ export function membraneMaterial(uniforms: PortalUniforms): THREE.Material {
     return vec4f(c * power * 2.3, clamp(inside * 0.94 + rim, 0.0, 1.0));
   }`, [hash, value, fbm]);
   const material = new gpu.MeshBasicNodeMaterial({ transparent: true, depthWrite: false, side: THREE.DoubleSide });
-  material.fragmentNode = membrane({ uv: uv(), ...uniformNodes(uniforms) });
+  const shown = membrane({ uv: uv(), ...uniformNodes(uniforms) });
+  // (seeThroughFade's uniforms, bound before the membrane's material was made: props.ts)
+  const see = uniforms as unknown as Record<string, { value: unknown }>;
+  material.fragmentNode = see.uSeeK ? shown.mul(tsl.vec4(1, 1, 1, seeKept(seeUniforms(see)))) : shown;
   return material;
 }
 

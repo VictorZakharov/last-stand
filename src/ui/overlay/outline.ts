@@ -116,12 +116,12 @@ function swapOut(swapped: Swapped[]): void {
   }
 }
 
-/** the mask: white where the outlined thing is, at the canvas's pixels */
-let maskTarget: THREE.WebGLRenderTarget | null = null;
+/** the mask: white where the outlined thing is, at the canvas's pixels (its texture the same one through a resize,
+ *  as WebGPU's edge samples it) */
+const maskTarget = new THREE.WebGLRenderTarget(1, 1, { depthBuffer: false });
 const canvasSize = new THREE.Vector2();
 
 function maskOfSize(width: number, height: number): THREE.WebGLRenderTarget {
-  maskTarget ??= new THREE.WebGLRenderTarget(width, height, { depthBuffer: false });
   if (maskTarget.width !== width || maskTarget.height !== height) maskTarget.setSize(width, height);
   return maskTarget;
 }
@@ -175,9 +175,8 @@ const edgeMaterial = new THREE.ShaderMaterial({
 });
 // (on WebGPU: the same 16 ways round, the mask read where the pixel is on the screen)
 portShader(edgeMaterial, ({ texture, screenUV, positionGeometry, vec2, float, min, max, vec4 }, u) => {
-  const blank = new THREE.Texture();
-  const mask = texture(blank);
-  mask.onRenderUpdate(() => { mask.value = edgeMaterial.uniforms.uMask.value ?? blank; });
+  // (the mask's own texture, the same through a resize)
+  const mask = texture(maskTarget.texture);
   const cover = (at: unknown) => min(1, mask.sample(at).a.mul(2));
   const inside = cover(screenUV);
   let line = float(0);
@@ -267,6 +266,8 @@ function drawEdge(gl: THREE.WebGLRenderer, target: THREE.WebGLRenderTarget, look
   gl.autoClear = false;
   gl.setRenderTarget(null);
   if (within) {
+    // (WebGPU's scissor is from the canvas's top, WebGL's from its bottom)
+    if (WEBGPU) within.y = canvasSize.y - within.y - within.w;
     // (in css px: the renderer scales the scissor by its pixel ratio)
     gl.setScissor(within.divideScalar(gl.getPixelRatio()));
     gl.setScissorTest(true);

@@ -178,7 +178,8 @@ id (`NodeManager.getCacheKey`), and three makes each environment map a node of i
   day skies on the far plane (`world/skyNodes.ts`, a `vertexNode` setting the clip position's z to its w), and the
   forest's shafts of light (`shaftsMaterial` in `world/forestNodes.ts`, in TSL). Checked side by side with WebGL in
   the third-person view (`stalls --scenario boot --view third --biome ...`): the flames burn whiter on WebGPU, where
-  the grade (not ported) would keep their hue. None of them fades as its prop dissolves yet (`seeThroughFade`). A
+  the grade (not ported) would keep their hue. Each fades as its prop dissolves (`seeThroughFade`, `seeKept` in
+  `core/shaderPorts.ts`), as the crypt's beacons do. A
   boot's report lists the page's logged errors, each once (`page errors`): a WGSL error shows there, and the count
   of three's "ShaderMaterial is not compatible" falls as each is ported (54 to 42 a first visit).
 - **The frame is drawn onto the canvas, whatever target was left set** (`renderWebGPU`): three's `RenderPipeline`
@@ -208,6 +209,22 @@ id (`NodeManager.getCacheKey`), and three makes each environment map a node of i
   way round undefined, and `pow` of a negative: the ports write the falling ones as one less the rising, and squares
   as products. Checked side by side with WebGL with `stalls --scenario boot --cast 3@1500` (a skill held for the
   end picture): Maelstrom's walls as WebGL draws them.
+- **A still mesh's ported uniforms are refreshed at every draw** (`refreshedEachDraw` in `core/shaderPorts.ts`):
+  three looks for a node on the material it was given, not on the node material it built from it, and finding none
+  on a `ShaderMaterial` (or a lit material given looks), it refreshes a mesh that stays still only as the
+  material's own properties change. Its uniforms stayed as they first drew: the outline round a foe kept the
+  warm-up's strength of 0 and drew nothing. Each such material carries a node of its own now (`refreshNode`), so
+  three refreshes it in full at each draw; what that costs a frame isn't measured.
+- **The outline round a foe** (`ui/overlay/outline.ts`, Quarry Mark's preview): its edge samples the mask's own
+  texture (one target, resized), and WebGPU's scissor counts from the canvas's top, WebGL's from its bottom (the
+  edge's box was mirrored). Checked with a dummy outlined by hand in the dev build (`stalls --read` importing the
+  page's own module): the same red line as WebGL's.
+- **The props' see-through and the kit's looks** (`seeMask`, `kitNodes` in `core/shaderPorts.ts`): a material
+  given them on WebGL is marked (`seeThrough`, `kitLooks`, properties of its own, read off the material drawn), and
+  three's converted node material is given the dissolve's screen door as its `maskNode` (the shadow pass reads the
+  material's own, so its shadow stays whole), and the kit's dissolve, frost, char, near glow, rim, edge and hit
+  flash as its colour, mask and emissive nodes. Checked with the hero stood behind a column: dithered away as on
+  WebGL. Not yet: the hood's shade, the shine's cap.
 - **The grade's display-space looks** (`graded` in `core/webgpu.ts`, after `renderOutput`: the pipeline's own
   conversion off): the vignette, the cool shadows and warm highlights, the low Health look and a hit's red flash,
   from the WebGL grade's own uniforms. The blood mask was never painted on WebGPU (`render` left before
@@ -229,9 +246,8 @@ id (`NodeManager.getCacheKey`), and three makes each environment map a node of i
 
 **Not ported yet** (each shows as missing, not broken):
 
-- **The ported effects fade with nothing yet:** the crypt's beacons as their prop dissolves (`seeThroughFade`).
-- **The kit's looks off the crowds** (the heroes, dummies, props), all GLSL `onBeforeCompile`:
-  - dissolve, frost, char, hit flash, near glow, rim, see-through
+- **The rest of the GLSL `onBeforeCompile` looks:**
+  - the hood's shade and the shine's cap (the kit's other looks are ported, above)
   - the floors' relief, and the crypt's earth's own normals (the floors' looks are ported, below)
   - a fire's bed and its logs' char glowing through their cracks (`emberMat`)
   - triplanar, fur sway, dual-quaternion hands

@@ -194,11 +194,12 @@ export function heroesShown() {
   return Boolean(screen?.checkVisibility());
 }
 
-/** The hero in focus chosen where the hero selection screen is up, as a first visit's player chooses one before the
- *  lobby: whether it was. (Run in the page, alone: `heroesShown`'s test written again.) */
-export function chooseIfAsked() {
+/** `hero` (or the hero in focus) chosen where the hero selection screen is up, as a first visit's player chooses one
+ *  before the lobby: whether it was. (Run in the page, alone: `heroesShown`'s test written again.) */
+export function chooseIfAsked(hero) {
   const screen = document.getElementById('heroes');
   if (!screen || !screen.checkVisibility()) return false;
+  if (hero) screen.querySelector(`.hs-tabs [data-c="${hero}"]`).click();
   screen.querySelector('.hs-choose').click();
   return true;
 }
