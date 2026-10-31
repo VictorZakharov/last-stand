@@ -358,6 +358,16 @@ jobs:
           set -euo pipefail
           pages_dir="${GITHUB_WORKSPACE}/pages"
 
+          # one PR's line is the commit's subject, several are its body
+          message() {
+            if (( $# == 1 )); then
+              echo "Preview PR $1"
+              return
+            fi
+            printf 'Preview %d PRs\n\n' "$#"
+            printf '%s\n' "$@"
+          }
+
           # one PR's build into its commit's folder, or its preview removed
           stage() {
             local number="$1" mode="$2" sha="$3" run="$4" site_dir="$5"
@@ -427,7 +437,7 @@ jobs:
           if git -C "${pages_dir}" diff --cached --quiet; then
             echo "changed=false" >> "${GITHUB_OUTPUT}"
           else
-            git -C "${pages_dir}" commit -F <(printf 'Preview PR %s\n' "${summary[@]}")
+            git -C "${pages_dir}" commit -F <(message "${summary[@]}")
             git -C "${pages_dir}" push origin HEAD:gh-pages
             echo "changed=true" >> "${GITHUB_OUTPUT}"
           fi
@@ -455,6 +465,16 @@ jobs:
         run: |
           set -euo pipefail
           pages_dir="${GITHUB_WORKSPACE}/pages"
+
+          # one PR's line is the commit's subject, several are its body
+          message() {
+            if (( $# == 1 )); then
+              echo "Preview PR $1"
+              return
+            fi
+            printf 'Preview %d PRs\n\n' "$#"
+            printf '%s\n' "$@"
+          }
 
           # 0 once Pages serves the build of $2 for PR $1
           served() {
@@ -515,7 +535,7 @@ jobs:
           git -C "${pages_dir}" config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git -C "${pages_dir}" add -A
           if ! git -C "${pages_dir}" diff --cached --quiet; then
-            git -C "${pages_dir}" commit -F <(printf 'Preview PR %s\n' "${summary[@]}")
+            git -C "${pages_dir}" commit -F <(message "${summary[@]}")
             git -C "${pages_dir}" push origin HEAD:gh-pages
           fi
           if (( unserved > 0 )); then
