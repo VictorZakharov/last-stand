@@ -1,7 +1,6 @@
 {
   "headSha": "b4ac6ab3815f6120f0b15d3c300d55b3458bbc79",
-  "state": "building",
-  "folder": "6e35956",
-  "since": "2026-10-31T14:04:00Z",
+  "state": "ready",
+  "folder": "b4ac6ab",
   "run": "https://github.com/VictorZakharov/last-stand/actions/runs/41208394561"
 }
