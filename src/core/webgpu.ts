@@ -41,8 +41,8 @@ export async function makeWebGPURenderer(): Promise<THREE.WebGLRenderer> {
     (renderer as unknown as { drawingPipeline: unknown }).drawingPipeline = new MeshletDrawingPipeline();
   }
   compileShadowsToo(renderer);
-  // TEMP: the node builds that take a while, and whether a compile asked them
-  if (import.meta.env.DEV) {
+  // TEMP: the node builds that take a while, and whether a compile asked them (`&builds`: `npm run stalls -- --read`)
+  if (new URLSearchParams(location.search).has('builds')) {
     const nodes = (renderer as unknown as { _nodes: { getForRender: (ro: unknown, ...rest: unknown[]) => unknown } })._nodes;
     const getForRender = nodes.getForRender.bind(nodes);
     const builds: string[] = [];
@@ -54,7 +54,7 @@ export async function makeWebGPURenderer(): Promise<THREE.WebGLRenderer> {
       const ms = performance.now() - at;
       if (ms > 0.3) {
         const r = ro as { object: THREE.Object3D; material: THREE.Material; renderContext: { id: number; depth?: boolean }; camera: THREE.Camera; lightsNode: { id: number } };
-        builds.push(`${Math.round(at)} ${ms.toFixed(0)}ms ${pre ? 'compile' : 'draw'} ${r.object?.name || r.object?.type} ${r.material?.type}${r.material?.name ? ` "${r.material.name}"` : ''} ctx${r.renderContext?.id} lights${r.lightsNode?.id} cam${r.camera?.id}`);
+        builds.push(`${Math.round(at)} ${ms.toFixed(0)}ms ${pre ? 'compile' : 'draw'} ${r.object?.name || r.object?.type} ${r.material?.type}${r.material?.name ? ` "${r.material.name}"` : ''} ctx${r.renderContext?.id} lights${r.lightsNode?.id} cam${r.camera?.id} key${(ro as { initialCacheKey: number }).initialCacheKey} cn${(renderer as unknown as { contextNode: { id: number; version: number } }).contextNode.id}.${(renderer as unknown as { contextNode: { id: number; version: number } }).contextNode.version} env${(ro as { _nodes: { getCacheKey(s: unknown, l: unknown): number }; scene: unknown; lightsNode: unknown })._nodes.getCacheKey((ro as { scene: unknown }).scene, (ro as { lightsNode: unknown }).lightsNode)} uuid${r.object?.uuid?.slice(0, 6)}`);
       }
       return out;
     };
@@ -125,6 +125,22 @@ export async function makePipeline(renderer: THREE.WebGLRenderer, scene: THREE.S
   const color = scenePass.getTextureNode('output');
   pipeline = new RenderPipeline(gpu);
   pipeline.outputNode = color.add(bloom(color, 0.85, 0, 0.9));
+}
+
+/** the scene's environment as one node, its map swapped (`oneEnvironment`) */
+let environment: { value: THREE.Texture } | null = null;
+
+/**
+ * The scene's environment map given to WebGPU as one node for good, its map swapped as the look changes: three
+ * makes each map a node of its own, whose id is in every lit pipeline's key, so each biome's map and the hall of
+ * heroes' had a copy of every lit pipeline, made at the first frames in its look (a first visit's hall: 6 s held up).
+ */
+export function oneEnvironment(scene: THREE.Scene): void {
+  const map = scene.environment;
+  if (!WEBGPU || !map) return;
+  environment ??= (map as THREE.CubeTexture).isCubeTexture ? tsl.cubeTexture(map as THREE.CubeTexture) : tsl.texture(map);
+  environment.value = map;
+  (scene as unknown as { environmentNode: unknown }).environmentNode = environment;
 }
 
 /** Draws a frame through the WebGPU post chain. */

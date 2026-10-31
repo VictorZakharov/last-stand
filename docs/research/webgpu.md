@@ -46,6 +46,25 @@ whether the CPU cost below can be brought down.
 - **The fight's foes are seated for the compile's walk alone** (`WarmUp.hide`): a crowd with no foe draws nothing,
   so its compile saw nothing.
 
+**A first visit's freeze** (the hall of heroes, which a first visit opens on): the loading screen's last step held
+the page up 5.3 to 6.1 s, the logo's WebGL exit waiting in `fit` on the GPU's process, busy making the pipelines
+the hall's first frames built, cold. A WebGPU pipeline is keyed by the scene's environment node and its lights by
+id (`NodeManager.getCacheKey`), and three makes each environment map a node of its own:
+
+- **One environment node for good** (`oneEnvironment` in `core/webgpu.ts`, from the arena's `setLook`), its map
+  swapped as the look changes: each biome's map and the hall's had a copy of every lit pipeline.
+- **The hall warmed in its own look** (`Swap.look`, `hallLook` in `game/warmup.ts`), all the scene compiled and
+  drawn in it: the hall has lights of its own.
+- Read with `npm run stalls -- --scenario boot --url "this?renderer=webgpu&builds" --read "window.__builds"`: the
+  node builds a draw made, by mesh, camera and key (`&builds`, a temporary record in `core/webgpu.ts`).
+
+| A first visit | before | after |
+| --- | --- | --- |
+| The lobby revealed | 18.7 s | 15.6 s |
+| The loading screen's last step | 5.9 s, held up 4.0 s | 1.9 s, held up 1.1 s |
+| The logo's exit, held up at most | 0.04 s | 0.01 s |
+| Node builds at a draw before the reveal | 1.10 s | 0.76 s |
+
 **Working:**
 
 - **The game boots and plays on `WebGPURenderer` behind `?renderer=webgpu`.** WebGL stays the default, unchanged
@@ -91,8 +110,7 @@ whether the CPU cost below can be brought down.
 - **The grade:** exposure areas, glare, low Health, HDR, sanitize.
 - **Other gaps:**
   - The warm-up compiles by `compileAsync` now (below), but the fight's crowds are still rebuilt at their draw
-    under the fight's loading bar (2.6 s), and a first visit holds the page up once for about 6 s before the
-    reveal (the GPU process's cold builds).
+    under the fight's loading bar (2.6 s).
   - The shadow-only casters (`world/culling.ts`).
   - The perf overlay's GPU timing.
   - The lab.

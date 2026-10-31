@@ -88,6 +88,7 @@ async function bootTraced(browser, page, url, visit, options, picture, setRate) 
     await page.evaluate(startIfCold);
     await page.waitForFunction(fightWarm, null, { timeout: WARM_TIMEOUT_MS, polling: 250 });
   }
+  if (options.read) writeFileSync(picture.read, `${JSON.stringify(await page.evaluate(options.read), null, 1)}\n`);
   const record = await page.evaluate(stopBootRecording);
   const events = await trace.stop();
   const shots = film ? await film.stop() : [];
@@ -125,8 +126,9 @@ function bootNotes(visit, options, left, errors, picture) {
   const blinked = options.blinkExit ? [blinks] : [];
   const leftNote = left ? [LEFT_NOTES[left]] : [];
   const failed = errors.length ? [`page errors: ${errors.slice(0, 3).join(' | ')}`] : [];
+  const read = options.read ? [`${options.read} read into ${picture.read}`] : [];
   const notes = [visit.note, ...auto, ...slowed, ...trips, ...stalled, ...held, ...blinked, ...stale, ...leftNote,
-    ...failed];
+    ...failed, ...read];
   return [...notes, `its end pictured in ${picture.end}`];
 }
 

@@ -123,13 +123,15 @@ async function chooseView(page, view) {
 const endPicture = (index) => join(OUT, `end-${index + 1}.png`);
 /** A boot's pictures: its end (`endPicture`), and its exit's film, the film's flickers (`--film`: `out/film-<n>.png`
  *  and `out/flickers-<n>.png`), its frames cut to the lobby logo (`--film-logo`: `out/logo-<n>.png`) and the
- *  exit's draws as the window changed (`--resize`: `out/wind-<n>.json`). */
+ *  exit's draws as the window changed (`--resize`: `out/wind-<n>.json`) and what was read off the page (`--read`:
+ *  `out/read-<n>.json`). */
 const bootPictures = (index) => ({
   end: endPicture(index),
   film: join(OUT, `film-${index + 1}.png`),
   flickers: join(OUT, `flickers-${index + 1}.png`),
   logo: join(OUT, `logo-${index + 1}.png`),
   wind: join(OUT, `wind-${index + 1}.json`),
+  read: join(OUT, `read-${index + 1}.json`),
 });
 
 /** A Chrome of its own for a measure, as `options` have its window. */

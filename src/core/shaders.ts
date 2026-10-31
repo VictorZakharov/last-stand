@@ -427,7 +427,7 @@ export interface WarmUp {
   drawn?: THREE.Object3D[];
   /** shown in place of `hide` for the draw alone (a biome the lobby doesn't show, for its shadows' programs, made as
    *  they're drawn: one in place of the other, so the lights counted are as many) */
-  swap?: { show: THREE.Object3D; hide: THREE.Object3D };
+  swap?: Swap;
   /** called just before the draw: what the lobby's frames mustn't draw before its programs are linked brought in (a
    *  foe seated in its crowd, which draws it whatever the camera sees) */
   show?: () => void;
@@ -445,6 +445,11 @@ export interface WarmUp {
    *  one not from the GPU's cache, behind the lobby (compiled cold behind it, a return's lobby drew 3 frames a second) */
   giveUpMs?: number;
 }
+
+/** What a warm-up shows in place of what (`WarmUp.swap`), and on WebGPU the scene's look it's shown with (`look`:
+ *  put on, returning its undoing): there a pipeline is keyed by the scene's environment and fog too, so the hall of
+ *  heroes compiled in the biome's look was built again in its own at its first frames (a first visit's 6 s hold). */
+export interface Swap { show: THREE.Object3D; hide: THREE.Object3D; look?: () => () => void }
 
 /** of a warm-up (`progress`), the share done once its maps have come, its textures uploaded, its programs linked */
 const MAPS_DONE = 0.2, UPLOADS_DONE = 0.3, LINKS_DONE = 0.95;
@@ -600,16 +605,19 @@ export async function warmUp(renderer: THREE.WebGLRenderer, scene: THREE.Scene, 
 async function warmUpWebGPU(renderer: THREE.WebGLRenderer, scene: THREE.Scene, camera: THREE.Camera, target: THREE.WebGLRenderTarget, how: WarmUp): Promise<WarmedUp> {
   const { objects = [], leaveOut = [], swap, progress, step } = how;
   const gpu = renderer as unknown as { compileAsync: (scene: THREE.Object3D, camera: THREE.Camera) => Promise<void> };
-  const drawn = how.drawn && [...how.drawn, ...objects, ...(swap ? [swap.show] : [])];
+  // (a look of its own keys every lit pipeline afresh, so all the scene is compiled and drawn in it, not its part)
+  const drawn = swap?.look ? undefined : how.drawn && [...how.drawn, ...objects, ...(swap ? [swap.show] : [])];
   const asDrawn = (run: () => void): void => {
     const prev = renderer.getRenderTarget();
     renderer.setRenderTarget(target);
     for (const o of objects) scene.add(o);
+    const unlook = swap?.look?.();
     if (swap) { swap.show.visible = true; swap.hide.visible = false; }
     try {
       drawnAlone(scene, camera, target, drawn, () => without(leaveOut, run));
     } finally {
       if (swap) { swap.show.visible = false; swap.hide.visible = true; }
+      unlook?.();
       for (const o of objects) scene.remove(o);
       renderer.setRenderTarget(prev);
     }

@@ -30,6 +30,7 @@ npm run stalls -- --scenario boot --film --perf --window 799x384 --scale 3.75 --
 npm run stalls -- --scenario boot --film --blink-exit 2   # the film's canary: two blinks to find
 npm run stalls -- --scenario boot --resize 1920x1080       # full screen and back 5 times: the exit follows the window
 npm run stalls -- --scenario boot --resize 1920x1080 --stale-wind  # its canary: an exit placed once is caught
+npm run stalls -- --scenario boot --url "this?renderer=webgpu&builds" --read "window.__builds"  # a page's own record
 npm run stalls -- --scenario sweep --stash 60 --seconds 8 --rounds 3 --variants base,iconFilter,stillGlow+noTooltip
                                                  # one page, the variants in turn three times over, by their medians
 npm run stalls -- --scenario sweep --stash 60 --seconds 6 --js   # and the page's JS, a frame's by function
