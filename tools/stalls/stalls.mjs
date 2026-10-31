@@ -13,6 +13,7 @@ import { nodeName } from '../lab/node/layers.mjs';
 import { priorityNow } from '../lab/node/priority.mjs';
 import { analyze } from './analyze.mjs';
 import { slowCpu, startChrome } from './chrome.mjs';
+import { measureWebgpuCache, WEBGPU_CACHE } from './webgpuCache.mjs';
 import { measureBoots } from './boot.mjs';
 import { BOOT, readOptions, usage, VIEWS } from './options.mjs';
 import {
@@ -293,6 +294,12 @@ async function main() {
   // desktop's work would read as the game's)
   console.log(`stalls: running at ${priorityNow()} priority`);
   mkdirSync(OUT, { recursive: true });
+  if (options.scenario === WEBGPU_CACHE) {
+    const text = await measureWebgpuCache(join(OUT, 'profiles'), options.urls);
+    writeFileSync(join(OUT, 'report.txt'), `${text}\n`);
+    console.log(`${text}\n\n(written to ${join(OUT, 'report.txt')})`);
+    return;
+  }
   const asked = options.urls.length ? options.urls : [THIS_TREE];
   const served = await serveTrees(asked, REPO, OUT, { named: options.js });
   const urls = asked.map(served.urlOf);

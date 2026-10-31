@@ -33,7 +33,7 @@ function fxNoise(x: N): N {
 export function crowdNodeMaterial(base: THREE.MeshStandardMaterial, rows: Rows, slot: number): THREE.Material {
   const {
     Fn, If, Discard, attribute, textureLoad, ivec2, int, instanceIndex, mat4, vec3, vec4, positionLocal, normalLocal,
-    positionGeometry, materialColor, materialOpacity, materialEmissive, varying, mix, smoothstep,
+    positionGeometry, materialColor, materialOpacity, materialEmissive, varying, mix, smoothstep, uniform,
   } = tsl as any;
   const source = base.clone();
   source.emissiveIntensity = 1;
@@ -55,11 +55,15 @@ export function crowdNodeMaterial(base: THREE.MeshStandardMaterial, rows: Rows, 
     normalLocal.assign(skin.mul(vec4(normalLocal, 0)).xyz);
     return skin.mul(vec4(positionLocal, 1)).xyz;
   })();
-  const looks = rows.joints * 4;
-  // (the kit's looks: dissolve, frost, char, hit; its edge's colour; this material's glow)
-  const fx = varying(texel(int(looks)));
-  const edgeColor = varying(texel(int(looks + 1)).xyz);
-  const glow = varying(texel(int(looks + rows.looks + Math.floor(slot / 4))).element(int(slot % 4)));
+  // (the kit's looks: dissolve, frost, char, hit; its edge's colour; this material's glow. Where each is in the row
+  // is a uniform: as constants, every kind's every material was a shader of its own, 43 of the boot's 170 vertex
+  // shaders alike but for them, each compiled again by Chrome on every visit)
+  const looksAt = uniform(rows.joints * 4, 'int');
+  const glowAt = uniform(rows.joints * 4 + rows.looks + Math.floor(slot / 4), 'int');
+  const glowLane = uniform(slot % 4, 'int');
+  const fx = varying(texel(looksAt));
+  const edgeColor = varying(texel(looksAt.add(1)).xyz);
+  const glow = varying(texel(glowAt).element(glowLane));
   const at = varying(positionGeometry);
   const dn = fxNoise(at.mul(7)).mul(0.65).add(fxNoise(at.mul(19)).mul(0.35)).toVar();
   node.colorNode = Fn(() => {

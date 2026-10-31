@@ -1,6 +1,7 @@
 // The stalls harness's command line (tools/stalls): its options, read and checked before anything starts, so a
 // misspelt one or a bad value stops it before a build or a browser.
 import { SCENARIOS, STOW_PRESS_MS, SWEEP_ITEM_MS } from './scenarios.mjs';
+import { WEBGPU_CACHE } from './webgpuCache.mjs';
 import { liveCss, partsOf, VARIANTS } from './variants.mjs';
 import { LISTED_LEAST, LISTED_MS } from './analyze.mjs';
 
@@ -36,7 +37,8 @@ const HELP = {
     + '(as it is with none); `ref:<git ref>` a commit, exported, built and served alike (`ref:HEAD~2`); either '
     + 'with a query asked of its page (`this,this?castAsOne=0`: a switch of the game\'s in turns, one build)'],
   scenario: ['name', `what the player does: ${Object.keys(SCENARIOS).join(', ')} (fight by default); ${BOOT}: the `
-    + 'game loaded as a first visit, then a return, each step of its loading timed'],
+    + 'game loaded as a first visit, then a return, each step of its loading timed; '
+    + `${WEBGPU_CACHE}: whether Chrome's cache serves a WebGPU page's pipelines as it loads again (a page of its own)`],
   seconds: ['n', `how long the scenario plays (45 by default; ${BOOT}: the lobby watched once revealed, `
     + `${BOOT_SECONDS})`],
   listed: ['ms', `each frame this long or longer listed with what was busy through it (${LISTED_LEAST} or more: `
@@ -169,8 +171,9 @@ export function readOptions(argv) {
     filmLogo: written['film-logo'] === true,
     help: written.help === true,
   };
-  if (!SCENARIOS[options.scenario] && options.scenario !== BOOT) {
-    throw new Error(`stalls: no scenario ${options.scenario} (${[...Object.keys(SCENARIOS), BOOT].join(', ')})`);
+  const own = [BOOT, WEBGPU_CACHE];
+  if (!SCENARIOS[options.scenario] && !own.includes(options.scenario)) {
+    throw new Error(`stalls: no scenario ${options.scenario} (${[...Object.keys(SCENARIOS), ...own].join(', ')})`);
   }
   const unknown = options.variants.flatMap(partsOf).find((part) => !VARIANTS[part]);
   if (unknown !== undefined) throw new Error(`stalls: no variant ${unknown} (${Object.keys(VARIANTS).join(', ')})`);
