@@ -126,8 +126,9 @@ id (`NodeManager.getCacheKey`), and three makes each environment map a node of i
   - Three's WebGPU build (751 kB), the meshlet pipeline (138 kB) and the bloom node are chunks of their own,
     fetched by `?renderer=webgpu`. That takes rolldown's chunk groups, not `manualChunks`, which pulled the
     WebGPU build into `three`.
-  - The offline worker still precaches every built file, so an install downloads the WebGPU chunks in the
-    background (about 900 kB). Leave them out of its list before this leaves draft.
+  - The offline worker leaves them out of its precache (`webgpuOnlyChunks` in `scripts/pwa.ts`: three's WebGPU
+    build, every chunk importing it and what only those import), so an install downloads none of them; a WebGPU page
+    fetches them from the network.
 
 ## The short answer (the estimate as first written)
 
