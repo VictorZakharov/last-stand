@@ -5,6 +5,7 @@
 import { writeFileSync } from 'node:fs';
 import { noCapture } from '../lab/node/browser.mjs';
 import { analyzeBoot } from './analyze.mjs';
+import { buildsBySteps, readBuilds, withBuilds } from './builds.mjs';
 import { slowCpu } from './chrome.mjs';
 import { BLINK_FRAMES, filmFrames, filmOf, logoBox, startFilm } from './film.mjs';
 import { bootRecording, chooseIfAsked, fightWarm, loaded, startIfCold, stopBootRecording } from './page.mjs';
@@ -34,8 +35,8 @@ const VISITS = [
 
 /** `browser`'s first context made ready for a boot: never taking the pointer, the boot recorded from each document's
  *  start (and where its exit draws, with `--resize`), `variant` (each of its parts) applied before the page's
- *  scripts, the performance overlay shown if `perf` and Auto's quality where `auto` says a device settled it (their
- *  cookies, set for `url`). */
+ *  scripts, the performance overlay shown if `perf`, Auto's quality where `auto` says a device settled it and the
+ *  battleground where `biome` is given (their cookies, set for `url`). */
 async function bootContext(browser, url, variant, options) {
   const context = browser.contexts()[0] ?? (await browser.newContext());
   await context.addInitScript(noCapture);
@@ -47,6 +48,7 @@ async function bootContext(browser, url, variant, options) {
   const cookies = [
     ...(options.perf ? [{ name: 'last-stand-perf-hud', value: '1', url }] : []),
     ...(options.auto ? [{ name: 'last-stand-quality-auto', value: options.auto, url }] : []),
+    ...(options.biome ? [{ name: 'last-stand-biome', value: options.biome, url }] : []),
   ];
   if (cookies.length) await context.addCookies(cookies);
   return context;
@@ -72,7 +74,7 @@ const LEFT_NOTES = {
  *  (`picture.end`, the film's sheets beside it), taken at the CPU's full speed (`setRate`: slowed ten times, the page
  *  painted none within Playwright's 30 s) and slowed again after. */
 async function bootTraced(browser, page, url, visit, options, picture, setRate) {
-  const trace = await startTrace(browser, { js: options.js, angle: options.angle });
+  const trace = await startTrace(browser, { js: options.js, angle: options.angle, dawn: options.dawn });
   const film = options.film ? await startFilm(page, { full: options.filmLogo }) : null;
   await visit.load(page, url);
   const resized = options.resize ? resizeTrips(page, options) : null;
@@ -88,12 +90,18 @@ async function bootTraced(browser, page, url, visit, options, picture, setRate) 
     await page.evaluate(startIfCold);
     await page.waitForFunction(fightWarm, null, { timeout: WARM_TIMEOUT_MS, polling: 250 });
   }
+  if (options.read) writeFileSync(picture.read, `${JSON.stringify(await page.evaluate(options.read), null, 1)}\n`);
+  const builds = options.builds ? await page.evaluate(readBuilds) : null;
   const record = await page.evaluate(stopBootRecording);
   const events = await trace.stop();
   const shots = film ? await film.stop() : [];
   await setRate(1);
   await page.screenshot({ path: picture.end });
   const findings = analyzeBoot(record, events, MARK, options.sourceOf);
+  if (builds) {
+    const bySteps = buildsBySteps(builds, findings.steps);
+    findings.steps.forEach((step, index) => { step.builds = bySteps[index]; });
+  }
   if (windFit) {
     const { trace, resizes, ...fit } = windFit;
     writeFileSync(picture.wind, `${JSON.stringify({ resizes, trace })}\n`);
@@ -125,8 +133,10 @@ function bootNotes(visit, options, left, errors, picture) {
   const blinked = options.blinkExit ? [blinks] : [];
   const leftNote = left ? [LEFT_NOTES[left]] : [];
   const failed = errors.length ? [`page errors: ${errors.slice(0, 3).join(' | ')}`] : [];
+  const read = options.read ? [`${options.read} read into ${picture.read}`] : [];
+  const builds = options.builds ? ['its WebGPU node builds recorded (`?builds`), each step\'s listed'] : [];
   const notes = [visit.note, ...auto, ...slowed, ...trips, ...stalled, ...held, ...blinked, ...stale, ...leftNote,
-    ...failed];
+    ...failed, ...read, ...builds];
   return [...notes, `its end pictured in ${picture.end}`];
 }
 
@@ -151,7 +161,8 @@ export async function measureBoots(urls, options, { chromeFor, sourcesFor, pictu
           for (const visit of VISITS) {
             console.log(`booting ${options.nameOf(url)} ${variant}, ${visit.name}, round ${round}`);
             const picture = pictureAt();
-            const { findings, left } = await bootTraced(chrome.browser, page, url, visit, options, picture, setRate);
+            const loaded = options.builds ? withBuilds(url) : url;
+            const { findings, left } = await bootTraced(chrome.browser, page, loaded, visit, options, picture, setRate);
             const group = `${options.nameOf(url)} ${variant}, ${visit.name}`;
             const notes = bootNotes(visit, options, left, errors, picture);
             measured({ name: `${group} (round ${round})`, group, notes, findings });

@@ -13,6 +13,7 @@ import { nodeName } from '../lab/node/layers.mjs';
 import { priorityNow } from '../lab/node/priority.mjs';
 import { analyze } from './analyze.mjs';
 import { slowCpu, startChrome } from './chrome.mjs';
+import { measureWebgpuCache, WEBGPU_CACHE } from './webgpuCache.mjs';
 import { measureBoots } from './boot.mjs';
 import { BOOT, readOptions, usage, VIEWS } from './options.mjs';
 import {
@@ -123,13 +124,15 @@ async function chooseView(page, view) {
 const endPicture = (index) => join(OUT, `end-${index + 1}.png`);
 /** A boot's pictures: its end (`endPicture`), and its exit's film, the film's flickers (`--film`: `out/film-<n>.png`
  *  and `out/flickers-<n>.png`), its frames cut to the lobby logo (`--film-logo`: `out/logo-<n>.png`) and the
- *  exit's draws as the window changed (`--resize`: `out/wind-<n>.json`). */
+ *  exit's draws as the window changed (`--resize`: `out/wind-<n>.json`) and what was read off the page (`--read`:
+ *  `out/read-<n>.json`). */
 const bootPictures = (index) => ({
   end: endPicture(index),
   film: join(OUT, `film-${index + 1}.png`),
   flickers: join(OUT, `flickers-${index + 1}.png`),
   logo: join(OUT, `logo-${index + 1}.png`),
   wind: join(OUT, `wind-${index + 1}.json`),
+  read: join(OUT, `read-${index + 1}.json`),
 });
 
 /** A Chrome of its own for a measure, as `options` have its window. */
@@ -142,8 +145,8 @@ function chromeFor(options) {
 /** The scenario played once on `page` (in `browser`) while traced: what it did, what the frames and the trace
  *  showed, and a picture of the screen at its end (`picture`). */
 async function playTraced(browser, page, options, picture) {
-  const { js, angle, passes, paints } = options;
-  const trace = await startTrace(browser, { js, angle, passes, paints });
+  const { js, angle, dawn, passes, paints } = options;
+  const trace = await startTrace(browser, { js, angle, dawn, passes, paints });
   await page.evaluate(startRecording, MARK);
   const notes = await SCENARIOS[options.scenario](page, options.seconds * 1000, options);
   const record = await page.evaluate(stopRecording, MARK);
@@ -151,7 +154,8 @@ async function playTraced(browser, page, options, picture) {
   await page.screenshot({ path: picture });
   notes.push(`its end pictured in ${picture}`);
   const painted = paints ? await paintedNames(page, events) : new Map();
-  return { notes, findings: analyze(record, events, MARK, options.listed, options.sourceOf, painted) };
+  const findings = analyze(record, events, MARK, options.listed, options.sourceOf, painted, options.jsUnder);
+  return { notes, findings };
 }
 
 /** The elements the page painted (`--paints`, `trace.mjs` `paintOf`), named as the lab's layers name them (their
@@ -291,6 +295,12 @@ async function main() {
   // desktop's work would read as the game's)
   console.log(`stalls: running at ${priorityNow()} priority`);
   mkdirSync(OUT, { recursive: true });
+  if (options.scenario === WEBGPU_CACHE) {
+    const text = await measureWebgpuCache(join(OUT, 'profiles'), options.urls);
+    writeFileSync(join(OUT, 'report.txt'), `${text}\n`);
+    console.log(`${text}\n\n(written to ${join(OUT, 'report.txt')})`);
+    return;
+  }
   const asked = options.urls.length ? options.urls : [THIS_TREE];
   const served = await serveTrees(asked, REPO, OUT, { named: options.js });
   const urls = asked.map(served.urlOf);

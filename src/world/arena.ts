@@ -7,6 +7,7 @@ import { ARENA } from '../data/balance';
 import { BIOME_IDS, type BiomeId } from '../data/biomes';
 import { groundHeight, setRelief } from './ground';
 import { setAdaptScale } from '../core/renderer';
+import { oneEnvironment, rigPointLights } from '../core/webgpu';
 import { bakeStaticShadows, compileEnvMaps as compileEach, drawStillShadows, envMap, type Biome, type BiomeBuilder, type BiomeLook } from './props';
 import { cullWhileDrawn, trimShadowCasters } from './culling';
 import { buildCrypt, CRYPT_ENV } from './crypt';
@@ -75,6 +76,8 @@ export async function buildArena(scene: THREE.Scene, renderer: THREE.WebGLRender
   trimShadowCasters(hallGroup, shadowCameraFor(moon, hall.look));
   hallGroup.visible = false;
   scene.add(hallGroup);
+  // (on WebGPU their point lights are drawn by one rig: its lit pipelines are keyed by its lights' ids)
+  rigPointLights(scene, [...BIOME_IDS.map((id) => biomes[id].group), hallGroup]);
   if (import.meta.env.DEV) {
     const groups = [...BIOME_IDS.map((id) => biomes[id].group), hallGroup];
     const lights = groups.map((g) => { let n = 0; g.traverse((o) => { if ((o as THREE.PointLight).isPointLight) n++; }); return n; });
@@ -115,6 +118,7 @@ export async function buildArena(scene: THREE.Scene, renderer: THREE.WebGLRender
     hemi.color.set(L.hemi.sky); hemi.groundColor.set(L.hemi.ground); hemi.intensity = L.hemi.intensity;
     moon.color.set(L.moon.color); moon.intensity = L.moon.intensity; moon.position.set(...L.moon.pos);
     scene.environment = envMap(renderer, L.env);
+    oneEnvironment(scene);
     scene.environmentIntensity = L.envIntensity;
     setAdaptScale(L.adapt ?? 1);
   }

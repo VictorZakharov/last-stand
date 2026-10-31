@@ -7,6 +7,7 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { Pass, FullScreenQuad } from 'three/addons/postprocessing/Pass.js';
+import { WEBGPU, makeWebGPURenderer, makePipeline, renderWebGPU, webgpuSceneTarget } from './webgpu';
 import { G } from '../state';
 import { CAMERA } from '../data/balance';
 import { clamp, damp } from '../util';
@@ -456,10 +457,11 @@ function firstVertexProvokes(context: WebGLRenderingContext | WebGL2RenderingCon
   provoking?.provokingVertexWEBGL(provoking.FIRST_VERTEX_CONVENTION_WEBGL);
 }
 
-export function initRenderer(container: HTMLElement) {
+export async function initRenderer(container: HTMLElement) {
   loopPointLights();
   shadeEnvironment();
-  const renderer = gl = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
+  const renderer = gl = WEBGPU ? await makeWebGPURenderer()
+    : new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
   renderer.setPixelRatio(canvasRatio());
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.shadowMap.enabled = true;
@@ -474,9 +476,9 @@ export function initRenderer(container: HTMLElement) {
   // round trip waits for everything sent before it (a first visit's lobby warm-up waited 0.45 s there, behind its
   // programs)
   renderer.capabilities.getMaxAnisotropy();
-  firstVertexProvokes(renderer.getContext());
+  if (!WEBGPU) firstVertexProvokes(renderer.getContext());
   container.appendChild(renderer.domElement);
-  initHdr(renderer.domElement, renderer.getContext() as WebGL2RenderingContext);
+  if (!WEBGPU) initHdr(renderer.domElement, renderer.getContext() as WebGL2RenderingContext);
 
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x030307);
@@ -520,6 +522,7 @@ export function initRenderer(container: HTMLElement) {
     pass.render = (...a: Parameters<typeof run>) => { gpuMarks.mark(label); run(...a); };
   }
 
+  if (WEBGPU) await makePipeline(renderer, scene, camera);
   G.scene = scene; G.camera = camera; G.renderer = renderer;
   window.addEventListener('resize', fitViewport);
   fitViewport();
@@ -582,7 +585,7 @@ function fitViewport(): boolean {
 }
 
 /** The offscreen target the scene is rendered into (shaders must be compiled for it). */
-export const sceneTarget = (): THREE.WebGLRenderTarget => sceneRT;
+export const sceneTarget = (): THREE.WebGLRenderTarget => (WEBGPU ? webgpuSceneTarget() as THREE.WebGLRenderTarget : sceneRT);
 
 /** What a point's size (m) over its distance is multiplied by for its size in the scene's pixels: the scene's
  *  target's height over the view's height 1 m out. (Sized by the canvas's height, a point was as many times too
@@ -820,6 +823,10 @@ export const overFrame = { draw: (): void => {} };
 export function render(): void {
   // a change the resize event missed: fit, and tell the rest of the page (UI scale...) too
   if (fitViewport()) window.dispatchEvent(new Event('resize'));
+  if (WEBGPU) {
+    renderWebGPU();
+    return;
+  }
   grade.uniforms.uTime.value = G.time;
   grade.uniforms.uHurt.value = rig.hurt;
   fitBloodMask(gl.domElement.width, gl.domElement.height);

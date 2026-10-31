@@ -1,6 +1,7 @@
 // Entry point: boots every system, owns the main loop and the menu <-> run flow.
 import * as THREE from 'three';
 import { G } from './state';
+import { WEBGPU } from './core/webgpu';
 import { initRenderer, updateCamera, render, zoomBy, orbitBy, lookBy, setZoom, sceneTarget, setViewShift, setView, viewMode, viewSettled, VIEWS, type ViewMode } from './core/renderer';
 import { CAMERA, LOBBY } from './data/balance';
 import { initInput, updateInputRay, endInputFrame, input, isDown, wasPressed, wantPointerLock, pointerLocked, onPointerLockLost, lockLostAt, releaseInput } from './core/input';
@@ -78,11 +79,14 @@ async function boot() {
   initUIScale();
   releaseClickedFocus();
   initItemIcons();
-  const { scene, renderer } = initRenderer($('#game'));
-  steadyShadowPrograms(renderer);
-  watchPrograms(renderer);
-  // (the environments' programs linked as the arena is built, each made as its biome is first shown)
-  compileEnvMaps(renderer);
+  const { scene, renderer } = await initRenderer($('#game'));
+  // (WebGL's programs: WebGPU's pipelines are none of them, core/webgpu.ts)
+  if (!WEBGPU) {
+    steadyShadowPrograms(renderer);
+    watchPrograms(renderer);
+    // (the environments' programs linked as the arena is built, each made as its biome is first shown)
+    compileEnvMaps(renderer);
+  }
   initInput(renderer.domElement);
   initAltCursor(renderer.domElement);
   particles.init(scene);
@@ -94,7 +98,7 @@ async function boot() {
   initQuality();
   // the lobby's biome shown, and its programs compiled while the hero is built (game/warmup.ts)
   initBiome();
-  const heroLit = compileTheBiome();
+  compileTheBiome();
   // (the lobby's panels rastered under the loading screen while the hero is built: ui/menus.ts)
   layOutMenuAhead();
 
@@ -105,7 +109,6 @@ async function boot() {
   G.profile = loadProfile(savedClass());
   G.player = new Player(G.profile.classId, G.profile.equipped);
   G.players = [G.player];
-  heroLit();
   // (what the lobby can do compiled with him, before its page is laid out: game/warmup.ts)
   compileTheLobby();
 
