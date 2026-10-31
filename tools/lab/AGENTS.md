@@ -9,6 +9,11 @@ The lab as an agent works with it: what every command measures, in a line here a
 - **A check run often takes minutes**, not half an hour (Don't waste compute in the root's Workflow): `--profile` it, cut what its measures don't read, run side by side what doesn't depend on each other, and while iterating run only the scenarios a change can touch.
 - **Send a long run's output to a file** in `.tmp` (an `--ab` run, a check) and read its parts: read through `head` or `tail`, a run's end was lost.
 - **Stop the server with `npm run lab -- stop`**: its supervisor starts a killed server again. It stops every command running in a process of its own from this tree too (`check`, `pwa`, one run without the server: `node/running.mjs`), which a stopped task doesn't: under Git Bash, `npm run lab` leaves its command no line back to the task, and a stopped check ran on to its end, eight browsers at full load.
+- **Each tree has its own server**, on a port of its own made from its root (`treePort` in `node/paths.mjs`; `LAB_PORT`
+  overrides it), and a server refuses a command or a `stop` from another tree's command line, saying whose it is.
+  Two sessions in two worktrees once shared a port: each one's command found the other's server running other code,
+  restarted it, and waited for it in vain (it came back on its own tree's code), and a `stop` stopped the other's.
+  Don't hand sessions a `LAB_PORT`: the default is already theirs alone.
 - **Don't load the shared PC for more than about two minutes unasked** (the root's Workflow): a whole check of the old harness for a "before" number pinned the CPU and GPU for over 17 minutes. Take old timings from past runs' `out/check/durations.json` and logs, or time one narrow job.
 - **The lab runs below normal priority, and lowers itself** (`node/priority.mjs`, #283): its command line, its server's supervisor and the server lower themselves as they start, before any browser, Vite or worker, which inherit it on Windows; each browser's processes Chrome raises (its GPU process as it starts, a page's renderer as it shows it) are lowered again after its launch and each page's load (`lowerProcesses` in `node/browser.mjs`, by the browser's own `SystemInfo.getProcessInfo`). At normal priority its runs froze the owner's desktop for 10 to 20 s, about a dozen times over one task. `lab status` and the supervisor's first line say what it runs at; check its browsers with their process tree's `PriorityClass` (a page's renderer may sit at Idle, lower still).
 
@@ -42,6 +47,7 @@ screen's edges, and the choice after a wave within a short screen's top 30%) wit
 - `hall`: the hero in focus in the hall of heroes showing off his skill and standing after it (each hand, elbow and the weapon's tip frame by frame in his own frame: a move a frame changing by over 12 cm a jerk, 40 as the weapon flies, the tip's by its speed; `--gear`/`--weapon` the weapon in his hand there), then the hall left mid-showcase and any sound it leaves playing; `--glow` the light round the weapon's tip frame by frame (the staff's crystal: near white, its median and brightest frames, its flashes, pictured at its brightest)
 - `glance`: the hero's casual look round as he stands idle (the head's turn from the chest and the eyes' in their sockets, frame by frame: in the countdown, the lobby and the hall after his showcase; none walking, attacking or through the eyes; within a neck's range, its speed, a jerk, the eyes leading, never a loop; a strip of the first glance)
 - `poses`: the hero's pose a move at a time as a digest to the last bit (every object's world matrix, every moving point of cloth: standing, walking, strafing attacking, stopped), and his `animate` timed each frame: a change made to cost less keeps the pose when an A/B's digests agree
+- `sit`: an idle hero's sit on a log, a stone or the floor by a fire (walked to and sat on his side of it, his hips on its top, his feet hanging on a high seat and down and still on a low one, every joint within its range, nothing under the floor, glancing, his skirts neither jerking nor wandering, pictured by a fire from ahead with it hidden; what he carries moved only in a hand and held as before once he's up, nothing of it jumping, his legs through his skirts, the third-person camera zoomed in framing him sat as standing, a film of the way down and up; asked to act, a tap and a key held: up first each time, a tap left undone, a held key done once he's up)
 - `coat`: the hero's skirts and hood as he stands at idle (every point of the cloth in its own space frame by frame: a move a frame changing by over 1 cm a jerk, with the hand nearest)
 - `haze`: the hero's held weapons' light through the eyes (each way he looks: their surface blown out near white, their bloom past it, and the frame round them darkened by the adaptation to them)
 - `spawns`: the foes coming in (boss waves one after another, a seed each: the gate every foe came by, its spot against the props, the gates each group and wave left idle, when the boss came against the rest of its wave, and its walk to the hero from each gate)
@@ -92,7 +98,7 @@ Options every command takes:
 - `--watch`: runs one again on each change to the source
 - `--profile`: says where a command's time went
 - `--tune name.field=v,...;...`: sets the game's tunable values before a command's set-up (`src/core/tuning.ts`: `warriorEyes.oneOn=0.75,-1.1,0.5`), so a pose or a camera is compared across values in seconds, without editing the source and booting again; `name.field[i,j]=v` sets some of a list's numbers alone (a swing's keys); given twice, the two are joined (any other option given twice is refused: a second `--tune` once replaced the first unsaid)
-- `--sweep name.field=a|b|c;...`: runs a command once for each value, or each combination of several, over its `--tune`, on the lab's server, each run's problems in full and the runs with the fewest named (a filter on the runs' output hid three failures on the runs it called best)
+- `--sweep name.field=a|b|c;...`: runs a command once for each value, or each combination of several, over its `--tune`, on the lab's server, each run's problems in full and the runs with the fewest named (a filter on the runs' output hid three failures on the runs it called best). Each field lists its own values, and the runs are every combination of them: `--sweep "sit.onKneeAt=0|0.2;sit.forearm=0.25,-0.45,1|0.25,-0.2,1"` is four runs (a list's numbers by commas). Whole sets of assignments either side of a `|` are refused, as an agent wrote them
 - `--boot level[@pixels]`: the page booted as a device whose Auto settled on that quality (`low@518400`: #243's phone): Auto's cookie set before the boot, so its warm-ups run at that level and the hero is built at its detail; a page booted ahead counts as ready only for the same boot
 - `--cold`: the page booted as a player's first visit (or a new build's) leaves it: the lab's own boot asks for everything the game warms after the lobby shows (`src/game/warm.ts`: the fight's programs, the other heroes') and waits for it; a cold one asks for nothing, so those stay cold until something needs them, as in the owner's lobby (`programs --cold`: its performance report counted every program as compiled late)
 - `--wear helm,chest,hands|none` (any command that sets the run up): the armour the hero wears, every piece not named left off (the set-up's report says what he `wears`): with `--screen` at the owner's window, a picture of what they see (the lab's hero is otherwise as the boot rolled him, bare-handed, and his first-person hands looked nothing like the owner's gloved ones)
@@ -105,7 +111,7 @@ Each command in full (what it measures and what it was measured against, its opt
 the options every command takes) is in [`COMMANDS.md`](COMMANDS.md), out of this file, which every session working on
 the lab loads whole, as it neared 120k characters. Read a command's entry there before running it for a measure or
 changing it; a new command gets its line in Commands at a glance above and its entry there. The largest entries are
-notes of their own in [`commands/`](commands) (`eyes`, `ui`, `gait`, `held`, `coop`, `swing`, `rush`, `check`), a line in
+notes of their own in [`commands/`](commands) (`eyes`, `ui`, `gait`, `held`, `coop`, `swing`, `rush`, `check`, `range`, `sit`), a line in
 `COMMANDS.md` pointing to each, as `COMMANDS.md` neared 120k in turn: an entry that grows past some 4k characters
 moves there too.
 
@@ -154,8 +160,9 @@ What the lab gives a probe (`page/lab.ts`):
   off itself (`G.run.wave`, its `timer` to 0) and reads its foes as they rise;
 - `lab.capture(views)`: pictures of this moment as PNGs (`lab.drawing = true` draws every frame instead), and
   `lab.picture(label, views, notes)` one moment of a report's `moments`: the lab writes them as a sheet
-  (`out/probes/<probe>/sheet.png`) and compares them in an A/B, as the sheet's (to see the frames a measure flagged,
-  run the measure's input to them and picture each);
+  (`out/probes/<probe>/sheet.png`, and `sheet-2.png`... past 8 rows: `writeSheet`, as one page of every row was too
+  big for the browser, which closed) and compares them in an A/B, as the sheet's (to see the frames a measure
+  flagged, run the measure's input to them and picture each);
 - `await lab.screen(label, notes, around?)`: this moment as the player sees it, the game drawn by its own camera with the
   page's UI over it (the HUD, a menu, a tooltip), pictured by the browser, whole, clipped round the element a CSS
   selector names (`'#hotbar'`) or to an area of the page (`screenArea(points)`: round points of the world as the
@@ -250,7 +257,8 @@ alone, each was waited out to the timeout, three minutes: a module that wouldn't
 loading screen never says it failed, and the command after it waited behind it.
 
 - `lab.mjs`: the command line. Reads and checks the command (`node/options.mjs`), and sends it to the server on
-  127.0.0.1:5196 (`LAB_PORT`; `node/client.mjs`), or runs it in a session of its own.
+  127.0.0.1 on this tree's own port (`treePort`, or `LAB_PORT`; `node/client.mjs`), or runs it in a session of its
+  own.
 - `node/`, the Node side:
   - `server.mjs`: `lab:serve`. One command at a time, the next page booted between them, and `--watch`'s changes. It
     only answers the lab's own command line: a POST of JSON for 127.0.0.1 or localhost, from no web page (a page in

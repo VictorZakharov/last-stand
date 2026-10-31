@@ -493,7 +493,7 @@ function update(dt: number): void {
   const vs = heroSelectOpen() ? heroSelectShift() : view === 'top' || input.touchMode ? lobbyViewShift() : { x: 0, y: 0 };
   setViewShift(vs.x, vs.y);
   const focus = focusPlayer();
-  updateCamera(dt, focus.pos, focus.model.height);
+  updateCamera(dt, focus.pos, focus.framedHeight());
   updateLowLife(dt);
   // through the eyes the body would fill the view (it still casts, animates and blocks): only the
   // arms and what they hold show
