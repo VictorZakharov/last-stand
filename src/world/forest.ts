@@ -19,6 +19,8 @@ import { bend, rag, taperTube } from '../entities/models/shapes';
 import { PropSet, instanceLook, meshLook, groupLook } from './destructible';
 import { buildFire, emberMat } from './fire';
 import { floorRelief } from '../core/parallax';
+import { tsl, WEBGPU } from '../core/webgpu';
+import { grassWindNode, mossColorNode } from './forestNodes';
 import { valueNoise3 } from '../core/patterns';
 import { tubesRelief } from './ground';
 import type { Obstacle } from '../types';
@@ -75,6 +77,12 @@ function clearOfFires(x: number, z: number, reach: number): [number, number] {
  * along a wave that crosses the clearing, on the game's clock (an updater keeps the time).
  */
 function windInGrass(m: THREE.MeshStandardMaterial, updaters: Updater[]): THREE.MeshStandardMaterial {
+  if (WEBGPU) {
+    const clock = tsl.uniform(0);
+    updaters.push((_dt, t) => { clock.value = t; });
+    m.positionNode = grassWindNode(clock, { rate: SWAY_RATE, reach: SWAY });
+    return m;
+  }
   const time = { value: 0 };
   updaters.push((_dt, t) => { time.value = t; });
   m.onBeforeCompile = (shader) => {
@@ -99,6 +107,10 @@ function windInGrass(m: THREE.MeshStandardMaterial, updaters: Updater[]): THREE.
 /** Large moss patches tinted over the floor in world space (a texture this big would tile visibly). The pebbles and
  *  leaves stand up out of the soil (core/parallax.ts). */
 function mossyGround<M extends THREE.Material>(m: M): M {
+  if (WEBGPU) {
+    (m as M & { colorNode: unknown }).colorNode = mossColorNode();
+    return m;
+  }
   m.onBeforeCompile = (shader) => {
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', '#include <common>\nvarying vec2 vMossXZ;')
