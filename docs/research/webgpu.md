@@ -230,6 +230,10 @@ id (`NodeManager.getCacheKey`), and three makes each environment map a node of i
   material's own, so its shadow stays whole), and the kit's dissolve, frost, char, near glow, rim, edge and hit
   flash as its colour, mask and emissive nodes. Checked with the hero stood behind a column: dithered away as on
   WebGL. Not yet: the hood's shade, the shine's cap.
+- **A lit material's own looks** (`OwnLooks` in `core/shaderPorts.ts`): a material whose GLSL patch is its own sets
+  `webgpuLooks`, given three's converted node material. A fire's bed and its logs' charred ends (`emberMat`) glow
+  through their cracks so (`emberNodes` in `world/fireNodes.ts`: the patch's functions as WGSL, its sheen cut by
+  scaling the specular terms in `setupSpecular`). Checked beside WebGL at a forest bonfire.
 - **The grade's display-space looks** (`graded` in `core/webgpu.ts`, after `renderOutput`: the pipeline's own
   conversion off): the vignette, the cool shadows and warm highlights, the low Health look and a hit's red flash,
   from the WebGL grade's own uniforms. The blood mask was never painted on WebGPU (`render` left before
@@ -254,7 +258,6 @@ id (`NodeManager.getCacheKey`), and three makes each environment map a node of i
 - **The rest of the GLSL `onBeforeCompile` looks:**
   - the hood's shade and the shine's cap (the kit's other looks are ported, above)
   - the floors' relief, and the crypt's earth's own normals (the floors' looks are ported, below)
-  - a fire's bed and its logs' char glowing through their cracks (`emberMat`)
   - triplanar, fur sway, dual-quaternion hands
 - **The grade:** the film grain, HDR, sanitize.
 - **Other gaps:**

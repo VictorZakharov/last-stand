@@ -1,8 +1,9 @@
 // A fire's flames on WebGPU (core/webgpu.ts): fire.ts's ray march as WGSL functions (`wgslFn`), written line for line
 // from its GLSL, the node material's whole output as `gl_FragColor` was. The noise is read at its first level
 // (`textureSampleLevel`): WGSL samples with gradients only where every pixel takes the same path, and the march stops
-// early. The flames fade as the prop under them dissolves (`seeThroughFade`, core/shaderPorts.ts `seeKept`). Not yet
-// ported: the bed's and the logs' char and embers (`emberMat`, a GLSL hook: they draw as plain lit stuff).
+// early. The flames fade as the prop under them dissolves (`seeThroughFade`, core/shaderPorts.ts `seeKept`). The bed's
+// and the logs' char and embers (`emberMat`) are its look's functions as WGSL, set on the lit material three converts
+// it to (`emberNodes`).
 import * as THREE from 'three';
 import { gpu, tsl } from '../core/webgpu';
 import { seeKept, seeUniforms } from '../core/shaderPorts';
@@ -36,6 +37,117 @@ export interface FlameShape {
   tongueBend: number;
   bendFoot: number;
   noise: { across: number; up: number; fineAcross: number; fineUp: number };
+}
+
+/** An ember material's values as fire.ts keeps them (each `{ value }`): the embers' clock, the bed's middle, how far
+ *  out it glows and how hot. */
+export interface EmberLooks {
+  time: { value: number };
+  centre: { value: THREE.Vector3 };
+  radius: { value: number };
+  heat: { value: number };
+}
+
+/** how much of a standard material's sheen char keeps (fire.ts's `CHAR_SHEEN`) */
+const CHAR_SHEEN = 0.2;
+
+/** The char's and the embers' functions, fire.ts's `EMBER_COMMON` as WGSL (made once). */
+let embers: { char: N; glow: N } | null = null;
+function emberFns(): { char: N; glow: N } {
+  const { wgslFn } = tsl as any;
+  if (embers) return embers;
+  const hash = wgslFn(`fn emberHash(p: vec2f) -> f32 {
+    return fract(sin(dot(p, vec2f(127.1, 311.7))) * 43758.5453);
+  }`);
+  const noise = wgslFn(`fn emberNoise(p: vec2f) -> f32 {
+    let i = floor(p);
+    var f = fract(p);
+    f = f * f * (3.0 - 2.0 * f);
+    return mix(mix(emberHash(i), emberHash(i + vec2f(1.0, 0.0)), f.x),
+      mix(emberHash(i + vec2f(0.0, 1.0)), emberHash(i + vec2f(1.0, 1.0)), f.x), f.y);
+  }`, [hash]);
+  const fbm = wgslFn(`fn emberFbm(start: vec2f) -> f32 {
+    var p = start;
+    var v = 0.0;
+    var a = 0.5;
+    for (var i = 0; i < 4; i++) {
+      v += a * emberNoise(p);
+      p = p * 2.03 + 17.1;
+      a *= 0.5;
+    }
+    return v;
+  }`, [noise]);
+  const hash3 = wgslFn(`fn emberHash3(q: vec3f) -> vec3f {
+    let p = vec3f(dot(q, vec3f(127.1, 311.7, 74.7)), dot(q, vec3f(269.5, 183.3, 246.1)),
+      dot(q, vec3f(113.5, 271.9, 124.6)));
+    return fract(sin(p) * 43758.5453);
+  }`);
+  // how far a point is from the edge between the nearest two cells (0 on it)
+  const cellEdge = wgslFn(`fn emberCellEdge(p: vec3f) -> f32 {
+    let i = floor(p);
+    let f = fract(p);
+    var nearest = 8.0;
+    var next = 8.0;
+    for (var z = -1; z <= 1; z++) {
+      for (var y = -1; y <= 1; y++) {
+        for (var x = -1; x <= 1; x++) {
+          let cell = vec3f(f32(x), f32(y), f32(z));
+          let d = length(cell + emberHash3(i + cell) - f);
+          if (d < nearest) {
+            next = nearest;
+            nearest = d;
+          } else if (d < next) {
+            next = d;
+          }
+        }
+      }
+    }
+    return next - nearest;
+  }`, [hash3]);
+  const hot = wgslFn(`fn emberHot(p: vec3f, centre: vec3f, radius: f32, heat: f32) -> f32 {
+    return clamp((1.0 - smoothstep(0.2, 1.05, length(p - centre) / radius)) * heat, 0.0, 1.0);
+  }`);
+  const char = wgslFn(`fn emberChar(p: vec3f, centre: vec3f, radius: f32, heat: f32) -> vec3f {
+    let ash = smoothstep(0.7, 0.84, emberFbm(p.xz * 9.0 + p.y * 7.0 + 3.0))
+      * (0.25 + 0.75 * (1.0 - emberHot(p, centre, radius, heat)));
+    return mix(vec3f(0.01, 0.009, 0.008), vec3f(0.1, 0.097, 0.094), ash);
+  }`, [fbm, hot]);
+  const glow = wgslFn(`fn emberGlow(p: vec3f, up: f32, time: f32, centre: vec3f, radius: f32, heat: f32) -> vec3f {
+    let hotHere = emberHot(p, centre, radius, heat);
+    let crack = (1.0 - smoothstep(0.0, 0.06, emberCellEdge(p * 22.0)))
+      * smoothstep(0.4, 0.62, emberFbm(p.xz * 4.0 + p.y * 3.0));
+    let hotPatch = smoothstep(0.62, 0.8, emberFbm(p.xz * 7.0 + p.y * 5.0));
+    let breathe = 0.45 + 0.55 * emberNoise(p.xz * 3.0 + vec2f(time * 0.35, time * 0.21));
+    let sides = 1.0 - smoothstep(0.3, 0.8, up);
+    let faces = max(heat - 1.0, 0.0) * hotHere * sides * (0.3 + 0.7 * emberNoise(p.xz * 14.0 + p.y * 9.0));
+    let g = clamp((crack * (0.03 + hotHere * hotHere) + hotPatch * hotHere * hotHere + faces) * breathe, 0.0, 1.0);
+    return mix(vec3f(0.8, 0.08, 0.01), vec3f(1.0, 0.42, 0.07), g) * (0.6 + g * 2.4) * g;
+  }`, [hot, cellEdge, fbm, noise]);
+  embers = { char, glow };
+  return embers;
+}
+
+/** An ember material's look on the node material three converts it to (fire.ts `emberMat`, its GLSL patch): its
+ *  colour darkened to char and ash, its glow through the cracks as its light, its sheen cut to a fifth. Its values
+ *  are read off the material drawn (`emberLooks`): every fire's bed and char shares the build. */
+export function emberNodes(node: N): void {
+  const {
+    materialReference, materialColor, materialOpacity, materialEmissive, positionWorld, normalWorld, vec4,
+    specularColor, specularColorBlended, specularF90,
+  } = tsl as any;
+  const { char, glow } = emberFns();
+  const read = (name: keyof EmberLooks, type: string): N => materialReference(`emberLooks.${name}.value`, type);
+  const at = { centre: read('centre', 'vec3'), radius: read('radius', 'float'), heat: read('heat', 'float') };
+  const time = read('time', 'float');
+  node.colorNode = vec4(materialColor.rgb.mul(char({ p: positionWorld, ...at })), materialOpacity);
+  node.emissiveNode = materialEmissive.add(glow({ p: positionWorld, up: normalWorld.y, time, ...at }));
+  const setupSpecular = node.setupSpecular.bind(node);
+  node.setupSpecular = () => {
+    setupSpecular();
+    specularColor.assign(specularColor.mul(CHAR_SHEEN));
+    specularColorBlended.assign(specularColorBlended.mul(CHAR_SHEEN));
+    specularF90.assign(specularF90.mul(CHAR_SHEEN));
+  };
 }
 
 /** `value` written into WGSL as a float */

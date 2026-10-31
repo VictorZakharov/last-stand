@@ -201,6 +201,11 @@ function refreshedEachDraw(material: THREE.Material): void {
   }
 }
 
+/** A lit material's own looks on WebGPU, where its GLSL patch (`onBeforeCompile`) is WebGL's alone: given the node
+ *  material three converts it to, as it's converted (a fire's char and embers: world/fireNodes.ts `emberNodes`).
+ *  Its uniforms are read off the material drawn (`materialReference`), as three shares the build. */
+export interface OwnLooks { webgpuLooks: (converted: N) => void }
+
 export function takePorts(renderer: WebGPURenderer): void {
   const library = renderer.library as unknown as { fromMaterial(material: THREE.Material): THREE.Material | null };
   const fromMaterial = library.fromMaterial.bind(library);
@@ -214,11 +219,13 @@ export function takePorts(renderer: WebGPURenderer): void {
       // (the props' and canopies' dissolve: their GLSL patch is WebGL's alone)
       const see = (material as { seeThrough?: SeeThrough }).seeThrough;
       const kit = (material as { kitLooks?: KitLooks }).kitLooks;
+      const own = (material as Partial<OwnLooks>).webgpuLooks;
       // (a material three converts afresh each time: its own node materials, the crowds', are left as they are)
       if (converted && !(material as N).isNodeMaterial) {
         if (see) (converted as N).maskNode = seeMask();
         if (kit) kitNodes(converted);
-        if (see || kit) refreshedEachDraw(material);
+        if (own) own(converted);
+        if (see || kit || own) refreshedEachDraw(material);
       }
       return converted;
     }

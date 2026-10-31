@@ -12,7 +12,7 @@ import { seeThrough, seeThroughFade } from '../core/seeThrough';
 import type { Updater } from './props';
 import { runPhase } from './runPhase';
 import { WEBGPU } from '../core/webgpu';
-import { flameMaterial, type FlameUniforms } from './fireNodes';
+import { emberNodes, flameMaterial, type EmberLooks, type FlameUniforms } from './fireNodes';
 
 /** A fire to build: its bed and flames, and the biome's light it flickers. */
 export interface FireSpec {
@@ -447,6 +447,10 @@ export function emberMat(centre: THREE.Vector3, radius: number, heat = 1): THREE
         #include <aomap_fragment>`);
   };
   mat.customProgramCacheKey = () => 'fire-ember';
+  // (on WebGPU, its look as nodes: world/fireNodes.ts; its own values a property of its own, read off it as drawn)
+  const looks: EmberLooks = { time: emberTime, centre: centreValue, radius: radiusValue, heat: heatValue };
+  Object.defineProperty(mat, 'emberLooks', { value: looks, configurable: true });
+  Object.defineProperty(mat, 'webgpuLooks', { value: emberNodes, configurable: true });
   return seeThrough(mat, 'prop');
 }
 
