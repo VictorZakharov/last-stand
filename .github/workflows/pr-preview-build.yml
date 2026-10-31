@@ -55,6 +55,11 @@ jobs:
         if: github.event.action != 'closed'
         run: npm run lab:test
 
+      # (pr-preview.yml runs main's copy of these scripts: a PR's are tested here before they get there)
+      - name: Test the preview publish's scripts
+        if: github.event.action != 'closed'
+        run: npm run preview:test
+
       # the path Pages serves the site under, as its settings have it: a project site's `/last-stand`, none on a custom
       # domain (`https://last-stand.cc`; built under `/last-stand/`, a preview there asked for every file at a path
       # that isn't, and stood on its loading screen). The SITE_ORIGIN variable, if set, wins, as in pr-preview.yml.
