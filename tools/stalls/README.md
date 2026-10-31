@@ -34,6 +34,7 @@ npm run stalls -- --scenario boot --url "this?renderer=webgpu&builds" --read "wi
 npm run stalls -- --scenario sweep --stash 60 --seconds 8 --rounds 3 --variants base,iconFilter,stillGlow+noTooltip
                                                  # one page, the variants in turn three times over, by their medians
 npm run stalls -- --scenario sweep --stash 60 --seconds 6 --js   # and the page's JS, a frame's by function
+npm run stalls -- --scenario lobby --js-under _renderObjectDirect --url "this?renderer=webgpu"  # what one function spends on
 npm run stalls -- --scenario sweep --stash 60 --seconds 2 --passes  # the compositor's render passes a frame, exact
 npm run stalls -- --help
 npm run stalls:test                              # the tool's own unit tests

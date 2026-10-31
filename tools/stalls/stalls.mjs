@@ -154,7 +154,8 @@ async function playTraced(browser, page, options, picture) {
   await page.screenshot({ path: picture });
   notes.push(`its end pictured in ${picture}`);
   const painted = paints ? await paintedNames(page, events) : new Map();
-  return { notes, findings: analyze(record, events, MARK, options.listed, options.sourceOf, painted) };
+  const findings = analyze(record, events, MARK, options.listed, options.sourceOf, painted, options.jsUnder);
+  return { notes, findings };
 }
 
 /** The elements the page painted (`--paints`, `trace.mjs` `paintOf`), named as the lab's layers name them (their

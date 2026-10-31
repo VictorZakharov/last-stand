@@ -31,6 +31,7 @@ test('fills in the defaults', () => {
     headed: false,
     perf: false,
     js: false,
+    jsUnder: null,
     angle: false,
     dawn: false,
     passes: false,
@@ -107,4 +108,10 @@ test('the usage lists every option', () => {
   for (const name of [...names, 'window', ...boot, 'item-ms', 'headed', 'perf', 'links', 'help']) {
     assert.match(usage(), new RegExp(`--${name}\\b`));
   }
+});
+
+test('a function to break down samples the JS', () => {
+  const options = readOptions(['--scenario', 'lobby', '--js-under', '_renderObjectDirect']);
+  assert.equal(options.js, true);
+  assert.equal(options.jsUnder, '_renderObjectDirect');
 });
