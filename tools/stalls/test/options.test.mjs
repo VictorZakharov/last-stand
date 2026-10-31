@@ -17,6 +17,7 @@ test('fills in the defaults', () => {
     view: 'top',
     biome: 'forest',
     hero: null,
+    cast: null,
     stash: 0,
     scale: 1,
     cpuSlowdown: 1,
@@ -61,6 +62,8 @@ test('reads values either way, and switches', () => {
   assert.equal(readOptions(['--scenario', 'boot', '--biome', 'crypt']).biome, 'crypt');
   assert.equal(readOptions(['--scale', '1.25']).scale, 1.25);
   assert.equal(readOptions(['--hero', 'warrior']).hero, 'warrior');
+  assert.deepEqual(readOptions(['--cast', '3']).cast, { key: '3', ms: 600 });
+  assert.deepEqual(readOptions(['--cast=2@900']).cast, { key: '2', ms: 900 });
   assert.equal(readOptions(['--stash=40']).stash, 40);
   assert.deepEqual(readOptions(['--window', '1536x695']).window, { width: 1536, height: 695 });
   assert.equal(readOptions(['--listed', '40']).listed, 40);

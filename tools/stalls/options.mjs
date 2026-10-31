@@ -51,6 +51,8 @@ const HELP = {
     + `${BOOT}: its end pictured in it, V pressed in the fight it started)`],
   biome: ['name', `the battleground: ${BIOMES.join(', ')} (forest by default; ${BOOT}: the game's own pick, `
     + 'where given its every visit\'s, so two variants\' end pictures show the same)'],
+  cast: ['key@ms', 'boot: its end pictured with this key held this long (a skill cast: 600 ms by default), its '
+    + 'look seen in the picture'],
   hero: ['name', `the hero chosen in the lobby: ${HEROES.join(', ')} (a first boot's by default)`],
   stash: ['n', `the hero's stash filled with this many items, copies of his own (0 to ${STASH_MOST}: 0 by default)`],
   'item-ms': ['ms', `how long a sweep over the stash stays over each item (${SWEEP_ITEM_MS} by default)`],
@@ -138,6 +140,16 @@ function sizeOf(written, name) {
  * The command line read and checked: the URLs (none: this tree built and served), the scenario, its length in
  * seconds, the variants, and the switches. Throws, saying what was wrong.
  */
+/** how long `--cast` holds its key before the picture, unless it says (ms) */
+const CAST_MS = 600;
+
+/** A `--cast` written as `key` or `key@ms`: the key a skill is cast by, and how long it's held for the picture. */
+function castOf(written) {
+  const [key, ms] = String(written).split('@');
+  if (!key) throw new Error(`--cast: a key to hold, as 2 or 2@900, not "${written}"`);
+  return { key, ms: Number(ms ?? CAST_MS) };
+}
+
 export function readOptions(argv) {
   const written = readWritten(argv);
   const options = {
@@ -150,6 +162,7 @@ export function readOptions(argv) {
     view: written.view ?? 'top',
     biome: written.biome ?? (written.scenario === BOOT ? null : 'forest'),
     hero: written.hero ?? null,
+    cast: written.cast === undefined ? null : castOf(written.cast),
     stash: Number(written.stash ?? 0),
     itemMs: Number(written['item-ms'] ?? SWEEP_ITEM_MS),
     pressMs: Number(written['press-ms'] ?? STOW_PRESS_MS),

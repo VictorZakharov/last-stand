@@ -74,13 +74,15 @@ function typeOf(value: unknown): string {
   throw new Error(`shaderPorts: no node type for the uniform ${String(value)}`);
 }
 
-/** `material`'s uniforms as nodes by name, each read as the frame draws it (but a texture not yet given, null: its
- *  port reads it itself) */
+/** `material`'s uniforms as nodes by name, each read off the material being drawn as the frame draws it (but a
+ *  texture not yet given, null: its port reads it itself). Read off this material's own uniforms, every material of
+ *  a kind drew with the first's: three builds them once, by their shape (Maelstrom's walls drew with the warm-up's,
+ *  faded out). */
 export function uniformsOf(material: THREE.ShaderMaterial): Record<string, N> {
   const nodes: Record<string, N> = {};
   for (const [name, uniform] of Object.entries(material.uniforms)) {
     if (uniform.value === null) continue;
-    nodes[name] = tsl.reference('value', typeOf(uniform.value), uniform);
+    nodes[name] = tsl.materialReference(`uniforms.${name}.value`, typeOf(uniform.value));
   }
   return nodes;
 }
@@ -97,6 +99,8 @@ function nearGlowed(colour: N): N {
 function madeFrom(material: THREE.ShaderMaterial, port: (t: Tsl, u: Record<string, N>) => Port): THREE.Material {
   const { fragment, vertex, position } = port(tsl as unknown as Tsl, uniformsOf(material));
   const node = new gpu.MeshBasicNodeMaterial() as N;
+  // (its uniforms are read off the material three draws: this one where it asks the build's)
+  node.uniforms = material.uniforms;
   const nearGlow = material.customProgramCacheKey() === 'nearGlow';
   node.fragmentNode = nearGlow ? nearGlowed(fragment) : fragment;
   if (vertex) node.vertexNode = vertex;

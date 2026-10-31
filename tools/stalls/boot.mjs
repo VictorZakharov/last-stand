@@ -98,7 +98,7 @@ async function bootTraced(browser, page, url, visit, options, picture, setRate) 
   const shots = film ? await film.stop() : [];
   await setRate(1);
   await viewForPicture(page, options.view);
-  await page.screenshot({ path: picture.end });
+  await pictureEnd(page, options.cast, picture.end);
   const findings = analyzeBoot(record, events, MARK, options.sourceOf);
   if (builds) {
     const bySteps = buildsBySteps(builds, findings.steps);
@@ -156,6 +156,19 @@ async function viewForPicture(page, view) {
     await page.keyboard.press('v', { delay: VIEW_KEY_MS });
     await page.waitForTimeout(VIEW_GLIDE_MS);
   }
+}
+
+/** The fight pictured into `path`, with `cast`'s key held its time first where given (a skill's look shown: its
+ *  key let go after the picture). */
+async function pictureEnd(page, cast, path) {
+  if (!cast) {
+    await page.screenshot({ path });
+    return;
+  }
+  await page.keyboard.down(cast.key);
+  await page.waitForTimeout(cast.ms);
+  await page.screenshot({ path });
+  await page.keyboard.up(cast.key);
 }
 
 /** the most distinct errors a boot's notes list */
