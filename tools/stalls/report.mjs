@@ -131,8 +131,8 @@ function lookLines(look) {
   ];
 }
 
-/** A measure's section: its name, what the scenario did, the frames (each phase's), the programs (each with
- *  `links`) and the long stalls. */
+/** A measure's section: its name, what the scenario did, the frames (each phase's), a frame's JS by function
+ *  (`--js`), the programs (each with `links`) and the long stalls. */
 export function measureText(measure, { links = false } = {}) {
   const { name, notes, findings } = measure;
   const frames = findings.frames;
@@ -142,6 +142,8 @@ export function measureText(measure, { links = false } = {}) {
     `  ${frames.count} frames, median ${frames.median.toFixed(1)} ms; ${frames.stalls} over ${STALL_MS} ms, `
       + `${seconds(frames.stalled)} in them; the worst ${frames.worst.map((value) => value.toFixed(0)).join(', ')} ms`,
     `  Skia programs linked: ${programs.count}, ${ms(programs.total)} in all, the longest ${ms(programs.longest)}`,
+    ...(findings.js?.own.length ? [jsLine('a frame\'s JS, each function\'s own time', findings.js.own)] : []),
+    ...(findings.js?.within.length ? [jsLine('and with what it calls', findings.js.within)] : []),
     ...(findings.phases ?? []).flatMap(phaseLines),
   ];
   if (links) lines.push(...linkLines(findings.built));

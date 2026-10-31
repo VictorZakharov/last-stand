@@ -68,6 +68,7 @@ export async function makeWebGPURenderer(): Promise<THREE.WebGLRenderer> {
   // `npm run stalls -- --read`)
   if (new URLSearchParams(location.search).has('builds')) recordBuilds(renderer);
   if (new URLSearchParams(location.search).has('shaders')) recordShaders(renderer);
+  if (new URLSearchParams(location.search).has('drawn')) recordDraws(renderer);
   // (own properties over the class's getters: `compile` is one)
   const stand = (key: string, value: unknown) => Object.defineProperty(renderer, key, { value, writable: true });
   // the WebGL code's compiles started as `compileAsync`, for the target set (the warm-ups': the scene's pass's,
@@ -118,6 +119,36 @@ function recordBuilds(renderer: WebGPURenderer): void {
       contextNode: `${renderer.contextNode.id}.${renderer.contextNode.version}`,
     });
     return out;
+  };
+}
+
+/** TEMP: the draws of the frames, by camera, object and its type, counted in `window.__drawn` (each frame's
+ *  counts start afresh, so it holds the last frame's when read). */
+function recordDraws(renderer: WebGPURenderer): void {
+  type Drawn = { object: THREE.Object3D; camera: THREE.Camera; material: THREE.Material };
+  const backend = (renderer as unknown as { backend: { draw(ro: Drawn, info: unknown): void } }).backend;
+  const draw = backend.draw.bind(backend);
+  let counts: Record<string, number> = {};
+  let frame = -1;
+  backend.draw = (ro: Drawn, info: unknown) => {
+    const now = (renderer as unknown as { info: { frame: number } }).info.frame;
+    if (now !== frame) {
+      frame = now;
+      Object.assign(window, { __drawn: counts });
+      counts = {};
+    }
+    const type = (ro.object as { isInstancedMesh?: boolean }).isInstancedMesh ? 'Instanced' : ro.object.type;
+    const path: string[] = [];
+    for (let at = ro.object.parent; at && path.length < 4; at = at.parent) if (at.name) path.push(at.name);
+    const name = ro.object.name || `- in ${path.join(' < ')}`;
+    const key = `${ro.camera.type}#${ro.camera.id} ${type} ${name} / ${ro.material.type}`;
+    counts[key] = (counts[key] ?? 0) + 1;
+    // (and each camera's draws over every frame since the page started, with the frames: a mean a frame)
+    const all = ((window as { __drawnAll?: Record<string, number> }).__drawnAll ??= {});
+    const cam = `${ro.camera.type}#${ro.camera.id}`;
+    all[cam] = (all[cam] ?? 0) + 1;
+    all.frames = now;
+    draw(ro, info);
   };
 }
 
@@ -245,6 +276,8 @@ export function rigPointLights(scene: THREE.Scene, groups: THREE.Object3D[]): vo
   });
   for (const lights of lightsOf.values()) for (const light of lights) light.visible = false;
   scene.add(...rig);
+  // TEMP: the rig, read by `npm run stalls -- --read` (`&drawn`)
+  if (new URLSearchParams(location.search).has('drawn')) Object.assign(window, { __rig: rig });
   const before = scene.onBeforeRender;
   scene.onBeforeRender = (...args) => {
     const shown = groups.find((group) => group.visible);

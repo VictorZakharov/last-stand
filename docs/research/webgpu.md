@@ -111,9 +111,16 @@ id (`NodeManager.getCacheKey`), and three makes each environment map a node of i
 - **Other gaps:**
   - The warm-up compiles by `compileAsync` now (below), but the fight's crowds are still rebuilt at their draw
     under the fight's loading bar (2.6 s).
-  - The shadow-only casters (`world/culling.ts`).
   - The perf overlay's GPU timing.
   - The lab.
+- **The shadow-only casters** (`world/culling.ts` `shadowsAsRenders`): WebGPU draws each shadow map as a render of
+  the scene by the light's camera, nested in the frame's, with no shadow map's `render` to wrap. So the casters only
+  the shadow map draws (a biome's bake, the trees' shadow copies, a hero cast as one) are shown, and the work round
+  a shadow's draw run, between the scene's `onBeforeRender` and `onAfterRender` round such a render. Hidden before,
+  the bake and the trees cast nothing, and each piece of the hero cast alone: the sun's shadow drew 173 times a lobby
+  frame, now 134, the frame's 416 draws 288 (WebGL's about 300). Its JS stayed 2.1 ms: three's cost is per object
+  it walks as much as per draw. The culled meshes are packed for the views alone now: packed for each shadow camera
+  too, the frame's view drew the instances packed for the sun's box.
 - **Bundle size:** a WebGL page loads none of the WebGPU code. Checked on the production build: its page fetches
   `index` and `three` (737 kB) alone.
   - Three's WebGPU build (751 kB), the meshlet pipeline (138 kB) and the bloom node are chunks of their own,
