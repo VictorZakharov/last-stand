@@ -78,6 +78,8 @@ export function wantPointerLock(on: boolean): void {
   if (!on) { if (pointerLocked()) document.exitPointerLock(); return; }
   if (!pointerLocked() && navigator.userActivation?.isActive && performance.now() - lockTried > 600) requestLock();
 }
+/** whether mouse look wants the pointer this frame (`lab village` reads it: headless, the lock itself may not come) */
+export const pointerWanted = (): boolean => lockWanted;
 export function onPointerLockLost(fn: () => void): void { onLockLost = fn; }
 
 const ray = new THREE.Raycaster();
@@ -100,7 +102,7 @@ function floorHit(r: THREE.Ray, out: THREE.Vector3): boolean {
 
 /** Where a ray first enters an upright cylinder (round (x, z), radius `r`, from y0 up to y1): the distance along it, 0 if
  *  it starts inside, Infinity if it never does. A cheap test before what the cylinder stands for is met as it's drawn. */
-function cylinder(r: THREE.Ray, x: number, z: number, rad: number, y0: number, y1: number): number {
+export function cylinder(r: THREE.Ray, x: number, z: number, rad: number, y0: number, y1: number): number {
   const o = r.origin, d = r.direction, fx = o.x - x, fz = o.z - z, a = d.x * d.x + d.z * d.z, c = fx * fx + fz * fz - rad * rad;
   // (the stretch of the ray inside the round, then inside the heights)
   let t0 = -Infinity, t1 = Infinity;

@@ -64,74 +64,7 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   the stops whose names contain that. Within one run each stop starts at its own moment of the clock, so a stop run
   alone can differ from the same one in the whole run: compare the totals. (The gait's steps back counted only steps
   that left once the body stood, and missed every stop's: the step back began as the body slowed.)
-- `range`: every joint of the hero against a body's ranges (`models/anatomy.ts`, as the dev builds' `watchBody`
-  measures them), frame by frame, over standing, walking each way, attacking standing, and walks that change
-  direction while he attacks (held or tapped) or runs (`--scenarios stand,walk,shoot,reverse,taps,run`), and with
-  `--skill` a skill cast standing and its end held (`cast`: its key held as long as the player would, `holdFor`, a
-  channel through; pressed for a frame, Steel Tempest stopped at once), the weapons held `--gear`'s way throughout
-  (`--weapon` the base): each angle past its range, on how many frames, its worst and where (for a leg, whether its
-  foot was planted; for a shoulder, its raise, the plane it rises in and its turn against what each allows), each
-  scenario's pose timed frame by frame by the browser's clock (`page/poseCost.ts`: its slowest frame, median and
-  p90; two frames over 20 ms fail, or one over 30 (one frame alone read 21 to 23 by the noise of a check's eight
-  sessions), canary one frame's made 40 ms slower: the lab's frames run on its own clock, and a
-  blow onto a pillar or a log that read the prop's every triangle for each point its stop tried took 571 ms a frame
-  unseen), its fastest ankle, its weapon tip's fastest move a frame between moves and through them, each with how far
-  the hand moved then and the joint whose own turn changed most (`page/tipMoves.ts`, in the hero's own frame: between
-  moves, where a pose eases back to the stance, a jump shows; Thunder Crescent's end was back at rest in a frame,
-  131 cm, and a two-handed swing's end turned the hand over, `handR turned 178°`), a two-hander's lower grip let go
-  of by the other hand (on how many frames, how often, from which frames and moments of a move, and why at the worst:
-  the grip past the arm's reach, its joints past their ranges, the arm into the body; a failure. Its frames on the
-  shoulder or the flask in hand are counted apart, `LowerGrip.free`), and its worst moment pictured, and the weapon
-  under the floor (`page/weaponFloor.ts`: every corner of the surface of what the main hand holds, on how many frames,
-  the deepest and how far along the weapon; Thunder Crescent put an axe's or a maul's head into the floor to its
-  middle; a prop's top counts as floor, and the arena's wall as drawn: how far into it, the less of under its top and
-  past its face, read by rays of the lab's own through `Wall.cast`, so a commit with no `wallTopAt` reads a blow into
-  the wall too; `--biome` and `--at`/`--facing` stand him by it: two-handed Power Strike went 2.6 m into the crypt's
-  wall, `--biome crypt --at 24.9,14.4 --facing 1.047`, and now holds on it; in a cast, the weapon's nearest the floor and its blade off the blow's line, the flat's normal against
-  his side's axis, so a blade lying flat or turned across the blow fails, its canary the grip turned a quarter:
-  "axe needs to strike with blade perpendicular to ground"; a prop's top counts as floor, `propTopAt`, so a blow
-  into a pillar or a stone is read where it stops on it; `--frames` lists each frame's weapon in the body or under
-  the floor), and an arm held at its stops (`page/armStrain.ts`:
-  two or more of one arm's joints within 2° of an end of
-  their ranges on the same frame, a gripping wrist by a gripping wrist's: the arm IK stops the forearm's turn and the
-  wrist at their ends, so a pose asking more of an arm than it gives is held there, within every range; two-handed
-  Power Strike's end held the forearm at 89.9° of its 90 and the wrist at 30° of its 30, and looked "broken". On how
-  many frames, the first with the most stops pictured, and each stop's frames tallied: said, not failed, until every
-  hero's are fixed, #307), and the weapon through the body (`page/weaponBody.ts`: every corner of the same surface
-  against the thighs and shins, capsules round their bones at their drawn radii, and the belly and chest, the
-  anatomy's solids; on how many frames, the deepest, in which part and how far along the weapon, pictured: said, not
-  failed, as main has it too. Thunder Crescent's end and Rending Cleave put the haft's butt 10 cm into a thigh, "axe
-  shaft going through leg"). The arms against the body: each forearm and hand against the trunk and head
-  (`page/armsIn.ts`, as `eyes` reads them) and against the thighs and shins (`page/armsInLegs.ts`, capsules at their
-  drawn radii), the deepest pictured, said, not failed (from play: "power strike ending pose makes hand go through
-  body, its a regression, pls figure out how it went past our guards": range read the joints' angles and the weapon
-  alone, on level ground, and two-handed Power Strike's end put a fist 9 cm into the left thigh and the right forearm
-  16 cm into the belly in the hall of heroes, on a plinth; `--at 0,4.3`, 0.9 m back from the dais's step, shows it, 23
-  frames); their canaries plant the right elbow in the chest and a hand in the left thigh. In a cast, the weapon's tip
-  is traced frame by frame (`page/weaponPath.ts`) and drawn as a line in the pictures (red where it moves fast, a mark
-  every third frame; from the front, the left and above, framed on the path): a heavy weapon swung hard keeps its line
-  ("axe should go down in 1 line, without changing direction/turning", "just draw a line of the same point of the
-  axe"), so its fast frames on the way down (from its highest: the raise crosses the body from a guard held across it)
-  should run straight from above, and the line says how far they stray off it (two-handed Power Strike: 39 to 49 cm
-  with its shoulder turned across him as it's raised, 11 to 12 raised across instead); its canary moves one fast point
-  30 cm aside. The cast scenario runs 4.5 s from the press, through the stand after the end until a two-hander goes
-  onto his shoulder (at 2.5 s a 1.5 s cast's stand went unread).
-  `--at x,z` and `--facing` stand every scenario elsewhere (`--at 0,4.7`: the dais's edge facing off it, the ground ahead a step lower than under
-  his feet, as off a plinth in the hall of heroes, where the left hand let go of a two-hander after Power Strike).
-  `--foe <kind>` stands a foe `--ahead` m before him (1.8 by default) for the cast scenario (`page/weaponOnFoe.ts`):
-  the weapon's lowest over its body, a share of its height ("power strike should
-  land on the enemy its striking"), its canary moving the foe 3 m aside for a reading, which must find nothing.
-  `--canary` turns the head past the neck's range on one frame and sinks the hero below the floor by the weapon's
-  height over it and 2 m for one measure (the weapon must be found under the floor: sunk 2 m alone, a weapon raised in
-  a cast's charge stayed over it, and the canary was missed on main too), moves the weapon's grip to the left
-  thigh's middle for one
-  (it must be found in it), and reads an arm whose forearm and wrist are at their ends (it must read pinned),
-  `--frames` lists every frame with a joint past its range, every frame an arm was pinned, every frame the weapon was
-  under the floor or in the body and every frame between moves the tip moved 10 cm or more (with every joint that
-  turned: an elbow swung round its arm turns the shoulder alone), and `--trace` (`--span a,b` for some frames) the leg IK frame by
-  frame as the gait's trace does (`page/legTrace.ts`: each foot down, in the air or in a timed step `~`, dragged `d`),
-  each frame's joints past their ranges after it. `--tune` sets the game's tunable values first (a pose's numbers
-  compared without editing them, `--sweep` for many).
+- `range`: every joint of the hero against a body's ranges: in full in [`commands/range.md`](commands/range.md).
 - `eyes <skill>`: a skill cast through the eyes: in full in [`commands/eyes.md`](commands/eyes.md).
 - `swing <name>`: a swing through the eyes keyed from a pose: in full in [`commands/swing.md`](commands/swing.md).
 - `match <picture>`: the hero through the eyes matched to a reference (`node/match.mjs`; another game's, the one the
@@ -253,6 +186,7 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   divided by the finger's whole distance, so half a screen out the hero walked at a seventh of his speed. `--canary`
   slides the furthest push's finger back to 20 px before it's read. Try it on a phone too
   (`--screen 844x390@3`): the stick is drawn at the touch controls' scale, and so is its travel.
+- `village`: the lobby's village as a player walks it: in full in [`commands/village.md`](commands/village.md).
 - `tap`: every skill of the hero's class aimed by holding (`SkillDef.aimed`: `--class mage` Starfall and Veilstep,
   `ranger` Quarry Mark and Strawman), its touch button pressed by a finger, the other thumb on the move stick
   (`lab.touchDown(at, finger)`), each from a fresh set-up with a training dummy standing clear at the hero's side.
@@ -271,17 +205,17 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   in over its first frames, metres for one off the edge: spots are picked where one stands clear.)
 - `practice`: casting in the lobby and in the runs it starts, the hero's every skill on a key with a cooldown of a
   second or more (its effect's own `fire` counted) cast, then cast again as soon as he is free (no cast, channel, aim
-  or charge under way), from full energy. In the lobby as it shows, and shown again after practice, casting is free:
-  both casts must be made (nothing left cooling from practice). In practice (stowed, by the control the screen shows:
-  a phone's rail's Practice, or the hint over the arena that Space works), with every panel folded on a screen that
-  shows them side by side (not played on one showing one at a time, where folds don't count), in a run started by the
-  lobby's start the screen shows, and in a run begun in practice (a co-op guest's, as its host starts: no button of
-  a stowed lobby starts one, so `#btn-start` is clicked by script), the second must be refused while the first cools,
+  or charge under way), from full energy. The lobby is the village, and each lobby case casts from the training
+  yard, turned to its dummies (a blink carries him off, so he's put back before each skill). With the inventory open
+  (I), and open again after practice, casting is free: both casts must be made (nothing left cooling from practice).
+  On the square, out of the yard, nothing may be cast. In practice (the inventory put away by I), in a run started
+  at the crypt's portal (its card's Enter), and in a run begun in practice (a co-op guest's, as its host starts:
+  `#btn-start` is clicked by script), the second must be refused while the first cools,
   the HUD must count it down on its key, and the cast must spend at least half its energy as the HUD shows it. A run is
   held in its countdown with a dummy before the hero, and left from the pause menu (`lab.clickOn`: scrolled to, as a
   phone's has its Abandon below the screen's edge). On main the run begun in practice kept the lobby's free casting
   through it: every skill cast twice, no countdown, no energy spent. `--canary` plays that run again with free casting
-  planted, which must be caught. Run with `--screen 832x384@3.75` for a phone's (the rail's controls).
+  planted, which must be caught. A run left from the pause menu puts the hero back in the yard.
 - `spawns`: the foes coming in. Boss waves (the 5th, 10th, 15th and 20th in turn, `--waves 32` in each biome,
   `--biomes`) are set off one after another, each from a seed of its own (every set-up seeds the same numbers, which
   would roll the same gates), the hero at the arena's middle (`--at`). Every foe is read as it rises: the gate it
@@ -548,9 +482,12 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   nothing, alike ones together, saying why (an instanced mesh of no instances, a range of nothing: the renderer's work
   for a draw each on the CPU, though an instanced mesh of none never reaches the GPU, so the perf overlay's count,
   which counts GL draws, leaves them out; the rubble's empty pools were 46 a frame), and the scene's draws by their
-  material's look (draws of one look, a merge of what doesn't move would make one). Its head line says the draws in
+  material's look (draws of one look, a merge of what doesn't move would make one), and by the scene's part (its two
+  outermost named levels: `village > fountain`, `dummy > Mesh`). Its head line says the draws in
   each pass and how many drew nothing, the triangles and how many lay outside the view, the scene's objects whose
-  matrices are made again each frame, and how many of them are off the camera's layer (a crowd's bodies' own meshes).
+  matrices are made again each frame, by the scene's part, and how many of them are off the camera's layer (a crowd's
+  bodies' own meshes); a subtree three leaves alone (`matrixWorldAutoUpdate` off: a hidden place, what stands still)
+  isn't counted made again (counted, the hidden biomes read as 1,800 of the village's 1,861).
   Through the eyes (`--view first --class warrior`), the arms' own camera's draws are a pass of their own
   (renderer.ts `drawArms`), and what it drew is listed, the hero's and what isn't his. Anything that is neither under the
   hero's model nor his weapons' trail (`fx/swingTrail.ts` `swingTrailsOf`) is a problem, drawn over the frame at the
@@ -559,8 +496,16 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   geometry before the hero, which must come out as seven draws of it, seven instanced boxes, four far behind the
   camera, which must come out as four outside the view, and an instanced mesh of none, which must come out as a draw
   of nothing. Through the eyes it also stands a box on the arms' layer before them, which must come out as drawn by
-  their camera, not the hero's.
-- `perf <skills>`: skills cast in turn as the player casts them (`page/perf.ts`; `maelstrom,glacialNova`), the
+  their camera, not the hero's. `--village` measures the lobby's village instead (the run its set-up starts left, no
+  foes), the hero at `--at` facing `--facing` (the square by default) and the camera turned his way: through the eyes
+  on the square it was 203 draws and 1.7 million triangles, the hall's heroes standing and the grass over the square
+  drawn, and inside the hall over the shoulder 1.63 million, the meadow drawn behind its walls (now 174 and 1.35, and
+  0.85; `src/world/AGENTS.md`'s village). `--hour` lights it for an hour (by night two lamps cast shadows: 1.4
+  million triangles at noon, 2.0 at midnight, where before their faces left out what spreads over the village it was
+  4.1), and its head line says the programs compiled from the run left to the frame drawn, each a problem. Each
+  draw's triangles are summed as it's drawn: taken as the last draw's times the draws, a geometry whose draws a lamp's
+  faces emptied counted all of them full.
+- `perf [<skills>]`: skills cast in turn as the player casts them (`page/perf.ts`; `maelstrom,glacialNova`), the
   biome's foes coming at the hero (`--foes`, 10), every frame timed as the game's performance report times it
   (`ui/perfHud.ts`, on the browser's clock: `perfClock`) and summed by phase: standing (60 frames), then from each
   press (`--apart` s, 1) to the next, the last to `--after` s (4). Each frame is timed whole by the browser's clock,
@@ -578,7 +523,13 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   start to its end, its waits for the page's commands with it; on a desktop the scene pass's GPU time often matches
   the render's CPU time, as the GPU waits on it, so a triangle cut shows smaller there than on a phone whose GPU sets
   the pace. A cast pressed and never made, a shader compiled while it was timed, and frames all read 0 ms are
-  problems. `--canary` runs a round with the hero's update made 2 ms slower (it must read at least 0.8 of that) and
+  problems. `--village`: the lobby's village instead (`--hour` it's lit for), no skills or foes: the hero standing on
+  its square, then walking (120 frames each; `--at`, `--facing`), then walking of himself from the square into the
+  hall of heroes to its dais (900 frames: from play, "lag when entering hall of heroes", frames of 875 and 472 ms),
+  then standing in it (120 frames: from play, "still FPS drop when entering the hall"), then 7 m in from its door
+  turned to it over the shoulder (120 frames: from play, "looking at plaza from hall", the render 15 ms of the CPU);
+  each phase lists its slowest frames, each with its page's work and its slowest stages; from the owner's report, 10 to 13 ms of GPU a frame
+  on an RTX 4070 Ti where the goal is a steady 144 frames a second (6.9 ms). `--canary` runs a round with the hero's update made 2 ms slower (it must read at least 0.8 of that) and
   the scene drawn twice (the scene pass's GPU time must read at least 1.3 times more), and the particles twice as
   wide (their fill must read at least 2.5 times more). The machine's load drifts: compare an A/B run `--fresh`, both
   sides then, not one side from the cache and the other now. Then the report as the overlay copies it is read

@@ -16,8 +16,8 @@ Everything is procedural: models, animation, textures, VFX and sound are generat
 
 ## How to play
 
-- Pick a battleground in the lobby, the **Crypt** or the **Forest** (or the dice for a random one each run). Each has its own enemies.
-- Start a run at any wave up to the best one you cleared **and banked** in that battleground (the lobby defaults to it); a run you died in doesn't count. On Random, the range is the waves banked in every battleground.
+- The lobby is a village you walk around. Walk up to something and press **E** (or click it, or tap it) to use it: the portals to the **Crypt** and the **Forest**, the chest for your stash, the hall of heroes to change hero, the campfire to play together, the chronicle for save slots, the notice board for how to play. **M** shows the village's map. Skills work in the training yard, on its dummies. A first visit starts with a short training round the village, which you can skip.
+- Each battleground has its own enemies. At its portal, start a run at any wave up to the best one you cleared **and banked** there (the portal defaults to it); a run you died in doesn't count.
 - Survive each wave inside the arena. Every fifth wave, a boss arrives: the **Colossus** in the Crypt, the **Thornheart** in the Forest.
 - After every wave, choose:
   - **Bank** — leave the arena and move everything you found into your stash, or
@@ -47,7 +47,7 @@ Plays with a keyboard and mouse, or by touch on phones and tablets (hold a phone
 - **Move:** a stick anywhere on the left half of the screen.
 - **Skills:** the buttons on the right. Tap to cast at the nearest foe, or drag to aim and let go to cast there; hold the attack button or a channelled skill to keep it going.
 - **Other:** pinch to zoom, and the ❚❚ button pauses.
-- **Lobby:** tap items to equip them or drop them on the floor, and tap a key, then a skill, to rebind it.
+- **Lobby:** tap something in the village to walk there and use it, or use the **Use** button beside it; **Bag** opens the inventory and **Map** the map. Tap items to equip them or drop them on the floor, and tap a key, then a skill, to rebind it.
 
 Keyboard and mouse:
 
@@ -61,10 +61,12 @@ Keyboard and mouse:
 | `V` | Change view (in a run or the lobby): top-down, over the shoulder, first person. The close views use mouse look and aim at the crosshair |
 | `Alt` (hold) | In the close views: a cursor for the HUD (the battle log's buttons, the skills' tooltips), the view held still |
 | `B` / `C` | Bank / Continue after a wave |
-| `E` (hold) | Revive a downed partner (co-op) |
+| `E` | In the lobby: use what you stand by (a portal, the chest, the hall...); in co-op, hold to revive a downed partner |
+| `I` | In the lobby: the inventory (equipment, attributes, skills) |
+| `M` | In the lobby: the village's map |
 | `Esc` | Pause |
 
-Skills can be **remapped in the lobby**: the chevron beside the key bar (or a click on a key) opens the spellbook (the warrior's arsenal) above it. Click a key, then a skill, or drag a skill onto any key (the same skill may sit on several keys); drag keys onto each other to swap. The loadout is saved in a cookie per class and save slot. You can also walk around and try every skill for free in the lobby, and fold its panels away to make room: the hero panel to the left, the equipment to the right and the key bar down, each by the tab on its edge (the lobby remembers).
+Skills can be **remapped in the lobby**: the chevron beside the key bar (or a click on a key) opens the spellbook (the warrior's arsenal) above it. Click a key, then a skill, or drag a skill onto any key (the same skill may sit on several keys); drag keys onto each other to swap. The loadout is saved in a cookie per class and save slot. You can also try every skill in the lobby's training yard, on its dummies: free while the inventory is open, with a run's costs and cooldowns once it's put away.
 
 ## Classes
 

@@ -9,7 +9,7 @@ and every one show again with the columns gone. `--canary` plants each column 3 
 label shows through, which must be caught.
 
 `ui`: the game's UI as the player sees it, in its states (`--states lobby,tooltip,glow,help,saves,heroes,readying,
-readyingHeroes,clicked,views,behindProps,logLobby,skillTipsTouch,sheetTouch,litTouch,run,scores,perf,decision,pause,summary,skillTips,log,logTouch,hudTouch,decisionTouch`, every one by default:
+readyingHeroes,clicked,views,behindProps,logLobby,pauseLobby,skillTipsTouch,sheetTouch,litTouch,run,scores,perf,decision,pause,summary,skillTips,log,logTouch,hudTouch,decisionTouch`, every one by default:
 the lobby, an item's tooltip, the stash given 60 items (more than its view shows, on most screens) and a weapon
 among them hovered by the mouse, those that fit its slot lit (`page/uiGlow.ts`: a short screen's rail turned to the
 gear first; pictured round the stash, its tooltip put away, at 400, 1000 and 1600 ms into the
@@ -53,7 +53,8 @@ shows it (`ui/readying.ts`, 40% along: within the window, its label on one line,
 the heroes' programs are kept cold (`game/warm.ts` `chill`), its bar saying it readies the heroes and every label the
 bar can show (`readyingLabels`) on one line on this screen (`--canary` puts back the page's own "Readying the fight",
 which a class pick once said, and it must be found; a tree from before it can't keep them cold, and says so), the
-lobby's battleground button on clicked with the mouse and a key pressed after it as the browser gets them (where the
+crypt's portal card (the hero put at its stand and the portal used) left by its Leave clicked with the mouse and a
+key pressed after it as the browser gets them, the hero put back after (where the
 focus went and whether the browser shows its ring: a problem when the button kept it), the lobby's camera switched with V through every
 view and back, each glide played and drawn (every frame, each label over the dummies against where its anchor shows
 by the camera as the frame draws it: off by more than a pixel is a problem; placed with the camera's turn of the
@@ -75,7 +76,10 @@ opened with the light; the moment after the stash weapon's is pictured, card and
 bar and damage numbers over it, the scores, the performance overlay, the choice after a wave (each button's label on one line, `page/uiDecision.ts`:
 narrowed on a short screen, the mouse's labels, their keys beside them, wrapped onto two; `--canary` makes it too
 narrow for them, which must be found; put away at once as it closes: folded back into the badge on the browser's own
-timers, it was still half shown in the next state's picture), the pause menu, the
+timers, it was still half shown in the next state's picture), the pause menu (with no time of day in a run's;
+`pauseLobby` the village's, `page/uiHour.ts`: its time of day shown within the window, the slider moved to 21:30
+holding the hour and saying so, and its first step, Auto, giving the clock back; `--canary` leaves the hour held at
+Auto, which must be found), the
 run's summary, each skill's tooltip on the hotbar opened by the mouse moved over its slot (within the window, the
 tallest pictured; `--canary` makes each as tall as the window, which must be found past it: issue #256's damage
 lines made them taller), the battle log with each skill on a key struck at the foe twice and its blows on the hero

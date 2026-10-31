@@ -24,7 +24,7 @@ const KINDS = [
 export const UI_STATES = [
   'lobby', 'tooltip', 'glow', 'help', 'saves', 'heroes', 'readying', 'readyingHeroes', 'clicked', 'views',
   'behindProps',
-  'logLobby',
+  'logLobby', 'pauseLobby',
   'skillTipsTouch', 'sheetTouch', 'litTouch',
   'run', 'scores', 'perf', 'decision', 'pause', 'summary', 'skillTips', 'log', 'logTouch',
   'hudTouch', 'decisionTouch',
@@ -356,17 +356,18 @@ export const COMMANDS = {
           + 'its panel leaves, its parts within the window and none over another, the hero beside clicked into focus, '
           + 'Esc back to the lobby), readying (the fight\'s loading bar over the lobby: within the window, its label '
           + 'on a line), readyingHeroes (Change hero clicked with the heroes\' programs cold: the bar says it readies '
-          + 'the heroes), clicked (a battleground\'s button clicked and a '
-          + 'key pressed after it: '
-          + 'where the focus went), views (the lobby\'s camera switched through its views: the labels over the '
-          + 'dummies against their anchors), behindProps (a column planted between the camera and each dummy\'s label: '
+          + 'the heroes), clicked (the crypt\'s portal card left by its Leave clicked and a key pressed after it: '
+          + 'where the focus went), views (the lobby\'s camera switched through its views from the training yard: '
+          + 'the labels over the dummies against their anchors), '
+          + 'behindProps (a column planted between the camera and each dummy\'s label: '
           + 'every label hidden behind it, every one shown with it gone; the canary plants it aside), run (the HUD '
           + 'with a hurt foe\'s bar and damage numbers), '
           + 'scores, perf, decision, pause, summary, skillTips (each skill\'s tooltip on the hotbar opened by the '
           + 'mouse, within the window; the tallest pictured; skillTipsTouch: the lobby\'s by a finger\'s tap), log '
           + '(the battle log with hits dealt and taken: every '
           + 'line shown, within the screen, over nothing of the HUD), logLobby (the same over the lobby, clear of its '
-          + 'panels), '
+          + 'panels), pauseLobby (the pause menu in the village: its time of day shown, holding the hour it is '
+          + 'moved to and giving the clock back at Auto; none in the pause menu of a run), '
           + 'logTouch (the same in touch mode: clear of the touch HUD, touches let through), hudTouch (the touch '
           + 'HUD\'s top corners at the screen\'s edges, none of its corners\' controls over another; --insets for a '
           + 'phone\'s cutout), decisionTouch (the choice after a wave in touch mode: on a short screen within its top '
@@ -534,12 +535,23 @@ export const COMMANDS = {
       + 'a shader compiled as it\'s timed and a canary unseen are problems (a phone\'s: --screen 832x384@3.75 '
       + '--quality low@518400 --throttle 4; --class mage)',
     argument: 'skills',
+    argumentOptional: true,
     options: {
       biome: {
         kind: 'choice',
         choices: ['crypt', 'forest'],
         usage: 'crypt|forest',
         help: 'the biome (forest by default)',
+      },
+      village: {
+        kind: 'switch',
+        help: 'in the lobby\'s village instead, no skills: the hero standing on its square, then walking (--at, '
+          + '--facing where he stands)',
+      },
+      hour: {
+        kind: 'number',
+        usage: 'h',
+        help: 'with --village, the hour it\'s lit for (0 to 24: by night its lamps are lit)',
       },
       facing: { kind: 'number', usage: 'degrees', help: 'the way the hero faces and casts (0, +z, by default)' },
       at: SETUP_OPTIONS.at,
@@ -1134,6 +1146,20 @@ export const COMMANDS = {
       ...COMMON_OPTIONS,
     },
   },
+  village: {
+    help: "the lobby's village as a player walks it: every object usable from its stand, casting in the yard alone, "
+      + "no walk out past the palisade or along a way out, the stair up to the hall, the first visit's training ticked "
+      + "step by step with the portal shut till it's done or skipped, and no program compiled as the hour changes",
+    options: {
+      canary: {
+        kind: 'switch',
+        help: "a fault planted for each check (an object's stand moved, the yard read outside it, a hero put past the "
+          + 'palisade, the stair walked at beside it, the notice board left unread, a new material at noon): all '
+          + 'must be found',
+      },
+      ...COMMON_OPTIONS,
+    },
+  },
   columns: {
     help: 'the crypt\'s broken columns roll after roll: each mesh welded, an edge one triangle uses above the '
       + 'shaft\'s foot is a hole; the break\'s face inside the flutes no steeper than 75 degrees',
@@ -1211,6 +1237,16 @@ export const COMMANDS = {
         choices: ['crypt', 'forest'],
         usage: 'crypt|forest',
         help: 'the biome (as the page has it by default)',
+      },
+      hour: {
+        kind: 'number',
+        usage: 'h',
+        help: 'with --village, the hour it\'s lit for (0 to 24: by night its lamps are lit, two casting shadows)',
+      },
+      village: {
+        kind: 'switch',
+        help: 'in the lobby\'s village instead (the run the set-up starts left, no foes; --at and --facing where the '
+          + 'hero stands there, the square by default)',
       },
       canary: {
         kind: 'switch',
@@ -2042,7 +2078,9 @@ export function parseCommandLine(argv) {
     }
   }
   checkTogether(options);
-  if (definition.argument && options._.length === 0) throw labError(`${name} needs its ${definition.argument}`);
+  if (definition.argument && !definition.argumentOptional && options._.length === 0) {
+    throw labError(`${name} needs its ${definition.argument}`);
+  }
   if (!definition.argument && options._.length > 0) {
     throw labError(`${name} takes no ${JSON.stringify(options._[0])} (options start with --)`);
   }
@@ -2084,7 +2122,8 @@ export function usage() {
   const lines = ['npm run lab -- <command> [options]', ''];
   for (const [name, definition] of Object.entries(COMMANDS)) {
     if (name === 'help') continue;
-    const head = definition.argument ? `${name} <${definition.argument}>` : name;
+    const head = !definition.argument ? name : definition.argumentOptional ? `${name} [<${definition.argument}>]`
+      : `${name} <${definition.argument}>`;
     lines.push(helpEntry(`  ${head}`, definition.help));
     for (const [optionName, spec] of Object.entries(definition.options)) {
       if (!shared.has(optionName)) lines.push(optionEntry(optionName, spec));
