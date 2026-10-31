@@ -1526,6 +1526,22 @@ export const COMMANDS = {
       ...COMMON_OPTIONS,
     },
   },
+  sit: {
+    help: 'an idle hero\'s sit on a log or a stone: walked to from 3 m off, sat on his side of it, his hips on its '
+      + 'top, his feet down or hanging as its height has them, every joint within its range, glancing round; then '
+      + 'asked to act, a tap and a key held: up first each time, a tap left undone, a held key done once he\'s up',
+    options: {
+      seats: { kind: 'list', usage: 'a,b', help: 'the seats tried: log, stone, column, fire, brazier (all by default)' },
+      frames: { kind: 'switch', help: 'list every frame his skirts jerked as he sat (their first 40)' },
+      trace: {
+        kind: 'text', usage: 'piece',
+        help: 'list a carried piece frame by frame (shield, Greatsword...): how far it went and turned, held or not',
+      },
+      canary: { kind: 'switch', help: 'plant a fault the measure must catch: his body raised off the seat as he sits' },
+      ...SETUP_OPTIONS,
+      ...COMMON_OPTIONS,
+    },
+  },
   glance: {
     help: 'the hero\'s casual look round as he stands idle, read from the head\'s turn from the chest and the eyes\' '
       + 'in their sockets: in a run\'s countdown, walking and attacking from a glance, through the eyes, in the lobby '

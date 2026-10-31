@@ -59,6 +59,7 @@ import type { HallOptions } from './hallMoves';
 import type { CoatOptions } from './coat';
 import type { PosesOptions } from './poses';
 import type { GlanceOptions } from './glance';
+import type { SitOptions } from './sit';
 import type { LiveInspect, LivePicture, LivePictured } from './live';
 import type { EyesOptions } from './eyes';
 import type { SwingOptions } from './swing';
@@ -149,6 +150,14 @@ export async function coat(lab: Lab, command: CoatOptions): Promise<Report> {
  *  problem. */
 export async function glance(lab: Lab, command: GlanceOptions): Promise<Report> {
   const { glance: follow } = await import('./glance');
+  return follow(lab, command);
+}
+
+/** `lab sit`: an idle hero's sit on a log or a stone; a sit never come, off its side, on air or in the seat, feet that
+ *  neither reach the floor nor hang, a joint past its range, no glance, an ask done before he's up or a tap done after,
+ *  or a canary it missed, is a problem. */
+export async function sit(lab: Lab, command: SitOptions): Promise<Report> {
+  const { sit: follow } = await import('./sit');
   return follow(lab, command);
 }
 

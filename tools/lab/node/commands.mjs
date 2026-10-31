@@ -179,19 +179,18 @@ function problemsIn(result) {
 }
 
 /**
- * Writes the moments the sides' results pictured (a report's `moments`) as one sheet in `dir`; returns its path, or
- * null when none pictured any.
+ * Writes the moments the sides' results pictured (a report's `moments`) as a sheet in `dir`; returns its images'
+ * paths relative to the repository (`writeSheet`'s parts), none when none pictured any.
  */
 async function writeMoments(results, dir, browser, name = 'sheet.png') {
   const runs = results
     .filter(([, result]) => result?.moments?.length)
     .map(([side, result]) => [side.name, { moments: result.moments }]);
-  if (runs.length === 0) return null;
+  if (runs.length === 0) return [];
   mkdirSync(dir, { recursive: true });
-  const image = join(dir, name);
   const views = Math.max(...runs.flatMap(([, { moments }]) => moments.map((moment) => moment.tiles.length)));
-  await writeSheet(browser, runs, views, image);
-  return image;
+  const images = await writeSheet(browser, runs, views, join(dir, name));
+  return images.map((image) => relative(REPO, image));
 }
 
 /**
@@ -207,8 +206,7 @@ async function textWithSheetEach(results, dir, browser) {
     const moments = result?.moments ?? [];
     for (const [index, moment] of moments.entries()) {
       const one = [side, { ...result, moments: [moment] }];
-      const image = await writeMoments([one], dir, browser, `${prefix}${index + 1}.png`);
-      if (image) images.push(relative(REPO, image));
+      images.push(...(await writeMoments([one], dir, browser, `${prefix}${index + 1}.png`)));
     }
   }
   return images.length ? `${text}\n\npictures: ${images.join(', ')}` : text;
@@ -234,8 +232,7 @@ async function textWithSheetsByGroup(results, dir, browser) {
     for (const group of groups) {
       const moments = result.moments.filter((moment) => groupOf(moment) === group);
       const name = `${prefix}${fileNameOf(group)}.png`;
-      const image = await writeMoments([[side, { ...result, moments }]], dir, browser, name);
-      if (image) images.push(relative(REPO, image));
+      images.push(...(await writeMoments([[side, { ...result, moments }]], dir, browser, name)));
     }
   }
   return images.length ? `${text}\n\npictures: ${images.join(', ')}` : text;
@@ -348,8 +345,7 @@ async function textWithSheetPerSide(results, dir, browser) {
   const text = results.map(([side, result]) => `${side.name}\n${asText(result)}`).join('\n\n');
   const images = [];
   for (const [side, result] of results) {
-    const image = await writeMoments([[side, result]], dir, browser, `${side.filePrefix}sheet.png`);
-    if (image) images.push(relative(REPO, image));
+    images.push(...(await writeMoments([[side, result]], dir, browser, `${side.filePrefix}sheet.png`)));
   }
   return images.length ? `${text}\n\npictures: ${images.join(', ')}` : text;
 }
@@ -357,8 +353,8 @@ async function textWithSheetPerSide(results, dir, browser) {
 /** Each side's text under its name, and the sheet of the moments they pictured, written in `dir` (when any did). */
 async function textWithMoments(results, dir, browser) {
   const text = results.map(([side, result]) => `${side.name}\n${asText(result)}`).join('\n\n');
-  const image = await writeMoments(results, dir, browser);
-  return image ? `${text}\n\npictures: ${relative(REPO, image)}` : text;
+  const images = await writeMoments(results, dir, browser);
+  return images.length ? `${text}\n\npictures: ${images.join(', ')}` : text;
 }
 
 /** A probe module's path relative to the repo, with forward slashes; throws unless it's a file under the repo. */
@@ -408,11 +404,10 @@ export const COMMANDS = {
       const runs = results.map(([side, sheet]) => [side.name, sheet]);
       const dir = session.outFor(join('sheets', options.tag));
       mkdirSync(dir, { recursive: true });
-      const image = join(dir, 'sheet.png');
-      await writeSheet(session.browser, runs, options.views.length, image);
+      const images = await writeSheet(session.browser, runs, options.views.length, join(dir, 'sheet.png'));
       const notes = runs.map(([name, sheet]) => `${name}, ${sheetNotes(sheet)}`);
       writeFileSync(join(dir, 'notes.txt'), notes.join('\n\n'));
-      return `${notes.join('\n\n')}\n\nsheet: ${relative(REPO, image)}`;
+      return `${notes.join('\n\n')}\n\nsheet: ${images.map((image) => relative(REPO, image)).join(', ')}`;
     },
     textOf: sheetNotes,
     pictures: picturePairs,
@@ -1350,6 +1345,25 @@ export const COMMANDS = {
     },
     textOf: asText,
     problemsOf: problemsIn,
+  },
+
+  sit: {
+    each(side, options) {
+      const command = {
+        fixture: fixtureFrom(options),
+        seats: options.seats,
+        frames: Boolean(options.frames),
+        trace: options.trace,
+        canary: Boolean(options.canary),
+      };
+      return side.command('sit', command);
+    },
+    finish(results, options, session) {
+      return textWithMoments(results, session.outFor('sit'), session.browser);
+    },
+    textOf: asText,
+    problemsOf: problemsIn,
+    pictures: picturePairs,
   },
 
   glance: {

@@ -2,6 +2,7 @@
 import * as THREE from 'three';
 import { gaitRate, legLength, LookAt, type LegIK } from './models/ik';
 import { stepVelocity } from './movement';
+import { foeNear, Sitting } from './sitting';
 import { watchBody } from './models/anatomy';
 import { G } from '../state';
 import { CLASSES } from '../data/classes/index';
@@ -13,21 +14,21 @@ import { BLOCK, COOP, FULL_DRAW } from '../data/balance';
 import { SKILL_KEYS, loadLoadout, saveLoadout, defaultLoadout, usableWith, resolveFor, weaponStyle, forStyle, type Loadout, type WeaponStyle } from '../loot/loadout';
 import { groundHeight } from '../world/arena';
 import { resolveProps } from '../world/collision';
-import { input, isDown, wasPressed } from '../core/input';
+import { cursorRay, input, isDown, wasPressed } from '../core/input';
 import { flashHurt, addShake, cameraYaw, lookFacing, viewMode, viewSettled, seenFromArms } from '../core/renderer';
 import { floatText } from '../ui/floaters';
 import { particles, col } from '../fx/particles';
 import { sfx } from '../core/audio';
 import { SHINE } from '../core/materials';
 import { emit } from '../events';
-import { angleDamp, damp, hitFlash, rand } from '../util';
+import { angleDamp, damp, hitFlash, rand, smooth } from '../util';
 import { applyShadowDetail } from '../core/quality';
 import { castAsOne, type OneShadow } from './models/castAsOne';
 import { countDown, countHealed, countTaken } from '../game/stats';
-import type { ActionState, CastAnim, ClassDef, DamageType, DerivedStats, Gear, Model, Profile, SkillDef, SkillKey, Struck } from '../types';
+import type { ActionState, CastAnim, ClassDef, DamageType, DerivedStats, Gear, Model, Profile, SitHands, SitState, SkillDef, SkillKey, Struck } from '../types';
 import type { Enemy } from './enemy';
 
-const _lookFrom = new THREE.Vector3(), _lookAt = new THREE.Vector3();
+const _lookFrom = new THREE.Vector3(), _lookAt = new THREE.Vector3(), _neck = new THREE.Vector3(), _aura = new THREE.Vector3();
 /** an overhead blow comes down on a foe whose near side is within this ahead (m: a two-hander's reach past the hands
  *  held before him), on the share of its height its top is taken at (the shoulders and the head) */
 const STRUCK_REACH = 2.2, STRUCK_TOP = 0.85;
@@ -107,7 +108,7 @@ export function setActionSink(fn: ((a: PlayerAction) => void) | null): void { ac
 export interface HitResult { taken: number; blocked: number; broke: boolean; absorbed: number }
 
 /** A remote player as its owner's reports have it at the moment shown (position, velocity, facing, aim: net/timeline). */
-export interface RemoteState { x: number; z: number; vx: number; vz: number; f: number; ax: number; az: number }
+export interface RemoteState { x: number; z: number; vx: number; vz: number; f: number; ax: number; az: number; sit: SitState }
 
 /** Out of a co-op run for the rest of it: banked, or dead for good. */
 export type PlayerOut = 'banked' | 'dead' | null;
@@ -115,6 +116,11 @@ export type PlayerOut = 'banked' | 'dead' | null;
 /** how fast a light lit only at full draw eases in, as its glint comes, and out (`damp`'s rates: in over a quarter
  *  second, the glint at full draw's first moments was lit less than main's) */
 const AURA_EASE = { in: 60, out: 12 };
+/** a model's hands with nothing to do as he sits */
+const NO_HANDS: SitHands = { before: 0, after: 0 };
+/** sat, a weapon's tip low by the floor (between these heights over it, m) moves the aura's light to over his head (`over`, m
+ *  over his feet): a blade's point set in the ground lit a hot disc round it, and over it, his hand on the pommel */
+const AURA_LOW = { from: 0.5, to: 1.2, over: 2.9 };
 
 export class Player {
   readonly cls: ClassDef;
@@ -142,7 +148,7 @@ export class Player {
   slot = 0;
   readonly spawn = new THREE.Vector3(0, 0, 3);
   /** a remote player: its latest reported state */
-  readonly remote: RemoteState = { x: 0, z: 3, vx: 0, vz: 0, f: Math.PI, ax: 0, az: 0 };
+  readonly remote: RemoteState = { x: 0, z: 3, vx: 0, vz: 0, f: Math.PI, ax: 0, az: 0, sit: { w: 0, hip: 0, foot: 0, before: 0, after: 0 } };
 
   readonly pos = new THREE.Vector3(0, 0, 3);
   readonly vel = new THREE.Vector3();
@@ -228,12 +234,37 @@ export class Player {
   /** whether he may glance round as he stands idle (models/glance.ts): the hall of heroes holds a hero's glances until
    *  his showcase is done */
   glances = true;
+  /** whether he goes to sit on a seat nearby once he's stood idle a while (`entities/sitting.ts`): the lab's set-ups
+   *  hold it off but for the measure of it */
+  sits = true;
+  /** his sit on a log or a stone */
+  readonly sitting = new Sitting();
+  /** his neck over his feet as he last stood (m): `framedHeight` lowers his height with it as he sits */
+  private standingNeck = 0;
   /** the most light a highlight on him reflects outside the eyes (`kit.u.uShine`; 0: as it is): the hall of heroes'
    *  key light a metre off put a glare on a shield's boss */
   shine = 0;
   /** a remote player holds its revive key (reported with its state) */
   reviving = false;
 
+
+  /** The height the camera frames him by: his own, lowered with his neck as he sits (from play: zoomed in over the
+   *  shoulder, the camera closed on where a standing hero's shoulders would be, over a seated one's head). */
+  /** how long his hands take before he sits and once he's sat (`Model.sitHands`) */
+  sitHands(floor: boolean): SitHands {
+    return this.model.sitHands?.(floor) ?? NO_HANDS;
+  }
+
+  framedHeight(): number {
+    const neck = this.model.joints?.neck;
+    if (!neck) return this.model.height;
+    const at = neck.getWorldPosition(_neck).y - this.pos.y;
+    if (!this.sitting.pose) {
+      this.standingNeck = at;
+      return this.model.height;
+    }
+    return this.standingNeck > 0 ? this.model.height * Math.min(1, at / this.standingNeck) : this.model.height;
+  }
   constructor(classId: string, equipped: Profile['equipped'], local = true) {
     this.cls = CLASSES[classId];
     this.local = local;
@@ -331,6 +362,7 @@ export class Player {
     // (standing: a hero placed while walking glided on from the spot, a third of a metre)
     this.vel.set(0, 0, 0);
     this.facing = facing;
+    this.sitting.clear();
     this.obj.position.set(pos.x, groundHeight(pos.x, pos.z), pos.z);
     this.model.root.rotation.y = facing;
     this.model.reset?.();
@@ -358,6 +390,7 @@ export class Player {
     this.out = null;
     this.guardUntil = -1;
     this.pos.copy(this.spawn);
+    this.sitting.clear();
     this.remote.x = this.spawn.x; this.remote.z = this.spawn.z;
     this.vel.set(0, 0, 0);
     this.model.kit.u.uDissolve.value = 0;
@@ -420,6 +453,9 @@ export class Player {
 
   // --- input & skills -------------------------------------------------------------
   handleInput(dt: number): void {
+    // (the seat the cursor rests on, outlined once E would sit him on it: none through the eyes, paused, in a wave)
+    const peace = G.mode !== 'run' || G.run?.phase !== 'fighting';
+    if (this.local) this.sitting.point(this, this.eyes || this.idle ? null : cursorRay(), dt, peace);
     if (this.idle) {
       // the co-op pause menu: stand still and let go of any channel
       this.goal.set(0, 0, 0);
@@ -437,6 +473,17 @@ export class Player {
     // the touch stick is analog: a small push walks
     if (!mx && !mz) { mx = input.stick.x; mz = input.stick.y; }
     const len = Math.hypot(mx, mz);
+    // (E sits him down at once, and gets him up again; a partner down within reach is raised by it instead)
+    const sitKey = this.local && wasPressed('e') && !this.downedNear() && !this.sitting.ask();
+    // (sat or getting up: any key gets him up, and nothing else is done until he's up; a key still held then acts)
+    const acted = sitKey || len > 0 || SKILL_KEYS.some((k) => isDown(k) || wasPressed(k));
+    if (this.sitting.update(this, dt, this.freeToSit(), acted)) {
+      this.goal.set(0, 0, 0);
+      this.vel.set(0, 0, 0);
+      this.steered = true;
+      this.queued = null;
+      return;
+    }
     let speed = this.stats.moveSpeed;
     if (this.casting && !this.casting.skill.def.freeMove) speed *= 0.45;
     if (this.channel) speed *= this.channel.skill.def.moveMult ?? 0.4;
@@ -447,6 +494,7 @@ export class Player {
     // (as a body moves itself, pushing and braking against the ground: turning round from a run takes a braking step
     // and a push the other way, `entities/movement.ts`)
     this.goal.set(tx, 0, tz);
+    if (this.sitting.walking) this.sitting.walkGoal(this, speed, this.goal);
     this.slowForWall(this.goal);
     stepVelocity(this.vel, this.goal, dt);
     this.steered = true;
@@ -665,7 +713,7 @@ export class Player {
    *  run, he kept running into it, his legs striding in place past their ranges. */
   private resolveWorld(dt: number): void {
     let x = this.pos.x, z = this.pos.z;
-    resolveProps(this.pos, this.radius);
+    resolveProps(this.pos, this.radius, this.sitting.relaxed);
     this.pushedBack(this.pos.x - x, this.pos.z - z, 0, dt);
     x = this.pos.x;
     z = this.pos.z;
@@ -805,7 +853,7 @@ export class Player {
     }
     this.pos.x += this.vel.x * dt;
     this.pos.z += this.vel.z * dt;
-    if (!d?.through || d.t >= d.dur) this.resolveWorld(dt);
+    if ((!d?.through || d.t >= d.dur) && !this.sitting.placed) this.resolveWorld(dt);
     if (d) {
       d.step?.();
       if (d.t >= d.dur + d.hold) { this.dashOver(d); this.vel.multiplyScalar(this.stats.moveSpeed / Math.max(1e-3, Math.hypot(d.vx, d.vz))); }
@@ -817,7 +865,9 @@ export class Player {
     const fighting = (this.casting && !this.casting.skill.def.freeMove) || this.channel;
     this.aimHold = fighting ? AIM_HOLD : Math.max(0, this.aimHold - dt);
     this.facesWay = false;
-    if (look !== null && !d) this.facing = look;
+    // (sat, or going down or up: the sit turns him)
+    if (this.sitting.placed) this.aimHold = 0;
+    else if (look !== null && !d) this.facing = look;
     else if (!fighting && this.aimHold > 0) this.faceTowards(this.aim);
     else if ((!this.casting || this.casting.skill.def.freeMove) && !this.channel && speed > 0.5) {
       const eased = angleDamp(this.facing, Math.atan2(this.vel.x, this.vel.z), 14, dt);
@@ -980,13 +1030,28 @@ export class Player {
       if (d < bd) { bd = d; best = e; }
     }
     _lookFrom.set(this.pos.x, this.obj.position.y, this.pos.z);
-    look.update(dt, _lookFrom, this.facing, best ? _lookAt.set(best.pos.x, best.obj.position.y + best.height * 0.6, best.pos.z) : null, weight, idle);
+    const at = best ? _lookAt.set(best.pos.x, best.obj.position.y + best.height * 0.6, best.pos.z) : null;
+    look.update(dt, _lookFrom, this.facing, at, weight, idle && !this.sitting.staged);
   }
 
   /** standing still with nothing cast, aimed or held on an aim: free to glance round (`move` the pose's share of his
    *  speed) */
   private standsIdle(move: number, action: ActionState | null): boolean {
     return this.glances && move < 0.05 && !action && !this.dash && !this.aiming && this.aimHold <= 0;
+  }
+
+  /** Whether a partner is down within reach of his revive (E raises him then, and doesn't sit). */
+  private downedNear(): boolean {
+    return G.players.some((p) => p !== this && p.downed && p.inRun
+      && Math.hypot(p.pos.x - this.pos.x, p.pos.z - this.pos.z) < COOP.reviveRange);
+  }
+
+  /** Whether he could go and sit (or stay sat): nothing cast, aimed or held, no foe near, not hurt, not through the eyes
+   *  (the camera rides his head) and not held where he is. */
+  private freeToSit(): boolean {
+    return this.sits && this.glances && this.local && this.alive && !this.idle && !this.eyes && !this.casting
+      && !this.channel && !this.dash && !this.aiming && this.aimHold <= 0 && !this.staggered && !this.rooted
+      && this.hitT <= 0 && !foeNear(this.pos.x, this.pos.z);
   }
 
   /** The foe an overhead blow comes down on: the nearest alive on the line straight ahead within `STRUCK_REACH`, its
@@ -1026,6 +1091,7 @@ export class Player {
       nocked: this.nocked,
       strike: action?.name === 'chop' ? this.struckAhead() : null,
       look: (weight) => this.lookAtFoe(dt, dead, this.standsIdle(move, action), weight),
+      sit: this.local ? this.sitting.pose : this.remote.sit.w > 0 || this.remote.sit.before > 0 ? this.remote.sit : null,
     });
     // (dev builds: a joint taken past a body's range is reported; through the eyes the arms keep hand-placed poses)
     if (import.meta.env.DEV && this.local && dead < 0 && !this.eyes && this.model.joints) watchBody(this.model.joints, action?.name ?? (move > 0.05 ? 'moving' : 'standing'));
@@ -1041,8 +1107,12 @@ export class Player {
         const cam = G.camera.position, yaw = cameraYaw();
         this.staffLight.position.set(cam.x - Math.sin(yaw) * 1.5, cam.y + 0.8, cam.z - Math.cos(yaw) * 1.5);
       } else {
-        this.staffLight.position.copy(this.castPoint);
-        this.staffLight.position.y += 0.35;
+        const at = this.staffLight.position.copy(this.castPoint);
+        at.y += 0.35;
+        // (sat: stood, a one-hander's point hangs by his foot, and his light was always there)
+        const sat = Math.min(1, (this.sitting.pose?.w ?? 0) / 0.2);
+        const low = sat - sat * smooth(THREE.MathUtils.clamp((at.y - this.obj.position.y - AURA_LOW.from) / (AURA_LOW.to - AURA_LOW.from), 0, 1));
+        if (low > 0) at.lerp(_aura.copy(this.obj.position).setY(this.obj.position.y + AURA_LOW.over), low);
       }
       const glow = this.cls.aura.intensity;
       // (its intensity alone goes to none: the light stays in the scene, as the light count must)

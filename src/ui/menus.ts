@@ -95,7 +95,8 @@ function keyboardDiagram(): string {
     s: { icon: '▼', cap: 'Move', tip: 'Move' }, d: { icon: '▶', cap: 'Move', tip: 'Move' },
     v: { icon: '◎', cap: 'View', tip: 'View: top-down, over the shoulder, first person' },
     b: { icon: '⛁', cap: 'Bank', tip: 'Bank after a wave' }, c: { icon: '➜', cap: 'Continue', tip: 'Continue after a wave' },
-    e: { icon: '✚', cap: 'Revive', tip: 'Revive a downed partner (co-op)', hold: true },
+    e: { icon: '✚', cap: 'Revive', tip: 'Revive a downed partner (co-op), or sit on a seat once the cursor has rested on it 2 s and outlined it, '
+      + 'between waves (again to stand up)', hold: true },
     tab: { icon: '☰', cap: 'Scores', tip: "The party's scores and pings", hold: true },
     alt: { icon: '⇱', cap: 'Cursor', tip: 'A cursor for the HUD over mouse look, the view held still', hold: true },
   };
