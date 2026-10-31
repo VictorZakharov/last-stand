@@ -192,7 +192,12 @@ id (`NodeManager.getCacheKey`), and three makes each environment map a node of i
   WebGL's `AreaPass`), each pixel adapted to its small and large area by the WebGL grade's targets (`uSmall`,
   `uLarge`, set before WebGPU's frame now), and tone mapped by its brightest channel where bloom's widest level says
   a large glare is round it. Checked side by side with WebGL: Maelstrom's fire in the crypt kept its orange where it
-  had burned white, and the forest's daylight the same exposure.
+  had burned white, and the forest's daylight the same exposure. Its film grain, and the scene's NaN and Inf pixels
+  cleaned out before bloom and the adaptation read them (`sanitized`), as WebGL's sanitize pass does.
+- **The floors' relief** (`reliefContext` in `core/parallax.ts`): the walk down the view ray as WGSL, in the maps'
+  own uv before their repeat, and each of the floor's maps read where it meets the ray through the material's build
+  context (`getUV`, and `getTextureGradient` for the floor's own gradients). Pictured: the floors as WebGL's at a
+  glance; the relief's shift itself not looked at closely.
 - **The world's overlays** (damage numbers, the foes' bars and names, the props' gauges, the dummies' meters): the
   labels' draw as nodes (`labelsMaterial`), drawn onto the canvas after the frame with no tone mapping or conversion
   asked (`drawOverFrame`: else three draws into a target of its own, empty, and copies it over the frame, which a
@@ -219,7 +224,9 @@ id (`NodeManager.getCacheKey`), and three makes each environment map a node of i
   on a `ShaderMaterial` (or a lit material given looks), it refreshes a mesh that stays still only as the
   material's own properties change. Its uniforms stayed as they first drew: the outline round a foe kept the
   warm-up's strength of 0 and drew nothing. Each such material carries a node of its own now (`refreshNode`), so
-  three refreshes it in full at each draw; what that costs a frame isn't measured.
+  three refreshes it in full at each draw. It costs the lobby's frame about 0.4 ms of JS (8.9 ms against 8.5 without,
+  one round of `stalls --scenario lobby --js` in the dev build, both taking turns; the frames' median 7.0 ms either
+  way): the props' see-through and looks need it, as the hero moves every frame.
 - **The outline round a foe** (`ui/overlay/outline.ts`, Quarry Mark's preview): its edge samples the mask's own
   texture (one target, resized), and WebGPU's scissor counts from the canvas's top, WebGL's from its bottom (the
   edge's box was mirrored). Checked with a dummy outlined by hand in the dev build (`stalls --read` importing the
@@ -229,7 +236,10 @@ id (`NodeManager.getCacheKey`), and three makes each environment map a node of i
   three's converted node material is given the dissolve's screen door as its `maskNode` (the shadow pass reads the
   material's own, so its shadow stays whole), and the kit's dissolve, frost, char, near glow, rim, edge and hit
   flash as its colour, mask and emissive nodes. Checked with the hero stood behind a column: dithered away as on
-  WebGL. Not yet: the hood's shade, the shine's cap.
+  WebGL. The hood's shade dims all its light before the fog (`setupOutput`), and the shine's cap eases its direct
+  highlights as three's lighting model finishes (`finish`, its sum mended by the difference): written as a select
+  between the capped and the plain, every kit's material drew pale, so it's blended. Checked: a full shade darkens
+  the hero alike on both.
 - **A lit material's own looks** (`OwnLooks` in `core/shaderPorts.ts`): a material whose GLSL patch is its own sets
   `webgpuLooks`, given three's converted node material. A fire's bed and its logs' charred ends (`emberMat`) glow
   through their cracks so (`emberNodes` in `world/fireNodes.ts`: the patch's functions as WGSL, its sheen cut by
@@ -256,10 +266,9 @@ id (`NodeManager.getCacheKey`), and three makes each environment map a node of i
 **Not ported yet** (each shows as missing, not broken):
 
 - **The rest of the GLSL `onBeforeCompile` looks:**
-  - the hood's shade and the shine's cap (the kit's other looks are ported, above)
-  - the floors' relief, and the crypt's earth's own normals (the floors' looks are ported, below)
+  - the crypt's earth's own normals (the floors' looks and relief are ported, below)
   - triplanar, fur sway, dual-quaternion hands
-- **The grade:** the film grain, HDR, sanitize.
+- **The grade:** HDR.
 - **Other gaps:**
   - The warm-up compiles by `compileAsync` now (below), but the fight's crowds are still rebuilt at their draw
     under the fight's loading bar (2.6 s).
