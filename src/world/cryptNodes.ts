@@ -1,8 +1,8 @@
 // The crypt's floor and what stands beyond its wall on WebGPU (core/webgpu.ts): crypt.ts's GLSL hooks as TSL nodes,
 // set on its plain materials (three copies them onto the node material it makes of each). The cobbles' damp, drift
 // and moss and the earth round the small dead trees' feet (`dampGround`), and the world past the wall darkened in the
-// top-down view (`dimOutside`); the cobbles' relief is core/parallax.ts's `reliefContext`. Not yet ported: the earth's
-// own normals, and the dimming comes after the fog here, before it in the GLSL.
+// top-down view (`dimOutside`); the cobbles' relief is core/parallax.ts's `reliefContext`. The dimming comes after the
+// fog here, before it in the GLSL.
 import type * as THREE from 'three';
 import { tsl } from '../core/webgpu';
 
@@ -31,15 +31,15 @@ export interface Damp {
   stones: number;
   washed: readonly number[];
   tile: number;
-  soil: { map: THREE.Texture; roughnessMap: THREE.Texture };
+  soil: { map: THREE.Texture; normalMap: THREE.Texture; roughnessMap: THREE.Texture };
 }
 
-/** The cobbles' colour and roughness with the damp, the moss by the wall and the earth round the trees laid over
- *  them, as `dampGround` lays them (one set of nodes, shared by both). */
-export function dampNodes(cobbles: THREE.MeshStandardMaterial, damp: Damp): { color: N; roughness: N } {
+/** The cobbles' colour, roughness and normal with the damp, the moss by the wall and the earth round the trees laid
+ *  over them, as `dampGround` lays them (one set of nodes, shared by them all). */
+export function dampNodes(cobbles: THREE.MeshStandardMaterial, damp: Damp): { color: N; roughness: N; normal: N } {
   const {
-    Fn, Loop, clamp, float, materialColor, materialRoughness, max, min, mix, positionWorld, smoothstep, texture,
-    uniformArray, uv, vec2, vec3, vec4,
+    Fn, Loop, cameraViewMatrix, clamp, float, materialColor, materialNormal, materialRoughness, max, min, mix,
+    positionWorld, smoothstep, texture, uniformArray, uv, vec2, vec3, vec4,
   } = tsl as any;
   const xz = positionWorld.xz;
   const sample = texture(damp.map, xz.mul(1 / damp.span)).rgb;
@@ -74,5 +74,9 @@ export function dampNodes(cobbles: THREE.MeshStandardMaterial, damp: Damp): { co
   })();
   const wet = sample.r.mul(earthAmount.oneMinus());
   const roughness = mix(mix(materialRoughness, 0.42, wet), texture(damp.soil.roughnessMap, soilAt).g, earthAmount);
-  return { color, roughness };
+  // the soil's own relief, its tangent space the floor's (u along x, v along z, up its normal), in view space
+  const soilNormal = texture(damp.soil.normalMap, soilAt).xyz.mul(2).sub(1);
+  const soilUp = cameraViewMatrix.mul(vec4(soilNormal.x, soilNormal.z, soilNormal.y.negate(), 0)).xyz.normalize();
+  const normal = mix(materialNormal, soilUp, earthAmount).normalize();
+  return { color, roughness, normal };
 }

@@ -163,7 +163,8 @@ function dampGround<M extends THREE.MeshStandardMaterial>(m: M, earth: THREE.Vec
       tile: EARTH.tile, soil: litter,
     });
     Object.assign(m, {
-      colorNode: nodes.color, roughnessNode: nodes.roughness, outputNode: outsideOutputNode(outside, OUTSIDE),
+      colorNode: nodes.color, roughnessNode: nodes.roughness, normalNode: nodes.normal,
+      outputNode: outsideOutputNode(outside, OUTSIDE),
     });
     reliefContext(m, COBBLE_RELIEF);
     return m;

@@ -266,7 +266,6 @@ id (`NodeManager.getCacheKey`), and three makes each environment map a node of i
 **Not ported yet** (each shows as missing, not broken):
 
 - **The rest of the GLSL `onBeforeCompile` looks:**
-  - the crypt's earth's own normals (the floors' looks and relief are ported, below)
   - triplanar, fur sway, dual-quaternion hands
 - **The grade:** HDR.
 - **Other gaps:**
