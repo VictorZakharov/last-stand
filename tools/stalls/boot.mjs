@@ -5,6 +5,7 @@
 import { writeFileSync } from 'node:fs';
 import { noCapture } from '../lab/node/browser.mjs';
 import { analyzeBoot } from './analyze.mjs';
+import { buildsBySteps, readBuilds, withBuilds } from './builds.mjs';
 import { slowCpu } from './chrome.mjs';
 import { BLINK_FRAMES, filmFrames, filmOf, logoBox, startFilm } from './film.mjs';
 import { bootRecording, chooseIfAsked, fightWarm, loaded, startIfCold, stopBootRecording } from './page.mjs';
@@ -90,12 +91,17 @@ async function bootTraced(browser, page, url, visit, options, picture, setRate) 
     await page.waitForFunction(fightWarm, null, { timeout: WARM_TIMEOUT_MS, polling: 250 });
   }
   if (options.read) writeFileSync(picture.read, `${JSON.stringify(await page.evaluate(options.read), null, 1)}\n`);
+  const builds = options.builds ? await page.evaluate(readBuilds) : null;
   const record = await page.evaluate(stopBootRecording);
   const events = await trace.stop();
   const shots = film ? await film.stop() : [];
   await setRate(1);
   await page.screenshot({ path: picture.end });
   const findings = analyzeBoot(record, events, MARK, options.sourceOf);
+  if (builds) {
+    const bySteps = buildsBySteps(builds, findings.steps);
+    findings.steps.forEach((step, index) => { step.builds = bySteps[index]; });
+  }
   if (windFit) {
     const { trace, resizes, ...fit } = windFit;
     writeFileSync(picture.wind, `${JSON.stringify({ resizes, trace })}\n`);
@@ -128,8 +134,9 @@ function bootNotes(visit, options, left, errors, picture) {
   const leftNote = left ? [LEFT_NOTES[left]] : [];
   const failed = errors.length ? [`page errors: ${errors.slice(0, 3).join(' | ')}`] : [];
   const read = options.read ? [`${options.read} read into ${picture.read}`] : [];
+  const builds = options.builds ? ['its WebGPU node builds recorded (`?builds`), each step\'s listed'] : [];
   const notes = [visit.note, ...auto, ...slowed, ...trips, ...stalled, ...held, ...blinked, ...stale, ...leftNote,
-    ...failed, ...read];
+    ...failed, ...read, ...builds];
   return [...notes, `its end pictured in ${picture.end}`];
 }
 
@@ -154,7 +161,8 @@ export async function measureBoots(urls, options, { chromeFor, sourcesFor, pictu
           for (const visit of VISITS) {
             console.log(`booting ${options.nameOf(url)} ${variant}, ${visit.name}, round ${round}`);
             const picture = pictureAt();
-            const { findings, left } = await bootTraced(chrome.browser, page, url, visit, options, picture, setRate);
+            const loaded = options.builds ? withBuilds(url) : url;
+            const { findings, left } = await bootTraced(chrome.browser, page, loaded, visit, options, picture, setRate);
             const group = `${options.nameOf(url)} ${variant}, ${visit.name}`;
             const notes = bootNotes(visit, options, left, errors, picture);
             measured({ name: `${group} (round ${round})`, group, notes, findings });

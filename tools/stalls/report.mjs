@@ -264,6 +264,16 @@ function dawnLine(kinds) {
   return `    Dawn's work: ${pieces.join('; ')}`;
 }
 
+/** A step's WebGPU node builds (`--builds`, `builds.mjs`): how many, those reusing another's shaders and those a
+ *  draw made, the new shaders and their WGSL, the JS they took; then the kinds with the most new WGSL. */
+function buildsLines({ count, reused, byDraw, shaders, kb, ms: took, kinds }) {
+  const drawn = byDraw ? `, ${byDraw} at a draw` : '';
+  const head = `    node builds: ${count} (${reused} reusing another's shaders${drawn}), ${shaders} new shaders `
+    + `(${kb.toFixed(0)} kB of WGSL), ${ms(took)} of JS`;
+  const pieces = kinds.map((kind) => `${kind.count} ${kind.name} (${kind.shaders} new, ${kind.kb.toFixed(0)} kB)`);
+  return [head, `    the most new WGSL: ${pieces.join('; ')}`];
+}
+
 /** A boot's step (`analyze.mjs` `analyzeBoot`): when it started, how long it took, its frames and the longest the
  *  page was held up in it, its long tasks and Skia programs, what the threads spent its time on in all, and the
  *  threads its GPU compiles ran on. */
@@ -282,6 +292,7 @@ function bootStepLines(step, { links = false } = {}) {
   if (step.gpuMain?.length) lines.push(workLine('the GPU process\'s main thread\'s', step.gpuMain));
   if (step.gpuCompiles) lines.push(gpuCompilesLine(step.gpuCompiles));
   if (step.dawn) lines.push(dawnLine(step.dawn));
+  if (step.builds) lines.push(...buildsLines(step.builds));
   if (links && step.links?.length) lines.push(builtInLine(step.links));
   if (step.js?.own.length) lines.push(jsLine('its JS, each function\'s own time', step.js.own));
   if (step.js?.within.length) lines.push(jsLine('and with what it calls', step.js.within));

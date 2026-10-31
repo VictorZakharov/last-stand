@@ -34,6 +34,7 @@ test('fills in the defaults', () => {
     jsUnder: null,
     angle: false,
     dawn: false,
+    builds: false,
     passes: false,
     paints: false,
     links: false,
@@ -97,6 +98,7 @@ test('refuses what it doesn\'t know and bad values', () => {
   assert.throws(() => readOptions(['--listed', '10']), /--listed must be a number of ms, 20 or more/);
   assert.throws(() => readOptions(['--resize', '1920x1080']), /--resize is the boot scenario's/);
   assert.throws(() => readOptions(['--read', 'window.__builds']), /--read is the boot scenario's/);
+  assert.throws(() => readOptions(['--builds']), /--builds is the boot scenario's/);
   assert.throws(() => readOptions(['--scenario', 'boot', '--resize', 'full']), /--resize must be a size in css px/);
   assert.throws(() => readOptions(['--scenario', 'boot', '--trips', '0']), /--trips must be a whole number/);
   assert.throws(() => readOptions(['--scenario', 'boot', '--stale-wind']), /--stale-wind is a canary of --resize/);

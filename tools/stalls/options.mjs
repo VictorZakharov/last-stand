@@ -7,7 +7,7 @@ import { LISTED_LEAST, LISTED_MS } from './analyze.mjs';
 
 /** the options a switch is (`--name`, `--name=false`); every other takes a value (`--name value`, `--name=value`) */
 const SWITCHES = new Set([
-  'headed', 'perf', 'js', 'angle', 'dawn', 'passes', 'paints', 'links', 'film', 'film-logo', 'cold-return', 'stale-wind',
+  'headed', 'perf', 'js', 'angle', 'dawn', 'builds', 'passes', 'paints', 'links', 'film', 'film-logo', 'cold-return', 'stale-wind',
   'help',
 ]);
 /** the views the game is played in (core/renderer.ts `VIEWS`, in the order V steps through them), and the
@@ -85,6 +85,9 @@ const HELP = {
     + 'linked or read back from the cache'],
   dawn: ['', 'Dawn\'s own work traced too (WebGPU, `?renderer=webgpu`): its shaders translated and compiled, its '
     + 'pipelines made, and what it read back from its cache'],
+  builds: ['', `${BOOT}: the WebGPU node builds each step made (\`?builds\`, \`recordNodeBuilds\` in `
+    + 'src/core/webgpu.ts): how many, the new shaders and their WGSL (each a compile of Chrome\'s on every visit), '
+    + 'the kinds with the most'],
   passes: ['', 'the compositor\'s frames traced as it drew them: each phase\'s render passes and quads a frame'],
   paints: ['', 'the page\'s paints traced: each phase\'s a frame, by the element painted'],
   links: ['', 'every Skia program built: when, how long, the tasks it was built in, the page\'s changes just before'],
@@ -165,6 +168,7 @@ export function readOptions(argv) {
     jsUnder: written['js-under'] ?? null,
     angle: written.angle === true,
     dawn: written.dawn === true,
+    builds: written.builds === true,
     passes: written.passes === true,
     paints: written.paints === true,
     links: written.links === true,
@@ -206,6 +210,7 @@ export function readOptions(argv) {
   }
   if (options.resize && options.scenario !== BOOT) throw new Error(`stalls: --resize is the ${BOOT} scenario's`);
   if (options.read && options.scenario !== BOOT) throw new Error(`stalls: --read is the ${BOOT} scenario's`);
+  if (options.builds && options.scenario !== BOOT) throw new Error(`stalls: --builds is the ${BOOT} scenario's`);
   if (!(Number.isInteger(options.trips) && options.trips >= 1)) {
     throw new Error('stalls: --trips must be a whole number, 1 or more');
   }
