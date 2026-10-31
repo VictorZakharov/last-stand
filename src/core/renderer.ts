@@ -3,6 +3,7 @@
 // run on plain single-sample targets, since multisampled post targets cost a resolve per
 // pass (very slow on tile-based GPUs such as Apple's).
 import * as THREE from 'three';
+import { lightTheLamps } from './lamps';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
@@ -459,6 +460,7 @@ function firstVertexProvokes(context: WebGLRenderingContext | WebGL2RenderingCon
 export function initRenderer(container: HTMLElement) {
   loopPointLights();
   shadeEnvironment();
+  lightTheLamps();
   const renderer = gl = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
   renderer.setPixelRatio(canvasRatio());
   renderer.setSize(window.innerWidth, window.innerHeight);
@@ -665,6 +667,10 @@ export function setView(v: ViewMode): void {
 export const viewSettled = (): boolean => rig.blend >= 1;
 /** Camera yaw in radians: screen-up is world (-sin, -cos) on XZ. */
 export const cameraYaw = (): number => rig.yaw;
+/** The camera turned at once to look the way `facing` goes (a hero's heading), in every view: back from a run, out of
+ *  its portal, the view kept the yaw it had and the hero looked back into the portal ("should be facing away from portal
+ *  and overlooking the village"). */
+export function faceCamera(facing: number): void { rig.yaw = rig.targetYaw = rig.topYaw = facing + Math.PI; }
 
 /** The camera rig as it is, and a function that puts it back: tools/lab pictures the game from its other views and
  *  leaves the game's own as it found it (the aim follows the camera). */
@@ -728,8 +734,10 @@ function onStage(cam: THREE.PerspectiveCamera, shot: Shot, dt: number): void {
   cam.updateMatrixWorld();
 }
 
-/** `height`: the character's, for the close views' shoulder and eye level. */
-export function updateCamera(dt: number, focus: THREE.Vector3, height: number): void {
+/** `height`: the character's, for the close views' shoulder and eye level, over `floor`: the ground he stands on (his
+ *  body's height, `obj.position.y`: the player's `pos.y` is always 0, and over it, through the eyes up the village's
+ *  stair, the eyes stayed at the square's level, "in 1st person cannot walk up the stairs"). */
+export function updateCamera(dt: number, focus: THREE.Vector3, height: number, floor = 0): void {
   const cam = G.camera;
   shift.x = damp(shift.x, shift.tx, 6, dt);
   shift.y = damp(shift.y, shift.ty, 6, dt);
@@ -763,12 +771,12 @@ export function updateCamera(dt: number, focus: THREE.Vector3, height: number): 
       rig.boom = damp(rig.boom, rig.targetBoom, 6, dt);
       // the shoulder the camera looks over, then back along the view. It never closes in on the
       // character: props and walls in the way dissolve instead (core/seeThrough.ts)
-      _pivot.set(focus.x + cy * CAMERA.third.side, height * 0.82, focus.z - sy * CAMERA.third.side);
+      _pivot.set(focus.x + cy * CAMERA.third.side, floor + height * 0.82, focus.z - sy * CAMERA.third.side);
       cam.position.copy(_pivot).addScaledVector(_fwd, -rig.boom);
-      cam.position.y = Math.max(0.4, cam.position.y);
+      cam.position.y = Math.max(floor + 0.4, cam.position.y);
     } else {
       fov = CAMERA.first.fov; near = 0.08;
-      cam.position.set(focus.x - sy * 0.12, height * 0.9, focus.z - cy * 0.12);
+      cam.position.set(focus.x - sy * 0.12, floor + height * 0.9, focus.z - cy * 0.12);
     }
     cam.lookAt(_look.copy(cam.position).add(_fwd));
   }
@@ -779,7 +787,7 @@ export function updateCamera(dt: number, focus: THREE.Vector3, height: number): 
     // aim at the character all the way (turning to it early), and settle into the new view's own
     // framing (over the shoulder, through the eyes) only over the last stretch
     _quat.copy(cam.quaternion);
-    cam.lookAt(focus.x, height * 0.55, focus.z);
+    cam.lookAt(focus.x, floor + height * 0.55, focus.z);
     _quat2.copy(cam.quaternion);   // (slerpQuaternions copies its first argument in before reading the second)
     // (into the eyes the character's direction swings wildly as the camera closes on it, so the settling
     // follows the distance closed, not the clock)
@@ -792,7 +800,7 @@ export function updateCamera(dt: number, focus: THREE.Vector3, height: number): 
   // between), fading in and out with the glide to and from the eyes
   const e = ease(rig.blend);
   const share = (view: ViewMode) => (rig.view === view ? e : 0) + (rig.fromView === view ? 1 - e : 0);
-  updateSeeThrough(focus.x, height * 0.6, focus.z, 1 - share('first'), share('top'));
+  updateSeeThrough(focus.x, floor + height * 0.6, focus.z, 1 - share('first'), share('top'));
   rig.kick = damp(rig.kick, rig.kickTo, rig.kickTo > rig.kick ? 14 : 6, dt); rig.kickTo = 0;
   if (rig.view !== 'top') fov += rig.kick * e;
   if (cam.fov !== fov || cam.near !== near) { cam.fov = fov; cam.near = near; cam.updateProjectionMatrix(); }
@@ -817,6 +825,15 @@ export const gpuMarks = { mark: (_label: string): void => {} };
 /** What is drawn over the finished frame, on the canvas at its own pixel ratio: the world's overlays (ui/overlay). */
 export const overFrame = { draw: (): void => {} };
 
+/** The scene's hidden parts left out of the frame's matrices: three makes every object's world matrix again as it
+ *  renders, shown or not, and the places not shown and the hall's room were a thousand of the village's 1853 objects
+ *  (`npm run lab -- perf --village --profile=render`). A part shown again is made again in that frame's render. */
+function matricesOfShownOnly(scene: THREE.Scene): void {
+  // (the scene itself never moves: its matrix made again each frame marked every object under it changed)
+  scene.matrixAutoUpdate = false;
+  for (const part of scene.children) part.matrixWorldAutoUpdate = part.visible;
+}
+
 export function render(): void {
   // a change the resize event missed: fit, and tell the rest of the page (UI scale...) too
   if (fitViewport()) window.dispatchEvent(new Event('resize'));
@@ -837,6 +854,7 @@ export function render(): void {
   u.uCap.value = (HI_CAP - HI_KNEE) * Math.max(1, hdr.peak / hdr.paper);
   gl.setRenderTarget(sceneRT);
   gpuMarks.mark('scene');
+  matricesOfShownOnly(G.scene);
   gl.render(G.scene, G.camera);
   if (armsFov !== null) { gpuMarks.mark('arms'); drawArmsOver(); }
   composer.render();

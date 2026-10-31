@@ -29,7 +29,8 @@ const _wallHit = { point: new THREE.Vector3(), normal: new THREE.Vector3(), t: 0
  *  the wall as into it too. Under its top alone, a weapon's pommel at rest a few centimetres into the crypt's wall's
  *  face read as 1.4 m in. */
 function wallDepth(x: number, y: number, z: number): number {
-  if (!G.arena || G.arena.hallShown) return -Infinity;
+  // (an older tree's hall of heroes stood in a room of its own, with no wall)
+  if (!G.arena || (G.arena as { hallShown?: boolean }).hallShown) return -Infinity;
   const wall = G.arena.wall;
   _rayFrom.set(x, WALL_RAY_FROM, z);
   _rayTo.set(x, y, z);
