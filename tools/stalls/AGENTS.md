@@ -29,5 +29,7 @@ The rules across the game are the [root AGENTS.md](../../AGENTS.md); each direct
   WebGPU port's shaders were checked so). Its notes list the page's errors, uncaught and logged, each once with its
   count (`page errors`): three logs a shader that failed to compile and draws on without it. A boot that never
   reaches its lobby fails saying what the loading screen said last and the page's errors (`withErrorsTold`): it
-  timed out bare, where the page had shown "Something went wrong while loading" with its cause.
+  timed out bare, where the page had shown "Something went wrong while loading" with its cause. `--cast key@ms`
+  holds a skill's key that long before the picture (`pictureEnd`), so its look is pictured on each renderer: the
+  WebGPU port's Maelstrom drew nothing of its walls, seen so.
 - **Its profiles are left behind from a sandboxed shell** (Chrome's files there can't be deleted: the tool says which), so its Chrome fetches nothing in the background: the models, Safe Browsing's lists and the components were 85 MB of a profile's 120. Delete `out/profiles/profile-*` from an unsandboxed shell now and then (each is a measure's own, never used again).

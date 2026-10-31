@@ -195,6 +195,21 @@ id (`NodeManager.getCacheKey`), and three makes each environment map a node of i
   renderer's stand-in had no `capabilities.maxTextureSize` (its side NaN), and the labels' geometry starts with an
   infinite instance count, which WebGL clamps and WebGPU's draw refuses (the boot hung on its loading screen: the
   stalls boot now says where a boot stopped, and the page's errors).
+- **The effects' own shaders** (`core/shaderPorts.ts`): each GLSL `ShaderMaterial` is given a port
+  (`portShader`), its shader as WGSL written line for line (`wgslFn`), and three takes it in the material's place as
+  it builds it on WebGPU (its library's `fromMaterial`), so the game drives the material it holds as before. Ported:
+  the swing trails, the warrior's arcs, ward and shield face, Void Lance, the bolts' orbs, the crypt's bolts, the
+  spore orbs, the arrow's glint, the aim laser, Maelstrom, the Hulk's vine, the crypt's beacons and the
+  environment's sky; the dazed stars are instanced quads, as the particles are, and the outline round a foe draws
+  its edge over the frame. A boot logs none incompatible now (43 before), and names any it meets ("Not ported to
+  WebGPU"). Each port reads its uniforms off the material being drawn (`materialReference`): three builds the
+  ported materials of one shader once, and read off the material each was made for, every one of a kind drew with
+  the first's (Maelstrom's walls with the warm-up's, faded out). WGSL leaves `smoothstep` with its edges the wrong
+  way round undefined, and `pow` of a negative: the ports write the falling ones as one less the rising, and squares
+  as products. Checked side by side with WebGL with `stalls --scenario boot --cast 3@1500` (a skill held for the
+  end picture): Maelstrom's walls as WebGL draws them.
+- **The environment maps are WebGPU's generator's** (`generator` in `world/props.ts`): WebGL's draws with shaders
+  WebGPU can't run, and its maps left the dais darker than on WebGL from every view. Now the same.
 - **The renderer is chosen in the pause menu** (`core/rendererChoice.ts`: WebGL or WebGPU, and WebGPU's meshlets and
   lights written out, kept in cookies for the next load, a reload offered), the address's `?renderer=` over it.
 - **What's still open on the way:** a boot logs a `GPUValidationError` copying 128x32 into a 1x1 texture: the still
@@ -209,17 +224,10 @@ id (`NodeManager.getCacheKey`), and three makes each environment map a node of i
 
 **Not ported yet** (each shows as missing, not broken):
 
-- **Every other `ShaderMaterial`** (about 25): skill effects (firestorm, rift bolts, void lance...), the crypt's
-  beacons, aim lasers, swing trails, the dazed stars, the leaf cards' own. `glslFn` doesn't run on WebGPU; `wgslFn`
-  takes the GLSL nearly line for line (above).
-- **The outline** round a foe (Quarry Mark's preview): its masks and edge are WebGL shaders. The world's overlays
-  themselves are ported (below).
+- **The ported effects fade with nothing yet:** the crypt's beacons as their prop dissolves (`seeThroughFade`).
 - **The kit's looks off the crowds** (the heroes, dummies, props), all GLSL `onBeforeCompile`:
   - dissolve, frost, char, hit flash, near glow, rim, see-through
   - the floors' relief, and the crypt's earth's own normals (the floors' looks are ported, below)
-  - the dais reads darker than on WebGL from the top-down view in both biomes, the same from the third-person
-    view: a plain standard material with no hook of its own, likely its reflection of the sky at that angle. Not
-    from its shadow (none received, as dark) nor its maps uploaded blank (uploaded again once painted, as dark)
   - a fire's bed and its logs' char glowing through their cracks (`emberMat`)
   - triplanar, fur sway, dual-quaternion hands
 - **The grade:** exposure areas, glare, low Health, HDR, sanitize.
