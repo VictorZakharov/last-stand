@@ -1,5 +1,5 @@
 // The weapon in the hero's hand against his own body through a scenario (tools/lab `range`): the frames any part of
-// it passes into a leg (a thigh or a shin, each a capsule round its bone) or the trunk (the belly and the chest, the
+// it passes into a leg (a thigh, a shin or a foot, each a capsule round its bone) or the trunk (the belly and the chest, the
 // anatomy's own solids), and the deepest. Every corner of its surface is read, as `weaponFloor.ts` reads them. The
 // arms aren't parts here: the hands hold it. A two-handed blow ending in the floor before him put the haft through
 // his thigh, and no measure said so (from play: "main problem here is axe shaft going through leg").
@@ -11,6 +11,10 @@ import { capsuleDepth, ellipsoidDepth } from './bodyDepth';
 
 /** into the body by this much a point counts (m): armour and cloth stand a little off the bones' capsules */
 const INTO_FROM = 0.01;
+/** a foot as a capsule on its ankle (the rig's units): its line's drop under the ankle, how far ahead it reaches to
+ *  the toes and back to the heel, and its radius (a boot over it). Without the feet, the ranger's bow laid by a fire
+ *  ended on his boot's toe, read by no measure (from review) */
+const FOOT = { down: 0.035, toe: 0.15, heel: 0.04, radius: 0.045 };
 /** the canary is caught when the weapon, its grip moved to the left thigh's middle, reads at least this deep (m) */
 export const BODY_CANARY_CAUGHT = 0.03;
 
@@ -48,6 +52,8 @@ export class WeaponBody {
   private readonly pieceOf: PieceOf;
   private frames = 0;
   private deepest: Into | null = null;
+  /** the nearest it came to the body, in it or not */
+  private nearest: Into | null = null;
   /** each frame it was in the body, as words */
   readonly listed: string[] = [];
 
@@ -61,6 +67,7 @@ export class WeaponBody {
    *  point as words if it's the deepest yet. */
   observe(lab: Lab, frame: string): string {
     const into = deepestInto(lab, frame, this.pieceOf(lab));
+    if (into && (!this.nearest || into.depth > this.nearest.depth)) this.nearest = into;
     if (!into || into.depth < INTO_FROM) return '';
     this.frames++;
     this.listed.push(`  ${this.scenario} frame ${frame}: the weapon ${describeInto(into)}`);
@@ -73,6 +80,14 @@ export class WeaponBody {
   describe(): string {
     if (!this.deepest) return '';
     return `the weapon through the body on ${this.frames} frames, the deepest ${describeInto(this.deepest)}`;
+  }
+
+  /** The nearest it came to the body as words (how far off it, or into it), or none if it held nothing. */
+  describeNearest(): string {
+    const nearest = this.nearest;
+    if (!nearest) return '';
+    if (nearest.depth > 0) return `the weapon at its nearest ${describeInto(nearest)}`;
+    return `the weapon at its nearest ${cm(-nearest.depth)} off the ${nearest.part} (frame ${nearest.at})`;
   }
 
   /** how many frames it was in the body */
@@ -123,6 +138,9 @@ function partsOf(lab: Lab): Part[] {
     const ankle = j[`ankle${side}`].getWorldPosition(new THREE.Vector3());
     parts.push({ name: `${left} thigh`, depthAt: (point) => capsuleDepth(point, hip, knee, j.P.thighR * scale) });
     parts.push({ name: `${left} shin`, depthAt: (point) => capsuleDepth(point, knee, ankle, j.P.shinR * scale) });
+    const toes = j[`ankle${side}`].localToWorld(new THREE.Vector3(0, -FOOT.down, FOOT.toe));
+    const heel = j[`ankle${side}`].localToWorld(new THREE.Vector3(0, -FOOT.down, -FOOT.heel));
+    parts.push({ name: `${left} foot`, depthAt: (point) => capsuleDepth(point, heel, toes, FOOT.radius * scale) });
   }
   for (const solid of bodyShape(j).solids.filter((each) => each.name === 'belly' || each.name === 'chest')) {
     const toSolid = solid.at.matrixWorld.clone().invert();
