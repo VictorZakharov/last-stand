@@ -5,6 +5,60 @@ Asked when three r187 (#330) brought GPU-driven meshlet drawing (`MeshletDrawing
 `WebGPURenderer`. Its WebGL backend falls back to the standard pipeline. It began as an estimate (three 0.185.1
 on `main`, 2026-10-30), and the port began the same evening on #330's three 0.187.
 
+## Load times against WebGL (2026-10-31)
+
+The aim: a WebGPU boot as quick as WebGL's, or quicker. `npm run stalls -- --scenario boot --rounds 2 --url
+"this?renderer=webgpu,this"` (the same build both ways, in turns, the forest; the machine the agent's alone):
+
+| Forest, mage, two rounds (median, range) | WebGPU | WebGL |
+| --- | --- | --- |
+| A first visit: the lobby shown | 9.10 s (9.10–9.94) | 9.01 s (9.01–10.50) |
+| A first visit: the fight warm | 15.20 s, behind the lobby | 19.15 s, after Start (its bar 1.75 s) |
+| A first visit: the lobby's fewest frames a second | 30 (30–34) | 67 (67–93) |
+| A return: the lobby shown | 6.92 s (6.92–6.94) | 5.21 s (5.21–5.72) |
+| A return: its "Conjuring spells" step | 2.26 s | 1.10 s |
+| A return: the fight warm | 12.26 s | 9.88 s |
+| A return: the lobby's fewest frames a second | 41 (41–43) | 104 (104–122) |
+| The lobby's frame, JS (`--scenario lobby --js`, 15 s) | about 10 ms | about 5.7 ms |
+| The lobby's draws a frame | 288 | about 300 |
+
+A first visit's lobby shows as soon as WebGL's, and its fight is warm behind the lobby where WebGL's waits for
+Start; a return still trails by 1.7 s, its compiles Chrome's DXC working again through every shader (below), and
+the lobby's frames a second stay low while the fight compiles behind it.
+
+**Where a WebGPU boot's time went:** Chrome's DXC compiling WGSL that three wrote out large, and the pipelines made
+one slice at a time. `--dawn` (stalls) traces Dawn's own work by step: `CompileShaderDXC`, Tint's HLSL writer,
+`CreatePipelineAsyncEvent`.
+
+- **The point lights in one loop** (`DynamicLighting`, `core/webgpu.ts`): three wrote each point light casting no
+  shadow out in full in every lit shader, the physical model's every term eight times over: 55 kB of WGSL a lit
+  fragment shader, 3.5 MB of the 4.6 MB the boot made. three's `DynamicLighting` lights them in a loop over a
+  uniform array, as WebGL's `loopPointLights` does. A first visit's lobby 11.2 to 8.9 s, its fight's bar 6.9 to
+  3.2 s. `?lights=each` for three's own.
+- **One rig of point lights** (`rigPointLights`): WebGPU keys every lit pipeline by its lights' ids, so each biome
+  and the hall had a copy of every lit pipeline. The biomes' lights are hidden and a rig of ten mirrors the shown
+  biome's each frame. The hero's lights are kept for good (`heroLights`).
+- **Chrome forgets the shaders between visits.** It keeps about 6 MB of a page's compiled WebGPU shaders in memory
+  and drops the oldest first: `npm run stalls -- --scenario webgpu-cache` (a page of the tool's own, made again on
+  every reload) had 8 pipelines served from the cache on a return, 40 or more none. The game made 29 MB of them,
+  so a return compiled everything again. So the fight is compiled as the loading screen leaves on every visit, and
+  the levers are ours: fewer shaders, and compiled faster.
+- **Fewer shaders:** the crowd's material reads where its looks and glow lie in a body's row from uniforms, not
+  constants (`crowdNodes.ts`): 43 vertex shaders alike but for them are one, the boot's distinct vertex shaders 170
+  to 98.
+- **Longer compile slices while loading:** three's async compile works 8 ms before it yields a frame, which left
+  Chrome's compilers a third busy (raising its 16 pipelines in flight to 64 changed nothing). A Vite transform of
+  its one line (`vite.config.ts`, production builds) reads the slice from the game (`compileSlice`): 40 ms under the
+  loading screen and the fight's loading bar, 8 in the lobby. A return's lobby 7.1 to 6.6 s, its fight's bar 2.1 to
+  1.3 s.
+
+**The lobby's frame** (`npm run stalls -- --scenario lobby --seconds 15 --js`): WebGPU's JS was 8.3 ms a frame to
+WebGL's 5.1, its render 6.7 ms to 3.4 (on another day's run 10 ms to 5.7), at about the same draws once the
+shadow-only casters cast (below). three's
+WebGPU path costs about twice WebGL's CPU an object drawn: its render objects' updates, uniforms' buffers
+(`writeBuffer`) and bindings. Render bundles (`BundleGroup`, the biomes' still parts recorded once) were tried and
+saved nothing measurable.
+
 ## Where the port stands (2026-10-30, evening)
 
 The day-count estimate further down (55–85 agent-days) was far too high, by about ten times. The owner pointed out
@@ -55,8 +109,8 @@ id (`NodeManager.getCacheKey`), and three makes each environment map a node of i
   swapped as the look changes: each biome's map and the hall's had a copy of every lit pipeline.
 - **The hall warmed in its own look** (`Swap.look`, `hallLook` in `game/warmup.ts`), all the scene compiled and
   drawn in it: the hall has lights of its own.
-- Read with `npm run stalls -- --scenario boot --url "this?renderer=webgpu&builds" --read "window.__builds"`: the
-  node builds a draw made, by mesh, camera and key (`&builds`, a temporary record in `core/webgpu.ts`).
+- Found with `npm run stalls -- --read`: the node builds a draw made, by mesh, camera and key, recorded by a
+  temporary probe (`&builds`, since dropped; in this PR's history).
 
 | A first visit | before | after |
 | --- | --- | --- |
