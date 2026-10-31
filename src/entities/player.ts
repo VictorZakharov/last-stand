@@ -116,6 +116,20 @@ export type PlayerOut = 'banked' | 'dead' | null;
  *  second, the glint at full draw's first moments was lit less than main's) */
 const AURA_EASE = { in: 60, out: 12 };
 
+/** the local hero's lights (`heroLights`) */
+let lightsKept: { staff: THREE.PointLight; hand: THREE.PointLight } | null = null;
+
+/**
+ * The local hero's lights, the cast point's and the free hand's, made once and kept from hero to hero (each takes
+ * them on and sets their colours): WebGPU keys every lit pipeline by the lights it's lit by, each by its id, so lights
+ * made with each hero had every lit pipeline made again at a class switch, and the warm-up's compiles before the hero
+ * was built (with a light standing in for his) went unused. The warm-up compiles the biome with them in.
+ */
+export function heroLights(): { staff: THREE.PointLight; hand: THREE.PointLight } {
+  lightsKept ??= { staff: new THREE.PointLight(0xffffff, 0, 6, 2), hand: new THREE.PointLight(0xffffff, 0, 3.5, 2) };
+  return lightsKept;
+}
+
 export class Player {
   readonly cls: ClassDef;
   readonly model: Model;
@@ -238,8 +252,15 @@ export class Player {
     this.cls = CLASSES[classId];
     this.local = local;
     this.sandbox = !local;   // a remote player's casts replay as its owner fires them: no costs here
-    this.staffLight = local ? new THREE.PointLight(this.cls.aura.light, this.cls.aura.intensity, 6, 2) : null;
-    this.handLight = local ? new THREE.PointLight(this.cls.aura.hand?.light ?? 0xffffff, 0, 3.5, 2) : null;
+    const lights = local ? heroLights() : null;
+    this.staffLight = lights?.staff ?? null;
+    this.handLight = lights?.hand ?? null;
+    if (lights) {
+      lights.staff.color.set(this.cls.aura.light);
+      lights.staff.intensity = this.cls.aura.intensity;
+      lights.hand.color.set(this.cls.aura.hand?.light ?? 0xffffff);
+      lights.hand.intensity = 0;
+    }
     this.model = buildModel(this.cls.model);
     this.obj.add(this.model.root);
     this.obj.name = `hero ${classId}`;   // names show up in the perf report
@@ -264,8 +285,7 @@ export class Player {
     this.shadow.dispose();
     this.obj.traverse((o) => { const m = o as THREE.SkinnedMesh; if (m.isSkinnedMesh) { m.skeleton.dispose(); (m.material as THREE.Material).dispose(); } });   // (skinned meshes own a copy of their material)
     this.model.dispose();
-    this.staffLight?.dispose();
-    this.handLight?.dispose();
+    // (its lights are the next hero's: `heroLights`)
   }
 
   /** Bind a skill (or nothing) to a key and persist the loadout (of the weapon style held). */

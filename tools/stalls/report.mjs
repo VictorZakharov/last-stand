@@ -255,6 +255,12 @@ function gpuCompilesLine({ threads, mean, most, steps }) {
     + `${most} at most; each ${step} s: ${each}`;
 }
 
+/** Dawn's work in a boot's step (`analyze.mjs` `dawnIn`), as a line of its own: each kind's count and time. */
+function dawnLine(kinds) {
+  const pieces = kinds.map((kind) => `${kind.count} ${kind.name} (${ms(kind.ms)})`);
+  return `    Dawn's work: ${pieces.join('; ')}`;
+}
+
 /** A boot's step (`analyze.mjs` `analyzeBoot`): when it started, how long it took, its frames and the longest the
  *  page was held up in it, its long tasks and Skia programs, what the threads spent its time on in all, and the
  *  threads its GPU compiles ran on. */
@@ -272,6 +278,7 @@ function bootStepLines(step, { links = false } = {}) {
   if (step.work.length) lines.push(workLine('its work', step.work));
   if (step.gpuMain?.length) lines.push(workLine('the GPU process\'s main thread\'s', step.gpuMain));
   if (step.gpuCompiles) lines.push(gpuCompilesLine(step.gpuCompiles));
+  if (step.dawn) lines.push(dawnLine(step.dawn));
   if (links && step.links?.length) lines.push(builtInLine(step.links));
   if (step.js?.own.length) lines.push(jsLine('its JS, each function\'s own time', step.js.own));
   if (step.js?.within.length) lines.push(jsLine('and with what it calls', step.js.within));

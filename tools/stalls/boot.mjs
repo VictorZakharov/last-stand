@@ -34,8 +34,8 @@ const VISITS = [
 
 /** `browser`'s first context made ready for a boot: never taking the pointer, the boot recorded from each document's
  *  start (and where its exit draws, with `--resize`), `variant` (each of its parts) applied before the page's
- *  scripts, the performance overlay shown if `perf` and Auto's quality where `auto` says a device settled it (their
- *  cookies, set for `url`). */
+ *  scripts, the performance overlay shown if `perf`, Auto's quality where `auto` says a device settled it and the
+ *  battleground where `biome` is given (their cookies, set for `url`). */
 async function bootContext(browser, url, variant, options) {
   const context = browser.contexts()[0] ?? (await browser.newContext());
   await context.addInitScript(noCapture);
@@ -47,6 +47,7 @@ async function bootContext(browser, url, variant, options) {
   const cookies = [
     ...(options.perf ? [{ name: 'last-stand-perf-hud', value: '1', url }] : []),
     ...(options.auto ? [{ name: 'last-stand-quality-auto', value: options.auto, url }] : []),
+    ...(options.biome ? [{ name: 'last-stand-biome', value: options.biome, url }] : []),
   ];
   if (cookies.length) await context.addCookies(cookies);
   return context;
@@ -72,7 +73,7 @@ const LEFT_NOTES = {
  *  (`picture.end`, the film's sheets beside it), taken at the CPU's full speed (`setRate`: slowed ten times, the page
  *  painted none within Playwright's 30 s) and slowed again after. */
 async function bootTraced(browser, page, url, visit, options, picture, setRate) {
-  const trace = await startTrace(browser, { js: options.js, angle: options.angle });
+  const trace = await startTrace(browser, { js: options.js, angle: options.angle, dawn: options.dawn });
   const film = options.film ? await startFilm(page, { full: options.filmLogo }) : null;
   await visit.load(page, url);
   const resized = options.resize ? resizeTrips(page, options) : null;

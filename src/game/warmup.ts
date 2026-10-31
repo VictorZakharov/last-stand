@@ -13,6 +13,7 @@ import * as THREE from 'three';
 import { G } from '../state';
 import { behindTheLobby, compileAhead, warmUp, type Swap, type WarmedUp } from '../core/shaders';
 import { compilePasses, sceneTarget } from '../core/renderer';
+import { WEBGPU } from '../core/webgpu';
 import { mapsArrived, mapsMadeAfresh } from '../core/textures';
 import { ENEMIES, type EnemyId } from '../data/enemies';
 import { BIOME_IDS } from '../data/biomes';
@@ -20,6 +21,7 @@ import { SKILL_IMPLS } from '../combat/skills/index';
 import { CLASSES } from '../data/classes/index';
 import { buildModel } from '../entities/models/index';
 import { Enemy } from '../entities/enemy';
+import { heroLights } from '../entities/player';
 import { crowdSlots, joinCrowd, leaveCrowd } from '../entities/models/crowd';
 import { clearEffects, shockwave, groundFlash, decal, telegraph, lightning, iceSpikes, glyphMarker, lightPillar, crackDecal, crystalBurst } from '../fx/effects';
 import { rubble } from '../fx/rubble';
@@ -33,7 +35,7 @@ import { swingTrailSamples } from '../fx/swingTrail';
 import { groundSamples } from './groundItems';
 import { compileOutline, warmOutline } from '../ui/overlay/outline';
 import { labelsScene } from '../ui/overlay/layer';
-import { isWarm, markWarm, wanted, warming, warmingRuns, type Need } from './warm';
+import { isWarm, markWarm, want, wanted, warming, warmingRuns, type Need } from './warm';
 import type { Model } from '../types';
 
 /** far outside the arena, past what the lobby's camera sees: where the fight's warm-up stands what it builds */
@@ -102,18 +104,16 @@ function heroAllWorn(model: string, at?: THREE.Vector3): Model {
 const otherBiomes = () => BIOME_IDS.filter((id) => id !== G.arena.biome);
 
 /**
- * The lobby's biome compiled as soon as it's built, a light standing in for the hero's (built next: a program is
- * made for the scene's count of lights), so the GPU's threads link its programs while the hero is built; the
+ * The lobby's biome compiled as soon as it's built, the hero's lights in (built next, he takes them on: a program is
+ * made for the scene's lights, `heroLights`), so the GPU's threads link its programs while the hero is built; the
  * lobby's warm-up waited for them after (a first visit's: 3.5 s of the 14 s of compiles it waited 2.3 s on). The
  * post chain's and the overlay's too, which the lobby's first full frame linked one after another.
- * Returns the stand-in's removal, for once the hero's own light is in.
  */
-export function compileTheBiome(): () => void {
-  const standIn = new THREE.PointLight(0xffffff, 0);
-  G.scene.add(standIn);
+export function compileTheBiome(): void {
+  const { staff, hand } = heroLights();
+  G.scene.add(staff, hand);
   compileAhead(G.renderer, G.scene, G.camera, sceneTarget(), otherBiomes().map((id) => G.arena.groupOf(id)));
   compilePasses([labelsScene()]);
-  return () => G.scene.remove(standIn);
 }
 
 /** `objects` named `name` where they have none of their own: what uses a program, as `lab programs` lists them. */
@@ -430,14 +430,18 @@ async function warmNeed(need: Need, parts: Part[], behind: () => Promise<boolean
  * The programs the lobby doesn't use warmed (game/warm.ts): the fight's behind it once the loading screen has `left`
  * (its logo's exit draws over the lobby till then), where this build warmed them here before and the maps were kept
  * (`rememberWarmed`: else, a first visit or a new build's, its programs are new to the GPU's cache), and the other
- * heroes' once something needs them. Their programs are the boot's (`inTurn`): from the lobby on, one compiled but
+ * heroes' once something needs them. On WebGPU the fight's are all compiled at once as the loading screen leaves,
+ * every visit: three's async compile makes its pipelines on the GPU's threads and builds its nodes a slice a frame,
+ * so the lobby never waits for one, and Chrome's cache never served them on a return (the bar was 2.4 s on every
+ * visit). A part at a time there compiled a few at once, and was slower still. Their programs are the boot's (`inTurn`): from the lobby on, one compiled but
  * by a warm-up is counted as compiled late (main.ts `markLoaded`).
  */
 export async function warmTheRest(left: Promise<void>): Promise<void> {
   const behind = async (): Promise<boolean> => {
     await Promise.race([left, wanted('fight')]);
-    return !mapsMadeAfresh() && warmedBuilds().includes(BUILD);
+    return !WEBGPU && !mapsMadeAfresh() && warmedBuilds().includes(BUILD);
   };
+  if (WEBGPU) void left.then(() => want('fight'));
   const fightWarm = warmNeed('fight', theFight(), behind).then(() => {
     rememberWarmed();
     performance.mark('fight warm');

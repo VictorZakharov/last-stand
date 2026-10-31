@@ -452,7 +452,11 @@ function onPage(record, events, mark, sourceOf) {
     .map((paint) => ({ node: paint.node, at: toPage(paint.ts) }))
     .filter((paint) => paint.at !== null);
   const samples = jsSamples(events, toPage, names, sourceOf);
-  return { stamp, tasks, names, toPage, placed, samples, links, draws, paints };
+  const dawn = events
+    .filter((event) => event.ph === 'W')
+    .map((work) => ({ name: work.name, ms: work.dur / 1000, at: toPage(work.ts) }))
+    .filter((work) => work.at !== null);
+  return { stamp, tasks, names, toPage, placed, samples, links, draws, paints, dawn };
 }
 
 /**
@@ -747,6 +751,22 @@ function gpuCompilesIn(placed, from, to) {
   };
 }
 
+/** Dawn's work that started in the page's `[from, to)` (`--dawn`), by its name: how many and how long in all, the
+ *  longest first, `WORK_SHOWN` kinds of it. Whether its cache was read (a shader or pipeline's blob) or its
+ *  compiles run (Tint's, DXC's). Null where none was traced. */
+function dawnIn(dawn, from, to) {
+  const byName = new Map();
+  for (const work of dawn) {
+    if (work.at < from || work.at >= to) continue;
+    const kind = byName.get(work.name) ?? { name: work.name, count: 0, ms: 0 };
+    kind.count++;
+    kind.ms += work.ms;
+    byName.set(work.name, kind);
+  }
+  if (!byName.size) return null;
+  return [...byName.values()].sort((a, b) => b.ms - a.ms).slice(0, WORK_SHOWN);
+}
+
 /** A boot's step from `from` to `to` (the page's ms): its frames' summary (the longest the page was held up in it,
  *  `worst`), its long tasks and Skia program links, and what the threads spent its time on in all, the GPU
  *  process's main thread apart, and the threads its compiles ran on (`gpuCompilesIn`). */
@@ -771,6 +791,7 @@ function bootStep(name, from, to, record, traced) {
     work: sharedWork(totals, 1).slice(0, BOOT_WORK_SHOWN),
     gpuMain: sharedWork(onGpuMain, 1).slice(0, BOOT_WORK_SHOWN),
     gpuCompiles: gpuCompilesIn(traced.placed, from, to),
+    dawn: dawnIn(traced.dawn, from, to),
     js: traced.samples.length ? jsIn(traced.samples, from, to, 1) : null,
   };
 }

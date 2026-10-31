@@ -98,7 +98,7 @@ async function boot() {
   initQuality();
   // the lobby's biome shown, and its programs compiled while the hero is built (game/warmup.ts)
   initBiome();
-  const heroLit = compileTheBiome();
+  compileTheBiome();
   // (the lobby's panels rastered under the loading screen while the hero is built: ui/menus.ts)
   layOutMenuAhead();
 
@@ -109,7 +109,6 @@ async function boot() {
   G.profile = loadProfile(savedClass());
   G.player = new Player(G.profile.classId, G.profile.equipped);
   G.players = [G.player];
-  heroLit();
   // (what the lobby can do compiled with him, before its page is laid out: game/warmup.ts)
   compileTheLobby();
 
