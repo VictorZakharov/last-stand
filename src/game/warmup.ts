@@ -13,7 +13,7 @@ import * as THREE from 'three';
 import { G } from '../state';
 import { behindTheLobby, compileAhead, warmUp, type Swap, type WarmedUp } from '../core/shaders';
 import { compilePasses, sceneTarget } from '../core/renderer';
-import { WEBGPU } from '../core/webgpu';
+import { COMPILE_SLICE, compileSlice, WEBGPU } from '../core/webgpu';
 import { mapsArrived, mapsMadeAfresh } from '../core/textures';
 import { ENEMIES, type EnemyId } from '../data/enemies';
 import { BIOME_IDS } from '../data/biomes';
@@ -35,7 +35,7 @@ import { swingTrailSamples } from '../fx/swingTrail';
 import { groundSamples } from './groundItems';
 import { compileOutline, warmOutline } from '../ui/overlay/outline';
 import { labelsScene } from '../ui/overlay/layer';
-import { isWarm, markWarm, want, wanted, warming, warmingRuns, type Need } from './warm';
+import { isReadying, isWarm, markWarm, onReadying, want, wanted, warming, warmingRuns, type Need } from './warm';
 import type { Model } from '../types';
 
 /** far outside the arena, past what the lobby's camera sees: where the fight's warm-up stands what it builds */
@@ -441,7 +441,13 @@ export async function warmTheRest(left: Promise<void>): Promise<void> {
     await Promise.race([left, wanted('fight')]);
     return !WEBGPU && !mapsMadeAfresh() && warmedBuilds().includes(BUILD);
   };
-  if (WEBGPU) void left.then(() => want('fight'));
+  if (WEBGPU) void left.then(() => {
+    want('fight');
+    // (the compile's slices long again while the fight's loading bar is up: nothing is played under it)
+    const slice = (): void => compileSlice(isReadying() ? COMPILE_SLICE.loading : COMPILE_SLICE.playing);
+    onReadying(slice);
+    slice();
+  });
   const fightWarm = warmNeed('fight', theFight(), behind).then(() => {
     rememberWarmed();
     performance.mark('fight warm');
