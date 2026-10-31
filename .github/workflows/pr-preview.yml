@@ -186,10 +186,28 @@ jobs:
     environment:
       name: github-pages-preview
     env:
-      SITE_ORIGIN: ${{ vars.SITE_ORIGIN || format('https://{0}.github.io/{1}', github.repository_owner, github.event.repository.name) }}
       HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
       RUN_URL: ${{ github.event.workflow_run.html_url }}
     steps:
+      # where Pages serves the site, as its settings have it (a custom domain's, `https://last-stand.cc`, once one is
+      # set: the github.io URL then answers with a redirect, and the probes below read that and failed);
+      # the SITE_ORIGIN variable, if set, wins
+      - name: Find where Pages serves the site
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ASKED_ORIGIN: ${{ vars.SITE_ORIGIN }}
+          FALLBACK_ORIGIN: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}
+        run: |
+          set -euo pipefail
+          origin="${ASKED_ORIGIN}"
+          if [[ -z "${origin}" ]]; then
+            origin="$(gh api "repos/${GITHUB_REPOSITORY}/pages" --jq '.html_url' 2>/dev/null || true)"
+          fi
+          origin="${origin:-${FALLBACK_ORIGIN}}"
+          echo "SITE_ORIGIN=${origin%/}" >> "${GITHUB_ENV}"
+          echo "Pages serves the site at ${origin%/}"
+
       - name: Download preview
         if: github.event.workflow_run.conclusion == 'success'
         continue-on-error: true
@@ -355,8 +373,8 @@ jobs:
           set -euo pipefail
           folder_url="${SITE_ORIGIN}/pr-preview/pr-${PR_NUMBER}/${HEAD_SHA:0:7}"
           for probe in $(seq 1 "${PROBES}"); do
-            if [[ "$(curl -fsS "${folder_url}/served-${probe}.txt" 2>/dev/null || true)" == "${HEAD_SHA}" ]]; then
-              got="$(curl -fsS "${folder_url}/preview-metadata.json" | jq -r '.headSha // ""' || true)"
+            if [[ "$(curl -fsSL "${folder_url}/served-${probe}.txt" 2>/dev/null || true)" == "${HEAD_SHA}" ]]; then
+              got="$(curl -fsSL "${folder_url}/preview-metadata.json" | jq -r '.headSha // ""' || true)"
               if [[ "${got}" == "${HEAD_SHA}" ]]; then
                 echo "Pages serves ${folder_url}/ (probe ${probe})"
                 exit 0
