@@ -1,8 +1,8 @@
 // The crypt's floor and what stands beyond its wall on WebGPU (core/webgpu.ts): crypt.ts's GLSL hooks as TSL nodes,
 // set on its plain materials (three copies them onto the node material it makes of each). The cobbles' damp, drift
 // and moss and the earth round the small dead trees' feet (`dampGround`), and the world past the wall darkened in the
-// top-down view (`dimOutside`). Not yet ported: the earth's own normals and the floor's relief (core/parallax.ts),
-// and the dimming comes after the fog here, before it in the GLSL.
+// top-down view (`dimOutside`); the cobbles' relief is core/parallax.ts's `reliefContext`. Not yet ported: the earth's
+// own normals, and the dimming comes after the fog here, before it in the GLSL.
 import type * as THREE from 'three';
 import { tsl } from '../core/webgpu';
 

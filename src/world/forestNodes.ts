@@ -1,7 +1,7 @@
 // The forest's floor, grass and light on WebGPU (core/webgpu.ts): forest.ts's GLSL hooks as TSL nodes, set on its
 // plain materials (three copies them onto the node material it makes of each): the moss tinted over the floor in
 // world space, and the grass's tufts swaying in the wind; and foliage.ts's shafts of light as a node material of their
-// own. Not yet ported: the floor's relief (core/parallax.ts).
+// own. The floor's relief is core/parallax.ts's `reliefContext`.
 import * as THREE from 'three';
 import { gpu, tsl } from '../core/webgpu';
 

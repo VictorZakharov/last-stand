@@ -301,6 +301,17 @@ export interface GradeLooks {
   glare: readonly [number, number];
 }
 
+/** `colour` with a NaN or Inf pixel made black and the rest held to 0..64, as WebGL's sanitize pass makes the scene
+ *  before bloom: bloom smears a single bad pixel into black boxes across the frame. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function sanitized(colour: any): any {
+  const { clamp, select, vec4 } = tsl as any;
+  // (a NaN is the one value unequal to itself; an Inf is past any float's range)
+  const nan = colour.r.notEqual(colour.r).or(colour.g.notEqual(colour.g)).or(colour.b.notEqual(colour.b));
+  const inf = colour.r.abs().add(colour.g.abs()).add(colour.b.abs()).greaterThan(1e30);
+  return select(nan.or(inf), vec4(0, 0, 0, 1), clamp(colour, 0, 64));
+}
+
 /** the light's weights, as the WebGL grade reads an area's and a pixel's */
 const LUM = [0.2126, 0.7152, 0.0722] as const;
 
@@ -371,6 +382,7 @@ function compressed(colour: any, { knee, cap }: Highlights): unknown {
 
 /** The WebGL grade's uniforms the WebGPU one reads (core/renderer.ts `GradeShader`), each `{ value }` */
 export interface GradeUniforms {
+  uTime: { value: number };
   uSmall: { value: number };
   uLarge: { value: number };
   uVignette: { value: number };
@@ -381,11 +393,12 @@ export interface GradeUniforms {
 }
 
 /** `colour` (tone mapped, in sRGB) graded as the WebGL grade grades it there: the vignette, shadows cooled and
- *  highlights warmed, the low Health look (the colour drained, the blood in from the edges as far as the Health has
+ *  highlights warmed, a film's grain, the low Health look (the colour drained, the blood in from the edges as far as the Health has
  *  fallen: core/lowLife.ts) and a hit's red flash round the edges. */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function graded(colour: any, u: GradeUniforms): unknown {
-  const { dot, vec3, vec4, mix, pow, smoothstep, step, clamp, texture, reference, screenUV } = tsl as any;
+  const { dot, vec2, vec3, vec4, mix, pow, smoothstep, step, clamp, texture, reference, screenUV, fract, sin } =
+    tsl as any;
   const read = (uniform: { value: number }): any => reference('value', 'float', uniform);
   const low = read(u.uLow);
   const d = screenUV.sub(0.5);
@@ -394,6 +407,9 @@ function graded(colour: any, u: GradeUniforms): unknown {
   let c = colour.rgb.mul(mix(0.35, 1, vignette));
   const lum = dot(c, vec3(0.299, 0.587, 0.114));
   c = mix(c.mul(vec3(0.93, 0.97, 1.08)), c.mul(vec3(1.04, 1.0, 0.94)), smoothstep(0.2, 0.8, lum));
+  const grainAt = screenUV.mul(900).add(read(u.uTime));
+  const grain = fract(sin(dot(grainAt, vec2(12.9898, 78.233))).mul(43758.5453));
+  c = c.add(grain.sub(0.5).mul(0.025));
   c = mix(c, vec3(dot(c, vec3(0.299, 0.587, 0.114))), pow(low, 1.5).mul(0.9));
   // (the mask as WebGL's grade reads it, its rows from the screen's foot up)
   const mask = texture(u.tBlood.value!, screenUV.flipY()).rgb;
@@ -410,7 +426,7 @@ function graded(colour: any, u: GradeUniforms): unknown {
 
 /** The post chain on WebGPU: the scene's pass, its bloom added, adapted to the light round each pixel, its highlights
  *  compressed, tone mapped keeping a large glare's hue and in sRGB, then graded there as WebGL's grade is
- *  (`graded`). (Not yet HDR.) */
+ *  (`graded`), its NaN and Inf pixels cleaned out first (`sanitized`). (Not yet HDR.) */
 export async function makePipeline(renderer: THREE.WebGLRenderer, scene: THREE.Scene, camera: THREE.Camera,
   looks: GradeLooks, grade: GradeUniforms): Promise<void> {
   const { RenderPipeline } = await import('three/webgpu');
@@ -419,7 +435,8 @@ export async function makePipeline(renderer: THREE.WebGLRenderer, scene: THREE.S
   const gpu = renderer as unknown as WebGPURenderer;
   const scenePass = pass(scene, camera);
   sceneTarget = scenePass.renderTarget;
-  const color = scenePass.getTextureNode('output');
+  const raw = scenePass.getTextureNode('output');
+  const color = sanitized(raw);
   pipeline = new RenderPipeline(gpu);
   // (tone mapped and in sRGB here, the grade after: the pipeline's own conversion off)
   pipeline.outputColorTransform = false;
@@ -428,7 +445,7 @@ export async function makePipeline(renderer: THREE.WebGLRenderer, scene: THREE.S
   const glowTexture = (glow as unknown as { getTextureNode(): any }).getTextureNode(); // eslint-disable-line @typescript-eslint/no-explicit-any
   // (after bloom, as on WebGL: the eye adapts to all the light that reaches it, halos included)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const lightAt = (at: any): any => color.sample(at).add(glowTexture.sample(at));
+  const lightAt = (at: any): any => sanitized(raw.sample(at)).add(glowTexture.sample(at));
   const grid = boxDown(lightAt, 64, 36);
   const small = boxDown((at) => grid.sample(at), 16, 9);
   const large = boxDown((at) => small.sample(at), 4, 3);

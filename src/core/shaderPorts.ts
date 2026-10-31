@@ -159,8 +159,8 @@ function seeMask(): N {
 /** A kit material's looks on WebGPU, set on its converted node material (`patch` in core/materials.ts, in TSL): the
  *  dissolve (its pixels dropped by the noise, an edge glowing round the hole), frost and char over its colour, its
  *  glow dimmed near the camera (`near`), a rim of light at glancing angles, the frost's, the char's embers and a hit's
- *  flash. Each read off the material drawn: every kit's material of a kind shares the build. (Not yet: the hood's
- *  shade, the shine's cap.) */
+ *  flash, the hood's shade over all its light (`hoodShaded`) and the shine's cap (`shineCapped`). Each read off the
+ *  material drawn: every kit's material of a kind shares the build. */
 function kitNodes(node: N): void {
   const {
     materialReference, materialColor, materialOpacity, materialEmissive, positionGeometry, positionView, normalView,
@@ -187,10 +187,49 @@ function kitNodes(node: N): void {
     .mul(char.mul(-0.7).add(1))
     .add(vec3(1.0, 0.32, 0.06).mul(char).mul(smoothstep(0.6, 0.78, dn)).mul(1.6).mul(near))
     .add(vec3(1.0, 0.9, 0.85).mul(read('u.uHit', 'float')).mul(0.45).mul(near));
+  hoodShaded(node, read('shade', 'vec4'), at);
+  shineCapped(node, read('u.uShine', 'float'));
 }
 
-/** three's library made to take each ported material's node material in its place (its blending, sides and depth
- *  copied over every time three asks: the draw reads them off the game's material, the build off this one). */
+/** All of `node`'s light (lit, reflected and its own glow) dimmed in a hood's shade, as the WebGL patch dims it after
+ *  its lights: `shade` x how deep, y where up the mesh (`at`) it's full, z where it's gone, w how much more aside.
+ *  Before the fog, as there. */
+function hoodShaded(node: N, shade: N, at: N): void {
+  const { abs, clamp, select, smoothstep, vec4 } = tsl as any;
+  const hood = shade.x.mul(clamp(smoothstep(shade.z, shade.y, at.y).add(shade.w.mul(abs(at.x))), 0, 1));
+  const kept = select(shade.x.greaterThan(0), hood.oneMinus(), 1);
+  const setupOutput = node.setupOutput.bind(node);
+  node.setupOutput = (builder: N, output: N) => setupOutput(builder, vec4(output.rgb.mul(kept), output.a));
+}
+
+/** `node`'s direct highlights eased into `shine` from half of it, as the WebGL patch caps them (`SHINE`: a held blade
+ *  through the eyes): three's lighting model has them apart as it finishes, and its sum is mended by the difference.
+ *  A material with no lighting model (unlit) is left as it is. */
+function shineCapped(node: N, shine: N): void {
+  const { max, mix, step } = tsl as any;
+  if (typeof node.setupLightingModel !== 'function') return;
+  const setupLightingModel = node.setupLightingModel.bind(node);
+  node.setupLightingModel = (builder: N) => {
+    const model = setupLightingModel(builder);
+    if (!model) return model;
+    const finish = model.finish.bind(model);
+    model.finish = (state: N) => {
+      const { outgoingLight, reflectedLight } = state.context;
+      const highlight = reflectedLight.directSpecular;
+      const most = max(max(highlight.r, highlight.g), highlight.b);
+      const knee = shine.mul(0.5);
+      // (with no division by naught where there's no cap, and blended: as a select between the two, every kit's
+      // material drew pale)
+      const over = max(most.sub(knee), 0);
+      const eased = highlight.mul(knee.add(over.div(over.div(max(shine.sub(knee), 1e-4)).add(1)))).div(max(most, 1e-6));
+      const capped = mix(highlight, eased, step(1e-4, shine).mul(step(knee, most)));
+      outgoingLight.assign(outgoingLight.sub(highlight).add(capped));
+      finish(state);
+    };
+    return model;
+  };
+}
+
 /** `material`'s uniforms refreshed at every draw. three looks for a node on the material it was given, not on the
  *  node material it built from it, and finding none, refreshes a mesh that stays still only as its own properties
  *  change: a port's or a look's uniforms stayed as they first drew (the outline's strength at the warm-up's 0). The
@@ -206,6 +245,8 @@ function refreshedEachDraw(material: THREE.Material): void {
  *  Its uniforms are read off the material drawn (`materialReference`), as three shares the build. */
 export interface OwnLooks { webgpuLooks: (converted: N) => void }
 
+/** three's library made to take each ported material's node material in its place (its blending, sides and depth
+ *  copied over every time three asks: the draw reads them off the game's material, the build off this one). */
 export function takePorts(renderer: WebGPURenderer): void {
   const library = renderer.library as unknown as { fromMaterial(material: THREE.Material): THREE.Material | null };
   const fromMaterial = library.fromMaterial.bind(library);

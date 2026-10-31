@@ -18,7 +18,7 @@ import { canopyGeo, fernClumpGeo, fernTexture, leafClusterTexture, leafTexture, 
 import { bend, rag, taperTube } from '../entities/models/shapes';
 import { PropSet, instanceLook, meshLook, groupLook } from './destructible';
 import { buildFire, emberMat } from './fire';
-import { floorRelief } from '../core/parallax';
+import { floorRelief, reliefContext } from '../core/parallax';
 import { tsl, WEBGPU } from '../core/webgpu';
 import { grassWindNode, mossColorNode } from './forestNodes';
 import { valueNoise3 } from '../core/patterns';
@@ -109,6 +109,7 @@ function windInGrass(m: THREE.MeshStandardMaterial, updaters: Updater[]): THREE.
 function mossyGround<M extends THREE.Material>(m: M): M {
   if (WEBGPU) {
     (m as M & { colorNode: unknown }).colorNode = mossColorNode();
+    reliefContext(m as unknown as THREE.MeshStandardMaterial, FLOOR_RELIEF);
     return m;
   }
   m.onBeforeCompile = (shader) => {

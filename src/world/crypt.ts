@@ -13,7 +13,7 @@ import { particles, col } from '../fx/particles';
 import { damp, mulberry, rand, TAU } from '../util';
 import { viewMode } from '../core/renderer';
 import { seeThrough, seeThroughFade } from '../core/seeThrough';
-import { floorRelief } from '../core/parallax';
+import { floorRelief, reliefContext } from '../core/parallax';
 import { buildSky, boxWithUV, buildGrassGeo, lumpy, placeGate, portalMembrane, setInstance, taperedTube, treeSpots, contactShadows, staticShadow, WALL_R, GATE_W, type BiomeBuilder, type EnvColours, type Portal, type Updater } from './props';
 
 /** the crypt's environment's colours (compiled ahead: `compileEnvMaps`) */
@@ -165,6 +165,7 @@ function dampGround<M extends THREE.MeshStandardMaterial>(m: M, earth: THREE.Vec
     Object.assign(m, {
       colorNode: nodes.color, roughnessNode: nodes.roughness, outputNode: outsideOutputNode(outside, OUTSIDE),
     });
+    reliefContext(m, COBBLE_RELIEF);
     return m;
   }
   m.onBeforeCompile = (shader) => {
