@@ -144,8 +144,8 @@ function chromeFor(options) {
 /** The scenario played once on `page` (in `browser`) while traced: what it did, what the frames and the trace
  *  showed, and a picture of the screen at its end (`picture`). */
 async function playTraced(browser, page, options, picture) {
-  const { js, angle, passes, paints } = options;
-  const trace = await startTrace(browser, { js, angle, passes, paints });
+  const { js, angle, dawn, passes, paints } = options;
+  const trace = await startTrace(browser, { js, angle, dawn, passes, paints });
   await page.evaluate(startRecording, MARK);
   const notes = await SCENARIOS[options.scenario](page, options.seconds * 1000, options);
   const record = await page.evaluate(stopRecording, MARK);

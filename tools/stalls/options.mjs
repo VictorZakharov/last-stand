@@ -6,7 +6,7 @@ import { LISTED_LEAST, LISTED_MS } from './analyze.mjs';
 
 /** the options a switch is (`--name`, `--name=false`); every other takes a value (`--name value`, `--name=value`) */
 const SWITCHES = new Set([
-  'headed', 'perf', 'js', 'angle', 'passes', 'paints', 'links', 'film', 'film-logo', 'cold-return', 'stale-wind',
+  'headed', 'perf', 'js', 'angle', 'dawn', 'passes', 'paints', 'links', 'film', 'film-logo', 'cold-return', 'stale-wind',
   'help',
 ]);
 /** the views the game is played in (core/renderer.ts `VIEWS`, in the order V steps through them), and the
@@ -46,7 +46,8 @@ const HELP = {
   rounds: ['n', 'the variants measured in turn this many times over in one page, each one\'s styles put on as it runs '
     + '(variants that only add styles), and compared by their medians (1 by default: a fresh Chrome for each)'],
   view: ['name', `the view it's played in: ${VIEWS.join(', ')} (V pressed in the lobby, its panels shown again; top)`],
-  biome: ['name', `the battleground: ${BIOMES.join(', ')} (forest by default)`],
+  biome: ['name', `the battleground: ${BIOMES.join(', ')} (forest by default; ${BOOT}: the game's own pick, `
+    + 'where given its every visit\'s, so two variants\' end pictures show the same)'],
   hero: ['name', `the hero chosen in the lobby: ${HEROES.join(', ')} (a first boot's by default)`],
   stash: ['n', `the hero's stash filled with this many items, copies of his own (0 to ${STASH_MOST}: 0 by default)`],
   'item-ms': ['ms', `how long a sweep over the stash stays over each item (${SWEEP_ITEM_MS} by default)`],
@@ -80,6 +81,8 @@ const HELP = {
     + 'its functions named from its source maps)'],
   angle: ['', 'ANGLE\'s own work on the GPU process traced too: a shader compiled at a draw (D3DCompile), a program '
     + 'linked or read back from the cache'],
+  dawn: ['', 'Dawn\'s own work traced too (WebGPU, `?renderer=webgpu`): its shaders translated and compiled, its '
+    + 'pipelines made, and what it read back from its cache'],
   passes: ['', 'the compositor\'s frames traced as it drew them: each phase\'s render passes and quads a frame'],
   paints: ['', 'the page\'s paints traced: each phase\'s a frame, by the element painted'],
   links: ['', 'every Skia program built: when, how long, the tasks it was built in, the page\'s changes just before'],
@@ -137,7 +140,7 @@ export function readOptions(argv) {
     variants: (written.variants ?? 'base').split(','),
     rounds: Number(written.rounds ?? 1),
     view: written.view ?? 'top',
-    biome: written.biome ?? 'forest',
+    biome: written.biome ?? (written.scenario === BOOT ? null : 'forest'),
     hero: written.hero ?? null,
     stash: Number(written.stash ?? 0),
     itemMs: Number(written['item-ms'] ?? SWEEP_ITEM_MS),
@@ -156,6 +159,7 @@ export function readOptions(argv) {
     perf: written.perf === true,
     js: written.js === true,
     angle: written.angle === true,
+    dawn: written.dawn === true,
     passes: written.passes === true,
     paints: written.paints === true,
     links: written.links === true,
@@ -171,7 +175,7 @@ export function readOptions(argv) {
   const unknown = options.variants.flatMap(partsOf).find((part) => !VARIANTS[part]);
   if (unknown !== undefined) throw new Error(`stalls: no variant ${unknown} (${Object.keys(VARIANTS).join(', ')})`);
   if (!VIEWS.includes(options.view)) throw new Error(`stalls: no view ${options.view} (${VIEWS.join(', ')})`);
-  if (!BIOMES.includes(options.biome)) throw new Error(`stalls: no biome ${options.biome} (${BIOMES.join(', ')})`);
+  if (options.biome !== null && !BIOMES.includes(options.biome)) throw new Error(`stalls: no biome ${options.biome} (${BIOMES.join(', ')})`);
   if (options.hero !== null && !HEROES.includes(options.hero)) {
     throw new Error(`stalls: no hero ${options.hero} (${HEROES.join(', ')})`);
   }

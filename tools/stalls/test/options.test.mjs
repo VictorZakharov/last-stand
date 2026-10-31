@@ -32,6 +32,7 @@ test('fills in the defaults', () => {
     perf: false,
     js: false,
     angle: false,
+    dawn: false,
     passes: false,
     paints: false,
     links: false,
@@ -54,6 +55,8 @@ test('reads values either way, and switches', () => {
   assert.equal(readOptions(['--scenario', 'lobby']).scenario, 'lobby');
   assert.equal(readOptions(['--view', 'first']).view, 'first');
   assert.equal(readOptions(['--biome=crypt']).biome, 'crypt');
+  assert.equal(readOptions(['--scenario', 'boot']).biome, null);
+  assert.equal(readOptions(['--scenario', 'boot', '--biome', 'crypt']).biome, 'crypt');
   assert.equal(readOptions(['--scale', '1.25']).scale, 1.25);
   assert.equal(readOptions(['--hero', 'warrior']).hero, 'warrior');
   assert.equal(readOptions(['--stash=40']).stash, 40);

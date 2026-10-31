@@ -7,6 +7,10 @@ import type { RenderPipeline, WebGPURenderer } from 'three/webgpu';
 const asked = new URLSearchParams(location.search).get('renderer');
 export const WEBGPU = asked === 'webgpu' || asked === 'webgpu-gl';
 
+/** the point lights the shaders' loop takes (`DynamicLighting`): a biome's eight without shadows, the hero's two,
+ *  the effects' pool of eight (`fx/lights.ts`), with room */
+const MAX_LOOPED_LIGHTS = 24;
+
 let pipeline: RenderPipeline | null = null;
 let sceneTarget: THREE.RenderTarget | null = null;
 /** the compiles started and not yet waited for (`compiled`) */
@@ -40,25 +44,19 @@ export async function makeWebGPURenderer(): Promise<THREE.WebGLRenderer> {
     const { MeshletDrawingPipeline } = await import('three/addons/pipelines/MeshletDrawingPipeline.js');
     (renderer as unknown as { drawingPipeline: unknown }).drawingPipeline = new MeshletDrawingPipeline();
   }
-  compileShadowsToo(renderer);
-  // TEMP: the node builds that take a while, and whether a compile asked them (`&builds`: `npm run stalls -- --read`)
-  if (new URLSearchParams(location.search).has('builds')) {
-    const nodes = (renderer as unknown as { _nodes: { getForRender: (ro: unknown, ...rest: unknown[]) => unknown } })._nodes;
-    const getForRender = nodes.getForRender.bind(nodes);
-    const builds: string[] = [];
-    Object.assign(window, { __builds: builds });
-    nodes.getForRender = (ro: unknown, ...rest: unknown[]) => {
-      const at = performance.now();
-      const pre = (renderer as unknown as { _precompilationState: unknown })._precompilationState !== null;
-      const out = getForRender(ro, ...rest);
-      const ms = performance.now() - at;
-      if (ms > 0.3) {
-        const r = ro as { object: THREE.Object3D; material: THREE.Material; renderContext: { id: number; depth?: boolean }; camera: THREE.Camera; lightsNode: { id: number } };
-        builds.push(`${Math.round(at)} ${ms.toFixed(0)}ms ${pre ? 'compile' : 'draw'} ${r.object?.name || r.object?.type} ${r.material?.type}${r.material?.name ? ` "${r.material.name}"` : ''} ctx${r.renderContext?.id} lights${r.lightsNode?.id} cam${r.camera?.id} key${(ro as { initialCacheKey: number }).initialCacheKey} cn${(renderer as unknown as { contextNode: { id: number; version: number } }).contextNode.id}.${(renderer as unknown as { contextNode: { id: number; version: number } }).contextNode.version} env${(ro as { _nodes: { getCacheKey(s: unknown, l: unknown): number }; scene: unknown; lightsNode: unknown })._nodes.getCacheKey((ro as { scene: unknown }).scene, (ro as { lightsNode: unknown }).lightsNode)} uuid${r.object?.uuid?.slice(0, 6)}`);
-      }
-      return out;
-    };
+  // the point lights casting no shadow drawn by one loop over a uniform array in each lit shader, where three wrote
+  // each out in full (the physical model's every term, eight times over): the lit fragment shaders were 55 kB of
+  // WGSL each, 3.5 MB of the 4.6 the game made, and Chrome's DXC compiled them again on every visit (its cache
+  // never served them). `?lights=each` for three's own, to compare.
+  if (new URLSearchParams(location.search).get('lights') !== 'each') {
+    const { DynamicLighting } = await import('three/addons/lighting/DynamicLighting.js');
+    renderer.lighting = new DynamicLighting({ maxPointLights: MAX_LOOPED_LIGHTS });
   }
+  compileShadowsToo(renderer);
+  // TEMP: every node build, the compile's (started, `async`) and a draw's, with its key's parts (`&builds`, read by
+  // `npm run stalls -- --read`)
+  if (new URLSearchParams(location.search).has('builds')) recordBuilds(renderer);
+  if (new URLSearchParams(location.search).has('shaders')) recordShaders(renderer);
   // (own properties over the class's getters: `compile` is one)
   const stand = (key: string, value: unknown) => Object.defineProperty(renderer, key, { value, writable: true });
   // the WebGL code's compiles started as `compileAsync`, for the target set (the warm-ups': the scene's pass's,
@@ -72,6 +70,56 @@ export async function makeWebGPURenderer(): Promise<THREE.WebGLRenderer> {
   stand('capabilities', { getMaxAnisotropy: () => renderer.getMaxAnisotropy(), isWebGL2: true });
   Object.defineProperty(renderer.info, 'programs', { value: [], writable: true });
   return renderer as unknown as THREE.WebGLRenderer;
+}
+
+/** a render object as the build record reads it */
+type Built = {
+  object: THREE.Object3D; material: THREE.Material; camera: THREE.Camera; context?: { id: number };
+  initialCacheKey: number; getMaterialCacheKey(): number; getDynamicCacheKey(): number;
+  lightsNode?: { _lights?: THREE.Light[] }; scene: object;
+};
+
+/** TEMP: each node build three makes, kept in `window.__builds` (see `makeWebGPURenderer`). */
+function recordBuilds(renderer: WebGPURenderer): void {
+  type Nodes = {
+    getForRender: (ro: Built, ...rest: unknown[]) => unknown;
+    get(ro: Built): { nodeBuilderState?: unknown };
+    nodeBuilderCache: Map<number, unknown>;
+  };
+  const nodes = (renderer as unknown as { _nodes: Nodes })._nodes;
+  const getForRender = nodes.getForRender.bind(nodes);
+  const builds: object[] = [];
+  Object.assign(window, { __builds: builds });
+  nodes.getForRender = (ro: Built, ...rest: unknown[]) => {
+    if (nodes.get(ro).nodeBuilderState !== undefined) return getForRender(ro, ...rest);
+    const cached = nodes.nodeBuilderCache.has(ro.initialCacheKey);
+    const at = performance.now();
+    const compiling = (renderer as unknown as { _precompilationState: unknown })._precompilationState !== null;
+    const out = getForRender(ro, ...rest);
+    builds.push({
+      t: Math.round(at), ms: +(performance.now() - at).toFixed(1), phase: compiling ? 'compile' : 'draw', cached,
+      name: ro.object.name || ro.object.type, material: ro.material.name || ro.material.type,
+      camera: ro.camera.id, context: ro.context?.id, key: ro.initialCacheKey,
+      materialKey: ro.getMaterialCacheKey(), dynamicKey: ro.getDynamicCacheKey(),
+      lights: (ro.lightsNode?._lights ?? []).map((l) => l.id).join(','), receive: ro.object.receiveShadow,
+      environment: (ro.scene as { environmentNode?: { id: number } }).environmentNode?.id,
+      fog: (ro.scene as { fog?: { id?: number } }).fog ? 1 : 0,
+      contextNode: `${renderer.contextNode.id}.${renderer.contextNode.version}`,
+    });
+    return out;
+  };
+}
+
+/** TEMP: every shader module's source, kept in `window.__shaders` (see `makeWebGPURenderer`). */
+function recordShaders(renderer: WebGPURenderer): void {
+  const device = (renderer as unknown as { backend: { device: GPUDevice } }).backend.device;
+  const create = device.createShaderModule.bind(device);
+  const shaders: string[] = [];
+  Object.assign(window, { __shaders: shaders });
+  device.createShaderModule = (descriptor: GPUShaderModuleDescriptor) => {
+    shaders.push(descriptor.code);
+    return create(descriptor);
+  };
 }
 
 /** a shadow node's view of its frame, and the renderer's state while it compiles */
@@ -141,6 +189,61 @@ export function oneEnvironment(scene: THREE.Scene): void {
   environment ??= (map as THREE.CubeTexture).isCubeTexture ? tsl.cubeTexture(map as THREE.CubeTexture) : tsl.texture(map);
   environment.value = map;
   (scene as unknown as { environmentNode: unknown }).environmentNode = environment;
+}
+
+/** `group`'s point lights, those casting shadows first (as the rig has them: `rigPointLights`). */
+function pointLightsIn(group: THREE.Object3D): THREE.PointLight[] {
+  const lights: THREE.PointLight[] = [];
+  group.traverse((o) => { if ((o as THREE.PointLight).isPointLight) lights.push(o as THREE.PointLight); });
+  return [...lights.filter((l) => l.castShadow), ...lights.filter((l) => !l.castShadow)];
+}
+
+/** `light`'s place, colour, reach and shadow given to `rigged`, and a shadow it was to draw again handed on. */
+function mirror(light: THREE.PointLight, rigged: THREE.PointLight): void {
+  light.getWorldPosition(rigged.position);
+  rigged.color.copy(light.color);
+  rigged.intensity = light.intensity;
+  rigged.distance = light.distance;
+  rigged.decay = light.decay;
+  if (light.castShadow) {
+    rigged.shadow.mapSize.copy(light.shadow.mapSize);
+    rigged.shadow.camera.near = light.shadow.camera.near;
+    rigged.shadow.bias = light.shadow.bias;
+    rigged.shadow.radius = light.shadow.radius;
+    if (light.shadow.needsUpdate) rigged.shadow.needsUpdate = true;
+    light.shadow.needsUpdate = false;
+  }
+  rigged.updateMatrixWorld();
+}
+
+/**
+ * The biomes' and the hall of heroes' point lights drawn by one rig of lights, the shown one's copied onto it before
+ * each render (its own hidden from WebGPU): WebGPU keys every lit pipeline by its lights' ids, where WebGL counts
+ * them, so each biome and the hall had a copy of every lit pipeline, and a run in another biome than the lobby's
+ * built its foes', heroes' and effects' at their first draws (7 s under the fight's loading bar on a return). Each
+ * has as many as the rig, as many casting (`arena.ts` checks): the casters take its first slots.
+ */
+export function rigPointLights(scene: THREE.Scene, groups: THREE.Object3D[]): void {
+  if (!WEBGPU) return;
+  const lightsOf = new Map(groups.map((group) => [group, pointLightsIn(group)]));
+  const most = Math.max(...[...lightsOf.values()].map((lights) => lights.length));
+  const rig = Array.from({ length: most }, () => new THREE.PointLight(0xffffff, 0));
+  [...lightsOf.values()][0].forEach((light, i) => {
+    rig[i].castShadow = light.castShadow;
+    rig[i].shadow.autoUpdate = light.shadow.autoUpdate;
+  });
+  for (const lights of lightsOf.values()) for (const light of lights) light.visible = false;
+  scene.add(...rig);
+  const before = scene.onBeforeRender;
+  scene.onBeforeRender = (...args) => {
+    const shown = groups.find((group) => group.visible);
+    const lights = shown ? lightsOf.get(shown)! : [];
+    rig.forEach((rigged, i) => {
+      if (lights[i]) mirror(lights[i], rigged);
+      else rigged.intensity = 0;
+    });
+    before.apply(scene, args);
+  };
 }
 
 /** Draws a frame through the WebGPU post chain. */
