@@ -36,6 +36,7 @@ npm run stalls -- --scenario sweep --stash 60 --seconds 8 --rounds 3 --variants 
 npm run stalls -- --scenario sweep --stash 60 --seconds 6 --js   # and the page's JS, a frame's by function
 npm run stalls -- --scenario lobby --js-under _renderObjectDirect --url "this?renderer=webgpu"  # what one function spends on
 npm run stalls -- --scenario boot --builds --url "this?renderer=webgpu"  # each step's WebGPU node builds and new shaders
+npm run stalls -- --scenario boot --view third --biome crypt --url "this?renderer=webgpu,this"  # both renderers' ends
 npm run stalls -- --scenario sweep --stash 60 --seconds 2 --passes  # the compositor's render passes a frame, exact
 npm run stalls -- --help
 npm run stalls:test                              # the tool's own unit tests

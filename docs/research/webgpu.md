@@ -171,6 +171,20 @@ id (`NodeManager.getCacheKey`), and three makes each environment map a node of i
   own), the crypt's damp, drift, moss by the wall and earth round the dead trees (`colorNode`, `roughnessNode`), and
   what lies past its wall darkened in the top-down view (`outputNode`, so after the fog, where the GLSL dims before
   it). Checked against WebGL's pictures of each biome (`stalls --scenario boot --biome`, its end picture).
+- **The world's own shaders, written as WGSL** (`wgslFn`, line for line from their GLSL, each a node material's
+  whole output as `gl_FragColor` was): the gates' membranes and the light they spill (`world/portalNodes.ts`), a
+  fire's flames (`world/fireNodes.ts`: the ray march reads its noise at its first level, `textureSampleLevel`, as
+  WGSL samples with gradients only where every pixel takes the same path, and the march stops early), the night and
+  day skies on the far plane (`world/skyNodes.ts`, a `vertexNode` setting the clip position's z to its w), and the
+  forest's shafts of light (`shaftsMaterial` in `world/forestNodes.ts`, in TSL). Checked side by side with WebGL in
+  the third-person view (`stalls --scenario boot --view third --biome ...`): the flames burn whiter on WebGPU, where
+  the grade (not ported) would keep their hue. None of them fades as its prop dissolves yet (`seeThroughFade`). A
+  boot's report lists the page's logged errors, each once (`page errors`): a WGSL error shows there, and the count
+  of three's "ShaderMaterial is not compatible" falls as each is ported (54 to 42 a first visit).
+- **What's still open on the way:** each boot logs one `GPUValidationError` on the texture named `output` (the scene
+  pass's), drawn into and read in one pass: three's `RenderPipeline` draws its quad into whatever target is set, so
+  one frame was drawn with the scene's own target left set. Where isn't found yet; the frame it costs is the only harm
+  seen.
 
 **Not verified:**
 
@@ -181,8 +195,9 @@ id (`NodeManager.getCacheKey`), and three makes each environment map a node of i
 
 **Not ported yet** (each shows as missing, not broken):
 
-- **Every other `ShaderMaterial`** (about 30): fires, skill effects (firestorm, rift bolts, void lance...), the
-  gates' membranes, aim lasers, swing trails, the dazed stars, foliage. `glslFn` doesn't run on WebGPU.
+- **Every other `ShaderMaterial`** (about 25): skill effects (firestorm, rift bolts, void lance...), the crypt's
+  beacons, aim lasers, swing trails, the dazed stars, the leaf cards' own. `glslFn` doesn't run on WebGPU; `wgslFn`
+  takes the GLSL nearly line for line (above).
 - **The world's overlays** (damage numbers, bars, names) and the outline:
   - A first try is in the history (commit, then revert).
   - Its render after the pipeline blacked out the frame.
@@ -190,9 +205,10 @@ id (`NodeManager.getCacheKey`), and three makes each environment map a node of i
 - **The kit's looks off the crowds** (the heroes, dummies, props), all GLSL `onBeforeCompile`:
   - dissolve, frost, char, hit flash, near glow, rim, see-through
   - the floors' relief, and the crypt's earth's own normals (the floors' looks are ported, below)
-  - the dais draws darker than on WebGL in both biomes, a plain standard material with no hook of its own: not
-    yet found (it casts and receives the sun's shadow; the harness boots a production build, which can't be
-    reached into to try)
+  - the dais reads darker than on WebGL from the top-down view in both biomes, the same from the third-person
+    view: a plain standard material with no hook of its own, likely its reflection of the sky at that angle. Not
+    from its shadow (none received, as dark) nor its maps uploaded blank (uploaded again once painted, as dark)
+  - a fire's bed and its logs' char glowing through their cracks (`emberMat`)
   - triplanar, fur sway, dual-quaternion hands
 - **The grade:** exposure areas, glare, low Health, HDR, sanitize.
 - **Other gaps:**
