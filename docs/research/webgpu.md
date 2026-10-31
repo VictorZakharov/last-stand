@@ -165,6 +165,13 @@ id (`NodeManager.getCacheKey`), and three makes each environment map a node of i
   stumps (460k triangles over two frames' passes), logs, roots, the gates' roots and arches, bonfire stones and
   the heroes' rigid pieces. Skinned meshes and every `ShaderMaterial` stay on the standard path.
 
+- **The floors' looks are TSL nodes** set on the plain materials, which three copies onto the node material it
+  makes of each (`world/forestNodes.ts`, `world/cryptNodes.ts`): the forest's moss patches (`colorNode`) and its
+  grass's wind (`positionNode`, after three places the instance: a tuft's place read as the point's offset from its
+  own), the crypt's damp, drift, moss by the wall and earth round the dead trees (`colorNode`, `roughnessNode`), and
+  what lies past its wall darkened in the top-down view (`outputNode`, so after the fog, where the GLSL dims before
+  it). Checked against WebGL's pictures of each biome (`stalls --scenario boot --biome`, its end picture).
+
 **Not verified:**
 
 - Whether the meshlet pipeline really draws those props as clusters: its own statistics (`info.clusters`) read 0,
@@ -182,7 +189,10 @@ id (`NodeManager.getCacheKey`), and three makes each environment map a node of i
   - The atlas's canvas reached the GPU as a 1 px wide texture.
 - **The kit's looks off the crowds** (the heroes, dummies, props), all GLSL `onBeforeCompile`:
   - dissolve, frost, char, hit flash, near glow, rim, see-through
-  - the floors' relief and dampness (the dais draws as a dark square)
+  - the floors' relief, and the crypt's earth's own normals (the floors' looks are ported, below)
+  - the dais draws darker than on WebGL in both biomes, a plain standard material with no hook of its own: not
+    yet found (it casts and receives the sun's shadow; the harness boots a production build, which can't be
+    reached into to try)
   - triplanar, fur sway, dual-quaternion hands
 - **The grade:** exposure areas, glare, low Health, HDR, sanitize.
 - **Other gaps:**

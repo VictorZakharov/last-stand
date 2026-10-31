@@ -3,6 +3,8 @@
 // flagstone paths from the gates and a ring walk, spirit beacons and braziers. Broken columns,
 // sarcophagi and gravestones break up the floor; a ruined necropolis and dead trees stand beyond.
 import * as THREE from 'three';
+import { WEBGPU } from '../core/webgpu';
+import { dampNodes, outsideOutputNode } from './cryptNodes';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { ARENA } from '../data/balance';
 import { cobblestone, soil, ashlar, granite, limestone, marble, slate, bark, bannerCloth, pbrMaterialMaps, runeCircle } from '../core/textures';
@@ -80,7 +82,13 @@ function dimOutside(shader: THREE.WebGLProgramParametersWithUniforms): void {
     .replace('#include <opaque_fragment>', `outgoingLight *= 1.0 - uOutside * 0.8 * smoothstep(${(WALL_R + 1.5).toFixed(1)}, ${(WALL_R + 7).toFixed(1)}, length(vOutXZ));
       #include <opaque_fragment>`);
 }
+/** how `dimOutside` darkens past the wall (WebGPU's nodes: `outsideOutputNode`) */
+const OUTSIDE = { from: WALL_R + 1.5, to: WALL_R + 7, most: 0.8 };
 function outsideDim<M extends THREE.Material>(m: M): M {
+  if (WEBGPU) {
+    (m as M & { outputNode: unknown }).outputNode = outsideOutputNode(outside, OUTSIDE);
+    return m;
+  }
   m.onBeforeCompile = dimOutside;
   m.customProgramCacheKey = () => 'outsidedim';
   return m;
@@ -148,6 +156,16 @@ const EARTH = { reach: 1.4, ragged: 0.45, tile: 3, stones: 0.4, washed: [0.25, 0
 function dampGround<M extends THREE.MeshStandardMaterial>(m: M, earth: THREE.Vector3[]): M {
   const damp = { value: dampMap() };
   const litter = pbrMaterialMaps(soil(), 1);
+  if (WEBGPU) {
+    const nodes = dampNodes(m, {
+      map: damp.value, span: DAMP_SPAN, earth, ragged: EARTH.ragged, stones: EARTH.stones, washed: EARTH.washed,
+      tile: EARTH.tile, soil: litter,
+    });
+    Object.assign(m, {
+      colorNode: nodes.color, roughnessNode: nodes.roughness, outputNode: outsideOutputNode(outside, OUTSIDE),
+    });
+    return m;
+  }
   m.onBeforeCompile = (shader) => {
     dimOutside(shader);
     shader.uniforms.uDamp = damp;
