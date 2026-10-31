@@ -60,8 +60,16 @@ cache. The other biomes already compile behind the lobby; what's left before it 
 hero, and every skill effect and drop, which the lobby's free casting may draw at once. Tried: the samples (the
 shots' cores, the drops, the swing trail, the hero's skills) warmed as the fight's first part instead, as the loading
 screen left. The return's step read 2.36 s (2.26 before; WebGL's 1.26, 10% over its last run), so they aren't
-what it compiles, and the change went: what is (the hero in all he can wear, the biome, its dummies) wants the
-node builds listed by step, which the probe that listed them (`&builds`, in this PR's history) did.
+what it compiles, and the change went: what is, is listed below (`--builds`).
+
+**What a boot compiles** (`npm run stalls -- --scenario boot --builds --url "this?renderer=webgpu"`: each step's node
+builds, new shaders and WGSL, from a record the game keeps behind `?builds`). A return's "Conjuring spells" made
+1,338 node builds, 83 new shaders and 927 kB of WGSL in 478 ms of JS: the lit materials' fragment shaders, about
+16 kB each, one pair for each combination of what sets a material apart (its maps, skinned, instanced, its colours,
+its sides, transparent, alpha test, flat, shadows received; `features` in the record). The mage's 13 shaders (191
+kB) and the forest's 12 (180 kB) led. Giving every lit material the same maps (a 1 px white one where it has none, a
+flat normal) would merge only 5 or 6 of the boot's 38 lit pairs. After the reveal the fight's compile makes about
+1,300 builds more, about 1 s of the page's JS while the lobby runs; its draws' builds are 115 ms of it.
 
 **The lobby's frame** (`npm run stalls -- --scenario lobby --seconds 15 --js`): WebGPU's JS was 8.3 ms a frame to
 WebGL's 5.1, its render 6.7 ms to 3.4 (on another day's run 10 ms to 5.7), at about the same draws once the

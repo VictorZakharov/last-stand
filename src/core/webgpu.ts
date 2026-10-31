@@ -63,6 +63,7 @@ export async function makeWebGPURenderer(): Promise<THREE.WebGLRenderer> {
     renderer.lighting = new DynamicLighting({ maxPointLights: MAX_LOOPED_LIGHTS });
   }
   compileShadowsToo(renderer);
+  if (new URLSearchParams(location.search).has('builds')) recordNodeBuilds(renderer);
   compileSlice(COMPILE_SLICE.loading);
   // (own properties over the class's getters: `compile` is one)
   const stand = (key: string, value: unknown) => Object.defineProperty(renderer, key, { value, writable: true });
@@ -77,6 +78,105 @@ export async function makeWebGPURenderer(): Promise<THREE.WebGLRenderer> {
   stand('capabilities', { getMaxAnisotropy: () => renderer.getMaxAnisotropy(), isWebGL2: true });
   Object.defineProperty(renderer.info, 'programs', { value: [], writable: true });
   return renderer as unknown as THREE.WebGLRenderer;
+}
+
+/** A node build three made for an object (`?builds`, `recordNodeBuilds`): when (the page's clock) and how long it
+ *  took, whether a compile asked for it or a draw, whether it reused another's shaders, what it was for, and its
+ *  shaders by number (in the order they were first made), with the bytes of WGSL it made that no build made before. */
+export interface NodeBuild {
+  at: number;
+  ms: number;
+  by: 'compile' | 'draw';
+  reused: boolean;
+  object: string;
+  material: string;
+  shadow: boolean;
+  /** what sets its material's shaders apart from another's of its kind (`featuresOf`) */
+  features: string;
+  vertex: number;
+  fragment: number;
+  newBytes: number;
+}
+
+/** a render object as `recordNodeBuilds` reads it */
+type Built = {
+  object: THREE.Object3D;
+  material: THREE.Material & { isShadowPassMaterial?: boolean };
+  initialCacheKey: number;
+};
+
+/** three's node manager as `recordNodeBuilds` reads it */
+type BuildingNodes = {
+  getForRender(built: Built, ...rest: unknown[]): { vertexShader?: string; fragmentShader?: string };
+  get(built: Built): { nodeBuilderState?: unknown };
+  nodeBuilderCache: Map<number, unknown>;
+};
+
+/** a material's maps, each a part of its shaders where it's set */
+const MAP_SLOTS = ['map', 'normalMap', 'roughnessMap', 'metalnessMap', 'aoMap', 'emissiveMap', 'alphaMap', 'bumpMap',
+  'displacementMap', 'lightMap', 'envMap'] as const;
+
+/** What sets `built`'s shaders apart from another's of its material's kind: its maps, and the object's and the
+ *  material's switches (`MAP_SLOTS`, skinned, instanced, its colours, its sides, blending, alpha test, flat shading,
+ *  shadows received). */
+function featuresOf({ object, material }: Built): string {
+  const lit = material as THREE.Material & Partial<Record<(typeof MAP_SLOTS)[number], unknown>> & {
+    flatShading?: boolean; vertexColors?: boolean;
+  };
+  const mesh = object as THREE.Mesh & { isSkinnedMesh?: boolean; isInstancedMesh?: boolean; instanceColor?: unknown };
+  const switches = [
+    ...MAP_SLOTS.filter((slot) => lit[slot]),
+    mesh.isSkinnedMesh && 'skinned', mesh.isInstancedMesh && 'instanced', mesh.instanceColor && 'instanceColor',
+    lit.vertexColors && 'vertexColors', lit.flatShading && 'flat', material.transparent && 'transparent',
+    material.alphaTest > 0 && 'alphaTest', material.side !== THREE.FrontSide && `side${material.side}`,
+    mesh.geometry?.attributes.color && 'colorAttribute', mesh.morphTargetInfluences?.length && 'morphs',
+    object.receiveShadow && 'receivesShadow',
+  ];
+  return switches.filter(Boolean).join(' ');
+}
+
+/** `object`'s name as a build lists it: its own, else its nearest named parent's, else its type. */
+function nameOf(object: THREE.Object3D): string {
+  for (let at: THREE.Object3D | null = object; at; at = at.parent) if (at.name) return at.name;
+  return object.type;
+}
+
+/**
+ * Every node build three makes, kept in `window.__webgpuBuilds` (`?builds`; `npm run stalls -- --scenario boot
+ * --builds` lists them by boot step): each new WGSL shader is a compile of Chrome's (DXC) on every visit, as its cache
+ * keeps about 6 MB of a page's, so what a boot builds, and when, is what it waits for.
+ */
+function recordNodeBuilds(renderer: WebGPURenderer): void {
+  const nodes = (renderer as unknown as { _nodes: BuildingNodes })._nodes;
+  const getForRender = nodes.getForRender.bind(nodes);
+  const shaders = new Map<string, number>();
+  let newBytes = 0;
+  const shaderOf = (code = ''): number => {
+    if (!shaders.has(code)) {
+      shaders.set(code, shaders.size);
+      newBytes += code.length;
+    }
+    return shaders.get(code)!;
+  };
+  const builds: NodeBuild[] = [];
+  Object.assign(window, { __webgpuBuilds: builds });
+  nodes.getForRender = (built: Built, ...rest: unknown[]) => {
+    if (nodes.get(built).nodeBuilderState !== undefined) return getForRender(built, ...rest);
+    const reused = nodes.nodeBuilderCache.has(built.initialCacheKey);
+    const compiling = (renderer as unknown as { _precompilationState: unknown })._precompilationState !== null;
+    const start = performance.now();
+    const state = getForRender(built, ...rest);
+    const ms = performance.now() - start;
+    newBytes = 0;
+    const vertex = shaderOf(state.vertexShader);
+    const fragment = shaderOf(state.fragmentShader);
+    builds.push({
+      at: start, ms, by: compiling ? 'compile' : 'draw', reused,
+      object: nameOf(built.object), material: built.material.name || built.material.type,
+      shadow: built.material.isShadowPassMaterial === true, features: featuresOf(built), vertex, fragment, newBytes,
+    });
+    return state;
+  };
 }
 
 /** a shadow node's view of its frame, and the renderer's state while it compiles */
