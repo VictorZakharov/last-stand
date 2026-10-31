@@ -2,7 +2,8 @@
 // and geometry helpers, the spawn-portal membrane, the environment map and the static shadow bake.
 import * as THREE from 'three';
 import { seeThroughFade } from '../core/seeThrough';
-import { WEBGPU } from '../core/webgpu';
+import { WEBGPU, gpu } from '../core/webgpu';
+import { portShader } from '../core/shaderPorts';
 import { membraneMaterial, spillMaterial } from './portalNodes';
 import { daySkyMaterial, nightSkyMaterial } from './skyNodes';
 import { drawingStill, inShadowsOnly } from './culling';
@@ -601,7 +602,7 @@ let ahead: { pm: THREE.PMREMGenerator; scenes: Map<string, THREE.Scene> } | unde
  * colour, a clear: no program.)
  */
 export function compileEnvMaps(renderer: THREE.WebGLRenderer, colours: EnvColours[]): void {
-  const pm = new THREE.PMREMGenerator(renderer);
+  const pm = generator(renderer);
   const scenes = new Map(colours.map((c) => [envKey(c), envScene(c)]));
   ahead = { pm, scenes };
   const target = compileGenerator(renderer, pm);
@@ -612,6 +613,13 @@ export function compileEnvMaps(renderer: THREE.WebGLRenderer, colours: EnvColour
   for (const scene of scenes.values()) renderer.compile(scene, capture);
   renderer.setRenderTarget(prev);
   target.dispose();
+}
+
+/** An environment's generator: WebGPU's own there (WebGL's draws with shaders WebGPU can't run: its maps were left
+ *  dark, the dais's reflection of the sky with them) */
+function generator(renderer: THREE.WebGLRenderer): THREE.PMREMGenerator {
+  return WEBGPU ? new gpu.PMREMGenerator(renderer as never) as unknown as THREE.PMREMGenerator
+    : new THREE.PMREMGenerator(renderer);
 }
 
 /** three's generator's private parts: what `compileGenerator` reaches for, each checked to be there */
@@ -672,7 +680,7 @@ export function envMap(renderer: THREE.WebGLRenderer, colours: EnvColours): THRE
 
 /** `colours`' environment made with a generator of its own */
 function makeEnvMap(renderer: THREE.WebGLRenderer, colours: EnvColours): THREE.Texture {
-  const pm = new THREE.PMREMGenerator(renderer);
+  const pm = generator(renderer);
   const scene = envScene(colours);
   const texture = pm.fromScene(scene, ENV_BLUR, 0.1, 100, { size: ENV_SIZE }).texture;
   pm.dispose();
@@ -693,14 +701,18 @@ function disposeScene(root: THREE.Object3D): void {
 // Dim environment for subtle reflections on metal / wet surfaces: a sky gradient and one soft panel.
 function envScene({ sky, panel }: EnvColours): THREE.Scene {
   const envScene = new THREE.Scene();
-  const skyMesh = new THREE.Mesh(new THREE.SphereGeometry(10, 32, 16), new THREE.ShaderMaterial({
+  const skyMesh = new THREE.Mesh(new THREE.SphereGeometry(10, 32, 16), portShader(new THREE.ShaderMaterial({
     side: THREE.BackSide,
     uniforms: { uSky: { value: new THREE.Vector3(...sky) } },
     vertexShader: `varying vec3 vP; void main(){ vP = position; gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
     fragmentShader: `varying vec3 vP; uniform vec3 uSky; void main(){ float y = normalize(vP).y;
       vec3 c = mix(vec3(0.02,0.02,0.03), uSky, smoothstep(-0.2, 1.0, y));
       gl_FragColor = vec4(c, 1.0); }`,
-  }));
+  }), ({ wgslFn, positionGeometry, varying }, u) => ({
+    fragment: wgslFn(`fn envSky(p: vec3f, sky: vec3f) -> vec4f {
+      return vec4f(mix(vec3f(0.02, 0.02, 0.03), sky, smoothstep(-0.2, 1.0, normalize(p).y)), 1.0);
+    }`)({ p: varying(positionGeometry), sky: u.uSky }),
+  })));
   envScene.add(skyMesh);
   const panelMesh = new THREE.Mesh(new THREE.PlaneGeometry(4, 4), new THREE.MeshBasicMaterial({ color: new THREE.Color(...panel).multiplyScalar(2), side: THREE.DoubleSide }));
   panelMesh.position.set(-5, 7, 3); panelMesh.lookAt(0, 0, 0);

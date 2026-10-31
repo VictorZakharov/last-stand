@@ -267,7 +267,7 @@ function drawLabels(): void {
 // (an outline round what a held skill would take, under the labels: a foe's bar and numbers stay over it)
 // (the outline isn't on WebGPU yet: its masks and edge are WebGL shaders)
 overFrame.draw = () => {
-  if (!WEBGPU) drawOutline();
+  drawOutline();
   drawLabels();
 };
 

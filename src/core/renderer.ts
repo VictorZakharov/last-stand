@@ -16,6 +16,8 @@ import type { QualityPreset } from '../data/quality';
 import { hdrLevels, initHdr, presentHdr } from './hdr';
 import { bloodMask, fitBloodMask } from './bloodEdges';
 import { ARMS_LAYER, WARM_LAYER } from './layers';
+import { takePorts } from './shaderPorts';
+import type { WebGPURenderer } from 'three/webgpu';
 
 /** Final colour: above HI_KNEE the brightest channel eases towards HI_CAP (hue kept); in HDR towards as much more
  *  as the peak has room over the paper white (`uCap`), so the highlights it grows aren't all held at SDR's. */
@@ -221,8 +223,11 @@ export function compilePasses(onScreen: THREE.Scene[]): void {
     gl.compile(holder, passCamera);
   };
   const prev = gl.getRenderTarget();
-  compiled(passMaterials.intoTargets, sceneRT);
-  compiled(passMaterials.toScreen, null);
+  // (WebGPU draws its own pipeline: the WebGL chain's passes are never drawn there, makePipeline in webgpu.ts)
+  if (!WEBGPU) {
+    compiled(passMaterials.intoTargets, sceneRT);
+    compiled(passMaterials.toScreen, null);
+  }
   for (const scene of onScreen) gl.compile(scene, passCamera);
   gl.setRenderTarget(prev);
   quad.dispose();
@@ -462,6 +467,7 @@ export async function initRenderer(container: HTMLElement) {
   shadeEnvironment();
   const renderer = gl = WEBGPU ? await makeWebGPURenderer()
     : new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
+  if (WEBGPU) takePorts(renderer as unknown as WebGPURenderer);
   renderer.setPixelRatio(canvasRatio());
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.shadowMap.enabled = true;
