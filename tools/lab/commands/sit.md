@@ -77,7 +77,12 @@ times a sit at most), it's pictured close on the hand (`his right fist let go of
 blade swung past a flat palm, held by nothing. The trace (`--trace`) says each frame where each palm is along the
 piece, each frame an arm was at its stops, and the hold as he began to sit however little it moved on the walk. And no arm may be held at two or more of its joints' stops at once (`page/armStrain.ts`, as `range` reads
 it; pictured at its most): "if a real warrior would put a sword down like that, he would snap his arm" (by the fire,
-the forearm turned to its end and the wrist bent to its). His legs are read against his skirts (`page/sitCloth.ts`): every
+the forearm turned to its end and the wrist bent to its). No finger may go into the floor (`page/fingersUnder.ts`: each
+finger's and thumb's joints and tip as balls of its radius against the ground, frame by frame; the hands are
+skinned, which the floor's check of what he wears never read: laying the bow down, the ranger's open fingers
+seemed to hang through the floor, and nothing could say whether they did; the canary puts his left hand under
+it). The trace also says how near his fingers came to the floor and the weapon to his body (a foot, a leg, the
+trunk), in or not. His legs are read against his skirts (`page/sitCloth.ts`): every
 triangle's corners, edges' middles and middle against the thighs' and shins' capsules at their drawn radii, a point
 over 1.5 cm inside one the leg through the cloth, the deepest pictured as it deepens ("knees clipping through robe
 when sitting near fire": the mage's thigh 9 cm through his robe; the skirts' wander and jerks were read, never what

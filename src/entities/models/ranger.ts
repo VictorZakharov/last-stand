@@ -39,10 +39,10 @@ const SIT_HANDS: RestTurn = tunable('rangerSit', { roll: [0, 0], bend: [0, 0] })
 /** sat on the floor, how far the quiver tips back off it (rad) */
 const QUIVER_TIP = 0.4;
 /** By a fire, the bow carried down in his fist over `lay[0]` to `lay[1]` of the way down to the floor beside his left
- *  hip (`floor`: out, ahead, over it, rig units), then let go of once he's sat, over `hands` s (`Model.sitHands`): his
- *  fingers open (to `tip[0]` of that), it tips over flat (to `tip[1]`) and his hand goes to his knee over an arc `arc`
- *  up; the reverse as he gets up (`layBow`). */
-const BOW_SIT = tunable('rangerBowSit', { lap: [0.95, 0.07], floor: [0.4, 0.1, 0.1], lay: [0.2, 1], tip: [0.08, 0.35], arc: 0.12, hands: 1.5, elbow: [0.3, -0.2, -1] });
+ *  hip (`floor`: out, ahead, over it, rig units; 0.4 out and 0.1 ahead, the limb ahead ended on his boot's toe), then
+ *  let go of once he's sat, over `hands` s (`Model.sitHands`): his fingers open (to `tip[0]` of that), it tips
+ *  over flat (to `tip[1]`) and his hand goes to his knee over an arc `arc` up; the reverse as he gets up (`layBow`). */
+const BOW_SIT = tunable('rangerBowSit', { lap: [0.95, 0.07], floor: [0.55, 0, 0.1], lay: [0.2, 1], tip: [0.08, 0.35], arc: 0.12, hands: 1.5, elbow: [0.3, -0.2, -1] });
 
 /** the broadhead's middle, back from the arrow's point (m) */
 const HEAD_MIDDLE = 0.035;
@@ -720,8 +720,8 @@ export function buildRanger(): Model {
   };
   /** By a fire, the bow laid down beside him as a seated man lays one: carried down in his fist `down` of the way, the
    *  arm hanging, the bow tipped forward in it to stand on its edge along his way beside his hip; then let go of, `free`
-   *  of the way, the fingers opening as it tips over flat (`BOW_SIT.tip` of it), and his hand going to his knee as the
-   *  arm is posed (`fitArm`'s). Getting up, the reverse. (Laid flat in his fist, no arm reached it: the palm had to face
+   *  of the way, the fingers opening as it tips over flat (`BOW_SIT.tip` of it), and his hand going to his knee on an
+   *  arc over his shin (`towardKnee`). Getting up, the reverse. (Laid flat in his fist, no arm reached it: the palm had to face
    *  down with the forearm level on the floor, and the wrist went 40 to 85 degrees past its range; eased out of his
    *  hand while the hand went to his knee, nothing carried it, "ranger uses force pull to grab his bow from seated
    *  near fire", 1.2 m in a frame as he stood) */
