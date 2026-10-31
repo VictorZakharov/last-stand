@@ -52,6 +52,13 @@ one slice at a time. `--dawn` (stalls) traces Dawn's own work by step: `CompileS
   loading screen and the fight's loading bar, 8 in the lobby. A return's lobby 7.1 to 6.6 s, its fight's bar 2.1 to
   1.3 s.
 
+**A return's lobby compile** (`npm run stalls -- --scenario boot --dawn`, its "Conjuring spells" step, 2.06 s): 66
+shaders compiled by DXC again (4.0 s of the GPU process's threads, about two at a time, 61 ms each), 0.39 s of them
+on its main thread (pipelines made at a draw, not by `compileAsync`), and about 1.5 s of three building nodes on the
+page's main thread with 0.6 s of collecting garbage. WebGL's step is 1.10 s, its programs read back from ANGLE's
+cache. The other biomes already compile behind the lobby; what's left before it shows is the shown biome, the
+hero, and every skill effect and drop, which the lobby's free casting may draw at once.
+
 **The lobby's frame** (`npm run stalls -- --scenario lobby --seconds 15 --js`): WebGPU's JS was 8.3 ms a frame to
 WebGL's 5.1, its render 6.7 ms to 3.4 (on another day's run 10 ms to 5.7), at about the same draws once the
 shadow-only casters cast (below). three's
