@@ -851,6 +851,19 @@ export const COMMANDS = {
     problemsOf: problemsIn,
   },
 
+  spin: {
+    each(side, options) {
+      const command = {
+        fixture: fixtureFrom(options),
+        views: options.views,
+        canary: Boolean(options.canary),
+      };
+      return side.command('spin', command);
+    },
+    textOf: asText,
+    problemsOf: problemsIn,
+  },
+
   cursor: {
     each(side, options) {
       const command = {

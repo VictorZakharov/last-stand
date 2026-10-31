@@ -32,6 +32,7 @@ import type { HitsOptions } from './hits';
 import type { LogOptions } from './log';
 import type { TooltipsOptions } from './tooltips';
 import type { CursorOptions } from './cursor';
+import type { SpinOptions } from './spin';
 import type { RushOptions } from './rush';
 import type { EvadeOptions } from './evade';
 import type { ThrowsOptions } from './throws';
@@ -434,6 +435,15 @@ export async function tooltips(lab: Lab, command: TooltipsOptions): Promise<Repo
 export async function cursor(lab: Lab, command: CursorOptions): Promise<Report> {
   const { cursor: cursorRound } = await import('./cursor');
   return cursorRound(lab, command);
+}
+
+/**
+ * `lab spin`: mouse look turned one way for a long while in each close view, then the other, the browser's own jump
+ * under the lock sent mid-spin: no frame may turn the view far past the spin's steady turn (#318).
+ */
+export async function spin(lab: Lab, command: SpinOptions): Promise<Report> {
+  const { spinView } = await import('./spin');
+  return spinView(lab, command);
 }
 
 /**
