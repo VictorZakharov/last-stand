@@ -2,10 +2,11 @@
 // given what the WebGL code around it asks of a WebGLRenderer, and the post chain as a node pipeline.
 import * as THREE from 'three';
 import type { RenderPipeline, WebGPURenderer } from 'three/webgpu';
+import { RUNNING } from './rendererChoice';
 
-/** Whether this page draws with WebGPURenderer (`?renderer=webgpu`; `?renderer=webgpu-gl` its WebGL 2 backend). */
-const asked = new URLSearchParams(location.search).get('renderer');
-export const WEBGPU = asked === 'webgpu' || asked === 'webgpu-gl';
+/** Whether this page draws with WebGPURenderer: chosen in the pause menu, or by the address (`?renderer=webgpu`;
+ *  `?renderer=webgpu-gl` its WebGL 2 backend), core/rendererChoice.ts. */
+export const WEBGPU = RUNNING.webgpu;
 
 /** the point lights the shaders' loop takes (`DynamicLighting`): a biome's eight without shadows, the hero's two,
  *  the effects' pool of eight (`fx/lights.ts`), with room */
@@ -46,11 +47,11 @@ export async function makeWebGPURenderer(): Promise<THREE.WebGLRenderer> {
   gpu = await import('three/webgpu');
   tsl = await import('three/tsl');
   const { WebGPURenderer } = gpu;
-  const renderer = new WebGPURenderer({ antialias: false, powerPreference: 'high-performance', forceWebGL: asked === 'webgpu-gl', trackTimestamp: true });
+  const renderer = new WebGPURenderer({ antialias: false, powerPreference: 'high-performance', forceWebGL: RUNNING.webgpuOnGl, trackTimestamp: true });
   await renderer.init();
   // three's GPU-driven drawing (r187): clusters of 64 triangles culled and their detail picked on the GPU, for what
   // it supports (static meshes and instanced ones in plain node materials); the rest drawn as before
-  if (new URLSearchParams(location.search).get('meshlets') === '1') {
+  if (RUNNING.meshlets) {
     const { MeshletDrawingPipeline } = await import('three/addons/pipelines/MeshletDrawingPipeline.js');
     (renderer as unknown as { drawingPipeline: unknown }).drawingPipeline = new MeshletDrawingPipeline();
   }
@@ -58,7 +59,7 @@ export async function makeWebGPURenderer(): Promise<THREE.WebGLRenderer> {
   // each out in full (the physical model's every term, eight times over): the lit fragment shaders were 55 kB of
   // WGSL each, 3.5 MB of the 4.6 the game made, and Chrome's DXC compiled them again on every visit (its cache
   // never served them). `?lights=each` for three's own, to compare.
-  if (new URLSearchParams(location.search).get('lights') !== 'each') {
+  if (!RUNNING.lightsEach) {
     const { DynamicLighting } = await import('three/addons/lighting/DynamicLighting.js');
     renderer.lighting = new DynamicLighting({ maxPointLights: MAX_LOOPED_LIGHTS });
   }
