@@ -69,6 +69,8 @@ export async function makeWebGPURenderer(): Promise<THREE.WebGLRenderer> {
     renderer.lighting = new DynamicLighting({ maxPointLights: MAX_LOOPED_LIGHTS });
   }
   compileShadowsToo(renderer);
+  compilesTakeTurns(renderer);
+  walkedAtOnce(renderer);
   if (new URLSearchParams(location.search).has('builds')) recordNodeBuilds(renderer);
   compileSlice(COMPILE_SLICE.loading);
   // (own properties over the class's getters: `compile` is one)
@@ -78,7 +80,7 @@ export async function makeWebGPURenderer(): Promise<THREE.WebGLRenderer> {
   // they were made at each material's first draw, on the main thread (the loading screen froze 10-15 s); waited for
   // by `compiled`. (Nothing listed as made: no WebGL programs to link.)
   stand('compile', (scene: THREE.Object3D, camera: THREE.Camera, target?: THREE.Scene | null) => {
-    compiling.push(renderer.compileAsync(scene, camera, target ?? null).catch((e: unknown) => console.warn('WebGPU compile:', e)));
+    compiling.push(renderer.compileAsync(scene, camera, target ?? null).catch((e: unknown) => console.error('WebGPU compile:', e)));
     return new Set<THREE.Material>();
   });
   // (the labels' atlas is sized within it: missing, its side was NaN, a texture 1 px wide)
@@ -283,6 +285,86 @@ function compileShadowsToo(renderer: WebGPURenderer): void {
       }
     }
     updateBefore(renderObject);
+  };
+}
+
+/** what of three's renderer a compile's state is kept by (`compilesTakeTurns`) */
+type Precompiling = {
+  _precompilationState: object | null;
+  _beginPreCompile(state: object): void;
+  _finishPreCompile(): void;
+  _nodes: CompileNodes & { getForRenderAsync(renderObject: object, yieldFn?: () => Promise<void>): Promise<unknown> };
+};
+
+/**
+ * three's async compile keeps the state of the item it builds (its target, its render context, its material's side)
+ * on the renderer, one for all, and waits a microtask or more mid-item (each stage of a node build, a build found
+ * cached): two compiles at once (the lobby's warm-up and a hero's, the fight's behind the lobby) worked through each
+ * other's items with each other's state, and one's end cleared the other's ("Cannot destructure property
+ * 'useFrameBufferTarget' of 'this._precompilationState' as it is null"), its compile thrown away and its pipelines
+ * made at their first draw instead (the lobby at 2 fps). Here each item's state is its own: one begun over another
+ * ends the other first, and each item takes its own back where its work goes on after a wait (its build's every
+ * yield, and its node updates after the build, the first thing it does past its last wait).
+ */
+function compilesTakeTurns(renderer: WebGPURenderer): void {
+  const r = renderer as unknown as Precompiling;
+  const begin = r._beginPreCompile.bind(r);
+  const finish = r._finishPreCompile.bind(r);
+  r._beginPreCompile = (state) => {
+    if (r._precompilationState !== null && r._precompilationState !== state) finish();
+    begin(state);
+  };
+  // (an item's state already ended by another's begin)
+  r._finishPreCompile = () => {
+    if (r._precompilationState !== null) finish();
+  };
+  const own = (state: object): void => {
+    if (r._precompilationState !== state) r._beginPreCompile(state);
+  };
+  const ownerOf = new WeakMap<object, object>();
+  const nodes = r._nodes;
+  const getForRenderAsync = nodes.getForRenderAsync.bind(nodes);
+  nodes.getForRenderAsync = (renderObject, yieldFn) => {
+    const state = r._precompilationState;
+    if (state === null || yieldFn === undefined) return getForRenderAsync(renderObject, yieldFn);
+    ownerOf.set(renderObject, state);
+    return getForRenderAsync(renderObject, async () => {
+      own(state);
+      await yieldFn();
+      own(state);
+    });
+  };
+  const updateBefore = nodes.updateBefore.bind(nodes);
+  nodes.updateBefore = (renderObject: object) => {
+    const state = ownerOf.get(renderObject);
+    if (state !== undefined) {
+      ownerOf.delete(renderObject);
+      own(state);
+    }
+    updateBefore(renderObject);
+  };
+}
+
+/**
+ * The GPU-driven drawing's `prepareAsync` (`?meshlets`) waits as every compile starts, so the compile walked the
+ * scene after the warm-up that asked for it had put it back (its objects out, the other biomes in): the lobby's and
+ * the fight's pipelines were made at their first draws, on the main thread. Here the compile walks the scene at once,
+ * and the clusters are made beside it (any it missed, as their meshes are first drawn).
+ */
+function walkedAtOnce(renderer: WebGPURenderer): void {
+  type Preparing = { prepareAsync?: (scene: THREE.Object3D, camera: THREE.Camera) => Promise<void> | undefined };
+  const drawing = (renderer as unknown as { drawingPipeline: Preparing }).drawingPipeline;
+  const prepareAsync = drawing.prepareAsync?.bind(drawing);
+  if (prepareAsync === undefined) return;
+  const compileAsync = renderer.compileAsync.bind(renderer);
+  renderer.compileAsync = (...args: Parameters<typeof compileAsync>) => {
+    void prepareAsync(args[0], args[1])?.catch((e: unknown) => console.error('WebGPU clusters:', e));
+    drawing.prepareAsync = () => undefined;
+    try {
+      return compileAsync(...args);
+    } finally {
+      drawing.prepareAsync = prepareAsync;
+    }
   };
 }
 

@@ -120,6 +120,17 @@ whether the CPU cost below can be brought down.
   render, by number, which a compile's queue works through under the last frame's. So each caster's shadow
   pipeline was made at its first shadow, synchronously, and that jammed the GPU process's main thread. The logo's
   WebGL exit waited behind it (`fit` 5.5–8.8 s).
+- **Compiles take turns** (`compilesTakeTurns` in `core/webgpu.ts`): three's `compileAsync` keeps the item it
+  builds (its target, its render context, its material's side) on the renderer, one for all, and waits a microtask
+  or more mid-item. Two compiles at once worked through each other's items with each other's state, and one's end
+  cleared the other's ("Cannot destructure property 'useFrameBufferTarget' of 'this._precompilationState'"): that
+  compile was thrown away and its pipelines made at their first draws, the lobby at 2 fps. Each item's state is
+  now its own, taken back wherever its work goes on after a wait. Queued one after another instead, the compiles
+  walked the scene after the warm-ups had put it back, and the lobby drew nothing from 3.5 s in.
+- **With meshlets the compile walks the scene at once** (`walkedAtOnce`): the meshlet pipeline's `prepareAsync`
+  waits as each compile starts, so every warm-up's walk saw the scene put back. Its clusters are made beside the
+  compile. With `&meshlets=1&lights=each` a first visit's lobby showed at 15.0 s (22.3 s before), its longest task
+  0.9 s (2.9 s), with no compile thrown and none of the cluster passes' `setPipeline` errors (4 before).
 - **The fight's foes are seated for the compile's walk alone** (`WarmUp.hide`): a crowd with no foe draws nothing,
   so its compile saw nothing.
 
@@ -160,7 +171,12 @@ id (`NodeManager.getCacheKey`), and three makes each environment map a node of i
   the same soft disc, the fade near the lens, and the near glow for the additive pool. They were checked with
   bursts and a smoke puff spawned by hand: casting from the pane didn't reach the game.
 - **The WebGL-only machinery is skipped under WebGPU:** program pinning, link waits and fences, the env maps'
-  compiles, the shadow map's wrap, the perf overlay's GPU timers, HDR.
+  compiles, the shadow map's wrap, the perf overlay's GPU timers, HDR's presenter.
+- **HDR is the renderer's own canvas** (`initHdrForWebGPU` in `core/hdr.ts`): made with a half float output, three
+  configures it `rgba16float` in extended range, and the grade's last step (`inHdr` in `core/webgpu.ts`) grows the
+  highlights past white as the WebGL grade does, from the same uniforms. three configures its canvas once, so a
+  change of the setting or the display shows after a reload there (the menu says so). Checked: the canvas is
+  `rgba16float`, extended with `?hdr=1`, `bgra8unorm`, standard without. Not looked at on an HDR display.
 - **Three's meshlet pipeline is behind `&meshlets=1`.** In the forest lobby it takes the static props: the
   stumps (460k triangles over two frames' passes), logs, roots, the gates' roots and arches, bonfire stones and
   the heroes' rigid pieces. Skinned meshes and every `ShaderMaterial` stay on the standard path.
@@ -267,7 +283,6 @@ id (`NodeManager.getCacheKey`), and three makes each environment map a node of i
 
 - **The rest of the GLSL `onBeforeCompile` looks:**
   - triplanar, fur sway, dual-quaternion hands
-- **The grade:** HDR.
 - **Other gaps:**
   - The warm-up compiles by `compileAsync` now (below), but the fight's crowds are still rebuilt at their draw
     under the fight's loading bar (2.6 s).
@@ -435,8 +450,7 @@ caniuse puts WebGPU at about 88% of global use (86% full, 2% partial). Sources:
 - **Mac:** threejs-nanites found Mac GPU timestamps untrustworthy, and a Mac allowing fewer than 8 storage
   buffers a shader. Its cluster passes failed there and only impostors drew. The meshlet pipeline's compute
   passes need checking on Apple GPUs.
-- **HDR:** `core/hdr.ts` already starts a WebGPU device, purely to present HDR beside the WebGL canvas.
-  Under `WebGPURenderer`, HDR output would be the renderer's own canvas, which simplifies that file.
+- **HDR:** under `WebGPURenderer` the output is the renderer's own canvas (ported; WebGL keeps its presenter).
 
 ## Inventory: what is WebGL-specific, and the port by system
 
