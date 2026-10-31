@@ -162,33 +162,91 @@ function cullFor(camera: THREE.Camera): void {
   }
 }
 
+/** The shadow-only casters shown and the work round a shadow map's draw run, for a draw by `camera`; returns what
+ *  puts them back. */
+function intoShadow(camera: THREE.Camera): () => void {
+  // (a biome's still shadows draw its own casters alone: a hero's shadow cast as one, shown for them, stayed in the
+  // braziers' shadow where he stood, and compiled a point light's skinned program mid-fight)
+  const casters = stillOf ? [...shadowOnly].filter((caster) => isUnder(caster, stillOf!)) : [...shadowOnly];
+  for (const caster of casters) caster.visible = true;
+  const after = stillOf ? [] : [...aroundShadow].map((around) => around(camera));
+  return () => {
+    for (const undo of after) undo();
+    for (const caster of casters) caster.visible = false;
+  };
+}
+
 /** Culls the meshes culled in cells as `renderer` draws `scene`: each render's camera's cells in view packed before
  *  it draws (after the scene's matrices are updated), and the shadow casters shown only while the shadow map draws. */
 export function cullWhileDrawn(scene: THREE.Scene, renderer: THREE.WebGLRenderer): void {
+  const shadows = renderer.shadowMap;
+  if (!shadows.render) {
+    shadowsAsRenders(scene);
+    return;
+  }
   const before = scene.onBeforeRender;
   scene.onBeforeRender = (...args) => {
     before.apply(scene, args);
     cullFor(args[2]);
   };
-  const shadows = renderer.shadowMap;
-  // (WebGPU's renderer draws its shadow maps as passes of its own, with no `render` to wrap: its shadow-only
-  // casters stay hidden there for now, docs/research/webgpu.md)
-  if (!shadows.render) return;
   const draw = shadows.render.bind(shadows);
   shadows.render = (lights, scene, camera) => {
-    // (a biome's still shadows draw its own casters alone: a hero's shadow cast as one, shown for them, stayed in the
-    // braziers' shadow where he stood, and compiled a point light's skinned program mid-fight)
-    const casters = stillOf ? [...shadowOnly].filter((caster) => isUnder(caster, stillOf!)) : [...shadowOnly];
-    for (const caster of casters) caster.visible = true;
-    const after = stillOf ? [] : [...aroundShadow].map((around) => around(camera));
+    const back = intoShadow(camera);
     try {
       draw(lights, scene, camera);
     } finally {
-      for (const undo of after) undo();
-      for (const caster of casters) caster.visible = false;
+      back();
     }
   };
 }
+
+/** Whether `camera` is a light's shadow camera in `scene`, each camera looked up once. */
+function shadowCameraTest(scene: THREE.Scene): (camera: THREE.Camera) => boolean {
+  const known = new WeakMap<THREE.Camera, boolean>();
+  return (camera) => {
+    let is = known.get(camera);
+    if (is === undefined) {
+      is = false;
+      scene.traverse((part) => {
+        const light = part as THREE.Light & { shadow?: THREE.LightShadow };
+        if (light.isLight && light.shadow?.camera === camera) is = true;
+      });
+      known.set(camera, is);
+    }
+    return is;
+  };
+}
+
+/**
+ * WebGPU's renderer draws each shadow map as a render of the scene by the light's camera, nested in the frame's own,
+ * with no shadow map's `render` to wrap: so the shadow-only casters are shown, and the work round a shadow's draw run,
+ * between the scene's hooks round such a render. Hidden there, the biomes' baked casters and the trees' shadow
+ * copies cast nothing, and each piece of a hero cast on its own (125 draws of the sun's 173 a lobby frame). The
+ * cells are packed for the views alone: the culled meshes cast nothing, and packed for each shadow camera too, every
+ * one was packed and sent to the GPU twice a frame.
+ */
+function shadowsAsRenders(scene: THREE.Scene): void {
+  const isShadow = shadowCameraTest(scene);
+  const backs: (() => void)[] = [];
+  const before = scene.onBeforeRender;
+  scene.onBeforeRender = (...args) => {
+    before.apply(scene, args);
+    const camera = args[2];
+    if (!isShadow(camera)) {
+      cullFor(camera);
+      backs.push(NOTHING);
+      return;
+    }
+    backs.push(intoShadow(camera));
+  };
+  const after = scene.onAfterRender;
+  scene.onAfterRender = (...args) => {
+    after.apply(scene, args);
+    backs.pop()?.();
+  };
+}
+
+const NOTHING = (): void => {};
 
 /** the biome whose still shadows are being drawn (`drawingStill`) */
 let stillOf: THREE.Object3D | null = null;

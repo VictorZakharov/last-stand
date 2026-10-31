@@ -487,6 +487,9 @@ export function analyze(record, events, mark, listedMs = LISTED_MS, sourceOf = (
     });
   const spans = phaseSpans(record);
   const refresh = refreshOf(spans.map(({ frames }) => frames), record.frames);
+  // (the whole measure's JS a frame, for a scenario of no phases: the lobby stood in, a fight)
+  const end = record.frames.length ? record.frames[record.frames.length - 1].at : record.start;
+  const js = samples.length && record.frames.length ? jsIn(samples, record.start, end, record.frames.length) : null;
   const built = inRecording.map((link) => ({
     ...link,
     at: link.at === null ? null : (link.at - record.start) / 1000,
@@ -498,6 +501,7 @@ export function analyze(record, events, mark, listedMs = LISTED_MS, sourceOf = (
     others: stamp ? othersWork(placed, stamp.pid, record.start) : { ms: 0, most: [] },
     built,
     frames: frameSummary(record.frames),
+    js,
     phases: phaseSummaries(spans, refresh, {
       kinds: (kept, count) => workIn(placed, kept, count),
       browser: (from, to) => browserWorkIn(placed, from, to),
