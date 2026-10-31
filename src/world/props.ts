@@ -581,33 +581,31 @@ const envMaps = new Map<string, THREE.Texture>();
 const envKey = ({ sky, panel }: EnvColours): string => `${sky} ${panel}`;
 /** an environment's size, a cube face's side (three's default) */
 const ENV_SIZE = 256;
+/** the blur over the captured scene before it's convolved, in radians */
+const ENV_BLUR = 0.04;
 
-/** What the environments compiled ahead are made with (`compileEnvMaps`): one generator, the scene it captures for
- *  each one's colours, and a stand-in for the generator's backdrop, whose program it would make as it first drew. */
-let ahead: { pm: THREE.PMREMGenerator; scenes: Map<string, THREE.Scene>; backdrop: THREE.Mesh } | undefined;
+/** What the environments compiled ahead are made with (`compileEnvMaps`): one generator and the scene it captures
+ *  for each one's colours. */
+let ahead: { pm: THREE.PMREMGenerator; scenes: Map<string, THREE.Scene> } | undefined;
 
 /**
  * Every biome's environment's programs compiled now (`colours`), for the targets they're drawn into: the scene the
- * generator captures and its backdrop, its blur and its convolution. The GPU's threads link them while the arena is
- * built; each map is made as its biome is first shown (`envMap`). Made before the arena, the first waited 0.43 s on
- * the convolution's link, compiled as it was first drawn: three compiles none of its own programs ahead but those
- * it converts a cube or a panorama with, so its private parts are reached for (`compileGenerator`).
+ * generator captures, its blur and its convolution. The GPU's threads link them while the arena is built; each map is
+ * made as its biome is first shown (`envMap`). Made before the arena, the first waited 0.43 s on the convolution's
+ * link, compiled as it was first drawn: three compiles none of its own programs ahead but those it converts a cube or
+ * a panorama with, so its private parts are reached for (`compileGenerator`). (The capture's backdrop is the clear
+ * colour, a clear: no program.)
  */
 export function compileEnvMaps(renderer: THREE.WebGLRenderer, colours: EnvColours[]): void {
   const pm = new THREE.PMREMGenerator(renderer);
   const scenes = new Map(colours.map((c) => [envKey(c), envScene(c)]));
-  // (as the generator makes its backdrop: a box round the capture, the clear colour, as no background is set)
-  const backdrop = new THREE.Mesh(new THREE.BoxGeometry(), new THREE.MeshBasicMaterial({
-    name: 'PMREM.Background', side: THREE.BackSide, depthWrite: false, depthTest: false,
-  }));
-  ahead = { pm, scenes, backdrop };
+  ahead = { pm, scenes };
   const target = compileGenerator(renderer, pm);
   if (!target) return;
   const prev = renderer.getRenderTarget();
   renderer.setRenderTarget(target);
   const capture = new THREE.PerspectiveCamera(90, 1, 0.1, 100);
   for (const scene of scenes.values()) renderer.compile(scene, capture);
-  renderer.compile(backdrop, capture);
   renderer.setRenderTarget(prev);
   target.dispose();
 }
@@ -615,37 +613,37 @@ export function compileEnvMaps(renderer: THREE.WebGLRenderer, colours: EnvColour
 /** three's generator's private parts: what `compileGenerator` reaches for, each checked to be there */
 interface GeneratorInside {
   _setSize?: (cubeSize: number) => void;
-  _allocateTargets?: () => THREE.WebGLRenderTarget;
-  _blurMaterial?: THREE.Material | null;
-  _ggxMaterial?: THREE.Material | null;
+  _allocateTarget?: () => THREE.WebGLCubeRenderTarget;
+  _getSourceTarget?: (depthBuffer: boolean) => THREE.WebGLCubeRenderTarget;
+  _blur?: (target: THREE.WebGLCubeRenderTarget, sigma: number) => void;
+  _applyPMREM?: (target: THREE.WebGLCubeRenderTarget) => void;
+  _compileMaterial?: (material: THREE.Material) => void;
+  _renderCube?: (target: THREE.WebGLCubeRenderTarget, lod: number, material: THREE.Material) => void;
 }
 
 /**
- * `pm`'s blur and convolution compiled for the maps it makes, sized as `fromScene` sizes them (it keeps both for
- * the size): a target of that kind, to compile the capture's programs for, the caller's to dispose. None where
- * three's private parts have changed: nothing compiled ahead then, the maps made as before.
+ * `pm`'s blur and convolution compiled for the maps it makes, sized as `fromScene` sizes them: its own passes run
+ * with each draw of a cube's faces (`_renderCube`) swapped for a compile into that target, so it makes its materials
+ * as it would and draws nothing. Returns a target of that kind, to compile the capture's programs for, the caller's
+ * to dispose. None where three's private parts have changed: nothing compiled ahead then, the maps made as before.
  */
 function compileGenerator(renderer: THREE.WebGLRenderer, pm: THREE.PMREMGenerator): THREE.WebGLRenderTarget | null {
   const inside = pm as unknown as GeneratorInside;
-  if (typeof inside._setSize !== 'function' || typeof inside._allocateTargets !== 'function') return null;
-  inside._setSize(ENV_SIZE);
-  const target = inside._allocateTargets();
-  const own = [inside._blurMaterial, inside._ggxMaterial];
-  if (!own.every((m) => m instanceof THREE.Material)) {
-    target.dispose();
-    return null;
-  }
-  // (drawn as three draws them: a flat camera, planes of positions and uvs alone; a bare geometry, as three compiles
-  // its own with, is another program, keyed by having no positions, and so are normals)
-  const planes = new THREE.BufferGeometry();
-  planes.setAttribute('position', new THREE.Float32BufferAttribute([-1, -1, 0, 1, -1, 0, 1, 1, 0], 3));
-  planes.setAttribute('uv', new THREE.Float32BufferAttribute([0, 0, 1, 0, 1, 1], 2));
+  const parts = [inside._setSize, inside._allocateTarget, inside._getSourceTarget, inside._blur, inside._applyPMREM,
+    inside._compileMaterial, inside._renderCube];
+  if (!parts.every((f) => typeof f === 'function')) return null;
+  inside._setSize!(ENV_SIZE);
+  const target = inside._allocateTarget!();
+  inside._getSourceTarget!(true);
   const prev = renderer.getRenderTarget();
-  renderer.setRenderTarget(target);
-  const flat = new THREE.OrthographicCamera();
-  for (const material of own) renderer.compile(new THREE.Mesh(planes, material!), flat);
+  inside._renderCube = (into, _lod, material) => {
+    renderer.setRenderTarget(into);
+    inside._compileMaterial!(material);
+  };
+  inside._blur!(target, ENV_BLUR);
+  inside._applyPMREM!(target);
+  delete inside._renderCube;
   renderer.setRenderTarget(prev);
-  planes.dispose();
   return target;
 }
 
@@ -658,14 +656,13 @@ export function envMap(renderer: THREE.WebGLRenderer, colours: EnvColours): THRE
   const made = envMaps.get(envKey(colours));
   if (made) return made;
   if (!ahead) return makeEnvMap(renderer, colours);
-  const { pm, scenes, backdrop } = ahead;
+  const { pm, scenes } = ahead;
   ahead = undefined;
   for (const [key, scene] of scenes) {
-    envMaps.set(key, pm.fromScene(scene, 0.04, 0.1, 100, { size: ENV_SIZE }).texture);
+    envMaps.set(key, pm.fromScene(scene, ENV_BLUR, 0.1, 100, { size: ENV_SIZE }).texture);
     disposeScene(scene);
   }
   pm.dispose();
-  disposeScene(backdrop);
   return envMaps.get(envKey(colours)) ?? makeEnvMap(renderer, colours);
 }
 
@@ -673,7 +670,7 @@ export function envMap(renderer: THREE.WebGLRenderer, colours: EnvColours): THRE
 function makeEnvMap(renderer: THREE.WebGLRenderer, colours: EnvColours): THREE.Texture {
   const pm = new THREE.PMREMGenerator(renderer);
   const scene = envScene(colours);
-  const texture = pm.fromScene(scene, 0.04, 0.1, 100, { size: ENV_SIZE }).texture;
+  const texture = pm.fromScene(scene, ENV_BLUR, 0.1, 100, { size: ENV_SIZE }).texture;
   pm.dispose();
   disposeScene(scene);
   envMaps.set(envKey(colours), texture);
