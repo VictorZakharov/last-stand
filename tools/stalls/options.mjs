@@ -83,6 +83,8 @@ const HELP = {
   passes: ['', 'the compositor\'s frames traced as it drew them: each phase\'s render passes and quads a frame'],
   paints: ['', 'the page\'s paints traced: each phase\'s a frame, by the element painted'],
   links: ['', 'every Skia program built: when, how long, the tasks it was built in, the page\'s changes just before'],
+  read: ['expr', `${BOOT}: this expression read off the page once a visit is done (its fight warm), written to `
+    + '`out/read-N.json`: a record the page keeps of its own (the WebGPU node builds, `this?renderer=webgpu&builds`)'],
   help: ['', 'this'],
 };
 
@@ -157,6 +159,7 @@ export function readOptions(argv) {
     passes: written.passes === true,
     paints: written.paints === true,
     links: written.links === true,
+    read: written.read ?? null,
     coldReturn: written['cold-return'] === true,
     film: written.film === true || written['film-logo'] === true,
     filmLogo: written['film-logo'] === true,
@@ -192,6 +195,7 @@ export function readOptions(argv) {
     throw new Error(`stalls: --auto must be a level and the most pixels, level@px (${levels}: low@518400)`);
   }
   if (options.resize && options.scenario !== BOOT) throw new Error(`stalls: --resize is the ${BOOT} scenario's`);
+  if (options.read && options.scenario !== BOOT) throw new Error(`stalls: --read is the ${BOOT} scenario's`);
   if (!(Number.isInteger(options.trips) && options.trips >= 1)) {
     throw new Error('stalls: --trips must be a whole number, 1 or more');
   }

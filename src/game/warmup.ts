@@ -11,7 +11,7 @@
 // and a third of the boot's are the fight's alone (`lab programs`).
 import * as THREE from 'three';
 import { G } from '../state';
-import { behindTheLobby, compileAhead, warmUp, type WarmedUp } from '../core/shaders';
+import { behindTheLobby, compileAhead, warmUp, type Swap, type WarmedUp } from '../core/shaders';
 import { compilePasses, sceneTarget } from '../core/renderer';
 import { mapsArrived, mapsMadeAfresh } from '../core/textures';
 import { ENEMIES, type EnemyId } from '../data/enemies';
@@ -219,7 +219,7 @@ interface Built {
   compile: THREE.Object3D[];
   objects: THREE.Object3D[];
   drawn: THREE.Object3D[];
-  swap?: { show: THREE.Object3D; hide: THREE.Object3D };
+  swap?: Swap;
   outlined: THREE.Object3D[];
   show?(): void;
   hide?(): void;
@@ -285,12 +285,20 @@ async function buildAhead(parts: Part[]): Promise<void> {
  *  (`heroModelParts`). */
 const heroParts = (): Part[] => [hallPart(), ...heroModelParts()];
 
+/** The hall of heroes' look put on the scene, and its undoing: the look it's shown in, which WebGPU keys its
+ *  pipelines by (`Swap.look`). */
+function hallLook(): () => void {
+  const shown = G.arena.hallShown;
+  G.arena.showHall(true);
+  return () => G.arena.showHall(shown);
+}
+
 /** The hall of heroes' room, shown in the lobby's biome's place (world/heroHall.ts). */
 function hallPart(): Part {
   return {
     name: 'hall',
     build() {
-      const swap = { show: G.arena.hallGroup, hide: G.arena.groupOf(G.arena.biome) };
+      const swap = { show: G.arena.hallGroup, hide: G.arena.groupOf(G.arena.biome), look: hallLook };
       return { compile: [swap.show], objects: [], drawn: [], swap, outlined: [], done: () => undefined };
     },
   };
