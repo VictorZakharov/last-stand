@@ -159,3 +159,4 @@ This is an early build — feedback, bug reports and ideas are very welcome in [
 ## License
 
 [MIT](LICENSE).
+<!-- throwaway 8 for #335 -->
