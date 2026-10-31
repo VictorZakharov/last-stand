@@ -1,7 +1,6 @@
 {
   "headSha": "db2fedb50205e9a7aa37cb6c123eb1388054e643",
-  "state": "building",
-  "folder": null,
-  "since": "2026-10-31T16:01:34Z",
+  "state": "ready",
+  "folder": "db2fedb",
   "run": "https://github.com/VictorZakharov/last-stand/actions/runs/41217639887"
 }
