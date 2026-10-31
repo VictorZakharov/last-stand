@@ -8,9 +8,9 @@
   <meta name="theme-color" content="#050303" />
   <title>Last Stand</title>
   <meta name="description" content="Last Stand — a 3D wave-survival action RPG arena that runs in your browser." />
-  <link rel="icon" type="image/svg+xml" href="/pr-preview/pr-331/269cf51/favicon.svg" />
+  <link rel="icon" type="image/svg+xml" href="/pr-preview/pr-331/bc09a46/favicon.svg" />
   <!-- installable, offline game: the build adds the Apple touch icon and the service worker (scripts/pwa.ts) -->
-  <link rel="manifest" href="/pr-preview/pr-331/269cf51/manifest.webmanifest" />
+  <link rel="manifest" href="/pr-preview/pr-331/bc09a46/manifest.webmanifest" />
   <meta name="apple-mobile-web-app-title" content="Last Stand" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -100,10 +100,10 @@
       #loading .ld-ember { display: none; }
     }
   </style>
-  <script type="module" crossorigin src="/pr-preview/pr-331/269cf51/assets/index--pCSYfS9.js"></script>
-  <link rel="modulepreload" crossorigin href="/pr-preview/pr-331/269cf51/assets/three-BpzPL--5.js">
-  <link rel="stylesheet" crossorigin href="/pr-preview/pr-331/269cf51/assets/index-kmdYvyd5.css">
-  <link rel="apple-touch-icon" href="/pr-preview/pr-331/269cf51/apple-touch-icon.png">
+  <script type="module" crossorigin src="/pr-preview/pr-331/bc09a46/assets/index-I3-l-m1K.js"></script>
+  <link rel="modulepreload" crossorigin href="/pr-preview/pr-331/bc09a46/assets/three-BpzPL--5.js">
+  <link rel="stylesheet" crossorigin href="/pr-preview/pr-331/bc09a46/assets/index-Ctyn9sGL.css">
+  <link rel="apple-touch-icon" href="/pr-preview/pr-331/bc09a46/apple-touch-icon.png">
 </head>
 <body>
   <!-- The "LAST STAND" logo (loading screen and lobby): brushed steel lit as a bevel over a crimson glow -->
@@ -565,6 +565,16 @@
             <label class="hdr-level" title="How bright the game's white is, against your screen's white for everything else"><span>Brightness</span><input type="range" id="opt-hdr-paper" min="0.4" max="1.6" step="0.05"><output id="opt-hdr-paper-value"></output></label>
             <label class="hdr-level" title="How bright the brightest effects and glows may go, against your screen's white"><span>Highlights</span><input type="range" id="opt-hdr-peak" min="1.2" max="8" step="0.1"><output id="opt-hdr-peak-value"></output></label>
           </div>
+        </div>
+        <!-- the renderer and WebGPU's flags (core/rendererChoice.ts): kept for the next load, a reload switches them -->
+        <div class="opt-row quality-row renderer-row"><span>Renderer</span>
+          <div class="seg" id="opt-renderer"><button data-r="webgl">WebGL</button><button data-r="webgpu">WebGPU</button></div>
+          <div class="renderer-flags">
+            <label class="renderer-flag" title="three's GPU-driven drawing: static props drawn as clusters, culled on the GPU"><input type="checkbox" id="opt-meshlets"> Meshlets</label>
+            <label class="renderer-flag" title="Every point light written out in each shader, as three has it (slower to compile; to compare)"><input type="checkbox" id="opt-lights-each"> Lights written out</label>
+          </div>
+          <div class="renderer-note"></div>
+          <button class="btn hidden" id="btn-renderer-reload">Reload to switch</button>
         </div>
         <label class="opt-row"><input type="checkbox" id="opt-perf"> Show performance stats</label>
         <label class="opt-row"><input type="checkbox" id="opt-net"> Show network stats</label>
