@@ -64,11 +64,6 @@ export async function makeWebGPURenderer(): Promise<THREE.WebGLRenderer> {
   }
   compileShadowsToo(renderer);
   compileSlice(COMPILE_SLICE.loading);
-  // TEMP: every node build, the compile's (started, `async`) and a draw's, with its key's parts (`&builds`, read by
-  // `npm run stalls -- --read`)
-  if (new URLSearchParams(location.search).has('builds')) recordBuilds(renderer);
-  if (new URLSearchParams(location.search).has('shaders')) recordShaders(renderer);
-  if (new URLSearchParams(location.search).has('drawn')) recordDraws(renderer);
   // (own properties over the class's getters: `compile` is one)
   const stand = (key: string, value: unknown) => Object.defineProperty(renderer, key, { value, writable: true });
   // the WebGL code's compiles started as `compileAsync`, for the target set (the warm-ups': the scene's pass's,
@@ -82,86 +77,6 @@ export async function makeWebGPURenderer(): Promise<THREE.WebGLRenderer> {
   stand('capabilities', { getMaxAnisotropy: () => renderer.getMaxAnisotropy(), isWebGL2: true });
   Object.defineProperty(renderer.info, 'programs', { value: [], writable: true });
   return renderer as unknown as THREE.WebGLRenderer;
-}
-
-/** a render object as the build record reads it */
-type Built = {
-  object: THREE.Object3D; material: THREE.Material; camera: THREE.Camera; context?: { id: number };
-  initialCacheKey: number; getMaterialCacheKey(): number; getDynamicCacheKey(): number;
-  lightsNode?: { _lights?: THREE.Light[] }; scene: object;
-};
-
-/** TEMP: each node build three makes, kept in `window.__builds` (see `makeWebGPURenderer`). */
-function recordBuilds(renderer: WebGPURenderer): void {
-  type Nodes = {
-    getForRender: (ro: Built, ...rest: unknown[]) => unknown;
-    get(ro: Built): { nodeBuilderState?: unknown };
-    nodeBuilderCache: Map<number, unknown>;
-  };
-  const nodes = (renderer as unknown as { _nodes: Nodes })._nodes;
-  const getForRender = nodes.getForRender.bind(nodes);
-  const builds: object[] = [];
-  Object.assign(window, { __builds: builds });
-  nodes.getForRender = (ro: Built, ...rest: unknown[]) => {
-    if (nodes.get(ro).nodeBuilderState !== undefined) return getForRender(ro, ...rest);
-    const cached = nodes.nodeBuilderCache.has(ro.initialCacheKey);
-    const at = performance.now();
-    const compiling = (renderer as unknown as { _precompilationState: unknown })._precompilationState !== null;
-    const out = getForRender(ro, ...rest);
-    builds.push({
-      t: Math.round(at), ms: +(performance.now() - at).toFixed(1), phase: compiling ? 'compile' : 'draw', cached,
-      name: ro.object.name || ro.object.type, material: ro.material.name || ro.material.type,
-      camera: ro.camera.id, context: ro.context?.id, key: ro.initialCacheKey,
-      materialKey: ro.getMaterialCacheKey(), dynamicKey: ro.getDynamicCacheKey(),
-      lights: (ro.lightsNode?._lights ?? []).map((l) => l.id).join(','), receive: ro.object.receiveShadow,
-      environment: (ro.scene as { environmentNode?: { id: number } }).environmentNode?.id,
-      fog: (ro.scene as { fog?: { id?: number } }).fog ? 1 : 0,
-      contextNode: `${renderer.contextNode.id}.${renderer.contextNode.version}`,
-    });
-    return out;
-  };
-}
-
-/** TEMP: the draws of the frames, by camera, object and its type, counted in `window.__drawn` (each frame's
- *  counts start afresh, so it holds the last frame's when read). */
-function recordDraws(renderer: WebGPURenderer): void {
-  type Drawn = { object: THREE.Object3D; camera: THREE.Camera; material: THREE.Material };
-  const backend = (renderer as unknown as { backend: { draw(ro: Drawn, info: unknown): void } }).backend;
-  const draw = backend.draw.bind(backend);
-  let counts: Record<string, number> = {};
-  let frame = -1;
-  backend.draw = (ro: Drawn, info: unknown) => {
-    const now = (renderer as unknown as { info: { frame: number } }).info.frame;
-    if (now !== frame) {
-      frame = now;
-      Object.assign(window, { __drawn: counts });
-      counts = {};
-    }
-    const type = (ro.object as { isInstancedMesh?: boolean }).isInstancedMesh ? 'Instanced' : ro.object.type;
-    const path: string[] = [];
-    for (let at = ro.object.parent; at && path.length < 4; at = at.parent) if (at.name) path.push(at.name);
-    const name = ro.object.name || `- in ${path.join(' < ')}`;
-    const key = `${ro.camera.type}#${ro.camera.id} ${type} ${name} / ${ro.material.type}`;
-    counts[key] = (counts[key] ?? 0) + 1;
-    // (and each camera's draws over every frame since the page started, with the frames: a mean a frame)
-    const all = ((window as { __drawnAll?: Record<string, number> }).__drawnAll ??= {});
-    const cam = `${ro.camera.type}#${ro.camera.id}`;
-    all[cam] = (all[cam] ?? 0) + 1;
-    all.frames = now;
-    draw(ro, info);
-  };
-}
-
-/** TEMP: every shader module's source, kept in `window.__shaders` (see `makeWebGPURenderer`). */
-function recordShaders(renderer: WebGPURenderer): void {
-  const device = (renderer as unknown as { backend: { device: GPUDevice } }).backend.device;
-  const create = device.createShaderModule.bind(device);
-  const shaders: string[] = [];
-  Object.assign(window, { __shaders: shaders });
-  device.createShaderModule = (descriptor: GPUShaderModuleDescriptor) => {
-    shaders.push(descriptor.code);
-    return create(descriptor);
-  };
 }
 
 /** a shadow node's view of its frame, and the renderer's state while it compiles */
@@ -276,8 +191,6 @@ export function rigPointLights(scene: THREE.Scene, groups: THREE.Object3D[]): vo
   });
   for (const lights of lightsOf.values()) for (const light of lights) light.visible = false;
   scene.add(...rig);
-  // TEMP: the rig, read by `npm run stalls -- --read` (`&drawn`)
-  if (new URLSearchParams(location.search).has('drawn')) Object.assign(window, { __rig: rig });
   const before = scene.onBeforeRender;
   scene.onBeforeRender = (...args) => {
     const shown = groups.find((group) => group.visible);
@@ -292,18 +205,3 @@ export function rigPointLights(scene: THREE.Scene, groups: THREE.Object3D[]): vo
 
 /** Draws a frame through the WebGPU post chain. */
 export function renderWebGPU(): void { pipeline?.render(); }
-
-// TEMP: what the page logged, readable off `window.__trace` (dropped before the PR leaves draft)
-if (WEBGPU && import.meta.env.DEV) {
-  const trace: string[] = [];
-  Object.assign(window, { __trace: trace });
-  for (const level of ['log', 'warn', 'error'] as const) {
-    const original = console[level].bind(console);
-    console[level] = (...args: unknown[]) => {
-      trace.push(`${level}: ${args.map((a) => (a instanceof Error ? `${a.message} @ ${a.stack?.split('\n')[1]}` : String(a))).join(' ')}`.slice(0, 400));
-      original(...args);
-    };
-  }
-  window.addEventListener('error', (e) => trace.push(`uncaught: ${e.message} ${String(e.error?.stack).split('\n').slice(1, 4).join(' | ')}`));
-  window.addEventListener('unhandledrejection', (e) => trace.push(`rejection: ${String(e.reason?.stack ?? e.reason).slice(0, 400)}`));
-}
