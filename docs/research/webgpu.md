@@ -56,7 +56,11 @@ one slice at a time. `--dawn` (stalls) traces Dawn's own work by step: `CompileS
 WebGL's 5.1, its render 6.7 ms to 3.4 (on another day's run 10 ms to 5.7), at about the same draws once the
 shadow-only casters cast (below). three's
 WebGPU path costs about twice WebGL's CPU an object drawn: its render objects' updates, uniforms' buffers
-(`writeBuffer`) and bindings. Render bundles (`BundleGroup`, the biomes' still parts recorded once) were tried and
+(`writeBuffer`) and bindings. Broken down (`npm run stalls -- --scenario lobby --js-under _renderObjectDirect`), the
+frame's objects took 5 ms in all, about 20 µs each: the bindings 1.45 ms (an object's uniform group is updated at
+every draw by design: `NodeManager.updateGroup` returns true for it), the node uniforms 0.87, the draw 0.70, the
+render object's lookup 0.43, its geometry 0.35 and pipeline 0.29. None of it is the game's to cut but by drawing
+fewer objects (the mage alone is 66 of the main pass's 154). Render bundles (`BundleGroup`, the biomes' still parts recorded once) were tried and
 saved nothing measurable.
 
 ## Where the port stands (2026-10-30, evening)

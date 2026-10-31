@@ -88,8 +88,10 @@ const HELP = {
   passes: ['', 'the compositor\'s frames traced as it drew them: each phase\'s render passes and quads a frame'],
   paints: ['', 'the page\'s paints traced: each phase\'s a frame, by the element painted'],
   links: ['', 'every Skia program built: when, how long, the tasks it was built in, the page\'s changes just before'],
+  'js-under': ['name', 'with `--js`, a measure\'s JS a frame under this function, by what it calls (the name as listed, '
+    + 'or the function\'s own: `_renderObjectDirect`)'],
   read: ['expr', `${BOOT}: this expression read off the page once a visit is done (its fight warm), written to `
-    + '`out/read-N.json`: a record the page keeps of its own (the WebGPU node builds, `this?renderer=webgpu&builds`)'],
+    + '`out/read-N.json`: something the page keeps of its own'],
   help: ['', 'this'],
 };
 
@@ -159,7 +161,8 @@ export function readOptions(argv) {
     staleWind: written['stale-wind'] === true,
     headed: written.headed === true,
     perf: written.perf === true,
-    js: written.js === true,
+    js: written.js === true || written['js-under'] !== undefined,
+    jsUnder: written['js-under'] ?? null,
     angle: written.angle === true,
     dawn: written.dawn === true,
     passes: written.passes === true,

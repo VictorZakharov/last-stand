@@ -88,6 +88,9 @@ test('says a frame\'s JS by function over the whole measure, where it was sample
   const text = measureText({ name: 'x', notes: [], findings });
   assert.match(text, /a frame's JS, each function's own time, ms: 1\.50 draw three\.js:1/);
   assert.match(text, /and with what it calls, ms: 4\.25 frame main\.ts:9/);
+  findings.js.under = { name: 'render', calls: [{ name: 'draw three.js:1', ms: 2 }] };
+  const under = measureText({ name: 'x', notes: [], findings });
+  assert.match(under, /under render, by what it calls, ms: 2\.00 draw three\.js:1/);
 });
 
 test('says when the trace never saw the page\'s mark', () => {

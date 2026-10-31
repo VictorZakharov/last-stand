@@ -1,7 +1,7 @@
 // What a measure of the stalls found (tools/stalls): the page's frames and the trace's Skia program links put on one
 // clock, each stall with the programs built in it, the tasks they were built inside, and what the page changed just
 // before it.
-import { jsIn, jsSamples } from './profile.mjs';
+import { jsIn, jsSamples, jsUnder } from './profile.mjs';
 
 /** a frame this long or longer is a stall (ms), and one this long is listed on its own unless the command says
  *  (`--listed`, down to `LISTED_LEAST`: the trace keeps tasks of 20 ms and more, `trace.mjs`) */
@@ -462,9 +462,11 @@ function onPage(record, events, mark, sourceOf) {
 /**
  * The findings of one measure: `record` is the page's (`page.mjs` `stopRecording`), `events` the trace's kept events
  * and `mark` the page's mark in them; `sourceOf` names the page's functions where its JS was sampled
- * (`sourceMap.mjs` `sourcesOf`), `painted` the elements it painted by their node ids (`stalls.mjs` `paintedNames`).
+ * (`sourceMap.mjs` `sourcesOf`), `painted` the elements it painted by their node ids (`stalls.mjs` `paintedNames`),
+ * `under` a function whose time the whole measure's JS breaks down by what it calls (`--js-under`).
  */
-export function analyze(record, events, mark, listedMs = LISTED_MS, sourceOf = () => null, painted = new Map()) {
+export function analyze(record, events, mark, listedMs = LISTED_MS, sourceOf = () => null, painted = new Map(),
+  under = null) {
   const traced = onPage(record, events, mark, sourceOf);
   const { stamp, tasks, names, toPage, placed, samples, links, draws, paints } = traced;
   const markTs = stamp?.ts ?? null;
@@ -489,7 +491,9 @@ export function analyze(record, events, mark, listedMs = LISTED_MS, sourceOf = (
   const refresh = refreshOf(spans.map(({ frames }) => frames), record.frames);
   // (the whole measure's JS a frame, for a scenario of no phases: the lobby stood in, a fight)
   const end = record.frames.length ? record.frames[record.frames.length - 1].at : record.start;
-  const js = samples.length && record.frames.length ? jsIn(samples, record.start, end, record.frames.length) : null;
+  const counted = samples.length && record.frames.length;
+  const js = counted ? jsIn(samples, record.start, end, record.frames.length) : null;
+  if (js && under) js.under = { name: under, calls: jsUnder(samples, record.start, end, record.frames.length, under) };
   const built = inRecording.map((link) => ({
     ...link,
     at: link.at === null ? null : (link.at - record.start) / 1000,

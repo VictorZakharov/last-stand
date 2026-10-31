@@ -144,6 +144,7 @@ export function measureText(measure, { links = false } = {}) {
     `  Skia programs linked: ${programs.count}, ${ms(programs.total)} in all, the longest ${ms(programs.longest)}`,
     ...(findings.js?.own.length ? [jsLine('a frame\'s JS, each function\'s own time', findings.js.own)] : []),
     ...(findings.js?.within.length ? [jsLine('and with what it calls', findings.js.within)] : []),
+    ...(findings.js?.under ? [jsLine(`under ${findings.js.under.name}, by what it calls`, findings.js.under.calls)] : []),
     ...(findings.phases ?? []).flatMap(phaseLines),
   ];
   if (links) lines.push(...linkLines(findings.built));
