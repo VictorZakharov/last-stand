@@ -181,10 +181,24 @@ id (`NodeManager.getCacheKey`), and three makes each environment map a node of i
   the grade (not ported) would keep their hue. None of them fades as its prop dissolves yet (`seeThroughFade`). A
   boot's report lists the page's logged errors, each once (`page errors`): a WGSL error shows there, and the count
   of three's "ShaderMaterial is not compatible" falls as each is ported (54 to 42 a first visit).
-- **What's still open on the way:** each boot logs one `GPUValidationError` on the texture named `output` (the scene
-  pass's), drawn into and read in one pass: three's `RenderPipeline` draws its quad into whatever target is set, so
-  one frame was drawn with the scene's own target left set. Where isn't found yet; the frame it costs is the only harm
-  seen.
+- **The frame is drawn onto the canvas, whatever target was left set** (`renderWebGPU`): three's `RenderPipeline`
+  draws its quad into the target set, and an async compile finishing puts back the target set when it began (a
+  warm-up's, the scene's own), so a frame drew into the texture it read (a `GPUValidationError` on `output`).
+- **The grade's highlight compression** (`compressed` in `core/webgpu.ts`, `HI_KNEE` to `HI_CAP` as WebGL's): the
+  fires blew out white without it ("too high glow, blinding"). The adaptation, the glare's kept hue and the low
+  Health look aren't ported.
+- **The world's overlays** (damage numbers, the foes' bars and names, the props' gauges, the dummies' meters): the
+  labels' draw as nodes (`labelsMaterial`), drawn onto the canvas after the frame with no tone mapping or conversion
+  asked (`drawOverFrame`: else three draws into a target of its own, empty, and copies it over the frame, which a
+  first try's black frame was), each slot copied from the paint canvas straight into the atlas
+  (`copyCanvasInto`: three's own copy reads a texture's last upload). The atlas had been 1 px wide because the
+  renderer's stand-in had no `capabilities.maxTextureSize` (its side NaN), and the labels' geometry starts with an
+  infinite instance count, which WebGL clamps and WebGPU's draw refuses (the boot hung on its loading screen: the
+  stalls boot now says where a boot stopped, and the page's errors).
+- **The renderer is chosen in the pause menu** (`core/rendererChoice.ts`: WebGL or WebGPU, and WebGPU's meshlets and
+  lights written out, kept in cookies for the next load, a reload offered), the address's `?renderer=` over it.
+- **What's still open on the way:** a boot logs a `GPUValidationError` copying 128x32 into a 1x1 texture: the still
+  shadows' 1x1 target meets a viewport texture's copy. Not found yet.
 
 **Not verified:**
 
@@ -198,10 +212,8 @@ id (`NodeManager.getCacheKey`), and three makes each environment map a node of i
 - **Every other `ShaderMaterial`** (about 25): skill effects (firestorm, rift bolts, void lance...), the crypt's
   beacons, aim lasers, swing trails, the dazed stars, the leaf cards' own. `glslFn` doesn't run on WebGPU; `wgslFn`
   takes the GLSL nearly line for line (above).
-- **The world's overlays** (damage numbers, bars, names) and the outline:
-  - A first try is in the history (commit, then revert).
-  - Its render after the pipeline blacked out the frame.
-  - The atlas's canvas reached the GPU as a 1 px wide texture.
+- **The outline** round a foe (Quarry Mark's preview): its masks and edge are WebGL shaders. The world's overlays
+  themselves are ported (below).
 - **The kit's looks off the crowds** (the heroes, dummies, props), all GLSL `onBeforeCompile`:
   - dissolve, frost, char, hit flash, near glow, rim, see-through
   - the floors' relief, and the crypt's earth's own normals (the floors' looks are ported, below)

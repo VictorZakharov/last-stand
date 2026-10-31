@@ -180,6 +180,27 @@ function keepErrors(page, errors) {
   });
 }
 
+/** What the loading screen says it's doing, and how far its bar is (a boot that never ended stopped there). */
+function loadingStep() {
+  const step = document.querySelector('#loading .ld-sub')?.textContent ?? 'no loading screen';
+  const fill = document.querySelector('#loading .ld-fill');
+  return `${step} (the bar at ${fill ? fill.style.width || 'its start' : 'none'})`;
+}
+
+/** `boot` as it ends, or its failure with where the loading screen stood and the page's errors added (a lobby that
+ *  never showed timed out bare). */
+async function withErrorsTold(boot, page, errors) {
+  try {
+    return await boot;
+  } catch (failure) {
+    const step = await page.evaluate(loadingStep).catch(() => 'unread');
+    const told = [failure.message, `the loading screen: ${step}`];
+    if (errors.length) told.push(`page errors: ${distinctErrors(errors).join(' | ')}`);
+    // (a new error: an error's stack, which Node prints, keeps the message it was made with)
+    throw new Error(told.join('\n'), { cause: failure });
+  }
+}
+
 /**
  * Each URL's boots in turn with each variant, `options.rounds` times over: in a fresh Chrome (`chromeFor`), a first
  * visit, then a return (`VISITS`). Rounds side by side in time are slowed alike by whatever else uses the machine.
@@ -202,7 +223,8 @@ export async function measureBoots(urls, options, { chromeFor, sourcesFor, pictu
             console.log(`booting ${options.nameOf(url)} ${variant}, ${visit.name}, round ${round}`);
             const picture = pictureAt();
             const loaded = options.builds ? withBuilds(url) : url;
-            const { findings, left } = await bootTraced(chrome.browser, page, loaded, visit, options, picture, setRate);
+            const traced = bootTraced(chrome.browser, page, loaded, visit, options, picture, setRate);
+            const { findings, left } = await withErrorsTold(traced, page, errors);
             const group = `${options.nameOf(url)} ${variant}, ${visit.name}`;
             const notes = bootNotes(visit, options, left, errors, picture);
             measured({ name: `${group} (round ${round})`, group, notes, findings });

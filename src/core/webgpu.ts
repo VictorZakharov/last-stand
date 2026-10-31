@@ -76,9 +76,75 @@ export async function makeWebGPURenderer(): Promise<THREE.WebGLRenderer> {
     compiling.push(renderer.compileAsync(scene, camera, target ?? null).catch((e: unknown) => console.warn('WebGPU compile:', e)));
     return new Set<THREE.Material>();
   });
-  stand('capabilities', { getMaxAnisotropy: () => renderer.getMaxAnisotropy(), isWebGL2: true });
+  // (the labels' atlas is sized within it: missing, its side was NaN, a texture 1 px wide)
+  const maxTextureSize = (renderer.backend as unknown as GpuBackend).device?.limits.maxTextureDimension2D ?? 4096;
+  stand('capabilities', { getMaxAnisotropy: () => renderer.getMaxAnisotropy(), isWebGL2: true, maxTextureSize });
   Object.defineProperty(renderer.info, 'programs', { value: [], writable: true });
   return renderer as unknown as THREE.WebGLRenderer;
+}
+
+/** what of three's WebGPU backend a canvas's copy into a texture reads: the device, and each texture's own */
+interface GpuBackend {
+  device?: {
+    limits: { maxTextureDimension2D: number };
+    queue: {
+      copyExternalImageToTexture(source: object, destination: object, size: object): void;
+    };
+  };
+  get(texture: THREE.Texture): { texture?: object };
+}
+
+/**
+ * `w` by `h` px of `canvas` from its top left copied into `texture` at `x`, `y`, premultiplied by their alpha on
+ * the way (the labels' slots, ui/overlay/atlas.ts): three's own copy reads a texture's upload, which would send the
+ * whole canvas each time. False where it can't (WebGPURenderer's WebGL 2 backend, a texture not yet on the GPU).
+ */
+export function copyCanvasInto(renderer: THREE.WebGLRenderer, canvas: HTMLCanvasElement, texture: THREE.Texture,
+  w: number, h: number, x: number, y: number): boolean {
+  const backend = (renderer as unknown as WebGPURenderer).backend as unknown as GpuBackend;
+  const into = backend.device && backend.get(texture).texture;
+  if (!backend.device || !into) return false;
+  backend.device.queue.copyExternalImageToTexture(
+    { source: canvas, origin: { x: 0, y: 0 } },
+    { texture: into, origin: { x, y }, premultipliedAlpha: true },
+    { width: w, height: h },
+  );
+  return true;
+}
+
+/** The labels' material on WebGPU (ui/overlay/layer.ts's shader as nodes): each instance a box of the canvas
+ *  (`aRect`, px) showing its slot of the atlas (`aUv`) at its alpha (`aAlpha`), premultiplied. */
+export function labelsMaterial(atlas: THREE.Texture, view: THREE.Vector2): {
+  material: THREE.Material;
+  setAtlas(texture: THREE.Texture): void;
+} {
+  const { attribute, positionGeometry, vec4, mix, varying, texture, uniform } = tsl;
+  const rect = attribute('aRect', 'vec4'), slot = attribute('aUv', 'vec4');
+  const size = uniform(view);
+  const px = rect.xy.add(positionGeometry.xy.mul(rect.zw));
+  const material = new gpu.MeshBasicNodeMaterial();
+  material.vertexNode = vec4(px.x.div(size.x).mul(2).sub(1), px.y.div(size.y).mul(2).oneMinus(), 0, 1);
+  const shown = texture(atlas, varying(mix(slot.xy, slot.zw, positionGeometry.xy)));
+  material.fragmentNode = shown.mul(varying(attribute('aAlpha', 'float')));
+  return { material, setAtlas: (t) => { shown.value = t; } };
+}
+
+/**
+ * `draw` onto the canvas over the frame the pipeline drew: with no tone mapping or conversion asked, so three draws
+ * straight onto it (else it draws into a target of its own, empty, and copies that over the frame: the labels' first
+ * port blacked the frame out), and not cleared.
+ */
+export function drawOverFrame(renderer: THREE.WebGLRenderer, draw: () => void): void {
+  const r = renderer as unknown as WebGPURenderer;
+  const { toneMapping, outputColorSpace, autoClear } = r;
+  r.toneMapping = THREE.NoToneMapping;
+  r.outputColorSpace = THREE.ColorManagement.workingColorSpace;
+  r.autoClear = false;
+  r.setRenderTarget(null);
+  draw();
+  r.toneMapping = toneMapping;
+  r.outputColorSpace = outputColorSpace;
+  r.autoClear = autoClear;
 }
 
 /** A node build three made for an object (`?builds`, `recordNodeBuilds`): when (the page's clock) and how long it
