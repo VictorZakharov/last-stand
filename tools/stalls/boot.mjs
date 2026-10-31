@@ -11,6 +11,7 @@ import { BLINK_FRAMES, filmFrames, filmOf, logoBox, startFilm } from './film.mjs
 import { bootRecording, chooseIfAsked, fightWarm, loaded, startIfCold, stopBootRecording } from './page.mjs';
 import { startTrace } from './trace.mjs';
 import { partsOf, VARIANTS } from './variants.mjs';
+import { VIEWS } from './options.mjs';
 import { resizeTrips, windFitRead, windFitRecording } from './windFit.mjs';
 
 /** the page's mark on the trace, where its clock starts */
@@ -96,6 +97,7 @@ async function bootTraced(browser, page, url, visit, options, picture, setRate) 
   const events = await trace.stop();
   const shots = film ? await film.stop() : [];
   await setRate(1);
+  await viewForPicture(page, options.view);
   await page.screenshot({ path: picture.end });
   const findings = analyzeBoot(record, events, MARK, options.sourceOf);
   if (builds) {
@@ -132,12 +134,50 @@ function bootNotes(visit, options, left, errors, picture) {
   const blinks = `the loading screen hidden for a frame ${options.blinkExit} times as it left`;
   const blinked = options.blinkExit ? [blinks] : [];
   const leftNote = left ? [LEFT_NOTES[left]] : [];
-  const failed = errors.length ? [`page errors: ${errors.slice(0, 3).join(' | ')}`] : [];
+  const failed = errors.length ? [`page errors: ${distinctErrors(errors).join(' | ')}`] : [];
   const read = options.read ? [`${options.read} read into ${picture.read}`] : [];
   const builds = options.builds ? ['its WebGPU node builds recorded (`?builds`), each step\'s listed'] : [];
   const notes = [visit.note, ...auto, ...slowed, ...trips, ...stalled, ...held, ...blinked, ...stale, ...leftNote,
     ...failed, ...read, ...builds];
   return [...notes, `its end pictured in ${picture.end}`];
+}
+
+/** the most of an error's text a boot's notes keep (a WGSL compile error quotes its shader) */
+const ERROR_CHARS = 400;
+
+/** how long a press of V is held, and how long the camera takes to glide into the next view (ms) */
+const VIEW_KEY_MS = 90;
+const VIEW_GLIDE_MS = 1500;
+
+/** The fight the boot started put in `view` for its end picture, V pressed as a player does (the close views lock the
+ *  pointer, a headless Chrome's own). */
+async function viewForPicture(page, view) {
+  for (let press = 0; press < VIEWS.indexOf(view); press++) {
+    await page.keyboard.press('v', { delay: VIEW_KEY_MS });
+    await page.waitForTimeout(VIEW_GLIDE_MS);
+  }
+}
+
+/** the most distinct errors a boot's notes list */
+const ERRORS_SHOWN = 6;
+
+/** `errors` each told once, with how many times it came where more than once, in the order they first came. */
+function distinctErrors(errors) {
+  const counts = new Map();
+  for (const error of errors) counts.set(error, (counts.get(error) ?? 0) + 1);
+  const told = [...counts].map(([error, count]) => (count > 1 ? `${error} (x${count})` : error));
+  const more = told.length > ERRORS_SHOWN ? [`${told.length - ERRORS_SHOWN} more`] : [];
+  return [...told.slice(0, ERRORS_SHOWN), ...more];
+}
+
+/** `page`'s errors kept in `errors` as they come: its uncaught ones, and those it logs (three logs a shader that
+ *  failed to compile, and draws on without it). */
+function keepErrors(page, errors) {
+  const keep = (text) => errors.push(text.slice(0, ERROR_CHARS));
+  page.on('pageerror', (error) => keep(String(error)));
+  page.on('console', (message) => {
+    if (message.type() === 'error') keep(`logged: ${message.text()}`);
+  });
 }
 
 /**
@@ -155,7 +195,7 @@ export async function measureBoots(urls, options, { chromeFor, sourcesFor, pictu
           const context = await bootContext(chrome.browser, url, variant, options);
           const page = await context.newPage();
           const errors = [];
-          page.on('pageerror', (error) => errors.push(String(error)));
+          keepErrors(page, errors);
           const setRate = await slowCpu(page, options.cpuSlowdown);
           options.sourceOf = sourcesFor(url);
           for (const visit of VISITS) {

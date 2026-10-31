@@ -47,7 +47,8 @@ const HELP = {
     + `${Object.keys(VARIANTS).join(', ')} (base)`],
   rounds: ['n', 'the variants measured in turn this many times over in one page, each one\'s styles put on as it runs '
     + '(variants that only add styles), and compared by their medians (1 by default: a fresh Chrome for each)'],
-  view: ['name', `the view it's played in: ${VIEWS.join(', ')} (V pressed in the lobby, its panels shown again; top)`],
+  view: ['name', `the view it's played in: ${VIEWS.join(', ')} (V pressed in the lobby, its panels shown again; top; `
+    + `${BOOT}: its end pictured in it, V pressed in the fight it started)`],
   biome: ['name', `the battleground: ${BIOMES.join(', ')} (forest by default; ${BOOT}: the game's own pick, `
     + 'where given its every visit\'s, so two variants\' end pictures show the same)'],
   hero: ['name', `the hero chosen in the lobby: ${HEROES.join(', ')} (a first boot's by default)`],
