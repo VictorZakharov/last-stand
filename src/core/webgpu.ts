@@ -219,8 +219,27 @@ type CompileNodes = { updateBefore(renderObject: unknown): void; getNodeFrameFor
 const nodes_ = (renderObject: unknown): { updateBeforeNodes: object[] } =>
   (renderObject as { getNodeBuilderState(): { updateBeforeNodes: object[] } }).getNodeBuilderState();
 
-/** The post chain on WebGPU: the scene's pass, its bloom added, tone mapped and in sRGB on the way out. */
-export async function makePipeline(renderer: THREE.WebGLRenderer, scene: THREE.Scene, camera: THREE.Camera): Promise<void> {
+/** Where the grade's highlights ease off (renderer.ts's `HI_KNEE`, `HI_CAP`): the brightest channel over `knee`
+ *  eases towards `cap`. */
+export interface Highlights { knee: number; cap: number }
+
+/** `colour` compressed as the WebGL grade compresses it: the brightest channel over the knee eased towards the cap,
+ *  the others kept in their ratio to it, so a stack of lights stops adding up (a fire's flames blew out white). */
+// (untyped: TSL's types don't follow a node through these calls yet)
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function compressed(colour: any, { knee, cap }: Highlights): unknown {
+  const { exp, max, select, vec4 } = tsl;
+  const brightest = max(colour.r, max(colour.g, colour.b));
+  const room = cap - knee;
+  const eased = exp(brightest.sub(knee).negate().div(room)).oneMinus().mul(room).add(knee);
+  const scale = select(brightest.greaterThan(knee), eased.div(brightest), 1);
+  return vec4(colour.rgb.mul(scale), colour.a);
+}
+
+/** The post chain on WebGPU: the scene's pass, its bloom added, its highlights compressed, tone mapped and in sRGB on
+ *  the way out. (Not yet the rest of the grade: the adaptation, the glare's kept hue, the low Health look.) */
+export async function makePipeline(renderer: THREE.WebGLRenderer, scene: THREE.Scene, camera: THREE.Camera,
+  highlights: Highlights): Promise<void> {
   const { RenderPipeline } = await import('three/webgpu');
   const { pass } = await import('three/tsl');
   const { bloom } = await import('three/addons/tsl/display/BloomNode.js');
@@ -229,7 +248,7 @@ export async function makePipeline(renderer: THREE.WebGLRenderer, scene: THREE.S
   sceneTarget = scenePass.renderTarget;
   const color = scenePass.getTextureNode('output');
   pipeline = new RenderPipeline(gpu);
-  pipeline.outputNode = color.add(bloom(color, 0.85, 0, 0.9));
+  pipeline.outputNode = <typeof pipeline.outputNode>compressed(color.add(bloom(color, 0.85, 0, 0.9)), highlights);
 }
 
 /** the scene's environment as one node, its map swapped (`oneEnvironment`) */
@@ -304,4 +323,14 @@ export function rigPointLights(scene: THREE.Scene, groups: THREE.Object3D[]): vo
 }
 
 /** Draws a frame through the WebGPU post chain. */
-export function renderWebGPU(): void { pipeline?.render(); }
+/**
+ * The frame: its last pass drawn onto the canvas. three's pipeline draws it into whatever target is set, and an async
+ * compile finishing puts back the target set when it started (a warm-up's, the scene's own): the frame after drew
+ * into the texture it read (a GPUValidationError on `output`, that pass dropped).
+ */
+export function renderWebGPU(): void {
+  if (!pipeline) return;
+  const renderer = (pipeline as unknown as { renderer: WebGPURenderer }).renderer;
+  renderer.setRenderTarget(null);
+  pipeline.render();
+}

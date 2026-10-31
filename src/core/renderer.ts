@@ -522,7 +522,7 @@ export async function initRenderer(container: HTMLElement) {
     pass.render = (...a: Parameters<typeof run>) => { gpuMarks.mark(label); run(...a); };
   }
 
-  if (WEBGPU) await makePipeline(renderer, scene, camera);
+  if (WEBGPU) await makePipeline(renderer, scene, camera, { knee: HI_KNEE, cap: HI_CAP });
   G.scene = scene; G.camera = camera; G.renderer = renderer;
   window.addEventListener('resize', fitViewport);
   fitViewport();
