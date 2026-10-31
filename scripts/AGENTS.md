@@ -6,6 +6,7 @@ The rules across the game are the [root AGENTS.md](../AGENTS.md).
 
 - `pwa.ts`: the Vite plugin for the installable, offline game (production builds only).
 - `check-pages-build.mjs`: `npm run check:pages`, after a build: every asset path in `dist/index.html` must work under the Pages base path (a preview's too).
+- `preview/`: what `.github/workflows/pr-preview.yml` does at each step, tested (`npm run preview:test`; its own AGENTS.md).
 - `issue.sh` and `commit.sh`: the fork workflow (a prompt starting `new issue:`, the root's Workflow).
 
 ## Gotchas

@@ -38,7 +38,9 @@ name: PR preview
 # This runs on `workflow_run`, so it uses the workflow from main with a write
 # token even for fork PRs. It never runs PR code: the artifact is only copied as
 # static files, and its PR number is checked against the API (the PR's head
-# must be the commit that was built).
+# must be the commit that was built). What each step does is a module in
+# `scripts/preview/` (its tests: `npm run preview:test`), checked out from
+# this run's commit, main's head, beside the stable page: never the PR's.
 
 on:
   workflow_run:
@@ -75,41 +77,25 @@ jobs:
       pull-requests: write
     environment:
       name: github-pages-preview
-    env:
-      HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
     steps:
+      # this run's commit, main's head: never the PR's
+      - name: Check out the stable page and the scripts
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: trusted
+          sparse-checkout: |
+            .github/preview-index.html
+            scripts/preview
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+
       - name: Find the open pull request
         id: pr
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
-            // this job can wait for a runner (or the group) longer than a quick build takes: once the build is
-            // done, the preview and the comment are the publish job's, and "building" would overwrite its link
-            const { data: build } = await github.rest.actions.getWorkflowRun({ ...context.repo, run_id: context.payload.workflow_run.id });
-            if (build.status === 'completed') { core.info('build already finished'); return core.setOutput('number', ''); }
-            const prs = await github.paginate(github.rest.pulls.list, { ...context.repo, state: 'open', per_page: 100 });
-            core.setOutput('number', String(prs.find((p) => p.head.sha === context.payload.workflow_run.head_sha)?.number ?? ''));
-
-      - name: Mark preview as building
-        if: steps.pr.outputs.number != ''
-        uses: marocchino/sticky-pull-request-comment@5770ad5eb8f42dd2c4f34da00c94c5381e49af88 # v3
-        with:
-          header: last-stand-pr-preview
-          number: ${{ steps.pr.outputs.number }}
-          message: |
-            **PR preview:** building `${{ github.event.workflow_run.head_sha }}`. The preview's page shows how long, and goes to the new build once it's published.
-
-            [Watch the build](${{ github.event.workflow_run.html_url }})
-
-      # main's own copy (this run's commit is main's head): never the PR's
-      - name: Check out the stable page
-        if: steps.pr.outputs.number != ''
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          path: trusted
-          sparse-checkout: .github/preview-index.html
-          sparse-checkout-cone-mode: false
-          persist-credentials: false
+            const { findBuildingPr } = await import(`${process.env.GITHUB_WORKSPACE}/trusted/scripts/preview/steps.mjs`);
+            await findBuildingPr({ github, context, core });
 
       - name: Check out gh-pages
         if: steps.pr.outputs.number != ''
@@ -121,48 +107,13 @@ jobs:
       - name: Say the preview is building
         id: stage
         if: steps.pr.outputs.number != ''
-        shell: bash
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
           PR_NUMBER: ${{ steps.pr.outputs.number }}
-          SINCE: ${{ github.event.workflow_run.created_at }}
-          RUN_URL: ${{ github.event.workflow_run.html_url }}
-        run: |
-          set -euo pipefail
-          pages_dir="${GITHUB_WORKSPACE}/pages"
-          preview_dir="${pages_dir}/pr-preview/pr-${PR_NUMBER}"
-          mkdir -p "${preview_dir}"
-          previous=""
-          if [[ -f "${preview_dir}/latest.json" ]]; then
-            previous="$(jq -r '.folder // empty' "${preview_dir}/latest.json")"
-          fi
-          # a build published at the PR's root (before #299) goes; the commits' folders stay
-          find "${preview_dir}" -mindepth 1 -maxdepth 1 -regextype posix-extended -not -regex '.*/[0-9a-f]{7}' \
-            -exec rm -rf {} +
-          # (the values are a repository's name, a number and hex: none holds a '|')
-          sed -e "s|__REPO__|${GITHUB_REPOSITORY}|g" \
-            -e "s|__PR__|${PR_NUMBER}|g" \
-            -e "s|__FOLDER__|${previous}|g" \
-            "${GITHUB_WORKSPACE}/trusted/.github/preview-index.html" > "${preview_dir}/index.html"
-          jq -n --arg sha "${HEAD_SHA}" --arg folder "${previous}" --arg since "${SINCE}" --arg run "${RUN_URL}" \
-            '{headSha: $sha, state: "building", folder: (if $folder == "" then null else $folder end), since: $since, run: $run}' \
-            > "${preview_dir}/latest.json"
-          touch "${pages_dir}/.nojekyll"
-
-          git -C "${pages_dir}" config user.name "github-actions[bot]"
-          git -C "${pages_dir}" config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git -C "${pages_dir}" add -A
-          if git -C "${pages_dir}" diff --cached --quiet; then
-            echo "deploy=false" >> "${GITHUB_OUTPUT}"
-            exit 0
-          fi
-          # the stable page reads latest.json from the branch: Pages is deployed only when what it serves changed
-          if git -C "${pages_dir}" diff --cached --name-only | grep -qv '/latest\.json$'; then
-            echo "deploy=true" >> "${GITHUB_OUTPUT}"
-          else
-            echo "deploy=false" >> "${GITHUB_OUTPUT}"
-          fi
-          git -C "${pages_dir}" commit -m "Preview PR #${PR_NUMBER}: building ${HEAD_SHA}"
-          git -C "${pages_dir}" push origin HEAD:gh-pages
+        with:
+          script: |
+            const { markBuilding } = await import(`${process.env.GITHUB_WORKSPACE}/trusted/scripts/preview/steps.mjs`);
+            markBuilding({ context, core });
 
       - name: Upload aggregated Pages artifact
         if: steps.stage.outputs.deploy == 'true'
@@ -178,7 +129,7 @@ jobs:
   # Publishes the build that triggered it and catches up every other one left unpublished: whichever run holds the
   # group last sees every build that finished before it, so a publish cancelled while it waited is made by the next.
   # It runs for every finished build, cancelled and skipped ones too, and after every production deploy, so the last
-  # job to hold the group is always one of these.
+  # job to hold the group is always one of these. The steps are scripts/preview/steps.mjs's (main's copy).
   publish:
     name: Publish PR previews
     if: github.event_name == 'workflow_dispatch' || github.event.action == 'completed'
@@ -197,151 +148,29 @@ jobs:
     environment:
       name: github-pages-preview
     steps:
-      # where Pages serves the site, as its settings have it (a custom domain's, `https://last-stand.cc`, once one is
-      # set: the github.io URL then answers with a redirect, and the probes below read that and failed);
-      # the SITE_ORIGIN variable, if set, wins
-      - name: Find where Pages serves the site
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-          ASKED_ORIGIN: ${{ vars.SITE_ORIGIN }}
-          FALLBACK_ORIGIN: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}
-        run: |
-          set -euo pipefail
-          origin="${ASKED_ORIGIN}"
-          if [[ -z "${origin}" ]]; then
-            origin="$(gh api "repos/${GITHUB_REPOSITORY}/pages" --jq '.html_url' 2>/dev/null || true)"
-          fi
-          origin="${origin:-${FALLBACK_ORIGIN}}"
-          echo "SITE_ORIGIN=${origin%/}" >> "${GITHUB_ENV}"
-          echo "Pages serves the site at ${origin%/}"
-          # what's to publish, what was staged and what came of each, as the steps below find it
-          {
-            echo "ITEMS=${RUNNER_TEMP}/items.json"
-            echo "STAGED=${RUNNER_TEMP}/staged.jsonl"
-            echo "RESULTS=${RUNNER_TEMP}/results.jsonl"
-          } >> "${GITHUB_ENV}"
-          touch "${RUNNER_TEMP}/staged.jsonl" "${RUNNER_TEMP}/results.jsonl"
+      # this run's commit, main's head: never the PR's
+      - name: Check out the stable page and the scripts
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: trusted
+          sparse-checkout: |
+            .github/preview-index.html
+            scripts/preview
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
 
-      # The triggering build, and for every open PR the newest finished build of its head when `latest.json` doesn't
-      # record that head as ready or failed yet. Each build's artifact ran PR code: its pr.json is untrusted until
-      # the API agrees (the PR's head must be the commit that was built).
+      # The triggering build, and each open PR's newest finished build gh-pages doesn't record yet: each artifact
+      # downloaded, its pr.json believed only when the API agrees (the PR's head is the commit built).
       - name: Find the builds to publish
         id: find
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
           GH_TOKEN: ${{ github.token }}
-          RUNS_DIR: ${{ runner.temp }}/runs
+          ASKED_ORIGIN: ${{ vars.SITE_ORIGIN }}
         with:
           script: |
-            const fs = require('fs');
-            const { owner, repo } = context.repo;
-            const failed = ['failure', 'timed_out', 'startup_failure'];
-            const finished = (run) => run.status === 'completed' && (run.conclusion === 'success' || failed.includes(run.conclusion));
-            // gh-pages as the stable page reads it: nothing else writes it while this job holds the group
-            const readPages = async (path) => {
-              try {
-                const { data } = await github.rest.repos.getContent({ owner, repo, path, ref: 'gh-pages' });
-                return data;
-              } catch (error) {
-                if (error.status === 404) return null;
-                throw error;
-              }
-            };
-            const readPagesJson = async (path) => {
-              const file = await readPages(path);
-              try { return file?.content ? JSON.parse(Buffer.from(file.content, 'base64').toString('utf8')) : null; } catch { return null; }
-            };
-            const latestOf = (number) => readPagesJson(`pr-preview/pr-${number}/latest.json`);
-            // a head is published once latest.json says it's ready or failed (or, built before #299, it's at the root)
-            const published = async (number, sha) => {
-              const latest = await latestOf(number);
-              if (latest?.headSha === sha && ['ready', 'failed'].includes(latest.state)) return true;
-              return (await readPagesJson(`pr-preview/pr-${number}/preview-metadata.json`))?.headSha === sha;
-            };
-
-            const prs = await github.paginate(github.rest.pulls.list, { owner, repo, state: 'open', per_page: 100 });
-            const builds = new Map();
-            const consider = (run, why) => {
-              core.info(`build ${run.id} (${run.head_sha.slice(0, 7)}, ${run.conclusion}): ${why}`);
-              builds.set(run.id, { id: run.id, sha: run.head_sha, url: run.html_url, conclusion: run.conclusion });
-            };
-            const trigger = context.payload.workflow_run;
-            if (trigger?.event === 'pull_request' && finished(trigger)) consider(trigger, 'triggered this run');
-            for (const pr of prs) {
-              if (await published(pr.number, pr.head.sha)) continue;
-              const { data } = await github.rest.actions.listWorkflowRuns({
-                owner, repo, workflow_id: 'pr-preview-build.yml', event: 'pull_request', head_sha: pr.head.sha, per_page: 30,
-              });
-              const runs = data.workflow_runs.sort((a, b) => b.created_at.localeCompare(a.created_at));
-              const newest = runs.find(finished);
-              // one still running publishes itself when it's done
-              if (!newest || runs.some((run) => run.status !== 'completed' && run.created_at > newest.created_at)) continue;
-              consider(newest, `the newest finished build of PR #${pr.number}, unpublished`);
-            }
-
-            // each PR's newest item wins (two builds of one head publish the same files)
-            const items = new Map();
-            const add = (item) => {
-              if ((items.get(item.number)?.id ?? 0) > item.id) return;
-              core.info(`PR #${item.number}: ${item.mode} ${item.sha ?? ''}`);
-              items.set(item.number, item);
-            };
-            for (const build of builds.values()) {
-              const dir = `${process.env.RUNS_DIR}/${build.id}`;
-              if (build.conclusion === 'success') {
-                // gh writes plain files inside the directory, never a link or a path out of it
-                await exec.exec('gh', ['run', 'download', String(build.id), '--repo', `${owner}/${repo}`, '--name', 'pr-preview', '--dir', dir], { ignoreReturnCode: true });
-              }
-              const meta = `${dir}/pr.json`;
-              const item = { id: build.id, sha: build.sha, run: build.url, site: `${dir}/site` };
-              if (build.conclusion !== 'success' || !fs.existsSync(meta)) {
-                const number = prs.find((p) => p.head.sha === build.sha)?.number;
-                if (number) add({ ...item, mode: 'failed', number });
-                continue;
-              }
-              let claimed;
-              try { claimed = JSON.parse(fs.readFileSync(meta, 'utf8')); } catch { core.warning(`build ${build.id}: unreadable pr.json`); continue; }
-              const { number, action } = claimed;
-              if (!Number.isInteger(number) || number <= 0) { core.warning(`build ${build.id}: bad PR number ${number}`); continue; }
-              const { data: pr } = await github.rest.pulls.get({ owner, repo, pull_number: number });
-              if (pr.head.sha !== build.sha) continue; // superseded by a newer push
-              if (action === 'closed') {
-                if (pr.state === 'closed' && !pr.merged) add({ ...item, mode: 'remove', number });
-                continue;
-              }
-              if (pr.state !== 'open') continue;
-              // a build a catch-up already published (its own run came after) isn't published again
-              const latest = await latestOf(number);
-              if (latest?.headSha === build.sha && latest.run === build.url && ['ready', 'failed'].includes(latest.state)) {
-                core.info(`PR #${number}: ${build.sha.slice(0, 7)} already ${latest.state}`);
-                continue;
-              }
-              add({ ...item, mode: 'publish', number });
-            }
-
-            // a preview whose PR was closed unmerged, if its removal was lost (merged ones go with production's deploy)
-            const open = new Set(prs.map((p) => p.number));
-            for (const entry of (await readPages('pr-preview')) ?? []) {
-              const number = Number(/^pr-(\d+)$/.exec(entry.name)?.[1]);
-              if (entry.type !== 'dir' || !number || open.has(number) || items.has(number)) continue;
-              const { data: pr } = await github.rest.pulls.get({ owner, repo, pull_number: number });
-              if (pr.state === 'closed' && !pr.merged) add({ id: 0, mode: 'remove', number });
-            }
-
-            fs.writeFileSync(process.env.ITEMS, JSON.stringify([...items.values()]));
-            core.setOutput('count', String(items.size));
-            core.setOutput('stage', String([...items.values()].some((item) => item.mode !== 'failed')));
-
-      # main's own copy (this run's commit is main's head): never the PR's
-      - name: Check out the stable page
-        if: steps.find.outputs.count != '0'
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          path: trusted
-          sparse-checkout: .github/preview-index.html
-          sparse-checkout-cone-mode: false
-          persist-credentials: false
+            const { findPublish } = await import(`${process.env.GITHUB_WORKSPACE}/trusted/scripts/preview/steps.mjs`);
+            await findPublish({ github, context, core, exec });
 
       - name: Check out gh-pages
         if: steps.find.outputs.count != '0'
@@ -353,95 +182,11 @@ jobs:
       - name: Stage or remove previews
         id: stage
         if: steps.find.outputs.stage == 'true'
-        shell: bash
-        run: |
-          set -euo pipefail
-          pages_dir="${GITHUB_WORKSPACE}/pages"
-
-          # one PR's line is the commit's subject, several are its body
-          message() {
-            if (( $# == 1 )); then
-              echo "Preview PR $1"
-              return
-            fi
-            printf 'Preview %d PRs\n\n' "$#"
-            printf '%s\n' "$@"
-          }
-
-          # one PR's build into its commit's folder, or its preview removed
-          stage() {
-            local number="$1" mode="$2" sha="$3" run="$4" site_dir="$5"
-            local preview_dir="${pages_dir}/pr-preview/pr-${number}"
-            local folder="${sha:0:7}"
-            if [[ "${mode}" == "remove" ]]; then
-              rm -rf "${preview_dir}"
-              jq -nc --argjson number "${number}" '{number: $number, state: "removed"}' >> "${staged_results}"
-              return
-            fi
-            # plain files only: no nested repos or links out of the preview
-            find "${site_dir}" -name .git -prune -exec rm -rf {} +
-            find "${site_dir}" -type l -delete
-            mkdir -p "${preview_dir}"
-            if [[ -d "${site_dir}/${folder}" ]]; then
-              # the build in its commit's folder, the stable page main's (the build's own beside it isn't used)
-              find "${preview_dir}" -mindepth 1 -maxdepth 1 -regextype posix-extended -not -regex '.*/[0-9a-f]{7}' \
-                -not -name latest.json -exec rm -rf {} +
-              rm -rf "${preview_dir:?}/${folder}"
-              cp -a "${site_dir}/${folder}/." "${preview_dir}/${folder}/"
-              printf '{"headSha":"%s","publishedAt":"%s"}\n' "${sha}" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-                > "${preview_dir}/${folder}/preview-metadata.json"
-              for probe in $(seq 1 "${PROBES}"); do
-                echo "${sha}" > "${preview_dir}/${folder}/served-${probe}.txt"
-              done
-              sed -e "s|__REPO__|${GITHUB_REPOSITORY}|g" \
-                -e "s|__PR__|${number}|g" \
-                -e "s|__FOLDER__|${folder}|g" \
-                "${GITHUB_WORKSPACE}/trusted/.github/preview-index.html" > "${preview_dir}/index.html"
-              # the newest KEEP_FOLDERS by when they were published; the rest go
-              for kept in "${preview_dir}"/*/; do
-                printf '%s %s\n' "$(jq -r '.publishedAt // ""' "${kept}preview-metadata.json" 2>/dev/null || true)" \
-                  "${kept}"
-              done | sort -r | tail -n "+$((KEEP_FOLDERS + 1))" | cut -d' ' -f2- | while read -r old; do
-                rm -rf "${old}"
-              done
-              jq -nc --argjson number "${number}" --arg sha "${sha}" --arg run "${run}" \
-                '{number: $number, sha: $sha, run: $run}' >> "${STAGED}"
-            else
-              # a PR built before #299, for the preview's root: published there as it was
-              rm -rf "${preview_dir}"
-              mkdir -p "${preview_dir}"
-              cp -a "${site_dir}/." "${preview_dir}/"
-              printf '{"headSha":"%s"}\n' "${sha}" > "${preview_dir}/preview-metadata.json"
-              jq -nc --argjson number "${number}" --arg sha "${sha}" \
-                --arg link "${SITE_ORIGIN}/pr-preview/pr-${number}/" \
-                '{number: $number, sha: $sha, state: "ready", link: $link}' >> "${staged_results}"
-            fi
-          }
-
-          # (fields split on the unit separator: a tab would run empty ones together)
-          summary=()
-          staged_results="${RUNNER_TEMP}/staged-results.jsonl"
-          : > "${staged_results}"
-          while IFS=$'\x1f' read -r number mode sha run site_dir; do
-            stage "${number}" "${mode}" "${sha}" "${run}" "${site_dir}"
-            summary+=("#${number}: ${mode} ${sha}")
-          done < <(jq -r '.[] | select(.mode != "failed") | [.number, .mode, .sha, .run, .site]
-            | map(. // "" | tostring) | join("\u001f")' "${ITEMS}")
-          touch "${pages_dir}/.nojekyll"
-
-          git -C "${pages_dir}" config user.name "github-actions[bot]"
-          git -C "${pages_dir}" config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git -C "${pages_dir}" add -A
-
-          # what's removed or at the root is done once it's pushed
-          if git -C "${pages_dir}" diff --cached --quiet; then
-            echo "changed=false" >> "${GITHUB_OUTPUT}"
-          else
-            git -C "${pages_dir}" commit -F <(message "${summary[@]}")
-            git -C "${pages_dir}" push origin HEAD:gh-pages
-            echo "changed=true" >> "${GITHUB_OUTPUT}"
-          fi
-          cat "${staged_results}" >> "${RESULTS}"
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const { stagePublish } = await import(`${process.env.GITHUB_WORKSPACE}/trusted/scripts/preview/steps.mjs`);
+            stagePublish({ core });
 
       - name: Upload aggregated Pages artifact
         if: steps.stage.outputs.changed == 'true'
@@ -455,124 +200,20 @@ jobs:
         if: steps.stage.outputs.changed == 'true'
         uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128 # v5.0.0
 
-      # Never a build's own files before they're served: a 404 the CDN cached for one would stand 10 minutes.
-      # latest.json is read by the stable page from the branch: no deploy needed (Pages' copy is its fallback alone).
       - name: Wait for Pages to serve each build, and record it
         if: always() && steps.find.outcome == 'success' && steps.find.outputs.count != '0' && steps.stage.outcome != 'failure'
-        shell: bash
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
           DEPLOY: ${{ steps.deploy.outcome }}
-        run: |
-          set -euo pipefail
-          pages_dir="${GITHUB_WORKSPACE}/pages"
+        with:
+          script: |
+            const { recordPublish } = await import(`${process.env.GITHUB_WORKSPACE}/trusted/scripts/preview/steps.mjs`);
+            await recordPublish({ core });
 
-          # one PR's line is the commit's subject, several are its body
-          message() {
-            if (( $# == 1 )); then
-              echo "Preview PR $1"
-              return
-            fi
-            printf 'Preview %d PRs\n\n' "$#"
-            printf '%s\n' "$@"
-          }
-
-          # 0 once Pages serves the build of $2 for PR $1
-          served() {
-            local folder_url="${SITE_ORIGIN}/pr-preview/pr-$1/${2:0:7}"
-            local got
-            for probe in $(seq 1 "${PROBES}"); do
-              if [[ "$(curl -fsSL "${folder_url}/served-${probe}.txt" 2>/dev/null || true)" == "$2" ]]; then
-                got="$(curl -fsSL "${folder_url}/preview-metadata.json" | jq -r '.headSha // ""' || true)"
-                if [[ "${got}" == "$2" ]]; then
-                  echo "Pages serves ${folder_url}/ (probe ${probe})"
-                  return 0
-                fi
-                echo "::error::Pages serves the probe but not the build's metadata (${got:-nothing})"
-                return 1
-              fi
-              sleep "${PROBE_EVERY_SECONDS}"
-            done
-            echo "::error::Pages didn't serve ${folder_url}/ within $((PROBES * PROBE_EVERY_SECONDS)) s"
-            return 1
-          }
-
-          # PR $1's latest.json: build $2 (run $4) is $3, ready or failed
-          record() {
-            local preview_dir="${pages_dir}/pr-preview/pr-$1"
-            local latest="${preview_dir}/latest.json"
-            local folder=""
-            mkdir -p "${preview_dir}"
-            if [[ -f "${latest}" ]]; then folder="$(jq -r '.folder // empty' "${latest}")"; fi
-            if [[ "$3" == "ready" ]]; then folder="${2:0:7}"; fi
-            jq -n --arg sha "$2" --arg state "$3" --arg folder "${folder}" --arg run "$4" \
-              '{headSha: $sha, state: $state, folder: (if $folder == "" then null else $folder end), run: $run}' \
-              > "${latest}"
-          }
-
-          unserved=0
-          summary=()
-          while IFS=$'\x1f' read -r number sha run; do
-            state="failed"
-            if [[ "${DEPLOY}" != "failure" && "${DEPLOY}" != "cancelled" ]] && served "${number}" "${sha}"; then
-              state="ready"
-            fi
-            record "${number}" "${sha}" "${state}" "${run}"
-            summary+=("#${number}: ${state} ${sha}")
-            if [[ "${state}" == "ready" ]]; then
-              jq -nc --argjson number "${number}" --arg sha "${sha}" \
-                --arg link "${SITE_ORIGIN}/pr-preview/pr-${number}/${sha:0:7}/" \
-                '{number: $number, sha: $sha, state: "ready", link: $link}' >> "${RESULTS}"
-            else
-              unserved=$((unserved + 1))
-            fi
-          done < <(jq -r '[.number, .sha, .run] | map(tostring) | join("\u001f")' "${STAGED}")
-          while IFS=$'\x1f' read -r number sha run; do
-            record "${number}" "${sha}" "failed" "${run}"
-            summary+=("#${number}: failed ${sha}")
-          done < <(jq -r '.[] | select(.mode == "failed") | [.number, .sha, .run] | map(tostring) | join("\u001f")' "${ITEMS}")
-
-          git -C "${pages_dir}" config user.name "github-actions[bot]"
-          git -C "${pages_dir}" config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git -C "${pages_dir}" add -A
-          if ! git -C "${pages_dir}" diff --cached --quiet; then
-            git -C "${pages_dir}" commit -F <(message "${summary[@]}")
-            git -C "${pages_dir}" push origin HEAD:gh-pages
-          fi
-          if (( unserved > 0 )); then
-            echo "::error::${unserved} build(s) not served"
-            exit 1
-          fi
-
-      # one sticky comment a PR, the same one marocchino/sticky-pull-request-comment keeps (the building job's)
       - name: Say what each preview is
         if: always() && steps.find.outcome == 'success' && steps.find.outputs.count != '0'
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
-            const fs = require('fs');
-            const { owner, repo } = context.repo;
-            const origin = process.env.SITE_ORIGIN;
-            const marker = '<!-- Sticky Pull Request Commentlast-stand-pr-preview -->';
-            const thisRun = `${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`;
-            const results = new Map(fs.readFileSync(process.env.RESULTS, 'utf8').split('\n').filter(Boolean)
-              .map((line) => JSON.parse(line)).map((result) => [result.number, result]));
-            const say = async (number, message) => {
-              const comments = await github.paginate(github.rest.issues.listComments, { owner, repo, issue_number: number, per_page: 100 });
-              const sticky = comments.find((comment) => comment.user?.type === 'Bot' && comment.body?.includes(marker));
-              const body = `${message}\n${marker}`;
-              if (sticky) await github.rest.issues.updateComment({ owner, repo, comment_id: sticky.id, body });
-              else await github.rest.issues.createComment({ owner, repo, issue_number: number, body });
-            };
-            const message = (item) => {
-              const result = results.get(item.number);
-              if (item.mode === 'failed') return `**PR preview:** build failed.\n\n[Open workflow run](${item.run})`;
-              if (item.mode === 'remove' && result?.state === 'removed') return '**PR preview:** removed.';
-              if (item.mode === 'publish' && result?.state === 'ready') {
-                return `**PR preview:** ready for \`${item.sha}\`.\n\n[Open preview](${result.link}) (this commit's build). ` +
-                  `The PR's own link, [pr-${item.number}/](${origin}/pr-preview/pr-${item.number}/), goes to its newest build.`;
-              }
-              return `**PR preview:** publication failed.\n\n[Open workflow run](${thisRun})`;
-            };
-            for (const item of JSON.parse(fs.readFileSync(process.env.ITEMS, 'utf8'))) {
-              await say(item.number, message(item));
-            }
+            const { commentPublish } = await import(`${process.env.GITHUB_WORKSPACE}/trusted/scripts/preview/steps.mjs`);
+            await commentPublish({ github, context });
