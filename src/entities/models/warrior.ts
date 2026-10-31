@@ -2064,6 +2064,10 @@ export function buildWarrior(): Model {
     // The full lift took the greataxe arm past its shoulder range; without a lift the forearm crossed the thigh 5.5 cm.
     if (w > letGo) restHands(j, { ...sit, w: ramp(w, letGo, 1) }, [1], _sitTurn, SIT_HANDS.rise, [1], 0.5);
   }
+  /** how much of the way down past `LAY.letGo` a fist let go of a weapon laid on the floor stays closed, before it
+   *  relaxes on its way to his knee (`restingHand`). (Loosened as it set the handle down, its fingers straightened
+   *  down through the floor, 3 to 8 cm) */
+  const LET_GO_LIFT = tunable('warriorLetGoLift', { after: 0.02 });
   /** A hand's weapon stood on its end and its arm round it, by `w` of the way down (in place of the arm's fit): the
    *  right's beside his right knee, the left's (dual) his left. To `PLANT.stood` of the way the fist carries it there
    *  as it holds it, its place taken from the fist (`carried`); from there it stands where it is, and the hand takes
@@ -3493,6 +3497,9 @@ export function buildWarrior(): Model {
       // (let go of for the blade to swing or lean round in it: `carryArm`)
       if (carriedBetween) loosen(handR, LOOSE_MOST * plantR.open, LOOSE_INDEX * plantR.open);
     }
+    // (let go of on the floor, the fist kept as it was round the handle until the hand has lifted off it: relaxed at
+    // once, its half-open fingers pointed down from the handle through the floor, 2 to 5 cm)
+    else if (plant > 0 && floorSit && !leanR) poseHand(handR, lerp(1.3, two ? 0.5 : 0.6, smooth(ramp(plant, LAY.letGo + LET_GO_LIFT.after, 1))), 0.1);
     else if (plant > 0) poseHand(handR, restingHand(plant, two), 0.1);
     else if (held) hold(handR, along(grip), held.r, undefined, slantR);
     else poseHand(handR, 0.5 + Math.sin(t * 1.3) * 0.05, 0.1);
