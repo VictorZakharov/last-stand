@@ -528,7 +528,7 @@ export async function initRenderer(container: HTMLElement) {
     pass.render = (...a: Parameters<typeof run>) => { gpuMarks.mark(label); run(...a); };
   }
 
-  if (WEBGPU) await makePipeline(renderer, scene, camera, { knee: HI_KNEE, cap: HI_CAP });
+  if (WEBGPU) await makePipeline(renderer, scene, camera, { knee: HI_KNEE, cap: HI_CAP }, grade.uniforms as never);
   G.scene = scene; G.camera = camera; G.renderer = renderer;
   window.addEventListener('resize', fitViewport);
   fitViewport();
@@ -829,14 +829,15 @@ export const overFrame = { draw: (): void => {} };
 export function render(): void {
   // a change the resize event missed: fit, and tell the rest of the page (UI scale...) too
   if (fitViewport()) window.dispatchEvent(new Event('resize'));
+  // (the grade's, WebGPU's too: core/webgpu.ts `graded`)
+  grade.uniforms.uTime.value = G.time;
+  grade.uniforms.uHurt.value = rig.hurt;
+  fitBloodMask(gl.domElement.width, gl.domElement.height);
   if (WEBGPU) {
     renderWebGPU();
     overFrame.draw();
     return;
   }
-  grade.uniforms.uTime.value = G.time;
-  grade.uniforms.uHurt.value = rig.hurt;
-  fitBloodMask(gl.domElement.width, gl.domElement.height);
   // the adaptation targets glide with the view
   const target = (v: ViewMode, i: 0 | 1): number => v !== 'top' ? ADAPT[v][i]
     : (ADAPT.lobby[i] + (ADAPT.top[i] - ADAPT.lobby[i]) * clamp((rig.zoom - CAMERA.lobbyZoom) / (1 - CAMERA.lobbyZoom), 0, 1)) * (i === 1 ? adaptScale : 1);

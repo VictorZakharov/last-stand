@@ -303,10 +303,47 @@ function compressed(colour: any, { knee, cap }: Highlights): unknown {
   return vec4(colour.rgb.mul(scale), colour.a);
 }
 
-/** The post chain on WebGPU: the scene's pass, its bloom added, its highlights compressed, tone mapped and in sRGB on
- *  the way out. (Not yet the rest of the grade: the adaptation, the glare's kept hue, the low Health look.) */
+/** The WebGL grade's uniforms the WebGPU one reads (core/renderer.ts `GradeShader`), each `{ value }` */
+export interface GradeUniforms {
+  uVignette: { value: number };
+  uHurt: { value: number };
+  uLow: { value: number };
+  uBeat: { value: number };
+  tBlood: { value: THREE.Texture | null };
+}
+
+/** `colour` (tone mapped, in sRGB) graded as the WebGL grade grades it there: the vignette, shadows cooled and
+ *  highlights warmed, the low Health look (the colour drained, the blood in from the edges as far as the Health has
+ *  fallen: core/lowLife.ts) and a hit's red flash round the edges. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function graded(colour: any, u: GradeUniforms): unknown {
+  const { dot, vec3, vec4, mix, pow, smoothstep, step, clamp, texture, reference, screenUV } = tsl as any;
+  const read = (uniform: { value: number }): any => reference('value', 'float', uniform);
+  const low = read(u.uLow);
+  const d = screenUV.sub(0.5);
+  const r = dot(d, d);
+  const vignette = smoothstep(0.12, 0.75, r.mul(read(u.uVignette))).oneMinus();
+  let c = colour.rgb.mul(mix(0.35, 1, vignette));
+  const lum = dot(c, vec3(0.299, 0.587, 0.114));
+  c = mix(c.mul(vec3(0.93, 0.97, 1.08)), c.mul(vec3(1.04, 1.0, 0.94)), smoothstep(0.2, 0.8, lum));
+  c = mix(c, vec3(dot(c, vec3(0.299, 0.587, 0.114))), pow(low, 1.5).mul(0.9));
+  // (the mask as WebGL's grade reads it, its rows from the screen's foot up)
+  const mask = texture(u.tBlood.value!, screenUV.flipY()).rgb;
+  const reach = low.mul(read(u.uBeat).mul(0.06).add(1));
+  const shown = mask.r.mul(smoothstep(mask.g.sub(0.03), mask.g.add(0.004), reach)).mul(step(1e-6, low));
+  const age = clamp(reach.sub(mask.g).div(0.45), 0, 1);
+  const rim = smoothstep(0, 0.035, reach.sub(mask.g)).oneMinus();
+  const blood = mix(vec3(0.42, 0.015, 0.025), vec3(0.11, 0, 0.006), age).mul(mask.b.mul(0.5).add(0.75))
+    .add(vec3(0.28, 0.04, 0.04).mul(rim).mul(mask.b));
+  c = mix(c, blood, shown.mul(mix(0.62, 0.94, age)));
+  c = mix(c, vec3(0.6, 0.02, 0.02), read(u.uHurt).mul(smoothstep(0.05, 0.5, r)).mul(0.8));
+  return vec4(c, colour.a);
+}
+
+/** The post chain on WebGPU: the scene's pass, its bloom added, its highlights compressed, tone mapped and in sRGB,
+ *  then graded there as WebGL's grade is (`graded`). (Not yet the adaptation, the glare's kept hue, HDR.) */
 export async function makePipeline(renderer: THREE.WebGLRenderer, scene: THREE.Scene, camera: THREE.Camera,
-  highlights: Highlights): Promise<void> {
+  highlights: Highlights, grade: GradeUniforms): Promise<void> {
   const { RenderPipeline } = await import('three/webgpu');
   const { pass } = await import('three/tsl');
   const { bloom } = await import('three/addons/tsl/display/BloomNode.js');
@@ -315,7 +352,10 @@ export async function makePipeline(renderer: THREE.WebGLRenderer, scene: THREE.S
   sceneTarget = scenePass.renderTarget;
   const color = scenePass.getTextureNode('output');
   pipeline = new RenderPipeline(gpu);
-  pipeline.outputNode = <typeof pipeline.outputNode>compressed(color.add(bloom(color, 0.85, 0, 0.9)), highlights);
+  // (tone mapped and in sRGB here, the grade after: the pipeline's own conversion off)
+  pipeline.outputColorTransform = false;
+  const out = tsl.renderOutput(compressed(color.add(bloom(color, 0.85, 0, 0.9)), highlights) as never);
+  pipeline.outputNode = <typeof pipeline.outputNode>graded(out, grade);
 }
 
 /** the scene's environment as one node, its map swapped (`oneEnvironment`) */

@@ -208,6 +208,11 @@ id (`NodeManager.getCacheKey`), and three makes each environment map a node of i
   way round undefined, and `pow` of a negative: the ports write the falling ones as one less the rising, and squares
   as products. Checked side by side with WebGL with `stalls --scenario boot --cast 3@1500` (a skill held for the
   end picture): Maelstrom's walls as WebGL draws them.
+- **The grade's display-space looks** (`graded` in `core/webgpu.ts`, after `renderOutput`: the pipeline's own
+  conversion off): the vignette, the cool shadows and warm highlights, the low Health look and a hit's red flash,
+  from the WebGL grade's own uniforms. The blood mask was never painted on WebGPU (`render` left before
+  `fitBloodMask`). Checked with the dev build at 6% of the hero's Health (`stalls --url http://localhost:PORT/?renderer=webgpu
+  --read "(__G.player.stats.maxLife = __G.player.life * 12, 1)"`): drained and bled as WebGL's, the drips from the top.
 - **The environment maps are WebGPU's generator's** (`generator` in `world/props.ts`): WebGL's draws with shaders
   WebGPU can't run, and its maps left the dais darker than on WebGL from every view. Now the same.
 - **The renderer is chosen in the pause menu** (`core/rendererChoice.ts`: WebGL or WebGPU, and WebGPU's meshlets and
@@ -230,7 +235,7 @@ id (`NodeManager.getCacheKey`), and three makes each environment map a node of i
   - the floors' relief, and the crypt's earth's own normals (the floors' looks are ported, below)
   - a fire's bed and its logs' char glowing through their cracks (`emberMat`)
   - triplanar, fur sway, dual-quaternion hands
-- **The grade:** exposure areas, glare, low Health, HDR, sanitize.
+- **The grade:** exposure areas, the glare's kept hue, the film grain, HDR, sanitize.
 - **Other gaps:**
   - The warm-up compiles by `compileAsync` now (below), but the fight's crowds are still rebuilt at their draw
     under the fight's loading bar (2.6 s).
