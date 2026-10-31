@@ -6,7 +6,7 @@ services:
       dockerfile: Dockerfile
     environment:
       PORT: "8080"
-      ORIGINS: https://victorzakharov.github.io,http://localhost:5173
+      ORIGINS: https://last-stand.cc,https://www.last-stand.cc,https://victorzakharov.github.io,http://localhost:5173
     expose:
       - "8080"
     healthcheck:

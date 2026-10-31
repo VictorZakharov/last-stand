@@ -8,9 +8,9 @@ stalls are the real browser's, at its own pace.
 
 ```bash
 npm run stalls                                   # this tree built and served, a 45 s fight in headless Chrome
-npm run stalls -- --url https://victorzakharov.github.io/last-stand/      # production
-npm run stalls -- --url https://victorzakharov.github.io/last-stand/pr-preview/pr-194/,https://victorzakharov.github.io/last-stand/
-npm run stalls -- --url this,https://victorzakharov.github.io/last-stand/  # this tree, then production
+npm run stalls -- --url https://last-stand.cc/      # production
+npm run stalls -- --url https://last-stand.cc/pr-preview/pr-194/,https://last-stand.cc/
+npm run stalls -- --url this,https://last-stand.cc/  # this tree, then production
 npm run stalls -- --headed --links --seconds 30  # a window on the screen, every program built listed
 npm run stalls -- --variants base,cpuCanvas      # the page as it is, then every 2D canvas drawn on the CPU
 npm run stalls -- --scenario lobby               # standing, then walking round the lobby
@@ -22,7 +22,7 @@ npm run stalls -- --scenario sweep --stash 60 --item-ms 100 --seconds 8 --rounds
 npm run stalls -- --scenario hover --stash 60 --listed 40   # every frame of 40 ms+ listed with what was busy
 npm run stalls -- --scenario stow --view top --perf --press-ms 100 --rounds 4  # Space pressed 10 times a second
 npm run stalls -- --scenario heroes --seconds 20 --listed 50  # the hero screen opened and left three times
-npm run stalls -- --scenario boot --url this,https://victorzakharov.github.io/last-stand/ --rounds 3  # the boot
+npm run stalls -- --scenario boot --url this,https://last-stand.cc/ --rounds 3  # the boot
 npm run stalls -- --scenario boot --cpu-slowdown 4 --js   # on a phone's CPU, its JS by function
 npm run stalls -- --scenario boot --url this,ref:HEAD~2 --rounds 3  # this tree beside a commit of its own
 npm run stalls -- --url "this,this?castAsOne=0" --rounds 4 --js  # a switch of the game's, in turns, one build

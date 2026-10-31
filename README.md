@@ -4,7 +4,7 @@
 
 A 3D wave-survival action RPG that runs in your browser. Hold the arena against endless waves, and after **every** wave make the call: **bank your spoils** and walk away, or **push on** for better loot — knowing that if you fall, everything you haven't banked is lost.
 
-**[▶ Play in your browser](https://victorzakharov.github.io/last-stand/)**
+**[▶ Play in your browser](https://last-stand.cc/)**
 
 Everything is procedural: models, animation, textures, VFX and sound are generated at runtime. There are no downloaded models, textures or audio files. The exceptions are the painted skill icons (`src/ui/skillArt/`) and the music (`src/audio/music/`).
 
