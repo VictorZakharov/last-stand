@@ -11,7 +11,10 @@ The rules across the game are the [root AGENTS.md](../../AGENTS.md).
   Pages API's `html_url`, or the `SITE_ORIGIN` variable if set): the game has its own domain, `last-stand.cc`, since
   2026-10-31, and the github.io address answers every path with a redirect there. Built from the github.io address,
   the probes read the redirect's page, and every publish failed after 60 s though its build was served. The probes
-  follow a redirect too. Pages must enforce HTTPS: over plain http a page has no WebGPU, service worker or install.
+  follow a redirect too. The build reads the same (`pr-preview-build.yml`, with `pages: read`) for its base path,
+  none on the domain's root: built under `/last-stand/`, a preview on last-stand.cc asked for every file at a path
+  that isn't there and stood on its loading screen. `404.html` takes a path as a project site's only where its
+  second part is `pr-preview`. Pages must enforce HTTPS: over plain http a page has no WebGPU, service worker or install.
 - `deploy-pages.yml`: on a merge to `main`, production at the root of `gh-pages`, the open PRs' previews kept.
 
 Don't switch Pages to "GitHub Actions only", and don't delete the `gh-pages` branch.
