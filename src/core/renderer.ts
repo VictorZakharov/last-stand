@@ -7,7 +7,7 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { Pass, FullScreenQuad } from 'three/addons/postprocessing/Pass.js';
-import { WEBGPU, makeWebGPURenderer, makePipeline, renderWebGPU } from './webgpu';
+import { WEBGPU, makeWebGPURenderer, makePipeline, renderWebGPU, webgpuSceneTarget } from './webgpu';
 import { G } from '../state';
 import { CAMERA } from '../data/balance';
 import { clamp, damp } from '../util';
@@ -585,7 +585,7 @@ function fitViewport(): boolean {
 }
 
 /** The offscreen target the scene is rendered into (shaders must be compiled for it). */
-export const sceneTarget = (): THREE.WebGLRenderTarget => sceneRT;
+export const sceneTarget = (): THREE.WebGLRenderTarget => (WEBGPU ? webgpuSceneTarget() as THREE.WebGLRenderTarget : sceneRT);
 
 /** What a point's size (m) over its distance is multiplied by for its size in the scene's pixels: the scene's
  *  target's height over the view's height 1 m out. (Sized by the canvas's height, a point was as many times too

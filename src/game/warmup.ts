@@ -213,8 +213,8 @@ interface Part {
   built?: Built;
 }
 /** A part built: what's compiled, what's added to the scene for the draw, what's drawn alone, what's shown in place
- *  of the lobby's biome for the draw, what's outlined, what's brought in just before the draw (`show`), and its
- *  pieces let go (`done`). */
+ *  of the lobby's biome for the draw, what's outlined, what's brought in just before the draw (`show`) and taken
+ *  out again (`hide`), and its pieces let go (`done`). */
 interface Built {
   compile: THREE.Object3D[];
   objects: THREE.Object3D[];
@@ -222,6 +222,7 @@ interface Built {
   swap?: { show: THREE.Object3D; hide: THREE.Object3D };
   outlined: THREE.Object3D[];
   show?(): void;
+  hide?(): void;
   done(): void;
 }
 
@@ -241,8 +242,9 @@ function fightParts(): Part[] {
       const roots = pair.map((e) => e.obj);
       const slots = crowdSlots(pair[0].model);
       const show = (): void => { for (const e of pair) joinCrowd(e); };
+      const hide = (): void => { for (const e of pair) leaveCrowd(e); };
       const done = (): void => { for (const e of pair) e.dispose(); };
-      return { compile: [...roots, ...slots], objects: roots, drawn: slots, outlined: roots, show, done };
+      return { compile: [...roots, ...slots], objects: roots, drawn: slots, outlined: roots, show, hide, done };
     },
   }));
   const shots: Part = {
@@ -342,6 +344,7 @@ async function warmBuilt(built: Built[], { step, progress }: Warming = {}): Prom
     drawn: built.flatMap((b) => b.drawn),
     swap: swaps[0]?.swap,
     show: () => { for (const b of built) b.show?.(); },
+    hide: () => { for (const b of built) b.hide?.(); },
     before: mapsArrived,
     also: () => compileOutline(built.flatMap((b) => b.outlined), { edge: !step }),
     progress,
