@@ -530,7 +530,7 @@ export async function initRenderer(container: HTMLElement) {
 
   if (WEBGPU) {
     const looks = {
-      highlights: { knee: HI_KNEE, cap: HI_CAP }, adaptBase: ADAPT_BASE, adaptAlike: ADAPT_ALIKE,
+      highlights: { knee: HI_KNEE, cap: HI_CAP }, hdrKnee: HDR_KNEE, adaptBase: ADAPT_BASE, adaptAlike: ADAPT_ALIKE,
       hue: [HUE_FROM, HUE_TO], glare: [GLARE_FROM, GLARE_TO],
     } as const;
     await makePipeline(renderer, scene, camera, looks, grade.uniforms as never);
@@ -846,16 +846,16 @@ export function render(): void {
   u.uSmall.value = target(rig.fromView, 0) + (target(rig.view, 0) - target(rig.fromView, 0)) * e;
   u.uLarge.value = target(rig.fromView, 1) + (target(rig.view, 1) - target(rig.fromView, 1)) * e;
   if (adaptHeld) u.uSmall.value = u.uLarge.value = 1e4;
-  if (WEBGPU) {
-    renderWebGPU();
-    overFrame.draw();
-    return;
-  }
   const hdr = hdrLevels();
   u.uHdr.value = hdr.peak > 1 || hdr.paper !== 1 ? 1 : 0;
   u.uPaper.value = hdr.paper;
   u.uPeak.value = hdr.peak;
   u.uCap.value = (HI_CAP - HI_KNEE) * Math.max(1, hdr.peak / hdr.paper);
+  if (WEBGPU) {
+    renderWebGPU();
+    overFrame.draw();
+    return;
+  }
   gl.setRenderTarget(sceneRT);
   gpuMarks.mark('scene');
   gl.render(G.scene, G.camera);

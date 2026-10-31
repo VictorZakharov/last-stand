@@ -3,6 +3,7 @@
 import * as THREE from 'three';
 import type { RenderPipeline, WebGPURenderer } from 'three/webgpu';
 import { RUNNING } from './rendererChoice';
+import { initHdrForWebGPU } from './hdr';
 
 /** Whether this page draws with WebGPURenderer: chosen in the pause menu, or by the address (`?renderer=webgpu`;
  *  `?renderer=webgpu-gl` its WebGL 2 backend), core/rendererChoice.ts. */
@@ -47,7 +48,11 @@ export async function makeWebGPURenderer(): Promise<THREE.WebGLRenderer> {
   gpu = await import('three/webgpu');
   tsl = await import('three/tsl');
   const { WebGPURenderer } = gpu;
-  const renderer = new WebGPURenderer({ antialias: false, powerPreference: 'high-performance', forceWebGL: RUNNING.webgpuOnGl, trackTimestamp: true });
+  // (the canvas in extended range for HDR, as the WebGL renderer's presenter is: core/hdr.ts)
+  const outputType = initHdrForWebGPU() ? THREE.HalfFloatType : undefined;
+  const renderer = new WebGPURenderer({
+    antialias: false, powerPreference: 'high-performance', forceWebGL: RUNNING.webgpuOnGl, trackTimestamp: true, outputType,
+  });
   await renderer.init();
   // three's GPU-driven drawing (r187): clusters of 64 triangles culled and their detail picked on the GPU, for what
   // it supports (static meshes and instanced ones in plain node materials); the rest drawn as before
@@ -295,6 +300,8 @@ export interface Highlights { knee: number; cap: number }
  *  hue, by its brightest channel and by the glare round it (`HUE_FROM`..`HUE_TO`, `GLARE_FROM`..`GLARE_TO`). */
 export interface GradeLooks {
   highlights: Highlights;
+  /** HDR's knee (renderer.ts `HDR_KNEE`): the share of white under which the frame shows as on an SDR screen */
+  hdrKnee: number;
   adaptBase: number;
   adaptAlike: readonly [number, number];
   hue: readonly [number, number];
@@ -371,10 +378,11 @@ function toneMappedKeepingHue(colour: any, glareAt: any, looks: GradeLooks): any
  *  the others kept in their ratio to it, so a stack of lights stops adding up (a fire's flames blew out white). */
 // (untyped: TSL's types don't follow a node through these calls yet)
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function compressed(colour: any, { knee, cap }: Highlights): unknown {
-  const { exp, max, select, vec4 } = tsl;
+function compressed(colour: any, { knee }: Highlights, u: GradeUniforms): unknown {
+  const { exp, max, select, vec4, reference } = tsl as any;
   const brightest = max(colour.r, max(colour.g, colour.b));
-  const room = cap - knee;
+  // (as far again as HDR's peak has room over its paper white: `uCap`, the cap less the knee)
+  const room = reference('value', 'float', u.uCap);
   const eased = exp(brightest.sub(knee).negate().div(room)).oneMinus().mul(room).add(knee);
   const scale = select(brightest.greaterThan(knee), eased.div(brightest), 1);
   return vec4(colour.rgb.mul(scale), colour.a);
@@ -383,6 +391,10 @@ function compressed(colour: any, { knee, cap }: Highlights): unknown {
 /** The WebGL grade's uniforms the WebGPU one reads (core/renderer.ts `GradeShader`), each `{ value }` */
 export interface GradeUniforms {
   uTime: { value: number };
+  uCap: { value: number };
+  uHdr: { value: number };
+  uPaper: { value: number };
+  uPeak: { value: number };
   uSmall: { value: number };
   uLarge: { value: number };
   uVignette: { value: number };
@@ -424,9 +436,28 @@ function graded(colour: any, u: GradeUniforms): unknown {
   return vec4(c, colour.a);
 }
 
+/** `colour` (graded, in sRGB) for an HDR canvas, as the WebGL grade's HDR does: the frame as an SDR screen shows it
+ *  (gamma 2.2: Windows shows SDR by the sRGB curve, which lifts its shadows), the highlights over `knee` grown towards
+ *  the peak by their brightest channel (hue kept; with no room over the paper white, nothing grown), all of it at the
+ *  paper white, encoded as extended sRGB. As it is in SDR. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function inHdr(colour: any, u: GradeUniforms, knee: number): any {
+  const { clamp, max, pow, reference, select, sRGBTransferOETF, vec3, vec4 } = tsl as any;
+  const read = (uniform: { value: number }): any => reference('value', 'float', uniform);
+  const paper = read(u.uPaper);
+  const v = pow(clamp(colour.rgb, 0, 1), vec3(2.2));
+  const top = max(max(v.r, v.g), v.b);
+  const room = max(read(u.uPeak).div(paper), 1);
+  const along = clamp(top.sub(knee).div(1 - knee), 0, 1);
+  const a = room.sub(knee).div(1 - knee).reciprocal();
+  const grown = v.mul(along.mul(1 - knee).div(along.mul(a.oneMinus()).oneMinus()).add(knee)).div(max(top, 1e-6));
+  const shown = sRGBTransferOETF(vec4(select(top.greaterThan(knee), grown, v).mul(paper), 1)).rgb;
+  return vec4(select(read(u.uHdr).greaterThan(0.5), shown, colour.rgb), colour.a);
+}
+
 /** The post chain on WebGPU: the scene's pass, its bloom added, adapted to the light round each pixel, its highlights
  *  compressed, tone mapped keeping a large glare's hue and in sRGB, then graded there as WebGL's grade is
- *  (`graded`), its NaN and Inf pixels cleaned out first (`sanitized`). (Not yet HDR.) */
+ *  (`graded`), its NaN and Inf pixels cleaned out first (`sanitized`), and in HDR grown past white (`inHdr`). */
 export async function makePipeline(renderer: THREE.WebGLRenderer, scene: THREE.Scene, camera: THREE.Camera,
   looks: GradeLooks, grade: GradeUniforms): Promise<void> {
   const { RenderPipeline } = await import('three/webgpu');
@@ -451,11 +482,11 @@ export async function makePipeline(renderer: THREE.WebGLRenderer, scene: THREE.S
   const large = boxDown((at) => small.sample(at), 4, 3);
   // (bloom's widest level: how large a bright spot is)
   const widest = (glow as unknown as { _renderTargetsVertical: THREE.RenderTarget[] })._renderTargetsVertical.at(-1)!;
-  const lit = compressed(adapted(color.add(glow), small, large, grade, looks), looks.highlights);
+  const lit = compressed(adapted(color.add(glow), small, large, grade, looks), looks.highlights, grade);
   const mapped = toneMappedKeepingHue(lit, tsl.texture(widest.texture).sample(tsl.screenUV), looks);
   // (tone mapped above: here only into sRGB)
   const out = tsl.renderOutput(mapped as never, THREE.NoToneMapping);
-  pipeline.outputNode = <typeof pipeline.outputNode>graded(out, grade);
+  pipeline.outputNode = <typeof pipeline.outputNode>inHdr(graded(out, grade), grade, looks.hdrKnee);
 }
 
 /** the scene's environment as one node, its map swapped (`oneEnvironment`) */
