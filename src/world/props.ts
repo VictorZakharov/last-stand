@@ -2,6 +2,8 @@
 // and geometry helpers, the spawn-portal membrane, the environment map and the static shadow bake.
 import * as THREE from 'three';
 import { seeThroughFade } from '../core/seeThrough';
+import { WEBGPU } from '../core/webgpu';
+import { membraneMaterial, spillMaterial } from './portalNodes';
 import { drawingStill, inShadowsOnly } from './culling';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { rand, TAU } from '../util';
@@ -436,7 +438,7 @@ export function portalMembrane(parent: THREE.Object3D, angle: number, colors: { 
   });
   // (it hides what's behind the gate, the hero too: it fades as the gate round it dissolves)
   seeThroughFade(mat, 'prop');
-  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(GATE_W, 4.4), mat);
+  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(GATE_W, 4.4), WEBGPU ? membraneMaterial(uniforms) : mat);
   mesh.position.set(0, 2.2, 0.1);
   parent.add(mesh);
   // light spilling across the floor in front of the gate
@@ -452,7 +454,8 @@ export function portalMembrane(parent: THREE.Object3D, angle: number, colors: { 
         gl_FragColor = vec4(mix(uB, uCore, 0.3) * g * uPower * 0.55, 1.0);
       }`,
   });
-  const spill = new THREE.Mesh(new THREE.PlaneGeometry(GATE_W + 2.5, 4).rotateX(-Math.PI / 2).rotateY(Math.PI), spillMat);
+  const spill = new THREE.Mesh(new THREE.PlaneGeometry(GATE_W + 2.5, 4).rotateX(-Math.PI / 2).rotateY(Math.PI),
+    WEBGPU ? spillMaterial(uniforms) : spillMat);
   spill.position.set(0, 0.04, 2.0);
   parent.add(spill);
   // its light on what stands round it: the arch, the wall, the floor, a body coming through (a glow on the floor alone,
