@@ -7,8 +7,44 @@ on `main`, 2026-10-30), and the port began the same evening on #330's three 0.18
 
 ## Where the port stands (2026-10-30, evening)
 
-The day-count estimate further down was far too high. The owner pointed out the whole game took about a month,
-and the first session of the port, under two hours, got this far:
+The day-count estimate further down (55–85 agent-days) was far too high, by about ten times. The owner pointed out
+the whole game took about a month, and the first session of the port, under two hours, got this far. At that
+pace, what's left to reach WebGL's look (the shaders, the kit's looks, the grade, the overlays, the warm-up, the
+lab) is days of work, not months: about 5–10 agent-days. Where it lands depends most on the ~30 shaders, and on
+whether the CPU cost below can be brought down.
+
+**First play of the preview (the owner's, 2026-10-30):**
+
+- **The loading screen froze:** 10–15 s on "Conjuring spells" and 5–10 s in the logo's exit. With no
+  `compileAsync`, every pipeline was made at its first draw, on the main thread: the lobby's warm-up and, behind
+  the lobby, the fight's.
+- **The lobby's frame cost 11–13 ms of CPU** (74–82 fps), almost all of it render. That needs the WebGL frame on
+  the same machine to compare against.
+- **The perf overlay's draw count kept growing.** Under WebGPU three's `info.render.calls` counts render calls
+  since the page started; the frame's draws are `drawCalls`. Fixed.
+
+**The warm-up compiled ahead** (`npm run stalls -- --scenario boot --url "this?renderer=webgpu"`, a busy machine):
+
+| | before | after |
+| --- | --- | --- |
+| A first visit's lobby revealed | 34.3 s | 19.1 s |
+| A return's lobby revealed | 16.1 s | 9.8 s |
+| A return's loading screen, held up at most | 2.3 s | 0.67 s |
+| A return's logo exit, held up at most | 1.6 s | 0.03 s |
+| The lobby warm-up's draw | 1.3–2.3 s | 0.18–0.3 s |
+
+- **The warm-ups' compiles are three's `compileAsync`** (`core/webgpu.ts`), started where the WebGL code compiles,
+  into the scene pass's own target (`sceneTarget`): its pipelines are made on the GPU's threads and its node builds
+  a slice a frame. With `compile` a no-op, every pipeline was made at its first draw, on the main thread.
+- **The warm-up compiles the scene as it will draw it** (`warmUpWebGPU` in `core/shaders.ts`): its objects in, its
+  layer, unculled, the other biomes out. three keys a pipeline by its lights and target, so each root compiled the
+  WebGL way was built again at the draw.
+- **Shadows are drawn inside the compile.** r187's `compileAsync` draws no shadow map, and a shadow is drawn once a
+  render, by number, which a compile's queue works through under the last frame's. So each caster's shadow
+  pipeline was made at its first shadow, synchronously, and that jammed the GPU process's main thread. The logo's
+  WebGL exit waited behind it (`fit` 5.5–8.8 s).
+- **The fight's foes are seated for the compile's walk alone** (`WarmUp.hide`): a crowd with no foe draws nothing,
+  so its compile saw nothing.
 
 **Working:**
 
@@ -54,7 +90,9 @@ and the first session of the port, under two hours, got this far:
   - triplanar, fur sway, dual-quaternion hands
 - **The grade:** exposure areas, glare, low Health, HDR, sanitize.
 - **Other gaps:**
-  - The warm-up: no `compileAsync` yet, so pipelines are made as they're first drawn.
+  - The warm-up compiles by `compileAsync` now (below), but the fight's crowds are still rebuilt at their draw
+    under the fight's loading bar (2.6 s), and a first visit holds the page up once for about 6 s before the
+    reveal (the GPU process's cold builds).
   - The shadow-only casters (`world/culling.ts`).
   - The perf overlay's GPU timing.
   - The lab.
