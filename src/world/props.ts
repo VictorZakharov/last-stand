@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import { seeThroughFade } from '../core/seeThrough';
 import { WEBGPU } from '../core/webgpu';
 import { membraneMaterial, spillMaterial } from './portalNodes';
+import { daySkyMaterial, nightSkyMaterial } from './skyNodes';
 import { drawingStill, inShadowsOnly } from './culling';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { rand, TAU } from '../util';
@@ -530,7 +531,7 @@ export function buildSky(fogColor: number, moonDir: THREE.Vector3, zenith: RGB =
         gl_FragColor = vec4(c, 1.0);
       }`,
   });
-  const sky = new THREE.Mesh(new THREE.SphereGeometry(150, 32, 16), mat);
+  const sky = new THREE.Mesh(new THREE.SphereGeometry(150, 32, 16), WEBGPU ? nightSkyMaterial(mat.uniforms) : mat);
   sky.renderOrder = 100;
   sky.frustumCulled = false;
   return sky;
@@ -564,7 +565,7 @@ export function buildDaySky(horizon: number, zenith: RGB, sunDir: THREE.Vector3)
         gl_FragColor = vec4(c, 1.0);
       }`,
   });
-  const mesh = new THREE.Mesh(new THREE.SphereGeometry(150, 32, 16), mat);
+  const mesh = new THREE.Mesh(new THREE.SphereGeometry(150, 32, 16), WEBGPU ? daySkyMaterial(mat.uniforms) : mat);
   mesh.renderOrder = 100;
   mesh.frustumCulled = false;
   return { mesh, update: (t) => { mat.uniforms.uTime.value = t; } };
