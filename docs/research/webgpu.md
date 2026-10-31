@@ -186,8 +186,13 @@ id (`NodeManager.getCacheKey`), and three makes each environment map a node of i
   draws its quad into the target set, and an async compile finishing puts back the target set when it began (a
   warm-up's, the scene's own), so a frame drew into the texture it read (a `GPUValidationError` on `output`).
 - **The grade's highlight compression** (`compressed` in `core/webgpu.ts`, `HI_KNEE` to `HI_CAP` as WebGL's): the
-  fires blew out white without it ("too high glow, blinding"). The adaptation, the glare's kept hue and the low
-  Health look aren't ported.
+  fires blew out white without it ("too high glow, blinding").
+- **The grade's adaptation and the glare's kept hue** (`adapted`, `toneMappedKeepingHue` in `core/webgpu.ts`): the
+  frame's light after bloom averaged down to 64x36, 16x9 and 4x3 (`boxDown`, three render-to-texture steps, as
+  WebGL's `AreaPass`), each pixel adapted to its small and large area by the WebGL grade's targets (`uSmall`,
+  `uLarge`, set before WebGPU's frame now), and tone mapped by its brightest channel where bloom's widest level says
+  a large glare is round it. Checked side by side with WebGL: Maelstrom's fire in the crypt kept its orange where it
+  had burned white, and the forest's daylight the same exposure.
 - **The world's overlays** (damage numbers, the foes' bars and names, the props' gauges, the dummies' meters): the
   labels' draw as nodes (`labelsMaterial`), drawn onto the canvas after the frame with no tone mapping or conversion
   asked (`drawOverFrame`: else three draws into a target of its own, empty, and copies it over the frame, which a
@@ -251,7 +256,7 @@ id (`NodeManager.getCacheKey`), and three makes each environment map a node of i
   - the floors' relief, and the crypt's earth's own normals (the floors' looks are ported, below)
   - a fire's bed and its logs' char glowing through their cracks (`emberMat`)
   - triplanar, fur sway, dual-quaternion hands
-- **The grade:** exposure areas, the glare's kept hue, the film grain, HDR, sanitize.
+- **The grade:** the film grain, HDR, sanitize.
 - **Other gaps:**
   - The warm-up compiles by `compileAsync` now (below), but the fight's crowds are still rebuilt at their draw
     under the fight's loading bar (2.6 s).

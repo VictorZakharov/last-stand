@@ -290,6 +290,72 @@ const nodes_ = (renderObject: unknown): { updateBeforeNodes: object[] } =>
  *  eases towards `cap`. */
 export interface Highlights { knee: number; cap: number }
 
+/** The grade's numbers as renderer.ts has them: the highlights, the adaptation's base and the share of an area's
+ *  light a pixel adapts with it from and fully at (`ADAPT_BASE`, `ADAPT_ALIKE`), and where a bright pixel keeps its
+ *  hue, by its brightest channel and by the glare round it (`HUE_FROM`..`HUE_TO`, `GLARE_FROM`..`GLARE_TO`). */
+export interface GradeLooks {
+  highlights: Highlights;
+  adaptBase: number;
+  adaptAlike: readonly [number, number];
+  hue: readonly [number, number];
+  glare: readonly [number, number];
+}
+
+/** the light's weights, as the WebGL grade reads an area's and a pixel's */
+const LUM = [0.2126, 0.7152, 0.0722] as const;
+
+/** `sample` (a function of a place on the screen) averaged over each texel of a `width` by `height` target, as
+ *  WebGL's `AreaPass` does: 8x8 taps an eighth of a texel apart, a NaN or Inf tap left out and each held to 64. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function boxDown(sample: (at: any) => any, width: number, height: number): any {
+  const { rtt, screenUV, vec2, vec3, vec4, min, select } = tsl as any;
+  const step = vec2(1 / width / 8, 1 / height / 8);
+  let sum = vec3(0);
+  for (let y = 0; y < 8; y++) {
+    for (let x = 0; x < 8; x++) {
+      const v = sample(screenUV.add(vec2(x - 3.5, y - 3.5).mul(step))).rgb;
+      // (a NaN is the one value unequal to itself; an Inf is past any float's range)
+      const bad = v.x.notEqual(v.x).or(v.y.notEqual(v.y)).or(v.z.notEqual(v.z)).or(v.x.add(v.y).add(v.z).greaterThan(1e30));
+      sum = sum.add(select(bad, vec3(0), min(v, vec3(64))));
+    }
+  }
+  return rtt(vec4(sum.div(64), 1), width, height, { depthBuffer: false });
+}
+
+/** `colour`'s light above the base compressed as the eye adapts to the average light round it, in a small area (a
+ *  16x9 grid of the frame) and a large one (4x3), as WebGL's grade does: a pixel as bright as its area or brighter
+ *  adapts with it, one half as bright or dimmer keeps its light (renderer.ts's `ADAPT`). */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function adapted(colour: any, small: any, large: any, u: GradeUniforms, looks: GradeLooks): any {
+  const { dot, vec3, vec4, log, pow, max, min, mix, smoothstep, select, reference, screenUV } = tsl as any;
+  const weights = vec3(...LUM);
+  const base = looks.adaptBase;
+  const lum = dot(colour.rgb, weights);
+  const adapt = (avg: any, target: any): any => select(avg.greaterThan(target),
+    log(target.div(base)).div(log(avg.div(base))), 1);
+  const adaptAt = (avg: any, target: any): any => mix(1, adapt(avg, target),
+    smoothstep(looks.adaptAlike[0], looks.adaptAlike[1], lum.div(max(avg, 1e-4))));
+  const smallTarget = reference('value', 'float', u.uSmall);
+  const largeTarget = reference('value', 'float', u.uLarge);
+  const g = min(adaptAt(dot(small.sample(screenUV).rgb, weights), smallTarget),
+    adaptAt(dot(large.sample(screenUV).rgb, weights), largeTarget));
+  const scale = select(lum.greaterThan(base), pow(lum.div(base), g).mul(base).div(max(lum, 1e-6)), 1);
+  return vec4(colour.rgb.mul(scale), colour.a);
+}
+
+/** `colour` tone mapped as WebGL's grade maps it: per channel, but a bright pixel in a large glare (bloom's widest
+ *  level round it) mapped by its brightest channel, keeping its colour, as the eye sees a large bright area's. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function toneMappedKeepingHue(colour: any, glareAt: any, looks: GradeLooks): any {
+  const { toneMapping, toneMappingExposure, vec3, vec4, max, mix, smoothstep } = tsl as any;
+  const mapped = (c: any): any => toneMapping(THREE.ACESFilmicToneMapping, toneMappingExposure, c);
+  const brightest = max(max(colour.r, max(colour.g, colour.b)), 1e-4);
+  const hue = colour.rgb.div(brightest).mul(mapped(vec3(brightest)).g);
+  const glare = max(glareAt.r, max(glareAt.g, glareAt.b));
+  const keep = smoothstep(looks.hue[0], looks.hue[1], brightest).mul(smoothstep(looks.glare[0], looks.glare[1], glare));
+  return vec4(mix(mapped(colour.rgb).rgb, hue, keep), colour.a);
+}
+
 /** `colour` compressed as the WebGL grade compresses it: the brightest channel over the knee eased towards the cap,
  *  the others kept in their ratio to it, so a stack of lights stops adding up (a fire's flames blew out white). */
 // (untyped: TSL's types don't follow a node through these calls yet)
@@ -305,6 +371,8 @@ function compressed(colour: any, { knee, cap }: Highlights): unknown {
 
 /** The WebGL grade's uniforms the WebGPU one reads (core/renderer.ts `GradeShader`), each `{ value }` */
 export interface GradeUniforms {
+  uSmall: { value: number };
+  uLarge: { value: number };
   uVignette: { value: number };
   uHurt: { value: number };
   uLow: { value: number };
@@ -340,10 +408,11 @@ function graded(colour: any, u: GradeUniforms): unknown {
   return vec4(c, colour.a);
 }
 
-/** The post chain on WebGPU: the scene's pass, its bloom added, its highlights compressed, tone mapped and in sRGB,
- *  then graded there as WebGL's grade is (`graded`). (Not yet the adaptation, the glare's kept hue, HDR.) */
+/** The post chain on WebGPU: the scene's pass, its bloom added, adapted to the light round each pixel, its highlights
+ *  compressed, tone mapped keeping a large glare's hue and in sRGB, then graded there as WebGL's grade is
+ *  (`graded`). (Not yet HDR.) */
 export async function makePipeline(renderer: THREE.WebGLRenderer, scene: THREE.Scene, camera: THREE.Camera,
-  highlights: Highlights, grade: GradeUniforms): Promise<void> {
+  looks: GradeLooks, grade: GradeUniforms): Promise<void> {
   const { RenderPipeline } = await import('three/webgpu');
   const { pass } = await import('three/tsl');
   const { bloom } = await import('three/addons/tsl/display/BloomNode.js');
@@ -354,7 +423,21 @@ export async function makePipeline(renderer: THREE.WebGLRenderer, scene: THREE.S
   pipeline = new RenderPipeline(gpu);
   // (tone mapped and in sRGB here, the grade after: the pipeline's own conversion off)
   pipeline.outputColorTransform = false;
-  const out = tsl.renderOutput(compressed(color.add(bloom(color, 0.85, 0, 0.9)), highlights) as never);
+  const glow = bloom(color, 0.85, 0, 0.9);
+  // (untyped in three's types: its output as a texture node)
+  const glowTexture = (glow as unknown as { getTextureNode(): any }).getTextureNode(); // eslint-disable-line @typescript-eslint/no-explicit-any
+  // (after bloom, as on WebGL: the eye adapts to all the light that reaches it, halos included)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const lightAt = (at: any): any => color.sample(at).add(glowTexture.sample(at));
+  const grid = boxDown(lightAt, 64, 36);
+  const small = boxDown((at) => grid.sample(at), 16, 9);
+  const large = boxDown((at) => small.sample(at), 4, 3);
+  // (bloom's widest level: how large a bright spot is)
+  const widest = (glow as unknown as { _renderTargetsVertical: THREE.RenderTarget[] })._renderTargetsVertical.at(-1)!;
+  const lit = compressed(adapted(color.add(glow), small, large, grade, looks), looks.highlights);
+  const mapped = toneMappedKeepingHue(lit, tsl.texture(widest.texture).sample(tsl.screenUV), looks);
+  // (tone mapped above: here only into sRGB)
+  const out = tsl.renderOutput(mapped as never, THREE.NoToneMapping);
   pipeline.outputNode = <typeof pipeline.outputNode>graded(out, grade);
 }
 

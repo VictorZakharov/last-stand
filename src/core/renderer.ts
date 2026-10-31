@@ -528,7 +528,13 @@ export async function initRenderer(container: HTMLElement) {
     pass.render = (...a: Parameters<typeof run>) => { gpuMarks.mark(label); run(...a); };
   }
 
-  if (WEBGPU) await makePipeline(renderer, scene, camera, { knee: HI_KNEE, cap: HI_CAP }, grade.uniforms as never);
+  if (WEBGPU) {
+    const looks = {
+      highlights: { knee: HI_KNEE, cap: HI_CAP }, adaptBase: ADAPT_BASE, adaptAlike: ADAPT_ALIKE,
+      hue: [HUE_FROM, HUE_TO], glare: [GLARE_FROM, GLARE_TO],
+    } as const;
+    await makePipeline(renderer, scene, camera, looks, grade.uniforms as never);
+  }
   G.scene = scene; G.camera = camera; G.renderer = renderer;
   window.addEventListener('resize', fitViewport);
   fitViewport();
@@ -833,11 +839,6 @@ export function render(): void {
   grade.uniforms.uTime.value = G.time;
   grade.uniforms.uHurt.value = rig.hurt;
   fitBloodMask(gl.domElement.width, gl.domElement.height);
-  if (WEBGPU) {
-    renderWebGPU();
-    overFrame.draw();
-    return;
-  }
   // the adaptation targets glide with the view
   const target = (v: ViewMode, i: 0 | 1): number => v !== 'top' ? ADAPT[v][i]
     : (ADAPT.lobby[i] + (ADAPT.top[i] - ADAPT.lobby[i]) * clamp((rig.zoom - CAMERA.lobbyZoom) / (1 - CAMERA.lobbyZoom), 0, 1)) * (i === 1 ? adaptScale : 1);
@@ -845,6 +846,11 @@ export function render(): void {
   u.uSmall.value = target(rig.fromView, 0) + (target(rig.view, 0) - target(rig.fromView, 0)) * e;
   u.uLarge.value = target(rig.fromView, 1) + (target(rig.view, 1) - target(rig.fromView, 1)) * e;
   if (adaptHeld) u.uSmall.value = u.uLarge.value = 1e4;
+  if (WEBGPU) {
+    renderWebGPU();
+    overFrame.draw();
+    return;
+  }
   const hdr = hdrLevels();
   u.uHdr.value = hdr.peak > 1 || hdr.paper !== 1 ? 1 : 0;
   u.uPaper.value = hdr.paper;
