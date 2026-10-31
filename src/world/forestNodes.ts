@@ -1,7 +1,9 @@
-// The forest's floor and grass on WebGPU (core/webgpu.ts): forest.ts's GLSL hooks as TSL nodes, set on its plain
-// materials (three copies them onto the node material it makes of each). The moss tinted over the floor in world
-// space, and the grass's tufts swaying in the wind. Not yet ported: the floor's relief (core/parallax.ts).
-import { tsl } from '../core/webgpu';
+// The forest's floor, grass and light on WebGPU (core/webgpu.ts): forest.ts's GLSL hooks as TSL nodes, set on its
+// plain materials (three copies them onto the node material it makes of each): the moss tinted over the floor in
+// world space, and the grass's tufts swaying in the wind; and foliage.ts's shafts of light as a node material of their
+// own. Not yet ported: the floor's relief (core/parallax.ts).
+import * as THREE from 'three';
+import { gpu, tsl } from '../core/webgpu';
 
 // (untyped: TSL's types don't follow its conversions across these calls yet)
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -54,4 +56,20 @@ export function grassWindNode(time: N, { rate, reach }: Sway): N {
     const push = vec2(0.8, 0.6).mul(gust.mul(reach).mul(bend));
     return positionLocal.add(vec3(push.x, 0, push.y));
   })();
+}
+
+/** The shafts of light (`lightShafts` in foliage.ts): brightest along their axis as seen from the camera, faded in
+ *  below the canopy and out at the ground, slow motes of dust drifting through, added. `time` is a `{ value }`. */
+export function shaftsMaterial(time: { value: number }, color: THREE.Color): THREE.Material {
+  const { abs, dot, normalView, positionView, pow, reference, smoothstep, uv, vec2, vec4 } = tsl as any;
+  const clock = reference('value', 'float', time);
+  const facing = abs(dot(normalView.normalize(), positionView.negate().normalize()));
+  const along = smoothstep(0, 0.08, uv().y).mul(smoothstep(0.55, 1, uv().y).oneMinus());
+  const dust = mossNoise(vec2(uv().x.mul(6), uv().y.mul(14).sub(clock.mul(0.15)))).mul(0.35).add(0.65);
+  const shine = pow(facing, 4).mul(along).mul(dust);
+  const material = new gpu.MeshBasicNodeMaterial({
+    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, fog: false,
+  });
+  material.fragmentNode = vec4(reference('value', 'color', { value: color }).mul(shine), 1);
+  return material;
 }
