@@ -31,6 +31,7 @@ import { armsInBody } from './armsIn';
 import { Carried, heldApart, heldNow, IN_HAND_MOST, LOOSE_MOST, PALM_AT, SLID_MOST, turnHeld } from './sitCarried';
 import { legsThrough, legsThroughCanary, THROUGH_FROM, type LegThrough } from './sitCloth';
 import { SitFilm } from './sitFilm';
+import { FINGERS_UNDER_FROM, FingersUnder, fingersCanary } from './fingersUnder';
 import { FRAMED_MOST, neckOnScreen, type Framed } from './sitFraming';
 
 /** What `lab sit` takes. */
@@ -208,6 +209,8 @@ interface Watch {
   shown: number;
   /** his arms held at two or more of their joints' stops at once ("he would snap his arm") */
   pinned: ArmsPinned;
+  /** his fingers into the floor */
+  fingers: FingersUnder;
   /** a fist let go of: how many times it's been pictured, and the frames since it last was */
   open: { shots: number; since: number };
   /** what he held, as he held it as he began to sit (before he walked to the seat, until then) */
@@ -279,6 +282,10 @@ async function canaryOn(lab: Lab, c: SeatCase, fixture: Fixture, out: Out): Prom
     out.text.push(`  canary, the weapon 15 cm into the seat: ${caught ? 'caught' : 'MISSED'} (${cmOf(read)} cm)`);
     if (!caught) problems.push('sit: the canary (the weapon in the seat) was missed');
   }
+  const fingers = fingersCanary(lab);
+  const fingersCaught = fingers >= FINGERS_UNDER_FROM;
+  out.text.push(`  canary, his left hand under the floor: ${fingersCaught ? 'caught' : 'MISSED'} (${cmOf(fingers)} cm)`);
+  if (!fingersCaught) problems.push('sit: the canary (his fingers in the floor) was missed');
   const cloth = legsThroughCanary(lab.joints);
   out.text.push(`  canary, legs through the skirts: ${cloth}`);
   if (!cloth.startsWith('caught')) problems.push(`sit: the canary (a cloth point at the knee) was missed`);
@@ -306,7 +313,7 @@ async function trySeat(lab: Lab, c: SeatCase, fixture: Fixture, options: SitOpti
   const watch: Watch = {
     carried: new Carried(lab, options.trace), film: new SitFilm(c.name, [c.views[0], 'third']), through: null,
     seat: [new WeaponSeat(seat, (each) => each.model.tip?.parent), new WeaponSeat(seat, bowApart)],
-    shown: 0, pinned: new ArmsPinned(c.name, ARM_LIMITS), open: { shots: 0, since: OPEN_SHOTS.every },
+    shown: 0, pinned: new ArmsPinned(c.name, ARM_LIMITS), fingers: new FingersUnder(), open: { shots: 0, since: OPEN_SHOTS.every },
     before: heldNow(lab), canary: !!options.canary, traced: !!options.trace, moments: [],
   };
   const sat = await untilSat(lab, label, c.views.slice(0, 2), out, watch);
@@ -418,6 +425,7 @@ function watchFrame(lab: Lab, name: string, frame: string, watch: Watch, skirts:
   const strain = watch.pinned.observe(bodyBreaches(lab.joints).angles, grippingRanges(lab), frame);
   if (strain) watch.moments.push(closeUp(lab, `${name}: ${describeStrain(strain)} (${frame})`, DEEPEST_VIEWS, false));
   for (const piece of watch.seat) piece.observe(lab, frame);
+  watch.fingers.observe(lab, frame);
   pictureOpenFist(lab, name, frame, watch);
   const through = legsThrough(lab.joints, skirts);
   if (!through || through.depth <= THROUGH_FROM) return;
@@ -473,6 +481,9 @@ function judgeWatch(name: string, watch: Watch, out: Out): void {
     const inHand = turned || slid ? `${turnedBy}, slid ${cmOf(slid?.by ?? 0)} cm in his hand at most` : '';
     out.text.push(`    his ${found.name}: ${cmOf(found.loose)} cm with no hand on it${jump}${inHand}`);
   }
+  const fingers = watch.fingers.describe();
+  if (fingers) out.problems.push(`sit: by the ${name}, ${fingers}`);
+  else if (watch.traced) out.text.push(`    ${watch.fingers.describeNearest()}`);
   const pinned = watch.pinned.describe();
   if (pinned) out.problems.push(`sit: by the ${name}, ${pinned} (the stops: ${watch.pinned.tally()})`);
   const through = watch.through;
@@ -737,6 +748,7 @@ async function readSat(lab: Lab, options: SitOptions, name: string, out: Out, wa
     return read;
   });
   for (const said of into.problems()) out.problems.push(`sit: on the ${name}, ${said}`);
+  if (watch.traced) for (const said of into.nearest()) out.text.push(`    sat on the ${name}, ${said}`);
   if (into.moment) out.moments.push(into.moment);
   out.moments.push(closeUp(lab, `${name}: sat, close`, DEEPEST_VIEWS, false));
   skirts.forEach((skirt, i) => {
@@ -820,6 +832,11 @@ class IntoBody {
     const said = this.pieces.filter((piece) => piece.depth > INTO_BODY).map((piece) => piece.describe());
     if (this.arms) said.push(`${this.arms.what}, on ${this.armFrames} frames`);
     return said;
+  }
+
+  /** How near each piece came to his body, in it or not, as words (for the trace). */
+  nearest(): string[] {
+    return this.pieces.map((piece) => piece.describeNearest()).filter(Boolean);
   }
 
   /** the deepest moment past `INTO_BODY`, pictured, if it went in */
