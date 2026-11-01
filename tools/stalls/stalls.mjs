@@ -142,6 +142,13 @@ function chromeFor(options) {
   return startChrome({ outDir: join(OUT, 'profiles'), headed, scale, width, height });
 }
 
+/** `expression` read off `page` into the JSON file beside its end picture (`--read`): what it was read into. */
+async function readOff(page, expression, picture) {
+  const path = picture.replace(/end-(\d+)\.png$/, 'read-$1.json');
+  writeFileSync(path, `${JSON.stringify(await page.evaluate(expression), null, 1)}\n`);
+  return `${expression} read into ${path}`;
+}
+
 /** The scenario played once on `page` (in `browser`) while traced: what it did, what the frames and the trace
  *  showed, and a picture of the screen at its end (`picture`). */
 async function playTraced(browser, page, options, picture) {
@@ -153,6 +160,7 @@ async function playTraced(browser, page, options, picture) {
   const events = await trace.stop();
   await page.screenshot({ path: picture });
   notes.push(`its end pictured in ${picture}`);
+  if (options.read) notes.push(await readOff(page, options.read, picture));
   const painted = paints ? await paintedNames(page, events) : new Map();
   const findings = analyze(record, events, MARK, options.listed, options.sourceOf, painted, options.jsUnder);
   return { notes, findings };

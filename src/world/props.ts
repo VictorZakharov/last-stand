@@ -2,7 +2,7 @@
 // and geometry helpers, the spawn-portal membrane, the environment map and the static shadow bake.
 import * as THREE from 'three';
 import { seeThroughFade } from '../core/seeThrough';
-import { WEBGPU, gpu } from '../core/webgpu';
+import { WEBGPU, gpu, webgpuSceneTarget } from '../core/webgpu';
 import { portShader } from '../core/shaderPorts';
 import { membraneMaterial, spillMaterial } from './portalNodes';
 import { daySkyMaterial, nightSkyMaterial } from './skyNodes';
@@ -135,7 +135,10 @@ export function drawStillShadows(renderer: THREE.WebGLRenderer, scene: THREE.Sce
   shown: THREE.Group, kept: THREE.LightShadow): void {
   const lights = [...stillShadows].filter((light) => shown.getObjectById(light.id));
   if (!lights.length) return;
-  stillTarget ??= new THREE.WebGLRenderTarget(1, 1);
+  // (on WebGPU the scene pass's own target, which the frame draws over: a pipeline is made for its target's format
+  // and samples, and in a pixel of its own each prop in view had one made at the draw, a breaking prop's frame held
+  // up 260 to 300 ms)
+  const into = WEBGPU ? webgpuSceneTarget() as THREE.WebGLRenderTarget : stillTarget ??= new THREE.WebGLRenderTarget(1, 1);
   const hidden: THREE.Object3D[] = [];
   const uncast: THREE.Object3D[] = [];
   hideBodies(scene, shown, hidden, uncast);
@@ -143,7 +146,7 @@ export function drawStillShadows(renderer: THREE.WebGLRenderer, scene: THREE.Sce
   const target = renderer.getRenderTarget();
   for (const light of lights) light.shadow.needsUpdate = true;
   kept.autoUpdate = false;
-  renderer.setRenderTarget(stillTarget);
+  renderer.setRenderTarget(into);
   try {
     drawingStill(shown, () => renderer.render(scene, camera));
   } finally {

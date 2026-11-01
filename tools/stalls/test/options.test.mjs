@@ -73,6 +73,7 @@ test('reads values either way, and switches', () => {
   assert.equal(resized.staleWind, true);
   const read = readOptions(['--scenario', 'boot', '--read', 'window.__builds']);
   assert.equal(read.read, 'window.__builds');
+  assert.equal(readOptions(['--scenario', 'storm', '--read', 'window.__builds']).read, 'window.__builds');
   const logo = readOptions(['--scenario', 'boot', '--film-logo']);
   assert.equal(logo.film, true);
   assert.equal(logo.filmLogo, true);
@@ -100,7 +101,6 @@ test('refuses what it doesn\'t know and bad values', () => {
   assert.throws(() => readOptions(['--window', '1536']), /--window must be a size in css px/);
   assert.throws(() => readOptions(['--listed', '10']), /--listed must be a number of ms, 20 or more/);
   assert.throws(() => readOptions(['--resize', '1920x1080']), /--resize is the boot scenario's/);
-  assert.throws(() => readOptions(['--read', 'window.__builds']), /--read is the boot scenario's/);
   assert.throws(() => readOptions(['--builds']), /--builds is the boot scenario's/);
   assert.throws(() => readOptions(['--scenario', 'boot', '--resize', 'full']), /--resize must be a size in css px/);
   assert.throws(() => readOptions(['--scenario', 'boot', '--trips', '0']), /--trips must be a whole number/);
