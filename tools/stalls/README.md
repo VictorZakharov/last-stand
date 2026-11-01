@@ -90,6 +90,9 @@ The report is printed and written to `tools/stalls/out/report.txt`.
   - `heroes`: the hero selection screen opened by the lobby's Change hero and left by Back, three times, after a
     fifth of the time in the lobby (the frames to beat): each trip's way in and way out a phase of its own, so the
     first opening is read apart from the ones after ("brief lag when reentering hero selection room").
+  - `switch`: another hero chosen from the hero selection screen, the warrior, the ranger and the mage in turn, each
+    choice a phase of its own, and how long each took to bring the lobby back said ("changing hero is a little
+    slow": WebGPU's 306 to 331 ms, WebGL's 213 to 270, the hero's build most of both).
   - `storm`: the mage in a run, walking away from the foes a side of a square at a time and casting Maelstrom back
     at those following him in a line, every other side: its storm draws them in and whirls what it kills.
   - `boot` (`boot.mjs`): no set-up and nothing played. In a fresh Chrome the game is loaded as a first visit has it

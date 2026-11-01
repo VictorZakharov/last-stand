@@ -344,6 +344,38 @@ async function heroes(page, ms) {
     + `${(half / 1000).toFixed(1)} s each way`];
 }
 
+/** the heroes `switch` picks in turn, ending on the one it began with when that's the mage (`--hero`'s default) */
+const SWITCHES = ['warrior', 'ranger', 'mage'];
+
+/**
+ * Another hero picked from the hero selection screen, each of `SWITCHES` in turn ("changing hero is a little
+ * slow"): a fifth of `ms` in the lobby first, then each pick a phase of its own, from the hero clicked in the hall
+ * to the lobby a while after. Its notes say how long each choice took to bring the lobby back, by the page's clock.
+ */
+async function switchHero(page, ms) {
+  if (!(await page.$('#btn-hero'))) return ['no hero selection screen in this tree: switched nothing'];
+  const world = await worldBox(page);
+  await page.mouse.move(world.x + world.width / 2, world.y + world.height / 2);
+  await page.evaluate(markPhase, 'away');
+  await page.waitForTimeout(ms / 5);
+  const each = (ms * 4) / 5 / SWITCHES.length;
+  const notes = [];
+  for (const hero of SWITCHES) {
+    await page.click('#btn-hero');
+    await page.waitForFunction(heroesShown, null, { timeout: HEROES_MS, polling: 100 });
+    await page.click(`#heroes .hs-tabs [data-c="${hero}"]`);
+    await page.waitForTimeout(500);
+    await page.evaluate(markPhase, `to the ${hero}`);
+    const chosen = await page.evaluate(() => performance.now());
+    await page.click('#heroes .hs-choose');
+    await page.waitForFunction(heroesGone, null, { timeout: HEROES_MS, polling: 'raf' });
+    const back = await page.evaluate(() => performance.now());
+    notes.push(`the ${hero}'s lobby back ${Math.round(back - chosen)} ms after his choice`);
+    await page.waitForTimeout(each);
+  }
+  return notes;
+}
+
 /** how many times `pause` opens the pause menu and closes it, and how long the screen is pictured after each press
  *  (ms), a picture every `PAUSE_PICTURE_MS` */
 const PAUSES = 2;
@@ -400,4 +432,4 @@ async function lobby(page, ms) {
 
 /** The scenarios by name: each plays the page for `ms` (as `options` say, those it reads) and returns notes of what
  *  happened. */
-export const SCENARIOS = { fight, lobby, storm, hover, sweep, stow, heroes, pause };
+export const SCENARIOS = { fight, lobby, storm, hover, sweep, stow, heroes, switch: switchHero, pause };
