@@ -587,6 +587,7 @@ export async function warmUp(renderer: THREE.WebGLRenderer, scene: THREE.Scene, 
   const drawn = how.drawn && [...how.drawn, ...objects, ...(swap ? [swap.show] : [])];
   drawnAlone(scene, camera, target, drawn, () => without(leaveOut, () => renderer.render(scene, camera)));
   if (swap) { swap.show.visible = false; swap.hide.visible = true; }
+  how.hide?.();
   const drawMs = performance.now() - at;
   renderer.setRenderTarget(prev);
   pinPrograms(renderer);
@@ -658,8 +659,14 @@ async function warmUpWebGPU(renderer: THREE.WebGLRenderer, scene: THREE.Scene, c
   progress?.(LINKS_DONE);
   await step?.();
   at = performance.now();
+  // (and taken out again: the fight's foes left in their crowds, the lobby's frames drew every kind as the other
+  // biomes warmed after, 943 node builds at its draws, 0.6 s of its JS)
   how.show?.();
-  asDrawn(() => renderer.render(scene, camera));
+  try {
+    asDrawn(() => renderer.render(scene, camera));
+  } finally {
+    how.hide?.();
+  }
   const drawMs = performance.now() - at;
   progress?.(1);
   return { compileMs, mapsMs: 0, uploadsMs: 0, linksMs, drawMs, cold: false };
