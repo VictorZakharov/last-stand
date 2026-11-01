@@ -386,12 +386,13 @@ async function warmPart(part: Part, step: () => Promise<void>): Promise<boolean>
 }
 
 /** `parts` built (where they weren't ahead) and warmed at once, `progress` told how far along: timed as `warm the
- *  <need> at once`. */
+ *  <need> at once`. A part built a frame while nothing waits for them (WebGPU's fight, warmed as the loading screen
+ *  leaves): built in tasks one after another, a foe's 50 to 110 ms each, they held the lobby's frames up. */
 async function warmAtOnce(need: Need, parts: Part[], progress: (share: number) => void): Promise<void> {
   const start = performance.now();
   const built: Built[] = [];
   for (const [i, part] of parts.entries()) {
-    if (!part.built) await nextTask();
+    if (!part.built) await (isReadying() ? nextTask() : nextFrame());
     built.push(part.built ?? part.build());
     part.built = undefined;
     progress(BUILT * (i + 1) / parts.length);
@@ -441,16 +442,54 @@ export async function warmTheRest(left: Promise<void>): Promise<void> {
     await Promise.race([left, wanted('fight')]);
     return !WEBGPU && !mapsMadeAfresh() && warmedBuilds().includes(BUILD);
   };
-  if (WEBGPU) void left.then(() => {
-    want('fight');
-    // (the compile's slices long again while the fight's loading bar is up: nothing is played under it)
-    const slice = (): void => compileSlice(isReadying() ? COMPILE_SLICE.loading : COMPILE_SLICE.playing);
-    onReadying(slice);
-    slice();
-  });
   const fightWarm = warmNeed('fight', theFight(), behind).then(() => {
     rememberWarmed();
     performance.mark('fight warm');
   });
+  if (WEBGPU) void left.then(() => {
+    want('fight');
+    fitSlices(fightWarm);
+    // (once it's warm, a compile's slices long while the fight's loading bar is up, nothing played under it)
+    onReadying(() => compileSlice(isReadying() ? COMPILE_SLICE.loading : COMPILE_SLICE.playing));
+  });
   await Promise.all([fightWarm, warmNeed('heroes', heroParts(), async () => false)]);
+}
+
+/** how much shorter the compile's slice gets after a frame that missed the screen's refresh, and how much longer
+ *  (ms) after one that didn't */
+const SLICE_CUT = 0.7;
+const SLICE_GROWTH = 0.25;
+/** how late a frame may come before it counts as missed, as a share of the screen's refresh */
+const MISSED = 1.25;
+
+/**
+ * three's async compile, behind the lobby on WebGPU, worked a slice of the frame's time fitted to what the frames
+ * leave until `until`: shorter after a frame that missed the screen's refresh, a little longer after each that
+ * didn't, from `COMPILE_SLICE.least` to `playing` (a 144 Hz screen's frame has 6.9 ms, the lobby's own JS about 5 of
+ * them; a 60 Hz screen's 16.7), and the loading screen's long slices while the fight's loading bar is up (nothing is
+ * played under it). The screen's refresh is the shortest time between frames, let drift up slowly (a window moved
+ * to a slower screen).
+ */
+function fitSlices(until: Promise<void>): void {
+  let done = false;
+  void until.then(() => { done = true; });
+  let last = 0;
+  let refresh = Infinity;
+  let slice: number = COMPILE_SLICE.playing;
+  const fit = (now: number): void => {
+    if (done) {
+      compileSlice(isReadying() ? COMPILE_SLICE.loading : COMPILE_SLICE.playing);
+      return;
+    }
+    if (last) {
+      const gap = now - last;
+      refresh = Math.min(refresh * 1.002, gap);
+      const missed = gap > refresh * MISSED;
+      slice = missed ? Math.max(COMPILE_SLICE.least, slice * SLICE_CUT) : Math.min(COMPILE_SLICE.playing, slice + SLICE_GROWTH);
+    }
+    last = now;
+    compileSlice(isReadying() ? COMPILE_SLICE.loading : slice);
+    requestAnimationFrame(fit);
+  };
+  requestAnimationFrame(fit);
 }

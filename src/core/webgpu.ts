@@ -16,8 +16,10 @@ const MAX_LOOPED_LIGHTS = 24;
 /** how long three's async compile works before it yields a frame (ms, `compileSlice`): while nothing is played (the
  *  loading screen, the fight's loading bar), and while the lobby is. Its own 8 ms kept the GPU's compilers a third
  *  busy (2.7 of Chrome's 9 at once), the lobby's main thread building nodes between frames: 40 took a return's lobby
- *  from 7.1 to 6.5 s and its fight's bar from 2.1 to 0.8 s, but behind the lobby drew it at 14 to 19 a second. */
-export const COMPILE_SLICE = { loading: 40, playing: 8 };
+ *  from 7.1 to 6.5 s and its fight's bar from 2.1 to 0.8 s, but behind the lobby drew it at 14 to 19 a second. While
+ *  the lobby is played, `playing` is the most: the slice is fitted to what the frames leave (`fitSlices` in
+ *  game/warmup.ts), as 8 held a 144 Hz lobby's 141 frames a second down to 56 as the fight warmed behind it. */
+export const COMPILE_SLICE = { loading: 40, playing: 8, least: 1 };
 /** three's async compile set to work `ms` before it yields a frame (`vite.config.ts` makes its build read it). */
 export function compileSlice(ms: number): void {
   (globalThis as { __compileSliceMs?: number }).__compileSliceMs = ms;

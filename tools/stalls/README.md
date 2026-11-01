@@ -13,6 +13,8 @@ npm run stalls -- --url https://last-stand.cc/pr-preview/pr-194/,https://last-st
 npm run stalls -- --url this,https://last-stand.cc/  # this tree, then production
 npm run stalls -- --headed --links --seconds 30  # a window on the screen, every program built listed
 npm run stalls -- --variants base,cpuCanvas      # the page as it is, then every 2D canvas drawn on the CPU
+npm run stalls -- --scenario lobby --js --variants seeded --url "this?renderer=webgpu,this?renderer=webgpu&x=0"
+                                                 # two URLs' heroes in the same gear (every page's dice one seed)
 npm run stalls -- --scenario lobby               # standing, then walking round the lobby
 npm run stalls -- --scenario storm --listed 120  # the mage's Maelstrom cast into the foes, every stall of 120 ms+
 npm run stalls -- --scenario hover --hero warrior --stash 40 --view first --scale 1.25 --perf  # a report's lobby

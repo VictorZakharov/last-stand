@@ -88,8 +88,26 @@ a still prop's uniforms no longer refreshed in full at each draw (`stillNodes`, 
 lobby's draws went from 405 to about 270, and its frame (forest, mage, `--rounds 2`, in turns) read 7.6 to 8.5 ms of
 JS against WebGL's 4.4, three's render 6.1 to 6.8 ms against 2.9: 111 to 122 frames a second headless, where WebGL
 holds the screen's 144. What is left is what moves: the hero's 50 colour draws and the dummies' 32, each refreshed
-in full at every draw because it moves (`__webgpuFull`, `?builds`), at about 20 µs each. The next cut would draw
-each hero's rigid pieces as one skinned mesh a material in the colour pass too, as `castAsOne` does for his shadow.
+in full at every draw because it moves (`__webgpuFull`, `?builds`), at about 20 µs each.
+
+**Merging the hero's draws was tried and saved little** (2026-11-01, `--variants seeded`, so both URLs' heroes wore
+the same gear: a fresh profile rolls its gear, and an A/B first read 0.8 ms saved that was only the gear). The mage
+shows 72 meshes, about 35 of them a material of their own; the rest merged a material each into one skinned mesh
+(each rigid piece a bone that is the piece itself, its normals laid in as (LᵀL)⁻¹ n so skinning by L gives L⁻ᵀ n;
+each skinned part through its bind matrix) took the colour pass's hero from about 72 draws to 53, and three's
+render from 4.87 to 5.05 ms to 4.68 to 4.79: about 0.2 ms, a merged skinned draw costing more than a plain one. Not
+kept, for its risks (gear, the first person's layers, a piece's own scale). On the way it showed that a skinned
+part's copy of a kit material (`Sculpt.build`'s twins) carries the kit's patch but not its looks (`kitLooks`), so on
+WebGPU skinned parts show no dissolve, frost or hit flash; given the looks, the mage's staff forearm drew in its
+sleeve's colour where WebGL's is bare skin, so that is left open.
+
+**The fight's warm-up behind the lobby** (2026-11-01): on WebGPU it compiles at once as the loading screen leaves,
+three's async compile working a slice of each frame (`COMPILE_SLICE`). Its 8 ms a frame, with the lobby's own 5,
+held a 144 Hz lobby at 56 frames a second at the least on a return (`npm run stalls -- --scenario boot`), and its
+parts were built in tasks back to back (a foe's 50 to 110 ms). The slice is now fitted to what the frames leave
+(`fitSlices` in `game/warmup.ts`: 30% shorter after a frame that missed the screen's refresh, a quarter ms longer
+after each that didn't, 1 to 8 ms), and a part built a frame while nothing waits for the fight: a return's least
+85 a second, a first visit's 42 (was 38: the GPU process's compiles are most of it there), the fight warm as soon.
 
 ## Where the port stands (2026-10-30, evening)
 
