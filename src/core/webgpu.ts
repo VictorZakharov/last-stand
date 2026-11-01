@@ -58,7 +58,8 @@ export async function makeWebGPURenderer(): Promise<THREE.WebGLRenderer> {
   // it supports (static meshes and instanced ones in plain node materials); the rest drawn as before
   if (RUNNING.meshlets) {
     const { MeshletDrawingPipeline } = await import('three/addons/pipelines/MeshletDrawingPipeline.js');
-    (renderer as unknown as { drawingPipeline: unknown }).drawingPipeline = new MeshletDrawingPipeline();
+    const drawing = new MeshletDrawingPipeline();
+    (renderer as unknown as { drawingPipeline: unknown }).drawingPipeline = stillAlone(drawing);
   }
   // the point lights casting no shadow drawn by one loop over a uniform array in each lit shader, where three wrote
   // each out in full (the physical model's every term, eight times over): the lit fragment shaders were 55 kB of
@@ -286,6 +287,28 @@ function compileShadowsToo(renderer: WebGPURenderer): void {
     }
     updateBefore(renderObject);
   };
+}
+
+/** the meshes the meshlet pipeline may draw: what the biomes stand, which never moves (`stillForMeshlets`) */
+const still = new WeakSet<object>();
+
+/** Everything under `roots` (the biomes and the hall as they're built) given to the meshlet pipeline. */
+export function stillForMeshlets(...roots: THREE.Object3D[]): void {
+  for (const root of roots) root.traverse((object) => still.add(object));
+}
+
+type Meshlets = { _isMeshlet(object: object, ...rest: unknown[]): boolean };
+
+/**
+ * The meshlet pipeline kept to still meshes (`stillForMeshlets`): it took every mesh it could, the heroes' and the
+ * training dummies' moving parts too, and after the pause menu closed the dummies were gone and a tan shell of their
+ * burlap stood round the hero in the middle of the dais.
+ */
+function stillAlone<T>(drawing: T): T {
+  const pipeline = drawing as unknown as Meshlets;
+  const isMeshlet = pipeline._isMeshlet.bind(pipeline);
+  pipeline._isMeshlet = (object, ...rest) => still.has(object) && isMeshlet(object, ...rest);
+  return drawing;
 }
 
 /** what of three's renderer a compile's state is kept by (`compilesTakeTurns`) */

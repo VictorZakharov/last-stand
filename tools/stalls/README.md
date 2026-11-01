@@ -85,6 +85,8 @@ The report is printed and written to `tools/stalls/out/report.txt`.
   - `stow`: the lobby's panels stowed and shown again with Space, as the owner pressed it "rapidly": a quarter of
     the time with them shown (the frames to beat), a quarter stowed (practice: the run's bar at the bottom), then
     Space pressed every 200 ms for the rest (`--press-ms`), the mouse over the world throughout.
+  - `pause`: the pause menu opened and closed with Esc twice, the screen pictured every 150 ms for 1.5 s after each
+    press (`out/end-N-pause-<press>-<n>.png`), and how long the menu took to show or go said for each.
   - `heroes`: the hero selection screen opened by the lobby's Change hero and left by Back, three times, after a
     fifth of the time in the lobby (the frames to beat): each trip's way in and way out a phase of its own, so the
     first opening is read apart from the ones after ("brief lag when reentering hero selection room").

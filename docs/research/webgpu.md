@@ -178,8 +178,11 @@ id (`NodeManager.getCacheKey`), and three makes each environment map a node of i
   change of the setting or the display shows after a reload there (the menu says so). Checked: the canvas is
   `rgba16float`, extended with `?hdr=1`, `bgra8unorm`, standard without. Not looked at on an HDR display.
 - **Three's meshlet pipeline is behind `&meshlets=1`.** In the forest lobby it takes the static props: the
-  stumps (460k triangles over two frames' passes), logs, roots, the gates' roots and arches, bonfire stones and
-  the heroes' rigid pieces. Skinned meshes and every `ShaderMaterial` stay on the standard path.
+  stumps (460k triangles over two frames' passes), logs, roots, the gates' roots and arches and bonfire stones:
+  what the biomes and the hall stand, and nothing else (`stillForMeshlets`). It took the heroes' and the training
+  dummies' rigid pieces too, and after the pause menu closed the dummies were gone and a tan shell of their burlap
+  stood round the hero (`npm run stalls -- --scenario pause`). Skinned meshes and every `ShaderMaterial` stay on
+  the standard path.
 
 - **The floors' looks are TSL nodes** set on the plain materials, which three copies onto the node material it
   makes of each (`world/forestNodes.ts`, `world/cryptNodes.ts`): the forest's moss patches (`colorNode`) and its

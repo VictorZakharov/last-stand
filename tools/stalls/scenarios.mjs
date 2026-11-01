@@ -344,6 +344,53 @@ async function heroes(page, ms) {
     + `${(half / 1000).toFixed(1)} s each way`];
 }
 
+/** how many times `pause` opens the pause menu and closes it, and how long the screen is pictured after each press
+ *  (ms), a picture every `PAUSE_PICTURE_MS` */
+const PAUSES = 2;
+const PAUSE_FILMED_MS = 1500;
+const PAUSE_PICTURE_MS = 150;
+
+/**
+ * The pause menu opened and closed with Esc, `PAUSES` times (from play on WebGPU: "after pressing esc dummies
+ * disappear, and after pressing it again, they appear but first this hollow brown sphere appears", the menu shown
+ * a second late): a fifth of `ms` in the lobby first, then each press a phase of its own, the screen pictured every
+ * `PAUSE_PICTURE_MS` for `PAUSE_FILMED_MS` after it (`<end picture>-pause-<press>-<n>.png`). Its notes say how long
+ * the menu took to show or go after each press, by the page's clock.
+ */
+async function pause(page, ms, { picture }) {
+  const world = await worldBox(page);
+  await page.mouse.move(world.x + world.width / 2, world.y + world.height / 2);
+  await page.evaluate(markPhase, 'away');
+  await page.waitForTimeout(ms / 5);
+  const notes = [];
+  for (let press = 1; press <= PAUSES * 2; press++) {
+    const opening = press % 2 === 1;
+    await page.evaluate(markPhase, `${opening ? 'opening' : 'closing'} ${Math.ceil(press / 2)}`);
+    const pressed = await page.evaluate(() => performance.now());
+    await tap(page, 'Escape');
+    const shownAt = page.waitForFunction(pauseShown, opening, { timeout: PAUSE_FILMED_MS * 4, polling: 'raf' })
+      .then(() => page.evaluate(() => performance.now()));
+    const pictures = [];
+    for (let n = 0; n * PAUSE_PICTURE_MS < PAUSE_FILMED_MS; n++) {
+      const path = picture.replace(/\.png$/, `-pause-${press}-${String(n).padStart(2, '0')}.png`);
+      await page.screenshot({ path });
+      pictures.push(path);
+      await page.waitForTimeout(PAUSE_PICTURE_MS);
+    }
+    const took = (await shownAt) - pressed;
+    notes.push(`press ${press}: the pause menu ${opening ? 'shown' : 'gone'} ${took.toFixed(0)} ms after Esc; `
+      + `pictured ${pictures.length} times from ${pictures[0]}`);
+    await page.waitForTimeout(ms / 5 / 2);
+  }
+  return notes;
+}
+
+/** Whether the pause menu is shown (`shown`) or gone (not). */
+function pauseShown(shown) {
+  const box = document.getElementById('pause');
+  return Boolean(box) && box.classList.contains('hidden') !== shown;
+}
+
 /** Stands in the lobby, then walks round it, for `ms` in all. */
 async function lobby(page, ms) {
   await page.waitForTimeout(ms / 4);
@@ -353,4 +400,4 @@ async function lobby(page, ms) {
 
 /** The scenarios by name: each plays the page for `ms` (as `options` say, those it reads) and returns notes of what
  *  happened. */
-export const SCENARIOS = { fight, lobby, storm, hover, sweep, stow, heroes };
+export const SCENARIOS = { fight, lobby, storm, hover, sweep, stow, heroes, pause };

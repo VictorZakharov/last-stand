@@ -148,7 +148,7 @@ async function playTraced(browser, page, options, picture) {
   const { js, angle, dawn, passes, paints } = options;
   const trace = await startTrace(browser, { js, angle, dawn, passes, paints });
   await page.evaluate(startRecording, MARK);
-  const notes = await SCENARIOS[options.scenario](page, options.seconds * 1000, options);
+  const notes = await SCENARIOS[options.scenario](page, options.seconds * 1000, { ...options, picture });
   const record = await page.evaluate(stopRecording, MARK);
   const events = await trace.stop();
   await page.screenshot({ path: picture });

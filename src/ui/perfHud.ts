@@ -2,6 +2,7 @@
 // renderer stats. Off by default; toggled from the pause menu, persisted in a cookie.
 import * as THREE from 'three';
 import { WEBGPU } from '../core/webgpu';
+import { RUNNING } from '../core/rendererChoice';
 import { G } from '../state';
 import { particles } from '../fx/particles';
 import { readCookie, writeCookie } from '../core/cookies';
@@ -84,7 +85,9 @@ export function initPerfHud(r: THREE.WebGLRenderer): void {
   renderer.info.autoReset = false;
   // (on WebGPU no GPU timing yet, its timestamp queries: core/webgpu.ts)
   if (WEBGPU) {
-    gpuName = 'WebGPU';
+    // (and its switches: a report's frames hang on them)
+    const flags = [RUNNING.meshlets && 'meshlets', RUNNING.lightsEach && 'lights each'].filter(Boolean);
+    gpuName = flags.length ? `WebGPU (${flags.join(', ')})` : 'WebGPU';
     el.onclick = copyReport;
     watchLongFrames();
     setPerfHud(readCookie(COOKIE) === '1', false);
