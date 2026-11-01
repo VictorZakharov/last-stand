@@ -395,6 +395,7 @@ export const buildForest: BiomeBuilder = (scene) => {
   rollStumps(stumps, pool, BOOT_ROLL);
 
   const logSpots = [[21, 1.15, 0.9], [11, 4.75, -0.4], [22, 3.0, 0.3]];
+  // (the bark alone casts: the heartwood's ends and the moss lie within its shadow, and each cast a draw a log)
   // (both sides: past the heartwood's rim, 0.2 m in, an end is the bark's shell alone, and from outside only it
   // showed the floor through the log's wall)
   const log = buildLogGeo(rng), logBark = barkAt(BARK_REPEATS.log);
@@ -406,7 +407,7 @@ export const buildForest: BiomeBuilder = (scene) => {
       m.name = 'fallen log';
       m.position.set(x, 0.38, z);
       m.rotation.y = yaw;
-      m.castShadow = mat !== capMat; m.receiveShadow = true;
+      m.castShadow = mat === logBark; m.receiveShadow = true;
       scene.add(m);
       parts.push(m);
     }
@@ -1030,17 +1031,20 @@ function buildGlowcaps(scene: THREE.Object3D, x: number, z: number, rng: () => n
 }
 
 function buildBonfire(scene: THREE.Object3D, x: number, z: number, stone: THREE.Material, wood: THREE.Material, updaters: Updater[]): void {
-  const ringGeo = boulderGeo(47, 0.2, 1);
+  // (the ring's stones merged: a mesh a stone, a bonfire's ring was 9 draws, and 9 more in the sun's shadow)
+  const ringGeo = boulderGeo(47, 0.2, 1), at = new THREE.Object3D(), stones: THREE.BufferGeometry[] = [];
   for (let i = 0; i < 9; i++) {
     const a = (i / 9) * TAU;
-    const s = new THREE.Mesh(ringGeo, stone);
-    s.name = 'bonfire stones';
-    s.position.set(x + Math.cos(a) * 0.75, 0.08, z + Math.sin(a) * 0.75);
-    s.scale.set(1.2, 0.8, 1);
-    s.rotation.set(0.25 * Math.sin(3 * a), a * 2, 0);
-    s.castShadow = true;
-    scene.add(s);
+    at.position.set(x + Math.cos(a) * 0.75, 0.08, z + Math.sin(a) * 0.75);
+    at.scale.set(1.2, 0.8, 1);
+    at.rotation.set(0.25 * Math.sin(3 * a), a * 2, 0);
+    at.updateMatrix();
+    stones.push(ringGeo.clone().applyMatrix4(at.matrix));
   }
+  const ring = new THREE.Mesh(mergeGeometries(stones), stone);
+  ring.name = 'bonfire stones';
+  ring.castShadow = true;
+  scene.add(ring);
   // a teepee of logs leaning in over the bed, two more lying across it; where the flames lick them, charred and
   // glowing through their char
   // (each log's bark and char merged: drawn a mesh a part, its charred end apart, a bonfire's logs were 22 draws)

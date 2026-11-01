@@ -145,7 +145,10 @@ function chromeFor(options) {
 /** `expression` read off `page` into the JSON file beside its end picture (`--read`): what it was read into. */
 async function readOff(page, expression, picture) {
   const path = picture.replace(/end-(\d+)\.png$/, 'read-$1.json');
-  writeFileSync(path, `${JSON.stringify(await page.evaluate(expression), null, 1)}\n`);
+  // (a URL beside may not define it, as WebGL's page has no WebGPU records: said, not thrown, so the other runs go on)
+  const read = await page.evaluate(expression).then((value) => ({ value }), (error) => ({ error }));
+  if (read.error) return `${expression} not read: ${read.error.message.split('\n')[0]}`;
+  writeFileSync(path, `${JSON.stringify(read.value, null, 1)}\n`);
   return `${expression} read into ${path}`;
 }
 

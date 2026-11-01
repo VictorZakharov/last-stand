@@ -82,6 +82,15 @@ render object's lookup 0.43, its geometry 0.35 and pipeline 0.29. None of it is 
 fewer objects (the mage alone is 66 of the main pass's 154). Render bundles (`BundleGroup`, the biomes' still parts recorded once) were tried and
 saved nothing measurable.
 
+Fewer objects, then (2026-11-01): the dummies' parts merged by joint and material, each glowcap cluster, each
+bonfire's ring of stones and the forest's light shafts a mesh a part, the fallen logs cast by their bark alone, and
+a still prop's uniforms no longer refreshed in full at each draw (`stillNodes`, the shadow pass's casters too). The
+lobby's draws went from 405 to about 270, and its frame (forest, mage, `--rounds 2`, in turns) read 7.6 to 8.5 ms of
+JS against WebGL's 4.4, three's render 6.1 to 6.8 ms against 2.9: 111 to 122 frames a second headless, where WebGL
+holds the screen's 144. What is left is what moves: the hero's 50 colour draws and the dummies' 32, each refreshed
+in full at every draw because it moves (`__webgpuFull`, `?builds`), at about 20 µs each. The next cut would draw
+each hero's rigid pieces as one skinned mesh a material in the colour pass too, as `castAsOne` does for his shadow.
+
 ## Where the port stands (2026-10-30, evening)
 
 The day-count estimate further down (55–85 agent-days) was far too high, by about ten times. The owner pointed out
