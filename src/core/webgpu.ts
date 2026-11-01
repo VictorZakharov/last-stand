@@ -442,7 +442,7 @@ export const stillNodes = new WeakSet<THREE.Material>();
 /** a render object as three's refresh reads it: its material, and its build's observer */
 type Monitored = {
   material: THREE.Material & { kitLooks?: KitLooks };
-  getMonitor(): { hasNode: boolean; stillChecked?: boolean };
+  getMonitor(): { hasNode: boolean };
   /** a kit material's looks as this render object last drew them (`looksChanged`): its own, as three's observer is
    *  shared by every render object of one node build (every kit's material of a kind) */
   looksSeen?: Float32Array;
@@ -499,16 +499,15 @@ function stillWhereStill(renderer: WebGPURenderer): void {
   const nodes = (renderer as unknown as { _nodes: { needsRefresh(built: Monitored): number } })._nodes;
   const needsRefresh = nodes.needsRefresh.bind(nodes);
   nodes.needsRefresh = (built) => {
-    const monitor = built.getMonitor();
-    if (!monitor.stillChecked) {
-      monitor.stillChecked = true;
-      // (and the shadow maps' depth materials: what makes a caster's shadow change moves it, which is a refresh)
-      const shadow = (built.material as { isShadowPassMaterial?: boolean }).isShadowPassMaterial === true;
-      if (shadow || stillNodes.has(built.material)) monitor.hasNode = false;
-    }
+    // (and the shadow maps' depth materials: what makes a caster's shadow change moves it, which is a refresh)
+    const shadow = (built.material as { isShadowPassMaterial?: boolean }).isShadowPassMaterial === true;
+    const still = shadow || stillNodes.has(built.material);
+    // (at every draw: three sets it again as each render object of the build is first drawn, and a still material
+    // holds a node, `refreshedEachDraw` in core/shaderPorts.ts, for the meshlets' copy of it)
+    if (still) built.getMonitor().hasNode = false;
     const type = needsRefresh(built);
     const looks = built.material.kitLooks;
-    if (!looks || monitor.hasNode) return type;
+    if (!looks || !still) return type;
     built.looksSeen ??= new Float32Array(LOOKS).fill(NaN);
     built.looksChanged = looksChanged(looks, built.looksSeen);
     // (three's refresh types: none 0, shared 1, full 2)

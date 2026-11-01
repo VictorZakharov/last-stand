@@ -283,9 +283,12 @@ export function takePorts(renderer: WebGPURenderer): void {
         if (kit) kitNodes(converted);
         if (own) own(converted);
         // (a see-through's own uniforms are set once a render: `seeOfKind`, and its node no reason for a refresh; a
-        // kit's looks are refreshed as they change, `stillWhereStill` in core/webgpu.ts)
-        if (own) refreshedEachDraw(material);
-        else if (kit || see) stillNodes.add(material);
+        // kit's looks are refreshed as they change, `stillWhereStill` in core/webgpu.ts. Its node is given all the
+        // same, for the meshlets' copy of it: their pipeline draws a copy of the material, which takes the node with
+        // its other properties and isn't still; without one, the batches' draws stayed as they first drew, and once
+        // the clusters' pool grew a few seconds in, the forest's standing stones and boulders were drawn nowhere)
+        if (kit || see || own) refreshedEachDraw(material);
+        if (!own && (kit || see)) stillNodes.add(material);
       }
       return converted;
     }
