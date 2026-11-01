@@ -63,9 +63,17 @@ interface Pipeline {
 /** a job sent and not yet back */
 interface Pending { geometry: THREE.BufferGeometry; group: Group; key: string | null }
 
-/** Has `drawing` (three's MeshletDrawingPipeline) get its clusters from workers. Gives the wait for every cluster
- *  asked so far to be let in, or null where no worker can start (three makes them, as before). */
-export function clustersInWorkers(drawing: object): (() => Promise<void>) | null {
+/** What a warm-up does with the clusters its compile asks for */
+export interface ClusterWait {
+  /** holds every cluster back as it comes; the release lets in those held and says how many */
+  hold: () => () => number;
+  /** waits for every cluster asked so far to be back */
+  back: () => Promise<void>;
+}
+
+/** Has `drawing` (three's MeshletDrawingPipeline) get its clusters from workers, or null where no worker can start
+ *  (three makes them, as before). */
+export function clustersInWorkers(drawing: object): ClusterWait | null {
   if (typeof Worker === 'undefined') return null;
   const pipeline = drawing as Pipeline;
   const workers: Worker[] = [];
@@ -74,6 +82,7 @@ export function clustersInWorkers(drawing: object): (() => Promise<void>) | null
   let made: { job: Pending; arrays: ClusterArrays }[] = [];
   const waiting: (() => void)[] = [];
   let next = 0;
+  let holds = 0;
   for (let i = 0; i < WORKERS; i++) {
     try {
       const worker = new Worker(new URL('./meshlets.worker.ts', import.meta.url), { type: 'module' });
@@ -87,7 +96,7 @@ export function clustersInWorkers(drawing: object): (() => Promise<void>) | null
   if (workers.length === 0) return null;
 
   /** a job's clusters back: kept until every job asked is back, then all let in at once (three makes its culling
-   *  and batches again for each geometry let in, and waits while any is to come) */
+   *  and batches again for each geometry let in, and waits while any is to come), unless a warm-up holds them */
   const back = (arrays: ClusterArrays) => {
     const job = pending.get(arrays.id);
     pending.delete(arrays.id);
@@ -95,11 +104,14 @@ export function clustersInWorkers(drawing: object): (() => Promise<void>) | null
     made.push({ job, arrays });
     letInOnceAllBack();
   };
-  const letInOnceAllBack = () => {
-    if (pending.size > 0) return;
-    for (const { job, arrays } of made) letIn(pipeline, job, arrays);
-    made = [];
+  const letInOnceAllBack = (): number => {
+    if (pending.size > 0) return 0;
     for (const resolve of waiting.splice(0)) resolve();
+    if (holds > 0) return 0;
+    for (const { job, arrays } of made) letIn(pipeline, job, arrays);
+    const count = made.length;
+    made = [];
+    return count;
   };
   const ask = (geometry: THREE.BufferGeometry, group: Group, key: string | null) => {
     let keys = asked.get(geometry);
@@ -131,7 +143,16 @@ export function clustersInWorkers(drawing: object): (() => Promise<void>) | null
     pipeline._waitingGeometry = pipeline._gpuProjectionId;
     return null;
   };
-  return () => pending.size === 0 ? Promise.resolve() : new Promise((resolve) => waiting.push(resolve));
+  return {
+    hold: () => {
+      holds++;
+      return () => {
+        holds--;
+        return letInOnceAllBack();
+      };
+    },
+    back: () => pending.size === 0 ? Promise.resolve() : new Promise((resolve) => waiting.push(resolve)),
+  };
 }
 
 /** an attribute's values as floats, `itemSize` a vertex, whatever its layout */

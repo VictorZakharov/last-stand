@@ -4,7 +4,7 @@
 // The set of distinct programs is small and bounded, so we keep all of them for the
 // whole session, and compile the known ones up front (warmUp) before the first frame.
 import * as THREE from 'three';
-import { WEBGPU, compiled as webgpuCompiled } from './webgpu';
+import { WEBGPU, clustersBack, compiled as webgpuCompiled, holdClusters } from './webgpu';
 import { G } from '../state';
 import { CROWD_LAYER, WARM_LAYER } from './layers';
 import { drawnInShadowsOnly } from '../world/culling';
@@ -622,19 +622,38 @@ async function warmUpWebGPU(renderer: THREE.WebGLRenderer, scene: THREE.Scene, c
       renderer.setRenderTarget(prev);
     }
   };
+  const compile = (): Promise<void> => {
+    let compiling: Promise<void> = Promise.resolve();
+    asDrawn(() => {
+      if (how.hide) how.show?.();
+      try {
+        compiling = gpu.compileAsync(scene, camera);
+      } finally {
+        how.hide?.();
+      }
+    });
+    return compiling;
+  };
   let at = performance.now();
-  let compiling: Promise<void> = Promise.resolve();
-  asDrawn(() => {
-    if (how.hide) how.show?.();
-    try {
-      compiling = gpu.compileAsync(scene, camera);
-    } finally {
-      how.hide?.();
-    }
-  });
+  // (`?meshlets`: the walk asks the clusters of what has none, drawn as before till they come; once let in, a batch
+  // draws them with materials of its own, compiled here before any frame can draw it: built at the lobby's draws,
+  // they held its frames up to 270 ms)
+  const release = holdClusters();
+  let compiling: Promise<void>;
+  try {
+    compiling = compile();
+  } catch (e) {
+    release();
+    throw e;
+  }
   const compileMs = performance.now() - at;
   at = performance.now();
-  await compiling;
+  try {
+    await compiling;
+    await clustersBack();
+  } finally {
+    if (release() > 0) await compile();
+  }
   const linksMs = performance.now() - at;
   progress?.(LINKS_DONE);
   await step?.();

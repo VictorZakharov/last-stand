@@ -1,6 +1,7 @@
 // The game on three's WebGPURenderer, behind `?renderer=webgpu` (docs/research/webgpu.md): the renderer made and
 // given what the WebGL code around it asks of a WebGLRenderer, and the post chain as a node pipeline.
 import * as THREE from 'three';
+import type { ClusterWait } from './meshlets';
 import type { RenderPipeline, WebGPURenderer } from 'three/webgpu';
 import { RUNNING } from './rendererChoice';
 import { initHdrForWebGPU } from './hdr';
@@ -35,10 +36,13 @@ export async function compiled(): Promise<void> {
   while (compiling.length) await Promise.all(compiling.splice(0));
 }
 
-let clustersWait = (): Promise<void> => Promise.resolve();
-/** Waits for the GPU-driven drawing's clusters asked so far (`?meshlets`, core/meshlets.ts): a warm-up's draw
- *  after them builds their shaders, which drawn first after the lobby showed held its frames up to 200 ms. */
-export const clustersMade = (): Promise<void> => clustersWait();
+let clusters: ClusterWait = { hold: () => () => 0, back: () => Promise.resolve() };
+/** The GPU-driven drawing's clusters (`?meshlets`, core/meshlets.ts) held back from the frames while a warm-up
+ *  compiles, so their batches' shaders are compiled there (`warmUpWebGPU`): built as the lobby first drew them, they
+ *  held its frames up to 270 ms. The release lets those held in and says how many. */
+export const holdClusters = (): (() => number) => clusters.hold();
+/** waits for every cluster asked so far to be back */
+export const clustersBack = (): Promise<void> => clusters.back();
 
 /** The target the scene's pass draws into: what its pipelines are made for, the warm-ups' too. */
 export const webgpuSceneTarget = (): THREE.RenderTarget => sceneTarget!;
@@ -67,7 +71,7 @@ export async function makeWebGPURenderer(): Promise<THREE.WebGLRenderer> {
     const { MeshletDrawingPipeline } = await import('three/addons/pipelines/MeshletDrawingPipeline.js');
     const drawing = new MeshletDrawingPipeline();
     const { clustersInWorkers } = await import('./meshlets');
-    clustersWait = clustersInWorkers(drawing) ?? clustersWait;
+    clusters = clustersInWorkers(drawing) ?? clusters;
     (renderer as unknown as { drawingPipeline: unknown }).drawingPipeline = stillAlone(drawing);
   }
   // the point lights casting no shadow drawn by one loop over a uniform array in each lit shader, where three wrote
@@ -268,6 +272,31 @@ function recordNodeBuilds(renderer: WebGPURenderer): void {
   recordPipelines(renderer);
   recordDraws(renderer);
   recordRenders(renderer);
+  recordBatches(renderer);
+}
+
+/** A batch the GPU-driven drawing made (`?builds` with `?meshlets`): when, for what material, and its geometry
+ *  pool's size and version then (a pool grown or moved has every render list's batches made again) */
+interface BatchMade { at: number; material: string; vertices: number; indices: number; poolVersion: number }
+
+/** Every batch three's meshlet pipeline makes, kept in `window.__meshletBatches`: each is drawn with materials of its
+ *  own, so each is node builds at its first draw. */
+function recordBatches(renderer: WebGPURenderer): void {
+  type Pool = { vertexArray: Float32Array; indexArray: Uint32Array; version: number };
+  type Batching = { createBatch?: (entry: { material: THREE.Material }, ...rest: unknown[]) => unknown; _geometryPool: Pool };
+  const drawing = (renderer as unknown as { drawingPipeline: Batching }).drawingPipeline;
+  const createBatch = drawing.createBatch?.bind(drawing);
+  if (createBatch === undefined) return;
+  const made: BatchMade[] = [];
+  Object.assign(window, { __meshletBatches: made });
+  drawing.createBatch = (entry, ...rest) => {
+    const pool = drawing._geometryPool;
+    made.push({
+      at: performance.now(), material: entry.material.name || entry.material.type,
+      vertices: pool.vertexArray.length, indices: pool.indexArray.length, poolVersion: pool.version,
+    });
+    return createBatch(entry, ...rest);
+  };
 }
 
 /** One kind of render call summed over the frames (`recordRenders`): how many, their time (ms, its nested renders
