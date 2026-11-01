@@ -388,6 +388,15 @@ From the PR (#35191):
 We already cull: `world/culling.ts` packs each instanced mesh's in-view cells per pass, so only 47k of the
 forest's 1.85 M triangles lie outside the view of the pass that draws them.
 
+**Its clusters are made in workers here** (`core/meshlets.ts`, `meshlets.worker.ts`, 2026-11-01). three makes a
+geometry's clusters as it is first drawn, on the main thread, one a frame (meshoptimizer's simplifier and clusterizer,
+up to 160 ms a geometry). That was right after the lobby showed, over the logo's exit: a first visit's slowest lobby
+second drew 1 frame, a return's 33 (`npm run stalls -- --scenario boot`, `?meshlets=1`, the commit before beside
+it). Made in two workers, the nodes over their arrays made on the page, and let in together once all are back,
+the same boot read 31 and 40, its fight drawn as before. The lobby's warm-up waits for them before its draw, so their
+draw materials are built under the loading screen. What's left: each meshlet batch's own node builds as it is first
+drawn (about 330 a boot after the reveal, three's compile never reaches them), still behind plain WebGPU's 76 to 85.
+
 ## Where our triangles and GPU time go
 
 `npm run lab -- draws --biome forest` (ranger, 38 foes, top view):

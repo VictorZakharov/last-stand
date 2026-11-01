@@ -13,7 +13,7 @@ import * as THREE from 'three';
 import { G } from '../state';
 import { behindTheLobby, compileAhead, warmUp, type Swap, type WarmedUp } from '../core/shaders';
 import { compilePasses, sceneTarget } from '../core/renderer';
-import { COMPILE_SLICE, compileSlice, WEBGPU } from '../core/webgpu';
+import { clustersMade, COMPILE_SLICE, compileSlice, WEBGPU } from '../core/webgpu';
 import { mapsArrived, mapsMadeAfresh } from '../core/textures';
 import { ENEMIES, type EnemyId } from '../data/enemies';
 import { BIOME_IDS } from '../data/biomes';
@@ -172,6 +172,11 @@ export function compileTheLobby(): void {
 /** the lobby's dummies' bodies, which its warm-up outlines */
 const dummies = (): THREE.Object3D[] => G.enemies.map((e) => e.obj);
 
+/** the maps a warm-up's draw needs, and the GPU-driven drawing's clusters, so their shaders are built by it */
+const withClusters = async (textures: Set<THREE.Texture>): Promise<void> => {
+  await Promise.all([mapsArrived(textures), clustersMade()]);
+};
+
 /** What the lobby shows and can do, warmed before it shows (the lobby's dummies already stand in it, its effects,
  *  loot and skills made with its hero: `compileTheLobby`); the fight's foes built meanwhile (`buildAhead`). With
  *  `heroes` (a first visit, which opens on the hero selection screen), the other heroes too, their programs' links
@@ -187,7 +192,7 @@ export async function warmLobby(heroes = false): Promise<void> {
   const leaveOut = otherBiomes().map((id) => G.arena.groupOf(id));
   const start = performance.now();
   const warming = warmUp(G.renderer, G.scene, G.camera, sceneTarget(), {
-    objects: extra, leaveOut, before: mapsArrived, also: () => compileOutline(dummies()),
+    objects: extra, leaveOut, before: withClusters, also: () => compileOutline(dummies()),
   });
   // (its compile is made as it's called, the scene walked before the foes are built)
   const ahead = buildAhead(theFight());
@@ -353,7 +358,7 @@ async function warmBuilt(built: Built[], { step, progress }: Warming = {}): Prom
     swap: swaps[0]?.swap,
     show: () => { for (const b of built) b.show?.(); },
     hide: () => { for (const b of built) b.hide?.(); },
-    before: mapsArrived,
+    before: withClusters,
     also: () => compileOutline(built.flatMap((b) => b.outlined), { edge: !step }),
     progress,
     step,

@@ -35,6 +35,11 @@ export async function compiled(): Promise<void> {
   while (compiling.length) await Promise.all(compiling.splice(0));
 }
 
+let clustersWait = (): Promise<void> => Promise.resolve();
+/** Waits for the GPU-driven drawing's clusters asked so far (`?meshlets`, core/meshlets.ts): a warm-up's draw
+ *  after them builds their shaders, which drawn first after the lobby showed held its frames up to 200 ms. */
+export const clustersMade = (): Promise<void> => clustersWait();
+
 /** The target the scene's pass draws into: what its pipelines are made for, the warm-ups' too. */
 export const webgpuSceneTarget = (): THREE.RenderTarget => sceneTarget!;
 /** three's WebGPU build and its node language, loaded with the renderer: what node materials are made from */
@@ -61,6 +66,8 @@ export async function makeWebGPURenderer(): Promise<THREE.WebGLRenderer> {
   if (RUNNING.meshlets) {
     const { MeshletDrawingPipeline } = await import('three/addons/pipelines/MeshletDrawingPipeline.js');
     const drawing = new MeshletDrawingPipeline();
+    const { clustersInWorkers } = await import('./meshlets');
+    clustersWait = clustersInWorkers(drawing) ?? clustersWait;
     (renderer as unknown as { drawingPipeline: unknown }).drawingPipeline = stillAlone(drawing);
   }
   // the point lights casting no shadow drawn by one loop over a uniform array in each lit shader, where three wrote
@@ -251,8 +258,10 @@ function recordNodeBuilds(renderer: WebGPURenderer): void {
     const fragment = shaderOf(state.fragmentShader);
     builds.push({
       at: start, ms, by: compiling ? 'compile' : 'draw', reused,
-      object: nameOf(built.object), material: built.material.name || built.material.type,
-      shadow: built.material.isShadowPassMaterial === true, features: featuresOf(built), vertex, fragment, newBytes,
+      // (the GPU-driven drawing's own builds, `?meshlets`, have no object or material)
+      object: built.object ? nameOf(built.object) : 'meshlets', material: built.material?.name || built.material?.type || '',
+      shadow: built.material?.isShadowPassMaterial === true, features: built.material ? featuresOf(built) : '',
+      vertex, fragment, newBytes,
     });
     return state;
   };
@@ -288,7 +297,7 @@ function recordRenders(renderer: WebGPURenderer): void {
   const render = r.render.bind(r);
   r.render = (scene, camera) => {
     const target = r.getRenderTarget();
-    const key = `${scene.name || scene.type} by ${camera.name || camera.type} into ${target?.texture.name || (target ? 'a target' : 'the canvas')}`;
+    const key = `${scene?.name || scene?.type} by ${camera?.name || camera?.type} into ${target?.texture?.name || (target ? 'a target' : 'the canvas')}`;
     const sum = (sums[key] ??= { calls: 0, ms: 0, draws: 0, full: 0, shared: 0, none: 0 }) as RenderSum;
     const start = performance.now();
     stack.push(sum);
@@ -355,9 +364,9 @@ function recordDraws(renderer: WebGPURenderer): void {
     // (the material's id too: how many of an object's draws share one, what a merge by material would leave)
     const mesh = built.object as THREE.InstancedMesh;
     // (an unnamed mesh by its geometry: its kind and size)
-    const shape = `${mesh.geometry?.type} ${mesh.geometry?.attributes.position?.count}`;
-    const own = `${mesh.name || shape}${mesh.isInstancedMesh ? ' (instanced)' : ''}${mesh.userData.noBake ? ' (breakable)' : ''}`;
-    const what = `${nameOf(built.object)}: ${own} / ${built.material.name || built.material.type} #${built.material.id}`;
+    const shape = `${mesh?.geometry?.type} ${mesh?.geometry?.attributes.position?.count}`;
+    const own = `${mesh?.name || shape}${mesh?.isInstancedMesh ? ' (instanced)' : ''}${mesh?.userData.noBake ? ' (breakable)' : ''}`;
+    const what = `${mesh ? nameOf(mesh) : 'meshlets'}: ${own} / ${built.material?.name || built.material?.type} #${built.material?.id}`;
     draws[what] = (draws[what] ?? 0) + 1;
     return draw(built, info);
   };
@@ -440,8 +449,9 @@ function recordPipelines(renderer: WebGPURenderer): void {
   const made: PipelineMade[] = [];
   Object.assign(window, { __webgpuPipelines: made });
   pipelines._getRenderPipeline = (built, vertex, fragment, key, promises) => {
-    const material = built.material.name || built.material.type;
-    made.push({ at: performance.now(), by: promises ? 'compile' : 'draw', object: nameOf(built.object), material, key });
+    const material = built.material?.name || built.material?.type || '';
+    const object = built.object ? nameOf(built.object) : 'meshlets';
+    made.push({ at: performance.now(), by: promises ? 'compile' : 'draw', object, material, key });
     return make(built, vertex, fragment, key, promises);
   };
 }
