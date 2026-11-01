@@ -31,7 +31,7 @@ export interface BreakableShadows {
 }
 
 /** a piece of a mesh to cast: its material's sides, and its vertices where it stands */
-interface Piece {
+export interface Piece {
   side: THREE.Side;
   shadowSide: THREE.Side | null;
   positions: Float32Array;
@@ -66,7 +66,7 @@ function castersIn(group: THREE.Group): THREE.Mesh[] {
 }
 
 /** `mesh`'s pieces: each material's group of it (or the whole), unindexed, where it stands in the world. */
-function piecesOf(mesh: THREE.Mesh): Piece[] {
+export function piecesOf(mesh: THREE.Mesh): Piece[] {
   const positions = new THREE.BufferGeometry().setAttribute('position', mesh.geometry.getAttribute('position'));
   positions.setIndex(mesh.geometry.getIndex());
   const placed = (positions.index ? positions.toNonIndexed() : positions.clone()).applyMatrix4(mesh.matrixWorld);
@@ -91,8 +91,19 @@ function stillHeld(held: Held[], casters: THREE.Mesh[]): boolean {
     && one.placed.equals(casters[i].matrixWorld));
 }
 
-/** What a caster of pieces of `side` draws with: depth alone, as the static caster's, its faces cast as theirs. */
-function casterMaterial(side: THREE.Side, shadowSide: THREE.Side | null): THREE.MeshBasicMaterial {
+/** `pieces` sorted by the way their faces cast (`side`, `shadowSide`): what each caster of them draws. */
+export function bySide(pieces: Piece[]): { side: THREE.Side; shadowSide: THREE.Side | null; pieces: Piece[] }[] {
+  const sides = new Map<string, { side: THREE.Side; shadowSide: THREE.Side | null; pieces: Piece[] }>();
+  for (const piece of pieces) {
+    const key = `${piece.side} ${piece.shadowSide}`;
+    if (!sides.has(key)) sides.set(key, { side: piece.side, shadowSide: piece.shadowSide, pieces: [] });
+    sides.get(key)!.pieces.push(piece);
+  }
+  return [...sides.values()];
+}
+
+/** What a caster of pieces of `side` draws with: depth alone, its faces cast as theirs. */
+export function casterMaterial(side: THREE.Side, shadowSide: THREE.Side | null): THREE.MeshBasicMaterial {
   const material = new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: false, side });
   material.shadowSide = shadowSide;
   return material;
@@ -116,18 +127,9 @@ export function castBreakablesAsOne(group: THREE.Group): BreakableShadows {
 
   const make = (meshes: THREE.Mesh[]): void => {
     letGo();
-    const bySide = new Map<string, { side: THREE.Side; shadowSide: THREE.Side | null; pieces: Piece[] }>();
-    const piecesByMesh = meshes.map((mesh) => {
-      const pieces = piecesOf(mesh);
-      for (const piece of pieces) {
-        const key = `${piece.side} ${piece.shadowSide}`;
-        if (!bySide.has(key)) bySide.set(key, { side: piece.side, shadowSide: piece.shadowSide, pieces: [] });
-        bySide.get(key)!.pieces.push(piece);
-      }
-      return pieces;
-    });
+    const piecesByMesh = meshes.map(piecesOf);
     const where = new Map<Piece, Stretch>();
-    for (const { side, shadowSide, pieces } of bySide.values()) {
+    for (const { side, shadowSide, pieces } of bySide(piecesByMesh.flat())) {
       const length = pieces.reduce((sum, piece) => sum + piece.positions.length, 0);
       const values = new Float32Array(length);
       const geometry = new THREE.BufferGeometry().setAttribute('position', new THREE.BufferAttribute(values, 3));

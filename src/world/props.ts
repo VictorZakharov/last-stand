@@ -7,7 +7,7 @@ import { portShader } from '../core/shaderPorts';
 import { membraneMaterial, spillMaterial } from './portalNodes';
 import { daySkyMaterial, nightSkyMaterial } from './skyNodes';
 import { drawingStill, inShadowsOnly } from './culling';
-import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { bySide, casterMaterial, piecesOf, type Piece } from './breakableShadows';
 import { rand, TAU } from '../util';
 import { valueNoise3 } from '../core/patterns';
 import { particles } from '../fx/particles';
@@ -730,27 +730,34 @@ function envScene({ sky, panel }: EnvColours): THREE.Scene {
 
 /**
  * A biome's shadow casters never move, but each one cost a draw call in the shadow pass
- * every frame. Merge them (positions only) into one caster drawn by the shadow map alone
+ * every frame. Merge them (positions only) into one caster for each way their faces cast (a material's side: in one
+ * front-sided caster a double-sided mesh cast from its back faces alone), drawn by the shadow map alone
  * (`inShadowsOnly`), and stop the originals casting. Instanced props are already one call, and a mesh that can
- * still go (`userData.noBake`: a breakable prop) keeps casting for itself.
+ * still go (`userData.noBake`: a breakable prop) is cast by its biome's breakables' casters (`breakableShadows.ts`).
  */
 export function bakeStaticShadows(group: THREE.Group): void {
   group.updateMatrixWorld(true);
-  const parts: THREE.BufferGeometry[] = [];
+  const pieces: Piece[] = [];
   group.traverse((o) => {
     const m = o as THREE.Mesh;
     if (!m.isMesh || !m.castShadow || (m as THREE.InstancedMesh).isInstancedMesh || m.userData.noBake) return;
-    const g = new THREE.BufferGeometry().setAttribute('position', m.geometry.getAttribute('position'));
-    g.setIndex(m.geometry.getIndex());
-    parts.push((g.index ? g.toNonIndexed() : g.clone()).applyMatrix4(m.matrixWorld));
+    pieces.push(...piecesOf(m));
     m.castShadow = false;
   });
-  if (!parts.length) return;
-  const caster = new THREE.Mesh(mergeGeometries(parts), new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: false }));
-  caster.castShadow = true;
-  inShadowsOnly(caster);
-  caster.name = `${group.name} static shadow caster`;
-  group.add(caster);
+  for (const { side, shadowSide, pieces: ofSide } of bySide(pieces)) {
+    const positions = new Float32Array(ofSide.reduce((sum, piece) => sum + piece.positions.length, 0));
+    let at = 0;
+    for (const piece of ofSide) {
+      positions.set(piece.positions, at);
+      at += piece.positions.length;
+    }
+    const geometry = new THREE.BufferGeometry().setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    const caster = new THREE.Mesh(geometry, casterMaterial(side, shadowSide));
+    caster.castShadow = true;
+    inShadowsOnly(caster);
+    caster.name = `${group.name} static shadow caster`;
+    group.add(caster);
+  }
 }
 
 /** Tube along `curve` whose radius tapers linearly from r0 to r1. */
