@@ -1,7 +1,7 @@
 // Entry point: boots every system, owns the main loop and the menu <-> run flow.
 import * as THREE from 'three';
 import { G } from './state';
-import { WEBGPU } from './core/webgpu';
+import { pipelinesAtOnceFromNow, WEBGPU } from './core/webgpu';
 import { initRenderer, updateCamera, render, zoomBy, orbitBy, lookBy, setZoom, sceneTarget, setViewShift, setView, viewMode, viewSettled, VIEWS, type ViewMode } from './core/renderer';
 import { CAMERA, LOBBY } from './data/balance';
 import { initInput, updateInputRay, endInputFrame, input, isDown, wasPressed, wantPointerLock, pointerLocked, onPointerLockLost, lockLostAt, releaseInput } from './core/input';
@@ -173,6 +173,7 @@ async function boot() {
   updateCamera(0, G.player.pos, G.player.model.height);
   loadingDone(() => {
     revealed = true;
+    if (WEBGPU) pipelinesAtOnceFromNow();
     setTimeout(() => checkPrograms(renderer));
     void rest.then(() => checkPrograms(renderer));
     // the overlays down the left (performance, network, the battle log) once the loading screen is gone (_perf.scss)

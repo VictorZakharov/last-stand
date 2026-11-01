@@ -73,6 +73,7 @@ export async function makeWebGPURenderer(): Promise<THREE.WebGLRenderer> {
   compilesTakeTurns(renderer);
   walkedAtOnce(renderer);
   pipelinesBeside(renderer);
+  stillWhereStill(renderer);
   if (new URLSearchParams(location.search).has('builds')) recordNodeBuilds(renderer);
   compileSlice(COMPILE_SLICE.loading);
   // (own properties over the class's getters: `compile` is one)
@@ -254,10 +255,150 @@ function recordNodeBuilds(renderer: WebGPURenderer): void {
     return state;
   };
   recordPipelines(renderer);
+  recordDraws(renderer);
+  recordRenders(renderer);
 }
 
-/** how many draws want their pipelines made at once (`pipelinesAtOnce`) */
+/** One kind of render call summed over the frames (`recordRenders`): how many, their time (ms, its nested renders
+ *  in it), the objects they drew and how each object's uniforms were refreshed (three's full, shared or none). */
+interface RenderSum { calls: number; ms: number; draws: number; full: number; shared: number; none: number }
+
+/**
+ * Every render call summed by what it drew into and with what camera, kept as `window.__webgpuRenders` (`frames`
+ * counted too): the shadow maps, the scene's pass, the post chain's passes, each with its time and its objects'
+ * refreshes, which is where WebGPU's JS goes (an object refreshed in full writes its uniforms anew).
+ */
+function recordRenders(renderer: WebGPURenderer): void {
+  type Rendering = {
+    render(scene: THREE.Object3D, camera: THREE.Camera): unknown;
+    getRenderTarget(): THREE.RenderTarget | null;
+    _nodes: { needsRefresh(built: unknown): number };
+  };
+  const r = renderer as unknown as Rendering;
+  const sums: Record<string, RenderSum | number> = { frames: 0 };
+  Object.assign(window, { __webgpuRenders: sums });
+  const count = (): void => {
+    (sums.frames as number)++;
+    requestAnimationFrame(count);
+  };
+  requestAnimationFrame(count);
+  const stack: RenderSum[] = [];
+  const render = r.render.bind(r);
+  r.render = (scene, camera) => {
+    const target = r.getRenderTarget();
+    const key = `${scene.name || scene.type} by ${camera.name || camera.type} into ${target?.texture.name || (target ? 'a target' : 'the canvas')}`;
+    const sum = (sums[key] ??= { calls: 0, ms: 0, draws: 0, full: 0, shared: 0, none: 0 }) as RenderSum;
+    const start = performance.now();
+    stack.push(sum);
+    try {
+      return render(scene, camera);
+    } finally {
+      stack.pop();
+      sum.calls++;
+      sum.ms += performance.now() - start;
+    }
+  };
+  // (three's refresh types: none 0, shared 1, full 2)
+  const kinds = ['none', 'shared', 'full'] as const;
+  // (and each full refresh by what it refreshed and why, as three's observer decides: `window.__webgpuFull`)
+  const full: Record<string, number> = {};
+  Object.assign(window, { __webgpuFull: full });
+  const needsRefresh = r._nodes.needsRefresh.bind(r._nodes);
+  r._nodes.needsRefresh = (built) => {
+    const type = needsRefresh(built);
+    const sum = stack[stack.length - 1];
+    if (sum) {
+      sum.draws++;
+      sum[kinds[type] ?? 'full']++;
+    }
+    if (type === 2) {
+      const what = `${fullBecause(built as Observed)}: ${nameOf((built as Observed).object)}`;
+      full[what] = (full[what] ?? 0) + 1;
+    }
+    return type;
+  };
+}
+
+/** a render object as three's observer reads it */
+type Observed = Built & {
+  getMonitor(): { hasNode: boolean; hasAnimation: boolean; hasDynamicInstancing(object: THREE.Object3D): boolean };
+};
+
+/** Why three's observer refreshes `built`'s uniforms in full: a node on its material, an animation, its instances
+ *  changing, or something of it changed since the last draw (its matrix, its material, the target...). */
+function fullBecause(built: Observed): string {
+  const monitor = built.getMonitor();
+  const material = built.material as THREE.Material & { seeThrough?: unknown; isNodeMaterial?: boolean };
+  const kind = `${material.type}${material.seeThrough ? ', see-through' : ''}${stillNodes.has(material) ? ', still' : ''}`;
+  if (monitor.hasNode) return `a node (${kind})`;
+  if (monitor.hasAnimation) return 'animated';
+  if (monitor.hasDynamicInstancing(built.object)) return 'instances';
+  return 'changed';
+}
+
+/** Every draw counted by what it drew (its object's name and material), kept as `window.__webgpuDraws`, with the
+ *  frames counted (`frames`): what a frame's draws are, for what a cut of them would save. */
+function recordDraws(renderer: WebGPURenderer): void {
+  type Drawing = { draw(built: Built, info: unknown): unknown };
+  const backend = renderer.backend as unknown as Drawing;
+  const draw = backend.draw.bind(backend);
+  const draws: Record<string, number> = { frames: 0 };
+  Object.assign(window, { __webgpuDraws: draws });
+  const count = (): void => {
+    draws.frames++;
+    requestAnimationFrame(count);
+  };
+  requestAnimationFrame(count);
+  backend.draw = (built, info) => {
+    // (the material's id too: how many of an object's draws share one, what a merge by material would leave)
+    const mesh = built.object as THREE.InstancedMesh;
+    // (an unnamed mesh by its geometry: its kind and size)
+    const shape = `${mesh.geometry?.type} ${mesh.geometry?.attributes.position?.count}`;
+    const own = `${mesh.name || shape}${mesh.isInstancedMesh ? ' (instanced)' : ''}${mesh.userData.noBake ? ' (breakable)' : ''}`;
+    const what = `${nameOf(built.object)}: ${own} / ${built.material.name || built.material.type} #${built.material.id}`;
+    draws[what] = (draws[what] ?? 0) + 1;
+    return draw(built, info);
+  };
+}
+
+/** the materials whose nodes hold nothing an object's draw must refresh: their uniforms are set once a render, their
+ *  maps never change (a see-through prop's, core/shaderPorts.ts) */
+export const stillNodes = new WeakSet<THREE.Material>();
+
+/** a render object as three's refresh reads it: its material, and its build's observer */
+type Monitored = { material: THREE.Material; getMonitor(): { hasNode: boolean; stillChecked?: boolean } };
+
+/**
+ * three refreshes every uniform of an object at each of its draws when the material it builds from holds any node
+ * (a node may read something of the object), so each still prop wrote its uniforms anew every frame, in the scene's
+ * pass and the shadow map's: on WebGPU, 128 of the lobby's 165 objects and all its 109 shadow casters. A build of a
+ * `stillNodes` material is refreshed as three refreshes a plain one: when the object, its material or its geometry
+ * changes, and its shared uniforms once a render.
+ */
+function stillWhereStill(renderer: WebGPURenderer): void {
+  const nodes = (renderer as unknown as { _nodes: { needsRefresh(built: Monitored): number } })._nodes;
+  const needsRefresh = nodes.needsRefresh.bind(nodes);
+  nodes.needsRefresh = (built) => {
+    const monitor = built.getMonitor();
+    if (!monitor.stillChecked) {
+      monitor.stillChecked = true;
+      // (and the shadow maps' depth materials: what makes a caster's shadow change moves it, which is a refresh)
+      const shadow = (built.material as { isShadowPassMaterial?: boolean }).isShadowPassMaterial === true;
+      if (shadow || stillNodes.has(built.material)) monitor.hasNode = false;
+    }
+    return needsRefresh(built);
+  };
+}
+
+/** how many draws want their pipelines made at once (`pipelinesAtOnce`); one for good once the loading screen is
+ *  gone (`pipelinesAtOnceFromNow`) */
 let atOnce = 0;
+
+/** Every pipeline made at its draw from now on (the lobby revealed): left out of the draws while made beside the
+ *  frames, a pass of the post chain made again in the lobby left a frame wrong, and the screen flickered. */
+export function pipelinesAtOnceFromNow(): void {
+  atOnce++;
+}
 
 /** `draw` run with the pipelines it needs made at once, before it draws: a draw that is made only now and then (the
  *  still shadows), whose objects would be left out of it while theirs were made beside the frames. */
@@ -274,8 +415,8 @@ export function pipelinesAtOnce<T>(draw: () => T): T {
  * A pipeline first needed at a draw is made on the GPU's threads, beside the frames (`createRenderPipelineAsync`, as
  * a compile makes them), and three leaves its object out of the draws until it's made. Made there and then, the GPU
  * process's main thread made each: the post chain's at the lobby's first frames held the page up 0.6 to 0.8 s just
- * before the logo was blown away, on a return too. Under the loading screen nothing shows of it; in play a new
- * thing shows a few frames late instead of holding the frame up.
+ * before the logo was blown away, on a return too. Under the loading screen alone: nothing shows of it there, where
+ * in the lobby a pass left out made the screen flicker (`pipelinesAtOnceFromNow`).
  */
 function pipelinesBeside(renderer: WebGPURenderer): void {
   const pipelines = (renderer as unknown as { _pipelines: MakingPipelines })._pipelines;

@@ -7,7 +7,7 @@ import * as THREE from 'three';
 import type { WebGPURenderer } from 'three/webgpu';
 import { NEAR_GLOW, type KitLooks } from './materials';
 import type { SeeThrough } from './seeThrough';
-import { WEBGPU, gpu, tsl } from './webgpu';
+import { WEBGPU, gpu, stillNodes, tsl } from './webgpu';
 
 // (untyped: TSL's types don't follow its conversions across these calls yet)
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -145,15 +145,31 @@ export function seeUniforms(uniforms: Record<string, { value: unknown }>): { foc
 /** A see-through material's mask on WebGPU (`seeThrough`'s screen door): a fragment kept unless a share of the
  *  pixels as large as its fade is dropped there, by the same dither. Its values read off the material drawn, as
  *  every material of the kind shares the build. */
-function seeMask(): N {
-  const { materialReference, positionWorld, screenCoordinate, fract, dot, vec2 } = tsl as any;
-  const see = {
-    focus: materialReference('seeThrough.focus.value', 'vec3'),
-    k: materialReference('seeThrough.k.value', 'vec4'),
-    minY: materialReference('seeThrough.minY.value', 'float'),
-  };
+function seeMask(of: SeeThrough): N {
+  const { positionWorld, screenCoordinate, fract, dot, vec2 } = tsl as any;
   const dither = fract(fract(dot(screenCoordinate.xy, vec2(0.06711056, 0.00583715))).mul(52.9829189));
-  return dither.greaterThanEqual(seeFade(positionWorld, see));
+  return dither.greaterThanEqual(seeFade(positionWorld, seeOfKind(of)));
+}
+
+/** each kind's see-through uniforms, by its hole (`SeeThrough.k`: one a kind) */
+const seeKinds = new WeakMap<object, { focus: N; k: N; minY: N }>();
+
+/**
+ * A kind's see-through values as uniforms set once a render, shared by its every material (each kind a build of its
+ * own, as a uniform node keys the build it's in). Read off each material drawn (`materialReference`), every prop's
+ * uniforms were refreshed at every draw, still or not: on WebGPU, about 35 µs of the frame's JS a prop.
+ */
+function seeOfKind(of: SeeThrough): { focus: N; k: N; minY: N } {
+  const made = seeKinds.get(of.k);
+  if (made) return made;
+  const { uniform } = tsl as any;
+  const nodes = {
+    focus: uniform(new THREE.Vector3()).onRenderUpdate(() => of.focus.value),
+    k: uniform(new THREE.Vector4()).onRenderUpdate(() => of.k.value),
+    minY: uniform(0).onRenderUpdate(() => of.minY.value),
+  };
+  seeKinds.set(of.k, nodes);
+  return nodes;
 }
 
 /** A kit material's looks on WebGPU, set on its converted node material (`patch` in core/materials.ts, in TSL): the
@@ -263,10 +279,12 @@ export function takePorts(renderer: WebGPURenderer): void {
       const own = (material as Partial<OwnLooks>).webgpuLooks;
       // (a material three converts afresh each time: its own node materials, the crowds', are left as they are)
       if (converted && !(material as N).isNodeMaterial) {
-        if (see) (converted as N).maskNode = seeMask();
+        if (see) (converted as N).maskNode = seeMask(see);
         if (kit) kitNodes(converted);
         if (own) own(converted);
-        if (see || kit || own) refreshedEachDraw(material);
+        // (a see-through's own uniforms are set once a render: `seeOfKind`, and its node no reason for a refresh)
+        if (kit || own) refreshedEachDraw(material);
+        else if (see) stillNodes.add(material);
       }
       return converted;
     }

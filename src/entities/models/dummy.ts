@@ -54,6 +54,36 @@ function strawBundle(rng: () => number, count: number, radius: number, length: [
   return mergeGeometries(straws);
 }
 
+/**
+ * The meshes right under `joint` that share a material and cast alike merged into one, each placed in the joint's
+ * space: a dummy was 23 meshes and 12 shadow casters, three of them a third of the lobby's draws (on WebGPU each
+ * draw is about 20 µs of the frame's JS), and they move only as their joints do.
+ */
+function mergeAlike(joint: THREE.Object3D): void {
+  const alike = new Map<string, THREE.Mesh[]>();
+  for (const child of joint.children) {
+    const mesh = child as THREE.Mesh;
+    if (!mesh.isMesh || mesh.geometry.userData.shared) continue;
+    const key = `${(mesh.material as THREE.Material).uuid} ${mesh.castShadow}`;
+    alike.set(key, [...alike.get(key) ?? [], mesh]);
+  }
+  for (const meshes of alike.values()) {
+    if (meshes.length < 2) continue;
+    const placed = meshes.map((mesh) => {
+      mesh.updateMatrix();
+      return mesh.geometry.applyMatrix4(mesh.matrix);
+    });
+    const merged = mergeGeometries(placed);
+    if (!merged) continue;
+    const one = part(merged, meshes[0].material as THREE.Material, joint);
+    one.castShadow = meshes[0].castShadow;
+    for (const mesh of meshes) {
+      joint.remove(mesh);
+      mesh.geometry.dispose();
+    }
+  }
+}
+
 export function buildDummy(): Model {
   const kit = createKit(0xf0c860);
   const woodMat = kit.std({ ...pbrMaterialMaps(wood(), 1, 1.2), roughness: 1 });
@@ -113,6 +143,8 @@ export function buildDummy(): Model {
     part(new THREE.RingGeometry(r0, r1, 32), rune, target).castShadow = false;
   }
   part(new THREE.CircleGeometry(0.025, 16), rune, target).castShadow = false;
+
+  for (const joint of [root, sway, head, target]) mergeAlike(joint);
 
   // spring wobble: lean back when struck, sway a little sideways
   let lean = 0, leanV = 0, tilt = 0, tiltV = 0, prevHit = 0;
