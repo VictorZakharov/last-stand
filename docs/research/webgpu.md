@@ -131,6 +131,14 @@ whether the CPU cost below can be brought down.
   waits as each compile starts, so every warm-up's walk saw the scene put back. Its clusters are made beside the
   compile. With `&meshlets=1&lights=each` a first visit's lobby showed at 15.0 s (22.3 s before), its longest task
   0.9 s (2.9 s), with no compile thrown and none of the cluster passes' `setPipeline` errors (4 before).
+- **A pipeline first needed at a draw is made beside the frames** (`pipelinesBeside`): three's async creation, its
+  object left out of the draws until it's made. Made at the draw, the GPU process's main thread made each: the post
+  chain's (bloom's passes, the copies, the output) at the lobby's first frames held the page up 0.6 to 0.8 s just
+  before the logo was blown away, on a return too; now 0.34 to 0.42 s, the step 0.28 to 0.52 s (was 0.98 to 1.12).
+  What is drawn once makes its pipelines at once (`pipelinesAtOnce`): the still shadows and the environment maps.
+  `?builds` also records every pipeline made, by a compile or a draw, with its key (`window.__webgpuPipelines`).
+- **The still shadows are drawn into the scene pass's target:** in a pixel of their own, each prop in view had a
+  pipeline made for that target at the draw, and a breaking prop held the frame up 260 to 300 ms.
 - **The fight's foes are seated for the compile's walk alone** (`WarmUp.hide`): a crowd with no foe draws nothing,
   so its compile saw nothing.
 

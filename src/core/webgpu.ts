@@ -72,6 +72,7 @@ export async function makeWebGPURenderer(): Promise<THREE.WebGLRenderer> {
   compileShadowsToo(renderer);
   compilesTakeTurns(renderer);
   walkedAtOnce(renderer);
+  pipelinesBeside(renderer);
   if (new URLSearchParams(location.search).has('builds')) recordNodeBuilds(renderer);
   compileSlice(COMPILE_SLICE.loading);
   // (own properties over the class's getters: `compile` is one)
@@ -251,6 +252,54 @@ function recordNodeBuilds(renderer: WebGPURenderer): void {
       shadow: built.material.isShadowPassMaterial === true, features: featuresOf(built), vertex, fragment, newBytes,
     });
     return state;
+  };
+  recordPipelines(renderer);
+}
+
+/** how many draws want their pipelines made at once (`pipelinesAtOnce`) */
+let atOnce = 0;
+
+/** `draw` run with the pipelines it needs made at once, before it draws: a draw that is made only now and then (the
+ *  still shadows), whose objects would be left out of it while theirs were made beside the frames. */
+export function pipelinesAtOnce<T>(draw: () => T): T {
+  atOnce++;
+  try {
+    return draw();
+  } finally {
+    atOnce--;
+  }
+}
+
+/**
+ * A pipeline first needed at a draw is made on the GPU's threads, beside the frames (`createRenderPipelineAsync`, as
+ * a compile makes them), and three leaves its object out of the draws until it's made. Made there and then, the GPU
+ * process's main thread made each: the post chain's at the lobby's first frames held the page up 0.6 to 0.8 s just
+ * before the logo was blown away, on a return too. Under the loading screen nothing shows of it; in play a new
+ * thing shows a few frames late instead of holding the frame up.
+ */
+function pipelinesBeside(renderer: WebGPURenderer): void {
+  const pipelines = (renderer as unknown as { _pipelines: MakingPipelines })._pipelines;
+  const make = pipelines._getRenderPipeline.bind(pipelines);
+  pipelines._getRenderPipeline = (built, vertex, fragment, key, promises) =>
+    make(built, vertex, fragment, key, promises ?? (atOnce > 0 ? null : []));
+}
+
+/** A pipeline three made: when, by a compile or at a draw, for what, and its key (its two shaders' ids, then the
+ *  backend's: blending, depth, side, the target's samples and formats, the vertex layout...). */
+interface PipelineMade { at: number; by: 'compile' | 'draw'; object: string; material: string; key: string }
+type MakingPipelines = { _getRenderPipeline(built: Built, vertex: unknown, fragment: unknown, key: string, promises: unknown[] | null): unknown };
+
+/** Every render pipeline made, kept as `window.__webgpuPipelines`: a draw that made one a compile had made with
+ *  another key shows which part of the key differs (the `--read` of `npm run stalls`). */
+function recordPipelines(renderer: WebGPURenderer): void {
+  const pipelines = (renderer as unknown as { _pipelines: MakingPipelines })._pipelines;
+  const make = pipelines._getRenderPipeline.bind(pipelines);
+  const made: PipelineMade[] = [];
+  Object.assign(window, { __webgpuPipelines: made });
+  pipelines._getRenderPipeline = (built, vertex, fragment, key, promises) => {
+    const material = built.material.name || built.material.type;
+    made.push({ at: performance.now(), by: promises ? 'compile' : 'draw', object: nameOf(built.object), material, key });
+    return make(built, vertex, fragment, key, promises);
   };
 }
 

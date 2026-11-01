@@ -2,7 +2,7 @@
 // and geometry helpers, the spawn-portal membrane, the environment map and the static shadow bake.
 import * as THREE from 'three';
 import { seeThroughFade } from '../core/seeThrough';
-import { WEBGPU, gpu, webgpuSceneTarget } from '../core/webgpu';
+import { WEBGPU, gpu, pipelinesAtOnce, webgpuSceneTarget } from '../core/webgpu';
 import { portShader } from '../core/shaderPorts';
 import { membraneMaterial, spillMaterial } from './portalNodes';
 import { daySkyMaterial, nightSkyMaterial } from './skyNodes';
@@ -148,7 +148,7 @@ export function drawStillShadows(renderer: THREE.WebGLRenderer, scene: THREE.Sce
   kept.autoUpdate = false;
   renderer.setRenderTarget(into);
   try {
-    drawingStill(shown, () => renderer.render(scene, camera));
+    drawingStill(shown, () => pipelinesAtOnce(() => renderer.render(scene, camera)));
   } finally {
     renderer.setRenderTarget(target);
     kept.autoUpdate = keptAuto;
@@ -668,6 +668,11 @@ function compileGenerator(renderer: THREE.WebGLRenderer, pm: THREE.PMREMGenerato
  * own.
  */
 export function envMap(renderer: THREE.WebGLRenderer, colours: EnvColours): THREE.Texture {
+  // (drawn once: every pass's pipeline made before it draws, none left out while made beside the frames)
+  return pipelinesAtOnce(() => envMapNow(renderer, colours));
+}
+
+function envMapNow(renderer: THREE.WebGLRenderer, colours: EnvColours): THREE.Texture {
   const made = envMaps.get(envKey(colours));
   if (made) return made;
   if (!ahead) return makeEnvMap(renderer, colours);
