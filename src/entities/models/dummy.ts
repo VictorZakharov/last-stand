@@ -9,6 +9,8 @@ import { mulberry } from '../../util';
 import { part, joint } from './rig';
 
 const STIFFNESS = 70, DAMPING = 5;
+/** how little of a lean and its speed (rad, rad/s) the spring is let go at, standing still */
+const AT_REST = 1e-4;
 /** the stream its straw is drawn from: every dummy alike */
 const STRAW_SEED = 4417;
 /** the straw's two geometries (spilling out of the sack and the sleeves, and out of the head), made once and shared by
@@ -146,7 +148,8 @@ export function buildDummy(): Model {
 
   for (const joint of [root, sway, head, target]) mergeAlike(joint);
 
-  // spring wobble: lean back when struck, sway a little sideways
+  // spring wobble: lean back when struck, sway a little sideways; at rest it stands still (a sway of 0.01 rad, 2 cm
+  // at its head, moved every part each frame: on WebGPU each moved part's draw is refreshed in full)
   let lean = 0, leanV = 0, tilt = 0, tiltV = 0, prevHit = 0;
   function animate(st: AnimState): void {
     const dt = st.dt;
@@ -155,9 +158,13 @@ export function buildDummy(): Model {
       tiltV += (Math.random() - 0.5) * 2.4;
     }
     prevHit = st.hit;
+    if (lean === 0 && leanV === 0 && tilt === 0 && tiltV === 0) return;
     leanV += (-STIFFNESS * lean - DAMPING * leanV) * dt; lean += leanV * dt;
     tiltV += (-STIFFNESS * tilt - DAMPING * tiltV) * dt; tilt += tiltV * dt;
-    sway.rotation.set(lean + Math.sin(st.t * 0.9) * 0.01, 0, tilt);
+    if (Math.abs(lean) + Math.abs(tilt) < AT_REST && Math.abs(leanV) + Math.abs(tiltV) < AT_REST) {
+      lean = leanV = tilt = tiltV = 0;
+    }
+    sway.rotation.set(lean, 0, tilt);
     head.rotation.set(-lean * 0.6, 0, -tilt * 0.8);
   }
 

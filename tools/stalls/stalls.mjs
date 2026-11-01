@@ -17,7 +17,8 @@ import { measureWebgpuCache, WEBGPU_CACHE } from './webgpuCache.mjs';
 import { measureBoots } from './boot.mjs';
 import { BOOT, readOptions, usage, VIEWS } from './options.mjs';
 import {
-  chooseIfAsked, equipmentShown, fightWarm, loaded, menuStowed, seededProfile, seedStash, startRecording, stopRecording, useStyle,
+  chooseIfAsked, equipmentShown, fightWarm, loaded, menuStowed, recordFromNow, seededProfile, seedStash, startRecording,
+  stopRecording, useStyle,
 } from './page.mjs';
 import { bootRoundsText, bootText, measureText, roundsText, summaryText } from './report.mjs';
 import { pickHero, SCENARIOS } from './scenarios.mjs';
@@ -172,6 +173,7 @@ async function playTraced(browser, page, options, picture) {
   const { js, angle, dawn, passes, paints } = options;
   const trace = await startTrace(browser, { js, angle, dawn, passes, paints });
   await page.evaluate(startRecording, MARK);
+  await page.evaluate(recordFromNow);
   const notes = await SCENARIOS[options.scenario](page, options.seconds * 1000, { ...options, picture });
   const record = await page.evaluate(stopRecording, MARK);
   const events = await trace.stop();

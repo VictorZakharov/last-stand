@@ -5,6 +5,7 @@ import type { ClusterWait } from './meshlets';
 import type { RenderPipeline, WebGPURenderer } from 'three/webgpu';
 import { RUNNING } from './rendererChoice';
 import { initHdrForWebGPU } from './hdr';
+import type { KitLooks } from './materials';
 
 /** Whether this page draws with WebGPURenderer: chosen in the pause menu, or by the address (`?renderer=webgpu`;
  *  `?renderer=webgpu-gl` its WebGL 2 backend), core/rendererChoice.ts. */
@@ -273,6 +274,28 @@ function recordNodeBuilds(renderer: WebGPURenderer): void {
   recordDraws(renderer);
   recordRenders(renderer);
   recordBatches(renderer);
+  Object.assign(window, { __webgpuRecordFrom: recordFromNow });
+}
+
+/** the recorders that sum over the frames (`__webgpuRenders`, `__webgpuFull`, `__webgpuDraws`), emptied together */
+const sumsKept: Record<string, unknown>[] = [];
+
+/** `record` kept as `window[name]`, emptied by `recordFromNow`. */
+function summed<T extends Record<string, unknown>>(name: string, record: T): T {
+  Object.assign(window, { [name]: record });
+  sumsKept.push(record);
+  return record;
+}
+
+/** The sums started again from this frame (`window.__webgpuRecordFrom`, which `npm run stalls` calls as its scenario
+ *  starts): summed from the boot, a steady lobby's frames were read with the loading screen's and the rise of its
+ *  dummies. */
+function recordFromNow(): void {
+  for (const record of sumsKept) {
+    const countsFrames = 'frames' in record;
+    for (const key of Object.keys(record)) delete record[key];
+    if (countsFrames) record.frames = 0;
+  }
 }
 
 /** A batch the GPU-driven drawing made (`?builds` with `?meshlets`): when, for what material, and its geometry
@@ -315,8 +338,7 @@ function recordRenders(renderer: WebGPURenderer): void {
     _nodes: { needsRefresh(built: unknown): number };
   };
   const r = renderer as unknown as Rendering;
-  const sums: Record<string, RenderSum | number> = { frames: 0 };
-  Object.assign(window, { __webgpuRenders: sums });
+  const sums = summed<Record<string, RenderSum | number>>('__webgpuRenders', { frames: 0 });
   const count = (): void => {
     (sums.frames as number)++;
     requestAnimationFrame(count);
@@ -341,8 +363,7 @@ function recordRenders(renderer: WebGPURenderer): void {
   // (three's refresh types: none 0, shared 1, full 2)
   const kinds = ['none', 'shared', 'full'] as const;
   // (and each full refresh by what it refreshed and why, as three's observer decides: `window.__webgpuFull`)
-  const full: Record<string, number> = {};
-  Object.assign(window, { __webgpuFull: full });
+  const full = summed<Record<string, number>>('__webgpuFull', {});
   const needsRefresh = r._nodes.needsRefresh.bind(r._nodes);
   r._nodes.needsRefresh = (built) => {
     const type = needsRefresh(built);
@@ -352,7 +373,10 @@ function recordRenders(renderer: WebGPURenderer): void {
       sum[kinds[type] ?? 'full']++;
     }
     if (type === 2) {
-      const what = `${fullBecause(built as Observed)}: ${nameOf((built as Observed).object)}`;
+      const object = (built as Observed).object as THREE.Mesh;
+      // (an unnamed mesh by its geometry: its kind and size)
+      const shape = object.name || `${object.geometry?.type} ${object.geometry?.attributes.position?.count}`;
+      const what = `${fullBecause(built as Observed)}: ${nameOf(object)} / ${shape}`;
       full[what] = (full[what] ?? 0) + 1;
     }
     return type;
@@ -362,18 +386,29 @@ function recordRenders(renderer: WebGPURenderer): void {
 /** a render object as three's observer reads it */
 type Observed = Built & {
   getMonitor(): { hasNode: boolean; hasAnimation: boolean; hasDynamicInstancing(object: THREE.Object3D): boolean };
+  looksChanged?: boolean;
 };
 
+/** each draw's object's world matrix as it was at the draw's last full refresh (`fullBecause`; by the render object:
+ *  an object drawn in two passes is refreshed in each) */
+const lastPlaced = new WeakMap<object, THREE.Matrix4>();
+
 /** Why three's observer refreshes `built`'s uniforms in full: a node on its material, an animation, its instances
- *  changing, or something of it changed since the last draw (its matrix, its material, the target...). */
+ *  changing, it moved since its last full refresh, or something else of it changed since the last draw (its
+ *  material, its looks, the target...). */
 function fullBecause(built: Observed): string {
   const monitor = built.getMonitor();
   const material = built.material as THREE.Material & { seeThrough?: unknown; isNodeMaterial?: boolean };
   const kind = `${material.type}${material.seeThrough ? ', see-through' : ''}${stillNodes.has(material) ? ', still' : ''}`;
   if (monitor.hasNode) return `a node (${kind})`;
   if (monitor.hasAnimation) return 'animated';
+  if (built.looksChanged) return 'looks';
   if (monitor.hasDynamicInstancing(built.object)) return 'instances';
-  return 'changed';
+  const placed = lastPlaced.get(built);
+  const moved = !placed || !placed.equals(built.object.matrixWorld);
+  if (placed) placed.copy(built.object.matrixWorld);
+  else lastPlaced.set(built, built.object.matrixWorld.clone());
+  return moved ? 'moved' : 'changed';
 }
 
 /** Every draw counted by what it drew (its object's name and material), kept as `window.__webgpuDraws`, with the
@@ -382,8 +417,7 @@ function recordDraws(renderer: WebGPURenderer): void {
   type Drawing = { draw(built: Built, info: unknown): unknown };
   const backend = renderer.backend as unknown as Drawing;
   const draw = backend.draw.bind(backend);
-  const draws: Record<string, number> = { frames: 0 };
-  Object.assign(window, { __webgpuDraws: draws });
+  const draws = summed<Record<string, number>>('__webgpuDraws', { frames: 0 });
   const count = (): void => {
     draws.frames++;
     requestAnimationFrame(count);
@@ -406,14 +440,60 @@ function recordDraws(renderer: WebGPURenderer): void {
 export const stillNodes = new WeakSet<THREE.Material>();
 
 /** a render object as three's refresh reads it: its material, and its build's observer */
-type Monitored = { material: THREE.Material; getMonitor(): { hasNode: boolean; stillChecked?: boolean } };
+type Monitored = {
+  material: THREE.Material & { kitLooks?: KitLooks };
+  getMonitor(): { hasNode: boolean; stillChecked?: boolean };
+  /** a kit material's looks as this render object last drew them (`looksChanged`): its own, as three's observer is
+   *  shared by every render object of one node build (every kit's material of a kind) */
+  looksSeen?: Float32Array;
+  /** whether its looks changed since its last draw: why it was refreshed in full (`fullBecause`) */
+  looksChanged?: boolean;
+};
+
+/** how many numbers a kit material's looks are (`looksChanged`) */
+const LOOKS = 16;
+
+/** Whether `value` differs from `seen[i]`, `seen[i]` set to it (as the array holds it: a float32 never equals the
+ *  double it rounded). */
+function seeAt(seen: Float32Array, i: number, value: number): boolean {
+  if (seen[i] === Math.fround(value)) return false;
+  seen[i] = value;
+  return true;
+}
+
+/** Whether `looks` differ from what `seen` holds, `seen` set to them: a kit material's looks as its render object
+ *  last drew them, compared number by number, nothing made at a draw (every one compared, so `seen` is all set). */
+function looksChanged(looks: KitLooks, seen: Float32Array): boolean {
+  const { u, near, rim, shade } = looks;
+  let changed = seeAt(seen, 0, u.uDissolve.value);
+  changed = seeAt(seen, 1, u.uFrozen.value) || changed;
+  changed = seeAt(seen, 2, u.uChar.value) || changed;
+  changed = seeAt(seen, 3, u.uHit.value) || changed;
+  changed = seeAt(seen, 4, u.uShine.value) || changed;
+  changed = seeAt(seen, 5, u.uEdge.value.r) || changed;
+  changed = seeAt(seen, 6, u.uEdge.value.g) || changed;
+  changed = seeAt(seen, 7, u.uEdge.value.b) || changed;
+  changed = seeAt(seen, 8, near.value) || changed;
+  changed = seeAt(seen, 9, rim.value.r) || changed;
+  changed = seeAt(seen, 10, rim.value.g) || changed;
+  changed = seeAt(seen, 11, rim.value.b) || changed;
+  changed = seeAt(seen, 12, shade.value.x) || changed;
+  changed = seeAt(seen, 13, shade.value.y) || changed;
+  changed = seeAt(seen, 14, shade.value.z) || changed;
+  changed = seeAt(seen, 15, shade.value.w) || changed;
+  return changed;
+}
 
 /**
  * three refreshes every uniform of an object at each of its draws when the material it builds from holds any node
  * (a node may read something of the object), so each still prop wrote its uniforms anew every frame, in the scene's
  * pass and the shadow map's: on WebGPU, 128 of the lobby's 165 objects and all its 109 shadow casters. A build of a
  * `stillNodes` material is refreshed as three refreshes a plain one: when the object, its material or its geometry
- * changes, and its shared uniforms once a render.
+ * changes, and its shared uniforms once a render. A kit material's (core/materials.ts) is too, and also as its looks
+ * change (`looksChanged`: its nodes read them off the material, `kitNodes` in core/shaderPorts.ts): refreshed at each
+ * draw, the lobby's two training dummies standing still were 31 full refreshes a frame (and 16 more as they swayed).
+ * Its looks are kept on each render object: three's observer is one for every render object of a node build, and
+ * kept on it, the two dummies' looks took turns and refreshed every draw.
  */
 function stillWhereStill(renderer: WebGPURenderer): void {
   const nodes = (renderer as unknown as { _nodes: { needsRefresh(built: Monitored): number } })._nodes;
@@ -426,7 +506,13 @@ function stillWhereStill(renderer: WebGPURenderer): void {
       const shadow = (built.material as { isShadowPassMaterial?: boolean }).isShadowPassMaterial === true;
       if (shadow || stillNodes.has(built.material)) monitor.hasNode = false;
     }
-    return needsRefresh(built);
+    const type = needsRefresh(built);
+    const looks = built.material.kitLooks;
+    if (!looks || monitor.hasNode) return type;
+    built.looksSeen ??= new Float32Array(LOOKS).fill(NaN);
+    built.looksChanged = looksChanged(looks, built.looksSeen);
+    // (three's refresh types: none 0, shared 1, full 2)
+    return built.looksChanged ? 2 : type;
   };
 }
 

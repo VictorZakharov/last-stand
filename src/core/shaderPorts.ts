@@ -282,9 +282,10 @@ export function takePorts(renderer: WebGPURenderer): void {
         if (see) (converted as N).maskNode = seeMask(see);
         if (kit) kitNodes(converted);
         if (own) own(converted);
-        // (a see-through's own uniforms are set once a render: `seeOfKind`, and its node no reason for a refresh)
-        if (kit || own) refreshedEachDraw(material);
-        else if (see) stillNodes.add(material);
+        // (a see-through's own uniforms are set once a render: `seeOfKind`, and its node no reason for a refresh; a
+        // kit's looks are refreshed as they change, `stillWhereStill` in core/webgpu.ts)
+        if (own) refreshedEachDraw(material);
+        else if (kit || see) stillNodes.add(material);
       }
       return converted;
     }
