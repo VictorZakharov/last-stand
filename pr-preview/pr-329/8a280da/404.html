@@ -34,11 +34,13 @@
 </main>
 <script>
   (() => {
-    // /last-stand/pr-preview/pr-N/<folder>/...: the site is the path's first part (a project's Pages site)
+    // [/last-stand]/pr-preview/pr-N/<folder>/...: the site is the domain's root (last-stand.cc), or the path's first
+    // part where a preview's path says it's a project's Pages site
     const parts = location.pathname.split('/').filter(Boolean);
-    const site = parts.length ? `/${parts[0]}/` : '/';
-    const preview = parts[1] === 'pr-preview' && /^pr-\d+$/.test(parts[2] ?? '');
-    const target = preview && parts.length > 3 ? `${site}pr-preview/${parts[2]}/` : site;
+    const at = parts[1] === 'pr-preview' ? 1 : 0;
+    const site = at === 1 ? `/${parts[0]}/` : '/';
+    const preview = parts[at] === 'pr-preview' && /^pr-\d+$/.test(parts[at + 1] ?? '');
+    const target = preview && parts.length > at + 2 ? `${site}pr-preview/${parts[at + 1]}/` : site;
     document.getElementById('target').href = target;
     // (the site's own page missing would bring this page back: it stays, with the link)
     if (target !== location.pathname) location.replace(target);
