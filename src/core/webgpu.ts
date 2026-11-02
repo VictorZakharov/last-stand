@@ -76,7 +76,7 @@ export async function makeWebGPURenderer(): Promise<THREE.WebGLRenderer> {
     const drawing = new MeshletDrawingPipeline();
     const { clustersInWorkers } = await import('./meshlets');
     clusters = clustersInWorkers(drawing) ?? clusters;
-    (renderer as unknown as { drawingPipeline: unknown }).drawingPipeline = stillAlone(drawing);
+    (renderer as unknown as { drawingPipeline: unknown }).drawingPipeline = batchesKept(stillAlone(drawing));
   }
   // the point lights casting no shadow drawn by one loop over a uniform array in each lit shader, where three wrote
   // each out in full (the physical model's every term, eight times over): the lit fragment shaders were 55 kB of
@@ -301,28 +301,76 @@ function recordFromNow(): void {
   }
 }
 
-/** A batch the GPU-driven drawing made (`?builds` with `?meshlets`): when, for what material, and its geometry
- *  pool's size and version then (a pool grown or moved has every render list's batches made again) */
-interface BatchMade { at: number; material: string; vertices: number; indices: number; poolVersion: number }
+/** A batch the GPU-driven drawing made (`?builds` with `?meshlets`): when, for what material, its geometry
+ *  pool's size and version then (a pool grown or moved has every render list's batches made again), whether a
+ *  compile made it or a draw (a draw's batch is node builds in that frame) and what it drew into */
+interface BatchMade {
+  at: number; material: string; vertices: number; indices: number; poolVersion: number;
+  by: 'compile' | 'draw'; target: string; size: string;
+  /** what became of the batch it replaces: none, its culling made again, outgrown, its material changed, other */
+  replaces: string;
+  /** its render list's record and culling, numbered as they're first met */
+  list: number; culling: number; entry: number;
+}
 
 /** Every batch three's meshlet pipeline makes, kept in `window.__meshletBatches`: each is drawn with materials of its
  *  own, so each is node builds at its first draw. */
 function recordBatches(renderer: WebGPURenderer): void {
   type Pool = { vertexArray: Float32Array; indexArray: Uint32Array; version: number };
-  type Batching = { createBatch?: (entry: { material: THREE.Material }, ...rest: unknown[]) => unknown; _geometryPool: Pool };
-  const drawing = (renderer as unknown as { drawingPipeline: Batching }).drawingPipeline;
+  type Batch = { culling: unknown; capacity: number; materialVersion: number };
+  type Entry = { material: THREE.Material; batch: Batch | null; count: number };
+  type Batching = {
+    createBatch?: (entry: Entry, capacity: number, view: unknown, culling: unknown) => unknown;
+    _geometryPool: Pool;
+    _drawBatches(renderList: unknown, record: object): void;
+  };
+  type Drawing = { drawingPipeline: Batching; _precompilationState: unknown };
+  const r = renderer as unknown as Drawing;
+  const drawing = r.drawingPipeline;
   const createBatch = drawing.createBatch?.bind(drawing);
   if (createBatch === undefined) return;
   const made: BatchMade[] = [];
   Object.assign(window, { __meshletBatches: made });
-  drawing.createBatch = (entry, ...rest) => {
+  const replaced = (entry: Entry, culling: unknown): string => {
+    const batch = entry.batch;
+    if (batch === null) return 'none';
+    if (batch.culling !== culling) return 'culling';
+    if (entry.count > batch.capacity) return 'outgrown';
+    if (batch.materialVersion !== entry.material.version) return 'material';
+    return 'other';
+  };
+  const numbers = new WeakMap<object, number>();
+  let numbered = 0;
+  const numberOf = (o: unknown): number => {
+    if (o === null || typeof o !== 'object') return -1;
+    if (!numbers.has(o)) numbers.set(o, numbered++);
+    return numbers.get(o)!;
+  };
+  let list = -1;
+  const drawBatches = drawing._drawBatches.bind(drawing);
+  drawing._drawBatches = (renderList, record) => {
+    list = numberOf(record);
+    drawBatches(renderList, record);
+  };
+  drawing.createBatch = (entry, capacity, view, culling) => {
     const pool = drawing._geometryPool;
     made.push({
       at: performance.now(), material: entry.material.name || entry.material.type,
       vertices: pool.vertexArray.length, indices: pool.indexArray.length, poolVersion: pool.version,
+      by: r._precompilationState !== null ? 'compile' : 'draw', target: renderer.getRenderTarget()?.texture.name ?? 'screen',
+      size: sizeDrawn(renderer), replaces: replaced(entry, culling), list, culling: numberOf(culling), entry: numberOf(entry),
     });
-    return createBatch(entry, ...rest);
+    return createBatch(entry, capacity, view, culling);
   };
+}
+
+/** The size the renderer draws at now (the size the meshlets' occlusion culling is made for): its target's, else
+ *  its canvas's. */
+function sizeDrawn(renderer: WebGPURenderer): string {
+  const target = renderer.getRenderTarget();
+  if (target) return `${target.width}x${target.height}`;
+  const size = renderer.getDrawingBufferSize(new THREE.Vector2());
+  return `${size.x}x${size.y}`;
 }
 
 /** One kind of render call summed over the frames (`recordRenders`): how many, their time (ms, its nested renders
@@ -655,6 +703,96 @@ function batchesBuiltApart(MeshletBatch: unknown): void {
   };
 }
 
+type KeptBatch = { capacity: number; dispose(): void; relocate(): boolean };
+type KeptEntry = { unusedProjections: number; batch: KeptBatch | null; source: KeptEntry | null };
+type KeptRecord = {
+  entries: KeptEntry[];
+  staticGroups: Map<unknown, { entries: KeptEntry[]; unusedProjections: number }>;
+  culling: unknown;
+};
+type Keeping = {
+  renderer: { _compilationPromises: unknown[] | null };
+  createBatch(entry: KeptEntry, ...rest: unknown[]): unknown;
+  _drawBatches(renderList: unknown, record: KeptRecord): void;
+  _shrinkCulling(record: KeptRecord, entries: KeptEntry[]): void;
+  _getCullingCapacity(entries: KeptEntry[], capacities: number[], ...rest: unknown[]): unknown;
+  _disposeBatches(record: KeptRecord, kept: Set<KeptEntry>): void;
+  _addGeometries(culling: unknown, entries: KeptEntry[]): boolean;
+};
+
+/**
+ * The meshlet batches a warm-up compiled kept, however long the frames leave them undrawn, and every batch kept
+ * through its culling's resize. The warm-ups compile into the frames' own render list, where three drops a batch:
+ * one undrawn for 60 projections (0.4 s at 144 Hz); and every one not drawn in the projection that resizes the
+ * culling, which each warm-up's new biome or part did, and the lobby's frames as they shrank it to their own. So the
+ * lobby's frames made their own batches again after each warm-up, the warm-ups' draws theirs, and the fight's first
+ * frames once more, each a node build in its frame: 1477 builds at a draw in the lobby's first seconds, its frames
+ * held up 200 to 740 ms. A resized culling is sized for the undrawn batches too, and they're moved into it.
+ */
+function batchesKept<T>(drawing: T): T {
+  const keeping = drawing as unknown as Keeping;
+  const warmed = new WeakSet<KeptEntry>();
+  /** the render list being drawn or shrunk, and its batches undrawn there, kept through its resize */
+  let record: KeptRecord | null = null;
+  let undrawn: KeptEntry[] = [];
+  const within = <A extends unknown[]>(run: (...args: A) => void) => (at: KeptRecord, ...args: A): void => {
+    record = at;
+    undrawn = [];
+    try {
+      run(...args);
+    } finally {
+      record = null;
+      undrawn = [];
+    }
+  };
+  const createBatch = keeping.createBatch.bind(keeping);
+  keeping.createBatch = (entry, ...rest) => {
+    if (keeping.renderer._compilationPromises !== null) warmed.add(entry);
+    return createBatch(entry, ...rest);
+  };
+  const drawBatches = keeping._drawBatches.bind(keeping);
+  keeping._drawBatches = (renderList, at) => within(() => {
+    for (const entry of at.entries) if (warmed.has(entry)) entry.unusedProjections = 0;
+    for (const group of at.staticGroups.values()) {
+      if (group.entries.some((entry) => warmed.has(entry))) group.unusedProjections = 0;
+    }
+    drawBatches(renderList, at);
+  })(at);
+  const shrinkCulling = keeping._shrinkCulling.bind(keeping);
+  keeping._shrinkCulling = (at, entries) => within(() => shrinkCulling(at, entries))(at);
+  const cullingCapacity = keeping._getCullingCapacity.bind(keeping);
+  keeping._getCullingCapacity = (entries, capacities, ...rest) => {
+    undrawn = record === null ? [] : undrawnOf(record, new Set(entries));
+    const all = [...entries, ...undrawn];
+    return cullingCapacity(all, [...capacities, ...undrawn.map((entry) => entry.batch!.capacity)], ...rest);
+  };
+  const disposeBatches = keeping._disposeBatches.bind(keeping);
+  keeping._disposeBatches = (at, kept) => disposeBatches(at, new Set([...kept, ...undrawn]));
+  const addGeometries = keeping._addGeometries.bind(keeping);
+  keeping._addGeometries = (culling, entries) => {
+    const added = addGeometries(culling, entries);
+    if (undrawn.length === 0 || record?.culling !== culling) return added;
+    const moved = undrawn;
+    undrawn = [];
+    const fits = addGeometries(culling, moved);
+    for (const entry of moved) {
+      if (fits && entry.batch!.relocate()) continue;
+      entry.batch!.dispose();
+      entry.batch = null;
+    }
+    return added;
+  };
+  return drawing;
+}
+
+/** `record`'s entries with a batch that aren't among `drawn`, whose objects' batch (a shared one's) is kept too. */
+function undrawnOf(record: KeptRecord, drawn: Set<KeptEntry>): KeptEntry[] {
+  const all = [...record.entries, ...[...record.staticGroups.values()].flatMap((group) => group.entries)];
+  const undrawn = all.filter((entry) => entry.batch !== null && !drawn.has(entry));
+  const kept = new Set([...drawn, ...undrawn]);
+  return undrawn.filter((entry) => entry.source === null || kept.has(entry.source));
+}
+
 /** what of three's renderer a compile's state is kept by (`compilesTakeTurns`) */
 type Precompiling = {
   _precompilationState: object | null;
@@ -914,6 +1052,11 @@ export async function makePipeline(renderer: THREE.WebGLRenderer, scene: THREE.S
   const { bloom } = await import('three/addons/tsl/display/BloomNode.js');
   const gpu = renderer as unknown as WebGPURenderer;
   const scenePass = pass(scene, camera);
+  // (sized as its frames will size it, before the warm-ups compile into it: the meshlets' culling is made for the
+  // size it's drawn at, and the lobby's, compiled at the 1 px it started at, was made again with all its batches at
+  // its first frame, their node builds in it)
+  const size = gpu.getDrawingBufferSize(new THREE.Vector2());
+  scenePass.setSize(size.x, size.y);
   sceneTarget = scenePass.renderTarget;
   const raw = scenePass.getTextureNode('output');
   const color = sanitized(raw);
