@@ -47,9 +47,10 @@ const LEAVE = 1.5;
 const LEVEL = 0.9;
 /** how near the hall the hero comes before its heroes are readied, if they aren't yet (m) */
 const HALL_NEAR = 22;
-/** how near the hall's door (m, on the terrace) the other heroes stand on its dais, as inside it: stood from the
- *  square, their builds' poses and draws took 5 ms of a frame's CPU and 400 draws (a perf report from play) */
-const HALL_SEEN = 7;
+/** how near the hall's door (m) the other heroes stand on its dais with the door in view, as inside it: from the stair
+ *  the dais stood empty through the door ("on approach heroes are not there"). Stood from anywhere on the square, their
+ *  builds' poses and draws took 5 ms of a frame's CPU and 400 draws (a perf report from play) */
+const HALL_SEEN = 12;
 /** how far before the hall's door its portico reaches (m), where a camera looking in sees no grass but through it */
 const PORTICO_DEEP = 3;
 /** how far into the yard the hero must stand to cast (m in from its fence) */
@@ -298,8 +299,8 @@ function hallInside(dt: number): void {
   // (from inside, the grass is seen through the doorway alone: walls and roof hid its 750k triangles, drawn all the
   // same; from above the roof is away, and all of it shows)
   village.meadow.visible = !(inside && view !== 'top' && cameraInHall() && !doorInView());
-  const onTerrace = p.obj.position.y > TERRACE.high - 0.1;
-  const seen = inside || (onTerrace && Math.hypot(p.pos.x - TERRACE.x, p.pos.z - HALL.door) < HALL_SEEN);
+  const byDoor = Math.hypot(p.pos.x - TERRACE.x, p.pos.z - HALL.door) < HALL_SEEN;
+  const seen = inside || (byDoor && view !== 'top' && doorwayOnScreen());
   const near = Math.hypot(p.pos.x - TERRACE.x, p.pos.z - HALL.door) < HALL_NEAR;
   standHeroes(lobby && seen && isWarm('heroes'), dt, lobby && near && isWarm('heroes'));
 }
@@ -318,8 +319,14 @@ function cameraInHall(): boolean {
  *  (looking in, all before it is the terrace's bare stone and the hall; the doorway's box lay before it, and the
  *  grass's 750k triangles were drawn for nothing). */
 function doorInView(): boolean {
-  const cam = G.camera, y0 = TERRACE.high;
+  const cam = G.camera;
   if (cam.position.z > HALL.door) return cam.getWorldDirection(_look).z > -0.3;
+  return doorwayOnScreen();
+}
+
+/** Whether the camera's view takes in the hall's doorway. */
+function doorwayOnScreen(): boolean {
+  const cam = G.camera, y0 = TERRACE.high;
   // (wider and deeper than the doorway: the camera's matrices are the last frame's, and turning to it the grass came late)
   // (and reaching out of the doorway, not into the hall: reaching in, a camera within its depth always saw it)
   _door.min.set(TERRACE.x - HALL.doorHalf - 1, y0, HALL.door);

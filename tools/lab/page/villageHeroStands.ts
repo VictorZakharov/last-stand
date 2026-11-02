@@ -9,7 +9,11 @@ import { G } from '../../../src/state';
 import { hallFocus, hallHeroes, heroesStanding, hallOpen } from '../../../src/game/hall';
 import { HALL, TERRACE } from '../../../src/data/village';
 import { groundHeight } from '../../../src/world/ground';
+import { faceCamera } from '../../../src/core/renderer';
+import { CLASS_IDS } from '../../../src/data/classes/index';
+import { isWarm } from '../../../src/game/warm';
 import { openHall, toLobby } from './hallMoves';
+import { viewBy } from './villageHallCull';
 import type { LightsChecked } from './villageLights';
 
 /** the frames given to the hall as it opens and after each key, the rounds read and the frames between them */
@@ -21,6 +25,11 @@ const CHOICES = [['warrior', 'ranger'], ['ranger', 'mage'], ['mage', 'warrior']]
 const WAIT_FIRST = 5;
 const SETTLE_LOBBY = 30;
 const ROUNDS = 12;
+/** how far up the stair he stands to look at the door (m), how far out past its foot to look away (the camera behind
+ *  him higher up stands in the doorway), and the most frames for the heroes to warm */
+const STAIR_UP = 2;
+const SQUARE_OUT = 4;
+const WARM_FRAMES = 6000;
 const FRAMES_A_ROUND = 30;
 /** how far before the dais he stands (m), an ankle's height over the plinth at rest (m), and the most it may rise
  *  past it */
@@ -40,6 +49,28 @@ function riseOfAnkles(hero: Player): number {
   const left = joints.ankleL.getWorldPosition(_ankle).y;
   const right = joints.ankleR.getWorldPosition(_ankle).y;
   return Math.max(left, right) - floor - ANKLE_REST;
+}
+
+/** The heroes stand on the dais as he comes up the stair with the door in view, and not with it behind him (from play,
+ *  "on approach heroes are not there, they should be"). `canary` reads the look away as the look at the door. */
+export async function heroesSeenOnApproach(lab: Lab, canary: boolean): Promise<LightsChecked> {
+  const x = TERRACE.x;
+  await viewBy(lab, 'third');
+  const looking = async (z: number, facing: number): Promise<number> => {
+    G.player.walkTo = null;
+    G.player.place(new THREE.Vector3(x, groundHeight(x, z), z), facing);
+    faceCamera(facing);
+    await lab.until(() => isWarm('heroes'), WARM_FRAMES, 'village: the heroes warming as he nears them');
+    await lab.step(SETTLE);
+    return heroesStanding().length;
+  };
+  const away = await looking(TERRACE.stairFoot + SQUARE_OUT, 0);
+  const atDoor = canary ? away : await looking(TERRACE.stairFoot - STAIR_UP, Math.PI);
+  await viewBy(lab, 'top');
+  const line = `${atDoor} heroes stand on the dais looking at the door from the stair, ${away} looking away from it`;
+  const wrong = atDoor < CLASS_IDS.length - 1 || away > 0;
+  if (canary) return { lines: [line], problems: [], caught: wrong, moments: [] };
+  return { lines: [line], problems: wrong ? [line] : [], caught: null, moments: [] };
 }
 
 /** The hero of class `id` chosen in the hall, `waiting` frames after it opened on the one he is. */

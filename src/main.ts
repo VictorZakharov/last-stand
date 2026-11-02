@@ -302,14 +302,14 @@ function leaveObject(o: VillageObject): void {
   if (o.use === 'help') hideHelp();
 }
 
-/** Whether what `o` opened is still up (the hall's screen is told closed by its own close). */
+/** Whether what `o` opened is still up. */
 function objectShows(o: VillageObject): boolean {
   switch (o.use) {
     case 'portal': case 'chronicle': return villageCardOf() === o;
     case 'stash': return panelsOpen() === 'chest';
     case 'coop': return coopOpen();
     case 'help': return helpOpen();
-    case 'heroes': return true;
+    case 'heroes': return heroSelectOpen();
   }
 }
 

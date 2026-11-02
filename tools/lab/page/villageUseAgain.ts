@@ -21,6 +21,8 @@ interface Opened { id: string; shows: string; close: string }
 const OPENED: readonly Opened[] = [
   { id: 'notice', shows: '#help', close: '#btn-help-close' },
   { id: 'chronicle', shows: '#vcard', close: '#vcard .vc-close' },
+  // (from play, "escape from choose hero does not reenable E hint until I move away and back")
+  { id: 'hall', shows: '#heroes', close: '#heroes .hs-back' },
 ];
 
 const shown = (selector: string): boolean => !document.querySelector(selector)?.classList.contains('hidden');
