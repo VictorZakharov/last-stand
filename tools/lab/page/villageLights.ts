@@ -1,14 +1,16 @@
 // `lab village`'s lights: every kind of light the village has, at midnight as the player meets it, a few metres off
 // and looked at in each close view, its pixels read back from the frame drawn: a street lamp's lantern, a hall torch,
 // a cottage's window, and each of the village's own point lights (the portals, the hall's braziers, the stair's
-// lamps, the campfire, the chronicle's candle). A light mustn't blind: drawn in a lit, glowing material with its
+// lamps, the campfire, the chronicle's candle), and the chronicle's book, the palest thing in the porch torch's light
+// and the candle's (it burned white, the lectern moved under the torch). A light mustn't blind: drawn in a lit,
+// glowing material with its
 // light a hand's breadth off the glass, the lanterns burned white and the bloom round them hid the lantern whole
 // (from play: "lights too bright, can't see geometry even", "we should always check all lights for blinding").
 // `canary` hangs a glaring orb in the first light, which must be caught.
 import * as THREE from 'three';
 import { screenArea, type Lab, type Pictured } from './lab';
 import { G } from '../../../src/state';
-import { COTTAGES, VILLAGE_OBJECTS } from '../../../src/data/village';
+import { CHRONICLE, COTTAGES, TERRACE, VILLAGE_OBJECTS } from '../../../src/data/village';
 import { COTTAGE } from '../../../src/world/villagePlan';
 import { groundHeight } from '../../../src/world/ground';
 import { holdHour } from '../../../src/game/clock';
@@ -20,7 +22,7 @@ export interface LightsChecked { lines: string[]; problems: string[]; caught: bo
 
 /** A light to read: its name, where it burns, how big it is (m across, the box its own pixels are counted over) and
  *  how far off it the hero stands (m, on the ground). */
-interface LightCase { name: string; at: THREE.Vector3; span: number; off: number }
+interface LightCase { name: string; at: THREE.Vector3; span: number; off: number; noonToo?: boolean }
 
 /** the frames the hero is given to settle and to look */
 const SETTLE = 15;
@@ -42,6 +44,10 @@ const ORB_GLARE = 12;
 const WINDOW = { across: 1.2, high: 1.7, out: 0.05 };
 /** the hall's lights before its torches in `hallTorches`: the dais's */
 const DAIS_LIGHTS = 2;
+/** the chronicle's book: how high over the terrace it lies (m) */
+const BOOK_UP = 1.14;
+/** the hour a case is read at again that the day's light burns too (the sun on top of its lamps, the view adapted) */
+const NOON = 12;
 
 /** A box round a point on the canvas, in its pixels from its bottom left, as its half width and middle. */
 interface ScreenBox { x: number; y: number; half: number }
@@ -138,10 +144,12 @@ function lightCases(): LightCase[] {
   const lanterns = [...G.arena.village.lanterns];
   lanterns.sort((a, b) => Math.hypot(a.x, a.z) - Math.hypot(b.x, b.z));
   const torch = G.arena.village.hallTorches[DAIS_LIGHTS];
+  const bookAt = new THREE.Vector3(CHRONICLE.x, TERRACE.high + BOOK_UP, CHRONICLE.z);
   return [
     { name: 'street lamp', at: lanterns[0], span: 0.6, off: 3 },
     { name: 'hall torch', at: torch, span: 0.4, off: 2.5 },
     { name: 'window', at: aWindow(), span: 0.9, off: 3.5 },
+    { name: "the chronicle's book", at: bookAt, span: 0.4, off: 2.2, noonToo: true },
     ...ownLights(),
   ];
 }
@@ -228,6 +236,13 @@ export async function lightsNotBlinding(lab: Lab, canary: boolean): Promise<Ligh
       } finally {
         unplant();
       }
+    }
+    holdHour(NOON);
+    for (const light of lights.filter((case_) => case_.noonToo)) {
+      const read = await readLight(lab, { ...light, name: `${light.name} at noon` });
+      lines.push(...read.lines);
+      moments.push(...read.moments);
+      problems.push(...read.blinding.map((line) => `${line}: a light blinds`));
     }
   } finally {
     holdHour(null);

@@ -44,12 +44,15 @@ import { propHoleWhereHidden } from './villageSeeThrough';
 import { hallWallsSteady } from './villageHallSteady';
 import { objectsUsedAgain } from './villageUseAgain';
 import { hallWallsHold } from './villageHallSide';
+import { chestOpensNear } from './villageChestLid';
 import { wallingAligned } from './villageWalling';
 import { windowsLetSunIn } from './villageWindows';
 import { grassRingsUnseen } from './villageGrassRing';
 
 export interface VillageOptions {
   canary: boolean;
+  /** only the checks whose names have this in them */
+  only?: string;
 }
 
 /** frames the hero is left to settle where he's put, and to walk to a spot or out to the village's edge */
@@ -75,39 +78,50 @@ const HOURS = [0, 6, 9, 12, 18, 21];
 /** One check's lines, its problems, and whether its canary was caught (null: no canary ran). */
 interface Checked { lines: string[]; problems: string[]; caught: boolean | null; moments?: Pictured[] }
 
+/** Whether the check called `name` is asked for: any of `only`'s comma-separated parts in its name, or all. */
+function wanted(name: string, only?: string): boolean {
+  return !only || only.split(',').some((part) => name.toLowerCase().includes(part.toLowerCase()));
+}
+
 /** The village checked as a player walks it. */
 export async function village(lab: Lab, options: VillageOptions): Promise<Report> {
   await toVillage(lab);
-  const checks = [
-    await objectsUsable(lab, options.canary),
-    await objectsUsedAgain(lab, options.canary),
-    await castingInYard(lab, options.canary),
-    await boundsClosed(lab, options.canary),
-    await portalsHold(lab, options.canary),
-    await stairClimbed(lab, options.canary),
-    await hallWallsHold(lab, options.canary),
-    await hallFreesPointer(lab, options.canary),
-    await grassSteady(lab, options.canary),
-    await grassRingsUnseen(lab, options.canary),
-    await roundCottages(lab, options.canary),
-    await walksAcross(lab, options.canary),
-    await lightsNotBlinding(lab, options.canary),
-    await lampsSteady(lab, options.canary),
-    await lampsAlike(lab, options.canary),
-    await lampsThroughTheDoor(lab, options.canary),
-    await heroShadowByLamp(lab, options.canary),
-    await heroShadowBetweenLamps(lab, options.canary),
-    await lampsLitAsTheyCast(lab, options.canary),
-    await everyLampCasts(lab, options.canary),
-    await hallCulledByDoor(lab, options.canary),
-    await hallWallsSteady(lab, options.canary),
-    roadsBendWide(options.canary),
-    wallingAligned(options.canary),
-    await windowsLetSunIn(lab, options.canary),
-    await propHoleWhereHidden(lab, options.canary),
-    await training(lab, options.canary),
-    await hoursCompileNothing(lab, options.canary),
-  ];
+  const all: Record<string, () => Checked | Promise<Checked>> = {
+    objectsUsable: () => objectsUsable(lab, options.canary),
+    objectsUsedAgain: () => objectsUsedAgain(lab, options.canary),
+    chestOpensNear: () => chestOpensNear(lab, options.canary),
+    castingInYard: () => castingInYard(lab, options.canary),
+    boundsClosed: () => boundsClosed(lab, options.canary),
+    portalsHold: () => portalsHold(lab, options.canary),
+    stairClimbed: () => stairClimbed(lab, options.canary),
+    hallWallsHold: () => hallWallsHold(lab, options.canary),
+    hallFreesPointer: () => hallFreesPointer(lab, options.canary),
+    grassSteady: () => grassSteady(lab, options.canary),
+    grassRingsUnseen: () => grassRingsUnseen(lab, options.canary),
+    roundCottages: () => roundCottages(lab, options.canary),
+    walksAcross: () => walksAcross(lab, options.canary),
+    lightsNotBlinding: () => lightsNotBlinding(lab, options.canary),
+    lampsSteady: () => lampsSteady(lab, options.canary),
+    lampsAlike: () => lampsAlike(lab, options.canary),
+    lampsThroughTheDoor: () => lampsThroughTheDoor(lab, options.canary),
+    heroShadowByLamp: () => heroShadowByLamp(lab, options.canary),
+    heroShadowBetweenLamps: () => heroShadowBetweenLamps(lab, options.canary),
+    lampsLitAsTheyCast: () => lampsLitAsTheyCast(lab, options.canary),
+    everyLampCasts: () => everyLampCasts(lab, options.canary),
+    hallCulledByDoor: () => hallCulledByDoor(lab, options.canary),
+    hallWallsSteady: () => hallWallsSteady(lab, options.canary),
+    roadsBendWide: () => roadsBendWide(options.canary),
+    wallingAligned: () => wallingAligned(options.canary),
+    windowsLetSunIn: () => windowsLetSunIn(lab, options.canary),
+    propHoleWhereHidden: () => propHoleWhereHidden(lab, options.canary),
+    training: () => training(lab, options.canary),
+    hoursCompileNothing: () => hoursCompileNothing(lab, options.canary),
+  };
+  const checks: Checked[] = [];
+  for (const [name, check] of Object.entries(all)) {
+    if (wanted(name, options.only)) checks.push(await check());
+  }
+  if (!checks.length) throw new Error(`lab: village: no check called ${options.only}`);
   const lines = checks.flatMap((c) => c.lines);
   const moments = checks.flatMap((c) => c.moments ?? []);
   const caught = checks.map((c) => c.caught);

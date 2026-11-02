@@ -1,13 +1,16 @@
 // `lab village`'s hall of heroes walked up to on its terrace: the hero walks straight at its side walls and its front
 // wall beside the door until they stop him, and a ray at a knee's height from where he set off reads the first surface
 // drawn ahead of him: his middle must stand off it (from play, "can pass through textures here": the plinth course
-// along the hall's foot, 35 cm out from its walls, was drawn and not in the wall, and he walked into it). `canary`
-// reads each gap as if he'd gone half a metre further.
+// along the hall's foot, 35 cm out from its walls, was drawn and not in the wall, and he walked into it). He walks
+// straight, the walk's routing off: found, his way to a spot past a wall went round by the door, and the gaps read
+// where he ended inside, the front wall cut away over him, and never a wall he was stopped by. `canary` reads each gap
+// as if he'd gone half a metre further.
 import * as THREE from 'three';
 import type { Lab } from './lab';
 import { G } from '../../../src/state';
 import { groundHeight } from '../../../src/world/ground';
 import { drawnInShadowsOnly } from '../../../src/world/culling';
+import { routing } from '../../../src/world/walkPath';
 import { HALL, TERRACE, type Spot } from '../../../src/data/village';
 import type { LightsChecked } from './villageLights';
 
@@ -76,10 +79,15 @@ async function walkUp(lab: Lab, walk: HallWalk): Promise<number> {
 export async function hallWallsHold(lab: Lab, canary: boolean): Promise<LightsChecked> {
   const gaps: string[] = [];
   const failed: string[] = [];
-  for (const walk of WALKS) {
-    const gap = (await walkUp(lab, walk)) - (canary ? CANARY_ON : 0);
-    gaps.push(`${walk.name} ${gap.toFixed(2)}`);
-    if (!(gap >= LEAST_OFF)) failed.push(`${walk.name}: his middle ${gap.toFixed(2)} m off the surface ahead`);
+  routing.on = false;
+  try {
+    for (const walk of WALKS) {
+      const gap = (await walkUp(lab, walk)) - (canary ? CANARY_ON : 0);
+      gaps.push(`${walk.name} ${gap.toFixed(2)}`);
+      if (!(gap >= LEAST_OFF)) failed.push(`${walk.name}: his middle ${gap.toFixed(2)} m off the surface ahead`);
+    }
+  } finally {
+    routing.on = true;
   }
   const line = `hall's walls walked up to: his middle off them (m, at least ${LEAST_OFF}): ${gaps.join(', ')}`;
   if (canary) return { lines: [line], problems: [], caught: failed.length > 0, moments: [] };

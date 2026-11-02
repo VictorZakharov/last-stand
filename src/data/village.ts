@@ -134,12 +134,15 @@ export const COTTAGES: readonly Cottage[] = [
 export const CAMPFIRE: Spot = [-9.2, 10.4];
 /** the notice board's middle, and the way it faces (rad, about y: 0 faces +z): beside the Thornwood's road, facing it */
 export const NOTICE = { x: -8.6, z: -1.6, facing: 0.25 };
-/** the chest at the hall's entrance: on the terrace, beside the stair's top, and the way it faces */
-export const CHEST = { x: TERRACE.x + 3.8, z: -12.0, facing: 0 };
-/** the chronicle's lectern across the stair's top from the chest, turned to the stair (rad about y: 0 faces +z). On a
- *  platform of its own east of the square it stood in the way: "lets remove this from here, and move the object near
- *  hall of heroes, to the left of chest/stash". */
-export const CHRONICLE = { x: TERRACE.x - 3.8, z: -12.0, facing: Math.PI / 2 };
+/** how far either side of the door's middle the chest and the lectern stand, and their z: each in the corner of the
+ *  door's frame and the portico's nearest column, its back to the wall's plinth course */
+const PORCH_CORNER = { x: 2.1, z: -13.95 };
+/** the chest at the hall's entrance, right of the door, facing the stair (rad about y: 0 faces +z) */
+export const CHEST = { x: TERRACE.x + PORCH_CORNER.x, z: PORCH_CORNER.z, facing: 0 };
+/** the chronicle's lectern left of the door, across it from the chest and facing the stair too. On a platform of its
+ *  own east of the square it stood in the way: "lets remove this from here, and move the object near hall of heroes,
+ *  to the left of chest/stash". */
+export const CHRONICLE = { x: TERRACE.x - PORCH_CORNER.x, z: PORCH_CORNER.z, facing: 0 };
 
 /** The portals' objects: each before its way out's portal, used from in front of it. */
 function portalObject(id: BiomeId, name: string, verb: string): VillageObject {
@@ -155,8 +158,8 @@ export const VILLAGE_OBJECTS: readonly VillageObject[] = [
   portalObject('crypt', 'Portal to the Crypt', 'Enter the Crypt'),
   portalObject('forest', 'Portal to the Thornwood', 'Enter the Thornwood'),
   {
-    // (stood beside it on the stair's top: before it, the terrace's edge is a step away and the ground under it too low)
-    id: 'chest', use: 'stash', at: [CHEST.x, CHEST.z], reach: 2.2, stand: [CHEST.x - 1.5, CHEST.z - 0.4], label: 1.4,
+    // (stood before it, on the porch)
+    id: 'chest', use: 'stash', at: [CHEST.x, CHEST.z], reach: 2.2, stand: [CHEST.x, CHEST.z + 1.3], label: 1.4,
     name: 'Stash', verb: 'Open the stash',
   },
   {
@@ -170,8 +173,8 @@ export const VILLAGE_OBJECTS: readonly VillageObject[] = [
     name: 'Campfire', verb: 'Play together',
   },
   {
-    // (stood before it on the stair's top, as the chest's on the other side)
-    id: 'chronicle', use: 'chronicle', at: [CHRONICLE.x, CHRONICLE.z], reach: 2.2, stand: [CHRONICLE.x + 1.2, CHRONICLE.z],
+    // (stood before it on the porch, as the chest's on the other side)
+    id: 'chronicle', use: 'chronicle', at: [CHRONICLE.x, CHRONICLE.z], reach: 2.2, stand: [CHRONICLE.x, CHRONICLE.z + 1.2],
     label: 1.9, name: 'Chronicle', verb: 'Save slots',
   },
   {

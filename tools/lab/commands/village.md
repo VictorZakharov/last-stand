@@ -3,6 +3,13 @@
 One command of the lab in full, moved here from [`COMMANDS.md`](../COMMANDS.md) (which lists every command, and the
 options every command takes) for its size.
 
+`--only names` runs the checks whose names have any of these in them (`--only lampsAlike,hallWalls`; the names are
+the check functions' in `page/village.ts`): the whole takes minutes.
+
+The chest's lid is read off the object drawn (`page/villageChestLid.ts`: from play, "stash chest should open when I
+approach it, and close when I move away"): shut far off and in the hall's door beside it, open at its stand, shut once
+he has walked off; `--canary` keeps him far off where it should be open.
+
 `village`: the lobby's village as a player walks it (`page/village.ts`; `src/game/village.ts`), the run left for
 the lobby. Each check in turn: every object (the portals, the chest, the hall, the campfire, the chronicle, the
 notice board) used from where the hero stands to use it, and what it opens shown; the notice board and the
@@ -35,7 +42,7 @@ each cottage to a spot behind it, and from each portal to every other object's s
 sends him (`goTo`), there within 600 and 1500 frames (walked straight at the spot, he ran into a cottage and stood
 there: "map waypoints dont work, when path is long and curved... it just runs into obstacles"); every kind of light
 the village has at midnight (a street lamp's lantern, a hall torch, a cottage's window, and each of its own ten
-point lights: the portals, the hall's braziers, the stair's lamps, the campfire, the chronicle's candle, the yard's),
+point lights: the portals, the hall's braziers, the stair's lamps, the campfire, the chronicle's candle, the yard's; and the chronicle's book at midnight and noon, which burned white under the porch's torch),
 stood by from a few metres off and looked at in each close view, its pixels read back from the frame
 (`page/villageLights.ts`, each pictured in the close view in `out/village/sheet.png`): over 12% of its box blown out
 (its brightest channel past 0.97) or 2% of the ring round it out to 2.5 times as far fails it as blinding (from

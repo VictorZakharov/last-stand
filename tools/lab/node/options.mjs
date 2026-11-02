@@ -1230,6 +1230,11 @@ export const COMMANDS = {
           + 'palisade, the stair walked at beside it, the notice board left unread, a new material at noon): all '
           + 'must be found',
       },
+      only: {
+        kind: 'text',
+        usage: 'names',
+        help: 'only the checks whose names have any of these in them (lampsAlike,hallWalls): the whole takes minutes',
+      },
       ...COMMON_OPTIONS,
     },
   },

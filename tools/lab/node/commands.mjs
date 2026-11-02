@@ -1194,7 +1194,7 @@ export const COMMANDS = {
 
   village: {
     each(side, options) {
-      return side.command('village', { canary: Boolean(options.canary) });
+      return side.command('village', { canary: Boolean(options.canary), only: options.only });
     },
     finish(results, options, session) {
       return textWithMoments(results, session.outFor('village'), session.browser);

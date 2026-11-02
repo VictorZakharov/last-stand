@@ -33,6 +33,9 @@ export interface VillageHooks {
   shows(object: VillageObject): boolean;
 }
 
+/** how near the chest the hero comes before its lid opens for him, and how far he goes before it shuts (m): inside
+ *  its reach, or it opened for everyone going through the middle of the hall's door beside it */
+const CHEST_OPENS = { near: 2.0, far: 2.15 };
 /** how far past an object's reach the hero may walk before what it opened is put away (m) */
 const LEAVE = 1.5;
 /** how far apart in height the hero and an object may stand for him to use it (m: the terrace's chest from under it) */
@@ -92,11 +95,23 @@ const named = (o: VillageObject): boolean => {
   return o === pointed || o === going;
 };
 
+/** whether the chest stands open for the hero (`chestByHero`) */
+let chestOpen = false;
+
 /** How far the hero is from `o` (m, across the floor), or Infinity where he stands on another level. */
 function distanceTo(o: VillageObject): number {
   const p = G.player.pos;
   if (Math.abs(groundHeight(p.x, p.z) - floorAt(o)) > LEVEL) return Infinity;
   return Math.hypot(p.x - o.at[0], p.z - o.at[1]);
+}
+
+/** The chest's lid opened as the hero comes to it and shut as he leaves (`on`: he walks the village). */
+function chestByHero(on: boolean): void {
+  const chest = villageObject('chest');
+  const off = on && chest ? distanceTo(chest) : Infinity;
+  if (off < CHEST_OPENS.near) chestOpen = true;
+  else if (off > CHEST_OPENS.far) chestOpen = false;
+  G.arena.village.setChestNear(chestOpen);
 }
 
 /** The object the hero is near enough to use (the nearest), or null. */
@@ -192,6 +207,7 @@ export function updateVillage(dt = 0): void {
   hallInside(dt);
   const on = hooks.active();
   const p = G.player;
+  chestByHero(on);
   p.armed = !on || inYard(p.pos.x, p.pos.z);
   if (on && inYard(p.pos.x, p.pos.z)) completeStep('yard');
   if (!on) {
