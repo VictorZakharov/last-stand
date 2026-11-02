@@ -87,7 +87,10 @@ shelter on it again, as it was); every street
 lamp's ground round its foot read from over it lit and put out as the hero walks to each lamp in turn at midnight,
 the casting lights handed over as his walk hands them, each lamp giving at least 30% of the light there
 (`page/villageLampsCast.ts`: from play, "why this light is off", a lamp beside him lighting nothing; not reproduced,
-the least 74%; `--canary` puts each lamp out for both its readings at the last stop); from inside the hall of
+the least 74%; `--canary` puts each lamp out for both its readings at the last stop); the frame with the sun's map
+kept (`sunShadowKept`, `world/moonShadow.ts`) against it redrawn whole at one moment, at three spots, the last by the
+chest: 0.00% changed (`--canary` leaves what moves out of it, 1.1 to 1.3%); every curb's top facing up (`curbsFaceUp`,
+`--canary` reads them wound the other way); from inside the hall of
 heroes over the shoulder, turned to its door (V pressed: the village's top view is its panels'), the frame drawn
 with what stands outside culled by the doorway (`world/hallPortal.ts`) and drawn whole, at midnight and noon:
 the scene's draws must fall and at most 0.05% of the pixels change (`page/villageHallCull.ts`: 425 draws to

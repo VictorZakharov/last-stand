@@ -129,6 +129,17 @@ export function lampShadow(light: THREE.PointLight, on: boolean): void {
   lampShadows.add(light);
 }
 
+/** how often what the sun's kept shadow holds has moved (`stillMoved`) */
+let stillMoves = 0;
+
+/** Something that casts on the sun's kept shadow moved for good (a chest's lid): it's drawn again next frame. */
+export function stillMoved(): void {
+  stillMoves++;
+}
+
+/** How often what the sun's kept shadow holds has moved (`stillMoved`). */
+export const stillMovedTimes = (): number => stillMoves;
+
 /** The lamps' still shadows asked to be drawn again (one moved to another lamp), with the next frame's still ones. */
 export function drawLampShadows(): void {
   lampsAsked++;
@@ -182,7 +193,7 @@ function hideBodies(parent: THREE.Object3D, shown: THREE.Object3D, hidden: THREE
 export function drawStillShadows(renderer: THREE.WebGLRenderer, scene: THREE.Scene, camera: THREE.Camera,
   shown: THREE.Group, kept: THREE.LightShadow): void {
   const lights = [...stillShadows].filter((light) => shown.getObjectById(light.id)).concat([...lampShadows]);
-  if (!lights.length) return;
+  if (!lights.length && kept.autoUpdate) return;
   // (on WebGPU the scene pass's own target, which the frame draws over: a pipeline is made for its target's format
   // and samples, and in a pixel of its own each prop in view had one made at the draw, a breaking prop's frame held
   // up 260 to 300 ms)
@@ -193,6 +204,8 @@ export function drawStillShadows(renderer: THREE.WebGLRenderer, scene: THREE.Sce
   const keptAuto = kept.autoUpdate;
   const target = renderer.getRenderTarget();
   for (const light of lights) light.shadow.needsUpdate = true;
+  // (held, the moon's is drawn here of what stands still too, and kept: `moonShadow.ts`)
+  if (!keptAuto) kept.needsUpdate = true;
   kept.autoUpdate = false;
   renderer.setRenderTarget(into);
   try {

@@ -45,7 +45,7 @@ function countedFrame(lab: Lab): Counted {
 }
 
 /** The share of the pixels whose light moved between `a` and `b`. */
-function changedShare(a: Canvas, b: Canvas): number {
+export function changedShare(a: Canvas, b: Canvas): number {
   let changed = 0;
   for (let at = 0; at < a.pixels.length; at += 4) {
     const red = Math.abs(a.pixels[at] - b.pixels[at]);

@@ -39,7 +39,8 @@ import { heroShadowBetweenLamps, heroShadowByLamp } from './villageHeroShadow';
 import { lampsLitAsTheyCast } from './villageLampsCast';
 import { everyLampCasts } from './villageLampShadows';
 import { hallCulledByDoor } from './villageHallCull';
-import { roadsBendWide } from './villageRoads';
+import { sunShadowKept } from './villageSunShadow';
+import { curbsFaceUp, roadsBendWide } from './villageRoads';
 import { propHoleWhereHidden } from './villageSeeThrough';
 import { hallWallsSteady } from './villageHallSteady';
 import { objectsUsedAgain } from './villageUseAgain';
@@ -110,8 +111,10 @@ export async function village(lab: Lab, options: VillageOptions): Promise<Report
     lampsLitAsTheyCast: () => lampsLitAsTheyCast(lab, options.canary),
     everyLampCasts: () => everyLampCasts(lab, options.canary),
     hallCulledByDoor: () => hallCulledByDoor(lab, options.canary),
+    sunShadowKept: () => sunShadowKept(lab, options.canary),
     hallWallsSteady: () => hallWallsSteady(lab, options.canary),
     roadsBendWide: () => roadsBendWide(options.canary),
+    curbsFaceUp: () => curbsFaceUp(options.canary),
     wallingAligned: () => wallingAligned(options.canary),
     windowsLetSunIn: () => windowsLetSunIn(lab, options.canary),
     propHoleWhereHidden: () => propHoleWhereHidden(lab, options.canary),

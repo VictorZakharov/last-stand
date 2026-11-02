@@ -13,9 +13,9 @@ import { G } from '../state';
 const kept = new Map<THREE.PointLight, THREE.WebGLCubeRenderTarget>();
 /** the lamp lights whose maps have heroes drawn over their still shadows */
 const overStill = new Set<THREE.PointLight>();
-/** what the heroes' draw is drawn as: the heroes' layer alone */
-const heroesSeen = new THREE.PerspectiveCamera();
-heroesSeen.layers.set(HERO_SHADOW_LAYER);
+/** what the heroes' draw is drawn as: the heroes' layer alone (`moonShadow.ts` draws by it too) */
+export const moversSeen = new THREE.PerspectiveCamera();
+moversSeen.layers.set(HERO_SHADOW_LAYER);
 
 /** A cube target to keep `map`'s depth in, of its size, set up on the GPU. */
 function keeperOf(renderer: THREE.WebGLRenderer, map: THREE.WebGLRenderTarget): THREE.WebGLCubeRenderTarget {
@@ -53,6 +53,8 @@ function copyDepth(renderer: THREE.WebGLRenderer, from: THREE.WebGLRenderTarget,
     gl.blitFramebuffer(0, 0, size, size, 0, 0, size, size, gl.DEPTH_BUFFER_BIT, gl.NEAREST);
   }
   state.bindFramebuffer(gl.READ_FRAMEBUFFER, null);
+  // (the target the frame draws into bound again: left on `to`, with no draw after it, the frame drew into the map)
+  renderer.setRenderTarget(renderer.getRenderTarget(), renderer.getActiveCubeFace(), renderer.getActiveMipmapLevel());
 }
 
 /** Each lamp light's map, drawn still, kept. */
@@ -74,7 +76,7 @@ function keepStill(renderer: THREE.WebGLRenderer): void {
 const HERO_ROUND = { up: 1, radius: 1.5 };
 
 /** A skinned part unculled (its bounds the bind pose's) held to a hero's sphere for the lamps' draw, put back after. */
-interface Bounded { part: THREE.SkinnedMesh; sphere: THREE.Sphere | null }
+export interface Bounded { part: THREE.SkinnedMesh; sphere: THREE.Sphere | null }
 
 const _round = new THREE.Sphere();
 const _toPart = new THREE.Matrix4();
@@ -82,7 +84,7 @@ const _toPart = new THREE.Matrix4();
 /** Every hero's part the world's layer shows put on the heroes' layer too (gear comes and goes), and no other; each
  *  skinned part three never culls culled by a sphere round its hero, into `bounded`: unculled, each was drawn into all
  *  six faces of each lamp's cube, 1.4 ms of the GPU a frame. */
-function heroesOnTheirLayer(bounded: Bounded[]): void {
+export function heroesOnTheirLayer(bounded: Bounded[]): void {
   for (const player of G.players) {
     _round.center.copy(player.obj.position).y += HERO_ROUND.up;
     _round.radius = HERO_ROUND.radius;
@@ -102,7 +104,7 @@ function heroesOnTheirLayer(bounded: Bounded[]): void {
 }
 
 /** The skinned parts held to their hero's sphere unculled again, their own bounds back. */
-function unbound(bounded: Bounded[]): void {
+export function unbound(bounded: Bounded[]): void {
   for (const { part, sphere } of bounded) {
     part.frustumCulled = false;
     part.boundingSphere = sphere!;
@@ -144,7 +146,7 @@ function heroesOverStill(renderer: THREE.WebGLRenderer, draw: ShadowDraw, scene:
   renderer.clear = () => {};
   renderer.shadowMap.needsUpdate = true;
   try {
-    draw(lights, scene, heroesSeen);
+    draw(lights, scene, moversSeen);
   } finally {
     renderer.clear = clear;
     unbound(bounded);

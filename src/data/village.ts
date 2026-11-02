@@ -113,9 +113,10 @@ export function portalPlace(id: BiomeId): { x: number; z: number; facing: number
 export const ROADS: readonly { points: readonly Spot[]; width: number }[] = [
   { points: [[5.2, -0.8], [10.5, -2.4], [16, -5.6], [21, -10.6], [24.7, -14.1], [27.5, -15.8]], width: 3.2 },
   { points: [[-5.2, 0.9], [-10.5, 2.4], [-15.5, 5.1], [-20.5, 9.6], [-24.4, 13.3], [-27.5, 15.2]], width: 3.0 },
-  // (straight into the stair's foot, on under it: coming in aslant, its end left a wedge of grass before the steps and
-  // its curb stopped short of the cheek)
-  { points: [[-0.6, -5.2], [-1.3, -6.5], [-1.5, -7.3], [-1.5, -8.6]], width: 4.4 },
+  // (straight out of the square up the stair's middle and on under it, as wide as the stair and a hair more, each curb
+  // ending square against its cheek: narrower, the curbs ran on in front of the steps' ends, "curb would never
+  // transition into stairs"; coming in aslant, one curb struck its cheek on a skew and the other lay along its foot)
+  { points: [[-1.5, -4.6], [-1.5, -6.2], [-1.5, -8.6]], width: 4.9 },
   // (the yard's: out of its gate 1.5 m along its way, then round on a 3 m arc to the square; turned 60 degrees in its
   // last 1.6 m, its inner edge folded back and its curb doubled over into slivers, "lets fix curb near training area")
   { points: [[5.23, 3.52], [5.91, 3.98], [6.58, 4.43], [7.13, 5.01], [7.51, 5.71], [7.7, 6.49],

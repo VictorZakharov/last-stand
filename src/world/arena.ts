@@ -11,9 +11,10 @@ import { groundHeight, setRelief } from './ground';
 import { setAdaptScale } from '../core/renderer';
 import { oneEnvironment, rigPointLights, stillForMeshlets } from '../core/webgpu';
 import { castBreakablesAsOne, type BreakableShadows } from './breakableShadows';
-import { bakeStaticShadows, compileEnvMaps as compileEach, drawStillShadows, envMap, lampShadowsAsked, mergeStill, type Biome, type BiomeBuilder, type BiomeLook } from './props';
+import { bakeStaticShadows, compileEnvMaps as compileEach, drawStillShadows, envMap, lampShadowsAsked, mergeStill, stillMovedTimes, type Biome, type BiomeBuilder, type BiomeLook } from './props';
 import { cullWhileDrawn, trimShadowCasters } from './culling';
 import { castHeroesOverLamps } from './lampShadows';
+import { castMoversOverMoon, holdMoonShadow } from './moonShadow';
 import { cullOutsideHall } from './hallPortal';
 import { buildCrypt, CRYPT_ENV } from './crypt';
 import { buildForest, FOREST_ENV } from './forest';
@@ -33,6 +34,9 @@ export type Arena = Awaited<ReturnType<typeof buildArena>>;
 
 /** Every place's environment's programs compiled ahead of the places, linked as they're built (`compileEnvMaps`). */
 export const compileEnvMaps = (renderer: THREE.WebGLRenderer): void => compileEach(renderer, [VILLAGE_ENV, CRYPT_ENV, FOREST_ENV]);
+
+/** how finely the sun's place is read for its kept shadow to be drawn again (a step's 1/n m, of its 60 m off or so) */
+const SUN_STEPS = 8;
 
 /** The moon's shadow camera as it's placed for a biome's `look` (the box it draws round the middle). */
 function shadowCameraFor(moon: THREE.DirectionalLight, look: BiomeLook): THREE.OrthographicCamera {
@@ -59,6 +63,7 @@ export async function buildArena(scene: THREE.Scene, renderer: THREE.WebGLRender
   scene.add(hemi, moon, moon.target);
   cullWhileDrawn(scene, renderer);
   castHeroesOverLamps(renderer);
+  castMoversOverMoon(renderer, moon);
   const fog = scene.fog = new THREE.Fog(0);
 
   const places = {} as Record<PlaceId, { group: THREE.Group; b: Biome; breakables?: BreakableShadows }>;
@@ -125,7 +130,7 @@ export async function buildArena(scene: THREE.Scene, renderer: THREE.WebGLRender
   let shown: PlaceId = 'village';
   let active = places.village.b;
   /** the place and the props' revision its still shadows were last drawn for (`drawStillShadows`) */
-  const stillDrawn = { place: null as PlaceId | 'hall' | null, rev: -1, lamps: 0 };
+  const stillDrawn = { place: null as PlaceId | 'hall' | null, rev: -1, lamps: 0, moved: 0, sun: '' };
   /** whether the hall of heroes' room stands in the place's stead */
   let hallShown = false;
   /** the village's look now (`setHour`: it changes with the hour, applied every frame while it's shown) */
@@ -229,13 +234,20 @@ export async function buildArena(scene: THREE.Scene, renderer: THREE.WebGLRender
       const now = hallShown ? 'hall' : shown;
       // (and a lamp's, as it takes a casting light: `lampShadow`)
       const lamps = lampShadowsAsked();
-      if (stillDrawn.place !== now || stillDrawn.rev !== propState.rev || stillDrawn.lamps !== lamps) {
+      // (and the sun's where it's kept: as it goes round, a redraw every 20 s or so, and as what stands in it moves)
+      const held = holdMoonShadow(moon, now === 'village');
+      const moved = stillMovedTimes();
+      const sun = now === 'village' ? moon.position.toArray().map((v) => Math.round(v * SUN_STEPS)).join() : '';
+      if (held || stillDrawn.place !== now || stillDrawn.rev !== propState.rev || stillDrawn.lamps !== lamps
+        || stillDrawn.moved !== moved || stillDrawn.sun !== sun) {
         // (and its breakables' shadows cast as one, each standing prop's: `world/breakableShadows.ts`)
         if (!hallShown) places[shown].breakables?.refresh();
         drawStillShadows(renderer, scene, G.camera, hallShown ? hallGroup : places[shown].group, moon.shadow);
         stillDrawn.place = now;
         stillDrawn.rev = propState.rev;
         stillDrawn.lamps = lamps;
+        stillDrawn.moved = moved;
+        stillDrawn.sun = sun;
       }
     },
   };

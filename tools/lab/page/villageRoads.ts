@@ -3,6 +3,8 @@
 // left the edge bare (from play, the yard's road at its gate: "lets fix curb near training area", its last 1.6 m
 // turning 60 degrees). `canary` adds that road as it was, which must be found.
 import { ROADS, YARD, yardToWorld, type Spot } from '../../../src/data/village';
+import * as THREE from 'three';
+import { curbGeometry } from '../../../src/world/village';
 import { windingLine } from '../../../src/world/villagePlan';
 import type { LightsChecked } from './villageLights';
 
@@ -50,4 +52,37 @@ export function roadsBendWide(canary: boolean): LightsChecked {
   const problems = folded.map(({ i, at }) => `${line}: road ${i} folds its inner curb at ${at[0].toFixed(1)}, `
     + `${at[1].toFixed(1)}`);
   return { lines: [line], problems, caught: null, moments: [] };
+}
+
+/** a triangle counts as on a curb's top from this height (m) */
+const TOP_FROM = 0.05;
+
+/** The curbs' top triangles: how many there are and how many face down, seen from above as nothing (the material is
+ *  one-sided). `flipped`: read each as wound the other way. */
+function curbTops(flipped: boolean): { tops: number; down: number } {
+  const position = curbGeometry().getAttribute('position');
+  const [a, b, c] = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()];
+  const normal = new THREE.Vector3();
+  let tops = 0;
+  let down = 0;
+  for (let at = 0; at + 2 < position.count; at += 3) {
+    a.fromBufferAttribute(position, at);
+    b.fromBufferAttribute(position, at + 1);
+    c.fromBufferAttribute(position, at + 2);
+    if (Math.min(a.y, b.y, c.y) < TOP_FROM) continue;
+    tops++;
+    normal.subVectors(b, a).cross(c.clone().sub(a));
+    if ((normal.y < 0) !== flipped) down++;
+  }
+  return { tops, down };
+}
+
+/** Every curb's top faces up (from a review: one curb of each road a sliver, its top culled). `canary` reads them
+ *  wound the other way, which must be found. */
+export function curbsFaceUp(canary: boolean): LightsChecked {
+  const { tops, down } = curbTops(canary);
+  const line = `curbs' tops: ${down} of ${tops} triangles face down`;
+  if (canary) return { lines: [line], problems: [], caught: down > 0, moments: [] };
+  if (tops === 0) return { lines: [line], problems: ['no curb top read'], caught: null, moments: [] };
+  return { lines: [line], problems: down > 0 ? [line] : [], caught: null, moments: [] };
 }

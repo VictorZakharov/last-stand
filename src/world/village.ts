@@ -30,7 +30,7 @@ import { bannerGeo, buildBrazier } from './crypt';
 import { CLASSES, CLASS_IDS } from '../data/classes/index';
 import { buildBonfire } from './forest';
 import { buildFire } from './fire';
-import { boxWithUV, contactShadows, setInstance, standStill, type Biome, type BiomeLook, type EnvColours, type Portal, type RGB, type Updater } from './props';
+import { stillMoved, boxWithUV, contactShadows, setInstance, standStill, type Biome, type BiomeLook, type EnvColours, type Portal, type RGB, type Updater } from './props';
 import { buildMeadow, meadowGround, MeadowMask, type MaskUniforms } from './meadow';
 import { growTree, type TreeKind } from './ezTrees';
 import { TREE_KINDS } from './forest';
@@ -89,8 +89,9 @@ const GROVES: readonly [number, number, number][] = [
 ];
 /** the wood round the palisade: how many trees, from how far past it to how far, and how tall (m) */
 const WOOD = { n: 130, near: 2.4, far: 30, low: 9, high: 20 };
-/** the lamp posts flanking the stair's foot (x either side, z), their lantern's height and light */
-const LAMPS = { x: 3.5, z: -7.0, high: 3.1, color: 0xffb46a };
+/** the lamp posts flanking the stair's foot (x either side, z: on the grass behind the curbs, as at -7 the square's
+ *  own edge left one standing on the paving), their lantern's height and light */
+const LAMPS = { x: 3.5, z: -8.7, high: 3.1, color: 0xffb46a };
 /** the street lamps (`buildStreetLamps`): how far apart along a road and the first from its start, how far out past
  *  its side (`builtAt` keeps 0.8 m by a road), how clear of any obstacle and of another lamp, and how many round the
  *  square (m) */
@@ -107,6 +108,8 @@ const MOTE_COLORS: Record<BiomeId, { rim: THREE.Color; core: THREE.Color }> = {
 const YARD_TORCH = { up: 2.25, color: 0xff8a3c, intensity: 3.2, distance: 10 };
 /** the candle on the chronicle's lectern: its light */
 const CANDLE = { color: 0xffc070, intensity: 2.2, distance: 6 };
+/** how little the chest's lid moves in a frame to count as still */
+const LID_STILL = 0.002;
 /** how high the chest's hoard stands under its shut lid (of its height open) */
 const HOARD_SHUT = 0.45;
 
@@ -659,7 +662,10 @@ export function buildVillage(scene: THREE.Group): Village {
 
   let lidOpen = 0, chestShown = false, chestNear = false, candleLit = 0, candleNear = false;
   updaters.push((dt) => {
+    const lidWas = lidOpen;
     lidOpen += ((chestShown || chestNear ? 1 : 0) - lidOpen) * Math.min(1, dt * 8);
+    // (its shadow on the sun's kept map)
+    if (Math.abs(lidOpen - lidWas) > LID_STILL) stillMoved();
     lid.rotation.x = -lidOpen * 1.4;
     // (the heap settled under the shut lid, or its goblet and top coins stood out through the wood; about the rim)
     pile.scale.y = HOARD_SHUT + (1 - HOARD_SHUT) * lidOpen;
@@ -936,16 +942,21 @@ function mitred({ line, out, closed }: CurbRun, w: number): Spot[] {
   });
 }
 
-/** The curbs: a low stone strip out from each edge of the paving (`curbLines`), mitred round its bends and capped at
- *  its ends. One mesh, standing still. */
-function curbs(m: THREE.Material): THREE.Mesh {
+/** The curbs' faces, each run's wound by the way it goes out from its paving: wound alike, a run going out to its
+ *  right showed its underside, its top culled, and of a curb along one side of each road only a sliver was drawn. */
+export function curbGeometry(): THREE.BufferGeometry {
   const positions: number[] = [], uvs: number[] = [];
-  const quad = (a: number[], b: number[], c: number[], d: number[], along0: number, along1: number): void => {
-    positions.push(...a, ...b, ...c, ...a, ...c, ...d);
-    uvs.push(along0, 0, along1, 0, along1, 1, along0, 0, along1, 1, along0, 1);
-  };
   for (const run of curbLines()) {
     const { line } = run;
+    const quad = (a: number[], b: number[], c: number[], d: number[], along0: number, along1: number): void => {
+      if (run.out === 1) {
+        positions.push(...a, ...c, ...b, ...a, ...d, ...c);
+        uvs.push(along0, 0, along1, 1, along1, 0, along0, 0, along0, 1, along1, 1);
+        return;
+      }
+      positions.push(...a, ...b, ...c, ...a, ...c, ...d);
+      uvs.push(along0, 0, along1, 0, along1, 1, along0, 0, along1, 1, along0, 1);
+    };
     const off = mitred(run, CURB.w);
     const h = CURB.h + run.lift;
     // (each point's inner foot and top, outer top and foot)
@@ -972,19 +983,37 @@ function curbs(m: THREE.Material): THREE.Mesh {
   g.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
   g.setAttribute('uv', new THREE.Float32BufferAttribute(uvs.map((v, k) => (k % 2 ? v * 0.3 : v)), 2));
   g.computeVertexNormals();
-  const mesh = new THREE.Mesh(g, m);
+  return g;
+}
+
+/** The curbs: a low stone strip out from each edge of the paving (`curbLines`), mitred round its bends and capped at
+ *  its ends. One mesh, standing still. */
+function curbs(m: THREE.Material): THREE.Mesh {
+  const mesh = new THREE.Mesh(curbGeometry(), m);
   mesh.name = 'curbs';
   mesh.receiveShadow = true;
   mesh.userData.noBake = true;
   return mesh;
 }
 
-/** The square's edge: round the fountain, wandering in and out. */
+/** how far north the square's edge goes (m), short of the stair's foot, so each curb of the stair's road comes straight
+ *  up to its cheek: reaching the foot, the square's own curb lay along one cheek's foot, its end at the bottom step */
+const SQUARE_NORTH = TERRACE.stairFoot * -1 - 1.5;
+/** how softly it's held to it (m) */
+const SQUARE_NORTH_EASE = 0.7;
+
+/** `v` held under `most`, easing over to it. */
+function softLeast(v: number, most: number): number {
+  const over = (v - most) / SQUARE_NORTH_EASE;
+  return most - SQUARE_NORTH_EASE * Math.log1p(Math.exp(-over));
+}
+
+/** The square's edge: round the fountain, wandering in and out, held short of the stair's foot. */
 function squareOutline(): Spot[] {
   return Array.from({ length: 64 }, (_, k): Spot => {
     const a = (k / 64) * TAU;
     const r = SQUARE_R * (1 + 0.09 * Math.sin(3 * a + 1.1) + 0.05 * Math.sin(5 * a + 2.3) + 0.03 * Math.sin(9 * a));
-    return [Math.cos(a) * r, Math.sin(a) * r];
+    return [Math.cos(a) * r, -softLeast(-Math.sin(a) * r, SQUARE_NORTH)];
   });
 }
 
