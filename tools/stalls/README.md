@@ -13,6 +13,8 @@ npm run stalls -- --url https://last-stand.cc/pr-preview/pr-194/,https://last-st
 npm run stalls -- --url this,https://last-stand.cc/  # this tree, then production
 npm run stalls -- --headed --links --seconds 30  # a window on the screen, every program built listed
 npm run stalls -- --variants base,cpuCanvas      # the page as it is, then every 2D canvas drawn on the CPU
+npm run stalls -- --scenario lobby --js --variants seeded --url "this?renderer=webgpu,this?renderer=webgpu&x=0"
+                                                 # two URLs' heroes in the same gear (every page's dice one seed)
 npm run stalls -- --scenario lobby               # standing, then walking round the lobby
 npm run stalls -- --scenario storm --listed 120  # the mage's Maelstrom cast into the foes, every stall of 120 ms+
 npm run stalls -- --scenario hover --hero warrior --stash 40 --view first --scale 1.25 --perf  # a report's lobby
@@ -30,9 +32,15 @@ npm run stalls -- --scenario boot --film --perf --window 799x384 --scale 3.75 --
 npm run stalls -- --scenario boot --film --blink-exit 2   # the film's canary: two blinks to find
 npm run stalls -- --scenario boot --resize 1920x1080       # full screen and back 5 times: the exit follows the window
 npm run stalls -- --scenario boot --resize 1920x1080 --stale-wind  # its canary: an exit placed once is caught
+npm run stalls -- --scenario boot --url "this?renderer=webgpu&builds" --read "window.__builds"  # a page's own record
+npm run stalls -- --scenario lobby --before "window.__G.someMesh.visible = false"  # a change just before the picture
 npm run stalls -- --scenario sweep --stash 60 --seconds 8 --rounds 3 --variants base,iconFilter,stillGlow+noTooltip
                                                  # one page, the variants in turn three times over, by their medians
 npm run stalls -- --scenario sweep --stash 60 --seconds 6 --js   # and the page's JS, a frame's by function
+npm run stalls -- --scenario lobby --js-under _renderObjectDirect --url "this?renderer=webgpu"  # what one function spends on
+npm run stalls -- --scenario boot --builds --url "this?renderer=webgpu"  # each step's WebGPU node builds and new shaders
+npm run stalls -- --scenario boot --view third --biome crypt --url "this?renderer=webgpu,this"  # both renderers' ends
+npm run stalls -- --scenario boot --view third --cast 3@1500 --url "this?renderer=webgpu,this"  # a skill held for it
 npm run stalls -- --scenario sweep --stash 60 --seconds 2 --passes  # the compositor's render passes a frame, exact
 npm run stalls -- --help
 npm run stalls:test                              # the tool's own unit tests
@@ -80,9 +88,14 @@ The report is printed and written to `tools/stalls/out/report.txt`.
   - `stow`: the lobby's panels stowed and shown again with Space, as the owner pressed it "rapidly": a quarter of
     the time with them shown (the frames to beat), a quarter stowed (practice: the run's bar at the bottom), then
     Space pressed every 200 ms for the rest (`--press-ms`), the mouse over the world throughout.
+  - `pause`: the pause menu opened and closed with Esc twice, the screen pictured every 150 ms for 1.5 s after each
+    press (`out/end-N-pause-<press>-<n>.png`), and how long the menu took to show or go said for each.
   - `heroes`: the hero selection screen opened by the lobby's Change hero and left by Back, three times, after a
     fifth of the time in the lobby (the frames to beat): each trip's way in and way out a phase of its own, so the
     first opening is read apart from the ones after ("brief lag when reentering hero selection room").
+  - `switch`: another hero chosen from the hero selection screen, the warrior, the ranger and the mage in turn, each
+    choice a phase of its own, and how long each took to bring the lobby back said ("changing hero is a little
+    slow": WebGPU's 306 to 331 ms, WebGL's 213 to 270, the hero's build most of both).
   - `storm`: the mage in a run, walking away from the foes a side of a square at a time and casting Maelstrom back
     at those following him in a line, every other side: its storm draws them in and whirls what it kills.
   - `boot` (`boot.mjs`): no set-up and nothing played. In a fresh Chrome the game is loaded as a first visit has it

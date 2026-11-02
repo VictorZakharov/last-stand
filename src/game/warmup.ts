@@ -11,8 +11,9 @@
 // and a third of the boot's are the fight's alone (`lab programs`).
 import * as THREE from 'three';
 import { G } from '../state';
-import { behindTheLobby, compileAhead, warmUp, type WarmedUp } from '../core/shaders';
+import { behindTheLobby, compileAhead, warmUp, type Swap, type WarmedUp } from '../core/shaders';
 import { compilePasses, sceneTarget } from '../core/renderer';
+import { COMPILE_SLICE, compileSlice, WEBGPU } from '../core/webgpu';
 import { mapsArrived, mapsMadeAfresh } from '../core/textures';
 import { ENEMIES, type EnemyId } from '../data/enemies';
 import { BIOME_IDS } from '../data/biomes';
@@ -20,6 +21,7 @@ import { SKILL_IMPLS } from '../combat/skills/index';
 import { CLASSES } from '../data/classes/index';
 import { buildModel } from '../entities/models/index';
 import { Enemy } from '../entities/enemy';
+import { heroLights } from '../entities/player';
 import { crowdSlots, joinCrowd, leaveCrowd } from '../entities/models/crowd';
 import { clearEffects, shockwave, groundFlash, decal, telegraph, lightning, iceSpikes, glyphMarker, lightPillar, crackDecal, crystalBurst } from '../fx/effects';
 import { rubble } from '../fx/rubble';
@@ -33,7 +35,7 @@ import { swingTrailSamples } from '../fx/swingTrail';
 import { groundSamples } from './groundItems';
 import { compileOutline, warmOutline } from '../ui/overlay/outline';
 import { labelsScene } from '../ui/overlay/layer';
-import { isWarm, markWarm, wanted, warming, warmingRuns, type Need } from './warm';
+import { isReadying, isWarm, markWarm, onReadying, want, wanted, warming, warmingRuns, type Need } from './warm';
 import type { Model } from '../types';
 
 /** far outside the arena, past what the lobby's camera sees: where the fight's warm-up stands what it builds */
@@ -102,18 +104,16 @@ function heroAllWorn(model: string, at?: THREE.Vector3): Model {
 const otherBiomes = () => BIOME_IDS.filter((id) => id !== G.arena.biome);
 
 /**
- * The lobby's biome compiled as soon as it's built, a light standing in for the hero's (built next: a program is
- * made for the scene's count of lights), so the GPU's threads link its programs while the hero is built; the
+ * The lobby's biome compiled as soon as it's built, the hero's lights in (built next, he takes them on: a program is
+ * made for the scene's lights, `heroLights`), so the GPU's threads link its programs while the hero is built; the
  * lobby's warm-up waited for them after (a first visit's: 3.5 s of the 14 s of compiles it waited 2.3 s on). The
  * post chain's and the overlay's too, which the lobby's first full frame linked one after another.
- * Returns the stand-in's removal, for once the hero's own light is in.
  */
-export function compileTheBiome(): () => void {
-  const standIn = new THREE.PointLight(0xffffff, 0);
-  G.scene.add(standIn);
+export function compileTheBiome(): void {
+  const { staff, hand } = heroLights();
+  G.scene.add(staff, hand);
   compileAhead(G.renderer, G.scene, G.camera, sceneTarget(), otherBiomes().map((id) => G.arena.groupOf(id)));
   compilePasses([labelsScene()]);
-  return () => G.scene.remove(standIn);
 }
 
 /** `objects` named `name` where they have none of their own: what uses a program, as `lab programs` lists them. */
@@ -213,15 +213,16 @@ interface Part {
   built?: Built;
 }
 /** A part built: what's compiled, what's added to the scene for the draw, what's drawn alone, what's shown in place
- *  of the lobby's biome for the draw, what's outlined, what's brought in just before the draw (`show`), and its
- *  pieces let go (`done`). */
+ *  of the lobby's biome for the draw, what's outlined, what's brought in just before the draw (`show`) and taken
+ *  out again (`hide`), and its pieces let go (`done`). */
 interface Built {
   compile: THREE.Object3D[];
   objects: THREE.Object3D[];
   drawn: THREE.Object3D[];
-  swap?: { show: THREE.Object3D; hide: THREE.Object3D };
+  swap?: Swap;
   outlined: THREE.Object3D[];
   show?(): void;
+  hide?(): void;
   done(): void;
 }
 
@@ -241,8 +242,9 @@ function fightParts(): Part[] {
       const roots = pair.map((e) => e.obj);
       const slots = crowdSlots(pair[0].model);
       const show = (): void => { for (const e of pair) joinCrowd(e); };
+      const hide = (): void => { for (const e of pair) leaveCrowd(e); };
       const done = (): void => { for (const e of pair) e.dispose(); };
-      return { compile: [...roots, ...slots], objects: roots, drawn: slots, outlined: roots, show, done };
+      return { compile: [...roots, ...slots], objects: roots, drawn: slots, outlined: roots, show, hide, done };
     },
   }));
   const shots: Part = {
@@ -283,12 +285,20 @@ async function buildAhead(parts: Part[]): Promise<void> {
  *  (`heroModelParts`). */
 const heroParts = (): Part[] => [hallPart(), ...heroModelParts()];
 
+/** The hall of heroes' look put on the scene, and its undoing: the look it's shown in, which WebGPU keys its
+ *  pipelines by (`Swap.look`). */
+function hallLook(): () => void {
+  const shown = G.arena.hallShown;
+  G.arena.showHall(true);
+  return () => G.arena.showHall(shown);
+}
+
 /** The hall of heroes' room, shown in the lobby's biome's place (world/heroHall.ts). */
 function hallPart(): Part {
   return {
     name: 'hall',
     build() {
-      const swap = { show: G.arena.hallGroup, hide: G.arena.groupOf(G.arena.biome) };
+      const swap = { show: G.arena.hallGroup, hide: G.arena.groupOf(G.arena.biome), look: hallLook };
       return { compile: [swap.show], objects: [], drawn: [], swap, outlined: [], done: () => undefined };
     },
   };
@@ -342,6 +352,7 @@ async function warmBuilt(built: Built[], { step, progress }: Warming = {}): Prom
     drawn: built.flatMap((b) => b.drawn),
     swap: swaps[0]?.swap,
     show: () => { for (const b of built) b.show?.(); },
+    hide: () => { for (const b of built) b.hide?.(); },
     before: mapsArrived,
     also: () => compileOutline(built.flatMap((b) => b.outlined), { edge: !step }),
     progress,
@@ -375,12 +386,13 @@ async function warmPart(part: Part, step: () => Promise<void>): Promise<boolean>
 }
 
 /** `parts` built (where they weren't ahead) and warmed at once, `progress` told how far along: timed as `warm the
- *  <need> at once`. */
+ *  <need> at once`. A part built a frame while nothing waits for them (WebGPU's fight, warmed as the loading screen
+ *  leaves): built in tasks one after another, a foe's 50 to 110 ms each, they held the lobby's frames up. */
 async function warmAtOnce(need: Need, parts: Part[], progress: (share: number) => void): Promise<void> {
   const start = performance.now();
   const built: Built[] = [];
   for (const [i, part] of parts.entries()) {
-    if (!part.built) await nextTask();
+    if (!part.built) await (isReadying() ? nextTask() : nextFrame());
     built.push(part.built ?? part.build());
     part.built = undefined;
     progress(BUILT * (i + 1) / parts.length);
@@ -419,17 +431,65 @@ async function warmNeed(need: Need, parts: Part[], behind: () => Promise<boolean
  * The programs the lobby doesn't use warmed (game/warm.ts): the fight's behind it once the loading screen has `left`
  * (its logo's exit draws over the lobby till then), where this build warmed them here before and the maps were kept
  * (`rememberWarmed`: else, a first visit or a new build's, its programs are new to the GPU's cache), and the other
- * heroes' once something needs them. Their programs are the boot's (`inTurn`): from the lobby on, one compiled but
+ * heroes' once something needs them. On WebGPU the fight's are all compiled at once as the loading screen leaves,
+ * every visit: three's async compile makes its pipelines on the GPU's threads and builds its nodes a slice a frame,
+ * so the lobby never waits for one, and Chrome's cache never served them on a return (the bar was 2.4 s on every
+ * visit). A part at a time there compiled a few at once, and was slower still. Their programs are the boot's (`inTurn`): from the lobby on, one compiled but
  * by a warm-up is counted as compiled late (main.ts `markLoaded`).
  */
 export async function warmTheRest(left: Promise<void>): Promise<void> {
   const behind = async (): Promise<boolean> => {
     await Promise.race([left, wanted('fight')]);
-    return !mapsMadeAfresh() && warmedBuilds().includes(BUILD);
+    return !WEBGPU && !mapsMadeAfresh() && warmedBuilds().includes(BUILD);
   };
   const fightWarm = warmNeed('fight', theFight(), behind).then(() => {
     rememberWarmed();
     performance.mark('fight warm');
   });
+  if (WEBGPU) void left.then(() => {
+    want('fight');
+    fitSlices(fightWarm);
+    // (once it's warm, a compile's slices long while the fight's loading bar is up, nothing played under it)
+    onReadying(() => compileSlice(isReadying() ? COMPILE_SLICE.loading : COMPILE_SLICE.playing));
+  });
   await Promise.all([fightWarm, warmNeed('heroes', heroParts(), async () => false)]);
+}
+
+/** how much shorter the compile's slice gets after a frame that missed the screen's refresh, and how much longer
+ *  (ms) after one that didn't */
+const SLICE_CUT = 0.7;
+const SLICE_GROWTH = 0.25;
+/** how late a frame may come before it counts as missed, as a share of the screen's refresh */
+const MISSED = 1.25;
+
+/**
+ * three's async compile, behind the lobby on WebGPU, worked a slice of the frame's time fitted to what the frames
+ * leave until `until`: shorter after a frame that missed the screen's refresh, a little longer after each that
+ * didn't, from `COMPILE_SLICE.least` to `playing` (a 144 Hz screen's frame has 6.9 ms, the lobby's own JS about 5 of
+ * them; a 60 Hz screen's 16.7), and the loading screen's long slices while the fight's loading bar is up (nothing is
+ * played under it). The screen's refresh is the shortest time between frames, let drift up slowly (a window moved
+ * to a slower screen).
+ */
+function fitSlices(until: Promise<void>): void {
+  let done = false;
+  void until.then(() => { done = true; });
+  let last = 0;
+  let refresh = Infinity;
+  let slice: number = COMPILE_SLICE.playing;
+  const fit = (now: number): void => {
+    if (done) {
+      compileSlice(isReadying() ? COMPILE_SLICE.loading : COMPILE_SLICE.playing);
+      return;
+    }
+    if (last) {
+      const gap = now - last;
+      refresh = Math.min(refresh * 1.002, gap);
+      const missed = gap > refresh * MISSED;
+      slice = missed ? Math.max(COMPILE_SLICE.least, slice * SLICE_CUT) : Math.min(COMPILE_SLICE.playing, slice + SLICE_GROWTH);
+    }
+    last = now;
+    compileSlice(isReadying() ? COMPILE_SLICE.loading : slice);
+    requestAnimationFrame(fit);
+  };
+  requestAnimationFrame(fit);
 }

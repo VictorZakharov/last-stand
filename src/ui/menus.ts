@@ -25,6 +25,7 @@ import { netHudEnabled, setNetHud } from './netHud';
 import { battleLogEnabled, setBattleLog } from './battleLog';
 import { qualitySetting, qualityLevel, setQuality } from '../core/quality';
 import { hdrSettings, hdrStatus, onHdrChange, setHdrSettings, type HdrMode, type HdrStatus } from '../core/hdr';
+import { chooseFlags, chooseRenderer, chosenFlags, chosenRenderer, RUNNING, setByAddress, type RendererKind } from '../core/rendererChoice';
 import { QUALITY, type QualitySetting } from '../data/quality';
 import { BIOMES, BIOME_IDS, type BiomeSetting } from '../data/biomes';
 import { biomeSetting, setBiomeSetting } from '../game/biome';
@@ -183,6 +184,7 @@ export function initMenus(h: MenuHooks): void {
   $<HTMLInputElement>('#opt-hdr-peak').oninput = (e) => { setHdrSettings({ peak: Number((e.target as HTMLInputElement).value) }); renderHdrOptions(); };
   // (it starts, stops or fails on its own: a window moved to another monitor, the WebGPU device lost)
   onHdrChange(renderHdrOptions);
+  initRendererOptions();
   $('#btn-hero').onclick = () => { sfx.click(); changeHero(); };
   // every class's name and tagline laid over the others, the one shown picked: the card is as wide and as tall as the
   // largest, so it never moves as the class changes (the warrior's name pushed the class buttons, as they were then,
@@ -794,6 +796,7 @@ function renderQualityOptions(): void {
 /** what Auto says HDR is doing */
 const HDR_NOTES: Record<HdrStatus, string> = {
   on: '(on)', off: '', 'sdr-display': '(no HDR display)', unsupported: '(not in this browser)', starting: '(starting)',
+  reload: '(reload to switch)',
 };
 function renderHdrOptions(): void {
   const s = hdrSettings(), status = hdrStatus();
@@ -805,6 +808,37 @@ function renderHdrOptions(): void {
   $<HTMLInputElement>('#opt-hdr-peak').value = String(s.peak);
   $('#opt-hdr-paper-value').textContent = `${Math.round(s.paper * 100)}%`;
   $('#opt-hdr-peak-value').textContent = `${Math.max(s.peak, s.paper).toFixed(1)}×`;
+}
+
+/** The renderer's row: its choice and WebGPU's flags kept for the next load, a reload offered once they differ from
+ *  what this page runs. */
+function initRendererOptions(): void {
+  document.querySelectorAll<HTMLElement>('#opt-renderer button').forEach((b) => {
+    b.onclick = () => { sfx.click(); chooseRenderer(b.dataset.r as RendererKind); renderRendererOptions(); };
+  });
+  const flagBox = (id: string): HTMLInputElement => $<HTMLInputElement>(id);
+  const keepFlags = (): void => {
+    chooseFlags({ meshlets: flagBox('#opt-meshlets').checked, lightsEach: flagBox('#opt-lights-each').checked });
+    renderRendererOptions();
+  };
+  flagBox('#opt-meshlets').onchange = keepFlags;
+  flagBox('#opt-lights-each').onchange = keepFlags;
+  $('#btn-renderer-reload').onclick = () => { sfx.click(); location.reload(); };
+  renderRendererOptions();
+}
+
+/** what the renderer's row shows: the choice kept, its flags while it's WebGPU, and whether a reload is due */
+function renderRendererOptions(): void {
+  const kind = chosenRenderer(), flags = chosenFlags();
+  document.querySelectorAll<HTMLElement>('#opt-renderer button').forEach((b) => b.classList.toggle('active', b.dataset.r === kind));
+  $('.renderer-flags').classList.toggle('hidden', kind !== 'webgpu');
+  $<HTMLInputElement>('#opt-meshlets').checked = flags.meshlets;
+  $<HTMLInputElement>('#opt-lights-each').checked = flags.lightsEach;
+  const differs = (kind === 'webgpu') !== RUNNING.webgpu
+    || (kind === 'webgpu' && (flags.meshlets !== RUNNING.meshlets || flags.lightsEach !== RUNNING.lightsEach));
+  // (the address's own renderer stands over the choice: a reload of it changes nothing)
+  $('.renderer-note').textContent = setByAddress ? 'This page\'s address sets the renderer: open the game without it to use this.' : '';
+  $('#btn-renderer-reload').classList.toggle('hidden', !differs || setByAddress);
 }
 
 export function showPause(v: boolean): void {
