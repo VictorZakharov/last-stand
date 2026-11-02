@@ -356,7 +356,7 @@ function makeMats(): Mats {
     lining: new THREE.MeshStandardMaterial({ color: 0x3c1218, roughness: 1 }),
     liningInside: new THREE.MeshStandardMaterial({ color: 0x3c1218, roughness: 1, side: THREE.BackSide }),
     // (a little warmth of their own: lit by the moon alone, gold went olive)
-    gold: new THREE.MeshStandardMaterial({ color: 0x8a6a22, roughness: 0.85, metalness: 0.1, emissive: 0x1e1203 }),
+    gold: new THREE.MeshStandardMaterial({ map: coinsPile(), roughness: 0.75, metalness: 0.1, emissive: 0x1e1203 }),
     coin: new THREE.MeshStandardMaterial({ map: coinFace(), color: 0xb8903a, roughness: 0.6, metalness: 0.2, emissive: 0x5a3808 }),
     gems: [0xa81c2c, 0x18805a, 0x2850a8].map((color) => new THREE.MeshStandardMaterial({ color, roughness: 0.12, metalness: 0.2, emissive: color, emissiveIntensity: 0.12 })),
     brass: new THREE.MeshStandardMaterial({ color: 0x6e5a2e, roughness: 0.5, metalness: 0.3 }),
@@ -438,6 +438,32 @@ function bookPage(seed: number, drawn: boolean): THREE.CanvasTexture {
   }
   const map = new THREE.CanvasTexture(c);
   map.colorSpace = THREE.SRGBColorSpace;
+  map.anisotropy = 8;
+  return map;
+}
+
+/** The coins deep in the hoard, between those lying on it: discs over discs, dark between them, tiling. */
+function coinsPile(): THREE.CanvasTexture {
+  const side = 256, c = canvasOf(side, side), g = ctx2d(c), rng = mulberry(81);
+  g.fillStyle = '#3e2a0c';
+  g.fillRect(0, 0, side, side);
+  for (let k = 0; k < 260; k++) {
+    const x = rng() * side, y = rng() * side, r = 11 + rng() * 5, squash = 0.5 + rng() * 0.5, turn = rng() * Math.PI;
+    const shade = 150 + rng() * 80;
+    for (const [dx, dy] of [[0, 0], [side, 0], [-side, 0], [0, side], [0, -side]]) {
+      g.beginPath();
+      g.ellipse(x + dx, y + dy, r, r * squash, turn, 0, Math.PI * 2);
+      g.fillStyle = `rgb(${shade},${shade * 0.72},${shade * 0.26})`;
+      g.fill();
+      g.strokeStyle = 'rgba(60,38,8,.8)';
+      g.lineWidth = 1.5;
+      g.stroke();
+    }
+  }
+  const map = new THREE.CanvasTexture(c);
+  map.colorSpace = THREE.SRGBColorSpace;
+  map.wrapS = map.wrapT = THREE.RepeatWrapping;
+  map.repeat.set(3, 2);
   map.anisotropy = 8;
   return map;
 }
@@ -1421,11 +1447,13 @@ function chestHoard(chest: THREE.Object3D, M: Mats, w: number, d: number, h: num
     return mesh;
   };
   // the heap: corner to corner at the rim's height, rising lumpily over it (the same lumps for what lies on it)
-  const across = w / 2, deep = d / 2, base = h - 0.05, rise = 0.24, rng = mulberry(79);
+  const across = w / 2, deep = d / 2, base = h - 0.09, rise = 0.3, rng = mulberry(79);
   const lump = (u: number, v: number): number => 1 + 0.3 * Math.sin(11 * u + 1) * Math.cos(9 * v) + 0.18 * Math.sin(21 * v + 7 * u);
   const heapAt = (x: number, z: number): number => {
     const u = x / across, v = z / deep;
-    return base + rise * lump(u, v) * Math.sqrt(Math.max(0, 1 - u ** 4 - v ** 4));
+    // (down to its foot inside the box at every side: flat to the rim, its edge stood over the wood as a slab's, seen from
+    // aside: "stash from side looks a little lame")
+    return base + rise * lump(u, v) * (Math.max(0, 1 - u * u) * Math.max(0, 1 - v * v)) ** 0.6;
   };
   const heap = new THREE.PlaneGeometry(w - 0.02, d - 0.02, 36, 22).rotateX(-Math.PI / 2);
   const at = heap.attributes.position;
@@ -1434,9 +1462,9 @@ function chestHoard(chest: THREE.Object3D, M: Mats, w: number, d: number, h: num
   add(heap, M.gold, 0, 0, 0);
   // the coins lying every way over it, thick enough that the heap reads as coins
   const coins: THREE.BufferGeometry[] = [];
-  for (let k = 0; k < 800; k++) {
-    // (kept off the rim, or they lay sliced along it and hid the box's wall)
-    const x = (rng() * 2 - 1) * across * 0.9, z = (rng() * 2 - 1) * deep * 0.82;
+  for (let k = 0; k < 950; k++) {
+    // (out to the lining, their edges lost in the box's thick walls)
+    const x = (rng() * 2 - 1) * across * 0.97, z = (rng() * 2 - 1) * deep * 0.95;
     const turn = new THREE.Euler(rng() * 1.6 - 0.8, rng() * 3, rng() * 1.6 - 0.8);
     coins.push(new THREE.CylinderGeometry(0.034, 0.034, 0.008, 10).applyQuaternion(new THREE.Quaternion().setFromEuler(turn))
       .translate(x, heapAt(x, z) + 0.002 + rng() * 0.012, z));
@@ -1993,7 +2021,9 @@ function lampPost(scene: THREE.Object3D, x: number, z: number, turn: number, M: 
   block(g, 0.42, 0.16, 0.42, 0, 0, 0, M.ashlar);
   block(g, 0.32, 0.14, 0.32, 0, 0.16, 0, M.ashlar);
   const parts = lampGeometries();
-  const pieces = [[parts.column, M.iron], [parts.bracket, M.iron], [parts.frame, M.lanternIron], [parts.cup, M.lanternIron],
+  // (unlit as the frame is: a hand's breadth from its own light, the post's and the bracket's edges burned in a white
+  // streak seen from under it, "this light is blinding")
+  const pieces = [[parts.column, M.lanternIron], [parts.bracket, M.lanternIron], [parts.frame, M.lanternIron], [parts.cup, M.lanternIron],
     [parts.panes, M.lantern]] as const;
   for (const [geo, m] of pieces) {
     const mesh = new THREE.Mesh(geo, m);

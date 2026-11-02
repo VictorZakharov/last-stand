@@ -7,7 +7,10 @@
 import * as THREE from 'three';
 import { G } from '../../../src/state';
 import * as renderer from '../../../src/core/renderer';
-import { canaryCost, flameCost, medianOf, timedRenders, timerOf } from './fireCost';
+import { lampShadowsOn, setLampShadows } from '../../../src/core/lamps';
+import { qualityLevel } from '../../../src/core/quality';
+import { QUALITY } from '../../../src/data/quality';
+import { canaryCost, costInTurns, flameCost, medianOf, timedRenders, timerOf } from './fireCost';
 import type { Lab } from './lab';
 
 /** how many of the draws with the most triangles are timed, and how many of those spread widest */
@@ -110,11 +113,44 @@ function partsShown(): Part[] {
   return [...whole, ...[...singles].map((mesh) => ({ name: nameOf(mesh), meshes: [mesh] }))];
 }
 
+/** What's switched in turns: a way the frame is drawn, on as the game has it and off. */
+interface Switch {
+  name: string;
+  turn: (on: boolean) => void;
+}
+
+/** The ways of drawing the frame that cost by the pixel, which hiding a mesh can't tell. */
+function switches(): Switch[] {
+  const preset = QUALITY[qualityLevel()];
+  const shadows = lampShadowsOn();
+  return [
+    { name: 'MSAA (off: none)', turn: (on) => renderer.setRenderQuality(on ? preset : { ...preset, msaa: 0 }) },
+    { name: 'MSAA (off: 2)', turn: (on) => renderer.setRenderQuality(on ? preset : { ...preset, msaa: 2 }) },
+    { name: 'the lamps\' still shadows', turn: (on) => setLampShadows(on && shadows) },
+    { name: 'the moon or sun\'s shadow map redrawn', turn: (on) => {
+      G.renderer.shadowMap.autoUpdate = on;
+    } },
+  ];
+}
+
+/** Each switch's time on the GPU, on and off in turns. */
+async function switchCosts(draw: () => void): Promise<string[]> {
+  const lines = ['what each way of drawing takes (the frame with it, and without):'];
+  for (const { name, turn } of switches()) {
+    const cost = await costInTurns(G.renderer, turn, draw);
+    if (!cost) continue;
+    const took = (cost.shown - cost.hidden).toFixed(2);
+    lines.push(`  ${took} ms: ${name}, the frame ${cost.shown.toFixed(2)} with it, ${cost.hidden.toFixed(2)} without`);
+  }
+  return lines;
+}
+
 /** Each part's time on the GPU as it's drawn and hidden, and its canary's problems. */
 export async function partCosts(lab: Lab, canary: boolean): Promise<{ lines: string[]; problems: string[] }> {
   const draw = (): void => renderer.render();
   const lines: string[] = [];
   await dearestWay(lab, lines);
+  lines.push(...await switchCosts(draw));
   lines.push('what the biggest parts take of the GPU that way (the frame drawn with each, and without):');
   const problems: string[] = [];
   const parts = partsShown();

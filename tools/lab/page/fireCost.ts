@@ -16,15 +16,25 @@ export interface FlameCost {
 const CANARY_TIMES = 4;
 export const CANARY_COST_LEAST = 2;
 
-/** What `parts` take of the GPU as `draw` renders the frame, drawn and not in turns; null where the browser times
- *  nothing. `draw` renders the frame as it stands, its camera on the flames. */
-export async function flameCost(renderer: THREE.WebGLRenderer, parts: THREE.Object3D[], draw: () => void):
+/** The frame's median time on the GPU with `turn` given true and false, in turns (it's left true); null where the
+ *  browser times nothing. `draw` renders the frame as it stands. */
+export async function costInTurns(renderer: THREE.WebGLRenderer, turn: (on: boolean) => void, draw: () => void):
   Promise<FlameCost | null> {
   const shown = (on: boolean) => {
     for (const part of parts) part.visible = on;
   };
   const cost = await costInTurns(renderer, shown, draw);
   return cost ? { shown: cost.on, hidden: cost.off, renders: cost.renders } : null;
+}
+
+/** What `parts` take of the GPU as `draw` renders the frame, drawn and not in turns; null where the browser times
+ *  nothing. `draw` renders the frame as it stands, its camera on the flames. */
+export function flameCost(renderer: THREE.WebGLRenderer, parts: THREE.Object3D[], draw: () => void):
+  Promise<FlameCost | null> {
+  const show = (on: boolean): void => {
+    for (const part of parts) part.visible = on;
+  };
+  return costInTurns(renderer, show, draw);
 }
 
 /** The canary's flames: `parts` drawn `CANARY_TIMES` over (copies sharing their geometry and material, so nothing
