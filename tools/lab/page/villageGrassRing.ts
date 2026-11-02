@@ -12,7 +12,7 @@ import type { Lab } from './lab';
 import { G } from '../../../src/state';
 import { holdHour } from '../../../src/game/clock';
 import { faceCamera, viewMode } from '../../../src/core/renderer';
-import { focusOf, meadowCombed, moveMeadowFocus } from '../../../src/world/meadow';
+import { focusOf, meadowCombed, meadowHandOver, moveMeadowFocus } from '../../../src/world/meadow';
 import { drawFrame, type Canvas } from './light';
 import { viewBy } from './villageHallCull';
 import type { LightsChecked } from './villageLights';
@@ -35,6 +35,12 @@ const FEWEST = 400;
 const LIT = 0.004;
 /** the most a band's grain may change as the rings move (a share of it) */
 const MOST_GRAIN = 0.15;
+/** how far the rings' middle goes in a stride (m), and the most of a band's light that may change in one */
+const STRIDE = 0.5;
+/** a band read only if blades cover this much of it: thin, over a road or a house's side, a few blades are all it has,
+ *  and it read the highest of all at every hand-over tried */
+const LEAST_COVER = 0.7;
+const MOST_CHANGED = 0.1;
 
 /** One band's grass in a frame: its pixels showing blades, and the sums of their light and of the light's steps to the
  *  next blade pixel beside each (over `pairs` of them). */
@@ -172,6 +178,78 @@ async function grassAsRingsMove(lab: Lab, canary: boolean): Promise<[number, Ban
     holdHour(null);
     await viewBy(lab, kept);
   }
+}
+
+/** How much of each band's light changes between two frames, pixel by pixel, each `[from m, its share]`. */
+function pixelsChanged(before: Canvas, after: Canvas, focus: THREE.Vector2): [number, number][] {
+  const bands = bandsUnder(before, focus);
+  const columns = Math.ceil(before.width / STEP);
+  const blades = new Array<number>(FARTHEST / BAND).fill(0);
+  const read = new Array<number>(FARTHEST / BAND).fill(0);
+  const lit = new Array<number>(FARTHEST / BAND).fill(0);
+  const changed = new Array<number>(FARTHEST / BAND).fill(0);
+  for (let y = 0; y < before.height; y += STEP) {
+    for (let x = 0; x < before.width; x += STEP) {
+      const band = bands[(y / STEP) * columns + x / STEP];
+      if (band < 0) continue;
+      read[band]++;
+      const i = (y * before.width + x) * 4;
+      const was = lightAt(before, i);
+      const is = lightAt(after, i);
+      if (Math.max(was, is) <= LIT) continue;
+      blades[band]++;
+      lit[band] += Math.max(was, is);
+      changed[band] += Math.abs(is - was);
+    }
+  }
+  return blades.flatMap((count, k): [number, number][] => {
+    return count < FEWEST || count < LEAST_COVER * read[k] ? [] : [[k * BAND, changed[k] / lit[k]]];
+  });
+}
+
+/** What of the grass changes in a stride or so of the rings' middle, band by band (as they did, with `canary`). */
+async function changedInAStride(lab: Lab, canary: boolean): Promise<[number, number][]> {
+  const kept = viewMode();
+  holdHour(HOUR);
+  if (canary) meadowHandOver(false);
+  try {
+    await viewBy(lab, 'third');
+    G.player.walkTo = null;
+    G.player.place(STAND, FACING);
+    faceCamera(FACING);
+    await lab.step(SETTLE);
+    G.player.obj.visible = false;
+    try {
+      const focus = focusOf(G.camera, new THREE.Vector2());
+      const sight = G.camera.getWorldDirection(new THREE.Vector3());
+      const ahead = new THREE.Vector2(sight.x, sight.z).normalize().multiplyScalar(STRIDE);
+      const [before, after] = bladesAlone(lab, ahead);
+      return pixelsChanged(before, after, focus);
+    } finally {
+      G.player.obj.visible = true;
+    }
+  } finally {
+    if (canary) meadowHandOver(true);
+    holdHour(null);
+    await viewBy(lab, kept);
+  }
+}
+
+/** No circle of blades coming and going round the hero: in a stride of the rings' middle, no band's light changing
+ *  past `MOST_CHANGED` (from play, "the circle of grass that keeps expanding/redrawing as I move"). `canary` hands
+ *  over as the rings did, across a fifth, each sheet grown whole. */
+export async function grassRingsGentle(lab: Lab, canary: boolean): Promise<LightsChecked> {
+  const bands = await changedInAStride(lab, canary);
+  if (bands.length < 10) throw new Error(`lab: village: only ${bands.length} bands of grass in view`);
+  const [worstAt, worst] = bands.reduce((a, b) => (b[1] > a[1] ? b : a));
+  const percent = (v: number): string => `${(v * 100).toFixed(1)}%`;
+  const line = `grass in a ${STRIDE} m stride of the rings' middle: the most of a band's light changed `
+    + `${percent(worst)} (${worstAt}-${worstAt + BAND} m out; at most ${percent(MOST_CHANGED)}); by band: `
+    + bands.map(([at, share]) => `${at}:${percent(share)}`).join(' ');
+  const seen = worst > MOST_CHANGED;
+  if (canary) return { lines: [line], problems: [], caught: seen, moments: [] };
+  const problems = seen ? [`${line}: a circle of blades comes and goes`] : [];
+  return { lines: [line], problems, caught: null, moments: [] };
 }
 
 /** The grass as its rings follow the hero: no band's grain changing past `MOST_GRAIN`. */

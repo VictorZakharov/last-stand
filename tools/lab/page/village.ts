@@ -41,6 +41,8 @@ import { everyLampCasts } from './villageLampShadows';
 import { hallCulledByDoor } from './villageHallCull';
 import { sunShadowKept } from './villageSunShadow';
 import { curbsFaceUp, roadsBendWide } from './villageRoads';
+import { hoardShowsStash } from './villageHoard';
+import { escClosesHelp } from './villageHelpEsc';
 import { propHoleWhereHidden } from './villageSeeThrough';
 import { hallWallsSteady } from './villageHallSteady';
 import { objectsUsedAgain } from './villageUseAgain';
@@ -48,7 +50,7 @@ import { hallWallsHold } from './villageHallSide';
 import { candleLightsNear, chestOpensNear } from './villageChestLid';
 import { wallingAligned } from './villageWalling';
 import { windowsLetSunIn } from './villageWindows';
-import { grassRingsUnseen } from './villageGrassRing';
+import { grassRingsGentle, grassRingsUnseen } from './villageGrassRing';
 
 export interface VillageOptions {
   canary: boolean;
@@ -100,6 +102,7 @@ export async function village(lab: Lab, options: VillageOptions): Promise<Report
     hallFreesPointer: () => hallFreesPointer(lab, options.canary),
     grassSteady: () => grassSteady(lab, options.canary),
     grassRingsUnseen: () => grassRingsUnseen(lab, options.canary),
+    grassRingsGentle: () => grassRingsGentle(lab, options.canary),
     roundCottages: () => roundCottages(lab, options.canary),
     walksAcross: () => walksAcross(lab, options.canary),
     lightsNotBlinding: () => lightsNotBlinding(lab, options.canary),
@@ -115,6 +118,8 @@ export async function village(lab: Lab, options: VillageOptions): Promise<Report
     hallWallsSteady: () => hallWallsSteady(lab, options.canary),
     roadsBendWide: () => roadsBendWide(options.canary),
     curbsFaceUp: () => curbsFaceUp(options.canary),
+    hoardShowsStash: () => hoardShowsStash(lab, options.canary),
+    escClosesHelp: () => escClosesHelp(lab, options.canary),
     wallingAligned: () => wallingAligned(options.canary),
     windowsLetSunIn: () => windowsLetSunIn(lab, options.canary),
     propHoleWhereHidden: () => propHoleWhereHidden(lab, options.canary),

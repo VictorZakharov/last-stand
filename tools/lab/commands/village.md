@@ -90,7 +90,11 @@ the casting lights handed over as his walk hands them, each lamp giving at least
 the least 74%; `--canary` puts each lamp out for both its readings at the last stop); the frame with the sun's map
 kept (`sunShadowKept`, `world/moonShadow.ts`) against it redrawn whole at one moment, at three spots, the last by the
 chest: 0.00% changed (`--canary` leaves what moves out of it, 1.1 to 1.3%); every curb's top facing up (`curbsFaceUp`,
-`--canary` reads them wound the other way); from inside the hall of
+`--canary` reads them wound the other way); what the chest's hoard draws, read as the frame with it and without at one
+moment, with the stash at 0, 1, 30 and 60 of 60 (`grassRingsGentle`: the light changed per band in a 0.5 m stride of the rings' middle, at most 10%; `--canary` hands
+over as they did) (`hoardShowsStash`: empty none at all, more as it fills; `--canary` reads
+five items as empty); how to play closed by Esc with the pointer locked, the browser's letting go of the lock as Esc is
+let go played by the page (`escClosesHelp`: no pause menu; `--canary` asks for the lock with Esc still down); from inside the hall of
 heroes over the shoulder, turned to its door (V pressed: the village's top view is its panels'), the frame drawn
 with what stands outside culled by the doorway (`world/hallPortal.ts`) and drawn whole, at midnight and noon:
 the scene's draws must fall and at most 0.05% of the pixels change (`page/villageHallCull.ts`: 425 draws to

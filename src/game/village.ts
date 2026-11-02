@@ -5,6 +5,7 @@
 // the one he's near, E using it.
 import * as THREE from 'three';
 import { G } from '../state';
+import { RUN } from '../data/balance';
 import { VILLAGE_OBJECTS, YARD, worldToYard, type VillageObject } from '../data/village';
 import { input, wasPressed, cylinder } from '../core/input';
 import { viewMode } from '../core/renderer';
@@ -122,6 +123,7 @@ function wakeByHero(on: boolean): void {
   candleLit = awake('chronicle', candleLit, on);
   G.arena.village.setChestNear(chestOpen);
   G.arena.village.setCandleNear(candleLit);
+  G.arena.village.setChestFull(G.profile.stash.length / RUN.bagLimit);
 }
 
 /** The object the hero is near enough to use (the nearest), or null. */

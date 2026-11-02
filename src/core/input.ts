@@ -44,6 +44,9 @@ export function releaseInput(): void {
 let canvasEl: HTMLCanvasElement;
 /** the close views lock the pointer for mouse look while a wave is on */
 let lockWanted = false, lockTried = 0;
+/** how long after Esc is let go no lock is asked for (ms), and when it last was; a lab's switch */
+const AFTER_ESC = 400;
+let escapeLetGo = -Infinity, lockHeldOffByEsc = true;
 /** when the pointer lock was lost without being asked to (Esc): that same Esc mustn't also unpause */
 export let lockLostAt = -1;
 let onLockLost: () => void = () => {};
@@ -76,8 +79,14 @@ function requestLock(): void {
 export function wantPointerLock(on: boolean): void {
   lockWanted = on;
   if (!on) { if (pointerLocked()) document.exitPointerLock(); return; }
+  // (not on the Esc that put a panel away: taken with it still down, the browser let the lock go again for that Esc, as
+  // a player's letting go of it, and the pause menu opened over what he had just closed: from play, "exiting from how
+  // to play should be possible with escape, it should not reopen another escape menu")
+  if (lockHeldOffByEsc && (input.down.has('escape') || performance.now() - escapeLetGo < AFTER_ESC)) return;
   if (!pointerLocked() && navigator.userActivation?.isActive && performance.now() - lockTried > 600) requestLock();
 }
+/** For a harness (tools/lab): the lock asked for even as Esc is down, as it was. */
+export function holdLockOffByEsc(on: boolean): void { lockHeldOffByEsc = on; }
 /** whether mouse look wants the pointer this frame (`lab village` reads it: headless, the lock itself may not come) */
 export const pointerWanted = (): boolean => lockWanted;
 export function onPointerLockLost(fn: () => void): void { onLockLost = fn; }
@@ -190,6 +199,7 @@ export function initInput(canvas: HTMLCanvasElement): void {
   window.addEventListener('keyup', (e) => {
     const k = keyName(e);
     input.down.delete(k);
+    if (k === 'escape') escapeLetGo = performance.now();
     // (let go alone, Alt would take the keys to the browser's menu)
     if (alt(k) && !typing(e)) e.preventDefault();
   });

@@ -1,7 +1,7 @@
 // A meadow's dense grass (after threejs-nanites' grass, its WebGL path): blades drawn round where the camera looks, in
 // three rings over grids of world cells that follow it (snapped to whole cells, so a blade stays where it is as the
 // view moves). A ring's cells are twice the size of the one inside it and its blades wider, and they hand over across
-// the last fifth of the inner ring by chance, so the ground stays as covered. Each cell's blade comes from a hash of the
+// the outer part of the inner ring by chance (`HAND_OVER`), so the ground stays as covered. Each cell's blade comes from a hash of the
 // cell: where it roots, how tall, which way it leans and bends; the keep test runs in the vertex shader (a dropped
 // blade is drawn as nothing at its root), against the ring's band and the meadow's mask (`MeadowMask`: where grass
 // grows, painted at build: none on a lane, round a house or under a tree). Each ring's grid is split into tiles, and
@@ -29,6 +29,16 @@ const TILES = 8;
 const WIDTH_IN_CELLS = 0.7;
 /** how much shorter than its blade a strand may be cut (a share of its height) */
 const STRAND_CUT = 0.35;
+/** how much of a ring its blades hand over to the next ring's across (a share of its radius), and how much of the
+ *  band's rise a blade takes to grow or shrink: over a fifth of the ring a line of blades came and went round the view
+ *  as he walked (from play, "the circle of grass that keeps expanding/redrawing as I move"); a blade grown more slowly
+ *  stood at half its height through the band, thinner than the grass either side */
+const HAND_OVER = 0.4;
+const BLADE_GROWS = 0.15;
+/** how far up the band's rise the last of a sheet's strands starts to rise */
+const STRANDS_RISE = 0.55;
+/** the hand-over as it was, for a harness (`meadowHandOver`) */
+const SHARP_HAND_OVER = 0.2;
 /** how far before it the camera's sight is followed onto the ground for the rings' middle (m, at most), and the least
  *  steepness of the sight it's followed by (the sine of its pitch down): followed onto the ground as far as it went,
  *  a sight near level moved it from 2 m to 24 m and back as the head bobbed through the eyes, the dense ring with it,
@@ -233,11 +243,13 @@ const VERTEX_HEAD = /* glsl */ `
   uniform vec2 uTiles[${TILES * TILES}];
   uniform vec2 uFocus;
   uniform vec4 uBand;
+  uniform float uByStrand;
   uniform float uTime;
   ${MEADOW_AT_GLSL}
   varying vec3 vBladeColour;
   varying vec2 vBlade;
   varying vec2 vStrands;
+  varying vec2 vGrowing;
   uvec2 pcg2d(uvec2 v) {
     v = v * 1664525u + 1013904223u;
     v.x += v.y * 1664525u; v.y += v.x * 1664525u;
@@ -281,13 +293,20 @@ const VERTEX_BLADE = /* glsl */ `
   vec2 maskUv = root / (2.0 * uMeadowHalf) + 0.5;
   float grows = texture2D(uMeadow, maskUv).r;
   float patchy = noise2(root * 0.15) * 0.65 + noise2(root * 0.55 + 9.1) * 0.35;
-  float chance = band * smoothstep(0.08, 0.6, grass) * smoothstep(0.3, 0.7, grows)
+  float chance = smoothstep(0.08, 0.6, grass) * smoothstep(0.3, 0.7, grows)
     * mix(0.75, 1.0, smoothstep(0.25, 0.7, patchy));
   // (each blade grows in as its chance rises past its own share, and shrinks away as it falls: switched on and off,
   // the blades in a ring's band, which moves with the hero, came and went in a line ahead of him as he walked, "grass
   // keeps redrawing itself in front of me"); none where its chance is none: faded in below its share, the lowest
   // shares grew on the paved roads, "we dont need grass on paved roads")
   float on = smoothstep(h.z * 0.85, h.z * 0.85 + 0.15, chance);
+  // (the ring's band apart from that, by a share of the blade's own, and slowly: what stands still keeps its look; a
+  // sheet of strands stands whole while its band is any, each strand rising by its own share as it's shaded: the sheet
+  // grown from nothing, its strands rose together and spread out from its middle, a sheet to 84 cm wide at 20 m out)
+  float byStrand = uByStrand * uCombed * step(1.5, uWider);
+  float share = fract(h.z * 3.17) * ${(1 - BLADE_GROWS).toFixed(2)};
+  on *= mix(smoothstep(share, share + ${BLADE_GROWS.toFixed(2)}, band), step(0.001, band), byStrand);
+  vGrowing = vec2(band, byStrand);
   float height = on * mix(0.2, 0.46, h.w) * mix(0.55, 1.0, grass) * mix(0.75, 1.25, tuft) * mix(0.8, 1.15, patchy);
   float width = on * uCell * uWider * ${WIDTH_IN_CELLS.toFixed(2)} * mix(0.8, 1.25, fract(h.z * 7.13));
   float turn = h.w * 6.2832 + h.x * 3.0;
@@ -338,6 +357,11 @@ const FRAGMENT_COLOUR = /* glsl */ `
     float strand = floor(strandAt);
     acrossB = abs(fract(strandAt) * 2.0 - 1.0);
     float tall = 1.0 - ${STRAND_CUT.toFixed(2)} * fract(sin(strand * 12.9898 + vStrands.y * 78.233) * 43758.5453);
+    // (all risen before the band's middle, as the blades they take over from go: risen across the whole of it, the
+    // band stood thinner and coarser than the grass either side)
+    float risesAt = fract(sin(strand * 39.346 + vStrands.y * 11.135) * 24634.6345) * ${STRANDS_RISE.toFixed(2)};
+    tall *= mix(1.0, smoothstep(risesAt, risesAt + ${BLADE_GROWS.toFixed(2)}, vGrowing.x), vGrowing.y);
+    if (tall < 0.01) discard;
     along = vBlade.x / tall;
     if (along > 1.0 || acrossB > 1.0 - pow(along, 2.5)) discard;
   }
@@ -358,7 +382,13 @@ interface RingUniforms extends MaskUniforms {
   uTiles: { value: THREE.Vector2[] };
   uFocus: { value: THREE.Vector2 };
   uBand: { value: THREE.Vector4 };
+  uByStrand: { value: number };
   uTime: { value: number };
+}
+
+/** A ring's band across `share` of each edge: from the ring inside (`inner`, none in the first) to its own radius. */
+function bandOf(band: THREE.Vector4, inner: number, radius: number, share: number): void {
+  band.set(inner ? inner * (1 - share) : -2, inner || -1, radius * (1 - share), radius);
 }
 
 /** every ring's uniforms, as built, and how far a harness has moved their middle off where the view puts it (m) */
@@ -376,6 +406,14 @@ export function meadowCombed(on: boolean): void {
   for (const u of rings) u.uCombed.value = on ? 1 : 0;
 }
 
+/** For a harness (tools/lab): the rings handing over as they do, or across a fifth, each sheet grown whole, as they did. */
+export function meadowHandOver(wide: boolean): void {
+  rings.forEach((u, k) => {
+    bandOf(u.uBand.value, k ? RINGS[k - 1].radius : 0, RINGS[k].radius, wide ? HAND_OVER : SHARP_HAND_OVER);
+    u.uByStrand.value = wide ? 1 : 0;
+  });
+}
+
 /** A ring's material: the standard one, its points placed as its blades (`VERTEX_BLADE`), coloured as grass;
  *  `combed`, its blades cut into strands, a program of its own (a discard in it would hold the depth test back to
  *  after the shading for the first ring's dense blades too, which never cut). */
@@ -389,7 +427,7 @@ function bladeMaterial(u: RingUniforms, combed: boolean): THREE.MeshStandardMate
       .replace('#include <beginnormal_vertex>', VERTEX_BLADE)
       .replace('#include <begin_vertex>', 'vec3 transformed = bladePos;');
     shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', '#include <common>\nvarying vec3 vBladeColour;\nvarying vec2 vBlade;\nvarying vec2 vStrands;')
+      .replace('#include <common>', '#include <common>\nvarying vec3 vBladeColour;\nvarying vec2 vBlade;\nvarying vec2 vStrands;\nvarying vec2 vGrowing;')
       .replace('vec4 diffuseColor = vec4( diffuse, opacity );', FRAGMENT_COLOUR)
       // (the face bent up is the lit one from either side: flipped on the back, every blade's back was dark)
       .replace('#include <normal_fragment_begin>',
@@ -443,12 +481,14 @@ export function buildMeadow(mask: MeadowMask, maskTexture: THREE.Texture, update
       uS: { value: S },
       uTiles: { value: Array.from({ length: TILES * TILES }, () => new THREE.Vector2()) },
       uFocus: { value: new THREE.Vector2() },
-      // (handed over from the ring inside across its last fifth; the first's inner edge never reached)
-      uBand: { value: new THREE.Vector4(k === 0 ? -2 : inner * 0.8, k === 0 ? -1 : inner, ring.radius * 0.8, ring.radius) },
+      // (handed over from the ring inside; the first's inner edge never reached)
+      uBand: { value: new THREE.Vector4() },
+      uByStrand: { value: 1 },
       uTime: time,
       uMeadow: { value: maskTexture },
       uMeadowHalf: { value: mask.half },
     };
+    bandOf(u.uBand.value, inner, ring.radius, HAND_OVER);
     rings.push(u);
     const geo = bladeGeometry(ring.segs);
     const mesh = new THREE.Mesh(geo, bladeMaterial(u, k > 0));
@@ -469,7 +509,7 @@ export function buildMeadow(mask: MeadowMask, maskTexture: THREE.Texture, update
           const near = Math.hypot(Math.max(x0 - focus.x, 0, focus.x - x0 - w), Math.max(z0 - focus.y, 0, focus.y - z0 - w));
           if (near >= ring.radius) continue;
           const far = Math.hypot(Math.max(focus.x - x0, x0 + w - focus.x), Math.max(focus.y - z0, z0 + w - focus.y));
-          if (far <= inner * 0.8) continue;
+          if (far <= inner * (1 - HAND_OVER)) continue;
           // (a blade leans and bends up to half a metre off its cell)
           _box.min.set(x0 - 0.5, -0.1, z0 - 0.5);
           _box.max.set(x0 + w + 0.5, 0.8, z0 + w + 0.5);

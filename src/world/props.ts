@@ -433,13 +433,16 @@ export function buildGrassTuft(rng: () => number, blades: number, c: TuftColours
 }
 
 // Box whose UVs are scaled by world size so textures don't stretch.
-export function boxWithUV(w: number, h: number, d: number, texel = 0.5): THREE.BufferGeometry {
+// `grained`: a map's v laid along each face's longer side, as a beam's grain runs along it.
+export function boxWithUV(w: number, h: number, d: number, texel = 0.5, grained = false): THREE.BufferGeometry {
   const g = new THREE.BoxGeometry(w, h, d);
   const uv = g.attributes.uv, n = g.attributes.normal;
   for (let i = 0; i < uv.count; i++) {
     const ax = Math.abs(n.getX(i)), ay = Math.abs(n.getY(i));
     const sw = ax > 0.5 ? d : w, sh = ay > 0.5 ? d : h;
-    uv.setXY(i, uv.getX(i) * sw * texel, uv.getY(i) * sh * texel);
+    const a = uv.getX(i) * sw * texel, b = uv.getY(i) * sh * texel;
+    if (grained && sw > sh) uv.setXY(i, b, a);
+    else uv.setXY(i, a, b);
   }
   return g;
 }

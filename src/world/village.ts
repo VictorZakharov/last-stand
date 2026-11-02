@@ -107,11 +107,22 @@ const MOTE_COLORS: Record<BiomeId, { rim: THREE.Color; core: THREE.Color }> = {
 /** the yard's torches on its gate posts: their fire's height, their light */
 const YARD_TORCH = { up: 2.25, color: 0xff8a3c, intensity: 3.2, distance: 10 };
 /** the candle on the chronicle's lectern: its light */
-const CANDLE = { color: 0xffc070, intensity: 2.2, distance: 6 };
+const CANDLE = { color: 0xffc070, intensity: 0.1, distance: 6, over: 0.12, flame: 0xff7a20, flameShows: 0.85, core: 0xffe6a0, coreLit: 2.4 };
 /** how little the chest's lid moves in a frame to count as still */
 const LID_STILL = 0.002;
-/** how high the chest's hoard stands under its shut lid (of its height open) */
-const HOARD_SHUT = 0.45;
+/** the chest's floor, inside it (m), and the highest what's in it may stand under the shut lid (m) */
+const CHEST_FLOOR = 0.06;
+const UNDER_LID = 0.69;
+/** the top of the goblet in a full chest (m over the box's foot) */
+const HOARD_TOP = 0.92;
+/** how little of a coin's size counts as nothing (a hidden mesh compiles nothing: all of it stays drawn) */
+const NOTHING = 1e-4;
+/** how fast the hoard follows the stash as it's seen open, and the difference it stops at */
+const HOARD_EASE = 6;
+const HOARD_NEAR = 0.002;
+/** the coins shown: the stash's share to this power, and at least so many */
+const COINS_BY = 1.7;
+const COINS_LEAST = 3;
 
 /** the village's light at each height of the sun (its sine): the night's, the twilight's and the day's */
 // (a bright moonlit night, a golden evening, a clear spring day)
@@ -134,6 +145,8 @@ export interface Village extends Biome {
   setChestNear(near: boolean): void;
   /** the hero by the chronicle or not: its candle's lit for him */
   setCandleNear(near: boolean): void;
+  /** how full the stash is (of 1): the chest's hoard shows it */
+  setChestFull(full: number): void;
   /** its trees as they stand (the map draws them) */
   trees: readonly { x: number; z: number; height: number }[];
   /** the street lamps' lanterns, each lit by the lit shaders' lamps (`core/lamps.ts`; game/village.ts `lightLamps`) */
@@ -181,7 +194,8 @@ function solid(group: THREE.Object3D, geometry: THREE.BufferGeometry, material: 
 /** A box of size (w, h, d) standing on y0, its middle at (x, z), turned `turn` about y, added to `group`. */
 function block(group: THREE.Object3D, w: number, h: number, d: number, x: number, y0: number, z: number,
   material: THREE.Material, texel = 0.5, turn = 0): THREE.Mesh {
-  const mesh = solid(group, boxWithUV(w, h, d, texel), material);
+  // (wood's grain along its length: across a beam's top, its stripes read as teeth along the edge, "house topology errors")
+  const mesh = solid(group, boxWithUV(w, h, d, texel, material.userData.grained === true), material);
   mesh.position.set(x, y0 + h / 2, z);
   mesh.rotation.y = turn;
   return mesh;
@@ -327,8 +341,8 @@ function makeMats(): Mats {
     column: new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(grunge(), [1, 2], 0.5), color: 0xccc2b0 }),
     // (lime plaster, washed warm and stained: the grunge map's patches under a cream)
     plaster: new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(grunge(), 1, 0.6), color: 0xd8c8a8 }),
-    timber: new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(wood(), 1, 1), color: 0x5a4030 }),
-    planks: new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(wood(), 1, 1), color: 0x8a6a4a }),
+    timber: new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(wood(), 1, 1), color: 0x5a4030, userData: { grained: true } }),
+    planks: new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(wood(), 1, 1), color: 0x8a6a4a, userData: { grained: true } }),
     logs: new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(bark(), [1, 2], 1.4), color: 0x8a7a6a }),
     roof: new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(slate(33, 2, 2), 1, 1.3), color: 0x6a6870 }),
     iron: new THREE.MeshStandardMaterial({ color: 0x2a2a2e, metalness: 0.9, roughness: 0.7 }),
@@ -351,8 +365,9 @@ function makeMats(): Mats {
     pagesRight: new THREE.MeshStandardMaterial({ map: bookPage(79, true), color: 0x7a7264, roughness: 1 }),
     pagesEdge: new THREE.MeshStandardMaterial({ map: pageEdges(), roughness: 1 }),
     ribbon: new THREE.MeshStandardMaterial({ color: 0x5a1416, roughness: 0.7 }),
-    wax: new THREE.MeshStandardMaterial({ color: 0xd8cfb4, roughness: 0.5 }),
-    pearl: new THREE.MeshStandardMaterial({ color: 0xcfc8b8, roughness: 0.3 }),
+    // (darker than it looks: pale, the porch's torch beside it lit it evenly bright from rim to foot, its bloom round it)
+    wax: new THREE.MeshStandardMaterial({ color: 0x7a7262, roughness: 0.6 }),
+    pearl: new THREE.MeshStandardMaterial({ color: 0x9c9688, roughness: 0.45 }),
     chestWood: new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(boards(), 1, 0.6), color: 0xb09070 }),
     chestIron: new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(hammered(), 1, 1), color: 0xe6e6ea, metalness: 0.4 }),
     binding: new THREE.MeshStandardMaterial({ color: 0x4a1c16, roughness: 0.8 }),
@@ -633,7 +648,7 @@ export function buildVillage(scene: THREE.Group): Village {
   const lid = buildChest(scene, M, obstacles);
   const pile = lid.parent!.getObjectByName('chest-hoard')!;
   stillBuilt(scene, () => buildLectern(scene, M, obstacles));
-  const candle = candleFlame(scene, M, lights);
+  const candle = candleFlame(scene, torchLook(), lights);
   stillBuilt(scene, () => buildPalisade(scene, wall, M, rng));
   const portals: Portal[] = stillBuilt(scene, () => [buildCryptWay(scene, wall, M, updaters), buildForestWay(scene, wall, updaters)]);
   const exits = {} as Village['exits'];
@@ -661,15 +676,20 @@ export function buildVillage(scene: THREE.Group): Village {
   updaters.push(portalMotes());
 
   let lidOpen = 0, chestShown = false, chestNear = false, candleLit = 0, candleNear = false;
+  let hoardWanted = 1, hoardFull = 1, hoardDrawn = { full: -1, open: -1 };
   updaters.push((dt) => {
     const lidWas = lidOpen;
     lidOpen += ((chestShown || chestNear ? 1 : 0) - lidOpen) * Math.min(1, dt * 8);
     // (its shadow on the sun's kept map)
     if (Math.abs(lidOpen - lidWas) > LID_STILL) stillMoved();
     lid.rotation.x = -lidOpen * 1.4;
-    // (the heap settled under the shut lid, or its goblet and top coins stood out through the wood; about the rim)
-    pile.scale.y = HOARD_SHUT + (1 - HOARD_SHUT) * lidOpen;
-    pile.position.y = pile.userData.rim * (1 - pile.scale.y);
+    // (as full as the stash is: at once with the lid shut, and rising or sinking where it's seen)
+    hoardFull += (hoardWanted - hoardFull) * Math.min(1, dt * HOARD_EASE);
+    if (lidOpen < LID_STILL || Math.abs(hoardWanted - hoardFull) < HOARD_NEAR) hoardFull = hoardWanted;
+    if (hoardFull !== hoardDrawn.full || lidOpen !== hoardDrawn.open) {
+      (pile.userData.show as (full: number, open: number) => void)(hoardFull, lidOpen);
+      hoardDrawn = { full: hoardFull, open: lidOpen };
+    }
     candleLit += ((candleNear ? 1 : 0) - candleLit) * Math.min(1, dt * 5);
     // (never quite out: a light at no strength stays a light, or every shader compiles again)
     candle.scale.setScalar(Math.max(0.001, candleLit));
@@ -697,6 +717,7 @@ export function buildVillage(scene: THREE.Group): Village {
     setChest(open) { chestShown = open; },
     setChestNear(near) { chestNear = near; },
     setCandleNear(near) { candleNear = near; },
+    setChestFull(full) { hoardWanted = full; },
     daylight(hour, look) {
       Object.assign(look, lookAt(hour));
       sky.set(hour);
@@ -1462,17 +1483,22 @@ function hallRoof(scene: THREE.Object3D, M: Mats, eaves: number, back: number, f
   return roof;
 }
 
-/** What the open chest shows: a heap of gold in it, coins strewn over the heap, gems, a goblet. All of
- *  it stands under the lid's drum as it shuts. Spread over `w` by `d`, the box's rim at `h`. */
+/** What the open chest shows, as full as the stash is: coins strewn over its floor, a heap of gold under them once
+ *  there are enough, gems, then pearls, then a goblet; none of it in an empty stash. All of it stands under the lid's
+ *  drum as it shuts. Spread over `w` by `d`, the box's rim at `h`; its `userData.show` sets how full it is and how far
+ *  the lid stands open. */
 function chestHoard(chest: THREE.Object3D, M: Mats, w: number, d: number, h: number): void {
   const g = new THREE.Group();
   g.name = 'chest-hoard';
-  g.userData.rim = h - 0.05;
   chest.add(g);
-  const add = (geo: THREE.BufferGeometry, material: THREE.Material, x: number, y: number, z: number): THREE.Mesh => {
+  // (the heap and all that lies on it, raised from the floor as it fills)
+  const heaped = new THREE.Group();
+  g.add(heaped);
+  const add = (geo: THREE.BufferGeometry, material: THREE.Material, x: number, y: number, z: number,
+    into: THREE.Object3D = heaped): THREE.Mesh => {
     const mesh = new THREE.Mesh(geo, material);
     mesh.position.set(x, y, z);
-    g.add(mesh);
+    into.add(mesh);
     return mesh;
   };
   // the heap: corner to corner at the rim's height, rising lumpily over it (the same lumps for what lies on it)
@@ -1488,7 +1514,7 @@ function chestHoard(chest: THREE.Object3D, M: Mats, w: number, d: number, h: num
   const at = heap.attributes.position;
   for (let k = 0; k < at.count; k++) at.setY(k, heapAt(at.getX(k), at.getZ(k)));
   heap.computeVertexNormals();
-  add(heap, M.gold, 0, 0, 0);
+  const heapMesh = add(heap, M.gold, 0, 0, 0);
   // the coins lying every way over it, thick enough that the heap reads as coins
   const coins: THREE.BufferGeometry[] = [];
   for (let k = 0; k < 950; k++) {
@@ -1498,17 +1524,19 @@ function chestHoard(chest: THREE.Object3D, M: Mats, w: number, d: number, h: num
     coins.push(new THREE.CylinderGeometry(0.034, 0.034, 0.008, 10).applyQuaternion(new THREE.Quaternion().setFromEuler(turn))
       .translate(x, heapAt(x, z) + 0.002 + rng() * 0.012, z));
   }
-  add(mergeGeometries(coins)!, M.coin, 0, 0, 0);
+  const coinCount = coins.length;
+  const coinsMesh = add(mergeGeometries(coins)!, M.coin, 0, 0, 0);
+  const perCoin = coinsMesh.geometry.index!.count / coinCount;
   for (const c of coins) c.dispose();
   // the gems half sunk in it, each cut as a gem is: a flat table, a crown, a point below (flat faces)
   const cut = new THREE.LatheGeometry([[0.001, -0.042], [0.042, 0.006], [0.028, 0.026], [0.001, 0.026]]
     .map(([r, y]) => new THREE.Vector2(r, y)), 8).toNonIndexed();
   cut.computeVertexNormals();
   const gemsAt: [number, number][] = [[-0.3, 0.1], [-0.08, -0.12], [0.14, 0.13], [0.34, -0.05], [0.02, 0.03], [-0.17, 0.17], [0.27, -0.13]];
-  gemsAt.forEach(([x, z], k) => {
-    const gem = add(cut, M.gems[k % M.gems.length], x, heapAt(x, z) + 0.022, z);
+  const gems = gemsAt.map(([x, z], k) => {
+    const gem = add(cut, M.gems[k % M.gems.length], x, 0, z, g);
     gem.rotation.set(0.5 + k * 0.4, k * 1.3, 0.3 - k * 0.2);
-    gem.scale.setScalar(1.5);
+    return { gem, y: heapAt(x, z) + 0.022, from: (k + 1) / (gemsAt.length + 1) };
   });
   // a string of pearls over the heap
   const pearls: THREE.BufferGeometry[] = [];
@@ -1516,14 +1544,41 @@ function chestHoard(chest: THREE.Object3D, M: Mats, w: number, d: number, h: num
     const t = k / 33, x = 0.02 + 0.34 * t, z = -0.02 + 0.16 * Math.sin(t * Math.PI * 1.6) - 0.08 * t;
     pearls.push(new THREE.SphereGeometry(0.011, 8, 6).translate(x, heapAt(x, z) + 0.016, z));
   }
-  add(mergeGeometries(pearls)!, M.pearl, 0, 0, 0);
+  const pearlsMesh = add(mergeGeometries(pearls)!, M.pearl, 0, 0, 0);
   for (const p of pearls) p.dispose();
   // the goblet stood in the heap at one end, leaning: its foot, stem and cup, a band of gold round the cup
   const profile = [[0.03, 0], [0.012, 0.012], [0.01, 0.07], [0.04, 0.1], [0.045, 0.16], [0.04, 0.16], [0.03, 0.11]]
     .map(([r, y]) => new THREE.Vector2(r, y));
-  const goblet = add(new THREE.LatheGeometry(profile, 14), M.coin, -0.24, heapAt(-0.24, -0.1) - 0.005, -0.1);
+  const gobletY = heapAt(-0.24, -0.1) - 0.005;
+  const goblet = add(new THREE.LatheGeometry(profile, 14), M.coin, -0.24, gobletY, -0.1, g);
   goblet.rotation.set(-0.12, 0, 0.22);
-  goblet.scale.setScalar(1.4);
+  const raised = (y: number, full: number): number => CHEST_FLOOR + (y - CHEST_FLOOR) * full;
+  g.userData.show = (full: number, open: number): void => {
+    g.scale.setScalar(full > 0 ? 1 : NOTHING);
+    // (settled under the shut lid only as far as it would stand through the wood: its goblet and top coins stood out)
+    const top = raised(HOARD_TOP, full);
+    const shut = Math.min(1, (UNDER_LID - CHEST_FLOOR) / (top - CHEST_FLOOR));
+    const settled = shut + (1 - shut) * open;
+    if (full > 0) g.scale.y = settled;
+    g.position.y = full > 0 ? CHEST_FLOOR * (1 - settled) : 0;
+    const level = Math.max(NOTHING, full);
+    heaped.scale.y = level;
+    heaped.position.y = CHEST_FLOOR * (1 - level);
+    // (a few coins lie on the bare floor: the heap's skin comes up from under it as they cover it)
+    const risen = THREE.MathUtils.smoothstep(full, 0.25, 0.5);
+    // (well under the floor until then: its lumps came through the coins in torn islands at 10 items of 60, a review)
+    heapMesh.position.y = -(1 - risen) * 0.3 / level;
+    // (fewer than the share: flat on the floor they cover far more of it than heaped, and by the share 10 items of 60
+    // carpeted it as 30 did, a review)
+    coinsMesh.geometry.setDrawRange(0, Math.max(COINS_LEAST, Math.ceil(coinCount * full ** COINS_BY)) * perCoin);
+    pearlsMesh.scale.setScalar(full >= 0.5 ? 1 : NOTHING);
+    for (const { gem, y, from } of gems) {
+      gem.position.y = raised(y, full);
+      gem.scale.setScalar(full >= from ? 1.5 : NOTHING);
+    }
+    goblet.position.y = raised(gobletY, full);
+    goblet.scale.setScalar(full >= 0.7 ? 1.4 : NOTHING);
+  };
 }
 
 /** The stash's chest right of the hall's door: an iron-bound box, its lid hinged at the back (returned, to swing). */
@@ -1632,18 +1687,36 @@ function buildChest(scene: THREE.Object3D, M: Mats, obstacles: Obstacle[]): THRE
 }
 
 /** The candle's flame and its light, over the lectern's candle (the part of it that moves: lit as the hero comes). */
-function candleFlame(scene: THREE.Object3D, M: Mats, lights: THREE.PointLight[]): THREE.Group {
+function candleFlame(scene: THREE.Object3D, look: TorchLook, lights: THREE.PointLight[]): THREE.Group {
   const { x, z, facing } = CHRONICLE, turn = facing + Math.PI / 2;
   const group = new THREE.Group();
   // (as the lectern's group turns its holder: at its 0.068, 0.394 off the post)
   group.position.set(x + 0.068 * Math.cos(turn) + 0.394 * Math.sin(turn), TERRACE.high + 1.283, z - 0.068 * Math.sin(turn) + 0.394 * Math.cos(turn));
-  const flame = new THREE.Mesh(flameGeometry(0.011, 0.052, 0.004), M.glass);
+  // (a see-through orange tongue round a pale core, on a wick: one colour, darker than the wax it wasn't what's lit,
+  // brighter it was "a glowing cone", a review; the same programs as a torch's flame and its glow)
+  const fireOf = (colour: number, lit: number): THREE.MeshStandardMaterial => {
+    const fire = look.fire.clone() as THREE.MeshStandardMaterial;
+    fire.emissive.setHex(colour);
+    fire.emissiveIntensity = lit;
+    return fire;
+  };
+  const tongue = look.glow.clone() as THREE.MeshBasicMaterial;
+  tongue.color.setHex(CANDLE.flame);
+  tongue.opacity = CANDLE.flameShows;
+  const flame = new THREE.Mesh(flameGeometry(0.015, 0.07, 0.004), tongue);
   flame.name = 'candle-flame';
   group.add(flame);
+  // (what lights up is its fire: a light of 2.2 a hand's breadth over the wax burned the whole candle white, from play
+  // "candle should light up, meaning the fire on it, not whole candle"; just over it, the wax falls off from the top)
   const light = new THREE.PointLight(CANDLE.color, CANDLE.intensity, CANDLE.distance, 2);
-  // (well over the flame: nearer, the wax's foot and the dish facing up under it bloomed white)
-  light.position.y = 0.35;
+  light.position.y = CANDLE.over;
   group.add(light);
+  const core = new THREE.Mesh(flameGeometry(0.008, 0.038, 0.002), fireOf(CANDLE.core, CANDLE.coreLit));
+  core.position.y = 0.006;
+  group.add(core);
+  const wick = new THREE.Mesh(new THREE.CylinderGeometry(0.0015, 0.0015, 0.014, 5), fireOf(0, 0));
+  wick.position.y = 0.002;
+  group.add(wick);
   scene.add(group);
   lights.push(light);
   return group;
@@ -1779,11 +1852,17 @@ function buildCottage(scene: THREE.Object3D, wall: Wall, M: Mats, c: Cottage, rn
     // (its own uvs: the panes' picture once across its face)
     solid(g, new THREE.BoxGeometry(0.8, 0.7, 0.04), M.window).position.set(wx, 1.7, face);
     for (const ex of [-1, 1]) block(g, 0.08, 0.86, 0.1, wx + ex * 0.44, 1.27, face + 0.02, M.timber);
-    block(g, 0.96, 0.08, 0.1, 0, 0, 0, M.timber).position.set(wx, 2.05, face + 0.02);
-    block(g, 1.04, 0.07, 0.2, wx, 1.22, face + 0.06, M.timber);
+    block(g, 0.96, 0.08, 0.1, wx, 2.05, face + 0.02, M.timber);
+    // (under the panes: a hand lower, the plaster showed between them and the sill)
+    block(g, 1.04, 0.07, 0.2, wx, 1.29, face + 0.06, M.timber);
     for (const k of [-1, 1]) {
-      const shutter = block(g, 0.42, 0.74, 0.05, sx * (w / 2 - 1.2) + k * 0.65, 1.33, d / 2 + 0.1, M.planks);
-      shutter.rotation.y = k * (0.3 + rng() * 0.6);
+      // (hung by its edge on the casing and swung out from the wall: turned about its middle, one edge of each stood
+      // through the plaster and the other off it, "house topology errors")
+      const hinge = new THREE.Group();
+      hinge.position.set(wx + k * 0.48, 1.37, d / 2 + 0.09);
+      hinge.rotation.y = -k * (0.3 + rng() * 0.6);
+      g.add(hinge);
+      block(hinge, 0.42, 0.74, 0.05, k * 0.21, 0, 0.025, M.planks);
     }
   }
   // the roof: two slopes of slate over the gables, and the gables' triangles of plaster
