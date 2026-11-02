@@ -8,9 +8,9 @@
   <meta name="theme-color" content="#050303" />
   <title>Last Stand</title>
   <meta name="description" content="Last Stand — a 3D wave-survival action RPG arena that runs in your browser." />
-  <link rel="icon" type="image/svg+xml" href="/pr-preview/pr-329/db57460/favicon.svg" />
+  <link rel="icon" type="image/svg+xml" href="/pr-preview/pr-329/12294f2/favicon.svg" />
   <!-- installable, offline game: the build adds the Apple touch icon and the service worker (scripts/pwa.ts) -->
-  <link rel="manifest" href="/pr-preview/pr-329/db57460/manifest.webmanifest" />
+  <link rel="manifest" href="/pr-preview/pr-329/12294f2/manifest.webmanifest" />
   <meta name="apple-mobile-web-app-title" content="Last Stand" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -100,10 +100,10 @@
       #loading .ld-ember { display: none; }
     }
   </style>
-  <script type="module" crossorigin src="/pr-preview/pr-329/db57460/assets/index-cdi0b9Vd.js"></script>
-  <link rel="modulepreload" crossorigin href="/pr-preview/pr-329/db57460/assets/three-Bfox2mtZ.js">
-  <link rel="stylesheet" crossorigin href="/pr-preview/pr-329/db57460/assets/index-B7-9tmdk.css">
-  <link rel="apple-touch-icon" href="/pr-preview/pr-329/db57460/apple-touch-icon.png">
+  <script type="module" crossorigin src="/pr-preview/pr-329/12294f2/assets/index-aFprbqMs.js"></script>
+  <link rel="modulepreload" crossorigin href="/pr-preview/pr-329/12294f2/assets/three-Bfox2mtZ.js">
+  <link rel="stylesheet" crossorigin href="/pr-preview/pr-329/12294f2/assets/index-BaoEFFRk.css">
+  <link rel="apple-touch-icon" href="/pr-preview/pr-329/12294f2/apple-touch-icon.png">
 </head>
 <body>
   <!-- The "LAST STAND" logo (loading screen and lobby): brushed steel lit as a bevel over a crimson glow -->
@@ -135,6 +135,7 @@
             <feMerge><feMergeNode in="shadow"/><feMergeNode in="rim"/><feMergeNode in="lit"/></feMerge>
           </filter>
       <filter id="logo-glow-blur" x="-30%" y="-40%" width="160%" height="180%"><feGaussianBlur stdDeviation="14"/></filter>
+      <g id="village-words"><text font-family="Cinzel, Georgia, serif" font-weight="900" text-anchor="middle" x="350" y="112" font-size="104" letter-spacing="4" textLength="670" lengthAdjust="spacingAndGlyphs">WARDENHOLLOW</text></g>
       <g id="logo-words"><text font-family="Cinzel, Georgia, serif" font-weight="900" text-anchor="middle" x="350" y="118" font-size="104" letter-spacing="14" textLength="400" lengthAdjust="spacingAndGlyphs">LAST</text><text font-family="Cinzel, Georgia, serif" font-weight="900" text-anchor="middle" x="350" y="282" font-size="170" letter-spacing="10" textLength="640" lengthAdjust="spacingAndGlyphs">STAND</text><text font-family="Cinzel, Georgia, serif" font-weight="900" text-anchor="middle" x="350" y="118" font-size="104" letter-spacing="14" textLength="400" lengthAdjust="spacingAndGlyphs">LAST</text><text font-family="Cinzel, Georgia, serif" font-weight="900" text-anchor="middle" x="350" y="282" font-size="170" letter-spacing="10" textLength="640" lengthAdjust="spacingAndGlyphs">STAND</text></g>
     </defs>
   </svg>
@@ -255,14 +256,13 @@
       <button data-lt="skills"><span class="ri">✦</span>Skills</button>
       <button id="rail-close"><span class="ri">✕</span>Close</button>
     </nav>
-    <!-- the village's crest: the logo (the loading screen's gathers into it), and a co-op room's bar under it -->
+    <!-- the village's crest: its name (the loading screen's logo gathers into it), and a co-op room's bar under it -->
     <div class="menu-crest">
       <div class="logo">
-        <div class="logo-art" role="img" aria-label="Last Stand">
-          <svg class="logo-glow" viewBox="0 0 700 330" aria-hidden="true"><use href="#logo-words" fill="#e0280c" filter="url(#logo-glow-blur)"/></svg>
-          <svg viewBox="0 0 700 330" aria-hidden="true"><use href="#logo-words" fill="url(#logo-steel)" filter="url(#logo-metal)"/></svg>
+        <div class="logo-art" role="img" aria-label="Wardenhollow">
+          <svg class="logo-glow" viewBox="0 0 700 150" aria-hidden="true"><use href="#village-words" fill="#e0280c" filter="url(#logo-glow-blur)"/></svg>
+          <svg viewBox="0 0 700 150" aria-hidden="true"><use href="#village-words" fill="url(#logo-steel)" filter="url(#logo-metal)"/></svg>
         </div>
-        <div class="logo-tag">Hold the line. Bank the spoils. Or risk it all.</div>
       </div>
       <div id="coop-bar" class="hidden" role="button" tabindex="0"></div>
     </div>
