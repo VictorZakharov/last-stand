@@ -149,7 +149,7 @@ function lightCases(): LightCase[] {
     { name: 'street lamp', at: lanterns[0], span: 0.6, off: 3 },
     { name: 'hall torch', at: torch, span: 0.4, off: 2.5 },
     { name: 'window', at: aWindow(), span: 0.9, off: 3.5 },
-    { name: "the chronicle's book", at: bookAt, span: 0.4, off: 2.2, noonToo: true },
+    { name: "the chronicle's book", at: bookAt, span: 0.4, off: 1.6, noonToo: true },
     ...ownLights(),
   ];
 }

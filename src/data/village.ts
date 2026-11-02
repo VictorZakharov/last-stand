@@ -19,7 +19,11 @@ export interface VillageObject {
   at: [number, number];
   reach: number;
   stand: [number, number];
+  /** where its name and E hint sit over its floor (m): on the thing itself, clear of what it's for (a chest's hoard and
+   *  lock, a board's notices, a lectern's book) */
   label: number;
+  /** how high a click or a tap on it counts over its floor (m) */
+  tall: number;
   name: string;
   verb: string;
 }
@@ -109,7 +113,9 @@ export function portalPlace(id: BiomeId): { x: number; z: number; facing: number
 export const ROADS: readonly { points: readonly Spot[]; width: number }[] = [
   { points: [[5.2, -0.8], [10.5, -2.4], [16, -5.6], [21, -10.6], [24.7, -14.1], [27.5, -15.8]], width: 3.2 },
   { points: [[-5.2, 0.9], [-10.5, 2.4], [-15.5, 5.1], [-20.5, 9.6], [-24.4, 13.3], [-27.5, 15.2]], width: 3.0 },
-  { points: [[-0.6, -5.2], [-1.0, -6.6], [-1.5, -8.0]], width: 4.4 },
+  // (straight into the stair's foot, on under it: coming in aslant, its end left a wedge of grass before the steps and
+  // its curb stopped short of the cheek)
+  { points: [[-0.6, -5.2], [-1.3, -6.5], [-1.5, -7.3], [-1.5, -8.6]], width: 4.4 },
   // (the yard's: out of its gate 1.5 m along its way, then round on a 3 m arc to the square; turned 60 degrees in its
   // last 1.6 m, its inner edge folded back and its curb doubled over into slivers, "lets fix curb near training area")
   { points: [[5.23, 3.52], [5.91, 3.98], [6.58, 4.43], [7.13, 5.01], [7.51, 5.71], [7.7, 6.49],
@@ -149,7 +155,7 @@ function portalObject(id: BiomeId, name: string, verb: string): VillageObject {
   const p = portalPlace(id), front = [Math.sin(p.facing), Math.cos(p.facing)];
   return {
     id, use: 'portal', biome: id, at: [p.x, p.z], reach: 4.2, stand: [p.x + front[0] * 3.2, p.z + front[1] * 3.2],
-    label: 5.6, name, verb,
+    label: 2.6, tall: 5.6, name, verb,
   };
 }
 
@@ -159,27 +165,27 @@ export const VILLAGE_OBJECTS: readonly VillageObject[] = [
   portalObject('forest', 'Portal to the Thornwood', 'Enter the Thornwood'),
   {
     // (stood before it, on the porch)
-    id: 'chest', use: 'stash', at: [CHEST.x, CHEST.z], reach: 2.2, stand: [CHEST.x, CHEST.z + 1.3], label: 1.4,
+    id: 'chest', use: 'stash', at: [CHEST.x, CHEST.z], reach: 2.2, stand: [CHEST.x, CHEST.z + 1.3], label: 0.03, tall: 1.4,
     name: 'Stash', verb: 'Open the stash',
   },
   {
     // (inside, before the plinths: walked in through its door)
     id: 'hall', use: 'heroes', at: [TERRACE.x, HALL.daisZ - 0.6], reach: 3.4, stand: [TERRACE.x, HALL.daisZ + 1.4],
-    label: 3.0,
+    label: 1.4, tall: 3.0,
     name: 'Hall of Heroes', verb: 'Choose your hero',
   },
   {
-    id: 'campfire', use: 'coop', at: CAMPFIRE, reach: 2.8, stand: [CAMPFIRE[0] + 1.9, CAMPFIRE[1] - 0.4], label: 1.8,
+    id: 'campfire', use: 'coop', at: CAMPFIRE, reach: 2.8, stand: [CAMPFIRE[0] + 1.9, CAMPFIRE[1] - 0.4], label: 0.6, tall: 1.8,
     name: 'Campfire', verb: 'Play together',
   },
   {
     // (stood before it on the porch, as the chest's on the other side)
     id: 'chronicle', use: 'chronicle', at: [CHRONICLE.x, CHRONICLE.z], reach: 2.2, stand: [CHRONICLE.x, CHRONICLE.z + 1.2],
-    label: 1.9, name: 'Chronicle', verb: 'Save slots',
+    label: 0.85, tall: 1.9, name: 'Chronicle', verb: 'Save slots',
   },
   {
     id: 'notice', use: 'help', at: [NOTICE.x, NOTICE.z], reach: 2.4,
-    stand: [NOTICE.x + Math.sin(NOTICE.facing) * 1.4, NOTICE.z + Math.cos(NOTICE.facing) * 1.4], label: 2.6,
+    stand: [NOTICE.x + Math.sin(NOTICE.facing) * 1.4, NOTICE.z + Math.cos(NOTICE.facing) * 1.4], label: 0.95, tall: 2.6,
     name: 'Notice board', verb: 'How to play',
   },
 ];

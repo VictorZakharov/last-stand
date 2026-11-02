@@ -44,6 +44,8 @@ export interface PerfOptions {
   at?: [number, number];
   /** the way the hero holds his weapons (as rolled when not given) */
   gear?: WeaponStyle;
+  /** after the phases, the biggest draws timed on the GPU, drawn and hidden in turns (`perfParts.ts`) */
+  parts?: boolean;
   /** the skills cast in turn: each one's key, behaviour or name */
   casts: string[];
   /** s from one press to the next, and from the last one to the end */
@@ -480,12 +482,20 @@ async function perfAtQuality(lab: Lab, options: PerfOptions): Promise<Report> {
     const hour = options.hour === undefined ? '' : ` at ${options.hour}:00`;
     const where = options.village ? `the village${hour}` : options.biome;
     lines.push(`${where}, the ${options.view} view, ${cpu}`);
-    const { phases, uncast } = options.village ? { phases: await villagePhases(lab), uncast: [] }
+    const { phases, uncast } = options.parts ? { phases: [], uncast: [] }
+      : options.village ? { phases: await villagePhases(lab), uncast: [] }
       : await castPhases(lab, options, aim);
     for (const phase of phases) lines.push(...phaseLines(phase), ...(options.frames ? frameLines(phase) : []));
     for (const name of uncast) problems.push(`${name} was pressed and never cast`);
-    if (phases.every((phase) => phase.frames.every((frame) => frame.cpu === 0))) {
+    if (phases.length && phases.every((phase) => phase.frames.every((frame) => frame.cpu === 0))) {
       problems.push('the perf overlay timed nothing: its frames read 0 ms');
+    }
+    if (options.parts) {
+      const { partCosts } = await import('./perfParts');
+      if (options.village) await inVillage(lab, options.at ?? VILLAGE_SPOT, options.facing * Math.PI / 180);
+      const parts = await partCosts(lab, true);
+      lines.push(...parts.lines);
+      problems.push(...parts.problems);
     }
     const read = await reportRead(options.canary);
     lines.push(...read.lines);

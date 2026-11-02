@@ -558,7 +558,7 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   start to its end, its waits for the page's commands with it; on a desktop the scene pass's GPU time often matches
   the render's CPU time, as the GPU waits on it, so a triangle cut shows smaller there than on a phone whose GPU sets
   the pace. A cast pressed and never made, a shader compiled while it was timed, and frames all read 0 ms are
-  problems. `--village`: the lobby's village instead (`--hour` it's lit for), no skills or foes: the hero standing on
+  problems. `--parts` (from play, "low fps at night"), in place of the phases: the frame's time on the GPU turned eight ways, then turned the dearest, what everything but the sky takes, the meadow and the fountain each whole and the biggest and widest draws, each drawn and hidden in turns; its canary times the meadow four times over (a part under about 0.5 ms is under its noise). `--village`: the lobby's village instead (`--hour` it's lit for), no skills or foes: the hero standing on
   its square, then walking (120 frames each; `--at`, `--facing`), then walking of himself from the square into the
   hall of heroes to its dais (900 frames: from play, "lag when entering hall of heroes", frames of 875 and 472 ms),
   then standing in it (120 frames: from play, "still FPS drop when entering the hall"), then 7 m in from its door

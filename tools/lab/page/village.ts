@@ -44,7 +44,7 @@ import { propHoleWhereHidden } from './villageSeeThrough';
 import { hallWallsSteady } from './villageHallSteady';
 import { objectsUsedAgain } from './villageUseAgain';
 import { hallWallsHold } from './villageHallSide';
-import { chestOpensNear } from './villageChestLid';
+import { candleLightsNear, chestOpensNear } from './villageChestLid';
 import { wallingAligned } from './villageWalling';
 import { windowsLetSunIn } from './villageWindows';
 import { grassRingsUnseen } from './villageGrassRing';
@@ -90,6 +90,7 @@ export async function village(lab: Lab, options: VillageOptions): Promise<Report
     objectsUsable: () => objectsUsable(lab, options.canary),
     objectsUsedAgain: () => objectsUsedAgain(lab, options.canary),
     chestOpensNear: () => chestOpensNear(lab, options.canary),
+    candleLightsNear: () => candleLightsNear(lab, options.canary),
     castingInYard: () => castingInYard(lab, options.canary),
     boundsClosed: () => boundsClosed(lab, options.canary),
     portalsHold: () => portalsHold(lab, options.canary),

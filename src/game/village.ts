@@ -9,7 +9,7 @@ import { VILLAGE_OBJECTS, YARD, worldToYard, type VillageObject } from '../data/
 import { input, wasPressed, cylinder } from '../core/input';
 import { viewMode } from '../core/renderer';
 import { groundHeight } from '../world/ground';
-import { anchorLabel, textArt } from '../ui/floaters';
+import { anchorLabel, promptArt, textArt } from '../ui/floaters';
 import { ORDER, type Label } from '../ui/overlay/layer';
 import { OUTLINE } from '../ui/overlay/paint';
 import { want } from './warm';
@@ -33,9 +33,10 @@ export interface VillageHooks {
   shows(object: VillageObject): boolean;
 }
 
-/** how near the chest the hero comes before its lid opens for him, and how far he goes before it shuts (m): inside
+/** how near the chest or the chronicle the hero comes before its lid opens or its candle lights, and how far he goes
+ *  before it shuts or goes out (m): inside
  *  its reach, or it opened for everyone going through the middle of the hall's door beside it */
-const CHEST_OPENS = { near: 2.0, far: 2.15 };
+const WAKES = { near: 2.0, far: 2.15 };
 /** how far past an object's reach the hero may walk before what it opened is put away (m) */
 const LEAVE = 1.5;
 /** how far apart in height the hero and an object may stand for him to use it (m: the terrace's chest from under it) */
@@ -79,7 +80,10 @@ export function initVillage(h: VillageHooks): void {
   hooks = h;
   for (const o of VILLAGE_OBJECTS) {
     const at = (): { x: number; y: number; z: number } | null => (named(o) ? { x: o.at[0], y: floorAt(o) + o.label, z: o.at[1] } : null);
-    labels.set(o.id, { label: anchorLabel(ORDER.tag, at, true), says: '' });
+    const label = anchorLabel(ORDER.tag, at, true);
+    // (its middle on the point: standing on it, the plate rose off a lectern's post over the book it named)
+    label.ay = 0.5;
+    labels.set(o.id, { label, says: '' });
   }
   bindPointer();
 }
@@ -95,8 +99,8 @@ const named = (o: VillageObject): boolean => {
   return o === pointed || o === going;
 };
 
-/** whether the chest stands open for the hero (`chestByHero`) */
-let chestOpen = false;
+/** whether the chest stands open and the chronicle's candle lit for the hero (`wakeByHero`) */
+let chestOpen = false, candleLit = false;
 
 /** How far the hero is from `o` (m, across the floor), or Infinity where he stands on another level. */
 function distanceTo(o: VillageObject): number {
@@ -105,13 +109,19 @@ function distanceTo(o: VillageObject): number {
   return Math.hypot(p.x - o.at[0], p.z - o.at[1]);
 }
 
-/** The chest's lid opened as the hero comes to it and shut as he leaves (`on`: he walks the village). */
-function chestByHero(on: boolean): void {
-  const chest = villageObject('chest');
-  const off = on && chest ? distanceTo(chest) : Infinity;
-  if (off < CHEST_OPENS.near) chestOpen = true;
-  else if (off > CHEST_OPENS.far) chestOpen = false;
+/** Whether what `id` is stands awake as the hero comes and goes, from whether it was (`on`: he walks the village). */
+function awake(id: string, was: boolean, on: boolean): boolean {
+  const o = villageObject(id);
+  const off = on && o ? distanceTo(o) : Infinity;
+  return off < WAKES.near || (was && off <= WAKES.far);
+}
+
+/** The chest's lid opened and the chronicle's candle lit as the hero comes to them, shut and out as he leaves. */
+function wakeByHero(on: boolean): void {
+  chestOpen = awake('chest', chestOpen, on);
+  candleLit = awake('chronicle', candleLit, on);
   G.arena.village.setChestNear(chestOpen);
+  G.arena.village.setCandleNear(candleLit);
 }
 
 /** The object the hero is near enough to use (the nearest), or null. */
@@ -129,7 +139,7 @@ function objectAlong(r: THREE.Ray): VillageObject | null {
   let best: VillageObject | null = null, bestT = Infinity;
   for (const o of VILLAGE_OBJECTS) {
     const y0 = floorAt(o), rad = Math.min(PICK_MOST, o.reach * PICK_SHARE);
-    const t = cylinder(r, o.at[0], o.at[1], rad, y0, y0 + o.label + 0.3);
+    const t = cylinder(r, o.at[0], o.at[1], rad, y0, y0 + o.tall + 0.3);
     if (t < bestT) { best = o; bestT = t; }
   }
   return best;
@@ -207,7 +217,7 @@ export function updateVillage(dt = 0): void {
   hallInside(dt);
   const on = hooks.active();
   const p = G.player;
-  chestByHero(on);
+  wakeByHero(on);
   p.armed = !on || inYard(p.pos.x, p.pos.z);
   if (on && inYard(p.pos.x, p.pos.z)) completeStep('yard');
   if (!on) {
@@ -434,10 +444,11 @@ function castFromLamps(on: boolean): void {
 function syncLabels(): void {
   for (const o of VILLAGE_OBJECTS) {
     const l = labels.get(o.id)!;
-    const says = o === near ? `E · ${o.verb}` : o.name;
+    const says = o === near ? o.verb : o.name;
     if (says === l.says) continue;
     l.says = says;
-    l.label.show(textArt(says, { face: 'display', size: 15, weight: 700, color: o === near ? '#ffe7b0' : '#e8dcc8', shadows: OUTLINE, spacing: 0.5 }));
+    const look = { face: 'display', size: 14, weight: 700, spacing: 0.5 } as const;
+    l.label.show(o === near ? promptArt('E', says, { ...look, color: '#ffe7b0' }) : textArt(says, { ...look, color: '#e8dcc8', shadows: OUTLINE }));
   }
 }
 

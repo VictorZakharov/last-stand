@@ -557,6 +557,10 @@ export const COMMANDS = {
         help: 'in the lobby\'s village instead, no skills: the hero standing on its square, then walking (--at, '
           + '--facing where he stands)',
       },
+      parts: {
+        kind: 'switch',
+        help: 'after the phases, the biggest draws timed on the GPU, each drawn and hidden in turns',
+      },
       hour: {
         kind: 'number',
         usage: 'h',

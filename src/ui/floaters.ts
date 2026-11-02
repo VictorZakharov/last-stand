@@ -3,7 +3,7 @@
 import * as THREE from 'three';
 import { G } from '../state';
 import { Label, ORDER, layoutLabels } from './overlay/layer';
-import { drawText, measure, type Shadow, type TextStyle } from './overlay/paint';
+import { drawText, measure, roundRect, type Shadow, type TextStyle } from './overlay/paint';
 import { uiScales } from './scale';
 import { groundHeight } from '../world/ground';
 
@@ -42,6 +42,41 @@ const FLOAT_STYLE: Record<FloatKind, Omit<TextStyle, 'color'>> = {
 export function textArt(text: string, s: TextStyle): { w: number; h: number; paint(c: CanvasRenderingContext2D, scale: number): void } {
   const t = measure(text, s), pad = Math.ceil(Math.max(...(s.shadows ?? []).map((sh) => sh.blur + Math.abs(sh.y)), 0));
   return { w: t.w + pad * 2, h: t.h + pad * 2, paint: (c, scale) => drawText(c, t, pad, pad, s, scale) };
+}
+
+/** a prompt's plate (px): round its words, its key's square, and the room left round it for its drop shadow */
+const PROMPT = { side: 7, high: 3, key: 19, gap: 6, shade: 9, corner: 5 };
+
+/**
+ * Art for what using a thing takes: `key`'s square and `text` on a dark plate with a drop shadow, to read over whatever
+ * lies behind it (from play, "need to make hint more stand out": bare words read as part of a notice board's papers).
+ */
+export function promptArt(key: string, text: string, s: TextStyle): { w: number; h: number; paint(c: CanvasRenderingContext2D, scale: number): void } {
+  const plain = { ...s, shadows: [] };
+  const words = measure(text, plain), letter = measure(key, plain);
+  const inside = Math.max(PROMPT.key, words.h);
+  const w = PROMPT.side * 2 + PROMPT.key + PROMPT.gap + words.w, h = inside + PROMPT.high * 2;
+  const paint = (c: CanvasRenderingContext2D, scale: number): void => {
+    const x = PROMPT.shade, y = PROMPT.shade;
+    roundRect(c, x, y, w, h, PROMPT.corner);
+    c.fillStyle = 'rgba(14,10,7,.88)';
+    c.shadowColor = 'rgba(0,0,0,.9)';
+    c.shadowBlur = 7 * scale;
+    c.shadowOffsetY = 2 * scale;
+    c.fill();
+    c.shadowColor = 'transparent';
+    c.shadowBlur = c.shadowOffsetY = 0;
+    c.strokeStyle = 'rgba(214,170,92,.8)';
+    c.lineWidth = 1;
+    c.stroke();
+    const keyX = x + PROMPT.side, keyY = y + (h - PROMPT.key) / 2;
+    roundRect(c, keyX, keyY, PROMPT.key, PROMPT.key, 3);
+    c.fillStyle = '#e6c06a';
+    c.fill();
+    drawText(c, letter, keyX + (PROMPT.key - letter.w) / 2, keyY + (PROMPT.key - letter.h) / 2, { ...plain, color: '#20140a' }, scale);
+    drawText(c, words, keyX + PROMPT.key + PROMPT.gap, y + (h - words.h) / 2, plain, scale);
+  };
+  return { w: w + PROMPT.shade * 2, h: h + PROMPT.shade * 2, paint };
 }
 
 export function floatText(x: number, y: number, z: number, text: string | number, kind: FloatKind = 'dmg', color: number | string = 0xffffff): void {

@@ -683,6 +683,7 @@ export const COMMANDS = {
         frames: Boolean(options.frames),
         canary: Boolean(options.canary),
         village: Boolean(options.village),
+        parts: Boolean(options.parts),
         hour: options.hour,
       };
       return side.command('perf', command);
