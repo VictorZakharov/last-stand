@@ -97,6 +97,8 @@ const HELP = {
   links: ['', 'every Skia program built: when, how long, the tasks it was built in, the page\'s changes just before'],
   'js-under': ['name', 'with `--js`, a measure\'s JS a frame under this function, by what it calls (the name as listed, '
     + 'or the function\'s own: `_renderObjectDirect`)'],
+  before: ['expr', 'this expression run on the page (and awaited) just before its end is pictured: a change made to '
+    + 'see what it does, as a material or a pass switched off'],
   read: ['expr', 'this expression read off the page once a visit or a scenario is done (a boot: its fight warm), '
     + 'written to `out/read-N.json`: something the page keeps of its own'],
   help: ['', 'this'],
@@ -187,6 +189,7 @@ export function readOptions(argv) {
     passes: written.passes === true,
     paints: written.paints === true,
     links: written.links === true,
+    before: written.before ?? null,
     read: written.read ?? null,
     coldReturn: written['cold-return'] === true,
     film: written.film === true || written['film-logo'] === true,

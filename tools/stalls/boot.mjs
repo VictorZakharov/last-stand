@@ -99,6 +99,7 @@ async function bootTraced(browser, page, url, visit, options, picture, setRate) 
   const shots = film ? await film.stop() : [];
   await setRate(1);
   await viewForPicture(page, options.view);
+  if (options.before) await page.evaluate(options.before);
   await pictureEnd(page, options.cast, picture.end);
   const findings = analyzeBoot(record, events, MARK, options.sourceOf);
   if (builds) {

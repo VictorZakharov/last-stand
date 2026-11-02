@@ -69,7 +69,10 @@ export async function makeWebGPURenderer(): Promise<THREE.WebGLRenderer> {
   // three's GPU-driven drawing (r187): clusters of 64 triangles culled and their detail picked on the GPU, for what
   // it supports (static meshes and instanced ones in plain node materials); the rest drawn as before
   if (RUNNING.meshlets) {
-    const { MeshletDrawingPipeline } = await import('three/addons/pipelines/MeshletDrawingPipeline.js');
+    const meshlets = await import('three/addons/pipelines/MeshletDrawingPipeline.js');
+    const { MeshletDrawingPipeline } = meshlets;
+    // (exported by three, not by its types)
+    batchesBuiltApart((meshlets as unknown as { MeshletBatch: unknown }).MeshletBatch);
     const drawing = new MeshletDrawingPipeline();
     const { clustersInWorkers } = await import('./meshlets');
     clusters = clustersInWorkers(drawing) ?? clusters;
@@ -625,6 +628,31 @@ function stillAlone<T>(drawing: T): T {
   const isMeshlet = pipeline._isMeshlet.bind(pipeline);
   pipeline._isMeshlet = (object, ...rest) => still.has(object) && isMeshlet(object, ...rest);
   return drawing;
+}
+
+type Batch = { meshes: THREE.Mesh[]; setupDraw(shared: unknown): void };
+type NodeMaterialKey = { customProgramCacheKey(this: THREE.Material): string };
+
+/**
+ * Each meshlet batch's draws built apart. A batch draws with a copy of its material that takes the material's own
+ * properties, so where the game's material has a `customProgramCacheKey` of its own (`seeThrough`'s, for WebGL) the
+ * copy's node build was keyed by it alone, blind to the batch's nodes, and every batch of a see-through material
+ * shared the first one's build: its offsets into the culling's queue and objects with it. The crypt's obelisks and
+ * beacons drew another batch's range, so nothing at all (#331), and so, likely, did the forest's stones (da9701e).
+ */
+function batchesBuiltApart(MeshletBatch: unknown): void {
+  const prototype = (MeshletBatch as { prototype: Batch }).prototype;
+  const setupDraw = prototype.setupDraw;
+  const nodeKey = (gpu.NodeMaterial.prototype as unknown as NodeMaterialKey).customProgramCacheKey;
+  let made = 0;
+  prototype.setupDraw = function (this: Batch, shared: unknown) {
+    setupDraw.call(this, shared);
+    const tag = `|batch${made++}`;
+    for (const { material } of this.meshes) {
+      const drawn = material as THREE.Material;
+      drawn.customProgramCacheKey = () => nodeKey.call(drawn) + tag;
+    }
+  };
 }
 
 /** what of three's renderer a compile's state is kept by (`compilesTakeTurns`) */
