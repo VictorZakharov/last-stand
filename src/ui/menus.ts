@@ -529,14 +529,24 @@ export function renderMenu(): void {
     } else if (!it) bindTooltip(d, () => ({ html: `<div class="tt-card empty"><div class="tt-name">${label}</div><div class="tt-type">Empty</div></div>`, color: '#666' }));
     else {
       // a weapon in the off-hand: its damage (the implicit) counts for less
-      const how = 'Click or drag to the stash to unequip · drag it onto the floor to throw it there';
+      // (taken off at the chest alone, where the stash is: by I a click sent it there from anywhere, from play,
+      // "clicking an item on character in I mode teleports it to stash")
+      const atStash = () => panelsOpen() !== 'inventory';
+      const how = () => (atStash() ? 'Click or drag to the stash to unequip · ' : 'Unequip at the stash · ')
+        + 'drag it onto the floor to throw it there';
       bindTooltip(d, () => ({ ...itemTooltip(it, false)(), foot: slot === 'offhand' && it.slot === 'weapon'
-        ? `In the off-hand its damage bonus (the implicit) counts at ${OFFHAND_WEAPON * 100}%<br>${how}` : how }));
-      const doUnequip = () => { unequip(p, slot); hideTooltip(); sfx.click(); changed(); };
+        ? `In the off-hand its damage bonus (the implicit) counts at ${OFFHAND_WEAPON * 100}%<br>${how()}` : how() }));
+      const doUnequip = () => {
+        if (!atStash()) return;
+        unequip(p, slot);
+        hideTooltip();
+        sfx.click();
+        changed();
+      };
       d.onclick = () => {
         if (!isTouch()) { doUnequip(); return; }
         if (longPressClick()) return;
-        openItemSheet(it, false, 'Unequip', p.stash.length < RUN.bagLimit ? doUnequip : null, () => { toss(discardEquipped(p, slot)); newIds.delete(it.id); sfx.salvage(); changed(); });
+        openItemSheet(it, false, 'Unequip', atStash() && p.stash.length < RUN.bagLimit ? doUnequip : null, () => { toss(discardEquipped(p, slot)); newIds.delete(it.id); sfx.salvage(); changed(); });
       };
       // (a long press is a context menu on Android: on touch it lights the slot's items, and unequips nothing)
       d.oncontextmenu = (e) => { e.preventDefault(); if (!isTouch()) doUnequip(); };

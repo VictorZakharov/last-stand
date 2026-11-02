@@ -155,6 +155,12 @@ export function inWay(x: number, z: number, pad = 0): boolean {
   });
 }
 
+/** Whether (x, z) is paved: the square's cobbles or a road's. */
+export function pavedAt(x: number, z: number): boolean {
+  if (Math.hypot(x, z) < SQUARE_EDGE) return true;
+  return roadLines.some((road) => toPolyline(x, z, road.line) < road.width / 2);
+}
+
 /** Whether something's built or trodden at (x, z), `pad` m round it: no tree stands there. */
 export function builtAt(x: number, z: number, pad = 0): boolean {
   if (Math.hypot(x, z) < SQUARE_R + 1 + pad) return true;

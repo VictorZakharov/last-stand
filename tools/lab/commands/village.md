@@ -91,7 +91,14 @@ the least 74%; `--canary` puts each lamp out for both its readings at the last s
 kept (`sunShadowKept`, `world/moonShadow.ts`) against it redrawn whole at one moment, at three spots, the last by the
 chest: 0.00% changed (`--canary` leaves what moves out of it, 1.1 to 1.3%); every curb's top facing up (`curbsFaceUp`,
 `--canary` reads them wound the other way); what the chest's hoard draws, read as the frame with it and without at one
-moment, with the stash at 0, 1, 30 and 60 of 60 (`grassRingsGentle`: the light changed per band in a 0.5 m stride of the rings' middle, at most 10%; `--canary` hands
+moment, with the stash at 0, 1, 30 and 60 of 60, and the vertices it draws growing with it (its share of the frame stops growing as the chest's mouth fills: 38% at 30, 29% at 60)
+(`heroChosenQuick`: another hero chosen in the hall, each frame timed by the browser's clock, the programs compiled;
+`--canary` stalls a frame) (`heroFaceNotBlinding`: round his head at midnight, before each portal and under the street lamps; `--canary` puts a
+light by his head) (`cameraBeforeWalls`: backed against the palisade over the shoulder, the camera stands on his side of
+it; `--canary` lets it stand behind)
+(`heroesStandOnBothFeet`: each hero chosen away from at moments through his showcase, both ankles at rest on the dais every frame; `--canary` lifts a foot) (`arrowsStickInGround`: an arrow standing in the yard and the meadow with either biome chosen, glancing off the square; `--canary` reads the square as ground)
+(`wornStaysOn`: a worn item clicked by I stays on him, at the chest goes to the stash; `--canary` reads the chest as I)
+(`grassRingsGentle`: the light changed per band in a 0.5 m stride of the rings' middle, at most 10%; `--canary` hands
 over as they did) (`hoardShowsStash`: empty none at all, more as it fills; `--canary` reads
 five items as empty); how to play closed by Esc with the pointer locked, the browser's letting go of the lock as Esc is
 let go played by the page (`escClosesHelp`: no pause menu; `--canary` asks for the lock with Esc still down); from inside the hall of

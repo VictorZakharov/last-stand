@@ -1,7 +1,8 @@
 // A meadow's dense grass (after threejs-nanites' grass, its WebGL path): blades drawn round where the camera looks, in
-// three rings over grids of world cells that follow it (snapped to whole cells, so a blade stays where it is as the
-// view moves). A ring's cells are twice the size of the one inside it and its blades wider, and they hand over across
-// the outer part of the inner ring by chance (`HAND_OVER`), so the ground stays as covered. Each cell's blade comes from a hash of the
+// rings over grids of world cells that follow it (snapped to whole cells, so a blade stays where it is as the
+// view moves). The second ring draws the first's very blades in fewer segments, so nothing shows where they meet; past
+// it a ring's cells are twice the size of the one inside it and its blades wider, and they hand over across the outer
+// part of the inner ring by chance (`HAND_OVER`), so the ground stays as covered. Each cell's blade comes from a hash of the
 // cell: where it roots, how tall, which way it leans and bends; the keep test runs in the vertex shader (a dropped
 // blade is drawn as nothing at its root), against the ring's band and the meadow's mask (`MeadowMask`: where grass
 // grows, painted at build: none on a lane, round a house or under a tree). Each ring's grid is split into tiles, and
@@ -16,9 +17,12 @@ import { hiddenByHallDoor } from './hallPortal';
 /** The rings: each cell's size (m), how far out it's drawn (m) and the segments along each blade. */
 const RINGS = [
   { cell: 0.075, radius: 9, segs: 4 },
-  { cell: 0.15, radius: 22, segs: 3 },
-  { cell: 0.3, radius: 45, segs: 2 },
-  { cell: 0.6, radius: 80, segs: 1 },
+  // (the same blades: the grass's first thinning, at 7 to 9 m, came and went in the middle of the view, "grass needs
+  // fixing")
+  { cell: 0.075, radius: 20, segs: 2 },
+  { cell: 0.15, radius: 36, segs: 2 },
+  { cell: 0.3, radius: 58, segs: 2 },
+  { cell: 0.6, radius: 85, segs: 1 },
 ];
 /** tiles a side over each ring's grid (the most drawn: the uniforms' array) */
 const TILES = 8;
@@ -35,6 +39,8 @@ const STRAND_CUT = 0.35;
  *  stood at half its height through the band, thinner than the grass either side */
 const HAND_OVER = 0.4;
 const BLADE_GROWS = 0.15;
+/** the width of an edge between rings of the same cells (m) */
+const AT_ONCE = 0.001;
 /** how far up the band's rise the last of a sheet's strands starts to rise */
 const STRANDS_RISE = 0.55;
 /** the hand-over as it was, for a harness (`meadowHandOver`) */
@@ -386,9 +392,12 @@ interface RingUniforms extends MaskUniforms {
   uTime: { value: number };
 }
 
-/** A ring's band across `share` of each edge: from the ring inside (`inner`, none in the first) to its own radius. */
-function bandOf(band: THREE.Vector4, inner: number, radius: number, share: number): void {
-  band.set(inner ? inner * (1 - share) : -2, inner || -1, radius * (1 - share), radius);
+/** Ring `k`'s band: from the ring inside to its own radius, across `share` of each edge between rings of other cells,
+ *  and at once between rings of the same cells, whose blades are the same. */
+function bandOf(band: THREE.Vector4, k: number, share: number): void {
+  const ring = RINGS[k], inside = RINGS[k - 1], outside = RINGS[k + 1];
+  const from = !inside ? -2 : inside.cell === ring.cell ? inside.radius - AT_ONCE : inside.radius * (1 - share);
+  band.set(from, inside ? inside.radius : -1, outside?.cell === ring.cell ? ring.radius - AT_ONCE : ring.radius * (1 - share), ring.radius);
 }
 
 /** every ring's uniforms, as built, and how far a harness has moved their middle off where the view puts it (m) */
@@ -409,7 +418,7 @@ export function meadowCombed(on: boolean): void {
 /** For a harness (tools/lab): the rings handing over as they do, or across a fifth, each sheet grown whole, as they did. */
 export function meadowHandOver(wide: boolean): void {
   rings.forEach((u, k) => {
-    bandOf(u.uBand.value, k ? RINGS[k - 1].radius : 0, RINGS[k].radius, wide ? HAND_OVER : SHARP_HAND_OVER);
+    bandOf(u.uBand.value, k, wide ? HAND_OVER : SHARP_HAND_OVER);
     u.uByStrand.value = wide ? 1 : 0;
   });
 }
@@ -488,10 +497,10 @@ export function buildMeadow(mask: MeadowMask, maskTexture: THREE.Texture, update
       uMeadow: { value: maskTexture },
       uMeadowHalf: { value: mask.half },
     };
-    bandOf(u.uBand.value, inner, ring.radius, HAND_OVER);
+    bandOf(u.uBand.value, k, HAND_OVER);
     rings.push(u);
     const geo = bladeGeometry(ring.segs);
-    const mesh = new THREE.Mesh(geo, bladeMaterial(u, k > 0));
+    const mesh = new THREE.Mesh(geo, bladeMaterial(u, ring.cell > RINGS[0].cell));
     mesh.name = `meadow grass ${k + 1}`;
     // (the tiles are its culling: three's sphere would be round no points)
     mesh.frustumCulled = false;
@@ -509,7 +518,7 @@ export function buildMeadow(mask: MeadowMask, maskTexture: THREE.Texture, update
           const near = Math.hypot(Math.max(x0 - focus.x, 0, focus.x - x0 - w), Math.max(z0 - focus.y, 0, focus.y - z0 - w));
           if (near >= ring.radius) continue;
           const far = Math.hypot(Math.max(focus.x - x0, x0 + w - focus.x), Math.max(focus.y - z0, z0 + w - focus.y));
-          if (far <= inner * (1 - HAND_OVER)) continue;
+          if (far <= u.uBand.value.x) continue;
           // (a blade leans and bends up to half a metre off its cell)
           _box.min.set(x0 - 0.5, -0.1, z0 - 0.5);
           _box.max.set(x0 + w + 0.5, 0.8, z0 + w + 0.5);

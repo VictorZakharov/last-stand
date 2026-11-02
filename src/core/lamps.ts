@@ -56,6 +56,9 @@ const placeOf = (i: number): number => (1 + i * 2) * 4;
 const lightOf = (i: number): number => placeOf(i) + 4;
 
 /** each lit shader's lamps, after three's point lights (its `directLight` and `RE_Direct`, as they light those) */
+/** how soft a lamp's light is close to (m squared, added to the square of the distance: as if a ball of about 2 m lit it);
+ *  its light on a head under it halved, on the ground 5 m off a tenth less. A pooled light is as soft by its `decay`. */
+export const LAMP_SOFT = 4;
 const LAMPS_LIT = `
 #if defined( RE_Direct )
 	{
@@ -80,7 +83,7 @@ const LAMPS_LIT = `
 				if ( lampLit <= 0.0 ) continue;
 			}
 			directLight.direction = toLamp / lampDistance;
-			directLight.color = lampLight.rgb * getDistanceAttenuation( lampDistance, lamp.w, 2.0 ) * lampLit;
+			directLight.color = lampLight.rgb * getDistanceAttenuation( lampDistance, lamp.w, ${(2 + LAMP_SOFT).toFixed(1)} ) * lampLit;
 			directLight.visible = true;
 			RE_Direct( directLight, geometryPosition, geometryNormal, geometryViewDir, geometryClearcoatNormal, material, reflectedLight );
 		}
@@ -134,6 +137,9 @@ float lampShadowAt( int lamp, vec3 d ) {
 /** where three's lit shaders begin their spot lights: the lamps go just before */
 const SPOT_LIGHTS_IF = '#if ( NUM_SPOT_LIGHTS > 0 ) && defined( RE_Direct )';
 
+const FALLOFF_BY_POW = 'pow( lightDistance, decayExponent )';
+const FALLOFF_SOFT = 'lightDistance * lightDistance + max( decayExponent - 2.0, 0.0 )';
+
 /** The lamps' list given to every lit material three makes and lit in its shaders; once, before any compiles. */
 export function lightTheLamps(): void {
   const begin = THREE.ShaderChunk.lights_fragment_begin;
@@ -141,7 +147,13 @@ export function lightTheLamps(): void {
     console.error('lightTheLamps: three\'s lit shaders have changed: the lamps light nothing');
     return;
   }
-  THREE.ShaderChunk.lights_pars_begin += LAMPS_DECLARED;
+  // (a light's falloff by the square of its distance plus its softness, carried in its decay past 2: a point has none, and
+  // a face under a lamp burned white, "blinding light from street light")
+  if (!THREE.ShaderChunk.lights_pars_begin.includes(FALLOFF_BY_POW)) {
+    console.error('lightTheLamps: three\'s falloff has changed: no light is soft');
+    return;
+  }
+  THREE.ShaderChunk.lights_pars_begin = THREE.ShaderChunk.lights_pars_begin.replace(FALLOFF_BY_POW, FALLOFF_SOFT) + LAMPS_DECLARED;
   THREE.ShaderChunk.lights_fragment_begin = begin.replace(SPOT_LIGHTS_IF, LAMPS_LIT + SPOT_LIGHTS_IF);
   for (const shader of Object.values(THREE.ShaderLib)) {
     if (!('pointLights' in shader.uniforms)) continue;

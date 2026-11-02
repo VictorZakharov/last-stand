@@ -20,20 +20,19 @@
 /* (the right panel's in front of what it frames: the stash's box reaches past it, and its fade, laid
    over the box, would put out the line and its brackets along it) */
 .menu-right::before { z-index: 4; }
-/* the crest over the village: the logo (the loading screen's gathers into it) and its motto, small at the top's middle,
+/* the crest over the village: its name (the loading screen's logo gathers into it), small at the top's middle,
    a co-op room's bar under it; it takes no pointer but the bar's */
-.menu-crest { position: absolute; top: 10px; left: 50%; translate: -50% 0; width: 230px; display: flex; flex-direction: column; align-items: center;
+.menu-crest { position: absolute; top: 10px; left: 50%; translate: -50% 0; width: 300px; display: flex; flex-direction: column; align-items: center;
   gap: 6px; zoom: var(--ui, 1); }
 .menu-crest #coop-bar { pointer-events: auto; }
-.logo { text-align: center; padding: 0; }
+.logo { width: 100%; text-align: center; padding: 0; }
 /* the logo art (SVG, shared with the loading screen) is defined in index.html */
-.logo .logo-art { width: 100%; max-width: 230px; margin: 0 auto; filter: drop-shadow(0 2px 6px rgba(0,0,0,.8)); }
+.logo .logo-art { width: 100%; max-width: 300px; aspect-ratio: 700 / 150; margin: 0 auto; filter: drop-shadow(0 2px 6px rgba(0,0,0,.8)); }
 .logo .logo-glow { opacity: .8; }
-.logo-tag { margin-top: 2px; font-size: 12px; color: var(--ink-dim); font-style: italic; text-shadow: 0 1px 3px #000; }
-/* the crest blown away after a while over the village (ui/crestBlow.ts): the wind takes the letters, the tagline fades;
+/* the crest blown away after a while over the village (ui/crestBlow.ts): the wind takes the letters;
    with no wind (reduced motion, Low quality) the letters fade too */
-.menu-crest .logo-tag, .menu-crest .logo-art { transition: opacity 1.2s ease; }
-.menu-crest.blowing .logo-tag, .menu-crest.blown .logo-art { opacity: 0; }
+.menu-crest .logo-art { transition: opacity 1.2s ease; }
+.menu-crest.blown .logo-art { opacity: 0; }
 .records { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .rec { position: relative; display: grid; grid-template-columns: auto 1fr; grid-template-rows: auto auto; column-gap: 12px; align-items: center;
   padding: 8px 12px; background: linear-gradient(135deg, rgba(40,32,22,.55), rgba(12,10,12,.8)); border: 1px solid rgba($frame, .35);

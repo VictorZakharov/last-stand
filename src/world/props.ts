@@ -455,8 +455,9 @@ export function boxWithUV(w: number, h: number, d: number, texel = 0.5, grained 
  * Returns the portal for the gate at `angle`.
  */
 /** a portal's light (each gate's one of its biome's point lights): how bright, how far it reaches (m), how far out in
- *  front of the membrane and how high it stands, and how much more as foes come through (`pulse`) */
-const PORTAL_LIGHT = { intensity: 7, reach: 11, out: 1.2, up: 2.0, pulse: 1.2 };
+ *  front of the membrane and how high it stands (over any head: at 2 m, a hand's breadth from a face beside the gate, it
+ *  blew it out white, "blinding light on face"), and how much more as foes come through (`pulse`) */
+const PORTAL_LIGHT = { intensity: 12, reach: 11, out: 1.2, up: 3.4, pulse: 1.2 };
 
 export function portalMembrane(parent: THREE.Object3D, angle: number, colors: { a: RGB; b: RGB; core: RGB }, updaters: Updater[], arch = false,
   place?: GatePlace): { mesh: THREE.Mesh; portal: Portal } {

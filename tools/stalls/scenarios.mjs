@@ -129,6 +129,16 @@ const HEROES_MS = 10_000;
 /** Whether the hero selection screen has gone. (Run in the page.) */
 const heroesGone = () => !document.getElementById('heroes').checkVisibility();
 
+/** The lobby's Change hero clicked, in the pause menu Esc opens where the lobby is a village, and the screen waited
+ *  for. */
+async function openHeroes(page) {
+  const shown = () => document.getElementById('btn-hero').checkVisibility();
+  if (!(await page.evaluate(shown))) await page.keyboard.press('Escape');
+  await page.waitForFunction(shown, null, { timeout: HEROES_MS });
+  await page.click('#btn-hero');
+  await page.waitForFunction(heroesShown, null, { timeout: HEROES_MS, polling: 100 });
+}
+
 /** `hero` picked in the lobby as a player picks him: on the hero selection screen its Change hero opens (his name
  *  clicked, then the choice), or by the lobby's class buttons in a tree from before it. */
 export async function pickHero(page, hero) {
@@ -136,8 +146,7 @@ export async function pickHero(page, hero) {
     await page.click(`#opt-class button[data-c="${hero}"]`);
     return;
   }
-  await page.click('#btn-hero');
-  await page.waitForFunction(heroesShown, null, { timeout: HEROES_MS, polling: 100 });
+  await openHeroes(page);
   await page.click(`#heroes .hs-tabs [data-c="${hero}"]`);
   await page.click('#heroes .hs-choose');
   await page.waitForFunction(heroesGone, null, { timeout: HEROES_MS });
@@ -333,8 +342,7 @@ async function heroes(page, ms) {
   const half = (ms * 4) / 5 / HERO_TRIPS / 2;
   for (let trip = 1; trip <= HERO_TRIPS; trip++) {
     await page.evaluate(markPhase, `opening ${trip}`);
-    await page.click('#btn-hero');
-    await page.waitForFunction(heroesShown, null, { timeout: HEROES_MS, polling: 100 });
+    await openHeroes(page);
     await page.waitForTimeout(half);
     await page.evaluate(markPhase, `closing ${trip}`);
     await page.click('#heroes .hs-back');
@@ -501,5 +509,28 @@ async function rendererSwitch(page, ms, { picture }) {
 
 /** The scenarios by name: each plays the page for `ms` (as `options` say, those it reads) and returns notes of what
  *  happened. */
-export const SCENARIOS = { fight, lobby, firing, firingPast, storm, hover, sweep, stow, heroes, switch: switchHero, pause,
+/**
+ * Another hero chosen on the hero selection screen, and back, `HERO_TRIPS` times (from play: "choose hero in hall
+ * freezes for like 10sec"): each trip's way in and its choice, the hero's tab clicked and then Choose, a phase of
+ * its own.
+ */
+async function choosing(page, ms) {
+  if (!(await page.$('#btn-hero'))) return ['no hero selection screen in this tree: chose nothing'];
+  await page.evaluate(markPhase, 'away');
+  await page.waitForTimeout(ms / 5);
+  const half = (ms * 4) / 5 / HERO_TRIPS / 2;
+  for (let trip = 1; trip <= HERO_TRIPS; trip++) {
+    await page.evaluate(markPhase, `opening ${trip}`);
+    await openHeroes(page);
+    await page.waitForTimeout(half);
+    await page.evaluate(markPhase, `choosing ${trip}`);
+    await page.click(`#heroes .hs-tabs [data-c="${trip % 2 ? 'ranger' : 'warrior'}"]`);
+    await page.click('#heroes .hs-choose');
+    await page.waitForFunction(heroesGone, null, { timeout: HEROES_MS });
+    await page.waitForTimeout(half);
+  }
+  return [`the lobby, then a hero chosen on the hero selection screen ${HERO_TRIPS} times`];
+}
+
+export const SCENARIOS = { fight, lobby, firing, firingPast, storm, hover, sweep, stow, heroes, switch: switchHero, pause, choosing,
   renderer: rendererSwitch };

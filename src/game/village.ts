@@ -16,6 +16,8 @@ import { OUTLINE } from '../ui/overlay/paint';
 import { want } from './warm';
 import { completeStep } from './training';
 import { HALL, TERRACE, inHall } from '../data/village';
+import { CLASS_IDS } from '../data/classes/index';
+import { LAMP_SOFT } from '../core/lamps';
 import { standHeroes } from './hall';
 import { isWarm } from './warm';
 import { flash, release, type LightSlot } from '../fx/lights';
@@ -56,7 +58,7 @@ const PICK_SHARE = 0.55, PICK_MOST = 2.6;
 
 /** the street lamps' light (`lightLamps`): its colour, intensity (a point light's, in candela), reach (m) and how far
  *  under the lantern's middle it burns. From play: "lights are lame": pools drawn on the ground lit nothing round them */
-const LAMPLIGHT = { color: 0xffb46a, intensity: 50, distance: 15, below: 0 };
+const LAMPLIGHT = { color: 0xffb46a, intensity: 85, distance: 18, below: 0 };
 /** the hall's torches as the pool lights them: brighter and nearer than a street lamp (lit like one, the hall stood
  *  dark round its heroes) */
 const TORCHLIGHT = { intensity: 6, distance: 9, dais: 2, daisIntensity: 16, daisDistance: 8, door: 6, porchIntensity: 10 };
@@ -76,11 +78,40 @@ const labels = new Map<string, { label: Label; says: string }>();
 const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
 const _to = new THREE.Vector3();
 
+/** the most light a highlight on a hero reflects here (`Player.shine`): a lamp over his steel, a glint on an axe's head
+ *  and a shield's rim burned white and bloomed */
+const VILLAGE_SHINE = 0.55;
+/** how far before a plinth's hero the hall's hint stands (m) */
+const HERO_HINT_BEFORE = 0.8;
+
+/** The plinth of the hero standing nearest the way the camera looks from the hero (his own class's stands empty). */
+export function heroLookedAt(): number {
+  const p = G.player.pos;
+  const sight = G.camera.getWorldDirection(_to);
+  let best = 0;
+  let bestAim = -Infinity;
+  HALL.plinths.forEach((x, i) => {
+    if (CLASS_IDS[i] === G.player.cls.id) return;
+    const dx = TERRACE.x + x - p.x, dz = HALL.plinthZ - p.z;
+    const aim = (dx * sight.x + dz * sight.z) / Math.max(1e-3, Math.hypot(dx, dz) * Math.hypot(sight.x, sight.z));
+    if (aim > bestAim) {
+      bestAim = aim;
+      best = i;
+    }
+  });
+  return best;
+}
+
 /** The village's objects set going: their names over them, the pointer's picks. */
 export function initVillage(h: VillageHooks): void {
   hooks = h;
   for (const o of VILLAGE_OBJECTS) {
-    const at = (): { x: number; y: number; z: number } | null => (named(o) ? { x: o.at[0], y: floorAt(o) + o.label, z: o.at[1] } : null);
+    const at = (): { x: number; y: number; z: number } | null => {
+      if (!named(o)) return null;
+      // (on the hero he looks at, not the dais's middle, his own empty plinth there as often as not)
+      if (o.use !== 'heroes') return { x: o.at[0], y: floorAt(o) + o.label, z: o.at[1] };
+      return { x: TERRACE.x + HALL.plinths[heroLookedAt()], y: floorAt(o) + o.label, z: HALL.plinthZ + HERO_HINT_BEFORE };
+    };
     const label = anchorLabel(ORDER.tag, at, true);
     // (its middle on the point: standing on it, the plate rose off a lectern's post over the book it named)
     label.ay = 0.5;
@@ -219,6 +250,7 @@ export function updateVillage(dt = 0): void {
   hallInside(dt);
   const on = hooks.active();
   const p = G.player;
+  for (const hero of G.players) hero.shine = on ? VILLAGE_SHINE : 0;
   wakeByHero(on);
   p.armed = !on || inYard(p.pos.x, p.pos.z);
   if (on && inYard(p.pos.x, p.pos.z)) completeStep('yard');
@@ -390,6 +422,7 @@ function lightLamps(dt: number): void {
     const light = lamp < 0 ? { intensity: 0, reach: LAMPLIGHT.distance } : lampLight(lamp);
     slot.peak = light.intensity * share;
     slot.light.distance = light.reach;
+    slot.light.decay = 2 + LAMP_SOFT;
     if (lamp >= 0) slot.light.position.copy(all[lamp]).setY(all[lamp].y - LAMPLIGHT.below);
   }
 }

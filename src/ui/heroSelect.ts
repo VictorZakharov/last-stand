@@ -221,7 +221,7 @@ export function closeHeroSelect(chosen?: { id: string; profile: Profile }): void
   hideTooltip();
   $('#heroes').classList.add('hidden');
   document.body.classList.remove('in-hall');
-  closeHall();
+  closeHall(Boolean(chosen));
   if (chosen) hooks.choose(chosen.id, chosen.profile);
   hooks.closed();
 }

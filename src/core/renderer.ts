@@ -928,7 +928,7 @@ export function stageCamera(shot: Shot | null, cut = false): void {
     stage.look.copy(cut ? shot.look : _look.set(0, 0, -1).applyQuaternion(cam.quaternion).multiplyScalar(6).add(cam.position));
     stage.fov = cut ? shot.fov : cam.fov;
   }
-  if (!shot && stage.shot) {
+  if (!shot && stage.shot && !cut) {
     rig.fromPos.copy(cam.position); rig.fromQuat.copy(cam.quaternion); rig.fromFov = cam.fov;
     rig.blend = 0;
     rig.fromView = rig.view;
@@ -948,6 +948,31 @@ function onStage(cam: THREE.PerspectiveCamera, shot: Shot, dt: number): void {
   // (nothing between the camera and the heroes to see through)
   updateSeeThrough(stage.look.x, stage.look.y, stage.look.z, 0, 0);
   cam.updateMatrixWorld();
+}
+
+const _boomAt = new THREE.Vector3();
+const _boomHit = { point: new THREE.Vector3(), normal: new THREE.Vector3(), t: 0, stone: false };
+/** how far the camera's boom is, clear of what's built (m), that far when it comes off a wall, how far it stands off a wall
+ *  (m), how close it comes to the shoulder (m), and how fast it goes out again */
+let boomNow = 0;
+const BOOM_OFF = 0.2;
+const BOOM_LEAST = 0.45;
+const BOOM_OUT = 3;
+let boomThrough = false;
+
+/** For a harness (tools/lab): the boom let stand behind what's built, as it did. */
+export function boomStandsBehind(on: boolean): void { boomThrough = on; }
+
+/** The boom back from `pivot` along the view, short of the first wall the line to the camera meets in the village. */
+function boomClear(pivot: THREE.Vector3, dt: number): number {
+  const wall = !boomThrough && G.arena?.place === 'village' ? G.arena.wall : null;
+  let most = rig.boom;
+  if (wall && wall.cast(pivot, _boomAt.copy(pivot).addScaledVector(_fwd, -rig.boom), _boomHit)) {
+    most = Math.max(BOOM_LEAST, _boomHit.point.distanceTo(pivot) - BOOM_OFF);
+  }
+  // (in at once, out by a spring: a post passed behind him sent it in and out)
+  boomNow = Math.min(most, damp(Math.max(boomNow, BOOM_LEAST), most, BOOM_OUT, dt));
+  return boomNow;
 }
 
 /** `height`: the character's, for the close views' shoulder and eye level, over `floor`: the ground he stands on (his
@@ -985,10 +1010,11 @@ export function updateCamera(dt: number, focus: THREE.Vector3, height: number, f
     if (rig.view === 'third') {
       fov = CAMERA.third.fov;
       rig.boom = damp(rig.boom, rig.targetBoom, 6, dt);
-      // the shoulder the camera looks over, then back along the view. It never closes in on the
-      // character: props and walls in the way dissolve instead (core/seeThrough.ts)
+      // the shoulder the camera looks over, then back along the view. Props in the way dissolve (core/seeThrough.ts);
+      // in the village it stands on his side of what's built behind him: dissolved, a palisade left him in a small window
+      // of black, "being behind obstacle - this is not useful... I should see more"
       _pivot.set(focus.x + cy * CAMERA.third.side, floor + height * 0.82, focus.z - sy * CAMERA.third.side);
-      cam.position.copy(_pivot).addScaledVector(_fwd, -rig.boom);
+      cam.position.copy(_pivot).addScaledVector(_fwd, -boomClear(_pivot, dt));
       cam.position.y = Math.max(floor + 0.4, cam.position.y);
     } else {
       fov = CAMERA.first.fov; near = 0.08;

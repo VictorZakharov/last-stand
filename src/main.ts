@@ -30,7 +30,7 @@ import { updateFloaters } from './ui/floaters';
 import { initHud, showHud, buildHotbar, banner, showDecision, hideDecision, resetDecision, updateHud, renderSpoils } from './ui/hud';
 import { initMenus, layOutMenuAhead, showMenu, showSummary, hideSummary, showPause, menuStowed, lobbyPractice, selectedWave, lobbyViewShift, renderMenu, markNew, clearOverlays, openPanels, panelsOpen, showHelp, helpOpen, hideHelp, changeHero as askForHeroes, type Panels } from './ui/menus';
 import { initVillageCard, showVillageCard, villageCardOf } from './ui/villageCard';
-import { initVillage, prepareLamps, updateVillage, closedFrom, inYard, villageObject, goUse, goTo, objectNear } from './game/village';
+import { initVillage, prepareLamps, updateVillage, closedFrom, inYard, villageObject, goUse, goTo, objectNear, heroLookedAt } from './game/village';
 import { initVillageMap, setVillageMap, villageMapOpen, updateVillageMap } from './ui/villageMap';
 import { initTraining, completeStep, restartTraining } from './game/training';
 import { initTrainingTracker, updateTrainingTracker } from './ui/training';
@@ -458,10 +458,9 @@ function abandon() {
 function changeHero() {
   if (G.mode !== 'menu' || heroSelectOpen()) return;
   showMenu(false);
-  // (inside the hall, the hero whose plinth he stands nearest in focus; his own class's empty one is his)
+  // (inside the hall, the hero he looks at in focus, whom the hint stands before)
   const p = G.player.pos;
-  const plinth = HALL.plinths.reduce((best, x, i) => (Math.abs(TERRACE.x + x - p.x) < Math.abs(TERRACE.x + HALL.plinths[best] - p.x) ? i : best), 0);
-  openHeroSelect(inHall(p.x, p.z) ? CLASS_IDS[plinth] : G.player.cls.id);
+  openHeroSelect(inHall(p.x, p.z) ? CLASS_IDS[heroLookedAt()] : G.player.cls.id);
 }
 
 /** A hero chosen on the selection screen: the new class brings its own profile (gear, stash, records) and loadout; a

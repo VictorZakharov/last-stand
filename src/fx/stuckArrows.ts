@@ -10,6 +10,7 @@ import { addEffect } from './effects';
 import { arrowGeometry, arrowLite, ARROW } from '../entities/models/bow';
 import { hullHit } from '../entities/models/hulls';
 import { groundHeight } from '../world/arena';
+import { pavedAt } from '../world/villagePlan';
 import { BIOMES } from '../data/biomes';
 import { sfx } from '../core/audio';
 import { clamp, rand } from '../util';
@@ -337,7 +338,11 @@ export function propSurface(o: Obstacle, at: THREE.Vector3, dir: THREE.Vector3, 
 }
 
 /** What the floor is made of under a point: the dais is stone, the rest is the biome's. */
-export const floorIsStone = (x: number, z: number): boolean => groundHeight(x, z) > 0 || BIOMES[G.arena.biome].surface.floor === 'stone';
+export const floorIsStone = (x: number, z: number): boolean => (G.arena.place === 'village'
+  // (the village's biome is whichever run was last chosen: in the crypt's, arrows skittered off the yard's grass, "ranger
+  // arrows should stick in ground in training area")
+  ? groundHeight(x, z) > 0 || pavedAt(x, z)
+  : groundHeight(x, z) > 0 || BIOMES[G.arena.biome].surface.floor === 'stone');
 /** What a prop is made of: stone unless it's wood, a cap or embers (which an arrow goes into). */
 export const propIsStone = (o: Obstacle): boolean => (o.prop?.kind ?? 'stone') === 'stone';
 

@@ -50,6 +50,7 @@ export function flash({ color = 0xffffff, intensity = 20, distance = 10, life = 
   if (!slot) slot = lights.filter((l) => l.hold !== Infinity).reduce((a, b) => (a.born < b.born ? a : b));
   slot.light.color.set(color);
   slot.light.distance = distance;
+  slot.light.decay = 2;
   slot.peak = intensity;
   slot.life = slot.maxLife = life;
   slot.hold = hold;

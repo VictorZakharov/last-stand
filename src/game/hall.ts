@@ -237,6 +237,9 @@ export async function buildStandingAhead(next: () => Promise<unknown>): Promise<
   do await next(); while (buildAhead());
 }
 
+/** The heroes standing on the village's hall's dais. */
+export const heroesStanding = (): readonly Player[] => standing;
+
 /** The class of the hero standing nearest (x, z) in the village's hall, or null. */
 export function standingNear(x: number, z: number): string | null {
   let best: string | null = null, bestD = Infinity;
@@ -305,8 +308,9 @@ function glowingHead(player: Player): void {
   });
 }
 
-/** The hall taken down, the lobby's hero shown again; its heroes kept out of the scene for its next opening. */
-export function closeHall(): void {
+/** The hall taken down, the lobby's hero shown again; its heroes kept out of the scene for its next opening (`cut`: the
+ *  camera there at once, where it glides back for Back: from play, "no need to zoom to new character after choosing"). */
+export function closeHall(cut = false): void {
   if (!hallOpen()) return;
   // (a showcase under way let go: a channel left open, Void Lance's hum played on in the lobby)
   for (const h of heroes) endShowcase(h);
@@ -321,7 +325,7 @@ export function closeHall(): void {
   for (const p of partners) if (G.players.includes(p)) p.show(true);
   partners = [];
   G.player.idle = false;
-  stageCamera(null);
+  stageCamera(null, cut);
 }
 
 /** Hero `i` in focus: the camera comes to him (`cut`: at once), and once it nears him he shows off his skill. */

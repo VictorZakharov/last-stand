@@ -50,6 +50,21 @@ function hoardDraws(lab: Lab, stand: readonly [number, number]): number {
   }
 }
 
+/** The vertices the hoard's meshes draw: its share of a frame stops growing once the chest's mouth is full (30 of 60
+ *  read 38% and 60 read 29%, the picture plainly fuller), but what it draws goes on growing. */
+function hoardVertices(): number {
+  const pile = G.scene.getObjectByName('chest-hoard');
+  let vertices = 0;
+  pile?.traverse((part) => {
+    const mesh = part as THREE.Mesh;
+    if (!mesh.isMesh || !mesh.visible) return;
+    const range = mesh.geometry.drawRange.count;
+    const all = mesh.geometry.index?.count ?? mesh.geometry.getAttribute('position').count;
+    vertices += Math.min(range, all);
+  });
+  return vertices;
+}
+
 /** The hoard read with the stash at each size: nothing in an empty one, more as it fills. */
 export async function hoardShowsStash(lab: Lab, canary: boolean): Promise<LightsChecked> {
   const stand = villageObject('chest')?.stand;
@@ -58,24 +73,28 @@ export async function hoardShowsStash(lab: Lab, canary: boolean): Promise<Lights
   G.player.walkTo = null;
   G.player.place(new THREE.Vector3(stand[0], groundHeight(stand[0], stand[1]), stand[1]), 0);
   const shares: number[] = [];
+  const drawn: number[] = [];
   try {
     for (const size of SIZES) {
       const held = size === 0 && canary ? CANARY_ITEMS : size;
       G.profile.stash = Array<Item>(held).fill({} as Item);
       await lab.step(SETTLE);
       shares.push(hoardDraws(lab, stand));
+      drawn.push(hoardVertices());
     }
   } finally {
     G.profile.stash = stash;
     await lab.step(SETTLE);
   }
   const read = shares.map((share, i) => `${SIZES[i]}: ${(share * 100).toFixed(2)}%`).join(', ');
-  const line = `the chest's hoard draws of the frame over it, by the stash's size: ${read}`;
-  const [empty, one, half, full] = shares;
+  const line = `the chest's hoard draws of the frame over it, by the stash's size: ${read}; `
+    + `vertices ${drawn.join(', ')}`;
+  const [empty, one] = shares;
+  const [, oneDrawn, half, full] = drawn;
   if (canary) return { lines: [line], problems: [], caught: empty > 0, moments: [] };
   const problems: string[] = [];
   if (empty > 0) problems.push(`${line}: an empty stash shows something`);
   if (one <= 0) problems.push(`${line}: an item shows nothing`);
-  if (one >= half || half > full) problems.push(`${line}: not more as it fills`);
+  if (oneDrawn >= half || half >= full) problems.push(`${line}: not more as it fills`);
   return { lines: [line], problems, caught: null, moments: [] };
 }

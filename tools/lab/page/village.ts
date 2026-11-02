@@ -51,6 +51,12 @@ import { candleLightsNear, chestOpensNear } from './villageChestLid';
 import { wallingAligned } from './villageWalling';
 import { windowsLetSunIn } from './villageWindows';
 import { grassRingsGentle, grassRingsUnseen } from './villageGrassRing';
+import { wornStaysOn } from './villageWorn';
+import { heroFaceNotBlinding } from './villageHeroFace';
+import { cameraBeforeWalls } from './villageCameraWall';
+import { heroChosenQuick } from './villageHeroChosen';
+import { heroesStandOnBothFeet } from './villageHeroStands';
+import { arrowsStickInGround } from './villageArrows';
 
 export interface VillageOptions {
   canary: boolean;
@@ -120,6 +126,12 @@ export async function village(lab: Lab, options: VillageOptions): Promise<Report
     curbsFaceUp: () => curbsFaceUp(options.canary),
     hoardShowsStash: () => hoardShowsStash(lab, options.canary),
     escClosesHelp: () => escClosesHelp(lab, options.canary),
+    wornStaysOn: () => wornStaysOn(lab, options.canary),
+    heroFaceNotBlinding: () => heroFaceNotBlinding(lab, options.canary),
+    cameraBeforeWalls: () => cameraBeforeWalls(lab, options.canary),
+    heroChosenQuick: () => heroChosenQuick(lab, options.canary),
+    heroesStandOnBothFeet: () => heroesStandOnBothFeet(lab, options.canary),
+    arrowsStickInGround: () => arrowsStickInGround(lab, options.canary),
     wallingAligned: () => wallingAligned(options.canary),
     windowsLetSunIn: () => windowsLetSunIn(lab, options.canary),
     propHoleWhereHidden: () => propHoleWhereHidden(lab, options.canary),

@@ -28,7 +28,7 @@ const MOVED = 2;
 const STEP = 2;
 /** the bands' width (m) and the farthest read (m) */
 const BAND = 1;
-const FARTHEST = 30;
+const FARTHEST = 40;
 /** a band read: at least this many of its pixels showing blades */
 const FEWEST = 400;
 /** a pixel lit by a blade: its light past this (black is no blade) */
