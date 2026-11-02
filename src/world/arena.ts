@@ -214,6 +214,7 @@ export async function buildArena(scene: THREE.Scene, renderer: THREE.WebGLRender
       hallGroup.visible = true;
       setRelief(hall.relief);
       setLook(hall.look);
+      emit('hallShown');
     },
     /** the hall of heroes' room (hidden but while it's shown): what the heroes' warm-up shows */
     hallGroup,

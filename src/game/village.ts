@@ -18,6 +18,7 @@ import { completeStep } from './training';
 import { HALL, TERRACE, inHall } from '../data/village';
 import { CLASS_IDS } from '../data/classes/index';
 import { LAMP_SOFT } from '../core/lamps';
+import { on } from '../events';
 import { standHeroes } from './hall';
 import { isWarm } from './warm';
 import { flash, release, type LightSlot } from '../fx/lights';
@@ -461,6 +462,10 @@ function castOnNearest(near: number[], dt: number): void {
     drawLampShadows();
   }
 }
+
+// (at once: E at the dais opens the hall in this update, after `lightLamps`, and the frame drawn with the room's two
+// casting lights and these compiled what it drew for four, 7.3 s, "choose hero in hall freezes for like 10sec")
+on('hallShown', () => castFromLamps(false));
 
 /** The two casting lights' shadows handed to the lamps' (`castOnNearest`), or back to the braziers. */
 function castFromLamps(on: boolean): void {

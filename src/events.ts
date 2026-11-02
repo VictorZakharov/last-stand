@@ -13,6 +13,8 @@ export interface GameEvents {
   waveStarted: [wave: number];
   /** the arena shows another biome (`world/arena.ts` `setBiome`) */
   biomeChanged: [biome: BiomeId];
+  /** the hall of heroes' room shown in the place's stead */
+  hallShown: [];
   /** a training dummy struck (its meter heard the hit) */
   dummyHit: [];
   /** the first visit's training moved on: a step done, finished or skipped (`game/training.ts`) */
