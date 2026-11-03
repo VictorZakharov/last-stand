@@ -8,6 +8,9 @@ import { costInTurns } from './gpuTurns';
 export interface FlameCost {
   shown: number;
   hidden: number;
+  /** the median of each round's two sides apart, each by its quickest render: what else uses the GPU only adds to a
+   *  render's time and drifts within a run, and two whole sides' medians read parts as costing less than nothing */
+  apart: number;
   /** the renders each side was timed over */
   renders: number;
 }

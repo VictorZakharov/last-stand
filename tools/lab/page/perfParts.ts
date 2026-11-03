@@ -7,7 +7,7 @@
 import * as THREE from 'three';
 import { G } from '../../../src/state';
 import * as renderer from '../../../src/core/renderer';
-import { lampShadowsOn, setLampShadows } from '../../../src/core/lamps';
+import { lampsHeldOut, lampShadowsOn, setLampShadows } from '../../../src/core/lamps';
 import { qualityLevel } from '../../../src/core/quality';
 import { QUALITY } from '../../../src/data/quality';
 import { canaryCost, costInTurns, flameCost, medianOf, timedRenders, timerOf } from './fireCost';
@@ -17,7 +17,8 @@ import type { Lab } from './lab';
 const BY_TRIANGLES = 6;
 const BY_REACH = 6;
 /** the groups timed whole */
-const WHOLE = ['meadow', 'fountain'];
+const RINGS = ['meadow grass 1', 'meadow grass 2', 'meadow grass 3', 'meadow grass 4', 'meadow grass 5'];
+const WHOLE = ['meadow', ...RINGS, 'fountain'];
 
 /** the ways he's turned (a turn's share each), the frames he's given to settle, and the renders timed each way */
 const TURNS = 8;
@@ -90,6 +91,19 @@ function under(mesh: THREE.Object3D, name: string): boolean {
 
 /** a mesh's reach from which it's taken for the sky's dome (m), left drawn with all else hidden */
 const SKY = 200;
+/** a mesh's reach from which it's taken for the ground (m), and the order it's tried in (before the sky's, 100) */
+const GROUND = 100;
+const GROUND_ORDER = 90;
+/** the order a depth pass is tried in, before all else */
+const DEPTH_PASS_ORDER = -10;
+
+/** What the village draws merged as still, that writes depth and cuts nothing out of its shape. */
+function stillMeshes(): THREE.Mesh[] {
+  return shownMeshes().filter((mesh) => {
+    const material = mesh.material as THREE.Material;
+    return under(mesh, 'village') && mesh.name.includes('merged') && !material.transparent && !material.alphaTest;
+  });
+}
 
 /** The meshes shown that hold nothing under them. */
 function shownMeshes(): THREE.Mesh[] {
@@ -119,6 +133,47 @@ interface Switch {
   turn: (on: boolean) => void;
 }
 
+/** What's drawn first by how near the camera its middle is, whatever its material: three goes by material first, and a
+ *  pixel covered later has been shaded for nothing. */
+function nearestFirst(a: THREE.RenderItem, b: THREE.RenderItem): number {
+  return a.renderOrder - b.renderOrder || (a.z ?? 0) - (b.z ?? 0);
+}
+
+/** The meadow's blades drawn before all else, or in their turn. */
+function grassFirst(first: boolean): void {
+  for (const mesh of shownMeshes()) {
+    if (under(mesh, 'meadow')) mesh.renderOrder = first ? -1 : 0;
+  }
+}
+
+/** The widest of what's drawn (the ground) after all else but the sky, or in its turn. */
+function groundLast(last: boolean): void {
+  for (const mesh of shownMeshes()) {
+    const reach = reachOf(mesh);
+    if (reach > GROUND && reach < SKY && mesh.renderOrder <= 0) mesh.renderOrder = last ? GROUND_ORDER : 0;
+    else if (reach > GROUND && reach < SKY && mesh.renderOrder === GROUND_ORDER) mesh.renderOrder = 0;
+  }
+}
+
+/** What a depth pass of what stands still would save: its meshes drawn once before all else, into the depth alone. */
+function depthPassOf(meshes: THREE.Mesh[]): (on: boolean) => void {
+  const depthOnly = new THREE.MeshBasicMaterial({ colorWrite: false });
+  const copies = meshes.map((mesh) => {
+    const copy = new THREE.Mesh(mesh.geometry, depthOnly);
+    copy.renderOrder = DEPTH_PASS_ORDER;
+    copy.matrixAutoUpdate = false;
+    copy.matrix.copy(mesh.matrixWorld);
+    copy.matrixWorld.copy(mesh.matrixWorld);
+    copy.visible = false;
+    copy.layers.mask = mesh.layers.mask;
+    G.scene.add(copy);
+    return copy;
+  });
+  return (on) => {
+    for (const copy of copies) copy.visible = !on;
+  };
+}
+
 /** The ways of drawing the frame that cost by the pixel, which hiding a mesh can't tell. */
 function switches(): Switch[] {
   const preset = QUALITY[qualityLevel()];
@@ -127,6 +182,11 @@ function switches(): Switch[] {
     { name: 'MSAA (off: none)', turn: (on) => renderer.setRenderQuality(on ? preset : { ...preset, msaa: 0 }) },
     { name: 'MSAA (off: 2)', turn: (on) => renderer.setRenderQuality(on ? preset : { ...preset, msaa: 2 }) },
     { name: 'the lamps\' still shadows', turn: (on) => setLampShadows(on && shadows) },
+    { name: 'the lamps\' list, all of it', turn: (on) => lampsHeldOut(!on) },
+    { name: 'three\'s order (off: nearest first)', turn: (on) => G.renderer.setOpaqueSort(on ? null : nearestFirst) },
+    { name: 'three\'s order (off: the grass first)', turn: (on) => grassFirst(!on) },
+    { name: 'three\'s order (off: the ground last)', turn: (on) => groundLast(!on) },
+    { name: 'no depth pass (off: what stands still first)', turn: depthPassOf(stillMeshes()) },
     { name: 'the moon or sun\'s shadow map redrawn', turn: (on) => {
       G.renderer.shadowMap.autoUpdate = on;
     } },
@@ -139,7 +199,7 @@ async function switchCosts(draw: () => void): Promise<string[]> {
   for (const { name, turn } of switches()) {
     const cost = await costInTurns(G.renderer, turn, draw);
     if (!cost) continue;
-    const took = (cost.shown - cost.hidden).toFixed(2);
+    const took = cost.apart.toFixed(2);
     lines.push(`  ${took} ms: ${name}, the frame ${cost.shown.toFixed(2)} with it, ${cost.hidden.toFixed(2)} without`);
   }
   return lines;
@@ -162,7 +222,7 @@ export async function partCosts(lab: Lab, canary: boolean): Promise<{ lines: str
       lines.push(`  ${name}: untimed (the browser has no timer)`);
       continue;
     }
-    const took = (cost.shown - cost.hidden).toFixed(2);
+    const took = cost.apart.toFixed(2);
     lines.push(`  ${took} ms: ${name}, the frame ${cost.shown.toFixed(2)} with it, ${cost.hidden.toFixed(2)} without`);
   }
   if (canary) {

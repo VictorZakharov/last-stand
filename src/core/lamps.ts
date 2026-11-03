@@ -202,6 +202,19 @@ export function setLampShadows(on: boolean): void {
 /** Whether the shadows' map is drawn and read. */
 export const lampShadowsOn = (): boolean => list[SHADOWS_ON] > 0;
 
+/** the list as it stood when a harness held the lamps out */
+let heldList: Float32Array | null = null;
+
+/** For a harness (tools/lab): every lamp out, what the list takes of a frame's pixels told; off, as they were. */
+export function lampsHeldOut(out: boolean): void {
+  if (out) {
+    heldList = list.slice();
+    lampsOut();
+  } else if (heldList) {
+    list.set(heldList);
+  }
+}
+
 /** Every lamp put out. */
 export function lampsOut(): void {
   for (let i = 0; i < insides.length; i++) list[lightOf(i) + 3] = 0;
