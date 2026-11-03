@@ -300,14 +300,16 @@ function hallInside(dt: number): void {
   const frontAway = roofAway;
   // (thinned to a ghost over a moment: gone at a stroke, walls and door vanished as he stepped in, from play "why here
   // geometry disappears ... it should fade to semi transparent")
-  frontFade = THREE.MathUtils.damp(frontFade, frontAway ? CUT_AWAY_GHOST : 0, CUT_AWAY_FADE, dt);
+  // (further the deeper he is in: the front wall then lies over half the frame, a dark veil with hard edges, a review)
+  const deep = THREE.MathUtils.clamp((HALL.door - p.pos.z) / WALL_DEEP, 0, 1);
+  const wallGhost = CUT_AWAY_GHOST + (DEEP_GHOST - CUT_AWAY_GHOST) * deep;
+  frontFade = THREE.MathUtils.damp(frontFade, frontAway ? wallGhost : 0, CUT_AWAY_FADE, dt);
   roofFade = THREE.MathUtils.damp(roofFade, roofAway ? ROOF_GHOST : 0, CUT_AWAY_FADE, dt);
   fadeWhole('hallFront', frontFade < CUT_AWAY_NONE ? 0 : frontFade);
   fadeWhole('hallRoof', roofFade < CUT_AWAY_NONE ? 0 : roofFade > 1 - CUT_AWAY_NONE ? 1 : roofFade);
-  // (deep in the hall the front wall stands over half the frame: at 40% it read as a slab over the room, a review)
   // (what stands free before him further: through a hole his own size in a column he showed alone, from play "need to
   // show around him more, to give scene context, not just hero by itself")
-  fadeWhole('hallColumn', frontFade < CUT_AWAY_NONE ? 0 : (frontFade / CUT_AWAY_GHOST) * COLUMN_GHOST);
+  fadeWhole('hallColumn', frontFade < CUT_AWAY_NONE ? 0 : Math.min(frontFade / CUT_AWAY_GHOST, 1) * COLUMN_GHOST);
   // (from inside, the grass is seen through the doorway alone: walls and roof hid its 750k triangles, drawn all the
   // same; from above the roof is away, and all of it shows)
   village.meadow.visible = !(inside && view !== 'top' && cameraInHall() && !doorInView());
@@ -321,6 +323,9 @@ function hallInside(dt: number): void {
  *  fast they go, and the share under which they're whole */
 let frontFade = 0, roofFade = 0;
 const CUT_AWAY_GHOST = 0.72, CUT_AWAY_FADE = 8, CUT_AWAY_NONE = 0.01;
+/** how far the walls thin with him deep in the hall, and how far in from the door that is (m) */
+const DEEP_GHOST = 0.93;
+const WALL_DEEP = 6;
 /** how far the roof thins: all of it, as it lies over all the room before him: thinned as the walls are the room lay
  *  under a dark veil, and at 90% its beams were left as thin stray lines across the frame, a review */
 const ROOF_GHOST = 1;
