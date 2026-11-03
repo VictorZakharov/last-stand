@@ -299,14 +299,15 @@ export class Player {
     this.reset();
   }
 
-  /** Out of the scene, his lights with him, to be brought back whole (`into`): a hero built ahead (`game/hall.ts`). */
+  /** Out of the scene, to be brought back whole (`into`): a hero built ahead (`game/hall.ts`). His lights stay: they're
+   *  every hero's (`heroLights`), and the scene's count of them every program's. */
   stowed(): void {
-    G.scene.remove(this.obj, ...(this.staffLight ? [this.staffLight] : []), ...(this.handLight ? [this.handLight] : []));
+    G.scene.remove(this.obj);
   }
 
   /** Back in the scene from `stowed`, as if just built in `equipped`. */
   unstowed(equipped: Profile['equipped']): void {
-    G.scene.add(this.obj, ...(this.staffLight ? [this.staffLight] : []), ...(this.handLight ? [this.handLight] : []));
+    G.scene.add(this.obj);
     this.recomputeStats(equipped);
     this.reset();
   }
@@ -315,12 +316,13 @@ export class Player {
   dispose(): void {
     this.stopChannel();
     this.ward?.onEnd?.();
-    G.scene.remove(this.obj, ...(this.staffLight ? [this.staffLight] : []), ...(this.handLight ? [this.handLight] : []));
+    G.scene.remove(this.obj);
     this.shadow.dispose();
     this.drawn.dispose();
     this.obj.traverse((o) => { const m = o as THREE.SkinnedMesh; if (m.isSkinnedMesh) { m.skeleton.dispose(); (m.material as THREE.Material).dispose(); } });   // (skinned meshes own a copy of their material)
     this.model.dispose();
-    // (its lights are the next hero's: `heroLights`)
+    // (its lights stay in the scene, the next hero's: `heroLights`. Taken out with a spare hero let go, the frame's 20
+    // were 18 and a wave compiled 14 programs late)
   }
 
   /** Bind a skill (or nothing) to a key and persist the loadout (of the weapon style held). */
