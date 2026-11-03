@@ -301,9 +301,13 @@ function hallInside(dt: number): void {
   // (thinned to a ghost over a moment: gone at a stroke, walls and door vanished as he stepped in, from play "why here
   // geometry disappears ... it should fade to semi transparent")
   frontFade = THREE.MathUtils.damp(frontFade, frontAway ? CUT_AWAY_GHOST : 0, CUT_AWAY_FADE, dt);
-  roofFade = THREE.MathUtils.damp(roofFade, roofAway ? CUT_AWAY_GHOST : 0, CUT_AWAY_FADE, dt);
+  roofFade = THREE.MathUtils.damp(roofFade, roofAway ? ROOF_GHOST : 0, CUT_AWAY_FADE, dt);
   fadeWhole('hallFront', frontFade < CUT_AWAY_NONE ? 0 : frontFade);
-  fadeWhole('hallRoof', roofFade < CUT_AWAY_NONE ? 0 : roofFade);
+  fadeWhole('hallRoof', roofFade < CUT_AWAY_NONE ? 0 : roofFade > 1 - CUT_AWAY_NONE ? 1 : roofFade);
+  // (deep in the hall the front wall stands over half the frame: at 40% it read as a slab over the room, a review)
+  // (what stands free before him further: through a hole his own size in a column he showed alone, from play "need to
+  // show around him more, to give scene context, not just hero by itself")
+  fadeWhole('hallColumn', frontFade < CUT_AWAY_NONE ? 0 : (frontFade / CUT_AWAY_GHOST) * COLUMN_GHOST);
   // (from inside, the grass is seen through the doorway alone: walls and roof hid its 750k triangles, drawn all the
   // same; from above the roof is away, and all of it shows)
   village.meadow.visible = !(inside && view !== 'top' && cameraInHall() && !doorInView());
@@ -316,7 +320,12 @@ function hallInside(dt: number): void {
 /** how far the hall's front wall and roof are thinned now, how far over the hero inside (a share of their pixels), how
  *  fast they go, and the share under which they're whole */
 let frontFade = 0, roofFade = 0;
-const CUT_AWAY_GHOST = 0.4, CUT_AWAY_FADE = 8, CUT_AWAY_NONE = 0.01;
+const CUT_AWAY_GHOST = 0.72, CUT_AWAY_FADE = 8, CUT_AWAY_NONE = 0.01;
+/** how far the roof thins: all of it, as it lies over all the room before him: thinned as the walls are the room lay
+ *  under a dark veil, and at 90% its beams were left as thin stray lines across the frame, a review */
+const ROOF_GHOST = 1;
+/** how far what stands free in the hall thins, before him and from above (a share of its pixels) */
+const COLUMN_GHOST = 0.75;
 const _door = new THREE.Box3(), _frustum = new THREE.Frustum(), _viewProj = new THREE.Matrix4();
 const _look = new THREE.Vector3();
 

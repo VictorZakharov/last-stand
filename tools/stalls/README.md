@@ -25,6 +25,7 @@ npm run stalls -- --scenario sweep --stash 60 --item-ms 100 --seconds 8 --rounds
 npm run stalls -- --scenario hover --stash 60 --listed 40   # every frame of 40 ms+ listed with what was busy
 npm run stalls -- --scenario stow --view top --perf --press-ms 100 --rounds 4  # Space pressed 10 times a second
 npm run stalls -- --scenario heroes --seconds 20 --listed 50  # the hero screen opened and left three times
+npm run stalls -- --scenario hall --seconds 12 --listed 60 --js --return  # into the hall of heroes, a hero chosen there
 npm run stalls -- --scenario boot --url this,https://last-stand.cc/ --rounds 3  # the boot
 npm run stalls -- --scenario boot --cpu-slowdown 4 --js   # on a phone's CPU, its JS by function
 npm run stalls -- --scenario boot --url this,ref:HEAD~2 --rounds 3  # this tree beside a commit of its own
@@ -102,6 +103,9 @@ The report is printed and written to `tools/stalls/out/report.txt`.
   - `switch`: another hero chosen from the hero selection screen, the warrior, the ranger and the mage in turn, each
     choice a phase of its own, and how long each took to bring the lobby back said ("changing hero is a little
     slow": WebGPU's 306 to 331 ms, WebGL's 213 to 270, the hero's build most of both).
+  - `hall`: the hero sent to the village's hall of heroes by its map, through its door and down its length to the
+    dais, its screen opening as he gets there, and another hero chosen on it, each a phase of its own: the first
+    time of each, as a player meets them.
   - `storm`: the mage in a run, walking away from the foes a side of a square at a time and casting Maelstrom back
     at those following him in a line, every other side: its storm draws them in and whirls what it kills.
   - `boot` (`boot.mjs`): no set-up and nothing played. In a fresh Chrome the game is loaded as a first visit has it

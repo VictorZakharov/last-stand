@@ -38,7 +38,7 @@ import { initCrestBlow, updateCrestBlow } from './ui/crestBlow';
 import { hourNow, holdHour } from './game/clock';
 import { initSaves, savesOpen, savesBack } from './ui/saves';
 import { initHeroSelect, openHeroSelect, heroSelectOpen, heroSelectKeys, heroSelectShift, heroSelectSlotSwitched } from './ui/heroSelect';
-import { updateHall } from './game/hall';
+import { takeSpareHero, updateHall } from './game/hall';
 import { hideTooltip } from './ui/tooltip';
 import { initUIScale } from './ui/scale';
 import { releaseClickedFocus } from './ui/focus';
@@ -503,7 +503,7 @@ function swapHero(id: string) {
   clearProjectiles(); clearEffects(); clearLights(); particles.clear();
   G.profile = loadProfile(id);
   const old = G.player;
-  G.player = new Player(id, G.profile.equipped);
+  G.player = takeSpareHero(id, G.profile.equipped) ?? new Player(id, G.profile.equipped);
   G.player.slot = old.slot;
   G.player.spawn.copy(old.spawn);
   G.players[G.players.indexOf(old)] = G.player;

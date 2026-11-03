@@ -4,7 +4,8 @@
 // `canary` plants a stall in one frame.
 import type { Lab } from './lab';
 import { G } from '../../../src/state';
-import { hallOpen } from '../../../src/game/hall';
+import { Player } from '../../../src/entities/player';
+import * as hall from '../../../src/game/hall';
 import { holdHour } from '../../../src/game/clock';
 import { openHall, toLobby } from './hallMoves';
 import type { LightsChecked } from './villageLights';
@@ -55,6 +56,35 @@ async function framesFrom(lab: Lab, canary: boolean): Promise<{ times: number[];
   return { times, compiled: (G.renderer.info.programs?.length ?? 0) - before };
 }
 
+/** The hall's screen opened and another hero chosen on it, the first time of each, builds no hero: built then, each
+ *  held the frame 110 to 290 ms (from play, "choosing here freezes for 0.5-1sec ... first time only"). `canary` lets
+ *  the heroes built ahead for the choice go. */
+export async function heroesBuiltAhead(lab: Lab, canary: boolean): Promise<LightsChecked> {
+  const was = G.player.cls.id;
+  await toLobby(lab);
+  await lab.step(SETTLE);
+  // (by its module, as an A/B's other commit may not have it)
+  if (canary) (hall as { dropSpareHeroes?: () => void }).dropSpareHeroes?.();
+  const before = Player.built;
+  await openHall(lab);
+  await lab.step(SETTLE);
+  const opening = Player.built - before;
+  // (it opens on the hero he stood looking at, in the hall itself: stepped along until it's another's)
+  while (document.querySelector('#heroes .hs-choose')?.textContent?.startsWith('Stay')) {
+    await lab.step(1, () => ({ keys: ['arrowright'] }));
+    await lab.step(SETTLE);
+  }
+  await lab.step(1, () => ({ keys: ['enter'] }));
+  await lab.step(SETTLE);
+  if (hall.hallOpen()) throw new Error('lab: village: Enter never chose a hero');
+  if (G.player.cls.id === was) throw new Error('lab: village: the hero chosen was the one he was');
+  const choosing = Player.built - before - opening;
+  const line = `the hall's first opening built ${opening} heroes, the first ${G.player.cls.id} chosen ${choosing}`;
+  const built = opening + choosing > 0;
+  if (canary) return { lines: [line], problems: [], caught: built, moments: [] };
+  return { lines: [line], problems: built ? [line] : [], caught: null, moments: [] };
+}
+
 /** Choosing another hero holds no frame up past `MOST_MS`. */
 export async function heroChosenQuick(lab: Lab, canary: boolean): Promise<LightsChecked> {
   const was = G.player.cls.id;
@@ -67,7 +97,7 @@ export async function heroChosenQuick(lab: Lab, canary: boolean): Promise<Lights
   await lab.step(SETTLE);
   const { times, compiled } = await framesFrom(lab, canary);
   holdHour(null);
-  if (hallOpen()) throw new Error('lab: village: Enter never chose a hero');
+  if (hall.hallOpen()) throw new Error('lab: village: Enter never chose a hero');
   if (G.player.cls.id === was) throw new Error('lab: village: the hero chosen was the one he was');
   const longest = Math.max(...times);
   const at = times.indexOf(longest);

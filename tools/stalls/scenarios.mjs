@@ -532,5 +532,39 @@ async function choosing(page, ms) {
   return [`the lobby, then a hero chosen on the hero selection screen ${HERO_TRIPS} times`];
 }
 
-export const SCENARIOS = { fight, lobby, firing, firingPast, storm, hover, sweep, stow, heroes, switch: switchHero, pause, choosing,
+/** how long `hall` gives him to walk to the hall's dais from anywhere in the village (ms) */
+const HALL_WALK_MS = 30_000;
+
+/**
+ * The hero sent to the hall of heroes' dais by the village's map (M, its name clicked), through its door and down its
+ * length, its screen opening as he gets there, then another hero chosen on it (from play: "as I entered heroes hall,
+ * had an FPS drop", "choosing here freezes for 0.5-1sec ... first time only"), each a phase of its own. It starts with
+ * a tenth of `ms` standing (the frames to beat), and gives each screen a tenth to settle.
+ */
+async function hall(page, ms) {
+  await page.evaluate(markPhase, 'away');
+  await page.waitForTimeout(ms / 10);
+  await page.evaluate(markPhase, 'walking in');
+  await tap(page, 'm');
+  await page.click('.vm-name[data-use="heroes"]');
+  await page.waitForFunction(heroesShown, null, { timeout: HALL_WALK_MS, polling: 100 });
+  await page.evaluate(markPhase, 'on the screen');
+  await page.waitForTimeout(ms / 10);
+  await page.evaluate(markPhase, 'choosing');
+  const other = await page.evaluate(otherHero);
+  await page.click(`#heroes .hs-tabs [data-c="${other}"]`);
+  await page.click('#heroes .hs-choose');
+  await page.waitForFunction(heroesGone, null, { timeout: HEROES_MS });
+  await page.waitForTimeout(ms / 10);
+  return [`walked into the hall by the map, and chose the ${other} on its screen`];
+}
+
+/** A hero's tab on the hero selection screen other than the one it opened on. (Run in the page.) */
+const otherHero = () => {
+  const tabs = [...document.querySelectorAll('#heroes .hs-tabs [data-c]')];
+  const other = tabs.find((tab) => !tab.classList.contains('on') && !tab.classList.contains('active')) ?? tabs[0];
+  return other.dataset.c;
+};
+
+export const SCENARIOS = { fight, lobby, firing, firingPast, storm, hover, sweep, stow, heroes, switch: switchHero, pause, choosing, hall,
   renderer: rendererSwitch };

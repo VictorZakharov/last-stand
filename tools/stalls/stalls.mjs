@@ -120,6 +120,10 @@ async function setUpLobby(page, options) {
     await page.waitForTimeout(HERO_BUILT_MS);
   }
   if (options.stash > 0) await fillStash(page, options.stash);
+  if (options.returning) {
+    await page.reload({ waitUntil: 'load' });
+    await waitLoaded(page);
+  }
   await chooseView(page, options.view);
 }
 

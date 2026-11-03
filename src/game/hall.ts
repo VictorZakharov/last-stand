@@ -170,7 +170,12 @@ export function openHall(focusId: string): void {
   heroes = CLASS_IDS.map((id, i) => {
     const profile = profileOf(id);
     const player = heroIn(id, profile);
-    standAtRest(player, spot(i), ROW.facing);
+    // (at rest since he last showed off, 11 poses saved: each opening took 70 ms of them, the first 50 more)
+    if (stillSince.has(player)) movedAtRest(player, spot(i), ROW.facing);
+    else {
+      standAtRest(player, spot(i), ROW.facing);
+      stillSince.add(player);
+    }
     return { id, profile, player, due: Infinity, shown: -Infinity, facing: ROW.facing, spin: 0, cast: null };
   });
   opened = G.time;
@@ -221,9 +226,10 @@ export function standHeroes(on: boolean, dt: number, ahead = false): void {
 const waited = new Map<Player, number>();
 let poseTurn = 0;
 
-/** One of the other classes' heroes not yet kept built, out of the scene; false once every one is. */
+/** One of the classes' heroes not yet kept built, out of the scene; false once every one is. (The lobby's own class's
+ *  too, for the hall's screen: built as it first opened, it held that frame 110 ms, from play "choosing here freezes".) */
 function buildAhead(): boolean {
-  const id = CLASS_IDS.find((c) => c !== G.profile.classId && !kept.has(c));
+  const id = CLASS_IDS.find((c) => !kept.has(c));
   if (!id) return false;
   const player = heroIn(id, profileOf(id));
   const i = CLASS_IDS.indexOf(id);
@@ -238,7 +244,42 @@ function buildAhead(): boolean {
  *  its warm-up waits on the GPU (`game/warmup.ts`): built as the hero neared the hall, even a hero a frame, each held
  *  the village up 90 to 240 ms (from play: "entering the hall", frames of 250 and 90 ms). */
 export async function buildStandingAhead(next: () => Promise<unknown>): Promise<void> {
-  do await next(); while (buildAhead());
+  do await next(); while (buildAhead() || spareAhead());
+}
+
+/** A hero of each other class as the lobby's own would be, built ahead and kept out of the scene, for the first time
+ *  he's chosen (`takeSpareHero`): built as he was chosen, it held the click 150 to 290 ms (from play, "choosing here
+ *  freezes ... first time only"). */
+const spares = new Map<string, { player: Player; gear: string }>();
+
+/** One other class's spare built; false once every one is. */
+function spareAhead(): boolean {
+  const id = CLASS_IDS.find((c) => c !== G.profile.classId && !spares.has(c));
+  if (!id) return false;
+  const { equipped } = profileOf(id);
+  const player = new Player(id, equipped);
+  player.stowed();
+  spares.set(id, { player, gear: gearOf(equipped) });
+  return true;
+}
+
+/** Class `id`'s spare in the scene if he's built in `equipped` at this detail (dropped if not), else null. */
+export function takeSpareHero(id: string, equipped: Profile['equipped']): Player | null {
+  const spare = spares.get(id);
+  if (!spare) return null;
+  spares.delete(id);
+  if (spare.gear !== gearOf(equipped)) {
+    spare.player.dispose();
+    return null;
+  }
+  spare.player.unstowed(equipped);
+  return spare.player;
+}
+
+/** Every spare let go, as if none had been built (the lab's canary). */
+export function dropSpareHeroes(): void {
+  for (const spare of spares.values()) spare.player.dispose();
+  spares.clear();
 }
 
 /** The heroes standing on the village's hall's dais. */
@@ -264,11 +305,14 @@ function profileOf(id: string): Profile {
   return unplayed ? hero.profile : loadProfile(id);
 }
 
+/** What a hero built for `equipped` now is built of: he's built again for anything else. */
+const gearOf = (equipped: Profile['equipped']): string => `${heroDetail()} ${JSON.stringify(equipped)}`;
+
 /** Class `id`'s hero in the gear `profile` wears, in the scene: the one kept from the hall's last opening if he wore
  *  the same at the same detail (a save slot switched, gear changed or the quality's detail since builds him again),
  *  his shadows as the quality has them now. */
 function heroIn(id: string, profile: Profile): Player {
-  const gear = `${heroDetail()} ${JSON.stringify(profile.equipped)}`;
+  const gear = gearOf(profile.equipped);
   let hero = kept.get(id);
   if (hero?.gear !== gear) {
     if (hero) halos.delete(hero.player);
@@ -347,6 +391,7 @@ export function focusHall(i: number, cut = false): void {
     left.facing = ROW.facing;
     left.spin = 0;
     standAtRest(left.player, spot(heroes.indexOf(left)), ROW.facing);
+    stillSince.add(left.player);
   }
   for (const [j, h] of heroes.entries()) h.due = j === focus && G.time - h.shown > SHOWCASE.again ? G.time + SHOWCASE.after : Infinity;
   stageCamera(shotAlong(focus, G.time), cut || reduced());
@@ -420,13 +465,23 @@ function standAtRest(p: Player, at: THREE.Vector3, facing: number): void {
   for (let step = 0; step < REST_STEPS; step++) p.update(REST_STEP);
 }
 
-/** the heroes stood at rest since the hall's screen last had them */
+/** the heroes stood at rest since the hall's screen last had them, and those who haven't shown off since they were (who
+ *  need no more of it for its row: the dais needs it again, or the warrior stepped 11 cm as he came to stand there) */
 let atRest = new WeakSet<Player>();
+const stillSince = new WeakSet<Player>();
 
 /** `standAtRest`, and kept so. */
 function restOn(p: Player, at: THREE.Vector3, facing: number): void {
   standAtRest(p, at, facing);
   atRest.add(p);
+  stillSince.add(p);
+}
+
+/** Hero `p`, at rest, stood at `at`: his feet brought with him, or they stepped there from where they stood. */
+function movedAtRest(p: Player, at: THREE.Vector3, facing: number): void {
+  place(p, at, facing);
+  p.update(REST_POSE);
+  place(p, at, facing);
 }
 
 /** The hall's frame: each hero stepped, the one in focus showing off when due, the lights on him, the camera's
@@ -489,6 +544,7 @@ function turnTo(h: HallHero, dt: number): void {
 
 /** Hero `h` begins his showcase: the cast reported as his game would report it (a drawn shot drawn to full). */
 function showOff(h: HallHero, t: number): void {
+  stillSince.delete(h.player);
   h.due = Infinity;
   h.shown = t;
   const { skill, at, hold = 0 } = CLASSES[h.id].hall.showcase;

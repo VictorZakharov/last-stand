@@ -265,7 +265,11 @@ export class Player {
   /** a remote player holds its revive key (reported with its state) */
   reviving = false;
 
+  /** the heroes built so far (a build is 100 to 200 ms: the lab counts those a screen's first opening makes) */
+  static built = 0;
+
   constructor(classId: string, equipped: Profile['equipped'], local = true) {
+    Player.built++;
     this.cls = CLASSES[classId];
     this.local = local;
     this.sandbox = !local;   // a remote player's casts replay as its owner fires them: no costs here
@@ -292,6 +296,18 @@ export class Player {
       this.known.set(def.impl, { def, impl });
     }
     this.recomputeStats(equipped);   // loads the loadout for the gear held
+    this.reset();
+  }
+
+  /** Out of the scene, his lights with him, to be brought back whole (`into`): a hero built ahead (`game/hall.ts`). */
+  stowed(): void {
+    G.scene.remove(this.obj, ...(this.staffLight ? [this.staffLight] : []), ...(this.handLight ? [this.handLight] : []));
+  }
+
+  /** Back in the scene from `stowed`, as if just built in `equipped`. */
+  unstowed(equipped: Profile['equipped']): void {
+    G.scene.add(this.obj, ...(this.staffLight ? [this.staffLight] : []), ...(this.handLight ? [this.handLight] : []));
+    this.recomputeStats(equipped);
     this.reset();
   }
 

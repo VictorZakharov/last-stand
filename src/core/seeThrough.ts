@@ -3,6 +3,10 @@
 // material, so shadows stay whole.
 import * as THREE from 'three';
 
+/** how far over his floor a prop starts to dissolve (m): the terrace's and the hall's floor came apart round his feet
+ *  when this was held at the village's ground, 1.6 m under them */
+const FLOOR_CLEAR = 0.12;
+
 /** the followed character (chest height), set by the camera every frame */
 const focus = { value: new THREE.Vector3() };
 
@@ -14,15 +18,19 @@ const focus = { value: new THREE.Vector3() };
 interface Kind { k: { value: THREE.Vector4 }; minY: { value: number }; across: { value: number }; whole: { value: number } }
 /** the props' hole, which what fades whole has too */
 const PROP_K = { value: new THREE.Vector4(1.0, 1.8, 0, 0.25) }, PROP_ACROSS_NOW = { value: 1 };
+/** nothing under this height dissolves in a prop: the floor he stands on (`updateSeeThrough`) and what lies lower */
+const PROP_MIN_Y = { value: FLOOR_CLEAR };
 const kinds = {
   /** canopies: a wide hole in every view, since the tree line can hide the player top-down */
   foliage: { k: { value: new THREE.Vector4(2.5, 5, 0.9, 1) }, minY: { value: -1e9 }, across: { value: 1 }, whole: { value: 0 } },
   /** props and walls: a narrow hole round the line to the player, in every view but through the eyes */
-  prop: { k: PROP_K, minY: { value: 0.12 }, across: PROP_ACROSS_NOW, whole: { value: 0 } },
+  prop: { k: PROP_K, minY: PROP_MIN_Y, across: PROP_ACROSS_NOW, whole: { value: 0 } },
   /** the hall of heroes' front wall and its roof over the hero inside: a prop, all of it before him thinned by a share
    *  of its own (`fadeWhole`) */
-  hallFront: { k: PROP_K, minY: { value: 0.12 }, across: PROP_ACROSS_NOW, whole: { value: 0 } },
-  hallRoof: { k: PROP_K, minY: { value: 0.12 }, across: PROP_ACROSS_NOW, whole: { value: 0 } },
+  hallFront: { k: PROP_K, minY: PROP_MIN_Y, across: PROP_ACROSS_NOW, whole: { value: 0 } },
+  hallRoof: { k: PROP_K, minY: PROP_MIN_Y, across: PROP_ACROSS_NOW, whole: { value: 0 } },
+  /** what stands free in the hall (its columns, its banners), which hides as much of the room as of him */
+  hallColumn: { k: PROP_K, minY: PROP_MIN_Y, across: PROP_ACROSS_NOW, whole: { value: 0 } },
 } satisfies Record<string, Kind>;
 
 /** Props' dissolve strength at full weight: they stay a faint ghost, so the player can still see what they stand behind. */
@@ -51,6 +59,8 @@ uniform float uSeeAcross;
 uniform float uSeeWhole;
 float seeFade() {
   if ((uSeeK.z <= 0.0 && uSeeWhole <= 0.0) || vSeeWp.y <= uSeeMinY) return 0.0;
+  // (all of it, behind him too: the roof from above, whose beams past him were left as stray lines)
+  if (uSeeWhole >= 1.0) return 1.0;
   vec3 seeCa = uSeeFocus - cameraPosition;
   float seeL = length(seeCa);
   vec3 seeDir = seeCa / seeL, seeCp = vSeeWp - cameraPosition;
@@ -65,7 +75,10 @@ float seeFade() {
   // (a cone from the eye to him, its hole his own size where he stands: what hides him from the eye. A tube as wide all
   // the way took the eave over the camera and the wall beside it apart, at the frame's edges)
   seeR /= max(seeAlong / seeL, 0.05);
-  return max((1.0 - smoothstep(uSeeK.x, uSeeK.y, seeR)) * uSeeK.z, uSeeWhole);
+  // (what thins whole comes back over the last of the way to him: cut at his depth, a column's foot behind it stood as a
+  // pale crescent on its base, a review)
+  float seeWhole = uSeeWhole * (1.0 - smoothstep(seeL - uSeeK.w - 2.0, seeL - uSeeK.w, seeAlong));
+  return max((1.0 - smoothstep(uSeeK.x, uSeeK.y, seeR)) * uSeeK.z, seeWhole);
 }`;
 
 function bindUniforms(uniforms: Record<string, THREE.IUniform>, kind: keyof typeof kinds): void {
@@ -114,16 +127,19 @@ export function seeThrough<M extends THREE.Material>(m: M, kind: keyof typeof ki
   return m;
 }
 
+/** The kinds that thin whole. */
+export type FadesWhole = 'hallFront' | 'hallRoof' | 'hallColumn';
+
 /** How much of what's before the hero `kind` thins by a share of its own, a whole wall's rather than a hole round him. */
-export function fadeWhole(kind: 'hallFront' | 'hallRoof', share: number): void {
+export function fadeWhole(kind: FadesWhole, share: number): void {
   kinds[kind].whole.value = share;
 }
 
 /** The share `kind` is thinned by now. */
-export const wholeShare = (kind: 'hallFront' | 'hallRoof'): number => kinds[kind].whole.value;
+export const wholeShare = (kind: FadesWhole): number => kinds[kind].whole.value;
 
 /** Whether `kind` is thinned at all now. */
-export const fadedWhole = (kind: 'hallFront' | 'hallRoof'): boolean => kinds[kind].whole.value > 0;
+export const fadedWhole = (kind: FadesWhole): boolean => kinds[kind].whole.value > 0;
 
 /**
  * A raw shader's share of `seeThrough`: `seeFade()` in its fragment shader (written before its `main`), the share of
@@ -142,8 +158,9 @@ export function seeThroughFade<M extends THREE.ShaderMaterial>(m: M, kind: keyof
  * Each frame: where the followed character is, how far props dissolve (0..1: none through the eyes) and how far the
  * view is from above (0..1), whose hole is narrower.
  */
-export function updateSeeThrough(x: number, y: number, z: number, props: number, top: number): void {
+export function updateSeeThrough(x: number, y: number, z: number, props: number, top: number, floor = 0): void {
   focus.value.set(x, y, z);
+  PROP_MIN_Y.value = floor + FLOOR_CLEAR;
   const k = kinds.prop.k.value;
   k.x = PROP_HOLE_CLOSE.from + (PROP_HOLE_TOP.from - PROP_HOLE_CLOSE.from) * top;
   k.y = PROP_HOLE_CLOSE.to + (PROP_HOLE_TOP.to - PROP_HOLE_CLOSE.to) * top;

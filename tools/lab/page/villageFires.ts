@@ -1,10 +1,14 @@
 // `lab village`'s fires' sparks and smoke where the fires stand (from play, "weird particles like fire burning, in the
-// plaza... roughly between the fountain and stairs up"): the yard's torches, laid out in a group turned and moved,
-// threw theirs from the group's own numbers. Every ember spawned over some frames must lie near a fire's flames, and
+// plaza... roughly between the fountain and stairs up"): the yard's gate torches, gone since, laid out in a group
+// turned and moved, threw theirs from the group's own numbers. Every ember spawned over some frames must lie near a
+// fire's flames, and
 // each fire's shader must be told where it stands. `canary` puts every ember a few metres off, as those were.
 import * as THREE from 'three';
 import type { Lab } from './lab';
 import { G } from '../../../src/state';
+import { YARD, yardToWorld } from '../../../src/data/village';
+import { groundHeight } from '../../../src/world/ground';
+import { faceCamera } from '../../../src/core/renderer';
 import { particles } from '../../../src/fx/particles';
 import type { LightsChecked } from './villageLights';
 
@@ -20,6 +24,12 @@ const PORTALS_FROM = 27;
 /** the largest ember's size and its least rise: what's told from the portals' motes and the like */
 const EMBER_SIZE = 0.06;
 const EMBER_RISE = 1.1;
+
+/** how near the yard's gate a fire may stand (m; from play, the fires on its posts "make no sense"), how far before the
+ *  gate he's stood for its picture (m), and the frames he's given to settle */
+const OFF_THE_GATE = 3;
+const BEFORE_GATE = 2;
+const SETTLE = 60;
 
 /** A spawn's fields read here. */
 interface Spawned { x: number; z: number; size?: number; vy?: number }
@@ -66,9 +76,17 @@ export async function firesWhereTheyStand(lab: Lab, canary: boolean): Promise<Li
   await lab.step(FRAMES);
   pool.spawn = own;
   if (embers === 0) throw new Error('lab: village: no ember spawned');
+  const [gateX, gateZ] = yardToWorld(YARD.gateAt, -YARD.halfZ);
+  const onGate = at.filter((fire) => Math.hypot(fire.x - gateX, fire.z - gateZ) < OFF_THE_GATE).length;
   const line = `the fires' embers: ${embers} over ${FRAMES} frames, ${astray} away from a fire `
     + `(${places.join(' ')}); `
-    + `${off} of ${at.length} fires' shaders told elsewhere`;
+    + `${off} of ${at.length} fires' shaders told elsewhere; ${onGate} on the yard's gate`;
   if (canary) return { lines: [line], problems: [], caught: astray > 0, moments: [] };
-  return { lines: [line], problems: astray || off ? [line] : [], caught: null, moments: [] };
+  const [standX, standZ] = yardToWorld(YARD.gateAt, -YARD.halfZ - BEFORE_GATE);
+  G.player.walkTo = null;
+  G.player.place(new THREE.Vector3(standX, groundHeight(standX, standZ), standZ), YARD.turn);
+  faceCamera(YARD.turn);
+  await lab.step(SETTLE);
+  const gate = await lab.screen('its gate', ['no fires on its posts']);
+  return { lines: [line], problems: astray || off || onGate ? [line] : [], caught: null, moments: [gate] };
 }

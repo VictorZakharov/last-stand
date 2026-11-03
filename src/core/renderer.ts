@@ -1100,7 +1100,8 @@ export function updateCamera(dt: number, focus: THREE.Vector3, height: number, f
   // of it onto the outside
   const e = ease(rig.blend);
   const share = (view: ViewMode) => (rig.view === view ? e : 0) + (rig.fromView === view ? 1 - e : 0);
-  updateSeeThrough(focus.x, floor + height * 0.6, focus.z, (1 - share('first')) * (1 - share('third') * overHead()), share('top'));
+  updateSeeThrough(focus.x, floor + height * 0.6, focus.z, (1 - share('first')) * (1 - share('third') * overHead()), share('top'),
+    floor);
   rig.kick = damp(rig.kick, rig.kickTo, rig.kickTo > rig.kick ? 14 : 6, dt); rig.kickTo = 0;
   if (rig.view !== 'top') fov += rig.kick * e;
   if (cam.fov !== fov || cam.near !== near) { cam.fov = fov; cam.near = near; cam.updateProjectionMatrix(); }

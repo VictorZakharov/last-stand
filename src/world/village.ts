@@ -24,12 +24,12 @@ import {
   boards, hammered, wood, cobblestone, grunge,
 } from '../core/textures';
 import { seeThrough } from '../core/seeThrough';
+import type { FadesWhole } from '../core/seeThrough';
 import { particles, col } from '../fx/particles';
 import { mulberry, rand, TAU } from '../util';
 import { bannerGeo, buildBrazier } from './crypt';
 import { CLASSES, CLASS_IDS } from '../data/classes/index';
 import { buildBonfire } from './forest';
-import { buildFire } from './fire';
 import { movesInShadows, boxWithUV, contactShadows, setInstance, standStill, type Biome, type BiomeLook, type EnvColours, type Portal, type RGB, type Updater } from './props';
 import { buildMeadow, meadowGround, MeadowMask, type MaskUniforms } from './meadow';
 import {
@@ -108,8 +108,9 @@ const MOTE_COLORS: Record<BiomeId, { rim: THREE.Color; core: THREE.Color }> = {
   crypt: { rim: new THREE.Color(1.0, 0.25, 0.55), core: new THREE.Color(1.0, 0.6, 1.0) },
   forest: { rim: new THREE.Color(0.45, 0.9, 0.15), core: new THREE.Color(0.7, 1.0, 0.55) },
 };
-/** the yard's torches on its gate posts: their fire's height, their light */
-const YARD_TORCH = { up: 2.25, color: 0xff8a3c, intensity: 3.2, distance: 10 };
+/** the yard's gate posts' height, and the light at each, of no strength: two of the village's 10 (a count every lit
+ *  program is made for) */
+const YARD_GATE = { up: 2.25, color: 0xff8a3c, distance: 1 };
 /** the candle on the chronicle's lectern: its light */
 const CANDLE = { color: 0xffc070, intensity: 0.1, distance: 6, over: 0.12, flame: 0xff7a20, flameShows: 0.85, core: 0xffe6a0, coreLit: 2.4 };
 /** how little the chest's lid moves in a frame to count as still */
@@ -639,7 +640,7 @@ export function buildVillage(scene: THREE.Group): Village {
   }
   stillBuilt(scene, () => { for (const c of COTTAGES) buildCottage(scene, wall, M, c, rng); });
   stillBuilt(scene, () => buildTrees(scene, wall, obstacles, trees));
-  buildYard(scene, wall, M, updaters);
+  buildYard(scene, wall, M);
   buildBonfire(scene, CAMPFIRE[0], CAMPFIRE[1], M.ashlar, M.logs, updaters, false);
   obstacles.push({ x: CAMPFIRE[0], z: CAMPFIRE[1], r: 1.0, h: 0.5 });
   stillBuilt(scene, () => buildBenches(scene, M, obstacles));
@@ -1214,19 +1215,24 @@ function buildHall(scene: THREE.Object3D, wall: Wall, levels: Levels, M: Mats, o
   const past = TERRACE.back - back;
   block(scene, half * 2 + 0.6, y0, past + 0.3, X, 0, back - 0.3 + (past + 0.3) / 2, M.ashlar, 0.5).receiveShadow = true;
   // (its edges in the walls: on their inner faces, its sides fought them in a sawtooth along their feet)
-  const floor = block(scene, HALL.inHalf * 2 + 0.1, 0.05, TERRACE.back - HALL.wall + 0.05, X, y0 - 0.045,
-    (TERRACE.back + HALL.wall - 0.05) / 2, M.flags, 1 / 2.25);
+  // (down its whole length to the door: stopped at the terrace's back, the terrace's paving met it across the room in a
+  // straight seam, another stone in another light, a review)
+  const floor = block(scene, HALL.inHalf * 2 + 0.1, 0.05, face - HALL.wall, X, y0 - 0.045, (face + HALL.wall) / 2, M.flags,
+    1 / 2.25);
   floor.receiveShadow = true;
   levels.paint(X - HALL.inHalf, HALL.wall, X + HALL.inHalf, TERRACE.back, () => y0);
-  // the back and side walls, a plinth course along their feet outside, tall windows down the long ones
-  wall.add(walling(scene, half * 2, eaves, thick, X, y0, HALL.wall - thick / 2, M.ashlar), true, 'wall', true);
+  // the back and side walls, a plinth course along their feet outside, tall windows down the long ones (a group of their
+  // own, thinned from above as the front wall is where they stand before him: the camera can turn to see over any)
+  const walls = new THREE.Group();
+  scene.add(walls);
+  wall.add(walling(walls, half * 2, eaves, thick, X, y0, HALL.wall - thick / 2, M.ashlar), true, 'wall', true);
   for (const s of [-1, 1]) {
     const sideX = X + s * (half - thick / 2), sideLen = face - back;
-    hallSideWall(scene, wall, M, sideX, s, thick, eaves, back, face);
+    hallSideWall(walls, wall, M, sideX, s, thick, eaves, back, face);
     // (its plinth course in the wall too: drawn alone, the hero walked along the terrace into it, "can pass through
     // textures here")
-    wall.add(block(scene, 0.35, 0.45, sideLen, sideX + s * 0.47, y0, back + sideLen / 2, M.coping), true, 'wall', true);
-    for (const z of windowsAlong()) block(scene, thick + 0.3, 0.1, WINDOWS.wide + 0.3, sideX, y0 + WINDOWS.sill - 0.1, z, M.coping);
+    wall.add(block(walls, 0.35, 0.45, sideLen, sideX + s * 0.47, y0, back + sideLen / 2, M.coping), true, 'wall', true);
+    for (const z of windowsAlong()) block(walls, thick + 0.3, 0.1, WINDOWS.wide + 0.3, sideX, y0 + WINDOWS.sill - 0.1, z, M.coping);
   }
   // the front wall either side of the door and over it, its plinth course, the door in its stone frame (a group of
   // their own: cut away with the roof over the hero inside, as from above they hid the room)
@@ -1245,8 +1251,11 @@ function buildHall(scene: THREE.Object3D, wall: Wall, levels: Levels, M: Mats, o
   for (const part of frontWall.children.slice(inWall)) wall.add(part, false, 'wall', true);
   const ceiling = y0 + eaves - ROOF.ceiling - 0.32;
   const look = torchLook();
-  const torches = hallColumns(scene, M, look, obstacles, ceiling);
-  const dais = hallDais(scene, levels, M, obstacles);
+  // (what stands free in it, thinned further: a group of its own)
+  const free = new THREE.Group();
+  scene.add(free);
+  const torches = hallColumns(free, M, look, obstacles, ceiling);
+  const dais = hallDais(scene, free, levels, M, obstacles);
   const daisTop = y0 + HALL.daisHigh;
   for (const s of [-1, 1]) {
     const x = X + s * BRAZIERS.x;
@@ -1261,16 +1270,18 @@ function buildHall(scene: THREE.Object3D, wall: Wall, levels: Levels, M: Mats, o
   for (const s of [-1, 1]) {
     for (const x of COLONNADE.x) {
       const cx = X + s * x, cz = COLONNADE.z;
-      wall.add(block(scene, 1.0, 0.4, 1.0, cx, y0, cz, M.granite), true, 'wall', true);
+      wall.add(block(free, 1.0, 0.4, 1.0, cx, y0, cz, M.granite), true, 'wall', true);
       const shaft = new THREE.CylinderGeometry(COLONNADE.radius * 0.88, COLONNADE.radius, COLONNADE.high, 18);
-      solid(scene, shaft, M.column).position.set(cx, y0 + 0.4 + COLONNADE.high / 2, cz);
-      block(scene, 0.95, 0.32, 0.95, cx, y0 + 0.4 + COLONNADE.high, cz, M.granite);
+      solid(free, shaft, M.column).position.set(cx, y0 + 0.4 + COLONNADE.high / 2, cz);
+      block(free, 0.95, 0.32, 0.95, cx, y0 + 0.4 + COLONNADE.high, cz, M.granite);
     }
   }
-  block(scene, half * 2, COLONNADE.lintel, 1.0, X, y0 + 0.72 + COLONNADE.high, COLONNADE.z, M.coping);
+  block(walls, half * 2, COLONNADE.lintel, 1.0, X, y0 + 0.72 + COLONNADE.high, COLONNADE.z, M.coping);
   const roof = hallRoof(scene, M, y0 + eaves, back, front);
   fadesWhole(roof, 'hallRoof');
   fadesWhole(frontWall, 'hallFront');
+  fadesWhole(walls, 'hallFront');
+  fadesWhole(free, 'hallColumn');
   return { cutaway: [roof, frontWall], torches, dais, porch };
 }
 
@@ -1380,7 +1391,7 @@ function torchLook(): TorchLook {
 
 /** What's under `group` drawn in materials of its own that thin as `kind` says (`fadeWhole`): the hall's cut away parts,
  *  as a material a hole round the hero alone has is the rest of the village's too. */
-function fadesWhole(group: THREE.Object3D, kind: 'hallFront' | 'hallRoof'): void {
+function fadesWhole(group: THREE.Object3D, kind: FadesWhole): void {
   const fading = new Map<THREE.Material, THREE.Material>();
   group.traverse((object) => {
     const mesh = object as THREE.Mesh;
@@ -1417,7 +1428,7 @@ function wallTorch(scene: THREE.Object3D, M: Mats, look: TorchLook, x: number, y
 /** The dais across the hall's far end, a step up onto it, and on it a plinth for each hero (granite, a coping on its
  *  top), stood on (its top a level) and kept off (a circle round it: the hero walks between them, the others stand on
  *  them); behind each its class's banner on the back wall. Returns where the lights on the heroes hang. */
-function hallDais(scene: THREE.Object3D, levels: Levels, M: Mats, obstacles: Obstacle[]): THREE.Vector3[] {
+function hallDais(scene: THREE.Object3D, free: THREE.Object3D, levels: Levels, M: Mats, obstacles: Obstacle[]): THREE.Vector3[] {
   const y0 = TERRACE.high, X = TERRACE.x, inHalf = HALL.inHalf, top = y0 + HALL.daisHigh;
   const deep = HALL.daisZ - HALL.wall, step = STEP_RUN, rise = HALL.daisHigh / 2;
   block(scene, inHalf * 2, rise, step, X, y0, HALL.daisZ - step / 2, M.granite);
@@ -1441,10 +1452,10 @@ function hallDais(scene: THREE.Object3D, levels: Levels, M: Mats, obstacles: Obs
     const cloth = bannerCloth(256, 512, CLASSES[CLASS_IDS[i]].hall.banner);
     const velvet = seeThrough(new THREE.MeshStandardMaterial({ map: cloth, roughness: 0.85, side: THREE.DoubleSide }), 'prop');
     const s = HALL_BANNER.scale;
-    solid(scene, bannerGeo(rng).rotateY(Math.PI).scale(s, s, s), velvet).position.set(x, bannerTop, bz);
+    solid(free, bannerGeo(rng).rotateY(Math.PI).scale(s, s, s), velvet).position.set(x, bannerTop, bz);
     const rod = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.9 * s + 0.3, 8).rotateZ(Math.PI / 2), M.iron);
     rod.position.set(x, bannerTop + 0.03, bz);
-    scene.add(rod);
+    free.add(rod);
   }
   // (the heroes lit from before and above, between them: seen from the door, lit by the torches alone they stood dark)
   return [-1, 1].map((s) => new THREE.Vector3(X + s * HALL.plinths[2] / 2, top + DAIS_LIGHT.up, z + DAIS_LIGHT.ahead));
@@ -2042,9 +2053,9 @@ function chimneySmoke(): Updater {
 
 // --- the yard, the campfire's benches, the notice board, the lamps -------------------------------------------------
 
-/** The training yard: a fence of posts and rails round a field of trodden grass, a gate on its north side with a torch on each
- *  post (two of the village's lights). */
-function buildYard(parent: THREE.Object3D, wall: Wall, M: Mats, updaters: Updater[]): void {
+/** The training yard: a fence of posts and rails round a field of trodden grass, a gate on its north side between two
+ *  taller posts (from play, a fire on each read as "floating campfires"; their lights stay, of no strength). */
+function buildYard(parent: THREE.Object3D, wall: Wall, M: Mats): void {
   // (laid out in its own frame: its gate side at -z, turned as the plan has it)
   const scene = new THREE.Group();
   scene.position.set(YARD.x, 0, YARD.z);
@@ -2077,14 +2088,10 @@ function buildYard(parent: THREE.Object3D, wall: Wall, M: Mats, updaters: Update
   side(w0, n1, w0, n0);
   for (const s of [-1, 1]) {
     const px = gateAt + s * gate;
-    block(scene, 0.26, YARD_TORCH.up, 0.26, px, 0, n0, M.timber);
-    const light = new THREE.PointLight(YARD_TORCH.color, YARD_TORCH.intensity, YARD_TORCH.distance, 2);
-    const at = new THREE.Vector3(px, YARD_TORCH.up + 0.05, n0);
-    light.position.set(at.x, at.y + 0.45, at.z);
+    block(scene, 0.26, YARD_GATE.up, 0.26, px, 0, n0, M.timber);
+    const light = new THREE.PointLight(YARD_GATE.color, 0, YARD_GATE.distance, 2);
+    light.position.set(px, YARD_GATE.up, n0);
     scene.add(light);
-    buildFire(scene, {
-      at, radius: 0.11, height: 0.45, dish: 0.03, light, intensity: YARD_TORCH.intensity, smoke: 1.2, smokeColour: 0x2a2826, embers: 3,
-    }, updaters);
   }
   // a rack of practice weapons against the fence's south side, and straw bales
   for (let k = 0; k < 3; k++) {

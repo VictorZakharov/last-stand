@@ -42,7 +42,7 @@ each cottage to a spot behind it, and from each portal to every other object's s
 sends him (`goTo`), there within 600 and 1500 frames (walked straight at the spot, he ran into a cottage and stood
 there: "map waypoints dont work, when path is long and curved... it just runs into obstacles"); every kind of light
 the village has at midnight (a street lamp's lantern, a hall torch, a cottage's window, and each of its own ten
-point lights: the portals, the hall's braziers, the stair's lamps, the campfire, the chronicle's candle, the yard's; and the chronicle's book at midnight and noon, which burned white under the porch's torch),
+point lights: the portals, the hall's braziers, the stair's lamps, the campfire, the chronicle's candle; and the chronicle's book at midnight and noon, which burned white under the porch's torch),
 stood by from a few metres off and looked at in each close view, its pixels read back from the frame
 (`page/villageLights.ts`, each pictured in the close view in `out/village/sheet.png`): over 12% of its box blown out
 (its brightest channel past 0.97) or 2% of the ring round it out to 2.5 times as far fails it as blinding (from
@@ -92,7 +92,7 @@ kept (`sunShadowKept`, `world/moonShadow.ts`) against it redrawn whole at one mo
 chest: 0.00% changed (`--canary` leaves what moves out of it, 1.1 to 1.3%); every curb's top facing up (`curbsFaceUp`,
 `--canary` reads them wound the other way); what the chest's hoard draws, read as the frame with it and without at one
 moment, with the stash at 0, 1, 30 and 60 of 60, and the vertices it draws growing with it (its share of the frame stops growing as the chest's mouth fills: 38% at 30, 29% at 60)
-(`heroChosenQuick`: another hero chosen in the hall, each frame timed by the browser's clock, the programs compiled;
+(`heroesBuiltAhead`: the hall's screen opened and another hero chosen, the first time of each, no hero built; `--canary` lets the spare heroes go) (`hallHoleOpens`: from above, a hall column before him, the frame as the game thins it against everything before him held whole: at least 10% of it opened, the floor before him whole; `page/villageHallHole.ts`, pictured; `--canary` leaves a hole his own size alone) (`heroChosenQuick`: another hero chosen in the hall, each frame timed by the browser's clock, the programs compiled;
 `--canary` stalls a frame) (`heroFaceNotBlinding`: round his head at midnight, before each portal and under the street lamps; `--canary` puts a
 light by his head) (`cameraBeforeWalls`: walked out from the square, the hall, the portico and just inside the door each way to what's
 built, his back to it and along it, then turned round in the doorway, over the shoulder: the camera on his side of what's

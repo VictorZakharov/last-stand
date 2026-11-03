@@ -8,7 +8,7 @@ import { LISTED_LEAST, LISTED_MS, LOBBY_LISTED_MS } from './analyze.mjs';
 /** the options a switch is (`--name`, `--name=false`); every other takes a value (`--name value`, `--name=value`) */
 const SWITCHES = new Set([
   'headed', 'perf', 'js', 'angle', 'dawn', 'builds', 'passes', 'paints', 'links', 'film', 'film-logo', 'cold-return',
-  'warm-behind', 'stale-wind',
+  'warm-behind', 'return', 'stale-wind',
   'help',
 ]);
 /** the views the game is played in (core/renderer.ts `VIEWS`, in the order V steps through them), and the
@@ -48,6 +48,9 @@ const HELP = {
     + `${Object.keys(VARIANTS).join(', ')} (base)`],
   rounds: ['n', 'the variants measured in turn this many times over in one page, each one\'s styles put on as it runs '
     + '(variants that only add styles), and compared by their medians (1 by default: a fresh Chrome for each)'],
+  return: ['', 'the page loaded again before the scenario, as a player back on a build they have played: its caches '
+    + 'and the saved hero kept, the fight and the other heroes warmed behind the lobby rather than under the loading '
+    + 'screen'],
   view: ['name', `the view it's played in: ${VIEWS.join(', ')} (V pressed in the lobby, its panels shown again; top; `
     + `${BOOT}: its end pictured in it, V pressed in the fight it started)`],
   biome: ['name', `the battleground: ${BIOMES.join(', ')} (forest by default; ${BOOT}: the game's own pick, `
@@ -196,6 +199,7 @@ export function readOptions(argv) {
     read: written.read ?? null,
     coldReturn: written['cold-return'] === true,
     warmBehind: written['warm-behind'] === true,
+    returning: written.return === true,
     film: written.film === true || written['film-logo'] === true,
     filmLogo: written['film-logo'] === true,
     help: written.help === true,
