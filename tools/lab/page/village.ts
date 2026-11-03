@@ -44,7 +44,7 @@ import { curbsFaceUp, roadsBendWide } from './villageRoads';
 import { hoardShowsStash } from './villageHoard';
 import { escClosesHelp } from './villageHelpEsc';
 import { propHoleWhereHidden } from './villageSeeThrough';
-import { hallWallsSteady } from './villageHallSteady';
+import { hallWallsSteady, hallFloorSteady } from './villageHallSteady';
 import { objectsUsedAgain } from './villageUseAgain';
 import { hallWallsHold } from './villageHallSide';
 import { candleLightsNear, chestOpensNear } from './villageChestLid';
@@ -143,6 +143,7 @@ export async function village(lab: Lab, options: VillageOptions): Promise<Report
     heroChosenQuick: () => heroChosenQuick(lab, options.canary),
     heroesBuiltAhead: () => heroesBuiltAhead(lab, options.canary),
     hallHoleOpens: () => hallHoleOpens(lab, options.canary),
+    hallFloorSteady: () => hallFloorSteady(lab, options.canary),
     heroesStandOnBothFeet: () => heroesStandOnBothFeet(lab, options.canary),
     heroesSeenOnApproach: () => heroesSeenOnApproach(lab, options.canary),
     daisOpensCompileNothing: () => daisOpensCompileNothing(lab, options.canary),

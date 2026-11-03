@@ -1162,12 +1162,23 @@ function buildTerrace(scene: THREE.Object3D, wall: Wall, levels: Levels, M: Mats
   const { x: X, front, back, half, high, stairHalf, stairFoot } = TERRACE;
   const deep = front - back;
   block(scene, half * 2, high, deep, X, 0, (front + back) / 2, M.ashlar, 0.5).receiveShadow = true;
-  const top = new THREE.Mesh(new THREE.PlaneGeometry(half * 2, deep).rotateX(-Math.PI / 2), M.flags);
-  const uv = top.geometry.attributes.uv;
-  for (let k = 0; k < uv.count; k++) uv.setXY(k, uv.getX(k) * half * 2 / 2.25, uv.getY(k) * deep / 2.25);
-  top.position.set(X, high + 0.005, (front + back) / 2);
-  top.receiveShadow = true;
-  scene.add(top);
+  // its paving but under the hall, whose floor lies in its plane: both there, with stones of their own, they flickered
+  // (from play, "this floor is now flickering"; `lab village --only hallFloorSteady`)
+  const inside = HALL.inHalf + 0.05;
+  const paved = (x0: number, x1: number, z0: number, z1: number): void => {
+    const top = new THREE.Mesh(new THREE.PlaneGeometry(x1 - x0, z1 - z0).rotateX(-Math.PI / 2), M.flags);
+    const { uv, position } = top.geometry.attributes;
+    top.position.set((x0 + x1) / 2, high + 0.005, (z0 + z1) / 2);
+    // (by the world's place, so its pieces' stones run on across their edges)
+    for (let k = 0; k < uv.count; k++) {
+      uv.setXY(k, (position.getX(k) + top.position.x) / 2.25, -(position.getZ(k) + top.position.z) / 2.25);
+    }
+    top.receiveShadow = true;
+    scene.add(top);
+  };
+  paved(X - half, X - inside, back, front);
+  paved(X + inside, X + half, back, front);
+  paved(X - inside, X + inside, HALL.door, front);
   levels.paint(X - half, back, X + half, front, () => high);
   // its walls: the front either side of the stair, the sides, the back (each stands a parapet over the terrace)
   const wallTop = high + PARAPET.over, t = PARAPET.thick / 2;
