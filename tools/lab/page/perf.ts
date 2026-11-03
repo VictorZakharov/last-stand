@@ -96,6 +96,10 @@ const HALL_FRAMES = 900;
  *  drop to 100 fps or below": what the first turn does that the later ones don't) */
 const SPIN_FRAMES = 240;
 const SPIN_TURNS = 3;
+/** the ways round each read on its own, and the frames the view is left to settle on one */
+const SPIN_WAYS = 8;
+const SPIN_SETTLE = 15;
+const UPLOADERS_SAID = 6;
 /** where the hero stands in the hall to look out of its door at the square, how far in from the door (m) (from play,
  *  a perf report "looking at plaza from hall": the render 15 ms of the CPU, 522 draws) */
 const OUT_FROM = 7;
@@ -424,6 +428,74 @@ function cameOnTheGpu(waiting: Map<THREE.BufferGeometry, string>): string {
   return `${count} of the scene's, ${vertices} vertices: ${names || 'none'}`;
 }
 
+/** A phase's median on the GPU, whole frames only (ms). */
+const gpuMedian = (phase: Phase): number => spreadOf(gpuOf(phase).whole).median;
+/** A phase's median of what its frames drew. */
+const drawnMedian = (phase: Phase, pick: (frame: Timed) => number): number => spreadOf(phase.frames.map(pick)).median;
+
+/** What's sent to the GPU's buffers meanwhile: the bytes, by who sent them, the most first, while `run` runs. */
+async function uploadsOver(run: () => Promise<unknown>): Promise<[string, number][]> {
+  const gl = G.renderer.getContext() as WebGL2RenderingContext;
+  const own = gl.bufferSubData;
+  const byWho = new Map<string, number>();
+  gl.bufferSubData = function counted(this: WebGL2RenderingContext, ...args: unknown[]): void {
+    const data = args[2] as ArrayBufferView;
+    const length = args[4] as number | undefined;
+    const elements = data.byteLength / ((data as unknown as { BYTES_PER_ELEMENT?: number }).BYTES_PER_ELEMENT ?? 1);
+    const bytes = length ? (length / elements) * data.byteLength : data.byteLength;
+    const who = uploader();
+    byWho.set(who, (byWho.get(who) ?? 0) + bytes);
+    (own as (...sent: unknown[]) => void).apply(this, args);
+  } as typeof gl.bufferSubData;
+  await run();
+  gl.bufferSubData = own;
+  return [...byWho].sort((a, b) => b[1] - a[1]);
+}
+
+/** The game's function nearest this upload, from its stack, three's own left out. */
+function uploader(): string {
+  const stack = new Error().stack?.split('\n') ?? [];
+  const game = stack.find((line) => line.includes('/src/') && !line.includes('three'));
+  return game?.trim().replace(/\(?http[^ ]*\/src\//, '').replace(/[?:].*$/, '') ?? 'three alone';
+}
+
+const uploadWords = (sent: [string, number][], frames: number) => sent
+  .slice(0, UPLOADERS_SAID)
+  .map(([who, bytes]) => `${who} ${(bytes / frames / 1024).toFixed(0)} kB`)
+  .join(', ') || 'none';
+
+/** Each way round, the GPU's frame turning through it against held still on it: what the turning itself costs, and
+ *  which way is the dear one (from play, "spin still drops": 7 ms one way, 12 to 13 turning through another). */
+async function spinWays(lab: Lab, facing: number): Promise<string[]> {
+  const lines = ['the GPU each way (degrees: turning through it, held still on it, ms; draws; triangles):'];
+  const framesAWay = SPIN_FRAMES / SPIN_WAYS;
+  for (let way = 0; way < SPIN_WAYS; way++) {
+    const start = facing + (way / SPIN_WAYS) * Math.PI * 2;
+    const step = (Math.PI * 2) / SPIN_FRAMES;
+    const turning = await timePhase(lab, 'turning', framesAWay, (f) => {
+      renderer.faceCamera(start + f * step);
+      return {};
+    });
+    renderer.faceCamera(start + (framesAWay / 2) * step);
+    await lab.step(SPIN_SETTLE);
+    const held = await timePhase(lab, 'held', framesAWay, () => ({}));
+    const degrees = ((way + 0.5) * 360) / SPIN_WAYS;
+    const draws = drawnMedian(held, (frame) => frame.draws);
+    const triangles = drawnMedian(held, (frame) => frame.triangles);
+    lines.push(`  ${degrees.toFixed(0)}: ${ms(gpuMedian(turning))}, ${ms(gpuMedian(held))}; ${draws.toFixed(0)}; `
+      + millions(triangles));
+  }
+  const quarter = SPIN_FRAMES / 4;
+  const turned = await uploadsOver(() => lab.step(quarter, (f) => {
+    renderer.faceCamera(facing + (f / SPIN_FRAMES) * Math.PI * 2);
+    return {};
+  }));
+  const held = await uploadsOver(() => lab.step(quarter));
+  lines.push(`sent to the GPU's buffers a frame, turning: ${uploadWords(turned, quarter)}`);
+  lines.push(`sent to the GPU's buffers a frame, held still: ${uploadWords(held, quarter)}`);
+  return lines;
+}
+
 /** The view turned right round where he stands, turn after turn, each a phase, with what each turn made for the GPU. */
 async function spinPhases(lab: Lab, facing: number): Promise<{ phases: Phase[]; lines: string[] }> {
   const phases: Phase[] = [];
@@ -440,6 +512,7 @@ async function spinPhases(lab: Lab, facing: number): Promise<{ phases: Phase[]; 
     lines.push(`turn ${turn + 1} made ${geometries - before.geometries} geometries and `
       + `${textures - before.textures} textures for the GPU; ${cameOnTheGpu(waiting)}`);
   }
+  lines.push(...await spinWays(lab, facing));
   return { phases, lines };
 }
 

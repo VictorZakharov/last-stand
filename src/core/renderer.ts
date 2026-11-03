@@ -964,10 +964,12 @@ let boomThrough = false;
  *  near plane there: at the shoulder's side a hand's breadth off him, what it left in the frame was a slice of his back,
  *  cut by the near plane (from play, "if you stopped moving cam through walls, make sure it looks good at all angles") */
 const BOOM_OVER_HEAD = 1.4;
-const BOOM_RISE = 0.5;
+const BOOM_RISE = 0.34;
+/** how far short of a wall the camera stops at the last (m): past the near plane at its closest */
+const CAMERA_OFF_WALL = 0.16;
 /** how much wider the view is at its closest (degrees): at the third view's own, his head filled the frame's foot, a
  *  mass of hair on a backdrop with slivers of shoulder, and hid the way ahead (a review of each spot's picture) */
-const BOOM_WIDER = 22;
+const BOOM_WIDER = 18;
 const BOOM_NEAR = 0.12;
 let boomOverHead = true;
 /** For a harness (tools/lab): the camera left at his shoulder however close it comes, as it was. */
@@ -992,7 +994,7 @@ function shoulderClear(pivot: THREE.Vector3, x: number, z: number): void {
 }
 
 /** The boom back from `pivot` along the view, short of the first wall the line to the camera meets in the village. */
-function boomClear(pivot: THREE.Vector3, x: number, z: number, dt: number): number {
+function boomClear(pivot: THREE.Vector3, x: number, chest: number, z: number, dt: number): number {
   const wall = !boomThrough && G.arena?.place === 'village' ? G.arena.wall : null;
   let most = rig.boom;
   if (wall && wall.cast(pivot, _boomAt.copy(pivot).addScaledVector(_fwd, -rig.boom), _boomHit)) {
@@ -1000,12 +1002,21 @@ function boomClear(pivot: THREE.Vector3, x: number, z: number, dt: number): numb
   }
   // (and short of what stands between the camera and him: read from the shoulder alone, a wall's corner passed beside it
   // and hid him, the camera at its full length)
-  if (wall && wall.cast(_boomFrom.set(x, pivot.y, z), _boomAt.copy(pivot).addScaledVector(_fwd, -most), _boomHit)) {
+  if (wall && wall.cast(_boomFrom.set(x, chest, z), _boomAt.copy(pivot).addScaledVector(_fwd, -most), _boomHit)) {
     most = Math.max(BOOM_LEAST, most * _boomHit.t - BOOM_OFF);
   }
   // (in at once, out by a spring: a post passed behind him sent it in and out)
   boomNow = Math.min(most, damp(Math.max(boomNow, BOOM_LEAST), most, BOOM_OUT, dt));
   return boomNow;
+}
+
+/** The camera brought back on his side of a wall it stands past: the boom's least, pressed against a wall, put it inside
+ *  the wall, whose far side then showed through (from play, "still seeing through walls from inside"). */
+function cameraClear(camera: THREE.Vector3, x: number, chest: number, z: number): void {
+  const wall = !boomThrough && G.arena?.place === 'village' ? G.arena.wall : null;
+  if (!wall || !wall.cast(_boomFrom.set(x, chest, z), camera, _boomHit)) return;
+  const reach = Math.max(0, _boomHit.point.distanceTo(_boomFrom) - CAMERA_OFF_WALL);
+  camera.sub(_boomFrom).setLength(reach).add(_boomFrom);
 }
 
 /** `height`: the character's, for the close views' shoulder and eye level, over `floor`: the ground he stands on (his
@@ -1046,11 +1057,18 @@ export function updateCamera(dt: number, focus: THREE.Vector3, height: number, f
       // the shoulder the camera looks over, then back along the view. Props in the way dissolve (core/seeThrough.ts);
       // in the village it stands on his side of what's built behind him: dissolved, a palisade left him in a small window
       // of black, "being behind obstacle - this is not useful... I should see more"
-      const over = overHead();
-      const side = CAMERA.third.side * (1 - over);
-      _pivot.set(focus.x + cy * side, floor + height * 0.82 + BOOM_RISE * over, focus.z - sy * side);
+      // (the boom read from his shoulder as it stands with the camera out: read from where the camera's nearness had
+      // moved it, the boom changed where it stands, which changed the boom, and in the doorway it jerked 0.65 m a frame,
+      // "camera starts to jerk back and forth, never settling")
+      _pivot.set(focus.x + cy * CAMERA.third.side, floor + height * 0.82, focus.z - sy * CAMERA.third.side);
       shoulderClear(_pivot, focus.x, focus.z);
-      cam.position.copy(_pivot).addScaledVector(_fwd, -boomClear(_pivot, focus.x, focus.z, dt));
+      const boom = boomClear(_pivot, focus.x, floor + height * 0.7, focus.z, dt);
+      const over = overHead();
+      _pivot.x += (focus.x - _pivot.x) * over;
+      _pivot.z += (focus.z - _pivot.z) * over;
+      _pivot.y += BOOM_RISE * over;
+      cam.position.copy(_pivot).addScaledVector(_fwd, -boom);
+      cameraClear(cam.position, focus.x, floor + height * 0.7, focus.z);
       near = 0.5 + (BOOM_NEAR - 0.5) * over;
       fov += BOOM_WIDER * over;
       cam.position.y = Math.max(floor + 0.4, cam.position.y);

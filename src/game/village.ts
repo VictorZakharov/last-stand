@@ -290,13 +290,14 @@ function hallInside(dt: number): void {
   const village = G.arena.village, p = G.player;
   const lobby = G.mode === 'menu' && G.arena.place === 'village' && !G.arena.hallShown;
   const inside = lobby && inHall(p.pos.x, p.pos.z) && p.obj.position.y > TERRACE.high - 0.1;
-  // (the roof from above alone: over the shoulder the camera is under its ceiling; the front wall over the shoulder
-  // too, which the camera stands behind)
+  // (from above alone, in the hall and on its portico: over the shoulder the camera stands on his side of them, which
+  // shows the room and a wall as a wall, from play "still seeing through walls from inside"; on the portico a hole round
+  // him showed him alone, "need to show around him more")
   const view = viewMode();
-  const roofAway = inside && view === 'top';
-  // (but kept with the camera inside its face: turned to the door, the hall's inside ended at nothing, from play
-  // "should see inner walls from inside the hall")
-  const frontAway = inside && view !== 'first' && G.camera.position.z >= HALL.inFront;
+  const under = lobby && p.obj.position.y > TERRACE.high - 0.1 && Math.abs(p.pos.x - TERRACE.x) < HALL.half
+    && p.pos.z < HALL.door + PORTICO_DEEP;
+  const roofAway = (inside || under) && view === 'top';
+  const frontAway = roofAway;
   // (thinned to a ghost over a moment: gone at a stroke, walls and door vanished as he stepped in, from play "why here
   // geometry disappears ... it should fade to semi transparent")
   frontFade = THREE.MathUtils.damp(frontFade, frontAway ? CUT_AWAY_GHOST : 0, CUT_AWAY_FADE, dt);

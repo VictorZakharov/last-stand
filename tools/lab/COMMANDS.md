@@ -531,7 +531,7 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   their camera, not the hero's. `--village --spin` turns the view right round where he stands three times, each turn a phase, with what each turn
   made for the GPU by name (from play, "initial spin around in 3rd person causes a drop to 100 fps or below": what the
   first turn does that the later ones don't; by the chest `--at 0.6,-12.65`, its first frame 78 ms before `standAtRest`
-  ran once). `--village` measures the lobby's village instead (the run its set-up starts left, no
+  ran once), and eight ways round the GPU turning through each against held still on it, its draws and triangles. `--village` measures the lobby's village instead (the run its set-up starts left, no
   foes), the hero at `--at` facing `--facing` (the square by default) and the camera turned his way: through the eyes
   on the square it was 203 draws and 1.7 million triangles, the hall's heroes standing and the grass over the square
   drawn, and inside the hall over the shoulder 1.63 million, the meadow drawn behind its walls (now 174 and 1.35, and

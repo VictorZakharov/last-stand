@@ -1238,8 +1238,11 @@ function buildHall(scene: THREE.Object3D, wall: Wall, levels: Levels, M: Mats, o
     wall.add(walling(frontWall, wing, eaves, thick, cx, y0, face - thick / 2, M.ashlar), true, 'wall', true);
     wall.add(block(frontWall, wing - DOOR.frame, 0.45, 0.35, cx + s * DOOR.frame / 2, y0, face + 0.17, M.coping), true, 'wall', true);
   }
+  // (the lintel, the frame and the leaves are in the wall: stood in a leaf, he and the camera went through it)
+  const inWall = frontWall.children.length;
   walling(frontWall, dh * 2, eaves - high, thick, X, y0 + high, face - thick / 2, M.ashlar);
   hallDoor(frontWall, M, X, y0, face);
+  for (const part of frontWall.children.slice(inWall)) wall.add(part, false, 'wall', true);
   const ceiling = y0 + eaves - ROOF.ceiling - 0.32;
   const look = torchLook();
   const torches = hallColumns(scene, M, look, obstacles, ceiling);

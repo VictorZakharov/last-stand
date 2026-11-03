@@ -30,7 +30,7 @@ const PROP_STRENGTH = 0.7;
 /** The props' hole over the shoulder (wide round the camera's way past him) and from above, about the hero's own
  *  size on screen there: at the shoulder's, a stump beside him came apart though it hid nothing of him. */
 const PROP_HOLE_CLOSE = { from: 1.0, to: 1.8 };
-const PROP_HOLE_TOP = { from: 0.55, to: 1.05 };
+const PROP_HOLE_TOP = { from: 1.1, to: 2.0 };
 /** How much more the props' hole counts an offset across the view (level, aside of the line to him) than up and down
  *  it, over the shoulder and from above: a body is a third as wide as it is tall (at 3, the wall half a metre beside
  *  him still came apart in a strip), and a round hole his height across
@@ -118,6 +118,9 @@ export function seeThrough<M extends THREE.Material>(m: M, kind: keyof typeof ki
 export function fadeWhole(kind: 'hallFront' | 'hallRoof', share: number): void {
   kinds[kind].whole.value = share;
 }
+
+/** The share `kind` is thinned by now. */
+export const wholeShare = (kind: 'hallFront' | 'hallRoof'): number => kinds[kind].whole.value;
 
 /** Whether `kind` is thinned at all now. */
 export const fadedWhole = (kind: 'hallFront' | 'hallRoof'): boolean => kinds[kind].whole.value > 0;

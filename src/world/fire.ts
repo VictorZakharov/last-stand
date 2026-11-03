@@ -492,7 +492,11 @@ export function buildFire(scene: THREE.Object3D, spec: FireSpec, updaters: Updat
   scene.add(coals);
   const seed = rng() * 100;
   const flames = flameMat(radius, height, seed);
-  flames.uniforms.uCentre.value.copy(at);
+  // (the shader, the embers and the smoke read the world: laid out in a group turned and moved, as the yard's torches
+  // are, the sparks rose from the group's own numbers, on the plaza, "weird particles like fire burning")
+  scene.updateWorldMatrix(true, false);
+  const inWorld = at.clone().applyMatrix4(scene.matrixWorld);
+  flames.uniforms.uCentre.value.copy(inWorld);
   flames.uniforms.uGlow.value = spec.glow ?? 1;
   if (spec.bowl) flames.uniforms.uBowl.value = spec.bowl.map(([y, r]) => new THREE.Vector2(y, r));
   const box = flameBox(radius, height);
@@ -517,12 +521,12 @@ export function buildFire(scene: THREE.Object3D, spec: FireSpec, updaters: Updat
     due.embers += dt * spec.embers;
     while (due.embers >= 1) {
       due.embers -= 1;
-      spawnEmber(at, radius, height);
+      spawnEmber(inWorld, radius, height);
     }
     due.smoke += dt * spec.smoke;
     while (due.smoke >= 1) {
       due.smoke -= 1;
-      spawnSmoke(at, radius, height * puff, spec.smokeColour);
+      spawnSmoke(inWorld, radius, height * puff, spec.smokeColour);
     }
   });
 }

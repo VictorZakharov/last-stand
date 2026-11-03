@@ -55,6 +55,7 @@ import { wornStaysOn } from './villageWorn';
 import { heroFaceNotBlinding } from './villageHeroFace';
 import { cameraBeforeWalls } from './villageCameraWall';
 import { hallFrontFades } from './villageHallFade';
+import { firesWhereTheyStand } from './villageFires';
 import { heroChosenQuick } from './villageHeroChosen';
 import {
   cancelledOnHisFloor, hallShownAtOnce, heroesSeenOnApproach, heroesStandOnBothFeet, heroLeftStands,
@@ -137,6 +138,7 @@ export async function village(lab: Lab, options: VillageOptions): Promise<Report
     heroFaceNotBlinding: () => heroFaceNotBlinding(lab, options.canary),
     cameraBeforeWalls: () => cameraBeforeWalls(lab, options.canary),
     hallFrontFades: () => hallFrontFades(lab, options.canary),
+    firesWhereTheyStand: () => firesWhereTheyStand(lab, options.canary),
     heroChosenQuick: () => heroChosenQuick(lab, options.canary),
     heroesStandOnBothFeet: () => heroesStandOnBothFeet(lab, options.canary),
     heroesSeenOnApproach: () => heroesSeenOnApproach(lab, options.canary),

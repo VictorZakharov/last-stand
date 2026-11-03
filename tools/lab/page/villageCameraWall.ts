@@ -22,6 +22,15 @@ const FROM = [
   { name: 'the square', x: 0, z: 0 },
   { name: 'the hall', x: TERRACE.x, z: (HALL.inFront + HALL.daisZ) / 2 },
   { name: 'the portico', x: TERRACE.x - 4, z: HALL.door + 2 },
+  { name: 'just inside the door', x: TERRACE.x + 0.4, z: HALL.inFront - 0.6 },
+];
+/** where he's stood and turned right round, where the lintel and the door's leaves are over and beside him (from play,
+ *  the frame all stippled by the wall the camera stood through, jerking back and forth) */
+const IN_THE_DOORWAY: readonly (readonly [number, number])[] = [
+  [TERRACE.x, HALL.door],
+  [TERRACE.x - 0.8, HALL.inFront - 0.2],
+  [TERRACE.x + 0.8, HALL.inFront - 0.2],
+  [TERRACE.x, HALL.inFront - 1],
 ];
 /** the angles he's walked out along, and the frames given for the camera to settle */
 const WAYS = 8;
@@ -40,6 +49,10 @@ const BODY_POINTS = [0.3, 0.9, 1.3, 1.65];
 const HEAD = 1.85;
 const CLOSE = 2.5;
 const MOST_PICTURES = 18;
+/** the frames the settled camera is watched over, and the most it may move in one (m): from play, "camera starts to
+ *  jerk back and forth, never settling" */
+const WATCHED = 20;
+const MOST_A_FRAME = 0.02;
 /** which way he's turned, from facing back the way he came: his back to the wall, then along it */
 const TURNS = [{ name: 'backed', by: 0 }, { name: 'along', by: Math.PI / 2 }];
 
@@ -50,8 +63,13 @@ interface Read {
   spots: number;
   cutting: number;
   headOut: number;
+  unsteady: string[];
   moments: Moment[];
 }
+
+/** how far short of the camera the lines to it end (m): what stands at its back hides nothing */
+const EYE_OFF = 0.15;
+const boomOf = (point: THREE.Vector3): number => G.camera.position.distanceTo(point);
 
 /** How far his body's nearest point stands past the near plane (m); under 0, the plane cuts him. */
 function clearOfNear(): number {
@@ -88,38 +106,67 @@ function wallAlong(from: { x: number; z: number }, angle: number): THREE.Vector3
   return new THREE.Vector3(x, floor, z);
 }
 
-/** Every spot's camera read, each close one pictured if `pictures`. */
-async function readSpots(lab: Lab, pictures: boolean): Promise<Read> {
-  const read: Read = { behind: 0, behindAt: [], spots: 0, cutting: 0, headOut: 0, moments: [] };
+/** The most the camera moves in a frame while nothing else does (m). */
+async function mostMoved(lab: Lab): Promise<number> {
+  const last = G.camera.position.clone();
+  let most = 0;
+  await lab.step(WATCHED, undefined, () => {
+    most = Math.max(most, G.camera.position.distanceTo(last));
+    last.copy(G.camera.position);
+  });
+  return most;
+}
+
+/** The camera read with him stood at `at`, turned to `facing`, pictured if close and `pictures`. */
+async function readSpot(lab: Lab, read: Read, at: THREE.Vector3, facing: number, label: string,
+  pictures: boolean): Promise<void> {
   const hit = { point: new THREE.Vector3(), normal: new THREE.Vector3(), t: 0, stone: false };
-  const chest = new THREE.Vector3();
+  G.player.walkTo = null;
+  G.player.place(at, facing);
+  faceCamera(facing);
+  await lab.step(SETTLE);
+  read.spots++;
+  const moved = await mostMoved(lab);
+  if (moved > MOST_A_FRAME) read.unsteady.push(`${label} ${moved.toFixed(2)} m`);
+  const chest = G.player.obj.position.clone();
+  chest.y += CHEST;
+  const head = chest.clone();
+  head.y += HEAD - CHEST;
+  // (hidden when neither shows: a column's edge across his chest with his head and shoulder in view hides nothing)
+  const eye = G.camera.position.clone().lerp(head, EYE_OFF / Math.max(boomOf(head), EYE_OFF));
+  const hidden = G.arena.wall.cast(chest, eye, hit) && G.arena.wall.cast(head, eye, hit);
+  if (hidden) {
+    read.behind++;
+    const met = hit.point.toArray().map((value) => value.toFixed(2)).join();
+    const eyeAt = G.camera.position.toArray().map((value) => value.toFixed(2)).join();
+    read.behindAt.push(`${label}, met at ${met}, the camera at ${eyeAt}`);
+  }
+  if (clearOfNear() < 0) read.cutting++;
+  if (!headInFrame()) read.headOut++;
+  const boom = G.camera.position.distanceTo(chest);
+  if (pictures && (hidden || (boom < CLOSE && read.moments.length < MOST_PICTURES))) {
+    read.moments.push(await lab.screen(label, [`boom ${boom.toFixed(2)} m`]));
+  }
+}
+
+/** Every spot's camera read: by the walls each way out, and turned all round in the doorway. */
+async function readSpots(lab: Lab, pictures: boolean): Promise<Read> {
+  const read: Read = { behind: 0, behindAt: [], spots: 0, cutting: 0, headOut: 0, unsteady: [], moments: [] };
   for (const from of FROM) {
     for (let way = 0; way < WAYS; way++) {
       const angle = (way / WAYS) * Math.PI * 2;
       const at = wallAlong(from, angle);
       if (!at) continue;
       for (const turn of TURNS) {
-        const facing = angle + Math.PI + turn.by;
-        G.player.walkTo = null;
-        G.player.place(at, facing);
-        faceCamera(facing);
-        await lab.step(SETTLE);
-        read.spots++;
-        chest.copy(G.player.obj.position);
-        chest.y += CHEST;
-        const hidden = G.arena.wall.cast(chest, G.camera.position, hit);
-        if (hidden) {
-          read.behind++;
-          read.behindAt.push(`${from.name} way ${way} ${turn.name}`);
-        }
-        if (clearOfNear() < 0) read.cutting++;
-        if (!headInFrame()) read.headOut++;
-        const close = G.camera.position.distanceTo(chest) < CLOSE;
-        if (pictures && (hidden || (close && read.moments.length < MOST_PICTURES))) {
-          const label = `${from.name}, way ${way}, ${turn.name}`;
-          read.moments.push(await lab.screen(label, [`boom ${G.camera.position.distanceTo(chest).toFixed(2)} m`]));
-        }
+        await readSpot(lab, read, at, angle + Math.PI + turn.by, `${from.name}, way ${way}, ${turn.name}`, pictures);
       }
+    }
+  }
+  for (const [x, z] of IN_THE_DOORWAY) {
+    const at = new THREE.Vector3(x, groundHeight(x, z), z);
+    for (let way = 0; way < WAYS; way++) {
+      const facing = (way / WAYS) * Math.PI * 2;
+      await readSpot(lab, read, at, facing, `in the doorway ${x.toFixed(1)},${z.toFixed(1)}, way ${way}`, pictures);
     }
   }
   return read;
@@ -137,13 +184,14 @@ export async function cameraBeforeWalls(lab: Lab, canary: boolean): Promise<Ligh
       boomStandsBehind(true);
       behind = (await readSpots(lab, false)).behind;
     }
-    const { spots, cutting, headOut, moments } = read;
+    const { spots, cutting, headOut, unsteady, moments } = read;
     if (spots < WAYS * 2) throw new Error(`lab: village: only ${spots} spots against a wall`);
     const line = `by the walls at ${spots} spots, over the shoulder: the camera behind one ${behind}, `
-      + `its near plane through him ${cutting}, his crown out of the frame ${headOut}`
+      + `its near plane through him ${cutting}, his crown out of the frame ${headOut}, never settling `
+      + `${unsteady.length}${unsteady.length ? ` (${unsteady.slice(0, 4).join(', ')})` : ''}`
       + `${read.behindAt.length ? ` (behind one: ${read.behindAt.join(', ')})` : ''}`;
     if (canary) return { lines: [line], problems: [], caught: behind > 0 && cutting > 0, moments: [] };
-    const problems = behind || cutting || headOut ? [line] : [];
+    const problems = behind || cutting || headOut || unsteady.length ? [line] : [];
     return { lines: [line], problems, caught: null, moments };
   } finally {
     boomStandsBehind(false);
