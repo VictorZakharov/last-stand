@@ -32,6 +32,10 @@ import { buildBonfire } from './forest';
 import { buildFire } from './fire';
 import { stillMoved, boxWithUV, contactShadows, setInstance, standStill, type Biome, type BiomeLook, type EnvColours, type Portal, type RGB, type Updater } from './props';
 import { buildMeadow, meadowGround, MeadowMask, type MaskUniforms } from './meadow';
+import {
+  barGeometry, chased, CoinBed, coinFaces, coinGeometry, coinsPile, crownGeometry, crownPointAngle, crownPoints, gemGeometry,
+  gobletGeometry, keyholeGeometry, lockPlate, plateGeometry, quiltedLining, type LaidCoin,
+} from './hoardPieces';
 import { growTree, type TreeKind } from './ezTrees';
 import { TREE_KINDS } from './forest';
 import { leafClusterTexture } from './foliage';
@@ -114,9 +118,20 @@ const LID_STILL = 0.002;
 const CHEST_FLOOR = 0.06;
 const UNDER_LID = 0.69;
 /** the top of the goblet in a full chest (m over the box's foot) */
-const HOARD_TOP = 0.92;
+const HOARD_TOP = 1.02;
 /** how little of a coin's size counts as nothing (a hidden mesh compiles nothing: all of it stays drawn) */
 const NOTHING = 1e-4;
+/** the coins' metals (each by a shade of its own), and where stacks of them stand and how tall (x, z, coins) */
+const GOLDEN = [0.6, 0.4, 0.13], TARNISHED = [0.42, 0.29, 0.13], SILVER = [0.5, 0.52, 0.54];
+/** the coins in a full chest, how thick each is (m), the spots each is tried at (the lowest taken, to fill the gaps) */
+const COINS = 850, COIN_THICK = 0.007, COIN_TRIES = 6;
+/** a coin at most laid at each bare spot left, every so many of the bed's cells, as far out as the coins go */
+const BARE_STRIDE = 3, COINS_ON_BARE = 300;
+/** the gems' colours */
+const GEM_TINTS = [0xc8142c, 0x10a060, 0x2048c8];
+/** the lining's picture a metre (four diamonds a side a tile: 9 cm a diamond) */
+const QUILT = 2.8;
+const COIN_STACKS = [[-0.12, 0.2, 7], [-0.05, 0.22, 4], [0.24, 0.17, 6], [0.08, -0.2, 5], [-0.37, -0.03, 6], [0.42, -0.14, 4]] as const;
 /** how fast the hoard follows the stash as it's seen open, and the difference it stops at */
 const HOARD_EASE = 6;
 const HOARD_NEAR = 0.002;
@@ -254,7 +269,8 @@ interface Mats {
   iron: THREE.Material; window: THREE.MeshStandardMaterial; skyPane: THREE.MeshStandardMaterial;
   glass: THREE.MeshStandardMaterial; paper: THREE.Material; pagesLeft: THREE.Material; pagesRight: THREE.Material; pagesEdge: THREE.Material; ribbon: THREE.Material;
   binding: THREE.Material; brass: THREE.Material; lining: THREE.Material; liningInside: THREE.Material; wax: THREE.Material;
-  gold: THREE.Material; coin: THREE.Material; pearl: THREE.Material; gems: readonly THREE.Material[];
+  gold: THREE.Material; coin: THREE.MeshStandardMaterial; gilt: THREE.MeshStandardMaterial; pearl: THREE.Material; gem: THREE.Material;
+  lockBrass: THREE.MeshStandardMaterial;
   chestWood: THREE.Material; chestIron: THREE.Material;
   lantern: THREE.MeshBasicMaterial; lanternIron: THREE.MeshBasicMaterial;
 }
@@ -329,6 +345,9 @@ function unrepeated<M extends THREE.MeshStandardMaterial>(m: M): M {
 function makeMats(): Mats {
   // (the biomes' own recipes, at the same arguments: their maps and their programs are theirs, nothing made afresh)
   const stoneMaps = ashlar(21, 6, 3), flagMaps = flagstone(47, 5), panes = windowPanes();
+  // (the lid's lining is a half cylinder, a tile round it whole: its picture repeated to the box's diamonds)
+  const lining = quiltedLining(), liningLid = quiltedLining();
+  for (const t of [liningLid.map, liningLid.bumpMap]) t.repeat.set(3, 2);
   const mats: Mats = {
     yardFloor: new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(soil(), 8, 0.8), color: 0xc8b090 }),
     cobbles: unrepeated(new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(cobblestone(), 1, 1.1), color: 0xfff4e4 })),
@@ -367,16 +386,21 @@ function makeMats(): Mats {
     ribbon: new THREE.MeshStandardMaterial({ color: 0x5a1416, roughness: 0.7 }),
     // (darker than it looks: pale, the porch's torch beside it lit it evenly bright from rim to foot, its bloom round it)
     wax: new THREE.MeshStandardMaterial({ color: 0x7a7262, roughness: 0.6 }),
-    pearl: new THREE.MeshStandardMaterial({ color: 0x9c9688, roughness: 0.45 }),
+    pearl: new THREE.MeshStandardMaterial({ color: 0x8e8878, roughness: 0.2, metalness: 0.1 }),
     chestWood: new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(boards(), 1, 0.6), color: 0xb09070 }),
     chestIron: new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(hammered(), 1, 1), color: 0xe6e6ea, metalness: 0.4 }),
     binding: new THREE.MeshStandardMaterial({ color: 0x4a1c16, roughness: 0.8 }),
-    lining: new THREE.MeshStandardMaterial({ color: 0x3c1218, roughness: 1 }),
-    liningInside: new THREE.MeshStandardMaterial({ color: 0x3c1218, roughness: 1, side: THREE.BackSide }),
-    // (a little warmth of their own: lit by the moon alone, gold went olive)
-    gold: new THREE.MeshStandardMaterial({ map: coinsPile(), roughness: 0.75, metalness: 0.1, emissive: 0x1e1203 }),
-    coin: new THREE.MeshStandardMaterial({ map: coinFace(), color: 0xb8903a, roughness: 0.6, metalness: 0.2, emissive: 0x5a3808 }),
-    gems: [0xa81c2c, 0x18805a, 0x2850a8].map((color) => new THREE.MeshStandardMaterial({ color, roughness: 0.12, metalness: 0.2, emissive: color, emissiveIntensity: 0.12 })),
+    lining: new THREE.MeshStandardMaterial({ ...lining, bumpScale: 3, roughness: 0.95 }),
+    liningInside: new THREE.MeshStandardMaterial({ ...liningLid, bumpScale: 3, roughness: 0.95, side: THREE.BackSide }),
+    // (a little warmth of their own: lit by the moon alone, gold went olive; at 0x5a3808 they glowed a flat yellow, every
+    // coin one colour whatever lit it, "this needs more detail"; metal, and dark in their colours (`GOLDEN`): what a coin
+    // takes of the noon sky the porch's shade doesn't reach, and pale gold bloomed white, less metal paler still)
+    gold: new THREE.MeshStandardMaterial({ ...coinsPile(), color: 0x6a5430, bumpScale: 2, roughness: 0.85, metalness: 0.1, emissive: 0x140c02 }),
+    coin: new THREE.MeshStandardMaterial({ ...coinFaces(), vertexColors: true, bumpScale: 1.6, roughness: 0.56, metalness: 0.8, emissive: 0x1e1304 }),
+    gilt: new THREE.MeshStandardMaterial({ ...chased(), color: 0xa07c34, bumpScale: 1.5, roughness: 0.42, metalness: 0.8, emissive: 0x1e1304 }),
+    // (white: each stone's colour and its facets' are in its vertices, some near white, as a stone flashes)
+    gem: new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.42, metalness: 0.1, emissive: 0x0c0c0c }),
+    lockBrass: new THREE.MeshStandardMaterial({ ...lockPlate(), color: 0x989088, bumpScale: 1.5, roughness: 0.55, metalness: 0.7, emissive: 0x100a02 }),
     brass: new THREE.MeshStandardMaterial({ color: 0x6e5a2e, roughness: 0.5, metalness: 0.3 }),
     // (the street lamps' panes: their own picture, lit by nothing, as bright as the hour sets, `daylight`)
     lantern: new THREE.MeshBasicMaterial({ map: lanternPane(), color: LANTERN_PANE.day }),
@@ -460,32 +484,6 @@ function bookPage(seed: number, drawn: boolean): THREE.CanvasTexture {
   return map;
 }
 
-/** The coins deep in the hoard, between those lying on it: discs over discs, dark between them, tiling. */
-function coinsPile(): THREE.CanvasTexture {
-  const side = 256, c = canvasOf(side, side), g = ctx2d(c), rng = mulberry(81);
-  g.fillStyle = '#3e2a0c';
-  g.fillRect(0, 0, side, side);
-  for (let k = 0; k < 260; k++) {
-    const x = rng() * side, y = rng() * side, r = 11 + rng() * 5, squash = 0.5 + rng() * 0.5, turn = rng() * Math.PI;
-    const shade = 150 + rng() * 80;
-    for (const [dx, dy] of [[0, 0], [side, 0], [-side, 0], [0, side], [0, -side]]) {
-      g.beginPath();
-      g.ellipse(x + dx, y + dy, r, r * squash, turn, 0, Math.PI * 2);
-      g.fillStyle = `rgb(${shade},${shade * 0.72},${shade * 0.26})`;
-      g.fill();
-      g.strokeStyle = 'rgba(60,38,8,.8)';
-      g.lineWidth = 1.5;
-      g.stroke();
-    }
-  }
-  const map = new THREE.CanvasTexture(c);
-  map.colorSpace = THREE.SRGBColorSpace;
-  map.wrapS = map.wrapT = THREE.RepeatWrapping;
-  map.repeat.set(3, 2);
-  map.anisotropy = 8;
-  return map;
-}
-
 /** A page block's edge: the leaves' lines, side by side. */
 function pageEdges(): THREE.CanvasTexture {
   const c = canvasOf(8, 32), g = ctx2d(c), rng = mulberry(80);
@@ -494,25 +492,6 @@ function pageEdges(): THREE.CanvasTexture {
     g.fillStyle = `rgb(${shade},${shade * 0.88},${shade * 0.68})`;
     g.fillRect(0, y, 8, 1);
   }
-  const map = new THREE.CanvasTexture(c);
-  map.colorSpace = THREE.SRGBColorSpace;
-  return map;
-}
-
-/** A coin's face (a cylinder's caps take the middle of the picture): a raised rim, a mark struck in the middle. */
-function coinFace(): THREE.CanvasTexture {
-  const c = canvasOf(64, 64), g = ctx2d(c);
-  g.fillStyle = '#e8d8a8';
-  g.fillRect(0, 0, 64, 64);
-  g.strokeStyle = '#8a6a2a';
-  g.lineWidth = 3;
-  g.beginPath();
-  g.arc(32, 32, 25, 0, Math.PI * 2);
-  g.moveTo(32, 18);
-  g.lineTo(44, 40);
-  g.lineTo(20, 40);
-  g.lineTo(32, 18);
-  g.stroke();
   const map = new THREE.CanvasTexture(c);
   map.colorSpace = THREE.SRGBColorSpace;
   return map;
@@ -727,11 +706,37 @@ export function buildVillage(scene: THREE.Group): Village {
       M.lantern.color.copy(LANTERN_PANE.day).lerp(LANTERN_PANE.night, 1 - dayness(hour));
       night = 1 - dayness(hour);
       fountainLight(dayness(hour));
+      hoardLight(M, dayness(hour));
     },
   };
 }
 
 // --- the light by the hour ------------------------------------------------------------------------------------------
+
+/** The hoard's metal by the hour (uniforms, nothing compiles): the sky a face reflects isn't shaded by the porch, and gold
+ *  light enough for the lamps' light alone bloomed white by day, whole coins' designs lost; dark enough for the day, it
+ *  was mud at midnight (a review of each). */
+function hoardLight(M: Mats, day: number): void {
+  for (const [metal, base] of [[M.coin, 0xffffff], [M.gilt, GILT], [M.lockBrass, LOCK_BRASS]] as const) {
+    metal.color.setHex(base).multiplyScalar(1 + (METAL_BY_NIGHT.bright - 1) * (1 - day));
+    // (warmer by night: only brighter, the heap drained to a pale khaki)
+    metal.color.g *= 1 - 0.14 * (1 - day);
+    metal.color.b *= 1 - 0.45 * (1 - day);
+    metal.metalness = METAL_BY_NIGHT.metal + (METAL_BY_DAY.metal - METAL_BY_NIGHT.metal) * day;
+    metal.roughness = METAL_BY_NIGHT.rough + (METAL_BY_DAY.rough - METAL_BY_NIGHT.rough) * day;
+    // (warmth of its own by night: by the moon and the lamps alone, the heap read grey-olive, a review)
+    metal.emissive.setHex(METAL_WARMTH.day).lerp(warmthByNight, 1 - day);
+  }
+  // (a piece's few curved faces sheen where a coin's many flat ones bloomed)
+  M.gilt.roughness *= GILT_SHEEN;
+  // (less a mirror than the coins: a crown's walls facing the dark of the porch went near black at noon, a review)
+  M.gilt.metalness *= GILT_METAL;
+  M.lockBrass.roughness *= GILT_SHEEN;
+}
+/** the hoard's metal, by day and by night, and the gilt's and the lock's colours by day */
+const METAL_BY_DAY = { metal: 0.85, rough: 0.62 }, METAL_BY_NIGHT = { metal: 0.6, rough: 0.56, bright: 1.35 };
+const GILT = 0xa8863c, LOCK_BRASS = 0x6e6048, GILT_SHEEN = 0.65, GILT_METAL = 0.7;
+const METAL_WARMTH = { day: 0x140c02, night: 0x3c2206 }, warmthByNight = new THREE.Color(METAL_WARMTH.night);
 
 /** How high the sun is at `hour` (the sine of its height over the horizon: below 0 it's night). */
 function sunHeight(hour: number): number {
@@ -1507,51 +1512,116 @@ function chestHoard(chest: THREE.Object3D, M: Mats, w: number, d: number, h: num
   const heapAt = (x: number, z: number): number => {
     const u = x / across, v = z / deep;
     // (down to its foot inside the box at every side: flat to the rim, its edge stood over the wood as a slab's, seen from
-    // aside: "stash from side looks a little lame")
-    return base + rise * lump(u, v) * (Math.max(0, 1 - u * u) * Math.max(0, 1 - v * v)) ** 0.6;
+    // aside: "stash from side looks a little lame"; rising at once from it, at 0.6, coins dropped from above lay thin on its
+    // steep front, bare between them seen from before it)
+    return base + rise * lump(u, v) * (Math.max(0, 1 - u * u) * Math.max(0, 1 - v * v)) ** 0.9;
   };
   const heap = new THREE.PlaneGeometry(w - 0.02, d - 0.02, 36, 22).rotateX(-Math.PI / 2);
   const at = heap.attributes.position;
   for (let k = 0; k < at.count; k++) at.setY(k, heapAt(at.getX(k), at.getZ(k)));
   heap.computeVertexNormals();
   const heapMesh = add(heap, M.gold, 0, 0, 0);
-  // the coins lying every way over it, thick enough that the heap reads as coins
+  // the coins lying every way over it, thick enough that the heap reads as coins, of four designs and sizes, most gold
+  // of its own shade, some tarnished, a few silver
   const coins: THREE.BufferGeometry[] = [];
-  for (let k = 0; k < 950; k++) {
-    // (out to the lining, their edges lost in the box's thick walls)
-    const x = (rng() * 2 - 1) * across * 0.97, z = (rng() * 2 - 1) * deep * 0.95;
-    const turn = new THREE.Euler(rng() * 1.6 - 0.8, rng() * 3, rng() * 1.6 - 0.8);
-    coins.push(new THREE.CylinderGeometry(0.034, 0.034, 0.008, 10).applyQuaternion(new THREE.Quaternion().setFromEuler(turn))
-      .translate(x, heapAt(x, z) + 0.002 + rng() * 0.012, z));
+  const bed = new CoinBed(w, d, heapAt);
+  const coinOf = ({ x, y, z, turn }: LaidCoin, radius: number): void => {
+    const metal = rng();
+    const tint = metal < 0.08 ? SILVER : metal < 0.26 ? TARNISHED : GOLDEN;
+    const shade = 0.82 + rng() * 0.3;
+    const colour = new THREE.Color(tint[0] * shade, tint[1] * shade, tint[2] * shade);
+    coins.push(coinGeometry(Math.floor(rng() * 4), radius, COIN_THICK, colour)
+      .applyQuaternion(turn).translate(x, y, z));
+  };
+  for (let k = 0; k < COINS; k++) {
+    // (each dropped on what's under it: the lowest of a few spots, out to the lining, its edge lost in the box's thick walls;
+    // placed anyhow they cut through each other and hung in the air, the heap's skin bare between them, a review)
+    let x = 0, z = 0, least = Infinity;
+    for (let tries = 0; tries < COIN_TRIES; tries++) {
+      const tryX = (rng() * 2 - 1) * across * 0.97, tryZ = (rng() * 2 - 1) * deep * 0.95;
+      const over = bed.topAt(tryX, tryZ) - heapAt(tryX, tryZ);
+      if (over < least) [x, z, least] = [tryX, tryZ, over];
+    }
+    const radius = 0.03 + rng() * 0.012;
+    coinOf(bed.lay(x, z, radius, COIN_THICK, rng() * TAU, false), radius);
+  }
+  // the rest where none lies yet: dropped on the lowest of a few spots, a patch of the heap's skin was still left bare
+  let bareLaid = 0;
+  for (const [x, z] of bed.bareSpots(across * 0.97, deep * 0.95, BARE_STRIDE)) {
+    if (bed.coveredAt(x, z) || bareLaid++ >= COINS_ON_BARE) continue;
+    const radius = 0.03 + rng() * 0.012;
+    coinOf(bed.lay(x, z, radius, COIN_THICK, rng() * TAU, false), radius);
+  }
+  // little stacks of them, as they were counted out, a little askew (a full chest's: last in the draw range)
+  for (const [x, z, tall] of COIN_STACKS) {
+    for (let k = 0; k < tall; k++) {
+      const askew = 0.006 * (rng() - 0.5);
+      coinOf(bed.lay(x + askew, z + askew, 0.032, COIN_THICK, rng() * TAU, true), 0.032);
+    }
   }
   const coinCount = coins.length;
   const coinsMesh = add(mergeGeometries(coins)!, M.coin, 0, 0, 0);
   const perCoin = coinsMesh.geometry.index!.count / coinCount;
   for (const c of coins) c.dispose();
-  // the gems half sunk in it, each cut as a gem is: a flat table, a crown, a point below (flat faces)
-  const cut = new THREE.LatheGeometry([[0.001, -0.042], [0.042, 0.006], [0.028, 0.026], [0.001, 0.026]]
-    .map(([r, y]) => new THREE.Vector2(r, y)), 8).toNonIndexed();
-  cut.computeVertexNormals();
-  const gemsAt: [number, number][] = [[-0.3, 0.1], [-0.08, -0.12], [0.14, 0.13], [0.34, -0.05], [0.02, 0.03], [-0.17, 0.17], [0.27, -0.13]];
-  const gems = gemsAt.map(([x, z], k) => {
-    const gem = add(cut, M.gems[k % M.gems.length], x, 0, z, g);
-    gem.rotation.set(0.5 + k * 0.4, k * 1.3, 0.3 - k * 0.2);
-    return { gem, y: heapAt(x, z) + 0.022, from: (k + 1) / (gemsAt.length + 1) };
+  // the gems half sunk in it, each cut as a gem is (`gemGeometry`), round and long, large and small
+  const stones = GEM_TINTS.map((tint, k) => gemGeometry(85 + k, tint));
+  const gemsAt: [number, number, number][] = [[-0.3, 0.1, 0.85], [-0.01, -0.17, 0.7], [0.1, 0.17, 0.8], [0.34, -0.05, 0.75],
+    [-0.03, 0.08, 0.85], [-0.17, 0.17, 0.7], [0.27, -0.13, 0.95], [-0.38, -0.13, 0.7], [0.42, 0.14, 0.8], [-0.02, 0.2, 0.6]];
+  const gems = gemsAt.map(([x, z, size], k) => {
+    const gem = add(gemGeometry(90 + k, GEM_TINTS[k % GEM_TINTS.length], k % 3 === 1 ? 1.35 : 1), M.gem, x, 0, z, g);
+    // (tables up, or near: turned anyhow most showed their pavilions, a fan of long facets)
+    gem.rotation.set(0.45 * Math.sin(k * 2.1), k * 1.3, 0.45 * Math.cos(k * 1.7));
+    return { gem, skin: heapAt(x, z), y: bed.topOver(x, z, 0.025) - 0.006, from: (k + 1) / (gemsAt.length + 1), size };
   });
   // a string of pearls over the heap
   const pearls: THREE.BufferGeometry[] = [];
+  let pearlsOverSkin = 0;
   for (let k = 0; k < 34; k++) {
-    const t = k / 33, x = 0.02 + 0.34 * t, z = -0.02 + 0.16 * Math.sin(t * Math.PI * 1.6) - 0.08 * t;
-    pearls.push(new THREE.SphereGeometry(0.011, 8, 6).translate(x, heapAt(x, z) + 0.016, z));
+    // (before the crown, not over it: on the coins' top under it, it hung in an arc across the crown)
+    const t = k / 33, x = -0.14 + 0.36 * t, z = 0.13 + 0.05 * Math.sin(t * Math.PI * 2.4);
+    const pearlY = bed.topOver(x, z, 0.012) + 0.009;
+    pearlsOverSkin += (pearlY - heapAt(x, z)) / 34;
+    pearls.push(new THREE.SphereGeometry(0.012, 10, 8).translate(x, pearlY, z));
   }
   const pearlsMesh = add(mergeGeometries(pearls)!, M.pearl, 0, 0, 0);
   for (const p of pearls) p.dispose();
-  // the goblet stood in the heap at one end, leaning: its foot, stem and cup, a band of gold round the cup
-  const profile = [[0.03, 0], [0.012, 0.012], [0.01, 0.07], [0.04, 0.1], [0.045, 0.16], [0.04, 0.16], [0.03, 0.11]]
-    .map(([r, y]) => new THREE.Vector2(r, y));
-  const gobletY = heapAt(-0.24, -0.1) - 0.005;
-  const goblet = add(new THREE.LatheGeometry(profile, 14), M.coin, -0.24, gobletY, -0.1, g);
-  goblet.rotation.set(-0.12, 0, 0.22);
+  // the goblet stood in the heap at one end, leaning, a ring of stones round its cup
+  const gobletAt: [number, number] = [-0.16, -0.05];
+  const gobletSkin = heapAt(gobletAt[0], gobletAt[1]), gobletY = bed.topOver(gobletAt[0], gobletAt[1], 0.03) - 0.006;
+  const goblet = add(gobletGeometry(), M.gilt, gobletAt[0], gobletY, gobletAt[1], g);
+  // (leaning toward the chest's front: stood up, from above it was a plain bowl, its chasing out of sight)
+  goblet.rotation.set(0.32, 0, 0.26);
+  for (let k = 0; k < 6; k++) {
+    const a = (k / 6) * TAU;
+    const stone = new THREE.Mesh(stones[k % stones.length], M.gem);
+    // (set low: at their full depth, they stood out from the cup like pegs)
+    stone.position.set(Math.sin(a) * 0.049, 0.125, Math.cos(a) * 0.049);
+    stone.rotation.set(Math.PI / 2, a, 0, 'YXZ');
+    stone.scale.set(0.26, 0.12, 0.26);
+    goblet.add(stone);
+  }
+  // a crown lying tipped on the heap, a stone in its band over each point
+  const crown = crownGeometry();
+  const crownAt: [number, number] = [0.13, -0.03];
+  const crownMesh = add(crown.band, M.gilt, crownAt[0], 0, crownAt[1], g);
+  // (tipped to the chest's front: level, from above it was a hoop, its points and stones edge on)
+  crownMesh.rotation.set(0.42, 0.35, -0.16);
+  for (let k = 0; k < crownPoints(); k++) {
+    const a = crownPointAngle(k);
+    const stone = new THREE.Mesh(stones[k % stones.length], M.gem);
+    stone.position.set(Math.sin(a) * (crown.size.r + 0.003), crown.size.band * 0.55, Math.cos(a) * (crown.size.r + 0.003));
+    stone.rotation.set(Math.PI / 2, a, 0, 'YXZ');
+    stone.scale.set(0.34, 0.16, 0.34);
+    crownMesh.add(stone);
+  }
+  const crownSkin = heapAt(crownAt[0], crownAt[1]), crownY = bed.topOver(crownAt[0], crownAt[1], crown.size.r) - 0.002;
+  // gold bars, two with one across them, sunk a little at the other end
+  const bar = barGeometry(), barsSkin = heapAt(0.305, 0.155), barsY = bed.topOver(0.305, 0.155, 0.07) + 0.008;
+  const bars = [[0.3, 0.19, 0, 0.3], [0.31, 0.12, 0, 0.42], [0.305, 0.155, 0.03, 1.8]].map(([x, z, up, turn]) => {
+    const mesh = add(bar, M.gilt, x, 0, z, g);
+    mesh.rotation.y = turn;
+    return { mesh, up };
+  });
   const raised = (y: number, full: number): number => CHEST_FLOOR + (y - CHEST_FLOOR) * full;
   g.userData.show = (full: number, open: number): void => {
     g.scale.setScalar(full > 0 ? 1 : NOTHING);
@@ -1570,14 +1640,27 @@ function chestHoard(chest: THREE.Object3D, M: Mats, w: number, d: number, h: num
     heapMesh.position.y = -(1 - risen) * 0.3 / level;
     // (fewer than the share: flat on the floor they cover far more of it than heaped, and by the share 10 items of 60
     // carpeted it as 30 did, a review)
-    coinsMesh.geometry.setDrawRange(0, Math.max(COINS_LEAST, Math.ceil(coinCount * full ** COINS_BY)) * perCoin);
+    // (none under the shut lid, where they can't be seen: their triangles were drawn from across the village)
+    const coinsShown = open > 0 ? Math.max(COINS_LEAST, Math.ceil(coinCount * full ** COINS_BY)) : 0;
+    coinsMesh.geometry.setDrawRange(0, coinsShown * perCoin);
+    // (each thing on the coins as far up as the coins yet shown come: at the height of a full chest's top, with fewer shown
+    // the gems hung in the air over the heap)
+    const coinsUp = coinsShown / coinCount;
+    const onCoins = (skin: number, top: number): number => raised(skin + (top - skin) * coinsUp, full);
     pearlsMesh.scale.setScalar(full >= 0.5 ? 1 : NOTHING);
-    for (const { gem, y, from } of gems) {
-      gem.position.y = raised(y, full);
-      gem.scale.setScalar(full >= from ? 1.5 : NOTHING);
+    pearlsMesh.position.y = -pearlsOverSkin * (1 - coinsUp);
+    for (const { gem, skin, y, from, size } of gems) {
+      gem.position.y = onCoins(skin, y);
+      gem.scale.setScalar(full >= from ? size : NOTHING);
     }
-    goblet.position.y = raised(gobletY, full);
-    goblet.scale.setScalar(full >= 0.7 ? 1.4 : NOTHING);
+    goblet.position.y = onCoins(gobletSkin, gobletY);
+    goblet.scale.setScalar(full >= 0.7 ? 1.5 : NOTHING);
+    crownMesh.position.y = onCoins(crownSkin, crownY);
+    crownMesh.scale.setScalar(full >= 0.85 ? 1.3 : NOTHING);
+    for (const { mesh, up } of bars) {
+      mesh.position.y = onCoins(barsSkin, barsY) + up;
+      mesh.scale.setScalar(full >= 0.6 ? 1 : NOTHING);
+    }
   };
 }
 
@@ -1597,10 +1680,10 @@ function buildChest(scene: THREE.Object3D, M: Mats, obstacles: Obstacle[]): THRE
   laid(block(g, w, h, side, 0, 0, d / 2 - side / 2, M.chestWood, tile));
   laid(block(g, w, h, side, 0, 0, -d / 2 + side / 2, M.chestWood, tile));
   for (const s of [-1, 1]) laid(block(g, side, h, d - side * 2, s * (w - side) / 2, 0, 0, M.chestWood, tile));
-  block(g, w - side * 2, 0.04, d - side * 2, 0, 0.02, 0, M.lining);
+  block(g, w - side * 2, 0.04, d - side * 2, 0, 0.02, 0, M.lining, QUILT);
   for (const s of [-1, 1]) {
-    block(g, w - side * 2, h - 0.04, 0.01, 0, 0.04, s * (d / 2 - side - 0.005), M.lining).castShadow = false;
-    block(g, 0.01, h - 0.04, d - side * 2, s * (w / 2 - side - 0.005), 0.04, 0, M.lining).castShadow = false;
+    block(g, w - side * 2, h - 0.04, 0.01, 0, 0.04, s * (d / 2 - side - 0.005), M.lining, QUILT).castShadow = false;
+    block(g, 0.01, h - 0.04, d - side * 2, s * (w / 2 - side - 0.005), 0.04, 0, M.lining, QUILT).castShadow = false;
     block(g, w + 0.03, 0.05, 0.016, 0, 0, s * (d / 2 + 0.008), M.timber).castShadow = false;
     block(g, 0.016, 0.05, d + 0.03, s * (w / 2 + 0.008), 0, 0, M.timber).castShadow = false;
     block(g, w + 0.02, 0.025, 0.012, 0, h - 0.025, s * (d / 2 + 0.006), M.timber).castShadow = false;
@@ -1632,9 +1715,13 @@ function buildChest(scene: THREE.Object3D, M: Mats, obstacles: Obstacle[]): THRE
     rivet(sx * (w / 2 + 0.027), 0.385, 0);
   }
   // its lock: a brass plate on the front, riveted, the keyhole in it
-  block(g, 0.16, 0.2, 0.03, 0, h - 0.2, d / 2 + 0.012, M.brass).castShadow = false;
-  block(g, 0.018, 0.022, 0.008, 0, h - 0.11, d / 2 + 0.03, M.iron).castShadow = false;
-  block(g, 0.008, 0.024, 0.008, 0, h - 0.13, d / 2 + 0.03, M.iron).castShadow = false;
+  const plate = new THREE.Mesh(plateGeometry(0.16, 0.2, 0.03), M.lockBrass);
+  // (under the box's rim: up to it, the rim's edge showed through the plate's top)
+  plate.position.set(0, h - 0.115, d / 2 + 0.012);
+  g.add(plate);
+  const keyhole = new THREE.Mesh(keyholeGeometry(), M.iron);
+  keyhole.position.set(0, h - 0.105, d / 2 + 0.0275);
+  g.add(keyhole);
   for (const x of [-0.06, 0.06]) for (const y of [h - 0.17, h - 0.03]) rivets.push(new THREE.SphereGeometry(0.009, 6, 4).translate(x, y, d / 2 + 0.03));
   chestHoard(g, M, w - side * 2, d - side * 2, h);
   const hinge = new THREE.Group();
@@ -1666,13 +1753,15 @@ function buildChest(scene: THREE.Object3D, M: Mats, obstacles: Obstacle[]): THRE
     block(g, 0.09, 0.09, 0.02, x, h - 0.06, -d / 2 - 0.03, M.chestIron).castShadow = false;
   }
   // the hasp on the lid's front edge, down over the lock as it shuts
-  block(hinge, 0.07, 0.1, 0.012, 0, -0.08, d + 0.03, M.brass).castShadow = false;
+  const hasp = new THREE.Mesh(plateGeometry(0.05, 0.075, 0.012), M.lockBrass);
+  hasp.position.set(0, -0.03, d + 0.03);
+  hinge.add(hasp);
   // the lining's brass studs, rows across the inside of the lid (flat cloth alone read as a box's flap)
   const studs: THREE.BufferGeometry[] = [];
   for (const a of [0.5, 1.05, 1.6, 2.15, 2.65]) {
     for (let k = -4; k <= 4; k++) {
       const r = d / 2 - side - 0.004;
-      studs.push(new THREE.SphereGeometry(0.009, 6, 4).translate(k * 0.115, Math.sin(a) * r, d / 2 + Math.cos(a) * r));
+      studs.push(new THREE.SphereGeometry(0.006, 6, 4).translate(k * 0.115, Math.sin(a) * r, d / 2 + Math.cos(a) * r));
     }
   }
   hinge.add(new THREE.Mesh(mergeGeometries(studs)!, M.brass));
