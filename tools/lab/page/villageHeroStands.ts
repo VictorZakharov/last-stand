@@ -179,6 +179,9 @@ export async function heroLeftStands(lab: Lab, canary: boolean): Promise<LightsC
       .join(', ')
     + ` (at most ${MOST_FRAMES_UP})`;
   const standing = await riseOfStanding(lab);
+  // (left open, V did nothing in every check after it: `lab village` whole stopped at the next change of view)
+  await lab.step(1, () => ({ keys: ['escape'] }));
+  if (hallOpen()) throw new Error('lab: village: Esc never left the hall');
   const lifted = [...worst.values()].some((rise) => rise.frames > MOST_FRAMES_UP);
   const standingCm = (standing * 100).toFixed(0);
   const atRest = `the warrior long at rest in the row, an ankle's highest past its rest: ${standingCm} cm`;

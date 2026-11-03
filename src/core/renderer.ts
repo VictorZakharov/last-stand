@@ -13,6 +13,7 @@ import { G } from '../state';
 import { CAMERA } from '../data/balance';
 import { clamp, damp } from '../util';
 import { updateSeeThrough } from './seeThrough';
+import { holeOpening } from './heroHidden';
 import type { QualityPreset } from '../data/quality';
 import { hdrLevels, initHdr, presentHdr } from './hdr';
 import { bloodMask, fitBloodMask } from './bloodEdges';
@@ -1019,6 +1020,50 @@ function cameraClear(camera: THREE.Vector3, x: number, chest: number, z: number)
   camera.sub(_boomFrom).setLength(reach).add(_boomFrom);
 }
 
+/** how close to a wall beside it the camera may stand (m), how far it looks for one, and the near plane as far as it
+ *  goes (m) */
+const SIDE_ROOM = 0.2;
+const SIDE_REACH = 0.4;
+const FAR_NEAR = 0.5;
+/** the share of the way to the far near plane a wall is kept off at, along a line through its corners */
+const NEAR_HELD = BOOM_NEAR / (FAR_NEAR * 0.85) + 0.02;
+/** the plane's corners and middle, in the frame's own -1 to 1 */
+const NEAR_POINTS: readonly (readonly [number, number])[] = [[-1, -1], [1, -1], [-1, 1], [1, 1], [0, 0]];
+const _nearRight = new THREE.Vector3(), _nearUp = new THREE.Vector3(), _nearWay = new THREE.Vector3();
+let farNearKept = false;
+/** For a harness (tools/lab): the near plane left as far as it was, by a wall beside the camera. */
+export function farNearAtWalls(on: boolean): void { farNearKept = on; }
+
+/**
+ * The camera moved off a wall beside it, and the near plane the frame may have there: at 0.5 m, a wall running along
+ * the view beside the camera was cut away by the plane, and what's behind it showed on the wall's far side (from play,
+ * "I should not able to see through walls like this").
+ */
+function nearClear(camera: THREE.Vector3, sy: number, cy: number, fov: number): number {
+  const wall = !boomThrough && G.arena?.place === 'village' ? G.arena.wall : null;
+  if (!wall || farNearKept) return FAR_NEAR;
+  _nearRight.set(cy, 0, -sy);
+  // (either side, and an eave over it)
+  for (const way of [1, -1, 0]) {
+    _nearWay.copy(_nearRight).multiplyScalar(way);
+    if (way === 0) _nearWay.set(0, 1, 0);
+    if (!wall.cast(camera, _boomAt.copy(camera).addScaledVector(_nearWay, SIDE_REACH), _boomHit)) continue;
+    camera.addScaledVector(_nearWay, Math.min(0, _boomHit.t * SIDE_REACH - SIDE_ROOM));
+  }
+  _nearUp.crossVectors(_nearRight, _fwd);
+  const high = Math.tan(THREE.MathUtils.degToRad(fov / 2));
+  const wide = high * G.camera.aspect;
+  let share = 1;
+  for (const [x, y] of NEAR_POINTS) {
+    _nearWay.copy(_fwd).addScaledVector(_nearRight, x * wide).addScaledVector(_nearUp, y * high).multiplyScalar(FAR_NEAR);
+    if (!wall.cast(camera, _boomAt.copy(camera).add(_nearWay), _boomHit)) continue;
+    // (off what slopes over it, an eave, as the plane comes no nearer than BOOM_NEAR)
+    camera.addScaledVector(_boomHit.normal, Math.max(0, NEAR_HELD - _boomHit.t) * _nearWay.length());
+    share = Math.min(share, Math.max(_boomHit.t, NEAR_HELD));
+  }
+  return share < 1 ? Math.max(BOOM_NEAR, FAR_NEAR * share * 0.85) : FAR_NEAR;
+}
+
 /** `height`: the character's, for the close views' shoulder and eye level, over `floor`: the ground he stands on (his
  *  body's height, `obj.position.y`: the player's `pos.y` is always 0, and over it, through the eyes up the village's
  *  stair, the eyes stayed at the square's level, "in 1st person cannot walk up the stairs"). */
@@ -1069,7 +1114,7 @@ export function updateCamera(dt: number, focus: THREE.Vector3, height: number, f
       _pivot.y += BOOM_RISE * over;
       cam.position.copy(_pivot).addScaledVector(_fwd, -boom);
       cameraClear(cam.position, focus.x, floor + height * 0.7, focus.z);
-      near = 0.5 + (BOOM_NEAR - 0.5) * over;
+      near = Math.min(0.5 + (BOOM_NEAR - 0.5) * over, nearClear(cam.position, sy, cy, fov + BOOM_WIDER * over));
       fov += BOOM_WIDER * over;
       cam.position.y = Math.max(floor + 0.4, cam.position.y);
     } else {
@@ -1100,8 +1145,9 @@ export function updateCamera(dt: number, focus: THREE.Vector3, height: number, f
   // of it onto the outside
   const e = ease(rig.blend);
   const share = (view: ViewMode) => (rig.view === view ? e : 0) + (rig.fromView === view ? 1 - e : 0);
-  updateSeeThrough(focus.x, floor + height * 0.6, focus.z, (1 - share('first')) * (1 - share('third') * overHead()), share('top'),
-    floor);
+  const props = (1 - share('first')) * (1 - share('third') * overHead());
+  const opening = holeOpening(cam.position, focus.x, floor, focus.z, height, props, dt);
+  updateSeeThrough(focus.x, floor + height * 0.6, focus.z, props, share('top'), floor, opening);
   rig.kick = damp(rig.kick, rig.kickTo, rig.kickTo > rig.kick ? 14 : 6, dt); rig.kickTo = 0;
   if (rig.view !== 'top') fov += rig.kick * e;
   if (cam.fov !== fov || cam.near !== near) { cam.fov = fov; cam.near = near; cam.updateProjectionMatrix(); }

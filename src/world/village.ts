@@ -95,7 +95,7 @@ const GROVES: readonly [number, number, number][] = [
 const WOOD = { n: 130, near: 2.4, far: 30, low: 9, high: 20 };
 /** the lamp posts flanking the stair's foot (x either side, z: on the grass behind the curbs, as at -7 the square's
  *  own edge left one standing on the paving), their lantern's height and light */
-const LAMPS = { x: 3.5, z: -8.7, high: 3.1, color: 0xffb46a };
+export const LAMPS = { x: 3.5, z: -8.7, high: 3.1, color: 0xffb46a };
 /** the street lamps (`buildStreetLamps`): how far apart along a road and the first from its start, how far out past
  *  its side (`builtAt` keeps 0.8 m by a road), how clear of any obstacle and of another lamp, and how many round the
  *  square (m) */
@@ -264,6 +264,10 @@ const stepAt = (along: number, top: number): number => Math.min(top, Math.max(0,
 interface Mats {
   yardFloor: THREE.Material; cobbles: THREE.Material; flags: THREE.Material;
   ashlar: THREE.Material; coping: THREE.Material; granite: THREE.Material; column: THREE.Material;
+  /** the ledges' and the fountain's stones: what stands free in the ashlar's and the coping's looks */
+  freeAshlar: THREE.Material; freeCoping: THREE.Material;
+  /** a lamp's plinth, thinned from the ground up */
+  footAshlar: THREE.Material;
   plaster: THREE.Material; timber: THREE.Material; planks: THREE.Material; logs: THREE.Material; roof: THREE.Material;
   iron: THREE.Material; window: THREE.MeshStandardMaterial; skyPane: THREE.MeshStandardMaterial;
   glass: THREE.MeshStandardMaterial; paper: THREE.Material; pagesLeft: THREE.Material; pagesRight: THREE.Material; pagesEdge: THREE.Material; ribbon: THREE.Material;
@@ -347,12 +351,14 @@ function makeMats(): Mats {
   // (the lid's lining is a half cylinder, a tile round it whole: its picture repeated to the box's diamonds)
   const lining = quiltedLining(), liningLid = quiltedLining();
   for (const t of [liningLid.map, liningLid.bumpMap]) t.repeat.set(3, 2);
+  const ashlarStone = new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(stoneMaps, 1, 1.2), color: 0xd0c4b0 });
+  const copingStone = new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(limestone(11), 2, 1.2), color: 0x9c968c });
   const mats: Mats = {
     yardFloor: new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(soil(), 8, 0.8), color: 0xc8b090 }),
     cobbles: unrepeated(new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(cobblestone(), 1, 1.1), color: 0xfff4e4 })),
     flags: new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(flagMaps, 1, 1.2), color: 0xd0c8bc }),
-    ashlar: new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(stoneMaps, 1, 1.2), color: 0xd0c4b0 }),
-    coping: new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(limestone(11), 2, 1.2), color: 0x9c968c }),
+    ashlar: ashlarStone,
+    coping: copingStone,
     granite: new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(granite(7), 2, 0.8), color: 0xc8c4c0 }),
     // (stuccoed, the plaster's stained wash: limestone's pits read as pocks on a shaft, a review said, and marble's
     // maps are slabs; a shaft's own uvs run once round it and once up it, so a tile round and two up are near square)
@@ -406,10 +412,18 @@ function makeMats(): Mats {
     // (the lantern's frame, crown and cup, dark against its glass: lit, the lamp's light 15 cm off them burned the
     // crown's rim white)
     lanternIron: new THREE.MeshBasicMaterial({ color: 0x141214 }),
+    freeAshlar: ashlarStone.clone(),
+    freeCoping: copingStone.clone(),
+    footAshlar: ashlarStone.clone(),
   };
-  for (const m of [mats.ashlar, mats.coping, mats.column, mats.plaster, mats.timber, mats.planks, mats.logs, mats.roof, mats.iron, mats.window, mats.skyPane]) {
+  // (a house's walls and roof, which never open over the shoulder; the rest stands free, opening wide as it hides him)
+  for (const m of [mats.ashlar, mats.coping, mats.plaster, mats.timber, mats.planks, mats.logs, mats.roof, mats.window, mats.skyPane]) {
+    seeThrough(m, 'built');
+  }
+  for (const m of [mats.column, mats.iron, mats.lantern, mats.lanternIron, mats.freeAshlar, mats.freeCoping]) {
     seeThrough(m, 'prop');
   }
+  seeThrough(mats.footAshlar, 'propFoot');
   return mats;
 }
 
@@ -1140,7 +1154,7 @@ function wayPoint(id: BiomeId, across: number, out: number): Spot {
 
 /** The fountain in the middle of the square (world/fountain.ts). */
 function buildSquare(scene: THREE.Object3D, M: Mats, obstacles: Obstacle[], updaters: Updater[]): FountainLight {
-  return buildFountain(scene, { stone: M.ashlar, coping: M.coping }, obstacles, updaters);
+  return buildFountain(scene, { stone: M.freeAshlar, coping: M.freeCoping }, obstacles, updaters);
 }
 
 // --- the terrace, its stair, the hall of heroes ---------------------------------------------------------------------
@@ -1151,8 +1165,8 @@ function buildSquare(scene: THREE.Object3D, M: Mats, obstacles: Obstacle[], upda
  */
 function ledgeWall(scene: THREE.Object3D, wall: Wall, M: Mats, a0: number, a1: number, at: number, top: number, alongZ = false): void {
   const len = a1 - a0, mid = (a0 + a1) / 2, t = PARAPET.thick;
-  const body = alongZ ? block(scene, t, top, len, at, 0, mid, M.ashlar, 0.5) : block(scene, len, top, t, mid, 0, at, M.ashlar, 0.5);
-  const cap = alongZ ? block(scene, t + 0.12, 0.12, len + 0.12, at, top, mid, M.coping) : block(scene, len + 0.12, 0.12, t + 0.12, mid, top, at, M.coping);
+  const body = alongZ ? block(scene, t, top, len, at, 0, mid, M.freeAshlar, 0.5) : block(scene, len, top, t, mid, 0, at, M.freeAshlar, 0.5);
+  const cap = alongZ ? block(scene, t + 0.12, 0.12, len + 0.12, at, top, mid, M.freeCoping) : block(scene, len + 0.12, 0.12, t + 0.12, mid, top, at, M.freeCoping);
   cap.castShadow = true;
   wall.add(body, true, 'wall', true);
 }
@@ -1208,7 +1222,7 @@ function cheek(scene: THREE.Object3D, wall: Wall, M: Mats, x: number, z0: number
   const g = new THREE.ExtrudeGeometry(s, { depth: PARAPET.thick, bevelEnabled: false }).rotateY(-Math.PI / 2);
   g.translate(x + PARAPET.thick / 2, 0, 0);
   // (its uvs as a box's would be: the extrusion's are in shape units already, a metre a tile)
-  const mesh = solid(scene, g, M.ashlar);
+  const mesh = solid(scene, g, M.freeAshlar);
   wall.add(mesh, true, 'wall', true);
 }
 
@@ -2242,8 +2256,8 @@ function lampPost(scene: THREE.Object3D, x: number, z: number, turn: number, M: 
   g.rotation.y = -turn;
   scene.add(g);
   // (a stepped stone plinth)
-  block(g, 0.42, 0.16, 0.42, 0, 0, 0, M.ashlar);
-  block(g, 0.32, 0.14, 0.32, 0, 0.16, 0, M.ashlar);
+  block(g, 0.42, 0.16, 0.42, 0, 0, 0, M.footAshlar);
+  block(g, 0.32, 0.14, 0.32, 0, 0.16, 0, M.footAshlar);
   const parts = lampGeometries();
   // (unlit as the frame is: a hand's breadth from its own light, the post's and the bracket's edges burned in a white
   // streak seen from under it, "this light is blinding")

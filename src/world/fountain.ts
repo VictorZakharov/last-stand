@@ -9,6 +9,7 @@
 // water's glow) follows the hour (`FountainLight`): by night it's lit by the lamps alone.
 import * as THREE from 'three';
 import { canvasOf, ctx2d } from '../core/textures';
+import { seeThrough } from '../core/seeThrough';
 import { mulberry } from '../util';
 import type { Obstacle } from '../types';
 import type { Updater } from './props';
@@ -140,6 +141,7 @@ export function buildFountain(scene: THREE.Object3D, M: FountainMats, obstacles:
     color: 0xeef6f8, emissive: FALLING_GLOW, roughness: 0.3, alphaMap: foamTexture(), transparent: true, opacity: 0.6,
     depthWrite: false, side: THREE.DoubleSide,
   });
+  seeThrough(foamMat, 'prop');
   const foam = new THREE.Mesh(new THREE.RingGeometry(BOWL.r + 0.12, BOWL.r + 0.75, 48, 1).rotateX(-Math.PI / 2), foamMat);
   foam.position.y = water + 0.006;
   g.add(foam);
@@ -157,7 +159,7 @@ export function buildFountain(scene: THREE.Object3D, M: FountainMats, obstacles:
       o.castShadow = o.receiveShadow = true;
     }
   });
-  obstacles.push({ x: 0, z: 0, r: r + 0.1, h: high });
+  obstacles.push({ x: 0, z: 0, r: r + 0.1, h: high, sight: { r: BOWL.r + 0.4, h: TOP.tip } });
   const curtainMap = curtain.alphaMap!, jetMap = jetMat.alphaMap!;
   updaters.push((_dt, t) => {
     time.value = t;
@@ -304,7 +306,7 @@ function waterMaterial(time: { value: number }, colour: number): THREE.MeshStand
         }`);
   };
   m.customProgramCacheKey = () => 'fountain-water';
-  return m;
+  return seeThrough(m, 'prop');
 }
 
 /**
@@ -338,7 +340,7 @@ function causticFloor(time: { value: number }, sunlit: { value: number }): THREE
         }`);
   };
   m.customProgramCacheKey = () => 'fountain-caustics';
-  return m;
+  return seeThrough(m, 'propFoot');
 }
 
 /** Falling water: white streaks of a picture, see-through between them, scrolled along a shell (`around` times round),
@@ -353,7 +355,8 @@ function fallingWater(streaks: THREE.Texture, around: number, opacity: number): 
   });
   m.onBeforeCompile = mirroredSky;
   m.customProgramCacheKey = () => 'fountain-falling';
-  return m;
+  // (a hero behind the fountain showed through its stone, its water left whole over him)
+  return seeThrough(m, 'prop');
 }
 
 /** The falling water's streaks: thin threads down a tile, feathered across, each broken into runs that fade in and out

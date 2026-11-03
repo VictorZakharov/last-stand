@@ -44,6 +44,7 @@ import { curbsFaceUp, roadsBendWide } from './villageRoads';
 import { hoardShowsStash } from './villageHoard';
 import { escClosesHelp } from './villageHelpEsc';
 import { propHoleWhereHidden } from './villageSeeThrough';
+import { heroBehindProps, wallsStayWhole } from './villageHeroInView';
 import { hallWallsSteady, hallFloorSteady } from './villageHallSteady';
 import { objectsUsedAgain } from './villageUseAgain';
 import { hallWallsHold } from './villageHallSide';
@@ -151,6 +152,8 @@ export async function village(lab: Lab, options: VillageOptions): Promise<Report
     wallingAligned: () => wallingAligned(options.canary),
     windowsLetSunIn: () => windowsLetSunIn(lab, options.canary),
     propHoleWhereHidden: () => propHoleWhereHidden(lab, options.canary),
+    heroBehindProps: () => heroBehindProps(lab, options.canary),
+    wallsStayWhole: () => wallsStayWhole(lab, options.canary),
     training: () => training(lab, options.canary),
     hoursCompileNothing: () => hoursCompileNothing(lab, options.canary),
   };

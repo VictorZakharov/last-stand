@@ -62,7 +62,11 @@ export async function viewBy(lab: Lab, view: ViewMode): Promise<void> {
     await lab.step(1, () => ({ keys: ['v'] }));
     await lab.step(1);
   }
-  if (viewMode() !== view) throw new Error(`lab: village: V never came round to the ${view} view`);
+  if (viewMode() !== view) {
+    const open = [...document.querySelectorAll('.show, .open')].map((element) => element.id).filter(Boolean).join();
+    const stuck = `at ${viewMode()}, open: ${open || 'nothing'}`;
+    throw new Error(`lab: village: V never came round to the ${view} view, ${stuck}`);
+  }
   await lab.step(SETTLE);
 }
 
