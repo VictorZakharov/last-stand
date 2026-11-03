@@ -3,6 +3,7 @@
 // Drawn once with the heroes hidden, a hero by a lamp cast no shadow from it ("no shadows from lights"). So each lamp
 // light's still map is kept as it's drawn, a copy of its depth cube, and each frame it's copied back and the heroes
 // alone drawn into it over what stands still: their dozen draws a face, not the village's.
+import { RUNNING } from '../core/rendererChoice';
 import * as THREE from 'three';
 import { afterShadows, type ShadowDraw } from './culling';
 import { lampShadowLights } from './props';
@@ -155,6 +156,7 @@ function heroesOverStill(renderer: THREE.WebGLRenderer, draw: ShadowDraw, scene:
 
 /** The lamps' shadows kept as drawn still and the heroes drawn over them each frame, as `renderer` draws the game. */
 export function castHeroesOverLamps(renderer: THREE.WebGLRenderer): void {
+  if (RUNNING.webgpu) return; // (its depth is copied by raw GL)
   afterShadows((draw, scene, camera, still) => {
     if (!lampShadowLights().size) return;
     if (still) {

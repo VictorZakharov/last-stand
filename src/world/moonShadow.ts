@@ -3,6 +3,7 @@
 // slow too"), and almost all it holds stands still. So it's drawn once of what stands in the village (with its still
 // shadows: `drawStillShadows`), a copy kept, and each frame the copy goes back and what moves (the heroes, the foes) is
 // drawn over it, as the lamps' are (`lampShadows.ts`). A fight's foes are most of a biome's map, which redraws as ever.
+import { RUNNING } from '../core/rendererChoice';
 import * as THREE from 'three';
 import { afterShadows } from './culling';
 import { heroesOnTheirLayer, moversSeen, unbound, type Bounded } from './lampShadows';
@@ -49,7 +50,8 @@ function copyDepth(renderer: THREE.WebGLRenderer, from: THREE.WebGLRenderTarget,
  */
 export function holdMoonShadow(moon: THREE.DirectionalLight, on: boolean): boolean {
   sun = moon;
-  const hold = on && wanted;
+  // (on WebGPU nothing keeps the map, its depth copied by raw GL, so it's drawn whole as it is in a biome)
+  const hold = on && wanted && !RUNNING.webgpu;
   const begun = hold && !holding;
   holding = hold;
   moon.shadow.autoUpdate = !hold;
@@ -65,6 +67,7 @@ export function keepMoonShadow(on: boolean): void {
 
 /** The sun's map kept as it's drawn still, and what moves drawn over it each frame, as `renderer` draws the game. */
 export function castMoversOverMoon(renderer: THREE.WebGLRenderer, moon: THREE.DirectionalLight): void {
+  if (RUNNING.webgpu) return;
   afterShadows((draw, scene, camera, still) => {
     const map = moon.shadow.map;
     if (!holding || !map) return;

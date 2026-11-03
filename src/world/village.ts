@@ -12,6 +12,8 @@
 // off (world/wall.ts outlines), so feet climb the steps one by one; its wall is what's built (`wallShape` 'free'). Its
 // light follows the hour (`daylight`, a uniform's change: nothing compiles), and as a biome it has 10 point lights, two
 // casting the still shadows (the hall's braziers).
+import { WEBGPU } from '../core/webgpu';
+import { villageSkyMaterial } from './skyNodes';
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import {
@@ -839,7 +841,7 @@ function buildDaySky(): { mesh: THREE.Mesh; update: Updater; set(hour: number): 
         gl_FragColor = vec4(c, 1.0);
       }`,
   });
-  const mesh = new THREE.Mesh(new THREE.SphereGeometry(150, 32, 16), mat);
+  const mesh = new THREE.Mesh(new THREE.SphereGeometry(150, 32, 16), WEBGPU ? villageSkyMaterial(uniforms) : mat);
   mesh.renderOrder = 100;
   mesh.frustumCulled = false;
   return {

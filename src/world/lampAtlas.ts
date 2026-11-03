@@ -5,6 +5,7 @@
 // "your light test for each light need to test SHADOW, it was missing for half of them"). What's drawn is what casts
 // as the world is built (the merged caster the shadow maps alone draw, the instanced posts and trunks); a leaf card,
 // which casts by its picture's alpha, is left out (drawn whole, it would cast a square).
+import { RUNNING } from '../core/rendererChoice';
 import * as THREE from 'three';
 import { lampShadowMap, setLampShadows, SHADOW_COLUMNS, SHADOW_TILE, type LampPlace } from '../core/lamps';
 import { drawnInShadowsOnly } from './culling';
@@ -122,7 +123,8 @@ function keptState(renderer: THREE.WebGLRenderer): () => void {
 
 /** Each of `lamps`' shadows of what stands still under `place` drawn into the lamps' map, and the map put to use. */
 export function bakeLampShadows(renderer: THREE.WebGLRenderer, place: THREE.Object3D, lamps: readonly LampPlace[]): void {
-  if (!drawsHalfFloats(renderer)) return;
+  // (WebGPU's lit materials have no side of the lamps' list to read this map: `core/lamps.ts` patches GLSL alone)
+  if (RUNNING.webgpu || !drawsHalfFloats(renderer)) return;
   const distance = distanceMaterial();
   const copy = copyMaterial();
   const casters = castersOf(place, distance);

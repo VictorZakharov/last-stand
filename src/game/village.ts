@@ -24,6 +24,7 @@ import { standHeroes } from './hall';
 import { isWarm } from './warm';
 import { flash, release, type LightSlot } from '../fx/lights';
 import { lampsOut, lightLamp, placeLamps, type LampPlace } from '../core/lamps';
+import { RUNNING } from '../core/rendererChoice';
 import { bakeLampShadows } from '../world/lampAtlas';
 import { drawLampShadows, lampShadow } from '../world/props';
 
@@ -435,7 +436,9 @@ function lightLamps(dt: number): void {
   const onTerrace = G.player.obj.position.y > TERRACE.high - 0.1;
   const atDoor = Math.abs(p.x - TERRACE.x) < HALL.doorHalf * 2 && Math.abs(p.z - HALL.door) < TORCHLIGHT.door;
   const inside = onTerrace && (inHall(p.x, p.z) || atDoor);
-  const casting = inside || village.night > 0.01;
+  // (not on WebGPU: three's observer reads a render object's casting lights by the count it first drew with, and
+  // threw as they changed; a lamp's shadow there has no depth copy to keep, `lampShadows.ts`)
+  const casting = !RUNNING.webgpu && (inside || village.night > 0.01);
   if (!lampLights.length) {
     lampLights = Array.from({ length: LAMP_SHADOWS }, () => flash({ ...LAMPLIGHT, intensity: 0, life: 1, hold: Infinity }));
   }

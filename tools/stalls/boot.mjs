@@ -224,11 +224,19 @@ function distinctErrors(errors) {
   return [...told.slice(0, ERRORS_SHOWN), ...more];
 }
 
+/** An uncaught error with the function that threw it and the one under that: its message alone doesn't say where a
+ *  frame's error came from, and each frame then draws nothing (`--js` builds this tree with its functions named). */
+function errorWithPlace(error) {
+  const frames = (error.stack ?? '').split('\n').filter((line) => line.trim().startsWith('at '));
+  const named = frames.slice(0, 2).map((line) => line.trim().replace(/^at /, '').replace(/\s*\(.*\)$/, ''));
+  return named.length ? `${error} (in ${named.join(' < ')})` : String(error);
+}
+
 /** `page`'s errors kept in `errors` as they come: its uncaught ones, and those it logs (three logs a shader that
  *  failed to compile, and draws on without it). */
 function keepErrors(page, errors) {
   const keep = (text) => errors.push(text.slice(0, ERROR_CHARS));
-  page.on('pageerror', (error) => keep(String(error)));
+  page.on('pageerror', (error) => keep(errorWithPlace(error)));
   page.on('console', (message) => {
     if (message.type() === 'error') keep(`logged: ${message.text()}`);
   });
