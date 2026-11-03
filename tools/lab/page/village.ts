@@ -55,7 +55,9 @@ import { wornStaysOn } from './villageWorn';
 import { heroFaceNotBlinding } from './villageHeroFace';
 import { cameraBeforeWalls } from './villageCameraWall';
 import { heroChosenQuick } from './villageHeroChosen';
-import { heroesSeenOnApproach, heroesStandOnBothFeet, heroLeftStands, hallShownAtOnce } from './villageHeroStands';
+import {
+  cancelledOnHisFloor, hallShownAtOnce, heroesSeenOnApproach, heroesStandOnBothFeet, heroLeftStands,
+} from './villageHeroStands';
 import { daisOpensCompileNothing } from './villageDaisOpens';
 import { arrowsStickInGround } from './villageArrows';
 
@@ -123,6 +125,7 @@ export async function village(lab: Lab, options: VillageOptions): Promise<Report
     hallCulledByDoor: () => hallCulledByDoor(lab, options.canary),
     sunShadowKept: () => sunShadowKept(lab, options.canary),
     heroLeftStands: () => heroLeftStands(lab, options.canary),
+    cancelledOnHisFloor: () => cancelledOnHisFloor(lab, options.canary),
     hallShownAtOnce: () => hallShownAtOnce(lab, options.canary),
     hallWallsSteady: () => hallWallsSteady(lab, options.canary),
     roadsBendWide: () => roadsBendWide(options.canary),

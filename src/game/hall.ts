@@ -316,6 +316,9 @@ export function closeHall(): void {
   lights = [];
   clearProjectiles(); clearEffects(); particles.clear();
   G.arena.showHall(false);
+  // (on the floor he stood on at once: hidden, his height followed the room's floor, and from the terrace he rose 1.6 m
+  // out of the ground back to it, from play "when hero is not picked/cancelled, he rises from ground")
+  for (const p of [G.player, ...partners]) p.place(p.pos, p.facing);
   G.player.show(true);
   for (const p of partners) if (G.players.includes(p)) p.show(true);
   partners = [];

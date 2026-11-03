@@ -13,6 +13,7 @@ import { HALL, TERRACE } from '../../../src/data/village';
 import { groundHeight } from '../../../src/world/ground';
 import { faceCamera, viewSettled } from '../../../src/core/renderer';
 import { CLASS_IDS } from '../../../src/data/classes/index';
+import { villageObject } from '../../../src/game/village';
 import { isWarm } from '../../../src/game/warm';
 import { openHall, toLobby } from './hallMoves';
 import { viewBy } from './villageHallCull';
@@ -35,6 +36,10 @@ const WARM_FRAMES = 6000;
 const FRAMES_A_ROUND = 30;
 /** the frames a hero left in the row is read over */
 const READ_LEFT = 120;
+/** the frames read back from a cancelled hall, the most he may be off his floor there (m), and the canary's drop */
+const READ_BACK = 30;
+const MOST_OFF_FLOOR = 0.01;
+const CANARY_DROP = 0.5;
 /** the frames a hero long at rest is read over, an ankle's height past its rest that counts as a foot up (m), and the
  *  frames one may be up as he's left: a step, not a dance */
 const READ_STANDING = 300;
@@ -175,10 +180,40 @@ export async function heroLeftStands(lab: Lab, canary: boolean): Promise<LightsC
     + ` (at most ${MOST_FRAMES_UP})`;
   const standing = await riseOfStanding(lab);
   const lifted = [...worst.values()].some((rise) => rise.frames > MOST_FRAMES_UP);
-  const atRest = `the warrior long at rest in the row, an ankle's highest past its rest: ${(standing * 100).toFixed(0)} cm`;
+  const standingCm = (standing * 100).toFixed(0);
+  const atRest = `the warrior long at rest in the row, an ankle's highest past its rest: ${standingCm} cm`;
   const lines = [line, atRest];
   if (canary) return { lines, problems: [], caught: lifted, moments: [] };
   return { lines, problems: lifted ? [line] : [], caught: null, moments: [] };
+}
+
+/** The hall cancelled from its dais, up on the terrace: he's on the floor he stood on from the first frame back (from
+ *  play, "when hero is not picked/cancelled, he rises from ground"). `canary` drops him as the hall closes. */
+export async function cancelledOnHisFloor(lab: Lab, canary: boolean): Promise<LightsChecked> {
+  await toLobby(lab);
+  await lab.step(SETTLE);
+  const stand = villageObject('hall')?.stand;
+  if (!stand) throw new Error('lab: village: no hall of heroes to stand at');
+  const [x, z] = stand;
+  G.player.walkTo = null;
+  G.player.place(new THREE.Vector3(x, groundHeight(x, z), z), Math.PI);
+  await lab.step(SETTLE);
+  const floor = G.player.obj.position.y;
+  await openHall(lab);
+  await lab.step(SETTLE);
+  await lab.step(1, () => ({ keys: ['escape'] }));
+  if (hallOpen()) throw new Error('lab: village: Esc never left the hall');
+  if (canary) G.player.obj.position.y = floor - CANARY_DROP;
+  let most = 0;
+  await lab.step(READ_BACK, undefined, () => {
+    most = Math.max(most, Math.abs(G.player.obj.position.y - floor));
+  });
+  const off = (most * 100).toFixed(0);
+  const line = `the hall cancelled on the terrace, ${floor.toFixed(2)} m up: his body at most ${off} cm off that floor `
+    + `over the ${READ_BACK} frames back (at most ${MOST_OFF_FLOOR * 100} cm)`;
+  const wrong = most > MOST_OFF_FLOOR;
+  if (canary) return { lines: [line], problems: [], caught: wrong, moments: [] };
+  return { lines: [line], problems: wrong ? [line] : [], caught: null, moments: [] };
 }
 
 /** How far the camera stands from the shot on the hero in focus (m). */
