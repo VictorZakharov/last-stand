@@ -180,7 +180,7 @@ function switches(): Switch[] {
   const shadows = lampShadowsOn();
   return [
     { name: 'MSAA (off: none)', turn: (on) => renderer.setRenderQuality(on ? preset : { ...preset, msaa: 0 }) },
-    { name: 'MSAA (off: 2)', turn: (on) => renderer.setRenderQuality(on ? preset : { ...preset, msaa: 2 }) },
+    { name: 'MSAA (off: 4)', turn: (on) => renderer.setRenderQuality(on ? preset : { ...preset, msaa: 4 }) },
     { name: 'the lamps\' still shadows', turn: (on) => setLampShadows(on && shadows) },
     { name: 'the lamps\' list, all of it', turn: (on) => lampsHeldOut(!on) },
     { name: 'three\'s order (off: nearest first)', turn: (on) => G.renderer.setOpaqueSort(on ? null : nearestFirst) },

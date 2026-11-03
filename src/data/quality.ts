@@ -33,9 +33,9 @@ export interface QualityPreset {
 }
 
 export const QUALITY: Record<QualityLevel, QualityPreset> = {
-  high:   { label: 'High',   pixels: Infinity, msaa: 4, shadowMap: 4096, minCasterRadius: 0.07, heroDetail: 1, ikRange: Infinity, relief: 16, hdr: true, coarseProps: false, bloomShare: 1 },
-  medium: { label: 'Medium', pixels: Infinity, msaa: 2, shadowMap: 2048, minCasterRadius: 0.11, heroDetail: 0.6, ikRange: Infinity, relief: 8, hdr: false, coarseProps: false, bloomShare: 1 },
-  low:    { label: 'Low',    pixels: Infinity, msaa: 0, shadowMap: 1024, minCasterRadius: 0.16, heroDetail: 0.35, ikRange: 14, relief: 0, hdr: false, coarseProps: true, bloomShare: 0.5 },
+  high:   { label: 'High',   pixels: Infinity,    msaa: 2, shadowMap: 4096, minCasterRadius: 0.07, heroDetail: 1, ikRange: Infinity, relief: 16 },
+  medium: { label: 'Medium', pixels: 2560 * 1440, msaa: 2, shadowMap: 2048, minCasterRadius: 0.11, heroDetail: 0.6, ikRange: Infinity, relief: 8 },
+  low:    { label: 'Low',    pixels: 1920 * 1080, msaa: 0, shadowMap: 1024, minCasterRadius: 0.16, heroDetail: 0.35, ikRange: 14, relief: 0 },
 };
 
 export const QUALITY_ORDER: QualityLevel[] = ['high', 'medium', 'low'];
