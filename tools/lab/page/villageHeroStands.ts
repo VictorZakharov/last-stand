@@ -1,15 +1,16 @@
 // `lab village`'s heroes standing on the hall's dais after another hero was chosen (from play, "after picking warrior
 // then ranger, warrior is dancing on one leg like irish dancer"): the hall of heroes opened, another hero chosen, him
 // walked into the village's hall, and each hero standing there read over some seconds: both ankles on his plinth,
-// within a step's height. `canary` lifts a standing hero's foot, which must be found.
+// within a step's height. `heroLeftStands` reads the hero left in the hall's own row as another is picked (from play,
+// "when picking hero, the previous hero starts irish dancing for a few sec"). `canary` lifts a foot, which must be found.
 import * as THREE from 'three';
 import type { Lab } from './lab';
 import type { Player } from '../../../src/entities/player';
 import { G } from '../../../src/state';
-import { hallFocus, hallHeroes, heroesStanding, hallOpen } from '../../../src/game/hall';
+import { focusHall, hallFocus, hallHeroes, hallShot, heroesStanding, hallOpen } from '../../../src/game/hall';
 import { HALL, TERRACE } from '../../../src/data/village';
 import { groundHeight } from '../../../src/world/ground';
-import { faceCamera } from '../../../src/core/renderer';
+import { faceCamera, viewSettled } from '../../../src/core/renderer';
 import { CLASS_IDS } from '../../../src/data/classes/index';
 import { isWarm } from '../../../src/game/warm';
 import { openHall, toLobby } from './hallMoves';
@@ -19,7 +20,7 @@ import type { LightsChecked } from './villageLights';
 /** the frames given to the hall as it opens and after each key, the rounds read and the frames between them */
 const SETTLE = 120;
 /** how long the hall stands open before he's chosen, on the warrior as his showcase runs, and for the first choice */
-const WAITS = [10, 70, 100, 130, 200];
+const WAITS = [70, 130];
 /** who's chosen, then chosen away from: each hero left to stand as his showcase runs */
 const CHOICES = [['warrior', 'ranger'], ['ranger', 'mage'], ['mage', 'warrior']];
 const WAIT_FIRST = 5;
@@ -31,6 +32,17 @@ const STAIR_UP = 2;
 const SQUARE_OUT = 4;
 const WARM_FRAMES = 6000;
 const FRAMES_A_ROUND = 30;
+/** the frames a hero left in the row is read over */
+const READ_LEFT = 120;
+/** the frames a hero long at rest is read over, an ankle's height past its rest that counts as a foot up (m), and the
+ *  frames one may be up as he's left: a step, not a dance */
+const READ_STANDING = 300;
+const FOOT_UP = 0.03;
+const MOST_FRAMES_UP = 25;
+/** how far off its shot the camera may stand a frame after a cut (m): the shot's own drift round him */
+const MOST_OFF_SHOT = 0.1;
+/** how long a hero is in focus before he's left, as his showcase runs */
+const LEFT_WAITS = [70, 110];
 /** how far before the dais he stands (m), an ankle's height over the plinth at rest (m), and the most it may rise
  *  past it */
 const BEFORE_DAIS = 3;
@@ -92,8 +104,8 @@ async function readDais(lab: Lab, worst: Map<string, number>, canary: boolean): 
   const x = TERRACE.x;
   const z = HALL.daisZ + BEFORE_DAIS;
   G.player.place(new THREE.Vector3(x, groundHeight(x, z), z), Math.PI);
-  await lab.step(SETTLE_LOBBY);
-  if (!heroesStanding().length) throw new Error('lab: village: no hero came to stand on the dais');
+  // (read from the first frame he stands: read after a settling, a few seconds' dance as he came went unseen)
+  await lab.until(() => heroesStanding().length > 0, WARM_FRAMES, 'village: a hero coming to stand on the dais');
   await lab.step(ROUNDS * FRAMES_A_ROUND, undefined, () => {
     for (const hero of heroesStanding()) {
       const rise = riseOfAnkles(hero) + (canary ? CANARY_LIFT : 0);
@@ -103,6 +115,102 @@ async function readDais(lab: Lab, worst: Map<string, number>, canary: boolean): 
   // (back out of the hall: he's sent away to open it from anywhere)
   G.player.place(new THREE.Vector3(0, 0, 0), 0);
   await lab.step(SETTLE_LOBBY);
+}
+
+/** The hero in focus left by a press of the arrow `waiting` frames after he came into focus: his ankles' highest past
+ *  their rest (m) over the seconds after it, and the frames each way of it, at most `READ_LEFT`. */
+async function riseOfOneLeft(lab: Lab, waiting: number, canary: boolean): Promise<LeftRise> {
+  await lab.step(waiting);
+  const left = hallHeroes()[hallFocus()].player;
+  await lab.step(1, () => ({ keys: ['arrowright'] }));
+  const rises: number[] = [];
+  await lab.step(READ_LEFT, undefined, () => {
+    rises.push(riseOfAnkles(left) + (canary ? CANARY_LIFT : 0));
+  });
+  const most = Math.max(...rises);
+  return { most, at: rises.indexOf(most), frames: rises.filter((rise) => rise > FOOT_UP).length };
+}
+
+/** What a hero left in the row did. */
+interface LeftRise {
+  most: number;
+  /** the frame of it, after he was left */
+  at: number;
+  /** the frames a foot was up, of `READ_LEFT` */
+  frames: number;
+}
+
+/** The warrior left alone in the row, out of focus and long at rest: his ankles' highest past their rest (m), what a
+ *  hero does standing, against which what one does as he's left is judged. */
+async function riseOfStanding(lab: Lab): Promise<number> {
+  const heroes = hallHeroes();
+  const warrior = heroes.find((hero) => hero.id === 'warrior');
+  if (!warrior) throw new Error('lab: village: no warrior in the hall');
+  while (heroes[hallFocus()] === warrior) await lab.step(1, () => ({ keys: ['arrowright'] }));
+  await lab.step(READ_LEFT);
+  let most = -Infinity;
+  await lab.step(READ_STANDING, undefined, () => {
+    most = Math.max(most, riseOfAnkles(warrior.player));
+  });
+  return most;
+}
+
+/** The hero left in the hall's row as another is picked stands on both feet at once, at any moment of his showcase. */
+export async function heroLeftStands(lab: Lab, canary: boolean): Promise<LightsChecked> {
+  await toLobby(lab);
+  await lab.step(SETTLE);
+  await openHall(lab);
+  const worst = new Map<string, LeftRise>();
+  for (const waiting of LEFT_WAITS) {
+    for (let turn = 0; turn < CLASS_IDS.length; turn++) {
+      const id = hallHeroes()[hallFocus()].id;
+      const rise = await riseOfOneLeft(lab, waiting, canary);
+      if (rise.frames > (worst.get(id)?.frames ?? -Infinity)) worst.set(id, rise);
+    }
+  }
+  const line = `each hero left in the row as his showcase ran, the frames a foot was up, of ${READ_LEFT}: `
+    + [...worst].map(([who, rise]) => `${who} ${rise.frames} (${(rise.most * 100).toFixed(0)} cm at frame ${rise.at})`)
+      .join(', ')
+    + ` (at most ${MOST_FRAMES_UP})`;
+  const standing = await riseOfStanding(lab);
+  const lifted = [...worst.values()].some((rise) => rise.frames > MOST_FRAMES_UP);
+  const lines = [line, `the warrior long at rest in the row, an ankle's highest past its rest: ${(standing * 100).toFixed(0)} cm`];
+  if (canary) return { lines, problems: [], caught: lifted, moments: [] };
+  return { lines, problems: lifted ? [line] : [], caught: null, moments: [] };
+}
+
+/** How far the camera stands from the shot on the hero in focus (m). */
+const offShot = (): number => G.camera.position.distanceTo(hallShot().pos);
+
+/** The hall opened, another hero picked and the hall left with the camera there at once, no flight or zoom (from play,
+ *  "remove zoom in effect when picking character", "just show heroes immediately"). `canary` picks by the glide a drag
+ *  let go lands by, which must be found. */
+export async function hallShownAtOnce(lab: Lab, canary: boolean): Promise<LightsChecked> {
+  await toLobby(lab);
+  await lab.step(SETTLE);
+  // (every page opens with reduced motion, under which the camera always cut: read so, this passed on a flight in)
+  await lab.reduceMotion(false);
+  await openHall(lab);
+  await lab.step(1);
+  const opened = offShot();
+  if (canary) {
+    focusHall(hallFocus() + 1);
+    await lab.step(1);
+  } else {
+    await lab.step(1, () => ({ keys: ['arrowright'] }));
+    await lab.step(1);
+  }
+  const picked = offShot();
+  await lab.step(1, () => ({ keys: ['escape'] }));
+  await lab.step(1);
+  if (hallOpen()) throw new Error('lab: village: Esc never left the hall');
+  const settled = viewSettled();
+  await lab.reduceMotion(true);
+  const line = `the camera off its shot as the hall opens ${(opened * 100).toFixed(0)} cm, a frame after a hero is `
+    + `picked ${(picked * 100).toFixed(0)} cm; the view ${settled ? 'settled' : 'still gliding'} as it's left`;
+  const wrong = opened > MOST_OFF_SHOT || picked > MOST_OFF_SHOT || !settled;
+  if (canary) return { lines: [line], problems: [], caught: wrong, moments: [] };
+  return { lines: [line], problems: wrong ? [line] : [], caught: null, moments: [] };
 }
 
 /** The heroes on the dais keep both feet on their plinths after another was chosen, at any moment of a showcase. */

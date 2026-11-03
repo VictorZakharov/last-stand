@@ -171,7 +171,7 @@ export function openHeroSelect(focusId: string, firstVisit = false): void {
   if (heroSelectOpen()) return;
   first = firstVisit;
   hideTooltip();
-  openHall(focusId, first);
+  openHall(focusId);
   const box = $('#heroes');
   box.classList.toggle('first', first);
   $('.hs-slot').textContent = `Save slot ${saveSlot()}`;
@@ -189,7 +189,7 @@ export function heroSelectSlotSwitched(focusId: string): void {
   if (!heroSelectOpen()) return;
   hideTooltip();
   closeHall();
-  openHall(focusId, true);
+  openHall(focusId);
   $('.hs-slot').textContent = `Save slot ${saveSlot()}`;
   for (const h of hallHeroes()) $(`.hs-card[data-c="${h.id}"] .hs-records`).innerHTML = records(h.profile);
   shown();
@@ -221,7 +221,7 @@ export function closeHeroSelect(chosen?: { id: string; profile: Profile }): void
   hideTooltip();
   $('#heroes').classList.add('hidden');
   document.body.classList.remove('in-hall');
-  closeHall(Boolean(chosen));
+  closeHall();
   if (chosen) hooks.choose(chosen.id, chosen.profile);
   hooks.closed();
 }
@@ -299,7 +299,8 @@ function hover(on: boolean): void { $('#heroes').classList.toggle('over-hero', o
 function focusOn(i: number): void {
   if (!hallOpen()) return;
   hideTooltip();
-  focusHall(i);
+  // (at once: from play, "remove zoom in effect when picking character")
+  focusHall(i, true);
   shown();
 }
 

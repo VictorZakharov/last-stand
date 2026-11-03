@@ -67,6 +67,8 @@ const RIM = { color: 0x8fb4ff, intensity: 5, distance: 6, behind: 1.3, side: -0.
  *  from rest and settles (eased in a frame by the angle alone, he set off at full speed: turning back to the camera
  *  after Power Strike, the axe's tip went from still to 11 cm a frame) */
 const TURN = 7;
+/** how fast a hero is still turning back to the camera (rad/s), at which he's stood at rest as he's left */
+const TURNING = 0.01;
 /** a drag along the row (ui/heroSelect.ts): how far past either end it may pull the camera (heroes), and how fast the
  *  camera follows it (`stageCamera`'s glide: about a frame and a half behind the finger) */
 const DRAG = { over: 0.35, glide: 24 };
@@ -151,10 +153,10 @@ const spot = (i: number): THREE.Vector3 => {
 /**
  * The hall built, the hero of class `focusId` in focus: the lobby's dummies and skill visuals cleared, its hero and
  * a co-op room's partners hidden. Each hero wears his profile in the save slot in play (the local hero's own, a class never played there its
- * starter gear, kept for it if it's chosen). The camera flies in from the lobby's view, or is there at once (`cut`: a
- * first visit's, under the loading screen).
+ * starter gear, kept for it if it's chosen). The camera is there at once (it flew in from the lobby's view: from play,
+ * "remove the effect when entering hero hall, just show heroes immediately").
  */
-export function openHall(focusId: string, cut = false): void {
+export function openHall(focusId: string): void {
   if (hallOpen()) return;
   // (those standing in the village's hall go to the room's plinths with the rest)
   standDown();
@@ -167,16 +169,12 @@ export function openHall(focusId: string, cut = false): void {
   heroes = CLASS_IDS.map((id, i) => {
     const profile = profileOf(id);
     const player = heroIn(id, profile);
-    const at = spot(i);
-    player.spawn.copy(at);
-    player.reset();
-    player.shine = SHINE;
-    place(player, at, ROW.facing);
+    standAtRest(player, spot(i), ROW.facing);
     return { id, profile, player, due: Infinity, shown: -Infinity, facing: ROW.facing, spin: 0, cast: null };
   });
   opened = G.time;
   lights = [flash({ ...KEY, life: 1, hold: Infinity }), flash({ ...RIM, life: 1, hold: Infinity })];
-  focusHall(Math.max(0, CLASS_IDS.indexOf(focusId)), cut);
+  focusHall(Math.max(0, CLASS_IDS.indexOf(focusId)), true);
 }
 
 /** The other classes' heroes standing on the plinths in the village's hall, each on his class's (the lobby's own
@@ -197,11 +195,8 @@ export function standHeroes(on: boolean, dt: number, ahead = false): void {
     const player = heroIn(id, profileOf(id));
     const at = new THREE.Vector3(TERRACE.x + HALL.plinths[i], 0, HALL.plinthZ);
     at.y = groundHeight(at.x, at.z);
-    player.spawn.copy(at);
-    player.reset();
-    player.shine = SHINE;
     // (facing the door, a little in toward the room's middle)
-    place(player, at, -HALL.plinths[i] * 0.06);
+    standAtRest(player, at, -HALL.plinths[i] * 0.06);
     castShadows(player, false);
     standing.push(player);
   }
@@ -308,9 +303,9 @@ function glowingHead(player: Player): void {
   });
 }
 
-/** The hall taken down, the lobby's hero shown again; its heroes kept out of the scene for its next opening (`cut`: the
- *  camera there at once, where it glides back for Back: from play, "no need to zoom to new character after choosing"). */
-export function closeHall(cut = false): void {
+/** The hall taken down, the lobby's hero shown again; its heroes kept out of the scene for its next opening, the camera
+ *  back at once (from play, "no need to zoom to new character after choosing"). */
+export function closeHall(): void {
   if (!hallOpen()) return;
   // (a showcase under way let go: a channel left open, Void Lance's hum played on in the lobby)
   for (const h of heroes) endShowcase(h);
@@ -325,13 +320,22 @@ export function closeHall(cut = false): void {
   for (const p of partners) if (G.players.includes(p)) p.show(true);
   partners = [];
   G.player.idle = false;
-  stageCamera(null, cut);
+  stageCamera(null, true);
 }
 
-/** Hero `i` in focus: the camera comes to him (`cut`: at once), and once it nears him he shows off his skill. */
+/** Hero `i` in focus, the one left standing at rest: the camera comes to him (`cut`: at once; a drag let go glides onto
+ *  him), and soon after he shows off his skill. */
 export function focusHall(i: number, cut = false): void {
   const n = heroes.length;
+  const left = heroes[focus];
   focus = ((i % n) + n) % n;
+  if (left && left !== heroes[focus] && (left.cast || Math.abs(left.spin) > TURNING)) {
+    if (left.cast?.endAt !== undefined) left.player.replay({ t: 'che' });
+    left.cast = null;
+    left.facing = ROW.facing;
+    left.spin = 0;
+    standAtRest(left.player, spot(heroes.indexOf(left)), ROW.facing);
+  }
   for (const [j, h] of heroes.entries()) h.due = j === focus && G.time - h.shown > SHOWCASE.again ? G.time + SHOWCASE.after : Infinity;
   stageCamera(shotAlong(focus, G.time), cut || reduced());
 }
@@ -383,6 +387,25 @@ export function frameHall(k: number, up = false): void {
 function place(p: Player, at: THREE.Vector3, facing: number): void {
   Object.assign(p.remote, { x: at.x, z: at.z, vx: 0, vz: 0, f: facing, ax: at.x + Math.sin(facing) * 4, az: at.z + Math.cos(facing) * 4 });
   p.place(at, facing);
+}
+
+/** how long a hero is posed in one go as he's stood at rest (s): past what's left of any action's easing out; then the
+ *  poses given his feet to step into his stance, and each one's time (s) */
+const REST_POSE = 1;
+const REST_STEPS = 10;
+const REST_STEP = 0.1;
+
+/** Hero `p` standing at `at` at once, whatever he was last doing. His last action eases out of his pose over a moment,
+ *  and his feet, planted where that pose had them, stepped back under him as it went, on one bent knee (from play, "the
+ *  previous hero starts irish dancing"), and a foot stepped into his stance after: both are run through before he shows. */
+function standAtRest(p: Player, at: THREE.Vector3, facing: number): void {
+  p.spawn.copy(at);
+  p.reset();
+  p.shine = SHINE;
+  place(p, at, facing);
+  p.update(REST_POSE);
+  place(p, at, facing);
+  for (let step = 0; step < REST_STEPS; step++) p.update(REST_STEP);
 }
 
 /** The hall's frame: each hero stepped, the one in focus showing off when due, the lights on him, the camera's
