@@ -36,7 +36,7 @@ import {
   barGeometry, chased, CoinBed, coinFaces, coinGeometry, coinsPile, crownGeometry, crownPointAngle, crownPoints, gemGeometry,
   gobletGeometry, keyholeGeometry, lockPlate, plateGeometry, quiltedLining, type LaidCoin,
 } from './hoardPieces';
-import { growTree, type TreeKind } from './ezTrees';
+import { growTree, type TreeKind, thinnedLeaves } from './ezTrees';
 import { TREE_KINDS } from './forest';
 import { leafClusterTexture } from './foliage';
 import { cullInCells, eachInstance } from './culling';
@@ -2298,6 +2298,11 @@ interface TreeSpot { x: number; z: number; kind: number; height: number; turn: n
 
 /** the kinds the village grows (the forest's first three: grown once for both, `growTree`) */
 const VILLAGE_KINDS = [0, 1, 2];
+/** The leaf cards kept and how much wider each (the owner's choice, of the grass or the leaves, for a steady 144 frames
+ *  a second): layer on layer of them shaded a pixel over and over, about 3.4 ms of the GPU's frame. Thinned most in the
+ *  wood, seen over the palisade from afar. */
+const LEAVES_NEAR = { keep: 0.7, grow: 1.15 };
+const LEAVES_FAR = { keep: 0.5, grow: 1.35 };
 
 /** Where the trees stand: groves in the village wherever nothing's built (`GROVES`), the Thornwood's grove round its way
  *  out, and the wood round the palisade, clear of the ways out. */
@@ -2347,21 +2352,34 @@ function buildTrees(scene: THREE.Object3D, wall: Wall, obstacles: Obstacle[], sp
       ...pbrMaterialMaps(bark(), TREE_KINDS[VILLAGE_KINDS[k]].bark, 1.6), color: 0xd8c8b0,
     }), 'prop');
     const barks = new THREE.InstancedMesh(kind.bark, barkMat, mine.length);
-    const leaves = new THREE.InstancedMesh(kind.leaves, leafMat, mine.length);
+    const inside = mine.filter((s) => withinVillage(s.x, s.z)).length;
+    const crowns = [
+      { name: 'in the village', look: LEAVES_NEAR, count: inside, at: 0 },
+      { name: 'in the wood', look: LEAVES_FAR, count: mine.length - inside, at: 0 },
+    ].map((crown) => {
+      const thin = thinnedLeaves(kind.leaves, crown.look.keep, crown.look.grow, k + 1);
+      return { ...crown, mesh: new THREE.InstancedMesh(thin, leafMat, crown.count) };
+    });
     mine.forEach((s, i) => {
       // (sunk a little: a trunk is an open tube at its foot)
       setInstance(barks, i, s.x, -0.25, s.z, 0, s.turn, 0, s.height, s.height, s.height);
       barks.getMatrixAt(i, mx);
-      leaves.setMatrixAt(i, mx);
-      leaves.setColorAt(i, s.colour);
+      const crown = crowns[withinVillage(s.x, s.z) ? 0 : 1];
+      crown.mesh.setMatrixAt(crown.at, mx);
+      crown.mesh.setColorAt(crown.at, s.colour);
+      crown.at++;
       wall.addGeometry(kind.trunk, mx, false, 'beyond');
       if (withinVillage(s.x, s.z)) {
         obstacles.push({ x: s.x, z: s.z, r: Math.max(0.3, kind.trunkFoot * s.height + 0.1), h: s.height });
       }
     });
-    barks.castShadow = barks.receiveShadow = leaves.castShadow = leaves.receiveShadow = true;
+    barks.castShadow = barks.receiveShadow = true;
     barks.name = `village trees' bark: ${TREE_KINDS[VILLAGE_KINDS[k]].preset}`;
-    leaves.name = `village trees' leaves: ${TREE_KINDS[VILLAGE_KINDS[k]].preset}`;
-    for (const mesh of [barks, leaves]) scene.add(...cullInCells(mesh, eachInstance));
+    scene.add(...cullInCells(barks, eachInstance));
+    for (const { mesh, name } of crowns) {
+      mesh.castShadow = mesh.receiveShadow = true;
+      mesh.name = `village trees' leaves ${name}: ${TREE_KINDS[VILLAGE_KINDS[k]].preset}`;
+      scene.add(...cullInCells(mesh, eachInstance));
+    }
   });
 }
