@@ -167,7 +167,6 @@ const UNDER_COIN = [[0, 0], ...[0.5, 1].flatMap((share) => Array.from({ length: 
  *  nothing else's inside, so none cuts through another and none hangs in the air. */
 export class CoinBed {
   private readonly tops: Float32Array;
-  private readonly covered: Uint8Array;
   private readonly columns: number;
   private readonly rows: number;
 
@@ -175,7 +174,6 @@ export class CoinBed {
     this.columns = Math.ceil(w / BED_CELL) + 1;
     this.rows = Math.ceil(d / BED_CELL) + 1;
     this.tops = new Float32Array(this.columns * this.rows);
-    this.covered = new Uint8Array(this.columns * this.rows);
     for (let row = 0; row < this.rows; row++) {
       for (let column = 0; column < this.columns; column++) {
         this.tops[this.cell(column, row)] = heapAt((column * BED_CELL - w / 2), (row * BED_CELL - d / 2));
@@ -192,25 +190,6 @@ export class CoinBed {
     const column = THREE.MathUtils.clamp(Math.round((x + this.w / 2) / BED_CELL), 0, this.columns - 1);
     const row = THREE.MathUtils.clamp(Math.round((z + this.d / 2) / BED_CELL), 0, this.rows - 1);
     return this.tops[this.cell(column, row)];
-  }
-
-  /** The spots no coin lies over yet within `across` and `deep` of the middle, every `stride` cells, as they stand now. */
-  bareSpots(across: number, deep: number, stride: number): [number, number][] {
-    const spots: [number, number][] = [];
-    for (let row = 0; row < this.rows; row += stride) {
-      for (let column = 0; column < this.columns; column += stride) {
-        const x = column * BED_CELL - this.w / 2, z = row * BED_CELL - this.d / 2;
-        if (!this.covered[this.cell(column, row)] && Math.abs(x) <= across && Math.abs(z) <= deep) spots.push([x, z]);
-      }
-    }
-    return spots;
-  }
-
-  /** Whether a coin lies over a spot. */
-  coveredAt(x: number, z: number): boolean {
-    const column = THREE.MathUtils.clamp(Math.round((x + this.w / 2) / BED_CELL), 0, this.columns - 1);
-    const row = THREE.MathUtils.clamp(Math.round((z + this.d / 2) / BED_CELL), 0, this.rows - 1);
-    return this.covered[this.cell(column, row)] === 1;
   }
 
   /** The highest top within `radius` of a spot. */
@@ -255,7 +234,6 @@ export class CoinBed {
         if (offX * offX + offZ * offZ > radius * radius) continue;
         const cell = this.cell(column, row);
         this.tops[cell] = Math.max(this.tops[cell], top + slopeX * offX + slopeZ * offZ);
-        this.covered[cell] = 1;
       }
     }
   }

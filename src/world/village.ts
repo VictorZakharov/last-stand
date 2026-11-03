@@ -125,8 +125,6 @@ const NOTHING = 1e-4;
 const GOLDEN = [0.6, 0.4, 0.13], TARNISHED = [0.42, 0.29, 0.13], SILVER = [0.5, 0.52, 0.54];
 /** the coins in a full chest, how thick each is (m), the spots each is tried at (the lowest taken, to fill the gaps) */
 const COINS = 850, COIN_THICK = 0.007, COIN_TRIES = 6;
-/** a coin at most laid at each bare spot left, every so many of the bed's cells, as far out as the coins go */
-const BARE_STRIDE = 3, COINS_ON_BARE = 300;
 /** the gems' colours */
 const GEM_TINTS = [0xc8142c, 0x10a060, 0x2048c8];
 /** the lining's picture a metre (four diamonds a side a tile: 9 cm a diamond) */
@@ -1542,13 +1540,6 @@ function chestHoard(chest: THREE.Object3D, M: Mats, w: number, d: number, h: num
       const over = bed.topAt(tryX, tryZ) - heapAt(tryX, tryZ);
       if (over < least) [x, z, least] = [tryX, tryZ, over];
     }
-    const radius = 0.03 + rng() * 0.012;
-    coinOf(bed.lay(x, z, radius, COIN_THICK, rng() * TAU, false), radius);
-  }
-  // the rest where none lies yet: dropped on the lowest of a few spots, a patch of the heap's skin was still left bare
-  let bareLaid = 0;
-  for (const [x, z] of bed.bareSpots(across * 0.97, deep * 0.95, BARE_STRIDE)) {
-    if (bed.coveredAt(x, z) || bareLaid++ >= COINS_ON_BARE) continue;
     const radius = 0.03 + rng() * 0.012;
     coinOf(bed.lay(x, z, radius, COIN_THICK, rng() * TAU, false), radius);
   }
