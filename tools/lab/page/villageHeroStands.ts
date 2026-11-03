@@ -2,7 +2,8 @@
 // then ranger, warrior is dancing on one leg like irish dancer"): the hall of heroes opened, another hero chosen, him
 // walked into the village's hall, and each hero standing there read over some seconds: both ankles on his plinth,
 // within a step's height. `heroLeftStands` reads the hero left in the hall's own row as another is picked (from play,
-// "when picking hero, the previous hero starts irish dancing for a few sec"). `canary` lifts a foot, which must be found.
+// "when picking hero, the previous hero starts irish dancing for a few sec"). `canary` lifts a foot, which must be
+// found.
 import * as THREE from 'three';
 import type { Lab } from './lab';
 import type { Player } from '../../../src/entities/player';
@@ -174,7 +175,8 @@ export async function heroLeftStands(lab: Lab, canary: boolean): Promise<LightsC
     + ` (at most ${MOST_FRAMES_UP})`;
   const standing = await riseOfStanding(lab);
   const lifted = [...worst.values()].some((rise) => rise.frames > MOST_FRAMES_UP);
-  const lines = [line, `the warrior long at rest in the row, an ankle's highest past its rest: ${(standing * 100).toFixed(0)} cm`];
+  const atRest = `the warrior long at rest in the row, an ankle's highest past its rest: ${(standing * 100).toFixed(0)} cm`;
+  const lines = [line, atRest];
   if (canary) return { lines, problems: [], caught: lifted, moments: [] };
   return { lines, problems: lifted ? [line] : [], caught: null, moments: [] };
 }
