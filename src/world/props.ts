@@ -1,6 +1,7 @@
 // Building blocks shared by the biome arenas: the biome contract, UV-scaled boxes, instancing
 // and geometry helpers, the spawn-portal membrane, the environment map and the static shadow bake.
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { HERO_SHADOW_LAYER } from '../core/layers';
 import { seeThroughFade } from '../core/seeThrough';
 import { WEBGPU, gpu, pipelinesAtOnce, webgpuSceneTarget } from '../core/webgpu';

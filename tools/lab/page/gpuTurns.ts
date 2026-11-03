@@ -12,6 +12,9 @@ import { quantile } from './timing';
 export interface TurnsCost {
   on: number;
   off: number;
+  /** the median of each round's two sides apart, each by its quickest render: what else uses the GPU only adds to a
+   *  render's time and drifts within a run, and two whole sides' medians read parts as costing less than nothing */
+  apart: number;
   /** the renders each side was timed over */
   renders: number;
 }
@@ -40,7 +43,7 @@ interface Timer {
 const nextTask = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 
 /** The GPU's timer on `renderer`'s context, or null. */
-function timerOf(renderer: THREE.WebGLRenderer): Timer | null {
+export function timerOf(renderer: THREE.WebGLRenderer): Timer | null {
   const gl = renderer.getContext() as WebGL2RenderingContext;
   const ext = gl.getExtension('EXT_disjoint_timer_query_webgl2');
   return ext ? { gl, ext } : null;
@@ -76,12 +79,12 @@ async function timeOf(timer: Timer, query: WebGLQuery): Promise<number | null> {
 }
 
 /** The median of `values`, or 0 with none. */
-function medianOf(values: number[]): number {
+export function medianOf(values: number[]): number {
   return values.length ? quantile([...values].sort((a, b) => a - b), 0.5) : 0;
 }
 
 /** `count` renders by `draw`, sent back to back, each timed; the times that came back. */
-async function timedRenders(timer: Timer, draw: () => void, count: number): Promise<number[]> {
+export async function timedRenders(timer: Timer, draw: () => void, count: number): Promise<number[]> {
   const queries = Array.from({ length: count }, () => queried(timer, draw));
   const times: number[] = [];
   for (const query of queries) {
@@ -106,6 +109,7 @@ export async function costInTurns(
   if (!timer) return null;
   const on: number[] = [];
   const off: number[] = [];
+  const apart: number[] = [];
   try {
     change(false);
     draw();
@@ -113,13 +117,16 @@ export async function costInTurns(
     for (let render = 0; render < WARM_RENDERS; render++) draw();
     for (let round = 0; round < turns.rounds; round++) {
       change(true);
-      on.push(...await timedRenders(timer, draw, turns.renders));
+      const withIt = await timedRenders(timer, draw, turns.renders);
       change(false);
-      off.push(...await timedRenders(timer, draw, turns.renders));
+      const without = await timedRenders(timer, draw, turns.renders);
+      on.push(...withIt);
+      off.push(...without);
+      if (withIt.length && without.length) apart.push(Math.min(...withIt) - Math.min(...without));
     }
   } finally {
     change(true);
   }
   if (!on.length || !off.length) return null;
-  return { on: medianOf(on), off: medianOf(off), renders: Math.min(on.length, off.length) };
+  return { on: medianOf(on), off: medianOf(off), apart: medianOf(apart), renders: Math.min(on.length, off.length) };
 }

@@ -10,7 +10,8 @@ import * as renderer from '../../../src/core/renderer';
 import { lampsHeldOut, lampShadowsOn, setLampShadows } from '../../../src/core/lamps';
 import { qualityLevel } from '../../../src/core/quality';
 import { QUALITY } from '../../../src/data/quality';
-import { canaryCost, costInTurns, flameCost, medianOf, timedRenders, timerOf } from './fireCost';
+import { canaryCost, flameCost, turnCost } from './fireCost';
+import { medianOf, timedRenders, timerOf } from './gpuTurns';
 import type { Lab } from './lab';
 
 /** how many of the draws with the most triangles are timed, and how many of those spread widest */
@@ -197,7 +198,7 @@ function switches(): Switch[] {
 async function switchCosts(draw: () => void): Promise<string[]> {
   const lines = ['what each way of drawing takes (the frame with it, and without):'];
   for (const { name, turn } of switches()) {
-    const cost = await costInTurns(G.renderer, turn, draw);
+    const cost = await turnCost(G.renderer, turn, draw);
     if (!cost) continue;
     const took = cost.apart.toFixed(2);
     lines.push(`  ${took} ms: ${name}, the frame ${cost.shown.toFixed(2)} with it, ${cost.hidden.toFixed(2)} without`);
