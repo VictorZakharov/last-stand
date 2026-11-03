@@ -1,6 +1,7 @@
 // Building blocks shared by the biome arenas: the biome contract, UV-scaled boxes, instancing
 // and geometry helpers, the spawn-portal membrane, the environment map and the static shadow bake.
 import * as THREE from 'three';
+import { HERO_SHADOW_LAYER } from '../core/layers';
 import { seeThroughFade } from '../core/seeThrough';
 import { WEBGPU, gpu, pipelinesAtOnce, webgpuSceneTarget } from '../core/webgpu';
 import { portShader } from '../core/shaderPorts';
@@ -129,17 +130,13 @@ export function lampShadow(light: THREE.PointLight, on: boolean): void {
   lampShadows.add(light);
 }
 
-/** how often what the sun's kept shadow holds has moved (`stillMoved`) */
-let stillMoves = 0;
-
-/** Something that casts on the sun's kept shadow moved for good (a chest's lid): it's drawn again next frame. */
-export function stillMoved(): void {
-  stillMoves++;
+/** what moves that isn't a body: kept out of what's drawn still, and drawn over it each frame as the heroes are */
+const movers: THREE.Object3D[] = [];
+/** `group`, which moves, drawn over the kept shadow maps each frame. */
+export function movesInShadows(group: THREE.Object3D): void {
+  movers.push(group);
+  group.traverse((part) => part.layers.enable(HERO_SHADOW_LAYER));
 }
-
-/** How often what the sun's kept shadow holds has moved (`stillMoved`). */
-export const stillMovedTimes = (): number => stillMoves;
-
 /** The lamps' still shadows asked to be drawn again (one moved to another lamp), with the next frame's still ones. */
 export function drawLampShadows(): void {
   lampsAsked++;
@@ -201,6 +198,12 @@ export function drawStillShadows(renderer: THREE.WebGLRenderer, scene: THREE.Sce
   const hidden: THREE.Object3D[] = [];
   const uncast: THREE.Object3D[] = [];
   hideBodies(scene, shown, hidden, uncast);
+  for (const mover of movers) {
+    if (mover.visible) {
+      mover.visible = false;
+      hidden.push(mover);
+    }
+  }
   const keptAuto = kept.autoUpdate;
   const target = renderer.getRenderTarget();
   for (const light of lights) light.shadow.needsUpdate = true;

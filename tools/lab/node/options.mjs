@@ -561,6 +561,10 @@ export const COMMANDS = {
         kind: 'switch',
         help: 'after the phases, the biggest draws timed on the GPU, each drawn and hidden in turns',
       },
+      spin: {
+        kind: 'switch',
+        help: 'with --village, the view turned right round on the spot three times, each turn a phase',
+      },
       hour: {
         kind: 'number',
         usage: 'h',

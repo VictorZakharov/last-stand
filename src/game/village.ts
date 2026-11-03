@@ -4,6 +4,7 @@
 // off; and his skills cast in the training yard alone. In the top view the pointer picks an object; in the close views
 // the one he's near, E using it.
 import * as THREE from 'three';
+import { fadeWhole } from '../core/seeThrough';
 import { G } from '../state';
 import { RUN } from '../data/balance';
 import { VILLAGE_OBJECTS, YARD, worldToYard, type VillageObject } from '../data/village';
@@ -291,11 +292,17 @@ function hallInside(dt: number): void {
   const inside = lobby && inHall(p.pos.x, p.pos.z) && p.obj.position.y > TERRACE.high - 0.1;
   // (the roof from above alone: over the shoulder the camera is under its ceiling; the front wall over the shoulder
   // too, which the camera stands behind)
-  const [roof, front] = village.hallCutaway, view = viewMode();
-  roof.visible = !inside || view !== 'top';
+  const view = viewMode();
+  const roofAway = inside && view === 'top';
   // (but kept with the camera inside its face: turned to the door, the hall's inside ended at nothing, from play
   // "should see inner walls from inside the hall")
-  front.visible = !inside || view === 'first' || G.camera.position.z < HALL.inFront;
+  const frontAway = inside && view !== 'first' && G.camera.position.z >= HALL.inFront;
+  // (thinned to a ghost over a moment: gone at a stroke, walls and door vanished as he stepped in, from play "why here
+  // geometry disappears ... it should fade to semi transparent")
+  frontFade = THREE.MathUtils.damp(frontFade, frontAway ? CUT_AWAY_GHOST : 0, CUT_AWAY_FADE, dt);
+  roofFade = THREE.MathUtils.damp(roofFade, roofAway ? CUT_AWAY_GHOST : 0, CUT_AWAY_FADE, dt);
+  fadeWhole('hallFront', frontFade < CUT_AWAY_NONE ? 0 : frontFade);
+  fadeWhole('hallRoof', roofFade < CUT_AWAY_NONE ? 0 : roofFade);
   // (from inside, the grass is seen through the doorway alone: walls and roof hid its 750k triangles, drawn all the
   // same; from above the roof is away, and all of it shows)
   village.meadow.visible = !(inside && view !== 'top' && cameraInHall() && !doorInView());
@@ -305,6 +312,10 @@ function hallInside(dt: number): void {
   standHeroes(lobby && seen && isWarm('heroes'), dt, lobby && near && isWarm('heroes'));
 }
 
+/** how far the hall's front wall and roof are thinned now, how far over the hero inside (a share of their pixels), how
+ *  fast they go, and the share under which they're whole */
+let frontFade = 0, roofFade = 0;
+const CUT_AWAY_GHOST = 0.4, CUT_AWAY_FADE = 8, CUT_AWAY_NONE = 0.01;
 const _door = new THREE.Box3(), _frustum = new THREE.Frustum(), _viewProj = new THREE.Matrix4();
 const _look = new THREE.Vector3();
 

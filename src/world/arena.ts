@@ -11,7 +11,7 @@ import { groundHeight, setRelief } from './ground';
 import { setAdaptScale } from '../core/renderer';
 import { oneEnvironment, rigPointLights, stillForMeshlets } from '../core/webgpu';
 import { castBreakablesAsOne, type BreakableShadows } from './breakableShadows';
-import { bakeStaticShadows, compileEnvMaps as compileEach, drawStillShadows, envMap, lampShadowsAsked, mergeStill, stillMovedTimes, type Biome, type BiomeBuilder, type BiomeLook } from './props';
+import { bakeStaticShadows, compileEnvMaps as compileEach, drawStillShadows, envMap, lampShadowsAsked, mergeStill, type Biome, type BiomeBuilder, type BiomeLook } from './props';
 import { cullWhileDrawn, trimShadowCasters } from './culling';
 import { castHeroesOverLamps } from './lampShadows';
 import { castMoversOverMoon, holdMoonShadow } from './moonShadow';
@@ -130,7 +130,7 @@ export async function buildArena(scene: THREE.Scene, renderer: THREE.WebGLRender
   let shown: PlaceId = 'village';
   let active = places.village.b;
   /** the place and the props' revision its still shadows were last drawn for (`drawStillShadows`) */
-  const stillDrawn = { place: null as PlaceId | 'hall' | null, rev: -1, lamps: 0, moved: 0, sun: '' };
+  const stillDrawn = { place: null as PlaceId | 'hall' | null, rev: -1, lamps: 0, sun: '' };
   /** whether the hall of heroes' room stands in the place's stead */
   let hallShown = false;
   /** the village's look now (`setHour`: it changes with the hour, applied every frame while it's shown) */
@@ -235,19 +235,17 @@ export async function buildArena(scene: THREE.Scene, renderer: THREE.WebGLRender
       const now = hallShown ? 'hall' : shown;
       // (and a lamp's, as it takes a casting light: `lampShadow`)
       const lamps = lampShadowsAsked();
-      // (and the sun's where it's kept: as it goes round, a redraw every 20 s or so, and as what stands in it moves)
+      // (and the sun's where it's kept: as it goes round, a redraw every 20 s or so)
       const held = holdMoonShadow(moon, now === 'village');
-      const moved = stillMovedTimes();
       const sun = now === 'village' ? moon.position.toArray().map((v) => Math.round(v * SUN_STEPS)).join() : '';
       if (held || stillDrawn.place !== now || stillDrawn.rev !== propState.rev || stillDrawn.lamps !== lamps
-        || stillDrawn.moved !== moved || stillDrawn.sun !== sun) {
+        || stillDrawn.sun !== sun) {
         // (and its breakables' shadows cast as one, each standing prop's: `world/breakableShadows.ts`)
         if (!hallShown) places[shown].breakables?.refresh();
         drawStillShadows(renderer, scene, G.camera, hallShown ? hallGroup : places[shown].group, moon.shadow);
         stillDrawn.place = now;
         stillDrawn.rev = propState.rev;
         stillDrawn.lamps = lamps;
-        stillDrawn.moved = moved;
         stillDrawn.sun = sun;
       }
     },

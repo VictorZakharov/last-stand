@@ -30,7 +30,7 @@ import { bannerGeo, buildBrazier } from './crypt';
 import { CLASSES, CLASS_IDS } from '../data/classes/index';
 import { buildBonfire } from './forest';
 import { buildFire } from './fire';
-import { stillMoved, boxWithUV, contactShadows, setInstance, standStill, type Biome, type BiomeLook, type EnvColours, type Portal, type RGB, type Updater } from './props';
+import { movesInShadows, boxWithUV, contactShadows, setInstance, standStill, type Biome, type BiomeLook, type EnvColours, type Portal, type RGB, type Updater } from './props';
 import { buildMeadow, meadowGround, MeadowMask, type MaskUniforms } from './meadow';
 import {
   barGeometry, chased, CoinBed, coinFaces, coinGeometry, coinsPile, crownGeometry, crownPointAngle, crownPoints, gemGeometry,
@@ -623,6 +623,9 @@ export function buildVillage(scene: THREE.Group): Village {
   const hall = stillBuilt(scene, () => buildHall(scene, wall, levels, M, obstacles, updaters));
   for (const part of hall.cutaway) part.traverse((object) => { object.userData.noMerge = true; });
   const lid = buildChest(scene, M, obstacles);
+  // (drawn over the sun's kept map each frame: each frame of its swing, redrawn whole, was 8 million triangles and 8 to 12
+  // ms of the page, and the first turn of the view by the chest fell to 70 a second)
+  movesInShadows(lid);
   const pile = lid.parent!.getObjectByName('chest-hoard')!;
   stillBuilt(scene, () => buildLectern(scene, M, obstacles));
   const candle = candleFlame(scene, torchLook(), lights);
@@ -655,10 +658,7 @@ export function buildVillage(scene: THREE.Group): Village {
   let lidOpen = 0, chestShown = false, chestNear = false, candleLit = 0, candleNear = false;
   let hoardWanted = 1, hoardFull = 1, hoardDrawn = { full: -1, open: -1 };
   updaters.push((dt) => {
-    const lidWas = lidOpen;
     lidOpen += ((chestShown || chestNear ? 1 : 0) - lidOpen) * Math.min(1, dt * 8);
-    // (its shadow on the sun's kept map)
-    if (Math.abs(lidOpen - lidWas) > LID_STILL) stillMoved();
     lid.rotation.x = -lidOpen * 1.4;
     // (as full as the stash is: at once with the lid shut, and rising or sinking where it's seen)
     hoardFull += (hoardWanted - hoardFull) * Math.min(1, dt * HOARD_EASE);
@@ -1266,6 +1266,8 @@ function buildHall(scene: THREE.Object3D, wall: Wall, levels: Levels, M: Mats, o
   }
   block(scene, half * 2, COLONNADE.lintel, 1.0, X, y0 + 0.72 + COLONNADE.high, COLONNADE.z, M.coping);
   const roof = hallRoof(scene, M, y0 + eaves, back, front);
+  fadesWhole(roof, 'hallRoof');
+  fadesWhole(frontWall, 'hallFront');
   return { cutaway: [roof, frontWall], torches, dais, porch };
 }
 
@@ -1371,6 +1373,19 @@ function torchLook(): TorchLook {
     halo: flameGeometry(0.06, 0.27, 0.025),
     cup: new THREE.CylinderGeometry(0.11, 0.06, 0.16, 10),
   };
+}
+
+/** What's under `group` drawn in materials of its own that thin as `kind` says (`fadeWhole`): the hall's cut away parts,
+ *  as a material a hole round the hero alone has is the rest of the village's too. */
+function fadesWhole(group: THREE.Object3D, kind: 'hallFront' | 'hallRoof'): void {
+  const fading = new Map<THREE.Material, THREE.Material>();
+  group.traverse((object) => {
+    const mesh = object as THREE.Mesh;
+    if (!mesh.isMesh) return;
+    const was = mesh.material as THREE.Material;
+    if (!fading.has(was)) fading.set(was, seeThrough(was.clone(), kind));
+    mesh.material = fading.get(was)!;
+  });
 }
 
 /** A torch on a wall's face at (x, z), `y` its bracket's top, standing out along (dx, dz) (a unit along x or z): an

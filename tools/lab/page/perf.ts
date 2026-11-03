@@ -65,6 +65,8 @@ export interface PerfOptions {
   village?: boolean;
   /** with `village`, the hour it's lit for (the page's own when not given) */
   hour?: number;
+  /** with `village`, the view turned right round on the spot three times instead */
+  spin?: boolean;
 }
 
 /** how far ahead of the hero the aim is (m): Maelstrom roams to it, into the foes coming */
@@ -90,6 +92,10 @@ const VILLAGE_FRAMES = 120;
 /** the frames the hero is given to walk from the square into the hall of heroes, to its dais (from play: "lag when
  *  entering hall of heroes", frames of 875 and 472 ms as he walked in) */
 const HALL_FRAMES = 900;
+/** the frames a turn right round takes, and the turns timed (from play: "initial spin around in 3rd person causes a
+ *  drop to 100 fps or below": what the first turn does that the later ones don't) */
+const SPIN_FRAMES = 240;
+const SPIN_TURNS = 3;
 /** where the hero stands in the hall to look out of its door at the square, how far in from the door (m) (from play,
  *  a perf report "looking at plaza from hall": the render 15 ms of the CPU, 522 draws) */
 const OUT_FROM = 7;
@@ -379,6 +385,64 @@ async function villagePhases(lab: Lab): Promise<Phase[]> {
   ];
 }
 
+/** Whether three has made a geometry's buffers: it listens for its disposal from then on (its `_listeners` are private,
+ *  so this is checked to read something: a frame's drawn meshes must have them). */
+function onTheGpu(geometry: THREE.BufferGeometry): boolean {
+  return Boolean(listenersOf(geometry)?.dispose?.length);
+}
+
+/** Three's listeners on a geometry, as `EventDispatcher` keeps them. */
+function listenersOf(geometry: THREE.BufferGeometry): Record<string, unknown[]> | undefined {
+  return (geometry as unknown as { _listeners?: Record<string, unknown[]> })._listeners;
+}
+
+/** Each geometry in the scene three hasn't made buffers for, by the name of the nearest named thing over it. */
+function notYetOnTheGpu(): Map<THREE.BufferGeometry, string> {
+  const waiting = new Map<THREE.BufferGeometry, string>();
+  G.scene.traverse((object) => {
+    const mesh = object as THREE.Mesh;
+    if (!mesh.isMesh || onTheGpu(mesh.geometry)) return;
+    let named: THREE.Object3D | null = mesh;
+    while (named && !named.name) named = named.parent;
+    waiting.set(mesh.geometry, named?.name ?? mesh.type);
+  });
+  return waiting;
+}
+
+/** What of `waiting` a turn put on the GPU: how many, their vertices, and the names they came under. */
+function cameOnTheGpu(waiting: Map<THREE.BufferGeometry, string>): string {
+  const byName = new Map<string, number>();
+  let vertices = 0;
+  let count = 0;
+  for (const [geometry, name] of waiting) {
+    if (!onTheGpu(geometry)) continue;
+    count++;
+    vertices += geometry.attributes.position?.count ?? 0;
+    byName.set(name, (byName.get(name) ?? 0) + 1);
+  }
+  const names = [...byName].sort((a, b) => b[1] - a[1]).map(([name, many]) => `${name} ${many}`).join(', ');
+  return `${count} of the scene's, ${vertices} vertices: ${names || 'none'}`;
+}
+
+/** The view turned right round where he stands, turn after turn, each a phase, with what each turn made for the GPU. */
+async function spinPhases(lab: Lab, facing: number): Promise<{ phases: Phase[]; lines: string[] }> {
+  const phases: Phase[] = [];
+  const lines: string[] = [];
+  for (let turn = 0; turn < SPIN_TURNS; turn++) {
+    const before = { ...G.renderer.info.memory };
+    const waiting = notYetOnTheGpu();
+    const phase = await timePhase(lab, `turn ${turn + 1}`, SPIN_FRAMES, (f) => {
+      renderer.faceCamera(facing + (f / SPIN_FRAMES) * Math.PI * 2);
+      return {};
+    });
+    phases.push(phase);
+    const { geometries, textures } = G.renderer.info.memory;
+    lines.push(`turn ${turn + 1} made ${geometries - before.geometries} geometries and `
+      + `${textures - before.textures} textures for the GPU; ${cameOnTheGpu(waiting)}`);
+  }
+  return { phases, lines };
+}
+
 /** The hero stood in the hall of heroes turned to its door, the square beyond it in view over his shoulder (from
  *  above its roof is cut away, and all of the village shows). */
 async function lookingOut(lab: Lab): Promise<Phase> {
@@ -482,7 +546,12 @@ async function perfAtQuality(lab: Lab, options: PerfOptions): Promise<Report> {
     const hour = options.hour === undefined ? '' : ` at ${options.hour}:00`;
     const where = options.village ? `the village${hour}` : options.biome;
     lines.push(`${where}, the ${options.view} view, ${cpu}`);
+    const spun = options.village && options.spin
+      ? await spinPhases(lab, options.facing * Math.PI / 180)
+      : null;
+    if (spun) lines.push(...spun.lines);
     const { phases, uncast } = options.parts ? { phases: [], uncast: [] }
+      : spun ? { phases: spun.phases, uncast: [] }
       : options.village ? { phases: await villagePhases(lab), uncast: [] }
       : await castPhases(lab, options, aim);
     for (const phase of phases) lines.push(...phaseLines(phase), ...(options.frames ? frameLines(phase) : []));

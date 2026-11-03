@@ -7,6 +7,7 @@
 // it (shown again round their draw), so its shadow seen through the doorway stays. The meadow's tiles are culled by
 // it as they're listed (`hiddenByHallDoor`).
 import * as THREE from 'three';
+import { fadedWhole } from '../core/seeThrough';
 import { HALL, TERRACE } from '../data/village';
 import { aroundShadows, isDrawingStill } from './culling';
 import { G } from '../state';
@@ -114,7 +115,8 @@ export function hiddenByHallDoor(box: THREE.Box3): boolean {
  *  its roof and front wall drawn (from above, or over the shoulder from before the wall, they're cut away). */
 function lookingOut(camera: THREE.Camera, village: THREE.Object3D, cutaway: readonly THREE.Object3D[]): boolean {
   if (mode === 'off' || camera !== G.camera || !village.visible || isDrawingStill()) return false;
-  if (!cutaway.every((part) => part.visible)) return false;
+  // (cut away, thinned to a ghost: what's beyond it shows)
+  if (!cutaway.every((part) => part.visible) || fadedWhole('hallFront') || fadedWhole('hallRoof')) return false;
   return eyeInside(camera.getWorldPosition(_eye));
 }
 

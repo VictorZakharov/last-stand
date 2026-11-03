@@ -157,6 +157,7 @@ const spot = (i: number): THREE.Vector3 => {
  * "remove the effect when entering hero hall, just show heroes immediately").
  */
 export function openHall(focusId: string): void {
+  atRest = new WeakSet();
   if (hallOpen()) return;
   // (those standing in the village's hall go to the room's plinths with the rest)
   standDown();
@@ -195,8 +196,11 @@ export function standHeroes(on: boolean, dt: number, ahead = false): void {
     const player = heroIn(id, profileOf(id));
     const at = new THREE.Vector3(TERRACE.x + HALL.plinths[i], 0, HALL.plinthZ);
     at.y = groundHeight(at.x, at.z);
-    // (facing the door, a little in toward the room's middle)
-    standAtRest(player, at, -HALL.plinths[i] * 0.06);
+    // (facing the door, a little in toward the room's middle; at rest already unless the hall's screen has had him: the 11
+    // poses, every time the doorway came on screen, took 47 ms of a frame as the view first turned to it)
+    const facing = -HALL.plinths[i] * 0.06;
+    if (atRest.has(player)) place(player, at, facing);
+    else restOn(player, at, facing);
     castShadows(player, false);
     standing.push(player);
   }
@@ -221,7 +225,12 @@ let poseTurn = 0;
 function buildAhead(): boolean {
   const id = CLASS_IDS.find((c) => c !== G.profile.classId && !kept.has(c));
   if (!id) return false;
-  G.scene.remove(heroIn(id, profileOf(id)).obj);
+  const player = heroIn(id, profileOf(id));
+  const i = CLASS_IDS.indexOf(id);
+  const at = new THREE.Vector3(TERRACE.x + HALL.plinths[i], 0, HALL.plinthZ);
+  at.y = groundHeight(at.x, at.z);
+  restOn(player, at, -HALL.plinths[i] * 0.06);
+  G.scene.remove(player.obj);
   return true;
 }
 
@@ -409,6 +418,15 @@ function standAtRest(p: Player, at: THREE.Vector3, facing: number): void {
   p.update(REST_POSE);
   place(p, at, facing);
   for (let step = 0; step < REST_STEPS; step++) p.update(REST_STEP);
+}
+
+/** the heroes stood at rest since the hall's screen last had them */
+let atRest = new WeakSet<Player>();
+
+/** `standAtRest`, and kept so. */
+function restOn(p: Player, at: THREE.Vector3, facing: number): void {
+  standAtRest(p, at, facing);
+  atRest.add(p);
 }
 
 /** The hall's frame: each hero stepped, the one in focus showing off when due, the lights on him, the camera's

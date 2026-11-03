@@ -666,6 +666,7 @@ export const COMMANDS = {
       if (options.throttle !== undefined && !(options.throttle >= 1)) throw labError('perf --throttle: 1 or more');
       if (options.quality !== undefined) qualityOf(options.quality);
       if (!options.village && options._.length === 0) throw labError('perf needs its skills (or --village)');
+      if (options.spin && !options.village) throw labError('perf --spin: with --village');
     },
     each(side, options) {
       const command = {
@@ -685,6 +686,7 @@ export const COMMANDS = {
         village: Boolean(options.village),
         parts: Boolean(options.parts),
         hour: options.hour,
+        spin: Boolean(options.spin),
       };
       return side.command('perf', command);
     },

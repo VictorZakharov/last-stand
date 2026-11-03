@@ -94,8 +94,12 @@ chest: 0.00% changed (`--canary` leaves what moves out of it, 1.1 to 1.3%); ever
 moment, with the stash at 0, 1, 30 and 60 of 60, and the vertices it draws growing with it (its share of the frame stops growing as the chest's mouth fills: 38% at 30, 29% at 60)
 (`heroChosenQuick`: another hero chosen in the hall, each frame timed by the browser's clock, the programs compiled;
 `--canary` stalls a frame) (`heroFaceNotBlinding`: round his head at midnight, before each portal and under the street lamps; `--canary` puts a
-light by his head) (`cameraBeforeWalls`: backed against the palisade over the shoulder, the camera stands on his side of
-it; `--canary` lets it stand behind)
+light by his head) (`cameraBeforeWalls`: walked out from the square, the hall and the portico each way to what's built, his back to it
+and along it, over the shoulder: the camera stands on his side of it, its near plane clear of him and his crown in the
+frame, each close spot pictured; `--canary` lets it stand behind and leaves it at his shoulder) (`hallFrontFades`: the
+hero stepped in from the portico, the camera out through the door: the frame against the frame with the front wall hidden,
+at most 30% of its share gone in a frame and 8 to 75% left after 30; `page/villageHallFade.ts`; `--canary` hides it at
+once, as it was)
 (`cancelledOnHisFloor`: the hall opened on the terrace and cancelled, his body on its floor every frame back, 100 cm under it and rising before; its canary drops him.) (`hallShownAtOnce`: the hall opened, another hero picked and the hall left with motion on, as under the lab's reduced motion the camera always cut: the camera on its shot within 10 cm a frame after each, the view settled as it's left; its canary picks by a drag's glide. `heroLeftStands`: each hero left in the row at two moments of his showcase, the frames of 120 a foot is up, at most 25, 35 for the warrior before, and the warrior long at rest for a control) (`daisOpensCompileNothing`: the hall opened by E at its dais, as the village's own update hears it, every frame's point lights casting counted and the programs compiled; `--canary` leaves another pooled light casting) (`heroesSeenOnApproach`: on the stair, the heroes standing on the dais with the door in view and none with it behind him; `--canary` reads the look away as the look at the door) (`heroesStandOnBothFeet`: each hero chosen away from at moments through his showcase, both ankles at rest on the dais every frame; `--canary` lifts a foot) (`arrowsStickInGround`: an arrow standing in the yard and the meadow with either biome chosen, glancing off the square; `--canary` reads the square as ground)
 (`wornStaysOn`: a worn item clicked by I stays on him, at the chest goes to the stash; `--canary` reads the chest as I)
 (`grassRingsGentle`: the light changed per band in a 0.5 m stride of the rings' middle, at most 10%; `--canary` hands
