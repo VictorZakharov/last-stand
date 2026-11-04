@@ -261,7 +261,7 @@ export class Sitting {
     if (st.after > 0) st.after = hands.after > 0 ? Math.max(0, st.after - dt / (hands.after * after)) : 0;
     else {
       if (this.u > 0) this.u = Math.max(0, this.u - dt / (hands.up ?? SIT.up));
-      if (this.u < SIT.handsFrom) st.before = hands.before > 0 ? Math.max(0, st.before - dt / (hands.before * before)) : 0;
+      if (hands.last ? this.u <= 0 : this.u < SIT.handsFrom) st.before = hands.before > 0 ? Math.max(0, st.before - dt / (hands.before * before)) : 0;
     }
     this.place(me, dt);
     // Hands without a separate stage finish halfway up; the body must finish too, or its weapon jumps to standing.

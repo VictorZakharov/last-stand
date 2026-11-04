@@ -123,6 +123,12 @@ const FIST_CLOSE = 0.7;
 /** how far off the way across its palm a closed fist may have its handle (deg): a slant across the palm is at most 25
  *  (`SLANT` in `models/hands.ts`), and past this the fingers no longer go round it */
 const ASKEW_MOST = 35;
+/** how far a closed fist may pass from its handle's axis (m), and how far past the handle's end it may close (m): from
+ *  review, "he needs to hold the two handed weapon by the handle, not by the blade" */
+const FIST_OFF_MOST = 0.03;
+const FIST_PAST_MOST = 0.01;
+/** the canary's hand moved off its handle (m) */
+const FIST_OFF_CANARY = 0.08;
 /** the canary's turn of a drawn hand about its length (rad) */
 const ASKEW_CANARY = Math.PI / 2;
 
@@ -203,7 +209,9 @@ interface Out {
   /** the canary's reads of its own pieces: how far what it pushed went with no hand on it (m), and whether what it
    *  turned in his hand read as held otherwise (each on its own, so a real fault can't pass for it) */
   /** what each canary read; `gripped`: whether a palm gripped anything to turn, sat */
-  canary?: { pushed: number; turned: boolean; twisted: number; gripped: boolean; pinned: boolean; askew: boolean };
+  canary?: {
+    pushed: number; turned: boolean; twisted: number; gripped: boolean; pinned: boolean; askew: boolean; fistOff: boolean;
+  };
 }
 
 /** What's followed on a seat from its set-up until he's up again: what he carries, his legs through his skirts (the
@@ -223,6 +231,10 @@ interface Watch {
   open: { shots: number; since: number };
   /** the frames a closed fist had its handle off the way across its palm, the most, and where */
   askew: { frames: number; most: number; at: string };
+  /** the frames a closed fist was off its handle's axis, the most, and where */
+  fistOff: { frames: number; most: number; at: string };
+  /** the frames a closed fist was past its handle's end, on what it was to hold it by, the most, and where */
+  fistPast: { frames: number; most: number; at: string };
   /** what he held, as he held it as he began to sit (before he walked to the seat, until then) */
   before: ReturnType<typeof heldNow>;
   /** whether a piece is traced (`--trace`) */
@@ -257,10 +269,11 @@ export async function sit(lab: Lab, options: SitOptions): Promise<Report> {
 
 /** The canary on one seat: his body raised off it as he sits must be caught as sitting on air. */
 async function canaryOn(lab: Lab, c: SeatCase, fixture: Fixture, out: Out): Promise<Report> {
-  out.canary = { pushed: 0, turned: false, twisted: 0, gripped: false, pinned: false, askew: false };
+  out.canary = { pushed: 0, turned: false, twisted: 0, gripped: false, pinned: false, askew: false, fistOff: false };
   await trySeat(lab, { ...c, asks: [{ what: 'step', held: false }] }, fixture, { canary: true }, out);
   out.canary.pinned = pinnedCanary(bodyBreaches(lab.joints).angles, ARM_LIMITS);
   out.canary.askew = askewCanary(lab);
+  out.canary.fistOff = fistOffCanary(lab);
   const problems: string[] = [];
   const pushedTo = CANARY_PUSH.by * (CANARY_PUSH.frames[1] - CANARY_PUSH.frames[0]) / 2;
   const canaries = [
@@ -275,6 +288,7 @@ async function canaryOn(lab: Lab, c: SeatCase, fixture: Fixture, out: Out): Prom
     { what: 'what he holds turned in his hand as he gets up', caught: out.canary.turned },
     { what: 'his right arm held at its stops', caught: out.canary.pinned },
     { what: 'a closed fist turned off its handle', caught: out.canary.askew },
+    { what: 'a closed fist moved off its handle', caught: out.canary.fistOff },
   ];
   // (sat with a two-hander, his palm rests on its pommel and grips nothing: nothing is in a hand to turn in it)
   if (out.canary.gripped) {
@@ -327,6 +341,8 @@ async function trySeat(lab: Lab, c: SeatCase, fixture: Fixture, options: SitOpti
     seat: [new WeaponSeat(seat, (each) => each.model.tip?.parent), new WeaponSeat(seat, bowApart)],
     shown: 0, pinned: new ArmsPinned(c.name, ARM_LIMITS), fingers: new FingersUnder(), open: { shots: 0, since: OPEN_SHOTS.every },
     askew: { frames: 0, most: 0, at: '' },
+    fistOff: { frames: 0, most: 0, at: '' },
+    fistPast: { frames: 0, most: 0, at: '' },
     before: heldNow(lab), canary: !!options.canary, traced: !!options.trace, moments: [],
   };
   const sat = await untilSat(lab, label, c.views.slice(0, 2), out, watch);
@@ -441,6 +457,7 @@ function watchFrame(lab: Lab, name: string, frame: string, watch: Watch, skirts:
   watch.fingers.observe(lab, frame);
   pictureOpenFist(lab, name, frame, watch);
   readAskew(lab, frame, watch);
+  readFistOn(lab, frame, watch);
   const through = legsThrough(lab.joints, skirts);
   if (!through || through.depth <= THROUGH_FROM) return;
   if (!watch.through || through.depth > watch.through.depth) watch.through = { ...through, at: frame };
@@ -479,6 +496,49 @@ function askewCanary(lab: Lab): boolean {
   const seen = askewNow(lab) > ASKEW_MOST;
   hands.forEach((hand, i) => hand.quaternion.copy(were[i]));
   return seen;
+}
+
+/** The drawn hand moved off its handle, as a hand short of it is: the read must see it. */
+function fistOffCanary(lab: Lab): boolean {
+  const hands = [lab.joints.handL, lab.joints.handR]
+    .map((joint) => joint.children.find((child) => child.userData.drawnHand))
+    .filter((hand) => hand !== undefined);
+  for (const hand of hands) hand.translateZ(FIST_OFF_CANARY / hand.getWorldScale(new THREE.Vector3()).x);
+  lab.model.root.updateMatrixWorld(true);
+  const seen = closedFists(lab).some((fist) => fist.off > FIST_OFF_MOST);
+  for (const hand of hands) hand.translateZ(-FIST_OFF_CANARY / hand.getWorldScale(new THREE.Vector3()).x);
+  lab.model.root.updateMatrixWorld(true);
+  return seen;
+}
+
+/** The fists closed on what they hold. */
+function closedFists(lab: Lab): Fist[] {
+  return (lab.model.fists ?? []).filter((fist) => fist.curl >= FIST_OPEN);
+}
+
+/** Where along what he holds its handle ends, from the grip (`userData.handleTo` on it), if it's said. */
+function handleEnd(lab: Lab): number | undefined {
+  let end: number | undefined;
+  lab.model.root.traverse((object) => {
+    if (object.visible && object.userData.handleTo !== undefined) end = object.userData.handleTo as number;
+  });
+  return end;
+}
+
+/** A frame's closed fists against their handles: off its axis, and past its end (the right hand's, which holds it). */
+function readFistOn(lab: Lab, frame: string, watch: Watch): void {
+  const end = handleEnd(lab);
+  for (const fist of closedFists(lab)) {
+    if (fist.off > FIST_OFF_MOST) {
+      watch.fistOff.frames++;
+      if (fist.off > watch.fistOff.most) watch.fistOff = { ...watch.fistOff, most: fist.off, at: frame };
+    }
+    const past = end === undefined || fist.hand !== 'right' ? 0 : (fist.along ?? 0) - end;
+    if (past > FIST_PAST_MOST) {
+      watch.fistPast.frames++;
+      if (past > watch.fistPast.most) watch.fistPast = { ...watch.fistPast, most: past, at: frame };
+    }
+  }
 }
 
 /** A fist as he sits, close on the hand: at the sheet's other distances a closed hand and an open one look alike. */
@@ -535,6 +595,15 @@ function readAskew(lab: Lab, frame: string, watch: Watch): void {
 /** What's followed judged once he's up again: what he carries moved with no hand on it or jumping, his legs
  *  through his skirts, and the film. */
 function judgeWatch(name: string, watch: Watch, out: Out): void {
+  const { fistOff, fistPast } = watch;
+  if (fistOff.frames > 0) {
+    const most = cmOf(fistOff.most);
+    out.problems.push(`sit: by the ${name}, a closed fist ${most} cm off its handle on ${fistOff.frames} frames (${fistOff.at})`);
+  }
+  if (fistPast.frames > 0) {
+    const most = cmOf(fistPast.most);
+    out.problems.push(`sit: by the ${name}, a closed fist ${most} cm past its handle's end on ${fistPast.frames} frames (${fistPast.at})`);
+  }
   const { askew } = watch;
   if (askew.frames > 0) {
     const most = askew.most.toFixed(0);
@@ -1204,7 +1273,8 @@ function riseMost(lab: Lab, c: SeatCase): number {
   const hands = lab.player.sitHands(!!c.pick(G.arena.seats)?.ground);
   const [before, after] = SIT.handsUp;
   const up = hands.up ?? SIT.up;
-  const body = Math.max(up, up * (1 - SIT.handsFrom) + hands.before * before) + hands.after * after;
+  const started = hands.last ? up : up * (1 - SIT.handsFrom);
+  const body = Math.max(up, started + hands.before * before) + hands.after * after;
   return hands.after * after + body + RISE_ROOM;
 }
 

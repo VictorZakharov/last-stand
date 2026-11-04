@@ -243,7 +243,8 @@ export class Carried {
  * piece moved with the hand moves in the world alone, and a palm moved over a piece that stands still moves in the
  * hand's frame alone (a palm going onto a pommel), but a piece turned or pulled through the fist does both. Its slide
  * is its own middle's (its group's origin): its corners' went round with its turn. Let go of, it's taken afresh. A piece
- * turning on its own mount (a staff's crystal, `userData.sitAnimated`) is passed over.
+ * turning on its own mount (a staff's crystal, `userData.sitAnimated`) is passed over, and so is a two-hander tipped
+ * upright on its far end on the ground as his hand turns round it (`userData.tipping`), the one turn in his hand there is.
  */
 function followInHand(each: Followed, held: boolean, quaternion: THREE.Quaternion, frame: string): void {
   const { mesh, joint, group } = each.part;
@@ -264,13 +265,20 @@ function followInHand(each: Followed, held: boolean, quaternion: THREE.Quaternio
     const turned = Math.min(inWorld, each.inHandWas.angleTo(inJoint) * DEG);
     const was = each.originWas;
     const slid = Math.min(origin.world.distanceTo(was.world), origin.onJoint.distanceTo(was.onJoint));
-    if (turned >= IN_HAND_FROM) each.inHand += turned;
-    if (slid >= SLID_FROM) each.slid += slid;
+    const tipping = isTipping(mesh);
+    if (!tipping && turned >= IN_HAND_FROM) each.inHand += turned;
+    if (!tipping && slid >= SLID_FROM) each.slid += slid;
     each.turnedInHand = further(each.turnedInHand, each.inHand, each.inHandFrom, frame);
     each.slidInHand = further(each.slidInHand, each.slid, each.inHandFrom, frame);
   }
   each.inHandWas = inJoint;
   each.originWas = origin;
+}
+
+/** Whether `object` is part of what's being tipped upright on its far end (`userData.tipping`). */
+function isTipping(object: THREE.Object3D): boolean {
+  for (let at: THREE.Object3D | null = object; at; at = at.parent) if (at.userData.tipping) return true;
+  return false;
 }
 
 /** `was`, or a stretch of `by` from `from` to `to` if it went further. */
