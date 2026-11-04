@@ -388,7 +388,7 @@ export interface AnimState {
 /** How far an idle hero has sat (`entities/sitting.ts`): his hands' work before his body goes down (`before`: 0..1,
  *  `Model.sitHands`), his body's way down (`w`), his hands' work once he's sat (`after`), his hips' height and his
  *  feet's way ahead (m). Getting up, each runs back in turn. */
-export interface SitHands { before: number; after: number }
+export interface SitHands { before: number; after: number; /** his way up, if not the sit's own (s) */ up?: number }
 
 export interface SitState { w: number; hip: number; foot: number; before: number; after: number }
 

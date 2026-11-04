@@ -1178,7 +1178,8 @@ function pushOutOfHand(lab: Lab, frame: number): (() => void) | null {
 function riseMost(lab: Lab, c: SeatCase): number {
   const hands = lab.player.sitHands(!!c.pick(G.arena.seats)?.ground);
   const [before, after] = SIT.handsUp;
-  const body = Math.max(SIT.up, SIT.up * (1 - SIT.handsFrom) + hands.before * before);
+  const up = hands.up ?? SIT.up;
+  const body = Math.max(up, up * (1 - SIT.handsFrom) + hands.before * before);
   return hands.after * after + body + RISE_ROOM;
 }
 

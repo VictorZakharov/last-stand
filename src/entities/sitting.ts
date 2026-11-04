@@ -25,7 +25,7 @@ export const SIT = {
    *  after (`Model.sitHands`: asked to act, the whole slow reverse, the owner's choice: up and doing it in about
    *  2.3 s, a greatsword drawn out of the ground and onto his shoulder; at a third of the time, it was swung over the top 40 cm a frame), and how far
    *  down he still is as they begin again before he stands (`handsFrom`) */
-  down: 1.1, up: 0.8, handsUp: [1, 0.7], handsFrom: 0.5,
+  down: 1.1, up: 0.8, handsUp: [1, 0.7], handsFrom: 0.3,
   /** a foe this near gets him up (m) */
   foes: 14,
   /** how long E asking him to sit waits to be taken, as he comes free (s): taken on its frame alone, a press just
@@ -255,12 +255,12 @@ export class Sitting {
   }
 
   private rise(me: Sitter, dt: number): boolean {
-    // (each back in turn, his hands quicker, `handsUp`, and readied again from half way up: in turn, a greatsword
+    // (each back in turn, his hands quicker, `handsUp`, and readied again near the end of the way up: in turn, a greatsword
     // swung back onto his shoulder in time went 45 cm a frame, and he took 2.6 s to be up)
     const st = this.state, hands = me.sitHands(!!this.spot!.seat.ground), [before, after] = SIT.handsUp;
     if (st.after > 0) st.after = hands.after > 0 ? Math.max(0, st.after - dt / (hands.after * after)) : 0;
     else {
-      if (this.u > 0) this.u = Math.max(0, this.u - dt / SIT.up);
+      if (this.u > 0) this.u = Math.max(0, this.u - dt / (hands.up ?? SIT.up));
       if (this.u < SIT.handsFrom) st.before = hands.before > 0 ? Math.max(0, st.before - dt / (hands.before * before)) : 0;
     }
     this.place(me, dt);
