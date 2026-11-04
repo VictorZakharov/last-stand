@@ -46,7 +46,7 @@ import { ItemGlows } from './itemGlow';
 /** sat, how a hand that holds a weapon turns as it goes down to his thigh (`models/sit.ts`, `restHands`), the left's
  *  and the right's, the weapon pointing down to where it's stood; an empty hand rests palm down. The small rise keeps
  *  his shield-side forearm over the thigh. */
-const SIT_HANDS = tunable('warriorSit', { roll: [0, 0], bend: [0, 0], rise: 0.005, slant: 0.1, along: 0.35, over: 0.11, armIn: 1, floorIn: 0.7, arc: 0.15, lapR: [0.55, 0.12, 0.85], lapTwo: [0.95, -0.22, 0.15], lapAt: [-0.16, 0.17, 0.36], lapPole: [-0.5, -0.5, -0.6], portDir: [-0.12, 1, 0.3], fistBelow: 0.08, swordOver: 0.05, maulOver: 0.26, axeOver: 0.33, armBy: 0.85, portAt: [-0.3, 0.14, 0.3], beside: [-0.42, 0.4, 0.02], besidePole: [-0.3, -0.2, -1], besideOut: -0.3, besideAhead: 0.95, twoR: [0.38, 0.12, 0.92], twoL: [-0.35, 0.3, 0.89], viaR: [-0.15, 0.2, 0.95], viaL: [0.15, 0.2, 0.95], viaAt: 0.45, floorBack: 0, viaFloorR: [-0.15, 0.5, 0.85], viaFloorL: [0.15, 0.5, 0.85], kneesR: [0.88, -0.2, 0.42], kneesL: [-0.7, -0.3, 0.65], turnFrom: 0.15, turnLate: 0.5, turnIn: 0.12, shieldOut: 0.09, edgeDown: 0.2, });
+const SIT_HANDS = tunable('warriorSit', { roll: [0, 0], bend: [0, 0], rise: 0.005, slant: 0.1, along: 0.35, over: 0.11, armIn: 1, floorIn: 0.7, arc: 0.15, lapR: [0.55, 0.12, 0.85], lapTwo: [0.95, -0.22, 0.15], lapAt: [-0.16, 0.205, 0.36], lapPole: [-0.5, -0.5, -0.6], portDir: [0.28, 0.92, 0.28], fistBelow: 0.08, swordOver: 0.05, maulOver: 0.26, axeOver: 0.33, armSat: 0.79, portAt: [-0.3, 0.14, 0.3], beside: [-0.42, 0.4, 0.02], besidePole: [-0.3, -0.2, -1], besideOut: -0.3, besideAhead: 0.95, twoR: [0.38, 0.12, 0.92], twoL: [-0.35, 0.3, 0.89], viaR: [-0.15, 0.2, 0.95], viaL: [0.15, 0.2, 0.95], viaAt: 0.45, floorBack: 0, viaFloorR: [-0.15, 0.5, 0.85], viaFloorL: [0.15, 0.5, 0.85], kneesR: [0.88, -0.2, 0.42], kneesL: [-0.7, -0.3, 0.65], turnFrom: 0.15, turnLate: 0.5, turnIn: 0.12, shieldOut: 0.09, edgeDown: 0.2, });
 const _sitTurn: RestTurn = { roll: [0, 0], bend: [0, 0], along: [0, 0], over: [0, 0], armIn: [0, 0], arc: [0, 0], out: [0, 0] };
 const _lifted: number[] = [], _resting: number[] = [];
 
@@ -1480,7 +1480,7 @@ export function buildWarrior(): Model {
   /** a model's hands with nothing to do as he sits */
   const NO_HANDS = { before: 0, after: 0 };
   /** a two-hander's lift to the port, before he goes down, and his way up with its weight (s) */
-  const TWO_SIT_HANDS = { before: 0.5, after: 0, up: 1.3 };
+  const TWO_SIT_HANDS = { before: 0.6, after: 0.3, up: 1.1 };
   const _rightArm = [j.shoulderR, j.elbowR, j.handR];
   const _lapX = new THREE.Vector3(), _lapY = new THREE.Vector3(), _lapZ = new THREE.Vector3();
   const _lapWorld = new THREE.Matrix4(), _lapHand = new THREE.Matrix4();
@@ -2604,7 +2604,11 @@ export function buildWarrior(): Model {
       // (lifted off his shoulder to the port before his body goes down, as a weight is, and let down as he sits: both in
       // the sit's own time, its tip went 29 cm a frame)
       // (and down over the first of his way, ahead of his thighs: over all of it, its butt met them rising, 11 cm in)
-      const up = smooth(st.sit!.before), down = smooth(ramp(st.sit!.w, 0, SIT_HANDS.armBy));
+      // (let down at one pace over his way down and a moment more, `after`: eased on top of his own easing, in his
+      // 1.1 s, it went 17 cm a frame at its fastest. `w` is `smooth` of his way: this is that way back.)
+      const way = 0.5 - Math.sin(Math.asin(1 - 2 * st.sit!.w) / 3);
+      const up = smooth(st.sit!.before);
+      const down = smooth(lerp(way * SIT_HANDS.armSat, 1, st.sit!.after));
       _rightArm.forEach((joint, i) => {
         joint.quaternion.slerpQuaternions(twoSit.from[i], twoSit.port[i], up).slerp(twoSit.rest[i], down);
       });
