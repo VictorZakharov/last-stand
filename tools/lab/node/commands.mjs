@@ -1441,7 +1441,7 @@ export const COMMANDS = {
         trace: options.trace,
         canary: Boolean(options.canary),
       };
-      return side.command('sit', command);
+      return side.picturedCommand('sit', command);
     },
     finish(results, options, session) {
       return textWithMoments(results, session.outFor('sit'), session.browser);
