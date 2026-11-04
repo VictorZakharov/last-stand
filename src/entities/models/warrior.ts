@@ -602,7 +602,7 @@ export function buildWarrior(): Model {
     for (const y of [-0.09, -0.2]) H.add(belt(0.072, 0.072, y, 0.018, 0.006, 0, 14), leatherDark, el);
     // the glove's cuff: from under the bracer down over the wrist into the palm, following the hand, so the hand joins the forearm (the bracer ends above the wrist)
     // (flattened as the palm is, its end inside it: round, a 7 cm tube's rim stood out of a 3 cm palm)
-    H.skinChain(wristBent(scaleUV(ovalTube([[-0.298, 0.032, 0.015], [-0.285, 0.033, 0.018], [-0.265, 0.038, 0.027], [-0.235, 0.046, 0.04], [-0.2, 0.052, 0.052]], 16), 2, 1), j.P.foreL), leather, el, wrist.chain);
+    H.skinChain(wristBent(scaleUV(ovalTube([[-0.298, 0.034, 0.016], [-0.285, 0.04, 0.025], [-0.265, 0.043, 0.032], [-0.235, 0.047, 0.042], [-0.2, 0.052, 0.052]], 16), 2, 1), j.P.foreL), leather, el, wrist.chain);
     // bare: the gambeson's sleeve on down the forearm (its top inside the upper sleeve's end, which follows the
     // forearm), a turned-back cuff at the wrist, and the wrist into the palm
     B.add(scaleUV(lathe([[0.05, -0.245], [0.052, -0.2], [0.057, -0.12], [0.061, -0.04], [0.06, 0]], 16), 2, 1), cloth, el);
