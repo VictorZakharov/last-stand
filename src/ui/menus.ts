@@ -2,7 +2,7 @@
 // pause and help modals. The village's objects open them (game/village.ts); I opens the inventory anywhere.
 import { G } from '../state';
 import { holdToConfirm, resetHold } from './holdButton';
-import { trainingPending } from '../game/training';
+import { restartTraining, trainingPending } from '../game/training';
 import { SLOTS, SLOT_INFO } from '../data/items';
 import { RUN } from '../data/balance';
 import { WAVES } from '../data/waves';
@@ -250,6 +250,10 @@ export function initMenus(h: MenuHooks): void {
   document.addEventListener('fullscreenchange', syncFs);
   syncFs();
   $('#btn-help-close').onclick = () => $('#help').classList.add('hidden');
+  $('#btn-help-restart').onclick = () => {
+    restartTraining();
+    hideHelp();
+  };
   $('#btn-reset').onclick = () => {
     const name = CLASSES[G.profile.classId].name;
     if (!confirm(`Reset the ${name} of save slot ${saveSlot()}? Their stash, equipment and records will be erased (other classes and slots keep theirs).`)) return;
@@ -309,9 +313,10 @@ export function showMenu(v: boolean): void {
   syncDiscard();
 }
 
-/** How to play (the notice board's, the pause menu's link). */
-export function showHelp(): void {
+/** How to play (the notice board's, whose `board` offers the training again, or the pause menu's link). */
+export function showHelp(board = false): void {
   renderControlsHelp();
+  $('#btn-help-restart').classList.toggle('hidden', !board);
   $('#help').classList.remove('hidden');
 }
 

@@ -56,7 +56,7 @@ export function skipTraining(): void {
   emit('trainingChanged');
 }
 
-/** Dev builds: the training begun afresh, as a new player's (a harness's look at it). */
+/** The training begun afresh, as a new player's (the notice board's Restart training; a harness's look at it). */
 export function restartTraining(): void {
   state = 'training';
   done.clear();

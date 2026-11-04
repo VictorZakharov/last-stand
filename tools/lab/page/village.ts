@@ -25,6 +25,7 @@ import { focusOf } from '../../../src/world/meadow';
 import { goTo, goUse, objectNear, villageObject } from '../../../src/game/village';
 import { routing } from '../../../src/world/walkPath';
 import { restartTraining, skipTraining, stepDone, trainingPending } from '../../../src/game/training';
+import { helpOpen, hideHelp, showHelp } from '../../../src/ui/menus';
 import { TRAINING } from '../../../src/data/training';
 import { minimapOut } from './villageMinimap';
 import { portalAtNight } from './villagePortalNight';
@@ -533,6 +534,37 @@ async function use(lab: Lab, o: VillageObject): Promise<void> {
 /** how far the training's middle drag goes (px) */
 const TRAINING_DRAG = 40;
 
+/** The notice board's Restart training, the training over (not clicked, with `canary`): under way afresh, every step
+ *  to do, the tracker out and the board put away; and no such button on How to play from the pause menu. */
+async function boardRestarts(lab: Lab, canary: boolean): Promise<{ problems: string[]; board: Pictured }> {
+  const problems: string[] = [];
+  // (he stays at it: walked off, the board is put away)
+  const notice = villageObject('notice')!;
+  await stand(lab, notice.stand);
+  goUse(notice);
+  await lab.step(SETTLE);
+  const restart = document.querySelector<HTMLElement>('#btn-help-restart')!;
+  if (!shownOnPage(restart)) problems.push('training: the notice board offers no restart');
+  const board = await lab.screen('the notice board, its Restart training', []);
+  if (!canary) await lab.clickOn(restart);
+  await lab.step(SETTLE);
+  if (!trainingPending()) problems.push('training: the notice board\'s restart left it over');
+  if (TRAINING.some((t) => stepDone(t.id))) problems.push('training: restarted with steps ticked');
+  if (!canary && !shownOnPage(document.querySelector('#training')!)) problems.push('training: restarted, no tracker');
+  if (!canary && helpOpen()) problems.push('training: the notice board stayed up after its restart');
+  hideHelp();
+  showHelp();
+  if (shownOnPage(restart)) problems.push('training: How to play offers a restart away from the notice board');
+  hideHelp();
+  await stand(lab, [0, 4.5]);
+  return { problems, board };
+}
+
+/** Whether an element takes up room on the page. */
+function shownOnPage(element: Element): boolean {
+  return element.getBoundingClientRect().width > 0;
+}
+
 /** The training's steps taken as a player takes them (the notice board left out, with `canary`): each ticked, the
  *  portal holding its way in until all are done; then begun again and skipped, the portal open at once. */
 async function training(lab: Lab, canary: boolean): Promise<Checked> {
@@ -568,6 +600,9 @@ async function training(lab: Lab, canary: boolean): Promise<Checked> {
   if (!canary && left.length) problems.push(`training: steps taken but not ticked: ${left.join(', ')}`);
   const after = await portalCard(lab);
   if (!canary && (!after.enter || after.warned)) problems.push('training: the portal stayed shut after the training');
+  const restarted = await boardRestarts(lab, canary);
+  problems.push(...restarted.problems);
+  const restartDead = !trainingPending();
   restartTraining();
   skipTraining();
   const skipped = await portalCard(lab);
@@ -577,7 +612,8 @@ async function training(lab: Lab, canary: boolean): Promise<Checked> {
       + `steps left after taking them: ${left.length ? left.join(', ') : 'none'}; `
       + `then ${after.enter ? 'open' : 'shut'}; skipped, ${skipped.enter ? 'open' : 'shut'}`,
   ];
-  return { lines, problems: canary ? [] : problems, caught: canary ? left.includes('notice') && !after.enter : null };
+  const caught = canary ? left.includes('notice') && !after.enter && restartDead : null;
+  return { lines, problems: canary ? [] : problems, caught, moments: canary ? [] : [restarted.board] };
 }
 
 /** Each hour of the day drawn: no program compiled for any (a new material shown at noon, with `canary`). */

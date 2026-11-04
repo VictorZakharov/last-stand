@@ -292,7 +292,7 @@ function useObject(o: VillageObject): void {
     case 'heroes': showVillageCard(null); openPanels(null); askForHeroes(); return;
     case 'coop': openCoop(true); return;
     case 'chronicle': openPanels(null); showVillageCard(o); return;
-    case 'help': showHelp(); completeStep('notice'); return;
+    case 'help': showHelp(true); completeStep('notice'); return;
   }
 }
 
