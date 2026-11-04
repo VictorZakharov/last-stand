@@ -13,6 +13,7 @@ import { SKIRT_TUCK, WRIST_INSIDE, floorUnder, onFloor, restHands, satBy, sitPos
 import { tunable } from '../../core/tuning';
 import { buildHumanoid, joint, part, resetPose, walkCycle, idle, deathFall, groundFeet, disposeGeometries, ramp, updateJoints } from './rig';
 import { Sculpt, stripRig, limb, lathe } from './shapes';
+import { ovalTube, wristBent, wristOf } from './wrist';
 import { belt, buckle, strap, plate, edgeTube, taperTube, stitches, Skirt, SkirtLimbs, armOffThigh, lod, type JointPoint } from './armor';
 import { onTunic, tunicFront, tunicBack, tunicCut, armholeEdge, SetInShoulders, ARMHOLE, WAIST, type ArmBlend } from './tunic';
 import { buildHead, buildNeck, toGroup, handSkin, HEAD_MM, type Head } from './head';
@@ -251,21 +252,6 @@ const drawnAt = (k: number): number => (pullAt(k) + smooth(clamp(k, 0, 1))) / 2;
 /** the coat's share of the arm round each armhole (`ArmBlend`; less above `topY`, under the baldric) */
 const ARM_K: ArmBlend = { seam: 0.5, reach: 0.09, top: 0.05, topY: 0.235, join: 0.1, joinIn: 0.05, around: 96, bulk: 0.35 };
 
-/**
- * `share` of the turn `q` from rest into `out`, taken the way round that is nearer `middle` (the middle of the turns
- * it takes). Taken the shorter way (a slerp from rest), a turn near half round went one way and then the other as it
- * crossed it, and the joints blended through it jumped between two places: the bow hand is turned 90 to 180 degrees
- * on its forearm (through the eyes 140 to 180, and past it), and its cuff flickered between two shapes with the hand still (#161).
- * Measured from the middle, the way round flips only half a turn from it, where the hand never goes.
- */
-function blendTurn(out: THREE.Quaternion, q: THREE.Quaternion, share: number, middle: THREE.Quaternion): THREE.Quaternion {
-  // (q and -q are one turn, each the other way round: the one nearer the middle)
-  const sign = q.dot(middle) < 0 ? -1 : 1;
-  const w = THREE.MathUtils.clamp(q.w * sign, -1, 1), half = Math.acos(w), s = Math.sin(half);
-  if (s < 1e-6) return out.identity();
-  const k = Math.sin(half * share) / s * sign;
-  return out.set(q.x * k, q.y * k, q.z * k, Math.cos(half * share));
-}
 const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _c = new THREE.Vector3(), _d = new THREE.Vector3(), _e = new THREE.Vector3();
 const _u = new THREE.Vector3(), _left = new THREE.Vector3(), _y = new THREE.Vector3(), _z = new THREE.Vector3(), _x = new THREE.Vector3();
 const _q = new THREE.Quaternion(), _q2 = new THREE.Quaternion(), _q3 = new THREE.Quaternion(), _m = new THREE.Matrix4(), _m2 = new THREE.Matrix4(), _s = new THREE.Vector3();
@@ -286,21 +272,6 @@ function frame(z: THREE.Vector3, cant: number, out: THREE.Quaternion, up = UP): 
 
 /** the draw hand's fingers: index, middle and ring hooked round the string at their last joints, the little finger and the
  *  thumb tucked under (`k` 1), or relaxed open (0); `pinch` closes the thumb on the index, holding an arrow by its nock */
-/** a tube round the forearm joint's bone (along -y, its space), flattened: rings of [y, half across, half through] from
- *  the bottom up (the wrist wider across the back of the hand than through it, as the forearm is towards it) */
-function ovalTube(rings: [number, number, number][], segs: number): THREE.BufferGeometry {
-  const g = lathe(rings.map(([y, rx]) => [rx, y] as [number, number]), segs), p = g.attributes.position;
-  if (!p) return g;
-  for (let i = 0; i < p.count; i++) {
-    const y = p.getY(i); let k = 0;
-    while (k < rings.length - 2 && y > rings[k + 1][0]) k++;
-    const [y0, x0, z0] = rings[k], [y1, x1, z1] = rings[k + 1], t = clamp((y - y0) / (y1 - y0), 0, 1);
-    p.setZ(i, p.getZ(i) * (z0 + (z1 - z0) * t) / (x0 + (x1 - x0) * t));
-  }
-  g.computeVertexNormals();
-  return g;
-}
-
 function hook(h: Hand, k: number, pinch: number): void {
   h.vis.position.set(0, 0, 0); h.vis.quaternion.identity();
   const s = h.s;
@@ -484,14 +455,9 @@ export function buildRanger(): Model {
   const run = [0, 0.2, 0.4, 0.6, 0.8, 1], across = (t: number) => lerp(-0.13, 0.155, t), down = (t: number) => lerp(0.24, -0.11, t);
   S.add(strap([...run.map((t) => tunicFront(across(t), down(t), 0.006)), onTunic(Math.PI / 2, -0.115, 0.006), ...[...run].reverse().map((t) => tunicBack(across(t), down(t), 0.006)), V(-0.135, 0.29, -0.012)], 0.048, 0.008, true), strapLeather, j.chest);
   S.add(buckle(0.042, 0.05, 0.007), brass, j.chest, tunicFront(-0.075, 0.18, 0.014).toArray(), [0, 0, -0.85]);
-  // each wrist's part-turned joints: a quarter, half and three quarters of the hand's turn on the forearm (`bendWrists`)
-  /** the middle of each hand's turns on its forearm, about its length (`blendTurn`: the bow hand's -180 to -90 degrees,
-   *  past -180 through the eyes, the draw hand's 0 to 185, standing, walking, strafing and shooting, in third person and
-   *  through the eyes). A middle is a way round too: given as 225, the bow hand's, the cuff twisted the long way round
-   *  its wrist and pinched in under the bracer */
-  const wristMiddles = [[j.handL, -135], [j.handR, 135]].map(([hand, deg]) =>
-    new THREE.Quaternion().setFromAxisAngle((hand as THREE.Object3D).position.clone().normalize(), (deg as number) * Math.PI / 180));
-  const wrists = [j.handL, j.handR].map((h) => [1, 2, 3].map((q) => { const d = joint(h.parent!, ...(h.position.toArray() as [number, number, number])); d.name = (h === j.handL ? 'wristL' : 'wristR') + q; return d; }));
+  // each wrist's part-turned joints (`wrist.ts`; the middle of the bow hand's turns on its forearm is -135, of the draw
+  // hand's 135: given as 225, the bow hand's cuff twisted the long way round its wrist and pinched in under the bracer)
+  const wrists = [wristOf(j.handL, true), wristOf(j.handR, false)];
   for (const [sh, el, hand] of [[j.shoulderL, j.elbowL, j.handL], [j.shoulderR, j.elbowR, j.handR]]) {
     // (set into the armhole: from its edge over the deltoid onto the arm, the arm's wholly from a little way down it, and over
     // the elbow onto the forearm)
@@ -507,9 +473,8 @@ export function buildRanger(): Model {
     // off; pinched in under the bracer's end, it read as a doll's joint)
     // (bent through joints turned a quarter, half and three quarters as far as the hand, `wrists`, over 6 cm: blended
     // straight from the forearm to the hand over 3.5, the cuff kinked at the wrist and its inside collapsed)
-    const cuff = ovalTube([[-0.3, 0.04, 0.02], [-0.288, 0.04, 0.021], [-0.274, 0.038, 0.023], [-0.258, 0.038, 0.026], [-0.235, 0.039, 0.028]], 18), cp = cuff.attributes.position;
-    if (cp) cuff.setAttribute('skinK', new THREE.BufferAttribute(Float32Array.from({ length: cp.count }, (_, i) => smooth(clamp((-cp.getY(i) - (j.P.foreL - 0.03)) / 0.058, 0, 1))), 1));
-    S.skinChain(cuff, hide, el, [el, ...wrists[hand === j.handL ? 0 : 1], hand]);
+    const cuff = wristBent(ovalTube([[-0.3, 0.04, 0.02], [-0.288, 0.04, 0.021], [-0.274, 0.038, 0.023], [-0.258, 0.038, 0.026], [-0.235, 0.039, 0.028]], 18), j.P.foreL);
+    S.skinChain(cuff, hide, el, wrists[hand === j.handL ? 0 : 1].chain);
     S.add(belt(0.059, 0.059, -0.1, 0.012, 0.004), brass, el);
   }
   for (const [th, kn, an] of [[j.thighL, j.kneeL, j.ankleL], [j.thighR, j.kneeR, j.ankleR]]) {
@@ -1318,12 +1283,10 @@ export function buildRanger(): Model {
     if (st.sit) tunic.keepAbove(floorUnder(hem));
     bendShoulders();
   }
-  /** each shoulder's part-turned joints (`SetInShoulders.bend`), and each wrist's (`blendTurn`) */
+  /** each shoulder's part-turned joints (`SetInShoulders.bend`), and each wrist's */
   function bendShoulders(): void {
-    for (let i = 0; i < 2; i++) {
-      const h = i ? j.handR : j.handL;
-      wrists[i].forEach((d, q) => { blendTurn(d.quaternion, h.quaternion, (q + 1) / 4, wristMiddles[i]); d.position.copy(h.position); });
-    }
+    wrists[0].bend(handL.vis);
+    wrists[1].bend(handR.vis);
     sets.bend();
   }
   return {

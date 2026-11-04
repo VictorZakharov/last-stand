@@ -9,6 +9,7 @@ import { leather as leatherMaps, cloth as clothMaps, steel as steelMaps, wood as
 import { engravedSteel, embroidered, projectUV, steelRegion } from '../../core/engraving';
 import { buildHumanoid, joint, part, resetPose, walkCycle, idle, deathFall, pulse, ramp, groundFeet, reachArm, runShareOf, disposeGeometries } from './rig';
 import { Sculpt, stripRig, limb, lathe } from './shapes';
+import { ovalTube, wristBent, wristOf } from './wrist';
 import { taperTube, lod, plate, edgeTube, strap, belt, buckle, stud, disc, stitches, gem as gemGeo, Skirt, SkirtLimbs, armOffThigh, scaleUV, type SurfaceFn, type JointPoint } from './armor';
 import { buildHead, buildNeck, toGroup, handSkin, HEAD_MM } from './head';
 import { EYE } from './face';
@@ -404,7 +405,8 @@ export function buildMage(): Model {
 
   // --- arms: the shirt's charcoal sleeves pushed up to the elbow in a thick roll, a strap round each upper arm, the forearms
   // bare and inked with runes; leather bracers buckled over them (the hands item's), fingerless gloves
-  for (const [s, sh, el, hd] of [[1, j.shoulderL, j.elbowL, j.handL], [-1, j.shoulderR, j.elbowR, j.handR]] as const) {
+  const wrists = { L: wristOf(j.handL, true), R: wristOf(j.handR, false) };
+  for (const [s, sh, el, wrist] of [[1, j.shoulderL, j.elbowL, wrists.L], [-1, j.shoulderR, j.elbowR, wrists.R]] as const) {
     // (set into the armhole: from its edge over the deltoid onto the arm, and over the elbow under the roll)
     // (its top run on close over the deltoid, `full`: as full as the ranger's coat sleeve, the shirt's stood out of the coat's
     // armhole in a ball; its top as wide as the armhole's, the deltoid under it: narrower, it hung out of the coat's
@@ -432,9 +434,10 @@ export function buildMage(): Model {
     S.add(belt(0.064, 0.064, -0.17, 0.022, 0.005, 0, 16), leather, sh);
     S.add(buckle(0.018, 0.022, 0.004), brass, sh, [s * 0.066, -0.17, 0], [0, s * Math.PI / 2, 0]);
     // the forearm, from under the roll to the wrist, and its runes over it
-    const fore: [number, number][] = [[0.033, -0.3], [0.035, -0.27], [0.04, -0.2], [0.046, -0.12], [0.048, -0.06], [0.046, -0.02]];
-    S.skin(lathe(fore, 18), bareSkin, el, hd, 0.25, 0.29);
-    S.skin(lathe(fore.map(([r, y]) => [r + 0.0006, y]), 18), ink, el, hd, 0.25, 0.29);
+    // (flattened to the wrist and its end inside the palm, as the warrior's: `wrist.ts`)
+    const fore: [number, number, number][] = [[-0.29, 0.028, 0.013], [-0.27, 0.031, 0.021], [-0.2, 0.04, 0.034], [-0.12, 0.046, 0.044], [-0.06, 0.048, 0.048], [-0.02, 0.046, 0.046]];
+    S.skinChain(wristBent(ovalTube(fore, 18), j.P.foreL), bareSkin, el, wrist.chain);
+    S.skinChain(wristBent(ovalTube(fore.map(([y, x, z]) => [y, x + 0.0006, z + 0.0006]), 18), j.P.foreL), ink, el, wrist.chain);
     // the bracer: leather round the lower forearm, two brass-buckled straps
     const bracer: [number, number][] = [[0.04, -0.27], [0.045, -0.22], [0.051, -0.15], [0.053, -0.12]];
     H.add(scaleUV(lathe(bracer, 16), 2, 1), leather, el);
@@ -1260,6 +1263,8 @@ export function buildMage(): Model {
     // (let go of it once it's laid down)
     if (gripped) hold(handR, _hd.set(0, 1, 0).transformDirection(staff.matrixWorld), STAFF_R, undefined, slant);
     else poseHand(handR, 0.35, 0.1);
+    wrists.L.bend(handL.vis);
+    wrists.R.bend(handR.vis);
 
     // cloth runs after the pose so it collides with this frame's skeleton
     if (dt > 0 && robed) for (const c of cloths) c.update(dt);
