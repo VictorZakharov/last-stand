@@ -46,7 +46,7 @@ import { ItemGlows } from './itemGlow';
 /** sat, how a hand that holds a weapon turns as it goes down to his thigh (`models/sit.ts`, `restHands`), the left's
  *  and the right's, the weapon pointing down to where it's stood; an empty hand rests palm down. The small rise keeps
  *  his shield-side forearm over the thigh. */
-const SIT_HANDS = tunable('warriorSit', { roll: [0, 0], bend: [0, 0], rise: 0.005, slant: 0.1, along: 0.35, over: 0.11, armIn: 1, floorIn: 0.7, arc: 0.15, lapR: [0.55, 0.12, 0.85], lapTwo: [0.95, -0.22, 0.15], lapAt: [-0.16, 0.205, 0.36], lapPole: [-0.5, -0.5, -0.6], portDir: [0.4, 0.9, 0.15], fistBelow: 0.08, swordRest: [0.09, -0.11, -0.3], maulRest: [0.26, 0.05, -0.2], axeRest: [0.43, 0.06, -0.3], stuckIn: 0.06, plantAt: [-0.2, 0.18, 0.54], plantPole: [-1, -0.1, -0.2], plantOut: 0.85, plantAhead: 0.3, armSat: 0.79, portAt: [-0.36, -0.08, 0.38], beside: [-0.55, 0.3, 0.05], besidePole: [-1, -0.1, -0.2], besideAhead: 0.95, twoR: [0.38, 0.12, 0.92], twoL: [-0.35, 0.3, 0.89], viaR: [-0.15, 0.2, 0.95], viaL: [0.15, 0.2, 0.95], viaAt: 0.45, floorBack: 0, viaFloorR: [-0.15, 0.5, 0.85], viaFloorL: [0.15, 0.5, 0.85], kneesR: [0.88, -0.2, 0.42], kneesL: [-0.7, -0.3, 0.65], turnFrom: 0.15, turnLate: 0.5, turnIn: 0.12, shieldOut: 0.09, edgeDown: 0.2, });
+const SIT_HANDS = tunable('warriorSit', { roll: [0, 0], bend: [0, 0], rise: 0.005, slant: 0.1, along: 0.35, over: 0.11, armIn: 1, floorIn: 0.7, arc: 0.15, lapR: [0.55, 0.12, 0.85], lapTwo: [0.95, -0.22, 0.15], lapAt: [-0.16, 0.205, 0.36], lapPole: [-0.5, -0.5, -0.6], portDir: [0.4, 0.9, 0.15], fistBelow: 0.08, swordRest: [0.09, -0.11, -0.3, 0.42], maulRest: [0.26, 0.05, -0.2, 0.42], axeRest: [0.36, 0.1, -0.3, 0.56], stuckIn: 0.06, plantAt: [-0.14, 0.2, 0.58], plantPole: [-1, -0.1, -0.2], plantOut: 0.85,  armSat: 0.79, portAt: [-0.36, -0.08, 0.38], beside: [-0.5, 0.36, 0.05], besidePole: [-1, -0.1, -0.2], besideAhead: 0.95, twoR: [0.38, 0.12, 0.92], twoL: [-0.35, 0.3, 0.89], viaR: [-0.15, 0.2, 0.95], viaL: [0.15, 0.2, 0.95], viaAt: 0.45, floorBack: 0, viaFloorR: [-0.15, 0.5, 0.85], viaFloorL: [0.15, 0.5, 0.85], kneesR: [0.88, -0.2, 0.42], kneesL: [-0.7, -0.3, 0.65], turnFrom: 0.15, turnLate: 0.5, turnIn: 0.12, shieldOut: 0.09, edgeDown: 0.2, });
 const _sitTurn: RestTurn = { roll: [0, 0], bend: [0, 0], along: [0, 0], over: [0, 0], armIn: [0, 0], arc: [0, 0], out: [0, 0] };
 const _lifted: number[] = [], _resting: number[] = [];
 
@@ -1556,7 +1556,7 @@ export function buildWarrior(): Model {
   const _portHand = new THREE.Vector3(), _besideAt = new THREE.Vector3(), _besidePole = new THREE.Vector3(), _floorWay = [0, 0, 0];
   /** What a two-hander's own shape asks of its rest: how far its far end's line stands over the floor by a fire and on a
    *  seat (a heavy head stands out of the handle's line, on its edge; a sword's point goes into the ground, on a seat) and
-   *  how far out it lies by a fire. */
+   *  how far out it lies by a fire, and how far ahead it goes on a seat (an axe's broad head met his left foot). */
   function floorRest(weapon: Weapon): readonly number[] {
     const name = weapon.group.name;
     return name === 'Maul' ? SIT_HANDS.maulRest : name === 'Greataxe' ? SIT_HANDS.axeRest : SIT_HANDS.swordRest;
@@ -1567,9 +1567,9 @@ export function buildWarrior(): Model {
    *  level in the air), and from a hand at his hip it starts inside the log. By a fire, too low to slope, it lies beside him,
    *  his arm out to it (held off the floor at his side it read as a beam held by the wrist, "an impossible pose"). */
   function wayToFloor(weapon: Weapon, floor: boolean): readonly number[] {
-    const [headFloor, headSeat, restOut] = floorRest(weapon);
+    const [headFloor, headSeat, restOut, plantAhead] = floorRest(weapon);
     const head = floor ? headFloor : headSeat;
-    const out = floor ? restOut : SIT_HANDS.plantOut, ahead = floor ? SIT_HANDS.besideAhead : SIT_HANDS.plantAhead;
+    const out = floor ? restOut : SIT_HANDS.plantOut, ahead = floor ? SIT_HANDS.besideAhead : plantAhead;
     const above = root.worldToLocal(j.handR.getWorldPosition(_besideAt)).y - SIT_HANDS.fistBelow - head;
     const fall = THREE.MathUtils.clamp(above / weapon.len, -0.3, 0.97), level = Math.sqrt(1 - fall * fall);
     _floorWay[0] = out * level;
