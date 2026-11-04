@@ -43,7 +43,7 @@ import type { ActionState, AnimState, Blade, Fist, Gear, KeyedArm, LowerGrip, Mo
 /** sat, how a hand that holds a weapon turns as it goes down to his thigh (`models/sit.ts`, `restHands`), the left's
  *  and the right's, the weapon pointing down to where it's stood; an empty hand rests palm down. The small rise keeps
  *  his shield-side forearm over the thigh. */
-const SIT_HANDS = tunable('warriorSit', { roll: [0, 0], bend: [0, 0], rise: 0.005, slant: 0.1, along: 0.1, over: 0.11, armIn: 1, floorIn: 0.7, arc: 0.15, lapR: [0.55, 0.12, 0.85], twoR: [0.55, 0.12, 0.85], twoL: [-0.55, 0.18, 0.85], kneesR: [0.7, -0.25, 0.65], kneesL: [-0.7, -0.3, 0.65], turnFrom: 0.15, turnLate: 0.5, turnIn: 0.12, shieldOut: 0.09 });
+const SIT_HANDS = tunable('warriorSit', { roll: [0, 0], bend: [0, 0], rise: 0.005, slant: 0.1, along: 0.1, over: 0.11, armIn: 1, floorIn: 0.7, arc: 0.15, lapR: [0.55, 0.12, 0.85], twoR: [0.38, 0.12, 0.92], twoL: [-0.38, 0.2, 0.92], viaR: [-0.15, 0.2, 0.95], viaL: [0.15, 0.2, 0.95], viaAt: 0.45, floorBack: 0, viaFloorR: [-0.15, 0.5, 0.85], viaFloorL: [0.15, 0.5, 0.85], kneesR: [0.7, -0.25, 0.65], kneesL: [-0.7, -0.3, 0.65], turnFrom: 0.15, turnLate: 0.5, turnIn: 0.12, shieldOut: 0.09 });
 const _sitTurn: RestTurn = { roll: [0, 0], bend: [0, 0], along: [0, 0], over: [0, 0], armIn: [0, 0], arc: [0, 0], out: [0, 0] };
 const _lifted: number[] = [], _resting: number[] = [];
 
@@ -1463,10 +1463,10 @@ export function buildWarrior(): Model {
   // --- sat with a two-hander: stood on its end before his right knee, his right hand round it (the owner's words: "put
   // the weapon down, like with end touching the ground ... easy for grabbing", "greatsword should be rested sticking
   // vertically into ground, and character resting one hand on the guard or handle")
-  /** where his hand holds it (rig units, the root's frame: out to his right, ahead), how deep a point goes in (m), and
-   *  the way his elbow points (the chest's frame: down, the forearm up along the handle as a staff is held) */
+  /** how deep a point goes in (m), and the way his elbow points (the chest's frame: down, the forearm up along the
+   *  handle as a staff is held) */
   const PLANT = tunable('warriorPlant', {
-    at: [-0.27, 0.46], deep: [0.12, 0.6], pole: [-0.4, -1, -0.3], stood: 0.6, settle: 0.4,
+    deep: [0.12, 0.6], pole: [-0.4, -1, -0.3], stood: 0.6, settle: 0.4,
   });
   const boxes = new Map<Weapon, THREE.Box3>();
   /** Sat on the floor, where a weapon lies and its arc out and up (rig units, the root's frame). A two-hander's grip
@@ -1899,25 +1899,33 @@ export function buildWarrior(): Model {
   const _lapX = new THREE.Vector3(), _lapY = new THREE.Vector3(), _lapZ = new THREE.Vector3();
   const _lapWorld = new THREE.Matrix4(), _lapHand = new THREE.Matrix4();
   const _lapQ = new THREE.Quaternion(), _lapNow = new THREE.Quaternion();
-  const _lapWas = new THREE.Quaternion(), _lapRoot = new THREE.Quaternion();
+  const _lapWas = new THREE.Quaternion(), _lapRoot = new THREE.Quaternion(), _lapVia = new THREE.Quaternion();
+  const _lapFore = new THREE.Vector3();
   /** how each hand's turned in his frame as he began to sit (the left's, the right's), once taken */
   const _lapStood = [new THREE.Quaternion(), new THREE.Quaternion()], _lapTaken = [false, false];
   /** A hand keeping its one-hander as he sits: its weapon turned by `w` to lie along `way` (the root's frame: out to
    *  his left, up, ahead), across his lap, and the back of the hand on from the forearm, as a man rests a weapon
    *  across his thighs. Said in those terms, as the arm's reach alone stood an axe up before his face. */
-  function holdAcrossLap(left: boolean, handle: THREE.Object3D, way: readonly number[], w: number, from: number): void {
+  function holdAcrossLap(left: boolean, handle: THREE.Object3D, way: readonly number[], w: number, from: number, st: NonNullable<AnimState['sit']>): void {
     const hand = left ? j.handL : j.handR, elbow = left ? j.elbowL : j.elbowR;
     root.updateMatrixWorld(true);
-    const fore = hand.getWorldPosition(_lapY).sub(elbow.getWorldPosition(_lapZ));
-    const along = _lapX.set(way[0], way[1], way[2]).transformDirection(root.matrixWorld);
-    fore.addScaledVector(along, -fore.dot(along)).normalize();
-    _lapWorld.makeBasis(along, fore, _lapZ.crossVectors(along, fore));
+    const fore = hand.getWorldPosition(_lapFore).sub(elbow.getWorldPosition(_lapZ));
     // (the handle's way in the hand's frame, and down the fingers, square to it)
     const inHand = _s1.set(0, 1, 0).applyQuaternion(handle.quaternion);
     const fingers = _s2.set(0, -1, 0);
     fingers.addScaledVector(inHand, -fingers.dot(inHand)).normalize();
-    _lapHand.makeBasis(inHand, fingers, _s3.crossVectors(inHand, fingers));
-    _lapQ.setFromRotationMatrix(_lapWorld.multiply(_lapHand.invert()));
+    _lapHand.makeBasis(inHand, fingers, _s3.crossVectors(inHand, fingers)).invert();
+    const turnAlong = (to: readonly number[], out: THREE.Quaternion): void => {
+      const along = _lapX.set(to[0], to[1], to[2]).transformDirection(root.matrixWorld);
+      const square = _lapY.copy(fore).addScaledVector(along, -fore.dot(along)).normalize();
+      _lapWorld.makeBasis(along, square, _lapZ.crossVectors(along, square));
+      out.setFromRotationMatrix(_lapWorld.multiply(_lapHand));
+    };
+    turnAlong(way, _lapQ);
+    // (low on a seat: higher, seen from ahead it stood across his face at two thirds of the way. Higher by a fire, whose
+    // arm is out over his knee: low there, his forearm went 3 cm into his thigh and the blade 38 cm in a frame)
+    const floorWay = left ? SIT_HANDS.viaFloorL : SIT_HANDS.viaFloorR;
+    turnAlong(onFloor(st) ? floorWay : left ? SIT_HANDS.viaL : SIT_HANDS.viaR, _lapVia);
     // (once the hand is on its way down: turned from the start, the blade swept past his face; its pace the sit's own,
     // as eased again its tip went up to 19 cm a frame)
     // (from how it stood as he began, kept in his own frame until then: left in the hand as the arm came in, two blades
@@ -1929,7 +1937,11 @@ export function buildWarrior(): Model {
       stood.copy(_lapRoot).invert().multiply(_lapNow);
       _lapTaken[side] = true;
     }
-    _lapWas.copy(_lapRoot).multiply(stood).slerp(_lapQ, ramp(w, from, 1));
+    // (tipped ahead of him first, then turned across: straight from upright to across his lap, it levered up over his
+    // neck and two blades crossed on his face, at about half way)
+    const across = ramp(w, from, 1);
+    const via = Math.min(1, across / SIT_HANDS.viaAt), on = ramp(across, SIT_HANDS.viaAt, 1);
+    _lapWas.copy(_lapRoot).multiply(stood).slerp(_lapVia, smooth(via)).slerp(_lapQ, smooth(on));
     // (and back onto the pose's own as he's nearly up, which it's come to at his last frame)
     _lapNow.slerp(_lapWas, smooth(ramp(w, 0, SIT_HANDS.turnIn)));
     hand.parent!.getWorldQuaternion(_lapQ).invert();
@@ -2760,12 +2772,13 @@ export function buildWarrior(): Model {
     const floorSit = !!st.sit && onFloor(st.sit);
     _sitTurn.roll[0] = offHeld && !sheathed ? SIT_HANDS.roll[0] : 0;
     _sitTurn.roll[1] = held && !two ? SIT_HANDS.roll[1] : 0;
-    _sitTurn.along![1] = held && !two ? SIT_HANDS.along : 0;
+    const further = floorSit ? SIT_HANDS.floorBack : SIT_HANDS.along;
+    _sitTurn.along![1] = held && !two ? further : 0;
     _sitTurn.over![1] = held && !two ? SIT_HANDS.over : 0;
     const heldIn = floorSit ? SIT_HANDS.floorIn : SIT_HANDS.armIn;
     _sitTurn.armIn![1] = held && !two ? heldIn : 0;
     _sitTurn.arc![1] = held && !two ? SIT_HANDS.arc : 0;
-    _sitTurn.along![0] = offHeld && !sheathed ? SIT_HANDS.along : 0;
+    _sitTurn.along![0] = offHeld && !sheathed ? further : 0;
     _sitTurn.over![0] = offHeld && !sheathed ? SIT_HANDS.over : 0;
     _sitTurn.armIn![0] = offHeld && !sheathed ? heldIn : 0;
     _sitTurn.arc![0] = offHeld && !sheathed ? SIT_HANDS.arc : 0;
@@ -2794,8 +2807,8 @@ export function buildWarrior(): Model {
       // straight down)
       const both = offHeld && !sheathed, lapR = both ? SIT_HANDS.twoR : SIT_HANDS.lapR;
       const from = floorSit ? SIT_HANDS.turnLate : SIT_HANDS.turnFrom;
-      if (held && !two) holdAcrossLap(false, grip, floorSit ? SIT_HANDS.kneesR : lapR, satBy(st.sit), from);
-      if (both) holdAcrossLap(true, gripL, floorSit ? SIT_HANDS.kneesL : SIT_HANDS.twoL, satBy(st.sit), from);
+      if (held && !two) holdAcrossLap(false, grip, floorSit ? SIT_HANDS.kneesR : lapR, satBy(st.sit), from, st.sit);
+      if (both) holdAcrossLap(true, gripL, floorSit ? SIT_HANDS.kneesL : SIT_HANDS.twoL, satBy(st.sit), from, st.sit);
     }
     body.legs = floorSit ? satBy(st.sit) : 0;
     if (st.dead >= 0) { deathFall(j, st.dead, -1); legs.reset(); }
