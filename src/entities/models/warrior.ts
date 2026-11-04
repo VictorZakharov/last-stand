@@ -863,12 +863,7 @@ export function buildWarrior(): Model {
   // domed boss. At rest it hangs at the side facing outwards; raised (or charging) it swings round in
   // front of the fist, facing out of the hand. Its face is local +Z.
   const shield = joint(j.handL, 0, -0.1, 0);
-  /** sat on the floor, where the shield lies flat beside him, face up (rig units, the root's frame: out to his left,
-   *  ahead), and its back's depth from its middle (rig units) */
-  const SHIELD_LAY = tunable('warriorShieldLay', { at: [0.55, 0.05], back: 0.03 });
-  /** sat on a seat, where the shield stands on its rim on the floor, its face ahead, leant back against the seat:
-   *  its middle from his left knee (rig units, out to his left, ahead) and its lean (rad) */
-  const SHIELD_STAND = tunable('warriorShieldStand', { at: [0.46, 0.12], lean: 0.3 });
+  shield.userData.strapped = true;
   shield.name = 'shield';
   shield.visible = false;
   {
@@ -1529,7 +1524,7 @@ export function buildWarrior(): Model {
     const [lowered, seated] = BETWEEN.stages;
     return lowered * sit.before + (seated - lowered) * sit.w + (1 - seated) * sit.after;
   };
-  const LAY = tunable('warriorLay', { at: [-0.5, -0.1], twoAt: [-0.4, -0.4], maulAt: [-0.4, -0.2], arc: [0.25, 0.3], twoArc: [0.35, 0.3], letGo: 0.95 });
+  const LAY = tunable('warriorLay', { at: [-0.5, -0.1], twoAt: [-0.4, -0.4], maulAt: [-0.4, -0.2], arc: [0.25, 0.3], twoArc: [0.35, 0.3], letGo: 0.95, close: [0.75, 0.9], fistTurn: 5 });
   const _plantHand = new THREE.Vector3(), _plantBox = new THREE.Box3(), _plantM = new THREE.Matrix4();
   /** a hand's weapon stood on its end: its grip's place there (world, `q`, `at`), the way from the hand to its
    *  shoulder (`up`), and whether it's stood this frame (`on`) */
@@ -1577,6 +1572,8 @@ export function buildWarrior(): Model {
     split: number;
     /** how far up its haft from its grip the fist has slid (the grip's units), leaning it on a seat */
     slide: number;
+    /** the way round the handle the fist last turned to carrying it down (`carryDown`), once it has (`carriedSide`) */
+    fistSide: THREE.Vector3; carriedSide: boolean;
     /** leant where it is, let go of */
     leant: boolean;
     /** how far a blade has turned point down through the loosened fist, and how it then stands */
@@ -1593,7 +1590,7 @@ export function buildWarrior(): Model {
       left, hand, joint: left ? j.handL : j.handR, grip, shoulder: left ? j.shoulderL : j.shoulderR,
       q: new THREE.Quaternion(), at: new THREE.Vector3(), up: new THREE.Vector3(), on: null, carried: false, turn: -1,
       landAt: new THREE.Vector3(), landQ: new THREE.Quaternion(), handAt: new THREE.Vector3(), handQ: new THREE.Quaternion(),
-      startAt: new THREE.Vector3(), startQ: new THREE.Quaternion(), armWas: [new THREE.Quaternion(), new THREE.Quaternion(), new THREE.Quaternion()], liftAt: new THREE.Vector3(), liftQ: new THREE.Quaternion(), gripWas: new THREE.Quaternion(), gripAtWas: new THREE.Vector3(), setAt: new THREE.Vector3(), setQ: new THREE.Quaternion(), reach: 0, flipWay: -1, flipSign: 1, flipAxis: new THREE.Vector3(), seatSet: new THREE.Quaternion(), seatNow: new THREE.Quaternion(), restArm: [new THREE.Quaternion(), new THREE.Quaternion(), new THREE.Quaternion()], seatRest: new THREE.Quaternion(), restPoint: new THREE.Vector3(), open: 0, carryWas: [new THREE.Quaternion(), new THREE.Quaternion(), new THREE.Quaternion()], carrySat: -1, swung: 0, split: -1, liftedAt: new THREE.Vector3(), liftedQ: new THREE.Quaternion(), slide: 0, leant: false, pivot: 0, standQ: new THREE.Quaternion(), drawWay: new THREE.Vector3(), drawWas: null, restTurn: -1, way: 0,
+      startAt: new THREE.Vector3(), startQ: new THREE.Quaternion(), armWas: [new THREE.Quaternion(), new THREE.Quaternion(), new THREE.Quaternion()], liftAt: new THREE.Vector3(), liftQ: new THREE.Quaternion(), fistSide: new THREE.Vector3(), carriedSide: false, gripWas: new THREE.Quaternion(), gripAtWas: new THREE.Vector3(), setAt: new THREE.Vector3(), setQ: new THREE.Quaternion(), reach: 0, flipWay: -1, flipSign: 1, flipAxis: new THREE.Vector3(), seatSet: new THREE.Quaternion(), seatNow: new THREE.Quaternion(), restArm: [new THREE.Quaternion(), new THREE.Quaternion(), new THREE.Quaternion()], seatRest: new THREE.Quaternion(), restPoint: new THREE.Vector3(), open: 0, carryWas: [new THREE.Quaternion(), new THREE.Quaternion(), new THREE.Quaternion()], carrySat: -1, swung: 0, split: -1, liftedAt: new THREE.Vector3(), liftedQ: new THREE.Quaternion(), slide: 0, leant: false, pivot: 0, standQ: new THREE.Quaternion(), drawWay: new THREE.Vector3(), drawWas: null, restTurn: -1, way: 0,
     };
   }
   const _standQ = new THREE.Quaternion(), _standAt = new THREE.Vector3(), _holdQ = new THREE.Quaternion();
@@ -1637,45 +1634,6 @@ export function buildWarrior(): Model {
   function reachAlong(w: Weapon, grip: THREE.Object3D): [number, number] {
     const box = boxOf(w, grip);
     return [box.min.y, box.max.y];
-  }
-  /** The shield laid on the floor by his left side as he sits on it, face up, eased from his forearm by `w` (from the
-   *  owner's review: by a fire his weapons are laid down; hung from a forearm on his knee it stood against his hip and
-   *  went 11 cm into the floor). Call once the left arm is posed. */
-  function layShield(w: number): void {
-    root.updateMatrixWorld(true);
-    const k = root.scale.x, spot = root.localToWorld(_s1.set(SHIELD_LAY.at[0], 0, SHIELD_LAY.at[1]));
-    spot.y = groundHeight(spot.x, spot.z) + SHIELD_LAY.back * k;
-    const ahead = _s4.set(0, 0, 1).transformDirection(root.matrixWorld).setY(0).normalize(), up = _s3.set(0, 1, 0);
-    _sq.setFromRotationMatrix(_sm.makeBasis(_s2.crossVectors(ahead, up), ahead, up));
-    _sq.premultiply(j.handL.getWorldQuaternion(_shq).invert());
-    shield.quaternion.slerp(_sq, w);
-    // (out from his leg and up on the way: straight down from his forearm, its disc went through his thigh and calf)
-    const arc = Math.sin(Math.PI * w) * k;
-    spot.add(_s2.set(1, 0, 0).transformDirection(root.matrixWorld).multiplyScalar(LAY.arc[0] * arc));
-    spot.y += LAY.arc[1] * arc;
-    shield.position.lerp(j.handL.worldToLocal(spot), w);
-  }
-  /** The shield stood on its rim on the floor by his left shin as he sits on a seat, its face ahead, leant back
-   *  against the seat, eased from his forearm by `w` (from review: hung from the forearm of a hand on his thigh, its
-   *  lower half went into the log and the column under him). */
-  const SHIELD_R = 0.315;
-  function standShield(w: number): void {
-    root.updateMatrixWorld(true);
-    const k = root.scale.x, [out, front] = SHIELD_STAND.at, lean = SHIELD_STAND.lean;
-    const ahead = _s4.set(0, 0, 1).transformDirection(root.matrixWorld).setY(0).normalize(), up = _s3.set(0, 1, 0);
-    const left = _s5.set(1, 0, 0).transformDirection(root.matrixWorld).setY(0).normalize();
-    const spot = j.kneeL.getWorldPosition(_s1).addScaledVector(left, out * k).addScaledVector(ahead, front * k);
-    // (its face ahead and up a little, its top leant back: up in its plane, its face along its +z)
-    const face = _s2.copy(ahead).multiplyScalar(Math.cos(lean)).addScaledVector(up, Math.sin(lean));
-    const top = _s6.copy(up).multiplyScalar(Math.cos(lean)).addScaledVector(ahead, -Math.sin(lean));
-    _sq.setFromRotationMatrix(_sm.makeBasis(_s7.crossVectors(top, face), top, face));
-    spot.y = groundHeight(spot.x, spot.z) + SHIELD_R * Math.cos(lean) * k + 0.01;
-    _sq.premultiply(j.handL.getWorldQuaternion(_shq).invert());
-    shield.quaternion.slerp(_sq, w);
-    // (out from his leg on the way, as it's laid down by a fire)
-    const arc = Math.sin(Math.PI * w) * k;
-    spot.addScaledVector(left, LAY.arc[0] * arc);
-    shield.position.lerp(j.handL.worldToLocal(spot), w);
   }
   /** A hand's weapon laid on the floor beside him as he sits on it (by a fire), flat, along his way, eased from the
    *  fist by `w` (`p.q`, `p.at`), its point back; the hand let go of it rests on his knee. */
@@ -2053,6 +2011,8 @@ export function buildWarrior(): Model {
   /** Carry the two-hander out beside the legs (by a fire), or a one-handed axe or mace to where it's leant on a seat
    *  (`leant`), then take the empty hand to the knee. The old interpolation from a hand already going to its knee
    *  took the greatsword 10 cm into his thigh. */
+  /** the frame's time, for `carryDown` */
+  let carryDt = 0;
   function carryDown(p: Planted, w: number, weapon: Weapon, sit: NonNullable<AnimState['sit']>, leant = false): void {
     const letGo = leant ? LEAN.letGo : LAY.letGo;
     if (leant) leanDown(p, Math.min(1, w / letGo), weapon);
@@ -2061,6 +2021,16 @@ export function buildWarrior(): Model {
     const direction = _hd.set(0, 1, 0).applyQuaternion(p.q);
     const held = _s7.copy(p.at).addScaledVector(direction, p.slide * _s5.setFromMatrixScale(p.grip.matrixWorld).y);
     const up = p.shoulder.getWorldPosition(p.up).sub(held).normalize();
+    // (the fist's way round the handle turned at a pace: towards his shoulder at once, it flipped 68 degrees in a frame
+    // where the way to the shoulder came along the handle, its elbow 27 cm and a maul's head 84)
+    up.addScaledVector(direction, -up.dot(direction)).normalize();
+    if (p.carriedSide) {
+      const most = LAY.fistTurn * carryDt;
+      const angle = p.fistSide.addScaledVector(direction, -p.fistSide.dot(direction)).normalize().angleTo(up);
+      if (angle > most) up.copy(p.fistSide).lerp(_s2.copy(up), most / angle).normalize();
+    }
+    p.fistSide.copy(up);
+    p.carriedSide = true;
     fistReach(p.hand, direction, up, weapon.r, _cur);
     fistTurn(p.hand, direction, up, _fq);
     const wrist = _cur.negate().add(held);
@@ -2414,7 +2384,7 @@ export function buildWarrior(): Model {
     unplant(plantR); unplant(plantL);
     // (what a sit chose kept until he's up: cleared with the grip each frame, the stood weapon's turn was chosen
     // afresh every frame, and the leant one went on 15 cm after it was let go of)
-    if (!st.sit) for (const p of [plantR, plantL]) { p.turn = -1; p.leant = false; p.way = 0; p.drawWay.set(0, 0, 0); p.drawWas = null; p.restTurn = -1; }
+    if (!st.sit) for (const p of [plantR, plantL]) { p.carriedSide = false; p.turn = -1; p.leant = false; p.way = 0; p.drawWay.set(0, 0, 0); p.drawWas = null; p.restTurn = -1; }
     // (through the eyes the hands drawn larger, `EYES.hand`: the fists seat and close round their handles at that scale)
     const handK = HAND_K * (fp ? EYES.hand : 1);
     handL.vis.scale.setScalar(handK); handR.vis.scale.setScalar(handK);
@@ -3314,6 +3284,7 @@ export function buildWarrior(): Model {
     carryingTwo = (carryTwo && plant > 0 && plant <= LAY.letGo) || (leanR && plant > 0 && plant <= LEAN.letGo) || (between && plant > 0 && plant < BETWEEN.letGo);
     const gripped = held && (!(plant > 0 && (floorSit || leanR)) || carryingTwo);
     const carriedBetween = between && plant > 0 && plant < BETWEEN.letGo;
+    carryDt = dt;
     if (plant > 0 && floorSit) {
       carryDown(plantR, plant, held!, st.sit!);
     }
@@ -3520,6 +3491,12 @@ export function buildWarrior(): Model {
       // read 58 cm and 66 degrees in his hand)
       else if (leanR) {
         const ring = smooth(ramp(plant, LEAN.ring[0], LEAN.ring[1]));
+        loosen(handR, LEAN.loose[0] * ring, LEAN.loose[1] * ring);
+      }
+      // (and for the handle to roll in it as he lays it flat on the floor, closed again to set it down: rolled in a
+      // closed fist, an axe read 66 degrees in his hand, each way)
+      else if (carryTwo) {
+        const ring = smooth(ramp(plant, LEAN.ring[0], LEAN.ring[1])) * (1 - smooth(ramp(plant, LAY.close[0], LAY.close[1])));
         loosen(handR, LEAN.loose[0] * ring, LEAN.loose[1] * ring);
       }
     }
