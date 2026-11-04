@@ -195,7 +195,10 @@ export class Carried {
   /** How far each hand with a fist is curled, as a line's part: under `FIST_OPEN` it grips nothing. */
   private fistsNow(): string {
     const fists = this.lab.model.fists ?? [];
-    return fists.map((fist) => `, ${fist.hand} fist curled ${fist.curl.toFixed(2)}`).join('');
+    return fists.map((fist) => {
+      const across = THREE.MathUtils.radToDeg(fist.across ?? 0).toFixed(0);
+      return `, ${fist.hand} fist curled ${fist.curl.toFixed(2)}, its handle ${across}° off across its palm`;
+    }).join('');
   }
 
   /** How far each hand and elbow went and turned since the frame before, as a line's end. */
