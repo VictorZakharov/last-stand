@@ -8,9 +8,9 @@
   <meta name="theme-color" content="#050303" />
   <title>Last Stand</title>
   <meta name="description" content="Last Stand — a 3D wave-survival action RPG arena that runs in your browser." />
-  <link rel="icon" type="image/svg+xml" href="/pr-preview/pr-329/08649e6/favicon.svg" />
+  <link rel="icon" type="image/svg+xml" href="/pr-preview/pr-329/b6cb8dd/favicon.svg" />
   <!-- installable, offline game: the build adds the Apple touch icon and the service worker (scripts/pwa.ts) -->
-  <link rel="manifest" href="/pr-preview/pr-329/08649e6/manifest.webmanifest" />
+  <link rel="manifest" href="/pr-preview/pr-329/b6cb8dd/manifest.webmanifest" />
   <meta name="apple-mobile-web-app-title" content="Last Stand" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -100,10 +100,10 @@
       #loading .ld-ember { display: none; }
     }
   </style>
-  <script type="module" crossorigin src="/pr-preview/pr-329/08649e6/assets/index-BlLgdsfH.js"></script>
-  <link rel="modulepreload" crossorigin href="/pr-preview/pr-329/08649e6/assets/three-Clk_Tg4e.js">
-  <link rel="stylesheet" crossorigin href="/pr-preview/pr-329/08649e6/assets/index-VGAyKKGX.css">
-  <link rel="apple-touch-icon" href="/pr-preview/pr-329/08649e6/apple-touch-icon.png">
+  <script type="module" crossorigin src="/pr-preview/pr-329/b6cb8dd/assets/index-BjFQxyuJ.js"></script>
+  <link rel="modulepreload" crossorigin href="/pr-preview/pr-329/b6cb8dd/assets/three-BwlODS-L.js">
+  <link rel="stylesheet" crossorigin href="/pr-preview/pr-329/b6cb8dd/assets/index-CI-GOvWJ.css">
+  <link rel="apple-touch-icon" href="/pr-preview/pr-329/b6cb8dd/apple-touch-icon.png">
 </head>
 <body>
   <!-- The "LAST STAND" logo (loading screen and lobby): brushed steel lit as a bevel over a crimson glow -->
@@ -189,6 +189,13 @@
       <div id="spoils">
         <div class="sp-title">Unbanked spoils <b class="sp-count">0</b></div>
         <div class="sp-list"></div>
+      </div>
+      <!-- the first visit's training (ui/training.ts): its steps, ticked as they're done, under the village's minimap -->
+      <div id="training" class="panel hidden" role="status">
+        <div class="tr-title">Training</div>
+        <ol class="tr-steps"></ol>
+        <div class="tr-finished">Training complete: the portals are open.</div>
+        <button class="link tr-skip">Skip training</button>
       </div>
     </div>
 
@@ -450,14 +457,6 @@
     </div>
   </div>
 
-  <!-- the first visit's training (ui/training.ts): its steps, ticked as they're done -->
-  <div id="training" class="panel hidden" role="status">
-    <div class="tr-title">Training</div>
-    <ol class="tr-steps"></ol>
-    <div class="tr-finished">Training complete: the portals are open.</div>
-    <button class="link tr-skip">Skip training</button>
-  </div>
-
   <!-- the village's map (ui/villageMap.ts): M in the lobby; its panels and names are filled in by it -->
   <div id="vmap" class="hidden" aria-hidden="true" role="dialog" aria-label="Map of the village">
     <div class="vm-sheet">
@@ -571,6 +570,11 @@
             <label class="hdr-level" title="How bright the game's white is, against your screen's white for everything else"><span>Brightness</span><input type="range" id="opt-hdr-paper" min="0.4" max="1.6" step="0.05"><output id="opt-hdr-paper-value"></output></label>
             <label class="hdr-level" title="How bright the brightest effects and glows may go, against your screen's white"><span>Highlights</span><input type="range" id="opt-hdr-peak" min="1.2" max="8" step="0.1"><output id="opt-hdr-peak-value"></output></label>
           </div>
+        </div>
+        <!-- the renderer (core/rendererChoice.ts): a press loads the game at its address, and nothing is kept -->
+        <div class="opt-row quality-row renderer-row"><span>Renderer</span>
+          <div class="seg" id="opt-renderer"><button data-r="webgl">WebGL</button><button data-r="webgpu">WebGPU</button></div>
+          <div class="renderer-note"></div>
         </div>
         <label class="opt-row"><input type="checkbox" id="opt-perf"> Show performance stats</label>
         <!-- the village's hour held for a look at it at any time (in the village alone: game/clock.ts), Auto its clock -->
