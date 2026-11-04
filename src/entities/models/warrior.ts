@@ -43,8 +43,8 @@ import type { ActionState, AnimState, Blade, Fist, Gear, KeyedArm, LowerGrip, Mo
 /** sat, how a hand that holds a weapon turns as it goes down to his thigh (`models/sit.ts`, `restHands`), the left's
  *  and the right's, the weapon pointing down to where it's stood; an empty hand rests palm down. The small rise keeps
  *  his shield-side forearm over the thigh. */
-const SIT_HANDS = tunable('warriorSit', { roll: [3.14, 2.5], bend: [0, 0], rise: 0.005 });
-const _sitTurn: RestTurn = { roll: [0, 0], bend: [0, 0] };
+const SIT_HANDS = tunable('warriorSit', { roll: [1.2, 1.2], bend: [0, 0], rise: 0.005, slant: 0.06, along: 0.1, over: 0.085, armIn: 1, floorIn: 0.55, arc: 0.15 });
+const _sitTurn: RestTurn = { roll: [0, 0], bend: [0, 0], along: [0, 0], over: [0, 0], armIn: [0, 0], arc: [0, 0] };
 const _lifted: number[] = [], _resting: number[] = [];
 
 const ZERO = new THREE.Vector3(), _v = new THREE.Vector3();
@@ -3062,28 +3062,36 @@ export function buildWarrior(): Model {
     const floorSit = !!st.sit && onFloor(st.sit);
     // (leaning a one-hander on a seat, he bends forward to set it down and to take it again: upright, his hand reached
     // no lower than his thigh, 84 cm off the floor, and the axe's haft stood up to 65)
-    const leanR = !!(st.sit && !floorSit && !fp && st.dead < 0 && held && !two && LEANS.has(held.group.name));
-    if (leanR) j.spine.rotation.x += LEAN.bend * smooth(ramp(st.sit!.w, LEAN.bow, LEAN.letGo)) * (1 - smooth(ramp(st.sit!.w, LEAN.letGo, 1)));
-    _sitTurn.roll[0] = offHeld && !sheathed && !floorSit ? SIT_HANDS.roll[0] : 0;
+    const leanR = false as boolean;
+    _sitTurn.roll[0] = offHeld && !sheathed ? SIT_HANDS.roll[0] : 0;
     // (the hand that leant its weapon rests empty: turned as one holding a weapon, it rested 3 cm into the thigh)
-    _sitTurn.roll[1] = held && !floorSit && !leanR ? SIT_HANDS.roll[1] : 0;
+    _sitTurn.roll[1] = held && !two ? SIT_HANDS.roll[1] : 0;
+    _sitTurn.along![1] = held && !two ? SIT_HANDS.along : 0;
+    _sitTurn.over![1] = held && !two ? SIT_HANDS.over : 0;
+    const heldIn = floorSit ? SIT_HANDS.floorIn : SIT_HANDS.armIn;
+    _sitTurn.armIn![1] = held && !two ? heldIn : 0;
+    _sitTurn.arc![1] = held && !two ? SIT_HANDS.arc : 0;
+    _sitTurn.along![0] = offHeld && !sheathed ? SIT_HANDS.along : 0;
+    _sitTurn.over![0] = offHeld && !sheathed ? SIT_HANDS.over : 0;
+    _sitTurn.armIn![0] = offHeld && !sheathed ? heldIn : 0;
+    _sitTurn.arc![0] = offHeld && !sheathed ? SIT_HANDS.arc : 0;
     st.look?.();
     // (a hand that stands its weapon up after isn't lifted over his thighs: lifted to his chest, the plant took it
     // from there, and for a frame the weapon swung across his chest and the hand through his head, 9 to 18 cm)
     _lifted.length = 0;
     const plants = !fp && st.dead < 0;
-    if (!(held && plants)) _lifted.push(1);
-    if (!(offHeld && !sheathed && plants)) _lifted.push(0);
+    if (!(held && two && plants)) _lifted.push(1);
+    _lifted.push(0);
     // (by a fire, a one-hander carried down in the fist as a two-hander is: eased there from it, it went there with no
     // hand on it, 5.8 m in all)
-    const carryTwo = !!(floorSit && held && plants);
+    const carryTwo = !!(floorSit && held && two && plants);
     // (a two-hander on a seat stood between his feet, in both hands)
     const between = !!(st.sit && !floorSit && held && two && plants);
     // (a hand that stands its weapon on a seat is the plant's alone, from the arm fitted holding it: rested first, its
     // arm solved again to a pole of the rest's from the sit's first frame on, the axe in it went 82 cm in that frame)
     _resting.length = 0;
-    if (!(offHeld && !sheathed && plants && st.sit && !floorSit)) _resting.push(0);
-    if (!carryTwo && !(held && plants && st.sit && !floorSit)) _resting.push(1);
+    _resting.push(0);
+    if (!carryTwo && !between) _resting.push(1);
     restHands(j, st.sit, _resting, _sitTurn, SIT_HANDS.rise, _lifted);
     body.legs = floorSit ? satBy(st.sit) : 0;
     if (st.dead >= 0) { deathFall(j, st.dead, -1); legs.reset(); }
@@ -3267,11 +3275,11 @@ export function buildWarrior(): Model {
     slantR = 0; slantL = 0;
     if (aimDown > 0 && held && !fp && st.dead < 0) aimAtFloor(aimDown, bladeUp, fall * fall);
     // (sat, his weapons stand on their ends and his hands rest on them)
-    const plant = held && st.sit && !fp && st.dead < 0 ? (sitsBetween(st.sit, held) ? betweenClock(st.sit) : st.sit.w) : 0;
-    const plantOff = offHeld && !sheathed && st.sit && !fp && st.dead < 0 ? st.sit.w : 0;
+    const plant = held && two && st.sit && !fp && st.dead < 0 ? (sitsBetween(st.sit, held) ? betweenClock(st.sit) : st.sit.w) : 0;
+    const plantOff = 0 as number;
     // (the hold he stood with remembered as he begins to sit, and taken up again once he's up: from where the carry's
     // solves left the arm, it came back on another slant, the weapon 4 to 7 cm along his fist)
-    if (plant > 0) standR ??= remembered(j.shoulderR);
+    if (plant > 0 || (st.sit && st.sit.w > 0 && held && !fp)) standR ??= remembered(j.shoulderR);
     else if (standR) {
       recall(j.shoulderR, standR);
       standR = null;
@@ -3325,10 +3333,11 @@ export function buildWarrior(): Model {
     } else if (plant > 0 && between) slantR = 0;
     // (the arm between his feet is its own solve's, `fistOnGrip`: fitted again after it, its elbow changed sides in a frame)
     else if (!fp && st.dead < 0) {
-      slantR = fitArm(j, false, gripped ? gripTurn(handR, grip, _vr) : undefined, body, gripped && !two ? SLANT : undefined).slant;
-      // (eased back to the slant he stood with as he comes up, before the fist closes, `LEAN.slant`: taken up in the
-      // frame he's up, the weapon went 7 cm along his fist, and eased as it closed, 7 cm through it)
-      if (plant > 0 && standR?.slant !== undefined) slantR = lerp(standR.slant, slantR, smooth(ramp(plant, LEAN.ring[1], LEAN.slant)));
+      // (sat, kept near the slant he stood with: free, the weapon went 10 cm along his fist; held to it, the wrist went
+      // 12 degrees past its range)
+      const stood = st.sit && !two ? standR?.slant : undefined;
+      const slant: number | [number, number] = stood === undefined ? SLANT : [stood - SIT_HANDS.slant, stood + SIT_HANDS.slant];
+      slantR = fitArm(j, false, gripped ? gripTurn(handR, grip, _vr) : undefined, body, gripped && !two ? slant : undefined).slant;
       // (the arm as it's drawn standing, which it's lifted from as he sits)
       if (plant === 0) {
         armOf(plantR).forEach((joint, i) => plantR.armWas[i].copy(joint.quaternion));
