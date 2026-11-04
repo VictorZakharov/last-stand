@@ -186,7 +186,13 @@ export class Carried {
     const turned = Math.max(0, ...traced.map((each) => each.inHand));
     const slid = Math.max(0, ...traced.map((each) => each.slid));
     const joint = traced[0]?.part.joint.name ?? '';
-    return `in his ${joint} turned ${turned.toFixed(1)}°, slid ${(slid * 100).toFixed(1)} cm`;
+    return `in his ${joint} turned ${turned.toFixed(1)}°, slid ${(slid * 100).toFixed(1)} cm${this.fistsNow()}`;
+  }
+
+  /** How far each hand with a fist is curled, as a line's part: under `FIST_OPEN` it grips nothing. */
+  private fistsNow(): string {
+    const fists = this.lab.model.fists ?? [];
+    return fists.map((fist) => `, ${fist.hand} fist curled ${fist.curl.toFixed(2)}`).join('');
   }
 
   /** How far each hand and elbow went and turned since the frame before, as a line's end. */
