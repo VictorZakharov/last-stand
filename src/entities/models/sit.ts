@@ -56,7 +56,20 @@ export const satBy = (s: SitState | null | undefined): number => (s ? s.w * s.w 
 
 /** How a hero's resting hands turn (`restHands`), the left's and the right's: about the forearm (rad, + turns the
  *  thumb out), and bent at the wrist (rad, + the palm down to the forearm). */
-export interface RestTurn { roll: number[]; bend: number[] }
+export interface RestTurn {
+  roll: number[];
+  bend: number[];
+  /** how much further along the thigh a hand rests, each side (a share of the thigh, as `SIT_POSE.rest`) */
+  along?: number[];
+  /** how much higher over it a hand holding a weapon rests, each side (rig units): its handle's end clear of the thigh */
+  over?: number[];
+  /** how much higher on the floor a hand holding a weapon goes on its way to the knee (rig units): the handle's end
+   *  over the thigh rising under it */
+  arc?: number[];
+  /** of the way down, how far a hand holding a weapon takes to come in, each side (0: as an empty hand's,
+   *  `SIT_POSE.armIn`): the weapon's far end sweeps round with it */
+  armIn?: number[];
+}
 
 /** The leg chain's angles (rad): the thigh forward from straight down, the knee's bend, the ankle's. */
 const _leg = { thigh: 0, knee: 0, ankle: 0 };
@@ -149,8 +162,9 @@ export function restHands(
     const thigh = left ? j.thighL : j.thighR, hand = left ? j.handL : j.handR;
     // (on the floor, placed from the knee: along the thigh past it, the knees up, the hands were held in the air before
     // the chest)
+    const further = turn?.along?.[side] ?? 0;
     if (floor) (left ? j.kneeL : j.kneeR).localToWorld(_on.set(sign * out, -P.shinL * along, P.shinR + over));
-    else thigh.localToWorld(_on.set(sign * out, -P.thighL * along, P.thighR + over + rise));
+    else thigh.localToWorld(_on.set(sign * out, -P.thighL * (along + further), P.thighR + over + rise + (turn?.over?.[side] ?? 0)));
     j.chest.worldToLocal(_on);
     _pole.set(sign * pole[0], pole[1], pole[2]);
     j.chest.worldToLocal(hand.getWorldPosition(_now));
@@ -161,14 +175,15 @@ export function restHands(
     } else {
       // (out early: at the way's own pace, the thigh rose into a hand still hanging at his side, 7 cm, 16% down)
       const arc = Math.max(Math.sin(Math.PI * Math.sqrt(w)), Math.sin(Math.PI * w));
-      _now.y += SIT_POSE.floorLift[0] * arc * floorLift;
+      _now.y += (SIT_POSE.floorLift[0] + (turn?.arc?.[side] ?? 0)) * arc * floorLift;
       _now.x += sign * SIT_POSE.floorLift[1] * arc * floorLift;
     }
     const shoulder = left ? j.shoulderL : j.shoulderR, elbow = left ? j.elbowL : j.elbowR;
     _shoulderWas.copy(shoulder.quaternion);
     _elbowWas.copy(elbow.quaternion);
     reachArm(shoulder, elbow, P.upperL, P.foreL, _now, _pole);
-    const armIn = w >= SIT_POSE.armIn ? 1 : w / SIT_POSE.armIn;
+    const heldIn = turn?.armIn?.[side] ?? 0;
+    const armIn = Math.min(1, w / (heldIn || SIT_POSE.armIn));
     if (armIn < 1) {
       shoulder.quaternion.copy(_shoulderWas.slerp(shoulder.quaternion, armIn));
       elbow.quaternion.copy(_elbowWas.slerp(elbow.quaternion, armIn));

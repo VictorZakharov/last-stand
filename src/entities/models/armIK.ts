@@ -415,7 +415,7 @@ export function solveArm(j: Joints, left: boolean, g: ArmGoal): ArmResult {
  * world matrices through their parents, so needs no update of the whole model first.)
  * `inside`: how far short of its ends (degrees) the wrist is kept.
  */
-export function fitArm(j: Joints, left: boolean, vis?: THREE.Quaternion, body?: BodyShape, slant?: number, inside?: number): ArmResult {
+export function fitArm(j: Joints, left: boolean, vis?: THREE.Quaternion, body?: BodyShape, slant?: number | [number, number], inside?: number): ArmResult {
   const sh = left ? j.shoulderL : j.shoulderR, el = left ? j.elbowL : j.elbowR, hd = left ? j.handL : j.handR;
   const wrist = hd.getWorldPosition(new THREE.Vector3());
   const hand = hd.getWorldQuaternion(new THREE.Quaternion());
