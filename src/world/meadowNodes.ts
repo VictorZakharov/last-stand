@@ -19,6 +19,7 @@ export interface BladeUniforms {
   uS: { value: number };
   uTiles: { value: THREE.Vector2[] };
   uFocus: { value: THREE.Vector2 };
+  uEye: { value: THREE.Vector2 };
   uBand: { value: THREE.Vector4 };
   uByStrand: { value: number };
   uTime: { value: number };
@@ -123,6 +124,7 @@ export function bladeNodes(m: THREE.MeshStandardMaterial, u: BladeUniforms, comb
   const held = <T>(of: { value: T }): N => uniform(of.value).setGroup(renderGroup).onRenderUpdate(() => of.value);
   const origin = held(u.uOrigin);
   const focus = held(u.uFocus);
+  const eye = held(u.uEye);
   const band = held(u.uBand);
   const cell = number(u.uCell);
   const wider = number(u.uWider);
@@ -174,7 +176,7 @@ export function bladeNodes(m: THREE.MeshStandardMaterial, u: BladeUniforms, comb
     const lean2 = normalize(mix(vec2(cos(turn), sin(turn)), normalize(inward.add(1e-5)), edge.mul(0.85))).toVar();
     const lean = vec3(lean2.x, 0, lean2.y);
     // seen edge on, a blade turns up to a third of the way to the camera
-    const toCam = normalize(cameraPosition.xz.sub(root).add(1e-4)).toVar();
+    const toCam = normalize(eye.sub(root).add(1e-4)).toVar();
     const across0 = vec2(lean2.y, lean2.x.negate());
     const facing = vec2(toCam.y.negate(), toCam.x);
     const facingBy = sign(dot(facing, across0).add(1e-4));

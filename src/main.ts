@@ -4,7 +4,7 @@ import { G } from './state';
 import { pipelinesAtOnceFromNow, WEBGPU } from './core/webgpu';
 import { initRenderer, updateCamera, render, zoomBy, orbitBy, lookBy, setZoom, sceneTarget, setViewShift, setView, faceCamera, viewMode, viewSettled, VIEWS, type ViewMode } from './core/renderer';
 import { CAMERA } from './data/balance';
-import { HALL, TERRACE, YARD_DUMMIES, inHall, type VillageObject } from './data/village';
+import { HALL, START_SPOTS, TERRACE, YARD_DUMMIES, inHall, type VillageObject } from './data/village';
 import { initInput, updateInputRay, endInputFrame, input, isDown, wasPressed, wantPointerLock, pointerLocked, onPointerLockLost, lockLostAt, releaseInput } from './core/input';
 import { initAudio, sfx } from './core/audio';
 import { updateMusic, type MusicWanted } from './core/music';
@@ -16,6 +16,7 @@ import { initEffects, updateEffects, clearEffects } from './fx/effects';
 import { buildArena, compileEnvMaps } from './world/arena';
 import { separateEnemies } from './world/collision';
 import { prepareWalks } from './world/walkPath';
+import { groundHeight } from './world/ground';
 import { HERO_RADIUS, Player } from './entities/player';
 import { viewArms } from './entities/viewModel';
 import { updateSwingTrails } from './fx/swingTrail';
@@ -219,7 +220,8 @@ async function boot() {
   markLoaded();
   // the lobby renders behind the loading screen (to settle) but only starts moving at the
   // reveal, so its opening camera zoom is seen
-  updateCamera(0, G.player.pos, G.player.model.height);
+  openAtOneOfTheStarts();
+  updateCamera(0, G.player.pos, G.player.model.height, G.player.obj.position.y);
   loadingDone(() => {
     revealed = true;
     recorder.revealed(!navigator.serviceWorker?.controller);
@@ -495,6 +497,14 @@ function switchSaveSlot(n: number) {
   heroSelectSlotSwitched(id);   // switched from over the hero selection screen: its hall on the slot's heroes
   renderMenu();
   sendLobbyChoice();   // its records set the starting wave
+}
+
+/** A game opens at one of the village's places, at random. */
+function openAtOneOfTheStarts(): void {
+  const start = START_SPOTS[Math.floor(Math.random() * START_SPOTS.length)];
+  const [x, z] = start.at;
+  G.player.place(new THREE.Vector3(x, groundHeight(x, z), z), start.facing);
+  faceCamera(start.facing);
 }
 
 /** The hero of `id` from the save slot in play takes the old one's place: a swap in place, not a respawn. */

@@ -17,8 +17,7 @@ import { growTree, REACH_BANDS, type Grow } from './ezTrees';
 import { canopyGeo, fernClumpGeo, fernTexture, leafClusterTexture, leafTexture, lightShafts, litterGeo } from './foliage';
 import { bend, rag, taperTube } from '../entities/models/shapes';
 import { PropSet, instanceLook, meshLook, groupLook } from './destructible';
-import { buildFire, emberMat } from './fire';
-import { LAMP_SOFT } from '../core/lamps';
+import { buildFire, emberMat, type FireSpec } from './fire';
 import { floorRelief, reliefContext } from '../core/parallax';
 import { tsl, WEBGPU, stillNodes } from '../core/webgpu';
 import { grassWindNode, mossColorNode } from './forestNodes';
@@ -50,7 +49,11 @@ const FLOOR_RELIEF = { depth: 0.045, perMetre: FLOOR_REPEAT / 220, fade: 70 };
 /** grass sways this far at its tips (m), slowly (rad/s), each tuft a little after the one upwind of it */
 const SWAY = 0.05, SWAY_RATE = 1.3;
 /** a bonfire's light (a point light's, in candela): enough for a warm pool round it, on a village's ground by night too */
-const BONFIRE_LIGHT = 100;
+export const BONFIRE_LIGHT = 110;
+/** how soft close to its light is (m squared, in its decay, as `LAMP_SOFT` is a lamp's): with a lamp's, a hand beside the
+ *  fire, nearer its light than the ground is, burned white by day with the sun on it too (from play, "fire blinding skin
+ *  issue again"; `lab village --only heroBesideFire`) */
+const BONFIRE_SOFT = 24;
 const BONFIRE_LIGHT_UP = 1.2;
 const BONFIRE_COLOUR = 0xff9a48;
 /** the bonfires' places, by the wall on the diagonal */
@@ -1058,7 +1061,7 @@ function buildGlowcaps(scene: THREE.Object3D, x: number, z: number, rng: () => n
 }
 
 export function buildBonfire(scene: THREE.Object3D, x: number, z: number, stone: THREE.Material, wood: THREE.Material, updaters: Updater[],
-  casts = true): void {
+  casts = true): FireSpec {
   // (the ring's stones merged: a mesh a stone, a bonfire's ring was 9 draws, and 9 more in the sun's shadow)
   const ringGeo = boulderGeo(47, 0.2, 1), at = new THREE.Object3D(), stones: THREE.BufferGeometry[] = [];
   for (let i = 0; i < 9; i++) {
@@ -1099,14 +1102,16 @@ export function buildBonfire(scene: THREE.Object3D, x: number, z: number, stone:
   // (from play, "there is no light from fire": at 18, under the village's lamps, it added 14 levels of red to what it lit)
   // (soft close to, as the lamps are: by the square alone, a hero beside it burned white, "blinding reflections from fire",
   // and the ring's stones peach)
-  const light = new THREE.PointLight(BONFIRE_COLOUR, BONFIRE_LIGHT, 16, 2 + LAMP_SOFT);
+  const light = new THREE.PointLight(BONFIRE_COLOUR, BONFIRE_LIGHT, 16, 2 + BONFIRE_SOFT);
   light.position.set(x, BONFIRE_LIGHT_UP, z);
   if (casts) staticShadow(light);
   scene.add(light);
-  buildFire(scene, {
+  const fire: FireSpec = {
     at: new THREE.Vector3(x, 0.03, z), radius: 0.5, height: 1.5, dish: 0, light, intensity: BONFIRE_LIGHT,
     smoke: 6, smokeColour: 0x8a8580, embers: 10,
-  }, updaters);
+  };
+  buildFire(scene, fire, updaters);
+  return fire;
 }
 
 /** A bonfire's logs, their bark's geometry and their char's, in the world's frame. */

@@ -63,6 +63,8 @@ import { candleLightsNear, chestOpensNear } from './villageChestLid';
 import { wallingAligned } from './villageWalling';
 import { windowsLetSunIn } from './villageWindows';
 import { grassRingsGentle, grassRingsUnseen } from './villageGrassRing';
+import { firesStillInFog, fogHoldsSteady, leavesInFog } from './villageFog';
+import { startSpots, topKeepsHim } from './villageStart';
 import { wornStaysOn } from './villageWorn';
 import { heroFaceNotBlinding } from './villageHeroFace';
 import { cameraBeforeWalls } from './villageCameraWall';
@@ -151,6 +153,11 @@ export async function village(lab: Lab, options: VillageOptions): Promise<Report
     heroFaceNotBlinding: () => heroFaceNotBlinding(lab, options.canary),
     heroBesideFire: () => heroBesideFire(lab, options.canary),
     sightBlacksOut: () => sightBlacksOut(lab, options.canary),
+    fogHoldsSteady: () => fogHoldsSteady(lab, options.canary),
+    firesStillInFog: () => firesStillInFog(lab, options.canary),
+    leavesInFog: () => leavesInFog(lab, options.canary),
+    startSpots: () => startSpots(lab, options.canary),
+    topKeepsHim: () => topKeepsHim(lab, options.canary),
     staffAtNight: () => staffAtNight(lab, options.canary),
     dummyLabelsFade: () => dummyLabelsFade(lab, options.canary),
     fountainStopsArrows: () => fountainStopsArrows(lab, options.canary),

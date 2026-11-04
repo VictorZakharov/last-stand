@@ -6,7 +6,7 @@
 import * as THREE from 'three';
 import type { WebGPURenderer } from 'three/webgpu';
 import { NEAR_GLOW, type KitLooks } from './materials';
-import type { SeeThrough } from './seeThrough';
+import { BLEND_GONE, type SeeThrough } from './seeThrough';
 import { WEBGPU, gpu, stillMaterialsGo, stillNodes, tsl } from './webgpu';
 
 // (untyped: TSL's types don't follow its conversions across these calls yet)
@@ -173,7 +173,19 @@ function seeMask(of: SeeThrough): N {
  *  hero). */
 function maskOwn(material: THREE.Material): void {
   const see = (material as { seeThrough?: SeeThrough }).seeThrough;
-  if (see) (material as N).maskNode ??= seeMask(see);
+  if (see) thinBy(material as N, see);
+}
+
+/** How `material` thins, as its kind does: by a blend (`opacityNode`), which drops what's nearly gone, or a pattern. */
+function thinBy(material: N, see: SeeThrough): void {
+  if (material.maskNode) return;
+  if (!see.blended) {
+    material.maskNode = seeMask(see);
+    return;
+  }
+  const left = seeFade((tsl as any).positionWorld, seeOfKind(see)).oneMinus();
+  material.opacityNode = left;
+  material.maskNode = left.greaterThanEqual(BLEND_GONE);
 }
 
 /** each kind's see-through uniforms, by its values (one object a kind: `seeThrough`'s kinds share holes) */
@@ -313,7 +325,7 @@ export function takePorts(renderer: WebGPURenderer): void {
       const own = (material as Partial<OwnLooks>).webgpuLooks;
       // (a material three converts afresh each time: its own node materials, the crowds', are left as they are)
       if (converted && !(material as N).isNodeMaterial) {
-        if (see) (converted as N).maskNode = seeMask(see);
+        if (see) thinBy(converted as N, see);
         // (a hair card: `bothSidesOut` in models/head.ts, its normal the surface's, not turned over for a back face)
         if ((material as { litBothSides?: boolean }).litBothSides) (converted as N).normalNode = (tsl as any).normalViewGeometry;
         // (an effect's plain material: `nearGlow`'s GLSL patch is WebGL's alone. Its node reads nothing of the frame's

@@ -272,9 +272,9 @@ export function updateVillage(dt = 0): void {
   const lobby = G.mode === 'menu' && G.arena.place === 'village' && !G.arena.hallShown;
   if (!sightTold) {
     sightTold = true;
-    sightWalls(G.arena.village.sight.walls, G.arena.village.sight.hall);
+    sightWalls(G.arena.village.sight.walls, G.arena.village.sight.hall, G.arena.village.sight.roofs);
   }
-  seeFrom(G.player.pos.x, G.player.pos.z, lobby && viewMode() === 'top', Math.min(1, dt * SIGHT_EASES));
+  seeFrom(G.player.pos.x, G.player.pos.z, lobby && viewMode() === 'top', Math.min(1, dt * SIGHT_EASES), dt);
   hallInside(dt);
   const on = hooks.active();
   const p = G.player;

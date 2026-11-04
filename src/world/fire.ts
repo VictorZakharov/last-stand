@@ -6,6 +6,7 @@
 // through cracks in their char; embers drifting up and smoke over it. One swell of the flames' height and the light's (a fire a metre across puffs about
 // 1.5 times a second) moves them together. `tools/lab` `fire` measures it.
 import * as THREE from 'three';
+import { inTheFog } from '../core/sight';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { particles, col } from '../fx/particles';
 import { rand } from '../util';
@@ -476,11 +477,19 @@ export function buildFire(scene: THREE.Object3D, spec: FireSpec, updaters: Updat
   scene.add(volume);
   const lightAt = light.position.clone();
   const due = runPhase({ embers: 0, smoke: 0 });
-  updaters.push((dt, t) => {
+  // (how long it has stood still in the fog: what he can't see plays out nothing, from play, "fire should not animate when
+  // in fog of war")
+  let stoodStill = 0;
+  updaters.push((dt, gameTime) => {
+    emberTime.value = gameTime;
+    if (inTheFog(inWorld.x, inWorld.z)) {
+      stoodStill += dt;
+      return;
+    }
+    const t = gameTime - stoodStill;
     const puff = puffAt(t, seed);
     flames.uniforms.uPuff.value = 1 + (puff - 1) * PUFF_SHOWS;
     flames.uniforms.uFrame.value = (t * LOOP_RATE + seed * LOOP.frames) % LOOP.frames;
-    emberTime.value = t;
     light.intensity = spec.intensity * (1 + (puff - 1) * LIGHT_SWELL);
     light.position.set(lightAt.x + (puff - 1) * LIGHT_SWAY, lightAt.y + (puff - 1) * LIGHT_SWAY * 2, lightAt.z);
     due.embers += dt * spec.embers;

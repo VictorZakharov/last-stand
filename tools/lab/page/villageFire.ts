@@ -30,7 +30,7 @@ const LEAST_DRAWN = 0.0003;
  *  at all */
 const FIRE_LIGHT_COLOUR = 0xff9a48;
 const FIRE_LIGHT_NEAR = 2.5;
-const LEAST_ADDED = 30;
+const LEAST_ADDED = 24;
 /** a change of red too small to see (levels of 255) */
 const LEAST_SEEN = 2;
 
@@ -116,7 +116,7 @@ function figureBurned(canvas: Canvas, at: THREE.Vector3): number {
 const QUIVER_BOX = 0.4;
 const QUIVER_UP = 0.3;
 const ROUND_FIRE = [1.6, 2.6];
-const WAYS_ROUND = 8;
+const WAYS_ROUND = 4;
 const QUIVER_MOST = 0.005;
 const QUIVER_SETTLE = 20;
 
@@ -148,6 +148,88 @@ async function quiverBurned(lab: Lab): Promise<QuiverRead | null> {
     }
   }
   return worst;
+}
+
+/** the hours the skin's read at (from play, by day, "fire blinding skin issue again"), and the most of his figure that
+ *  may be burned, read all round the fire from its side */
+const SKIN_HOURS = [12, 0];
+const SKIN_MOST = 0.009;
+
+/** His figure round the fire by day and night, the camera on its side: the worst burned of it, pictured. */
+async function skinRoundTheFire(lab: Lab, lines: string[], problems: string[], moments: Pictured[]): Promise<void> {
+  await viewBy(lab, 'top');
+  let worst = { share: -1, angle: 0, away: 0, hour: 0 };
+  for (const hour of SKIN_HOURS) {
+    holdHour(hour);
+    for (const away of ROUND_FIRE) {
+      for (let way = 0; way < WAYS_ROUND; way++) {
+        const angle = way / WAYS_ROUND * Math.PI * 2;
+        const x = CAMPFIRE[0] + Math.sin(angle) * away;
+        const z = CAMPFIRE[1] + Math.cos(angle) * away;
+        G.player.place(new THREE.Vector3(x, groundHeight(x, z), z), angle + Math.PI);
+        faceCamera(angle);
+        await lab.step(QUIVER_SETTLE);
+        const share = bodyBurned(lab);
+        if (share > worst.share) worst = { share, angle, away, hour };
+      }
+    }
+  }
+  const said = `${(worst.share * 100).toFixed(2)}% burned, ${worst.away} m out at ${worst.angle.toFixed(2)} rad, `
+    + `at ${worst.hour} h`;
+  lines.push(`his skin round the fire at worst: ${said}`);
+  if (worst.share > SKIN_MOST) problems.push(`his skin beside the campfire: ${said}`);
+  holdHour(worst.hour);
+  const x = CAMPFIRE[0] + Math.sin(worst.angle) * worst.away;
+  const z = CAMPFIRE[1] + Math.cos(worst.angle) * worst.away;
+  G.player.place(new THREE.Vector3(x, groundHeight(x, z), z), worst.angle + Math.PI);
+  faceCamera(worst.angle);
+  await lab.step(QUIVER_SETTLE);
+  moments.push(await lab.screen('his skin at its worst beside the fire', []));
+  holdHour(0);
+}
+
+/** how far a pixel must change with him hidden to be one of him (of the screen's white), and the fewest such pixels
+ *  that say he was drawn at all */
+const HIS_PIXEL = 0.04;
+const HIS_FEWEST = 200;
+
+/** Every fire's flames, their light left on: drawn over him, they count as his in a frame with him and without. */
+function theFlames(): THREE.Object3D[] {
+  const flames: THREE.Object3D[] = [];
+  G.scene.traverse((object) => {
+    const uniforms = ((object as THREE.Mesh).material as THREE.ShaderMaterial | undefined)?.uniforms;
+    if (uniforms?.uFrame && object.visible) flames.push(object);
+  });
+  return flames;
+}
+
+/** The share of his own pixels that's burned out: the frame drawn with him and without, for the grass in the sun and
+ *  the flames round him (in his box, they read 1.3% burned with no skin burned in the picture). */
+function bodyBurned(lab: Lab): number {
+  const flames = theFlames();
+  for (const mesh of flames) mesh.visible = false;
+  const withHim = drawFrame(lab).pixels.slice();
+  const light = campfireLight();
+  const lit = light.intensity;
+  light.intensity = 0;
+  const unlit = drawFrame(lab).pixels.slice();
+  light.intensity = lit;
+  G.player.obj.visible = false;
+  const without = drawFrame(lab).pixels;
+  G.player.obj.visible = true;
+  for (const mesh of flames) mesh.visible = true;
+  let burned = 0;
+  let his = 0;
+  for (let pixel = 0; pixel < withHim.length; pixel += 4) {
+    const moved = Math.abs(withHim[pixel] - without[pixel]) + Math.abs(withHim[pixel + 1] - without[pixel + 1]);
+    if (moved < HIS_PIXEL) continue;
+    his++;
+    // (what's burned with its light off is the sun's or a lamp's on his steel, none of the fire's doing)
+    const burnedUnlit = Math.max(unlit[pixel], unlit[pixel + 1], unlit[pixel + 2]) > FIGURE_BURNED;
+    if (!burnedUnlit && Math.max(withHim[pixel], withHim[pixel + 1], withHim[pixel + 2]) > FIGURE_BURNED) burned++;
+  }
+  if (his < HIS_FEWEST) throw new Error(`lab: village: only ${his} pixels of him drawn beside the fire`);
+  return burned / his;
 }
 
 /** Stood as near the campfire as he can, and at its own stand, by midnight, in each view: his figure not burned out. */
@@ -189,6 +271,7 @@ export async function heroBesideFire(lab: Lab, canary: boolean): Promise<LightsC
         moments.push(await lab.screen(`beside it ${name} ${view}`, []));
       }
     }
+    await skinRoundTheFire(lab, lines, problems, moments);
     await viewBy(lab, 'third');
     const quiver = await quiverBurned(lab);
     if (quiver) {

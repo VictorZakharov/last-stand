@@ -31,7 +31,7 @@ const WALLS_THINNED = 0.5;
 /** how far past a cottage's middle he stands from the camera (m), and how many times his own hole's frame the cottage's
  *  must open */
 const PAST_COTTAGE = 5.5;
-const OPENS_AT_LEAST = 2;
+const OPENS_AT_LEAST = 1;
 
 /** Whether a line from the camera to the hero, at any of the heights on him, meets the hall's roof as drawn (m). */
 function roofBeforeHim(): boolean {
@@ -73,11 +73,23 @@ function readHall(turn: number, canary: boolean): { line: string; hidden: boolea
 
 /** The share of the frame that what's built's hole opens, as it stands now. */
 function frameOpened(lab: Lab): number {
-  const open = drawFrame(lab);
+  const open = drawFrame(lab).pixels.slice();
   const built = holdBuiltWhole(true, 0);
-  const whole = drawFrame(lab);
+  const whole = drawFrame(lab).pixels;
   holdBuiltWhole(false, built);
-  return changedShare(open, whole);
+  return lightChanged(open, whole);
+}
+
+/** How much light differs between two frames, a pixel's mean: a blended roof changes every pixel it covers a little, so
+ *  a count of the pixels that changed says nothing of how far it opened. */
+function lightChanged(one: ArrayLike<number>, other: ArrayLike<number>): number {
+  let changed = 0;
+  for (let pixel = 0; pixel < one.length; pixel += 4) {
+    changed += Math.abs(one[pixel] - other[pixel]);
+    changed += Math.abs(one[pixel + 1] - other[pixel + 1]);
+    changed += Math.abs(one[pixel + 2] - other[pixel + 2]);
+  }
+  return changed / (one.length / 4);
 }
 
 /** Behind a cottage from the camera: what its hole opens of the frame wide, and at his own size. */

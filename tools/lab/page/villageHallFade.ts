@@ -11,7 +11,7 @@ import { fadeWhole, wholeShare } from '../../../src/core/seeThrough';
 import { HALL, TERRACE } from '../../../src/data/village';
 import { groundHeight } from '../../../src/world/ground';
 import { drawFrame } from './light';
-import { changedShare, viewBy } from './villageHallCull';
+import { viewBy } from './villageHallCull';
 import type { LightsChecked } from './villageLights';
 
 /** where he stands, in from the door (m), and out on the square (m), and the frames given to settle */
@@ -23,16 +23,23 @@ const FRAMES = 40;
 const HOUR = 12;
 /** the most the wall may thin in one frame, and the least (and most) of it to stay as a ghost */
 const MOST_A_FRAME = 0.15;
-const GHOST_LEAST = 0.15;
+const GHOST_LEAST = 0.05;
 const GHOST_MOST = 0.9;
 
-/** How much of the frame the front wall changes now: the frame as it is against with the wall hidden. */
+/** How much light the front wall changes in the frame now, against the frame with it hidden: a sum over its pixels,
+ *  as a blended ghost changes every pixel it covers a little, where a pattern changed a share of them. */
 function wallsShare(lab: Lab, front: THREE.Object3D): number {
-  const drawn = drawFrame(lab);
+  const drawn = drawFrame(lab).pixels.slice();
   front.visible = false;
-  const without = drawFrame(lab);
+  const without = drawFrame(lab).pixels;
   front.visible = true;
-  return changedShare(drawn, without);
+  let changed = 0;
+  for (let pixel = 0; pixel < drawn.length; pixel += 4) {
+    changed += Math.abs(drawn[pixel] - without[pixel]);
+    changed += Math.abs(drawn[pixel + 1] - without[pixel + 1]);
+    changed += Math.abs(drawn[pixel + 2] - without[pixel + 2]);
+  }
+  return changed / (drawn.length / 4);
 }
 
 /** The hero put at (x, z), turned into the hall (\`facing\` π is along -z, in through the door). */
@@ -80,8 +87,8 @@ export async function hallFrontFades(lab: Lab, canary: boolean): Promise<LightsC
     if (whole <= 0) throw new Error('lab: village: the front wall isn\'t in the frame from above');
     const left = ghost / whole;
     const gone = !(left >= GHOST_LEAST && left <= GHOST_MOST);
-    const line = `the hall's front wall from above: ${(whole * 100).toFixed(1)}% of the frame whole, `
-      + `${(left * 100).toFixed(0)}% of that left as a ghost, thinned by at most ${(sharpest * 100).toFixed(0)}% `
+    const line = `the hall's front wall from above: ${(left * 100).toFixed(0)}% of its light left as a ghost, `
+      + `thinned by at most ${(sharpest * 100).toFixed(0)}% `
       + `in a frame; over the shoulder thinned ${(overShoulder * 100).toFixed(0)}%`;
     if (canary) return { lines: [line], problems: [], caught: gone, moments: [] };
     const problems = gone || sharpest > MOST_A_FRAME || overShoulder > 0 ? [line] : [];

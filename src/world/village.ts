@@ -16,7 +16,7 @@ import { unrepeatedNodes } from './villageNodes';
 import { WEBGPU } from '../core/webgpu';
 import { villageSkyMaterial } from './skyNodes';
 import * as THREE from 'three';
-import type { SightWall } from '../core/sight';
+import type { SightRoof, SightWall } from '../core/sight';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import {
   CAMPFIRE, CHEST, CHRONICLE, COTTAGES, DAY, ENTRANCES, GAP_HALF, HALL, NOTICE, STEP_RISE, TERRACE, YARD, portalPlace,
@@ -33,7 +33,7 @@ import { particles, col } from '../fx/particles';
 import { mulberry, rand, TAU } from '../util';
 import { bannerGeo, buildBrazier } from './crypt';
 import { CLASSES, CLASS_IDS } from '../data/classes/index';
-import { buildBonfire } from './forest';
+import { BONFIRE_LIGHT, buildBonfire } from './forest';
 import { movesInShadows, boxWithUV, contactShadows, setInstance, standStill, type Biome, type BiomeLook, type EnvColours, type Portal, type RGB, type Updater } from './props';
 import { buildMeadow, meadowGround, MeadowMask, type MaskUniforms } from './meadow';
 import {
@@ -170,7 +170,7 @@ export interface Village extends Biome {
   /** its trees as they stand (the map draws them) */
   trees: readonly { x: number; z: number; height: number }[];
   /** what stops his sight from above (core/sight.ts), the walls and the hall, which may be shut to him */
-  sight: { walls: SightWall[]; hall: THREE.Vector4 };
+  sight: { walls: SightWall[]; hall: THREE.Vector4; roofs: SightRoof[] };
   /** the street lamps' lanterns, each lit by the lit shaders' lamps (`core/lamps.ts`; game/village.ts `lightLamps`) */
   lanterns: readonly THREE.Vector3[];
   /** the hall of heroes' roof, ceiling and front wall (cut away over the hero inside, but through his eyes, as from
@@ -673,7 +673,7 @@ export function buildVillage(scene: THREE.Group): Village {
   stillBuilt(scene, () => { for (const c of COTTAGES) buildCottage(scene, wall, M, c, rng); });
   stillBuilt(scene, () => buildTrees(scene, wall, obstacles, trees));
   buildYard(scene, wall, M);
-  buildBonfire(scene, CAMPFIRE[0], CAMPFIRE[1], M.ashlar, M.logs, updaters, false);
+  const campfire = buildBonfire(scene, CAMPFIRE[0], CAMPFIRE[1], M.ashlar, M.logs, updaters, false);
   obstacles.push({ x: CAMPFIRE[0], z: CAMPFIRE[1], r: 1.0, h: 0.5 });
   stillBuilt(scene, () => buildBenches(scene, M, obstacles));
   stillBuilt(scene, () => buildNoticeBoard(scene, wall, M));
@@ -734,6 +734,9 @@ export function buildVillage(scene: THREE.Group): Village {
       sky.set(hour);
       // (the windows lit as the light goes; the lanterns' glass burns the same at any hour)
       M.window.emissiveIntensity = WINDOW_GLOW * (1 - dayness(hour));
+      // (a fire adds little to what the sun lights: at its night's strength, the sun on him too, a hand beside it burned
+      // white, from play, "fire blinding skin issue again")
+      campfire.intensity = BONFIRE_LIGHT * (CAMPFIRE_BY_DAY + (1 - CAMPFIRE_BY_DAY) * (1 - dayness(hour)));
       M.skyPane.emissiveIntensity = SKY_PANE.night + (SKY_PANE.day - SKY_PANE.night) * dayness(hour);
       M.lantern.color.copy(LANTERN_PANE.day).lerp(LANTERN_PANE.night, 1 - dayness(hour));
       night = 1 - dayness(hour);
@@ -777,6 +780,8 @@ function sunHeight(hour: number): number {
 }
 
 /** 0 by night, 1 by full day, between through the twilights. */
+/** the campfire's light at noon, as a share of its light by night */
+const CAMPFIRE_BY_DAY = 0.3;
 const dayness = (hour: number): number => THREE.MathUtils.smoothstep(sunHeight(hour), -0.12, 0.35);
 
 /** The way to the key light at `hour`: the sun along its arc from east through south to west, by night the moon. */
@@ -2171,8 +2176,9 @@ function buildYard(parent: THREE.Object3D, wall: Wall, M: Mats): void {
 
 /** The walls that stop his sight: each cottage's four, and the hall's, open at its door (its windows are too high to see
  *  a floor through, from outside or in). */
-function sightOfThePlace(): { walls: SightWall[]; hall: THREE.Vector4 } {
+function sightOfThePlace(): { walls: SightWall[]; hall: THREE.Vector4; roofs: SightRoof[] } {
   const walls: SightWall[] = [];
+  const roofs: SightRoof[] = [];
   const around = (corners: [number, number][]): void => {
     corners.forEach(([x0, z0], i) => {
       const [x1, z1] = corners[(i + 1) % corners.length];
@@ -2187,6 +2193,7 @@ function sightOfThePlace(): { walls: SightWall[]; hall: THREE.Vector4 } {
     // (as the group's turn about y turns them)
     const turned = (x: number, z: number): [number, number] => [c.x + x * cos + z * sin, c.z - x * sin + z * cos];
     around([turned(-halfW, -halfD), turned(halfW, -halfD), turned(halfW, halfD), turned(-halfW, halfD)]);
+    roofs.push({ x: c.x, z: c.z, halfW, halfD, cos, sin });
   }
   const west = TERRACE.x - HALL.half;
   const east = TERRACE.x + HALL.half;
@@ -2197,7 +2204,7 @@ function sightOfThePlace(): { walls: SightWall[]; hall: THREE.Vector4 } {
   walls.push({ x0: east, z0: HALL.wall, x1: east, z1: HALL.door });
   walls.push({ x0: west, z0: HALL.door, x1: doorW, z1: HALL.door });
   walls.push({ x0: doorE, z0: HALL.door, x1: east, z1: HALL.door });
-  return { walls, hall: new THREE.Vector4(west, HALL.wall, east, HALL.door) };
+  return { walls, hall: new THREE.Vector4(west, HALL.wall, east, HALL.door), roofs };
 }
 
 /** Logs to sit on round the campfire. */

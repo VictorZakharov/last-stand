@@ -312,6 +312,8 @@ export function passTriangle(): THREE.BufferGeometry {
 export const passCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
 
 const rig = {
+  /** the floor the view from above looks at, eased as he climbs */
+  floor: 0,
   zoom: 1,
   targetZoom: 1,
   shake: 0,
@@ -1075,6 +1077,14 @@ function nearClear(camera: THREE.Vector3, sy: number, cy: number, fov: number): 
   return share < 1 ? Math.max(BOOM_NEAR, FAR_NEAR * share * 0.85) : FAR_NEAR;
 }
 
+/** whether a harness holds the view from above on the village's ground, as it was */
+let topOnGround = false;
+
+/** For a harness (tools/lab): the view from above looking at the ground whatever floor he stands on. */
+export function holdTopOnGround(held: boolean): void {
+  topOnGround = held;
+}
+
 /** `height`: the character's, for the close views' shoulder and eye level, over `floor`: the ground he stands on (his
  *  body's height, `obj.position.y`: the player's `pos.y` is always 0, and over it, through the eyes up the village's
  *  stair, the eyes stayed at the square's level, "in 1st person cannot walk up the stairs"). */
@@ -1091,6 +1101,7 @@ export function updateCamera(dt: number, focus: THREE.Vector3, height: number, f
   rig.focus.x = damp(rig.focus.x, focus.x, CAMERA.follow, dt);
   rig.focus.z = damp(rig.focus.z, focus.z, CAMERA.follow, dt);
   rig.focus.y = 0;
+  rig.floor = damp(rig.floor, topOnGround ? 0 : floor, CAMERA.follow, dt);
   rig.yaw = damp(rig.yaw, rig.targetYaw, 18, dt);
   let fov: number = CAMERA.fov, near = 0.5;
   if (rig.view === 'top') {
@@ -1100,8 +1111,10 @@ export function updateCamera(dt: number, focus: THREE.Vector3, height: number, f
     const pitch = CAMERA.closePitch + (CAMERA.pitch - CAMERA.closePitch) * k;
     const lookY = 0.6 + (1 - k) * 0.7;
     const r = Math.cos(pitch) * d;
-    cam.position.set(rig.focus.x + Math.sin(rig.yaw) * r, Math.sin(pitch) * d, rig.focus.z + Math.cos(rig.yaw) * r);
-    _look.set(rig.focus.x, lookY, rig.focus.z);
+    // (from the floor he stands on: from the ground whatever it was, zoomed in he rose up the frame as he climbed to the
+    // terrace, "this one is not (head cut off), and I didn't do anything, just climbed up")
+    cam.position.set(rig.focus.x + Math.sin(rig.yaw) * r, rig.floor + Math.sin(pitch) * d, rig.focus.z + Math.cos(rig.yaw) * r);
+    _look.set(rig.focus.x, rig.floor + lookY, rig.focus.z);
     cam.lookAt(_look);
   } else {
     // close views sit right on the character: no follow lag, or the aim would swim

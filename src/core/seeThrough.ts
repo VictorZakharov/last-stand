@@ -23,6 +23,8 @@ interface Kind {
   whole: { value: number };
   /** how far short of him what thins whole comes back (m) */
   ramp: { value: number };
+  /** whether it thins by blending, not by a pattern of dropped pixels */
+  blended?: boolean;
 }
 /** the props' hole, which what fades whole has too */
 const PROP_K = { value: new THREE.Vector4(1.0, 1.8, 0, 0.25) }, PROP_ACROSS_NOW = { value: 1 };
@@ -37,7 +39,7 @@ const HALL_K = { value: new THREE.Vector4(1.0, 1.8, 0, 0.25) };
 const ROOF_K = { value: new THREE.Vector4(1.0, 1.8, 0, -1000) };
 /** how far every roof thins from above, whatever it hides (a share of its pixels; from play, "we should make roof
  *  semi-transparent in this case too, even if hero is not directly under it") */
-export const ROOF_GHOST_ABOVE = 0.6;
+export const ROOF_GHOST_ABOVE = 0.72;
 /** how much wider what's built opens from above while it hides him (m at his depth): his own size, he showed alone in a
  *  roof, "it needs to match the previous screenshot, logically" */
 const BUILT_OPENS = 5;
@@ -54,18 +56,22 @@ const kinds = {
   /** what's built (a house's walls and roof, the palisade): the same hole from above alone. Over the shoulder the camera
    *  stands on his side of it, and a hole there showed both sides of a wall at once (from play, "I should not able to
    *  see through walls like this") */
-  built: { k: BUILT_K, minY: PROP_MIN_Y, across: PROP_ACROSS_NOW, whole: { value: 0 }, ramp: WALL_RAMP },
+  built: { k: BUILT_K, minY: PROP_MIN_Y, across: PROP_ACROSS_NOW, whole: { value: 0 }, ramp: WALL_RAMP, blended: true },
   /** a thing's foot on the floor: as `prop`, from the ground up */
   propFoot: { k: PROP_K, minY: { value: -1e9 }, across: PROP_ACROSS_NOW, whole: { value: 0 }, ramp: { value: GHOST_RAMP } },
   /** the hall of heroes' front wall and its roof over the hero inside: a prop, all of it before him thinned by a share
    *  of its own (`fadeWhole`) */
-  hallFront: { k: HALL_K, minY: PROP_MIN_Y, across: PROP_ACROSS_NOW, whole: { value: 0 }, ramp: WALL_RAMP },
-  hallRoof: { k: ROOF_K, minY: PROP_MIN_Y, across: PROP_ACROSS_NOW, whole: { value: 0 }, ramp: WALL_RAMP },
+  hallFront: { k: HALL_K, minY: PROP_MIN_Y, across: PROP_ACROSS_NOW, whole: { value: 0 }, ramp: WALL_RAMP, blended: true },
+  hallRoof: { k: ROOF_K, minY: PROP_MIN_Y, across: PROP_ACROSS_NOW, whole: { value: 0 }, ramp: WALL_RAMP, blended: true },
   /** the other roofs: as what's built, and a ghost from above (`ROOF_GHOST_ABOVE`) */
-  roof: { k: ROOF_K, minY: PROP_MIN_Y, across: PROP_ACROSS_NOW, whole: { value: 0 }, ramp: WALL_RAMP },
+  roof: { k: ROOF_K, minY: PROP_MIN_Y, across: PROP_ACROSS_NOW, whole: { value: 0 }, ramp: WALL_RAMP, blended: true },
   /** what stands free in the hall (its columns, its banners), which hides as much of the room as of him */
-  hallColumn: { k: PROP_K, minY: PROP_MIN_Y, across: PROP_ACROSS_NOW, whole: { value: 0 }, ramp: WALL_RAMP },
+  hallColumn: { k: PROP_K, minY: PROP_MIN_Y, across: PROP_ACROSS_NOW, whole: { value: 0 }, ramp: WALL_RAMP, blended: true },
 } satisfies Record<string, Kind>;
+
+/** Less of it than this left and a blended thing drops the pixel: nothing's drawn, its depth too, or the fog would read
+ *  what's under a roof gone as the roof */
+export const BLEND_GONE = 0.02;
 
 /** Props' dissolve strength at full weight: they stay a faint ghost, so the player can still see what they stand behind. */
 const PROP_STRENGTH = 0.7;
@@ -144,6 +150,7 @@ export interface SeeThrough {
   across: { value: number };
   whole: { value: number };
   ramp: { value: number };
+  blended?: boolean;
 }
 
 /** each kind's values, one object a kind: what WebGPU keeps its nodes by */
@@ -157,9 +164,17 @@ function markSeeThrough(m: THREE.Material, kind: keyof typeof kinds): void {
   Object.defineProperty(m, 'seeThrough', { value, configurable: true });
 }
 
-/** Dissolve `m` where it stands between the camera and the player. Keeps any patch the material already has. */
+/** Dissolve `m` where it stands between the camera and the player. Keeps any patch the material already has. A roof and
+ *  what the hall thins whole blend (from play, "Yes, real blending": a pattern of dots over a roof reads as a screen door,
+ *  and the fog, reading the depth, stippled it too), with their depth kept, for the fog to read them as what they are. */
 export function seeThrough<M extends THREE.Material>(m: M, kind: keyof typeof kinds): M {
   markSeeThrough(m, kind);
+  const blended = (kinds[kind] as Kind).blended === true;
+  if (blended) {
+    m.transparent = true;
+    m.depthWrite = true;
+    if (kind !== 'roof' && kind !== 'built') thinningWhole.set(kind, [...(thinningWhole.get(kind) ?? []), m]);
+  }
   const prev = m.onBeforeCompile, key = m.customProgramCacheKey();
   m.onBeforeCompile = (shader, renderer) => {
     prev.call(m, shader, renderer);
@@ -180,12 +195,28 @@ export function seeThrough<M extends THREE.Material>(m: M, kind: keyof typeof ki
         vec2 seeBit = mod(floor(gl_FragCoord.xy), 2.0), seeTwo = mod(floor(gl_FragCoord.xy * 0.5), 2.0);
         float seeN = (abs(seeBit.x - seeBit.y) * 8.0 + seeBit.y * 4.0 + abs(seeTwo.x - seeTwo.y) * 2.0 + seeTwo.y + 0.5) / 16.0;
         if (seeN < seeFade()) discard;`);
+    if (blended) thinByBlending(shader);
   };
   // the same code for every kind (they differ in uniforms only), so kinds share programs; on WebGPU a kind's uniforms are
   // nodes of its build, and sharing the first's, the fountain's stone (`prop`) stood solid over him as a wall (`built`) does
-  m.customProgramCacheKey = () => (RUNNING.webgpu ? `${key}|seethrough|${kind}` : `${key}|seethrough`);
+  m.customProgramCacheKey = () => (RUNNING.webgpu ? `${key}|seethrough|${kind}` : `${key}|seethrough${blended ? '|blended' : ''}`);
   return m;
 }
+
+/** A dissolve's pattern of dropped pixels in `shader` made a blend. */
+function thinByBlending(shader: { fragmentShader: string }): void {
+  shader.fragmentShader = shader.fragmentShader
+    .replace('if (seeN < seeFade()) discard;', `float seeLeft = 1.0 - seeFade();
+        if (seeLeft < ${BLEND_GONE.toFixed(2)}) discard;`)
+    .replace('#include <opaque_fragment>', `diffuseColor.a *= seeLeft;
+        #include <opaque_fragment>`);
+}
+
+/** the blended materials of what thins whole, by kind, their depth let go as they thin */
+const thinningWhole = new Map<string, THREE.Material[]>();
+/** thinned past this share, what thins whole leaves the depth to what's behind it: the fog reads the frame's depth, and
+ *  the room behind a ghost of the hall's front wall lay under the fog of the wall's own place, whole */
+const DEPTH_LET_GO = 0.3;
 
 /** The kinds that thin whole. */
 export type FadesWhole = 'hallFront' | 'hallRoof' | 'hallColumn';
@@ -193,6 +224,7 @@ export type FadesWhole = 'hallFront' | 'hallRoof' | 'hallColumn';
 /** How much of what's before the hero `kind` thins by a share of its own, a whole wall's rather than a hole round him. */
 export function fadeWhole(kind: FadesWhole, share: number): void {
   kinds[kind].whole.value = share;
+  for (const material of thinningWhole.get(kind) ?? []) material.depthWrite = share < DEPTH_LET_GO;
 }
 
 /** The share `kind` is thinned by now. */

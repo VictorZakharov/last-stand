@@ -254,6 +254,7 @@ const VERTEX_HEAD = /* glsl */ `
   uniform int uS;
   uniform vec2 uTiles[${TILES * TILES}];
   uniform vec2 uFocus;
+  uniform vec2 uEye;
   uniform vec4 uBand;
   uniform float uByStrand;
   uniform float uTime;
@@ -331,7 +332,7 @@ const VERTEX_BLADE = /* glsl */ `
   lean2 = normalize(mix(lean2, normalize(inward + 1e-5), edge * 0.85));
   vec3 lean = vec3(lean2.x, 0.0, lean2.y);
   // seen edge on, a blade turns up to a third of the way to the camera (edge on it's a thin line)
-  vec2 toCam = normalize(cameraPosition.xz - root + 1e-4);
+  vec2 toCam = normalize(uEye - root + 1e-4);
   vec2 across0 = vec2(lean2.y, -lean2.x);
   vec2 facing = vec2(-toCam.y, toCam.x);
   vec2 turned = normalize(mix(across0, facing * sign(dot(facing, across0) + 1e-4), (1.0 - abs(dot(toCam, lean2))) * 0.35));
@@ -393,6 +394,7 @@ interface RingUniforms extends MaskUniforms {
   uS: { value: number };
   uTiles: { value: THREE.Vector2[] };
   uFocus: { value: THREE.Vector2 };
+  uEye: { value: THREE.Vector2 };
   uBand: { value: THREE.Vector4 };
   uByStrand: { value: number };
   uTime: { value: number };
@@ -414,6 +416,32 @@ const focusMoved = new THREE.Vector2();
  *  the grass changes as the rings follow the hero, nothing else changed. */
 export function moveMeadowFocus(x: number, z: number): void {
   focusMoved.set(x, z);
+}
+
+/** whether a harness has the blades turn to the camera from above too, as they did (`--only grassStillFromAbove`'s canary) */
+let eyeFollowsAbove = false;
+
+/** For a harness (tools/lab): the blades turned to the camera where it stands from above too, as they were. */
+export function holdEyeFollowsAbove(follows: boolean): void {
+  eyeFollowsAbove = follows;
+}
+
+/** how far off along the view a blade turns to, from above (m) */
+const EYE_FAR = 10000;
+const _sight = new THREE.Vector3();
+
+/** What a blade seen edge on turns to, into `out`: the camera, close to; from above, a point as far off as the sun, along
+ *  the view: turned to where the camera stands, every blade in the frame moved with its every step, the whole meadow
+ *  crawling as he walked (from play, "grass appearing/rerendering when I walk in top down view"). */
+function eyeOf(camera: THREE.Camera, above: boolean, out: THREE.Vector2): void {
+  if (above && !eyeFollowsAbove) {
+    camera.getWorldDirection(_sight);
+    const flat = Math.hypot(_sight.x, _sight.z) || 1;
+    out.set((-_sight.x / flat) * EYE_FAR, (-_sight.z / flat) * EYE_FAR);
+    return;
+  }
+  _sight.setFromMatrixPosition(camera.matrixWorld);
+  out.set(_sight.x, _sight.z).add(focusMoved);
 }
 
 /** whether the view is from above, and a harness's hold on it (null: the game's) */
@@ -520,6 +548,7 @@ export function buildMeadow(mask: MeadowMask, maskTexture: THREE.Texture, update
       uS: { value: S },
       uTiles: { value: Array.from({ length: TILES * TILES }, () => new THREE.Vector2()) },
       uFocus: { value: new THREE.Vector2() },
+      uEye: { value: new THREE.Vector2() },
       // (handed over from the ring inside; the first's inner edge never reached)
       uBand: { value: new THREE.Vector4() },
       uByStrand: { value: 1 },
@@ -543,6 +572,7 @@ export function buildMeadow(mask: MeadowMask, maskTexture: THREE.Texture, update
         return;
       }
       const focus = focusOf(camera, u.uFocus.value).add(focusMoved);
+      eyeOf(camera, above, u.uEye.value);
       const ox = Math.floor(focus.x / ring.cell) - (N >> 1), oz = Math.floor(focus.y / ring.cell) - (N >> 1);
       u.uOrigin.value.set(ox, oz);
       _viewProj.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);

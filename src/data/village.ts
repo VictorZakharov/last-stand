@@ -139,6 +139,16 @@ export const COTTAGES: readonly Cottage[] = [
 
 /** the campfire's middle */
 export const CAMPFIRE: Spot = [-9.2, 10.4];
+
+/** A place a game may open at: where he stands, the way he and the camera face (rad about y: 0 faces +z). */
+export interface StartSpot { name: string; at: Spot; facing: number }
+/** Where a game opens, one at random (from play, "lets also choose a more scenic startup location, current one is
+ *  boring, maybe several (3-5), and pick at random"): each with something to look at beyond him. */
+export const START_SPOTS: readonly StartSpot[] = [
+  { name: 'before the fountain, the hall beyond it', at: [-0.6, 7.2], facing: Math.PI },
+  { name: 'by the campfire, the cottages over it', at: [CAMPFIRE[0] + 1.4, CAMPFIRE[1] - 3.4], facing: 0 },
+  { name: 'at the training yard, its dummies before him', at: yardToWorld(YARD.gateAt, -YARD.halfZ - 1.6), facing: 0 },
+];
 /** the notice board's middle, and the way it faces (rad, about y: 0 faces +z): beside the Thornwood's road, facing it */
 export const NOTICE = { x: -8.6, z: -1.6, facing: 0.25 };
 /** how far either side of the door's middle the chest and the lectern stand, and their z: each in the corner of the

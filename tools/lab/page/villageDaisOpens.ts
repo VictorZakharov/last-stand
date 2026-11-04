@@ -8,6 +8,7 @@ import * as THREE from 'three';
 import type { Lab } from './lab';
 import { G } from '../../../src/state';
 import { hallOpen } from '../../../src/game/hall';
+import { closeHeroSelect, heroSelectOpen } from '../../../src/ui/heroSelect';
 import { isWarm } from '../../../src/game/warm';
 import { objectNear, villageObject } from '../../../src/game/village';
 import { pooledLights } from '../../../src/fx/lights';
@@ -61,6 +62,9 @@ export async function daisOpensCompileNothing(lab: Lab, canary: boolean): Promis
     throw new Error(`lab: village: E at the dais never opened the hall (near ${nearNow}, mode ${G.mode})`);
   }
   const compiled = (G.renderer.info.programs?.length ?? 0) - before;
+  // (left open, the screen's menu held V from every check after this one)
+  if (heroSelectOpen()) closeHeroSelect();
+  await lab.until(() => !hallOpen() && !G.menuOpen, 600, 'the hall never closed after the dais opened it');
   const line = `the hall opened by E at its dais: ${compiled} programs compiled, at most ${most} point lights casting `
     + `(its programs are made for ${CASTING})`;
   const wrong = compiled > 0 || most > CASTING;

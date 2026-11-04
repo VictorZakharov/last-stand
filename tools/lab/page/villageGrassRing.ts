@@ -12,7 +12,9 @@ import type { Lab } from './lab';
 import { G } from '../../../src/state';
 import { holdHour } from '../../../src/game/clock';
 import { faceCamera, viewMode } from '../../../src/core/renderer';
-import { focusOf, holdMeadowFromAbove, meadowCombed, meadowHandOver, moveMeadowFocus } from '../../../src/world/meadow';
+import {
+  focusOf, holdEyeFollowsAbove, holdMeadowFromAbove, meadowCombed, meadowHandOver, moveMeadowFocus,
+} from '../../../src/world/meadow';
 import { drawFrame, type Canvas } from './light';
 import { viewBy } from './villageHallCull';
 import type { LightsChecked } from './villageLights';
@@ -265,7 +267,7 @@ const ABOVE_COVER = 0.2;
 export async function grassStillFromAbove(lab: Lab, canary: boolean): Promise<LightsChecked> {
   const kept = viewMode();
   holdHour(HOUR);
-  if (canary) holdMeadowFromAbove(false);
+  holdEyeFollowsAbove(canary);
   let bands: [number, number][];
   try {
     await viewBy(lab, 'top');
@@ -282,7 +284,7 @@ export async function grassStillFromAbove(lab: Lab, canary: boolean): Promise<Li
       G.player.obj.visible = true;
     }
   } finally {
-    holdMeadowFromAbove(null);
+    holdEyeFollowsAbove(false);
     holdHour(null);
     await viewBy(lab, kept);
   }

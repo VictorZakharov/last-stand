@@ -1,7 +1,7 @@
 // The game on three's WebGPURenderer, behind `?renderer=webgpu` (docs/research/webgpu.md): the renderer made and
 // given what the WebGL code around it asks of a WebGLRenderer, and the post chain as a node pipeline.
 import * as THREE from 'three';
-import { SIGHT, SIGHT_LOOK } from './sight';
+import { SIGHT, ROOFS_HALF, SIGHT_LOOK } from './sight';
 import type { ClusterWait } from './meshlets';
 import type { RenderPipeline, WebGPURenderer } from 'three/webgpu';
 import { RUNNING } from './rendererChoice';
@@ -1170,11 +1170,12 @@ function sanitized(colour: any): any {
 
 /** `colour` in the fog where he can't see (core/sight.ts's `SIGHT_GLSL`, on WebGPU's clip space: depth from 0, y from the top). */
 function seenOnly(colour: any, depthNode: any): any {
-  const { atan, dot, length, max, mix, reference, screenUV, select, smoothstep, step, texture, vec2, vec3, vec4 } = tsl as any;
+  const { atan, dot, length, max, min, mix, reference, screenUV, select, smoothstep, step, texture, vec2, vec3, vec4 } = tsl as any;
   const on = reference('value', 'float', SIGHT.uSightOn);
   const from = reference('value', 'vec2', SIGHT.uSightFrom);
   const inverse = reference('value', 'mat4', SIGHT.uSightInverse);
   const sealed = reference('value', 'vec4', SIGHT.uSightSealed);
+  const shutBy = reference('value', 'float', SIGHT.uSightShut);
   const clip = vec4(screenUV.x.mul(2).sub(1), screenUV.y.mul(2).oneMinus(), depthNode.r, 1);
   const world = inverse.mul(clip);
   const place = world.xyz.div(world.w);
@@ -1183,17 +1184,29 @@ function seenOnly(colour: any, depthNode: any): any {
   // (atan(0, 0) is undefined, and NaN smears over the frame in the bloom)
   const toSafe = select(away.lessThan(0.3), vec2(1, 0), to);
   const across = atan(toSafe.y, toSafe.x).div(Math.PI * 2).add(0.5);
-  const reach = texture(SIGHT.tSight.value, vec2(across, 0.5)).r;
-  const far = reach.add(SIGHT_LOOK.wall);
-  const open = smoothstep(far, far.add(SIGHT_LOOK.soft), away).oneMinus();
-  const shut = step(sealed.x, place.x).mul(step(place.x, sealed.z)).mul(step(sealed.y, place.z)).mul(step(place.z, sealed.w));
+  const aside = min(away.max(0.01).reciprocal().mul(SIGHT_LOOK.edge), SIGHT_LOOK.edgeAngle).div(Math.PI * 2);
+  const seenAlong = (ray: any): any => {
+    const band = texture(SIGHT.tSight.value, vec2(ray, 0.5));
+    const nearer = smoothstep(band.r.add(SIGHT_LOOK.wallFrom), band.r.add(SIGHT_LOOK.wall), away).oneMinus();
+    const further = smoothstep(band.g.add(SIGHT_LOOK.wallFrom), band.g.add(SIGHT_LOOK.wall), away).oneMinus();
+    return mix(nearer, further, band.b);
+  };
+  let open = seenAlong(across);
+  for (const tap of [-1, -0.75, -0.5, -0.25, 0.25, 0.5, 0.75, 1]) open = open.add(seenAlong(across.add(aside.mul(tap))));
+  open = open.div(9);
+  const inIt = step(sealed.x, place.x).mul(step(place.x, sealed.z)).mul(step(sealed.y, place.z)).mul(step(place.z, sealed.w));
+  const shut = inIt.mul(shutBy);
   const over = mix(SIGHT_LOOK.over, SIGHT_LOOK.overSealed, shut);
-  const above = smoothstep(over, over.add(SIGHT_LOOK.overSoft), place.y);
+  const belowRoofs = smoothstep(SIGHT_LOOK.roofs, SIGHT_LOOK.roofs + SIGHT_LOOK.overSoft, place.y).oneMinus();
+  const roof = texture(SIGHT.tSightRoofs.value, place.xz.div(ROOFS_HALF * 2).add(0.5)).r;
+  const above = smoothstep(over, over.add(SIGHT_LOOK.overSoft), place.y).mul(max(belowRoofs.mul(roof), inIt));
   const near = away.lessThan(0.3).or(depthNode.r.greaterThanEqual(0.99999));
   const unseen = select(near, 0, max(open, above).oneMinus().mul(on));
   const light = dot(colour.rgb, vec3(0.2126, 0.7152, 0.0722));
   const pressed = light.div(light.add(SIGHT_LOOK.knee)).mul(SIGHT_LOOK.range);
-  const kept = mix(pressed.add(SIGHT_LOOK.floor), pressed.mul(SIGHT_LOOK.sealed), shut);
+  const keptOpen = pressed.add(SIGHT_LOOK.floor);
+  const keptShut = pressed.mul(SIGHT_LOOK.sealed).add(SIGHT_LOOK.floor * SIGHT_LOOK.sealedFloor);
+  const kept = mix(keptOpen, keptShut, shut);
   const fogged = mix(colour.rgb.mul(kept).div(max(light, 0.001)), vec3(...SIGHT_LOOK.tint).mul(kept), SIGHT_LOOK.grey);
   return vec4(mix(colour.rgb, fogged, unseen), colour.a);
 }
