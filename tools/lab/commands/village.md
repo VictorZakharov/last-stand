@@ -148,3 +148,14 @@ a sheet there.
 
 `heroPickedNear` (`page/villageHeroNear.ts`, from play: "in top down, the hero selection is not based on proximity"):
 top-down, stood before each other class's plinth, that hero is the one the dais opens on. `--canary` asks for the other.
+
+`roofsFromAbove` (`page/villageRoofsSeen.ts`, from play: "it needs to match the previous screenshot, logically", "we
+should make roof semi-transparent"): beside the hall with the camera turned each way, its roof gone and walls thinned
+where it meets a line to him, a ghost where it doesn't; behind a cottage, the frame opened against his own size.
+`--canary` puts the roof back as it's read.
+
+`grassStillFromAbove` (`page/villageGrassRing.ts`, from play: "in top down, grass is visibly redrawing"): the blades alone
+from above, again with the rings' middle moved a stride: no band's light changing past 3%. `--canary` draws the rings.
+
+`campfireBurns` (`page/villageFire.ts`, from play: "there is no light from fire"): what its own light adds to the red of what it lights by midnight, against the light out, and where the renderer's matrix has it; the campfire by night and day, over the shoulder and from above, pictured, and
+what its flames draw of each frame. `--canary` hides them.

@@ -97,10 +97,10 @@ function placesInOnePlane(): string[] {
   return places;
 }
 
-/** No surface lies in the plane of the hall's floor (from play, "this floor is now flickering": run on to the door, it
- *  lay in the plane of the terrace's paving under it, each with stones of its own; moving the camera a hair showed
- *  nothing, as it takes a turn of the view to flip them, so this reads the surfaces themselves). `canary` plants a sheet
- *  in that plane. */
+/** No surface lies in the plane of the hall's floor (from play, "this floor is now flickering": run on to the door,
+ *  it lay in the plane of the terrace's paving under it, each with stones of its own; moving the camera a hair
+ *  showed nothing, as it takes a turn of the view to flip them, so this reads the surfaces themselves). `canary`
+ *  plants a sheet in that plane. */
 export async function hallFloorSteady(lab: Lab, canary: boolean): Promise<LightsChecked> {
   await viewBy(lab, viewMode());
   const sheet = canary ? coplanarSheet() : null;
@@ -137,16 +137,18 @@ function sillsInOnePlane(): string[] {
         const hits = new THREE.Raycaster(from, down, 0, OVER_SILL * 2).intersectObjects(meshes, false);
         if (!hits.length) throw new Error(`lab: village: no sill under ${from.x.toFixed(1)}, ${from.z.toFixed(1)}`);
         const next = hits[1];
-        if (next && hits[0].distance + SAME_PLANE > next.distance) places.push(`${from.x.toFixed(1)},${from.z.toFixed(1)}`);
+        if (next && hits[0].distance + SAME_PLANE > next.distance) {
+          places.push(`${from.x.toFixed(1)},${from.z.toFixed(1)}`);
+        }
       }
     }
   }
   return places;
 }
 
-/** No surface lies in the plane of a window's sill (from play, seen from above in the hall: "bottom / sill of windows are
- *  flickering, probably z fighting": the sill's top and the wall's course under it were at one height). `canary` plants
- *  a sheet in the first sill's plane. */
+/** No surface lies in the plane of a window's sill (from play, seen from above in the hall: "bottom / sill of
+ *  windows are flickering, probably z fighting": the sill's top and the wall's course under it were at one height).
+ *  `canary` plants a sheet in the first sill's plane. */
 export async function hallSillsSteady(lab: Lab, canary: boolean): Promise<LightsChecked> {
   await viewBy(lab, viewMode());
   const [sill] = hallSills();

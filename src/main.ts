@@ -67,6 +67,7 @@ import { prepareWind } from './ui/logoWind';
 import { preloadTextures } from './core/textures';
 import { preloadHands } from './entities/models/hands';
 import { preloadStump } from './world/stump';
+import { preloadFlames } from './world/fire';
 import { initSync } from './net/sync';
 import { initSession, joinRoom, invitedRoom, sendLook, sendLobby, sendStart, sendControl, syncAway, updateSession, playSession, partnerInRun } from './net/session';
 import { isCoop, isGuest, isHost, simulates } from './net/role';
@@ -88,6 +89,7 @@ async function boot() {
   const textures = preloadTextures(CLASSES[savedClass()].model);
   const hands = preloadHands();
   preloadStump();
+  preloadFlames();
   prepareWind();
   await loadingStep('Forging the arena', 0.08);
   initUIScale();

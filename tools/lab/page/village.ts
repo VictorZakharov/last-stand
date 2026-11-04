@@ -31,6 +31,7 @@ import { portalAtNight } from './villagePortalNight';
 import { heroPickedNear } from './villageHeroNear';
 import { roofsFromAbove } from './villageRoofsSeen';
 import { grassStillFromAbove } from './villageGrassRing';
+import { campfireBurns } from './villageFire';
 import { holdHour } from '../../../src/game/clock';
 import { villageMapOpen } from '../../../src/ui/villageMap';
 import { closeHeroSelect, heroSelectOpen } from '../../../src/ui/heroSelect';
@@ -165,6 +166,7 @@ export async function village(lab: Lab, options: VillageOptions): Promise<Report
     heroPickedNear: () => heroPickedNear(lab, options.canary),
     roofsFromAbove: () => roofsFromAbove(lab, options.canary),
     grassStillFromAbove: () => grassStillFromAbove(lab, options.canary),
+    campfireBurns: () => campfireBurns(lab, options.canary),
     minimapOut: () => minimapOut(lab, (spot) => stand(lab, spot), yardToWorld(0, 0), options.canary),
     hoursCompileNothing: () => hoursCompileNothing(lab, options.canary),
   };

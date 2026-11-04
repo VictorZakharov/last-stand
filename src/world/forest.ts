@@ -48,6 +48,10 @@ const FLOOR_RELIEF = { depth: 0.045, perMetre: FLOOR_REPEAT / 220, fade: 70 };
 
 /** grass sways this far at its tips (m), slowly (rad/s), each tuft a little after the one upwind of it */
 const SWAY = 0.05, SWAY_RATE = 1.3;
+/** a bonfire's light (a point light's, in candela): enough for a warm pool round it, on a village's ground by night too */
+const BONFIRE_LIGHT = 85;
+const BONFIRE_LIGHT_UP = 1.7;
+const BONFIRE_COLOUR = 0xff9a48;
 /** the bonfires' places, by the wall on the diagonal */
 const BONFIRES = [Math.PI / 4, (5 * Math.PI) / 4].map((a) => [Math.cos(a) * (WALL_R - 2.4), Math.sin(a) * (WALL_R - 2.4)]);
 /** a fire clears the ground round it (m): nothing lies within its ring of stones, and a fern's roots stand clear of
@@ -1091,12 +1095,15 @@ export function buildBonfire(scene: THREE.Object3D, x: number, z: number, stone:
     mesh.castShadow = true;
     scene.add(mesh);
   }
-  const light = new THREE.PointLight(0xff7a30, 12, 13, 2);
-  light.position.set(x, 1.3, z);
+  // (from play, "there is no light from fire": at 18, under the village's lamps, it added 14 levels of red to what it lit)
+  // (high over the logs, so what's round it is lit evenly: lower, the ring's stones burned peach. Not soft by `LAMP_SOFT`,
+  // as the lamps are: WebGPU's lights take a decay as an exponent, and at 6 it burned everything within a metre white)
+  const light = new THREE.PointLight(BONFIRE_COLOUR, BONFIRE_LIGHT, 16, 2);
+  light.position.set(x, BONFIRE_LIGHT_UP, z);
   if (casts) staticShadow(light);
   scene.add(light);
   buildFire(scene, {
-    at: new THREE.Vector3(x, 0.03, z), radius: 0.42, height: 1.2, dish: 0, light, intensity: 12,
+    at: new THREE.Vector3(x, 0.03, z), radius: 0.5, height: 1.5, dish: 0, light, intensity: BONFIRE_LIGHT,
     smoke: 6, smokeColour: 0x8a8580, embers: 10,
   }, updaters);
 }

@@ -162,6 +162,9 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   times) and the readings were noise; check `nvidia-smi` first. On the owner's idle 4070 Ti the lookups cost under
   a millisecond on both 0.185 and 0.187 (0.3 to 0.9 ms against frames of 3.9 to 6.7), while one scene's whole frame
   read 3.8 to 11.8 ms from run to run: run it twice, and believe only what both runs agree on.
+- `npm run fire-bake -- [key=value ...]` (`node/fireBakeSheet.mjs`, no browser): the fire's simulation (`src/world/fireBake.ts`) run alone, six of its
+  frames drawn from the side as the ray-march draws them, in seconds, with how long it took and how high the flames
+  stand: for trying `FireTuning`'s and `FLAME_LOOK`'s values; its picture isn't the game's light.
 - `fire`: each biome's fire as the player meets it (`page/fire.ts`, `page/fireMeasure.ts`, tested in
   `test/fireMeasure.test.mjs`; `--biomes crypt,forest`). Found by its light, the warm one of the biome's ten, the hero
   stood 4.5 m before it towards the middle. For `--seconds` (2), 30 times a second, it's drawn from beside it with its

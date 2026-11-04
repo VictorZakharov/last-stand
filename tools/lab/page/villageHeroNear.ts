@@ -48,7 +48,8 @@ export async function heroPickedNear(lab: Lab, canary: boolean): Promise<LightsC
         const picked = heroLookedAt();
         said.push(`${turn.toFixed(1)} by ${CLASS_IDS[plinth]}: ${CLASS_IDS[picked]}`);
         if (picked !== plinth) {
-          problems.push(`top-down, turned ${turn.toFixed(1)}, by ${CLASS_IDS[plinth]}'s plinth ${CLASS_IDS[picked]} was picked`);
+          const by = `by ${CLASS_IDS[plinth]}'s plinth`;
+          problems.push(`top-down, turned ${turn.toFixed(1)}, ${by} ${CLASS_IDS[picked]} was picked`);
         }
         if (picked !== plinths[(k + 1) % plinths.length]) wrongFound = true;
       }

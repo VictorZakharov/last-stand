@@ -123,6 +123,7 @@ A bow hunter in a green trailcoat with a quiver, leather bracers and boots. The 
 
 - [Three.js](https://threejs.org/) 0.187 with an HDR post-processing chain (bloom, tone mapping, grading)
 - The Thornwood's trees are grown by [ez-tree](https://github.com/dgreenheck/ez-tree) (MIT), its geometry with our own procedural bark and leaves
+- The fires' flames are a fluid simulated once and played back, after the physics of [Fire Pro](https://github.com/dgreenheck/threejs-fire-pro) (MIT)
 - TypeScript (strict) + [Vite](https://vite.dev/)
 - Procedural textures (cobblestone, slabs, runes), procedural humanoid rigs and animation, CPU particles, pooled dynamic lights
 - WebAudio-synthesized sound effects, and music for each biome: one track in its lobby and between waves, one through each wave's fight (looped by `tools/music`)

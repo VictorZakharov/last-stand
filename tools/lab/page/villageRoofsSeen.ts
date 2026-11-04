@@ -1,9 +1,9 @@
-// `lab village --only roofsFromAbove`: what's built as the top-down view shows it. From play: the hall's cut away with him
-// inside "is good", "but this is not good, it needs to match the previous screenshot, logically" (stood behind the hall,
-// a hole his own size in its roof), and "we should make roof semi-transparent in this case too, even if hero is not
-// directly under it". Stood beside the hall with the camera turned each way: wherever the roof meets the line to him it's
-// gone and its walls thinned; wherever it doesn't, every roof is a ghost alike. Stood behind a cottage: the frame opens
-// wider than his own size. `canary` puts the hall's roof back whole as it's read, which must be found.
+// `lab village --only roofsFromAbove`: what's built as the top-down view shows it. From play: the hall's cut away with
+// him inside "is good", "but this is not good, it needs to match the previous screenshot, logically" (stood behind the
+// hall, a hole his own size in its roof), and "we should make roof semi-transparent in this case too, even if hero is
+// not directly under it". Stood beside the hall with the camera turned each way: wherever the roof meets the line to
+// him it's gone and its walls thinned; wherever it doesn't, every roof is a ghost alike. Stood behind a cottage: the
+// frame opens wider than his own size. `canary` puts the hall's roof back whole as it's read, which must be found.
 import * as THREE from 'three';
 import type { Lab } from './lab';
 import { G } from '../../../src/state';
@@ -17,7 +17,8 @@ import { changedShare, viewBy } from './villageHallCull';
 import { drawFrame } from './light';
 import type { LightsChecked } from './villageLights';
 
-/** how far outside the hall's wall he stands (m), the frames all is given to settle, and the camera's turns (radians) */
+/** how far outside the hall's wall he stands (m), the frames all is given to settle, and the camera's turns
+ *  (radians) */
 const OUT_OF_WALL = 1.2;
 const SETTLE = 90;
 const TURNS = [0, Math.PI / 2, Math.PI, -Math.PI / 2];
@@ -60,11 +61,14 @@ function readHall(turn: number, canary: boolean): { line: string; hidden: boolea
   const problems: string[] = [];
   const at = turn.toFixed(1);
   if (hidden && roof < 1 - FADE_NEAR) problems.push(`turned ${at}, the roof before him only ${roof.toFixed(2)} gone`);
-  if (hidden && front < WALLS_THINNED) problems.push(`turned ${at}, the walls before him only ${front.toFixed(2)} thin`);
+  if (hidden && front < WALLS_THINNED) {
+    problems.push(`turned ${at}, the walls before him only ${front.toFixed(2)} thin`);
+  }
   if (!hidden && Math.abs(roof - ROOF_GHOST_ABOVE) > FADE_NEAR) {
     problems.push(`turned ${at}, hiding nothing, the roof at ${roof.toFixed(2)}, not its ghost`);
   }
-  return { line: `${at}: ${hidden ? 'before him' : 'clear'}, roof ${roof.toFixed(2)}, walls ${front.toFixed(2)}`, hidden, problems };
+  const line = `${at}: ${hidden ? 'before him' : 'clear'}, roof ${roof.toFixed(2)}, walls ${front.toFixed(2)}`;
+  return { line, hidden, problems };
 }
 
 /** The share of the frame that what's built's hole opens, as it stands now. */
@@ -118,7 +122,8 @@ export async function roofsFromAbove(lab: Lab, canary: boolean): Promise<LightsC
   const { wide, small } = await behindCottage(lab);
   const planted = canary && problems.length > 0;
   if (!canary && wide < small * OPENS_AT_LEAST) {
-    problems.push(`behind a cottage it opened ${(wide * 100).toFixed(1)}% of the frame, at his own size ${(small * 100).toFixed(1)}%`);
+    const opened = `${(wide * 100).toFixed(1)}% of the frame, at his own size ${(small * 100).toFixed(1)}%`;
+    problems.push(`behind a cottage it opened ${opened}`);
   }
   await viewBy(lab, kept);
   const lines = [
