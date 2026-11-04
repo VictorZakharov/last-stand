@@ -370,14 +370,18 @@ export function loosen(h: Hand, by: number, index = by): void {
   });
 }
 
-export function fistOn(h: Hand, handle: THREE.Object3D, r: number): { off: number; along: number; curl: number } {
+export function fistOn(h: Hand, handle: THREE.Object3D, r: number): { off: number; along: number; curl: number; across: number } {
   h.vis.updateWorldMatrix(true, false);
   const from = h.vis.localToWorld(_fa.set(0, GRIP_Y, -(r / h.vis.scale.x + GRIP_GAP))).sub(handle.getWorldPosition(_fc));
   const axis = _fb.set(0, 1, 0).transformDirection(handle.matrixWorld);
   let bend = 0, joints = 0;
   for (const f of h.f) for (const j of f.j) { bend += j.rotation.x; joints++; }
   const along = from.dot(axis);
-  return { off: from.addScaledVector(axis, -along).length(), along, curl: bend / joints };
+  // (the handle's way against the way across the palm: a fist closed on another way than its handle has it between
+  // its fingers, however curled they are)
+  const palm = _fc.set(1, 0, 0).transformDirection(h.vis.matrixWorld);
+  const across = Math.acos(Math.min(1, Math.abs(palm.dot(axis))));
+  return { off: from.addScaledVector(axis, -along).length(), along, curl: bend / joints, across };
 }
 
 /** where the handle's axis runs through that fist, from its wrist (unscaled: the hand joint's own units) */

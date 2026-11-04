@@ -20,6 +20,7 @@ import { SIT } from '../../../src/entities/sitting';
 import { outlinedLook } from '../../../src/ui/overlay/outline';
 import type { BiomeId } from '../../../src/data/biomes';
 import type { Fixture, Lab, Pictured, Report, ViewName } from './lab';
+import type { Fist } from '../../../src/types';
 import { ARM_LIMITS, bodyBreaches, FIST_OPEN, grippingRanges, grippingSides } from './range';
 import { ArmsPinned, describeStrain, pinnedCanary } from './armStrain';
 import { cm as cmOf, follow, JERK_FROM, skirtsOf, type Followed } from './coat';
@@ -117,6 +118,13 @@ const PICTURE_DEEPER = 0.01;
 /** a fist let go of (a two-hander regripped as it's lowered) is pictured close on the hand as it opens and every so
  *  many frames after while it's open (the frames), at most so many times a sit, from so far (m) */
 const OPEN_SHOTS = { every: 30, most: 4, distance: 1.2 };
+/** how far from a fist its close picture is taken (m) */
+const FIST_CLOSE = 0.7;
+/** how far off the way across its palm a closed fist may have its handle (deg): a slant across the palm is at most 25
+ *  (`SLANT` in `models/hands.ts`), and past this the fingers no longer go round it */
+const ASKEW_MOST = 35;
+/** the canary's turn of a drawn hand about its length (rad) */
+const ASKEW_CANARY = Math.PI / 2;
 
 /** by a fire, his body's way off the way to it at most (degrees): from review, he sat 30 to 45 off it */
 const FACING_FIRE = 15;
@@ -195,7 +203,7 @@ interface Out {
   /** the canary's reads of its own pieces: how far what it pushed went with no hand on it (m), and whether what it
    *  turned in his hand read as held otherwise (each on its own, so a real fault can't pass for it) */
   /** what each canary read; `gripped`: whether a palm gripped anything to turn, sat */
-  canary?: { pushed: number; turned: boolean; twisted: number; gripped: boolean; pinned: boolean };
+  canary?: { pushed: number; turned: boolean; twisted: number; gripped: boolean; pinned: boolean; askew: boolean };
 }
 
 /** What's followed on a seat from its set-up until he's up again: what he carries, his legs through his skirts (the
@@ -213,6 +221,8 @@ interface Watch {
   fingers: FingersUnder;
   /** a fist let go of: how many times it's been pictured, and the frames since it last was */
   open: { shots: number; since: number };
+  /** the frames a closed fist had its handle off the way across its palm, the most, and where */
+  askew: { frames: number; most: number; at: string };
   /** what he held, as he held it as he began to sit (before he walked to the seat, until then) */
   before: ReturnType<typeof heldNow>;
   /** whether a piece is traced (`--trace`) */
@@ -247,9 +257,10 @@ export async function sit(lab: Lab, options: SitOptions): Promise<Report> {
 
 /** The canary on one seat: his body raised off it as he sits must be caught as sitting on air. */
 async function canaryOn(lab: Lab, c: SeatCase, fixture: Fixture, out: Out): Promise<Report> {
-  out.canary = { pushed: 0, turned: false, twisted: 0, gripped: false, pinned: false };
+  out.canary = { pushed: 0, turned: false, twisted: 0, gripped: false, pinned: false, askew: false };
   await trySeat(lab, { ...c, asks: [{ what: 'step', held: false }] }, fixture, { canary: true }, out);
   out.canary.pinned = pinnedCanary(bodyBreaches(lab.joints).angles, ARM_LIMITS);
+  out.canary.askew = askewCanary(lab);
   const problems: string[] = [];
   const pushedTo = CANARY_PUSH.by * (CANARY_PUSH.frames[1] - CANARY_PUSH.frames[0]) / 2;
   const canaries = [
@@ -263,6 +274,7 @@ async function canaryOn(lab: Lab, c: SeatCase, fixture: Fixture, out: Out): Prom
     },
     { what: 'what he holds turned in his hand as he gets up', caught: out.canary.turned },
     { what: 'his right arm held at its stops', caught: out.canary.pinned },
+    { what: 'a closed fist turned off its handle', caught: out.canary.askew },
   ];
   // (sat with a two-hander, his palm rests on its pommel and grips nothing: nothing is in a hand to turn in it)
   if (out.canary.gripped) {
@@ -314,6 +326,7 @@ async function trySeat(lab: Lab, c: SeatCase, fixture: Fixture, options: SitOpti
     carried: new Carried(lab, options.trace), film: new SitFilm(c.name, [c.views[0], 'third']), through: null,
     seat: [new WeaponSeat(seat, (each) => each.model.tip?.parent), new WeaponSeat(seat, bowApart)],
     shown: 0, pinned: new ArmsPinned(c.name, ARM_LIMITS), fingers: new FingersUnder(), open: { shots: 0, since: OPEN_SHOTS.every },
+    askew: { frames: 0, most: 0, at: '' },
     before: heldNow(lab), canary: !!options.canary, traced: !!options.trace, moments: [],
   };
   const sat = await untilSat(lab, label, c.views.slice(0, 2), out, watch);
@@ -427,6 +440,7 @@ function watchFrame(lab: Lab, name: string, frame: string, watch: Watch, skirts:
   for (const piece of watch.seat) piece.observe(lab, frame);
   watch.fingers.observe(lab, frame);
   pictureOpenFist(lab, name, frame, watch);
+  readAskew(lab, frame, watch);
   const through = legsThrough(lab.joints, skirts);
   if (!through || through.depth <= THROUGH_FROM) return;
   if (!watch.through || through.depth > watch.through.depth) watch.through = { ...through, at: frame };
@@ -455,9 +469,54 @@ function pictureOpenFist(lab: Lab, name: string, frame: string, watch: Watch): v
   watch.moments.push(withHidden(hides, () => lab.picture(label, DEEPEST_VIEWS, [], options)));
 }
 
+/** The fist's drawn hand turned about its length, as a hand closed on a stale way is: the read must see it. */
+function askewCanary(lab: Lab): boolean {
+  const hands = [lab.joints.handL, lab.joints.handR]
+    .map((joint) => joint.children.find((child) => child.userData.drawnHand))
+    .filter((hand) => hand !== undefined);
+  const were = hands.map((hand) => hand.quaternion.clone());
+  for (const hand of hands) hand.rotateY(ASKEW_CANARY);
+  const seen = askewNow(lab) > ASKEW_MOST;
+  hands.forEach((hand, i) => hand.quaternion.copy(were[i]));
+  return seen;
+}
+
+/** A fist as he sits, close on the hand: at the sheet's other distances a closed hand and an open one look alike. */
+function fistClose(lab: Lab, name: string, fist: Fist): Pictured {
+  const hand = fist.hand === 'left' ? lab.joints.handL : lab.joints.handR;
+  const at = hand.getWorldPosition(new THREE.Vector3());
+  const hides = (part: string) => FIRE_PARTS.includes(part) || PLANTS.test(part) || AROUND.test(part);
+  const options = { at, distance: FIST_CLOSE, look: 'lit' as const };
+  const label = `${name}: sat, his ${fist.hand} fist close`;
+  return withHidden(hides, () => lab.picture(label, DEEPEST_VIEWS, [], options));
+}
+
+/** How far off the way across its palm a closed fist has its handle, this frame (deg). */
+function askewNow(lab: Lab): number {
+  const closed = (lab.model.fists ?? []).filter((fist) => fist.curl >= FIST_OPEN);
+  return Math.max(0, ...closed.map((fist) => THREE.MathUtils.radToDeg(fist.across ?? 0)));
+}
+
+/** A closed fist with its handle off the way across its palm, the fingers wrapped round nothing and the handle lying
+ *  between them: from review ("the fingers run along the handle"), which every curl and grip read here had passed. */
+function readAskew(lab: Lab, frame: string, watch: Watch): void {
+  const askew = askewNow(lab);
+  if (askew <= ASKEW_MOST) return;
+  watch.askew.frames++;
+  if (askew > watch.askew.most) {
+    watch.askew.most = askew;
+    watch.askew.at = frame;
+  }
+}
+
 /** What's followed judged once he's up again: what he carries moved with no hand on it or jumping, his legs
  *  through his skirts, and the film. */
 function judgeWatch(name: string, watch: Watch, out: Out): void {
+  const { askew } = watch;
+  if (askew.frames > 0) {
+    const most = askew.most.toFixed(0);
+    out.problems.push(`sit: by the ${name}, a closed fist off its handle by ${most}° on ${askew.frames} frames (${askew.at})`);
+  }
   for (const piece of watch.seat) if (piece.depth > 0) out.problems.push(`sit: by the ${name}, ${piece.describe()}`);
   for (const found of watch.carried.findings()) {
     if (found.loose > LOOSE_MOST) {
@@ -751,6 +810,7 @@ async function readSat(lab: Lab, options: SitOptions, name: string, out: Out, wa
   if (watch.traced) for (const said of into.nearest()) out.text.push(`    sat on the ${name}, ${said}`);
   if (into.moment) out.moments.push(into.moment);
   out.moments.push(closeUp(lab, `${name}: sat, close`, DEEPEST_VIEWS, false));
+  for (const fist of lab.model.fists ?? []) out.moments.push(fistClose(lab, name, fist));
   skirts.forEach((skirt, i) => {
     const { most, at } = spans[i].widest();
     out.text.push(`    his ${skirt.name}: a point wandered ${cmOf(most)} cm at most (point ${at})`);

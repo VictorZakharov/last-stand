@@ -74,7 +74,10 @@ pommel, as a greatsword is pushed upright under it, read 34° turned in the hand
 hand's fist (`Model.fists`), not open: its fingers curled 0.5 rad or more, as `eyes` has it. A blade may swing round
 in a hand let go of, as a swordsman regrips one; each time a fist opens, and every 30 frames while it's open (four
 times a sit at most), it's pictured close on the hand (`his right fist let go of, curled N°`): opened too far, the
-blade swung past a flat palm, held by nothing. The trace (`--trace`) says each frame where each palm is along the
+blade swung past a flat palm, held by nothing. A closed fist's handle may lie at most 35 degrees off the way across
+its palm (`Fist.across`), past a slant, or the fingers go round nothing; and each fist is pictured close once he's sat
+(`his right fist close`), the one distance at which a closed hand can be told from an open one: reviews of the other
+rows read a closed fist as open four times. The trace (`--trace`) says each frame where each palm is along the
 piece, each frame an arm was at its stops, and the hold as he began to sit however little it moved on the walk. And no arm may be held at two or more of its joints' stops at once (`page/armStrain.ts`, as `range` reads
 it; pictured at its most): "if a real warrior would put a sword down like that, he would snap his arm" (by the fire,
 the forearm turned to its end and the wrist bent to its). No finger may go into the floor (`page/fingersUnder.ts`: each
