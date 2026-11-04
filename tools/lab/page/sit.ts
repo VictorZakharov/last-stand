@@ -491,6 +491,29 @@ function fistClose(lab: Lab, name: string, fist: Fist): Pictured {
   return withHidden(hides, () => lab.picture(label, DEEPEST_VIEWS, [], options));
 }
 
+/** The lowest part of what he's stood on the floor, close: from review, no other picture shows a far end meeting it. */
+function farEndClose(lab: Lab, name: string): Pictured | null {
+  lab.model.root.updateMatrixWorld(true);
+  let lowest: THREE.Vector3 | null = null;
+  lab.model.root.traverse((object) => {
+    const mesh = object as THREE.Mesh;
+    if (!mesh.isMesh || !shown(mesh) || !isStood(mesh)) return;
+    _box.setFromObject(mesh, true);
+    if (lowest && _box.min.y >= lowest.y) return;
+    lowest = _box.getCenter(new THREE.Vector3()).setY(_box.min.y);
+  });
+  if (!lowest) return null;
+  const hides = (part: string) => FIRE_PARTS.includes(part) || PLANTS.test(part) || AROUND.test(part);
+  const options = { at: lowest, distance: FIST_CLOSE, look: 'lit' as const };
+  return withHidden(hides, () => lab.picture(`${name}: sat, the far end on the floor`, DEEPEST_VIEWS, [], options));
+}
+
+/** Whether `object` is part of what's marked as stood on the floor (`userData.stoodOn`). */
+function isStood(object: THREE.Object3D): boolean {
+  for (let at: THREE.Object3D | null = object; at; at = at.parent) if (at.userData.stoodOn) return true;
+  return false;
+}
+
 /** How far off the way across its palm a closed fist has its handle, this frame (deg). */
 function askewNow(lab: Lab): number {
   const closed = (lab.model.fists ?? []).filter((fist) => fist.curl >= FIST_OPEN);
@@ -811,6 +834,8 @@ async function readSat(lab: Lab, options: SitOptions, name: string, out: Out, wa
   if (into.moment) out.moments.push(into.moment);
   out.moments.push(closeUp(lab, `${name}: sat, close`, DEEPEST_VIEWS, false));
   for (const fist of lab.model.fists ?? []) out.moments.push(fistClose(lab, name, fist));
+  const farEnd = farEndClose(lab, name);
+  if (farEnd) out.moments.push(farEnd);
   skirts.forEach((skirt, i) => {
     const { most, at } = spans[i].widest();
     out.text.push(`    his ${skirt.name}: a point wandered ${cmOf(most)} cm at most (point ${at})`);
