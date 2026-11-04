@@ -1208,7 +1208,7 @@ function seenOnly(colour: any, depthNode: any): any {
   const keptShut = pressed.mul(SIGHT_LOOK.sealed).add(SIGHT_LOOK.floor * SIGHT_LOOK.sealedFloor);
   const kept = mix(keptOpen, keptShut, shut);
   const fogged = mix(colour.rgb.mul(kept).div(max(light, 0.001)), vec3(...SIGHT_LOOK.tint).mul(kept), SIGHT_LOOK.grey);
-  return vec4(mix(colour.rgb, fogged, unseen), colour.a);
+  return vec4(mix(colour.rgb, fogged, unseen.mul(min(colour.a, 1))), max(colour.a, 1));
 }
 
 /** the light's weights, as the WebGL grade reads an area's and a pixel's */

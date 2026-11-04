@@ -194,7 +194,7 @@ const HIS_PIXEL = 0.04;
 const HIS_FEWEST = 200;
 
 /** Every fire's flames, their light left on: drawn over him, they count as his in a frame with him and without. */
-function theFlames(): THREE.Object3D[] {
+export function theFlames(): THREE.Object3D[] {
   const flames: THREE.Object3D[] = [];
   G.scene.traverse((object) => {
     const uniforms = ((object as THREE.Mesh).material as THREE.ShaderMaterial | undefined)?.uniforms;

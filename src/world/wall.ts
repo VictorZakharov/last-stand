@@ -6,6 +6,7 @@
 // it (an instanced mesh's culling moves its instances), sorted by the slices of the ring they cross. What bounds the
 // floor is read once, with rays out from the middle at a body's heights: the nearest surface along each slice, a
 // line round the ring a body's circle is kept off.
+import { thinsByBlending } from '../core/seeThrough';
 import * as THREE from 'three';
 import { TAU } from '../util';
 import { faceAt, pastWall } from './edge';
@@ -93,7 +94,9 @@ const angleOf = (bin: number): number => ((bin + 0.5) / BINS) * TAU;
 /** Whether a material draws a surface: opaque (cut out only for foliage, its leaf cards), seen from outside. */
 function drawsSurface(material: THREE.Material | THREE.Material[], use: WallUse): boolean {
   const m = Array.isArray(material) ? material[0] : material;
-  if (m.transparent || m.side === THREE.BackSide || m.blending !== THREE.NormalBlending) return false;
+  // (what thins by blending stands as solid as ever: taken for glass, from play, "can walk through buildings too")
+  const thinned = thinsByBlending(m);
+  if (m.side === THREE.BackSide || (!thinned && (m.transparent || m.blending !== THREE.NormalBlending))) return false;
   return use === 'foliage' || m.alphaTest === 0;
 }
 

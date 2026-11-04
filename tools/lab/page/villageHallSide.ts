@@ -11,6 +11,8 @@ import { G } from '../../../src/state';
 import { groundHeight } from '../../../src/world/ground';
 import { drawnInShadowsOnly } from '../../../src/world/culling';
 import { routing } from '../../../src/world/walkPath';
+import { COTTAGES, type Cottage } from '../../../src/data/village';
+import { COTTAGE } from '../../../src/world/villagePlan';
 import { HALL, TERRACE, type Spot } from '../../../src/data/village';
 import type { LightsChecked } from './villageLights';
 
@@ -26,7 +28,7 @@ const CANARY_ON = 0.5;
 const PAST = 6;
 
 /** A walk at the hall: its name, where he sets off, and which way he walks (a unit along x or z). */
-interface HallWalk { name: string; from: Spot; way: Spot }
+interface HallWalk { name: string; from: Spot; way: Spot; offOutline?: (x: number, z: number) => number }
 
 const X = TERRACE.x;
 /** the walks: at each side wall from the terrace beside it, at the front wall between the portico's columns */
@@ -35,7 +37,41 @@ const WALKS: readonly HallWalk[] = [
   { name: 'west side', from: [X - HALL.half - 2.2, -18], way: [1, 0] },
   { name: 'front, east of the door', from: [X + 4.45, HALL.door + 2.6], way: [0, -1] },
   { name: 'front, west of the door', from: [X - 4.45, HALL.door + 2.6], way: [0, -1] },
+  // (its wings past the terrace's back, from the grass below them: from play, "I can also walk from down here up to
+  // the hall, through the wall, and back")
+  { name: 'east wing, from the grass', from: [X + HALL.half + 2.2, -27], way: [-1, 0] },
+  { name: 'west wing, from the grass', from: [X - HALL.half - 2.2, -27], way: [1, 0] },
 ];
+
+/** how far off a cottage's wall each walk at it sets off (m), and off its corners along the wall (m) */
+const OFF_COTTAGE = 2.6;
+
+/** A walk at each of `c`'s four walls, from its middle's line (from play, "and can walk through buildings too"). */
+function walksAtCottage(c: Cottage, index: number): HallWalk[] {
+  const halfW = (COTTAGE.w / 2) * c.size;
+  const halfD = (COTTAGE.d / 2) * c.size;
+  const cos = Math.cos(c.facing);
+  const sin = Math.sin(c.facing);
+  // (as the group's turn about y turns them)
+  const turned = (x: number, z: number): Spot => [c.x + x * cos + z * sin, c.z - x * sin + z * cos];
+  const ways: [string, number, number, number][] = [
+    ['front', 0, 1, halfD],
+    ['back', 0, -1, halfD],
+    ['side', 1, 0, halfW],
+    ['other side', -1, 0, halfW],
+  ];
+  return ways.map(([side, x, z, half]) => {
+    const from = turned(x * (half + OFF_COTTAGE), z * (half + OFF_COTTAGE));
+    const toward = turned(-x, -z);
+    // (off its walls' rectangle, not the first thing drawn ahead: he goes round a lamp post or a fence on the way)
+    const offOutline = (px: number, pz: number): number => {
+      const acrossW = (px - c.x) * cos - (pz - c.z) * sin;
+      const acrossD = (px - c.x) * sin + (pz - c.z) * cos;
+      return Math.max(Math.abs(acrossW) - halfW, Math.abs(acrossD) - halfD);
+    };
+    return { name: `cottage ${index} ${side}`, from, way: [toward[0] - c.x, toward[1] - c.z] as Spot, offOutline };
+  });
+}
 
 /** Whether `object` and everything over it is drawn in the frame (not hidden, not the shadows' alone). */
 function drawn(object: THREE.Object3D): boolean {
@@ -69,7 +105,8 @@ async function walkUp(lab: Lab, walk: HallWalk): Promise<number> {
   G.player.walkTo = new THREE.Vector3(x + wx * (PAST + 3), 0, z + wz * (PAST + 3));
   await lab.step(WALK);
   G.player.walkTo = null;
-  const start = new THREE.Vector3(x, TERRACE.high + KNEE, z);
+  if (walk.offOutline) return walk.offOutline(G.player.pos.x, G.player.pos.z);
+  const start = new THREE.Vector3(x, groundHeight(x, z) + KNEE, z);
   const way = new THREE.Vector3(wx, 0, wz);
   const walked = (G.player.pos.x - x) * wx + (G.player.pos.z - z) * wz;
   return surfaceAhead(start, way) - walked;
@@ -81,7 +118,7 @@ export async function hallWallsHold(lab: Lab, canary: boolean): Promise<LightsCh
   const failed: string[] = [];
   routing.on = false;
   try {
-    for (const walk of WALKS) {
+    for (const walk of [...WALKS, ...COTTAGES.flatMap(walksAtCottage)]) {
       const gap = (await walkUp(lab, walk)) - (canary ? CANARY_ON : 0);
       gaps.push(`${walk.name} ${gap.toFixed(2)}`);
       if (!(gap >= LEAST_OFF)) failed.push(`${walk.name}: his middle ${gap.toFixed(2)} m off the surface ahead`);

@@ -267,7 +267,7 @@ export const SIGHT_GLSL = /* glsl */`
     float further = 1.0 - smoothstep(ray.g + ${SIGHT_LOOK.wallFrom.toFixed(2)}, ray.g + ${SIGHT_LOOK.wall.toFixed(2)}, away);
     return mix(nearer, further, ray.b);
   }
-  vec3 seenColour(vec3 colour, vec2 uv) {
+  vec3 seenColour(vec3 colour, vec2 uv, float under) {
     if (uSightOn <= 0.0) return colour;
     float depth = texture2D(tSightDepth, uv).r;
     if (depth >= 0.99999) return colour;
@@ -297,6 +297,6 @@ export const SIGHT_GLSL = /* glsl */`
     float pressed = ${SIGHT_LOOK.range.toFixed(3)} * light / (light + ${SIGHT_LOOK.knee.toFixed(3)});
     float kept = mix(${SIGHT_LOOK.floor.toFixed(3)} + pressed, ${(SIGHT_LOOK.floor * SIGHT_LOOK.sealedFloor).toFixed(3)} + pressed * ${SIGHT_LOOK.sealed.toFixed(3)}, shut);
     vec3 fogged = mix(colour * kept / max(light, 0.001), tint * kept, ${SIGHT_LOOK.grey.toFixed(2)});
-    return mix(colour, fogged, (1.0 - max(open, above)) * uSightOn);
+    return mix(colour, fogged, (1.0 - max(open, above)) * uSightOn * under);
   }
 `;

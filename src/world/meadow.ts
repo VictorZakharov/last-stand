@@ -441,7 +441,8 @@ function eyeOf(camera: THREE.Camera, above: boolean, out: THREE.Vector2): void {
     return;
   }
   _sight.setFromMatrixPosition(camera.matrixWorld);
-  out.set(_sight.x, _sight.z).add(focusMoved);
+  out.set(_sight.x, _sight.z);
+  if (eyeFollowsAbove) out.add(focusMoved);
 }
 
 /** whether the view is from above, and a harness's hold on it (null: the game's) */

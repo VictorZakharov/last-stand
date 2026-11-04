@@ -7,6 +7,7 @@
 // light a hand's breadth off the glass, the lanterns burned white and the bloom round them hid the lantern whole
 // (from play: "lights too bright, can't see geometry even", "we should always check all lights for blinding").
 // `canary` hangs a glaring orb in the first light, which must be caught.
+import { theFlames } from './villageFire';
 import * as THREE from 'three';
 import { screenArea, type Lab, type Pictured } from './lab';
 import { G } from '../../../src/state';
@@ -37,8 +38,8 @@ const BLOWN = 0.97;
 const OWN_MOST = 0.12;
 const RING_MOST = 0.02;
 /** the canary's orb: its radius (m) and its colour, far past white */
-const ORB_RADIUS = 0.16;
-const ORB_GLARE = 12;
+const ORB_RADIUS = 0.45;
+const ORB_GLARE = 64;
 /** a cottage's window as its builder places it, in the cottage's own frame (`buildCottage`): out from the middle
  *  along its face, its height, and how far out the face stands past half its depth */
 const WINDOW = { across: 1.2, high: 1.7, out: 0.05 };
@@ -158,7 +159,7 @@ function lightCases(): LightCase[] {
 
 /** The canary's orb, far past white, hung at `at`. */
 function plantOrb(at: THREE.Vector3): () => void {
-  const glare = new THREE.Color(ORB_GLARE, ORB_GLARE * 0.9, ORB_GLARE * 0.7);
+  const glare = new THREE.Color(ORB_GLARE, ORB_GLARE, ORB_GLARE);
   const material = new THREE.MeshBasicMaterial({ color: glare });
   const orb = new THREE.Mesh(new THREE.SphereGeometry(ORB_RADIUS, 12, 8), material);
   orb.position.copy(at);
@@ -172,7 +173,12 @@ function plantOrb(at: THREE.Vector3): () => void {
 
 /** One close view's reading of a light: its line, and whether it blinds. */
 function readView(view: string, light: LightCase, lab: Lab): { line: string; blinds: boolean } {
+  // (a fire's flames stand taller than its light, and in the ring round it they read as what it burns: `lab fire` reads
+  // them, and they're as bright as a flame is)
+  const flames = theFlames();
+  for (const mesh of flames) mesh.visible = false;
   const canvas = drawFrame(lab);
+  for (const mesh of flames) mesh.visible = true;
   const own = boxOn(canvas, light.at, light.span);
   if (!own || own.half < 3) return { line: `lights: ${light.name}, ${view}: not in view`, blinds: false };
   const ring = { ...own, half: own.half * RING_OUT };

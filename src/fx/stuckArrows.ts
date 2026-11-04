@@ -4,6 +4,7 @@
 // tumbling to lie on the floor. Two instanced meshes hold them: the whole arrow within NEAR of the camera, the plain
 // one (`arrowLite`, 18 triangles to its 301) beyond. Only the moving ones (riding, falling, fading) are written each
 // frame. Purely visual: every game keeps its own, from the arrows it sees.
+import { thinsByBlending } from '../core/seeThrough';
 import * as THREE from 'three';
 import { G } from '../state';
 import { addEffect } from './effects';
@@ -275,7 +276,7 @@ function solid(o: THREE.Object3D): boolean {
   const m = o as THREE.Mesh;
   if (!m.isMesh || o.userData.noStick) return false;
   const mt = (Array.isArray(m.material) ? m.material[0] : m.material) as THREE.Material;
-  return mt.blending === THREE.NormalBlending && !(mt.transparent && mt.opacity < 0.9) && shown(o);
+  return (thinsByBlending(mt) || (mt.blending === THREE.NormalBlending && !(mt.transparent && mt.opacity < 0.9))) && shown(o);
 }
 /** The nearest solid surface the ray meets on `root`'s rigid meshes (each on the joint it moves with). The skinned ones,
  *  which bend across the joints, are left out: a ray costs 1 to 9 ms against them, every vertex moved by its bones first,

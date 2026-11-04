@@ -267,7 +267,9 @@ const SanitizeShader = {
       vec4 c = texture2D(tDiffuse, vUv);
       bool bad = any(isnan(c)) || any(isinf(c)) || c.r != c.r || c.g != c.g || c.b != c.b;
       gl_FragColor = bad ? vec4(0.0, 0.0, 0.0, 1.0) : clamp(c, 0.0, 64.0);
-      gl_FragColor.rgb = seenColour(gl_FragColor.rgb, vUv);
+      // (a thinned roof's alpha: how much of the pixel is what is under it, tellsItsShare)
+      gl_FragColor.rgb = seenColour(gl_FragColor.rgb, vUv, min(gl_FragColor.a, 1.0));
+      gl_FragColor.a = max(gl_FragColor.a, 1.0);
     }`,
 };
 

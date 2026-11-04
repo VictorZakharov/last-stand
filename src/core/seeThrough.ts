@@ -39,7 +39,7 @@ const HALL_K = { value: new THREE.Vector4(1.0, 1.8, 0, 0.25) };
 const ROOF_K = { value: new THREE.Vector4(1.0, 1.8, 0, -1000) };
 /** how far every roof thins from above, whatever it hides (a share of its pixels; from play, "we should make roof
  *  semi-transparent in this case too, even if hero is not directly under it") */
-export const ROOF_GHOST_ABOVE = 0.72;
+export const ROOF_GHOST_ABOVE = 0.62;
 /** how much wider what's built opens from above while it hides him (m at his depth): his own size, he showed alone in a
  *  roof, "it needs to match the previous screenshot, logically" */
 const BUILT_OPENS = 5;
@@ -173,7 +173,8 @@ export function seeThrough<M extends THREE.Material>(m: M, kind: keyof typeof ki
   if (blended) {
     m.transparent = true;
     m.depthWrite = true;
-    if (kind !== 'roof' && kind !== 'built') thinningWhole.set(kind, [...(thinningWhole.get(kind) ?? []), m]);
+    if (kind === 'roof') tellsItsShare(m);
+    if (kind !== 'built') thinningWhole.set(kind, [...(thinningWhole.get(kind) ?? []), m]);
   }
   const prev = m.onBeforeCompile, key = m.customProgramCacheKey();
   m.onBeforeCompile = (shader, renderer) => {
@@ -210,6 +211,31 @@ function thinByBlending(shader: { fragmentShader: string }): void {
         if (seeLeft < ${BLEND_GONE.toFixed(2)}) discard;`)
     .replace('#include <opaque_fragment>', `diffuseColor.a *= seeLeft;
         #include <opaque_fragment>`);
+}
+
+/** Whether `material` thins by blending: drawn blended, it's as solid as what's opaque, to a body or a shot. */
+export const thinsByBlending = (material: THREE.Material): boolean =>
+  (material as { seeThrough?: SeeThrough }).seeThrough?.blended === true;
+
+/** whether a harness has the roofs keep their depth over what's under them, as they did */
+let roofDepthHeld = false;
+
+/** For a harness (tools/lab): the roofs' depth kept when thinned, so the fog reads a roof over what's under it. */
+export function holdRoofDepth(held: boolean): void {
+  roofDepthHeld = held;
+}
+
+/** The roof's pixel says how much of it is roof: its alpha over what's opaque comes to what's left of what's under it,
+ *  which the fog alone lies over (`seenColour`'s `under`). With its depth kept, the fog read a roof's whole pixel as the
+ *  roof, and the grass and walls seen through it stood bright over what he can't see (from play, "fog of war bugs"); and
+ *  fogged by what's under it, a roof would be the fog's colour whole, as a house's inside is always hidden from him. */
+function tellsItsShare(m: THREE.Material): void {
+  m.blending = THREE.CustomBlending;
+  m.blendEquation = THREE.AddEquation;
+  m.blendSrc = THREE.SrcAlphaFactor;
+  m.blendDst = THREE.OneMinusSrcAlphaFactor;
+  m.blendSrcAlpha = THREE.ZeroFactor;
+  m.blendDstAlpha = THREE.OneMinusSrcAlphaFactor;
 }
 
 /** the blended materials of what thins whole, by kind, their depth let go as they thin */
@@ -265,6 +291,9 @@ export function updateSeeThrough(x: number, y: number, z: number, props: number,
   HALL_K.value.set(from, to, built, HALL_K.value.w);
   ROOF_K.value.set(from + wider, to + wider, built, ROOF_K.value.w);
   kinds.roof.whole.value = ROOF_GHOST_ABOVE * top * props;
+  for (const material of thinningWhole.get('roof') ?? []) {
+    material.depthWrite = roofDepthHeld || kinds.roof.whole.value < DEPTH_LET_GO;
+  }
   kinds.prop.whole.value = fadeHeld ? 0 : (openHeld ?? open) * GHOST_WHILE_HIDDEN * props;
   kinds.propFoot.whole.value = kinds.prop.whole.value;
   PROP_ACROSS_NOW.value = acrossHeld ?? PROP_ACROSS.close + (PROP_ACROSS.top - PROP_ACROSS.close) * top;
