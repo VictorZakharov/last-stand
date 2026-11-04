@@ -14,7 +14,7 @@ import { WEBGPU, drawOverScene, makeWebGPURenderer, makePipeline, renderWebGPU, 
 import { G } from '../state';
 import { CAMERA } from '../data/balance';
 import { clamp, damp } from '../util';
-import { updateSeeThrough } from './seeThrough';
+import { blendedBuiltFirst, sortBlendedFrom, updateSeeThrough } from './seeThrough';
 import { builtOpening, holeOpening } from './heroHidden';
 import type { QualityPreset } from '../data/quality';
 import { hdrLevels, initHdr, presentHdr } from './hdr';
@@ -637,6 +637,7 @@ export async function initRenderer(container: HTMLElement) {
   }
   renderer.setPixelRatio(canvasRatio());
   renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.setTransparentSort(blendedBuiltFirst as never);
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFShadowMap;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -1174,6 +1175,7 @@ export function updateCamera(dt: number, focus: THREE.Vector3, height: number, f
   const props = (1 - share('first')) * (1 - share('third') * overHead());
   const opening = holeOpening(cam.position, focus.x, floor, focus.z, height, props, dt);
   updateSeeThrough(focus.x, floor + height * 0.6, focus.z, props, share('top'), floor, opening, builtOpening());
+  sortBlendedFrom(cam.position);
   rig.kick = damp(rig.kick, rig.kickTo, rig.kickTo > rig.kick ? 14 : 6, dt); rig.kickTo = 0;
   if (rig.view !== 'top') fov += rig.kick * e;
   if (cam.fov !== fov || cam.near !== near) { cam.fov = fov; cam.near = near; cam.updateProjectionMatrix(); }

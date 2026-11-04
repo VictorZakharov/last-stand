@@ -276,7 +276,7 @@ interface Mats {
   freeAshlar: THREE.Material; freeCoping: THREE.Material;
   /** a lamp's plinth, thinned from the ground up */
   footAshlar: THREE.Material;
-  plaster: THREE.Material; gable: THREE.Material; timber: THREE.Material; planks: THREE.Material; logs: THREE.Material; roof: THREE.Material;
+  plaster: THREE.Material; gable: THREE.Material; chimney: THREE.Material; timber: THREE.Material; planks: THREE.Material; logs: THREE.Material; roof: THREE.Material;
   iron: THREE.Material; window: THREE.MeshStandardMaterial; skyPane: THREE.MeshStandardMaterial;
   glass: THREE.MeshStandardMaterial; paper: THREE.Material; pagesLeft: THREE.Material; pagesRight: THREE.Material; pagesEdge: THREE.Material; ribbon: THREE.Material;
   binding: THREE.Material; brass: THREE.Material; lining: THREE.Material; liningInside: THREE.Material; wax: THREE.Material;
@@ -428,11 +428,16 @@ function makeMats(): Mats {
     freeCoping: copingStone.clone(),
     footAshlar: ashlarStone.clone(),
     gable: undefined as unknown as THREE.Material,
+    chimney: undefined as unknown as THREE.Material,
   };
   // (a house's gables thin as its roof does: left whole under the slate's ghost, each one's top edge stood as a pale stripe
   // along the roof's end, from play, "roof geometry little weird here")
   mats.gable = mats.plaster.clone();
-  seeThrough(mats.gable, 'roof');
+  seeThrough(mats.gable, 'gable');
+  // (a chimney stands out of the roof, and thins with it: whole on a ghost of a roof it stood as a heavy black post, a
+  // review; from play, "chimney/gable needs work")
+  mats.chimney = mats.ashlar.clone();
+  seeThrough(mats.chimney, 'roof');
   // (a house's walls and roof, which never open over the shoulder; the rest stands free, opening wide as it hides him)
   for (const m of [mats.ashlar, mats.coping, mats.plaster, mats.timber, mats.planks, mats.logs, mats.window, mats.skyPane]) {
     seeThrough(m, 'built');
@@ -2063,7 +2068,7 @@ function buildCottage(scene: THREE.Object3D, wall: Wall, M: Mats, c: Cottage, rn
     const tri = new THREE.ExtrudeGeometry(gable, { depth: 0.1, bevelEnabled: false }).rotateY(Math.PI / 2);
     solid(g, tri, M.gable).position.set(sx * (w / 2) - 0.05, h, 0);
   }
-  const chimney = block(g, 0.6, rise + 1.2, 0.6, w / 2 - 0.9, h - 0.2, -d / 4, M.ashlar);
+  const chimney = block(g, 0.6, rise + 1.2, 0.6, w / 2 - 0.9, h - 0.2, -d / 4, M.chimney);
   g.userData.chimney = chimney;
   scene.add(g);
   g.updateMatrixWorld(true);
@@ -2176,6 +2181,9 @@ function buildYard(parent: THREE.Object3D, wall: Wall, M: Mats): void {
 
 /** The walls that stop his sight: each cottage's four, and the hall's, open at its door (its windows are too high to see
  *  a floor through, from outside or in). */
+/** how far inside the hall's outer faces what's shut to him starts (m): past the walls' thickness */
+const SEALED_INSIDE = 0.7;
+
 function sightOfThePlace(): { walls: SightWall[]; hall: THREE.Vector4; roofs: SightRoof[] } {
   const walls: SightWall[] = [];
   const roofs: SightRoof[] = [];
@@ -2204,7 +2212,11 @@ function sightOfThePlace(): { walls: SightWall[]; hall: THREE.Vector4; roofs: Si
   walls.push({ x0: east, z0: HALL.wall, x1: east, z1: HALL.door });
   walls.push({ x0: west, z0: HALL.door, x1: doorW, z1: HALL.door });
   walls.push({ x0: doorE, z0: HALL.door, x1: east, z1: HALL.door });
-  return { walls, hall: new THREE.Vector4(west, HALL.wall, east, HALL.door), roofs };
+  // (what's shut to him starts inside the walls: at their faces, a face read itself in or out of it by its depth's last
+  // bits, wedges of black over the front wall he stood before, moving as he moved, from play, "here we dont need to see
+  // through the wall, because I'm in front of the wall", "this is still flickering")
+  const inside = new THREE.Vector4(west + SEALED_INSIDE, HALL.wall + SEALED_INSIDE, east - SEALED_INSIDE, HALL.door - SEALED_INSIDE);
+  return { walls, hall: inside, roofs };
 }
 
 /** Logs to sit on round the campfire. */

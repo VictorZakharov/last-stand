@@ -12,6 +12,7 @@ import { setAdaptScale } from '../core/renderer';
 import { oneEnvironment, rigPointLights, stillForMeshlets } from '../core/webgpu';
 import { castBreakablesAsOne, type BreakableShadows } from './breakableShadows';
 import { bakeStaticShadows, compileEnvMaps as compileEach, drawStillShadows, envMap, lampShadowsAsked, mergeStill, type Biome, type BiomeBuilder, type BiomeLook } from './props';
+import { depthOfWhatStaysWhole } from '../core/seeThrough';
 import { cullWhileDrawn, trimShadowCasters } from './culling';
 import { castHeroesOverLamps } from './lampShadows';
 import { castMoversOverMoon, holdMoonShadow } from './moonShadow';
@@ -93,6 +94,7 @@ export async function buildArena(scene: THREE.Scene, renderer: THREE.WebGLRender
   // (its casters aren't trimmed to a shadow camera: the sun goes round it with the hour)
   bakeStaticShadows(villageGroup);
   mergeStill(villageGroup);
+  depthOfWhatStaysWhole(villageGroup);
   villageGroup.visible = false;
   villageGroup.matrixAutoUpdate = false;
   scene.add(villageGroup);
