@@ -1168,9 +1168,9 @@ function sanitized(colour: any): any {
   return select(nan.or(inf), vec4(0, 0, 0, 1), clamp(colour, 0, 64));
 }
 
-/** `colour` blacked where he can't see (core/sight.ts's `SIGHT_GLSL`, on WebGPU's clip space: depth from 0, y from the top). */
+/** `colour` in the fog where he can't see (core/sight.ts's `SIGHT_GLSL`, on WebGPU's clip space: depth from 0, y from the top). */
 function seenOnly(colour: any, depthNode: any): any {
-  const { atan, length, max, mix, reference, screenUV, select, smoothstep, step, texture, vec2, vec4 } = tsl as any;
+  const { atan, dot, length, max, mix, reference, screenUV, select, smoothstep, step, texture, vec2, vec3, vec4 } = tsl as any;
   const on = reference('value', 'float', SIGHT.uSightOn);
   const from = reference('value', 'vec2', SIGHT.uSightFrom);
   const inverse = reference('value', 'mat4', SIGHT.uSightInverse);
@@ -1190,8 +1190,12 @@ function seenOnly(colour: any, depthNode: any): any {
   const over = mix(SIGHT_LOOK.over, SIGHT_LOOK.overSealed, shut);
   const above = smoothstep(over, over.add(SIGHT_LOOK.overSoft), place.y);
   const near = away.lessThan(0.3).or(depthNode.r.greaterThanEqual(0.99999));
-  const seen = select(near, 1, mix(1, max(open, above), on));
-  return vec4(colour.rgb.mul(seen), colour.a);
+  const unseen = select(near, 0, max(open, above).oneMinus().mul(on));
+  const light = dot(colour.rgb, vec3(0.2126, 0.7152, 0.0722));
+  const pressed = light.div(light.add(SIGHT_LOOK.knee)).mul(SIGHT_LOOK.range);
+  const kept = mix(pressed.add(SIGHT_LOOK.floor), pressed.mul(SIGHT_LOOK.sealed), shut);
+  const fogged = mix(colour.rgb.mul(kept).div(max(light, 0.001)), vec3(...SIGHT_LOOK.tint).mul(kept), SIGHT_LOOK.grey);
+  return vec4(mix(colour.rgb, fogged, unseen), colour.a);
 }
 
 /** the light's weights, as the WebGL grade reads an area's and a pixel's */

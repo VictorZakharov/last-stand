@@ -5,7 +5,7 @@
 // him it's gone and its walls thinned; wherever it doesn't, every roof is a ghost alike. Stood behind a cottage: the
 // frame opens wider than his own size. `canary` puts the hall's roof back whole as it's read, which must be found.
 import * as THREE from 'three';
-import type { Lab } from './lab';
+import type { Lab, Pictured } from './lab';
 import { G } from '../../../src/state';
 import { HALL, TERRACE } from '../../../src/data/village';
 import { CAMERA } from '../../../src/data/balance';
@@ -81,7 +81,7 @@ function frameOpened(lab: Lab): number {
 }
 
 /** Behind a cottage from the camera: what its hole opens of the frame wide, and at his own size. */
-async function behindCottage(lab: Lab): Promise<{ wide: number; small: number }> {
+async function behindCottage(lab: Lab): Promise<{ wide: number; small: number; shot: Pictured }> {
   const cottage = COTTAGES[0];
   const sight = G.camera.getWorldDirection(new THREE.Vector3());
   const level = Math.hypot(sight.x, sight.z) || 1;
@@ -89,11 +89,12 @@ async function behindCottage(lab: Lab): Promise<{ wide: number; small: number }>
   const z = cottage.z + (sight.z / level) * PAST_COTTAGE;
   await standAt(lab, x, z);
   const wide = frameOpened(lab);
+  const shot = await lab.screen('behind a cottage, its roof and gables thinned', []);
   holdHoleOpening(0);
   await lab.step(1);
   const small = frameOpened(lab);
   holdHoleOpening(null);
-  return { wide, small };
+  return { wide, small, shot };
 }
 
 /** The hall's roof and walls from every side of him, and a cottage's. */
@@ -119,7 +120,7 @@ export async function roofsFromAbove(lab: Lab, canary: boolean): Promise<LightsC
   }
   if (!sawHidden || !sawClear) problems.push(`beside the hall: hidden ${sawHidden}, clear ${sawClear}: not both seen`);
   await lab.step(SETTLE);
-  const { wide, small } = await behindCottage(lab);
+  const { wide, small, shot } = await behindCottage(lab);
   const planted = canary && problems.length > 0;
   if (!canary && wide < small * OPENS_AT_LEAST) {
     const opened = `${(wide * 100).toFixed(1)}% of the frame, at his own size ${(small * 100).toFixed(1)}%`;
@@ -130,5 +131,5 @@ export async function roofsFromAbove(lab: Lab, canary: boolean): Promise<LightsC
     `the hall from above, he beside it: ${said.join('; ')}`,
     `behind a cottage, the frame opened: ${(wide * 100).toFixed(1)}% (his own size: ${(small * 100).toFixed(1)}%)`,
   ];
-  return { lines, problems: canary ? [] : problems, caught: canary ? planted : null, moments: [] };
+  return { lines, problems: canary ? [] : problems, caught: canary ? planted : null, moments: canary ? [] : [shot] };
 }

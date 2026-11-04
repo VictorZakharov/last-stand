@@ -4,6 +4,7 @@
 // at two spots) and the boxes of the minimap and the tracker; out on the square and in the yard, with the bottom bar in
 // the yard alone, and put away with the inventory. Its canary reads the arrow half a turn off and sets the tracker
 // over the minimap.
+import type { Lab, Pictured } from './lab';
 import { G } from '../../../src/state';
 import { cameraYaw } from '../../../src/core/renderer';
 import { restartTraining, skipTraining } from '../../../src/game/training';
@@ -31,6 +32,7 @@ export interface MinimapChecked {
   lines: string[];
   problems: string[];
   caught: boolean | null;
+  moments: Pictured[];
 }
 
 /** Whether the page shows `selector`'s element. */
@@ -104,7 +106,7 @@ function atSpot(where: string, yardBar: boolean, extra = 0): string[] {
 
 /** The minimap out in the village as a run has it, the tracker in its column. */
 export async function minimapOut(
-  lab: { step(count: number): Promise<unknown> },
+  lab: Lab,
   stand: Stand,
   yard: [number, number],
   canary: boolean,
@@ -113,6 +115,7 @@ export async function minimapOut(
   await stand([0, 9]);
   await lab.step(SHOW_FRAMES);
   const problems: string[] = [...atSpot('on the square', false), ...trackerBelow()];
+  const onSquare = await lab.screen('the tracker over the square, its words over the world', []);
   const squareAt = heroOnCanvas(0).map((v) => v.toFixed(0)).join(', ');
   const wrongTurn = atSpot('on the square', false, Math.PI).some((problem) => problem.includes('no arrow'));
   const tracker = document.querySelector<HTMLElement>('#training')!;
@@ -123,6 +126,7 @@ export async function minimapOut(
   await lab.step(SHOW_FRAMES);
   problems.push(...atSpot('in the yard', true));
   const yardAt = heroOnCanvas(0).map((v) => v.toFixed(0)).join(', ');
+  const inYard = await lab.screen('the tracker over the yard', []);
   openPanels('inventory');
   await lab.step(SHOW_FRAMES);
   if (shows('#minimap') || shows('#training')) problems.push('the minimap or the tracker shows over the inventory');
@@ -133,5 +137,6 @@ export async function minimapOut(
   skipTraining();
   const lines = [`minimap: the hero's arrow at ${squareAt} on the square and ${yardAt} in the yard; `
     + `the tracker under it, ${problems.length} problems`];
-  return { lines, problems: canary ? [] : problems, caught: canary ? wrongTurn && wrongPlace : null };
+  const moments = canary ? [] : [onSquare, inYard];
+  return { lines, problems: canary ? [] : problems, caught: canary ? wrongTurn && wrongPlace : null, moments };
 }

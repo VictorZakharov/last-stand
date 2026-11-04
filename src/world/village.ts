@@ -276,7 +276,7 @@ interface Mats {
   freeAshlar: THREE.Material; freeCoping: THREE.Material;
   /** a lamp's plinth, thinned from the ground up */
   footAshlar: THREE.Material;
-  plaster: THREE.Material; timber: THREE.Material; planks: THREE.Material; logs: THREE.Material; roof: THREE.Material;
+  plaster: THREE.Material; gable: THREE.Material; timber: THREE.Material; planks: THREE.Material; logs: THREE.Material; roof: THREE.Material;
   iron: THREE.Material; window: THREE.MeshStandardMaterial; skyPane: THREE.MeshStandardMaterial;
   glass: THREE.MeshStandardMaterial; paper: THREE.Material; pagesLeft: THREE.Material; pagesRight: THREE.Material; pagesEdge: THREE.Material; ribbon: THREE.Material;
   binding: THREE.Material; brass: THREE.Material; lining: THREE.Material; liningInside: THREE.Material; wax: THREE.Material;
@@ -427,7 +427,12 @@ function makeMats(): Mats {
     freeAshlar: ashlarStone.clone(),
     freeCoping: copingStone.clone(),
     footAshlar: ashlarStone.clone(),
+    gable: undefined as unknown as THREE.Material,
   };
+  // (a house's gables thin as its roof does: left whole under the slate's ghost, each one's top edge stood as a pale stripe
+  // along the roof's end, from play, "roof geometry little weird here")
+  mats.gable = mats.plaster.clone();
+  seeThrough(mats.gable, 'roof');
   // (a house's walls and roof, which never open over the shoulder; the rest stands free, opening wide as it hides him)
   for (const m of [mats.ashlar, mats.coping, mats.plaster, mats.timber, mats.planks, mats.logs, mats.window, mats.skyPane]) {
     seeThrough(m, 'built');
@@ -2011,7 +2016,12 @@ function buildCottage(scene: THREE.Object3D, wall: Wall, M: Mats, c: Cottage, rn
   // the frame: posts at the corners and between, a sill and a plate along each face
   for (const sx of [-1, -0.33, 0.33, 1]) for (const sz of [-1, 1]) block(g, 0.18, h - 0.5, 0.06, sx * (w / 2 - 0.09), 0.5, sz * (d / 2 + 0.02), M.timber);
   for (const sz of [-1, 1]) for (const y of [0.5, h - 0.18]) block(g, w + 0.04, 0.16, 0.06, 0, y, sz * (d / 2 + 0.02), M.timber);
-  for (const sx of [-1, 1]) block(g, 0.06, h - 0.5, d, sx * (w / 2 + 0.02), 0.5, 0, M.timber);
+  // (each end framed as the faces are, plaster between: one sheet of timber, its whole wall stood black, from play)
+  for (const sx of [-1, 1]) {
+    const endX = sx * (w / 2 + 0.02);
+    for (const z of [-(d / 2 - 0.09), 0, d / 2 - 0.09]) block(g, 0.06, h - 0.5, 0.18, endX, 0.5, z, M.timber);
+    for (const y of [0.5, h - 0.18]) block(g, 0.06, 0.16, d, endX, y, 0, M.timber);
+  }
   // the door and two windows on its face (+z, as it's turned), lit within by night: each its panes set in a timber
   // casing, a sill under it
   block(g, 1.0, 1.9, 0.08, 0, 0.5, d / 2 + 0.04, M.planks);
@@ -2046,7 +2056,7 @@ function buildCottage(scene: THREE.Object3D, wall: Wall, M: Mats, c: Cottage, rn
   gable.moveTo(-d / 2, 0); gable.lineTo(d / 2, 0); gable.lineTo(0, rise); gable.lineTo(-d / 2, 0);
   for (const sx of [-1, 1]) {
     const tri = new THREE.ExtrudeGeometry(gable, { depth: 0.1, bevelEnabled: false }).rotateY(Math.PI / 2);
-    solid(g, tri, M.plaster).position.set(sx * (w / 2) - 0.05, h, 0);
+    solid(g, tri, M.gable).position.set(sx * (w / 2) - 0.05, h, 0);
   }
   const chimney = block(g, 0.6, rise + 1.2, 0.6, w / 2 - 0.9, h - 0.2, -d / 4, M.ashlar);
   g.userData.chimney = chimney;

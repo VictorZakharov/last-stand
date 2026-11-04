@@ -12,6 +12,7 @@ import { holdHour } from '../../../src/game/clock';
 import { faceCamera, viewMode, type ViewMode } from '../../../src/core/renderer';
 import { groundHeight } from '../../../src/world/ground';
 import { drawFrame, type Canvas } from './light';
+import { boxRound, glowOf } from './hallGlow';
 import { changedShare, viewBy } from './villageHallCull';
 import type { LightsChecked } from './villageLights';
 
@@ -108,6 +109,47 @@ function figureBurned(canvas: Canvas, at: THREE.Vector3): number {
   return read ? burned / read : 0;
 }
 
+/** the box read round a quiver's mouth (m across), how far along it its mouth is from its joint (m), how far from the
+ *  fire he's read and how many ways round it, facing it with the camera on the fire's side of him (from play, "arrows
+ *  still blinding reflection near fire": beyond the fire from the camera), and the most of the box that may be near
+ *  white */
+const QUIVER_BOX = 0.4;
+const QUIVER_UP = 0.3;
+const ROUND_FIRE = [1.6, 2.6];
+const WAYS_ROUND = 8;
+const QUIVER_MOST = 0.005;
+const QUIVER_SETTLE = 20;
+
+/** A place round the fire and what his quiver's mouth read there. */
+interface QuiverRead {
+  share: number;
+  brightest: number;
+  angle: number;
+  away: number;
+}
+
+/** His quiver's mouth from the fire's side, all round it: the place where the most of it is near white. */
+async function quiverBurned(lab: Lab): Promise<QuiverRead | null> {
+  const quiver = G.player.model.root.getObjectByName('quiver');
+  if (!quiver) return null;
+  let worst: QuiverRead = { share: -1, brightest: 0, angle: 0, away: 0 };
+  for (const away of ROUND_FIRE) {
+    for (let way = 0; way < WAYS_ROUND; way++) {
+      const angle = way / WAYS_ROUND * Math.PI * 2;
+      const x = CAMPFIRE[0] + Math.sin(angle) * away;
+      const z = CAMPFIRE[1] + Math.cos(angle) * away;
+      G.player.place(new THREE.Vector3(x, groundHeight(x, z), z), angle + Math.PI);
+      faceCamera(angle);
+      await lab.step(QUIVER_SETTLE);
+      G.player.model.root.updateMatrixWorld(true);
+      const mouth = quiver.localToWorld(new THREE.Vector3(0, QUIVER_UP, 0));
+      const glow = glowOf(drawFrame(lab, boxRound(mouth, QUIVER_BOX)), 0);
+      if (glow.nearWhite > worst.share) worst = { share: glow.nearWhite, brightest: glow.max, angle, away };
+    }
+  }
+  return worst;
+}
+
 /** Stood as near the campfire as he can, and at its own stand, by midnight, in each view: his figure not burned out. */
 export async function heroBesideFire(lab: Lab, canary: boolean): Promise<LightsChecked> {
   const kept = viewMode();
@@ -146,6 +188,19 @@ export async function heroBesideFire(lab: Lab, canary: boolean): Promise<LightsC
         }
         moments.push(await lab.screen(`beside it ${name} ${view}`, []));
       }
+    }
+    await viewBy(lab, 'third');
+    const quiver = await quiverBurned(lab);
+    if (quiver) {
+      const said = `${(quiver.share * 100).toFixed(1)}% near white, its brightest ${quiver.brightest.toFixed(2)}, `
+        + `${quiver.away} m out at ${quiver.angle.toFixed(2)} rad`;
+      lines.push(`his quiver round it at worst: ${said}`);
+      if (quiver.share > QUIVER_MOST) problems.push(`his quiver beside the campfire: ${said}`);
+      G.player.place(new THREE.Vector3(CAMPFIRE[0] + Math.sin(quiver.angle) * quiver.away, 0,
+        CAMPFIRE[1] + Math.cos(quiver.angle) * quiver.away), quiver.angle + Math.PI);
+      faceCamera(quiver.angle);
+      await lab.step(QUIVER_SETTLE);
+      moments.push(await lab.screen('his quiver at its worst', []));
     }
   } finally {
     light.position.y = held;
