@@ -51,8 +51,25 @@ const roofTexture = new THREE.DataTexture(roofMap, ROOFS_TEXELS, ROOFS_TEXELS, T
 roofTexture.minFilter = roofTexture.magFilter = THREE.LinearFilter;
 roofTexture.needsUpdate = true;
 
+/** what the map holds within a house's walls, and under its eaves past them: a roof's alpha lets the fog off what's under
+ *  it within its walls alone, as a house's inside is always hidden from him. Under the eaves too, the ground past the wall
+ *  lay half out of the fog, a strip of green round a house he can't see past (from play, "and here should be all grey,
+ *  right ?") */
+const WITHIN_WALLS = 255;
+const UNDER_EAVES = 127;
+/** the roofs last painted, and whether a harness has their eaves count as within their walls, as they did */
+let roofsPainted: readonly SightRoof[] = [];
+let eavesHeld = false;
+
+/** For a harness (tools/lab): the roofs' eaves letting the fog off what's under them, as they did. */
+export function holdEavesAsWithin(held: boolean): void {
+  eavesHeld = held;
+  paintRoofs(roofsPainted);
+}
+
 /** The roofs painted into their map. */
 function paintRoofs(roofs: readonly SightRoof[]): void {
+  roofsPainted = roofs;
   roofMap.fill(0);
   const texel = (ROOFS_HALF * 2) / ROOFS_TEXELS;
   for (const roof of roofs) {
@@ -67,7 +84,8 @@ function paintRoofs(roofs: readonly SightRoof[]): void {
         const alongW = dx * roof.cos - dz * roof.sin;
         const alongD = dx * roof.sin + dz * roof.cos;
         if (Math.abs(alongW) <= roof.halfW + ROOF_EAVES && Math.abs(alongD) <= roof.halfD + ROOF_EAVES) {
-          roofMap[row * ROOFS_TEXELS + column] = 255;
+          const within = Math.abs(alongW) <= roof.halfW && Math.abs(alongD) <= roof.halfD;
+          roofMap[row * ROOFS_TEXELS + column] = within || eavesHeld ? WITHIN_WALLS : UNDER_EAVES;
         }
       }
     }
@@ -287,9 +305,10 @@ export const SIGHT_GLSL = /* glsl */`
     float shut = inIt * uSightShut;
     float over = mix(${SIGHT_LOOK.over.toFixed(2)}, ${SIGHT_LOOK.overSealed.toFixed(2)}, shut);
     float above = smoothstep(over, over + ${SIGHT_LOOK.overSoft.toFixed(2)}, place.y);
+    float roof = texture2D(tSightRoofs, place.xz / ${(ROOFS_HALF * 2).toFixed(1)} + 0.5).r;
+    float letOff = mix(1.0, under, smoothstep(0.6, 0.9, roof));
     if (inIt <= 0.0) {
-      float roof = texture2D(tSightRoofs, place.xz / ${(ROOFS_HALF * 2).toFixed(1)} + 0.5).r;
-      above *= roof * (1.0 - smoothstep(${SIGHT_LOOK.roofs.toFixed(2)},
+      above *= min(roof * 2.0, 1.0) * (1.0 - smoothstep(${SIGHT_LOOK.roofs.toFixed(2)},
         ${(SIGHT_LOOK.roofs + SIGHT_LOOK.overSoft).toFixed(2)}, place.y));
     }
     float light = dot(colour, vec3(0.2126, 0.7152, 0.0722));
@@ -297,6 +316,6 @@ export const SIGHT_GLSL = /* glsl */`
     float pressed = ${SIGHT_LOOK.range.toFixed(3)} * light / (light + ${SIGHT_LOOK.knee.toFixed(3)});
     float kept = mix(${SIGHT_LOOK.floor.toFixed(3)} + pressed, ${(SIGHT_LOOK.floor * SIGHT_LOOK.sealedFloor).toFixed(3)} + pressed * ${SIGHT_LOOK.sealed.toFixed(3)}, shut);
     vec3 fogged = mix(colour * kept / max(light, 0.001), tint * kept, ${SIGHT_LOOK.grey.toFixed(2)});
-    return mix(colour, fogged, (1.0 - max(open, above)) * uSightOn * under);
+    return mix(colour, fogged, (1.0 - max(open, above)) * uSightOn * letOff);
   }
 `;

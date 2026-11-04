@@ -56,15 +56,15 @@ import { hoardShowsStash } from './villageHoard';
 import { escClosesHelp } from './villageHelpEsc';
 import { propHoleWhereHidden } from './villageSeeThrough';
 import { heroBehindProps, wallsStayWhole } from './villageHeroInView';
-import { hallWallsSteady, hallFloorSteady, hallSillsSteady } from './villageHallSteady';
+import { hallFacesSteady, hallWallsSteady, hallFloorSteady, hallSillsSteady } from './villageHallSteady';
 import { objectsUsedAgain } from './villageUseAgain';
 import { hallWallsHold } from './villageHallSide';
 import { candleLightsNear, chestOpensNear } from './villageChestLid';
 import { wallingAligned } from './villageWalling';
 import { windowsLetSunIn } from './villageWindows';
 import { grassRingsGentle, grassRingsUnseen } from './villageGrassRing';
-import { fogUnderRoofs, firesStillInFog, fogHoldsSteady, leavesInFog } from './villageFog';
-import { portalOverAll, wallsPastHimWhole } from './villageSeenPast';
+import { fogUnderEaves, fogUnderRoofs, firesStillInFog, fogHoldsSteady, leavesInFog } from './villageFog';
+import { columnsStayGhosts, portalOverAll, wallsPastHimWhole } from './villageSeenPast';
 import { startSpots, topKeepsHim } from './villageStart';
 import { wornStaysOn } from './villageWorn';
 import { heroFaceNotBlinding } from './villageHeroFace';
@@ -158,8 +158,11 @@ export async function village(lab: Lab, options: VillageOptions): Promise<Report
     firesStillInFog: () => firesStillInFog(lab, options.canary),
     leavesInFog: () => leavesInFog(lab, options.canary),
     fogUnderRoofs: () => fogUnderRoofs(lab, options.canary),
+    fogUnderEaves: () => fogUnderEaves(lab, options.canary),
     wallsPastHimWhole: () => wallsPastHimWhole(lab, options.canary),
     portalOverAll: () => portalOverAll(lab, options.canary),
+    columnsStayGhosts: () => columnsStayGhosts(lab, options.canary),
+    hallFacesSteady: () => hallFacesSteady(lab, options.canary),
     startSpots: () => startSpots(lab, options.canary),
     topKeepsHim: () => topKeepsHim(lab, options.canary),
     staffAtNight: () => staffAtNight(lab, options.canary),

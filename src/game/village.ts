@@ -367,7 +367,7 @@ const WALL_DEEP = 6;
  *  under a dark veil, and at 90% its beams were left as thin stray lines across the frame, a review */
 const ROOF_GHOST = 1;
 /** how far what stands free in the hall thins, before him and from above (a share of its pixels) */
-const COLUMN_GHOST = 0.75;
+const COLUMN_GHOST = 0.55;
 const _door = new THREE.Box3(), _frustum = new THREE.Frustum(), _viewProj = new THREE.Matrix4();
 const _look = new THREE.Vector3();
 /** the heights on him the camera's line runs to (m), and the points read along each */

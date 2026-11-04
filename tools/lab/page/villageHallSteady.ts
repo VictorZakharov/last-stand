@@ -11,7 +11,8 @@ import { holdHour } from '../../../src/game/clock';
 import { groundHeight } from '../../../src/world/ground';
 import { faceCamera, viewMode } from '../../../src/core/renderer';
 import { readShelterOnSurface } from '../../../src/core/lamps';
-import { HALL, TERRACE } from '../../../src/data/village';
+import { COTTAGES, HALL, TERRACE } from '../../../src/data/village';
+import { COTTAGE } from '../../../src/world/villagePlan';
 import { hallSills } from '../../../src/world/village';
 import { drawFrame, type Canvas } from './light';
 import { viewBy } from './villageHallCull';
@@ -23,6 +24,10 @@ const SHEET = 12;
 const FLOOR_STEP = 1.5;
 const OVER_FLOOR = 3;
 const SAME_PLANE = 0.001;
+/** how alike the ways two faces look must be for them to lie in one plane (a cosine) */
+const SAME_FACING = 0.999;
+/** how far beside a ray the rays that confirm it are sent (m) */
+const BESIDE = 0.002;
 
 /** how far in from the door he stands (m), the frames he's given, how far the camera moves aside between the frames
  *  (m), how far a channel jumps to count, and the most of the frame that may jump (5% did) */
@@ -112,6 +117,173 @@ export async function hallFloorSteady(lab: Lab, canary: boolean): Promise<Lights
     if (canary) return { lines: [line], problems: [], caught: places.length > 0, moments: [] };
     const problems = places.length ? [`${line}: the floor flickers`] : [];
     return { lines: [line], problems, caught: null, moments: [] };
+  } finally {
+    if (sheet) G.scene.remove(sheet);
+  }
+}
+
+/** how far apart rays are sent at the hall from each side and from above (m; not round, for none to run along a seam
+ *  or a triangle's diagonal), how far off they start, how high its top is, and how many places are said */
+const SIDE_STEP = 0.37;
+/** the heights rays are sent at besides (m over its floor): the beam's band under the eaves, thinner than a step */
+const THIN_BANDS = [6.4, 6.42, 6.45];
+const RAY_OFF = 14;
+const HALL_TOP = 11;
+const PLACES_SAID = 14;
+
+/** A ray at the hall: from where, which way. */
+type HallRay = [THREE.Vector3, THREE.Vector3];
+
+/** A building's box to send rays at: its least and most x and z, its floor and its top, and bands thinner than a
+ *  step. */
+interface Building {
+  west: number;
+  east: number;
+  back: number;
+  front: number;
+  floor: number;
+  top: number;
+  bands: number[];
+}
+
+/** The hall of heroes and each cottage, each with room round it. */
+function buildings(): Building[] {
+  const hall = {
+    west: TERRACE.x - HALL.half - 1,
+    east: TERRACE.x + HALL.half + 1,
+    back: HALL.wall - 1,
+    front: HALL.door + 4,
+    floor: TERRACE.high,
+    top: HALL_TOP,
+    bands: THIN_BANDS,
+  };
+  const cottages = COTTAGES.map((cottage) => {
+    const reach = Math.hypot(COTTAGE.w, COTTAGE.d) / 2 * cottage.size + 1;
+    return {
+      west: cottage.x - reach,
+      east: cottage.x + reach,
+      back: cottage.z - reach,
+      front: cottage.z + reach,
+      floor: 0,
+      top: COTTAGE.h + COTTAGE.rise + 1.5,
+      bands: [],
+    };
+  });
+  return [hall, ...cottages];
+}
+
+/** Rays at a building from over it and from its four sides, its portico's and its roof's faces among them. */
+function raysAt(building: Building): HallRay[] {
+  const { west, east, back, front, floor, top, bands } = building;
+  const rays: HallRay[] = [];
+  for (let x = west + 0.013; x < east; x += SIDE_STEP) {
+    for (let z = back + 0.017; z < front; z += SIDE_STEP) {
+      rays.push([new THREE.Vector3(x, top + RAY_OFF, z), new THREE.Vector3(0, -1, 0)]);
+    }
+    for (let y = floor + 0.011; y < top; y += SIDE_STEP) {
+      rays.push([new THREE.Vector3(x, y, front + RAY_OFF), new THREE.Vector3(0, 0, -1)]);
+      rays.push([new THREE.Vector3(x, y, back - RAY_OFF), new THREE.Vector3(0, 0, 1)]);
+    }
+    for (const up of bands) {
+      rays.push([new THREE.Vector3(x, floor + up, front + RAY_OFF), new THREE.Vector3(0, 0, -1)]);
+      rays.push([new THREE.Vector3(x, floor + up, back - RAY_OFF), new THREE.Vector3(0, 0, 1)]);
+    }
+  }
+  for (let z = back + 0.017; z < front; z += SIDE_STEP) {
+    for (let y = floor + 0.011; y < top; y += SIDE_STEP) {
+      rays.push([new THREE.Vector3(west - RAY_OFF, y, z), new THREE.Vector3(1, 0, 0)]);
+      rays.push([new THREE.Vector3(east + RAY_OFF, y, z), new THREE.Vector3(-1, 0, 0)]);
+    }
+  }
+  return rays;
+}
+
+/** Which way a face a ray met looks, in the world. */
+function worldFacing(hit: THREE.Intersection): THREE.Vector3 {
+  if (!hit.face) throw new Error('lab: village: a ray met no face');
+  return hit.face.normal.clone().transformDirection(hit.object.matrixWorld);
+}
+
+/** A face's triangle's sides (m): what it's part of, as a merged mesh has no other name for it. */
+function faceSize(hit: THREE.Intersection): string {
+  const { face } = hit;
+  const position = (hit.object as THREE.Mesh).geometry.getAttribute('position');
+  if (!face || !position) throw new Error('lab: village: a ray met no face');
+  const corners = [face.a, face.b, face.c].map((corner) => new THREE.Vector3().fromBufferAttribute(position, corner));
+  const sides = corners.map((corner, i) => corner.distanceTo(corners[(i + 1) % 3])).sort((a, b) => a - b);
+  return `${sides[0].toFixed(2)}x${sides[1].toFixed(2)}`;
+}
+
+/** Where a ray meets two faces in one plane first: the plane, and the place in it. */
+function firstInOnePlane(ray: HallRay, meshes: THREE.Mesh[]): { plane: string; at: THREE.Vector3 } | null {
+  const hits = new THREE.Raycaster(ray[0], ray[1], 0, RAY_OFF * 3).intersectObjects(meshes, false);
+  const [first, next] = hits;
+  if (!first || !next || next.distance - first.distance > SAME_PLANE) return null;
+  // (two faces of one turned box meet at its corner, and a ray clipping it meets both: nothing to fight there)
+  if (worldFacing(first).dot(worldFacing(next)) < SAME_FACING) return null;
+  const axis = ray[1].x !== 0 ? 'x' : ray[1].y !== 0 ? 'y' : 'z';
+  const faces = `${faceSize(first)} & ${faceSize(next)}`;
+  return { plane: `${axis}=${first.point[axis].toFixed(2)} (${faces})`, at: first.point };
+}
+
+/** Whether rays a hair to each side meet two faces in one plane as well: one that lands on the seam between two stones
+ *  or on a triangle's diagonal meets both, with nothing to fight, and the rays beside it meet one. */
+function stillTwoBeside(ray: HallRay, meshes: THREE.Mesh[]): boolean {
+  const across = Math.abs(ray[1].y) > 0.5 ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 1, 0);
+  const along = new THREE.Vector3().crossVectors(ray[1], across);
+  for (const [a, b] of [[1, 1], [1, -1], [-1, 1], [-1, -1]]) {
+    const from = ray[0].clone().addScaledVector(across, a * BESIDE).addScaledVector(along, b * BESIDE);
+    if (!firstInOnePlane([from, ray[1]], meshes)) return false;
+  }
+  return true;
+}
+
+/** The planes `places` lie in, each with how many and the box they fill. */
+function planesSaid(places: { plane: string; at: THREE.Vector3 }[]): string {
+  const planes = new Map<string, { count: number; box: THREE.Box3 }>();
+  for (const { plane, at } of places) {
+    const read = planes.get(plane) ?? { count: 0, box: new THREE.Box3() };
+    read.count++;
+    read.box.expandByPoint(at);
+    planes.set(plane, read);
+  }
+  const edge = (at: THREE.Vector3): string => `${at.x.toFixed(1)},${at.y.toFixed(1)},${at.z.toFixed(1)}`;
+  return [...planes].sort((a, b) => b[1].count - a[1].count).slice(0, PLACES_SAID)
+    .map(([plane, read]) => `${plane} ${read.count}x ${edge(read.box.min)}..${edge(read.box.max)}`).join('; ');
+}
+
+/** A sheet in the plane of the portico's beam's face. */
+function beamFaceSheet(): THREE.Mesh {
+  const ray = new THREE.Raycaster(new THREE.Vector3(TERRACE.x, TERRACE.high + 0.72 + 5.2 + 0.2, HALL.door + 8),
+    new THREE.Vector3(0, 0, -1));
+  const face = ray.intersectObjects(stillMeshes(), false)[0];
+  if (!face) throw new Error('lab: village: no beam before the hall');
+  const sheet = new THREE.Mesh(new THREE.PlaneGeometry(4, 2), new THREE.MeshBasicMaterial({ color: 0xff00ff }));
+  sheet.position.set(face.point.x, face.point.y, face.point.z - 0.0002);
+  G.scene.add(sheet);
+  return sheet;
+}
+
+/** No two of the hall's outer faces lie in one plane (from play, "still flickering": the portico's beam and the ceiling
+ *  over it shared a front face, and its gable and its walls shared others: from above, as the view moved, one showed
+ *  through the other in stripes). `canary` plants a sheet in the beam's face. */
+export async function hallFacesSteady(lab: Lab, canary: boolean): Promise<LightsChecked> {
+  await viewBy(lab, viewMode());
+  G.scene.updateMatrixWorld(true);
+  const sheet = canary ? beamFaceSheet() : null;
+  try {
+    G.scene.updateMatrixWorld(true);
+    const meshes = stillMeshes();
+    const rays = buildings().flatMap(raysAt);
+    const places: { plane: string; at: THREE.Vector3 }[] = [];
+    for (const ray of rays) {
+      const place = firstInOnePlane(ray, meshes);
+      if (place && stillTwoBeside(ray, meshes)) places.push(place);
+    }
+    const line = `at the hall and the cottages, of ${rays.length} rays, ${places.length} met two faces in one plane`
+      + (places.length ? `: ${planesSaid(places)}` : '');
+    if (canary) return { lines: [line], problems: [], caught: places.length > 0, moments: [] };
+    return { lines: [line], problems: places.length ? [line] : [], caught: null, moments: [] };
   } finally {
     if (sheet) G.scene.remove(sheet);
   }

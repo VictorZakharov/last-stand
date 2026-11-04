@@ -12,7 +12,7 @@ import { CAMPFIRE, COTTAGES, HALL, TERRACE, type Cottage } from '../../../src/da
 import { COTTAGE } from '../../../src/world/villagePlan';
 import { holdHour } from '../../../src/game/clock';
 import { faceCamera, viewMode } from '../../../src/core/renderer';
-import { holdSightOff, holdSightSharp, seenShareAt } from '../../../src/core/sight';
+import { holdEavesAsWithin, holdSightOff, holdSightSharp, seenShareAt } from '../../../src/core/sight';
 import { holdRoofDepth } from '../../../src/core/seeThrough';
 import type { SightWall } from '../../../src/core/sight';
 import { groundHeight } from '../../../src/world/ground';
@@ -257,6 +257,72 @@ export async function fogUnderRoofs(lab: Lab, canary: boolean): Promise<LightsCh
     holdSightOff(false);
     holdHour(null);
     // (the view turned back, for the checks after this one to read a side of the hall as they set out to)
+    faceCamera(0);
+    await viewBy(lab, kept);
+  }
+}
+
+/** the most of the ground under an eave he can't see past that may show plainly green */
+const MOST_GREEN_UNDER_EAVES = 0.05;
+
+/** The share of `points`' pixels that's plainly green. */
+function greenAt(lab: Lab, points: THREE.Vector3[]): number {
+  const canvas = drawFrame(lab);
+  let green = 0;
+  let read = 0;
+  for (const point of points) {
+    const place = point.clone().project(G.camera);
+    const column = Math.floor(((place.x + 1) / 2) * canvas.width);
+    const row = Math.floor(((place.y + 1) / 2) * canvas.height);
+    if (column < 0 || column >= canvas.width || row < 0 || row >= canvas.height) continue;
+    const pixel = (row * canvas.width + column) * 4;
+    read++;
+    if (isGreen(canvas.pixels[pixel], canvas.pixels[pixel + 1], canvas.pixels[pixel + 2])) green++;
+  }
+  if (read === 0) throw new Error('lab: village: no ground under the eave in the frame');
+  return green / read;
+}
+
+/** The share of the ground under `c`'s eave at its side that shows green, him stood before its front towards that side:
+ *  the camera past the wall there, as from before its middle the wall stands over that ground. */
+async function greenUnderEaves(lab: Lab, c: Cottage): Promise<number> {
+  const halfW = (COTTAGE.w / 2) * c.size;
+  const halfD = (COTTAGE.d / 2) * c.size;
+  const cos = Math.cos(c.facing);
+  const sin = Math.sin(c.facing);
+  const turned = (x: number, z: number): [number, number] => [c.x + x * cos + z * sin, c.z - x * sin + z * cos];
+  const [x, z] = turned(halfW * 0.7, halfD + 0.8);
+  await standAt(lab, x, z, c.facing + Math.PI);
+  const points: THREE.Vector3[] = [];
+  for (let across = -halfD * 0.8; across <= -halfD * 0.2; across += ALONG_BACK) {
+    for (const out of [0.5, 0.75, 1]) {
+      const [px, pz] = turned(halfW + out, across);
+      points.push(new THREE.Vector3(px, groundHeight(px, pz) + 0.1, pz));
+    }
+  }
+  return greenAt(lab, points);
+}
+
+/** From before each cottage, the ground under its eaves past its walls lies in the fog as all round it does. */
+export async function fogUnderEaves(lab: Lab, canary: boolean): Promise<LightsChecked> {
+  const kept = viewMode();
+  holdHour(12);
+  holdEavesAsWithin(canary);
+  try {
+    await viewBy(lab, 'top');
+    const all: number[] = [];
+    for (const cottage of COTTAGES) all.push(await greenUnderEaves(lab, cottage));
+    const worst = Math.max(...all);
+    const shares = all.map((share) => (share * 100).toFixed(0)).join(' ');
+    const line = `under a cottage's side eave, past its wall: ${(worst * 100).toFixed(0)}% plainly green: ${shares}`;
+    const wrong = worst > MOST_GREEN_UNDER_EAVES;
+    if (canary) return { lines: [line], problems: [], caught: wrong, moments: [] };
+    const shot = await lab.screen('before a cottage, the ground under its far eaves', []);
+    return { lines: [line], problems: wrong ? [line] : [], caught: null, moments: [shot] };
+  } finally {
+    holdEavesAsWithin(false);
+    holdSightOff(false);
+    holdHour(null);
     faceCamera(0);
     await viewBy(lab, kept);
   }

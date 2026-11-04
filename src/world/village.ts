@@ -27,7 +27,7 @@ import {
   ashlar, bannerCloth, bark, canvasOf, ctx2d, flagstone, granite, limestone, pbrMaterialMaps, slate, soil, textureFromCanvas,
   boards, hammered, wood, cobblestone, grunge,
 } from '../core/textures';
-import { seeThrough } from '../core/seeThrough';
+import { hallRoomIs, seeThrough } from '../core/seeThrough';
 import type { FadesWhole } from '../core/seeThrough';
 import { particles, col } from '../fx/particles';
 import { mulberry, rand, TAU } from '../util';
@@ -80,7 +80,7 @@ const HALL_BANNER = { top: 4.6, off: 0.25, scale: 1.15 };
 const DOOR = { frame: 0.32, set: 0.22, straps: [0.5, 1.7, 2.9], open: 1.45 };
 /** the hall's roof: its ridge over the eaves, its slabs' thickness and overhang, its gables' depth, the ceiling's
  *  planks' thickness and the beams' spacing under it (m) */
-const ROOF = { rise: 2.8, thick: 0.24, over: 0.6, gable: 0.5, ceiling: 0.14, beamGap: 1.6 };
+const ROOF = { rise: 2.8, thick: 0.24, over: 0.6, gable: 0.5, ceiling: 0.14, ceilingShort: 0.04, beamGap: 1.6 };
 /** the braziers on the dais behind the heroes, between their plinths (x, z: the still shadows' lights), their light, and their
  *  slabs against the crypt's (as the selection screen's room has them, world/heroHall.ts: in the portico either side
  *  of the door they stood in the way, "move these inside the hall, behind heroes, like it was before village feature,
@@ -1279,7 +1279,9 @@ function buildHall(scene: THREE.Object3D, wall: Wall, levels: Levels, M: Mats, o
   // own, thinned from above as the front wall is where they stand before him: the camera can turn to see over any)
   const walls = new THREE.Group();
   scene.add(walls);
-  wall.add(walling(walls, half * 2, eaves, thick, X, y0, HALL.wall - thick / 2, M.ashlar), true, 'wall', true);
+  // (between the side walls, as the front wall's wings are: run to their outer faces, each shared a plane with them at the
+  // corners, from play, "still flickering")
+  wall.add(walling(walls, half * 2 - thick * 2, eaves, thick, X, y0, HALL.wall - thick / 2, M.ashlar), true, 'wall', true);
   for (const s of [-1, 1]) {
     const sideX = X + s * (half - thick / 2), sideLen = face - back;
     hallSideWall(walls, wall, M, sideX, s, thick, eaves, back, face);
@@ -1298,8 +1300,10 @@ function buildHall(scene: THREE.Object3D, wall: Wall, levels: Levels, M: Mats, o
   scene.add(frontWall);
   for (const s of [-1, 1]) {
     const cx = X + s * (dh + wing / 2);
-    wall.add(walling(frontWall, wing, eaves, thick, cx, y0, face - thick / 2, M.ashlar), true, 'wall', true);
-    wall.add(block(frontWall, wing - DOOR.frame, 0.45, 0.35, cx + s * DOOR.frame / 2, y0, face + 0.17, M.coping), true, 'wall', true);
+    const wingX = X + s * (dh + (wing - thick) / 2);
+    wall.add(walling(frontWall, wing - thick, eaves, thick, wingX, y0, face - thick / 2, M.ashlar), true, 'wall', true);
+    // (its plinth course whole: too low to hide him, and thinned it parted along its top in a dark line, a review)
+    wall.add(block(scene, wing - DOOR.frame, 0.45, 0.35, cx + s * DOOR.frame / 2, y0, face + 0.17, M.coping), true, 'wall', true);
   }
   // (the lintel, the frame and the leaves are in the wall: stood in a leaf, he and the camera went through it)
   const inWall = frontWall.children.length;
@@ -1311,7 +1315,7 @@ function buildHall(scene: THREE.Object3D, wall: Wall, levels: Levels, M: Mats, o
   // (what stands free in it, thinned further: a group of its own)
   const free = new THREE.Group();
   scene.add(free);
-  const torches = hallColumns(free, M, look, obstacles, ceiling);
+  const torches = hallColumns(free, scene, M, look, obstacles, ceiling);
   const dais = hallDais(scene, free, levels, M, obstacles);
   const daisTop = y0 + HALL.daisHigh;
   for (const s of [-1, 1]) {
@@ -1330,7 +1334,8 @@ function buildHall(scene: THREE.Object3D, wall: Wall, levels: Levels, M: Mats, o
       wall.add(block(free, 1.0, 0.4, 1.0, cx, y0, cz, M.granite), true, 'wall', true);
       const shaft = new THREE.CylinderGeometry(COLONNADE.radius * 0.88, COLONNADE.radius, COLONNADE.high, 18);
       solid(free, shaft, M.column).position.set(cx, y0 + 0.4 + COLONNADE.high / 2, cz);
-      block(free, 0.95, 0.32, 0.95, cx, y0 + 0.4 + COLONNADE.high, cz, M.granite);
+      // (not with what thins: its face went clear with the floor showing through under a solid top, a review)
+      block(scene, 0.95, 0.32, 0.95, cx, y0 + 0.4 + COLONNADE.high, cz, M.granite);
     }
   }
   block(walls, half * 2, COLONNADE.lintel, 1.0, X, y0 + 0.72 + COLONNADE.high, COLONNADE.z, M.coping);
@@ -1400,7 +1405,8 @@ function hallSideWall(scene: THREE.Object3D, wall: Wall, M: Mats, sideX: number,
  *  to the ceiling's beams, a granite capital), kept off by a circle each; and a torch on each, on its side to the
  *  aisle (an iron bracket, a flame in a cup: lit by the pool's lights as the hero walks past, game/village.ts
  *  `lightLamps`, the hall's own ten being spent outside). Returns where each torch's light is. */
-function hallColumns(scene: THREE.Object3D, M: Mats, look: TorchLook, obstacles: Obstacle[], ceiling: number): THREE.Vector3[] {
+function hallColumns(scene: THREE.Object3D, capitals: THREE.Object3D, M: Mats, look: TorchLook, obstacles: Obstacle[],
+  ceiling: number): THREE.Vector3[] {
   const y0 = TERRACE.high, torches: THREE.Vector3[] = [];
   const shaftHigh = ceiling - y0 - 0.35 - 0.3;
   const shaft = new THREE.CylinderGeometry(COLUMN_IN.radius * 0.9, COLUMN_IN.radius, shaftHigh, 18);
@@ -1409,13 +1415,14 @@ function hallColumns(scene: THREE.Object3D, M: Mats, look: TorchLook, obstacles:
       const x = TERRACE.x + s * HALL.columnX;
       block(scene, 0.82, 0.35, 0.82, x, y0, z, M.granite);
       solid(scene, shaft, M.column).position.set(x, y0 + 0.35 + shaftHigh / 2, z);
-      block(scene, 0.78, 0.3, 0.78, x, ceiling - 0.3, z, M.granite);
+      block(capitals, 0.78, 0.3, 0.78, x, ceiling - 0.3, z, M.granite);
       obstacles.push({ x, z, r: 0.5, h: ceiling });
       // the torch on its aisle side, at a man's reach and a half
       torches.push(wallTorch(scene, M, look, x - s * (COLUMN_IN.radius + 0.02), y0 + 2.7, z, -s, 0, false));
       // (held by an iron band round the shaft: a flat plate on it stood off its curve at one edge and cut into it at
       // the other)
-      const band = solid(scene, new THREE.CylinderGeometry(COLUMN_IN.radius * 0.97, COLUMN_IN.radius * 0.97, 0.1, 18),
+      // (proud of the tapering shaft all round: level with it there, it showed as a dash from some sides, a review)
+      const band = solid(scene, new THREE.CylinderGeometry(COLUMN_IN.radius * 1.01, COLUMN_IN.radius * 1.01, 0.1, 18),
         M.iron);
       band.position.set(x, y0 + 2.4, z);
       band.castShadow = false;
@@ -1562,7 +1569,9 @@ function hallRoof(scene: THREE.Object3D, M: Mats, eaves: number, back: number, f
   const X = TERRACE.x, half = HALL.half, deep = front - back, mid = (front + back) / 2;
   const roof = new THREE.Group();
   scene.add(roof);
-  block(roof, half * 2, ROOF.ceiling, deep, X, eaves - ROOF.ceiling, mid, M.planks);
+  // (short of the portico's beam's and the gables' faces, which it shared a plane with: as the view moved, a stripe of it
+  // showed through them, from play, "still flickering")
+  block(roof, half * 2, ROOF.ceiling, deep - ROOF.ceilingShort * 2, X, eaves - ROOF.ceiling, mid, M.planks);
   for (let z = back + ROOF.beamGap; z < front - 0.5; z += ROOF.beamGap) {
     block(roof, half * 2 - 0.2, 0.32, 0.36, X, eaves - ROOF.ceiling - 0.32, z, M.timber);
   }
@@ -2025,12 +2034,13 @@ function buildCottage(scene: THREE.Object3D, wall: Wall, M: Mats, c: Cottage, rn
   const body = block(g, w, h - 0.5, d, 0, 0.5, 0, M.plaster, 1);
   // the frame: posts at the corners and between, a sill and a plate along each face
   for (const sx of [-1, -0.33, 0.33, 1]) for (const sz of [-1, 1]) block(g, 0.18, h - 0.5, 0.06, sx * (w / 2 - 0.09), 0.5, sz * (d / 2 + 0.02), M.timber);
-  for (const sz of [-1, 1]) for (const y of [0.5, h - 0.18]) block(g, w + 0.04, 0.16, 0.06, 0, y, sz * (d / 2 + 0.02), M.timber);
+  // (a sill and a plate stand a hair proud of the posts they cross: in one plane, the two fought where they crossed)
+  for (const sz of [-1, 1]) for (const y of [0.5, h - 0.18]) block(g, w + 0.04, 0.16, 0.08, 0, y, sz * (d / 2 + 0.02), M.timber);
   // (each end framed as the faces are, plaster between: one sheet of timber, its whole wall stood black, from play)
   for (const sx of [-1, 1]) {
     const endX = sx * (w / 2 + 0.02);
     for (const z of [-(d / 2 - 0.09), 0, d / 2 - 0.09]) block(g, 0.06, h - 0.5, 0.18, endX, 0.5, z, M.timber);
-    for (const y of [0.5, h - 0.18]) block(g, 0.06, 0.16, d, endX, y, 0, M.timber);
+    for (const y of [0.5, h - 0.18]) block(g, 0.08, 0.16, d, endX, y, 0, M.timber);
   }
   // the door and two windows on its face (+z, as it's turned), lit within by night: each its panes set in a timber
   // casing, a sill under it
@@ -2040,7 +2050,8 @@ function buildCottage(scene: THREE.Object3D, wall: Wall, M: Mats, c: Cottage, rn
     // (its own uvs: the panes' picture once across its face)
     solid(g, new THREE.BoxGeometry(0.8, 0.7, 0.04), M.window).position.set(wx, 1.7, face);
     for (const ex of [-1, 1]) block(g, 0.08, 0.86, 0.1, wx + ex * 0.44, 1.27, face + 0.02, M.timber);
-    block(g, 0.96, 0.08, 0.1, wx, 2.05, face + 0.02, M.timber);
+    // (its head proud of the sides it sits over, for the same reason)
+    block(g, 0.96, 0.08, 0.12, wx, 2.05, face + 0.02, M.timber);
     // (under the panes: a hand lower, the plaster showed between them and the sill)
     block(g, 1.04, 0.07, 0.2, wx, 1.29, face + 0.06, M.timber);
     for (const k of [-1, 1]) {
@@ -2057,7 +2068,8 @@ function buildCottage(scene: THREE.Object3D, wall: Wall, M: Mats, c: Cottage, rn
   const slope = Math.hypot(d / 2 + eave, rise), pitch = Math.atan2(rise, d / 2 + eave);
   const roofParts: THREE.Mesh[] = [];
   for (const sz of [-1, 1]) {
-    const slab = block(g, w + eave * 2, 0.14, slope, 0, 0, 0, M.roof);
+    // (one a hair wider: their ends, in one plane, fought where the slopes overlap at the ridge)
+    const slab = block(g, w + eave * 2 + (sz > 0 ? 0.02 : 0), 0.14, slope, 0, 0, 0, M.roof);
     slab.position.set(0, h + rise / 2, sz * (d / 2 + eave) / 2);
     slab.rotation.x = sz * pitch;
     roofParts.push(slab);
@@ -2144,13 +2156,17 @@ function buildYard(parent: THREE.Object3D, wall: Wall, M: Mats): void {
   const { halfX, halfZ, gate } = YARD, x = 0, z = 0;
   // (its floor the meadow trodden thin: `meadowMask`)
   // each side of the fence: posts along it and two rails, the rails the part a body is kept off
+  // (a corner's post once: each side stood its own there, the two in one place, flickering)
+  const posted = new Set<string>();
   const side = (x0: number, z0: number, x1: number, z1: number): void => {
     const len = Math.hypot(x1 - x0, z1 - z0), turn = Math.atan2(x1 - x0, z1 - z0) - Math.PI / 2;
     const mx = (x0 + x1) / 2, mz = (z0 + z1) / 2;
     const n = Math.max(2, Math.round(len / 1.6));
     for (let k = 0; k <= n; k++) {
-      const t = k / n;
-      block(scene, 0.16, 1.25, 0.16, x0 + (x1 - x0) * t, 0, z0 + (z1 - z0) * t, M.timber, 0.4);
+      const t = k / n, px = x0 + (x1 - x0) * t, pz = z0 + (z1 - z0) * t, place = `${px.toFixed(2)},${pz.toFixed(2)}`;
+      if (posted.has(place)) continue;
+      posted.add(place);
+      block(scene, 0.16, 1.25, 0.16, px, 0, pz, M.timber, 0.4);
     }
     for (const y of [0.45, 0.95]) block(scene, len, 0.1, 0.08, mx, y, mz, M.planks, 0.4, turn);
     // (one slab the rails' height for bodies to be kept off: the rails as drawn have a man's gap under them)
@@ -2216,6 +2232,8 @@ function sightOfThePlace(): { walls: SightWall[]; hall: THREE.Vector4; roofs: Si
   // bits, wedges of black over the front wall he stood before, moving as he moved, from play, "here we dont need to see
   // through the wall, because I'm in front of the wall", "this is still flickering")
   const inside = new THREE.Vector4(west + SEALED_INSIDE, HALL.wall + SEALED_INSIDE, east - SEALED_INSIDE, HALL.door - SEALED_INSIDE);
+  // (the room the hall's walls thin for: its floor, out to under the portico's beam)
+  hallRoomIs(new THREE.Vector4(inside.x, inside.y, inside.z, COLONNADE.z + 1));
   return { walls, hall: inside, roofs };
 }
 

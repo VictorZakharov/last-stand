@@ -1199,7 +1199,8 @@ function seenOnly(colour: any, depthNode: any): any {
   const over = mix(SIGHT_LOOK.over, SIGHT_LOOK.overSealed, shut);
   const belowRoofs = smoothstep(SIGHT_LOOK.roofs, SIGHT_LOOK.roofs + SIGHT_LOOK.overSoft, place.y).oneMinus();
   const roof = texture(SIGHT.tSightRoofs.value, place.xz.div(ROOFS_HALF * 2).add(0.5)).r;
-  const above = smoothstep(over, over.add(SIGHT_LOOK.overSoft), place.y).mul(max(belowRoofs.mul(roof), inIt));
+  const onRoof = min(roof.mul(2), 1);
+  const above = smoothstep(over, over.add(SIGHT_LOOK.overSoft), place.y).mul(max(belowRoofs.mul(onRoof), inIt));
   const near = away.lessThan(0.3).or(depthNode.r.greaterThanEqual(0.99999));
   const unseen = select(near, 0, max(open, above).oneMinus().mul(on));
   const light = dot(colour.rgb, vec3(0.2126, 0.7152, 0.0722));
@@ -1208,7 +1209,8 @@ function seenOnly(colour: any, depthNode: any): any {
   const keptShut = pressed.mul(SIGHT_LOOK.sealed).add(SIGHT_LOOK.floor * SIGHT_LOOK.sealedFloor);
   const kept = mix(keptOpen, keptShut, shut);
   const fogged = mix(colour.rgb.mul(kept).div(max(light, 0.001)), vec3(...SIGHT_LOOK.tint).mul(kept), SIGHT_LOOK.grey);
-  return vec4(mix(colour.rgb, fogged, unseen.mul(min(colour.a, 1))), max(colour.a, 1));
+  const letOff = mix(1, min(colour.a, 1), smoothstep(0.6, 0.9, roof));
+  return vec4(mix(colour.rgb, fogged, unseen.mul(letOff)), max(colour.a, 1));
 }
 
 /** the light's weights, as the WebGL grade reads an area's and a pixel's */

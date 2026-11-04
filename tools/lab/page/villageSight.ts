@@ -29,7 +29,7 @@ const SHUT_KEEPS = 0.55;
 const LEAST_OVER_SHOULDER = 0.05;
 /** how far out of a wall he stands, and how far past it what's read lies (m) */
 const OUT_OF_WALL = 1.5;
-const PAST_WALL = 1;
+const PAST_WALL = 5;
 const IN_THE_HALL = 4;
 const BESIDE_DOOR = 3;
 /** how far further back from the door the hall's floor is read (m), and how far off a cottage's end (m) */

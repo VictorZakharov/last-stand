@@ -111,16 +111,18 @@ function madeFrom(material: THREE.ShaderMaterial, port: (t: Tsl, u: Record<strin
 
 /** what thins whole reaching all of it, for a kind that gives no reach */
 const ALL_THE_WAY = new THREE.Vector2(1e5, 1e6);
+/** no room to thin for, for a kind that gives none */
+const EVERYWHERE = new THREE.Vector4(-1e5, -1e5, 1e5, 1e5);
 
 /** A kind's see-through values as nodes. */
-interface SeeNodes { focus: N; k: N; minY: N; across: N; whole: N; ramp: N; reach: N }
+interface SeeNodes { focus: N; k: N; minY: N; across: N; whole: N; ramp: N; reach: N; room: N }
 
 /** How much of a fragment at `world` to drop where it stands between the camera and the hero, as `seeFade()` has it
  *  (core/seeThrough.ts), by the hole and floor `see` reads (each a node of the `SeeThrough`'s values) */
 export function seeFade(world: N, see: SeeNodes): N {
   const { wgslFn, cameraPosition } = tsl as any;
   return wgslFn(`fn seeFade(wp: vec3f, eye: vec3f, focus: vec3f, k: vec4f, minY: f32, across: f32, whole: f32,
-    ramp: f32, reach: vec2f) -> f32 {
+    ramp: f32, reach: vec2f, room: vec4f) -> f32 {
     if ((k.z <= 0.0 && whole <= 0.0) || wp.y <= minY) { return 0.0; }
     let ca = focus - eye;
     let l = length(ca);
@@ -136,8 +138,13 @@ export function seeFade(world: N, see: SeeNodes): N {
     let side = select(vec3f(1.0, 0.0, 0.0), level / max(levelLength, 1e-6), levelLength > 1e-3);
     let aside = dot(off, side);
     let r = length(off + side * aside * (across - 1.0)) / max(along / l, 0.05);
-    let thinned = whole * (1.0 - smoothstep(-k.w - ramp, -k.w, past)) * (1.0 - smoothstep(reach.x, reach.y, r));
-    return max((1.0 - smoothstep(k.x, k.y, r)) * k.z, thinned);
+    let on = wp.xz + select(vec2f(0.0), ca.xz / max(flat, 1e-6), flat > 0.01) * 1.2;
+    let inRoom = min(min(on.x - room.x, room.z - on.x), min(on.y - room.y, room.w - on.y));
+    let floorOff = select(r, abs(dot(wp.xz - focus.xz, vec2f(-ca.z, ca.x))) / max(flat, 1e-6), flat > 0.01);
+    let thinned = whole * (1.0 - smoothstep(-k.w - ramp, -k.w, past)) * (1.0 - smoothstep(reach.x, reach.y, floorOff))
+      * smoothstep(0.0, 0.3, inRoom);
+    let atHim = smoothstep(focus.y - 0.2, focus.y + 0.1, wp.y);
+    return max((1.0 - smoothstep(k.x, k.y, r)) * k.z * atHim, thinned);
   }`)({ wp: world, eye: cameraPosition, ...see });
 }
 
@@ -159,6 +166,7 @@ export function seeUniforms(uniforms: Record<string, { value: unknown }>): SeeNo
     whole: reference('value', 'float', uniforms.uSeeWhole),
     ramp: reference('value', 'float', uniforms.uSeeRamp),
     reach: reference('value', 'vec2', uniforms.uSeeReach),
+    room: reference('value', 'vec4', uniforms.uSeeRoom),
   };
 }
 
@@ -185,7 +193,7 @@ function maskOwn(material: THREE.Material): void {
 function thinBy(material: N, see: SeeThrough): void {
   if (material.maskNode) return;
   if (see.wholeOnly) {
-    material.maskNode = seeFade((tsl as any).positionWorld, seeOfKind(see)).lessThanEqual(0.001);
+    material.maskNode = seeFade((tsl as any).positionWorld, seeOfKind(see)).lessThanEqual(see.stillWhole ?? 0.15);
     return;
   }
   if (!see.blended) {
@@ -219,6 +227,7 @@ function seeOfKind(of: SeeThrough): SeeNodes {
     whole: uniform(0).setGroup(renderGroup).onRenderUpdate(() => of.whole.value),
     ramp: uniform(0).setGroup(renderGroup).onRenderUpdate(() => of.ramp.value),
     reach: uniform(new THREE.Vector2()).setGroup(renderGroup).onRenderUpdate(() => of.reach?.value ?? ALL_THE_WAY),
+    room: uniform(new THREE.Vector4()).setGroup(renderGroup).onRenderUpdate(() => of.room?.value ?? EVERYWHERE),
   };
   seeKinds.set(of, nodes);
   return nodes;
