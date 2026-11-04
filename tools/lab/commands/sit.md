@@ -35,7 +35,7 @@ his glance and is let be). From play, "on log cloth is jerking few times per sec
 cm a frame on the log (162 frames in 7 s) and 54 by a fire, the drape between his raised knees going round one or
 the other as his hanging feet swung and the cloth's flutter moved it a few millimetres (`Skirt.ease`). Then he's
 asked to act from it, a step and an attack, tapped (3 frames) and held: he must begin getting up within 2 frames,
-attack nothing before he's up, be up within the time his body and his hands take back (`riseMost`: 0.8 s and 0.4 to spare bare-handed, about 2.7 with a greatsword planted), and once up do nothing after a tap (moved 5 cm at most, no
+attack nothing before he's up, be up within the time his body and his hands take back (`riseMost`: 0.8 s and 0.4 to spare bare-handed, about 1.3 and more with a two-hander's weight), and once up do nothing after a tap (moved 5 cm at most, no
 attack: a tap isn't queued) and do a held key (walked off 0.6 m, or attacked). Pictured half way down and sat, from
 the front, the left and above behind, and sat in the game's own views (`top`, `third`); by a fire from his right,
 behind and above, and from ahead with the fire hidden, framed on his knees (`fromBeyond`: through the flames the
@@ -107,7 +107,7 @@ of his hand, 15 cm and a centimetre further each frame for half a second as he s
 of its own: at least 15 cm of it must read as moved with no hand on it; turns what he holds 0.5 rad in his hand once
 he's up, read against how he held it a moment before: it must read as held otherwise; turns what a palm grips 0.03
 rad further in his hand each frame for half a second, sat, which must read as turned over 40° in it (not run, and
-said, when nothing is gripped sat: a two-hander is let go of once it's stuck in the ground); holds the right arm at its
+said, when nothing is gripped sat); holds the right arm at its
 stops (`pinnedCanary`); and reads a cloth point at his
 left knee's joint, which must read 4 cm deep or more. The owner's words: "if there is a nearby log or not high stone ... and character is idle,
 they need to walk up to this prop and sit on it, should sit on the closest side", "when user presses any action,
