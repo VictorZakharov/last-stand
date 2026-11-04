@@ -188,7 +188,7 @@ export function restHands(
       shoulder.quaternion.copy(_shoulderWas.slerp(shoulder.quaternion, armIn));
       elbow.quaternion.copy(_elbowWas.slerp(elbow.quaternion, armIn));
     }
-    if (turn && (turn.roll[side] || turn.bend[side])) {
+    if (turn && (turn.roll[side] || turn.bend[side] || turn.armIn?.[side])) {
       hand.rotation.y += sign * turn.roll[side] * w;
       hand.rotation.x += turn.bend[side] * w;
       if (floor) hand.rotation.x += SIT_POSE.dangle * w;

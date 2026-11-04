@@ -45,7 +45,7 @@ import { ItemGlows } from './itemGlow';
 /** sat, how a hand that holds a weapon turns as it goes down to his thigh (`models/sit.ts`, `restHands`), the left's
  *  and the right's, the weapon pointing down to where it's stood; an empty hand rests palm down. The small rise keeps
  *  his shield-side forearm over the thigh. */
-const SIT_HANDS = tunable('warriorSit', { roll: [1.2, 1.2], bend: [0, 0], rise: 0.005, slant: 0.06, along: 0.1, over: 0.085, armIn: 1, floorIn: 0.55, arc: 0.15 });
+const SIT_HANDS = tunable('warriorSit', { roll: [0, 0], bend: [0, 0], rise: 0.005, slant: 0.06, along: 0.1, over: 0.07, armIn: 1, floorIn: 0.7, arc: 0.15, lapR: [0.55, -0.05, 0.85], lapL: [-0.55, 0, 0.85], kneesR: [0.25, -0.6, 0.7], kneesL: [-0.25, -0.6, 0.7], turnFrom: 0.15 });
 const _sitTurn: RestTurn = { roll: [0, 0], bend: [0, 0], along: [0, 0], over: [0, 0], armIn: [0, 0], arc: [0, 0] };
 const _lifted: number[] = [], _resting: number[] = [];
 
@@ -1958,6 +1958,31 @@ export function buildWarrior(): Model {
   /** Carry the two-hander out beside the legs (by a fire), or a one-handed axe or mace to where it's leant on a seat
    *  (`leant`), then take the empty hand to the knee. The old interpolation from a hand already going to its knee
    *  took the greatsword 10 cm into his thigh. */
+  const _lapX = new THREE.Vector3(), _lapY = new THREE.Vector3(), _lapZ = new THREE.Vector3();
+  const _lapWorld = new THREE.Matrix4(), _lapHand = new THREE.Matrix4();
+  const _lapQ = new THREE.Quaternion(), _lapNow = new THREE.Quaternion();
+  /** A hand keeping its one-hander as he sits: its weapon turned by `w` to lie along `way` (the root's frame: out to
+   *  his left, up, ahead), across his lap, and the back of the hand on from the forearm, as a man rests a weapon
+   *  across his thighs. Said in those terms, as the arm's reach alone stood an axe up before his face. */
+  function holdAcrossLap(left: boolean, handle: THREE.Object3D, way: readonly number[], w: number): void {
+    const hand = left ? j.handL : j.handR, elbow = left ? j.elbowL : j.elbowR;
+    root.updateMatrixWorld(true);
+    const fore = hand.getWorldPosition(_lapY).sub(elbow.getWorldPosition(_lapZ));
+    const along = _lapX.set(way[0], way[1], way[2]).transformDirection(root.matrixWorld);
+    fore.addScaledVector(along, -fore.dot(along)).normalize();
+    _lapWorld.makeBasis(along, fore, _lapZ.crossVectors(along, fore));
+    // (the handle's way in the hand's frame, and down the fingers, square to it)
+    const inHand = _s1.set(0, 1, 0).applyQuaternion(handle.quaternion);
+    const fingers = _s2.set(0, -1, 0);
+    fingers.addScaledVector(inHand, -fingers.dot(inHand)).normalize();
+    _lapHand.makeBasis(inHand, fingers, _s3.crossVectors(inHand, fingers));
+    _lapQ.setFromRotationMatrix(_lapWorld.multiply(_lapHand.invert()));
+    // (once the hand is on its way down: turned from the start, the blade swept past his face; its pace the sit's own,
+    // as eased again its tip went up to 19 cm a frame)
+    hand.getWorldQuaternion(_lapNow).slerp(_lapQ, ramp(w, SIT_HANDS.turnFrom, 1));
+    hand.parent!.getWorldQuaternion(_lapQ).invert();
+    hand.quaternion.copy(_lapQ).multiply(_lapNow);
+  }
   /** the frame's time, for `carryDown` */
   let carryDt = 0;
   function carryDown(p: Planted, w: number, weapon: Weapon, sit: NonNullable<AnimState['sit']>): void {
@@ -2821,6 +2846,13 @@ export function buildWarrior(): Model {
     _resting.push(0);
     if (!carryTwo && !between) _resting.push(1);
     restHands(j, st.sit, _resting, _sitTurn, SIT_HANDS.rise, _lifted);
+    if (st.sit && !fp && st.dead < 0) {
+      // (ahead over his far knee on a seat, its end down between his feet by a fire: straight across his lap, an axe's
+      // haft went through his shield, a sword over his other hand and two swords made one bar; level over his raised
+      // knees by a fire, it floated)
+      if (held && !two) holdAcrossLap(false, grip, floorSit ? SIT_HANDS.kneesR : SIT_HANDS.lapR, satBy(st.sit));
+      if (offHeld && !sheathed) holdAcrossLap(true, gripL, floorSit ? SIT_HANDS.kneesL : SIT_HANDS.lapL, satBy(st.sit));
+    }
     body.legs = floorSit ? satBy(st.sit) : 0;
     if (st.dead >= 0) { deathFall(j, st.dead, -1); legs.reset(); }
     else {
