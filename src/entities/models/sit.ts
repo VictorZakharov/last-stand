@@ -59,7 +59,8 @@ export const satBy = (s: SitState | null | undefined): number => (s ? s.w * s.w 
 export interface RestTurn {
   roll: number[];
   bend: number[];
-  /** how much further along the thigh a hand rests, each side (a share of the thigh, as `SIT_POSE.rest`) */
+  /** how much further along the thigh a hand rests, each side (a share of the thigh, as `SIT_POSE.rest`; by a fire, from
+   *  the knee: less than 0, back up the thigh) */
   along?: number[];
   /** how much higher over it a hand holding a weapon rests, each side (rig units): its handle's end clear of the thigh */
   over?: number[];
@@ -149,7 +150,7 @@ const _shoulderWas = new THREE.Quaternion(), _elbowWas = new THREE.Quaternion();
  * out and back (hanging at his sides sat, the arms read as a man at attention; the warrior's weapon stood up before
  * his face). Call after `sitPose` and the look (before it, a glance carried the shoulders round and the hands with them,
  * 8 cm over the knee); the arms' IK (`fitArm`) keeps them within their ranges after. `lifted`: the sides lifted over
- * the rising thighs on a seat (all of them by default; not a hand that sets a weapon down after, `plantArm`).
+ * the rising thighs on a seat (all of them by default; not a hand that sets a weapon down after).
  * `floorLift` scales the arc for a hand already lowered beside the legs.
  */
 export function restHands(
@@ -165,7 +166,13 @@ export function restHands(
     // (on the floor, placed from the knee: along the thigh past it, the knees up, the hands were held in the air before
     // the chest)
     const further = turn?.along?.[side] ?? 0;
-    if (floor) (left ? j.kneeL : j.kneeR).localToWorld(_on.set(sign * out, -P.shinL * along, P.shinR + over));
+    if (floor) {
+      const knee = left ? j.kneeL : j.kneeR;
+      knee.localToWorld(_on.set(sign * out, -P.shinL * along, P.shinR + over));
+      // (brought back along the thigh itself: back along the shin's line, a fist rose to his chest)
+      thigh.getWorldPosition(_foot).sub(knee.getWorldPosition(_up));
+      _on.addScaledVector(_foot, -further);
+    }
     else thigh.localToWorld(_on.set(sign * (out + (turn?.out?.[side] ?? 0)), -P.thighL * (along + further), P.thighR + over + rise + (turn?.over?.[side] ?? 0)));
     j.chest.worldToLocal(_on);
     _pole.set(sign * pole[0], pole[1], pole[2]);
