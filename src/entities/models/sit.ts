@@ -69,6 +69,8 @@ export interface RestTurn {
   /** of the way down, how far a hand holding a weapon takes to come in, each side (0: as an empty hand's,
    *  `SIT_POSE.armIn`): the weapon's far end sweeps round with it */
   armIn?: number[];
+  /** how much further out from the thigh a hand rests on a seat, each side (rig units) */
+  out?: number[];
 }
 
 /** The leg chain's angles (rad): the thigh forward from straight down, the knee's bend, the ankle's. */
@@ -164,7 +166,7 @@ export function restHands(
     // the chest)
     const further = turn?.along?.[side] ?? 0;
     if (floor) (left ? j.kneeL : j.kneeR).localToWorld(_on.set(sign * out, -P.shinL * along, P.shinR + over));
-    else thigh.localToWorld(_on.set(sign * out, -P.thighL * (along + further), P.thighR + over + rise + (turn?.over?.[side] ?? 0)));
+    else thigh.localToWorld(_on.set(sign * (out + (turn?.out?.[side] ?? 0)), -P.thighL * (along + further), P.thighR + over + rise + (turn?.over?.[side] ?? 0)));
     j.chest.worldToLocal(_on);
     _pole.set(sign * pole[0], pole[1], pole[2]);
     j.chest.worldToLocal(hand.getWorldPosition(_now));
