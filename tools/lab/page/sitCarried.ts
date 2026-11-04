@@ -415,7 +415,7 @@ function gripsIt(part: Part, palm: THREE.Vector3, hand: Fist['hand'], fists?: re
   if (palmOn(part.mesh, palm) >= HELD_WITHIN || onItsEnd(part.group, palm)) return false;
   if (!fists) return true;
   const fist = fists.find((each) => each.hand === hand);
-  return !!fist && fist.curl >= FIST_OPEN;
+  return !!fist && fist.curl >= FIST_OPEN && !fist.slips;
 }
 
 /** Whether a palm rests on a piece's end, as on a pommel's top: within `END_SHARE` of either end of its length. */
