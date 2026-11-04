@@ -464,7 +464,8 @@ export class Skirt {
   private ease(settle: number, h: number): void {
     const P = (this.geo.attributes.position as THREE.BufferAttribute).array as Float32Array;
     const was = this.drawn ??= Float32Array.from(P);
-    const k = 1 - settle * Math.exp(-h / SETTLE);
+    // (only as he comes to rest: eased all the way down, his rising thigh passed the cloth lagging behind it, 8 to 9 cm)
+    const k = 1 - settle ** SETTLE_IN * Math.exp(-h / SETTLE);
     for (let n = 0; n < P.length; n++) P[n] = was[n] += (P[n] - was[n]) * k;
   }
 
@@ -767,6 +768,8 @@ const LIES_OUT = 0.35;
 const TUCKED_FROM = -0.3;
 /** how long a sat hero's skirt takes to ease to where it's draped (s): `Skirt.ease` */
 const SETTLE = 0.4;
+/** how late in the sit that ease comes in (a power of the way down) */
+const SETTLE_IN = 8;
 /** how far into a leg's gap the cloth between neighbours round a row may dip before it is put round (m): between two points
  *  lying on a thigh the line dips a millimetre or two into the gap, and moving them for it pushed the cloth out into the free
  *  hand's cuff */
