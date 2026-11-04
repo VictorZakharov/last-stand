@@ -18,6 +18,9 @@ import { FIST_OPEN } from './range';
 
 /** a palm this near a piece holds it (m): the fingers round a handle, a strap's width */
 const HELD_WITHIN = 0.06;
+/** a forearm's line this near a piece strapped to it holds it (m): a strap's width from the arm's skin, 4 cm off its
+ *  line */
+const STRAPPED_WITHIN = HELD_WITHIN + 0.04;
 /** where a palm's middle is in its hand's frame (rig units): down the hand from the wrist, onto its palm */
 export const PALM_AT = new THREE.Vector3(0, -0.06, -0.02);
 /** a palm within this share of a piece's length of either end rests on it (a greatsword's pommel: 0.03 to 0.06; its
@@ -455,15 +458,30 @@ function pieceBox(group: THREE.Object3D): THREE.Box3 {
   return box;
 }
 
-/** The pieces a palm is on now: of those hung from a hand, any whose mesh a palm is within `HELD_WITHIN` of. */
+/** The pieces a palm is on now: of those hung from a hand, any whose mesh a palm is within `HELD_WITHIN` of; a piece
+ *  strapped to the forearm (`userData.strapped`, a shield) the wrist or the forearm's middle too. (A shield on a forearm
+ *  resting on his knee, the palm turned down off it, read "moved 50 cm with no hand on it", following the arm.) */
 function heldPieces(lab: Lab, parts: Part[]): Set<THREE.Object3D> {
   const palms = palmsOf(lab);
+  const arms = forearmsOf(lab);
   const held = new Set<THREE.Object3D>();
   for (const part of parts) {
     if (!part.inHand || held.has(part.group) || !shown(part.mesh)) continue;
-    if (palms.some((palm) => palmOn(part.mesh, palm) < HELD_WITHIN)) held.add(part.group);
+    const onPalm = palms.some((palm) => palmOn(part.mesh, palm) < HELD_WITHIN);
+    const onArm = part.group.userData.strapped && arms.some((arm) => palmOn(part.mesh, arm) < STRAPPED_WITHIN);
+    if (onPalm || onArm) held.add(part.group);
   }
   return held;
+}
+
+/** Each wrist and each forearm's middle in the world now. */
+function forearmsOf(lab: Lab): THREE.Vector3[] {
+  const sides = [[lab.joints.handL, lab.joints.elbowL], [lab.joints.handR, lab.joints.elbowR]];
+  return sides.flatMap(([hand, elbow]) => {
+    const wrist = hand.getWorldPosition(new THREE.Vector3());
+    const middle = elbow.getWorldPosition(new THREE.Vector3()).lerp(wrist, 0.5);
+    return [wrist, middle];
+  });
 }
 
 /** Every rigid mesh of his model that isn't cloth, with the piece it belongs to. */
