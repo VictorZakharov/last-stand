@@ -44,7 +44,7 @@ import type { ActionState, AnimState, Blade, Fist, Gear, KeyedArm, LowerGrip, Mo
 /** sat, how a hand that holds a weapon turns as it goes down to his thigh (`models/sit.ts`, `restHands`), the left's
  *  and the right's, the weapon pointing down to where it's stood; an empty hand rests palm down. The small rise keeps
  *  his shield-side forearm over the thigh. */
-const SIT_HANDS = tunable('warriorSit', { roll: [0, 0], bend: [0, 0], rise: 0.005, slant: 0.1, along: 0.35, over: 0.11, armIn: 1, floorIn: 0.7, arc: 0.15, lapR: [0.55, 0.12, 0.85], lapTwo: [0.95, -0.22, 0.15], lapAt: [-0.16, 0.205, 0.36], lapPole: [-0.5, -0.5, -0.6], portDir: [0.4, 0.9, 0.15], fistBelow: 0.08, swordOver: 0.03, maulOver: 0.26, axeOver: 0.315, armSat: 0.79, portAt: [-0.36, -0.08, 0.38], beside: [-0.42, 0.4, 0.02], besidePole: [-0.3, -0.2, -1], besideOut: -0.3, besideAhead: 0.95, twoR: [0.38, 0.12, 0.92], twoL: [-0.35, 0.3, 0.89], viaR: [-0.15, 0.2, 0.95], viaL: [0.15, 0.2, 0.95], viaAt: 0.45, floorBack: 0, viaFloorR: [-0.15, 0.5, 0.85], viaFloorL: [0.15, 0.5, 0.85], kneesR: [0.88, -0.2, 0.42], kneesL: [-0.7, -0.3, 0.65], turnFrom: 0.15, turnLate: 0.5, turnIn: 0.12, shieldOut: 0.09, edgeDown: 0.2, });
+const SIT_HANDS = tunable('warriorSit', { roll: [0, 0], bend: [0, 0], rise: 0.005, slant: 0.1, along: 0.35, over: 0.11, armIn: 1, floorIn: 0.7, arc: 0.15, lapR: [0.55, 0.12, 0.85], lapTwo: [0.95, -0.22, 0.15], lapAt: [-0.16, 0.205, 0.36], lapPole: [-0.5, -0.5, -0.6], portDir: [0.4, 0.9, 0.15], fistBelow: 0.08, swordRest: [0.02, 0.1, -0.52], maulRest: [0.26, 0, -0.2], axeRest: [0.51, 0, -0.3], armSat: 0.79, portAt: [-0.36, -0.08, 0.38], beside: [-0.4, 0.25, 0.06], besidePole: [-0.3, -0.2, -1], besideAhead: 0.95, twoR: [0.38, 0.12, 0.92], twoL: [-0.35, 0.3, 0.89], viaR: [-0.15, 0.2, 0.95], viaL: [0.15, 0.2, 0.95], viaAt: 0.45, floorBack: 0, viaFloorR: [-0.15, 0.5, 0.85], viaFloorL: [0.15, 0.5, 0.85], kneesR: [0.88, -0.2, 0.42], kneesL: [-0.7, -0.3, 0.65], turnFrom: 0.15, turnLate: 0.5, turnIn: 0.12, shieldOut: 0.09, edgeDown: 0.2, });
 const _sitTurn: RestTurn = { roll: [0, 0], bend: [0, 0], along: [0, 0], over: [0, 0], armIn: [0, 0], arc: [0, 0], out: [0, 0] };
 const _lifted: number[] = [], _resting: number[] = [];
 
@@ -607,7 +607,7 @@ export function buildWarrior(): Model {
     // forearm), a turned-back cuff at the wrist, and the wrist into the palm
     B.add(scaleUV(lathe([[0.05, -0.245], [0.052, -0.2], [0.057, -0.12], [0.061, -0.04], [0.06, 0]], 16), 2, 1), cloth, el);
     B.add(scaleUV(lathe([[0.049, -0.25], [0.056, -0.245], [0.058, -0.215], [0.055, -0.205]], 16), 2, 0.3), cloth, el);
-    B.skinChain(wristBent(ovalTube([[-0.292, 0.029, 0.013], [-0.28, 0.03, 0.017], [-0.265, 0.033, 0.023], [-0.235, 0.038, 0.032], [-0.2, 0.042, 0.04]], 16), j.P.foreL), bareSkin, el, wrist.chain);
+    B.skinChain(wristBent(ovalTube([[-0.292, 0.029, 0.021], [-0.28, 0.03, 0.024], [-0.265, 0.033, 0.027], [-0.235, 0.038, 0.032], [-0.2, 0.042, 0.04]], 16), j.P.foreL), bareSkin, el, wrist.chain);
   }
   const handL = buildHand(j.handL, 1, leather, skinTip, HAND_K, bareSkin), handR = buildHand(j.handR, -1, leather, skinTip, HAND_K, bareSkin);
   const body = bodyShape(j, { L: handL.vis, R: handR.vis });
@@ -1536,14 +1536,21 @@ export function buildWarrior(): Model {
   const _allJoints = Object.values(j).filter((o): o is THREE.Object3D => o instanceof THREE.Object3D);
   const _jointsWere = _allJoints.map((o) => ({ at: new THREE.Vector3(), q: new THREE.Quaternion() }));
   const _portHand = new THREE.Vector3(), _besideAt = new THREE.Vector3(), _besidePole = new THREE.Vector3(), _floorWay = [0, 0, 0];
+  /** By a fire, what a two-hander's own shape asks of its rest: how far its far end's line stands over the floor (a heavy
+   *  head stands out of the handle's line, on its edge), how much higher the hand (a sword's guard crosses the handle,
+   *  and level, went 10 cm under the floor) and how far out it lies (the axe: further out, the wrist at its stops). */
+  function floorRest(weapon: Weapon): readonly number[] {
+    const name = weapon.group.name;
+    return name === 'Maul' ? SIT_HANDS.maulRest : name === 'Greataxe' ? SIT_HANDS.axeRest : SIT_HANDS.swordRest;
+  }
   /** By a fire, the way from his right hand, in his frame, that puts `weapon`'s far end on the floor ahead of him, beside
-   *  his leg: his arm hanging from the shoulder, the handle square to it as a hand hanging at his side holds one. */
+   *  his leg: his arm hanging from the shoulder, the handle square to it as a hand hanging at his side holds one, tipped up
+   *  a little to a head that rests on its edge. */
   function wayToFloor(weapon: Weapon): readonly number[] {
-    // (a heavy head lies on its side, which stands out of the handle's line)
-    const name = weapon.group.name, head = name === 'Maul' ? SIT_HANDS.maulOver : name === 'Greataxe' ? SIT_HANDS.axeOver : SIT_HANDS.swordOver;
+    const [head, , out] = floorRest(weapon);
     const above = root.worldToLocal(j.handR.getWorldPosition(_besideAt)).y - SIT_HANDS.fistBelow - head;
-    const fall = THREE.MathUtils.clamp(above / weapon.len, 0, 0.97), level = Math.sqrt(1 - fall * fall);
-    _floorWay[0] = SIT_HANDS.besideOut * level;
+    const fall = THREE.MathUtils.clamp(above / weapon.len, -0.3, 0.97), level = Math.sqrt(1 - fall * fall);
+    _floorWay[0] = out * level;
     _floorWay[1] = -fall;
     _floorWay[2] = SIT_HANDS.besideAhead * level;
     return _floorWay;
@@ -1573,7 +1580,7 @@ export function buildWarrior(): Model {
     const floor = onFloor(sat);
     const [x, y, z] = floor ? SIT_HANDS.beside : SIT_HANDS.lapAt;
     const [px, py, pz] = floor ? SIT_HANDS.besidePole : SIT_HANDS.lapPole;
-    const high = floor ? y : sat.hip / root.scale.x + y;
+    const high = floor ? y + floorRest(weapon)[1] : sat.hip / root.scale.x + y;
     j.chest.worldToLocal(root.localToWorld(_besideAt.set(x, high, z)));
     reachArm(j.shoulderR, j.elbowR, j.P.upperL, j.P.foreL, _besideAt, _besidePole.set(px, py, pz));
     holdAcrossLap(false, grip, floor ? wayToFloor(weapon) : SIT_HANDS.lapTwo, 1, 0, sat);
