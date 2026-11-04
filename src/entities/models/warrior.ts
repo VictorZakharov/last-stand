@@ -45,8 +45,8 @@ import { ItemGlows } from './itemGlow';
 /** sat, how a hand that holds a weapon turns as it goes down to his thigh (`models/sit.ts`, `restHands`), the left's
  *  and the right's, the weapon pointing down to where it's stood; an empty hand rests palm down. The small rise keeps
  *  his shield-side forearm over the thigh. */
-const SIT_HANDS = tunable('warriorSit', { roll: [0, 0], bend: [0, 0], rise: 0.005, slant: 0.06, along: 0.1, over: 0.07, armIn: 1, floorIn: 0.7, arc: 0.15, lapR: [0.55, -0.05, 0.85], lapL: [-0.55, 0, 0.85], kneesR: [0.25, -0.6, 0.7], kneesL: [-0.25, -0.6, 0.7], turnFrom: 0.15 });
-const _sitTurn: RestTurn = { roll: [0, 0], bend: [0, 0], along: [0, 0], over: [0, 0], armIn: [0, 0], arc: [0, 0] };
+const SIT_HANDS = tunable('warriorSit', { roll: [0, 0], bend: [0, 0], rise: 0.005, slant: 0.1, along: 0.1, over: 0.11, armIn: 1, floorIn: 0.7, arc: 0.15, lapR: [0.55, 0.12, 0.85], twoR: [0.55, 0.12, 0.85], twoL: [-0.55, 0.18, 0.85], kneesR: [0.7, -0.25, 0.65], kneesL: [-0.7, -0.3, 0.65], turnFrom: 0.15, turnLate: 0.5, turnIn: 0.12, shieldOut: 0.09 });
+const _sitTurn: RestTurn = { roll: [0, 0], bend: [0, 0], along: [0, 0], over: [0, 0], armIn: [0, 0], arc: [0, 0], out: [0, 0] };
 const _lifted: number[] = [], _resting: number[] = [];
 
 const ZERO = new THREE.Vector3(), _v = new THREE.Vector3();
@@ -1917,10 +1917,13 @@ export function buildWarrior(): Model {
   const _lapX = new THREE.Vector3(), _lapY = new THREE.Vector3(), _lapZ = new THREE.Vector3();
   const _lapWorld = new THREE.Matrix4(), _lapHand = new THREE.Matrix4();
   const _lapQ = new THREE.Quaternion(), _lapNow = new THREE.Quaternion();
+  const _lapWas = new THREE.Quaternion(), _lapRoot = new THREE.Quaternion();
+  /** how each hand's turned in his frame as he began to sit (the left's, the right's), once taken */
+  const _lapStood = [new THREE.Quaternion(), new THREE.Quaternion()], _lapTaken = [false, false];
   /** A hand keeping its one-hander as he sits: its weapon turned by `w` to lie along `way` (the root's frame: out to
    *  his left, up, ahead), across his lap, and the back of the hand on from the forearm, as a man rests a weapon
    *  across his thighs. Said in those terms, as the arm's reach alone stood an axe up before his face. */
-  function holdAcrossLap(left: boolean, handle: THREE.Object3D, way: readonly number[], w: number): void {
+  function holdAcrossLap(left: boolean, handle: THREE.Object3D, way: readonly number[], w: number, from: number): void {
     const hand = left ? j.handL : j.handR, elbow = left ? j.elbowL : j.elbowR;
     root.updateMatrixWorld(true);
     const fore = hand.getWorldPosition(_lapY).sub(elbow.getWorldPosition(_lapZ));
@@ -1935,7 +1938,18 @@ export function buildWarrior(): Model {
     _lapQ.setFromRotationMatrix(_lapWorld.multiply(_lapHand.invert()));
     // (once the hand is on its way down: turned from the start, the blade swept past his face; its pace the sit's own,
     // as eased again its tip went up to 19 cm a frame)
-    hand.getWorldQuaternion(_lapNow).slerp(_lapQ, ramp(w, SIT_HANDS.turnFrom, 1));
+    // (from how it stood as he began, kept in his own frame until then: left in the hand as the arm came in, two blades
+    // tipped across his face at a third of the way down)
+    const side = left ? 0 : 1, stood = _lapStood[side];
+    hand.getWorldQuaternion(_lapNow);
+    root.getWorldQuaternion(_lapRoot);
+    if (!_lapTaken[side]) {
+      stood.copy(_lapRoot).invert().multiply(_lapNow);
+      _lapTaken[side] = true;
+    }
+    _lapWas.copy(_lapRoot).multiply(stood).slerp(_lapQ, ramp(w, from, 1));
+    // (and back onto the pose's own as he's nearly up, which it's come to at his last frame)
+    _lapNow.slerp(_lapWas, smooth(ramp(w, 0, SIT_HANDS.turnIn)));
     hand.parent!.getWorldQuaternion(_lapQ).invert();
     hand.quaternion.copy(_lapQ).multiply(_lapNow);
   }
@@ -2085,6 +2099,7 @@ export function buildWarrior(): Model {
     unplant(plantR);
     // (what a sit chose kept until he's up: cleared with the grip each frame, the stood weapon's turn was chosen
     // afresh every frame, and the leant one went on 15 cm after it was let go of)
+    if (!st.sit) _lapTaken.fill(false);
     if (!st.sit) for (const p of [plantR]) { p.carriedSide = false; p.turn = -1; p.leant = false; }
     // (through the eyes the hands drawn larger, `EYES.hand`: the fists seat and close round their handles at that scale)
     const handK = HAND_K * (fp ? EYES.hand : 1);
@@ -2772,6 +2787,8 @@ export function buildWarrior(): Model {
     _sitTurn.over![0] = offHeld && !sheathed ? SIT_HANDS.over : 0;
     _sitTurn.armIn![0] = offHeld && !sheathed ? heldIn : 0;
     _sitTurn.arc![0] = offHeld && !sheathed ? SIT_HANDS.arc : 0;
+    // (the shield's arm outside the thigh, the shield clear of it: on the thigh, his knee came through it on a low seat)
+    _sitTurn.out![0] = shield.visible ? SIT_HANDS.shieldOut : 0;
     st.look?.();
     // (a hand that stands its weapon up after isn't lifted over his thighs: lifted to his chest, the plant took it
     // from there, and for a frame the weapon swung across his chest and the hand through his head, 9 to 18 cm)
@@ -2787,11 +2804,16 @@ export function buildWarrior(): Model {
     if (!carryTwo && !between) _resting.push(1);
     restHands(j, st.sit, _resting, _sitTurn, SIT_HANDS.rise, _lifted);
     if (st.sit && !fp && st.dead < 0) {
-      // (ahead over his far knee on a seat, its end down between his feet by a fire: straight across his lap, an axe's
-      // haft went through his shield, a sword over his other hand and two swords made one bar; level over his raised
-      // knees by a fire, it floated)
-      if (held && !two) holdAcrossLap(false, grip, floorSit ? SIT_HANDS.kneesR : SIT_HANDS.lapR, satBy(st.sit));
-      if (offHeld && !sheathed) holdAcrossLap(true, gripL, floorSit ? SIT_HANDS.kneesL : SIT_HANDS.lapL, satBy(st.sit));
+      // (ahead over his far knee on a seat, down across his shins by a fire, as a palm on the knee holds it: straight
+      // across his lap, an axe's haft went through his shield, a sword over his other hand and two swords made one bar;
+      // level over his raised knees by a fire it floated, and down beside his shin the wrist was at its stops for as
+      // long as he sat and the blade went 37 cm in a frame)
+      // (turned once the hands are low by a fire: from the start, the blade lay flat at shin height from a hand hanging
+      // straight down)
+      const both = offHeld && !sheathed, lapR = both ? SIT_HANDS.twoR : SIT_HANDS.lapR;
+      const from = floorSit ? SIT_HANDS.turnLate : SIT_HANDS.turnFrom;
+      if (held && !two) holdAcrossLap(false, grip, floorSit ? SIT_HANDS.kneesR : lapR, satBy(st.sit), from);
+      if (both) holdAcrossLap(true, gripL, floorSit ? SIT_HANDS.kneesL : SIT_HANDS.twoL, satBy(st.sit), from);
     }
     body.legs = floorSit ? satBy(st.sit) : 0;
     if (st.dead >= 0) { deathFall(j, st.dead, -1); legs.reset(); }
