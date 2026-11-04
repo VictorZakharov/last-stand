@@ -24,6 +24,7 @@ import { clearProjectiles } from '../../../src/combat/projectiles';
 import { clearEffects } from '../../../src/fx/effects';
 import { clearLights } from '../../../src/fx/lights';
 import { particles } from '../../../src/fx/particles';
+import { groundHeight } from '../../../src/world/ground';
 type RunPhaseModule = typeof import('../../../src/world/runPhase');
 import { buildHotbar } from '../../../src/ui/hud';
 import * as culling from '../../../src/world/culling';
@@ -387,6 +388,8 @@ export interface CaptureOptions {
    *  (its turn still the hero's facing's) */
   at?: THREE.Vector3;
   distance?: number;
+  /** Keep a ground-level close-up's camera at least this far above the terrain (m). */
+  aboveGround?: number;
   /** how the frame is drawn (looks.ts): as the player sees it (`lit`, the default), or the hero's wireframe, his
    *  faces' orientation, his parts each a colour, or his skeleton over the frame */
   look?: Look;
@@ -1116,6 +1119,10 @@ export class Lab {
       centre.y + closeUp.rise * distance / BODY_DISTANCE,
       centre.z + Math.cos(angle) * distance,
     );
+    if (options.aboveGround !== undefined) {
+      camera.position.y = Math.max(camera.position.y,
+        groundHeight(camera.position.x, camera.position.z) + options.aboveGround);
+    }
     camera.fov = CLOSE_UP_FOV;
     camera.near = 0.05;
     camera.updateProjectionMatrix();

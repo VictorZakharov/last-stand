@@ -120,6 +120,8 @@ const PICTURE_DEEPER = 0.01;
 const OPEN_SHOTS = { every: 30, most: 4, distance: 1.2 };
 /** how far from a fist its close picture is taken (m) */
 const FIST_CLOSE = 0.7;
+/** A weapon's end needs more room than a fist, especially a maul head (m). */
+const FAR_END_CLOSE = 1.4;
 /** how far off the way across its palm a closed fist may have its handle (deg): a slant across the palm is at most 25
  *  (`SLANT` in `models/hands.ts`), and past this the fingers no longer go round it */
 const ASKEW_MOST = 35;
@@ -551,7 +553,7 @@ function fistClose(lab: Lab, name: string, fist: Fist): Pictured {
   return withHidden(hides, () => lab.picture(label, DEEPEST_VIEWS, [], options));
 }
 
-/** The lowest part of what he's stood on the floor, close: from review, no other picture shows a far end meeting it. */
+/** The floor contact of what he's stood or laid down, close: no other picture shows the far end meeting it. */
 function farEndClose(lab: Lab, name: string): Pictured | null {
   lab.model.root.updateMatrixWorld(true);
   let lowest: THREE.Vector3 | null = null;
@@ -563,8 +565,35 @@ function farEndClose(lab: Lab, name: string): Pictured | null {
     lowest = _box.getCenter(new THREE.Vector3()).setY(_box.min.y);
   });
   if (!lowest) return null;
+  // A laid two-hander's lowest mesh may be its grip. Find the drawn vertex nearest its tip, which can extend past the
+  // blade's geometry, so the camera frames the actual far end rather than empty space beyond it.
+  const tip = lab.model.tip;
+  const twoHander = tip?.parent?.children.some((child) => (
+    child.userData.stoodOn && child.userData.handleTo !== undefined
+  ));
+  if (tip && twoHander) {
+    const at = tip.getWorldPosition(new THREE.Vector3());
+    const point = new THREE.Vector3();
+    let nearest = Infinity;
+    tip.parent!.traverse((object) => {
+      const mesh = object as THREE.Mesh;
+      if (!mesh.isMesh || !shown(mesh) || !isStood(mesh)) return;
+      const positions = mesh.geometry.getAttribute('position');
+      if (!positions) return;
+      for (let index = 0; index < positions.count; index++) {
+        point.fromBufferAttribute(positions, index).applyMatrix4(mesh.matrixWorld);
+        const distance = point.distanceToSquared(at);
+        if (distance >= nearest) continue;
+        nearest = distance;
+        lowest!.copy(point);
+      }
+    });
+  }
+  // Frame the ground surface, not a point buried by a planted blade: the cameras must remain above the floor.
+  const end = lowest as THREE.Vector3;
+  end.y = Math.max(end.y, groundHeight(end.x, end.z)) + 0.12;
   const hides = (part: string) => FIRE_PARTS.includes(part) || PLANTS.test(part) || AROUND.test(part);
-  const options = { at: lowest, distance: FIST_CLOSE, look: 'lit' as const };
+  const options = { at: end, distance: FAR_END_CLOSE, aboveGround: 0.1, look: 'lit' as const };
   return withHidden(hides, () => lab.picture(`${name}: sat, the far end on the floor`, DEEPEST_VIEWS, [], options));
 }
 

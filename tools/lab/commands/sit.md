@@ -1,5 +1,11 @@
 # `sit`
 
+The report stays in the page until its pictured moments are transferred one at a time: all five seats' pictures in
+one Playwright message exceeded Node's string limit. The far-end close-up aims above the ground surface, even when a
+point is buried, and keeps each camera above the terrain where it stands; for a laid two-hander it follows the drawn
+vertex nearest the tip, since the lowest mesh can instead be its grip. Nearby seats or the hero can still obscure
+individual views, so inspect the other views too.
+
 The unobstructed front close-up hides the brazier's whole assembly, including its stepped plinth: hiding the flames
 alone left the mage's lower body behind the step. The ordinary views still show the scene as played.
 
