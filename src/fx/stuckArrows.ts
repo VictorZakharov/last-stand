@@ -11,6 +11,7 @@ import { arrowGeometry, arrowLite, ARROW } from '../entities/models/bow';
 import { hullHit } from '../entities/models/hulls';
 import { groundHeight } from '../world/arena';
 import { pavedAt } from '../world/villagePlan';
+import { basinTop, FOUNTAIN } from '../world/fountain';
 import { BIOMES } from '../data/biomes';
 import { sfx } from '../core/audio';
 import { clamp, rand } from '../util';
@@ -229,13 +230,15 @@ function fall(s: Spent, dt: number): void {
     const vn = push > 1e-6 ? v.dot(_n.divideScalar(push)) : 0;
     if (vn < 0) v.addScaledVector(_n, -(1 + restitution(BOUNCE, BOUNCE_V, -vn)) * vn);
   }
-  const g = groundHeight(s.p.x, s.p.z) + LIE_H;
+  const g = Math.max(groundHeight(s.p.x, s.p.z), G.arena.place === 'village' ? basinTop(s.p.x, s.p.z) : 0) + LIE_H;
   if (s.p.y > g) return;
   s.p.y = g;
   if (Math.hypot(v.x, v.y, v.z) < SETTLE_V) {
     // lying along the floor the way it points, rolled a little onto its vanes
     _d.copy(FWD).applyQuaternion(s.q).setY(0);
     if (_d.lengthSq() < 1e-6) _d.set(Math.random() - 0.5, 0, Math.random() - 0.5);
+    // (along the fountain's rim: across it, half an arrow hung in the air over the water, a review)
+    if (G.arena.place === 'village' && basinTop(s.p.x, s.p.z) === FOUNTAIN.high) _d.set(-s.p.z, 0, s.p.x);
     s.q.setFromUnitVectors(FWD, _d.normalize()).multiply(_q.setFromAxisAngle(FWD, rand(-0.6, 0.6)));
     s.tip.copy(s.p);
     s.mode = 'fixed'; s.v = s.w = undefined;
@@ -324,10 +327,11 @@ export function stickIn(root: THREE.Object3D, from: THREE.Vector3, dir: THREE.Ve
  * what it draws (the circle is rounder than the prop): it's met where the circle has it.
  */
 export function propSurface(o: Obstacle, at: THREE.Vector3, dir: THREE.Vector3, normal: THREE.Vector3): THREE.Vector3 | null {
-  if (!o.prop) return null;
+  if (!o.prop && !o.drawn) return null;
   ray.set(_p.copy(at).addScaledVector(dir, -PROP_REACH), dir); ray.far = PROP_REACH * 2;
   _hits.length = 0;
-  o.prop.raycast(ray, _hits);
+  if (o.prop) o.prop.raycast(ray, _hits);
+  else ray.intersectObjects(o.drawn as THREE.Object3D[], false, _hits);
   let best: THREE.Intersection | null = null;
   for (const h of _hits) if (!best || h.distance < best.distance) best = h;
   if (!best) return null;

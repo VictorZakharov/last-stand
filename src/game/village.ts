@@ -4,6 +4,7 @@
 // off; and his skills cast in the training yard alone. In the top view the pointer picks an object; in the close views
 // the one he's near, E using it.
 import * as THREE from 'three';
+import { seeFrom, sightWalls } from '../core/sight';
 import { fadeWhole, ROOF_GHOST_ABOVE } from '../core/seeThrough';
 import { G } from '../state';
 import { RUN } from '../data/balance';
@@ -87,6 +88,10 @@ const _to = new THREE.Vector3();
 /** the most light a highlight on a hero reflects here (`Player.shine`): a lamp over his steel, a glint on an axe's head
  *  and a shield's rim burned white and bloomed */
 const VILLAGE_SHINE = 0.55;
+/** how fast what he can't see blacks as the view comes down from above (the whole of it a second) */
+const SIGHT_EASES = 3;
+/** whether the place's walls were told to what he can see */
+let sightTold = false;
 /** how far before a plinth's hero the hall's hint stands (m) */
 const HERO_HINT_BEFORE = 0.8;
 
@@ -225,6 +230,12 @@ export const objectNear = (): VillageObject | null => (hooks?.active() ? near : 
 /** The village's object of `id` (the lab, a panel naming where it was opened from). */
 export const villageObject = (id: string): VillageObject | undefined => VILLAGE_OBJECTS.find((o) => o.id === id);
 
+let armedAnywhere = false;
+/** The hero armed wherever he stands (`lab village --only fountainStopsArrows`: there's no fountain in the yard). */
+export function armedEverywhere(on: boolean): void {
+  armedAnywhere = on;
+}
+
 /** Whether (x, z) is in the training yard, far enough in from its fence to cast. */
 export function inYard(x: number, z: number): boolean {
   const [across, along] = worldToYard(x, z);
@@ -257,12 +268,19 @@ function bindPointer(): void {
  *  names over the objects; nothing while the lobby isn't up. */
 export function updateVillage(dt = 0): void {
   lightLamps(dt);
+  // (from above alone: there the camera sees what he can't, and in any other view it stands where he does)
+  const lobby = G.mode === 'menu' && G.arena.place === 'village' && !G.arena.hallShown;
+  if (!sightTold) {
+    sightTold = true;
+    sightWalls(G.arena.village.sight.walls, G.arena.village.sight.hall);
+  }
+  seeFrom(G.player.pos.x, G.player.pos.z, lobby && viewMode() === 'top', Math.min(1, dt * SIGHT_EASES));
   hallInside(dt);
   const on = hooks.active();
   const p = G.player;
   for (const hero of G.players) hero.shine = on ? VILLAGE_SHINE : 0;
   wakeByHero(on);
-  p.armed = !on || inYard(p.pos.x, p.pos.z);
+  p.armed = !on || armedAnywhere || inYard(p.pos.x, p.pos.z);
   if (on && inYard(p.pos.x, p.pos.z)) completeStep('yard');
   if (!on) {
     near = null;
@@ -277,7 +295,14 @@ export function updateVillage(dt = 0): void {
   // press got it, I cannot press E again until I move away")
   if (opened && !hooks.shows(opened)) opened = null;
   if (going && distanceTo(going) < going.reach) useNow(going);
-  else if (near && wasPressed('e') && opened !== near) useNow(near);
+  else if (near && wasPressed('e')) {
+    // (E again puts it away, from play, "lets add option to dismiss with E as well"; the hall's screen has a place of its own)
+    if (opened !== near) useNow(near);
+    else if (near.use !== 'heroes') {
+      opened = null;
+      hooks.leave(near);
+    }
+  }
   if (opened && distanceTo(opened) > opened.reach + LEAVE) {
     const left = opened;
     opened = null;

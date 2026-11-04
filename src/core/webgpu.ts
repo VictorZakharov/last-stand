@@ -1,6 +1,7 @@
 // The game on three's WebGPURenderer, behind `?renderer=webgpu` (docs/research/webgpu.md): the renderer made and
 // given what the WebGL code around it asks of a WebGLRenderer, and the post chain as a node pipeline.
 import * as THREE from 'three';
+import { SIGHT, SIGHT_LOOK } from './sight';
 import type { ClusterWait } from './meshlets';
 import type { RenderPipeline, WebGPURenderer } from 'three/webgpu';
 import { RUNNING } from './rendererChoice';
@@ -1167,6 +1168,32 @@ function sanitized(colour: any): any {
   return select(nan.or(inf), vec4(0, 0, 0, 1), clamp(colour, 0, 64));
 }
 
+/** `colour` blacked where he can't see (core/sight.ts's `SIGHT_GLSL`, on WebGPU's clip space: depth from 0, y from the top). */
+function seenOnly(colour: any, depthNode: any): any {
+  const { atan, length, max, mix, reference, screenUV, select, smoothstep, step, texture, vec2, vec4 } = tsl as any;
+  const on = reference('value', 'float', SIGHT.uSightOn);
+  const from = reference('value', 'vec2', SIGHT.uSightFrom);
+  const inverse = reference('value', 'mat4', SIGHT.uSightInverse);
+  const sealed = reference('value', 'vec4', SIGHT.uSightSealed);
+  const clip = vec4(screenUV.x.mul(2).sub(1), screenUV.y.mul(2).oneMinus(), depthNode.r, 1);
+  const world = inverse.mul(clip);
+  const place = world.xyz.div(world.w);
+  const to = place.xz.sub(from);
+  const away = length(to);
+  // (atan(0, 0) is undefined, and NaN smears over the frame in the bloom)
+  const toSafe = select(away.lessThan(0.3), vec2(1, 0), to);
+  const across = atan(toSafe.y, toSafe.x).div(Math.PI * 2).add(0.5);
+  const reach = texture(SIGHT.tSight.value, vec2(across, 0.5)).r;
+  const far = reach.add(SIGHT_LOOK.wall);
+  const open = smoothstep(far, far.add(SIGHT_LOOK.soft), away).oneMinus();
+  const shut = step(sealed.x, place.x).mul(step(place.x, sealed.z)).mul(step(sealed.y, place.z)).mul(step(place.z, sealed.w));
+  const over = mix(SIGHT_LOOK.over, SIGHT_LOOK.overSealed, shut);
+  const above = smoothstep(over, over.add(SIGHT_LOOK.overSoft), place.y);
+  const near = away.lessThan(0.3).or(depthNode.r.greaterThanEqual(0.99999));
+  const seen = select(near, 1, mix(1, max(open, above), on));
+  return vec4(colour.rgb.mul(seen), colour.a);
+}
+
 /** the light's weights, as the WebGL grade reads an area's and a pixel's */
 const LUM = [0.2126, 0.7152, 0.0722] as const;
 
@@ -1338,7 +1365,7 @@ export async function makePipeline(renderer: THREE.WebGLRenderer, scene: THREE.S
     return drawn;
   };
   const raw = scenePass.getTextureNode('output');
-  const color = sanitized(raw);
+  const color = seenOnly(sanitized(raw), scenePass.getTextureNode('depth'));
   pipeline = new RenderPipeline(gpu);
   // (tone mapped and in sRGB here, the grade after: the pipeline's own conversion off)
   pipeline.outputColorTransform = false;

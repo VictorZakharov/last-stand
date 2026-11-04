@@ -175,7 +175,10 @@ export function seeThrough<M extends THREE.Material>(m: M, kind: keyof typeof ki
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', `#include <common>\n${SEE_FRAGMENT}`)
       .replace('#include <clipping_planes_fragment>', `#include <clipping_planes_fragment>
-        float seeN = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));
+        // (a fine ordered pattern, a 4 by 4 Bayer matrix, an even tone: interleaved noise's long lines read on a roof as
+        // z-fighting, "z fighting texture at this angle", and a hash's clumps as a broken picture, a review)
+        vec2 seeBit = mod(floor(gl_FragCoord.xy), 2.0), seeTwo = mod(floor(gl_FragCoord.xy * 0.5), 2.0);
+        float seeN = (abs(seeBit.x - seeBit.y) * 8.0 + seeBit.y * 4.0 + abs(seeTwo.x - seeTwo.y) * 2.0 + seeTwo.y + 0.5) / 16.0;
         if (seeN < seeFade()) discard;`);
   };
   // the same code for every kind (they differ in uniforms only), so kinds share programs; on WebGPU a kind's uniforms are

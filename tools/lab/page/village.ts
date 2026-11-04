@@ -31,7 +31,11 @@ import { portalAtNight } from './villagePortalNight';
 import { heroPickedNear } from './villageHeroNear';
 import { roofsFromAbove } from './villageRoofsSeen';
 import { grassStillFromAbove } from './villageGrassRing';
-import { campfireBurns } from './villageFire';
+import { campfireBurns, heroBesideFire } from './villageFire';
+import { sightBlacksOut } from './villageSight';
+import { staffAtNight } from './villageStaff';
+import { dummyLabelsFade } from './villageMeter';
+import { fountainStopsArrows } from './villageFountain';
 import { holdHour } from '../../../src/game/clock';
 import { villageMapOpen } from '../../../src/ui/villageMap';
 import { closeHeroSelect, heroSelectOpen } from '../../../src/ui/heroSelect';
@@ -144,6 +148,11 @@ export async function village(lab: Lab, options: VillageOptions): Promise<Report
     escClosesHelp: () => escClosesHelp(lab, options.canary),
     wornStaysOn: () => wornStaysOn(lab, options.canary),
     heroFaceNotBlinding: () => heroFaceNotBlinding(lab, options.canary),
+    heroBesideFire: () => heroBesideFire(lab, options.canary),
+    sightBlacksOut: () => sightBlacksOut(lab, options.canary),
+    staffAtNight: () => staffAtNight(lab, options.canary),
+    dummyLabelsFade: () => dummyLabelsFade(lab, options.canary),
+    fountainStopsArrows: () => fountainStopsArrows(lab, options.canary),
     cameraBeforeWalls: () => cameraBeforeWalls(lab, options.canary),
     hallFrontFades: () => hallFrontFades(lab, options.canary),
     firesWhereTheyStand: () => firesWhereTheyStand(lab, options.canary),

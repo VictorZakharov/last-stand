@@ -3,7 +3,8 @@
 // again until I move away, might affect other objects too": How to play's Got it hid it, and the village still held the
 // notice board as open until he walked off it; the campfire's Close the same, left out here: its dialog asks the relay
 // server how it is, which the lab's page can't reach). `canary` leaves the second press out for the first object,
-// which must then be found closed.
+// which must then be found closed. And each put away by E itself ("lets add option to dismiss with E as well"), and
+// opened by E after that; its canary leaves that press out for the first, which must be found open.
 import * as THREE from 'three';
 import type { Lab } from './lab';
 import { G } from '../../../src/state';
@@ -53,6 +54,26 @@ async function usedAgain(lab: Lab, o: Opened, skipSecond: boolean): Promise<stri
   return again ? null : `${o.id}: put away by its button, E never opened it again where he stood`;
 }
 
+/** `o` used by E, put away by E and used by E again: what of it went wrong, if anything. */
+async function putAwayByE(lab: Lab, o: Opened, skipPress: boolean): Promise<string | null> {
+  const object = villageObject(o.id);
+  if (!object) return `${o.id}: no such object`;
+  const [x, z] = object.stand;
+  G.player.walkTo = null;
+  G.player.place(new THREE.Vector3(x, groundHeight(x, z), z), 0);
+  await lab.step(SETTLE);
+  await pressE(lab);
+  if (!shown(o.shows)) return `${o.id}: E never opened it`;
+  if (!skipPress) await pressE(lab);
+  const left = shown(o.shows);
+  await pressE(lab);
+  const again = shown(o.shows);
+  (document.querySelector(o.close) as HTMLElement | null)?.click();
+  await lab.step(SETTLE);
+  if (left) return `${o.id}: E never put it away`;
+  return again ? null : `${o.id}: put away by E, E never opened it again`;
+}
+
 /** Each object with a button of its own used, put away and used again. */
 export async function objectsUsedAgain(lab: Lab, canary: boolean): Promise<LightsChecked> {
   const failed: string[] = [];
@@ -60,7 +81,13 @@ export async function objectsUsedAgain(lab: Lab, canary: boolean): Promise<Light
     const failure = await usedAgain(lab, o, canary && i === 0);
     if (failure) failed.push(failure);
   }
-  const line = `used again: ${OPENED.length - failed.length} of ${OPENED.length} opened by E after their own button`;
+  const dismissed = OPENED.filter((o) => o.id !== 'hall');
+  for (const [i, o] of dismissed.entries()) {
+    const failure = await putAwayByE(lab, o, canary && i === 0);
+    if (failure) failed.push(failure);
+  }
+  const all = OPENED.length + dismissed.length;
+  const line = `used again: ${all - failed.length} of ${all}: opened by E after their own button, put away by E`;
   if (canary) return { lines: [line], problems: [], caught: failed.length > 0, moments: [] };
   return { lines: [line], problems: failed.map((f) => `used again: ${f}`), caught: null, moments: [] };
 }

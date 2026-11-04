@@ -18,6 +18,7 @@ import { canopyGeo, fernClumpGeo, fernTexture, leafClusterTexture, leafTexture, 
 import { bend, rag, taperTube } from '../entities/models/shapes';
 import { PropSet, instanceLook, meshLook, groupLook } from './destructible';
 import { buildFire, emberMat } from './fire';
+import { LAMP_SOFT } from '../core/lamps';
 import { floorRelief, reliefContext } from '../core/parallax';
 import { tsl, WEBGPU, stillNodes } from '../core/webgpu';
 import { grassWindNode, mossColorNode } from './forestNodes';
@@ -49,8 +50,8 @@ const FLOOR_RELIEF = { depth: 0.045, perMetre: FLOOR_REPEAT / 220, fade: 70 };
 /** grass sways this far at its tips (m), slowly (rad/s), each tuft a little after the one upwind of it */
 const SWAY = 0.05, SWAY_RATE = 1.3;
 /** a bonfire's light (a point light's, in candela): enough for a warm pool round it, on a village's ground by night too */
-const BONFIRE_LIGHT = 85;
-const BONFIRE_LIGHT_UP = 1.7;
+const BONFIRE_LIGHT = 100;
+const BONFIRE_LIGHT_UP = 1.2;
 const BONFIRE_COLOUR = 0xff9a48;
 /** the bonfires' places, by the wall on the diagonal */
 const BONFIRES = [Math.PI / 4, (5 * Math.PI) / 4].map((a) => [Math.cos(a) * (WALL_R - 2.4), Math.sin(a) * (WALL_R - 2.4)]);
@@ -1096,9 +1097,9 @@ export function buildBonfire(scene: THREE.Object3D, x: number, z: number, stone:
     scene.add(mesh);
   }
   // (from play, "there is no light from fire": at 18, under the village's lamps, it added 14 levels of red to what it lit)
-  // (high over the logs, so what's round it is lit evenly: lower, the ring's stones burned peach. Not soft by `LAMP_SOFT`,
-  // as the lamps are: WebGPU's lights take a decay as an exponent, and at 6 it burned everything within a metre white)
-  const light = new THREE.PointLight(BONFIRE_COLOUR, BONFIRE_LIGHT, 16, 2);
+  // (soft close to, as the lamps are: by the square alone, a hero beside it burned white, "blinding reflections from fire",
+  // and the ring's stones peach)
+  const light = new THREE.PointLight(BONFIRE_COLOUR, BONFIRE_LIGHT, 16, 2 + LAMP_SOFT);
   light.position.set(x, BONFIRE_LIGHT_UP, z);
   if (casts) staticShadow(light);
   scene.add(light);

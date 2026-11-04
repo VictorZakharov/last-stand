@@ -20,10 +20,22 @@ import type { Updater } from './props';
 /** the basin: its outer radius (to its corners), its rim's thickness, its wall's height, the water's level in it, and
  *  its floor's (m) */
 export const FOUNTAIN = { r: 2.2, rim: 0.3, high: 0.6, water: 0.46, floor: 0.08 };
+/** Whether (x, z) lies over the basin's water, inside its octagon's faces. */
+export const inBasin = (x: number, z: number): boolean => Math.hypot(x, z)
+  < (FOUNTAIN.r - FOUNTAIN.rim) * Math.cos(Math.PI / 8);
+
+/** What an arrow lying at (x, z) lies on over the village's ground (m): the basin's floor, its rim's top; nothing elsewhere. */
+export function basinTop(x: number, z: number): number {
+  if (inBasin(x, z)) return FOUNTAIN.floor;
+  return Math.hypot(x, z) < FOUNTAIN.r ? FOUNTAIN.high : 0;
+}
+
 /** the middle bowl on the pedestal: its foot, its radius, its water's level (m) */
 const BOWL = { foot: 1.25, r: 0.85, water: 1.52 };
 /** the top bowl: its foot, its radius, its water's level, and the finial's tip over it (m) */
 const TOP = { foot: 2.0, r: 0.42, water: 2.18, tip: 2.62 };
+/** how far past the middle bowl's radius its scallops can reach (m) */
+const TIERS_PAST = 0.2;
 /** the spouts on the pedestal: their height and how far out their water lands (m) */
 const SPOUT = { y: 0.78, at: 0.3, lands: 1.5 };
 /** the corners of the basin: an octagon's, its faces square to x and z */
@@ -102,6 +114,8 @@ export function buildFountain(scene: THREE.Object3D, M: FountainMats, obstacles:
     ball.position.set(Math.sin(a) * out, high + 0.19, Math.cos(a) * out);
     g.add(ball);
   }
+  // (what an arrow meets, as drawn: the basin's wall from outside, the tiers over it)
+  const walls = [...g.children];
   // the floor under the water, its caustics, and the water
   const inside = r - rim;
   const sunlit = { value: 1 };
@@ -162,7 +176,11 @@ export function buildFountain(scene: THREE.Object3D, M: FountainMats, obstacles:
       o.castShadow = o.receiveShadow = true;
     }
   });
-  obstacles.push({ x: 0, z: 0, r: r + 0.1, h: high, sight: { r: BOWL.r + 0.4, h: TOP.tip } });
+  const tiers = g.children.filter((o) => !walls.includes(o) && o instanceof THREE.Mesh
+    && (o.material === M.stone || o.material === M.coping));
+  obstacles.push({ x: 0, z: 0, r: r + 0.1, h: high, sight: { r: BOWL.r + 0.4, h: TOP.tip }, drawn: walls });
+  // (the tiers stand taller than the basin stops a body: from play, "fountain should be a valid obstacle for arrows")
+  obstacles.push({ x: 0, z: 0, r: BOWL.r + TIERS_PAST, h: TOP.tip, drawn: tiers });
   const curtainMap = curtain.alphaMap!, jetMap = jetMat.alphaMap!;
   updaters.push((_dt, t) => {
     time.value = t;

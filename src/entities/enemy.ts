@@ -247,9 +247,10 @@ export class Enemy {
 
     // (in the village a dummy's readout shows while the hero is in the training yard alone: from play, "training dummy
     // labels only should be visible when player enters the training area")
-    if (def.dummy) this.meter = new DamageMeter(def.name, () => (G.arena.place === 'village' && !inYard(G.player.pos.x, G.player.pos.z)
-      ? null : { x: this.pos.x, y: this.obj.position.y + this.height + 0.3, z: this.pos.z }));
-    else if (!this.boss) this.createBar();
+    if (def.dummy) {
+      this.meter = new DamageMeter(def.name, () => ({ x: this.pos.x, y: this.obj.position.y + this.height + 0.3, z: this.pos.z }),
+        () => G.arena.place !== 'village' || inYard(G.player.pos.x, G.player.pos.z));
+    } else if (!this.boss) this.createBar();
   }
 
   createBar(): void {

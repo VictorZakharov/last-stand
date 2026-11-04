@@ -132,8 +132,29 @@ function makeLampsNode(): N {
   return new LampsNode();
 }
 
+/**
+ * A point light's falloff on WebGPU as `lightTheLamps` makes it on WebGL: by the square of its distance plus its softness,
+ * carried in its decay past 2. three's takes a decay as an exponent, so a soft light (a decay of 6) burned everything
+ * within a metre white and was gone a few metres off.
+ */
+function softPointLights(): void {
+  const { float } = tsl as any;
+  const prototype = gpu.PointLightNode.prototype as N;
+  prototype.setupDirect = function (this: N, builder: N): N {
+    const toLight = this.getLightVector(builder);
+    const away = toLight.length();
+    const softness = this.decayExponentNode.sub(2).max(0);
+    const falloff = away.mul(away).add(softness).max(0.01).reciprocal();
+    const cutoff = this.cutoffDistanceNode;
+    const window = away.div(cutoff.max(float(0.0001))).pow(4).oneMinus().clamp().pow(2);
+    const light = cutoff.greaterThan(0).select(falloff.mul(window), falloff);
+    return { lightDirection: toLight.normalize(), lightColor: this.colorNode.mul(light) };
+  };
+}
+
 /** The lamps lit in every lit node material; once, as the renderer starts, before anything compiles. */
 export function lightTheLampsOnWebGPU(): void {
+  softPointLights();
   lightAfterLights(makeLampsNode());
 }
 

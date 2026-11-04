@@ -2,12 +2,12 @@
 // effects, more professional (lobby and main game, especially camp fire"), by night and by day, over the shoulder and
 // from above: its picture from each, and how much of the frame its flames draw against the frame with them hidden, its
 // flames found by their material; and what its own light adds to the frame by night (from play, "in our case, there is
-// no light from fire, its a mistake"). `lab fire` reads the same flames in the biomes. `canary` hides them and puts its
-// light out first.
+// no light from fire, its a mistake"). `lab fire` reads the same flames in the biomes. `canary` hides them and puts
+// its light out first.
 import * as THREE from 'three';
 import type { Lab, Pictured } from './lab';
 import { G } from '../../../src/state';
-import { CAMPFIRE } from '../../../src/data/village';
+import { CAMPFIRE, VILLAGE_OBJECTS } from '../../../src/data/village';
 import { holdHour } from '../../../src/game/clock';
 import { faceCamera, viewMode, type ViewMode } from '../../../src/core/renderer';
 import { groundHeight } from '../../../src/world/ground';
@@ -61,6 +61,16 @@ function redAdded(lit: Canvas, unlit: Canvas): number {
   return changed ? added / changed : 0;
 }
 
+/** his head's height (m), how near the campfire's middle he can stand (m: its obstacle's edge and his body's), the
+ *  frames given to settle; a pixel's lightest channel past this is burned out, the most of his figure that may be,
+ *  his figure's half width against its height on the screen and the least it's read (px) */
+const HEAD_UP = 1.7;
+const NEAREST = 1.35;
+const FIGURE_BURNED = 0.9;
+const FIGURE_MOST = 0.06;
+const FIGURE_WIDE = 0.22;
+const FIGURE_LEAST_PX = 12;
+
 /** The campfire's own light: the point light of a fire's colour nearest it. */
 function campfireLight(): THREE.PointLight {
   let found: THREE.PointLight | null = null;
@@ -71,6 +81,80 @@ function campfireLight(): THREE.PointLight {
   });
   if (!found) throw new Error('lab: village: no light over the campfire');
   return found;
+}
+
+/** The share of his figure as `canvas` shows it (a box from his feet to his head) burned past `FIGURE_BURNED`. */
+function figureBurned(canvas: Canvas, at: THREE.Vector3): number {
+  const place = (height: number): THREE.Vector3 => at.clone().setY(at.y + height).project(G.camera);
+  const foot = place(0);
+  const head = place(HEAD_UP);
+  const across = (foot.x + head.x) / 2;
+  const wide = Math.abs(head.y - foot.y) * FIGURE_WIDE * canvas.height / canvas.width;
+  const half = Math.max(FIGURE_LEAST_PX / canvas.width, wide);
+  const left = Math.floor((across - half + 1) / 2 * canvas.width);
+  const right = Math.ceil((across + half + 1) / 2 * canvas.width);
+  const bottom = Math.floor((Math.min(foot.y, head.y) + 1) / 2 * canvas.height);
+  const top = Math.ceil((Math.max(foot.y, head.y) + 1) / 2 * canvas.height);
+  let burned = 0;
+  let read = 0;
+  for (let y = bottom; y < top; y++) {
+    for (let x = left; x < right; x++) {
+      const pixel = (y * canvas.width + x) * 4;
+      const lightest = Math.max(canvas.pixels[pixel], canvas.pixels[pixel + 1], canvas.pixels[pixel + 2]);
+      read++;
+      if (lightest > FIGURE_BURNED) burned++;
+    }
+  }
+  return read ? burned / read : 0;
+}
+
+/** Stood as near the campfire as he can, and at its own stand, by midnight, in each view: his figure not burned out. */
+export async function heroBesideFire(lab: Lab, canary: boolean): Promise<LightsChecked> {
+  const kept = viewMode();
+  const light = campfireLight();
+  const lines: string[] = [];
+  const problems: string[] = [];
+  const moments: Pictured[] = [];
+  const stand = VILLAGE_OBJECTS.find((object) => object.id === 'campfire')?.stand;
+  if (!stand) throw new Error('lab: village: the campfire has no stand');
+  const spots: [string, number, number][] = [
+    ['at its stand', stand[0], stand[1]],
+    ['as near as he can', CAMPFIRE[0] + NEAREST, CAMPFIRE[1]],
+  ];
+  const held = light.position.y;
+  const heldDecay = light.decay;
+  // (as the fault was: a light at his head's height, not soft close to)
+  if (canary) {
+    light.position.y = HEAD_UP;
+    light.decay = 2;
+  }
+  holdHour(0);
+  try {
+    for (const view of VIEWS) {
+      await viewBy(lab, view);
+      for (const [name, x, z] of spots) {
+        const at = new THREE.Vector3(x, 0, z);
+        at.y = groundHeight(x, z);
+        G.player.walkTo = null;
+        G.player.place(at, Math.atan2(CAMPFIRE[0] - x, CAMPFIRE[1] - z));
+        await lab.step(SETTLE);
+        const body = G.player.obj.position.clone();
+        const share = figureBurned(drawFrame(lab), body);
+        lines.push(`his figure ${name}, ${view}: ${(share * 100).toFixed(1)}% burned out`);
+        if (share > FIGURE_MOST) {
+          problems.push(`beside the campfire ${name}, ${view}: ${(share * 100).toFixed(1)}% burned out`);
+        }
+        moments.push(await lab.screen(`beside it ${name} ${view}`, []));
+      }
+    }
+  } finally {
+    light.position.y = held;
+    light.decay = heldDecay;
+    holdHour(null);
+    await viewBy(lab, kept);
+  }
+  if (canary) return { lines, problems: [], caught: problems.length > 0, moments: [] };
+  return { lines, problems, caught: null, moments };
 }
 
 /** The campfire at each hour from each view. */

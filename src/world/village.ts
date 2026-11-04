@@ -16,6 +16,7 @@ import { unrepeatedNodes } from './villageNodes';
 import { WEBGPU } from '../core/webgpu';
 import { villageSkyMaterial } from './skyNodes';
 import * as THREE from 'three';
+import type { SightWall } from '../core/sight';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import {
   CAMPFIRE, CHEST, CHRONICLE, COTTAGES, DAY, ENTRANCES, GAP_HALF, HALL, NOTICE, STEP_RISE, TERRACE, YARD, portalPlace,
@@ -168,6 +169,8 @@ export interface Village extends Biome {
   setChestFull(full: number): void;
   /** its trees as they stand (the map draws them) */
   trees: readonly { x: number; z: number; height: number }[];
+  /** what stops his sight from above (core/sight.ts), the walls and the hall, which may be shut to him */
+  sight: { walls: SightWall[]; hall: THREE.Vector4 };
   /** the street lamps' lanterns, each lit by the lit shaders' lamps (`core/lamps.ts`; game/village.ts `lightLamps`) */
   lanterns: readonly THREE.Vector3[];
   /** the hall of heroes' roof, ceiling and front wall (cut away over the hero inside, but through his eyes, as from
@@ -708,6 +711,7 @@ export function buildVillage(scene: THREE.Group): Village {
     exits,
     trees,
     lanterns,
+    sight: sightOfThePlace(),
     hallCutaway: hall.cutaway,
     meadow,
     hallTorches: [...hall.dais, ...hall.torches],
@@ -2153,6 +2157,37 @@ function buildYard(parent: THREE.Object3D, wall: Wall, M: Mats): void {
     const bale = block(scene, 1.1, 0.55, 0.6, x + halfX - 1.0, 0, n1 - 0.6 - k * 0.7, M.yardFloor, 0.5, 0.1 * k);
     bale.castShadow = true;
   }
+}
+
+/** The walls that stop his sight: each cottage's four, and the hall's, open at its door (its windows are too high to see
+ *  a floor through, from outside or in). */
+function sightOfThePlace(): { walls: SightWall[]; hall: THREE.Vector4 } {
+  const walls: SightWall[] = [];
+  const around = (corners: [number, number][]): void => {
+    corners.forEach(([x0, z0], i) => {
+      const [x1, z1] = corners[(i + 1) % corners.length];
+      walls.push({ x0, z0, x1, z1 });
+    });
+  };
+  for (const c of COTTAGES) {
+    const halfW = (COTTAGE.w / 2) * c.size;
+    const halfD = (COTTAGE.d / 2) * c.size;
+    const cos = Math.cos(c.facing);
+    const sin = Math.sin(c.facing);
+    // (as the group's turn about y turns them)
+    const turned = (x: number, z: number): [number, number] => [c.x + x * cos + z * sin, c.z - x * sin + z * cos];
+    around([turned(-halfW, -halfD), turned(halfW, -halfD), turned(halfW, halfD), turned(-halfW, halfD)]);
+  }
+  const west = TERRACE.x - HALL.half;
+  const east = TERRACE.x + HALL.half;
+  const doorW = TERRACE.x - HALL.doorHalf;
+  const doorE = TERRACE.x + HALL.doorHalf;
+  walls.push({ x0: west, z0: HALL.wall, x1: east, z1: HALL.wall });
+  walls.push({ x0: west, z0: HALL.wall, x1: west, z1: HALL.door });
+  walls.push({ x0: east, z0: HALL.wall, x1: east, z1: HALL.door });
+  walls.push({ x0: west, z0: HALL.door, x1: doorW, z1: HALL.door });
+  walls.push({ x0: doorE, z0: HALL.door, x1: east, z1: HALL.door });
+  return { walls, hall: new THREE.Vector4(west, HALL.wall, east, HALL.door) };
 }
 
 /** Logs to sit on round the campfire. */

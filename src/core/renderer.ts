@@ -4,6 +4,7 @@
 // a resolve per pass (very slow on tile-based GPUs such as Apple's).
 import * as THREE from 'three';
 import { lightTheLamps } from './lamps';
+import { SIGHT, SIGHT_GLSL, aimSight } from './sight';
 import { lightTheLampsOnWebGPU } from './lampNodes';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
@@ -256,19 +257,19 @@ class AreaPass extends Pass {
   }
 }
 
-/** Bloom's bright pass reading the scene's target as `SCENE_READ` reads it (three's `LuminosityHighPassShader`). */
-const BRIGHT_FROM_SCENE = /* glsl */`
-  uniform sampler2D tDiffuse; uniform vec3 defaultColor; uniform float defaultOpacity;
-  uniform float luminosityThreshold; uniform float smoothWidth;
-  varying vec2 vUv;
-  ${SCENE_READ}
-  void main() {
-    vec4 texel = sceneAt(tDiffuse, vUv);
-    float v = luminance(texel.xyz);
-    vec4 outputColor = vec4(defaultColor.rgb, defaultOpacity);
-    float alpha = smoothstep(luminosityThreshold, luminosityThreshold + smoothWidth, v);
-    gl_FragColor = mix(outputColor, texel, alpha);
-  }`;
+const SanitizeShader = {
+  uniforms: { tDiffuse: { value: null }, tSightDepth: { value: null } },
+  vertexShader: /* glsl */`varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
+  fragmentShader: /* glsl */`
+    uniform sampler2D tDiffuse; varying vec2 vUv;
+    ${SIGHT_GLSL}
+    void main(){
+      vec4 c = texture2D(tDiffuse, vUv);
+      bool bad = any(isnan(c)) || any(isinf(c)) || c.r != c.r || c.g != c.g || c.b != c.b;
+      gl_FragColor = bad ? vec4(0.0, 0.0, 0.0, 1.0) : clamp(c, 0.0, 64.0);
+      gl_FragColor.rgb *= seen(vUv);
+    }`,
+};
 
 let areaPass: AreaPass;
 let composer: EffectComposer, grade: ShaderPass, gl: THREE.WebGLRenderer, sceneRT: THREE.WebGLRenderTarget;
@@ -656,9 +657,17 @@ export async function initRenderer(container: HTMLElement) {
 
   const size = sceneSize(new THREE.Vector2());
   sceneRT = new THREE.WebGLRenderTarget(size.x, size.y, { type: THREE.HalfFloatType, samples: 4 });
+  // (read back by what he can see: core/sight.ts)
+  sceneRT.depthTexture = new THREE.DepthTexture(size.x, size.y, THREE.UnsignedIntType);
   composer = new EffectComposer(renderer, new THREE.WebGLRenderTarget(size.x, size.y, { type: THREE.HalfFloatType, depthBuffer: false }));
-  // Every pass reads the scene's target itself (`SCENE_READ`), cleaned as it reads it: the composer's own
-  // buffers are read by none
+  // Kill NaN/Inf pixels before bloom: a single bad pixel would otherwise be blurred
+  // into large black rectangles. It reads the scene target itself ('none': not the read buffer).
+  const sanitize = new ShaderPass(SanitizeShader, 'none');
+  sanitize.uniforms.tDiffuse.value = sceneRT.texture;
+  sanitize.uniforms.tSightDepth.value = sceneRT.depthTexture;
+  // (the pass copied what it was made with: these are shared, set each frame)
+  Object.assign(sanitize.uniforms, SIGHT);
+  composer.addPass(sanitize);
   const bloom = new UnrealBloomPass(new THREE.Vector2(size.x, size.y), 0.85, 0, 0.9);
   // each blur level's weight, tightest to widest (radius 0: used as they are). The widest levels spread a
   // bright effect over half the screen as a pale veil that fogs up the scene, so they only add a trace
@@ -1202,12 +1211,15 @@ export function render(): void {
   u.uPaper.value = hdr.paper;
   u.uPeak.value = hdr.peak;
   u.uCap.value = (HI_CAP - HI_KNEE) * Math.max(1, hdr.peak / hdr.paper);
+  aimSight(G.camera);
   if (WEBGPU) {
     sunShadowInTurns();
     renderWebGPU();
     overFrame.draw();
     return;
   }
+  // (its depth read back from above alone: in every other view no pixel reads it)
+  sceneRT.resolveDepthBuffer = SIGHT.uSightOn.value > 0;
   gl.setRenderTarget(sceneRT);
   gpuMarks.mark('scene');
   matricesOfShownOnly(G.scene);

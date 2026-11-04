@@ -161,8 +161,10 @@ export function seeUniforms(uniforms: Record<string, { value: unknown }>): SeeNo
  *  pixels as large as its fade is dropped there, by the same dither. Its values read off the material drawn, as
  *  every material of the kind shares the build. */
 function seeMask(of: SeeThrough): N {
-  const { positionWorld, screenCoordinate, fract, dot, vec2 } = tsl as any;
-  const dither = fract(fract(dot(screenCoordinate.xy, vec2(0.06711056, 0.00583715))).mul(52.9829189));
+  const { abs, floor, mod, positionWorld, screenCoordinate } = tsl as any;
+  const bit = mod(floor(screenCoordinate.xy), 2);
+  const two = mod(floor(screenCoordinate.xy.mul(0.5)), 2);
+  const dither = abs(bit.x.sub(bit.y)).mul(8).add(bit.y.mul(4)).add(abs(two.x.sub(two.y)).mul(2)).add(two.y).add(0.5).div(16);
   return dither.greaterThanEqual(seeFade(positionWorld, seeOfKind(of)));
 }
 

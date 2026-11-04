@@ -265,7 +265,9 @@ export function buildMage(): Model {
   const glow = kit.glow(0xff6fe0, 1.5);
   // the staff's crystal: glowing softly, a little more while casting (animate() sets it each frame)
   const GEM_GLOW = 0.4;
-  const gem = kit.phys({ color: 0xff4fd8, emissive: 0xff4fd8, emissiveIntensity: GEM_GLOW, roughness: 0.05, metalness: 0, clearcoat: 1, flatShading: true });
+  // (rough, its coat thin and rough, its highlight weak: polished, each facet as it turned mirrored a street lamp by night,
+  // 4 times as bright as its glow for a frame or two, "mage's staff flickers too bright at times"; `lab village --only staffAtNight`)
+  const gem = kit.phys({ color: 0xff4fd8, emissive: 0xff4fd8, emissiveIntensity: GEM_GLOW, roughness: 0.7, metalness: 0, clearcoat: 0.1, clearcoatRoughness: 0.7, specularIntensity: 0.3, flatShading: true });
   // the grimoire's set stone: red, lit from within a little
   const stone = kit.phys({ color: 0x7a0f1a, emissive: 0xff2a3a, emissiveIntensity: 0.5, roughness: 0.08, metalness: 0, clearcoat: 1, flatShading: true });
   // the coat's front panels: oxblood, a brass-thread border and a column of diamonds down each, as the sheet's
