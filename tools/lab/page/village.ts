@@ -28,10 +28,13 @@ import { restartTraining, skipTraining, stepDone, trainingPending } from '../../
 import { TRAINING } from '../../../src/data/training';
 import { minimapOut } from './villageMinimap';
 import { portalAtNight } from './villagePortalNight';
+import { heroPickedNear } from './villageHeroNear';
+import { roofsFromAbove } from './villageRoofsSeen';
+import { grassStillFromAbove } from './villageGrassRing';
 import { holdHour } from '../../../src/game/clock';
 import { villageMapOpen } from '../../../src/ui/villageMap';
 import { closeHeroSelect, heroSelectOpen } from '../../../src/ui/heroSelect';
-import { pointerWanted } from '../../../src/core/input';
+import { input, pointerWanted } from '../../../src/core/input';
 import * as renderer from '../../../src/core/renderer';
 import { lightsNotBlinding } from './villageLights';
 import { lampsSteady } from './villageSteady';
@@ -40,14 +43,14 @@ import { lampsThroughTheDoor } from './villageDoorLamps';
 import { heroShadowBetweenLamps, heroShadowByLamp } from './villageHeroShadow';
 import { lampsLitAsTheyCast } from './villageLampsCast';
 import { everyLampCasts } from './villageLampShadows';
-import { hallCulledByDoor } from './villageHallCull';
+import { hallCulledByDoor, viewBy } from './villageHallCull';
 import { sunShadowKept } from './villageSunShadow';
 import { curbsFaceUp, roadsBendWide } from './villageRoads';
 import { hoardShowsStash } from './villageHoard';
 import { escClosesHelp } from './villageHelpEsc';
 import { propHoleWhereHidden } from './villageSeeThrough';
 import { heroBehindProps, wallsStayWhole } from './villageHeroInView';
-import { hallWallsSteady, hallFloorSteady } from './villageHallSteady';
+import { hallWallsSteady, hallFloorSteady, hallSillsSteady } from './villageHallSteady';
 import { objectsUsedAgain } from './villageUseAgain';
 import { hallWallsHold } from './villageHallSide';
 import { candleLightsNear, chestOpensNear } from './villageChestLid';
@@ -147,6 +150,7 @@ export async function village(lab: Lab, options: VillageOptions): Promise<Report
     heroesBuiltAhead: () => heroesBuiltAhead(lab, options.canary),
     hallHoleOpens: () => hallHoleOpens(lab, options.canary),
     hallFloorSteady: () => hallFloorSteady(lab, options.canary),
+    hallSillsSteady: () => hallSillsSteady(lab, options.canary),
     heroesStandOnBothFeet: () => heroesStandOnBothFeet(lab, options.canary),
     heroesSeenOnApproach: () => heroesSeenOnApproach(lab, options.canary),
     daisOpensCompileNothing: () => daisOpensCompileNothing(lab, options.canary),
@@ -158,6 +162,9 @@ export async function village(lab: Lab, options: VillageOptions): Promise<Report
     wallsStayWhole: () => wallsStayWhole(lab, options.canary),
     training: () => training(lab, options.canary),
     portalAtNight: () => portalAtNight(lab, options.canary),
+    heroPickedNear: () => heroPickedNear(lab, options.canary),
+    roofsFromAbove: () => roofsFromAbove(lab, options.canary),
+    grassStillFromAbove: () => grassStillFromAbove(lab, options.canary),
     minimapOut: () => minimapOut(lab, (spot) => stand(lab, spot), yardToWorld(0, 0), options.canary),
     hoursCompileNothing: () => hoursCompileNothing(lab, options.canary),
   };
@@ -512,6 +519,9 @@ async function use(lab: Lab, o: VillageObject): Promise<void> {
   await stand(lab, [0, 4.5]);
 }
 
+/** how far the training's middle drag goes (px) */
+const TRAINING_DRAG = 40;
+
 /** The training's steps taken as a player takes them (the notice board left out, with `canary`): each ticked, the
  *  portal holding its way in until all are done; then begun again and skipped, the portal open at once. */
 async function training(lab: Lab, canary: boolean): Promise<Checked> {
@@ -519,6 +529,15 @@ async function training(lab: Lab, canary: boolean): Promise<Checked> {
   const problems: string[] = [];
   const before = await portalCard(lab);
   if (before.enter || !before.warned) problems.push('training: the portal let him in with the training under way');
+  // (the view's three, as a player takes them: V round to a close view and back, a middle drag, the wheel)
+  const viewWas = renderer.viewMode();
+  await lab.step(1, () => ({ keys: ['v'] }));
+  await lab.step(1);
+  await viewBy(lab, viewWas);
+  input.orbit = TRAINING_DRAG;
+  await lab.step(1);
+  input.wheel = 1;
+  await lab.step(1);
   await stand(lab, yardToWorld(0, 0));
   const [dx, dz] = YARD_DUMMIES[1];
   const dummy = new THREE.Vector3(dx, 1, dz);

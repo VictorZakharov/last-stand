@@ -588,7 +588,10 @@ function handleGlobalKeys() {
     if (G.mode === 'run' && G.run && !G.player.inRun) return;
     openPause(!G.menuOpen);
   }
-  if (!G.menuOpen && wasPressed('v')) nextView();
+  if (!G.menuOpen && wasPressed('v')) {
+    nextView();
+    completeStep('view');
+  }
   if (G.mode !== 'run') return;
   if (!G.menuOpen && G.run?.phase === 'cleared') {
     if (wasPressed('b')) chooseBank();
@@ -626,8 +629,14 @@ function checkRunOver() {
 function update(dt: number): void {
   perfLap();
   updateInputRay();
-  if (input.wheel && !input.mouse.overUI) zoomBy(input.wheel);
-  if (input.orbit) orbitBy(input.orbit);
+  if (input.wheel && !input.mouse.overUI) {
+    zoomBy(input.wheel);
+    completeStep('zoom');
+  }
+  if (input.orbit) {
+    orbitBy(input.orbit);
+    completeStep('turn');
+  }
   if (input.look.x || input.look.y) lookBy(input.look.x, input.look.y);
 
   // co-op: the partners' reports (and on a guest the host's fight) played out to the moment shown

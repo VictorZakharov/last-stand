@@ -68,6 +68,8 @@ const COLONNADE = { x: [3.3, 5.6], z: -13.4, radius: 0.36, high: 5.2, lintel: 0.
 const COLUMN_IN = { radius: 0.32 };
 /** the windows down the hall's long walls: their sill over its floor, how tall and wide (m) */
 const WINDOWS = { sill: 2.6, high: 2.4, wide: 1.1 };
+/** how far a window's sill stands over the wall's course it lies on (m) */
+const SILL_PROUD = 0.015;
 /** the lights on the heroes on the dais: how high over it, how far before their plinths (m) */
 const DAIS_LIGHT = { up: 3.0, ahead: 2.2 };
 /** the hall's door: its stone frame's width, how far its leaves are set back in the wall, its iron straps' heights */
@@ -424,9 +426,10 @@ function makeMats(): Mats {
     footAshlar: ashlarStone.clone(),
   };
   // (a house's walls and roof, which never open over the shoulder; the rest stands free, opening wide as it hides him)
-  for (const m of [mats.ashlar, mats.coping, mats.plaster, mats.timber, mats.planks, mats.logs, mats.roof, mats.window, mats.skyPane]) {
+  for (const m of [mats.ashlar, mats.coping, mats.plaster, mats.timber, mats.planks, mats.logs, mats.window, mats.skyPane]) {
     seeThrough(m, 'built');
   }
+  seeThrough(mats.roof, 'roof');
   for (const m of [mats.column, mats.iron, mats.lantern, mats.lanternIron, mats.freeAshlar, mats.freeCoping]) {
     seeThrough(m, 'prop');
   }
@@ -1264,7 +1267,10 @@ function buildHall(scene: THREE.Object3D, wall: Wall, levels: Levels, M: Mats, o
     // (its plinth course in the wall too: drawn alone, the hero walked along the terrace into it, "can pass through
     // textures here")
     wall.add(block(walls, 0.35, 0.45, sideLen, sideX + s * 0.47, y0, back + sideLen / 2, M.coping), true, 'wall', true);
-    for (const z of windowsAlong()) block(walls, thick + 0.3, 0.1, WINDOWS.wide + 0.3, sideX, y0 + WINDOWS.sill - 0.1, z, M.coping);
+    // (its top a little over the wall's course under it: at one height, the two flickered from above, "probably z fighting")
+    for (const z of windowsAlong()) {
+      block(walls, thick + 0.3, 0.1, WINDOWS.wide + 0.3, sideX, y0 + WINDOWS.sill - 0.1 + SILL_PROUD, z, M.coping);
+    }
   }
   // the front wall either side of the door and over it, its plinth course, the door in its stone frame (a group of
   // their own: cut away with the roof over the hero inside, as from above they hid the room)
@@ -1315,6 +1321,23 @@ function buildHall(scene: THREE.Object3D, wall: Wall, levels: Levels, M: Mats, o
   fadesWhole(walls, 'hallFront');
   fadesWhole(free, 'hallColumn');
   return { cutaway: [roof, frontWall], torches, dais, porch };
+}
+
+/** Whether a point of the world lies inside the hall of heroes as it stands: within its walls' feet and under its roof
+ *  (from the ground up, its footing and the terrace under it too: the camera's line to him meets those no sooner). */
+export function inHallsBulk(x: number, y: number, z: number): boolean {
+  const out = Math.abs(x - TERRACE.x);
+  const thick = HALL.half - HALL.inHalf;
+  if (out > HALL.half + ROOF.over || z < HALL.wall - thick - ROOF.over || z > COLONNADE.z + 0.5 + ROOF.over) return false;
+  const eaves = TERRACE.high + 0.72 + COLONNADE.high + COLONNADE.lintel;
+  return y >= 0 && y <= eaves + ROOF.rise * Math.max(0, 1 - out / HALL.half);
+}
+
+/** The hall's windows' sills: each side's middle (x), their height's plane, how deep across the wall, and where along it. */
+export function hallSills(): { x: number; y: number; deep: number; wide: number; z: number }[] {
+  const thick = HALL.half - HALL.inHalf;
+  const sides = [-1, 1].map((s) => TERRACE.x + s * (HALL.half - thick / 2));
+  return sides.flatMap((x) => windowsAlong().map((z) => ({ x, y: TERRACE.high + WINDOWS.sill, deep: thick, wide: WINDOWS.wide, z })));
 }
 
 /** Where the windows stand down each long wall (z, from the back): between each pair of columns. */

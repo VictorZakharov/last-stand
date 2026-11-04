@@ -12,6 +12,7 @@ import { groundHeight } from '../../../src/world/ground';
 import { faceCamera, viewMode } from '../../../src/core/renderer';
 import { readShelterOnSurface } from '../../../src/core/lamps';
 import { HALL, TERRACE } from '../../../src/data/village';
+import { hallSills } from '../../../src/world/village';
 import { drawFrame, type Canvas } from './light';
 import { viewBy } from './villageHallCull';
 import type { LightsChecked } from './villageLights';
@@ -111,6 +112,62 @@ export async function hallFloorSteady(lab: Lab, canary: boolean): Promise<Lights
     if (canary) return { lines: [line], problems: [], caught: places.length > 0, moments: [] };
     const problems = places.length ? [`${line}: the floor flickers`] : [];
     return { lines: [line], problems, caught: null, moments: [] };
+  } finally {
+    if (sheet) G.scene.remove(sheet);
+  }
+}
+
+/** the shares across and along a sill it's read at, off the panes in its middle; how far over it a ray starts (m); the
+ *  canary's sheet's size, and how far it lies under where a sill's top is (m) */
+const SILL_ACROSS = [-0.35, 0.35];
+const SILL_ALONG = [-0.3, 0, 0.3];
+const OVER_SILL = 0.5;
+const SILL_SHEET = 0.4;
+const SHEET_UNDER = 0.0002;
+
+/** The places on the hall's windows' sills with a second surface in the top one's plane. */
+function sillsInOnePlane(): string[] {
+  const down = new THREE.Vector3(0, -1, 0);
+  const meshes = stillMeshes();
+  const places: string[] = [];
+  for (const sill of hallSills()) {
+    for (const across of SILL_ACROSS) {
+      for (const along of SILL_ALONG) {
+        const from = new THREE.Vector3(sill.x + across * sill.deep, sill.y + OVER_SILL, sill.z + along * sill.wide);
+        const hits = new THREE.Raycaster(from, down, 0, OVER_SILL * 2).intersectObjects(meshes, false);
+        if (!hits.length) throw new Error(`lab: village: no sill under ${from.x.toFixed(1)}, ${from.z.toFixed(1)}`);
+        const next = hits[1];
+        if (next && hits[0].distance + SAME_PLANE > next.distance) places.push(`${from.x.toFixed(1)},${from.z.toFixed(1)}`);
+      }
+    }
+  }
+  return places;
+}
+
+/** No surface lies in the plane of a window's sill (from play, seen from above in the hall: "bottom / sill of windows are
+ *  flickering, probably z fighting": the sill's top and the wall's course under it were at one height). `canary` plants
+ *  a sheet in the first sill's plane. */
+export async function hallSillsSteady(lab: Lab, canary: boolean): Promise<LightsChecked> {
+  await viewBy(lab, viewMode());
+  const [sill] = hallSills();
+  let sheet: THREE.Mesh | null = null;
+  if (canary) {
+    sheet = new THREE.Mesh(
+      new THREE.PlaneGeometry(SILL_SHEET, SILL_SHEET).rotateX(-Math.PI / 2),
+      new THREE.MeshBasicMaterial({ color: 0xff00ff }),
+    );
+    const top = new THREE.Raycaster(new THREE.Vector3(sill.x, sill.y + OVER_SILL, sill.z), new THREE.Vector3(0, -1, 0));
+    const met = top.intersectObjects(stillMeshes(), false)[0];
+    sheet.position.set(sill.x + SILL_ACROSS[1] * sill.deep, met.point.y - SHEET_UNDER, sill.z);
+    G.scene.add(sheet);
+  }
+  try {
+    G.scene.updateMatrixWorld(true);
+    const places = sillsInOnePlane();
+    const line = `on the hall's ${hallSills().length} window sills, ${places.length} places with a second surface in `
+      + `their plane${places.length ? ` (${places.slice(0, 3).join(' ')})` : ''}`;
+    if (canary) return { lines: [line], problems: [], caught: places.length > 0, moments: [] };
+    return { lines: [line], problems: places.length ? [`${line}: the sills flicker`] : [], caught: null, moments: [] };
   } finally {
     if (sheet) G.scene.remove(sheet);
   }

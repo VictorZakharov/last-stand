@@ -5,6 +5,7 @@
 import { readCookie, writeCookie } from '../core/cookies';
 import { emit, on } from '../events';
 import { TRAINING, type TrainingStep } from '../data/training';
+import { input } from '../core/input';
 
 const COOKIE = 'last-stand-training';
 
@@ -32,6 +33,9 @@ export function initTraining(firstVisit: boolean): void {
 /** Whether the training is under way: the portals warn and wait. */
 export const trainingPending = (): boolean => state === 'training';
 
+/** The steps a player with this input has to take. */
+export const trainingSteps = (): typeof TRAINING => TRAINING.filter((t) => !(input.touchMode && t.mouseOnly));
+
 /** Whether step `s` is done. */
 export const stepDone = (s: TrainingStep): boolean => done.has(s);
 
@@ -39,7 +43,7 @@ export const stepDone = (s: TrainingStep): boolean => done.has(s);
 export function completeStep(s: TrainingStep): void {
   if (state !== 'training' || done.has(s)) return;
   done.add(s);
-  if (done.size === TRAINING.length) state = 'done';
+  if (trainingSteps().every((t) => done.has(t.id))) state = 'done';
   save();
   emit('trainingChanged');
 }

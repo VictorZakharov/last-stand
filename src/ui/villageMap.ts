@@ -24,6 +24,9 @@ const VIEW = { x0: -54.5, x1: 54.5, z0: -44, z1: 44 };
 /** the hall of heroes' roof as the map draws it (world/village.ts builds it): how far past the back wall's face it
  *  reaches, its front's z and half its width with the eaves' overhang (m) */
 export const HALL_ROOF = { back: 1.2, front: -12.3, half: HALL.half + 0.6 };
+/** the least gap between two names side by side, how far in a pointer stays from its name's corners, and the rounds
+ *  names are pushed apart in (css px, at the reference layout's scale for the first two) */
+const NAME_GAP = 3, TAIL_IN = 3, NAME_ROUNDS = 12;
 /** the panels it folds into, and how long it takes to open or fold (s) */
 const PANELS = 4, FOLD_TIME = 0.75;
 /** the ink and washes it's drawn in */
@@ -99,7 +102,12 @@ export function initVillageMap(h: VillageMapHooks): void {
   root.querySelector<HTMLElement>('.vm-close')!.addEventListener('click', () => setVillageMap(false));
   // (a click on the parchment's margin, off the sheet, folds it away)
   root.addEventListener('click', (e) => { if (e.target === root) setVillageMap(false); });
-  addEventListener('resize', () => { drawnAt = ''; if (wanted) drawSheet(); });
+  addEventListener('resize', () => {
+    drawnAt = '';
+    if (!wanted) return;
+    drawSheet();
+    layNames();
+  });
 }
 
 /** Whether the map is open (or opening). */
@@ -114,6 +122,7 @@ export function setVillageMap(on: boolean): void {
     // (shown first: hidden, the sheet has no size to be drawn at)
     root.classList.remove('hidden');
     drawSheet();
+    layNames();
     root.setAttribute('aria-hidden', 'false');
     sfx.click();
   }
@@ -160,6 +169,47 @@ function layFolds(k: number, fade: number): void {
     shade.style.opacity = ((i % 2 === 0 ? 0.15 : 0.45) * (1 - k)).toFixed(3);
   });
   sheet.style.opacity = fade.toFixed(3);
+}
+
+/**
+ * The names moved aside as far as they need to lie clear of each other and within the sheet, each pointer still at its
+ * place: the Chronicle and the Stash stand either side of the hall's porch, and the one lay over the other (from play,
+ * "need to fix the map, there is overlap"). Their sizes follow the UI's scale and the sheet the window's, so it's done
+ * for the size it's shown at.
+ */
+function layNames(): void {
+  const across = sheet.clientWidth, down = sheet.clientHeight;
+  const names = [...sheet.querySelectorAll<HTMLElement>('.vm-name')].map((el) => ({
+    el,
+    x: (parseFloat(el.style.left) / 100) * across,
+    y: (parseFloat(el.style.top) / 100) * down,
+    wide: el.offsetWidth,
+    tall: el.offsetHeight,
+    aside: 0,
+  }));
+  for (let round = 0; round < NAME_ROUNDS; round++) {
+    for (const [i, a] of names.entries()) {
+      for (const b of names.slice(i + 1)) {
+        if (Math.abs(a.y - b.y) >= (a.tall + b.tall) / 2) continue;
+        const [left, right] = a.x + a.aside <= b.x + b.aside ? [a, b] : [b, a];
+        const apart = right.x + right.aside - (left.x + left.aside);
+        const short = (left.wide + right.wide) / 2 + NAME_GAP - apart;
+        if (short <= 0) continue;
+        left.aside -= short / 2;
+        right.aside += short / 2;
+      }
+    }
+    for (const name of names) {
+      const least = name.wide / 2 - name.x;
+      const most = across - name.wide / 2 - name.x;
+      name.aside = Math.min(most, Math.max(least, name.aside));
+    }
+  }
+  for (const { el, wide, aside } of names) {
+    const reach = wide / 2 - TAIL_IN;
+    el.style.setProperty('--aside', `${aside.toFixed(1)}px`);
+    el.style.setProperty('--tail', `${Math.min(reach, Math.max(-reach, -aside)).toFixed(1)}px`);
+  }
 }
 
 /** A point of the world (x, z) as a share of the sheet across and down. */

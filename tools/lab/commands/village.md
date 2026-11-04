@@ -141,3 +141,10 @@ the warm-up made and those the run's first frames made, none. In real Chrome tha
 a biome drawn in the village's place to warm it, with the lamps' two casting lights on beside its own, compiled every
 program for four, and the run's first frame compiled them again for two. Walk the real path on the real GPU with stalls:
 `--before` clicking the map's portal name and `#btn-start`, on `?hour=0`. `--canary` leaves a spare light casting.
+
+`hallSillsSteady` (`page/villageHallSteady.ts`, from play: "bottom / sill of windows are flickering, probably z
+fighting"): rays down onto every window sill of the hall, no second surface in the plane of its top. `--canary` plants
+a sheet there.
+
+`heroPickedNear` (`page/villageHeroNear.ts`, from play: "in top down, the hero selection is not based on proximity"):
+top-down, stood before each other class's plinth, that hero is the one the dais opens on. `--canary` asks for the other.

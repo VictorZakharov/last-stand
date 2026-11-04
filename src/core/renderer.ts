@@ -14,7 +14,7 @@ import { G } from '../state';
 import { CAMERA } from '../data/balance';
 import { clamp, damp } from '../util';
 import { updateSeeThrough } from './seeThrough';
-import { holeOpening } from './heroHidden';
+import { builtOpening, holeOpening } from './heroHidden';
 import type { QualityPreset } from '../data/quality';
 import { hdrLevels, initHdr, presentHdr } from './hdr';
 import { bloodMask, fitBloodMask } from './bloodEdges';
@@ -1149,7 +1149,7 @@ export function updateCamera(dt: number, focus: THREE.Vector3, height: number, f
   const share = (view: ViewMode) => (rig.view === view ? e : 0) + (rig.fromView === view ? 1 - e : 0);
   const props = (1 - share('first')) * (1 - share('third') * overHead());
   const opening = holeOpening(cam.position, focus.x, floor, focus.z, height, props, dt);
-  updateSeeThrough(focus.x, floor + height * 0.6, focus.z, props, share('top'), floor, opening);
+  updateSeeThrough(focus.x, floor + height * 0.6, focus.z, props, share('top'), floor, opening, builtOpening());
   rig.kick = damp(rig.kick, rig.kickTo, rig.kickTo > rig.kick ? 14 : 6, dt); rig.kickTo = 0;
   if (rig.view !== 'top') fov += rig.kick * e;
   if (cam.fov !== fov || cam.near !== near) { cam.fov = fov; cam.near = near; cam.updateProjectionMatrix(); }

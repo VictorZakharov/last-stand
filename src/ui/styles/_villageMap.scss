@@ -18,11 +18,12 @@
 #vmap.flat .vm-names, #vmap.flat .vm-you { opacity: 1; }
 #vmap.flat .vm-names { pointer-events: auto; }
 .vm-names { position: absolute; inset: 0; }
-.vm-name { position: absolute; translate: -50% calc(-100% - #{ui(10px)}); padding: ui(3px) ui(9px); white-space: nowrap;
+/* (moved aside from its neighbours by ui/villageMap.ts `layNames`, its pointer kept at its place) */
+.vm-name { position: absolute; translate: calc(-50% + var(--aside, 0px)) calc(-100% - #{ui(10px)}); padding: ui(3px) ui(9px); white-space: nowrap; min-width: ui(84px); text-align: center; box-sizing: border-box;
   font: 700 ui(13px) var(--font-display); letter-spacing: .04em; color: #3a2a1a; cursor: $cursor-hand;
   background: rgba(240, 226, 196, .9); border: 1px solid rgba(58, 42, 26, .7); border-radius: ui(3px);
   box-shadow: 0 ui(2px) ui(6px) rgba(40, 24, 8, .35); }
-.vm-name::after { content: ''; position: absolute; left: 50%; top: 100%; translate: -50% 0; border: ui(5px) solid transparent;
+.vm-name::after { content: ''; position: absolute; left: calc(50% + var(--tail, 0px)); top: 100%; translate: -50% 0; border: ui(5px) solid transparent;
   border-top-color: rgba(58, 42, 26, .7); }
 .vm-name:hover, .vm-name:focus-visible { background: #fff3d6; color: #1a0f04; }
 .vm-name[data-biome="crypt"] { color: #5a1f86; }

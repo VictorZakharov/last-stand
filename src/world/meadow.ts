@@ -26,6 +26,10 @@ const RINGS = [
   { cell: 0.3, radius: 58, segs: 2 },
   { cell: 0.6, radius: 85, segs: 1 },
 ];
+/** The one ring drawn from above, over all the view: there every blade is about as far from the camera, and rings round
+ *  the middle of the view put their hand-overs in the frame, circles of blades coming and going as he walked (from play,
+ *  "in top down, grass is visibly redrawing as I'm moving around"). Its blades stay where they are as it follows. */
+const ABOVE_RING = { cell: 0.15, radius: 70, segs: 2 };
 /** tiles a side over each ring's grid (the most drawn: the uniforms' array) */
 const TILES = 8;
 /** how wide a blade is at its root, in its ring's cells, in the first ring; each ring out its blades wider again by its
@@ -412,6 +416,20 @@ export function moveMeadowFocus(x: number, z: number): void {
   focusMoved.set(x, z);
 }
 
+/** whether the view is from above, and a harness's hold on it (null: the game's) */
+let fromAbove = false;
+let aboveHeld: boolean | null = null;
+
+/** Each frame: whether the view is from above, so the one ring (`ABOVE_RING`) is drawn in the rings' place. */
+export function meadowFromAbove(on: boolean): void {
+  fromAbove = on;
+}
+
+/** For a harness (tools/lab): the rings drawn as from above or not, whatever the view (null: as the view has them). */
+export function holdMeadowFromAbove(on: boolean | null): void {
+  aboveHeld = on;
+}
+
 /** For a harness (tools/lab): the far rings' blades cut into strands (or drawn whole, each a wide blade, as they were). */
 export function meadowCombed(on: boolean): void {
   for (const u of rings) u.uCombed.value = on ? 1 : 0;
@@ -420,6 +438,7 @@ export function meadowCombed(on: boolean): void {
 /** For a harness (tools/lab): the rings handing over as they do, or across a fifth, each sheet grown whole, as they did. */
 export function meadowHandOver(wide: boolean): void {
   rings.forEach((u, k) => {
+    if (!RINGS[k]) return;
     bandOf(u.uBand.value, k, wide ? HAND_OVER : SHARP_HAND_OVER);
     u.uByStrand.value = wide ? 1 : 0;
   });
@@ -488,8 +507,8 @@ export function buildMeadow(mask: MeadowMask, maskTexture: THREE.Texture, update
     }
     return false;
   };
-  RINGS.forEach((ring, k) => {
-    const inner = k === 0 ? 0 : RINGS[k - 1].radius;
+  [...RINGS, ABOVE_RING].forEach((ring, k) => {
+    const above = ring === ABOVE_RING;
     // (cells a side a tile: the ring's square across, in whole tiles)
     const S = Math.ceil((Math.ceil((ring.radius * 2) / ring.cell) + 1) / TILES);
     const N = S * TILES;
@@ -508,7 +527,8 @@ export function buildMeadow(mask: MeadowMask, maskTexture: THREE.Texture, update
       uMeadow: { value: maskTexture },
       uMeadowHalf: { value: mask.half },
     };
-    bandOf(u.uBand.value, k, HAND_OVER);
+    if (above) u.uBand.value.set(-2, -1, ring.radius - AT_ONCE, ring.radius);
+    else bandOf(u.uBand.value, k, HAND_OVER);
     rings.push(u);
     const geo = bladeGeometry(ring.segs);
     const mesh = new THREE.Mesh(geo, bladeMaterial(u, ring.cell > RINGS[0].cell, k));
@@ -517,6 +537,11 @@ export function buildMeadow(mask: MeadowMask, maskTexture: THREE.Texture, update
     mesh.frustumCulled = false;
     mesh.receiveShadow = true;
     mesh.onBeforeRender = (_renderer, _scene, camera) => {
+      // (none listed rather than hidden: a hidden mesh compiles nothing)
+      if ((aboveHeld ?? fromAbove) !== above) {
+        geo.instanceCount = 0;
+        return;
+      }
       const focus = focusOf(camera, u.uFocus.value).add(focusMoved);
       const ox = Math.floor(focus.x / ring.cell) - (N >> 1), oz = Math.floor(focus.y / ring.cell) - (N >> 1);
       u.uOrigin.value.set(ox, oz);

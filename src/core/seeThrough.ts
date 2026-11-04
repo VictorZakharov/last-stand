@@ -32,6 +32,15 @@ const PROP_MIN_Y = { value: FLOOR_CLEAR };
  *  hall's side wall onto the grass */
 const BUILT_K = { value: new THREE.Vector4(1.0, 1.8, 0, 0.25) };
 const HALL_K = { value: new THREE.Vector4(1.0, 1.8, 0, 0.25) };
+/** the roofs' hole: reaching past him (its w far under 0), so a ghost of a roof is one all over, whichever side of him
+ *  the camera looks at it from */
+const ROOF_K = { value: new THREE.Vector4(1.0, 1.8, 0, -1000) };
+/** how far every roof thins from above, whatever it hides (a share of its pixels; from play, "we should make roof
+ *  semi-transparent in this case too, even if hero is not directly under it") */
+export const ROOF_GHOST_ABOVE = 0.6;
+/** how much wider what's built opens from above while it hides him (m at his depth): his own size, he showed alone in a
+ *  roof, "it needs to match the previous screenshot, logically" */
+const BUILT_OPENS = 5;
 /** the walls' way back over the last of the way to him */
 const WALL_RAMP = { value: 2 };
 /** how far short of him a ghost comes back (m): over 2 m, as the hall's walls do, a post a stride before him stayed whole */
@@ -51,7 +60,9 @@ const kinds = {
   /** the hall of heroes' front wall and its roof over the hero inside: a prop, all of it before him thinned by a share
    *  of its own (`fadeWhole`) */
   hallFront: { k: HALL_K, minY: PROP_MIN_Y, across: PROP_ACROSS_NOW, whole: { value: 0 }, ramp: WALL_RAMP },
-  hallRoof: { k: HALL_K, minY: PROP_MIN_Y, across: PROP_ACROSS_NOW, whole: { value: 0 }, ramp: WALL_RAMP },
+  hallRoof: { k: ROOF_K, minY: PROP_MIN_Y, across: PROP_ACROSS_NOW, whole: { value: 0 }, ramp: WALL_RAMP },
+  /** the other roofs: as what's built, and a ghost from above (`ROOF_GHOST_ABOVE`) */
+  roof: { k: ROOF_K, minY: PROP_MIN_Y, across: PROP_ACROSS_NOW, whole: { value: 0 }, ramp: WALL_RAMP },
   /** what stands free in the hall (its columns, its banners), which hides as much of the room as of him */
   hallColumn: { k: PROP_K, minY: PROP_MIN_Y, across: PROP_ACROSS_NOW, whole: { value: 0 }, ramp: WALL_RAMP },
 } satisfies Record<string, Kind>;
@@ -204,7 +215,8 @@ export function seeThroughFade<M extends THREE.ShaderMaterial>(m: M, kind: keyof
  * Each frame: where the followed character is, how far props dissolve (0..1: none through the eyes), how far the view
  * is from above (0..1), whose hole is narrower, and how far the hole opens round him (0..1: `core/heroHidden.ts`).
  */
-export function updateSeeThrough(x: number, y: number, z: number, props: number, top: number, floor = 0, open = 0): void {
+export function updateSeeThrough(x: number, y: number, z: number, props: number, top: number, floor = 0, open = 0,
+  builtOpen = 0): void {
   focus.value.set(x, y, z);
   PROP_MIN_Y.value = floor + FLOOR_CLEAR;
   const from = PROP_HOLE_CLOSE.from + (PROP_HOLE_TOP.from - PROP_HOLE_CLOSE.from) * top;
@@ -213,8 +225,11 @@ export function updateSeeThrough(x: number, y: number, z: number, props: number,
   PROP_K.value.set(from, to, strength, PROP_K.value.w);
   // (from above alone, what's built: over the shoulder the camera is on his side of it)
   const built = builtThinned ? strength : strength * top;
-  BUILT_K.value.set(from, to, built, BUILT_K.value.w);
+  const wider = (openHeld ?? builtOpen) * top * BUILT_OPENS;
+  BUILT_K.value.set(from + wider, to + wider, built, BUILT_K.value.w);
   HALL_K.value.set(from, to, built, HALL_K.value.w);
+  ROOF_K.value.set(from + wider, to + wider, built, ROOF_K.value.w);
+  kinds.roof.whole.value = ROOF_GHOST_ABOVE * top * props;
   kinds.prop.whole.value = fadeHeld ? 0 : (openHeld ?? open) * GHOST_WHILE_HIDDEN * props;
   kinds.propFoot.whole.value = kinds.prop.whole.value;
   PROP_ACROSS_NOW.value = acrossHeld ?? PROP_ACROSS.close + (PROP_ACROSS.top - PROP_ACROSS.close) * top;
@@ -226,7 +241,7 @@ export function holdPropHole(shut: boolean, across: number | null = null): void 
   fadeHeld = shut;
   acrossHeld = across;
   if (!shut) return;
-  for (const k of [PROP_K, BUILT_K, HALL_K]) k.value.z = 0;
+  for (const k of [PROP_K, BUILT_K, HALL_K, ROOF_K]) k.value.z = 0;
   kinds.prop.whole.value = 0;
   kinds.propFoot.whole.value = 0;
 }
@@ -241,6 +256,7 @@ export function holdBuiltWhole(whole: boolean, built: number): number {
   const was = BUILT_K.value.z;
   BUILT_K.value.z = whole ? 0 : built;
   HALL_K.value.z = whole ? 0 : built;
+  ROOF_K.value.z = whole ? 0 : built;
   return was;
 }
 

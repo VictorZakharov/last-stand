@@ -20,10 +20,17 @@ const OPENS = 7;
 const CLOSES = 3;
 
 const hidden = new Uint8Array(POINTS);
+/** the same lines, read against what's built alone */
+const walled = new Uint8Array(POINTS);
 const _point = new THREE.Vector3();
 const _hit = wallHit();
 let next = 0;
 let opening = 0;
+let wallOpening = 0;
+
+/** How far what's built alone hides him (0..1), as `holeOpening` last read it: what stands free before him is no reason
+ *  to open a cottage beside it. */
+export const builtOpening = (): number => wallOpening;
 
 /** Whether the line from `camera` to `point` crosses a circle of what stands free, under its top. */
 function crossesObstacle(camera: THREE.Vector3, point: THREE.Vector3): boolean {
@@ -48,7 +55,10 @@ function crossesObstacle(camera: THREE.Vector3, point: THREE.Vector3): boolean {
 /** The hole's opening this frame (0: his own size, 1: wide), the camera at `camera`, him at (x, z) over `floor`. */
 export function holeOpening(camera: THREE.Vector3, x: number, floor: number, z: number, height: number, props: number,
   dt: number): number {
-  if (!G.arena?.wall || props <= 0) return (opening = 0);
+  if (!G.arena?.wall || props <= 0) {
+    wallOpening = 0;
+    return (opening = 0);
+  }
   const toX = x - camera.x;
   const toZ = z - camera.z;
   const long = Math.hypot(toX, toZ) || 1;
@@ -57,10 +67,13 @@ export function holeOpening(camera: THREE.Vector3, x: number, floor: number, z: 
     const side = SIDES[next % SIDES.length];
     const up = HEIGHTS[Math.floor(next / SIDES.length)];
     _point.set(x - (toZ / long) * side, floor + height * up, z + (toX / long) * side);
-    hidden[next] = crossesObstacle(camera, _point) || G.arena.wall.cast(camera, _point, _hit) ? 1 : 0;
+    walled[next] = G.arena.wall.cast(camera, _point, _hit) ? 1 : 0;
+    hidden[next] = walled[next] || crossesObstacle(camera, _point) ? 1 : 0;
   }
   const share = hidden.reduce((sum, one) => sum + one, 0) / POINTS;
   const wanted = clamp(share / FULLY_OPEN, 0, 1);
   opening = damp(opening, wanted, wanted > opening ? OPENS : CLOSES, dt);
+  const wallWanted = clamp(walled.reduce((sum, one) => sum + one, 0) / POINTS / FULLY_OPEN, 0, 1);
+  wallOpening = damp(wallOpening, wallWanted, wallWanted > wallOpening ? OPENS : CLOSES, dt);
   return opening;
 }

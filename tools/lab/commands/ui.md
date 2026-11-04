@@ -128,3 +128,7 @@ and yes, we need a minimap in wardenhollow too"): the village's minimap with the
 in the training yard, by mouse and on touch: each within the window, the tracker under the minimap (beside it on a
 short screen, where under it hid three skill buttons), and none over the touch controls beside and below them. Check on a phone's `--screen` too. `--canary` makes the tracker
 as tall as the window.
+
+`villageMap` (`page/uiVillageMap.ts`, from play: "need to fix the map, there is overlap"): the village's map laid flat,
+no name over another, each within the sheet, each pointer's tip at its place on the map however far its name was moved
+aside. Check on a phone's `--screen` too. `--canary` lays one name on another.

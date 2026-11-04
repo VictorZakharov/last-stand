@@ -4,7 +4,7 @@
 // off; and his skills cast in the training yard alone. In the top view the pointer picks an object; in the close views
 // the one he's near, E using it.
 import * as THREE from 'three';
-import { fadeWhole } from '../core/seeThrough';
+import { fadeWhole, ROOF_GHOST_ABOVE } from '../core/seeThrough';
 import { G } from '../state';
 import { RUN } from '../data/balance';
 import { VILLAGE_OBJECTS, YARD, worldToYard, type VillageObject } from '../data/village';
@@ -17,6 +17,8 @@ import { OUTLINE } from '../ui/overlay/paint';
 import { want } from './warm';
 import { completeStep } from './training';
 import { HALL, TERRACE, inHall } from '../data/village';
+import { inHallsBulk } from '../world/village';
+import { meadowFromAbove } from '../world/meadow';
 import { CLASS_IDS } from '../data/classes/index';
 import { LAMP_SOFT } from '../core/lamps';
 import { on } from '../events';
@@ -88,16 +90,20 @@ const VILLAGE_SHINE = 0.55;
 /** how far before a plinth's hero the hall's hint stands (m) */
 const HERO_HINT_BEFORE = 0.8;
 
-/** The plinth of the hero standing nearest the way the camera looks from the hero (his own class's stands empty). */
+/** The plinth of the hero standing nearest the way the camera looks from the hero, or from above, where it looks the
+ *  same way wherever he stands and picked the one hero from every spot, nearest the hero himself (his own class's
+ *  stands empty; "in top down, the hero selection is not based on proximity"; `lab village --only heroPickedNear`). */
 export function heroLookedAt(): number {
   const p = G.player.pos;
   const sight = G.camera.getWorldDirection(_to);
+  const fromAbove = viewMode() === 'top';
   let best = 0;
   let bestAim = -Infinity;
   HALL.plinths.forEach((x, i) => {
     if (CLASS_IDS[i] === G.player.cls.id) return;
     const dx = TERRACE.x + x - p.x, dz = HALL.plinthZ - p.z;
-    const aim = (dx * sight.x + dz * sight.z) / Math.max(1e-3, Math.hypot(dx, dz) * Math.hypot(sight.x, sight.z));
+    const aim = fromAbove ? -Math.hypot(dx, dz)
+      : (dx * sight.x + dz * sight.z) / Math.max(1e-3, Math.hypot(dx, dz) * Math.hypot(sight.x, sight.z));
     if (aim > bestAim) {
       bestAim = aim;
       best = i;
@@ -295,9 +301,12 @@ function hallInside(dt: number): void {
   // shows the room and a wall as a wall, from play "still seeing through walls from inside"; on the portico a hole round
   // him showed him alone, "need to show around him more")
   const view = viewMode();
+  meadowFromAbove(view === 'top');
   const under = lobby && p.obj.position.y > TERRACE.high - 0.1 && Math.abs(p.pos.x - TERRACE.x) < HALL.half
     && p.pos.z < HALL.door + PORTICO_DEEP;
-  const roofAway = (inside || under) && view === 'top';
+  // (and wherever the hall stands between the camera and him: from behind it, a hole his own size showed him alone in
+  // its roof, "it needs to match the previous screenshot, logically")
+  const roofAway = (inside || under || (lobby && view === 'top' && hallHidesHim())) && view === 'top';
   const frontAway = roofAway;
   // (thinned to a ghost over a moment: gone at a stroke, walls and door vanished as he stepped in, from play "why here
   // geometry disappears ... it should fade to semi transparent")
@@ -305,7 +314,9 @@ function hallInside(dt: number): void {
   const deep = THREE.MathUtils.clamp((HALL.door - p.pos.z) / WALL_DEEP, 0, 1);
   const wallGhost = CUT_AWAY_GHOST + (DEEP_GHOST - CUT_AWAY_GHOST) * deep;
   frontFade = THREE.MathUtils.damp(frontFade, frontAway ? wallGhost : 0, CUT_AWAY_FADE, dt);
-  roofFade = THREE.MathUtils.damp(roofFade, roofAway ? ROOF_GHOST : 0, CUT_AWAY_FADE, dt);
+  // (a ghost from above whatever it hides, as every roof is: `ROOF_GHOST_ABOVE`)
+  const roofWanted = roofAway ? ROOF_GHOST : lobby && view === 'top' ? ROOF_GHOST_ABOVE : 0;
+  roofFade = THREE.MathUtils.damp(roofFade, roofWanted, CUT_AWAY_FADE, dt);
   fadeWhole('hallFront', frontFade < CUT_AWAY_NONE ? 0 : frontFade);
   fadeWhole('hallRoof', roofFade < CUT_AWAY_NONE ? 0 : roofFade > 1 - CUT_AWAY_NONE ? 1 : roofFade);
   // (what stands free before him further: through a hole his own size in a column he showed alone, from play "need to
@@ -334,6 +345,24 @@ const ROOF_GHOST = 1;
 const COLUMN_GHOST = 0.75;
 const _door = new THREE.Box3(), _frustum = new THREE.Frustum(), _viewProj = new THREE.Matrix4();
 const _look = new THREE.Vector3();
+/** the heights on him the camera's line runs to (m), and the points read along each */
+const HIDDEN_AT = [0.3, 1.1, 1.8];
+const HIDDEN_STEPS = 24;
+
+/** Whether the hall stands between the camera and him. */
+function hallHidesHim(): boolean {
+  const cam = G.camera.position, p = G.player;
+  const dx = p.pos.x - cam.x, dz = p.pos.z - cam.z;
+  for (const up of HIDDEN_AT) {
+    const y = p.obj.position.y + up;
+    // (short of him: he isn't before himself, and stood in its bulk's edge beside it, it hides nothing)
+    for (let step = 1; step < HIDDEN_STEPS; step++) {
+      const along = step / HIDDEN_STEPS;
+      if (inHallsBulk(cam.x + dx * along, cam.y + (y - cam.y) * along, cam.z + dz * along)) return true;
+    }
+  }
+  return false;
+}
 
 /** Whether the camera stands inside the hall's walls, or over the portico before them looking in (over the shoulder
  *  its front wall is away, and before it lies the terrace, bare). */

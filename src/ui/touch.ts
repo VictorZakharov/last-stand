@@ -12,6 +12,7 @@ import * as THREE from 'three';
 import { G } from '../state';
 import { input } from '../core/input';
 import { cameraYaw, zoomBy } from '../core/renderer';
+import { completeStep } from '../game/training';
 import { additive } from '../core/materials';
 import { groundHeight } from '../world/ground';
 import { SKILL_KEYS } from '../loot/loadout';
@@ -140,7 +141,7 @@ export function initTouch(v: TouchVillage): void {
     const d = dist(e.touches);
     // one zoom notch per 12% change in finger spread
     const n = Math.log(pinch.d / d) / Math.log(1.12);
-    if (Math.abs(n) >= 1) { zoomBy(Math.trunc(n)); pinch.d = d; }
+    if (Math.abs(n) >= 1) { zoomBy(Math.trunc(n)); pinch.d = d; completeStep('zoom'); }
   }, { passive: true });
   window.addEventListener('touchend', (e) => { if (e.touches.length < 2) pinch = null; }, { passive: true });
 

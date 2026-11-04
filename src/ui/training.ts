@@ -1,9 +1,8 @@
 // The training's tracker (game/training.ts): a small card in the lobby's corner listing the first visit's steps, each
 // ticked as it's done, and a button to skip them; finished, it says the portals are open, and goes a moment later.
 // It shows while the village takes the hero's input (no panel, map or screen over it).
-import { TRAINING } from '../data/training';
 import { on } from '../events';
-import { skipTraining, stepDone, trainingPending } from '../game/training';
+import { skipTraining, stepDone, trainingPending, trainingSteps } from '../game/training';
 import { sfx } from '../core/audio';
 import { input } from '../core/input';
 
@@ -56,9 +55,9 @@ export function updateTrainingTracker(dt: number, visible: boolean): void {
 function render(): void {
   const pending = trainingPending();
   root.classList.toggle('pending', pending);
-  list.replaceChildren(...TRAINING.map((t) => {
+  list.replaceChildren(...trainingSteps().map((t) => {
     const li = document.createElement('li');
-    li.textContent = t.key && !input.touchMode ? `${t.text} (${t.key})` : t.text;
+    li.textContent = input.touchMode ? t.touchText ?? t.text : t.key ? `${t.text} (${t.key})` : t.text;
     li.classList.toggle('done', stepDone(t.id));
     return li;
   }));
