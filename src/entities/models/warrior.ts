@@ -12,7 +12,7 @@ import { buildHumanoid, joint, resetPose, walkCycle, idle, deathFall, pulse, ram
 import { Sculpt, stripRig, limb, lathe } from './shapes';
 import { FurSway } from './furSway';
 import { LegIK, IK } from './ik';
-import { fitArm, solveArm, type ArmResult } from './armIK';
+import { fitArm, solveArm, type ArmResult, recall, remembered, type ArmMemory } from './armIK';
 import { bodyShape, clampWrist, GRIPPED_FLEXION } from './anatomy';
 import { curve, PoseFade, type Keys } from './motion';
 import { buildFlask, drink, drinkUp, holdFlask, DRINK_SHEATHED, type DrinkHold } from './flask';
@@ -1275,6 +1275,8 @@ export function buildWarrior(): Model {
   const grasp: LowerGrip = { held: false, free: false, short: 0, past: 0, into: 0 };
   /** each hand's slant on its handle this frame (rad, armIK.ts) */
   let slantR = 0, slantL = 0;
+  /** what the standing hold's solves remembered as each arm's sit began, for it to take up again (`recall`) */
+  let standR: ArmMemory | null = null, standL: ArmMemory | null = null;
   /** the slant a swing through the eyes holds each fist's handle at (rad, `ViewSwing.slant`), kept while its hold fades */
   let swingSlantR = 0, swingSlantL = 0;
   // a weapon in the left hand hangs on the belt while the hand is busy with the flask: in a leather frog at the
@@ -1516,8 +1518,10 @@ export function buildWarrior(): Model {
    *  as he got up, its head 15 to 20 cm a frame. Held where it's held, its grip stood 19 cm off the floor, lower than
    *  his hand reaches from a seat, so the hand slides up its haft as he sets it down, to `hold` (m) off the floor and
    *  no nearer its head than `head` (the grip's units): held at the grip to the end, it was let go of 57 cm over the
-   *  floor and dropped there in a frame. */
-  const LEAN = tunable('warriorLean', { at: [-0.65, 0.28], lean: 0.3, letGo: 0.8, hold: 0.62, head: 0.15, bend: 0.9, bow: 0.4 });
+   *  floor and dropped there in a frame. The fist opens to a ring round the haft over `ring` of the way down, for it
+   *  to slip through, its fingers and its index let go by `loose`; it slips, and the handle's slant
+   *  across the palm eases to the standing one, only above `slant` of the way down. */
+  const LEAN = tunable('warriorLean', { at: [-0.8, 0.28], lean: 0.15, letGo: 0.8, hold: 0.62, head: 0.15, bend: 0.9, bow: 0.4, ring: [0.01, 0.06], loose: [0.6, 0.2], slant: 0.2 });
   const LEANS = new Set(['Axe', 'Mace']);
   /** A two-hander on a seat stuck point down in the ground beside his right foot and left standing there: its point
    *  `ahead` of his hips and `side` to his right (rig units, his own frame), sunk to bring its pommel `top` over his
@@ -1764,7 +1768,8 @@ export function buildWarrior(): Model {
     const e = smooth(w);
     const above = leant.y - groundHeight(spot.x, spot.z);
     const slide = THREE.MathUtils.clamp((LEAN.hold * k - above) / (up.y * s), 0, box.max.y - LEAN.head);
-    p.slide = slide * e;
+    // (only once the fist has opened, `LEAN.ring`: from the start, it slid 4 cm through the closed fist)
+    p.slide = slide * smooth(ramp(w, LEAN.slant / LEAN.letGo, 1));
     if (!from) grip.getWorldPosition(p.at);
     p.at.lerp(leant, e);
     // (on an arc out and up from his legs, as one is laid by a fire)
@@ -3312,6 +3317,18 @@ export function buildWarrior(): Model {
     // (sat, his weapons stand on their ends and his hands rest on them)
     const plant = held && st.sit && !fp && st.dead < 0 ? (sitsBetween(st.sit, held) ? betweenClock(st.sit) : st.sit.w) : 0;
     const plantOff = offHeld && !sheathed && st.sit && !fp && st.dead < 0 ? st.sit.w : 0;
+    // (the hold he stood with remembered as he begins to sit, and taken up again once he's up: from where the carry's
+    // solves left the arm, it came back on another slant, the weapon 4 to 7 cm along his fist)
+    if (plant > 0) standR ??= remembered(j.shoulderR);
+    else if (standR) {
+      recall(j.shoulderR, standR);
+      standR = null;
+    }
+    if (plantOff > 0) standL ??= remembered(j.shoulderL);
+    else if (standL) {
+      recall(j.shoulderL, standL);
+      standL = null;
+    }
     carryingTwo = (carryTwo && plant > 0 && plant <= LAY.letGo) || (leanR && plant > 0 && plant <= LEAN.letGo) || (between && plant > 0 && plant < BETWEEN.letGo);
     const gripped = held && (!(plant > 0 && (floorSit || leanR)) || carryingTwo);
     const carriedBetween = between && plant > 0 && plant < BETWEEN.letGo;
@@ -3356,6 +3373,9 @@ export function buildWarrior(): Model {
     // (the arm between his feet is its own solve's, `fistOnGrip`: fitted again after it, its elbow changed sides in a frame)
     else if (!fp && st.dead < 0) {
       slantR = fitArm(j, false, gripped ? gripTurn(handR, grip, _vr) : undefined, body, gripped && !two ? SLANT : undefined).slant;
+      // (eased back to the slant he stood with as he comes up, before the fist closes, `LEAN.slant`: taken up in the
+      // frame he's up, the weapon went 7 cm along his fist, and eased as it closed, 7 cm through it)
+      if (plant > 0 && standR?.slant !== undefined) slantR = lerp(standR.slant, slantR, smooth(ramp(plant, LEAN.ring[1], LEAN.slant)));
       // (the arm as it's drawn standing, which it's lifted from as he sits)
       if (plant === 0) {
         armOf(plantR).forEach((joint, i) => plantR.armWas[i].copy(joint.quaternion));
@@ -3514,6 +3534,12 @@ export function buildWarrior(): Model {
       }
       // (let go of for the blade to swing or lean round in it: `carryArm`)
       if (carriedBetween) loosen(handR, LOOSE_MOST * plantR.open, LOOSE_INDEX * plantR.open);
+      // (and for a haft to slip down through it to the floor as he leans it on a seat: slid through a closed fist, it
+      // read 58 cm and 66 degrees in his hand)
+      else if (leanR) {
+        const ring = smooth(ramp(plant, LEAN.ring[0], LEAN.ring[1]));
+        loosen(handR, LEAN.loose[0] * ring, LEAN.loose[1] * ring);
+      }
     }
     // (let go of on the floor, the fist kept as it was round the handle until the hand has lifted off it: relaxed at
     // once, its half-open fingers pointed down from the handle through the floor, 2 to 5 cm)
