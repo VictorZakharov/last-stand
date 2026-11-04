@@ -44,7 +44,7 @@ import type { ActionState, AnimState, Blade, Fist, Gear, KeyedArm, LowerGrip, Mo
 /** sat, how a hand that holds a weapon turns as it goes down to his thigh (`models/sit.ts`, `restHands`), the left's
  *  and the right's, the weapon pointing down to where it's stood; an empty hand rests palm down. The small rise keeps
  *  his shield-side forearm over the thigh. */
-const SIT_HANDS = tunable('warriorSit', { roll: [0, 0], bend: [0, 0], rise: 0.005, slant: 0.1, along: 0.35, over: 0.11, armIn: 1, floorIn: 0.7, arc: 0.15, lapR: [0.55, 0.12, 0.85], lapTwo: [0.95, -0.22, 0.15], lapAt: [-0.16, 0.205, 0.36], lapPole: [-0.5, -0.5, -0.6], portDir: [0.28, 0.92, 0.28], fistBelow: 0.08, swordOver: 0.05, maulOver: 0.26, axeOver: 0.33, armSat: 0.79, portAt: [-0.3, 0.14, 0.3], beside: [-0.42, 0.4, 0.02], besidePole: [-0.3, -0.2, -1], besideOut: -0.3, besideAhead: 0.95, twoR: [0.38, 0.12, 0.92], twoL: [-0.35, 0.3, 0.89], viaR: [-0.15, 0.2, 0.95], viaL: [0.15, 0.2, 0.95], viaAt: 0.45, floorBack: 0, viaFloorR: [-0.15, 0.5, 0.85], viaFloorL: [0.15, 0.5, 0.85], kneesR: [0.88, -0.2, 0.42], kneesL: [-0.7, -0.3, 0.65], turnFrom: 0.15, turnLate: 0.5, turnIn: 0.12, shieldOut: 0.09, edgeDown: 0.2, });
+const SIT_HANDS = tunable('warriorSit', { roll: [0, 0], bend: [0, 0], rise: 0.005, slant: 0.1, along: 0.35, over: 0.11, armIn: 1, floorIn: 0.7, arc: 0.15, lapR: [0.55, 0.12, 0.85], lapTwo: [0.95, -0.22, 0.15], lapAt: [-0.16, 0.205, 0.36], lapPole: [-0.5, -0.5, -0.6], portDir: [0.28, 0.92, 0.28], fistBelow: 0.08, swordOver: 0.05, maulOver: 0.26, axeOver: 0.28, armSat: 0.79, portAt: [-0.36, -0.08, 0.38], beside: [-0.42, 0.4, 0.02], besidePole: [-0.3, -0.2, -1], besideOut: -0.3, besideAhead: 0.95, twoR: [0.38, 0.12, 0.92], twoL: [-0.35, 0.3, 0.89], viaR: [-0.15, 0.2, 0.95], viaL: [0.15, 0.2, 0.95], viaAt: 0.45, floorBack: 0, viaFloorR: [-0.15, 0.5, 0.85], viaFloorL: [0.15, 0.5, 0.85], kneesR: [0.88, -0.2, 0.42], kneesL: [-0.7, -0.3, 0.65], turnFrom: 0.15, turnLate: 0.5, turnIn: 0.12, shieldOut: 0.09, edgeDown: 0.2, });
 const _sitTurn: RestTurn = { roll: [0, 0], bend: [0, 0], along: [0, 0], over: [0, 0], armIn: [0, 0], arc: [0, 0], out: [0, 0] };
 const _lifted: number[] = [], _resting: number[] = [];
 
@@ -2369,6 +2369,7 @@ export function buildWarrior(): Model {
     const twoSits = !!(st.sit && (st.sit.w > 0 || st.sit.before > 0) && held && two && !fp && st.dead < 0);
     if (!twoSits) _resting.push(1);
     if (!twoSits) twoSit.taken = false;
+    if (!twoSits && held) held.group.userData.stoodOn = false;
     else if (!twoSit.taken) takeTwoRest(st.sit!, t, held!);
     restHands(j, st.sit, _resting, _sitTurn, SIT_HANDS.rise, _lifted);
     if (st.sit && !fp && st.dead < 0) {
@@ -2596,6 +2597,7 @@ export function buildWarrior(): Model {
       });
       j.shoulderR.position.lerpVectors(twoSit.fromAt, twoSit.portAt, up).lerp(twoSit.restAt, down);
       slantR = lerp(lerp(twoSit.fromSlant, twoSit.portSlant, up), twoSit.restSlant, down);
+      held!.group.userData.stoodOn = onFloor(st.sit!) && down >= 1;
     }
     else if (!fp && st.dead < 0) {
       // (sat, kept near the slant he stood with: free, the weapon went 10 cm along his fist; held to it, the wrist went
