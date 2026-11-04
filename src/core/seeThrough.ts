@@ -2,6 +2,7 @@
 // nothing hides the player. Only the main pass: shadow maps render with their own depth
 // material, so shadows stay whole.
 import * as THREE from 'three';
+import { RUNNING } from './rendererChoice';
 
 /** how far over his floor a prop starts to dissolve (m): the terrace's and the hall's floor came apart round his feet
  *  when this was held at the village's ground, 1.6 m under them */
@@ -125,12 +126,23 @@ function bindUniforms(uniforms: Record<string, THREE.IUniform>, kind: keyof type
 
 /** What a material dissolves by, as WebGPU reads it off the material (`SeeThrough`, core/shaderPorts.ts `seeMask`):
  *  the followed character, and its kind's hole and floor. */
-export interface SeeThrough { focus: { value: THREE.Vector3 }; k: { value: THREE.Vector4 }; minY: { value: number } }
+export interface SeeThrough {
+  focus: { value: THREE.Vector3 };
+  k: { value: THREE.Vector4 };
+  minY: { value: number };
+  across: { value: number };
+  whole: { value: number };
+  ramp: { value: number };
+}
+
+/** each kind's values, one object a kind: what WebGPU keeps its nodes by */
+const seen = new Map<keyof typeof kinds, SeeThrough>();
 
 /** `m`'s dissolve given it for WebGPU (`seeThrough`, a property of its own: not copied to a clone, as its
  *  `onBeforeCompile` isn't). */
 function markSeeThrough(m: THREE.Material, kind: keyof typeof kinds): void {
-  const value: SeeThrough = { focus, k: kinds[kind].k, minY: kinds[kind].minY };
+  let value = seen.get(kind);
+  if (!value) seen.set(kind, value = { focus, ...kinds[kind] });
   Object.defineProperty(m, 'seeThrough', { value, configurable: true });
 }
 
@@ -155,8 +167,9 @@ export function seeThrough<M extends THREE.Material>(m: M, kind: keyof typeof ki
         float seeN = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));
         if (seeN < seeFade()) discard;`);
   };
-  // the same code for every kind (they differ in uniforms only), so kinds share programs
-  m.customProgramCacheKey = () => `${key}|seethrough`;
+  // the same code for every kind (they differ in uniforms only), so kinds share programs; on WebGPU a kind's uniforms are
+  // nodes of its build, and sharing the first's, the fountain's stone (`prop`) stood solid over him as a wall (`built`) does
+  m.customProgramCacheKey = () => (RUNNING.webgpu ? `${key}|seethrough|${kind}` : `${key}|seethrough`);
   return m;
 }
 

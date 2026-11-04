@@ -4,6 +4,7 @@
 // a resolve per pass (very slow on tile-based GPUs such as Apple's).
 import * as THREE from 'three';
 import { lightTheLamps } from './lamps';
+import { lightTheLampsOnWebGPU } from './lampNodes';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
@@ -626,6 +627,7 @@ export async function initRenderer(container: HTMLElement) {
   if (WEBGPU) {
     takePorts(renderer as unknown as WebGPURenderer);
     // (`?envShadow=0` leaves the environment unshadowed, to compare)
+    lightTheLampsOnWebGPU();
     if (!/[?&]envShadow=0/.test(location.search)) shadeEnvironmentNodes({ environment: ENV_IN_SHADOW, ambient: AMBIENT_IN_SHADOW });
   }
   renderer.setPixelRatio(canvasRatio());

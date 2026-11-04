@@ -9,6 +9,8 @@
 // only the tiles in view and in its band are drawn (on the CPU, as the mesh is about to be drawn by a camera). Blades
 // gather in tufts and patches, bend along an arc, turn a little to the camera seen edge on and sway in the wind.
 // Nothing here changes a program as the camera moves: the tiles, the grids' origins and the count are uniforms.
+import { WEBGPU } from '../core/webgpu';
+import { bladeNodes, swardColorNode } from './meadowNodes';
 import * as THREE from 'three';
 import { canvasOf, ctx2d, readCtx2d } from '../core/textures';
 import type { Updater } from './props';
@@ -426,8 +428,17 @@ export function meadowHandOver(wide: boolean): void {
 /** A ring's material: the standard one, its points placed as its blades (`VERTEX_BLADE`), coloured as grass;
  *  `combed`, its blades cut into strands, a program of its own (a discard in it would hold the depth test back to
  *  after the shading for the first ring's dense blades too, which never cut). */
-function bladeMaterial(u: RingUniforms, combed: boolean): THREE.MeshStandardMaterial {
+function bladeMaterial(u: RingUniforms, combed: boolean, ring: number): THREE.MeshStandardMaterial {
   const m = new THREE.MeshStandardMaterial({ roughness: 0.85, side: THREE.DoubleSide });
+  if (WEBGPU) {
+    bladeNodes(m, u, combed, {
+      widthInCells: WIDTH_IN_CELLS, grows: BLADE_GROWS, strandCut: STRAND_CUT, strandsRise: STRANDS_RISE,
+    });
+    // (a build of its own: sharing the first's, a ring drew with that ring's uniforms, its tiles listed for that ring's
+    // view, whole tiles of the lawn bare)
+    m.customProgramCacheKey = () => `meadow-blades-${ring}`;
+    return m;
+  }
   if (combed) m.defines = { COMBED: '' };
   m.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, u);
@@ -500,7 +511,7 @@ export function buildMeadow(mask: MeadowMask, maskTexture: THREE.Texture, update
     bandOf(u.uBand.value, k, HAND_OVER);
     rings.push(u);
     const geo = bladeGeometry(ring.segs);
-    const mesh = new THREE.Mesh(geo, bladeMaterial(u, ring.cell > RINGS[0].cell));
+    const mesh = new THREE.Mesh(geo, bladeMaterial(u, ring.cell > RINGS[0].cell, k));
     mesh.name = `meadow grass ${k + 1}`;
     // (the tiles are its culling: three's sphere would be round no points)
     mesh.frustumCulled = false;
@@ -509,7 +520,8 @@ export function buildMeadow(mask: MeadowMask, maskTexture: THREE.Texture, update
       const focus = focusOf(camera, u.uFocus.value).add(focusMoved);
       const ox = Math.floor(focus.x / ring.cell) - (N >> 1), oz = Math.floor(focus.y / ring.cell) - (N >> 1);
       u.uOrigin.value.set(ox, oz);
-      _frustum.setFromProjectionMatrix(_viewProj.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse));
+      _viewProj.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
+      _frustum.setFromProjectionMatrix(_viewProj, camera.coordinateSystem);
       const w = S * ring.cell;
       let listed = 0;
       for (let ty = 0; ty < TILES; ty++) {
@@ -538,6 +550,10 @@ export function buildMeadow(mask: MeadowMask, maskTexture: THREE.Texture, update
 /** The ground under a meadow: its own colour (bare earth) where the mask has none, a sward's dark green where it has
  *  grass (seen between the blades), in broad patches. */
 export function meadowGround<M extends THREE.MeshStandardMaterial>(m: M, mask: MaskUniforms): M {
+  if (WEBGPU) {
+    (m as M & { colorNode: unknown }).colorNode = swardColorNode(mask.uMeadow.value, mask.uMeadowHalf.value);
+    return m;
+  }
   m.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, mask);
     shader.vertexShader = shader.vertexShader

@@ -1,11 +1,10 @@
 // Graphics quality: the player's setting (auto / high / medium / low, cookie) and the
-// level in effect. Auto steps down the levels while the frame rate stays low, and never
-// steps back up within a session, to avoid oscillating; each boot, once the game is shown, it
-// tries the level above the one it last settled on, kept once it holds its frame rate for a
-// window, else left for the settled one at once (`bootAuto`). Every level renders the
-// screen's own pixels: what's cut is other work,
-// never the resolution (from play, "I want to run the game at full phone res, if we need
-// to cut, we need to cut something else, not resolution").
+// level in effect. Auto starts from the level it last settled on and steps down while
+// the frame rate stays low, High's resolution first (from the screen's own pixels, on
+// any device and at any of the OS's scaling: what the hardware holds is measured), then
+// the levels, then Low's resolution; it never steps back up on its own, to avoid
+// oscillating.
+import { WEBGPU } from './webgpu';
 import * as THREE from 'three';
 import { G } from '../state';
 import { QUALITY, QUALITY_ORDER, AUTO_QUALITY, type QualityLevel, type QualitySetting } from '../data/quality';
@@ -118,8 +117,12 @@ function apply(l: QualityLevel, most = Infinity): void {
   const shadow = G.arena.moon.shadow;
   if (shadow.mapSize.x !== p.shadowMap) {
     shadow.mapSize.set(p.shadowMap, p.shadowMap);
-    shadow.map?.dispose();
-    shadow.map = null;   // recreated at the new size on the next render
+    // (on WebGPU three's shadow node resizes the map it holds, and a map disposed here was a destroyed texture used in the
+    // next submit, a frame's passes refused)
+    if (!WEBGPU) {
+      shadow.map?.dispose();
+      shadow.map = null;   // recreated at the new size on the next render
+    }
   }
   // (a uniform: as wide on the floor at every map's size)
   shadow.radius = PENUMBRA * p.shadowMap / (shadow.camera.right - shadow.camera.left);

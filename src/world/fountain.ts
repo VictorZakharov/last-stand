@@ -7,6 +7,9 @@
 // shells and tubes, the foam a picture turning where it lands: their textures' offsets and the game's clock are all
 // that move, so nothing compiles after the village's warm-up. What of its light is the sky's (the caustics, the falling
 // water's glow) follows the hour (`FountainLight`): by night it's lit by the lamps alone.
+import { WEBGPU } from '../core/webgpu';
+import type { OwnLooks } from '../core/shaderPorts';
+import { causticNodes, fallingNodes, waterLooks, waterNodes } from './villageNodes';
 import * as THREE from 'three';
 import { canvasOf, ctx2d } from '../core/textures';
 import { seeThrough } from '../core/seeThrough';
@@ -70,9 +73,9 @@ const WATER_LIT_ROUGH = 0.12;
 /** the share of the water's highlights the lights round it give (its mirror of the sky keeps its own): at full, a
  *  street lamp's glints 3 m off bloomed into a puddle of light (a review) */
 const WATER_LIT_SHINE = 0.3;
-/** the most light a glint on the water gives by night, just under the bloom's threshold (`renderer.ts`, 0.9): over
- *  it, the bloom spread each glint into a soft ball, the lamp's path a cloud of fireflies (a review); by day the sun's
- *  glints go uncapped */
+/** the most light a glint on the water gives, just under the bloom's threshold (`renderer.ts`, 0.9): over it, the bloom
+ *  spread each glint into a soft ball, the lamp's path a cloud of fireflies (a review), and uncapped by day the sun's
+ *  lay a white blot across the basin to anyone looking at it from the sun's far side */
 const GLINT_MOST = 0.8;
 
 /** The fountain's light set for how much of the day's there is (0 by night, 1 by full day). */
@@ -270,6 +273,13 @@ function waterMaterial(time: { value: number }, colour: number): THREE.MeshStand
   const m = new THREE.MeshStandardMaterial({
     color: colour, roughness: 0.1, metalness: 0.1, transparent: true, depthWrite: false,
   });
+  if (WEBGPU) {
+    waterNodes(m, time);
+    const sky = skyLight;
+    const lit = { rough: WATER_LIT_ROUGH, shine: WATER_LIT_SHINE, glintMost: GLINT_MOST };
+    (m as typeof m & OwnLooks).webgpuLooks = (converted) => waterLooks(converted, sky, lit);
+    return seeThrough(m, 'prop');
+  }
   m.onBeforeCompile = (shader) => {
     mirroredSky(shader);
     shader.uniforms.uRippleTime = time;
@@ -284,8 +294,7 @@ function waterMaterial(time: { value: number }, colour: number): THREE.MeshStand
         + `material.specularColor *= ${WATER_LIT_SHINE.toFixed(2)};\n`
         + `material.specularF90 *= ${WATER_LIT_SHINE.toFixed(2)};\n#include <lights_fragment_begin>\n`
         + 'material.roughness = ownRough;\nmaterial.specularColor = ownSpecular;\nmaterial.specularF90 = ownF90;\n'
-        + `reflectedLight.directSpecular = min(reflectedLight.directSpecular, `
-        + `vec3(mix(${GLINT_MOST.toFixed(2)}, 100.0, smoothstep(0.3, 0.9, uSkyLight))));`)
+        + `reflectedLight.directSpecular = min(reflectedLight.directSpecular, vec3(${GLINT_MOST.toFixed(2)}));`)
       .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
         {
           float d = length(vRipple) + 1e-4;
@@ -315,6 +324,10 @@ function waterMaterial(time: { value: number }, colour: number): THREE.MeshStand
  */
 function causticFloor(time: { value: number }, sunlit: { value: number }): THREE.MeshStandardMaterial {
   const m = new THREE.MeshStandardMaterial({ color: 0x8f9a92, roughness: 0.85 });
+  if (WEBGPU) {
+    causticNodes(m, time, sunlit);
+    return seeThrough(m, 'propFoot');
+  }
   m.onBeforeCompile = (shader) => {
     shader.uniforms.uCausticTime = time;
     shader.uniforms.uCausticLight = sunlit;
@@ -353,6 +366,11 @@ function fallingWater(streaks: THREE.Texture, around: number, opacity: number): 
     color: 0xdfeef2, emissive: FALLING_GLOW, roughness: 0.85, alphaMap: map, transparent: true, opacity, depthWrite: false,
     side: THREE.DoubleSide,
   });
+  if (WEBGPU) {
+    const sky = skyLight;
+    (m as typeof m & OwnLooks).webgpuLooks = (converted) => fallingNodes(converted, sky);
+    return seeThrough(m, 'prop');
+  }
   m.onBeforeCompile = mirroredSky;
   m.customProgramCacheKey = () => 'fountain-falling';
   // (a hero behind the fountain showed through its stone, its water left whole over him)

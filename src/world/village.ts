@@ -12,6 +12,7 @@
 // off (world/wall.ts outlines), so feet climb the steps one by one; its wall is what's built (`wallShape` 'free'). Its
 // light follows the hour (`daylight`, a uniform's change: nothing compiles), and as a biome it has 10 point lights, two
 // casting the still shadows (the hall's braziers).
+import { unrepeatedNodes } from './villageNodes';
 import { WEBGPU } from '../core/webgpu';
 import { villageSkyMaterial } from './skyNodes';
 import * as THREE from 'three';
@@ -310,6 +311,10 @@ function shiftedReads(chunk: keyof typeof THREE.ShaderChunk, map: string, uv: st
  * obvious"). Its own program, made at the village's warm-up.
  */
 function unrepeated<M extends THREE.MeshStandardMaterial>(m: M): M {
+  if (WEBGPU) {
+    unrepeatedNodes(m);
+    return m;
+  }
   m.onBeforeCompile = (shader) => {
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', '#include <common>\nvarying vec2 vPaveXZ;')

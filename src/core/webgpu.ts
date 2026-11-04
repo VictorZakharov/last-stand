@@ -56,6 +56,14 @@ export const webgpuSceneTarget = (): THREE.RenderTarget => sceneTarget!;
 /** a light node of three's as `shadeEnvironmentNodes` reads it */
 type LitNode = { light?: THREE.DirectionalLight; shadowNode?: { x: unknown } | null };
 
+/** what each lit material builds after its lights (`lightAfterLights`) */
+const builtAfterLights: { build(builder: unknown): void }[] = [];
+
+/** `node` built in each lit material's lighting, after its lights (the village's lamps: `core/lampNodes.ts`). */
+export function lightAfterLights(node: { build(builder: unknown): void }): void {
+  builtAfterLights.push(node);
+}
+
 /**
  * The ambient light and the environment's reflection darkened in the sun's shadow, as `shadeEnvironment` in
  * core/renderer.ts has WebGL's chunks do it (`inShadow` the share of each left there). The lights' nodes have all added
@@ -75,6 +83,7 @@ export function shadeEnvironmentNodes(inShadow: { environment: number; ambient: 
   const setupLights = lights.setupLights;
   lights.setupLights = function (builder, nodes) {
     setupLights.call(this, builder, nodes);
+    for (const after of builtAfterLights) after.build(builder);
     if (!builder.object.receiveShadow) return;
     const sun = nodes.find((node) => node.light?.isDirectionalLight && node.light.castShadow)?.shadowNode;
     if (!sun) return;

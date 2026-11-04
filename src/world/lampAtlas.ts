@@ -5,9 +5,10 @@
 // "your light test for each light need to test SHADOW, it was missing for half of them"). What's drawn is what casts
 // as the world is built (the merged caster the shadow maps alone draw, the instanced posts and trunks); a leaf card,
 // which casts by its picture's alpha, is left out (drawn whole, it would cast a square).
-import { RUNNING } from '../core/rendererChoice';
 import * as THREE from 'three';
-import { lampShadowMap, setLampShadows, SHADOW_COLUMNS, SHADOW_TILE, type LampPlace } from '../core/lamps';
+import { lampAtlasTexture, lampShadowMap, setLampShadows, SHADOW_COLUMNS, SHADOW_TILE, type LampPlace } from '../core/lamps';
+import { lampDistanceMaterial } from '../core/lampNodes';
+import { pipelinesAtOnce, WEBGPU } from '../core/webgpu';
 import { drawnInShadowsOnly } from './culling';
 
 /** what's nearer a lamp than this casts nothing (m): its own lantern's frame and panes round its flame */
@@ -121,10 +122,59 @@ function keptState(renderer: THREE.WebGLRenderer): () => void {
   };
 }
 
+/** The map drawn on WebGPU: each face copied into its tile of the texture its materials read, whose rows run from the
+ *  top as a face's do, where WebGL's run from the foot: the materials flip the row they read (`core/lampNodes.ts`). */
+function bakeOnWebGPU(renderer: THREE.WebGLRenderer, place: THREE.Object3D, lamps: readonly LampPlace[]): void {
+  const lampAt = new THREE.Vector3();
+  const distance = lampDistanceMaterial(lampAt);
+  const casters = castersOf(place, distance);
+  const atlas = lampAtlasTexture();
+  const face = new THREE.RenderTarget(SHADOW_TILE, SHADOW_TILE, {
+    type: THREE.HalfFloatType, format: THREE.RedFormat, minFilter: THREE.NearestFilter,
+    magFilter: THREE.NearestFilter, generateMipmaps: false,
+  });
+  const camera = new THREE.PerspectiveCamera(90, 1, NEAR, 1);
+  const putBack = keptState(renderer);
+  const ahead = new THREE.Vector3();
+  const corner = new THREE.Vector2();
+  try {
+    renderer.autoClear = true;
+    renderer.initTexture(atlas);
+    pipelinesAtOnce(() => {
+      for (const [lamp, { at, reach }] of lamps.entries()) {
+        lampAt.copy(at);
+        camera.far = reach;
+        camera.updateProjectionMatrix();
+        camera.position.copy(at);
+        for (const [k, { axis, up }] of FACES.entries()) {
+          camera.up.copy(up);
+          camera.lookAt(ahead.copy(at).add(axis));
+          camera.updateMatrixWorld();
+          renderer.setClearColor(new THREE.Color(reach, 0, 0), 1);
+          renderer.setRenderTarget(face as THREE.WebGLRenderTarget);
+          renderer.render(casters, camera);
+          const tile = lamp * 6 + k;
+          const row = Math.floor(tile / SHADOW_COLUMNS);
+          corner.set((tile % SHADOW_COLUMNS) * SHADOW_TILE, atlas.image.height - (row + 1) * SHADOW_TILE);
+          renderer.copyTextureToTexture(face.texture, atlas, null, corner);
+        }
+      }
+    });
+  } finally {
+    putBack();
+    face.dispose();
+    distance.dispose();
+  }
+  setLampShadows(true);
+}
+
 /** Each of `lamps`' shadows of what stands still under `place` drawn into the lamps' map, and the map put to use. */
 export function bakeLampShadows(renderer: THREE.WebGLRenderer, place: THREE.Object3D, lamps: readonly LampPlace[]): void {
-  // (WebGPU's lit materials have no side of the lamps' list to read this map: `core/lamps.ts` patches GLSL alone)
-  if (RUNNING.webgpu || !drawsHalfFloats(renderer)) return;
+  if (WEBGPU) {
+    bakeOnWebGPU(renderer, place, lamps);
+    return;
+  }
+  if (!drawsHalfFloats(renderer)) return;
   const distance = distanceMaterial();
   const copy = copyMaterial();
   const casters = castersOf(place, distance);

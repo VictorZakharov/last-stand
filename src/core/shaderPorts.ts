@@ -109,36 +109,51 @@ function madeFrom(material: THREE.ShaderMaterial, port: (t: Tsl, u: Record<strin
   return node;
 }
 
+/** A kind's see-through values as nodes. */
+interface SeeNodes { focus: N; k: N; minY: N; across: N; whole: N; ramp: N }
+
 /** How much of a fragment at `world` to drop where it stands between the camera and the hero, as `seeFade()` has it
  *  (core/seeThrough.ts), by the hole and floor `see` reads (each a node of the `SeeThrough`'s values) */
-export function seeFade(world: N, see: { focus: N; k: N; minY: N }): N {
+export function seeFade(world: N, see: SeeNodes): N {
   const { wgslFn, cameraPosition } = tsl as any;
-  return wgslFn(`fn seeFade(wp: vec3f, eye: vec3f, focus: vec3f, k: vec4f, minY: f32) -> f32 {
-    if (k.z <= 0.0 || wp.y <= minY) { return 0.0; }
+  return wgslFn(`fn seeFade(wp: vec3f, eye: vec3f, focus: vec3f, k: vec4f, minY: f32, across: f32, whole: f32,
+    ramp: f32) -> f32 {
+    if ((k.z <= 0.0 && whole <= 0.0) || wp.y <= minY) { return 0.0; }
+    if (whole >= 1.0) { return 1.0; }
     let ca = focus - eye;
     let l = length(ca);
     let dir = ca / l;
     let cp = wp - eye;
     let along = dot(cp, dir);
     if (along <= 0.0 || along >= l - k.w) { return 0.0; }
-    return (1.0 - smoothstep(k.x, k.y, length(cp - dir * along))) * k.z;
+    let off = cp - dir * along;
+    let level = vec3f(-dir.z, 0.0, dir.x);
+    let levelLength = length(level);
+    let side = select(vec3f(1.0, 0.0, 0.0), level / max(levelLength, 1e-6), levelLength > 1e-3);
+    let aside = dot(off, side);
+    let r = length(off + side * aside * (across - 1.0)) / max(along / l, 0.05);
+    let thinned = whole * (1.0 - smoothstep(l - k.w - ramp, l - k.w, along));
+    return max((1.0 - smoothstep(k.x, k.y, r)) * k.z, thinned);
   }`)({ wp: world, eye: cameraPosition, ...see });
 }
 
 /** The share of a raw shader's light kept as its prop dissolves (`seeThroughFade`'s `1.0 - seeFade()`), at the
  *  mesh's own place before any displacement, as its GLSL reads it; `see` its `uSee*` uniforms as nodes. */
-export function seeKept(see: { focus: N; k: N; minY: N }): N {
+export function seeKept(see: SeeNodes): N {
   const { modelWorldMatrix, positionGeometry, varying, vec4 } = tsl as any;
   return seeFade(varying(modelWorldMatrix.mul(vec4(positionGeometry, 1)).xyz), see).oneMinus();
 }
 
 /** `uniforms`' `seeThroughFade` values as nodes, each read off its object (one for every material of a kind) */
-export function seeUniforms(uniforms: Record<string, { value: unknown }>): { focus: N; k: N; minY: N } {
+export function seeUniforms(uniforms: Record<string, { value: unknown }>): SeeNodes {
   const { reference } = tsl as any;
   return {
     focus: reference('value', 'vec3', uniforms.uSeeFocus),
     k: reference('value', 'vec4', uniforms.uSeeK),
     minY: reference('value', 'float', uniforms.uSeeMinY),
+    across: reference('value', 'float', uniforms.uSeeAcross),
+    whole: reference('value', 'float', uniforms.uSeeWhole),
+    ramp: reference('value', 'float', uniforms.uSeeRamp),
   };
 }
 
@@ -159,16 +174,16 @@ function maskOwn(material: THREE.Material): void {
   if (see) (material as N).maskNode ??= seeMask(see);
 }
 
-/** each kind's see-through uniforms, by its hole (`SeeThrough.k`: one a kind) */
-const seeKinds = new WeakMap<object, { focus: N; k: N; minY: N }>();
+/** each kind's see-through uniforms, by its values (one object a kind: `seeThrough`'s kinds share holes) */
+const seeKinds = new WeakMap<object, SeeNodes>();
 
 /**
  * A kind's see-through values as uniforms set once a render, shared by its every material (each kind a build of its
  * own, as a uniform node keys the build it's in). Read off each material drawn (`materialReference`), every prop's
  * uniforms were refreshed at every draw, still or not: on WebGPU, about 35 µs of the frame's JS a prop.
  */
-function seeOfKind(of: SeeThrough): { focus: N; k: N; minY: N } {
-  const made = seeKinds.get(of.k);
+function seeOfKind(of: SeeThrough): SeeNodes {
+  const made = seeKinds.get(of);
   if (made) return made;
   const { uniform, renderGroup } = tsl as any;
   // (in the render's group: a still prop's refresh sends only what's shared, and in the object's these stayed at the
@@ -177,8 +192,11 @@ function seeOfKind(of: SeeThrough): { focus: N; k: N; minY: N } {
     focus: uniform(new THREE.Vector3()).setGroup(renderGroup).onRenderUpdate(() => of.focus.value),
     k: uniform(new THREE.Vector4()).setGroup(renderGroup).onRenderUpdate(() => of.k.value),
     minY: uniform(0).setGroup(renderGroup).onRenderUpdate(() => of.minY.value),
+    across: uniform(1).setGroup(renderGroup).onRenderUpdate(() => of.across.value),
+    whole: uniform(0).setGroup(renderGroup).onRenderUpdate(() => of.whole.value),
+    ramp: uniform(0).setGroup(renderGroup).onRenderUpdate(() => of.ramp.value),
   };
-  seeKinds.set(of.k, nodes);
+  seeKinds.set(of, nodes);
   return nodes;
 }
 
