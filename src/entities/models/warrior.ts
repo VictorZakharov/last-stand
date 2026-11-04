@@ -44,7 +44,7 @@ import type { ActionState, AnimState, Blade, Fist, Gear, KeyedArm, LowerGrip, Mo
 /** sat, how a hand that holds a weapon turns as it goes down to his thigh (`models/sit.ts`, `restHands`), the left's
  *  and the right's, the weapon pointing down to where it's stood; an empty hand rests palm down. The small rise keeps
  *  his shield-side forearm over the thigh. */
-const SIT_HANDS = tunable('warriorSit', { roll: [0, 0], rise: 0.005, slant: 0.1, along: 0.35, over: 0.11, armIn: 1, floorIn: 0.7, arc: 0.15, lapR: [0.55, 0.12, 0.85], fistBelow: 0.08, swordRest: [-0.04, -0.32, -0.3, 0.05, 0.3, 0.12, 0, 1.08, 0.1], maulRest: [0.26, 0.05, -0.2, 0.1, 0.25, 0.7, -0.4, 0.93, 0.32], axeRest: [0.46, 0.13, -0.3, 0.1, 0.25, 0.5, -0.4, 0.95, 0.32], stuckIn: 0.32, plantX: -0.4, plantPole: [-0.5, -1, -0.6], flatEdge: [-1, 0, 0], frontAt: [-0.12, 1.2, 0.36], frontWay: [0, 0.75, 0.66], flatSide: [1, 0, 0], lowHand: [-0.2, 0.42], lowEndX: -0.45, pathOut: 0.25, liftBy: 0.2, lowerBy: 0.72, helpFrom: 0.03, helpBy: 0.2, helpOff: 0.2, plantFrom: 0.15, plantBy: 0.8, lowerOver: 0.04, caneAhead: [0.1, -0.25, 1], seatHip: 0.86, sinkBy: 1, leftAbove: -0.13, beside: [-0.5, 0.09, 0.1], besidePole: [-1, -0.1, -0.2], besideAhead: 0.95, twoR: [0.38, 0.12, 0.92], twoL: [-0.35, 0.3, 0.89], viaR: [-0.15, 0.2, 0.95], viaL: [0.15, 0.2, 0.95], viaAt: 0.45, floorBack: 0, viaFloorR: [-0.15, 0.5, 0.85], viaFloorL: [0.15, 0.5, 0.85], kneesR: [0.88, -0.2, 0.42], kneesL: [-0.7, -0.3, 0.65], turnFrom: 0.15, turnLate: 0.5, turnIn: 0.12, shieldOut: 0.09, edgeDown: 0.2, });
+const SIT_HANDS = tunable('warriorSit', { roll: [0, 0], rise: 0.005, slant: 0.1, along: 0.35, over: 0.11, armIn: 1, floorIn: 0.7, arc: 0.15, lapR: [0.55, 0.12, 0.85], fistBelow: 0.08, swordRest: [-0.04, -0.32, -0.3, 0.05, 0.3, 0.12, -0.25, 1.08, 0.3], maulRest: [0.26, 0.05, -0.2, 0.1, 0.25, 0.7, -0.4, 0.93, 0.32], axeRest: [0.53, 0.13, -0.3, 0.1, 0.25, 0.5, -0.4, 0.95, 0.32], stuckIn: 0.32, plantX: -0.4, plantPole: [-0.5, -1, -0.6], flatEdge: [-1, 0, 0], frontAt: [-0.12, 1.2, 0.36], frontWay: [0, 0.75, 0.66], flatSide: [1, 0, 0], lowHand: [-0.2, 0.42], lowEndX: -0.45, pathOut: 0.25, settleFrom: 0.7, besideBy: 0.4, liftBy: 0.32, lowerBy: 0.72, helpFrom: 0.03, helpBy: 0.3, helpOff: 0.2, plantFrom: 0.15, plantBy: 0.8, lowerOver: 0.04, caneAhead: [0.1, -0.25, 1], seatHip: 0.86, sinkBy: 1, leftAbove: -0.13, beside: [-0.5, 0.09, 0.1], besidePole: [-1, -0.1, -0.2], besideAhead: 0.95, twoR: [0.38, 0.12, 0.92], twoL: [-0.35, 0.3, 0.89], viaR: [-0.15, 0.2, 0.95], viaL: [0.15, 0.2, 0.95], viaAt: 0.45, floorBack: 0, viaFloorR: [-0.15, 0.5, 0.85], viaFloorL: [0.15, 0.5, 0.85], kneesR: [0.88, -0.2, 0.42], kneesL: [-0.7, -0.3, 0.65], turnFrom: 0.15, turnLate: 0.5, turnIn: 0.12, shieldOut: 0.09, edgeDown: 0.2, });
 const _sitTurn: RestTurn = { roll: [0, 0], bend: [0, 0], along: [0, 0], over: [0, 0], armIn: [0, 0], arc: [0, 0], out: [0, 0] };
 const _lifted: number[] = [], _resting: number[] = [];
 
@@ -1556,6 +1556,9 @@ export function buildWarrior(): Model {
     lowAt: new THREE.Vector3(),
     lowWay: new THREE.Vector3(),
     lowSlant: 0,
+    /** where it lies by a fire, in his frame */
+    restGrip: new THREE.Vector3(),
+    restWay: new THREE.Vector3(),
     rest: [new THREE.Quaternion(), new THREE.Quaternion(), new THREE.Quaternion()],
     restAt: new THREE.Vector3(),
     restSlant: 0,
@@ -1565,6 +1568,8 @@ export function buildWarrior(): Model {
   const _standTurn = new THREE.Quaternion(), _gripHome = new THREE.Vector3(), _seatWas = new THREE.Vector3();
   const _noTurn = new THREE.Quaternion();
   const _pathAt = new THREE.Vector3(), _pathWay = new THREE.Vector3(), _pathFlat = new THREE.Vector3();
+  const _inverseRoot = new THREE.Matrix4();
+  const _pathEnd = new THREE.Vector3(), _pathEnd2 = new THREE.Vector3(), _pathPole = new THREE.Vector3();
   const _fistWas = new THREE.Quaternion(), _fistNow = new THREE.Quaternion(), _rootTurn = new THREE.Quaternion();
   const _portHand = new THREE.Vector3(), _besideAt = new THREE.Vector3(), _besidePole = new THREE.Vector3(), _floorWay = [0, 0, 0];
   /** What a two-hander's own shape asks of its rest: how far its far end's line stands over the floor by a fire and when
@@ -1695,18 +1700,34 @@ export function buildWarrior(): Model {
   function along2(g: THREE.Object3D): THREE.Vector3 {
     return _hd.set(0, 1, 0).transformDirection(g.matrixWorld);
   }
-  /** His arm to the weapon, `down` of the way along its path from before him to its far end on the ground. */
-  function weaponOnPath(down: number): void {
+  /** His arm to the weapon, `down` of the way along its path from before him to its far end on the ground, and by a fire
+   *  `laid` of the way from there to lying beside him, its far end along the floor. */
+  function weaponOnPath(down: number, weapon: Weapon, laid = 0): void {
     root.updateMatrixWorld(true);
     // (his hands out from him as it passes level: straight down, the butt of its handle came 21 cm into his chest)
     _pathAt.lerpVectors(twoSit.frontAt, twoSit.lowAt, down);
     _pathAt.z += SIT_HANDS.pathOut * Math.sin(Math.PI * down);
+    _pathWay.lerpVectors(twoSit.frontWay, twoSit.lowWay, down).normalize();
+    if (laid > 0) {
+      _pathEnd.copy(twoSit.lowAt).addScaledVector(twoSit.lowWay, weapon.len);
+      _pathEnd2.copy(twoSit.restGrip).addScaledVector(twoSit.restWay, weapon.len);
+      _pathEnd.lerp(_pathEnd2, laid);
+      // (his hand out beside his hip first, his arm hanging: a fist points a blade down only with the forearm near hanging,
+      // and held before him as his shoulder dropped, his wrist went 75 degrees past. Its far end stays on the floor)
+      const beside = smooth(ramp(laid, 0, SIT_HANDS.besideBy));
+      _pathAt.lerpVectors(twoSit.lowAt, twoSit.restGrip, beside);
+      _pathAt.y = lerp(twoSit.lowAt.y, twoSit.restGrip.y, laid);
+      const falls = THREE.MathUtils.clamp((_pathAt.y - _pathEnd.y) / weapon.len, -1, 1), level = Math.sqrt(1 - falls * falls);
+      _pathWay.subVectors(_pathEnd, _pathAt).setY(0).normalize().multiplyScalar(level).setY(-falls);
+    }
     root.localToWorld(_pathAt);
-    _pathWay.lerpVectors(twoSit.frontWay, twoSit.lowWay, down).normalize().transformDirection(root.matrixWorld);
+    _pathWay.transformDirection(root.matrixWorld);
     const [sx, sy, sz] = SIT_HANDS.flatSide;
     _pathFlat.set(sx, sy, sz).transformDirection(root.matrixWorld);
     const [polX, polY, polZ] = SIT_HANDS.plantPole;
-    holdInWorld(ARM_R, _pathAt, _pathWay, _besidePole.set(polX, polY, polZ), 1, _pathFlat, 1);
+    const [sidePolX, sidePolY, sidePolZ] = SIT_HANDS.besidePole;
+    _besidePole.set(polX, polY, polZ).lerp(_pathPole.set(sidePolX, sidePolY, sidePolZ), laid);
+    holdInWorld(ARM_R, _pathAt, _pathWay, _besidePole, 1, _pathFlat, 1);
   }
   /** The hold he'll rest a two-hander in, found as a sit begins: the arm's search makes up its mind differently frame to
    *  frame on the way there (fitted every frame, the blade jumped 310 cm), and a hold known beforehand is one the arm can
@@ -1733,9 +1754,9 @@ export function buildWarrior(): Model {
     const outBy = THREE.MathUtils.clamp((SIT_HANDS.lowEndX - lowX) / (weapon.len * level), -1, 1);
     twoSit.lowAt.set(lowX, lowY, lowZ);
     twoSit.lowWay.set(outBy * level, -falls, Math.sqrt(1 - outBy * outBy) * level);
-    weaponOnPath(0);
+    weaponOnPath(0, weapon);
     twoSit.frontSlant = fitArm(j, false, gripTurn(handR, grip, _vr), body, SLANT).slant;
-    weaponOnPath(1);
+    weaponOnPath(1, weapon);
     twoSit.lowSlant = fitArm(j, false, gripTurn(handR, grip, _vr), body, SLANT).slant;
     const sat = { ...sit, w: 1, before: 1, after: 1 };
     sitPose(j, sat, t);
@@ -1748,6 +1769,9 @@ export function buildWarrior(): Model {
     reachArm(j.shoulderR, j.elbowR, j.P.upperL, j.P.foreL, _besideAt, _besidePole.set(px, py, pz));
     holdAcrossLap(false, grip, wayToFloor(weapon), 1, 0, sat, 0, SIT_HANDS.flatEdge);
     twoSit.restSlant = fitArm(j, false, gripTurn(handR, grip, _vr), body, SLANT).slant;
+    root.updateMatrixWorld(true);
+    root.worldToLocal(grip.getWorldPosition(twoSit.restGrip));
+    twoSit.restWay.copy(along2(grip)).transformDirection(_inverseRoot.copy(root.matrixWorld).invert());
     _rightArm.forEach((joint, i) => twoSit.rest[i].copy(joint.quaternion));
     twoSit.restAt.copy(j.shoulderR.position);
     twoSit.taken = true;
@@ -2785,9 +2809,11 @@ export function buildWarrior(): Model {
       // (placed by the weapon, off the arm as he carried it)
       _rightArm.forEach((joint, i) => joint.quaternion.copy(twoSit.from[i]));
       j.shoulderR.position.copy(twoSit.fromAt);
-      weaponOnPath(falling);
+      weaponOnPath(falling, held!, down);
+      // (and into the hold found for it at the very end: from lowered to there by the joints alone, it went 300 cm in a frame)
+      const settled = smooth(ramp(down, SIT_HANDS.settleFrom, 1));
       _rightArm.forEach((joint, i) => {
-        joint.quaternion.slerp(twoSit.from[i], 1 - up).slerp(twoSit.rest[i], down);
+        joint.quaternion.slerp(twoSit.from[i], 1 - up).slerp(twoSit.rest[i], settled);
       });
       j.shoulderR.position.lerp(twoSit.restAt, down);
       slantR = lerp(lerp(twoSit.fromSlant, twoSit.frontSlant, up), twoSit.lowSlant, falling);
