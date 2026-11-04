@@ -26,6 +26,7 @@ import { goTo, goUse, objectNear, villageObject } from '../../../src/game/villag
 import { routing } from '../../../src/world/walkPath';
 import { restartTraining, skipTraining, stepDone, trainingPending } from '../../../src/game/training';
 import { TRAINING } from '../../../src/data/training';
+import { minimapOut } from './villageMinimap';
 import { holdHour } from '../../../src/game/clock';
 import { villageMapOpen } from '../../../src/ui/villageMap';
 import { closeHeroSelect, heroSelectOpen } from '../../../src/ui/heroSelect';
@@ -155,6 +156,7 @@ export async function village(lab: Lab, options: VillageOptions): Promise<Report
     heroBehindProps: () => heroBehindProps(lab, options.canary),
     wallsStayWhole: () => wallsStayWhole(lab, options.canary),
     training: () => training(lab, options.canary),
+    minimapOut: () => minimapOut(lab, (spot) => stand(lab, spot), yardToWorld(0, 0), options.canary),
     hoursCompileNothing: () => hoursCompileNothing(lab, options.canary),
   };
   const checks: Checked[] = [];

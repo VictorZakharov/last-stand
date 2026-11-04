@@ -11,6 +11,7 @@ import { buildTouchSkills } from './touch';
 import { partyDecision, waitingForParty } from './coop';
 import { isCoop } from '../net/role';
 import { skillArt } from './skillArt';
+import { drawVillageOnMinimap, villageMinimapScale } from './villageMinimap';
 
 import { SKILL_KEYS } from '../loot/loadout';
 import type { Player } from '../entities/player';
@@ -26,6 +27,8 @@ let slots: HotbarSlot[] = [];
 let builtFor: Player | null = null;
 let bannerTimer: ReturnType<typeof setTimeout> | undefined;
 let mmCtx: CanvasRenderingContext2D;
+/** how much larger the hero's arrow is on the village's minimap, which is drawn smaller than a fight's */
+const VILLAGE_ARROW = 1.4;
 
 export function initHud(): void {
   mmCtx = $<HTMLCanvasElement>('#minimap').getContext('2d')!;
@@ -33,9 +36,37 @@ export function initHud(): void {
   on('waveStarted', () => renderSpoils());
 }
 
-export function showHud(v: boolean, lobby = false): void {
+/** The HUD shown or not: a run's whole, or the lobby's, its minimap alone and with `practice` the run's bottom bar. */
+export function showHud(v: boolean, lobby = false, practice = false): void {
   $('#hud').classList.toggle('hidden', !v);
   $('#hud').classList.toggle('lobby', lobby);
+  $('#hud').classList.toggle('practice', practice);
+  $('.mm-title').textContent = lobby ? 'Wardenhollow' : 'The Last Stand';
+  if (!lobby) minimapOut(true);
+}
+
+/** whether the minimap is out, as the village last asked */
+let minimapShown = true;
+function minimapOut(shown: boolean): void {
+  if (shown === minimapShown) return;
+  minimapShown = shown;
+  $('#minimap-wrap').classList.toggle('hidden', !shown);
+}
+
+/** The village's frame of the minimap: out while the village takes the hero's input (no panel, map or screen over
+ *  it), as in a run, so a player knows it before their first fight. */
+export function updateVillageMinimap(dt: number, visible: boolean): void {
+  if (G.mode === 'run') return;
+  minimapOut(visible);
+  if (visible) tickMinimap(dt);
+}
+
+/** The minimap drawn when its turn has come: a 200px canvas, so 30 Hz is plenty. */
+function tickMinimap(dt: number): void {
+  minimapT -= dt;
+  if (minimapT > 0) return;
+  minimapT = 1 / 30;
+  drawMinimap();
 }
 
 /**
@@ -259,9 +290,7 @@ export function updateHud(): void {
   if (r.phase === 'cleared' && isCoop()) { partyT -= G.dt; if (partyT <= 0) { partyT = 0.25; refreshDecision?.(); } }
 
   updateTarget();
-  // the minimap is a 200px canvas: 30 Hz is plenty
-  minimapT -= G.dt;
-  if (minimapT <= 0) { minimapT = 1 / 30; drawMinimap(); }
+  tickMinimap(G.dt);
 }
 
 function updateTarget() {
@@ -286,11 +315,32 @@ function updateTarget() {
 }
 
 function drawMinimap() {
-  const c = mmCtx, W = 200, S = W / 64; // world units -> px
+  const c = mmCtx, W = 200, inRun = G.mode === 'run';
+  const S = inRun ? W / 64 : villageMinimapScale(W); // world units -> px
   c.clearRect(0, 0, W, W);
   c.save();
   c.translate(W / 2, W / 2);
   c.rotate(cameraYaw()); // screen-up on the map is screen-up in the view
+  if (inRun) drawArena(c, S);
+  else drawVillageOnMinimap(c, W);
+  // player arrows: ours in green, co-op partners in blue
+  for (const p of [...G.players].reverse()) {
+    if (p.away || p.out === 'banked') continue;
+    c.save();
+    c.translate(p.pos.x * S, p.pos.z * S);
+    c.rotate(-p.facing + Math.PI);
+    // (larger among the village's buildings, and inked round: on a pale roof it was the hardest thing on the map to find)
+    if (!inRun) c.scale(VILLAGE_ARROW, VILLAGE_ARROW);
+    c.fillStyle = p.local ? '#6dffb0' : p.alive ? '#6ab8ff' : '#56627a';
+    c.strokeStyle = 'rgba(0,0,0,.85)'; c.lineWidth = 1.5; c.lineJoin = 'round';
+    c.beginPath(); c.moveTo(0, -6); c.lineTo(4.5, 5); c.lineTo(0, 2.5); c.lineTo(-4.5, 5); c.closePath(); c.stroke(); c.fill();
+    c.restore();
+  }
+  c.restore();
+}
+
+/** A fight's arena on the minimap, `S` px a metre: its boundary, dais and gates, and the foes. */
+function drawArena(c: CanvasRenderingContext2D, S: number): void {
   // boundary: the crypt's octagon wall or the forest's ring of thicket
   const mm = BIOMES[G.arena.biome].minimap;
   c.strokeStyle = 'rgba(200,190,170,.55)'; c.lineWidth = 3;
@@ -316,15 +366,4 @@ function drawMinimap() {
     c.fillStyle = e.boss ? '#c070ff' : e.hero ? '#ffb040' : '#ff3a30';
     c.beginPath(); c.arc(e.pos.x * S, e.pos.z * S, e.boss ? 5 : e.hero ? 3.5 : 2.2, 0, Math.PI * 2); c.fill();
   }
-  // player arrows: ours in green, co-op partners in blue
-  for (const p of [...G.players].reverse()) {
-    if (p.away || p.out === 'banked') continue;
-    c.save();
-    c.translate(p.pos.x * S, p.pos.z * S);
-    c.rotate(-p.facing + Math.PI);
-    c.fillStyle = p.local ? '#6dffb0' : p.alive ? '#6ab8ff' : '#56627a';
-    c.beginPath(); c.moveTo(0, -6); c.lineTo(4.5, 5); c.lineTo(0, 2.5); c.lineTo(-4.5, 5); c.closePath(); c.fill();
-    c.restore();
-  }
-  c.restore();
 }

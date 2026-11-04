@@ -123,8 +123,8 @@ differ by text's antialiasing, 2 to 5% of their pixels (the lobby's states 12 to
 takes a state at a time: a 4K screen's ten pictures sent back at once were too much for the browser, which closed.
 `--hdr` puts HDR on first, as on a display in HDR mode, so the pause menu shows its levels.
 
-`heroesWarming` (`page/uiHeroesWarming.ts`): the hero selection screen opened as a first visit's, the other heroes
-not yet warm, one 40% of the way (from play, "we can only load currently selected/default hero... and then load the two
-others, show some loading bars on those heroes"): the lobby's own hero standing, each cold one off his plinth with a bar
-on his tab, the choice on a cold one saying "Readying the Mage 40%" and choosing nothing; then the heroes warmed, every
-one standing and no bar left. Its canary leaves a cold hero's tab without its bar.
+`villageHud`, `villageHudTouch` (`page/uiVillageHud.ts`, from play: "move training checklist to the right below minimap,
+and yes, we need a minimap in wardenhollow too"): the village's minimap with the training's tracker under it, the hero
+in the training yard, by mouse and on touch: each within the window, the tracker under the minimap (beside it on a
+short screen, where under it hid three skill buttons), and none over the touch controls beside and below them. Check on a phone's `--screen` too. `--canary` makes the tracker
+as tall as the window.

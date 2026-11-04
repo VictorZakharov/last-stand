@@ -65,8 +65,9 @@ body.touch #decision .dc-buttons .btn { min-height: calc(32px / var(--hud, 1)); 
 .mouse-only { display: inline; } .touch-inline { display: none; }
 body.touch .mouse-only { display: none; } body.touch .touch-inline { display: inline; }
 
-/* ---------- the village's touch buttons (the lobby's alone): in the top-right corner, Use naming what it does ---------- */
-#touch-village { position: absolute; right: 8px; top: 8px; display: flex; gap: 10px;
+/* ---------- the village's touch buttons (the lobby's alone): in the top-right corner beside the minimap, Use naming what
+   it does ---------- */
+#touch-village { position: absolute; right: calc(var(--minimap-room, 224px) * var(--hud, 1) + 8px); top: 8px; display: flex; gap: 10px;
   align-items: center; justify-content: flex-end; scale: var(--touch, 1); transform-origin: right top;
   pointer-events: none; }
 #touch-village.hidden, #touch-village .hidden { display: none; }

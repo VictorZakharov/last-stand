@@ -23,7 +23,7 @@ import { completeStep } from '../game/training';
 const VIEW = { x0: -54.5, x1: 54.5, z0: -44, z1: 44 };
 /** the hall of heroes' roof as the map draws it (world/village.ts builds it): how far past the back wall's face it
  *  reaches, its front's z and half its width with the eaves' overhang (m) */
-const HALL_ROOF = { back: 1.2, front: -12.3, half: HALL.half + 0.6 };
+export const HALL_ROOF = { back: 1.2, front: -12.3, half: HALL.half + 0.6 };
 /** the panels it folds into, and how long it takes to open or fold (s) */
 const PANELS = 4, FOLD_TIME = 0.75;
 /** the ink and washes it's drawn in */

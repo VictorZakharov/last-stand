@@ -27,7 +27,7 @@ import { initGround, updateGround, clearGround } from './game/groundItems';
 import { saveSlot, setSaveSlot } from './loot/saveSlots';
 import { initRun, startRun, updateRun, continueRun, bankRun, abandonRun, playerOut, hostLeft, endRun } from './game/run';
 import { updateFloaters } from './ui/floaters';
-import { initHud, showHud, buildHotbar, banner, showDecision, hideDecision, resetDecision, updateHud, renderSpoils } from './ui/hud';
+import { initHud, showHud, buildHotbar, banner, showDecision, hideDecision, resetDecision, updateHud, updateVillageMinimap, renderSpoils } from './ui/hud';
 import { initMenus, layOutMenuAhead, showMenu, showSummary, hideSummary, showPause, menuStowed, lobbyPractice, selectedWave, lobbyViewShift, renderMenu, markNew, clearOverlays, openPanels, panelsOpen, showHelp, helpOpen, hideHelp, changeHero as askForHeroes, type Panels } from './ui/menus';
 import { initVillageCard, showVillageCard, villageCardOf } from './ui/villageCard';
 import { initVillage, prepareLamps, updateVillage, closedFrom, inYard, villageObject, goUse, goTo, objectNear, heroLookedAt } from './game/village';
@@ -143,7 +143,7 @@ async function boot() {
   // (the practice's bar laid out under the loading screen too, so its first raster builds Chrome's Skia programs there:
   // shown first as the hero walked into the yard, a first visit's held Chrome's GPU process 0.25 to 0.4 s; the lobby
   // hides it as it's entered)
-  showHud(true, true);
+  showHud(true, true, true);
   initRun({ banner, showDecision, hideDecision, resetDecision, showSummary });
   // (the lobby shows before the fight's programs are warm: pressed early, what needs them goes ahead once they are)
   initMenus({ start: whenWarm(['fight'], start, READYING.fight), toMenu, resume, abandon, profileChanged, changeHero, summaryDone, lobbyChanged: sendLobbyChoice, panels: panelsChanged });
@@ -242,7 +242,7 @@ function enterMenu() {
   G.paused = G.menuOpen = G.player.idle = false;
   releaseInput();
   runOver = false;
-  showHud(false);
+  showHud(true, true);
   showPause(false);
   hideSummary();
   G.arena.showVillage(true);
@@ -396,7 +396,7 @@ function syncPractice() {
     p.cooldowns.clear();
     p.energy = p.stats.maxEnergy;
   }
-  showHud(now, true);
+  showHud(true, true, now);
 }
 
 function toMenu() {
@@ -635,7 +635,9 @@ function update(dt: number): void {
   // (the village: what the hero is near and walks to, and whether he may cast there)
   updateVillage(dt);
   updateVillageMap(dt);
-  updateTrainingTracker(dt, villageActive() && !panelsOpen() && !villageCardOf());
+  const villageOut = villageActive() && !panelsOpen() && !villageCardOf();
+  updateTrainingTracker(dt, villageOut);
+  updateVillageMinimap(dt, villageOut);
   updateCrestBlow(dt, revealed && G.mode === 'menu' && G.arena.place === 'village' && !heroSelectOpen(), villageMapOpen());
   // (its own stage: in the player's, a report from the hall of heroes couldn't tell the lamps and the dais's heroes
   // from the hero's own pose)

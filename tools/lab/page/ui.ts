@@ -51,7 +51,7 @@ import {
   pauseShown,
 } from './uiPause';
 import { ASK_CANARY, closePerfAsk, openPerfAsk, openPerfAskBreak, openPerfAskTouch, perfAskShown } from './uiPerfAsk';
-import { closeHeroesWarming, HEROES_WARMING_CANARY, heroesWarmingShown, openHeroesWarming } from './uiHeroesWarming';
+import { closeVillageHud, openVillageHud, VILLAGE_HUD_CANARY, villageHudShown } from './uiVillageHud';
 import { closeDecisionTouch, decisionTouchShown, hudTouchShown, openDecisionTouch, openHudTouch, TOUCH_CANARIES }
   from './uiTouch';
 import { BUTTONS_CANARY, lobbyButtonsShown, openButtonsTouch, runButtonsShown } from './uiButtons';
@@ -71,7 +71,7 @@ export type UiState =
   | 'lobby' | 'tooltip' | 'glow' | 'help' | 'saves' | 'heroes' | 'readying' | 'readyingHeroes' | 'clicked' | 'views'
   | 'behindProps'
   | 'logLobby' | 'perfAsk' | 'pauseLobby'
-  | 'skillTipsTouch' | 'sheetTouch' | 'litTouch' | 'run' | 'scores' | 'perf'
+  | 'villageHud', 'villageHudTouch', 'skillTipsTouch' | 'sheetTouch' | 'litTouch' | 'run' | 'scores' | 'perf'
   | 'decision' | 'perfAskBreak' | 'pause' | 'pauseSettings' | 'pauseAbandon' | 'summary' | 'skillTips' | 'log' | 'logTouch' | 'hudTouch' | 'decisionTouch'
   | 'perfAskTouch' | 'buttonsRunTouch';
 
@@ -944,7 +944,8 @@ const STEPS: Record<UiState, Steps> = {
   perfAsk: { open: openPerfAsk, close: closePerfAsk, check: (canary) => perfAskShown('perfAsk', canary) },
   pauseLobby: { open: openPauseLobby, close: closePauseLobby, check: hourShown },
   skillTipsTouch: { open: openSkillTipsTouch, close: closeSkillTipsTouch, check: skillTipsShown },
-  heroesWarming: { open: openHeroesWarming, close: closeHeroesWarming, check: heroesWarmingShown },
+  villageHud: { open: (lab) => openVillageHud(lab, false), close: closeVillageHud, check: villageHudShown },
+  villageHudTouch: { open: (lab) => openVillageHud(lab, true), close: closeVillageHud, check: villageHudShown },
   sheetTouch: { open: openSheetTouch, close: closeSheetTouch, check: sheetTouchShown },
   litTouch: {
     open: openLitTouch, close: closeLitTouch, check: litTouchShown, pictures: async () => litTouchPictures(),
@@ -1077,15 +1078,10 @@ export async function ui(lab: Lab, options: UiOptions): Promise<Report> {
     lines.push(`  canary: ${what} ${caught ? 'caught' : 'went unseen'}`);
     if (!caught) missed.push(`${state}: the canary's ${what} went unseen`);
   }
-  if (state === 'buttonsTouch' || state === 'buttonsRunTouch') {
-    const caught = found.problems.some((problem) => problem.includes(BUTTONS_CANARY.name));
-    lines.push(`  canary: ${BUTTONS_CANARY.what} ${caught ? 'caught' : 'went unseen'}`);
-    if (!caught) missed.push(`${state}: the canary's ${BUTTONS_CANARY.what} went unseen`);
-  }
-  if (state === 'heroesWarming') {
-    const caught = found.problems.some((problem) => problem.includes(HEROES_WARMING_CANARY.name));
-    lines.push(`  canary: ${HEROES_WARMING_CANARY.what} ${caught ? 'caught' : 'went unseen'}`);
-    if (!caught) missed.push(`${state}: the canary's ${HEROES_WARMING_CANARY.what} went unseen`);
+  if (state === 'villageHud' || state === 'villageHudTouch') {
+    const caught = found.problems.some((problem) => problem.includes(VILLAGE_HUD_CANARY.name));
+    lines.push(`  canary: ${VILLAGE_HUD_CANARY.what} ${caught ? 'caught' : 'went unseen'}`);
+    if (!caught) missed.push(`${state}: the canary's ${VILLAGE_HUD_CANARY.what} went unseen`);
   }
   if (state === 'sheetTouch' || state === 'litTouch') {
     for (const { name, what } of SHEET_CANARIES[state]) {

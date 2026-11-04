@@ -128,3 +128,9 @@ stair
 walked at beside it, the
 pointer asked of the square, the notice board never read, a new material shown at one hour), each listed and each must
 be caught. It found the chest's stand off the terrace's edge, below it, where the hero could never use it.
+
+`minimapOut` (`page/villageMinimap.ts`, from play: "we need a minimap in wardenhollow too"): read off the page, the
+minimap out on the square and in the yard, titled for the village, with no run's objectives or spoils, the hero's arrow
+on its canvas where he stands as the camera has it turned, the bottom bar in the yard alone, the tracker under it on the
+right, and both away with the inventory and back after. `--canary` reads the arrow half a turn off and sets the tracker
+over the minimap.
