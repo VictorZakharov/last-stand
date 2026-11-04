@@ -503,6 +503,20 @@ function castOnNearest(near: number[], dt: number): void {
 // casting lights and these compiled what it drew for four, 7.3 s, "choose hero in hall freezes for like 10sec")
 on('hallShown', () => castFromLamps(false));
 
+/**
+ * The lamps' casting lights off for a draw of another place (a warm-up's), returning their undoing. By night, a biome
+ * drawn to warm it with its own two beside these made every lit program for four inside that one draw, the page held up
+ * 38 s on a cold cache ("when using a portal to the main game, it hangs"; `lab village --cold --only portalAtNight`).
+ * Their shadows and shares are left as they are: this draw alone doesn't see them.
+ */
+export function lampsLetGo(): () => void {
+  const casting = lampLights.map((slot) => slot.light).filter((light) => light.castShadow);
+  for (const light of casting) light.castShadow = false;
+  return () => {
+    for (const light of casting) light.castShadow = true;
+  };
+}
+
 /** The two casting lights' shadows handed to the lamps' (`castOnNearest`), or back to the braziers. */
 function castFromLamps(on: boolean): void {
   if (on === lampsCast) return;

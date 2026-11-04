@@ -1,5 +1,6 @@
 // The stalls harness's command line (tools/stalls): its options, read and checked before anything starts, so a
 // misspelt one or a bad value stops it before a build or a browser.
+import { readFileSync } from 'node:fs';
 import { SCENARIOS, STOW_PRESS_MS, SWEEP_ITEM_MS } from './scenarios.mjs';
 import { WEBGPU_CACHE } from './webgpuCache.mjs';
 import { liveCss, partsOf, VARIANTS } from './variants.mjs';
@@ -149,6 +150,15 @@ function sizeOf(written, name) {
  * The command line read and checked: the URLs (none: this tree built and served), the scenario, its length in
  * seconds, the variants, and the switches. Throws, saying what was wrong.
  */
+/**
+ * `--before`'s expression: as given, or from a file with `@path` (a walk of its own, `walks/`, written to be read: a
+ * script of many lines given on the command line came to the page cut at its first line).
+ */
+function beforeOf(given) {
+  if (!given) return null;
+  return given.startsWith('@') ? readFileSync(given.slice(1), 'utf8') : given;
+}
+
 /** how long `--cast` holds its key before the picture, unless it says (ms) */
 const CAST_MS = 600;
 
@@ -195,7 +205,7 @@ export function readOptions(argv) {
     passes: written.passes === true,
     paints: written.paints === true,
     links: written.links === true,
-    before: written.before ?? null,
+    before: beforeOf(written.before),
     read: written.read ?? null,
     coldReturn: written['cold-return'] === true,
     warmBehind: written['warm-behind'] === true,

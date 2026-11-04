@@ -134,3 +134,10 @@ minimap out on the square and in the yard, titled for the village, with no run's
 on its canvas where he stands as the camera has it turned, the bottom bar in the yard alone, the tracker under it on the
 right, and both away with the inventory and back after. `--canary` reads the arrow half a turn off and sets the tracker
 over the minimap.
+
+`portalAtNight` (`page/villagePortalNight.ts`, needs `--cold`, says it wasn't measured without; from play, "when using a
+portal to the main game, it hangs"): a portal's Enter pressed at midnight with the fight's programs cold, the programs
+the warm-up made and those the run's first frames made, none. In real Chrome that was 38 s and then 11 s with no frame:
+a biome drawn in the village's place to warm it, with the lamps' two casting lights on beside its own, compiled every
+program for four, and the run's first frame compiled them again for two. Walk the real path on the real GPU with stalls:
+`--before` clicking the map's portal name and `#btn-start`, on `?hour=0`. `--canary` leaves a spare light casting.

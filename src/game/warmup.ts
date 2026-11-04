@@ -9,6 +9,7 @@
 // everything that brings its own materials, compiles their shaders and clears it all again: with core/shaders.ts
 // pinning programs, nothing compiles mid-fight. Compiling a program took ANGLE a third of a second on a first visit,
 // and a third of the boot's are the fight's alone (`lab programs`).
+import { lampsLetGo } from './village';
 import * as THREE from 'three';
 import { G } from '../state';
 import { behindTheLobby, compileAhead, warmUp, type Swap, type WarmedUp } from '../core/shaders';
@@ -267,7 +268,7 @@ function fightParts(): Part[] {
   const biomes = otherBiomes().map((id): Part => ({
     name: id,
     build() {
-      const swap = { show: G.arena.groupOf(id), hide: G.arena.groupOf('village') };
+      const swap = { show: G.arena.groupOf(id), hide: G.arena.groupOf('village'), alone: lampsLetGo };
       return { compile: [swap.show], objects: [], drawn: [], swap, outlined: [], done: () => undefined };
     },
   }));
@@ -320,7 +321,7 @@ function hallPart(): Part {
   return {
     name: 'hall',
     build() {
-      const swap = { show: G.arena.hallGroup, hide: G.arena.groupOf(G.arena.place) };
+      const swap = { show: G.arena.hallGroup, hide: G.arena.groupOf(G.arena.place), alone: lampsLetGo };
       return { compile: [swap.show], objects: [], drawn: [], swap, outlined: [], done: () => undefined };
     },
   };
