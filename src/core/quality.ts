@@ -161,22 +161,28 @@ export function holdQuality(): void {
   settle = AUTO_QUALITY.settle;
 }
 
-/** Feed the real (unclamped) frame delta each frame while the game is running. Returns Auto's step, if it took one
- *  (`low`), for the performance trace to mark. */
-export function sampleQuality(dt: number): string | null {
-  if (setting !== 'auto' || (atBottom() && !aboveNext)) return null;
-  if (dt > AUTO_QUALITY.longestFrame) return null;   // tab switch, breakpoint: not a performance signal
-  if (settle > 0) { settle -= dt; return null; }   // let a level change take effect first
-  if (aboveNext) return tryAbove();
-  quick.push(dt);
-  quickTime += dt;
-  // (far below the target, judged by the window's middle frame, which a hitch doesn't move: to Low at once; a device
-  // too slow for the 4 s path's frames, over `HITCH` each, stepped never)
-  if (quickTime >= AUTO_QUALITY.quickWindow) {
-    const fps = 1 / median(quick);
-    if (fps < AUTO_QUALITY.minFps * AUTO_QUALITY.farBelow) return step(true);
-    quick.length = 0;
-    quickTime = 0;
+/** whether Auto is held where it is (the perf overlay's profile: it would answer every switch the profile makes) */
+let autoHeld = false;
+export function holdAuto(held: boolean): void {
+  autoHeld = held;
+  frames = time = 0;
+  settle = AUTO_QUALITY.settle;
+}
+
+/** Feed the real (unclamped) frame delta each frame while the game is running. */
+export function sampleQuality(dt: number): void {
+  if (setting !== 'auto' || atBottom() || autoHeld) return;
+  if (dt > 0.25) return;                 // tab switch, breakpoint: not a performance signal
+  if (settle > 0) { settle -= dt; return; }   // let a level change take effect first
+  frames++; time += dt;
+  const fps = frames / time;
+  const far = fps < AUTO_QUALITY.minFps * AUTO_QUALITY.farBelow;
+  if (time < (far ? AUTO_QUALITY.farWindow : AUTO_QUALITY.window)) return;
+  if (fps < AUTO_QUALITY.minFps) {
+    // (each step about halves the frame's cost: as many as the frame rate is short by halvings, at once)
+    const steps = far ? Math.ceil(Math.log2(AUTO_QUALITY.minFps / fps)) : 1;
+    for (let i = 0; i < steps && !atBottom(); i++) stepDown();
+    writeAuto();
   }
   // (the 4 s path as it always was: the mean of frames up to `HITCH`, a level a step)
   if (dt > HITCH) return null;

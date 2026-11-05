@@ -41,12 +41,14 @@ export const QUALITY: Record<QualityLevel, QualityPreset> = {
 export const QUALITY_ORDER: QualityLevel[] = ['high', 'medium', 'low'];
 
 /**
- * Auto quality: a level down when the average FPS stays below `minFps` for `window` seconds (frames over 250 ms,
- * hitches, left out of it), the screen's own pixels kept at every level (from play, "I want to run the game at full
- * phone res, if we need to cut, we need to cut something else, not resolution"); or to Low at once after
- * `quickWindow` seconds whose middle frame is under `farBelow` of it (a hitch doesn't move the middle). A frame longer
- * than `longestFrame` s is no measure (a tab switch, a breakpoint). What the hardware holds is measured, never guessed
- * from the device or the OS's scaling. From play, a laptop's integrated GPU switched to Auto ran at 5 frames a
- * second "for the first minute or two" (`npm run lab -- auto`: to Low in 3.4 s).
+ * Auto quality: step down when the average FPS stays below `minFps` for `window` seconds. High first renders fewer
+ * pixels, half as many a step, down to `highFloor`; then the level goes down, keeping the pixels; then Low renders
+ * fewer, down to `fewest` (each the screen's own, if fewer). What the hardware holds is measured, never guessed from
+ * the device or the OS's scaling. Far below it (under `farBelow` of `minFps`) a window of `farWindow` is enough, and it
+ * takes as many steps at once as halving the frame's cost that many times would need: a step at a time, 6 s each, a
+ * phone's first visit (Auto starting from High) drew a few frames a second for half a minute, from play "insane
+ * slowdown when choosing a hero upon first entry into the game, on phone".
  */
-export const AUTO_QUALITY = { minFps: 50, window: 4, quickWindow: 1, farBelow: 0.5, settle: 2, longestFrame: 1 };
+export const AUTO_QUALITY = {
+  minFps: 50, window: 4, settle: 2, highFloor: 1920 * 1080, fewest: 960 * 540, farBelow: 0.5, farWindow: 1.5,
+};
