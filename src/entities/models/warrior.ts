@@ -44,7 +44,7 @@ import type { ActionState, AnimState, Blade, Fist, Gear, KeyedArm, LowerGrip, Mo
 /** sat, how a hand that holds a weapon turns as it goes down to his thigh (`models/sit.ts`, `restHands`), the left's
  *  and the right's, the weapon pointing down to where it's stood; an empty hand rests palm down. The small rise keeps
  *  his shield-side forearm over the thigh. */
-const SIT_HANDS = tunable('warriorSit', { roll: [0, 0], rise: 0.005, slant: 0.1, along: 0.35, over: 0.11, armIn: 1, floorIn: 0.7, arc: 0.15, lapR: [0.85, -0.1, 0.5], fistBelow: 0.08, swordRest: [0.03, -0.32, -0.5, 0.05, 0.3, 0.12, 0, 1.08, 0.2], maulRest: [0.1, 0.05, -0.58, 0.1, 0.25, 0.7, -0.4, 0.93, 0.32], axeRest: [0.05, 0.13, -0.54, 0.1, 0.25, 0.5, -0.4, 0.95, 0.32], stuckIn: 0.32, plantX: -0.4, plantPole: [-0.5, -1, -0.6], flatEdge: [-1, 0, 0], frontAt: [-0.12, 1.34, 0.38], frontWay: [-0.05, 0.6, 0.8], leanTo: 0.12, regripOpen: 0.7, leanDraws: 0.4, flatSide: [1, 0, 0], lowHand: [-0.14, 0.54], lowEndX: -0.45, pathOut: 0.25, besideBy: 0.4, offOpen: 0.75, floorFrontAt: [-0.34, 1.22, 0.36], floorFrontWay: [-0.55, 0.6, 0.58], floorFlat: [0.7, 0, 0.7], floorLowHand: [-0.36, 0.14], floorOut: [-0.6, 0.8], floorGripY: 0.04, floorGripZ: 0.2, floorLaidFlat: [0, -1, 0], liftBy: 0.28, lowerBy: 0.72, helpFrom: 0.02, helpBy: 0.2, helpOff: 0.4, plantFrom: 0.15, plantBy: 0.8, lowerOver: 0.04, caneAhead: [0.1, -0.25, 1], seatHip: 0.86, sinkBy: 1, leftAbove: -0.13, beside: [-0.5, 0.09, 0.1], besidePole: [-1, -0.1, -0.2], besideAhead: 0.95, twoR: [-0.12, -0.2, 0.97], twoL: [0.12, -0.2, 0.97], viaR: [-0.15, 0.2, 0.95], viaL: [0.15, 0.2, 0.95], viaAt: 0.45, floorBack: 0, viaFloorR: [-0.15, 0.5, 0.85], viaFloorL: [0.15, 0.5, 0.85], kneesR: [0.88, -0.2, 0.42], kneesL: [-0.7, -0.3, 0.65], turnFrom: 0.15, turnLate: 0.5, turnIn: 0.12, shieldOut: 0.09, edgeDown: 0.2, });
+const SIT_HANDS = tunable('warriorSit', { roll: [0, 0], rise: 0.005, slant: 0.1, along: 0.35, over: 0.11, armIn: 1, floorIn: 0.7, arc: 0.15, lapR: [0.85, -0.1, 0.5], fistBelow: 0.08, swordRest: [0.03, -0.32, -0.5, 0.05, 0.3, 0.12, 0, 1.08, 0.2], maulRest: [0.1, 0.05, -0.58, 0.1, 0.25, 0.7, -0.4, 0.93, 0.32], axeRest: [0.05, 0.13, -0.54, 0.1, 0.25, 0.5, -0.4, 0.95, 0.32], stuckIn: 0.32, plantX: -0.4, plantPole: [-0.5, -1, -0.6], flatEdge: [-1, 0, 0], frontAt: [-0.12, 1.34, 0.38], frontWay: [-0.05, 0.6, 0.8], leanTo: 0.12, regripOpen: 0.7, leanDraws: 0.4, flatSide: [1, 0, 0], lowHand: [-0.14, 0.54], lowEndX: -0.45, pathOut: 0.25, besideBy: 0.4, offOpen: 0.75, floorFrontAt: [-0.34, 1.22, 0.36], floorFrontWay: [-0.55, 0.6, 0.58], floorFlat: [0.7, 0, 0.7], floorLowHand: [-0.42, 0.2], floorOut: [-0.6, 0.8], floorPathOut: 0.3, floorGripY: 0.04, floorGripZ: 0.2, floorLaidFlat: [0, -1, 0], liftBy: 0.28, lowerBy: 0.72, helpFrom: 0.02, helpBy: 0.2, helpOff: 0.4, plantFrom: 0.15, plantBy: 0.8, lowerOver: 0.04, caneAhead: [0.1, -0.25, 1], seatHip: 0.86, sinkBy: 1, leftAbove: -0.13, beside: [-0.5, 0.09, 0.1], besidePole: [-1, -0.1, -0.2], besideAhead: 0.95, twoR: [-0.12, -0.2, 0.97], twoL: [0.12, -0.2, 0.97], viaR: [-0.15, 0.2, 0.95], viaL: [0.15, 0.2, 0.95], viaAt: 0.45, floorBack: 0, viaFloorR: [-0.15, 0.5, 0.85], viaFloorL: [0.15, 0.5, 0.85], kneesR: [0.88, -0.2, 0.42], kneesL: [-0.7, -0.3, 0.65], turnFrom: 0.15, turnLate: 0.5, turnIn: 0.12, shieldOut: 0.09, edgeDown: 0.2, });
 const _sitTurn: RestTurn = { roll: [0, 0], bend: [0, 0], along: [0, 0], over: [0, 0], armIn: [0, 0], arc: [0, 0], out: [0, 0] };
 const _lifted: number[] = [], _resting: number[] = [];
 
@@ -1745,7 +1745,9 @@ export function buildWarrior(): Model {
     _pathAt.lerpVectors(twoSit.frontAt, twoSit.lowAt, down);
     _pathAt.z += twoSit.pathOut * Math.sin(Math.PI * down);
     _pathWay.lerpVectors(twoSit.frontWay, twoSit.lowWay, down).normalize();
-    if (laid > 0) {
+    // (not just over nothing: his way back from `w` comes out at 5e-17 with him standing, and read as lying, this took the
+    // weapon straight from his shoulder to low, past the port, 25 cm a frame through the flames)
+    if (laid > 1e-6) {
       _pathEnd.copy(twoSit.lowAt).addScaledVector(twoSit.lowWay, weapon.len);
       _pathEnd2.copy(twoSit.restGrip).addScaledVector(twoSit.restWay, weapon.len);
       _pathEnd.lerp(_pathEnd2, laid);
@@ -1791,7 +1793,7 @@ export function buildWarrior(): Model {
     twoSit.frontAt.set(fx, fy, fz);
     twoSit.frontWay.set(wx, wy, wz).normalize();
     twoSit.flatFrom.set(sx, sy, sz);
-    twoSit.pathOut = toFloor ? 0 : SIT_HANDS.pathOut;
+    twoSit.pathOut = toFloor ? SIT_HANDS.floorPathOut : SIT_HANDS.pathOut;
     const lowY = floorRest(weapon)[7];
     const [lowX, lowZ] = toFloor ? SIT_HANDS.floorLowHand : SIT_HANDS.lowHand;
     const falls = THREE.MathUtils.clamp((lowY - over) / weapon.len, 0, 1), level = Math.sqrt(1 - falls * falls);
