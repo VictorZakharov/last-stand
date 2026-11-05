@@ -79,3 +79,10 @@
   #rotate svg { width: 84px; height: 84px; }
 }
 #lobby-rail button:disabled { opacity: .45; cursor: $cursor; }
+
+/* a phone held sideways with the browser's bars (298 css px tall on an S25 Edge): the skill buttons' arc reaches up
+   to the tracker's foot, so it stands further from the minimap (after the short screen's rule, which it
+   overrides) */
+@media (max-height: 340px) {
+  #training { right: 240px; }
+}

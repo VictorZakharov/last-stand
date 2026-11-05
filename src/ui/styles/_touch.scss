@@ -74,4 +74,10 @@ body.touch .mouse-only { display: none; } body.touch .touch-inline { display: in
 #touch-village button { pointer-events: auto; touch-action: manipulation; height: 48px; min-width: 56px; padding: 0 14px;
   border-radius: 24px; border: 1px solid rgba($accent, .55); background: rgba(8, 7, 9, .78); color: #f3e1b0;
   font: 600 15px var(--font-display); letter-spacing: .04em; cursor: $cursor-hand; }
+// (full screen an icon alone, round: its arrows out, or in while the page is full screen)
+#touch-village .tv-full { width: 48px; min-width: 0; padding: 0; display: grid; place-items: center; }
+#touch-village .tv-full svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2;
+  stroke-linecap: round; stroke-linejoin: round; }
+#touch-village .tv-full .tv-leave, #touch-village .tv-full.on .tv-enter { display: none; }
+#touch-village .tv-full.on .tv-leave { display: block; }
 #touch-village .tv-use { border-color: var(--accent); box-shadow: 0 0 12px rgba($highlight, .45); color: #ffe7b0; }

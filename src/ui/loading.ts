@@ -15,8 +15,12 @@ function showTip(): void {
   t.classList.add('on');
 }
 
+/** each step the loading screen showed and when (the page's clock, ms), for the perf report's boot */
+export const loadingSteps: { at: number; label: string }[] = [];
+
 /** Show a step, then wait until the browser has painted it: the work that follows blocks the main thread. */
 export async function loadingStep(label: string, progress: number): Promise<void> {
+  loadingSteps.push({ at: performance.now(), label });
   if (!tipTimer) { showTip(); tipTimer = window.setInterval(showTip, 6000); }
   sub().textContent = label;
   recorder.bootStep(label);
