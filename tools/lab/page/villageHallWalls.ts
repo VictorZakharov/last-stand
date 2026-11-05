@@ -1,8 +1,8 @@
 // `lab village`'s hall of heroes from above, wall by wall, each from play, each stand after the owner's picture:
 //
 // `hallWallsOneByOne`: a wall thins while it hides him or the floor near him, all of it, and no other does, its
-// window's linings with it: "here we should not try to make transparent the side which doesn't help see the hero", "this wall
-// should be transparent but the one 90 degree to it should not", "here both should be transparent, but only 1 is", "and
+// window's linings with it: "here we should not try to make transparent the side which doesn't help see the hero",
+// "this wall should be transparent but the one 90 degree to it should not", "here both should be transparent, but only 1 is", "and
 // here, should be transparent too", "this is good, but weird geometry on left". Places on each wall are read drawn as
 // the game thins and with nothing thinned. `--canary`: every wall thinned at each stand, as it was.
 //
