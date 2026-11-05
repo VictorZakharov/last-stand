@@ -122,3 +122,5 @@ they need to walk up to this prop and sit on it, should sit on the closest side"
 they should stand up first, then perform the action if user is still pressing it (do not queue)", "while seated,
 they should continue looking left/right like now", "it should be also possible to sit near fire after idle... just
 on the ground".
+
+A two-hander's right hand may be open only with the left closed on the handle (`his right hand let go with no left hand on the handle`, with a canary; the report says how many frames it was open, so a run that never regripped shows): only a review caught a left hand that never came, then one that let go halfway.
