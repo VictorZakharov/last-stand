@@ -1,10 +1,14 @@
 // The perf overlay's Profile: where this device's frame goes, measured on the device itself (from play: phones at 16 to
 // 39 frames a second, a frame of 25 ms on an S25 Edge whether it drew 440k triangles or 600k, and no desktop GPU nor
-// a software one able to stand in for a phone's). The view and the quality held, one thing switched off at a time,
-// each for `TAKE` frames after `SKIP` to settle: what the frame's interval and our own work drop by with it off is its
-// cost there. Nothing switched compiles a program: each is a pass left out, a part hidden, a size changed. The result
-// goes into the overlay's copied report. Phones time no GPU (WebGL's timer isn't there), so the frame's interval says
-// it; the GPU's time is listed where the browser gives it.
+// a software one able to stand in for a phone's). The view and the quality held, each thing is switched off and on
+// again in turn, `ROUNDS` times, `TAKE` frames each way after `SKIP` to settle, and each side compared with the one
+// beside it: what the frames and our own work drop by with it off is its cost there. Run once, a baseline then each
+// part off, the S25's own work rose step after step whatever was off (8.4 to 11.5 ms, the phone warming), and bloom
+// off read 16 ms dearer; side by side, a drift is the same on both. A phone's frames are whole refreshes (16.7 or
+// 33.3 ms), so its median says nothing of a part: what tells is how many frames missed a refresh, and the mean.
+// Nothing switched compiles a program: each is a pass left out, a part hidden, a size changed. The result goes into
+// the overlay's copied report. Phones time no GPU (WebGL's timer isn't there); the GPU's time is listed where the
+// browser gives it.
 import * as THREE from 'three';
 import { G } from '../state';
 import { holdBloom, holdCanvasAtScene, overFrame, scenePixels } from '../core/renderer';
@@ -19,23 +23,28 @@ interface Step {
   off(): (() => void) | null;
 }
 
-/** A step's frames: the interval's median and mean, our work's mean, the GPU's mean (NaN untimed), ms. */
-interface Sampled {
-  median: number;
-  mean: number;
-  ours: number;
-  gpu: number;
+/** A side's frames: their intervals, our work in each, and the GPU's times (none untimed), ms. */
+interface Frames {
+  intervals: number[];
+  ours: number[];
+  gpu: number[];
 }
 
-/** the frames let go after a switch (the targets resized, the shadow map's last draw), and the frames taken */
-const SKIP = 30;
-const TAKE = 90;
+/** the frames let go after a switch (the targets resized, the shadow map's last draw), the frames taken each way,
+ *  and how many times each way */
+const SKIP = 10;
+const TAKE = 30;
+const ROUNDS = 4;
 /** how long a step waits for a frame before it gives up (ms): a hidden page draws none */
 const NO_FRAME_MS = 3000;
+/** a frame missed a refresh when it took this many of the screen's refreshes or more */
+const MISSED = 1.5;
 
-const median = (values: number[]): number => [...values].sort((a, b) => a - b)[Math.floor(values.length / 2)] ?? NaN;
+const sorted = (values: number[]): number[] => [...values].sort((a, b) => a - b);
 const mean = (values: number[]): number => values.reduce((sum, v) => sum + v, 0) / (values.length || NaN);
 const fixed = (value: number): string => (Number.isFinite(value) ? value.toFixed(1) : '--').padStart(6);
+const signed = (value: number): string => (Number.isFinite(value) ? (value >= 0 ? '+' : '') + value.toFixed(1) : '--')
+  .padStart(6);
 
 /** A flag switched off where it's on: what puts it back. */
 const flag = (get: () => boolean, set: (on: boolean) => void) => (): (() => void) | null => {
@@ -94,35 +103,68 @@ function steps(): Step[] {
   ];
 }
 
-/** The next `SKIP` frames let go and the `TAKE` after them sampled. */
-function sample(): Promise<Sampled> {
+/** The next `SKIP` frames let go and the `count` after them taken. */
+function take(count: number): Promise<Frames> {
   return new Promise((resolve, reject) => {
-    const intervals: number[] = [];
-    const ours: number[] = [];
-    const gpu: number[] = [];
+    const taken: Frames = { intervals: [], ours: [], gpu: [] };
     let seen = 0;
     let timer = setTimeout(() => reject(new Error('no frames came')), NO_FRAME_MS);
-    perfListen.gpu = (ms) => { if (seen > SKIP) gpu.push(ms); };
+    perfListen.gpu = (ms) => { if (seen > SKIP) taken.gpu.push(ms); };
     perfListen.frame = (interval, work) => {
       clearTimeout(timer);
       timer = setTimeout(() => reject(new Error('the frames stopped')), NO_FRAME_MS);
       if (++seen <= SKIP) return;
-      intervals.push(interval);
-      ours.push(work);
-      if (intervals.length < TAKE) return;
+      taken.intervals.push(interval);
+      taken.ours.push(work);
+      if (taken.intervals.length < count) return;
       clearTimeout(timer);
       perfListen.frame = perfListen.gpu = null;
-      resolve({ median: median(intervals), mean: mean(intervals), ours: mean(ours), gpu: mean(gpu) });
+      resolve(taken);
     };
   });
 }
 
-/** A step's line: its frames, and what it saves against the baseline's (the median interval less this one's, a
- *  frame held up once moving a mean by 11 ms; and our own work's mean less this one's). */
-function line(label: string, taken: Sampled, base: Sampled | null): string {
-  const saves = base ? `  saves ${fixed(base.median - taken.median)} (ours ${fixed(base.ours - taken.ours)})` : '';
-  return `  ${label.padEnd(30)} frame ${fixed(taken.median)} (mean ${fixed(taken.mean)})  ours ${fixed(taken.ours)}`
-    + `  GPU ${fixed(taken.gpu)}${saves}`;
+const joined = (all: Frames[]): Frames => ({
+  intervals: all.flatMap((f) => f.intervals),
+  ours: all.flatMap((f) => f.ours),
+  gpu: all.flatMap((f) => f.gpu),
+});
+
+/** A side's figures: its mean frame, the share of its frames that missed a refresh (%), our work's and the GPU's
+ *  means. `refresh` is the screen's interval. */
+function figures(frames: Frames, refresh: number) {
+  const missed = frames.intervals.filter((interval) => interval >= refresh * MISSED).length;
+  return {
+    mean: mean(frames.intervals),
+    missed: 100 * missed / (frames.intervals.length || NaN),
+    ours: mean(frames.ours),
+    gpu: mean(frames.gpu),
+  };
+}
+
+/** A step's frames on and off, `ROUNDS` times in turn (on first, so the switch's own frames are let go off). */
+async function onAndOff(step: Step): Promise<{ on: Frames; off: Frames } | null> {
+  const on: Frames[] = [];
+  const off: Frames[] = [];
+  for (let round = 0; round < ROUNDS; round++) {
+    on.push(await take(TAKE));
+    const undo = step.off();
+    if (!undo) return null;
+    try {
+      off.push(await take(TAKE));
+    } finally {
+      undo();
+    }
+  }
+  return { on: joined(on), off: joined(off) };
+}
+
+/** A step's line: with it on and off, and what off saves (on less off). */
+function line(label: string, on: ReturnType<typeof figures>, off: ReturnType<typeof figures>): string {
+  return `  ${label.padEnd(30)} frame ${fixed(on.mean)} > ${fixed(off.mean)}  missed% ${fixed(on.missed)} >`
+    + ` ${fixed(off.missed)}  ours ${fixed(on.ours)} > ${fixed(off.ours)}  GPU ${fixed(on.gpu)} > ${fixed(off.gpu)}`
+    + `  | saves frame ${signed(on.mean - off.mean)} missed ${signed(on.missed - off.missed)}`
+    + ` ours ${signed(on.ours - off.ours)}`;
 }
 
 let running = false;
@@ -131,26 +173,23 @@ let running = false;
 async function profile(told: (text: string) => void): Promise<void> {
   const all = steps();
   holdAuto(true);
-  const lines = [
-    `Profile (the view and quality held, ${TAKE} frames each after ${SKIP}; ms; saves = the baseline's median less`
-      + ' this; a frame at the screen\'s rate shows no saving):',
-  ];
+  const lines: string[] = [];
   try {
-    told(`Profiling: baseline (1/${all.length + 1})`);
-    const base = await sample();
-    lines.push(line('baseline', base, null));
+    told('Profiling: the screen\'s rate');
+    // (the screen's interval: the quickest tenth of the frames, as a frame never comes sooner than a refresh)
+    const first = sorted((await take(60)).intervals);
+    const refresh = first[Math.floor(first.length / 10)];
+    lines.push(`Profile (the view and quality held; each part on and off in turn, ${ROUNDS} times ${TAKE} frames`
+      + ` each way after ${SKIP}; mean ms on > off; missed% = frames of ${MISSED} refreshes or more, the refresh`
+      + ` ${refresh.toFixed(1)} ms; saves = on less off):`);
     for (const [i, step] of all.entries()) {
-      told(`Profiling: ${step.label} (${i + 2}/${all.length + 1})`);
-      const undo = step.off();
-      if (!undo) {
+      told(`Profiling: ${step.label} (${i + 1}/${all.length})`);
+      const sides = await onAndOff(step);
+      if (!sides) {
         lines.push(`  ${step.label.padEnd(30)} (off already, or not here)`);
         continue;
       }
-      try {
-        lines.push(line(step.label, await sample(), base));
-      } finally {
-        undo();
-      }
+      lines.push(line(step.label, figures(sides.on, refresh), figures(sides.off, refresh)));
     }
   } catch (error) {
     lines.push(`  stopped: ${(error as Error).message}`);
