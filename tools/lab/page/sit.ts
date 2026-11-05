@@ -365,7 +365,7 @@ async function trySeat(lab: Lab, c: SeatCase, fixture: Fixture, options: SitOpti
   }
   const label = `${c.name} (top ${seatTopAt(seat, spot.x, spot.z).toFixed(2)} m)`;
   const watch: Watch = {
-    carried: new Carried(lab, options.trace), film: new SitFilm(c.name, [c.views[0], 'third']), through: null,
+    carried: new Carried(lab, options.trace), film: new SitFilm(c.name, c.name in LAID_ON ? [c.views[0], 'back', 'third'] : [c.views[0], 'third']), through: null,
     seat: [new WeaponSeat(seat, (each) => each.model.tip?.parent), new WeaponSeat(seat, bowApart)],
     shown: 0, pinned: new ArmsPinned(c.name, ARM_LIMITS), fingers: new FingersUnder(), open: { shots: 0, since: OPEN_SHOTS.every },
     askew: { frames: 0, most: 0, at: '' },
