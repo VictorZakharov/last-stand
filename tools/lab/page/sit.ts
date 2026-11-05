@@ -21,7 +21,7 @@ import { outlinedLook } from '../../../src/ui/overlay/outline';
 import type { BiomeId } from '../../../src/data/biomes';
 import type { Fixture, Lab, Pictured, Report, ViewName } from './lab';
 import type { Fist } from '../../../src/types';
-import { FireClear, LaidStill } from './sitFire';
+import { describeShieldRim, FireClear, LaidStill, shieldRimOver } from './sitFire';
 import { ARM_LIMITS, bodyBreaches, FIST_OPEN, grippingRanges, grippingSides } from './range';
 import { ArmsPinned, describeStrain, pinnedCanary } from './armStrain';
 import { cm as cmOf, follow, JERK_FROM, skirtsOf, type Followed } from './coat';
@@ -396,6 +396,8 @@ async function trySeat(lab: Lab, c: SeatCase, fixture: Fixture, options: SitOpti
   }
   const reads = await readSat(lab, options, c.name, out, watch);
   watch.laid.observe(lab, 'sat a while');
+  const rim = c.name in LAID_ON ? describeShieldRim(shieldRimOver(lab), c.name) : '';
+  if (rim) out.problems.push(rim);
   judgeSat(c, label, reads, seat, out);
   judgeFraming(c.name, standing, neckOnScreen(lab), out);
   for (const ask of c.asks) {
