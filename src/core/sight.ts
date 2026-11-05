@@ -123,7 +123,7 @@ export const SIGHT = {
  *  walls stayed the brightest thing there (a review). The inside of a building shut to him keeps a share of that, over a
  *  share of the floor: with none it was a pure black mass over him on the terrace, a void (a review). */
 export const SIGHT_LOOK = {
-  roofNear: 0.8, roofFar: 1.8, pastFarWall: 0.6, eaves: 0.5, groundFrom: 0.4, groundTo: 0.7, wallFrom: 0.05, wall: 0.5, edge: 0.6, edgeAngle: 0.12, over: 3.2, roofs: 5.3, overSealed: 8, overSoft: 0.4,
+  roofNear: 0.8, roofFar: 1.8, pastFarWall: 0.6, eaves: 0.5, eavesBy: 2.5, groundFrom: 0.4, groundTo: 0.7, wallFrom: 0.05, wall: 0.5, edge: 0.6, edgeAngle: 0.12, over: 3.2, roofs: 5.3, overSealed: 8, overSoft: 0.4,
   floor: 0.022, range: 0.2, knee: 0.5, sealed: 0.25, sealedFloor: 0.35, grey: 0.85,
   tint: [0.72, 0.82, 1] as const,
 };
@@ -349,6 +349,6 @@ export const SIGHT_GLSL = /* glsl */`
     vec3 shown = mix(colour, fogged, (1.0 - max(open, above)) * uSightOn * letOff);
     // (the eaves, past its walls, in the fog's hue and their own light: the lit grass under them stood green round the roof)
     float eaves = throughRoof * (1.0 - smoothstep(0.6, 0.9, roof)) * uSightOn;
-    return mix(shown, tint * light * ${SIGHT_LOOK.eaves.toFixed(2)}, eaves);
+    return mix(shown, tint * light * ${SIGHT_LOOK.eaves.toFixed(2)}, eaves * min(under * ${SIGHT_LOOK.eavesBy.toFixed(1)}, 1.0));
   }
 `;

@@ -61,7 +61,7 @@ const SCENARIOS: readonly BehindProp[] = [
     off: 0.8,
     aside: 0,
     view: 'top',
-    leastRound: 0.01,
+    leastRound: 0.006,
   },
   { name: 'the fountain', x: 0, z: 0, way: 0.6, off: FOUNTAIN.r + 0.5, aside: -0.32, view: 'third', leastRound: 0.02 },
   {

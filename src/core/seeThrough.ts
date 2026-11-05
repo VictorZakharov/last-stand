@@ -72,7 +72,11 @@ const COLUMN_K = { value: new THREE.Vector4(1.0, 1.8, 0, 0.25) };
 const ROOF_K = { value: new THREE.Vector4(1.0, 1.8, 0, -1000) };
 /** how far every roof thins from above, whatever it hides (a share of its pixels; from play, "we should make roof
  *  semi-transparent in this case too, even if hero is not directly under it") */
-export const ROOF_GHOST_ABOVE = 0.42;
+export const ROOF_GHOST_ABOVE = 0.25;
+/** thinned past this a roof lets its depth go, for the fog to read what's under it */
+const ROOF_LET_GO = 0.1;
+/** the share of what's built's widening a roof's hole takes */
+const ROOF_HOLE_WIDER = 0.25;
 /** how far a house's gables thin from above: gone, as any ghost of plaster that pale stood as a band over what lay past it */
 const GABLE_GHOST_ABOVE = 1;
 /** how much wider what's built opens from above while it hides him (m at his depth): his own size, he showed alone in a
@@ -150,6 +154,8 @@ let openHeld: number | null = null;
 let builtThinned = false;
 /** whether a harness has what's built open round him whether or not it hides him, as it was */
 let heldOpenAlways = false;
+/** what a harness holds the roofs' ghost from above at */
+let roofGhostHeld: number | null = null;
 /** whether a harness holds the props' hole shut (a frame drawn as without it) */
 let fadeHeld = false;
 /** whether the hall alone is what's thinned for him now, so what stands free stays whole (`propsLeftWhole`) */
@@ -638,15 +644,26 @@ export function updateSeeThrough(x: number, y: number, z: number, props: number,
   // from play, "it shows green where it should not")
   const hides = heldOpenAlways ? 1 : openHeld === null ? builtOpen : 1;
   BUILT_K.value.set(from + wider, to + wider, built * hides, BUILT_K.value.w);
-  ROOF_K.value.set(from + wider, to + wider, built, ROOF_K.value.w);
-  kinds.roof.whole.value = ROOF_GHOST_ABOVE * top * props;
+  // (a roof's hole opens less wide: wide as a wall's while it hides him, it took all of a cottage's roof, and what lay under
+  // it stood as a glass box with a strip of grass across it, where the roof of the next cottage stood whole, a review)
+  const roofWider = wider * ROOF_HOLE_WIDER;
+  ROOF_K.value.set(from + roofWider, to + roofWider, built, ROOF_K.value.w);
+  kinds.roof.whole.value = (roofGhostHeld ?? ROOF_GHOST_ABOVE) * top * props;
   kinds.gable.whole.value = GABLE_GHOST_ABOVE * top * props;
   for (const material of [...(thinningWhole.get('roof') ?? []), ...(thinningWhole.get('gable') ?? [])]) {
-    material.depthWrite = roofDepthHeld || kinds.roof.whole.value < DEPTH_LET_GO;
+    material.depthWrite = roofDepthHeld || kinds.roof.whole.value < ROOF_LET_GO;
   }
-  kinds.prop.whole.value = fadeHeld || propsWhole ? 0 : (openHeld ?? open) * GHOST_WHILE_HIDDEN * props;
+  // (what's built hiding him alone leaves what stands free whole: a lamp past a cottage stood in dots, a review)
+  const propsHide = openHeld ?? Math.max(0, open - builtOpen);
+  kinds.prop.whole.value = fadeHeld || propsWhole ? 0 : propsHide * GHOST_WHILE_HIDDEN * props;
   kinds.propFoot.whole.value = kinds.prop.whole.value;
   PROP_ACROSS_NOW.value = acrossHeld ?? PROP_ACROSS.close + (PROP_ACROSS.top - PROP_ACROSS.close) * top;
+}
+
+/** For a harness (tools/lab): every roof thinned from above by `ghost` (null: the game's), from the next frame: thinner,
+ *  what lies under one shows enough to read the fog on it. */
+export function holdRoofGhost(ghost: number | null): void {
+  roofGhostHeld = ghost;
 }
 
 /** For a harness (tools/lab): the props' hole held shut, at once (a frame drawn again as it was, without it), and its

@@ -16,7 +16,7 @@ import { faceCamera, setZoom, viewMode } from '../../../src/core/renderer';
 import {
   holdEavesAsWithin, holdFarWallByRays, holdRoofByRays, holdSightOff, holdSightSharp, seenShareAt,
 } from '../../../src/core/sight';
-import { holdRoofDepth } from '../../../src/core/seeThrough';
+import { holdRoofDepth, holdRoofGhost } from '../../../src/core/seeThrough';
 import type { SightWall } from '../../../src/core/sight';
 import { groundHeight } from '../../../src/world/ground';
 import { drawFrame } from './light';
@@ -189,7 +189,7 @@ function isGreen(red: number, middle: number, blue: number): boolean {
 const PAST_BACK = [1.4, 1.8, 2.2, 2.6, 3];
 const ALONG_BACK = 0.4;
 const FOG_EASES = 40;
-const LEAST_TAKEN = 0.12;
+const LEAST_TAKEN = 0.05;
 
 /** The light of `points` on the ground in the frame, the sum of their pixels'. */
 function lightAt(lab: Lab, points: THREE.Vector3[]): number {
@@ -275,6 +275,9 @@ const MOST_GREEN_THROUGH_ROOF = 0.05;
 /** how far along its back wall the ground is read (a share of its half width, from the far side) */
 const THROUGH_ROOF_ALONG = [-0.8, -0.6, -0.4, -0.2, 0, 0.2];
 
+/** how far the roofs are thinned for what's under them to be read: at the game's, too little shows to tell the rule on
+ *  from the rule off */
+const READ_THROUGH_GHOST = 0.62;
 /** how far past a cottage's back wall the ground is read through the ghost of that wall (m) */
 const PAST_WALL_GHOST = [0.3, 0.8, 1.3, 1.8, 2.3, 2.8];
 /** how high a cottage's walls stand, from what's off the ground: a ray crossing them here crosses the wall's ghost */
@@ -341,6 +344,7 @@ export async function farWallInFog(lab: Lab, canary: boolean): Promise<LightsChe
   const kept = viewMode();
   holdHour(FAR_WALL_HOUR);
   holdFarWallByRays(canary);
+  holdRoofGhost(READ_THROUGH_GHOST);
   try {
     await viewBy(lab, 'top');
     setZoom(FAR_WALL_ZOOM);
@@ -355,6 +359,7 @@ export async function farWallInFog(lab: Lab, canary: boolean): Promise<LightsChe
     return { lines: [line], problems: wrong ? [line] : [], caught: null, moments: [] };
   } finally {
     holdFarWallByRays(false);
+    holdRoofGhost(null);
     setZoom(CAMERA.lobbyZoom);
     holdHour(null);
     faceCamera(0);
@@ -382,6 +387,7 @@ export async function roofReadsAsOne(lab: Lab, canary: boolean): Promise<LightsC
   const kept = viewMode();
   holdHour(12);
   holdRoofByRays(canary);
+  holdRoofGhost(READ_THROUGH_GHOST);
   try {
     await viewBy(lab, 'top');
     const all: number[] = [];
@@ -400,6 +406,7 @@ export async function roofReadsAsOne(lab: Lab, canary: boolean): Promise<LightsC
     return { lines: [line], problems: wrong ? [line] : [], caught: null, moments: shot ? [shot] : [] };
   } finally {
     holdRoofByRays(false);
+    holdRoofGhost(null);
     holdHour(null);
     faceCamera(0);
     await viewBy(lab, kept);

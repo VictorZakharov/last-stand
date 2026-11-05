@@ -1223,7 +1223,8 @@ function seenOnly(colour: any, depthNode: any): any {
   const letOff = mix(1, min(colour.a, 1), max(smoothstep(0.6, 0.9, roof), throughRoof));
   const eaves = throughRoof.mul(smoothstep(0.6, 0.9, roof).oneMinus()).mul(on);
   const shown = mix(colour.rgb, fogged, unseen.mul(letOff));
-  return vec4(mix(shown, vec3(...SIGHT_LOOK.tint).mul(light).mul(SIGHT_LOOK.eaves), eaves), max(colour.a, 1));
+  return vec4(mix(shown, vec3(...SIGHT_LOOK.tint).mul(light).mul(SIGHT_LOOK.eaves),
+    eaves.mul(min(min(colour.a, 1).mul(SIGHT_LOOK.eavesBy), 1))), max(colour.a, 1));
 }
 
 /** the light's weights, as the WebGL grade reads an area's and a pixel's */
