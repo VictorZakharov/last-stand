@@ -128,3 +128,5 @@ A two-hander's right hand may be open only with the left closed on the handle (`
 By a fire his weapon must stay out of the flames every frame (`sitFire.ts`, `FireClear`: `his weapon in the flames`), and a two-hander laid down must be let go of and lie still (`LaidStill`: `what he laid down stirred`, `never let go of`), each with a canary.
 
 `--poses` measures nothing: the warrior sat, each way of holding his gear (`HOLDINGS` in `sitPoses.ts`) on each seat asked for, three pictures a row, each numbered across the run (`#12 right`), for the owner to name what's wrong by its number without playing his way to it. Send it after a change to a sit (from the owner: "send me each sitting combination pose of warrior, as screenshot, with each weapon type, from 3 different angles", "label each image with a unique number").
+
+A shield by a fire must rest on the floor (`shieldRimOver`: `his shield's rim ... the floor`, within 3 cm). `--poses` keeps `--tune` and `--wear`. The fires' films have a view from behind him, the fire in frame: a blade catches its light two metres off, and from the sides that reads as a blade in the flames.
