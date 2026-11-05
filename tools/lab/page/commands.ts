@@ -172,6 +172,10 @@ export async function glance(lab: Lab, command: GlanceOptions): Promise<Report> 
  *  neither reach the floor nor hang, a joint past its range, no glance, an ask done before he's up or a tap done after,
  *  or a canary it missed, is a problem. */
 export async function sit(lab: Lab, command: SitOptions): Promise<Report> {
+  if (command.poses) {
+    const { sitPoses } = await import('./sitPoses');
+    return sitPoses(lab, command.seats);
+  }
   const { sit: follow } = await import('./sit');
   return follow(lab, command);
 }

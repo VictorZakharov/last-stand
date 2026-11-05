@@ -1490,6 +1490,7 @@ export const COMMANDS = {
         frames: Boolean(options.frames),
         trace: options.trace,
         canary: Boolean(options.canary),
+        poses: Boolean(options.poses),
       };
       return side.picturedCommand('sit', command);
     },

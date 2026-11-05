@@ -124,3 +124,7 @@ they should continue looking left/right like now", "it should be also possible t
 on the ground".
 
 A two-hander's right hand may be open only with the left closed on the handle (`his right hand let go with no left hand on the handle`, with a canary; the report says how many frames it was open, so a run that never regripped shows): only a review caught a left hand that never came, then one that let go halfway.
+
+By a fire his weapon must stay out of the flames every frame (`sitFire.ts`, `FireClear`: `his weapon in the flames`), and a two-hander laid down must be let go of and lie still (`LaidStill`: `what he laid down stirred`, `never let go of`), each with a canary.
+
+`--poses` measures nothing: the warrior sat, each way of holding his gear (`HOLDINGS` in `sitPoses.ts`) on each seat asked for, three pictures a row, each numbered across the run (`#12 right`), for the owner to name what's wrong by its number without playing his way to it. Send it after a change to a sit (from the owner: "send me each sitting combination pose of warrior, as screenshot, with each weapon type, from 3 different angles", "label each image with a unique number").

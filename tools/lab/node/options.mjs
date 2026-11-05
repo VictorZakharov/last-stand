@@ -1686,6 +1686,10 @@ export const COMMANDS = {
       + 'asked to act, a tap and a key held: up first each time, a tap left undone, a held key done once he\'s up',
     options: {
       seats: { kind: 'list', usage: 'a,b', help: 'the seats tried: log, stone, column, fire, brazier (all by default)' },
+      poses: {
+        kind: 'switch',
+        help: 'no measures: the warrior sat, each way of holding his gear on each seat, numbered pictures from three sides',
+      },
       frames: { kind: 'switch', help: 'list every frame his skirts jerked as he sat (their first 40)' },
       trace: {
         kind: 'text', usage: 'piece',
