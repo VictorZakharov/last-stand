@@ -1,0 +1,122 @@
+// A two-hander held up in one hand as a hero stands to sit or stands up again (tools/lab `sit`). From play: "when one
+// end is touching ground yes, but as soon as sword lifts off ground, he needs both hands to manipulate it", of a
+// greatsword held out level in one fist by a fire, "physically impossible, he'd break his arm doing it".
+// `HeldAloft` reads each frame he stands in a sit's hands stage: his weapon off the floor and off his shoulder must
+// have his left fist closed on it too.
+
+import * as THREE from 'three';
+import { groundHeight } from '../../../src/world/ground';
+import type { Fist } from '../../../src/types';
+import type { Lab } from './lab';
+import { FIST_OPEN } from './range';
+
+/** how near the floor an end counts as on it, its weight taken there (m) */
+const ON_FLOOR = 0.04;
+/** how near the weapon's line passes his right shoulder's joint for it to rest on his shoulder (m) */
+const ON_SHOULDER = 0.2;
+/** how far a closed left fist may be off the handle for it to hold it (m) */
+const LEFT_OFF_MOST = 0.03;
+/** how far into his way down he still stands (the sit's share) */
+const STANDS_TILL = 0.05;
+
+const _grip = new THREE.Vector3();
+const _way = new THREE.Vector3();
+const _end = new THREE.Vector3();
+const _shoulder = new THREE.Vector3();
+const _point = new THREE.Vector3();
+const _box = new THREE.Box3();
+const _inverse = new THREE.Matrix4();
+
+/** Where a weapon reaches along its grip's own up, each way from the grip (m, in the grip's space). */
+interface Reach {
+  down: number;
+  up: number;
+}
+
+/** What holds a weapon this frame: the floor, his shoulder, his left hand. */
+export interface Holds {
+  /** its lowest end over the floor (m) */
+  over: number;
+  /** its line's nearest to his right shoulder's joint (m) */
+  shoulder: number;
+  /** his left fist closed on its handle */
+  left: boolean;
+}
+
+/** Whether a weapon so held is up in his right hand alone. */
+export function aloftInOne(holds: Holds): boolean {
+  return holds.over > ON_FLOOR && holds.shoulder > ON_SHOULDER && !holds.left;
+}
+
+/** The canary: held up level, nothing under it and no left hand, it reads as in one hand; on the floor or the
+ *  shoulder, or in both hands, it doesn't. */
+export function aloftCanary(): boolean {
+  const up: Holds = { over: 0.6, shoulder: 0.5, left: false };
+  const caught = aloftInOne(up);
+  const passed = [{ ...up, over: 0 }, { ...up, shoulder: 0.1 }, { ...up, left: true }].every((each) => !aloftInOne(each));
+  return caught && passed;
+}
+
+/** A two-hander's frames up in one hand while he stands, the highest and where. */
+export class HeldAloft {
+  private reach: Reach | null = null;
+  private frames = 0;
+  private highest = 0;
+  private at = '';
+
+  /** Notes this frame, if he stands in a sit's hands stage with a two-hander. */
+  observe(lab: Lab, frame: string): void {
+    const pose = lab.player.sitting.pose;
+    const grip = lab.model.tip?.parent;
+    if (!pose || pose.w > STANDS_TILL || !grip || !lab.model.offGrip) return;
+    const holds = this.holdsOf(lab, grip);
+    if (!aloftInOne(holds)) return;
+    this.frames++;
+    if (holds.over <= this.highest) return;
+    this.highest = holds.over;
+    this.at = frame;
+  }
+
+  /** The frames up in one hand as words, or none if it never was. */
+  describe(name: string): string {
+    if (this.frames === 0) return '';
+    const highest = (this.highest * 100).toFixed(0);
+    return `sit: by the ${name}, his two-hander up in one hand on ${this.frames} frames, ${highest} cm off the floor `
+      + `(${this.at})`;
+  }
+
+  private holdsOf(lab: Lab, grip: THREE.Object3D): Holds {
+    lab.model.root.updateMatrixWorld(true);
+    const reach = (this.reach ??= reachOf(grip));
+    grip.getWorldPosition(_grip);
+    _way.set(0, 1, 0).transformDirection(grip.matrixWorld);
+    const scale = _point.setFromMatrixScale(grip.matrixWorld).y;
+    const ends = [reach.down, reach.up].map((along) => _end.copy(_grip).addScaledVector(_way, along * scale).clone());
+    const over = Math.min(...ends.map((end) => end.y - groundHeight(end.x, end.z)));
+    lab.joints.shoulderR.getWorldPosition(_shoulder);
+    const line = new THREE.Line3(ends[0], ends[1]);
+    const shoulder = line.closestPointToPoint(_shoulder, true, _point).distanceTo(_shoulder);
+    return { over, shoulder, left: leftOn(lab.model.fists ?? []) };
+  }
+}
+
+/** Whether his left fist is closed on its handle. */
+function leftOn(fists: readonly Fist[]): boolean {
+  const left = fists.find((fist) => fist.hand === 'left');
+  return !!left && left.curl >= FIST_OPEN && left.off <= LEFT_OFF_MOST;
+}
+
+/** How far the weapon hung from `grip` reaches along its up each way, read once from its meshes. */
+function reachOf(grip: THREE.Object3D): Reach {
+  const reach: Reach = { down: 0, up: 0 };
+  _inverse.copy(grip.matrixWorld).invert();
+  grip.traverse((object) => {
+    const mesh = object as THREE.Mesh;
+    if (!mesh.isMesh || !mesh.geometry) return;
+    mesh.geometry.computeBoundingBox();
+    _box.copy(mesh.geometry.boundingBox!).applyMatrix4(mesh.matrixWorld).applyMatrix4(_inverse);
+    reach.down = Math.min(reach.down, _box.min.y);
+    reach.up = Math.max(reach.up, _box.max.y);
+  });
+  return reach;
+}

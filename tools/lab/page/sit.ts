@@ -22,6 +22,7 @@ import type { BiomeId } from '../../../src/data/biomes';
 import type { Fixture, Lab, Pictured, Report, ViewName } from './lab';
 import type { Fist } from '../../../src/types';
 import { describeShieldRim, FireClear, LaidStill, shieldRimOver } from './sitFire';
+import { aloftCanary, HeldAloft } from './sitAloft';
 import { ARM_LIMITS, bodyBreaches, FIST_OPEN, grippingRanges, grippingSides } from './range';
 import { ArmsPinned, describeStrain, pinnedCanary } from './armStrain';
 import { cm as cmOf, follow, JERK_FROM, skirtsOf, type Followed } from './coat';
@@ -242,6 +243,8 @@ interface Watch {
   regrip: { open: number; unheld: number; at: string };
   fire: FireClear;
   laid: LaidStill;
+  /** a two-hander up in his right hand alone as he stands */
+  aloft: HeldAloft;
   /** he carries a two-hander: by a fire it's laid down */
   twoHanded: boolean;
   /** the frames a closed fist was past its handle's end, on what it was to hold it by, the most, and where */
@@ -373,6 +376,7 @@ async function trySeat(lab: Lab, c: SeatCase, fixture: Fixture, options: SitOpti
     regrip: { open: 0, unheld: 0, at: '' },
     fire: new FireClear(seat),
     laid: new LaidStill(),
+    aloft: new HeldAloft(),
     twoHanded: !!lab.model.offGrip,
     fistPast: { frames: 0, most: 0, at: '' },
     before: heldNow(lab), canary: !!options.canary, traced: !!options.trace, moments: [],
@@ -497,6 +501,7 @@ function watchFrame(lab: Lab, name: string, frame: string, watch: Watch, skirts:
   readRegrip(lab, frame, watch);
   watch.fire.observe(lab, frame);
   watch.laid.observe(lab, frame);
+  watch.aloft.observe(lab, frame);
   const through = legsThrough(lab.joints, skirts);
   if (!through || through.depth <= THROUGH_FROM) return;
   if (!watch.through || through.depth > watch.through.depth) watch.through = { ...through, at: frame };
@@ -694,6 +699,9 @@ function judgeWatch(name: string, watch: Watch, out: Out): void {
   if (!watch.laid.caught()) out.problems.push('sit: the canary (what he laid down stirred) was missed');
   const stirred = watch.laid.describe(name, watch.twoHanded && name in LAID_ON);
   if (stirred) out.problems.push(stirred);
+  const aloft = watch.aloft.describe(name);
+  if (aloft) out.problems.push(aloft);
+  if (!aloftCanary()) out.problems.push('sit: the canary (a two-hander up in one hand) was missed');
   if (regrip.open > 0) {
     out.text.push(`  by the ${name}, his right hand open on ${regrip.open} frames, ${regrip.unheld} with no left hand on it`);
   }
