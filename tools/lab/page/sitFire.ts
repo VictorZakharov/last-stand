@@ -88,7 +88,7 @@ export class LaidStill {
   /** Notes this frame's weapon, if it's lying let go of. */
   observe(lab: Lab, frame: string): void {
     const tip = lab.model.tip;
-    if (!tip?.parent?.parent || !isLaid(tip)) {
+    if (!tip || !isLaid(tip)) {
       this.first = null;
       return;
     }
@@ -126,12 +126,11 @@ export class LaidStill {
   }
 }
 
-/** Whether what `tip` belongs to says it's lying let go of. */
+/** Whether what `tip` belongs to says it's lying let go of: said on the weapon's group, which shares the tip's grip. */
 function isLaid(tip: THREE.Object3D): boolean {
-  let object: THREE.Object3D | null = tip;
-  while (object) {
-    if (object.userData.laid) return true;
-    object = object.parent;
-  }
-  return false;
+  let laid = false;
+  tip.parent?.traverse((object) => {
+    laid ||= !!object.userData.laid;
+  });
+  return laid;
 }
