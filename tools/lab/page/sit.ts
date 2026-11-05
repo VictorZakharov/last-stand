@@ -21,6 +21,7 @@ import { outlinedLook } from '../../../src/ui/overlay/outline';
 import type { BiomeId } from '../../../src/data/biomes';
 import type { Fixture, Lab, Pictured, Report, ViewName } from './lab';
 import type { Fist } from '../../../src/types';
+import { FireClear, LaidStill } from './sitFire';
 import { ARM_LIMITS, bodyBreaches, FIST_OPEN, grippingRanges, grippingSides } from './range';
 import { ArmsPinned, describeStrain, pinnedCanary } from './armStrain';
 import { cm as cmOf, follow, JERK_FROM, skirtsOf, type Followed } from './coat';
@@ -39,6 +40,8 @@ import { FRAMED_MOST, neckOnScreen, type Framed } from './sitFraming';
 export interface SitOptions {
   /** the set-up's (`--gear`, `--weapon`, `--wear`, `--tune`): where he stands is the measure's */
   fixture?: Fixture;
+  /** no measures: every way of holding his gear on each seat, pictured (`sitPoses.ts`) */
+  poses?: boolean;
   /** the seats tried, by name (all by default) */
   seats?: string[];
   /** list every frame his skirts jerked as he sat */
@@ -146,7 +149,7 @@ const CANARY_TURN = 0.5;
 const CANARY_TWIST = { by: 0.03, frames: [100, 130] };
 
 /** A seat tried: its name, its biome, how it's picked from the biome's, and whether its feet hang. */
-interface SeatCase {
+export interface SeatCase {
   name: string;
   biome: BiomeId;
   pick: (seats: readonly Seat[]) => Seat | undefined;
@@ -171,7 +174,7 @@ const FIRE_VIEWS: ViewName[] = ['right', 'back', 'above', 'front', 'top', 'third
 
 const lengthOf = (s: Seat) => Math.hypot(s.bx - s.ax, s.bz - s.az);
 
-const CASES: SeatCase[] = [
+export const CASES: SeatCase[] = [
   {
     name: 'log', biome: 'forest', pick: (seats) => seats.find((s) => lengthOf(s) > 2), hangs: true,
     views: SEAT_VIEWS,
@@ -237,6 +240,10 @@ interface Watch {
   fistOff: { frames: number; most: number; at: string };
   /** the frames a two-hander's right hand was open on it, and those with no left hand closed on its handle */
   regrip: { open: number; unheld: number; at: string };
+  fire: FireClear;
+  laid: LaidStill;
+  /** he carries a two-hander: by a fire it's laid down */
+  twoHanded: boolean;
   /** the frames a closed fist was past its handle's end, on what it was to hold it by, the most, and where */
   fistPast: { frames: number; most: number; at: string };
   /** what he held, as he held it as he began to sit (before he walked to the seat, until then) */
@@ -324,6 +331,21 @@ async function canaryOn(lab: Lab, c: SeatCase, fixture: Fixture, out: Out): Prom
   return { text: out.text.join('\n'), problems, moments: out.moments };
 }
 
+/** Him set up as `fixture` asks and sat on `c`, nothing read: whether he sat (`lab sit --poses`). */
+export async function sitOn(lab: Lab, c: SeatCase, fixture: Fixture): Promise<boolean> {
+  if (G.arena.biome !== c.biome) G.arena.setBiome(c.biome);
+  const seat = c.pick(G.arena.seats);
+  if (!seat) return false;
+  const { at, facing } = startOff(seat);
+  await lab.setup({ ...fixture, at, facing });
+  lab.player.sits = true;
+  for (let frame = 0; frame < SAT_BY * RATE; frame++) {
+    await lab.step(1);
+    if (satWhole(lab.player.sitting.pose)) return true;
+  }
+  return false;
+}
+
 /** A seat tried: sat on, read, and got up from by each of its asks. */
 async function trySeat(lab: Lab, c: SeatCase, fixture: Fixture, options: SitOptions, out: Out): Promise<void> {
   if (G.arena.biome !== c.biome) G.arena.setBiome(c.biome);
@@ -349,12 +371,16 @@ async function trySeat(lab: Lab, c: SeatCase, fixture: Fixture, options: SitOpti
     askew: { frames: 0, most: 0, at: '' },
     fistOff: { frames: 0, most: 0, at: '' },
     regrip: { open: 0, unheld: 0, at: '' },
+    fire: new FireClear(seat),
+    laid: new LaidStill(),
+    twoHanded: !!lab.model.offGrip,
     fistPast: { frames: 0, most: 0, at: '' },
     before: heldNow(lab), canary: !!options.canary, traced: !!options.trace, moments: [],
   };
   const sat = await untilSat(lab, label, c.views.slice(0, 2), out, watch);
   watch.film.end('down');
   if (!sat) return;
+  watch.laid.observe(lab, 'as he sat');
   const side = (lab.player.pos.x - spot.x) ** 2 + (lab.player.pos.z - spot.z) ** 2;
   if (side > 0.05 ** 2) out.problems.push(`sit: on the ${c.name} he sat ${Math.sqrt(side).toFixed(2)} m off its spot`);
   out.moments.push(lab.picture(`${c.name}: sat`, c.views));
@@ -369,6 +395,7 @@ async function trySeat(lab: Lab, c: SeatCase, fixture: Fixture, options: SitOpti
     out.problems.push(`sit: on the ${c.name}, his ${stood.name} stood ${over} cm over the floor`);
   }
   const reads = await readSat(lab, options, c.name, out, watch);
+  watch.laid.observe(lab, 'sat a while');
   judgeSat(c, label, reads, seat, out);
   judgeFraming(c.name, standing, neckOnScreen(lab), out);
   for (const ask of c.asks) {
@@ -466,6 +493,8 @@ function watchFrame(lab: Lab, name: string, frame: string, watch: Watch, skirts:
   readAskew(lab, frame, watch);
   readFistOn(lab, frame, watch);
   readRegrip(lab, frame, watch);
+  watch.fire.observe(lab, frame);
+  watch.laid.observe(lab, frame);
   const through = legsThrough(lab.joints, skirts);
   if (!through || through.depth <= THROUGH_FROM) return;
   if (!watch.through || through.depth > watch.through.depth) watch.through = { ...through, at: frame };
@@ -657,6 +686,12 @@ function readAskew(lab: Lab, frame: string, watch: Watch): void {
  *  through his skirts, and the film. */
 function judgeWatch(name: string, watch: Watch, out: Out): void {
   const { fistOff, fistPast, regrip } = watch;
+  const inFlames = watch.fire.describe(name);
+  if (inFlames) out.problems.push(inFlames);
+  if (!watch.fire.caught()) out.problems.push('sit: the canary (his weapon in the flames) was missed');
+  if (!watch.laid.caught()) out.problems.push('sit: the canary (what he laid down stirred) was missed');
+  const stirred = watch.laid.describe(name, watch.twoHanded && name in LAID_ON);
+  if (stirred) out.problems.push(stirred);
   if (regrip.open > 0) {
     out.text.push(`  by the ${name}, his right hand open on ${regrip.open} frames, ${regrip.unheld} with no left hand on it`);
   }
@@ -714,17 +749,19 @@ function judgeWatch(name: string, watch: Watch, out: Out): void {
 }
 
 /** what of a fire hides him from ahead, hidden for `fromBeyond` (the brazier includes its stepped plinth) */
+/** The seats on the floor, where a two-hander is laid down and let go of. */
+const LAID_ON: Record<string, true> = { fire: true, brazier: true };
 const FIRE_PARTS = ['flames', 'bonfire logs', 'bonfire stones', 'brazier'];
 /** where `fromBeyond` frames him: his knees' height over his hips' place, from this far ahead (m) */
 const BEYOND = { up: 0.15, distance: 2.6 };
 
 /** the plants round a seat, hidden for a close-up of his limbs (a tuft of grass before the camera hid his arms) */
-const PLANTS = /^(grass \d|ferns|weeds)$/;
+export const PLANTS = /^(grass \d|ferns|weeds)$/;
 /** what of the biome stands round him to hide for a close-up of him (a boulder filled the picture from his left) */
 const AROUND = /^(boulders|standing stone|thicket.*|stump|column)$/;
 
 /** `take` done with the biome's parts `hides` names hidden, shown again after. */
-function withHidden<T>(hides: (name: string) => boolean, take: () => T): T {
+export function withHidden<T>(hides: (name: string) => boolean, take: () => T): T {
   const hidden: THREE.Object3D[] = [];
   G.arena.groupOf(G.arena.biome).traverse((object) => {
     if (hides(object.name) && object.visible) hidden.push(object);
