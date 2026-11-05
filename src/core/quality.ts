@@ -1,9 +1,9 @@
 // Graphics quality: the player's setting (auto / high / medium / low, cookie) and the
-// level in effect. Auto starts from the level it last settled on and steps down while
-// the frame rate stays low, High's resolution first (from the screen's own pixels, on
-// any device and at any of the OS's scaling: what the hardware holds is measured), then
-// the levels, then Low's resolution; it never steps back up on its own, to avoid
-// oscillating.
+// level in effect. Auto starts from the level it last settled on and steps down the
+// levels while the frame rate stays low; it never steps back up on its own, to avoid
+// oscillating. Every level renders the screen's own pixels: what's cut is other work,
+// never the resolution (from play, "I want to run the game at full phone res, if we need
+// to cut, we need to cut something else, not resolution").
 import { WEBGPU } from './webgpu';
 import * as THREE from 'three';
 import { G } from '../state';
@@ -179,8 +179,8 @@ export function sampleQuality(dt: number): void {
   const far = fps < AUTO_QUALITY.minFps * AUTO_QUALITY.farBelow;
   if (time < (far ? AUTO_QUALITY.farWindow : AUTO_QUALITY.window)) return;
   if (fps < AUTO_QUALITY.minFps) {
-    // (each step about halves the frame's cost: as many as the frame rate is short by halvings, at once)
-    const steps = far ? Math.ceil(Math.log2(AUTO_QUALITY.minFps / fps)) : 1;
+    // (far below, every level down at once)
+    const steps = far ? QUALITY_ORDER.length : 1;
     for (let i = 0; i < steps && !atBottom(); i++) stepDown();
     writeAuto();
   }
@@ -228,7 +228,7 @@ function median(values: number[]): number {
 /** Whether Auto has nothing left to lower: Low. */
 const atBottom = (): boolean => level === 'low';
 
-/** Auto's step down: a level, the screen's own pixels kept (from play, "cut something else, not resolution"). */
+/** Auto's step down: a level, the screen's own pixels kept. */
 function stepDown(): void {
   apply(QUALITY_ORDER[QUALITY_ORDER.indexOf(level) + 1]);
 }

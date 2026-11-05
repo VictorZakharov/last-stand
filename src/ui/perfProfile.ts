@@ -14,6 +14,10 @@ import { G } from '../state';
 import { holdBloom, holdCanvasAtScene, overFrame, scenePixels } from '../core/renderer';
 import { holdAuto, qualityBudget, qualityLevel, useQuality } from '../core/quality';
 import { particles } from '../fx/particles';
+import { lampShadowsOn, lampsHeldOut, setLampShadows } from '../core/lamps';
+import { holdSightOff } from '../core/sight';
+import { setReliefSteps } from '../core/parallax';
+import { QUALITY } from '../data/quality';
 import { perfListen, setProfiled } from './perfHud';
 
 /** A thing the profile switches off: its label, and what switches it off, returning what puts it back (null where
@@ -65,6 +69,10 @@ const undrawn = (root: THREE.Object3D | null | undefined) => (): (() => void) | 
   return () => kept.forEach(([part, mask]) => { part.layers.mask = mask; });
 };
 
+/** The opaque in order of their depth alone, nearest first (three's own order groups them by program first). */
+const nearestFirst = (a: THREE.RenderItem, b: THREE.RenderItem): number =>
+  a.groupOrder - b.groupOrder || a.renderOrder - b.renderOrder || a.z - b.z;
+
 /** What the profile switches off, in turn. */
 function steps(): Step[] {
   const shadows = G.renderer.shadowMap;
@@ -94,6 +102,24 @@ function steps(): Step[] {
       overFrame.draw = () => {};
       return () => { overFrame.draw = draw; };
     } },
+    // (not a part: the opaque drawn nearest first, so the pixels behind are tested out before they're shaded, at the
+    // cost of switching programs more often; at the S25's full res on a 4070 Ti, 4.05 to 3.11 ms of the GPU's frame)
+    { label: 'nearest first (not 3\'s order)', off: () => {
+      G.renderer.setOpaqueSort(nearestFirst);
+      return () => G.renderer.setOpaqueSort(null);
+    } },
+    { label: 'lamps out', off: () => {
+      lampsHeldOut(true);
+      return () => lampsHeldOut(false);
+    } },
+    { label: 'lamps\' shadows not read', off: flag(lampShadowsOn, setLampShadows) },
+    { label: 'fog of war off', off: () => {
+      holdSightOff(true);
+      return () => holdSightOff(false);
+    } },
+    { label: 'floors\' relief flat', off: flag(() => QUALITY[qualityLevel()].relief > 0, (on) => {
+      setReliefSteps(on ? QUALITY[qualityLevel()].relief : 0);
+    }) },
     { label: 'half the scene\'s pixels', off: () => {
       const level = qualityLevel();
       const budget = qualityBudget();
