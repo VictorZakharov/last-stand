@@ -174,7 +174,7 @@ export async function glance(lab: Lab, command: GlanceOptions): Promise<Report> 
 export async function sit(lab: Lab, command: SitOptions): Promise<Report> {
   if (command.poses) {
     const { sitPoses } = await import('./sitPoses');
-    return sitPoses(lab, command.seats);
+    return sitPoses(lab, command.seats, command.fixture);
   }
   const { sit: follow } = await import('./sit');
   return follow(lab, command);

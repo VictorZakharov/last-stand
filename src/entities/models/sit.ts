@@ -70,8 +70,10 @@ export interface RestTurn {
   /** of the way down, how far a hand holding a weapon takes to come in, each side (0: as an empty hand's,
    *  `SIT_POSE.armIn`): the weapon's far end sweeps round with it */
   armIn?: number[];
-  /** how much further out from the thigh a hand rests on a seat, each side (rig units) */
+  /** how much further out from the thigh or the knee a hand rests, each side (rig units) */
   out?: number[];
+  /** how much lower than its knee a hand rests by a fire, each side (rig units): what's strapped on it down on the floor */
+  low?: number[];
 }
 
 /** The leg chain's angles (rad): the thigh forward from straight down, the knee's bend, the ankle's. */
@@ -168,7 +170,8 @@ export function restHands(
     const further = turn?.along?.[side] ?? 0;
     if (floor) {
       const knee = left ? j.kneeL : j.kneeR;
-      knee.localToWorld(_on.set(sign * out, -P.shinL * along, P.shinR + over));
+      knee.localToWorld(_on.set(sign * (out + (turn?.out?.[side] ?? 0)), -P.shinL * along, P.shinR + over));
+      _on.y -= (turn?.low?.[side] ?? 0) * j.root.scale.y;
       // (brought back along the thigh itself: back along the shin's line, a fist rose to his chest)
       thigh.getWorldPosition(_foot).sub(knee.getWorldPosition(_up));
       _on.addScaledVector(_foot, -further);

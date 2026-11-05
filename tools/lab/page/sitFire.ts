@@ -16,6 +16,10 @@ const LAID_MOST = 0.002;
 /** how far the canaries put a weapon wrong (m) */
 const CANARY_BY = 0.2;
 
+/** how far a shield resting on the floor may be off it (m) */
+const RIM_MOST = 0.03;
+
+const _box = new THREE.Box3();
 const _grip = new THREE.Vector3();
 const _tip = new THREE.Vector3();
 const _point = new THREE.Vector3();
@@ -23,6 +27,21 @@ const _point = new THREE.Vector3();
 /** How far `point` is inside a circle round (`x`, `z`) on the floor (m, up to its radius), or 0. */
 export function insideCircle(point: THREE.Vector3, x: number, z: number, radius: number): number {
   return Math.max(0, radius - Math.hypot(point.x - x, point.z - z));
+}
+
+/** How far the lowest of what's named `shield` on him is over the floor under his feet (m), or null with none shown. */
+export function shieldRimOver(lab: Lab): number | null {
+  const shield = lab.model.root.getObjectByName('shield');
+  if (!shield?.visible) return null;
+  lab.model.root.updateMatrixWorld(true);
+  return _box.setFromObject(shield, true).min.y - lab.player.pos.y;
+}
+
+/** A shield's rim sat by a fire as words, or none if it rests on the floor (from play: a shield in mid-air beside him). */
+export function describeShieldRim(rim: number | null, name: string): string {
+  if (rim === null || Math.abs(rim) <= RIM_MOST) return '';
+  const where = rim > 0 ? 'over' : 'under';
+  return `sit: by the ${name}, his shield's rim ${(Math.abs(rim) * 100).toFixed(1)} cm ${where} the floor`;
 }
 
 /** A weapon's points against a fire: its deepest into the flames, frame by frame. */

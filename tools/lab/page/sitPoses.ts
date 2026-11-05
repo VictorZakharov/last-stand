@@ -4,7 +4,7 @@
 // with a unique number so its easier to reference".
 
 import type { WeaponStyle } from '../../../src/types';
-import type { Lab, Pictured, Report, ViewName } from './lab';
+import type { Fixture, Lab, Pictured, Report, ViewName } from './lab';
 import { CASES, PLANTS, sitOn, withHidden, type SeatCase } from './sit';
 
 /** A way of holding his gear, and what it's called on the sheet. */
@@ -30,7 +30,7 @@ const SEAT_ANGLES: ViewName[] = ['front', 'right', 'third'];
 const FLOOR_ANGLES: ViewName[] = ['right', 'above', 'third'];
 
 /** Every holding on every seat asked for, sat and pictured, each picture numbered. */
-export async function sitPoses(lab: Lab, seats: readonly string[] | undefined): Promise<Report> {
+export async function sitPoses(lab: Lab, seats: readonly string[] | undefined, asked?: Fixture): Promise<Report> {
   const moments: Pictured[] = [];
   const text: string[] = [];
   const problems: string[] = [];
@@ -38,7 +38,8 @@ export async function sitPoses(lab: Lab, seats: readonly string[] | undefined): 
   let next = 1;
   for (const holding of HOLDINGS) {
     for (const seatCase of cases) {
-      const sat = await sitOn(lab, seatCase, { gear: holding.gear, weapon: holding.weapon, fresh: true });
+      const fixture = { ...asked, gear: holding.gear, weapon: holding.weapon, fresh: true };
+      const sat = await sitOn(lab, seatCase, fixture);
       const name = `${holding.name} by the ${seatCase.name}`;
       if (!sat) {
         problems.push(`sit --poses: ${name}: he never sat`);
