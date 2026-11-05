@@ -12,6 +12,7 @@ import { groundHeight } from '../../../src/world/ground';
 import { faceCamera, viewMode } from '../../../src/core/renderer';
 import { readShelterOnSurface } from '../../../src/core/lamps';
 import { COTTAGES, HALL, TERRACE } from '../../../src/data/village';
+import { seenThroughFromAbove } from '../../../src/core/seeThrough';
 import { COTTAGE } from '../../../src/world/villagePlan';
 import { hallSills } from '../../../src/world/village';
 import { drawFrame, type Canvas } from './light';
@@ -214,16 +215,31 @@ function faceSize(hit: THREE.Intersection): string {
   return `${sides[0].toFixed(2)}x${sides[1].toFixed(2)}`;
 }
 
-/** Where a ray meets two faces in one plane first: the plane, and the place in it. */
+/** Whether a ray goes on, to the eye, past a face it met: a roof or a wall the hall thins is seen through from
+ *  above. */
+function seenPast(hit: THREE.Intersection): boolean {
+  const { material } = hit.object as THREE.Mesh;
+  return !Array.isArray(material) && seenThroughFromAbove(material);
+}
+
+/** Where a ray meets two faces in one plane first, as far as it's seen through: the plane, and the place in it. Read
+ *  only at its first face, the ceiling's top and the portico's beam's, in one plane under the roof's ghost, went
+ *  unseen,
+ *  from play, "this surface still flickers". */
 function firstInOnePlane(ray: HallRay, meshes: THREE.Mesh[]): { plane: string; at: THREE.Vector3 } | null {
   const hits = new THREE.Raycaster(ray[0], ray[1], 0, RAY_OFF * 3).intersectObjects(meshes, false);
-  const [first, next] = hits;
-  if (!first || !next || next.distance - first.distance > SAME_PLANE) return null;
-  // (two faces of one turned box meet at its corner, and a ray clipping it meets both: nothing to fight there)
-  if (worldFacing(first).dot(worldFacing(next)) < SAME_FACING) return null;
-  const axis = ray[1].x !== 0 ? 'x' : ray[1].y !== 0 ? 'y' : 'z';
-  const faces = `${faceSize(first)} & ${faceSize(next)}`;
-  return { plane: `${axis}=${first.point[axis].toFixed(2)} (${faces})`, at: first.point };
+  for (let at = 0; at + 1 < hits.length; at++) {
+    const first = hits[at];
+    const next = hits[at + 1];
+    // (two faces of one turned box meet at its corner, and a ray clipping it meets both: nothing to fight there)
+    if (next.distance - first.distance <= SAME_PLANE && worldFacing(first).dot(worldFacing(next)) >= SAME_FACING) {
+      const axis = ray[1].x !== 0 ? 'x' : ray[1].y !== 0 ? 'y' : 'z';
+      const faces = `${faceSize(first)} & ${faceSize(next)}`;
+      return { plane: `${axis}=${first.point[axis].toFixed(2)} (${faces})`, at: first.point };
+    }
+    if (!seenPast(first)) return null;
+  }
+  return null;
 }
 
 /** Whether rays a hair to each side meet two faces in one plane as well: one that lands on the seam between two stones

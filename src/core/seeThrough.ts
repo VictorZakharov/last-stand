@@ -31,6 +31,10 @@ interface Kind {
   /** the room it thins for (least x, least z, most x, most z): only what has it just past it along the view thins whole;
    *  everywhere if not given */
   room?: { value: THREE.Vector4 };
+  /** the door's two jambs (x, z, x, z), for the cone he sees through it to open in it; none if not given */
+  door?: { value: THREE.Vector4 };
+  /** how far that cone is open (a share of what's in it dropped) */
+  doorOn?: { value: number };
 }
 /** what thins whole reaching all of it */
 const ALL_OF_IT = { value: new THREE.Vector2(1e5, 1e6) };
@@ -38,6 +42,17 @@ const ALL_OF_IT = { value: new THREE.Vector2(1e5, 1e6) };
 const ANYWHERE = { value: new THREE.Vector4(-1e5, -1e5, 1e5, 1e5) };
 /** the hall's room, for what thins whole of its walls */
 const HALL_ROOM = { value: new THREE.Vector4(-1e5, -1e5, 1e5, 1e5) };
+/** the hall's door's jambs, and how far what hides the cone he sees through it is thinned (`seeDoorCone`) */
+const HALL_DOOR = { value: new THREE.Vector4() };
+const HALL_DOOR_ON = { value: 0 };
+/** the same for what stands in the room past it, less than none (`seeFade`) */
+const HALL_DOOR_ROOM = { value: 0 };
+/** no door to see through */
+const NO_DOOR = { value: new THREE.Vector4() };
+const DOOR_SHUT = { value: 0 };
+/** how far in from its sides the cone through the door comes in whole, as a share of the way to its middle there: by a
+ *  width on the floor, its edges up the wall were razor sharp and the columns behind them spikes (a review) */
+const DOOR_CONE_SOFT = 0.8;
 /** how far past a place along the view its room is looked for (m): past a wall's thickness */
 const ROOM_PAST = 1.2;
 /** the props' hole, which what fades whole has too */
@@ -57,7 +72,7 @@ const COLUMN_K = { value: new THREE.Vector4(1.0, 1.8, 0, 0.25) };
 const ROOF_K = { value: new THREE.Vector4(1.0, 1.8, 0, -1000) };
 /** how far every roof thins from above, whatever it hides (a share of its pixels; from play, "we should make roof
  *  semi-transparent in this case too, even if hero is not directly under it") */
-export const ROOF_GHOST_ABOVE = 0.62;
+export const ROOF_GHOST_ABOVE = 0.42;
 /** how far a house's gables thin from above: gone, as any ghost of plaster that pale stood as a band over what lay past it */
 const GABLE_GHOST_ABOVE = 1;
 /** how much wider what's built opens from above while it hides him (m at his depth): his own size, he showed alone in a
@@ -65,6 +80,11 @@ const GABLE_GHOST_ABOVE = 1;
 const BUILT_OPENS = 5;
 /** the walls' way back over the last of the way to him */
 const WALL_RAMP = { value: 2 };
+/** how far short of him the hall's walls come back (m): `WALL_RAMP`'s way, and while what's built hides him, none to speak
+ *  of: stood a hand from the side wall with the camera past it, all of that wall lay in the way back, solid over him and
+ *  its courses in black bars, from play, "also this is broken" */
+const HALL_RAMP = { value: 2 };
+const HALL_RAMP_HIDDEN = 0.15;
 /** how far short of him a ghost comes back (m): over 2 m, as the hall's walls do, a post a stride before him stayed whole */
 const GHOST_RAMP = 0.5;
 const kinds = {
@@ -83,9 +103,10 @@ const kinds = {
    *  of its own (`fadeWhole`) */
   // (a wall with the room past it: all that stood short of him thinned, the side walls went to glass, the grass past them
   // showing through, where from over the room they hide nothing of it, from play, "why am I seeing through walls here?")
-  hallFront: { k: HALL_K, minY: PROP_MIN_Y, across: PROP_ACROSS_NOW, whole: { value: 0 }, ramp: WALL_RAMP, blended: true,
-    room: HALL_ROOM },
-  hallRoof: { k: ROOF_K, minY: PROP_MIN_Y, across: PROP_ACROSS_NOW, whole: { value: 0 }, ramp: WALL_RAMP, blended: true },
+  hallFront: { k: HALL_K, minY: PROP_MIN_Y, across: PROP_ACROSS_NOW, whole: { value: 0 }, ramp: HALL_RAMP, blended: true,
+    room: HALL_ROOM, door: HALL_DOOR, doorOn: HALL_DOOR_ON },
+  hallRoof: { k: ROOF_K, minY: PROP_MIN_Y, across: PROP_ACROSS_NOW, whole: { value: 0 }, ramp: WALL_RAMP, blended: true,
+    door: HALL_DOOR, doorOn: HALL_DOOR_ON },
   /** the other roofs: as what's built, and a ghost from above (`ROOF_GHOST_ABOVE`) */
   roof: { k: ROOF_K, minY: PROP_MIN_Y, across: PROP_ACROSS_NOW, whole: { value: 0 }, ramp: WALL_RAMP, blended: true },
   /** a house's gables from above, fainter than its roof: at the roof's own ghost, plaster that pale read as a strip
@@ -94,7 +115,7 @@ const kinds = {
   /** what stands free in the hall (its columns, its banners), which hides as much of the room as of him */
   // (those near the line to him: a column well aside of it hides nothing of him, and all gone, the portico stood on plinths)
   hallColumn: { k: COLUMN_K, minY: PROP_MIN_Y, across: PROP_ACROSS_NOW, whole: { value: 0 }, ramp: { value: 0.4 }, blended: true,
-    reach: { value: new THREE.Vector2(0.8, 1.6) } },
+    reach: { value: new THREE.Vector2(0.8, 1.6) }, door: HALL_DOOR, doorOn: HALL_DOOR_ROOM },
 } satisfies Record<string, Kind>;
 
 /** how far under his middle a hole round him comes in, from none to all (m) */
@@ -131,6 +152,8 @@ let builtThinned = false;
 let heldOpenAlways = false;
 /** whether a harness holds the props' hole shut (a frame drawn as without it) */
 let fadeHeld = false;
+/** whether the hall alone is what's thinned for him now, so what stands free stays whole (`propsLeftWhole`) */
+let propsWhole = false;
 
 /** The fragment side's declarations and `seeFade()`: the share of this fragment to drop (0 where it hides nothing). */
 const SEE_FRAGMENT = `varying vec3 vSeeWp;
@@ -142,8 +165,32 @@ uniform float uSeeWhole;
 uniform float uSeeRamp;
 uniform vec2 uSeeReach;
 uniform vec4 uSeeRoom;
+uniform vec4 uSeeDoor;
+uniform float uSeeDoorOn;
+// (what hides the floor he sees through a door: the floor this fragment hides, in the wedge from him past the door's
+// jambs. Standing at a door the wall over it hid all he could see, from play, "here should open the wall above hero, so
+// user can see in the cone up")
+float seeDoorCone() {
+  float seeDown = cameraPosition.y - vSeeWp.y;
+  if (seeDown <= 0.01) return 0.0;
+  float seeFloorDown = cameraPosition.y - (uSeeMinY - ${FLOOR_CLEAR.toFixed(2)});
+  vec2 seeHidden = cameraPosition.xz + (vSeeWp.xz - cameraPosition.xz) * seeFloorDown / seeDown;
+  vec2 seeTo = seeHidden - uSeeFocus.xz, seeA = uSeeDoor.xy - uSeeFocus.xz, seeB = uSeeDoor.zw - uSeeFocus.xz;
+  float seeTurn = sign(seeA.x * seeB.y - seeA.y * seeB.x);
+  float seeInA = seeTurn * (seeA.x * seeTo.y - seeA.y * seeTo.x) / max(length(seeA), 0.01);
+  float seeInB = seeTurn * (seeTo.x * seeB.y - seeTo.y * seeB.x) / max(length(seeB), 0.01);
+  float seeInRoom = min(min(seeHidden.x - uSeeRoom.x, uSeeRoom.z - seeHidden.x), min(seeHidden.y - uSeeRoom.y, uSeeRoom.w - seeHidden.y));
+  float seeHalfSine = sqrt(max(0.0, (1.0 - dot(seeA, seeB) / max(length(seeA) * length(seeB), 1e-4)) * 0.5));
+  float seeInCone = min(seeInA, seeInB) / max(length(seeTo) * seeHalfSine, 0.05);
+  return smoothstep(-0.05, ${DOOR_CONE_SOFT.toFixed(2)}, seeInCone) * smoothstep(0.0, 0.3, seeInRoom);
+}
 float seeFade() {
-  if ((uSeeK.z <= 0.0 && uSeeWhole <= 0.0) || vSeeWp.y <= uSeeMinY) return 0.0;
+  if (vSeeWp.y <= uSeeMinY) return 0.0;
+  // (a column in the room past the door, its door on told as less than none, shows only as far as the wall before it has
+  // opened: drawn after the wall, it stopped at the depth of what stays whole of it in a hard spike, a review)
+  float seeCone = uSeeDoorOn > 0.0 ? uSeeDoorOn * seeDoorCone()
+    : uSeeDoorOn < 0.0 && vSeeWp.z < uSeeDoor.y ? 1.0 - seeDoorCone() : 0.0;
+  if (uSeeK.z <= 0.0 && uSeeWhole <= 0.0) return seeCone;
   vec3 seeCa = uSeeFocus - cameraPosition;
   float seeL = length(seeCa);
   vec3 seeDir = seeCa / seeL, seeCp = vSeeWp - cameraPosition;
@@ -154,7 +201,7 @@ float seeFade() {
   // this, because I'm front of the wall", "these pillars in hero hall are oddly cut")
   float seeFlat = length(seeCa.xz);
   float seePast = seeFlat > 0.01 ? dot(vSeeWp.xz - uSeeFocus.xz, seeCa.xz) / seeFlat : seeAlong - seeL;
-  if (seeAlong <= 0.0 || seePast >= -uSeeK.w) return 0.0;
+  if (seeAlong <= 0.0 || seePast >= -uSeeK.w) return seeCone;
   // (the offset from the line, its part aside of it, level, counted uSeeAcross times over)
   vec3 seeOff = seeCp - seeDir * seeAlong, seeLevel = vec3(-seeDir.z, 0.0, seeDir.x);
   float seeLevelLength = length(seeLevel);
@@ -176,7 +223,7 @@ float seeFade() {
   // (no hole under his middle: what lies that low hides his feet at most, and a terrace's coping he stood past took a patch
   // of stipple for nothing, a review)
   float seeAtHim = smoothstep(uSeeFocus.y - ${HOLE_UNDER.from.toFixed(2)}, uSeeFocus.y - ${HOLE_UNDER.to.toFixed(2)}, vSeeWp.y);
-  return max((1.0 - smoothstep(uSeeK.x, uSeeK.y, seeR)) * uSeeK.z * seeAtHim, seeWhole);
+  return max(max((1.0 - smoothstep(uSeeK.x, uSeeK.y, seeR)) * uSeeK.z * seeAtHim, seeWhole), seeCone);
 }`;
 
 function bindUniforms(uniforms: Record<string, THREE.IUniform>, kind: keyof typeof kinds): void {
@@ -189,6 +236,8 @@ function bindUniforms(uniforms: Record<string, THREE.IUniform>, kind: keyof type
   uniforms.uSeeRamp = u.ramp;
   uniforms.uSeeReach = (u as Kind).reach ?? ALL_OF_IT;
   uniforms.uSeeRoom = (u as Kind).room ?? ANYWHERE;
+  uniforms.uSeeDoor = (u as Kind).door ?? NO_DOOR;
+  uniforms.uSeeDoorOn = (u as Kind).doorOn ?? DOOR_SHUT;
 }
 
 /** What a material dissolves by, as WebGPU reads it off the material (`SeeThrough`, core/shaderPorts.ts `seeMask`):
@@ -202,6 +251,8 @@ export interface SeeThrough {
   ramp: { value: number };
   reach?: { value: THREE.Vector2 };
   room?: { value: THREE.Vector4 };
+  door?: { value: THREE.Vector4 };
+  doorOn?: { value: number };
   blended?: boolean;
   /** draws only what's left whole of it, for its depth (`depthOfWhatStaysWhole`) */
   wholeOnly?: boolean;
@@ -273,6 +324,13 @@ function thinByBlending(shader: { fragmentShader: string }): void {
 export const thinsByBlending = (material: THREE.Material): boolean =>
   (material as { seeThrough?: SeeThrough }).seeThrough?.blended === true;
 
+/** Whether `material` is seen through from above whatever it hides: a roof, or the hall's walls. A cottage's walls and the
+ *  palisade blend too, but only open round him while they hide him. */
+export const seenThroughFromAbove = (material: THREE.Material): boolean => {
+  const k = (material as { seeThrough?: SeeThrough }).seeThrough?.k;
+  return k === ROOF_K || k === HALL_K;
+};
+
 /** What three sorts a list's blended things by. */
 interface Sorted {
   groupOrder: number; renderOrder: number; z: number; id: number; material: THREE.Material; object: THREE.Object3D;
@@ -318,9 +376,64 @@ export function hideHallColumns(hidden: boolean): void {
   for (const material of thinningWhole.get('hallColumn') ?? []) material.visible = !hidden;
 }
 
-/** The hall's room told to what thins whole of its walls. */
-export function hallRoomIs(room: THREE.Vector4): void {
+/** The hall's room told to what thins whole of its walls, and its door's jambs (x, z, x, z). */
+export function hallRoomIs(room: THREE.Vector4, door: THREE.Vector4): void {
   HALL_ROOM.value.copy(room);
+  hallRoomKept.copy(room);
+  HALL_DOOR.value.copy(door);
+}
+
+/** the hall's room as told, while what thins whole of its walls may be told to thin for anywhere */
+const hallRoomKept = new THREE.Vector4();
+
+/** Whether the hall's walls thin wherever they stand before him, or only over its room. Stood outside it, past a wall from
+ *  the camera, that wall has no room past it and stayed whole, and hid him, from play, "and here cannot see hero". */
+export function hallThinsAnywhere(anywhere: boolean): void {
+  HALL_ROOM.value.copy(anywhere && !roomAlways ? ANYWHERE.value : hallRoomKept);
+}
+
+/** whether a harness holds the hall's walls to thinning over its room alone, as they did */
+let roomAlways = false;
+
+/** For a harness (tools/lab): the hall's walls thinning over its room alone and coming back over the last 2 m to him,
+ *  as they did. */
+export function holdHallRoomAlways(held: boolean): void {
+  roomAlways = held;
+}
+
+/** How far what hides the floor he sees through the hall's door is thinned (0: not at all). */
+export function openThroughDoor(share: number): void {
+  HALL_DOOR_ON.value = doorHeldShut ? 0 : share;
+  HALL_DOOR_ROOM.value = -HALL_DOOR_ON.value;
+}
+
+/** How far the cone through the hall's door is open now. */
+export const doorConeOpen = (): number => HALL_DOOR_ON.value;
+
+/** whether a harness holds the cone through the hall's door shut, as it was */
+let doorHeldShut = false;
+
+/** For a harness (tools/lab): the cone through the hall's door shut, as it was. */
+export function holdDoorShut(held: boolean): void {
+  doorHeldShut = held;
+  if (held) {
+    HALL_DOOR_ON.value = 0;
+    HALL_DOOR_ROOM.value = 0;
+  }
+}
+
+/** Whether what stands free stays whole, while the hall alone is what's thinned for him: thinned too, the terrace's coping
+ *  stood in dots across the frame, over the hall's foot, for hiding nothing of him, from play, "also this is broken". */
+export function propsLeftWhole(whole: boolean): void {
+  propsWhole = whole && !propsThinnedHeld;
+}
+
+/** whether a harness has what stands free thin while the hall alone is thinned for him, as it did */
+let propsThinnedHeld = false;
+
+/** For a harness (tools/lab): what stands free thinned while the hall alone is thinned for him, as it was. */
+export function holdPropsThinned(held: boolean): void {
+  propsThinnedHeld = held;
 }
 
 /** How two things that thin by blending are ordered: in their turns, each back to front by the middle of what it draws.
@@ -477,7 +590,7 @@ export type FadesWhole = 'hallFront' | 'hallRoof' | 'hallColumn';
 /** How much of what's before the hero `kind` thins by a share of its own, a whole wall's rather than a hole round him. */
 export function fadeWhole(kind: FadesWhole, share: number): void {
   kinds[kind].whole.value = share;
-  const letGo = share >= DEPTH_LET_GO;
+  const letGo = share >= DEPTH_LET_GO || ((kind === 'hallFront' || kind === 'hallRoof') && HALL_DOOR_ON.value > 0);
   for (const material of thinningWhole.get(kind) ?? []) material.depthWrite = !letGo;
   (wholeDepths.get(kind) ?? []).forEach((mesh, at) => {
     mesh.visible = letGo || at === 0;
@@ -518,6 +631,7 @@ export function updateSeeThrough(x: number, y: number, z: number, props: number,
   // (from above alone, what's built: over the shoulder the camera is on his side of it)
   const built = builtThinned ? strength : strength * top;
   const opening = openHeld ?? builtOpen;
+  HALL_RAMP.value = WALL_RAMP.value + (HALL_RAMP_HIDDEN - WALL_RAMP.value) * (roomAlways ? 0 : builtOpen);
   const wider = opening * top * BUILT_OPENS;
   // (only while it hides him: a hole his own size all the time thinned the wall he stood beside, hiding nothing of him,
   // and a shutter thinned there, its depth written, held back the wall behind it, the grass past both showing through,
@@ -530,7 +644,7 @@ export function updateSeeThrough(x: number, y: number, z: number, props: number,
   for (const material of [...(thinningWhole.get('roof') ?? []), ...(thinningWhole.get('gable') ?? [])]) {
     material.depthWrite = roofDepthHeld || kinds.roof.whole.value < DEPTH_LET_GO;
   }
-  kinds.prop.whole.value = fadeHeld ? 0 : (openHeld ?? open) * GHOST_WHILE_HIDDEN * props;
+  kinds.prop.whole.value = fadeHeld || propsWhole ? 0 : (openHeld ?? open) * GHOST_WHILE_HIDDEN * props;
   kinds.propFoot.whole.value = kinds.prop.whole.value;
   PROP_ACROSS_NOW.value = acrossHeld ?? PROP_ACROSS.close + (PROP_ACROSS.top - PROP_ACROSS.close) * top;
 }

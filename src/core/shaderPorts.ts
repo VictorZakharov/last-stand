@@ -113,17 +113,36 @@ function madeFrom(material: THREE.ShaderMaterial, port: (t: Tsl, u: Record<strin
 const ALL_THE_WAY = new THREE.Vector2(1e5, 1e6);
 /** no room to thin for, for a kind that gives none */
 const EVERYWHERE = new THREE.Vector4(-1e5, -1e5, 1e5, 1e5);
+/** no door to see through, for a kind that gives none */
+const NO_DOOR = new THREE.Vector4();
 
 /** A kind's see-through values as nodes. */
-interface SeeNodes { focus: N; k: N; minY: N; across: N; whole: N; ramp: N; reach: N; room: N }
+interface SeeNodes { focus: N; k: N; minY: N; across: N; whole: N; ramp: N; reach: N; room: N; door: N; doorOn: N }
 
 /** How much of a fragment at `world` to drop where it stands between the camera and the hero, as `seeFade()` has it
  *  (core/seeThrough.ts), by the hole and floor `see` reads (each a node of the `SeeThrough`'s values) */
 export function seeFade(world: N, see: SeeNodes): N {
   const { wgslFn, cameraPosition } = tsl as any;
   return wgslFn(`fn seeFade(wp: vec3f, eye: vec3f, focus: vec3f, k: vec4f, minY: f32, across: f32, whole: f32,
-    ramp: f32, reach: vec2f, room: vec4f) -> f32 {
-    if ((k.z <= 0.0 && whole <= 0.0) || wp.y <= minY) { return 0.0; }
+    ramp: f32, reach: vec2f, room: vec4f, door: vec4f, doorOn: f32) -> f32 {
+    if (wp.y <= minY) { return 0.0; }
+    var cone = 0.0;
+    let down = eye.y - wp.y;
+    if (doorOn != 0.0 && down > 0.01) {
+      let hidden = eye.xz + (wp.xz - eye.xz) * (eye.y - (minY - 0.12)) / down;
+      let to = hidden - focus.xz;
+      let a = door.xy - focus.xz;
+      let b = door.zw - focus.xz;
+      let turn = sign(a.x * b.y - a.y * b.x);
+      let inA = turn * (a.x * to.y - a.y * to.x) / max(length(a), 0.01);
+      let inB = turn * (to.x * b.y - to.y * b.x) / max(length(b), 0.01);
+      let inHall = min(min(hidden.x - room.x, room.z - hidden.x), min(hidden.y - room.y, room.w - hidden.y));
+      let halfSine = sqrt(max(0.0, (1.0 - dot(a, b) / max(length(a) * length(b), 1e-4)) * 0.5));
+      let inCone = min(inA, inB) / max(length(to) * halfSine, 0.05);
+      let shape = smoothstep(-0.05, 0.8, inCone) * smoothstep(0.0, 0.3, inHall);
+      if (doorOn > 0.0) { cone = doorOn * shape; } else if (wp.z < door.y) { cone = 1.0 - shape; }
+    }
+    if (k.z <= 0.0 && whole <= 0.0) { return cone; }
     let ca = focus - eye;
     let l = length(ca);
     let dir = ca / l;
@@ -131,7 +150,7 @@ export function seeFade(world: N, see: SeeNodes): N {
     let along = dot(cp, dir);
     let flat = length(ca.xz);
     let past = select(along - l, dot(wp.xz - focus.xz, ca.xz) / max(flat, 1e-6), flat > 0.01);
-    if (along <= 0.0 || past >= -k.w) { return 0.0; }
+    if (along <= 0.0 || past >= -k.w) { return cone; }
     let off = cp - dir * along;
     let level = vec3f(-dir.z, 0.0, dir.x);
     let levelLength = length(level);
@@ -144,7 +163,7 @@ export function seeFade(world: N, see: SeeNodes): N {
     let thinned = whole * (1.0 - smoothstep(-k.w - ramp, -k.w, past)) * (1.0 - smoothstep(reach.x, reach.y, floorOff))
       * smoothstep(0.0, 0.3, inRoom);
     let atHim = smoothstep(focus.y - 0.2, focus.y + 0.1, wp.y);
-    return max((1.0 - smoothstep(k.x, k.y, r)) * k.z * atHim, thinned);
+    return max(max((1.0 - smoothstep(k.x, k.y, r)) * k.z * atHim, thinned), cone);
   }`)({ wp: world, eye: cameraPosition, ...see });
 }
 
@@ -167,6 +186,8 @@ export function seeUniforms(uniforms: Record<string, { value: unknown }>): SeeNo
     ramp: reference('value', 'float', uniforms.uSeeRamp),
     reach: reference('value', 'vec2', uniforms.uSeeReach),
     room: reference('value', 'vec4', uniforms.uSeeRoom),
+    door: reference('value', 'vec4', uniforms.uSeeDoor),
+    doorOn: reference('value', 'float', uniforms.uSeeDoorOn),
   };
 }
 
@@ -228,6 +249,8 @@ function seeOfKind(of: SeeThrough): SeeNodes {
     ramp: uniform(0).setGroup(renderGroup).onRenderUpdate(() => of.ramp.value),
     reach: uniform(new THREE.Vector2()).setGroup(renderGroup).onRenderUpdate(() => of.reach?.value ?? ALL_THE_WAY),
     room: uniform(new THREE.Vector4()).setGroup(renderGroup).onRenderUpdate(() => of.room?.value ?? EVERYWHERE),
+    door: uniform(new THREE.Vector4()).setGroup(renderGroup).onRenderUpdate(() => of.door?.value ?? NO_DOOR),
+    doorOn: uniform(0).setGroup(renderGroup).onRenderUpdate(() => of.doorOn?.value ?? 0),
   };
   seeKinds.set(of, nodes);
   return nodes;

@@ -169,6 +169,15 @@ stood behind a portico's column, the column shows over the wall past it (the sha
 without the columns); stood with a capital at the edge of what thins round him, the frame on the capital's top doesn't
 change with the shaft under it taken out. `--canary` draws the columns in with the walls and takes their depth away.
 
+`farWallInFog` (`page/villageFog.ts`, a review): from the same corner, the ground seen through the roof and the ghost of the wall past it, by how far green stands over blue on it, on average; canary: that wall's ghost read by the rays, as it was, a strip of grass across the roof.
+
+`roofReadsAsOne` (`page/villageFog.ts`, from play: "why we cut off a portion / triangle ?"): stood at each cottage's back corner, the
+ground past its back wall seen through its roof, over 3 m from him, lies in the fog, read by the share that's plainly green; `--canary`
+reads it by the rays, as it was. `doorConeOpens`, `heroSeenPastHall`, `noDotsBesideHall` (`page/villageHallOpens.ts`): at the hall's door
+the floor he sees through it shows through the wall over it and the wall aside stays ("here should open the wall above hero"); past its
+side wall from the camera he shows through it ("and here cannot see hero"); while the hall alone is thinned for him what stands free
+stays whole ("also this is broken": the terrace's coping in dots). Each `--canary` holds it as it was.
+
 `fogUnderEaves` (`page/villageFog.ts`, from play: "and here should be all grey, right ?"): stood beside a cottage, the
 ground under its far eaves, past its wall, holds no plainly green pixel. `--canary` lets the fog off under the eaves.
 

@@ -5,7 +5,7 @@
 // the one he's near, E using it.
 import * as THREE from 'three';
 import { seeFrom, sightWalls } from '../core/sight';
-import { fadeWhole, ROOF_GHOST_ABOVE } from '../core/seeThrough';
+import { fadeWhole, hallThinsAnywhere, openThroughDoor, propsLeftWhole, ROOF_GHOST_ABOVE } from '../core/seeThrough';
 import { G } from '../state';
 import { RUN } from '../data/balance';
 import { VILLAGE_OBJECTS, YARD, worldToYard, type VillageObject } from '../data/village';
@@ -339,6 +339,20 @@ function hallInside(dt: number): void {
   const deep = THREE.MathUtils.clamp((HALL.door - p.pos.z) / WALL_DEEP, 0, 1);
   const wallGhost = CUT_AWAY_GHOST + (DEEP_GHOST - CUT_AWAY_GHOST) * deep;
   frontFade = THREE.MathUtils.damp(frontFade, frontAway ? wallGhost : 0, CUT_AWAY_FADE, dt);
+  // (the hall alone hiding him from outside it: its walls thin wherever they stand before him; let go of only once they're
+  // back, or a wall still thinned would come back at a stroke)
+  if (inside || under) thinsAnywhere = false;
+  else if (roofAway) thinsAnywhere = true;
+  else if (frontFade < CUT_AWAY_NONE) thinsAnywhere = false;
+  hallThinsAnywhere(thinsAnywhere);
+  propsLeftWhole(roofAway);
+  // (stood at the door, the wall over it hides what he sees through it: it's past him, so it doesn't thin of itself)
+  const offDoor = p.pos.z - HALL.inFront;
+  const atDoor = lobby && view === 'top' && Math.abs(p.pos.x - TERRACE.x) < HALL.half
+    ? (1 - THREE.MathUtils.smoothstep(offDoor, DOOR_CONE.near, DOOR_CONE.far)) * THREE.MathUtils.smoothstep(offDoor, DOOR_CONE.inFrom, DOOR_CONE.in)
+    : 0;
+  doorCone = THREE.MathUtils.damp(doorCone, atDoor * DOOR_CONE.ghost, CUT_AWAY_FADE, dt);
+  openThroughDoor(doorCone < CUT_AWAY_NONE ? 0 : doorCone);
   // (a ghost from above whatever it hides, as every roof is: `ROOF_GHOST_ABOVE`)
   const roofWanted = roofAway ? ROOF_GHOST : lobby && view === 'top' ? ROOF_GHOST_ABOVE : 0;
   roofFade = THREE.MathUtils.damp(roofFade, roofWanted, CUT_AWAY_FADE, dt);
@@ -368,6 +382,13 @@ const WALL_DEEP = 6;
 const ROOF_GHOST = 1;
 /** how far what stands free in the hall thins, before him and from above (a share of its pixels) */
 const COLUMN_GHOST = 0.55;
+/** the cone he sees through the hall's door: how far from the door's inner face it's open whole and shut (m, out from it),
+ *  from how far in it's shut and open whole, and what share of what hides it is thinned */
+const DOOR_CONE = { near: 2.6, far: 4, inFrom: -0.5, in: -0.1, ghost: 0.85 };
+/** how far that cone is open now */
+let doorCone = 0;
+/** whether the hall's walls thin wherever they stand before him now */
+let thinsAnywhere = false;
 const _door = new THREE.Box3(), _frustum = new THREE.Frustum(), _viewProj = new THREE.Matrix4();
 const _look = new THREE.Vector3();
 /** the heights on him the camera's line runs to (m), and the points read along each */

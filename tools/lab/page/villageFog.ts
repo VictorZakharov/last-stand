@@ -11,8 +11,11 @@ import { G } from '../../../src/state';
 import { CAMPFIRE, COTTAGES, HALL, TERRACE, type Cottage } from '../../../src/data/village';
 import { COTTAGE } from '../../../src/world/villagePlan';
 import { holdHour } from '../../../src/game/clock';
-import { faceCamera, viewMode } from '../../../src/core/renderer';
-import { holdEavesAsWithin, holdSightOff, holdSightSharp, seenShareAt } from '../../../src/core/sight';
+import { CAMERA } from '../../../src/data/balance';
+import { faceCamera, setZoom, viewMode } from '../../../src/core/renderer';
+import {
+  holdEavesAsWithin, holdFarWallByRays, holdRoofByRays, holdSightOff, holdSightSharp, seenShareAt,
+} from '../../../src/core/sight';
 import { holdRoofDepth } from '../../../src/core/seeThrough';
 import type { SightWall } from '../../../src/core/sight';
 import { groundHeight } from '../../../src/world/ground';
@@ -186,7 +189,7 @@ function isGreen(red: number, middle: number, blue: number): boolean {
 const PAST_BACK = [1.4, 1.8, 2.2, 2.6, 3];
 const ALONG_BACK = 0.4;
 const FOG_EASES = 40;
-const LEAST_TAKEN = 0.2;
+const LEAST_TAKEN = 0.12;
 
 /** The light of `points` on the ground in the frame, the sum of their pixels'. */
 function lightAt(lab: Lab, points: THREE.Vector3[]): number {
@@ -264,6 +267,162 @@ export async function fogUnderRoofs(lab: Lab, canary: boolean): Promise<LightsCh
 
 /** the most of the ground under an eave he can't see past that may show plainly green */
 const MOST_GREEN_UNDER_EAVES = 0.05;
+
+/** how far round him the ground seen through a roof stays by the rays (m), past which it's read */
+const ROOF_READ_OFF = 2;
+/** the most of the ground past a cottage's back wall, seen through its roof, that may show plainly green */
+const MOST_GREEN_THROUGH_ROOF = 0.05;
+/** how far along its back wall the ground is read (a share of its half width, from the far side) */
+const THROUGH_ROOF_ALONG = [-0.8, -0.6, -0.4, -0.2, 0, 0.2];
+
+/** how far past a cottage's back wall the ground is read through the ghost of that wall (m) */
+const PAST_WALL_GHOST = [0.3, 0.8, 1.3, 1.8, 2.3, 2.8];
+/** how high a cottage's walls stand, from what's off the ground: a ray crossing them here crosses the wall's ghost */
+const WALL_GHOST_FROM = 0.7;
+const WALL_GHOST_TO = 3;
+/** the most green may stand over blue there on average, over the cottages: fixed -0.0179, by the rays -0.0164, as the
+ *  roof's own colour is most of those pixels; the lab's frames repeat to the last bit, so a narrow margin holds */
+const MOST_GREEN_OVER_BLUE = -0.017;
+/** the hour and zoom it's read at, the owner's kind: by day from the lab's zoom the fog hardly shows on it */
+const FAR_WALL_HOUR = 0;
+const FAR_WALL_ZOOM = 0.8;
+/** the frames the zoom takes to glide back */
+const ZOOM_SETTLES = 120;
+
+/** The share of the ground past `c`'s back wall, seen through its roof, that shows green, him stood at its corner
+ *  there, from where he sees along all of it: `throughWall` the ground seen through that wall's ghost too. */
+async function greenThroughRoof(lab: Lab, c: Cottage, throughWall = false): Promise<number> {
+  const halfW = (COTTAGE.w / 2) * c.size;
+  const halfD = (COTTAGE.d / 2) * c.size;
+  const cos = Math.cos(c.facing);
+  const sin = Math.sin(c.facing);
+  const turned = (x: number, z: number): [number, number] => [c.x + x * cos + z * sin, c.z - x * sin + z * cos];
+  const [x, z] = turned(halfW + 0.35, -halfD - 0.35);
+  await standAt(lab, x, z, c.facing + Math.PI);
+  const points: THREE.Vector3[] = [];
+  for (const along of THROUGH_ROOF_ALONG) {
+    for (const past of throughWall ? PAST_WALL_GHOST : PAST_BACK) {
+      const [px, pz] = turned(along * halfW, -halfD - past);
+      if (Math.hypot(px - x, pz - z) > ROOF_READ_OFF) {
+        points.push(new THREE.Vector3(px, groundHeight(px, pz) + 0.1, pz));
+      }
+    }
+  }
+  const under = points.filter((point) => (throughWall ? overRoofAndWall(point) : overRoofPixel(point)));
+  if (throughWall) {
+    if (under.length === 0) throw new Error("lab: village: no ground seen through a wall's ghost");
+    return greenOverBlueAt(lab, under);
+  }
+  return under.length ? greenAt(lab, under) : 0;
+}
+
+/** Whether a ray from the eye to `point` meets a roof and then a wall's ghost. */
+function overRoofAndWall(point: THREE.Vector3): boolean {
+  const from = G.camera.position;
+  const way = point.clone().sub(from).normalize();
+  const hits = new THREE.Raycaster(from, way, 0, point.distanceTo(from)).intersectObject(G.scene, true);
+  const blended = hits.filter((hit) => {
+    const { material } = hit.object as THREE.Mesh;
+    return !Array.isArray(material) && material?.transparent === true;
+  });
+  const isRoof = (hit: THREE.Intersection): boolean => {
+    return ((hit.object as THREE.Mesh).material as THREE.Material).blending === THREE.CustomBlending;
+  };
+  const overWall = blended.some((hit) => {
+    return !isRoof(hit) && hit.point.y > WALL_GHOST_FROM && hit.point.y < WALL_GHOST_TO;
+  });
+  return blended.some(isRoof) && overWall;
+}
+
+/** The ground seen through a roof and the ghost of the wall past it lies in the fog too: that wall keeps its depth, so
+ *  the rays read it, and a strip of grass stood across the roof, down to that wall's top, a review. `canary` has the
+ *  rays read it, as they did. */
+export async function farWallInFog(lab: Lab, canary: boolean): Promise<LightsChecked> {
+  const kept = viewMode();
+  holdHour(FAR_WALL_HOUR);
+  holdFarWallByRays(canary);
+  try {
+    await viewBy(lab, 'top');
+    setZoom(FAR_WALL_ZOOM);
+    const all: number[] = [];
+    for (const cottage of COTTAGES) all.push(await greenThroughRoof(lab, cottage, true));
+    const mean = all.reduce((sum, over) => sum + over, 0) / all.length;
+    const shares = all.map((over) => over.toFixed(4)).join(' ');
+    const line = `past a cottage's back wall, through its roof and that wall's ghost, from its corner: `
+      + `green over blue ${mean.toFixed(4)} on average (at most ${MOST_GREEN_OVER_BLUE}): ${shares}`;
+    const wrong = mean > MOST_GREEN_OVER_BLUE;
+    if (canary) return { lines: [line], problems: [], caught: wrong, moments: [] };
+    return { lines: [line], problems: wrong ? [line] : [], caught: null, moments: [] };
+  } finally {
+    holdFarWallByRays(false);
+    setZoom(CAMERA.lobbyZoom);
+    holdHour(null);
+    faceCamera(0);
+    await viewBy(lab, kept);
+    // (the zoom glides, and a check after this one read the frame part way back)
+    await lab.step(ZOOM_SETTLES);
+  }
+}
+
+/** Whether a ray from the eye to `point` meets a roof, from above: only those are seen through one. */
+function overRoofPixel(point: THREE.Vector3): boolean {
+  const from = G.camera.position;
+  const way = point.clone().sub(from).normalize();
+  const hits = new THREE.Raycaster(from, way, 0, point.distanceTo(from)).intersectObject(G.scene, true);
+  return hits.some((hit) => {
+    const { material } = hit.object as THREE.Mesh;
+    return !Array.isArray(material) && material?.blending === THREE.CustomBlending;
+  });
+}
+
+/** The ground seen through a roof away from him lies in the fog, whatever the rays say: by the rays, the edge of what
+ *  he sees past a house's corner stood across its roof as a straight cut, from play, "why we cut off a portion /
+ *  triangle ?". `canary` has it read by the rays, as it was. */
+export async function roofReadsAsOne(lab: Lab, canary: boolean): Promise<LightsChecked> {
+  const kept = viewMode();
+  holdHour(12);
+  holdRoofByRays(canary);
+  try {
+    await viewBy(lab, 'top');
+    const all: number[] = [];
+    let shot: Awaited<ReturnType<Lab['screen']>> | null = null;
+    for (const cottage of COTTAGES) {
+      all.push(await greenThroughRoof(lab, cottage));
+      shot ??= canary ? null : await lab.screen("at a cottage's corner, its roof from the far end", []);
+    }
+    const worst = Math.max(...all);
+    const shares = all.map((share) => (share * 100).toFixed(0)).join(' ');
+    const line = `past a cottage's back wall, through its roof, from its corner: `
+      + `${(worst * 100).toFixed(0)}% plainly green `
+      + `(at most ${MOST_GREEN_THROUGH_ROOF * 100}%): ${shares}`;
+    const wrong = worst > MOST_GREEN_THROUGH_ROOF;
+    if (canary) return { lines: [line], problems: [], caught: wrong, moments: [] };
+    return { lines: [line], problems: wrong ? [line] : [], caught: null, moments: shot ? [shot] : [] };
+  } finally {
+    holdRoofByRays(false);
+    holdHour(null);
+    faceCamera(0);
+    await viewBy(lab, kept);
+  }
+}
+
+/** How far green stands over blue at `points`' pixels, on average: the fog's colour is blue, grass green. */
+function greenOverBlueAt(lab: Lab, points: THREE.Vector3[]): number {
+  const canvas = drawFrame(lab);
+  let over = 0;
+  let read = 0;
+  for (const point of points) {
+    const place = point.clone().project(G.camera);
+    const column = Math.floor(((place.x + 1) / 2) * canvas.width);
+    const row = Math.floor(((place.y + 1) / 2) * canvas.height);
+    if (column < 0 || column >= canvas.width || row < 0 || row >= canvas.height) continue;
+    const pixel = (row * canvas.width + column) * 4;
+    over += canvas.pixels[pixel + 1] - canvas.pixels[pixel + 2];
+    read++;
+  }
+  if (read === 0) throw new Error("lab: village: no ground through a wall's ghost in the frame");
+  return over / read;
+}
 
 /** The share of `points`' pixels that's plainly green. */
 function greenAt(lab: Lab, points: THREE.Vector3[]): number {

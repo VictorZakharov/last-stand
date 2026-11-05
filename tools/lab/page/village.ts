@@ -63,7 +63,10 @@ import { candleLightsNear, chestOpensNear } from './villageChestLid';
 import { wallingAligned } from './villageWalling';
 import { windowsLetSunIn } from './villageWindows';
 import { grassRingsGentle, grassRingsUnseen } from './villageGrassRing';
-import { fogUnderEaves, fogUnderRoofs, firesStillInFog, fogHoldsSteady, leavesInFog } from './villageFog';
+import {
+  fogUnderEaves, fogUnderRoofs, firesStillInFog, fogHoldsSteady, leavesInFog, roofReadsAsOne, farWallInFog,
+} from './villageFog';
+import { doorConeOpens, heroSeenPastHall, noDotsBesideHall } from './villageHallOpens';
 import { columnsStayGhosts, portalOverAll, wallsPastHimWhole } from './villageSeenPast';
 import { startSpots, topKeepsHim } from './villageStart';
 import { wornStaysOn } from './villageWorn';
@@ -159,6 +162,11 @@ export async function village(lab: Lab, options: VillageOptions): Promise<Report
     leavesInFog: () => leavesInFog(lab, options.canary),
     fogUnderRoofs: () => fogUnderRoofs(lab, options.canary),
     fogUnderEaves: () => fogUnderEaves(lab, options.canary),
+    roofReadsAsOne: () => roofReadsAsOne(lab, options.canary),
+    farWallInFog: () => farWallInFog(lab, options.canary),
+    doorConeOpens: () => doorConeOpens(lab, options.canary),
+    heroSeenPastHall: () => heroSeenPastHall(lab, options.canary),
+    noDotsBesideHall: () => noDotsBesideHall(lab, options.canary),
     wallsPastHimWhole: () => wallsPastHimWhole(lab, options.canary),
     portalOverAll: () => portalOverAll(lab, options.canary),
     columnsStayGhosts: () => columnsStayGhosts(lab, options.canary),

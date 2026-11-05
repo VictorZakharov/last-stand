@@ -103,7 +103,7 @@ function differs(a: Canvas, b: Canvas, at: number): boolean {
 }
 
 /** The pixels he covers, read with the village hidden (no prop before him, no shadow of his on it). */
-function hisPixels(lab: Lab): number[] {
+export function hisPixels(lab: Lab): number[] {
   const village = G.arena.groupOf('village');
   village.visible = false;
   const { him, none } = withAndWithoutHim(lab);
@@ -116,7 +116,7 @@ function hisPixels(lab: Lab): number[] {
 }
 
 /** The share of `pixels` where he shows in the frame as it stands. */
-function shownOf(lab: Lab, pixels: number[]): number {
+export function shownOf(lab: Lab, pixels: number[]): number {
   const { him, none } = withAndWithoutHim(lab);
   return pixels.filter((at) => differs(him, none, at)).length / Math.max(pixels.length, 1);
 }

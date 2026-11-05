@@ -1194,6 +1194,17 @@ function seenOnly(colour: any, depthNode: any): any {
   let open = seenAlong(across);
   for (const tap of [-1, -0.75, -0.5, -0.25, 0.25, 0.5, 0.75, 1]) open = open.add(seenAlong(across.add(aside.mul(tap))));
   open = open.div(9);
+  // (what's seen through a roof, away from him, isn't by the rays: `seenColour`)
+  const eyeWorld = inverse.mul(vec4(clip.x, clip.y, 0, 1));
+  const alongView = place.xz.sub(eyeWorld.xz.div(eyeWorld.w));
+  const pastIt = place.xz.add(alongView.div(max(length(alongView), 0.001)).mul(SIGHT_LOOK.pastFarWall));
+  const noHousePast = smoothstep(0.6, 0.9, texture(SIGHT.tSightRoofs.value, pastIt.div(ROOFS_HALF * 2).add(0.5)).r).oneMinus();
+  const offGround = smoothstep(SIGHT_LOOK.groundFrom, SIGHT_LOOK.groundTo, place.y);
+  const farWall = offGround.mul(noHousePast).mul(reference('value', 'float', SIGHT.uSightFarWall));
+  const throughRoof = smoothstep(0.9, 0.99, min(colour.a, 1)).oneMinus()
+    .mul(smoothstep(SIGHT_LOOK.roofNear, SIGHT_LOOK.roofFar, away)).mul(reference('value', 'float', SIGHT.uSightRoofOne))
+    .mul(max(offGround.oneMinus(), farWall));
+  open = open.mul(throughRoof.oneMinus());
   const inIt = step(sealed.x, place.x).mul(step(place.x, sealed.z)).mul(step(sealed.y, place.z)).mul(step(place.z, sealed.w));
   const shut = inIt.mul(shutBy);
   const over = mix(SIGHT_LOOK.over, SIGHT_LOOK.overSealed, shut);
@@ -1209,8 +1220,10 @@ function seenOnly(colour: any, depthNode: any): any {
   const keptShut = pressed.mul(SIGHT_LOOK.sealed).add(SIGHT_LOOK.floor * SIGHT_LOOK.sealedFloor);
   const kept = mix(keptOpen, keptShut, shut);
   const fogged = mix(colour.rgb.mul(kept).div(max(light, 0.001)), vec3(...SIGHT_LOOK.tint).mul(kept), SIGHT_LOOK.grey);
-  const letOff = mix(1, min(colour.a, 1), smoothstep(0.6, 0.9, roof));
-  return vec4(mix(colour.rgb, fogged, unseen.mul(letOff)), max(colour.a, 1));
+  const letOff = mix(1, min(colour.a, 1), max(smoothstep(0.6, 0.9, roof), throughRoof));
+  const eaves = throughRoof.mul(smoothstep(0.6, 0.9, roof).oneMinus()).mul(on);
+  const shown = mix(colour.rgb, fogged, unseen.mul(letOff));
+  return vec4(mix(shown, vec3(...SIGHT_LOOK.tint).mul(light).mul(SIGHT_LOOK.eaves), eaves), max(colour.a, 1));
 }
 
 /** the light's weights, as the WebGL grade reads an area's and a pixel's */

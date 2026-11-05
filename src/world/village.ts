@@ -80,7 +80,7 @@ const HALL_BANNER = { top: 4.6, off: 0.25, scale: 1.15 };
 const DOOR = { frame: 0.32, set: 0.22, straps: [0.5, 1.7, 2.9], open: 1.45 };
 /** the hall's roof: its ridge over the eaves, its slabs' thickness and overhang, its gables' depth, the ceiling's
  *  planks' thickness and the beams' spacing under it (m) */
-const ROOF = { rise: 2.8, thick: 0.24, over: 0.6, gable: 0.5, ceiling: 0.14, ceilingShort: 0.04, beamGap: 1.6 };
+const ROOF = { rise: 2.8, thick: 0.24, over: 0.6, gable: 0.5, ceiling: 0.14, ceilingShort: 0.04, ceilingDown: 0.03, beamGap: 1.6 };
 /** the braziers on the dais behind the heroes, between their plinths (x, z: the still shadows' lights), their light, and their
  *  slabs against the crypt's (as the selection screen's room has them, world/heroHall.ts: in the portico either side
  *  of the door they stood in the way, "move these inside the hall, behind heroes, like it was before village feature,
@@ -276,7 +276,7 @@ interface Mats {
   freeAshlar: THREE.Material; freeCoping: THREE.Material;
   /** a lamp's plinth, thinned from the ground up */
   footAshlar: THREE.Material;
-  plaster: THREE.Material; gable: THREE.Material; chimney: THREE.Material; timber: THREE.Material; planks: THREE.Material; logs: THREE.Material; roof: THREE.Material;
+  plaster: THREE.Material; gable: THREE.Material; chimney: THREE.Material; timber: THREE.Material; planks: THREE.Material; logs: THREE.Material; roof: THREE.Material; boardRoof: THREE.Material;
   iron: THREE.Material; window: THREE.MeshStandardMaterial; skyPane: THREE.MeshStandardMaterial;
   glass: THREE.MeshStandardMaterial; paper: THREE.Material; pagesLeft: THREE.Material; pagesRight: THREE.Material; pagesEdge: THREE.Material; ribbon: THREE.Material;
   binding: THREE.Material; brass: THREE.Material; lining: THREE.Material; liningInside: THREE.Material; wax: THREE.Material;
@@ -429,6 +429,7 @@ function makeMats(): Mats {
     footAshlar: ashlarStone.clone(),
     gable: undefined as unknown as THREE.Material,
     chimney: undefined as unknown as THREE.Material,
+    boardRoof: undefined as unknown as THREE.Material,
   };
   // (a house's gables thin as its roof does: left whole under the slate's ghost, each one's top edge stood as a pale stripe
   // along the roof's end, from play, "roof geometry little weird here")
@@ -442,6 +443,10 @@ function makeMats(): Mats {
   for (const m of [mats.ashlar, mats.coping, mats.plaster, mats.timber, mats.planks, mats.logs, mats.window, mats.skyPane]) {
     seeThrough(m, 'built');
   }
+  // (the notice board's: no room under it, and a ghost over the lit grass it took the fog of what's seen through a roof, a
+  // hard blue plate over the board, a review)
+  mats.boardRoof = mats.roof.clone();
+  seeThrough(mats.boardRoof, 'built');
   seeThrough(mats.roof, 'roof');
   for (const m of [mats.column, mats.iron, mats.lantern, mats.lanternIron, mats.freeAshlar, mats.freeCoping]) {
     seeThrough(m, 'prop');
@@ -1571,7 +1576,9 @@ function hallRoof(scene: THREE.Object3D, M: Mats, eaves: number, back: number, f
   scene.add(roof);
   // (short of the portico's beam's and the gables' faces, which it shared a plane with: as the view moved, a stripe of it
   // showed through them, from play, "still flickering")
-  block(roof, half * 2, ROOF.ceiling, deep - ROOF.ceilingShort * 2, X, eaves - ROOF.ceiling, mid, M.planks);
+  // (and under their tops: at the beam's own height, the two tops fought from above as the view moved, seen through the
+  // roof's ghost, from play, "this surface still flickers")
+  block(roof, half * 2, ROOF.ceiling, deep - ROOF.ceilingShort * 2, X, eaves - ROOF.ceiling - ROOF.ceilingDown, mid, M.planks);
   for (let z = back + ROOF.beamGap; z < front - 0.5; z += ROOF.beamGap) {
     block(roof, half * 2 - 0.2, 0.32, 0.36, X, eaves - ROOF.ceiling - 0.32, z, M.timber);
   }
@@ -2033,13 +2040,13 @@ function buildCottage(scene: THREE.Object3D, wall: Wall, M: Mats, c: Cottage, rn
   block(g, w + 0.2, 0.5, d + 0.2, 0, 0, 0, M.ashlar);
   const body = block(g, w, h - 0.5, d, 0, 0.5, 0, M.plaster, 1);
   // the frame: posts at the corners and between, a sill and a plate along each face
-  for (const sx of [-1, -0.33, 0.33, 1]) for (const sz of [-1, 1]) block(g, 0.18, h - 0.5, 0.06, sx * (w / 2 - 0.09), 0.5, sz * (d / 2 + 0.02), M.timber);
+  for (const sx of [-1, -0.33, 0.33, 1]) for (const sz of [-1, 1]) block(g, 0.18, h - 0.51, 0.06, sx * (w / 2 - 0.09), 0.5, sz * (d / 2 + 0.02), M.timber);
   // (a sill and a plate stand a hair proud of the posts they cross: in one plane, the two fought where they crossed)
   for (const sz of [-1, 1]) for (const y of [0.5, h - 0.18]) block(g, w + 0.04, 0.16, 0.08, 0, y, sz * (d / 2 + 0.02), M.timber);
   // (each end framed as the faces are, plaster between: one sheet of timber, its whole wall stood black, from play)
   for (const sx of [-1, 1]) {
     const endX = sx * (w / 2 + 0.02);
-    for (const z of [-(d / 2 - 0.09), 0, d / 2 - 0.09]) block(g, 0.06, h - 0.5, 0.18, endX, 0.5, z, M.timber);
+    for (const z of [-(d / 2 - 0.09), 0, d / 2 - 0.09]) block(g, 0.06, h - 0.51, 0.18, endX, 0.5, z, M.timber);
     for (const y of [0.5, h - 0.18]) block(g, 0.08, 0.16, d, endX, y, 0, M.timber);
   }
   // the door and two windows on its face (+z, as it's turned), lit within by night: each its panes set in a timber
@@ -2049,7 +2056,7 @@ function buildCottage(scene: THREE.Object3D, wall: Wall, M: Mats, c: Cottage, rn
     const wx = sx * (w / 2 - 1.2), face = d / 2 + 0.05;
     // (its own uvs: the panes' picture once across its face)
     solid(g, new THREE.BoxGeometry(0.8, 0.7, 0.04), M.window).position.set(wx, 1.7, face);
-    for (const ex of [-1, 1]) block(g, 0.08, 0.86, 0.1, wx + ex * 0.44, 1.27, face + 0.02, M.timber);
+    for (const ex of [-1, 1]) block(g, 0.08, 0.85, 0.1, wx + ex * 0.44, 1.27, face + 0.02, M.timber);
     // (its head proud of the sides it sits over, for the same reason)
     block(g, 0.96, 0.08, 0.12, wx, 2.05, face + 0.02, M.timber);
     // (under the panes: a hand lower, the plaster showed between them and the sill)
@@ -2233,7 +2240,9 @@ function sightOfThePlace(): { walls: SightWall[]; hall: THREE.Vector4; roofs: Si
   // through the wall, because I'm in front of the wall", "this is still flickering")
   const inside = new THREE.Vector4(west + SEALED_INSIDE, HALL.wall + SEALED_INSIDE, east - SEALED_INSIDE, HALL.door - SEALED_INSIDE);
   // (the room the hall's walls thin for: its floor, out to under the portico's beam)
-  hallRoomIs(new THREE.Vector4(inside.x, inside.y, inside.z, COLONNADE.z + 1));
+  hallRoomIs(new THREE.Vector4(inside.x, inside.y, inside.z, COLONNADE.z + 1), new THREE.Vector4(
+    TERRACE.x - HALL.doorHalf, HALL.inFront, TERRACE.x + HALL.doorHalf, HALL.inFront,
+  ));
   return { walls, hall: inside, roofs };
 }
 
@@ -2258,7 +2267,7 @@ function buildNoticeBoard(scene: THREE.Object3D, wall: Wall, M: Mats): void {
   g.rotation.y = NOTICE.facing;
   for (const s of [-1, 1]) block(g, 0.16, 2.6, 0.16, s * 0.9, 0, 0, M.timber);
   const board = block(g, 1.9, 1.1, 0.08, 0, 1.0, 0, M.planks, 0.4);
-  const roof = block(g, 2.3, 0.08, 0.7, 0, 2.55, 0.05, M.roof);
+  const roof = block(g, 2.3, 0.08, 0.7, 0, 2.55, 0.05, M.boardRoof);
   roof.rotation.x = 0.35;
   for (const [x, y, w, h, tilt] of [[-0.5, 1.6, 0.5, 0.6, 0.05], [0.15, 1.5, 0.45, 0.55, -0.08], [0.6, 1.75, 0.4, 0.4, 0.1], [-0.1, 1.15, 0.5, 0.35, 0]]) {
     const note = new THREE.Mesh(new THREE.PlaneGeometry(w, h), M.paper);

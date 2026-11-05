@@ -105,6 +105,9 @@ export const SIGHT = {
    *  and out of it */
   uSightSealed: { value: new THREE.Vector4(1, 1, 0, 0) },
   uSightShut: { value: 0 },
+  /** whether what's seen through a roof away from him is taken as unseen (`seenColour`): 1, or 0 under a harness */
+  uSightRoofOne: { value: 1 },
+  uSightFarWall: { value: 1 },
 };
 
 /** How far past a wall's near face the fog is whole, none of it nearer than `wallFrom` (m): from a wall's line the place
@@ -120,7 +123,7 @@ export const SIGHT = {
  *  walls stayed the brightest thing there (a review). The inside of a building shut to him keeps a share of that, over a
  *  share of the floor: with none it was a pure black mass over him on the terrace, a void (a review). */
 export const SIGHT_LOOK = {
-  wallFrom: 0.05, wall: 0.5, edge: 0.6, edgeAngle: 0.12, over: 3.2, roofs: 5.3, overSealed: 8, overSoft: 0.4,
+  roofNear: 0.8, roofFar: 1.8, pastFarWall: 0.6, eaves: 0.5, groundFrom: 0.4, groundTo: 0.7, wallFrom: 0.05, wall: 0.5, edge: 0.6, edgeAngle: 0.12, over: 3.2, roofs: 5.3, overSealed: 8, overSoft: 0.4,
   floor: 0.022, range: 0.2, knee: 0.5, sealed: 0.25, sealedFloor: 0.35, grey: 0.85,
   tint: [0.72, 0.82, 1] as const,
 };
@@ -149,6 +152,16 @@ export function sightWalls(
 /** The fog held off whatever else asks for it (`lab village --only sightBlacksOut`'s canary). */
 export function holdSightOff(off: boolean): void {
   heldOff = off;
+}
+
+/** For a harness (tools/lab): what's seen through a roof by the rays alone, as it was. */
+export function holdRoofByRays(held: boolean): void {
+  SIGHT.uSightRoofOne.value = held ? 0 : 1;
+}
+
+/** For a harness (tools/lab): a far wall's ghost through a roof read by the rays, as it was. */
+export function holdFarWallByRays(held: boolean): void {
+  SIGHT.uSightFarWall.value = held ? 0 : 1;
 }
 
 /** For a harness (tools/lab): the rays shown as they're cast, at once, as they were (`--only fogHoldsSteady`'s canary). */
@@ -278,7 +291,7 @@ export function aimSight(camera: THREE.Camera): void {
 /** WebGL's pass: `colour` at `uv` as he sees it, in the fog where he can't. */
 export const SIGHT_GLSL = /* glsl */`
   uniform sampler2D tSight; uniform sampler2D tSightDepth; uniform sampler2D tSightRoofs; uniform float uSightOn; uniform vec2 uSightFrom;
-  uniform mat4 uSightInverse; uniform vec4 uSightSealed; uniform float uSightShut;
+  uniform mat4 uSightInverse; uniform vec4 uSightSealed; uniform float uSightShut; uniform float uSightRoofOne; uniform float uSightFarWall;
   float seenAlong(float across, float away) {
     vec3 ray = texture2D(tSight, vec2(across, 0.5)).rgb;
     float nearer = 1.0 - smoothstep(ray.r + ${SIGHT_LOOK.wallFrom.toFixed(2)}, ray.r + ${SIGHT_LOOK.wall.toFixed(2)}, away);
@@ -300,13 +313,30 @@ export const SIGHT_GLSL = /* glsl */`
     float open = 0.0;
     for (int tap = -4; tap <= 4; tap++) open += seenAlong(across + aside * float(tap) * 0.25, away);
     open /= 9.0;
+    // (the ground seen through a roof, away from him, isn't by the rays: the edge of what he sees past a house's corner,
+    // under the far eave, stood across the roof as a straight cut, from play, "why we cut off a portion / triangle?". The
+    // ground, and the far wall's ghost, which keeps its depth, so the rays read it and a strip of bright grass stood across
+    // the roof down to that wall's top, a review; not the near wall: under its eave the wall he sees lay in a band of fog.
+    // The far one has no house past it along the view)
+    vec4 eyeWorld = uSightInverse * vec4(uv * 2.0 - 1.0, -1.0, 1.0);
+    vec2 alongView = place.xz - eyeWorld.xz / eyeWorld.w;
+    vec2 pastIt = place.xz + alongView / max(length(alongView), 0.001) * ${SIGHT_LOOK.pastFarWall.toFixed(2)};
+    float noHousePast = 1.0 - smoothstep(0.6, 0.9, texture2D(tSightRoofs, pastIt / ${(ROOFS_HALF * 2).toFixed(1)} + 0.5).r);
+    float offGround = smoothstep(${SIGHT_LOOK.groundFrom.toFixed(2)}, ${SIGHT_LOOK.groundTo.toFixed(2)}, place.y);
+    float farWall = uSightFarWall * offGround * noHousePast;
+    float throughRoof = uSightRoofOne * (1.0 - smoothstep(0.9, 0.99, under))
+      * smoothstep(${SIGHT_LOOK.roofNear.toFixed(2)}, ${SIGHT_LOOK.roofFar.toFixed(2)}, away)
+      * max(1.0 - offGround, farWall);
+    open *= 1.0 - throughRoof;
     float inIt = step(uSightSealed.x, place.x) * step(place.x, uSightSealed.z)
       * step(uSightSealed.y, place.z) * step(place.z, uSightSealed.w);
     float shut = inIt * uSightShut;
     float over = mix(${SIGHT_LOOK.over.toFixed(2)}, ${SIGHT_LOOK.overSealed.toFixed(2)}, shut);
     float above = smoothstep(over, over + ${SIGHT_LOOK.overSoft.toFixed(2)}, place.y);
     float roof = texture2D(tSightRoofs, place.xz / ${(ROOFS_HALF * 2).toFixed(1)} + 0.5).r;
-    float letOff = mix(1.0, under, smoothstep(0.6, 0.9, roof));
+    // (read through a roof, by what's under it, eaves and all: fogged whole past its walls, the roof's own colour went
+    // with it, and its eaves stood round it as a dark plate, a review)
+    float letOff = mix(1.0, under, max(smoothstep(0.6, 0.9, roof), throughRoof));
     if (inIt <= 0.0) {
       above *= min(roof * 2.0, 1.0) * (1.0 - smoothstep(${SIGHT_LOOK.roofs.toFixed(2)},
         ${(SIGHT_LOOK.roofs + SIGHT_LOOK.overSoft).toFixed(2)}, place.y));
@@ -316,6 +346,9 @@ export const SIGHT_GLSL = /* glsl */`
     float pressed = ${SIGHT_LOOK.range.toFixed(3)} * light / (light + ${SIGHT_LOOK.knee.toFixed(3)});
     float kept = mix(${SIGHT_LOOK.floor.toFixed(3)} + pressed, ${(SIGHT_LOOK.floor * SIGHT_LOOK.sealedFloor).toFixed(3)} + pressed * ${SIGHT_LOOK.sealed.toFixed(3)}, shut);
     vec3 fogged = mix(colour * kept / max(light, 0.001), tint * kept, ${SIGHT_LOOK.grey.toFixed(2)});
-    return mix(colour, fogged, (1.0 - max(open, above)) * uSightOn * letOff);
+    vec3 shown = mix(colour, fogged, (1.0 - max(open, above)) * uSightOn * letOff);
+    // (the eaves, past its walls, in the fog's hue and their own light: the lit grass under them stood green round the roof)
+    float eaves = throughRoof * (1.0 - smoothstep(0.6, 0.9, roof)) * uSightOn;
+    return mix(shown, tint * light * ${SIGHT_LOOK.eaves.toFixed(2)}, eaves);
   }
 `;
