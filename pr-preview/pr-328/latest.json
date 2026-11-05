@@ -1,7 +1,6 @@
 {
   "headSha": "cfdc60af89f04524607b7098d81b8c6247c06703",
-  "state": "building",
-  "folder": "2559295",
-  "since": "2026-11-05T12:54:31Z",
+  "state": "ready",
+  "folder": "cfdc60a",
   "run": "https://github.com/VictorZakharov/last-stand/actions/runs/42031106198"
 }
