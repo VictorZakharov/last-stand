@@ -212,7 +212,7 @@ interface Out {
    *  turned in his hand read as held otherwise (each on its own, so a real fault can't pass for it) */
   /** what each canary read; `gripped`: whether a palm gripped anything to turn, sat */
   canary?: {
-    pushed: number; turned: boolean; twisted: number; gripped: boolean; pinned: boolean; askew: boolean; fistOff: boolean;
+    pushed: number; turned: boolean; twisted: number; gripped: boolean; pinned: boolean; askew: boolean; fistOff: boolean; unheld: boolean;
   };
 }
 
@@ -235,6 +235,8 @@ interface Watch {
   askew: { frames: number; most: number; at: string };
   /** the frames a closed fist was off its handle's axis, the most, and where */
   fistOff: { frames: number; most: number; at: string };
+  /** the frames a two-hander's right hand was open on it, and those with no left hand closed on its handle */
+  regrip: { open: number; unheld: number; at: string };
   /** the frames a closed fist was past its handle's end, on what it was to hold it by, the most, and where */
   fistPast: { frames: number; most: number; at: string };
   /** what he held, as he held it as he began to sit (before he walked to the seat, until then) */
@@ -271,11 +273,12 @@ export async function sit(lab: Lab, options: SitOptions): Promise<Report> {
 
 /** The canary on one seat: his body raised off it as he sits must be caught as sitting on air. */
 async function canaryOn(lab: Lab, c: SeatCase, fixture: Fixture, out: Out): Promise<Report> {
-  out.canary = { pushed: 0, turned: false, twisted: 0, gripped: false, pinned: false, askew: false, fistOff: false };
+  out.canary = { pushed: 0, turned: false, twisted: 0, gripped: false, pinned: false, askew: false, fistOff: false, unheld: false };
   await trySeat(lab, { ...c, asks: [{ what: 'step', held: false }] }, fixture, { canary: true }, out);
   out.canary.pinned = pinnedCanary(bodyBreaches(lab.joints).angles, ARM_LIMITS);
   out.canary.askew = askewCanary(lab);
   out.canary.fistOff = fistOffCanary(lab);
+  out.canary.unheld = unheldCanary();
   const problems: string[] = [];
   const pushedTo = CANARY_PUSH.by * (CANARY_PUSH.frames[1] - CANARY_PUSH.frames[0]) / 2;
   const canaries = [
@@ -291,6 +294,7 @@ async function canaryOn(lab: Lab, c: SeatCase, fixture: Fixture, out: Out): Prom
     { what: 'his right arm held at its stops', caught: out.canary.pinned },
     { what: 'a closed fist turned off its handle', caught: out.canary.askew },
     { what: 'a closed fist moved off its handle', caught: out.canary.fistOff },
+    { what: 'a right hand let go with no left on the handle', caught: out.canary.unheld },
   ];
   // (sat with a two-hander, his palm rests on its pommel and grips nothing: nothing is in a hand to turn in it)
   if (out.canary.gripped) {
@@ -344,6 +348,7 @@ async function trySeat(lab: Lab, c: SeatCase, fixture: Fixture, options: SitOpti
     shown: 0, pinned: new ArmsPinned(c.name, ARM_LIMITS), fingers: new FingersUnder(), open: { shots: 0, since: OPEN_SHOTS.every },
     askew: { frames: 0, most: 0, at: '' },
     fistOff: { frames: 0, most: 0, at: '' },
+    regrip: { open: 0, unheld: 0, at: '' },
     fistPast: { frames: 0, most: 0, at: '' },
     before: heldNow(lab), canary: !!options.canary, traced: !!options.trace, moments: [],
   };
@@ -460,6 +465,7 @@ function watchFrame(lab: Lab, name: string, frame: string, watch: Watch, skirts:
   pictureOpenFist(lab, name, frame, watch);
   readAskew(lab, frame, watch);
   readFistOn(lab, frame, watch);
+  readRegrip(lab, frame, watch);
   const through = legsThrough(lab.joints, skirts);
   if (!through || through.depth <= THROUGH_FROM) return;
   if (!watch.through || through.depth > watch.through.depth) watch.through = { ...through, at: frame };
@@ -543,6 +549,32 @@ function readFistOn(lab: Lab, frame: string, watch: Watch): void {
   }
 }
 
+/** A two-hander's right hand let go of with its left not on the handle: the weapon held by nothing. */
+function letGoUnheld(fists: readonly Fist[]): boolean {
+  const left = fists.find((fist) => fist.hand === 'left');
+  return !left || left.curl < FIST_OPEN || left.off > FIST_OFF_MOST;
+}
+
+/** A hand over hand must have the left on the handle while the right goes round it: planted fists, the read must see it. */
+function unheldCanary(): boolean {
+  const right: Fist = { hand: 'right', off: 0, curl: 0 };
+  const onIt: Fist = { hand: 'left', off: 0, curl: FIST_OPEN };
+  const short: Fist = { ...onIt, off: FIST_OFF_MOST * 2 };
+  return letGoUnheld([right]) && letGoUnheld([right, short]) && !letGoUnheld([right, onIt]);
+}
+
+/** A frame's two-hander let go of by the right hand: who has it then. */
+function readRegrip(lab: Lab, frame: string, watch: Watch): void {
+  if (!lab.model.offGrip) return;
+  const fists = lab.model.fists ?? [];
+  const right = fists.find((fist) => fist.hand === 'right');
+  if (!right || right.curl >= FIST_OPEN) return;
+  watch.regrip.open++;
+  if (!letGoUnheld(fists)) return;
+  if (watch.regrip.unheld === 0) watch.regrip.at = frame;
+  watch.regrip.unheld++;
+}
+
 /** A fist as he sits, close on the hand: at the sheet's other distances a closed hand and an open one look alike. */
 function fistClose(lab: Lab, name: string, fist: Fist): Pictured {
   const hand = fist.hand === 'left' ? lab.joints.handL : lab.joints.handR;
@@ -624,7 +656,14 @@ function readAskew(lab: Lab, frame: string, watch: Watch): void {
 /** What's followed judged once he's up again: what he carries moved with no hand on it or jumping, his legs
  *  through his skirts, and the film. */
 function judgeWatch(name: string, watch: Watch, out: Out): void {
-  const { fistOff, fistPast } = watch;
+  const { fistOff, fistPast, regrip } = watch;
+  if (regrip.open > 0) {
+    out.text.push(`  by the ${name}, his right hand open on ${regrip.open} frames, ${regrip.unheld} with no left hand on it`);
+  }
+  if (regrip.unheld > 0) {
+    const frames = `${regrip.unheld} frames (${regrip.at})`;
+    out.problems.push(`sit: by the ${name}, his right hand let go with no left hand on the handle on ${frames}`);
+  }
   if (fistOff.frames > 0) {
     const most = cmOf(fistOff.most);
     out.problems.push(`sit: by the ${name}, a closed fist ${most} cm off its handle on ${fistOff.frames} frames (${fistOff.at})`);
