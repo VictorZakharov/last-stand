@@ -23,6 +23,7 @@ import type { Fixture, Lab, Pictured, Report, ViewName } from './lab';
 import type { Fist } from '../../../src/types';
 import { describeShieldRim, FireClear, LaidStill, shieldRimOver } from './sitFire';
 import { aloftCanary, HeldAloft } from './sitAloft';
+import { BladesApart, bladesCanary } from './sitBlades';
 import { ARM_LIMITS, bodyBreaches, FIST_OPEN, grippingRanges, grippingSides } from './range';
 import { ArmsPinned, describeStrain, pinnedCanary } from './armStrain';
 import { cm as cmOf, follow, JERK_FROM, skirtsOf, type Followed } from './coat';
@@ -245,6 +246,8 @@ interface Watch {
   laid: LaidStill;
   /** a two-hander up in his right hand alone as he stands */
   aloft: HeldAloft;
+  /** a weapon in each hand through the other */
+  blades: BladesApart;
   /** he carries a two-hander: by a fire it's laid down */
   twoHanded: boolean;
   /** the frames a closed fist was past its handle's end, on what it was to hold it by, the most, and where */
@@ -377,6 +380,7 @@ async function trySeat(lab: Lab, c: SeatCase, fixture: Fixture, options: SitOpti
     fire: new FireClear(seat),
     laid: new LaidStill(),
     aloft: new HeldAloft(),
+    blades: new BladesApart(),
     twoHanded: !!lab.model.offGrip,
     fistPast: { frames: 0, most: 0, at: '' },
     before: heldNow(lab), canary: !!options.canary, traced: !!options.trace, moments: [],
@@ -502,6 +506,7 @@ function watchFrame(lab: Lab, name: string, frame: string, watch: Watch, skirts:
   watch.fire.observe(lab, frame);
   watch.laid.observe(lab, frame);
   watch.aloft.observe(lab, frame);
+  watch.blades.observe(lab, frame);
   const through = legsThrough(lab.joints, skirts);
   if (!through || through.depth <= THROUGH_FROM) return;
   if (!watch.through || through.depth > watch.through.depth) watch.through = { ...through, at: frame };
@@ -702,6 +707,11 @@ function judgeWatch(name: string, watch: Watch, out: Out): void {
   const aloft = watch.aloft.describe(name);
   if (aloft) out.problems.push(aloft);
   if (!aloftCanary()) out.problems.push('sit: the canary (a two-hander up in one hand) was missed');
+  const bladesRead = watch.blades.summary(name);
+  if (bladesRead) out.text.push(bladesRead);
+  const blades = watch.blades.describe(name);
+  if (blades) out.problems.push(blades);
+  if (!bladesCanary()) out.problems.push('sit: the canary (two weapons through each other) was missed');
   if (regrip.open > 0) {
     out.text.push(`  by the ${name}, his right hand open on ${regrip.open} frames, ${regrip.unheld} with no left hand on it`);
   }
