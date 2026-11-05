@@ -80,3 +80,15 @@ body.touch #diag { --top: #{touch(180px)}; }
 // (on touch it lets the move stick have what's under it: the stick's pad starts a fifth of the way down)
 body.touch #blog { pointer-events: none; }
 body.touch .bl-head .link { pointer-events: auto; }
+.pf-profile {
+  margin-top: 4px;
+  padding: 8px 8px;
+  text-align: center;
+  font-size: 10px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: $accent;
+  border: 1px solid rgba($accent, .5);
+  pointer-events: auto;
+  cursor: $cursor-hand;
+}

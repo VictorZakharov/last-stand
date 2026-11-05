@@ -50,6 +50,7 @@ import { initItemIcons } from './ui/itemIcons';
 import { initTraceConsent } from './perf/consent';
 import { recorder } from './perf/recorder';
 import { traceNow } from './perf/upload';
+import { initPerfProfile } from './ui/perfProfile';
 import { initPerfHud, perfBeginFrame, perfEndFrame, perfSplit, perfLap, perfClock } from './ui/perfHud';
 import { initNetHud } from './ui/netHud';
 import { drawBattleLog, initBattleLog } from './ui/battleLog';
@@ -140,6 +141,7 @@ async function boot() {
   });
   initPerfHud(renderer);
   initTraceConsent();
+  initPerfProfile();
   initNetHud();
   initBattleLog();
   buildHotbar(G.player);

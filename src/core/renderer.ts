@@ -769,10 +769,19 @@ const SHARE_STEP = 1 / 256;
  * The canvas's pixels per css px: the screen's own. What is rendered is counted in the screen's pixels, never by the
  * OS's scaling (a 4K screen at 300% is a window of 1280x720 css px, at 100% of 3840x2160: both render the same).
  */
-const canvasRatio = (): number => window.devicePixelRatio || 1;
-/** The screen's pixels under the window: the canvas's. */
+const screenRatio = (): number => window.devicePixelRatio || 1;
+/** whether the canvas is drawn at the scene's pixels, stretched to the window (the perf overlay's profile: what the
+ *  full screen's pixels cost, the last pass's and the page's compositing) */
+let canvasAtScene = false;
+const canvasRatio = (): number => (canvasAtScene ? sceneRatio() : screenRatio());
+/** The canvas drawn at the scene's pixels (`on`), or at the screen's again: fitted afresh on the next frame. */
+export function holdCanvasAtScene(on: boolean): void {
+  canvasAtScene = on;
+  fitted.dpr = 0;
+}
+/** The screen's pixels under the window. */
 export function screenPixels(): number {
-  const ratio = canvasRatio();
+  const ratio = screenRatio();
   return Math.floor(window.innerWidth * ratio) * Math.floor(window.innerHeight * ratio);
 }
 /** The most pixels the scene renders now: the screen's, within the quality's and Auto's budget. */
@@ -785,7 +794,7 @@ function sceneShare(): number {
   return Math.max(SHARE_STEP, Math.floor(Math.sqrt(most / screen) / SHARE_STEP) * SHARE_STEP);
 }
 /** The scene's pixels per css px (the last pass scales it up to the canvas). */
-export const sceneRatio = (): number => canvasRatio() * sceneShare();
+export const sceneRatio = (): number => screenRatio() * sceneShare();
 /** The scene's render size in pixels (the canvas's at the scene's own ratio). */
 export function sceneSize(out: THREE.Vector2): THREE.Vector2 {
   const r = sceneRatio();

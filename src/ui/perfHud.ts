@@ -124,6 +124,16 @@ export function initPerfHud(r: THREE.WebGLRenderer): void {
 
 export const perfHudEnabled = (): boolean => enabled;
 
+/** Each frame as it's timed (its interval and our work, ms), and each GPU frame timed whole as it comes back: what the
+ *  profile listens to (`perfProfile.ts`), while the overlay is on. */
+export const perfListen = {
+  frame: null as ((interval: number, ours: number) => void) | null,
+  gpu: null as ((ms: number) => void) | null,
+};
+/** the last profile's result, added to the copied report */
+let profiled = '';
+export function setProfiled(text: string): void { profiled = text; }
+
 export function setPerfHud(on: boolean, persist = true): void {
   enabled = on;
   el.classList.toggle('hidden', !on);
@@ -194,6 +204,7 @@ export function perfEndFrame(): void {
   if (!enabled) return;
   const last = samples[samples.length - 1];
   if (last) { last.cpu = end - cpuStart; last.upd = split.upd; last.rnd = split.rnd; last.stages = stages; if (last.frame > 10) last.ctx = frameContext(); }
+  if (last) perfListen.frame?.(last.frame, last.cpu);
   stages = {};
   const cutoff = frameNow - WINDOW_MS;
   while (samples.length && samples[0].t < cutoff) samples.shift();
@@ -234,6 +245,7 @@ function takeWebGpuTime(): void {
       if (ms <= 0) return;
       recorder.gpu(at, ms, null);
       if (enabled) gpuTimes.push({ t: frameNow, ms });
+      perfListen.gpu?.(ms);
       if (gpuTaken.push({ ms, parts: null }) > GPU_KEPT) gpuTaken.shift();
     })
     .finally(() => { readingGpuTime = false; });
@@ -258,6 +270,7 @@ function pollQueries(now: number): void {
     // (a frame timed in parts is slowed by its queries: its parts go to the recorder, its time none)
     recorder.gpu(f.ring, f.split ? -1 : ms, f.split ? parts : null);
     if (gpuTaken.push({ ms, parts: f.split ? parts : null }) > GPU_KEPT) gpuTaken.shift();
+    if (!f.split) perfListen.gpu?.(ms);
     if (!enabled) continue;
     if (!f.split) gpuTimes.push({ t: now, ms });
     else if (gpuParts.push(parts) > 30) gpuParts.shift();
@@ -441,6 +454,7 @@ function report(): string {
     'Update stages (ms: mean p95 max):',
     ...stageStats(),
     ...(lateCompiles.length ? ['Shaders compiled after load:', ...lateCompiles.slice(-40).map((l) => '  ' + l)] : []),
+    ...(profiled ? [profiled] : []),
   ].join('\n');
 }
 
