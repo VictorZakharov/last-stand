@@ -9,6 +9,10 @@
 // `roomColumnsStay`: in the doorway the room's columns he sees over the wall stay: "when entering hall, pillars inside
 // disappear". A shaft shows if the frame changes with the columns hidden. `--canary`: they're hidden.
 //
+// `doorConeFromStair` ("when player is down even one stair, then in top down he cannot see into the hall, even tho he
+// clearly can in 3rd person view"): from a step down the stair and on down it, the floor past the door shows as at it.
+// `--canary`: the cone held shut.
+//
 // `heroesSeenFromAbove`: from above the plinths' heroes stand while he can see a plinth: "pedestals are empty from this
 // position, they should display heroes if character can see them from their cone of view". `--canary`: read as none.
 //
@@ -24,11 +28,13 @@ import { heroesStanding } from '../../../src/game/hall';
 import { isWarm } from '../../../src/game/warm';
 import { CAMERA } from '../../../src/data/balance';
 import { setZoom } from '../../../src/core/renderer';
-import { hideHallColumns } from '../../../src/core/seeThrough';
+import { doorConeOpen, hideHallColumns, holdDoorShut } from '../../../src/core/seeThrough';
 import { groundHeight } from '../../../src/world/ground';
 import { walkLength } from '../../../src/world/walkPath';
 import { drawFrame } from './light';
-import { fromAboveAtNoon, standFacing } from './villageHallOpens';
+import {
+  floorMark, fromAboveAtNoon, inFrame, LEAST_SHOWN, LOOKING_IN, shownMarks, standFacing,
+} from './villageHallOpens';
 import { hisPixels, shownOf } from './villageHeroInView';
 import type { LightsChecked } from './villageLights';
 import { placesThinned } from './villageSeenPast';
@@ -242,6 +248,11 @@ function standProblems(stand: WallStand, reads: WallRead[], him: number): string
 
 /** the zoom of the owner's pictures, further out than the lobby's own, and the frames the camera takes to get there */
 const OWNERS_ZOOM = 0.8;
+/** how far down the stair past the terrace's front he stands (m: a step, then on down it), and how far in from the
+ *  door the floor's marked from there, those in the frame read: past what the doorway itself shows from there, under
+ *  the wall over it (marked in the doorway, 1.5 to 3.5 m in, the floor showed with the cone shut) */
+const STAIR_DOWN = [0.3, 1.5, 2.9];
+const STAIR_FLOOR_IN = [3.5, 4, 4.5, 5, 5.5, 6.5];
 const ZOOM_FRAMES = 120;
 
 /** `read` from above at noon, the camera as far out as the owner's pictures have it, put back after it. */
@@ -255,6 +266,32 @@ async function fromAboveAsPictured<T>(lab: Lab, read: () => Promise<T>, zoom = O
       setZoom(CAMERA.lobbyZoom);
       await lab.step(ZOOM_FRAMES);
     }
+  });
+}
+
+/** On the stair below the terrace, looking in, the floor he sees through the door shown through the wall over it, from
+ *  each stand. */
+export async function doorConeFromStair(lab: Lab, canary: boolean): Promise<LightsChecked> {
+  return fromAboveAsPictured(lab, async () => {
+    holdDoorShut(canary);
+    const lines: string[] = [];
+    let wrong = false;
+    const moments = [];
+    for (const down of STAIR_DOWN) {
+      await standFacing(lab, TERRACE.x, TERRACE.front + down, LOOKING_IN);
+      const marks = STAIR_FLOOR_IN.map((inside) => floorMark(TERRACE.x, HALL.inFront - inside))
+        .filter((mark) => inFrame(mark.position) || (G.scene.remove(mark), false));
+      if (!marks.length) throw new Error(`lab: village: no mark past the hall's door is in the frame, ${down} m down`);
+      const shown = shownMarks(lab, marks);
+      if (!canary) moments.push(await lab.screen(`${down} m down the stair: what he sees through the door`, []));
+      for (const mark of marks) G.scene.remove(mark);
+      lines.push(`${down} m down the hall's stair, the floor past its door shown: ${(shown * 100).toFixed(0)}% `
+        + `(at least ${LEAST_SHOWN * 100}%), the cone ${doorConeOpen().toFixed(2)}`);
+      wrong ||= shown < LEAST_SHOWN;
+    }
+    holdDoorShut(false);
+    if (canary) return { lines, problems: [], caught: wrong, moments: [] };
+    return { lines, problems: wrong ? lines : [], caught: null, moments };
   });
 }
 

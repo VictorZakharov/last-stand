@@ -119,7 +119,8 @@ async function bootTraced(browser, page, url, visit, options, picture, setRate) 
   const logo = options.filmLogo ? await page.evaluate(logoBox) : null;
   // (a first visit opens on the hero selection screen: `--hero` chosen there, else the hero in focus, as a player
   // chooses one; a return keeps him)
-  await page.evaluate(chooseIfAsked, options.hero);
+  // (watched as long again after the choice, before Start is pressed: what the choice holds up is its own phase)
+  if (await page.evaluate(chooseIfAsked, options.hero)) await page.waitForTimeout(options.seconds * 1000);
   let left = null;
   if (leftCold(visit, options)) left = (await page.evaluate(fightWarm)) ? 'warm' : 'cold';
   else {

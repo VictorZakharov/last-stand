@@ -74,7 +74,7 @@ import { heroFaceNotBlinding } from './villageHeroFace';
 import { cameraBeforeWalls } from './villageCameraWall';
 import { hallFrontFades } from './villageHallFade';
 import {
-  hallWallsOneByOne, heroesSeenFromAbove, heroLitInHall, objectsWalkedShort, roomColumnsStay,
+  doorConeFromStair, hallWallsOneByOne, heroesSeenFromAbove, heroLitInHall, objectsWalkedShort, roomColumnsStay,
 } from './villageHallWalls';
 import { firesWhereTheyStand } from './villageFires';
 import { heroChosenQuick, heroesBuiltAhead } from './villageHeroChosen';
@@ -168,6 +168,7 @@ export async function village(lab: Lab, options: VillageOptions): Promise<Report
     roofReadsAsOne: () => roofReadsAsOne(lab, options.canary),
     farWallInFog: () => farWallInFog(lab, options.canary),
     doorConeOpens: () => doorConeOpens(lab, options.canary),
+    doorConeFromStair: () => doorConeFromStair(lab, options.canary),
     heroSeenPastHall: () => heroSeenPastHall(lab, options.canary),
     hallWallsOneByOne: () => hallWallsOneByOne(lab, options.canary),
     heroLitInHall: () => heroLitInHall(lab, options.canary),

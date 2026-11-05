@@ -37,13 +37,13 @@ const MARK_SHOWS = 0.7;
 const MARK_BRIGHT = 0.3;
 /** how far out from the door's outer face he stands (m), and looking in: the camera's on his side of it */
 const AT_DOOR = 0.6;
-const LOOKING_IN = Math.PI;
+export const LOOKING_IN = Math.PI;
 /** how far in from the door the floor's marked, down its middle (m); how far aside of that it's marked, out of what he
  *  sees, how far in (m); and the least shown, the most shown aside */
 const FLOOR_IN = [6, 7, 8];
 const WALL_ASIDE = [-4.5, -3.8, 3.8, 4.5];
 const ASIDE_IN = 1;
-const LEAST_SHOWN = 0.75;
+export const LEAST_SHOWN = 0.75;
 /** how far the cone must have opened by then */
 const LEAST_OPEN = 0.5;
 const MOST_ASIDE = 0.25;
@@ -68,7 +68,7 @@ export async function standFacing(lab: Lab, x: number, z: number, facing: number
 }
 
 /** A bright mark on the hall's floor at (x, z), to read whether that floor shows. */
-function floorMark(x: number, z: number): THREE.Mesh {
+export function floorMark(x: number, z: number): THREE.Mesh {
   const mark = new THREE.Mesh(
     new THREE.PlaneGeometry(MARK, MARK).rotateX(-Math.PI / 2),
     new THREE.MeshBasicMaterial({ color: 0xff00ff }),
@@ -76,6 +76,12 @@ function floorMark(x: number, z: number): THREE.Mesh {
   mark.position.set(x, TERRACE.high + MARK_OVER, z);
   G.scene.add(mark);
   return mark;
+}
+
+/** Whether `point` is in the camera's frame. */
+export function inFrame(point: THREE.Vector3): boolean {
+  const place = point.clone().project(G.camera);
+  return Math.abs(place.x) < 1 && Math.abs(place.y) < 1 && place.z < 1;
 }
 
 /** Whether a pixel of `canvas` over `point` shows a mark. */
@@ -92,7 +98,7 @@ function showsMark(canvas: Canvas, point: THREE.Vector3): boolean {
 }
 
 /** The share of `marks` that show in the frame drawn now. */
-function shownMarks(lab: Lab, marks: THREE.Mesh[]): number {
+export function shownMarks(lab: Lab, marks: THREE.Mesh[]): number {
   const canvas = drawFrame(lab);
   return marks.filter((mark) => showsMark(canvas, mark.position)).length / marks.length;
 }

@@ -115,7 +115,10 @@ The report is printed and written to `tools/stalls/out/report.txt`.
     by default). Its steps are the loading screen's, read off it as it's drawn (`page.mjs` `bootRecording`), so
     a build without marks of its own is timed alike: the document fetched, `Loading…` (the scripts fetched and
     run), each label `loadingStep` shows, the loop started (the bar full, waiting for smooth frames), the logo
-    blown away, the lobby revealed. `--cpu-slowdown N` slows the page's CPU as a phone's (any scenario).
+    blown away, the lobby revealed; on a first visit, the hero chosen on the screen it opens on (`--hero`, or the
+    one in focus), a step of its own watched as long again before anything else is pressed (from play, a phone's
+    "insane slowdown when choosing a hero upon first entry"). `--cpu-slowdown N` slows the page's CPU as a phone's
+    (any scenario).
     `--stall-blow ms` holds the page up once in the logo blow's first frames, as a fast machine stalled by the GPU
     busy elsewhere: the blow's watchdog must not take it for a slow device (`src/ui/logoWind.ts`). A build that
     warms the fight's programs after the lobby shows (one with the fight's loading bar, `#readying`) is watched till

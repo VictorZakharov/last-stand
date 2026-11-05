@@ -184,6 +184,11 @@ over the wall show, also on the jambs' line, where they had all gone (0 of 6 pla
 stand with a plinth in his sight; a clicked object's spot is reached by about the shortest way into its reach (the campfire 12 m
 for 6); by night on the hall's floor his pixels hold a mean light of 0.1 (0.045 with his light off) and at most 0.3% of the frame
 burns. `--canary`: every wall thinned, his light off, the shafts hidden, the heroes read as none, the shortest way read as half.
+`doorConeFromStair` (there too): from a step down the hall's stair and on down it, looking in, the room's floor past the door
+shows from above ("when player is down even one stair, then in top down he cannot see into the hall"): 0%, 0% and 25% of its
+marks at 0.3, 1.5 and 2.9 m down, the cone shut from 4 m out and the roof and the portico's beam over the room; now all. Marked
+deeper than the doorway alone shows (in it, the floor showed with the cone shut), those in the frame read. `--canary`: the cone
+held shut.
 
 `fogUnderEaves` (`page/villageFog.ts`, from play: "and here should be all grey, right ?"): stood beside a cottage, the
 ground under its far eaves, past its wall, holds no plainly green pixel. `--canary` lets the fog off under the eaves.

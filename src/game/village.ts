@@ -373,11 +373,14 @@ function hallInside(dt: number): void {
   // (looking in: from over the room, the wall before him thins as any wall does)
   const atDoor = lobby && view === 'top' && Math.abs(p.pos.x - TERRACE.x) < HALL.half && G.camera.position.z > HALL.door
     ? (1 - THREE.MathUtils.smoothstep(offDoor, DOOR_CONE.near, DOOR_CONE.far)) * THREE.MathUtils.smoothstep(offDoor, DOOR_CONE.inFrom, DOOR_CONE.in)
+      * seesThroughDoor()
     : 0;
   doorCone = THREE.MathUtils.damp(doorCone, atDoor * DOOR_CONE.ghost, CUT_AWAY_FADE, dt);
   openThroughDoor(doorCone < CUT_AWAY_NONE ? 0 : doorCone);
-  // (a ghost from above whatever it hides, as every roof is: `ROOF_GHOST_ABOVE`)
-  const roofWanted = roofAway ? ROOF_GHOST : lobby && view === 'top' ? ROOF_GHOST_ABOVE : 0;
+  // (a ghost from above whatever it hides, as every roof is: `ROOF_GHOST_ABOVE`; away while he sees in through the door,
+  // as inside: a ghost over the room, from the stair the floor past the door showed a sliver of it under the roof)
+  const seesIn = atDoor > AT_DOOR_CONE;
+  const roofWanted = roofAway || seesIn ? ROOF_GHOST : lobby && view === 'top' ? ROOF_GHOST_ABOVE : 0;
   roofFade = THREE.MathUtils.damp(roofFade, roofWanted, CUT_AWAY_FADE, dt);
   // (each wall by itself: stood at the door, the one over it hides what he sees through it alone, which the cone opens)
   for (const wall of HALL_WALL_SIDES) {
@@ -387,7 +390,9 @@ function hallInside(dt: number): void {
     wallFades.set(wall.kind, fade);
     fadeWhole(wall.kind, fade < CUT_AWAY_NONE ? 0 : fade);
   }
-  beamFade = THREE.MathUtils.damp(beamFade, roofAway && !wallsNoneHeld && beamHidesHim() ? WALL_GHOST : 0, CUT_AWAY_FADE, dt);
+  // (and while he sees in through the door from the stair: it lay over the room past the door, the roof away)
+  const beamThins = !wallsNoneHeld && ((roofAway && beamHidesHim()) || seesIn);
+  beamFade = THREE.MathUtils.damp(beamFade, beamThins ? WALL_GHOST : 0, CUT_AWAY_FADE, dt);
   fadeWhole('hallBeam', beamFade < CUT_AWAY_NONE ? 0 : beamFade);
   lightHim(lobby && view === 'top' && inside ? 1 : 0, dt);
   fadeWhole('hallRoof', roofFade < CUT_AWAY_NONE ? 0 : roofFade > 1 - CUT_AWAY_NONE ? 1 : roofFade);
@@ -403,6 +408,11 @@ function hallInside(dt: number): void {
   const seen = inside || (byDoor && (view === 'top' ? aPlinthSeen() : doorwayOnScreen()));
   const near = Math.hypot(p.pos.x - TERRACE.x, p.pos.z - HALL.door) < HALL_NEAR;
   standHeroes(lobby && seen && isWarm('heroes'), dt, lobby && near && isWarm('heroes'));
+}
+
+/** How much of the hall's floor just past its door he sees, by the rays round him (0 to 1). */
+function seesThroughDoor(): number {
+  return Math.max(...DOOR_CONE.floorIn.map((inside) => seenShareAt(TERRACE.x, HALL.inFront - inside)));
 }
 
 /** Whether he sees any plinth of the hall's, by the rays round him. */
@@ -555,8 +565,11 @@ const ROOF_GHOST = 1;
 /** how far what stands free in the hall thins, before him and from above (a share of its pixels) */
 const COLUMN_GHOST = 0.55;
 /** the cone he sees through the hall's door: how far from the door's inner face it's open whole and shut (m, out from it),
- *  from how far in it's shut and open whole, and what share of what hides it is thinned */
-const DOOR_CONE = { near: 2.6, far: 4, inFrom: -0.5, in: -0.1, ghost: 0.85 };
+ *  from how far in it's shut and open whole, what share of what hides it is thinned, and how far in from the door the
+ *  floor he must see through it lies (m, down its middle). Open while he sees in, as far out as the dais's heroes stand
+ *  for him: shut from 4 m out, a step down the stair saw nothing of the room from above, where over the shoulder he
+ *  saw in, from play "when player is down even one stair, then in top down he cannot see into the hall" */
+const DOOR_CONE = { near: HALL_SEEN - 1.5, far: HALL_SEEN, inFrom: -0.5, in: -0.1, ghost: 0.85, floorIn: [0.5, 1.5, 3] };
 /** how far that cone is open now */
 let doorCone = 0;
 const _door = new THREE.Box3(), _frustum = new THREE.Frustum(), _viewProj = new THREE.Matrix4();
