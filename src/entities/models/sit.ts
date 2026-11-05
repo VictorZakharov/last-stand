@@ -229,6 +229,24 @@ export function floorUnder(object: THREE.Object3D): number {
 }
 
 /**
+ * A handle held in the fist (`held`, a child of the hand, along its own y) slid through it, `k` of the way, until its
+ * end below the fist (`foot`, along that y, less than 0) is on the floor, from over it as well as under it, but never
+ * further than `most` along itself: a maul stood head up on the butt of its haft beside a seated hero (as
+ * `footOutOfFloor`, whose staff went 18 to 78 cm past the floor slid by the world's rise). Says it's stood on the floor.
+ */
+export function footToFloor(held: THREE.Object3D, foot: number, k: number, most: number): void {
+  held.updateWorldMatrix(true, false);
+  held.localToWorld(_foot.set(0, foot, 0));
+  const over = _foot.y - groundHeight(_foot.x, _foot.z);
+  const rise = _up.set(0, 1, 0).transformDirection(held.matrixWorld).y;
+  held.userData.stoodOn = k >= 1 && rise >= 0.3;
+  if (rise < 0.3) return;
+  const scale = _foot.setFromMatrixScale(held.parent!.matrixWorld).y;
+  const slide = Math.min(most, over / (rise * scale)) * k;
+  held.position.addScaledVector(_up.set(0, 1, 0).applyQuaternion(held.quaternion), -slide);
+}
+
+/**
  * A handle held in the fist (`held`, a child of the hand, along its own y) slid through it until its end hanging down
  * (`foot`, along that y: a staff's foot below the fist, a weapon's head above it held head down) is out of the floor:
  * sat low, his hand comes down with him, and the mage's staff stood where he held it went 40 cm into the floor. Call

@@ -72,6 +72,12 @@ interface Jump {
   at: string;
 }
 
+/** A held piece's middle, in the world and in its hand's frame (scaled as the world is). */
+interface Origin {
+  world: THREE.Vector3;
+  onJoint: THREE.Vector3;
+}
+
 /** One mesh's frames: where its corners were (the world's and its joint's), and what it did. */
 interface Followed {
   part: Part;
@@ -90,7 +96,7 @@ interface Followed {
   inHandWas: THREE.Quaternion | null;
   /** where the piece's own middle (its group's origin: a grip, a bow's handle) was the frame before, in the world and
    *  in its joint's frame (m), while held */
-  originWas: { world: THREE.Vector3; onJoint: THREE.Vector3 } | null;
+  originWas: Origin | null;
   inHand: number;
   slid: number;
   inHandFrom: string;
@@ -264,7 +270,7 @@ function followInHand(each: Followed, held: boolean, quaternion: THREE.Quaternio
     const inWorld = each.quaternion.angleTo(quaternion) * DEG;
     const turned = Math.min(inWorld, each.inHandWas.angleTo(inJoint) * DEG);
     const was = each.originWas;
-    const slid = Math.min(origin.world.distanceTo(was.world), origin.onJoint.distanceTo(was.onJoint));
+    const slid = slidAcross(group, joint, origin, was);
     const tipping = isTipping(mesh);
     if (!tipping && turned >= IN_HAND_FROM) each.inHand += turned;
     if (!tipping && slid >= SLID_FROM) each.slid += slid;
@@ -273,6 +279,28 @@ function followInHand(each: Followed, held: boolean, quaternion: THREE.Quaternio
   }
   each.inHandWas = inJoint;
   each.originWas = origin;
+}
+
+/** How far a held piece's middle moved from `was` to `now`, the lesser of in the world and in the hand's frame; of a
+ *  haft slid through the fist along its length on purpose (`userData.slidesAlong`: a maul stood head up, his fist going
+ *  up it as its butt comes down onto the floor), only what's across that length. */
+function slidAcross(group: THREE.Object3D, joint: THREE.Object3D, now: Origin, was: Origin): number {
+  const world = now.world.clone().sub(was.world);
+  const onJoint = now.onJoint.clone().sub(was.onJoint);
+  const slider = slidingOf(group);
+  if (slider) {
+    const length = new THREE.Vector3(0, 1, 0).transformDirection(slider.matrixWorld);
+    world.addScaledVector(length, -world.dot(length));
+    const inJoint = length.clone().transformDirection(joint.matrixWorld.clone().invert());
+    onJoint.addScaledVector(inJoint, -onJoint.dot(inJoint));
+  }
+  return Math.min(world.length(), onJoint.length());
+}
+
+/** What `object` is part of that slides through the fist along its own length (`userData.slidesAlong`), if anything. */
+function slidingOf(object: THREE.Object3D): THREE.Object3D | null {
+  for (let at: THREE.Object3D | null = object; at; at = at.parent) if (at.userData.slidesAlong) return at;
+  return null;
 }
 
 /** Whether `object` is part of what's being tipped upright on its far end (`userData.tipping`). */
