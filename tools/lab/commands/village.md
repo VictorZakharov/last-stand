@@ -176,7 +176,14 @@ ground past its back wall seen through its roof, over 3 m from him, lies in the 
 reads it by the rays, as it was. `doorConeOpens`, `heroSeenPastHall`, `noDotsBesideHall` (`page/villageHallOpens.ts`): at the hall's door
 the floor he sees through it shows through the wall over it and the wall aside stays ("here should open the wall above hero"); past its
 side wall from the camera he shows through it ("and here cannot see hero"); while the hall alone is thinned for him what stands free
-stays whole ("also this is broken": the terrace's coping in dots). Each `--canary` holds it as it was.
+stays whole ("also this is broken": the terrace's coping in dots). Each `--canary` holds it as it was. `hallWallsOneByOne`,
+`heroLitInHall`, `roomColumnsStay`, `heroesSeenFromAbove`, `objectsWalkedShort` (`page/villageHallWalls.ts`, each stand after one of the owner's
+pictures, at their zoom): a wall thins while it hides him or the floor near him and no other does, read on each wall's places
+with nothing thinned against as the game thins, those seen through another wall left out; in the doorway the room's shafts seen
+over the wall show, also on the jambs' line, where they had all gone (0 of 6 places, now 6 of 6); from above the plinths' heroes
+stand with a plinth in his sight; a clicked object's spot is reached by about the shortest way into its reach (the campfire 12 m
+for 6); by night on the hall's floor his pixels hold a mean light of 0.1 (0.045 with his light off) and at most 0.3% of the frame
+burns. `--canary`: every wall thinned, his light off, the shafts hidden, the heroes read as none, the shortest way read as half.
 
 `fogUnderEaves` (`page/villageFog.ts`, from play: "and here should be all grey, right ?"): stood beside a cottage, the
 ground under its far eaves, past its wall, holds no plainly green pixel. `--canary` lets the fog off under the eaves.

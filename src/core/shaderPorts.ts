@@ -3,6 +3,8 @@
 // takes the port in its place as it builds the material there (its library's `fromMaterial`, `takePorts`). The
 // material stays the one the game holds and drives: the port reads its uniforms by reference (`uniformsOf`), and the
 // draw takes its blending, sides and depth from it as they are. On WebGL nothing changes.
+import { HALL, TERRACE } from '../data/village';
+import { DOOR_LINE } from './seeThrough';
 import * as THREE from 'three';
 import type { WebGPURenderer } from 'three/webgpu';
 import { NEAR_GLOW, type KitLooks } from './materials';
@@ -138,9 +140,17 @@ export function seeFade(world: N, see: SeeNodes): N {
       let inB = turn * (to.x * b.y - to.y * b.x) / max(length(b), 0.01);
       let inHall = min(min(hidden.x - room.x, room.z - hidden.x), min(hidden.y - room.y, room.w - hidden.y));
       let halfSine = sqrt(max(0.0, (1.0 - dot(a, b) / max(length(a) * length(b), 1e-4)) * 0.5));
-      let inCone = min(inA, inB) / max(length(to) * halfSine, 0.05);
+      let inCone = select(min(inA, inB) / max(length(to) * halfSine, 0.05), 1.0, focus.z <= door.y + ${DOOR_LINE.toFixed(2)});
       let shape = smoothstep(-0.05, 0.8, inCone) * smoothstep(0.0, 0.3, inHall);
-      if (doorOn > 0.0) { cone = doorOn * shape; } else if (wp.z < door.y) { cone = 1.0 - shape; }
+      if (doorOn > 0.0) {
+        cone = doorOn * shape;
+      } else if (eye.z > door.y && wp.z < door.y) {
+        let at = eye + (wp - eye) * (door.y - eye.z) / (wp.z - eye.z);
+        let offMiddle = abs(at.x - ${TERRACE.x.toFixed(2)});
+        let meetsWall = at.y < ${(TERRACE.high + HALL.wallHigh).toFixed(2)} && offMiddle < ${HALL.half.toFixed(2)};
+        let inDoor = at.y < ${(TERRACE.high + HALL.doorHigh).toFixed(2)} && offMiddle < ${HALL.doorHalf.toFixed(2)};
+        if (meetsWall && !inDoor) { cone = 1.0 - shape; }
+      }
     }
     if (k.z <= 0.0 && whole <= 0.0) { return cone; }
     let ca = focus - eye;
@@ -157,11 +167,8 @@ export function seeFade(world: N, see: SeeNodes): N {
     let side = select(vec3f(1.0, 0.0, 0.0), level / max(levelLength, 1e-6), levelLength > 1e-3);
     let aside = dot(off, side);
     let r = length(off + side * aside * (across - 1.0)) / max(along / l, 0.05);
-    let on = wp.xz + select(vec2f(0.0), ca.xz / max(flat, 1e-6), flat > 0.01) * 1.2;
-    let inRoom = min(min(on.x - room.x, room.z - on.x), min(on.y - room.y, room.w - on.y));
     let floorOff = select(r, abs(dot(wp.xz - focus.xz, vec2f(-ca.z, ca.x))) / max(flat, 1e-6), flat > 0.01);
-    let thinned = whole * (1.0 - smoothstep(-k.w - ramp, -k.w, past)) * (1.0 - smoothstep(reach.x, reach.y, floorOff))
-      * smoothstep(0.0, 0.3, inRoom);
+    let thinned = whole * (1.0 - smoothstep(-k.w - ramp, -k.w, past)) * (1.0 - smoothstep(reach.x, reach.y, floorOff));
     let atHim = smoothstep(focus.y - 0.2, focus.y + 0.1, wp.y);
     return max(max((1.0 - smoothstep(k.x, k.y, r)) * k.z * atHim, thinned), cone);
   }`)({ wp: world, eye: cameraPosition, ...see });

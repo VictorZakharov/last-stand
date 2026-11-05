@@ -46,6 +46,10 @@ export const STEP_RISE = 0.16;
  *  interact with it to choose anything, it should be a real building", and "hall of heroes need to be longer, like an
  *  actual hall, so you walk in, and see heroes in the distance, and can marvel at its architecture". */
 export const HALL = {
+  /** how high its walls stand over the terrace */
+  wallHigh: 6.47,
+  /** the portico's beam over its columns: its middle (z), how deep it is, and how high its foot stands */
+  beamZ: -13.4, beamDeep: 1, beamFoot: 5.92,
   wall: -33.0, door: -14.7, doorHalf: 1.1, doorHigh: 3.4, half: 6.2,
   daisZ: -28.6, daisHigh: 0.32,
   plinths: [-3.3, 0, 3.3], plinthZ: -30.6, plinthHalf: 0.7, plinthHigh: 0.3,

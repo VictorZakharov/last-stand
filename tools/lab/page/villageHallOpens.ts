@@ -5,7 +5,7 @@
 // cone held shut, as it was.
 //
 // `heroSeenPastHall` ("and here cannot see hero"): stood outside its side wall with the camera over its room, he shows
-// through that wall. `--canary`: its walls held to thinning only over its room, as they were.
+// through that wall. `--canary`: its walls held whole.
 //
 // `noDotsBesideHall` ("also this is broken"): while the hall alone is thinned for him, what stands free stays whole:
 // the frame hardly changes with the props' thinning held off. `--canary`: they thin as they did, the terrace's coping
@@ -14,9 +14,10 @@ import * as THREE from 'three';
 import type { Lab } from './lab';
 import { G } from '../../../src/state';
 import { holdHour } from '../../../src/game/clock';
+import { holdHallWallsNone } from '../../../src/game/village';
 import { faceCamera, viewMode } from '../../../src/core/renderer';
 import {
-  doorConeOpen, holdDoorShut, holdHallRoomAlways, holdPropHole, holdPropsThinned,
+  doorConeOpen, holdDoorShut, holdPropHole, holdPropsThinned,
 } from '../../../src/core/seeThrough';
 import { HALL, TERRACE } from '../../../src/data/village';
 import { groundHeight } from '../../../src/world/ground';
@@ -59,7 +60,7 @@ const LOOKING_WEST = -Math.PI / 2;
 const MOST_DOTS = 0.002;
 
 /** The hero stood at (x, z), the camera turned to `facing`, let settle. */
-async function standFacing(lab: Lab, x: number, z: number, facing: number): Promise<void> {
+export async function standFacing(lab: Lab, x: number, z: number, facing: number): Promise<void> {
   G.player.walkTo = null;
   G.player.place(new THREE.Vector3(x, groundHeight(x, z), z), facing);
   faceCamera(facing);
@@ -97,7 +98,7 @@ function shownMarks(lab: Lab, marks: THREE.Mesh[]): number {
 }
 
 /** The view from above at noon for `read`, put back after it. */
-async function fromAboveAtNoon<T>(lab: Lab, read: () => Promise<T>): Promise<T> {
+export async function fromAboveAtNoon<T>(lab: Lab, read: () => Promise<T>): Promise<T> {
   const kept = viewMode();
   holdHour(HOUR);
   try {
@@ -151,7 +152,7 @@ async function shownFrom(lab: Lab, x: number, z: number, facing: number): Promis
 /** Past the hall's side wall from the camera, and in the hall a hand from it, he shows through it. */
 export async function heroSeenPastHall(lab: Lab, canary: boolean): Promise<LightsChecked> {
   return fromAboveAtNoon(lab, async () => {
-    holdHallRoomAlways(canary);
+    holdHallWallsNone(canary);
     try {
       const past = await shownFrom(lab, TERRACE.x + PAST_WALL, PAST_WALL_Z, LOOKING_EAST);
       const shot = canary ? null : await lab.screen("past the hall's side wall", []);
@@ -164,7 +165,7 @@ export async function heroSeenPastHall(lab: Lab, canary: boolean): Promise<Light
       const moments = shot && byShot ? [shot, byShot] : [];
       return { lines: [line], problems: wrong ? [line] : [], caught: null, moments };
     } finally {
-      holdHallRoomAlways(false);
+      holdHallWallsNone(false);
     }
   });
 }

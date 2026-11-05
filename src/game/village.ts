@@ -4,8 +4,10 @@
 // off; and his skills cast in the training yard alone. In the top view the pointer picks an object; in the close views
 // the one he's near, E using it.
 import * as THREE from 'three';
-import { seeFrom, sightWalls } from '../core/sight';
-import { fadeWhole, hallThinsAnywhere, openThroughDoor, propsLeftWhole, ROOF_GHOST_ABOVE } from '../core/seeThrough';
+import { seeFrom, seenShareAt, sightWalls } from '../core/sight';
+import {
+  fadeWhole, HALL_WALL_KINDS, type HallWallKind, openThroughDoor, propsLeftWhole, ROOF_GHOST_ABOVE,
+} from '../core/seeThrough';
 import { G } from '../state';
 import { RUN } from '../data/balance';
 import { VILLAGE_OBJECTS, YARD, worldToYard, type VillageObject } from '../data/village';
@@ -16,6 +18,7 @@ import { anchorLabel, promptArt, textArt } from '../ui/floaters';
 import { ORDER, type Label } from '../ui/overlay/layer';
 import { OUTLINE } from '../ui/overlay/paint';
 import { want } from './warm';
+import { stands, walkLength } from '../world/walkPath';
 import { completeStep } from './training';
 import { HALL, TERRACE, inHall } from '../data/village';
 import { inHallsBulk } from '../world/village';
@@ -205,7 +208,33 @@ function objectAt(x: number, y: number): VillageObject | null {
 export function goUse(o: VillageObject): void {
   if (distanceTo(o) < o.reach) { useNow(o); return; }
   going = o;
-  G.player.walkTo = new THREE.Vector3(o.stand[0], 0, o.stand[1]);
+  const [x, z] = spotToUse(o);
+  G.player.walkTo = new THREE.Vector3(x, 0, z);
+}
+
+/** the places round an object's reach looked at for the nearest to walk to, and how far in from its edge they are (m) */
+const REACH_SPOTS = 24;
+const REACH_IN = 0.15;
+
+/** The nearest place by his way there from which `o` can be used: its reach's edge wherever a body stands on its level.
+ *  Walked to `stand`, a place on one side of it, he went round the campfire and its logs to get there, from play, "when I
+ *  click on campfire, hero moves in from the left side, it should be the shortest path". */
+export function spotToUse(o: VillageObject): [number, number] {
+  const p = G.player;
+  let best: [number, number] = [o.stand[0], o.stand[1]];
+  let bestWay = walkLength(p.pos.x, p.pos.z, best[0], best[1], p.radius);
+  for (let spot = 0; spot < REACH_SPOTS; spot++) {
+    const round = (spot / REACH_SPOTS) * Math.PI * 2;
+    const x = o.at[0] + Math.sin(round) * (o.reach - REACH_IN);
+    const z = o.at[1] + Math.cos(round) * (o.reach - REACH_IN);
+    if (Math.abs(groundHeight(x, z) - floorAt(o)) > LEVEL || !stands(x, z, p.radius)) continue;
+    const way = walkLength(p.pos.x, p.pos.z, x, z, p.radius);
+    if (way < bestWay) {
+      best = [x, z];
+      bestWay = way;
+    }
+  }
+  return best;
 }
 
 /** The hero walked to (x, z), using nothing there (a place picked on the map: the training yard). */
@@ -332,23 +361,17 @@ function hallInside(dt: number): void {
   // (and wherever the hall stands between the camera and him: from behind it, a hole his own size showed him alone in
   // its roof, "it needs to match the previous screenshot, logically")
   const roofAway = (inside || under || (lobby && view === 'top' && hallHidesHim())) && view === 'top';
-  const frontAway = roofAway;
   // (thinned to a ghost over a moment: gone at a stroke, walls and door vanished as he stepped in, from play "why here
   // geometry disappears ... it should fade to semi transparent")
   // (further the deeper he is in: the front wall then lies over half the frame, a dark veil with hard edges, a review)
   const deep = THREE.MathUtils.clamp((HALL.door - p.pos.z) / WALL_DEEP, 0, 1);
-  const wallGhost = CUT_AWAY_GHOST + (DEEP_GHOST - CUT_AWAY_GHOST) * deep;
-  frontFade = THREE.MathUtils.damp(frontFade, frontAway ? wallGhost : 0, CUT_AWAY_FADE, dt);
-  // (the hall alone hiding him from outside it: its walls thin wherever they stand before him; let go of only once they're
-  // back, or a wall still thinned would come back at a stroke)
-  if (inside || under) thinsAnywhere = false;
-  else if (roofAway) thinsAnywhere = true;
-  else if (frontFade < CUT_AWAY_NONE) thinsAnywhere = false;
-  hallThinsAnywhere(thinsAnywhere);
+  const wallGhost = WALL_GHOST + (DEEP_GHOST - WALL_GHOST) * deep;
+  frontFade = THREE.MathUtils.damp(frontFade, roofAway ? wallGhost : 0, CUT_AWAY_FADE, dt);
   propsLeftWhole(roofAway);
   // (stood at the door, the wall over it hides what he sees through it: it's past him, so it doesn't thin of itself)
   const offDoor = p.pos.z - HALL.inFront;
-  const atDoor = lobby && view === 'top' && Math.abs(p.pos.x - TERRACE.x) < HALL.half
+  // (looking in: from over the room, the wall before him thins as any wall does)
+  const atDoor = lobby && view === 'top' && Math.abs(p.pos.x - TERRACE.x) < HALL.half && G.camera.position.z > HALL.door
     ? (1 - THREE.MathUtils.smoothstep(offDoor, DOOR_CONE.near, DOOR_CONE.far)) * THREE.MathUtils.smoothstep(offDoor, DOOR_CONE.inFrom, DOOR_CONE.in)
     : 0;
   doorCone = THREE.MathUtils.damp(doorCone, atDoor * DOOR_CONE.ghost, CUT_AWAY_FADE, dt);
@@ -356,7 +379,17 @@ function hallInside(dt: number): void {
   // (a ghost from above whatever it hides, as every roof is: `ROOF_GHOST_ABOVE`)
   const roofWanted = roofAway ? ROOF_GHOST : lobby && view === 'top' ? ROOF_GHOST_ABOVE : 0;
   roofFade = THREE.MathUtils.damp(roofFade, roofWanted, CUT_AWAY_FADE, dt);
-  fadeWhole('hallFront', frontFade < CUT_AWAY_NONE ? 0 : frontFade);
+  // (each wall by itself: stood at the door, the one over it hides what he sees through it alone, which the cone opens)
+  for (const wall of HALL_WALL_SIDES) {
+    const wanted = roofAway && !wallsNoneHeld && (wallsAllThinHeld || (wallHidesNearHim(wall) && !(wall.kind === 'hallFront' && atDoor > AT_DOOR_CONE)));
+    const was = wallFades.get(wall.kind) ?? 0;
+    const fade = THREE.MathUtils.damp(was, wanted ? wallGhost : 0, CUT_AWAY_FADE, dt);
+    wallFades.set(wall.kind, fade);
+    fadeWhole(wall.kind, fade < CUT_AWAY_NONE ? 0 : fade);
+  }
+  beamFade = THREE.MathUtils.damp(beamFade, roofAway && !wallsNoneHeld && beamHidesHim() ? WALL_GHOST : 0, CUT_AWAY_FADE, dt);
+  fadeWhole('hallBeam', beamFade < CUT_AWAY_NONE ? 0 : beamFade);
+  lightHim(lobby && view === 'top' && inside ? 1 : 0, dt);
   fadeWhole('hallRoof', roofFade < CUT_AWAY_NONE ? 0 : roofFade > 1 - CUT_AWAY_NONE ? 1 : roofFade);
   // (what stands free before him further: through a hole his own size in a column he showed alone, from play "need to
   // show around him more, to give scene context, not just hero by itself")
@@ -365,15 +398,154 @@ function hallInside(dt: number): void {
   // same; from above the roof is away, and all of it shows)
   village.meadow.visible = !(inside && view !== 'top' && cameraInHall() && !doorInView());
   const byDoor = Math.hypot(p.pos.x - TERRACE.x, p.pos.z - HALL.door) < HALL_SEEN;
-  const seen = inside || (byDoor && view !== 'top' && doorwayOnScreen());
+  // (from above, the camera sees past the walls: while he can see a plinth, from play, "pedestals are empty from this
+  // position, they should display heroes if character can see them from their cone of view")
+  const seen = inside || (byDoor && (view === 'top' ? aPlinthSeen() : doorwayOnScreen()));
   const near = Math.hypot(p.pos.x - TERRACE.x, p.pos.z - HALL.door) < HALL_NEAR;
   standHeroes(lobby && seen && isWarm('heroes'), dt, lobby && near && isWarm('heroes'));
 }
 
+/** Whether he sees any plinth of the hall's, by the rays round him. */
+function aPlinthSeen(): boolean {
+  return HALL.plinths.some((across) => seenShareAt(TERRACE.x + across, HALL.plinthZ) > 0);
+}
+
+/** A wall of the hall on the floor: what thins it, which way it runs, its outer and inner faces, and how far along. */
+interface HallWallSide {
+  kind: HallWallKind;
+  acrossX: boolean;
+  outer: number;
+  inner: number;
+  from: number;
+  to: number;
+}
+
+const HALL_THICK = HALL.half - HALL.inHalf;
+/** The hall's walls, in `HALL_WALL_KINDS`' order. */
+const HALL_WALL_SIDES: HallWallSide[] = (['hallFront', 'hallBack', 'hallEast', 'hallWest'] as const).map((kind) => {
+  const alongX = { from: TERRACE.x - HALL.half, to: TERRACE.x + HALL.half };
+  const alongZ = { from: HALL.wall - HALL_THICK, to: HALL.door };
+  if (kind === 'hallFront') return { kind, acrossX: true, outer: HALL.door, inner: HALL.inFront, ...alongX };
+  if (kind === 'hallBack') return { kind, acrossX: true, outer: HALL.wall - HALL_THICK, inner: HALL.wall, ...alongX };
+  const side = kind === 'hallEast' ? 1 : -1;
+  return { kind, acrossX: false, outer: TERRACE.x + side * HALL.half, inner: TERRACE.x + side * HALL.inHalf, ...alongZ };
+});
+
+/** the portico's beam as a box, and the heights of him a sight to him is read at (m over his floor) */
+const BEAM = new THREE.Box3(
+  new THREE.Vector3(TERRACE.x - HALL.half, TERRACE.high + HALL.beamFoot, HALL.beamZ - HALL.beamDeep / 2),
+  new THREE.Vector3(TERRACE.x + HALL.half, TERRACE.high + HALL.wallHigh, HALL.beamZ + HALL.beamDeep / 2),
+);
+const HIS_HEIGHTS = [0.3, 1.1, 1.8];
+const _sight = new THREE.Ray(), _sightTo = new THREE.Vector3(), _sightHit = new THREE.Vector3();
+
+/** Whether the portico's beam stands between the camera and him: from along it, it lay over him whole, a review. */
+function beamHidesHim(): boolean {
+  const eye = G.camera.position, p = G.player;
+  for (const up of HIS_HEIGHTS) {
+    _sightTo.set(p.pos.x, p.obj.position.y + up, p.pos.z).sub(eye);
+    const away = _sightTo.length();
+    _sight.set(eye, _sightTo.divideScalar(away));
+    if (_sight.intersectBox(BEAM, _sightHit) && _sightHit.distanceTo(eye) < away) return true;
+  }
+  return false;
+}
+
+/** the light he's lit by in the hall from above: a share of what a lamp gives, warm, short, and how high over him. The
+ *  room's torches stand on its columns, and on its dark floor he stood as a dark figure, the thinning for nothing, a review */
+const HERO_LIGHT = { color: 0xffd9a8, intensity: 38, distance: 8, over: 3.2, eases: 6 };
+const _heroLightAt = new THREE.Vector3();
+/** the pool's light he's lit by, how bright now, and whether a harness holds it off */
+let heroLight: LightSlot | null = null;
+let heroLightNow = 0;
+let heroLightOffHeld = false;
+
+/** For a harness (tools/lab): the light he's lit by in the hall held off. */
+export function holdHeroLightOff(held: boolean): void {
+  heroLightOffHeld = held;
+}
+
+/** His light in the hall eased to `wanted` (a share), taken from the pool while it burns. */
+function lightHim(wanted: number, dt: number): void {
+  heroLightNow = THREE.MathUtils.damp(heroLightNow, heroLightOffHeld ? 0 : wanted, HERO_LIGHT.eases, dt);
+  const burning = heroLightNow > CUT_AWAY_NONE;
+  if (burning && !heroLight) {
+    heroLight = flash({
+      color: HERO_LIGHT.color, intensity: 0, distance: HERO_LIGHT.distance, life: 1, hold: Infinity,
+      follow: () => _heroLightAt,
+    });
+    // (soft close to, as a lamp is: by the square alone, a column a stride from him burned white, a review)
+    heroLight.light.decay = 2 + LAMP_SOFT;
+  }
+  if (!heroLight) return;
+  _heroLightAt.set(G.player.pos.x, G.player.obj.position.y + HERO_LIGHT.over, G.player.pos.z);
+  heroLight.peak = HERO_LIGHT.intensity * heroLightNow;
+  if (!burning) {
+    release(heroLight);
+    heroLight = null;
+  }
+}
+
+/** how far round him the floor a wall hides counts (m), how many places on that round are read, and how open the cone
+ *  through the door must be for it to stand in for the front wall */
+const NEAR_HIM = 2.5;
+const NEAR_PLACES = 12;
+const AT_DOOR_CONE = 0.5;
+/** how far each wall is thinned now */
+const wallFades = new Map<HallWallKind, number>();
+
+/** Whether the sight from the camera to a place on his floor at (x, z) meets `wall` under its top, the place on his side
+ *  of it. */
+function wallHidesPlace(wall: HallWallSide, x: number, z: number): boolean {
+  const eye = G.camera.position, p = G.player;
+  const middle = (wall.outer + wall.inner) / 2;
+  const off = (wall.acrossX ? z : x) - middle;
+  const eyeOff = (wall.acrossX ? eye.z : eye.x) - middle;
+  const hisOff = (wall.acrossX ? p.pos.z : p.pos.x) - middle;
+  if (off * eyeOff >= 0 || off * hisOff <= 0) return false;
+  const near = Math.abs(eyeOff + middle - wall.outer) < Math.abs(eyeOff + middle - wall.inner) ? wall.outer : wall.inner;
+  const along = (near - eyeOff - middle) / (off - eyeOff);
+  const floor = p.obj.position.y;
+  if (eye.y + (floor - eye.y) * along >= TERRACE.high + HALL.wallHigh) return false;
+  const across = wall.acrossX ? eye.x + (x - eye.x) * along : eye.z + (z - eye.z) * along;
+  return across > wall.from && across < wall.to;
+}
+
+/** Whether `wall` hides him or the floor round him: a wall the camera's past may hide nothing near him, its top under the
+ *  sight (from play, "we should not try to make transparent the side which doesn't help see the hero"), and one that
+ *  leaves him clear may hide all the floor beside him ("here both should be transparent, but only 1 is"). */
+function wallHidesNearHim(wall: HallWallSide): boolean {
+  const { x, z } = G.player.pos;
+  if (wallHidesPlace(wall, x, z)) return true;
+  for (let place = 0; place < NEAR_PLACES; place++) {
+    const round = (place / NEAR_PLACES) * Math.PI * 2;
+    if (wallHidesPlace(wall, x + Math.sin(round) * NEAR_HIM, z + Math.cos(round) * NEAR_HIM)) return true;
+  }
+  return false;
+}
+
+/** whether a harness has every wall of the hall thin while any does, as they did */
+let wallsAllThinHeld = false;
+
+/** For a harness (tools/lab): every wall of the hall thinned while any is, as they were. */
+export function holdHallWallsAllThin(held: boolean): void {
+  wallsAllThinHeld = held;
+}
+
+/** whether a harness holds every wall of the hall whole */
+let wallsNoneHeld = false;
+
+/** For a harness (tools/lab): every wall of the hall held whole. */
+export function holdHallWallsNone(held: boolean): void {
+  wallsNoneHeld = held;
+}
+
 /** how far the hall's front wall and roof are thinned now, how far over the hero inside (a share of their pixels), how
  *  fast they go, and the share under which they're whole */
-let frontFade = 0, roofFade = 0;
+let frontFade = 0, roofFade = 0, beamFade = 0;
 const CUT_AWAY_GHOST = 0.72, CUT_AWAY_FADE = 8, CUT_AWAY_NONE = 0.01;
+/** how far a wall before him thins by the door: at 72% he stood dim behind it, a figure in the dark (`hallWallsOneByOne`) */
+const WALL_GHOST = 0.85;
 /** how far the walls thin with him deep in the hall, and how far in from the door that is (m) */
 const DEEP_GHOST = 0.93;
 const WALL_DEEP = 6;
@@ -387,8 +559,6 @@ const COLUMN_GHOST = 0.55;
 const DOOR_CONE = { near: 2.6, far: 4, inFrom: -0.5, in: -0.1, ghost: 0.85 };
 /** how far that cone is open now */
 let doorCone = 0;
-/** whether the hall's walls thin wherever they stand before him now */
-let thinsAnywhere = false;
 const _door = new THREE.Box3(), _frustum = new THREE.Frustum(), _viewProj = new THREE.Matrix4();
 const _look = new THREE.Vector3();
 /** the heights on him the camera's line runs to (m), and the points read along each */

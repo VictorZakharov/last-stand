@@ -29,7 +29,7 @@ let grid: StandGrid | null = null;
 export const routing = { on: true };
 
 /** Whether a body of `radius` stands at (x, z): clear of every obstacle by its margin, and where the wall leaves it. */
-function stands(x: number, z: number, radius: number): boolean {
+export function stands(x: number, z: number, radius: number): boolean {
   for (const o of G.arena.obstacles) {
     if (o.h < 0.3) continue;
     if (Math.hypot(x - o.x, z - o.z) < o.r + radius + MARGIN) return false;
@@ -169,4 +169,17 @@ export function walkPath(x: number, z: number, tx: number, tz: number, radius: n
   }
   corners.push([tx, tz]);
   return corners;
+}
+
+/** How long the way `walkPath` finds from (x, z) to (tx, tz) is (m). */
+export function walkLength(x: number, z: number, tx: number, tz: number, radius: number): number {
+  let length = 0;
+  let fromX = x;
+  let fromZ = z;
+  for (const [toX, toZ] of walkPath(x, z, tx, tz, radius)) {
+    length += Math.hypot(toX - fromX, toZ - fromZ);
+    fromX = toX;
+    fromZ = toZ;
+  }
+  return length;
 }

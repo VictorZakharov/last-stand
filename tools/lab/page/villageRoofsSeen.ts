@@ -11,7 +11,9 @@ import { HALL, TERRACE } from '../../../src/data/village';
 import { CAMERA } from '../../../src/data/balance';
 import { COTTAGES } from '../../../src/data/village';
 import { orbitBy, viewMode } from '../../../src/core/renderer';
-import { fadeWhole, holdBuiltWhole, holdHoleOpening, ROOF_GHOST_ABOVE, wholeShare } from '../../../src/core/seeThrough';
+import {
+  HALL_WALL_KINDS, fadeWhole, holdBuiltWhole, holdHoleOpening, ROOF_GHOST_ABOVE, wholeShare,
+} from '../../../src/core/seeThrough';
 import { groundHeight } from '../../../src/world/ground';
 import { changedShare, viewBy } from './villageHallCull';
 import { drawFrame } from './light';
@@ -57,7 +59,8 @@ function readHall(turn: number, canary: boolean): { line: string; hidden: boolea
   const hidden = roofBeforeHim();
   if (canary && hidden) fadeWhole('hallRoof', 0);
   const roof = wholeShare('hallRoof');
-  const front = wholeShare('hallFront');
+  // (the walls thin one by one, as each hides him)
+  const front = Math.max(...HALL_WALL_KINDS.map((kind) => wholeShare(kind)));
   const problems: string[] = [];
   const at = turn.toFixed(1);
   if (hidden && roof < 1 - FADE_NEAR) problems.push(`turned ${at}, the roof before him only ${roof.toFixed(2)} gone`);

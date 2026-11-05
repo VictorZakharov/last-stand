@@ -11,6 +11,7 @@ import { G } from '../../../src/state';
 import { COTTAGES, HALL, portalPlace, TERRACE } from '../../../src/data/village';
 import { COTTAGE } from '../../../src/world/villagePlan';
 import { holdHour } from '../../../src/game/clock';
+import { holdHallWallsAllThin } from '../../../src/game/village';
 import { faceCamera, viewMode, type ViewMode } from '../../../src/core/renderer';
 import {
   holdBlendedAmongGlows,
@@ -25,8 +26,6 @@ import { drawFrame } from './light';
 import { viewBy } from './villageHallCull';
 import type { LightsChecked } from './villageLights';
 
-/** how far the hall's room runs out under its portico's beam, as the village has it (z) */
-const COLONNADE_FRONT = -12.4;
 /** the frames given to settle */
 const SETTLE = 90;
 /** how much a place's light may differ from what's drawn with nothing thinned, a share of it (its first 3% of full
@@ -174,13 +173,31 @@ function readStand(lab: Lab, stand: Stand): { wrong: number; read: number; worst
   return { wrong, read, worst, places: places.join('; ') };
 }
 
+/** How far each of `points` differs thinned as the game thins from nothing thinned, the hall's columns out of both
+ *  frames: of full light, null off the frame. */
+export function placesThinned(lab: Lab, points: THREE.Vector3[]): (number | null)[] {
+  hideHallColumns(true);
+  const canvas = drawFrame(lab);
+  const thinned = canvas.pixels.slice();
+  const giveBack = thinningLetGo();
+  const whole = drawFrame(lab).pixels;
+  giveBack();
+  hideHallColumns(false);
+  return points.map((point) => {
+    const pixel = pixelOf(point, canvas.width, canvas.height);
+    if (pixel === null) return null;
+    let differs = 0;
+    for (let part = 0; part < 3; part++) differs += Math.abs(thinned[pixel + part] - whole[pixel + part]);
+    return differs / 3;
+  });
+}
+
 /** From above, what stands past him is drawn whole. */
 export async function wallsPastHimWhole(lab: Lab, canary: boolean): Promise<LightsChecked> {
   const kept = viewMode();
   holdHour(12);
-  holdThinningReach(canary, new THREE.Vector4(
-    TERRACE.x - HALL.half + 0.7, HALL.wall + 0.7, TERRACE.x + HALL.half - 0.7, COLONNADE_FRONT,
-  ));
+  holdThinningReach(canary);
+  holdHallWallsAllThin(canary);
   holdBuiltOpenAlways(canary);
   const lines: string[] = [];
   const problems: string[] = [];
@@ -200,9 +217,8 @@ export async function wallsPastHimWhole(lab: Lab, canary: boolean): Promise<Ligh
       if (!canary) moments.push(await lab.screen(stand.name, []));
     }
   } finally {
-    holdThinningReach(false, new THREE.Vector4(
-      TERRACE.x - HALL.half + 0.7, HALL.wall + 0.7, TERRACE.x + HALL.half - 0.7, COLONNADE_FRONT,
-    ));
+    holdThinningReach(false);
+    holdHallWallsAllThin(false);
     holdBuiltOpenAlways(false);
     holdHour(null);
     faceCamera(0);

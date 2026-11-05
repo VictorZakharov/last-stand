@@ -1268,7 +1268,7 @@ function cheek(scene: THREE.Object3D, wall: Wall, M: Mats, x: number, z0: number
 function buildHall(scene: THREE.Object3D, wall: Wall, levels: Levels, M: Mats, obstacles: Obstacle[],
   updaters: Updater[]): { cutaway: THREE.Object3D[]; torches: THREE.Vector3[]; dais: THREE.Vector3[]; porch: THREE.Vector3[] } {
   const y0 = TERRACE.high, X = TERRACE.x, half = HALL.half, thick = HALL.half - HALL.inHalf;
-  const eaves = 0.72 + COLONNADE.high + COLONNADE.lintel;
+  const eaves = HALL.wallHigh;
   const back = HALL.wall - thick, face = HALL.door, front = COLONNADE.z + 0.5;
   // its footing past the terrace's back, as high as the terrace, and its floor on it
   const past = TERRACE.back - back;
@@ -1282,20 +1282,24 @@ function buildHall(scene: THREE.Object3D, wall: Wall, levels: Levels, M: Mats, o
   levels.paint(X - HALL.inHalf, HALL.wall, X + HALL.inHalf, TERRACE.back, () => y0);
   // the back and side walls, a plinth course along their feet outside, tall windows down the long ones (a group of their
   // own, thinned from above as the front wall is where they stand before him: the camera can turn to see over any)
+  // (each wall a group of its own: it thins by itself, as it stands between the camera and him, `hallInside`)
   const walls = new THREE.Group();
   scene.add(walls);
+  const sideWalls = [new THREE.Group(), new THREE.Group()];
+  for (const side of sideWalls) scene.add(side);
   // (between the side walls, as the front wall's wings are: run to their outer faces, each shared a plane with them at the
   // corners, from play, "still flickering")
   wall.add(walling(walls, half * 2 - thick * 2, eaves, thick, X, y0, HALL.wall - thick / 2, M.ashlar), true, 'wall', true);
   for (const s of [-1, 1]) {
     const sideX = X + s * (half - thick / 2), sideLen = face - back;
-    hallSideWall(walls, wall, M, sideX, s, thick, eaves, back, face);
+    const sideWall = sideWalls[s < 0 ? 0 : 1];
+    hallSideWall(sideWall, wall, M, sideX, s, thick, eaves, back, face);
     // (its plinth course in the wall too: drawn alone, the hero walked along the terrace into it, "can pass through
     // textures here")
-    wall.add(block(walls, 0.35, 0.45, sideLen, sideX + s * 0.47, y0, back + sideLen / 2, M.coping), true, 'wall', true);
+    wall.add(block(sideWall, 0.35, 0.45, sideLen, sideX + s * 0.47, y0, back + sideLen / 2, M.coping), true, 'wall', true);
     // (its top a little over the wall's course under it: at one height, the two flickered from above, "probably z fighting")
     for (const z of windowsAlong()) {
-      block(walls, thick + 0.3, 0.1, WINDOWS.wide + 0.3, sideX, y0 + WINDOWS.sill - 0.1 + SILL_PROUD, z, M.coping);
+      block(sideWall, thick + 0.3, 0.1, WINDOWS.wide + 0.3, sideX, y0 + WINDOWS.sill - 0.1 + SILL_PROUD, z, M.coping);
     }
   }
   // the front wall either side of the door and over it, its plinth course, the door in its stone frame (a group of
@@ -1321,7 +1325,7 @@ function buildHall(scene: THREE.Object3D, wall: Wall, levels: Levels, M: Mats, o
   const free = new THREE.Group();
   scene.add(free);
   const torches = hallColumns(free, scene, M, look, obstacles, ceiling);
-  const dais = hallDais(scene, free, levels, M, obstacles);
+  const dais = hallDais(scene, walls, levels, M, obstacles);
   const daisTop = y0 + HALL.daisHigh;
   for (const s of [-1, 1]) {
     const x = X + s * BRAZIERS.x;
@@ -1343,11 +1347,16 @@ function buildHall(scene: THREE.Object3D, wall: Wall, levels: Levels, M: Mats, o
       block(scene, 0.95, 0.32, 0.95, cx, y0 + 0.4 + COLONNADE.high, cz, M.granite);
     }
   }
-  block(walls, half * 2, COLONNADE.lintel, 1.0, X, y0 + 0.72 + COLONNADE.high, COLONNADE.z, M.coping);
+  const beam = new THREE.Group();
+  scene.add(beam);
+  block(beam, half * 2, COLONNADE.lintel, HALL.beamDeep, X, y0 + HALL.beamFoot, HALL.beamZ, M.coping);
   const roof = hallRoof(scene, M, y0 + eaves, back, front);
   fadesWhole(roof, 'hallRoof');
   fadesWhole(frontWall, 'hallFront');
-  fadesWhole(walls, 'hallFront');
+  fadesWhole(walls, 'hallBack');
+  fadesWhole(beam, 'hallBeam');
+  fadesWhole(sideWalls[0], 'hallWest');
+  fadesWhole(sideWalls[1], 'hallEast');
   fadesWhole(free, 'hallColumn');
   return { cutaway: [roof, frontWall], torches, dais, porch };
 }
@@ -1514,7 +1523,7 @@ function wallTorch(scene: THREE.Object3D, M: Mats, look: TorchLook, x: number, y
 /** The dais across the hall's far end, a step up onto it, and on it a plinth for each hero (granite, a coping on its
  *  top), stood on (its top a level) and kept off (a circle round it: the hero walks between them, the others stand on
  *  them); behind each its class's banner on the back wall. Returns where the lights on the heroes hang. */
-function hallDais(scene: THREE.Object3D, free: THREE.Object3D, levels: Levels, M: Mats, obstacles: Obstacle[]): THREE.Vector3[] {
+function hallDais(scene: THREE.Object3D, backWall: THREE.Object3D, levels: Levels, M: Mats, obstacles: Obstacle[]): THREE.Vector3[] {
   const y0 = TERRACE.high, X = TERRACE.x, inHalf = HALL.inHalf, top = y0 + HALL.daisHigh;
   const deep = HALL.daisZ - HALL.wall, step = STEP_RUN, rise = HALL.daisHigh / 2;
   block(scene, inHalf * 2, rise, step, X, y0, HALL.daisZ - step / 2, M.granite);
@@ -1538,10 +1547,11 @@ function hallDais(scene: THREE.Object3D, free: THREE.Object3D, levels: Levels, M
     const cloth = bannerCloth(256, 512, CLASSES[CLASS_IDS[i]].hall.banner);
     const velvet = seeThrough(new THREE.MeshStandardMaterial({ map: cloth, roughness: 0.85, side: THREE.DoubleSide }), 'prop');
     const s = HALL_BANNER.scale;
-    solid(free, bannerGeo(rng).rotateY(Math.PI).scale(s, s, s), velvet).position.set(x, bannerTop, bz);
+    // (on the back wall's kind: left whole as the wall thinned, they hung in the air, a review)
+    solid(backWall, bannerGeo(rng).rotateY(Math.PI).scale(s, s, s), velvet).position.set(x, bannerTop, bz);
     const rod = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.9 * s + 0.3, 8).rotateZ(Math.PI / 2), M.iron);
     rod.position.set(x, bannerTop + 0.03, bz);
-    free.add(rod);
+    backWall.add(rod);
   }
   // (the heroes lit from before and above, between them: seen from the door, lit by the torches alone they stood dark)
   return [-1, 1].map((s) => new THREE.Vector3(X + s * HALL.plinths[2] / 2, top + DAIS_LIGHT.up, z + DAIS_LIGHT.ahead));
