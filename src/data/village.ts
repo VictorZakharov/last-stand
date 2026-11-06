@@ -103,6 +103,18 @@ export const ENTRANCES: Record<BiomeId, Entrance> = {
   forest: { gap: [-24.3, 13.2], out: unit(-0.85, 0.53), portalOut: 6.5 },
 };
 
+/** How far inside its gap a hero back through a way's portal comes out (m): at 3.3 m out of the portal, under its
+ *  arch and between the gap's walls, the view from behind him looked down on the crypt's gate, the top half of the
+ *  frame its dark stone, him in a hole cut through it (from play, "this is what I saw when lower end player returned
+ *  to sanctuary"; `npm run lab -- village --only portalReturn`). */
+export const EXIT_IN = 3.8;
+
+/** Where a hero back through a way's portal comes out: inside its gap, facing into the village. */
+export function exitPlace(id: BiomeId): { x: number; z: number; facing: number } {
+  const e = ENTRANCES[id];
+  return { x: e.gap[0] - e.out[0] * EXIT_IN, z: e.gap[1] - e.out[1] * EXIT_IN, facing: portalPlace(id).facing };
+}
+
 /** Where a way out's portal stands, and the way it faces (rad about y: 0 faces +z): back along its way. */
 export function portalPlace(id: BiomeId): { x: number; z: number; facing: number } {
   const e = ENTRANCES[id];

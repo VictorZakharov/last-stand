@@ -34,6 +34,7 @@ import { roofsFromAbove } from './villageRoofsSeen';
 import { grassStillFromAbove } from './villageGrassRing';
 import { campfireBurns, heroBesideFire } from './villageFire';
 import { sightBlacksOut } from './villageSight';
+import { portalReturn } from './villagePortalReturn';
 import { staffAtNight } from './villageStaff';
 import { dummyLabelsFade } from './villageMeter';
 import { fountainStopsArrows } from './villageFountain';
@@ -160,6 +161,7 @@ export async function village(lab: Lab, options: VillageOptions): Promise<Report
     heroFaceNotBlinding: () => heroFaceNotBlinding(lab, options.canary),
     heroBesideFire: () => heroBesideFire(lab, options.canary),
     sightBlacksOut: () => sightBlacksOut(lab, options.canary),
+    portalReturn: () => portalReturn(lab, options.canary),
     fogHoldsSteady: () => fogHoldsSteady(lab, options.canary),
     firesStillInFog: () => firesStillInFog(lab, options.canary),
     leavesInFog: () => leavesInFog(lab, options.canary),

@@ -19,7 +19,7 @@ import * as THREE from 'three';
 import type { SightRoof, SightWall } from '../core/sight';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import {
-  CAMPFIRE, CHEST, CHRONICLE, COTTAGES, DAY, ENTRANCES, GAP_HALF, HALL, NOTICE, STEP_RISE, TERRACE, YARD, portalPlace,
+  CAMPFIRE, CHEST, CHRONICLE, COTTAGES, DAY, ENTRANCES, GAP_HALF, HALL, NOTICE, STEP_RISE, TERRACE, YARD, exitPlace, portalPlace,
   type Cottage, type Spot,
 } from '../data/village';
 import { BIOME_IDS, type BiomeId } from '../data/biomes';
@@ -676,9 +676,8 @@ export function buildVillage(scene: THREE.Group): Village {
   const portals: Portal[] = stillBuilt(scene, () => [buildCryptWay(scene, wall, M, updaters), buildForestWay(scene, wall, updaters)]);
   const exits = {} as Village['exits'];
   for (const id of BIOME_IDS) {
-    const p = portalPlace(id);
-    const at = new THREE.Vector3(p.x + Math.sin(p.facing) * 3.3, 0, p.z + Math.cos(p.facing) * 3.3);
-    exits[id] = { at, facing: p.facing };
+    const p = exitPlace(id);
+    exits[id] = { at: new THREE.Vector3(p.x, 0, p.z), facing: p.facing };
   }
   stillBuilt(scene, () => { for (const c of COTTAGES) buildCottage(scene, wall, M, c, rng); });
   stillBuilt(scene, () => buildTrees(scene, wall, obstacles, trees));
