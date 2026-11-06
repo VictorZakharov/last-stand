@@ -11,6 +11,10 @@ import { input } from '../../../src/core/input';
 import { cameraYaw } from '../../../src/core/renderer';
 import { hostRoom, joinRoom, session } from '../../../src/net/session';
 import * as netlog from '../../../src/net/netlog';
+import * as netRole from '../../../src/net/role';
+import * as warm from '../../../src/game/warm';
+import * as village_ from '../../../src/data/village';
+import { groundHeight } from '../../../src/world/ground';
 import { spawnEnemy } from '../../../src/entities/spawner';
 import { clearEnemies, type Enemy } from '../../../src/entities/enemy';
 import { Projectile } from '../../../src/combat/projectiles';
@@ -115,6 +119,10 @@ export interface CoopState {
   stowed: boolean;
   /** its own hero casting freely, as the lobby has him (no costs or cooldowns) */
   free: boolean;
+  /** its run's phase (none out of a run), whether its countdown is held for a guest readying the run, its seconds */
+  phase: string | null;
+  held: boolean;
+  timer: number | null;
 }
 
 /** A turn of frames the lab asks a page for: the messages arrived meanwhile, and what to play. */
@@ -611,9 +619,15 @@ export async function coopOpen(
 }
 
 /** The guest practising on the lobby's dummies while it waits for its host, as a player does: its lobby stowed, as
- *  Space and a phone's Practice stow it. */
+ *  Space and a phone's Practice stow it, and in the village in its training yard, where the dummies stand (anywhere
+ *  else a hero isn't armed, and its lobby never became practice). */
 export function coopPractise(): void {
   toggleMenuStowed(true);
+  const village = village_ as { yardToWorld?: (x: number, z: number) => [number, number] };
+  if (G.arena.place !== 'village' || !village.yardToWorld) return;
+  const [x, z] = village.yardToWorld(0, 0);
+  G.player.walkTo = null;
+  G.player.place(new THREE.Vector3(x, groundHeight(x, z), z), 0);
 }
 
 /** The host starts the run (its guest comes along). */
@@ -628,8 +642,40 @@ function stateNow(): CoopState {
     partners: G.players.length - 1,
     stowed: menuStowed(),
     free: G.player.sandbox,
+    phase: G.run?.phase ?? null,
+    held: (G.run as { held?: boolean } | null)?.held === true,
+    timer: G.run ? G.run.timer : null,
   };
 }
+
+/** The guest's fight's programs kept cold (`chill`), so the run the host starts waits for them under its loading
+ *  bar, as a slow device's does (from play, "readying the fight for slower device takes forever, and first wave
+ *  already launched"). */
+export function coopSlowToReady(): void {
+  warm.chill('fight');
+}
+
+/** The guest's fight's programs warm: the run it waited for begins. */
+export function coopReady(): void {
+  warm.markWarm('fight');
+}
+
+/** The canary: the host told no guest is readying, every frame, so its countdown never holds. */
+export function coopForgetReadying(lab: Lab): void {
+  // (an older tree, whose host never waits, has none to tell)
+  const readying = (netRole as { readying?: { guests: string[] } }).readying;
+  const forget = (): void => { if (readying) readying.guests = []; };
+  if (!lab.beforeFrame.includes(forget)) lab.beforeFrame.push(forget);
+  forgetting = forget;
+}
+
+/** The canary's hook taken off again. */
+export function coopRememberReadying(lab: Lab): void {
+  const at = forgetting ? lab.beforeFrame.indexOf(forgetting) : -1;
+  if (at >= 0) lab.beforeFrame.splice(at, 1);
+  forgetting = null;
+}
+let forgetting: (() => void) | null = null;
 
 /** The run's countdown held (no wave comes) and every hero kept from falling. */
 function holdTheRun(): void {

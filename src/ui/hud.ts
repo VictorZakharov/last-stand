@@ -278,7 +278,8 @@ export function updateHud(): void {
   if (!r) return;
   // objectives
   const ol = h('.obj-line');
-  const txt = r.phase === 'countdown' ? `Wave ${r.wave} begins in ${Math.ceil(r.timer)}…`
+  const txt = r.phase === 'countdown' && r.held ? 'Waiting for players…'
+    : r.phase === 'countdown' ? `Wave ${r.wave} begins in ${Math.ceil(r.timer)}…`
     : r.phase === 'fighting' ? `Eliminate all enemies (${r.remaining})`
     : r.phase === 'cleared' ? (G.player.active ? 'Bank your spoils or continue' : 'The others decide')
     : G.player.out === 'banked' ? 'Spoils banked' : G.player.out === 'dead' ? 'Fallen' : 'The run is over';

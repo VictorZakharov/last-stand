@@ -13,7 +13,7 @@ import { Player, setActionSink, type PlayerAction } from '../entities/player';
 import { openLink, ServerDown, SERVER_DOWN, type Link } from './transport';
 import { netLog, serverPings } from './netlog';
 import { mine, freshNumbers, type RunNumbers } from '../game/stats';
-import { role } from './role';
+import { readying, role } from './role';
 import { ownOffset, setHostOffset } from '../game/clock';
 import { hostSync, stopSync, onWorld, onGuestControl, sendWorld, playWorld, onGuestHits, takeHits, type HitReport, type WorldMessage } from './sync';
 import { Playout, Smoother, Timeline, Track, type Pose } from './timeline';
@@ -22,7 +22,7 @@ import { setGroundNet, addDrop, removeDrop, receiveItem, groundDrops, clearGroun
 import type { Profile } from '../types';
 
 /** bumped when messages or the playable roster change: incompatible games don't play together */
-const PROTOCOL = 20;
+const PROTOCOL = 21;
 /** how long a guest waits for the host before giving up (s) */
 const JOIN_TIMEOUT = 25;
 /** room codes: no look-alike letters or digits */
@@ -37,6 +37,8 @@ export type SessionStatus = 'off' | 'hosting' | 'joining' | 'joined' | 'failed';
  *  it did). */
 interface Peer {
   id: string; slot: number; player: Player | null; look: Look | null; inRun: boolean;
+  /** sent the start of a run and not yet in it: readying it (the host's countdown holds for it) */
+  readying: boolean;
   /** its run in numbers and its round trips to the server, as it reports them (the scoreboard) */
   numbers: RunNumbers; rtt: number | null; pings: number[];
   clock: Timeline; track: Track<StateMsg>; smooth: Smoother; actions: Playout<PlayerAction>;
@@ -155,6 +157,7 @@ export function leaveRoom(): void {
   setGroundNet(null);
   for (const peer of session.peers.values()) dropPlayer(peer);
   session.peers.clear();
+  syncReadying();
   session.status = 'off';
   session.hostId = '';
   session.biome = null;
@@ -278,8 +281,13 @@ function onControl(from: string, m: Record<string, unknown>): void {
     }
     return;
   }
-  // host: a guest's choices in the run
+  // host: a guest in the run it was sent (its countdown held till then), or its choices in the run
   const peer = session.peers.get(from);
+  if (m.t === 'inrun') {
+    if (peer) peer.readying = false;
+    syncReadying();
+    return;
+  }
   if (peer?.player) onGuestControl(peer.player, m);
 }
 
@@ -408,7 +416,7 @@ function playState(p: Player, pose: Pose, m: StateMsg): void {
 function addPeer(id: string, slot: number, look: Look): void {
   const spacing = 1000 / COOP.sendRate;
   const peer: Peer = {
-    id, slot, player: null, look, inRun: false, clock: new Timeline(spacing), track: new Track(), smooth: new Smoother(), actions: new Playout(),
+    id, slot, player: null, look, inRun: false, readying: false, clock: new Timeline(spacing), track: new Track(), smooth: new Smoother(), actions: new Playout(),
     numbers: freshNumbers(), rtt: null, pings: [],
   };
   session.peers.set(id, peer);
@@ -441,6 +449,8 @@ function peerLeft(id: string): void {
   const wasHost = id === session.hostId;
   dropPlayer(peer);
   session.peers.delete(id);
+  // (a guest gone while it readied the run isn't waited for)
+  syncReadying();
   if (wasHost) { hooks.hostGone(); leaveRoom(); return; }
   hooks.changed();
 }
@@ -476,10 +486,25 @@ export function sendLobby(biome: BiomeId, wave: number): void {
 /** The host starts a run: the guests in the lobby come along, its props shaped by the same `seed`. */
 export function sendStart(biome: BiomeId, wave: number, seed: number): void {
   if (role.current !== 'host') return;
-  for (const peer of session.peers.values()) if (!peer.inRun) send('ctl', { t: 'start', biome, wave, seed }, peer.id);
+  for (const peer of session.peers.values()) {
+    if (peer.inRun) continue;
+    send('ctl', { t: 'start', biome, wave, seed }, peer.id);
+    peer.readying = true;
+  }
   // they're in from now on (their reports will say so too)
   for (const peer of session.peers.values()) peer.inRun = true;
   syncAway();
+  syncReadying();
+}
+
+/** A guest: our run begun as the host's start asked (its fight's programs warm): the host's countdown goes on. */
+export function sendInRun(): void { sendControl({ t: 'inrun' }); }
+
+/** The guests still readying the run the host started, for its countdown (net/role.ts `readying`). */
+function syncReadying(): void {
+  readying.guests = [...session.peers.values()]
+    .filter((peer) => peer.readying)
+    .map((peer) => peer.player?.cls.name ?? 'a partner');
 }
 
 /** A guest's choice in the run, for the host. */

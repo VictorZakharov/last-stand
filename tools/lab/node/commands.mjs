@@ -456,7 +456,8 @@ export const COMMANDS = {
   coop: {
     each(side, options) {
       const { scenarios, ping, jitter } = options;
-      return runCoop(side, { scenarios, ping, jitter, pictures: Boolean(options.pictures) });
+      const canary = Boolean(options.canary);
+      return runCoop(side, { scenarios, ping, jitter, pictures: Boolean(options.pictures), canary });
     },
     textOf: asText,
     problemsOf: problemsIn,

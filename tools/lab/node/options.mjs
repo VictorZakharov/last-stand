@@ -291,6 +291,7 @@ export const COMMANDS = {
       ping: { kind: 'number', usage: 'ms', help: 'the link\'s least round trip (300 by default)' },
       jitter: { kind: 'number', usage: 'ms', help: 'how much later each way a message may come (60 by default)' },
       pictures: { kind: 'switch', help: 'picture both screens at a scenario\'s moments (into out/coop)' },
+      canary: { kind: 'switch', help: 'plant a fault the start must catch: the host told no guest readies the run' },
       ...COMMON_OPTIONS,
     },
   },

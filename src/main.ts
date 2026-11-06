@@ -74,7 +74,7 @@ import { preloadEngraving } from './core/engraving';
 import { preloadStump } from './world/stump';
 import { preloadFlames } from './world/fire';
 import { initSync } from './net/sync';
-import { initSession, joinRoom, invitedRoom, sendLook, sendLobby, sendStart, sendControl, syncAway, updateSession, playSession, partnerInRun } from './net/session';
+import { initSession, joinRoom, invitedRoom, sendInRun, sendLook, sendLobby, sendStart, sendControl, syncAway, updateSession, playSession, partnerInRun } from './net/session';
 import { isCoop, isGuest, isHost, simulates } from './net/role';
 import { initCoop, renderCoop, updateCoopHud, touchReviving, openCoop, coopOpen } from './ui/coop';
 import { updateScoreboard } from './ui/scoreboard';
@@ -367,6 +367,8 @@ function start() {
 function guestStart(biome: BiomeId, wave: number, seed: number) {
   G.arena.setBiome(biome);
   beginRun(wave, seed);
+  // (the host's countdown held till now: a slow device's readying outlasted it, and the wave came without it)
+  sendInRun();
 }
 
 function beginRun(wave: number, seed: number) {
