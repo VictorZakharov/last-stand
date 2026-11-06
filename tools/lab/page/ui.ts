@@ -53,11 +53,12 @@ import {
   closeLitTouch, closeSheetTouch, litTouchPictures, litTouchShown, openLitTouch, openSheetTouch, plantLitCanary,
   SHEET_CANARIES, sheetTouchShown,
 } from './uiSheet';
+import { closeSitHint, openSitHint, sitHintCanaryCaught, sitHintClosed, sitHintShown } from './uiSitHint';
 
 /** The states pictured, in the order they run (tools/lab/node/options.mjs `UI_STATES`). */
 export type UiState =
   | 'lobby' | 'tooltip' | 'glow' | 'help' | 'saves' | 'heroes' | 'readying' | 'readyingHeroes' | 'clicked' | 'views'
-  | 'behindProps'
+  | 'behindProps' | 'sitHint'
   | 'logLobby' | 'perfAsk'
   | 'heroesWarming' | 'skillTipsTouch' | 'sheetTouch' | 'litTouch' | 'buttonsTouch' | 'run' | 'scores' | 'perf'
   | 'decision' | 'perfAskBreak' | 'pause' | 'pauseSettings' | 'pauseAbandon' | 'summary' | 'skillTips' | 'log' | 'logTouch' | 'hudTouch' | 'decisionTouch'
@@ -894,6 +895,7 @@ const STEPS: Record<UiState, Steps> = {
   clicked: { open: clickClass, close: () => undefined, check: focusAfterClick },
   views: { open: switchViews, close: () => undefined, check: labelsThroughSwitches },
   behindProps: { open: () => undefined, close: () => undefined, check: labelsBehindProps },
+  sitHint: { open: openSitHint, close: closeSitHint, check: sitHintShown, closed: sitHintClosed },
   logLobby: { open: openLogLobby, close: closeLog, check: logShown },
   perfAsk: { open: openPerfAsk, close: closePerfAsk, check: (canary) => perfAskShown('perfAsk', canary) },
   skillTipsTouch: { open: openSkillTipsTouch, close: closeSkillTipsTouch, check: skillTipsShown },
@@ -984,6 +986,11 @@ export async function ui(lab: Lab, options: UiOptions): Promise<Report> {
     const caught = found.problems.some((problem) => problem.includes(name));
     lines.push(`  canary: ${what} ${caught ? 'caught' : 'went unseen'}`);
     if (!caught) missed.push(`${state}: the canary's ${what} went unseen`);
+  }
+  if (state === 'sitHint') {
+    const caught = sitHintCanaryCaught(found.problems);
+    lines.push(`  canary: the hint hidden over a seat outlined ${caught ? 'caught' : 'went unseen'}`);
+    if (!caught) missed.push(`${state}: the canary's hidden hint went unseen`);
   }
   if (state === 'readying' && readyingBar()) {
     const wrapped = found.problems.some((problem) => problem.includes('runs onto'));

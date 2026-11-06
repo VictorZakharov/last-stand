@@ -115,6 +115,11 @@ export class Sitting {
     return this.leaving;
   }
 
+  /** Whether the seat the cursor rests on is outlined, so E sits him on it (the hint to, `ui/sitHint.ts`). */
+  get pointed(): boolean {
+    return this.lit;
+  }
+
   /** The seat the cursor points at, followed a frame (`ray`: the cursor's, none on touch; `peace`: no wave under way):
    *  outlined white once it has rested there `SIT.look`, when E sits him on it. */
   point(me: Sitter, ray: THREE.Ray | null, dt: number, peace: boolean): void {
