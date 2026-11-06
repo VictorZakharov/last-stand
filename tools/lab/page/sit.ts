@@ -25,6 +25,7 @@ import { describeShieldRim, FireClear, LaidStill, shieldRimOver } from './sitFir
 import { aloftCanary, HeldAloft } from './sitAloft';
 import { BladesApart, bladesCanary } from './sitBlades';
 import { HaftSlide, slideCanary } from './sitSlide';
+import { FaceClear } from './sitFace';
 import { ARM_LIMITS, bodyBreaches, FIST_OPEN, grippingRanges, grippingSides } from './range';
 import { ArmsPinned, describeStrain, pinnedCanary } from './armStrain';
 import { cm as cmOf, follow, JERK_FROM, skirtsOf, type Followed } from './coat';
@@ -251,6 +252,8 @@ interface Watch {
   blades: BladesApart;
   /** a weapon moving along itself through his fist by itself */
   slide: HaftSlide;
+  /** a weapon's far end by his face */
+  face: FaceClear;
   /** he carries a two-hander: by a fire it's laid down */
   twoHanded: boolean;
   /** the frames a closed fist was past its handle's end, on what it was to hold it by, the most, and where */
@@ -385,6 +388,7 @@ async function trySeat(lab: Lab, c: SeatCase, fixture: Fixture, options: SitOpti
     aloft: new HeldAloft(),
     blades: new BladesApart(),
     slide: new HaftSlide(),
+    face: new FaceClear(),
     twoHanded: !!lab.model.offGrip,
     fistPast: { frames: 0, most: 0, at: '' },
     before: heldNow(lab), canary: !!options.canary, traced: !!options.trace, moments: [],
@@ -512,6 +516,7 @@ function watchFrame(lab: Lab, name: string, frame: string, watch: Watch, skirts:
   watch.aloft.observe(lab, frame);
   watch.blades.observe(lab, frame);
   watch.slide.observe(lab, frame);
+  watch.face.observe(lab, frame);
   const through = legsThrough(lab.joints, skirts);
   if (!through || through.depth <= THROUGH_FROM) return;
   if (!watch.through || through.depth > watch.through.depth) watch.through = { ...through, at: frame };
@@ -720,6 +725,11 @@ function judgeWatch(name: string, watch: Watch, out: Out): void {
   const slid = watch.slide.describe(name);
   if (slid) out.problems.push(slid);
   if (!slideCanary()) out.problems.push('sit: the canary (a weapon moving through his fist by itself) was missed');
+  const faceRead = watch.face.summary(name);
+  if (faceRead) out.text.push(faceRead);
+  const byFace = watch.face.describe(name);
+  if (byFace) out.problems.push(byFace);
+  if (!watch.face.caught()) out.problems.push('sit: the canary (a weapon\'s head at his face) was missed');
   if (regrip.open > 0) {
     out.text.push(`  by the ${name}, his right hand open on ${regrip.open} frames, ${regrip.unheld} with no left hand on it`);
   }
