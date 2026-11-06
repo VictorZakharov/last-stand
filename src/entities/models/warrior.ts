@@ -46,7 +46,7 @@ import { ItemGlows } from './itemGlow';
 /** sat, how a hand that holds a weapon turns as it goes down to his thigh (`models/sit.ts`, `restHands`), the left's
  *  and the right's, the weapon pointing down to where it's stood; an empty hand rests palm down. The small rise keeps
  *  his shield-side forearm over the thigh. */
-const SIT_HANDS = tunable('warriorSit', { roll: [0, 0], rise: 0.005, slant: 0.1, along: 0.35, over: 0.09, armIn: 1, floorIn: 0.7, arc: 0.15, lapR: [0.85, -0.1, 0.5], fistBelow: 0.08, swordRest: [-0.03, -0.32, -0.5, 0.05, 0.3, 0.12, 0, 1.08, 0.2], maulRest: [0.05, 0.05, -0.58, 0.1, 0.25, 0.7, -0.4, 0.93, 0.32], axeRest: [-0.01, 0.13, -0.54, 0.1, 0.25, 0.5, -0.4, 0.95, 0.32], stuckIn: 0.32, plantX: -0.4, plantPole: [-0.5, -1, -0.6], flatEdge: [-1, 0, 0], frontAt: [-0.12, 1.34, 0.38], frontWay: [-0.05, 0.6, 0.8], leanTo: 0.12, regripOpen: 0.7, leanDraws: 0.4, flatSide: [1, 0, 0], lowHand: [-0.14, 0.54], lowEndX: -0.45, pathOut: 0.25, besideFrom: 0.6, besideBy: 0.35, handDownBy: 0.7, offOpen: 0.75, floorFrontAt: [-0.15, 1.2, 0.35], floorFrontWay: [-0.75, 0.65, -0.1], floorFlat: [0.25, 0.25, 0.9], floorLowHand: [-0.2, 0.42], floorLowY: 0.85, floorHaftAhead: 0.13, floorOut: [-0.6, 0.8], floorLowOut: [-0.75, 0.66], floorPathOut: 0, floorPathAhead: 0.18, floorGripY: 0.04, floorGripZ: 0.2, floorLaidFlat: [0, -1, 0], liftBy: 0.34, lowerBy: 0.72, helpFrom: 0.02, helpBy: 0.14, helpOff: 0.4, floorLetGo: 0.1, plantFrom: 0.15, plantBy: 0.8, lowerOver: 0.04, caneAhead: [0.1, -0.25, 1], seatHip: 0.86, sinkBy: 1, leftAbove: -0.13, beside: [-0.5, 0.09, 0.1], besidePole: [-1, -0.1, -0.2], besideAhead: 0.95, twoR: [0.8, -0.08, 0.6], twoL: [-0.8, -0.2, 0.6], twoAlong: [0, 0], twoOverL: 0.09, viaR: [-0.15, 0.2, 0.95], viaL: [0.15, 0.2, 0.95], viaAt: 0.45, floorBack: 0, viaFloorR: [-0.15, 0.5, 0.85], viaFloorL: [0.15, 0.5, 0.85], kneesR: [0.88, -0.2, 0.42], kneesL: [-0.7, -0.3, 0.65], turnFrom: 0.15, turnLate: 0.5, turnIn: 0.12, shieldOut: 0.09, upLeftAbove: 0.22, upLeftFrom: 0.42, upPlantFrom: 0.55, upPlantBy: 0.75, plantLetGo: 0.8, upWay: [-0.08, 0.99, 0.02], upRestAt: [-0.35, 0.05, 0.6], upLeanWay: [-0.1, 0.95, 0.25], upLeanFrom: 0.6, upTurn: [0.3, -0.9, 0.2], upButt: 0.56, floorShieldOut: 0.12, floorShieldLow: 0.14, edgeDown: 0.2, });
+const SIT_HANDS = tunable('warriorSit', { roll: [0, 0], rise: 0.005, slant: 0.1, along: 0.35, over: 0.09, armIn: 1, floorIn: 0.7, arc: 0.15, lapR: [0.85, -0.1, 0.5], fistBelow: 0.08, swordRest: [-0.03, -0.32, -0.5, 0.05, 0.3, 0.12, 0, 1.08, 0.2], maulRest: [0.05, 0.05, -0.58, 0.1, 0.25, 0.7, -0.4, 0.93, 0.32], axeRest: [-0.01, 0.13, -0.54, 0.1, 0.25, 0.5, -0.4, 0.95, 0.32], stuckIn: 0.32, plantX: -0.4, plantPole: [-0.5, -1, -0.6], flatEdge: [-1, 0, 0], frontAt: [-0.12, 1.34, 0.38], frontWay: [-0.05, 0.6, 0.8], leanTo: 0.12, regripOpen: 0.7, leanDraws: 0.4, flatSide: [1, 0, 0], lowHand: [-0.14, 0.54], lowEndX: -0.45, pathOut: 0.25, besideFrom: 0.6, besideBy: 0.35, handDownBy: 0.7, offOpen: 0.75, floorFrontAt: [-0.15, 1.2, 0.35], floorFrontWay: [-0.75, 0.65, -0.1], floorFlat: [0.25, 0.25, 0.9], floorLowHand: [-0.2, 0.42], floorLowY: 0.85, floorHaftAhead: 0.13, floorOut: [-0.6, 0.8], floorLowOut: [-0.75, 0.66], floorPathOut: 0, floorPathAhead: 0.18, floorGripY: 0.04, floorGripZ: 0.2, floorLaidFlat: [0, -1, 0], liftBy: 0.34, lowerBy: 0.72, helpFrom: 0.02, helpBy: 0.14, helpOff: 0.4, floorLetGo: 0.1, plantFrom: 0.15, plantBy: 0.8, lowerOver: 0.04, caneAhead: [0.1, -0.25, 1], seatHip: 0.86, sinkBy: 1, leftAbove: -0.13, beside: [-0.5, 0.09, 0.1], besidePole: [-1, -0.1, -0.2], besideAhead: 0.95, twoR: [0.8, -0.08, 0.6], twoL: [-0.8, -0.2, 0.6], twoAlong: [0, 0], twoOverL: 0.09, viaR: [-0.15, 0.2, 0.95], viaL: [0.15, 0.2, 0.95], viaAt: 0.45, floorBack: 0, viaFloorR: [-0.15, 0.5, 0.85], viaFloorL: [0.15, 0.5, 0.85], kneesR: [0.88, -0.2, 0.42], kneesL: [-0.7, -0.3, 0.65], turnFrom: 0.15, turnLate: 0.5, turnIn: 0.12, shieldOut: 0.09, upLeftAbove: 0.22, upLeftFrom: 0.42, upPlantFrom: 0.55, upPlantBy: 0.75, plantLetGo: 0.8, upWay: [-0.08, 0.99, 0.02], upRestAt: [-0.35, -0.15, 0.62], upLeanWay: [-0.1, 0.95, 0.25], upLeanFrom: 0.6, upSlipFrom: 0.25, upSlipBy: 0.6, upTurn: [0.3, -0.9, 0.2], upButt: 0.56, floorShieldOut: 0.12, floorShieldLow: 0.14, edgeDown: 0.2, });
 const _sitTurn: RestTurn = { roll: [0, 0], bend: [0, 0], along: [0, 0], over: [0, 0], armIn: [0, 0], arc: [0, 0], out: [0, 0], low: [0, 0] };
 const _lifted: number[] = [], _resting: number[] = [];
 
@@ -1592,6 +1592,9 @@ export function buildWarrior(): Model {
     /** where it's stood head up between his feet and its way there, in his frame, before it's leant out to his right */
     uprightAt: new THREE.Vector3(),
     uprightWay: new THREE.Vector3(),
+    /** his hands' stage sat last frame, and whether it's setting the weapon down (else taking it up) */
+    handsWas: 0,
+    settingDown: true,
     /** where it lies by a fire, in his frame */
     restGrip: new THREE.Vector3(),
     restWay: new THREE.Vector3(),
@@ -1919,7 +1922,7 @@ export function buildWarrior(): Model {
   }
   /** Its butt let down onto the ground as he's `sat` of the way down, his fist going up the haft (the grip moved along
    *  the weapon under the hand, as far as its handle goes). */
-  function buttDown(weapon: Weapon, sat: number, before: number): void {
+  function buttDown(weapon: Weapon, sat: number, before: number, slips: boolean): void {
     seat(handR, grip, weapon.r, slantR);
     root.updateMatrixWorld(true);
     const scale = _cur.setFromMatrixScale(grip.matrixWorld).y;
@@ -1936,7 +1939,11 @@ export function buildWarrior(): Model {
     // (by his right fist as it comes off his shoulder, and up the haft only once it stands before him: up there from the
     // start, it reached for a spot by his face, his forearm into his head)
     const up = sat > 0 ? 1 : smooth(ramp(before, SIT_HANDS.upLeftFrom, SIT_HANDS.upPlantFrom));
-    offGrip.position.y = SIT_HANDS.upLeftAbove + full * up;
+    // (set down, let slip through both his loosened fists under its own weight, his left closed round it over his
+    // right, where it stays: carried down by his left instead, it was first lifted overhead off his shoulder, his left
+    // hand reaching up across his face, and in his fist as he carries it, his fist went past his reach sat. Taken up, it
+    // can't rise through his fist by itself, so his left lifts it)
+    offGrip.position.y = SIT_HANDS.upLeftAbove + full * (slips ? sat : up);
     grip.updateMatrixWorld(true);
     twoSit.upright = true;
   }
@@ -3005,6 +3012,14 @@ export function buildWarrior(): Model {
       // (and otherwise off it once his left hand has it: lifted as it came, it was up in one fist a moment)
       // (off his shoulder once his left hand has it: lifted as it came, it was up in one fist a moment)
       const up = smooth(ramp(before, SIT_HANDS.helpBy, upright ? SIT_HANDS.upLeftFrom : SIT_HANDS.liftBy));
+      // (head up: setting it down as his hands' stage goes on, taking it up as it goes back; held where it is between)
+      if (before > twoSit.handsWas) twoSit.settingDown = true;
+      else if (before < twoSit.handsWas) twoSit.settingDown = false;
+      twoSit.handsWas = before;
+      // (its butt onto the floor: let slip down as it comes off his shoulder, and lifted back up through his fist by his
+      // left once that's on it)
+      const planting = twoSit.settingDown ? smooth(ramp(before, SIT_HANDS.upSlipFrom, SIT_HANDS.upSlipBy))
+        : smooth(ramp(before, SIT_HANDS.upPlantFrom, SIT_HANDS.upPlantBy));
       const falling = upright ? 1 : smooth(ramp(before, SIT_HANDS.liftBy, loweredBy));
       const floor = onFloor(st.sit!);
       const down = floor ? smooth(way) : 0;
@@ -3047,11 +3062,11 @@ export function buildWarrior(): Model {
       // (his fist loosened on it as it's tipped upright on its far end: the lab's `sit` passes this over, and no other turn)
       held!.group.userData.tipping = inGround && (round < 1 || turned < 1);
       held!.group.userData.handleTo = floorRest(held!)[5];
-      held!.group.userData.stoodOn = (inGround && turned >= 1) || down >= 1 || (upright && before >= SIT_HANDS.upPlantBy);
+      held!.group.userData.stoodOn = (inGround && turned >= 1) || down >= 1 || (upright && planting >= 1);
       // (stood on its butt while he still stands, and planted there as long as his body moves, his fist going down the haft
       // as he sits and up it as he stands: let down with his hips and taken up with them as he rose, it slid up through his
       // fist on its own, from play "maul cannot slide up without jedi force he doesn't have")
-      if (upright) buttDown(held!, smooth(ramp(before, SIT_HANDS.upPlantFrom, SIT_HANDS.upPlantBy)), before);
+      if (upright) buttDown(held!, planting, before, twoSit.settingDown);
       // (said on the grip, which `lab sit` follows as the piece hung from his hand)
       grip.userData.slidesAlong = upright;
       grip.userData.stoodOn = false;
