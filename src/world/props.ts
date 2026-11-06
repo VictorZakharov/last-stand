@@ -138,6 +138,8 @@ export function movesInShadows(group: THREE.Object3D): void {
   movers.push(group);
   group.traverse((part) => part.layers.enable(HERO_SHADOW_LAYER));
 }
+/** What moves that isn't a body, drawn over the kept shadow maps (`movesInShadows`). */
+export const shadowMovers = (): readonly THREE.Object3D[] => movers;
 /** The lamps' still shadows asked to be drawn again (one moved to another lamp), with the next frame's still ones. */
 export function drawLampShadows(): void {
   lampsAsked++;

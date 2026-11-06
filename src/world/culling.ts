@@ -203,6 +203,17 @@ export function afterShadows(after: AfterShadows): void {
   afterShadow.add(after);
 }
 
+/** Whether the work after a shadow map's draw may be let go this time, told whether the draw is a still one
+ *  (`skipAfterShadows`). */
+type SkipsAfter = (camera: THREE.Camera, still: boolean) => boolean;
+let skipsAfter: SkipsAfter | null = null;
+
+/** `skips` asked before each draw's work after it (`afterShadows`): true lets it go, the maps left as they stand
+ *  (`world/shadowsOnMove.ts`: on Low, nothing that moves has). */
+export function skipAfterShadows(skips: SkipsAfter): void {
+  skipsAfter = skips;
+}
+
 /** Culls the meshes culled in cells as `renderer` draws `scene`: each render's camera's cells in view packed before
  *  it draws (after the scene's matrices are updated), and the shadow casters shown only while the shadow map draws. */
 export function cullWhileDrawn(scene: THREE.Scene, renderer: THREE.WebGLRenderer): void {
@@ -221,7 +232,8 @@ export function cullWhileDrawn(scene: THREE.Scene, renderer: THREE.WebGLRenderer
     const back = intoShadow(camera);
     try {
       draw(lights, scene, camera);
-      for (const then of afterShadow) then(draw, scene, camera, stillOf !== null);
+      const still = stillOf !== null;
+      if (!skipsAfter?.(camera, still)) for (const then of afterShadow) then(draw, scene, camera, still);
     } finally {
       back();
     }
