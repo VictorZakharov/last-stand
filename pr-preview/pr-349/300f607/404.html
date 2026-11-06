@@ -1,0 +1,50 @@
+<!doctype html>
+<!--
+  The site's "not found" page: GitHub Pages answers every missing path with the site root's 404.html, served at that
+  path, so it links nothing relative and finds the site from its own address. A PR preview's build folder goes three
+  pushes later and a closed PR's preview with it, yet the installed app reopens on the page it last showed (a preview
+  link tapped on the phone opens in the app: production's scope holds the previews), and a preview installed as an
+  app starts in its folder: both showed Pages' plain 404. This page sends a gone build to its PR's stable page, which
+  goes to the newest build, and anything else, a closed PR's preview included, to the game.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Last Stand</title>
+<style>
+  :root { color-scheme: dark; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    background: #050303;
+    color: #d8d4c8;
+    font: 16px/1.5 system-ui, sans-serif;
+  }
+  main { max-width: 34rem; padding: 2rem 1rem; text-align: center; }
+  a { color: #e8c372; }
+</style>
+</head>
+<body>
+<main>
+  <p id="status">Not found. Opening <a id="target" href="/">Last Stand</a>.</p>
+</main>
+<script>
+  (() => {
+    // [/last-stand]/pr-preview/pr-N/<folder>/...: the site is the domain's root (last-stand.cc), or the path's first
+    // part where a preview's path says it's a project's Pages site
+    const parts = location.pathname.split('/').filter(Boolean);
+    const at = parts[1] === 'pr-preview' ? 1 : 0;
+    const site = at === 1 ? `/${parts[0]}/` : '/';
+    const preview = parts[at] === 'pr-preview' && /^pr-\d+$/.test(parts[at + 1] ?? '');
+    const target = preview && parts.length > at + 2 ? `${site}pr-preview/${parts[at + 1]}/` : site;
+    document.getElementById('target').href = target;
+    // (the site's own page missing would bring this page back: it stays, with the link)
+    if (target !== location.pathname) location.replace(target);
+  })();
+</script>
+</body>
+</html>
