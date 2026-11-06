@@ -38,7 +38,7 @@ import { swingTrailSamples } from '../fx/swingTrail';
 import { groundSamples } from './groundItems';
 import { compileOutline, warmOutline } from '../ui/overlay/outline';
 import { labelsScene } from '../ui/overlay/layer';
-import { isReadying, isWarm, markWarm, onReadying, want, wanted, warming, warmingRuns, type Need } from './warm';
+import { heroWarming, isReadying, isWarm, markWarm, onReadying, want, wanted, warming, warmingRuns, type Need } from './warm';
 import { buildStandingAhead } from './hall';
 import type { Model } from '../types';
 
@@ -83,10 +83,6 @@ function warmedBuilds(): string[] {
     return [];
   }
 }
-
-/** Whether this build warmed its programs on this machine before (its GPU's cache has them): not on a first visit,
- *  nor on the first after a deploy. */
-export const warmedHereBefore = (): boolean => warmedBuilds().includes(BUILD);
 
 /** This build kept as one that warmed the fight here. */
 function rememberWarmed(): void {
@@ -187,20 +183,11 @@ const dummies = (): THREE.Object3D[] => G.enemies.map((e) => e.obj);
  *  `heroes` (a first visit, which opens on the hero selection screen), the other heroes too, their programs' links
  *  waited for with the lobby's (warmed after it, in turn, they held the screen back 1.8 s), then the hall of heroes'
  *  room drawn in the village's place: the `heroes` need warm. */
-export async function warmLobby(heroes = false): Promise<void> {
+export async function warmLobby(hall = false): Promise<void> {
   // (the hero's class with all it can wear: equipping anything in the lobby compiles nothing)
   await painted();
   const hero = heroAllWorn(G.player.cls.model);
-  // (a frame painted between the heroes' builds: on a CPU slowed six times they were 5.6 s in one task, the loading
-  // screen frozen)
-  const others: ReturnType<ReturnType<typeof heroModelParts>[number]['build']>[] = [];
-  if (heroes) {
-    for (const part of heroModelParts()) {
-      await painted();
-      others.push(part.build());
-    }
-  }
-  const extra = [...lobbyExtras, hero.root, ...others.flatMap((b) => b.objects)];
+  const extra = [...lobbyExtras, hero.root];
   lobbyExtras = [];
   const leaveOut = otherBiomes().map((id) => G.arena.groupOf(id));
   const start = performance.now();
@@ -214,10 +201,11 @@ export async function warmLobby(heroes = false): Promise<void> {
   const took = await warming;
   performance.measure('warm the lobby', { start, duration: performance.now() - start, detail: took });
   hero.dispose();
-  for (const b of others) b.done();
-  if (heroes) {
+  // (a first visit opens on the hall of heroes: its room warmed with the lobby, its other heroes after the reveal, a
+  // hero at a time, each shown as he's warm: warmed with the lobby, the two held a low-end laptop's loading screen)
+  if (hall) {
     await warmBuilt([hallPart().build()]);
-    markWarm('heroes');
+    hallWarm = true;
   }
   // (the outline a held skill draws round a foe: the dummies' meshes drawn into its mask)
   warmOutline(dummies());
@@ -324,7 +312,9 @@ async function buildHeroesAhead(): Promise<void> {
 
 /** The heroes' parts: the hall of heroes' room they're chosen in (`hallPart`), and each other class's hero
  *  (`heroModelParts`). */
-const heroParts = (): Part[] => [hallPart(), ...heroModelParts()];
+const heroParts = (): Part[] => [...(hallWarm ? [] : [hallPart()]), ...heroModelParts()];
+/** whether the hall of heroes' room was warmed with the lobby (a first visit's) */
+let hallWarm = false;
 
 /** The hall of heroes' room, shown in the village's place (world/heroHall.ts). */
 function hallPart(): Part {

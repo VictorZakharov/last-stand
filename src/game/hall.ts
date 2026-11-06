@@ -22,6 +22,7 @@ import { heroDetail } from '../entities/models/armor';
 import { applyShadowDetail, qualityLevel } from '../core/quality';
 import type { Profile } from '../types';
 import { HALL, TERRACE } from '../data/village';
+import { heroShare } from './warm';
 
 /** the way the heroes face (to the camera) */
 const ROW = { facing: 0 };
