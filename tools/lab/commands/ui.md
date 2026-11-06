@@ -8,8 +8,10 @@ along the line from the camera to each label (an obstacle, `G.arena.obstacles`, 
 and every one show again with the columns gone. `--canary` plants each column 3 m beside its line, where at least one
 label shows through, which must be caught.
 
+`sitHint`: the hint to sit, E Sit (`src/ui/sitHint.ts`; from play: "when pointing at object to sit on, we need to display a hint like E Sit"). The mouse rests on the lobby's seat nearest the hero that shows on the screen, past `SIT.look`: the seat outlined, the hint shown and within the window; then on the floor beside him, and the hint gone (`uiSitHint.ts`). `--canary` hides the shown hint, which must be caught.
+
 `ui`: the game's UI as the player sees it, in its states (`--states lobby,tooltip,glow,help,saves,heroes,readying,
-readyingHeroes,clicked,views,behindProps,logLobby,perfAsk,coop,coopRename,skillTipsTouch,sheetTouch,litTouch,coopTouch,autoFull,
+readyingHeroes,clicked,views,behindProps,sitHint,logLobby,perfAsk,coop,coopRename,skillTipsTouch,sheetTouch,litTouch,coopTouch,autoFull,
 run,scores,perf,decision,perfAskBreak,pause,pauseSettings,pauseVolume,pauseTabKept,pauseAbandon,summary,skillTips,log,logTouch,hudTouch,
 decisionTouch,perfAskTouch,buttonsTouch,buttonsRunTouch`, every one by default (the Play together dialog,
 `page/uiCoop.ts`: opened by its button with the co-op server found up (the local link), as a joiner refused for its

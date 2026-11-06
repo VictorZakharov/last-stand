@@ -67,6 +67,8 @@ import { initSync } from './net/sync';
 import { initSession, invitedRoom, sendLook, sendLobby, sendStart, sendControl, syncAway, updateSession, playSession, partnerInRun } from './net/session';
 import { isCoop, isGuest, isHost, simulates } from './net/role';
 import { initCoop, renderCoop, updateCoopHud, updateNameTags, touchReviving, joinInvited, hideRunBits } from './ui/coop';
+import { initCoop, renderCoop, updateCoopHud, touchReviving, joinInvited } from './ui/coop';
+import { updateSitHint } from './ui/sitHint';
 import { updateScoreboard } from './ui/scoreboard';
 import type { BiomeId } from './data/biomes';
 import type { Profile } from './types';
@@ -561,6 +563,7 @@ function update(dt: number): void {
   updateSession(dt, G.player.reviving);
   syncPractice();
   updateNameTags();
+  updateSitHint();
   if (G.mode === 'run') {
     updateHud();
     updateCoopHud();

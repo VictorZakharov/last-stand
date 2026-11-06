@@ -23,7 +23,7 @@ const KINDS = [
 /** the UI's states `ui` pictures, in the order it runs them: the lobby's, then the run's (page/ui.ts `UiState`) */
 export const UI_STATES = [
   'lobby', 'tooltip', 'glow', 'help', 'saves', 'heroes', 'readying', 'readyingHeroes', 'clicked', 'views',
-  'behindProps',
+  'behindProps', 'sitHint',
   'logLobby', 'perfAsk', 'coop', 'coopRename',
   'heroesWarming', 'skillTipsTouch', 'sheetTouch', 'litTouch', 'buttonsTouch', 'coopTouch', 'autoFull',
   'run', 'scores', 'perf', 'decision', 'perfAskBreak', 'pause', 'pauseSettings', 'pauseVolume',
@@ -386,7 +386,8 @@ export const COMMANDS = {
           + 'key pressed after it: '
           + 'where the focus went), views (the lobby\'s camera switched through its views: the labels over the '
           + 'dummies against their anchors), behindProps (a column planted between the camera and each dummy\'s label: '
-          + 'every label hidden behind it, every one shown with it gone; the canary plants it aside), run (the HUD '
+          + 'every label hidden behind it, every one shown with it gone; the canary plants it aside), sitHint (the mouse rested '
+          + 'on the nearest seat: the hint E Sit shown within the window, gone once it leaves; the canary hides it), run (the HUD '
           + 'with a hurt foe\'s bar and damage numbers), '
           + 'scores, perf, decision, pause, summary, skillTips (each skill\'s tooltip on the hotbar opened by the '
           + 'mouse, within the window; the tallest pictured; skillTipsTouch: the lobby\'s by a finger\'s tap), log '
