@@ -46,7 +46,7 @@ import { ItemGlows } from './itemGlow';
 /** sat, how a hand that holds a weapon turns as it goes down to his thigh (`models/sit.ts`, `restHands`), the left's
  *  and the right's, the weapon pointing down to where it's stood; an empty hand rests palm down. The small rise keeps
  *  his shield-side forearm over the thigh. */
-const SIT_HANDS = tunable('warriorSit', { roll: [0, 0], rise: 0.005, slant: 0.1, along: 0.35, over: 0.09, armIn: 1, floorIn: 0.7, arc: 0.15, lapR: [0.85, -0.1, 0.5], fistBelow: 0.08, swordRest: [-0.03, -0.32, -0.5, 0.05, 0.3, 0.12, 0, 1.08, 0.2], maulRest: [0.05, 0.05, -0.58, 0.1, 0.25, 0.7, -0.4, 0.93, 0.32], axeRest: [-0.01, 0.13, -0.54, 0.1, 0.25, 0.5, -0.4, 0.95, 0.32], stuckIn: 0.32, plantX: -0.4, plantPole: [-0.5, -1, -0.6], flatEdge: [-1, 0, 0], frontAt: [-0.12, 1.34, 0.38], frontWay: [-0.05, 0.6, 0.8], leanTo: 0.12, regripOpen: 0.7, leanDraws: 0.4, flatSide: [1, 0, 0], lowHand: [-0.14, 0.54], lowEndX: -0.45, pathOut: 0.25, besideFrom: 0.6, besideBy: 0.35, handDownBy: 0.7, offOpen: 0.75, floorFrontAt: [-0.15, 1.2, 0.35], floorFrontWay: [-0.75, 0.65, -0.1], floorFlat: [0.25, 0.25, 0.9], floorLowHand: [-0.2, 0.42], floorLowY: 0.85, floorHaftAhead: 0.13, floorOut: [-0.6, 0.8], floorLowOut: [-0.75, 0.66], floorPathOut: 0, floorPathAhead: 0.18, floorGripY: 0.04, floorGripZ: 0.2, floorLaidFlat: [0, -1, 0], liftBy: 0.34, lowerBy: 0.72, helpFrom: 0.02, helpBy: 0.14, helpOff: 0.4, floorLetGo: 0.1, plantFrom: 0.15, plantBy: 0.8, lowerOver: 0.04, caneAhead: [0.1, -0.25, 1], seatHip: 0.86, sinkBy: 1, leftAbove: -0.13, beside: [-0.5, 0.09, 0.1], besidePole: [-1, -0.1, -0.2], besideAhead: 0.95, twoR: [0.8, -0.08, 0.6], twoL: [-0.8, -0.2, 0.6], twoAlong: [0, 0], twoOverL: 0.09, viaR: [-0.15, 0.2, 0.95], viaL: [0.15, 0.2, 0.95], viaAt: 0.45, floorBack: 0, viaFloorR: [-0.15, 0.5, 0.85], viaFloorL: [0.15, 0.5, 0.85], kneesR: [0.88, -0.2, 0.42], kneesL: [-0.7, -0.3, 0.65], turnFrom: 0.15, turnLate: 0.5, turnIn: 0.12, shieldOut: 0.09, upLeftAbove: 0.22, upLeftFrom: 0.42, upPlantFrom: 0.55, upPlantBy: 0.75, plantLetGo: 0.8, upWay: [-0.08, 0.99, 0.02], upRestAt: [-0.35, -0.15, 0.62], upLeanWay: [-0.1, 0.95, 0.25], upLeanFrom: 0.6, upSlipFrom: 0.25, upSlipBy: 0.6, upTurn: [0.3, -0.9, 0.2], upButt: 0.56, floorShieldOut: 0.12, floorShieldLow: 0.14, edgeDown: 0.2, });
+const SIT_HANDS = tunable('warriorSit', { roll: [0, 0], rise: 0.005, slant: 0.1, along: 0.35, over: 0.09, armIn: 1, floorIn: 0.7, arc: 0.15, lapR: [0.85, -0.1, 0.5], fistBelow: 0.08, swordRest: [-0.03, -0.32, -0.5, 0.05, 0.3, 0.12, 0, 1.08, 0.2], maulRest: [0.05, 0.05, -0.58, 0.1, 0.25, 0.7, -0.4, 0.93, 0.32], axeRest: [-0.01, 0.13, -0.54, 0.1, 0.25, 0.5, -0.4, 0.95, 0.32], stuckIn: 0.32, plantX: -0.4, plantPole: [-0.5, -1, -0.6], flatEdge: [-1, 0, 0], frontAt: [-0.12, 1.34, 0.38], frontWay: [-0.05, 0.6, 0.8], leanTo: 0.12, regripOpen: 0.7, leanDraws: 0.4, flatSide: [1, 0, 0], lowHand: [-0.14, 0.54], lowEndX: -0.45, pathOut: 0.25, besideFrom: 0.6, besideBy: 0.35, handDownBy: 0.7, offOpen: 0.75, floorFrontAt: [-0.15, 1.2, 0.35], floorFrontWay: [-0.75, 0.65, -0.1], floorFlat: [0.25, 0.25, 0.9], floorLowHand: [-0.2, 0.37], floorLowY: 0.75, floorHaftAhead: 0.13, floorOut: [-0.6, 0.8], floorLowOut: [-0.75, 0.66], floorPathOut: 0, floorPathAhead: 0.18, floorGripY: 0.04, floorGripZ: 0.2, floorLaidFlat: [0, -1, 0], liftBy: 0.34, lowerBy: 0.72, helpFrom: 0.02, helpBy: 0.14, helpOff: 0.4, floorLetGo: 0.85, plantFrom: 0.15, plantBy: 0.8, lowerOver: 0.04, caneAhead: [0.1, -0.25, 1], seatHip: 0.86, sinkBy: 1, leftAbove: -0.13, beside: [-0.5, 0.09, 0.1], besidePole: [-1, -0.1, -0.2], besideAhead: 0.95, twoR: [0.8, -0.08, 0.6], twoL: [-0.8, -0.2, 0.6], twoAlong: [0, 0], twoOverL: 0.09, viaR: [-0.15, 0.2, 0.95], viaL: [0.15, 0.2, 0.95], viaAt: 0.45, floorBack: 0, viaFloorR: [-0.15, 0.5, 0.85], viaFloorL: [0.15, 0.5, 0.85], kneesR: [0.88, -0.2, 0.42], kneesL: [-0.7, -0.3, 0.65], turnFrom: 0.15, turnLate: 0.5, turnIn: 0.12, shieldOut: 0.09, upLeftAbove: 0.22, upLeftFrom: 0.42, upPlantFrom: 0.55, upPlantBy: 0.75, plantLetGo: 0.8, upWay: [-0.08, 0.99, 0.02], upRestAt: [-0.35, -0.15, 0.62], upLeanWay: [-0.1, 0.95, 0.25], upLeanFrom: 0.6, upSlipFrom: 0.25, upSlipBy: 0.6, upTurn: [0.3, -0.9, 0.2], upButt: 0.56, floorShieldOut: 0.12, floorShieldLow: 0.14, edgeDown: 0.2, });
 const _sitTurn: RestTurn = { roll: [0, 0], bend: [0, 0], along: [0, 0], over: [0, 0], armIn: [0, 0], arc: [0, 0], out: [0, 0], low: [0, 0] };
 const _lifted: number[] = [], _resting: number[] = [];
 
@@ -190,6 +190,7 @@ const SHOULDER_FLAT = new THREE.Vector3(1, 0, 0);
 const FLAT_IN_GRIP = new THREE.Vector3(1, 0, 0);
 const _hp = new THREE.Vector3(), _hd = new THREE.Vector3();
 const _grip = new THREE.Vector3(), _pole = new THREE.Vector3(1, -0.7, -0.6), _pw = new THREE.Vector3(), _fq = new THREE.Quaternion(), _cq = new THREE.Quaternion(), _eq = new THREE.Quaternion(), _wq = new THREE.Quaternion(), _vl = new THREE.Quaternion(), _vr = new THREE.Quaternion();
+const _letW = new THREE.Vector3(), _letQ = new THREE.Quaternion(), _letP = new THREE.Vector3(), _letS = new THREE.Vector3();
 const _gw = new THREE.Vector3(), _dw = new THREE.Vector3(), _cur = new THREE.Vector3(), _hq = new THREE.Quaternion(), _pq = new THREE.Quaternion(), _sq = new THREE.Quaternion();
 /** the legs' own blend over the pose this frame (left, right), see `legs.update` */
 const _legW: [number, number] = [1, 1];
@@ -1265,6 +1266,17 @@ export function buildWarrior(): Model {
   const twoHold = { at: new THREE.Vector3(), dir: new THREE.Vector3(), flat: new THREE.Vector3(), pole: SW2_POLE, k: 0, flatK: 0 };
   /** how surely the left hand holds a two-hander's lower grip: it lets go of one no turn of the hand keeps the arm within its ranges for */
   let twoGood = 1;
+  // (his left arm faded over `LEFT_SWITCH` s from as it was drawn, as he sits or stands, when how it's placed changes:
+  // its own pose fitted, eased towards a two-hander's lower grip, or on it. Solved each its own way, its elbow went 13 to
+  // 25 cm in the frame it changed)
+  const leftShown = [new THREE.Quaternion(), new THREE.Quaternion(), new THREE.Quaternion()];
+  const leftFrom = [new THREE.Quaternion(), new THREE.Quaternion(), new THREE.Quaternion()];
+  // (and each joint's turn over the frame before, carried on through the fade: faded from the arm frozen as drawn, his
+  // hand stopped dead for a frame, 8 cm a frame to none)
+  const leftWas = [new THREE.Quaternion(), new THREE.Quaternion(), new THREE.Quaternion()];
+  const leftTurn = [new THREE.Quaternion(), new THREE.Quaternion(), new THREE.Quaternion()];
+  const _turnNow = new THREE.Quaternion();
+  let leftModeWas = -1, leftFadeW = 0;
   /** the lower grip as the left hand held it this frame (`Model.lowerGrip`) */
   const grasp: LowerGrip = { held: false, free: false, short: 0, past: 0, into: 0 };
   /** each hand's slant on its handle this frame (rad, armIK.ts) */
@@ -1485,6 +1497,13 @@ export function buildWarrior(): Model {
   const TWO_UP_HANDS = { before: 0, after: 2, up: 1.4 };
   // (by a fire he doesn't turn his hand round on it: held still for that time, he stood frozen, lowered. `after`: his hand
   // coming off it, once he's sat)
+  /** how long his left arm's fade lasts as how it's placed changes, sitting or standing (s: `fadeLeftSwitch`) */
+  const LEFT_SWITCH = 0.2;
+  /** how far his left elbow may go in a frame as his hand eases on or off a two-hander far from its grip (m): free, from one
+   *  side of a fire it went to its other side in a frame as he let go, his hand 41 cm */
+  const EASE_ELBOW = 0.05;
+  /** how far ahead of the straight way his left hand goes at most as it eases on or off a two-hander (rig units) */
+  const EASE_AHEAD = 0.15;
   const TWO_FLOOR_HANDS = { before: 2.6, after: 0.6, up: 1.4, last: true };
   const _rightArm = [j.shoulderR, j.elbowR, j.handR];
   const _lapX = new THREE.Vector3(), _lapY = new THREE.Vector3(), _lapZ = new THREE.Vector3();
@@ -1678,6 +1697,35 @@ export function buildWarrior(): Model {
     grip.position.copy(twoSit.laidGripAt);
     grip.updateMatrixWorld(true);
   }
+  /** His left arm faded from as it was last drawn over `LEFT_SWITCH` s when `mode` (how it's placed, -1 not sitting)
+   *  changes from one frame to the next, and its joints as drawn kept for the next. */
+  function fadeLeftSwitch(mode: number, dt: number): void {
+    const arm = [j.shoulderL, j.elbowL, j.handL];
+    if (mode >= 0 && leftModeWas >= 0 && mode !== leftModeWas) {
+      for (let i = 0; i < arm.length; i++) {
+        leftFrom[i].copy(leftShown[i]);
+        leftTurn[i].copy(leftShown[i]).multiply(leftWas[i].invert());
+      }
+      leftFadeW = 1;
+    }
+    if (mode < 0) leftFadeW = 0;
+    if (leftFadeW > 0) {
+      leftFadeW = Math.max(0, leftFadeW - dt / LEFT_SWITCH);
+      const eased = smooth(leftFadeW);
+      for (let i = 0; i < arm.length; i++) {
+        // (the old arm going on as it went, slowing as the fade goes)
+        _turnNow.identity().slerp(leftTurn[i], leftFadeW);
+        leftFrom[i].premultiply(_turnNow);
+        arm[i].quaternion.slerp(leftFrom[i], eased);
+      }
+    }
+    for (let i = 0; i < arm.length; i++) {
+      leftWas[i].copy(leftShown[i]);
+      leftShown[i].copy(arm[i].quaternion);
+    }
+    leftModeWas = mode;
+  }
+
   /** By a fire, once he's sat: what he's laid stays on the floor, whatever his body does, and his hand comes off it to his
    *  knee ("he keeps it in hand and floating parallel to ground, also moving as he moves"). */
   function layDown(sit: NonNullable<AnimState['sit']>, weapon: Weapon, floor: boolean): void {
@@ -1857,6 +1905,8 @@ export function buildWarrior(): Model {
     twoSit.sideBy = 0;
     twoSit.pathSide = toFloor ? SIT_HANDS.floorPathOut : 0;
     // (by a fire at his hip, his arms near hanging: at the seat's height, his chest's, his arms stood straight out before him)
+    // (and below his hip, near: at its height, 42 cm ahead, his arms stood stiff and straight out and down for a second
+    // as he laid it, "jerky and lame", his right wrist 29 degrees past its range)
     const lowY = toFloor ? SIT_HANDS.floorLowY : floorRest(weapon)[7];
     const [lowX, lowZ] = toFloor ? SIT_HANDS.floorLowHand : SIT_HANDS.lowHand;
     const falls = THREE.MathUtils.clamp((lowY - over) / weapon.len, 0, 1), level = Math.sqrt(1 - falls * falls);
@@ -2688,17 +2738,21 @@ export function buildWarrior(): Model {
     // (his left hand has a two-hander as his right goes round on it, hand over hand, and is gone as he sits)
     // (by a fire until its far end is on the floor, then let go as his right lays it down: from play, "as soon as sword
     // lifts off ground, he needs both hands to manipulate it", of it held out level in one fist)
-    // (as he starts down, its far end on the floor: let go as it came onto the floor, the arm went back across his belly)
+    // (by a fire, once its far end is on the floor and before he goes down, `floorLetGo` on of his hands' stage: let go as
+    // it came onto the floor, the arm went back across his belly; as he started down, his thighs rising into his arm
+    // as his body dropped, the hand went 50 cm in 6 frames, the arm's solve flipping, 13 to 26 cm a frame)
     // (a maul head up on a seat, until it stands on its butt)
     const planted = st.sit && held && standsUp(st.sit, held);
     // (his hands' stage: a maul's once he's sat, `after`, every other two-hander's before he goes down)
     const handsAt = st.sit ? (planted ? st.sit.after : st.sit.before) : 0;
-    const letGo = st.sit && onFloor(st.sit) ? 1 - smooth(ramp(st.sit.w, 0, SIT_HANDS.floorLetGo))
+    const letGo = st.sit && onFloor(st.sit) ? 1 - smooth(ramp(st.sit.before, SIT_HANDS.floorLetGo, 1))
       : planted ? 1 - smooth(ramp(handsAt, SIT_HANDS.plantLetGo, 1))
       : 1 - smooth(ramp(st.sit ? satBy(st.sit) : 0, 0, SIT_HANDS.helpOff));
     const leftHelps = st.sit && handsAt > 0 && held && two && !fp && st.dead < 0
       ? smooth(ramp(handsAt, SIT_HANDS.helpFrom, SIT_HANDS.helpBy)) * letGo : 0;
-    const leftAway = leftHelps >= 1 ? 0 : Math.min(leftOffIt, 1 - leftHelps);
+    // (by a fire, as far on it as it helps: eased off it by `leftOffIt` there, it stayed on till he was a quarter sat,
+    // then went in a few frames, 13 to 17 cm a frame)
+    const leftAway = leftHelps >= 1 ? 0 : st.sit && onFloor(st.sit) && handsAt > 0 ? 1 - leftHelps : Math.min(leftOffIt, 1 - leftHelps);
     // (right against his right hand on a long handle, his arm low: where it holds it to fight, his elbow stood level across
     // his chest)
     if (held?.off != null) {
@@ -3120,6 +3174,12 @@ export function buildWarrior(): Model {
     // a two-hander: the left hand follows the grip wherever the right arm takes the weapon, and lets go
     // where it can't reach (a pose that flings the arms apart), the arm easing back to the pose's own
     let twoHeld = false;
+    // (his left arm solved already for where his hand eases to on or off a two-hander, so not fitted again: solved twice
+    // a frame, each from the other's last elbow, his hand went 15 to 20 cm one way and back in turn as it came on)
+    let leftEased = false;
+    // (how his left arm is placed this frame, sat or getting up: 0 its own pose, 1 eased from it a hand far off the grip,
+    // 2 at the grip or held)
+    let leftMode = 0;
     if (two) {
       root.updateMatrixWorld(true);
       offGrip.getWorldPosition(_grip);
@@ -3131,8 +3191,25 @@ export function buildWarrior(): Model {
       // wrist bent 52 degrees; held halfway to the shoulder, the lower grip's turn bent it 30)
       let k = (1 - ramp(out, 0.07, 0.2)) * Math.min(1, 2 * (1 - drinkOn)) * (1 - leftAway);
       const reach = out < 0.07 && drinkOn < 0.5 && leftAway === 0;
+      // (sat or getting up, coming onto it or letting go: his hand goes from where the pose has it to the grip, the arm
+      // solved for each place on the way. Blended by the joints' turns between the two arms, his hand went 50 cm along
+      // a crooked path in 6 frames as he let go by a fire, 13 to 17 cm a frame off its line)
+      const easing = k > 0 && k < 1 && !!st.sit && leftHelps > 0;
+      leftEased = easing;
+      leftMode = easing ? (k < 0.5 ? 1 : 2) : k > 0 ? 2 : 0;
       if (k > 0) {
         _sq.copy(j.shoulderL.quaternion); _eq.copy(j.elbowL.quaternion); _wq.copy(j.handL.quaternion);
+        if (easing) {
+          // (from the pose's own arm as fitted, as it's drawn when his hand is off it: from the pose's own as posed,
+          // the elbow went 25 cm in the ease's first frame. Fitted with no memory, or the grip's solve after it starts
+          // from it, and the two take turns)
+          j.handL.getWorldPosition(_letW); j.handL.getWorldQuaternion(_letQ);
+          j.elbowL.getWorldPosition(_letP).sub(j.shoulderL.getWorldPosition(_letS));
+          solveArm(j, true, { wrist: _letW, hand: _letQ, pole: _letP, body, remember: false });
+          j.handL.getWorldPosition(_letW); j.handL.getWorldQuaternion(_letQ);
+          j.elbowL.getWorldPosition(_letP).sub(j.shoulderL.getWorldPosition(_letS)).normalize();
+          j.shoulderL.quaternion.copy(_sq); j.elbowL.quaternion.copy(_eq); j.handL.quaternion.copy(_wq);
+        }
         // the wrist where the fist closes round the lower grip (a hand stays on its wrist), the hand's length along
         // the line to the shoulder, turned about the handle as far as the arm needs to stay within a body's ranges
         // (armIK.ts); a grip no turn makes possible, or one the arm reaches only through the body, it lets go of
@@ -3149,7 +3226,19 @@ export function buildWarrior(): Model {
         // (its turn on the grip found between the few tried, `glide`: picked from them, the greataxe's left wrist jumped
         // 6 degrees in a frame, 2 past its range)
         const shoulder = fp ? _fw[5].copy(j.shoulderL.position) : undefined;
-        const fit = solveArm(j, true, { wrist: _cur.negate().add(_gw), hand: _fq, roll: { axis: _hd, range: 1.1, at: _gw }, pole: _pw.copy(_pole).applyQuaternion(j.chest.getWorldQuaternion(_cq)), body: fp ? undefined : body, slant: SLANT, slantOnHandle: true, glide: 1, shoulder, flexion: GRIPPED_FLEXION });
+        _cur.negate().add(_gw);
+        _pw.copy(_pole).applyQuaternion(j.chest.getWorldQuaternion(_cq));
+        // (and its elbow from where the pose had it: from the grip's pole alone, the elbow went 20 cm in the first
+        // frame of the ease, the hand still nearly where the pose had it)
+        // (its turn about the handle, about an axis through the grip, as far as the hand is on it: in full off it, the
+        // hand went 15 to 20 cm round the grip in a frame as it began to ease)
+        if (easing) {
+          _cur.lerp(_letW, 1 - k); _fq.slerp(_letQ, 1 - k); _pw.normalize().lerp(_letP, 1 - k);
+          // (round in front of him: straight from the grip at his right front to his left side, his forearm went 8 cm
+          // into his chest, and its elbow went over to its other side in a frame, his hand 41 cm)
+          _cur.add(_letS.set(0, 0, 1).transformDirection(root.matrixWorld).multiplyScalar(EASE_AHEAD * j.root.scale.x * Math.sin(Math.PI * k)));
+        }
+        const fit = easing && k < 0.5 ? solveArm(j, true, { wrist: _cur, hand: _fq, pole: _pw, body, maxMove: EASE_ELBOW / j.root.scale.x }) : solveArm(j, true, { wrist: _cur, hand: _fq, roll: { axis: _hd, range: easing ? 1.1 * k : 1.1, at: _gw }, pole: _pw, body: fp ? undefined : body, slant: SLANT, slantOnHandle: true, glide: 1, shoulder, flexion: GRIPPED_FLEXION });
         slantL = fit.slant;
         _up.applyAxisAngle(_hd, fit.roll);
         // (a grip out of reach for a frame or two is held through: a hand doesn't let go for 50 ms; and while the hand
@@ -3162,7 +3251,7 @@ export function buildWarrior(): Model {
         grasp.past = fit.excess; grasp.into = fit.depth;
         // (the arm eases back to the pose's own only once the hand has let go: easing it back while still holding bent the wrist)
         if (!twoHeld) k *= Math.min(1, 2 * twoGood);
-        if (k < 1) { j.shoulderL.quaternion.slerp(_sq, 1 - k); j.elbowL.quaternion.slerp(_eq, 1 - k); j.handL.quaternion.slerp(_wq, 1 - k); }
+        if (k < 1 && !easing) { j.shoulderL.quaternion.slerp(_sq, 1 - k); j.elbowL.quaternion.slerp(_eq, 1 - k); j.handL.quaternion.slerp(_wq, 1 - k); }
       } else { grasp.past = 0; grasp.into = 0; }
       // (coming back onto it off the flask, it's taking hold too: counted as let go, the hand on its way back read as off
       // the grip for 4 frames after every draught)
@@ -3171,13 +3260,14 @@ export function buildWarrior(): Model {
 
     // the other arm within a body's ranges too, its hand where the pose put it
     const grippedL = offHeld && !sheathed;
-    if (!fp && st.dead < 0 && !twoHeld) {
+    if (!fp && st.dead < 0 && !twoHeld && !leftEased) {
       const stoodL = st.sit ? standL?.slant : undefined;
       const slantRange: number | [number, number] = stoodL === undefined ? SLANT : [stoodL - SIT_HANDS.slant, stoodL + SIT_HANDS.slant];
       slantL = fitArm(j, true, grippedL ? gripTurn(handL, gripL, _vl) : undefined, body, grippedL ? slantRange : undefined).slant;
     }
     else if (fp && st.dead < 0 && offHeld && !sheathed) slantL = fitInView(true, gripL, gripTurn(handL, gripL, _vl), SLANT, holdL) + holdL * swingSlantL;
     if (fp && st.dead < 0 && offHeld && !sheathed) wristInGrip(true, gripTurn(handL, gripL, _vl, slantL));
+    fadeLeftSwitch(st.sit && !fp && st.dead < 0 && two ? leftMode : -1, dt);
     // (set down once the arm is fitted: the fit moved the hand, and the shield with it, 8 cm into the floor)
     // (on a seat it stays on his forearm, hung beside his leg: stood on its rim by his shin, its grip was lower than
     // his hand reaches sat, and it flew there off his arm, "weapons are being pulled around with jedi force")
