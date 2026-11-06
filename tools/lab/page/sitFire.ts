@@ -16,6 +16,10 @@ const LAID_MOST = 0.002;
 /** how far the canaries put a weapon wrong (m) */
 const CANARY_BY = 0.2;
 
+/** how far outside the fire's ring of stones what he lays down must lie at least (m): from review, of a maul whose head
+ *  lay on the stones, lit by the flames, "on screen it reads as the weapon put in or against the fire" */
+const RING_CLEAR = 0.15;
+
 /** how far a shield resting on the floor may be off it (m) */
 const RIM_MOST = 0.03;
 
@@ -44,16 +48,21 @@ export function describeShieldRim(rim: number | null, name: string): string {
   return `sit: by the ${name}, his shield's rim ${(Math.abs(rim) * 100).toFixed(1)} cm ${where} the floor`;
 }
 
-/** A weapon's points against a fire: its deepest into the flames, frame by frame. */
+/** A weapon's points against a fire: its deepest into the flames, frame by frame, and how near what he's laid down
+ *  lies to the fire's ring of stones. */
 export class FireClear {
   private frames = 0;
   private deepest = 0;
   private at = '';
+  /** the nearest a point of it lay to the ring while let go of on the floor (m, less than 0 inside it), and where */
+  private laidGap = Infinity;
+  private laidAt = '';
 
   constructor(private readonly seat: Seat) {}
 
   /** Notes this frame's weapon, whatever part of the sit it's in. */
   observe(lab: Lab, frame: string): void {
+    if (this.seat.ground) this.noteLaid(lab, frame);
     const depth = this.seat.ground ? this.depthOf(lab) : 0;
     if (depth <= 0) return;
     this.frames++;
@@ -68,6 +77,52 @@ export class FireClear {
     if (radius <= 0) return true;
     _point.set(this.seat.ax + CANARY_BY, 0, this.seat.az);
     return insideCircle(_point, this.seat.ax, this.seat.az, radius) > 0;
+  }
+
+  /** Notes how near what he's laid down lies to the ring of stones this frame, if he's let go of it. */
+  private noteLaid(lab: Lab, frame: string): void {
+    const tip = lab.model.tip;
+    const circle = this.seat.circles[0];
+    if (!tip || !circle || !isLaid(tip)) return;
+    const gap = this.gapOf(tip, circle.r);
+    if (gap >= this.laidGap) return;
+    this.laidGap = gap;
+    this.laidAt = frame;
+  }
+
+  /** The nearest a point of the weapon from its grip to `tip` is to a circle round the fire of `radius` (m). */
+  private gapOf(tip: THREE.Object3D, radius: number): number {
+    tip.parent!.getWorldPosition(_grip);
+    tip.getWorldPosition(_tip);
+    let nearest = Infinity;
+    for (let i = 0; i <= WEAPON_POINTS; i++) {
+      _point.lerpVectors(_grip, _tip, i / WEAPON_POINTS);
+      nearest = Math.min(nearest, Math.hypot(_point.x - this.seat.ax, _point.z - this.seat.az) - radius);
+    }
+    return nearest;
+  }
+
+  /** The ring canary: laid on the stones it must read as too near, and laid well clear of them, not. */
+  caughtRing(): boolean {
+    const on = new FireClear(this.seat);
+    on.laidGap = -CANARY_BY;
+    const clear = new FireClear(this.seat);
+    clear.laidGap = RING_CLEAR + CANARY_BY;
+    return on.describeRing('canary') !== '' && clear.describeRing('canary') === '';
+  }
+
+  /** How near what he laid down lay to the ring, as words, or none if he laid nothing down there. */
+  summaryRing(name: string): string {
+    if (this.laidGap === Infinity) return '';
+    return `    by the ${name}, what he laid down ${(this.laidGap * 100).toFixed(0)} cm outside the fire's ring of stones`;
+  }
+
+  /** What he laid down on or by the ring of stones as a fault, or none. */
+  describeRing(name: string): string {
+    if (this.laidGap >= RING_CLEAR) return '';
+    const gap = (this.laidGap * 100).toFixed(0);
+    return `sit: by the ${name}, what he laid down lay ${gap} cm outside the fire's ring of stones `
+      + `(at least ${RING_CLEAR * 100}; ${this.laidAt})`;
   }
 
   /** The frames in the flames as words, or none if it never was. */

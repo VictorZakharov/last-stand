@@ -726,6 +726,11 @@ function judgeWatch(name: string, watch: Watch, out: Out): void {
   const inFlames = watch.fire.describe(name);
   if (inFlames) out.problems.push(inFlames);
   if (!watch.fire.caught()) out.problems.push('sit: the canary (his weapon in the flames) was missed');
+  const ringRead = watch.fire.summaryRing(name);
+  if (ringRead) out.text.push(ringRead);
+  const byRing = watch.fire.describeRing(name);
+  if (byRing) out.problems.push(byRing);
+  if (!watch.fire.caughtRing()) out.problems.push('sit: the canary (what he laid down on the fire\'s stones) was missed');
   if (!watch.laid.caught()) out.problems.push('sit: the canary (what he laid down stirred) was missed');
   const stirred = watch.laid.describe(name, watch.twoHanded && name in LAID_ON);
   if (stirred) out.problems.push(stirred);
