@@ -85,4 +85,6 @@
    overrides) */
 @media (max-height: 340px) {
   #training { right: 240px; }
+  /* (and the minimap a little smaller, its spoils' line clear of the arc's top button) */
+  #minimap-wrap { zoom: .85; }
 }

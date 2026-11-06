@@ -552,12 +552,12 @@ function profileChanged() {
 const compileContext = () => `(${G.mode}${G.run ? ` wave ${G.run.wave}` : ''}, t=${G.time.toFixed(1)}s, ${G.enemies.length} foes)`;
 
 // --- views ------------------------------------------------------------------------
-/** the view, cycled with V in a run and in the lobby alike (touch play stays top-down) */
+/** the view, cycled with V in a run and in the lobby alike (on touch, the camera button beside the pause) */
 let view: ViewMode = 'top';
 const crosshair = document.getElementById('crosshair')!, lookHint = document.getElementById('look-hint')!;
 
 function syncView(): void {
-  const v = input.touchMode ? 'top' : view;
+  const v = view;
   setView(v);
   input.centerAim = v !== 'top';
   // mouse look holds the pointer through the run, the bank-or-continue choice included (B / C
@@ -569,9 +569,10 @@ function syncView(): void {
   const inLobby = G.mode === 'menu' && menuStowed() && !savesOpen() && !villageCardOf() && !villageMapOpen()
     && !heroSelectOpen() && !dialogOpen();
   const look = v !== 'top' && !G.menuOpen && (inRun || inLobby);
-  wantPointerLock(look);
+  // (a finger looks by dragging over the world: no pointer to lock, ui/touch.ts)
+  wantPointerLock(look && !input.touchMode);
   crosshair.classList.toggle('hidden', v === 'top');
-  lookHint.classList.toggle('hidden', !look || pointerLocked());
+  lookHint.classList.toggle('hidden', !look || pointerLocked() || input.touchMode);
   updateAltCursor();
 }
 
@@ -628,7 +629,7 @@ function handleGlobalKeys() {
  *  the pointer be taken). */
 function nextView() {
   view = VIEWS[(VIEWS.indexOf(view) + 1) % VIEWS.length];
-  if (G.mode === 'menu' && !input.touchMode && view !== 'top') openPanels(null);
+  if (G.mode === 'menu' && view !== 'top') openPanels(null);
 }
 
 /** Who the camera follows: the local player, or once out of a co-op run, a partner still in it. */
@@ -702,7 +703,7 @@ function update(dt: number): void {
   }
   updateScoreboard(dt);
   // (top-down only: a close view shifted off its middle would leave the crosshair off the aim)
-  const vs = heroSelectOpen() ? heroSelectShift() : view === 'top' || input.touchMode ? lobbyViewShift() : { x: 0, y: 0 };
+  const vs = heroSelectOpen() ? heroSelectShift() : view === 'top' ? lobbyViewShift() : { x: 0, y: 0 };
   setViewShift(vs.x, vs.y);
   const focus = focusPlayer();
   updateCamera(dt, focus.pos, focus.model.height, focus.obj.position.y);

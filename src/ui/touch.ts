@@ -11,7 +11,7 @@
 import * as THREE from 'three';
 import { G } from '../state';
 import { input } from '../core/input';
-import { cameraYaw, zoomBy } from '../core/renderer';
+import { cameraYaw, lookBy, viewMode, zoomBy } from '../core/renderer';
 import { completeStep } from '../game/training';
 import { additive } from '../core/materials';
 import { groundHeight } from '../world/ground';
@@ -159,7 +159,9 @@ export function initTouch(v: TouchVillage): void {
   window.addEventListener('touchend', (e) => { if (e.touches.length < 2) pinch = null; }, { passive: true });
 
   $('#btn-pause').addEventListener('click', () => input.pressed.add('escape'));
-  initFullScreen();
+  // (the view as V changes it: top-down, over the shoulder, through the eyes)
+  $('#btn-view').addEventListener('click', () => input.pressed.add('v'));
+  lookByDrag();
 
   ring = new THREE.Mesh(new THREE.RingGeometry(0.62, 0.8, 40).rotateX(-Math.PI / 2), additive(0xffe0a0, 1.6, 0.9));
   ring.name = 'touch-aim-ring';
@@ -233,6 +235,31 @@ export function buildTouchSkills(): void {
     box.appendChild(el);
     return { key, el, cd: el.querySelector<HTMLElement>('.cd')!, cdt: el.querySelector<HTMLElement>('.cdt')! };
   });
+}
+
+/** how far the view turns for a finger's css px, against the mouse's (a finger crosses fewer px for a turn) */
+const LOOK_TOUCH = 1.6;
+
+/**
+ * In the close views a finger dragged over the world turns the view, as the mouse looks (from play, "a camera icon...
+ * it will toggle top down, third and 1st person": touch play had stayed top-down, with no mouse to look round). One
+ * finger at a time, never while two pinch.
+ */
+function lookByDrag(): void {
+  let look: { id: number; x: number; y: number } | null = null;
+  window.addEventListener('pointerdown', (e) => {
+    if (e.pointerType !== 'touch' || look || viewMode() === 'top' || !(e.target instanceof HTMLCanvasElement)) return;
+    look = { id: e.pointerId, x: e.clientX, y: e.clientY };
+  });
+  window.addEventListener('pointermove', (e) => {
+    if (look?.id !== e.pointerId) return;
+    if (!pinch) lookBy((e.clientX - look.x) * LOOK_TOUCH, (e.clientY - look.y) * LOOK_TOUCH);
+    look.x = e.clientX;
+    look.y = e.clientY;
+  });
+  const end = (e: PointerEvent) => { if (look?.id === e.pointerId) look = null; };
+  window.addEventListener('pointerup', end);
+  window.addEventListener('pointercancel', end);
 }
 
 /** The nearest foe in reach, or a spot a few metres ahead. */
