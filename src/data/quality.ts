@@ -25,12 +25,16 @@ export interface QualityPreset {
    *  world/meadow.ts): twice, a quarter of the blades cover the ground as before, a quarter of the vertices shaded
    *  (on an S25 Edge at full res the grass was 21 ms of an 80 ms frame) */
   grassSpread: number;
+  /** the share of the village's lamps' reach, and whether they read the shadows' map of what stands round them
+   *  (`setLampQuality` in core/lamps.ts) */
+  lampReach: number;
+  lampShadows: boolean;
 }
 
 export const QUALITY: Record<QualityLevel, QualityPreset> = {
-  high:   { label: 'High',   pixels: Infinity,    msaa: 2, shadowMap: 4096, minCasterRadius: 0.07, heroDetail: 1, ikRange: Infinity, relief: 16, grassSpread: 1 },
-  medium: { label: 'Medium', pixels: Infinity,   msaa: 2, shadowMap: 2048, minCasterRadius: 0.11, heroDetail: 0.6, ikRange: Infinity, relief: 8, grassSpread: 1 },
-  low:    { label: 'Low',    pixels: Infinity,    msaa: 0, shadowMap: 1024, minCasterRadius: 0.16, heroDetail: 0.35, ikRange: 14, relief: 0, grassSpread: 2 },
+  high:   { label: 'High',   pixels: Infinity,    msaa: 2, shadowMap: 4096, minCasterRadius: 0.07, heroDetail: 1, ikRange: Infinity, relief: 16, grassSpread: 1, lampReach: 1, lampShadows: true },
+  medium: { label: 'Medium', pixels: Infinity,   msaa: 2, shadowMap: 2048, minCasterRadius: 0.11, heroDetail: 0.6, ikRange: Infinity, relief: 8, grassSpread: 1, lampReach: 1, lampShadows: true },
+  low:    { label: 'Low',    pixels: Infinity,    msaa: 0, shadowMap: 1024, minCasterRadius: 0.16, heroDetail: 0.35, ikRange: 14, relief: 0, grassSpread: 2, lampReach: 0.7, lampShadows: false },
 };
 
 export const QUALITY_ORDER: QualityLevel[] = ['high', 'medium', 'low'];

@@ -181,8 +181,28 @@ export function lightTheLamps(): void {
 /** A lamp's place: where it burns, how far it reaches (m), and whether it lights the shelter's inside. */
 export interface LampPlace { at: THREE.Vector3; reach: number; inside: boolean }
 
-/** whether each lamp lights the shelter's inside, as placed */
+/** whether each lamp lights the shelter's inside, and how far it reaches (m), as placed */
 let insides: boolean[] = [];
+let reaches: number[] = [];
+/** a quality's share of each lamp's reach, and whether it reads the shadows' map (`setLampQuality`); and whether the
+ *  map is there to read (`setLampShadows`) */
+let reachBy = 1;
+let shadowsAllowed = true;
+let shadowsDrawn = false;
+
+/** The lamps' share of their reach and whether their shadows are read, for a quality: on Low, lit within 18 m, each
+ *  pixel by night took the light (and the map's sixteen reads) of 4.6 lamps on the square (on an S25
+ *  Edge at full res, the lamps 5.5 ms of an 80 ms frame and their shadows 5); a reach of 12.6 m takes about half
+ *  (at 10 m the square's middle lay dark between them). Uniforms alone: a quality switches it live. */
+export function setLampQuality(reach: number, shadows: boolean): void {
+  reachBy = reach;
+  shadowsAllowed = shadows;
+  list[SHADOWS_ON] = shadowsDrawn && shadowsAllowed ? 1 : 0;
+  reaches.forEach((r, i) => { list[placeOf(i) + 3] = r * reachBy; });
+}
+
+/** A quality's share of each lamp's reach (a light standing in for a lamp reaches as far). */
+export const lampReachBy = (): number => reachBy;
 
 /** The shelter (its least x and z, its most) and the lamps (none past `LAMPS_MOST`), each out until `lightLamp`. */
 export function placeLamps(shelter: [number, number, number, number], places: readonly LampPlace[]): void {
@@ -190,11 +210,12 @@ export function placeLamps(shelter: [number, number, number, number], places: re
   const shadows = list[SHADOWS_ON];
   list.fill(0);
   list[SHADOWS_ON] = shadows;
+  reaches = places.slice(0, LAMPS_MOST).map((place) => place.reach);
   list[SHELTER_READ] = SHELTER_OFF;
   list.set(shelter, 0);
   insides = places.slice(0, LAMPS_MOST).map((place) => place.inside);
   for (const [i, place] of places.slice(0, LAMPS_MOST).entries()) {
-    list.set([place.at.x, place.at.y, place.at.z, place.reach], placeOf(i));
+    list.set([place.at.x, place.at.y, place.at.z, place.reach * reachBy], placeOf(i));
   }
 }
 
@@ -210,9 +231,11 @@ export function lightLamp(i: number, color: THREE.Color, intensity: number): voi
   list.set([color.r * intensity, color.g * intensity, color.b * intensity, side], lightOf(i));
 }
 
-/** Whether the shadows' map is drawn and read (`world/lampAtlas.ts`); off, every lamp lights through all. */
+/** Whether the shadows' map is drawn and read (`world/lampAtlas.ts`; read where the quality has it,
+ *  `setLampQuality`); off, every lamp lights through all. */
 export function setLampShadows(on: boolean): void {
-  list[SHADOWS_ON] = on ? 1 : 0;
+  shadowsDrawn = on;
+  list[SHADOWS_ON] = shadowsDrawn && shadowsAllowed ? 1 : 0;
 }
 
 /** Whether the shadows' map is drawn and read. */

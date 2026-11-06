@@ -29,7 +29,7 @@ import { on } from '../events';
 import { standHeroes } from './hall';
 import { isWarm } from './warm';
 import { flash, release, type LightSlot } from '../fx/lights';
-import { lampsOut, lightLamp, placeLamps, type LampPlace } from '../core/lamps';
+import { lampReachBy, lampsOut, lightLamp, placeLamps, type LampPlace } from '../core/lamps';
 import { RUNNING } from '../core/rendererChoice';
 import { bakeLampShadows } from '../world/lampAtlas';
 import { drawLampShadows, lampShadow } from '../world/props';
@@ -718,7 +718,7 @@ function lightLamps(dt: number): void {
     const { lamp, share } = casters[k];
     const light = lamp < 0 ? { intensity: 0, reach: LAMPLIGHT.distance } : lampLight(lamp);
     slot.peak = light.intensity * share;
-    slot.light.distance = light.reach;
+    slot.light.distance = light.reach * lampReachBy();
     slot.light.decay = 2 + LAMP_SOFT;
     if (lamp >= 0) slot.light.position.copy(all[lamp]).setY(all[lamp].y - LAMPLIGHT.below);
   }
