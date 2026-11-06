@@ -3137,7 +3137,9 @@ export function buildWarrior(): Model {
         // (a grip out of reach for a frame or two is held through: a hand doesn't let go for 50 ms; and while the hand
         // comes onto it off the shoulder, it's taking hold, not failing to: counted so, it was still easing back after)
         // (nor does it let go while the right goes round: nothing else has the weapon then)
-        twoGood = takingHold > 0 || leftHelps >= 1 ? 1 : damp(twoGood, reach && fit.excess < 15 && fit.depth < 0.03 ? 1 : 0, 6, dt);
+        // (and while his left comes onto it as he sits or stands, `leftHelps`, eased by it alone: counted as holding
+        // only once fully on, it eased from nothing, and the arm went 37 cm onto the haft in a frame as it got there)
+        twoGood = takingHold > 0 || leftHelps > 0 ? 1 : damp(twoGood, reach && fit.excess < 15 && fit.depth < 0.03 ? 1 : 0, 6, dt);
         twoHeld = reach && twoGood > 0.5;
         grasp.past = fit.excess; grasp.into = fit.depth;
         // (the arm eases back to the pose's own only once the hand has let go: easing it back while still holding bent the wrist)
