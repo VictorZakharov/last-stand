@@ -67,17 +67,7 @@ let adaptHeld = NO_ADAPT;
 export function holdAdaptation(off: boolean): void { adaptHeld = off || NO_ADAPT; }
 /** bloom left out from now on, or no longer (the lab's trail draws where an effect is, not its glow round it) */
 let bloomPass: UnrealBloomPass | null = null;
-export function holdBloom(off: boolean): void {
-  if (!bloomPass) return;
-  bloomPass.enabled = !off;
-  // (the grade and the area add bloom's composite themselves: left out, they read none)
-  const added = off ? NO_BLOOM : bloomPass.renderTargetsHorizontal[0].texture;
-  grade.uniforms.tBloom.value = added;
-  areaPass.material.uniforms.tBloom.value = added;
-}
-/** what the grade and the area add while bloom is left out */
-const NO_BLOOM = new THREE.DataTexture(new Uint8Array(4), 1, 1);
-NO_BLOOM.needsUpdate = true;
+export function holdBloom(off: boolean): void { if (bloomPass) bloomPass.enabled = !off; }
 /** the share of the scene's pixels each way bloom draws at (`setBloomShare`), and the size the post chain gave it */
 let bloomShare = 1;
 const bloomGiven = new THREE.Vector2(1, 1);
@@ -101,19 +91,6 @@ export function bloomPixels(): number {
   }
   return pixels;
 }
-/**
- * The scene's target as a pass reads it: a NaN or Inf pixel made black and the rest held to 0..64 (bloom would smear
- * a bad pixel into black rectangles). Read by each pass that reads
- * the scene, bloom's bright pass, the area's first grid and the grade: a pass of its own made it into a target of the
- * frame's size, and bloom was added over that in another, two passes over every pixel (from play, an S25 Edge's post
- * chain 9.4 ms of its 33 ms frame at full res).
- */
-const SCENE_READ = /* glsl */`
-  vec4 sceneAt(sampler2D scene, vec2 uv) {
-    vec4 c = texture2D(scene, uv);
-    bool bad = any(isnan(c)) || any(isinf(c)) || c.r != c.r || c.g != c.g || c.b != c.b;
-    return bad ? vec4(0.0, 0.0, 0.0, 1.0) : clamp(c, 0.0, 64.0);
-  }`;
 /** Bloom's blur levels, tightest to widest: the halo round an effect, and only a trace of the screen-wide veil. */
 const BLOOM_LEVELS = [0.56, 0.5, 0.35, 0.12, 0.03];
 const GradeShader = {

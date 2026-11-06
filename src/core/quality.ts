@@ -132,6 +132,7 @@ function apply(l: QualityLevel, most = Infinity): void {
   setGrassSpread(p.grassSpread);
   setLampQuality(p.lampReach, p.lampShadows);
   setShadowsOnMove(p.shadowsOnMove);
+  setBloomShare(p.bloomShare);
   for (const p of G.players) applyShadowDetail(p.obj);
   for (const e of G.enemies) applyShadowDetail(e.obj);
   restart();

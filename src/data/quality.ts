@@ -32,12 +32,14 @@ export interface QualityPreset {
   /** whether the village draws what moves into its kept shadow maps only on frames it moved
    *  (`world/shadowsOnMove.ts`) */
   shadowsOnMove: boolean;
+  /** the share of the scene's pixels each way bloom draws at (`setBloomShare` in core/renderer.ts) */
+  bloomShare: number;
 }
 
 export const QUALITY: Record<QualityLevel, QualityPreset> = {
-  high:   { label: 'High',   pixels: Infinity,    msaa: 2, shadowMap: 4096, minCasterRadius: 0.07, heroDetail: 1, ikRange: Infinity, relief: 16, grassSpread: 1, lampReach: 1, lampShadows: true, shadowsOnMove: false },
-  medium: { label: 'Medium', pixels: Infinity,   msaa: 2, shadowMap: 2048, minCasterRadius: 0.11, heroDetail: 0.6, ikRange: Infinity, relief: 8, grassSpread: 1, lampReach: 1, lampShadows: true, shadowsOnMove: false },
-  low:    { label: 'Low',    pixels: Infinity,    msaa: 0, shadowMap: 1024, minCasterRadius: 0.16, heroDetail: 0.35, ikRange: 14, relief: 0, grassSpread: 2, lampReach: 0.7, lampShadows: false, shadowsOnMove: true },
+  high:   { label: 'High',   pixels: Infinity,    msaa: 2, shadowMap: 4096, minCasterRadius: 0.07, heroDetail: 1, ikRange: Infinity, relief: 16, grassSpread: 1, lampReach: 1, lampShadows: true, shadowsOnMove: false, bloomShare: 1 },
+  medium: { label: 'Medium', pixels: Infinity,   msaa: 2, shadowMap: 2048, minCasterRadius: 0.11, heroDetail: 0.6, ikRange: Infinity, relief: 8, grassSpread: 1, lampReach: 1, lampShadows: true, shadowsOnMove: false, bloomShare: 1 },
+  low:    { label: 'Low',    pixels: Infinity,    msaa: 0, shadowMap: 1024, minCasterRadius: 0.16, heroDetail: 0.35, ikRange: 14, relief: 0, grassSpread: 2, lampReach: 0.7, lampShadows: false, shadowsOnMove: true, bloomShare: 0.5 },
 };
 
 export const QUALITY_ORDER: QualityLevel[] = ['high', 'medium', 'low'];
