@@ -13,6 +13,7 @@ import { qualitySetting, qualityLevel, qualityBudget } from '../core/quality';
 import { atlasUse } from './overlay/atlas';
 import { QUALITY } from '../data/quality';
 import { loadingLeft, loadingSteps } from './loading';
+import { isWarm, isWarming } from '../game/warm';
 import { gpuMarks, viewMode, sceneRatio, sceneSize } from '../core/renderer';
 import { recorder } from '../perf/recorder';
 
@@ -203,7 +204,10 @@ export function perfLap(stage?: string): void {
 }
 // (WebGPU's `calls` counts its renders since the page started; the frame's draws are its `drawCalls`)
 const frameDraws = (): number => (WEBGPU ? (renderer.info.render as unknown as { drawCalls: number }).drawCalls : renderer.info.render.calls);
-const frameContext = (): string => `${G.mode}, ${G.enemies.length} foes, ${particles.glow.count + particles.smoke.count} particles, ${frameDraws()} draws`;
+// (a warm-up behind the lobby said: a phone's lobby stalled 150 to 300 ms at a time with our own work at 10 ms, and
+// the report couldn't tell whether the fight's programs were being made then)
+const frameContext = (): string => `${G.mode}${isWarming() ? ' (warming)' : ''}, ${G.enemies.length} foes, `
+  + `${particles.glow.count + particles.smoke.count} particles, ${frameDraws()} draws`;
 
 /** Call after the frame has been rendered. */
 export function perfEndFrame(): void {
@@ -470,6 +474,7 @@ function report(): string {
     `Canvas ${size.x}x${size.y} | pixel ratio ${renderer.getPixelRatio()} | scene ${sceneSize(new THREE.Vector2()).toArray().join('x')} at ${sceneRatio()} | devicePixelRatio ${window.devicePixelRatio} | window ${window.innerWidth}x${window.innerHeight}`,
     `Quality ${qualityLevel()} (setting ${qualitySetting()}${budgetNote()}) | MSAA ${sceneSamples()} | shadow map ${QUALITY[qualityLevel()].shadowMap} | label atlas ${Math.round(atlasUse() * 100)}% used | vsync ${framesUncapped() ? 'off' : 'on'}`,
     ...(gpuParts.length ? [`GPU split: ${gpuSplit()}`] : []),
+    `Warm: the fight ${isWarm('fight') ? 'yes' : 'no'}, the heroes ${isWarm('heroes') ? 'yes' : 'no'}${isWarming() ? ', warming now' : ''}`,
     `Mode ${G.mode} | biome ${G.arena.biome} | view ${viewMode()} | enemies ${G.enemies.length} | projectiles ${G.projectiles.length} | particles ${particles.glow.count + particles.smoke.count}`,
 
     `GPU ${gpuName} | CPU cores ${navigator.hardwareConcurrency ?? '?'} | JS bench ${fmt(jsBench(), 2)} ms`,

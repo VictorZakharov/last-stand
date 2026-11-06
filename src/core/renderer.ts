@@ -1186,6 +1186,14 @@ export const gpuMarks = { mark: (_label: string): void => {} };
 /** What is drawn over the finished frame, on the canvas at its own pixel ratio: the world's overlays (ui/overlay). */
 export const overFrame = { draw: (): void => {} };
 
+/** what the Profile leaves undrawn (`holdDraws`): the scene (its shadows' maps with it), or the post chain */
+const heldDraws = { scene: false, post: false };
+/** The Profile's: the scene, or the post chain after it, left undrawn from the next frame (`off`), or drawn again.
+ *  The scene's target is cleared in its place; with the post chain left out nothing reaches the screen meanwhile. */
+export function holdDraws(part: keyof typeof heldDraws, off: boolean): void {
+  heldDraws[part] = off;
+}
+
 /** The scene's hidden parts left out of the frame's matrices: three makes every object's world matrix again as it
  *  renders, shown or not, and the places not shown and the hall's room were a thousand of the village's 1853 objects
  *  (`npm run lab -- perf --village --profile=render`). A part shown again is made again in that frame's render. */
@@ -1226,9 +1234,10 @@ export function render(): void {
   gl.setRenderTarget(sceneRT);
   gpuMarks.mark('scene');
   matricesOfShownOnly(G.scene);
-  gl.render(G.scene, G.camera);
-  if (armsFov !== null) { gpuMarks.mark('arms'); drawArmsOver(); }
-  composer.render();
+  if (heldDraws.scene) gl.clear();
+  else gl.render(G.scene, G.camera);
+  if (armsFov !== null && !heldDraws.scene) { gpuMarks.mark('arms'); drawArmsOver(); }
+  if (!heldDraws.post) composer.render();
   gpuMarks.mark('overlay');
   overFrame.draw();
   presentHdr();

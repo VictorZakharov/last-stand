@@ -228,7 +228,9 @@ export function readShelterOnSurface(on: boolean): void {
 export function lightLamp(i: number, color: THREE.Color, intensity: number): void {
   if (i >= insides.length) return;
   const side = intensity > 0 ? (insides[i] ? 1 : -1) : 0;
-  list.set([color.r * intensity, color.g * intensity, color.b * intensity, side], lightOf(i));
+  // (held out by a harness, the lamp's light is kept for when they're back: the village lights its lamps every frame,
+  // and wrote over the harness's lamps out at once, so the Profile's "lamps out" put them out for a frame alone)
+  (heldList ?? list).set([color.r * intensity, color.g * intensity, color.b * intensity, side], lightOf(i));
 }
 
 /** Whether the shadows' map is drawn and read (`world/lampAtlas.ts`; read where the quality has it,
@@ -251,6 +253,7 @@ export function lampsHeldOut(out: boolean): void {
     lampsOut();
   } else if (heldList) {
     list.set(heldList);
+    heldList = null;
   }
 }
 

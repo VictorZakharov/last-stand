@@ -13,7 +13,7 @@
 // browser gives it.
 import * as THREE from 'three';
 import { G } from '../state';
-import { holdBloom, holdCanvasAtScene, overFrame, scenePixels } from '../core/renderer';
+import { holdBloom, holdCanvasAtScene, holdDraws, overFrame, scenePixels } from '../core/renderer';
 import { holdAuto, qualityBudget, qualityLevel, useQuality } from '../core/quality';
 import { particles } from '../fx/particles';
 import { lampShadowsOn, lampsHeldOut, setLampShadows } from '../core/lamps';
@@ -24,7 +24,7 @@ import { perfListen, setProfiled } from './perfHud';
 
 /** A thing the profile switches off: its label, and what switches it off, returning what puts it back (null where
  *  it's off already, or not here). */
-interface Step {
+export interface Step {
   label: string;
   off(): (() => void) | null;
 }
@@ -37,7 +37,7 @@ interface Frames {
 }
 
 /** the time let go after a switch (the targets resized, the shadow map's last draw), the time taken each way (ms),
- *  and how many times each way: 13 parts take about 13 x 2 x 2 x 1.8 s, 94 s, at any frame rate */
+ *  and how many times each way: 16 parts take about 16 x 2 x 2 x 1.8 s, 115 s, at any frame rate */
 const SKIP_MS = 300;
 const TAKE_MS = 1500;
 const ROUNDS = 2;
@@ -75,12 +75,23 @@ const undrawn = (root: THREE.Object3D | null | undefined) => (): (() => void) | 
   return () => kept.forEach(([part, mask]) => { part.layers.mask = mask; });
 };
 
+/** The heroes' updates let go (their moves, poses and skills), as the game calls each: what puts them back. */
+const heroesStill = (): (() => void) => {
+  const players = [...G.players];
+  for (const player of players) {
+    (player as { update: (dt: number) => void }).update = () => {};
+  }
+  return () => {
+    for (const player of players) delete (player as { update?: unknown }).update;
+  };
+};
+
 /** The opaque in order of their depth alone, nearest first (three's own order groups them by program first). */
 const nearestFirst = (a: THREE.RenderItem, b: THREE.RenderItem): number =>
   a.groupOrder - b.groupOrder || a.renderOrder - b.renderOrder || a.z - b.z;
 
-/** What the profile switches off, in turn. */
-function steps(): Step[] {
+/** What the profile switches off, in turn (the lab's too: `lab village --only profileRows`). */
+export function steps(): Step[] {
   const shadows = G.renderer.shadowMap;
   const meadow = G.arena.place === 'village' ? G.arena.village.meadow : null;
   return [
@@ -126,6 +137,17 @@ function steps(): Step[] {
     { label: 'floors\' relief flat', off: flag(() => QUALITY[qualityLevel()].relief > 0, (on) => {
       setReliefSteps(on ? QUALITY[qualityLevel()].relief : 0);
     }) },
+    // (the frame split: what drawing the scene costs, what the post chain after it does, and the heroes' own update,
+    // most of our work on a phone)
+    { label: 'scene not drawn', off: () => {
+      holdDraws('scene', true);
+      return () => holdDraws('scene', false);
+    } },
+    { label: 'post chain not drawn', off: () => {
+      holdDraws('post', true);
+      return () => holdDraws('post', false);
+    } },
+    { label: 'heroes not updated', off: heroesStill },
     { label: 'half the scene\'s pixels', off: () => {
       const level = qualityLevel();
       const budget = qualityBudget();
