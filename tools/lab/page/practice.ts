@@ -230,9 +230,7 @@ async function enterRun(lab: Lab, start: () => Promise<void>): Promise<() => voi
 /** The run abandoned from the pause menu, back to the lobby. */
 async function leaveRun(lab: Lab, unhold: () => void): Promise<void> {
   unhold();
-  await lab.step(1, () => ({ keys: ['escape'] }));
-  await lab.clickOn(byId('btn-abandon'));
-  await lab.until(() => G.mode === 'menu', RUN_FRAMES, 'practice: the run never gave way to the lobby');
+  await lab.abandonRun();
   await lab.step(LOBBY_FRAMES);
 }
 
