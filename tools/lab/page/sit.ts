@@ -25,6 +25,7 @@ import { describeShieldRim, FireClear, LaidStill, shieldRimOver } from './sitFir
 import { aloftCanary, HeldAloft } from './sitAloft';
 import { BladesApart, bladesCanary } from './sitBlades';
 import { HaftSlide, slideCanary } from './sitSlide';
+import { jerkCanary, SitJerks } from './sitJerks';
 import { FaceClear } from './sitFace';
 import { ARM_LIMITS, bodyBreaches, FIST_OPEN, grippingRanges, grippingSides } from './range';
 import { ArmsPinned, describeStrain, pinnedCanary } from './armStrain';
@@ -252,6 +253,8 @@ interface Watch {
   blades: BladesApart;
   /** a weapon moving along itself through his fist by itself */
   slide: HaftSlide;
+  /** a hand, an elbow or the weapon changing its move at once */
+  jerks: SitJerks;
   /** a weapon's far end by his face */
   face: FaceClear;
   /** he carries a two-hander: by a fire it's laid down */
@@ -388,6 +391,7 @@ async function trySeat(lab: Lab, c: SeatCase, fixture: Fixture, options: SitOpti
     aloft: new HeldAloft(),
     blades: new BladesApart(),
     slide: new HaftSlide(),
+    jerks: new SitJerks(),
     face: new FaceClear(),
     twoHanded: !!lab.model.offGrip,
     fistPast: { frames: 0, most: 0, at: '' },
@@ -526,6 +530,7 @@ function watchFrame(lab: Lab, name: string, frame: string, watch: Watch, skirts:
   watch.aloft.observe(lab, frame);
   watch.blades.observe(lab, frame);
   watch.slide.observe(lab, frame);
+  watch.jerks.observe(lab, frame);
   watch.face.observe(lab, frame);
   const through = legsThrough(lab.joints, skirts);
   if (!through || through.depth <= THROUGH_FROM) return;
@@ -735,6 +740,10 @@ function judgeWatch(name: string, watch: Watch, out: Out): void {
   const slid = watch.slide.describe(name);
   if (slid) out.problems.push(slid);
   if (!slideCanary()) out.problems.push('sit: the canary (a weapon moving through his fist by itself) was missed');
+  out.text.push(watch.jerks.summary(name));
+  const jerked = watch.jerks.describe(name);
+  if (jerked) out.problems.push(jerked);
+  if (!jerkCanary()) out.problems.push('sit: the canary (a hand stopped dead) was missed');
   const faceRead = watch.face.summary(name);
   if (faceRead) out.text.push(faceRead);
   const byFace = watch.face.describe(name);
