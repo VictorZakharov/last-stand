@@ -169,24 +169,25 @@ export function holdQuality(): void {
 let autoHeld = false;
 export function holdAuto(held: boolean): void {
   autoHeld = held;
-  frames = time = 0;
+  restart();
   settle = AUTO_QUALITY.settle;
 }
 
-/** Feed the real (unclamped) frame delta each frame while the game is running. */
-export function sampleQuality(dt: number): void {
-  if (setting !== 'auto' || atBottom() || autoHeld) return;
-  if (dt > 0.25) return;                 // tab switch, breakpoint: not a performance signal
-  if (settle > 0) { settle -= dt; return; }   // let a level change take effect first
-  frames++; time += dt;
-  const fps = frames / time;
-  const far = fps < AUTO_QUALITY.minFps * AUTO_QUALITY.farBelow;
-  if (time < (far ? AUTO_QUALITY.farWindow : AUTO_QUALITY.window)) return;
-  if (fps < AUTO_QUALITY.minFps) {
-    // (far below, every level down at once)
-    const steps = far ? QUALITY_ORDER.length : 1;
-    for (let i = 0; i < steps && !atBottom(); i++) stepDown();
-    writeAuto();
+/** Feed the real (unclamped) frame delta each frame while the game is running. Returns Auto's step, if it took one
+ *  (`low`), for the performance trace to mark. */
+export function sampleQuality(dt: number): string | null {
+  if (setting !== 'auto' || atBottom() || autoHeld) return null;
+  if (dt > AUTO_QUALITY.longestFrame) return null;   // tab switch, breakpoint: not a performance signal
+  if (settle > 0) { settle -= dt; return null; }   // let a level change take effect first
+  quick.push(dt);
+  quickTime += dt;
+  // (far below the target, judged by the window's middle frame, which a hitch doesn't move: to Low at once; a device
+  // too slow for the 4 s path's frames, over `HITCH` each, stepped never)
+  if (quickTime >= AUTO_QUALITY.quickWindow) {
+    const fps = 1 / median(quick);
+    if (fps < AUTO_QUALITY.minFps * AUTO_QUALITY.farBelow) return step(true);
+    quick.length = 0;
+    quickTime = 0;
   }
   // (the 4 s path as it always was: the mean of frames up to `HITCH`, a level a step)
   if (dt > HITCH) return null;
@@ -232,7 +233,7 @@ function median(values: number[]): number {
 /** Whether Auto has nothing left to lower: Low. */
 const atBottom = (): boolean => level === 'low';
 
-/** Auto's step down: a level, the screen's own pixels kept. */
+/** Auto's step down: a level, the screen's own pixels kept (from play, "cut something else, not resolution"). */
 function stepDown(): void {
   apply(QUALITY_ORDER[QUALITY_ORDER.indexOf(level) + 1]);
 }

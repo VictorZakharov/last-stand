@@ -543,10 +543,9 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   4.1), and its head line says the programs compiled from the run left to the frame drawn, each a problem. Each
   draw's triangles are summed as it's drawn: taken as the last draw's times the draws, a geometry whose draws a lamp's
   faces emptied counted all of them full.
+- `trace [code]`, `recorder` and `auto`: the performance traces slow games send, read back, what recording them
+  costs, and Auto quality's walk down on a slow device: in full in [`commands/traces.md`](commands/traces.md).
 - `perf [<skills>]`: skills cast in turn as the player casts them (`page/perf.ts`; `maelstrom,glacialNova`), the
-- `trace [code]` and `recorder`: the performance traces slow games send, read back, and what recording them costs:
-  in full in [`commands/traces.md`](commands/traces.md).
-- `perf <skills>`: skills cast in turn as the player casts them (`page/perf.ts`; `maelstrom,glacialNova`), the
   biome's foes coming at the hero (`--foes`, 10), every frame timed as the game's performance report times it
   (`ui/perfHud.ts`, on the browser's clock: `perfClock`) and summed by phase: standing (60 frames), then from each
   press (`--apart` s, 1) to the next, the last to `--after` s (4). Each frame is timed whole by the browser's clock,

@@ -177,6 +177,9 @@ export function openHall(focusId: string): void {
       standAtRest(player, spot(i), ROW.facing);
       stillSince.add(player);
     }
+    // (a cold hero hidden from the start, as `updateHall` keeps him: added shown, a first visit's hall drew the other
+    // heroes in the frame after the loading screen's last step, compiling their programs there, a task of 2.7 s)
+    player.obj.visible = heroShare(player.cls.model) >= 1;
     return { id, profile, player, due: Infinity, shown: -Infinity, facing: ROW.facing, spin: 0, cast: null };
   });
   opened = G.time;

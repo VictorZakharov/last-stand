@@ -180,9 +180,8 @@ const dummies = (): THREE.Object3D[] => G.enemies.map((e) => e.obj);
 
 /** What the lobby shows and can do, warmed before it shows (the lobby's dummies already stand in it, its effects,
  *  loot and skills made with its hero: `compileTheLobby`); the fight's foes built meanwhile (`buildAhead`). With
- *  `heroes` (a first visit, which opens on the hero selection screen), the other heroes too, their programs' links
- *  waited for with the lobby's (warmed after it, in turn, they held the screen back 1.8 s), then the hall of heroes'
- *  room drawn in the village's place: the `heroes` need warm. */
+ *  `hall` (a first visit, which opens on the hero selection screen), the hall of heroes' room too, drawn in the
+ *  village's place; its other heroes are warmed after the reveal, a hero at a time (`warmTheRest`). */
 export async function warmLobby(hall = false): Promise<void> {
   // (the hero's class with all it can wear: equipping anything in the lobby compiles nothing)
   await painted();
