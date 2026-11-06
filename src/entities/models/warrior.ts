@@ -1499,6 +1499,8 @@ export function buildWarrior(): Model {
   // coming off it, once he's sat)
   /** how long his left arm's fade lasts as how it's placed changes, sitting or standing (s: `fadeLeftSwitch`) */
   const LEFT_SWITCH = 0.2;
+  /** how many times faster that fade goes once his hand holds the grip */
+  const LEFT_HELD_FASTER = 3;
   /** how far his left elbow may go in a frame as his hand eases on or off a two-hander far from its grip (m): free, from one
    *  side of a fire it went to its other side in a frame as he let go, his hand 41 cm */
   const EASE_ELBOW = 0.05;
@@ -1698,8 +1700,8 @@ export function buildWarrior(): Model {
     grip.updateMatrixWorld(true);
   }
   /** His left arm faded from as it was last drawn over `LEFT_SWITCH` s when `mode` (how it's placed, -1 not sitting)
-   *  changes from one frame to the next, and its joints as drawn kept for the next. */
-  function fadeLeftSwitch(mode: number, dt: number): void {
+   *  changes from one frame to the next, until his hand `holds` the grip, and its joints as drawn kept for the next. */
+  function fadeLeftSwitch(mode: number, holds: boolean, dt: number): void {
     const arm = [j.shoulderL, j.elbowL, j.handL];
     if (mode >= 0 && leftModeWas >= 0 && mode !== leftModeWas) {
       for (let i = 0; i < arm.length; i++) {
@@ -1710,7 +1712,9 @@ export function buildWarrior(): Model {
     }
     if (mode < 0) leftFadeW = 0;
     if (leftFadeW > 0) {
-      leftFadeW = Math.max(0, leftFadeW - dt / LEFT_SWITCH);
+      // (and quicker once his hand holds the grip: faded on at its pace, the closed fist was dragged 4.6 cm off the
+      // handle; ended there, his hand went 10 cm in a frame as it took hold)
+      leftFadeW = Math.max(0, leftFadeW - (holds ? LEFT_HELD_FASTER : 1) * dt / LEFT_SWITCH);
       const eased = smooth(leftFadeW);
       for (let i = 0; i < arm.length; i++) {
         // (the old arm going on as it went, slowing as the fade goes)
@@ -3267,7 +3271,7 @@ export function buildWarrior(): Model {
     }
     else if (fp && st.dead < 0 && offHeld && !sheathed) slantL = fitInView(true, gripL, gripTurn(handL, gripL, _vl), SLANT, holdL) + holdL * swingSlantL;
     if (fp && st.dead < 0 && offHeld && !sheathed) wristInGrip(true, gripTurn(handL, gripL, _vl, slantL));
-    fadeLeftSwitch(st.sit && !fp && st.dead < 0 && two ? leftMode : -1, dt);
+    fadeLeftSwitch(st.sit && !fp && st.dead < 0 && two ? leftMode : -1, twoHeld, dt);
     // (set down once the arm is fitted: the fit moved the hand, and the shield with it, 8 cm into the floor)
     // (on a seat it stays on his forearm, hung beside his leg: stood on its rim by his shin, its grip was lower than
     // his hand reaches sat, and it flew there off his arm, "weapons are being pulled around with jedi force")
