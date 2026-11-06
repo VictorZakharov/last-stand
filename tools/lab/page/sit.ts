@@ -740,6 +740,9 @@ function judgeWatch(name: string, watch: Watch, out: Out): void {
   const byFace = watch.face.describe(name);
   if (byFace) out.problems.push(byFace);
   if (!watch.face.caught()) out.problems.push('sit: the canary (a weapon\'s head at his face) was missed');
+  const beforeFace = watch.face.describeBefore(name);
+  if (beforeFace) out.problems.push(beforeFace);
+  if (!watch.face.caughtBefore()) out.problems.push('sit: the canary (a weapon upright before his face) was missed');
   if (regrip.open > 0) {
     out.text.push(`  by the ${name}, his right hand open on ${regrip.open} frames, ${regrip.unheld} with no left hand on it`);
   }
