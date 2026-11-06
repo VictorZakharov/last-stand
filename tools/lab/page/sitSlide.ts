@@ -2,9 +2,12 @@
 // stood on its butt by a log: "maul cannot slide up without jedi force he doesn't have", and "maul slides up with jedi
 // force, still". A fist may slide along a haft that stays where it is (its butt on the floor, his hand going up it),
 // and a haft may slide through a loosened fist that another hand is moving; it may not move along itself through his
-// right fist with no other hand on it. `HaftSlide` reads each frame the weapon's move in the world along its length,
-// the right fist's slide along it, and whether his left fist is closed on it and moving with it (a left fist sliding
-// along it too, kept by the right one, read as holding it, and the old jedi rise read 4 cm).
+// right fist with no other hand on it. It may slip down through his loosened fists under its own weight, his left
+// closed round it guiding it (from the owner, of a maul set down sat: "let it slide down"; lowered in his fist as he
+// carries it, his fist went past his reach), but never rise so. `HaftSlide` reads each frame the weapon's move in the
+// world along its length, the right fist's slide along it, whether his left fist is closed on it and moving with it
+// (a left fist sliding along it too, kept by the right one, read as holding it, and the old jedi rise read 4 cm),
+// and whether it went down and his left fist was closed on it at all.
 
 import * as THREE from 'three';
 import type { Fist } from '../../../src/types';
@@ -27,25 +30,33 @@ const _hand = new THREE.Vector3();
 const _left = new THREE.Vector3();
 const _way = new THREE.Vector3();
 
-/** A frame's moves (m): the weapon's along its length in the world, the right fist's along it, and whether the left
- *  holds it and moves with it. */
+/** A frame's moves (m): the weapon's along its length in the world, the right fist's along it, whether the left
+ *  holds it and moves with it, whether the weapon went down, and whether the left was closed on it. */
 export interface SlideFrame {
   moved: number;
   slid: number;
   left: boolean;
+  falls: boolean;
+  guided: boolean;
 }
 
 /** Whether a frame so read is the weapon moving through his right fist by itself. */
 export function byItself(frame: SlideFrame): boolean {
-  return Math.abs(frame.moved) > MOVES_FROM && Math.abs(frame.slid) > MOVES_FROM && !frame.left;
+  const slips = frame.falls && frame.guided;
+  return Math.abs(frame.moved) > MOVES_FROM && Math.abs(frame.slid) > MOVES_FROM && !frame.left && !slips;
 }
 
-/** The canary: risen through his fist with no left hand, it's by itself; planted, or lifted by his left, it isn't. */
+/** The canary: risen through his fist with no left hand, even with it closed on it, it's by itself, and so is slipped
+ *  down with no hand on it; planted, lifted by his left, or slipped down his left round it, it isn't. */
 export function slideCanary(): boolean {
-  const risen: SlideFrame = { moved: 0.01, slid: -0.01, left: false };
+  const risen: SlideFrame = { moved: 0.01, slid: -0.01, left: false, falls: false, guided: false };
+  const risenGuided: SlideFrame = { ...risen, guided: true };
+  const dropped: SlideFrame = { ...risen, moved: -0.01, slid: 0.01, falls: true };
   const planted: SlideFrame = { ...risen, moved: 0 };
   const lifted: SlideFrame = { ...risen, left: true };
-  return byItself(risen) && !byItself(planted) && !byItself(lifted);
+  const slipped: SlideFrame = { ...dropped, guided: true };
+  const caught = byItself(risen) && byItself(risenGuided) && byItself(dropped);
+  return caught && !byItself(planted) && !byItself(lifted) && !byItself(slipped);
 }
 
 /** A held weapon's moves along itself through his right fist with no other hand on it. */
@@ -75,10 +86,14 @@ export class HaftSlide {
     _way.set(0, 1, 0).transformDirection(grip.matrixWorld);
     const scale = new THREE.Vector3().setFromMatrixScale(grip.matrixWorld).y;
     const leftSlid = Math.abs(left.y - this.was.left.y) * scale;
+    const moved = _grip.clone().sub(this.was.grip).dot(_way);
+    const guided = leftOn(lab.model.fists ?? []);
     const read: SlideFrame = {
-      moved: _grip.clone().sub(this.was.grip).dot(_way),
+      moved,
       slid: (hand.y - this.was.hand.y) * scale,
-      left: leftOn(lab.model.fists ?? []) && leftSlid <= LEFT_SLIDES_MOST * Math.abs(hand.y - this.was.hand.y) * scale,
+      left: guided && leftSlid <= LEFT_SLIDES_MOST * Math.abs(hand.y - this.was.hand.y) * scale,
+      falls: moved * _way.y < 0,
+      guided,
     };
     this.was.grip.copy(_grip);
     this.was.hand.copy(hand);
