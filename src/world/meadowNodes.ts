@@ -22,6 +22,7 @@ export interface BladeUniforms {
   uEye: { value: THREE.Vector2 };
   uBand: { value: THREE.Vector4 };
   uByStrand: { value: number };
+  uStrandsBy: { value: number };
   uTime: { value: number };
   uMeadow: { value: THREE.Texture };
   uMeadowHalf: { value: number };
@@ -131,6 +132,7 @@ export function bladeNodes(m: THREE.MeshStandardMaterial, u: BladeUniforms, comb
   const combedNow = number(u.uCombed);
   const side = number(u.uS, 'uint');
   const byStrandNow = number(u.uByStrand);
+  const strandsBy = number(u.uStrandsBy);
   const time = number(u.uTime);
   const tiles = uniformArray(u.uTiles.value, 'vec2').setGroup(renderGroup);
   const half = u.uMeadowHalf.value;
@@ -189,7 +191,7 @@ export function bladeNodes(m: THREE.MeshStandardMaterial, u: BladeUniforms, comb
     const bendBy = fract(h.y.mul(7.7)).mul(0.7).add(0.35);
     const mid = tilt.add(bendBy.mul(t).mul(0.5)).toVar();
     const angle = tilt.add(bendBy.mul(t)).toVar();
-    const strands = combedNow.mul(wider).mul(wider).toVar();
+    const strands = combedNow.mul(wider).mul(wider).mul(strandsBy).toVar();
     const w = width.mul(select(strands.greaterThan(1.5), float(1), pow(t, 2.5).oneMinus()));
     vStrands.assign(vec2(strands, h.x));
     const local = across.mul(sideOf.mul(w).mul(0.5))

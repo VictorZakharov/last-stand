@@ -21,21 +21,16 @@ export interface QualityPreset {
   ikRange: number;
   /** the floors' relief: the most steps down each view ray (core/parallax.ts), 0 = flat */
   relief: number;
-  /** whether the frame may be shown in HDR on a display in HDR mode (`setHdrAllowed` in core/hdr.ts): its copy of
-   *  the frame at the screen's pixels cost a 4K laptop's integrated GPU 26 ms of 38 */
-  hdr: boolean;
-  /** whether the props sculpted for close looks are drawn coarser (the crypt's skulls: `setSkullDetail` in
-   *  world/skull.ts) */
-  coarseProps: boolean;
-  /** the share of the scene's pixels each way bloom draws at (`setBloomShare` in core/renderer.ts): Low's half,
-   *  a quarter of the pixels (an S25 Edge's bloom was 6 ms of an 80 ms frame at full res) */
-  bloomShare: number;
+  /** how far apart the grass's blades stand, against High's, each as many times wider (`setGrassSpread` in
+   *  world/meadow.ts): twice, a quarter of the blades cover the ground as before, a quarter of the vertices shaded
+   *  (on an S25 Edge at full res the grass was 21 ms of an 80 ms frame) */
+  grassSpread: number;
 }
 
 export const QUALITY: Record<QualityLevel, QualityPreset> = {
-  high:   { label: 'High',   pixels: Infinity,    msaa: 2, shadowMap: 4096, minCasterRadius: 0.07, heroDetail: 1, ikRange: Infinity, relief: 16 },
-  medium: { label: 'Medium', pixels: Infinity,   msaa: 2, shadowMap: 2048, minCasterRadius: 0.11, heroDetail: 0.6, ikRange: Infinity, relief: 8 },
-  low:    { label: 'Low',    pixels: Infinity,    msaa: 0, shadowMap: 1024, minCasterRadius: 0.16, heroDetail: 0.35, ikRange: 14, relief: 0 },
+  high:   { label: 'High',   pixels: Infinity,    msaa: 2, shadowMap: 4096, minCasterRadius: 0.07, heroDetail: 1, ikRange: Infinity, relief: 16, grassSpread: 1 },
+  medium: { label: 'Medium', pixels: Infinity,   msaa: 2, shadowMap: 2048, minCasterRadius: 0.11, heroDetail: 0.6, ikRange: Infinity, relief: 8, grassSpread: 1 },
+  low:    { label: 'Low',    pixels: Infinity,    msaa: 0, shadowMap: 1024, minCasterRadius: 0.16, heroDetail: 0.35, ikRange: 14, relief: 0, grassSpread: 2 },
 };
 
 export const QUALITY_ORDER: QualityLevel[] = ['high', 'medium', 'low'];

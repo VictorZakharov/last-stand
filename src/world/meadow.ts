@@ -30,6 +30,9 @@ const RINGS = [
  *  the middle of the view put their hand-overs in the frame, circles of blades coming and going as he walked (from play,
  *  "in top down, grass is visibly redrawing as I'm moving around"). Its blades stay where they are as it follows. */
 const ABOVE_RING = { cell: 0.15, radius: 70, segs: 2 };
+/** the segments along each of its blades when they're spread (`setGrassSpread`): from above every blade is about as far
+ *  off, seen from over it, and its bend hardly shows */
+const ABOVE_SPREAD_SEGS = 1;
 /** tiles a side over each ring's grid (the most drawn: the uniforms' array) */
 const TILES = 8;
 /** how wide a blade is at its root, in its ring's cells, in the first ring; each ring out its blades wider again by its
@@ -257,6 +260,7 @@ const VERTEX_HEAD = /* glsl */ `
   uniform vec2 uEye;
   uniform vec4 uBand;
   uniform float uByStrand;
+  uniform float uStrandsBy;
   uniform float uTime;
   ${MEADOW_AT_GLSL}
   varying vec3 vBladeColour;
@@ -343,7 +347,7 @@ const VERTEX_BLADE = /* glsl */ `
   // (past the first ring a blade stands for as many of the first ring's, a sheet cut into strands of their width as
   // it's shaded: untapered here, each strand tapered there; drawn whole, the far rings' blades were a lighter, coarser
   // carpet, four times as wide in the second, and its edge a circle round the view as it moved)
-  float strands = uCombed * uWider * uWider;
+  float strands = uCombed * uWider * uWider * uStrandsBy;
   float w = width * (strands > 1.5 ? 1.0 : 1.0 - pow(t, 2.5));
   vStrands = vec2(strands, h.x);
   vec3 local = across * (side * w * 0.5) + lean * (t * height * sin(mid)) + vec3(0.0, t * height * cos(mid), 0.0);
@@ -397,6 +401,8 @@ interface RingUniforms extends MaskUniforms {
   uEye: { value: THREE.Vector2 };
   uBand: { value: THREE.Vector4 };
   uByStrand: { value: number };
+  /** a sheet's strands times as many as its width says (a cut ring's at a spread: each strand as wide as High's) */
+  uStrandsBy: { value: number };
   uTime: { value: number };
 }
 
@@ -410,6 +416,46 @@ function bandOf(band: THREE.Vector4, k: number, share: number): void {
 
 /** every ring's uniforms, as built, and how far a harness has moved their middle off where the view puts it (m) */
 const rings: RingUniforms[] = [];
+/** every ring's meshes, and the geometries of the one from above (a second of fewer segments, when spread) */
+const ringMeshes: THREE.Mesh[] = [];
+const aboveGeometries: { full?: THREE.InstancedBufferGeometry; spread?: THREE.InstancedBufferGeometry } = {};
+/** how far apart the blades stand against the rings' own cells, each as many times wider (a quality's `grassSpread`) */
+let spread = 1;
+
+type Ring = { cell: number; radius: number; segs: number };
+
+/** How far apart a ring's blades stand at the spread: the one from above by its square root (spread whole, its sheets
+ *  twice as wide read as slabs lying about the lawn from above, `grassOnLow`'s pictures; its blades have one segment
+ *  instead). */
+const spreadOf = (ring: Ring): number => (ring === ABOVE_RING ? Math.sqrt(spread) : spread);
+
+/** A ring's cells a side a tile, at the spread: its square across in whole tiles (each as wide in metres at any
+ *  spread: grown with the cells, the tiles listed past the view's edge shaded 67% of High's vertices from above). */
+function cellsATile(ring: Ring): number {
+  return Math.ceil((Math.ceil((ring.radius * 2) / (ring.cell * spreadOf(ring))) + 1) / TILES);
+}
+
+/** A ring's strands a sheet against its width's, at the spread: a cut ring's sheets, as many times wider, cut into as
+ *  many more (left as many, each strand was twice as wide, and from above a sheet's dark root a comb: `grassOnLow`'s
+ *  pictures); the first rings' blades are never cut, and stay whole. */
+function strandsBy(ring: Ring): number {
+  return ring.cell > RINGS[0].cell ? spreadOf(ring) ** 2 : 1;
+}
+
+/** The blades `by` times as far apart, each as many times wider, so they cover the ground as before with a square of
+ *  `by` fewer (from above by its square root, each of one segment): uniforms, counts and a geometry alone, so a quality
+ *  switches it live (each ring's cells, and its tiles with them). */
+export function setGrassSpread(by: number): void {
+  spread = by;
+  [...RINGS, ABOVE_RING].forEach((ring, k) => {
+    if (!rings[k]) return;
+    rings[k].uCell.value = ring.cell * spreadOf(ring);
+    rings[k].uS.value = cellsATile(ring);
+    rings[k].uStrandsBy.value = strandsBy(ring);
+  });
+  const above = ringMeshes[RINGS.length];
+  if (above) above.geometry = (spread > 1 ? aboveGeometries.spread : aboveGeometries.full)!;
+}
 const focusMoved = new THREE.Vector2();
 
 /** For a harness (tools/lab): the rings' middle moved (x, z) m off where the view puts it, the view as it is: what of
@@ -538,21 +584,19 @@ export function buildMeadow(mask: MeadowMask, maskTexture: THREE.Texture, update
   };
   [...RINGS, ABOVE_RING].forEach((ring, k) => {
     const above = ring === ABOVE_RING;
-    // (cells a side a tile: the ring's square across, in whole tiles)
-    const S = Math.ceil((Math.ceil((ring.radius * 2) / ring.cell) + 1) / TILES);
-    const N = S * TILES;
     const u: RingUniforms = {
       uOrigin: { value: new THREE.Vector2() },
-      uCell: { value: ring.cell },
+      uCell: { value: ring.cell * spreadOf(ring) },
       uWider: { value: ring.cell / RINGS[0].cell },
       uCombed: { value: 1 },
-      uS: { value: S },
+      uS: { value: cellsATile(ring) },
       uTiles: { value: Array.from({ length: TILES * TILES }, () => new THREE.Vector2()) },
       uFocus: { value: new THREE.Vector2() },
       uEye: { value: new THREE.Vector2() },
       // (handed over from the ring inside; the first's inner edge never reached)
       uBand: { value: new THREE.Vector4() },
       uByStrand: { value: 1 },
+      uStrandsBy: { value: strandsBy(ring) },
       uTime: time,
       uMeadow: { value: maskTexture },
       uMeadowHalf: { value: mask.half },
@@ -560,13 +604,20 @@ export function buildMeadow(mask: MeadowMask, maskTexture: THREE.Texture, update
     if (above) u.uBand.value.set(-2, -1, ring.radius - AT_ONCE, ring.radius);
     else bandOf(u.uBand.value, k, HAND_OVER);
     rings.push(u);
-    const geo = bladeGeometry(ring.segs);
-    const mesh = new THREE.Mesh(geo, bladeMaterial(u, ring.cell > RINGS[0].cell, k));
+    const full = bladeGeometry(ring.segs);
+    if (above) {
+      aboveGeometries.full = full;
+      aboveGeometries.spread = bladeGeometry(ABOVE_SPREAD_SEGS);
+    }
+    const mesh = new THREE.Mesh(above && spread > 1 ? aboveGeometries.spread! : full,
+      bladeMaterial(u, ring.cell > RINGS[0].cell, k));
+    ringMeshes.push(mesh);
     mesh.name = `meadow grass ${k + 1}`;
     // (the tiles are its culling: three's sphere would be round no points)
     mesh.frustumCulled = false;
     mesh.receiveShadow = true;
     mesh.onBeforeRender = (_renderer, _scene, camera) => {
+      const geo = mesh.geometry as THREE.InstancedBufferGeometry;
       // (none listed rather than hidden: a hidden mesh compiles nothing)
       if ((aboveHeld ?? fromAbove) !== above) {
         geo.instanceCount = 0;
@@ -574,15 +625,18 @@ export function buildMeadow(mask: MeadowMask, maskTexture: THREE.Texture, update
       }
       const focus = focusOf(camera, u.uFocus.value).add(focusMoved);
       eyeOf(camera, above, u.uEye.value);
-      const ox = Math.floor(focus.x / ring.cell) - (N >> 1), oz = Math.floor(focus.y / ring.cell) - (N >> 1);
+      const cell = u.uCell.value;
+      const S = u.uS.value;
+      const N = S * TILES;
+      const ox = Math.floor(focus.x / cell) - (N >> 1), oz = Math.floor(focus.y / cell) - (N >> 1);
       u.uOrigin.value.set(ox, oz);
       _viewProj.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
       _frustum.setFromProjectionMatrix(_viewProj, camera.coordinateSystem);
-      const w = S * ring.cell;
+      const w = S * cell;
       let listed = 0;
       for (let ty = 0; ty < TILES; ty++) {
         for (let tx = 0; tx < TILES; tx++) {
-          const x0 = (ox + tx * S) * ring.cell, z0 = (oz + ty * S) * ring.cell;
+          const x0 = (ox + tx * S) * cell, z0 = (oz + ty * S) * cell;
           const near = Math.hypot(Math.max(x0 - focus.x, 0, focus.x - x0 - w), Math.max(z0 - focus.y, 0, focus.y - z0 - w));
           if (near >= ring.radius) continue;
           const far = Math.hypot(Math.max(focus.x - x0, x0 + w - focus.x), Math.max(focus.y - z0, z0 + w - focus.y));
