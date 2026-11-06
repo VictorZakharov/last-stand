@@ -15,6 +15,7 @@ import { setHeroDetail } from '../entities/models/armor';
 import { setRubbleShadows } from '../fx/rubble';
 import { setReliefSteps } from './parallax';
 import { setGrassSpread } from '../world/meadow';
+import { setDrapeRounds } from '../entities/models/armor';
 import { setLampQuality } from './lamps';
 import { setShadowsOnMove } from '../world/shadowsOnMove';
 
@@ -133,6 +134,7 @@ function apply(l: QualityLevel, most = Infinity): void {
   setLampQuality(p.lampReach, p.lampShadows);
   setShadowsOnMove(p.shadowsOnMove);
   setBloomShare(p.bloomShare);
+  setDrapeRounds(p.drapeRounds);
   for (const p of G.players) applyShadowDetail(p.obj);
   for (const e of G.enemies) applyShadowDetail(e.obj);
   restart();

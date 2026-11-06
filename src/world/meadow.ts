@@ -424,10 +424,10 @@ let spread = 1;
 
 type Ring = { cell: number; radius: number; segs: number };
 
-/** How far apart a ring's blades stand at the spread: the one from above by its square root (spread whole, its sheets
- *  twice as wide read as slabs lying about the lawn from above, `grassOnLow`'s pictures; its blades have one segment
- *  instead). */
-const spreadOf = (ring: Ring): number => (ring === ABOVE_RING ? Math.sqrt(spread) : spread);
+/** How far apart a ring's blades stand at the spread, the one from above too, its sheets cut into as many more
+ *  strands (`strandsBy`) and its blades of one segment. (By the square root alone from above, Low's grass there was
+ *  still 6.8 ms of an S25 Edge's 33 ms frame, and from play, "ok but I want 60 fps": Low may look plainer than High.) */
+const spreadOf = (_ring: Ring): number => spread;
 
 /** A ring's cells a side a tile, at the spread: its square across in whole tiles (each as wide in metres at any
  *  spread: grown with the cells, the tiles listed past the view's edge shaded 67% of High's vertices from above). */

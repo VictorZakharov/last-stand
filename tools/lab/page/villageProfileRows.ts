@@ -132,6 +132,8 @@ export async function profileRows(lab: Lab, canary: boolean): Promise<LightsChec
   const was = qualityLevel();
   holdHour(0);
   useQuality('low');
+  // (placed itself: left where the checks before it had him, the lamps out changed 4% of the frame, alone 79%)
+  G.player.place(FROM.clone().setY(groundHeight(FROM.x, FROM.z)), 0);
   await viewBy(lab, 'third');
   // (each frame drawn as the game draws it: the lab skips the draws of the frames it steps)
   const drawing = lab.drawing;

@@ -11,6 +11,10 @@ let detail = 1;
 /** The heroes' geometric detail, 1 = full (the quality preset's `heroDetail`): heroes built from now on
  *  use fewer hair locks and fur tufts and coarser curves below 1. */
 export function setHeroDetail(k: number): void { detail = k; }
+/** the rounds a skirt's drape puts its cloth out of the limbs and holds it to its lengths before its last pass off them
+ *  (a quality's `drapeRounds`: the drape was a third of the hero's update, from play an S25 Edge's frame) */
+let drapeRounds = 4;
+export function setDrapeRounds(rounds: number): void { drapeRounds = rounds; }
 export const heroDetail = (): number => detail;
 /** `n` scaled by the detail level, at least `min` */
 export const lod = (n: number, min = 1): number => Math.max(min, Math.round(n * detail));
@@ -527,8 +531,8 @@ export class Skirt {
       }
     };
     // (the lines between points kept out of the legs in the last passes only: the first pull the cloth most of the way)
-    for (let it = 0; it < 4; it++) {
-      offAll(it >= 3);
+    for (let it = 0; it < drapeRounds; it++) {
+      offAll(it >= drapeRounds - 1);
       // (down the cloth from the waist, which stays: each point no further from the one above than its length and a little)
       for (let j = C; j < n; j++) pull(P, j, j - C, down[j] * 1.04, 1);
       // (round it: neighbours no further apart than theirs and a little, both moving; across the seam the last column but one

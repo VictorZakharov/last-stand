@@ -11,6 +11,7 @@ import { WEBGPU } from '../core/webgpu';
 import type { OwnLooks } from '../core/shaderPorts';
 import { causticNodes, fallingNodes, waterLooks, waterNodes } from './villageNodes';
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { canvasOf, ctx2d } from '../core/textures';
 import { seeThrough } from '../core/seeThrough';
 import { mulberry } from '../util';
@@ -176,11 +177,14 @@ export function buildFountain(scene: THREE.Object3D, M: FountainMats, obstacles:
       o.castShadow = o.receiveShadow = true;
     }
   });
-  const tiers = g.children.filter((o) => !walls.includes(o) && o instanceof THREE.Mesh
+  const tiers = g.children.filter((o): o is THREE.Mesh => !walls.includes(o) && o instanceof THREE.Mesh
     && (o.material === M.stone || o.material === M.coping));
-  obstacles.push({ x: 0, z: 0, r: r + 0.1, h: high, sight: { r: BOWL.r + 0.4, h: TOP.tip }, drawn: walls });
+  // (its stone drawn as one a material: the basin's wall, the tiers' coping and their stone)
+  const wall = asOne(g, walls as THREE.Mesh[]);
+  const tiersAsOne = [M.coping, M.stone].map((m) => asOne(g, tiers.filter((o) => o.material === m)));
+  obstacles.push({ x: 0, z: 0, r: r + 0.1, h: high, sight: { r: BOWL.r + 0.4, h: TOP.tip }, drawn: [wall] });
   // (the tiers stand taller than the basin stops a body: from play, "fountain should be a valid obstacle for arrows")
-  obstacles.push({ x: 0, z: 0, r: BOWL.r + TIERS_PAST, h: TOP.tip, drawn: tiers });
+  obstacles.push({ x: 0, z: 0, r: BOWL.r + TIERS_PAST, h: TOP.tip, drawn: tiersAsOne });
   const curtainMap = curtain.alphaMap!, jetMap = jetMat.alphaMap!;
   updaters.push((_dt, t) => {
     time.value = t;
@@ -202,6 +206,36 @@ export function buildFountain(scene: THREE.Object3D, M: FountainMats, obstacles:
     sunlit.value = lit;
     for (const m of [curtain, jetMat, foamMat]) m.emissiveIntensity = lit;
   };
+}
+
+/** the attributes every piece of the fountain's stone has, all that a merge of them keeps */
+const STONE_ATTRIBUTES = ['position', 'normal', 'uv'];
+
+/**
+ * Pieces of `g` of one material drawn as one, in `g`'s space: a draw each, the fountain was 42 of the 220 draws of an
+ * S25 Edge's frame by it at night, and three's work for each draw (its program, its uniforms) most of the render's CPU,
+ * 10 of the frame's 33 ms (from play, "ok but I want 60 fps"). Only its stone: what falls and the foam blend, and three
+ * sorts what blends by its object.
+ */
+function asOne(g: THREE.Group, meshes: THREE.Mesh[]): THREE.Mesh {
+  const parts = meshes.map((mesh) => {
+    mesh.updateMatrix();
+    const part = mesh.geometry.index ? mesh.geometry.toNonIndexed() : mesh.geometry.clone();
+    for (const name of Object.keys(part.attributes)) if (!STONE_ATTRIBUTES.includes(name)) part.deleteAttribute(name);
+    return part.applyMatrix4(mesh.matrix);
+  });
+  const merged = mergeGeometries(parts);
+  for (const part of parts) part.dispose();
+  if (!merged) throw new Error('fountain: its stone wouldn\'t merge');
+  const one = new THREE.Mesh(merged, meshes[0].material);
+  one.castShadow = meshes[0].castShadow;
+  one.receiveShadow = meshes[0].receiveShadow;
+  g.add(one);
+  for (const mesh of meshes) {
+    mesh.removeFromParent();
+    mesh.geometry.dispose();
+  }
+  return one;
 }
 
 /** A solid turned about y from its profile's points (radius, height), from `start` round. */

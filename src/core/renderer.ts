@@ -67,7 +67,17 @@ let adaptHeld = NO_ADAPT;
 export function holdAdaptation(off: boolean): void { adaptHeld = off || NO_ADAPT; }
 /** bloom left out from now on, or no longer (the lab's trail draws where an effect is, not its glow round it) */
 let bloomPass: UnrealBloomPass | null = null;
-export function holdBloom(off: boolean): void { if (bloomPass) bloomPass.enabled = !off; }
+export function holdBloom(off: boolean): void {
+  if (!bloomPass) return;
+  bloomPass.enabled = !off;
+  // (the grade and the area add bloom's composite themselves: left out, they read none)
+  const added = off ? NO_BLOOM : bloomPass.renderTargetsHorizontal[0].texture;
+  grade.uniforms.tBloom.value = added;
+  areaPass.material.uniforms.tBloom.value = added;
+}
+/** what the grade and the area add while bloom is left out */
+const NO_BLOOM = new THREE.DataTexture(new Uint8Array(4), 1, 1);
+NO_BLOOM.needsUpdate = true;
 /** the share of the scene's pixels each way bloom draws at (`setBloomShare`), and the size the post chain gave it */
 let bloomShare = 1;
 const bloomGiven = new THREE.Vector2(1, 1);
@@ -91,6 +101,22 @@ export function bloomPixels(): number {
   }
   return pixels;
 }
+/**
+ * The scene's target as a pass reads it: a NaN or Inf pixel made black and the rest held to 0..64 (bloom would smear
+ * a bad pixel into black rectangles), and what he can't see in the fog (core/sight.ts). Read by each pass that reads
+ * the scene, bloom's bright pass, the area's first grid and the grade: a pass of its own made it into a target of the
+ * frame's size, and bloom was added over that in another, two passes over every pixel (from play, an S25 Edge's post
+ * chain 9.4 ms of its 33 ms frame at full res).
+ */
+const SCENE_READ = /* glsl */`
+  ${SIGHT_GLSL}
+  vec4 sceneAt(sampler2D scene, vec2 uv) {
+    vec4 c = texture2D(scene, uv);
+    bool bad = any(isnan(c)) || any(isinf(c)) || c.r != c.r || c.g != c.g || c.b != c.b;
+    c = bad ? vec4(0.0, 0.0, 0.0, 1.0) : clamp(c, 0.0, 64.0);
+    // (a thinned roof's alpha: how much of the pixel is what is under it, tellsItsShare)
+    return vec4(seenColour(c.rgb, uv, min(c.a, 1.0)), max(c.a, 1.0));
+  }`;
 /** Bloom's blur levels, tightest to widest: the halo round an effect, and only a trace of the screen-wide veil. */
 const BLOOM_LEVELS = [0.56, 0.5, 0.35, 0.12, 0.03];
 const GradeShader = {
@@ -101,7 +127,7 @@ const GradeShader = {
     uVignette: { value: 1.05 },
     uLow: { value: 0 }, uBeat: { value: 0 }, tBlood: { value: null as THREE.Texture | null },
     tGlare: { value: null as THREE.Texture | null },
-    tBloom: { value: null as THREE.Texture | null },
+    tBloom: { value: null as THREE.Texture | null }, tSightDepth: { value: null as THREE.Texture | null },
     tSmall: { value: null as THREE.Texture | null }, tLarge: { value: null as THREE.Texture | null },
     uSmall: { value: ADAPT.top[0] }, uLarge: { value: ADAPT.top[1] },
     uCap: { value: HI_CAP - HI_KNEE },
@@ -198,6 +224,7 @@ class AreaPass extends Pass {
     uniforms: {
       tDiffuse: { value: null as THREE.Texture | null }, uStep: { value: new THREE.Vector2() },
       uFirst: { value: 0 }, tBloom: { value: null as THREE.Texture | null },
+      tSightDepth: { value: null as THREE.Texture | null },
     },
     vertexShader: /* glsl */`varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }`,
     // 8x8 bilinear taps spread over the output texel: a box average of its footprint
@@ -234,23 +261,27 @@ class AreaPass extends Pass {
   }
 }
 
-const SanitizeShader = {
-  uniforms: { tDiffuse: { value: null }, tSightDepth: { value: null } },
-  vertexShader: /* glsl */`varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
-  fragmentShader: /* glsl */`
-    uniform sampler2D tDiffuse; varying vec2 vUv;
-    ${SIGHT_GLSL}
-    void main(){
-      vec4 c = texture2D(tDiffuse, vUv);
-      bool bad = any(isnan(c)) || any(isinf(c)) || c.r != c.r || c.g != c.g || c.b != c.b;
-      gl_FragColor = bad ? vec4(0.0, 0.0, 0.0, 1.0) : clamp(c, 0.0, 64.0);
-      // (a thinned roof's alpha: how much of the pixel is what is under it, tellsItsShare)
-      gl_FragColor.rgb = seenColour(gl_FragColor.rgb, vUv, min(gl_FragColor.a, 1.0));
-      gl_FragColor.a = max(gl_FragColor.a, 1.0);
-    }`,
-};
+/** Bloom's bright pass reading the scene's target as `SCENE_READ` reads it (three's `LuminosityHighPassShader`). */
+const BRIGHT_FROM_SCENE = /* glsl */`
+  uniform sampler2D tDiffuse; uniform vec3 defaultColor; uniform float defaultOpacity;
+  uniform float luminosityThreshold; uniform float smoothWidth;
+  varying vec2 vUv;
+  ${SCENE_READ}
+  void main() {
+    vec4 texel = sceneAt(tDiffuse, vUv);
+    float v = luminance(texel.xyz);
+    vec4 outputColor = vec4(defaultColor.rgb, defaultOpacity);
+    float alpha = smoothstep(luminosityThreshold, luminosityThreshold + smoothWidth, v);
+    gl_FragColor = mix(outputColor, texel, alpha);
+  }`;
 
 let areaPass: AreaPass;
+/** A pass's uniforms given the sight's (shared, set each frame: a pass copies what it's made with) and the scene's
+ *  depth, which `SCENE_READ` reads. */
+function sharesTheSight(uniforms: Record<string, THREE.IUniform>): void {
+  Object.assign(uniforms, SIGHT);
+  uniforms.tSightDepth = { value: sceneRT.depthTexture };
+}
 let composer: EffectComposer, grade: ShaderPass, gl: THREE.WebGLRenderer, sceneRT: THREE.WebGLRenderTarget;
 /** the post chain's materials: those its passes draw into its targets with, and the grade's, drawn to the screen */
 let passMaterials: { intoTargets: THREE.ShaderMaterial[]; toScreen: THREE.ShaderMaterial[] } = { intoTargets: [], toScreen: [] };
@@ -642,19 +673,14 @@ export async function initRenderer(container: HTMLElement) {
   // (read back by what he can see: core/sight.ts)
   sceneRT.depthTexture = new THREE.DepthTexture(size.x, size.y, THREE.UnsignedIntType);
   composer = new EffectComposer(renderer, new THREE.WebGLRenderTarget(size.x, size.y, { type: THREE.HalfFloatType, depthBuffer: false }));
-  // Kill NaN/Inf pixels before bloom: a single bad pixel would otherwise be blurred
-  // into large black rectangles. It reads the scene target itself ('none': not the read buffer).
-  const sanitize = new ShaderPass(SanitizeShader, 'none');
-  sanitize.uniforms.tDiffuse.value = sceneRT.texture;
-  sanitize.uniforms.tSightDepth.value = sceneRT.depthTexture;
-  // (the pass copied what it was made with: these are shared, set each frame)
-  Object.assign(sanitize.uniforms, SIGHT);
-  composer.addPass(sanitize);
+  // Every pass reads the scene's target itself (`SCENE_READ`), cleaned and fogged as it reads it: the composer's own
+  // buffers are read by none
   const bloom = new UnrealBloomPass(new THREE.Vector2(size.x, size.y), 0.85, 0, 0.9);
   // each blur level's weight, tightest to widest (radius 0: used as they are). The widest levels spread a
   // bright effect over half the screen as a pale veil that fogs up the scene, so they only add a trace
   bloom.compositeMaterial.uniforms.bloomFactors.value = BLOOM_LEVELS;
   bloom.materialHighPassFilter.fragmentShader = BRIGHT_FROM_SCENE;
+  sharesTheSight(bloom.materialHighPassFilter.uniforms);
   // (its composite is added by the grade and the area, not blended over a copy of the frame: three draws no
   // material that isn't visible)
   bloom.blendMaterial.visible = false;
@@ -672,6 +698,7 @@ export async function initRenderer(container: HTMLElement) {
   // after bloom: the eye adapts to all the light that reaches it, halos included
   const area = new AreaPass();
   areaPass = area;
+  sharesTheSight(area.material.uniforms);
   area.material.uniforms.tBloom.value = bloom.renderTargetsHorizontal[0].texture;
   const areaFrom = area.render.bind(area);
   area.render = (renderer, write) => areaFrom(renderer, write, sceneRT);
@@ -679,6 +706,7 @@ export async function initRenderer(container: HTMLElement) {
   grade = new ShaderPass(GradeShader, 'none');
   grade.uniforms.tDiffuse.value = sceneRT.texture;
   grade.uniforms.tBloom.value = bloom.renderTargetsHorizontal[0].texture;
+  sharesTheSight(grade.uniforms);
   grade.uniforms.tGlare.value = bloom.renderTargetsVertical[bloom.nMips - 1].texture;
   // (set on the pass: it copies the uniforms it's made with, a texture's settings too, and the copy never saw the mask painted)
   grade.uniforms.tBlood.value = bloodMask;
