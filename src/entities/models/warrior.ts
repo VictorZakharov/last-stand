@@ -1608,6 +1608,8 @@ export function buildWarrior(): Model {
     sideBy: 0,
     /** how far his hand goes out to his side as it passes level, by a fire */
     pathSide: 0,
+    /** whether its way turns at one pace, by a fire: from head up to head down */
+    turnsEvenly: false,
     /** a maul or a greataxe stood head up on a seat this frame, its grip placed under his fist (`buttDown`) */
     upright: false,
     /** where it's stood head up between his feet and its way there, in his frame, before it's leant out to his right */
@@ -1847,7 +1849,9 @@ export function buildWarrior(): Model {
     // (by a fire out to his side instead: ahead of him, his arm stood straight out with the blade level at the flames)
     _pathAt.x -= twoSit.pathSide * Math.sin(Math.PI * down);
     // (by a fire at one turning pace: its way eased in a straight line, nearly half a turn went by in a moment of the middle)
-    if (twoSit.pathSide > 0) {
+    // (and by a fire whatever its side: head up to head down, eased in a line, its head fell from his face to his belt in a
+    // fifth of a second, through his arms)
+    if (twoSit.pathSide > 0 || twoSit.turnsEvenly) {
       _pq.setFromUnitVectors(twoSit.frontWay, twoSit.lowWay);
       _pathWay.copy(twoSit.frontWay).applyQuaternion(_pathTurn.identity().slerp(_pq, down));
     }
@@ -1908,6 +1912,7 @@ export function buildWarrior(): Model {
     twoSit.pathOut = toFloor ? SIT_HANDS.floorPathAhead : SIT_HANDS.pathOut;
     twoSit.sideBy = 0;
     twoSit.pathSide = toFloor ? SIT_HANDS.floorPathOut : 0;
+    twoSit.turnsEvenly = toFloor;
     // (by a fire at his hip, his arms near hanging: at the seat's height, his chest's, his arms stood straight out before him)
     // (and below his hip, near, as he crouches to it (`floorCrouch`): at its height, 42 cm ahead, standing straight, his
     // arms stood stiff and straight out and down for a second as he laid it, "jerky and lame", his right wrist 29 degrees
