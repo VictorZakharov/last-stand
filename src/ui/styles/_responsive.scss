@@ -81,10 +81,11 @@
 #lobby-rail button:disabled { opacity: .45; cursor: $cursor; }
 
 /* a phone held sideways with the browser's bars (298 css px tall on an S25 Edge): the skill buttons' arc reaches up
-   to the tracker's foot, so it stands further from the minimap (after the short screen's rule, which it
-   overrides) */
+   to the tracker's foot, so it stands further from the minimap there (after the short screen's rule, which it
+   overrides); off the yard, where they're hidden, beside the minimap as on any short screen ("training bullet
+   points could be further right, there is space there") */
 @media (max-height: 340px) {
-  #training { right: 240px; }
+  body.touch:not(.unarmed) #training { right: 240px; }
   /* (and the minimap a little smaller, its spoils' line clear of the arc's top button) */
   #minimap-wrap { zoom: .85; }
 }

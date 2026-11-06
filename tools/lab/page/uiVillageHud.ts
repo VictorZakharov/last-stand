@@ -1,9 +1,11 @@
 // tools/lab ui `villageHud` and `villageHudTouch`: the village's minimap and the training's tracker under it, the hero
 // in the training yard, where the touch skills show too: each within the window, the tracker under the minimap on the
-// right, none over another of the corner's controls. Its canary makes the tracker as tall as the window.
+// right, none over another of the corner's controls; on touch the skills hidden with him on the square first (they
+// showed there and did nothing, from play). Its canary makes the tracker as tall as the window.
 import * as THREE from 'three';
 import { yardToWorld } from '../../../src/data/village';
 import { restartTraining, skipTraining } from '../../../src/game/training';
+import { inYard } from '../../../src/game/village';
 import { groundHeight } from '../../../src/world/ground';
 import type { Lab } from './lab';
 import type { TouchFound } from './uiTouch';
@@ -18,11 +20,19 @@ const TAP_AT = { x: 0.4, y: 0.45 };
 const SHORT_SCREEN = 520;
 /** frames for the village's parts and the touch controls to show */
 const SHOW_FRAMES = 15;
+/** where the hero stands off the yard, by the fountain (the world's metres) */
+const ON_THE_SQUARE = { x: 0, z: 4 };
+
+/** whether the touch skills showed with the hero on the square (null: not touch) */
+let skillsOffTheYard: boolean | null = null;
+
+/** what counts as shown: `visibility: hidden` too (the touch skills off the yard), which `checkVisibility` lets by */
+const SHOWN = { visibilityProperty: true, opacityProperty: true };
 
 /** `selector`'s box, or null when it shows nothing. */
 function boxOf(selector: string): DOMRect | null {
   const element = document.querySelector<HTMLElement>(selector);
-  if (!element?.checkVisibility()) return null;
+  if (!element?.checkVisibility(SHOWN)) return null;
   const box = element.getBoundingClientRect();
   return box.width >= 1 && box.height >= 1 ? box : null;
 }
@@ -35,7 +45,7 @@ function boxesOf(selector: string): DOMRect[] {
   if (selector !== '#touch-skills' && selector !== '#touch-village') return [whole];
   const element = document.querySelector<HTMLElement>(selector)!;
   return [...element.children]
-    .filter((child) => (child as HTMLElement).checkVisibility())
+    .filter((child) => (child as HTMLElement).checkVisibility(SHOWN))
     .map((child) => child.getBoundingClientRect())
     .filter((box) => box.width >= 1);
 }
@@ -51,8 +61,18 @@ export async function openVillageHud(lab: Lab, touch: boolean): Promise<void> {
   if (touch && !document.body.classList.contains('touch')) {
     await lab.tap({ x: innerWidth * TAP_AT.x, y: innerHeight * TAP_AT.y });
   }
-  const [x, z] = yardToWorld(0, 0);
   lab.player.walkTo = null;
+  skillsOffTheYard = null;
+  if (touch) {
+    await standAt(lab, ON_THE_SQUARE.x, ON_THE_SQUARE.z);
+    skillsOffTheYard = boxesOf('#touch-skills').length > 0;
+  }
+  const [x, z] = yardToWorld(0, 0);
+  await standAt(lab, x, z);
+}
+
+/** The hero stood at a point of the ground and the frames for the HUD to follow him run. */
+async function standAt(lab: Lab, x: number, z: number): Promise<void> {
   lab.player.place(new THREE.Vector3(x, groundHeight(x, z), z), 0);
   await lab.step(SHOW_FRAMES);
 }
@@ -89,6 +109,12 @@ function partsFound(): TouchFound {
   const placed = innerHeight <= SHORT_SCREEN ? tracker && map && tracker.right <= map.left : tracker && map
     && tracker.top >= map.bottom;
   if (map && tracker && !placed) problems.push('villageHud: the tracker is not under the minimap');
+  if (skillsOffTheYard !== null) {
+    if (inYard(ON_THE_SQUARE.x, ON_THE_SQUARE.z)) throw new Error('lab: the square\'s spot lies in the yard');
+    lines.push(`  the touch skills on the square: ${skillsOffTheYard ? 'shown' : 'hidden'}`);
+    if (skillsOffTheYard) problems.push('villageHud: the touch skills show off the yard, where he can\'t cast');
+    if (!shown.includes('#touch-skills')) problems.push('villageHud: no touch skills in the yard');
+  }
   return { lines, problems };
 }
 

@@ -310,6 +310,8 @@ export function updateVillage(dt = 0): void {
   for (const hero of G.players) hero.shine = on ? VILLAGE_SHINE : 0;
   wakeByHero(on);
   p.armed = !on || armedAnywhere || inYard(p.pos.x, p.pos.z);
+  // (the touch skills shown where he can cast alone: on the square they showed and did nothing, from play)
+  document.body.classList.toggle('unarmed', !p.armed);
   if (on && inYard(p.pos.x, p.pos.z)) completeStep('yard');
   if (!on) {
     near = null;

@@ -13,6 +13,8 @@ body.touch .touch-only { display: flex !important; }
   background: radial-gradient(circle at 40% 35%, #f3e1b0, #7a5a2a 70%); box-shadow: 0 0 14px rgba($highlight, .45); }
 /* the attack button in the corner, the other skills on an arc around it, the potion off to the left */
 #touch-skills { position: absolute; right: env(safe-area-inset-right, 0px); bottom: 0; width: 270px; height: 270px; scale: var(--touch, 1); transform-origin: right bottom; }
+/* (hidden, not gone: a finger pressing one as he walks out keeps it till it lifts) */
+body.unarmed #touch-skills { visibility: hidden; }
 #touch-skills .slot { position: absolute; width: 58px; height: 58px; border-radius: 50%; pointer-events: auto; touch-action: none; overflow: hidden; opacity: .92; }
 #touch-skills .slot .icon { font-size: 30px; }
 #touch-skills .slot .key { display: none; }
