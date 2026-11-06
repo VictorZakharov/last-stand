@@ -1,12 +1,14 @@
 // The perf overlay's Profile: where this device's frame goes, measured on the device itself (from play: phones at 16 to
 // 39 frames a second, a frame of 25 ms on an S25 Edge whether it drew 440k triangles or 600k, and no desktop GPU nor
 // a software one able to stand in for a phone's). The view and the quality held, each thing is switched off and on
-// again in turn, `ROUNDS` times, `TAKE` frames each way after `SKIP` to settle, and each side compared with the one
+// again in turn, `ROUNDS` times, `TAKE_MS` each way after `SKIP_MS` to settle, and each side compared with the one
 // beside it: what the frames and our own work drop by with it off is its cost there. Run once, a baseline then each
 // part off, the S25's own work rose step after step whatever was off (8.4 to 11.5 ms, the phone warming), and bloom
 // off read 16 ms dearer; side by side, a drift is the same on both. A phone's frames are whole refreshes (16.7 or
 // 33.3 ms), so its median says nothing of a part: what tells is how many frames missed a refresh, and the mean.
-// Nothing switched compiles a program: each is a pass left out, a part hidden, a size changed. The result goes into
+// Timed, not counted: 40 frames a side took the S25 at 11 frames a second over 6 minutes, and the phone slept ("we
+// need to reduce under 2min total"); the screen is held awake while it runs (`navigator.wakeLock`). Nothing switched
+// compiles a program: each is a pass left out, a part hidden, a size changed. The result goes into
 // the overlay's copied report. Phones time no GPU (WebGL's timer isn't there); the GPU's time is listed where the
 // browser gives it.
 import * as THREE from 'three';
@@ -34,11 +36,15 @@ interface Frames {
   gpu: number[];
 }
 
-/** the frames let go after a switch (the targets resized, the shadow map's last draw), the frames taken each way,
- *  and how many times each way */
-const SKIP = 10;
-const TAKE = 30;
-const ROUNDS = 4;
+/** the time let go after a switch (the targets resized, the shadow map's last draw), the time taken each way (ms),
+ *  and how many times each way: 13 parts take about 13 x 2 x 2 x 1.8 s, 94 s, at any frame rate */
+const SKIP_MS = 300;
+const TAKE_MS = 1500;
+const ROUNDS = 2;
+/** the fewest frames a side takes, however long they take */
+const FEWEST = 4;
+/** the time the screen's rate is read over first (ms) */
+const RATE_MS = 1000;
 /** how long a step waits for a frame before it gives up (ms): a hidden page draws none */
 const NO_FRAME_MS = 3000;
 /** a frame missed a refresh when it took this many of the screen's refreshes or more */
@@ -129,20 +135,25 @@ function steps(): Step[] {
   ];
 }
 
-/** The next `SKIP` frames let go and the `count` after them taken. */
-function take(count: number): Promise<Frames> {
+/** The frames of the next `SKIP_MS` let go and those of the `ms` after them taken (`FEWEST` at least). */
+function take(ms: number): Promise<Frames> {
   return new Promise((resolve, reject) => {
     const taken: Frames = { intervals: [], ours: [], gpu: [] };
-    let seen = 0;
+    let skipped = 0;
+    let spent = 0;
     let timer = setTimeout(() => reject(new Error('no frames came')), NO_FRAME_MS);
-    perfListen.gpu = (ms) => { if (seen > SKIP) taken.gpu.push(ms); };
+    perfListen.gpu = (gpu) => { if (skipped >= SKIP_MS) taken.gpu.push(gpu); };
     perfListen.frame = (interval, work) => {
       clearTimeout(timer);
       timer = setTimeout(() => reject(new Error('the frames stopped')), NO_FRAME_MS);
-      if (++seen <= SKIP) return;
+      if (skipped < SKIP_MS) {
+        skipped += interval;
+        return;
+      }
       taken.intervals.push(interval);
       taken.ours.push(work);
-      if (taken.intervals.length < count) return;
+      spent += interval;
+      if (spent < ms || taken.intervals.length < FEWEST) return;
       clearTimeout(timer);
       perfListen.frame = perfListen.gpu = null;
       resolve(taken);
@@ -173,11 +184,11 @@ async function onAndOff(step: Step): Promise<{ on: Frames; off: Frames } | null>
   const on: Frames[] = [];
   const off: Frames[] = [];
   for (let round = 0; round < ROUNDS; round++) {
-    on.push(await take(TAKE));
+    on.push(await take(TAKE_MS));
     const undo = step.off();
     if (!undo) return null;
     try {
-      off.push(await take(TAKE));
+      off.push(await take(TAKE_MS));
     } finally {
       undo();
     }
@@ -195,18 +206,28 @@ function line(label: string, on: ReturnType<typeof figures>, off: ReturnType<typ
 
 let running = false;
 
+/** The screen held awake while the profile runs, where the browser lets it (none: the phone may sleep). */
+async function keptAwake(): Promise<WakeLockSentinel | null> {
+  try {
+    return await navigator.wakeLock?.request('screen') ?? null;
+  } catch {
+    return null;
+  }
+}
+
 /** The profile run: each step's progress told to `told`; the result kept for the copied report. */
 async function profile(told: (text: string) => void): Promise<void> {
   const all = steps();
   holdAuto(true);
+  const awake = await keptAwake();
   const lines: string[] = [];
   try {
     told('Profiling: the screen\'s rate');
     // (the screen's interval: the quickest tenth of the frames, as a frame never comes sooner than a refresh)
-    const first = sorted((await take(60)).intervals);
+    const first = sorted((await take(RATE_MS)).intervals);
     const refresh = first[Math.floor(first.length / 10)];
-    lines.push(`Profile (the view and quality held; each part on and off in turn, ${ROUNDS} times ${TAKE} frames`
-      + ` each way after ${SKIP}; mean ms on > off; missed% = frames of ${MISSED} refreshes or more, the refresh`
+    lines.push(`Profile (the view and quality held; each part on and off in turn, ${ROUNDS} times ${TAKE_MS} ms`
+      + ` each way after ${SKIP_MS}; mean ms on > off; missed% = frames of ${MISSED} refreshes or more, the refresh`
       + ` ${refresh.toFixed(1)} ms; saves = on less off):`);
     for (const [i, step] of all.entries()) {
       told(`Profiling: ${step.label} (${i + 1}/${all.length})`);
@@ -222,6 +243,7 @@ async function profile(told: (text: string) => void): Promise<void> {
   } finally {
     perfListen.frame = perfListen.gpu = null;
     holdAuto(false);
+    void awake?.release().catch(() => {});
   }
   setProfiled(lines.join('\n'));
 }
