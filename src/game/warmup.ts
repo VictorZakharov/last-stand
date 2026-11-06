@@ -9,6 +9,7 @@
 // everything that brings its own materials, compiles their shaders and clears it all again: with core/shaders.ts
 // pinning programs, nothing compiles mid-fight. Compiling a program took ANGLE a third of a second on a first visit,
 // and a third of the boot's are the fight's alone (`lab programs`).
+import { painted } from '../world/arena';
 import { lampsLetGo } from './village';
 import * as THREE from 'three';
 import { G } from '../state';
@@ -188,9 +189,18 @@ const dummies = (): THREE.Object3D[] => G.enemies.map((e) => e.obj);
  *  room drawn in the village's place: the `heroes` need warm. */
 export async function warmLobby(heroes = false): Promise<void> {
   // (the hero's class with all it can wear: equipping anything in the lobby compiles nothing)
-  await nextTask();
+  await painted();
   const hero = heroAllWorn(G.player.cls.model);
-  const extra = [...lobbyExtras, hero.root];
+  // (a frame painted between the heroes' builds: on a CPU slowed six times they were 5.6 s in one task, the loading
+  // screen frozen)
+  const others: ReturnType<ReturnType<typeof heroModelParts>[number]['build']>[] = [];
+  if (heroes) {
+    for (const part of heroModelParts()) {
+      await painted();
+      others.push(part.build());
+    }
+  }
+  const extra = [...lobbyExtras, hero.root, ...others.flatMap((b) => b.objects)];
   lobbyExtras = [];
   const leaveOut = otherBiomes().map((id) => G.arena.groupOf(id));
   const start = performance.now();

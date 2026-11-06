@@ -51,6 +51,15 @@ function shadowCameraFor(moon: THREE.DirectionalLight, look: BiomeLook): THREE.O
 /** The hour the village is lit for before anyone sets it (a dusk) */
 const FIRST_HOUR = 18.5;
 
+/** The next task once the browser has painted a frame (or 50 ms on, where it paints none: a hidden tab). */
+export const painted = (): Promise<void> => new Promise((resolve) => {
+  const fallback = setTimeout(resolve, 50);
+  requestAnimationFrame(() => {
+    clearTimeout(fallback);
+    setTimeout(resolve);
+  });
+});
+
 export async function buildArena(scene: THREE.Scene, renderer: THREE.WebGLRenderer) {
   const hemi = new THREE.HemisphereLight();
   const moon = new THREE.DirectionalLight();
@@ -72,12 +81,15 @@ export async function buildArena(scene: THREE.Scene, renderer: THREE.WebGLRender
   await stumpPreloaded();
   for (const id of BIOME_IDS) {
     // one place at a time, letting the page paint between them (a window moved to another monitor stays black until
-    // the main thread is free)
-    await new Promise((r) => setTimeout(r));
+    // the main thread is free), and between its build and its wall's seal (on a phone the arena's build froze the
+    // loading screen 1 s at a time: on a CPU slowed six times the crypt's build was 3 s, the walls' seals 3.7)
+    await painted();
     const group = new THREE.Group();
     group.name = id;
     const b = BUILDERS[id](group);
+    await painted();
     b.wall.seal();
+    await painted();
     bakeStaticShadows(group);
     const breakables = castBreakablesAsOne(group);
     trimShadowCasters(group, shadowCameraFor(moon, b.look));
@@ -86,11 +98,13 @@ export async function buildArena(scene: THREE.Scene, renderer: THREE.WebGLRender
     scene.add(group);
     places[id] = { group, b, breakables };
   }
-  await new Promise((r) => setTimeout(r));
+  await painted();
   const villageGroup = new THREE.Group();
   villageGroup.name = 'village';
   const village: Village = buildVillage(villageGroup);
+  await painted();
   village.wall.seal();
+  await painted();
   // (its casters aren't trimmed to a shadow camera: the sun goes round it with the hour)
   bakeStaticShadows(villageGroup);
   mergeStill(villageGroup);

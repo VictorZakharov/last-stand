@@ -13,7 +13,7 @@ import { updateTimers } from './core/timers';
 import { particles } from './fx/particles';
 import { initLights, updateLights, clearLights } from './fx/lights';
 import { initEffects, updateEffects, clearEffects } from './fx/effects';
-import { buildArena, compileEnvMaps } from './world/arena';
+import { buildArena, compileEnvMaps, painted } from './world/arena';
 import { separateEnemies } from './world/collision';
 import { prepareWalks } from './world/walkPath';
 import { groundHeight } from './world/ground';
@@ -68,6 +68,9 @@ import { loadingStep, loadingDone, loadingFailed, loadingLeft, lobbyLaidOut } fr
 import { prepareWind } from './ui/logoWind';
 import { preloadTextures } from './core/textures';
 import { preloadHands } from './entities/models/hands';
+import { preloadHeads } from './entities/models/head';
+import { heroDetail } from './entities/models/armor';
+import { preloadEngraving } from './core/engraving';
 import { preloadStump } from './world/stump';
 import { preloadFlames } from './world/fire';
 import { initSync } from './net/sync';
@@ -119,6 +122,10 @@ async function boot() {
   // (and its lamps' shadows of what stands still, drawn once)
   prepareLamps(renderer, scene.getObjectByName('village')!);
   initQuality();
+  // (every hero's head and the engraved steel made in workers meanwhile, at the detail the heroes are built at: on a
+  // phone they froze the loading screen for 4.9 s in the hero's build, "phone has freezes during loading")
+  const heads = preloadHeads(heroDetail());
+  const engraving = textures.ready('steel').then(preloadEngraving);
   // the village shown, and its programs compiled while the hero is built (game/warmup.ts)
   compileTheBiome();
   // (the lobby's panels rastered under the loading screen while the hero is built: ui/menus.ts)
@@ -128,11 +135,15 @@ async function boot() {
   await hands;
   // (the heroes' engraving is painted over the steel's map as they're built)
   await textures.ready('steel');
+  await Promise.all([heads, engraving]);
   G.profile = loadProfile(savedClass());
   G.player = new Player(G.profile.classId, G.profile.equipped);
   G.players = [G.player];
+  // (a frame painted between the boot's long pieces, so the loading screen moves on)
+  await painted();
   // (what the lobby can do compiled with him, before its page is laid out: game/warmup.ts)
   compileTheLobby();
+  await painted();
 
   initHud();
   initTouch({
