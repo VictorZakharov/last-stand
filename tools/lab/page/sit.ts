@@ -15,7 +15,7 @@ import type { SitState } from '../../../src/types';
 import * as THREE from 'three';
 import { G } from '../../../src/state';
 import { groundHeight } from '../../../src/world/ground';
-import { seatSpot, seatTopAt, type Seat } from '../../../src/world/seats';
+import { seatSpot, seatStands, seatTopAt, type Seat } from '../../../src/world/seats';
 import { SIT } from '../../../src/entities/sitting';
 import { outlinedLook } from '../../../src/ui/overlay/outline';
 import type { BiomeId } from '../../../src/data/biomes';
@@ -443,6 +443,16 @@ function seatMiddle(seat: Seat): THREE.Vector3 {
   return new THREE.Vector3(x, y, z);
 }
 
+/** What the sit's pointing reads, said as why a seat pointed at wasn't outlined: a sit still under way, or the seat
+ *  the cursor's ray met. */
+function whyUnlit(player: Lab['player'], pointed: Seat): string {
+  const sitting = player.sitting as unknown as { phase: string | null; pointedSeat: Seat | null; pointedFor: number };
+  const seat = sitting.pointedSeat ? 'a seat' : 'no seat';
+  const broken = seatStands(pointed) ? '' : ', the seat broken';
+  const off = seatMiddle(pointed).setY(player.pos.y).distanceTo(player.pos);
+  return `his sit ${sitting.phase ?? 'over'}, ${seat} under the cursor for ${sitting.pointedFor.toFixed(2)} s, he's ${off.toFixed(1)} m off it${broken}`;
+}
+
 /** Whether the seat is outlined white round its first target. */
 function seatLit(seat: Seat): boolean {
   const look = outlinedLook();
@@ -468,7 +478,7 @@ async function sitKey(lab: Lab, c: SeatCase, seat: Seat, out: Out): Promise<void
   }
   const lit = await within(lab, () => seatLit(seat), Math.round((SIT.look - KEY_EARLY) * RATE) + KEY_TAKES);
   if (!lit) {
-    out.problems.push(`sit: the ${name} wasn't outlined white after ${SIT.look} s pointed at`);
+    out.problems.push(`sit: the ${name} wasn't outlined white after ${SIT.look} s pointed at (${whyUnlit(player, seat)})`);
     return;
   }
   out.moments.push(await lab.screen(`${name}: pointed at, outlined`));
@@ -1417,7 +1427,9 @@ function riseMost(lab: Lab, c: SeatCase): number {
   const [before, after] = SIT.handsUp;
   const up = hands.up ?? SIT.up;
   const started = hands.last ? up : up * (1 - SIT.handsFrom);
-  const body = Math.max(up, started + hands.before * before) + hands.after * after;
+  // (his hands' stage sat counted once: counted in his body's time too, a maul's 1.4 s was counted twice, and a held
+  // step walked him on for 3 s once up, out of the reach of the seat pointed at next)
+  const body = Math.max(up, started + hands.before * before);
   return hands.after * after + body + RISE_ROOM;
 }
 
