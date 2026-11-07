@@ -233,6 +233,29 @@ function lowestOver(grip: THREE.Object3D): number {
   return _box.min.y - groundHeight(_point.x, _point.z);
 }
 
+/** The weapon's handle's two ends in the world as it's drawn now (its butt, and its far end past the grip), or none
+ *  without one. */
+export function handleOf(lab: Lab): { butt: THREE.Vector3; far: THREE.Vector3 } | null {
+  const grip = lab.model.tip?.parent;
+  if (!grip) return null;
+  lab.model.root.updateMatrixWorld(true);
+  const reach = reachOf(grip);
+  grip.getWorldPosition(_grip);
+  _way.set(0, 1, 0).transformDirection(grip.matrixWorld);
+  const scale = _point.setFromMatrixScale(grip.matrixWorld).y;
+  const butt = _grip.clone().addScaledVector(_way, reach.down * scale);
+  const far = _grip.clone().addScaledVector(_way, reach.up * scale);
+  return { butt, far };
+}
+
+/** Each wrist's place up the weapon's handle from its butt (m, the right's then the left's), or none without one. */
+export function fistsUpHandle(lab: Lab): [number, number] | null {
+  const handle = handleOf(lab);
+  if (!handle) return null;
+  const { butt, far } = handle;
+  return [upFrom(butt, far, lab.joints.handR), upFrom(butt, far, lab.joints.handL)];
+}
+
 /** How far up the line from `butt` to `far` the place nearest `hand`'s wrist is (m). */
 function upFrom(butt: THREE.Vector3, far: THREE.Vector3, hand: THREE.Object3D): number {
   hand.getWorldPosition(_point);

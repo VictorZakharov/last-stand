@@ -85,6 +85,9 @@ export class Sitting {
   /** the seat he got up from, kept off it only as far as he has left it (`relaxed`) */
   private leaving: Relaxed | null = null;
   private readonly state: SitState = { w: 0, hip: 0, foot: 0, before: 0, after: 0 };
+  /** getting up, his hands' stage held at this (the lab's `live hold`: a moment of it looked at as long as it's wanted),
+   *  or none */
+  holdHands: number | null = null;
 
   /** The pose's share of the sit this frame, or none. */
   get pose(): SitState | null {
@@ -266,7 +269,8 @@ export class Sitting {
     if (st.after > 0) st.after = hands.after > 0 ? Math.max(0, st.after - dt / (hands.after * after)) : 0;
     else {
       if (this.u > 0) this.u = Math.max(0, this.u - dt / (hands.up ?? SIT.up));
-      if (hands.last ? this.u <= 0 : this.u < SIT.handsFrom) st.before = hands.before > 0 ? Math.max(0, st.before - dt / (hands.before * before)) : 0;
+      const least = this.holdHands ?? 0;
+      if (hands.last ? this.u <= 0 : this.u < SIT.handsFrom) st.before = hands.before > 0 ? Math.max(least, st.before - dt / (hands.before * before)) : 0;
     }
     const turn = this.inSeatFrame(hands.turn);
     this.place(me, dt, turnFor(turn, st.before), stepFor(turn, st.before));
@@ -360,13 +364,14 @@ const NO_STEP: readonly [number, number] = [0, 0];
 /** How far he has stepped as he gets up, his hands' stage at `before` (`SitTurn.step`), in the seat's frame. */
 function stepFor(turn: SitTurn | undefined, before: number): readonly [number, number] {
   if (!turn?.step) return NO_STEP;
-  const stepped = smooth(ramp(before, 1, turn.inTo));
+  const stepped = turn.by ? turn.by(before) : smooth(ramp(before, 1, turn.inTo));
   return [turn.step[0] * stepped, turn.step[1] * stepped];
 }
 
 /** How far his facing is turned from the seat's as he gets up, his hands' stage at `before` (`SitHands.turn`). */
 function turnFor(turn: SitTurn | undefined, before: number): number {
   if (!turn) return 0;
+  if (turn.by) return turn.angle * turn.by(before);
   const turnedIn = smooth(ramp(before, 1, turn.inTo));
   const turnedBack = smooth(ramp(before, turn.backFrom, turn.backTo));
   return turn.angle * turnedIn * (1 - turnedBack);

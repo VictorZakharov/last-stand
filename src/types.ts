@@ -410,6 +410,9 @@ export interface SitTurn {
    *  up lies, wherever it lies */
   yaw?: number;
   at?: [number, number];
+  /** or how far turned and stepped he is at each moment of his hands' stage (0 to 1), from a keyed move: in place of
+   *  `inTo`, `backFrom` and `backTo` */
+  by?: (before: number) => number;
 }
 
 export interface SitState { w: number; hip: number; foot: number; before: number; after: number }

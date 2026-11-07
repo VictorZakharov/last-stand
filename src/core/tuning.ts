@@ -11,6 +11,8 @@ type Value = number | number[];
 interface Registered {
   values: Record<string, Value>; keyed: Record<string, number>;
   copies: WeakRef<Record<string, Value>>[]; set: Map<string, Value>;
+  /** the names of a key's numbers, for the lists of keys that give them (a keyed move's columns) */
+  named: Record<string, readonly string[]>;
 }
 
 const registry = new Map<string, Registered>();
@@ -22,6 +24,7 @@ const registry = new Map<string, Registered>();
  *  last copy alone, the warrior's `warriorLay` set a hall's or a warm-up's build and the hero in the scene kept his. */
 export function tunable<T extends Record<string, Value>>(
   name: string, values: T, keyed: Partial<Record<keyof T, number>> = {},
+  named: Partial<Record<keyof T, readonly string[]>> = {},
 ): T {
   if (!import.meta.env.DEV) return values;
   const had = registry.get(name);
@@ -29,7 +32,9 @@ export function tunable<T extends Record<string, Value>>(
   const set = had?.set ?? new Map<string, Value>();
   for (const [field, value] of set) values[field as keyof T] = copyOf(value) as T[keyof T];
   copies.push(new WeakRef(values));
-  registry.set(name, { values, keyed: keyed as Record<string, number>, copies, set });
+  registry.set(name, {
+    values, keyed: keyed as Record<string, number>, copies, set, named: named as Record<string, readonly string[]>,
+  });
   return values;
 }
 
@@ -76,15 +81,54 @@ function tune(path: string, value: number[]): void {
   }
 }
 
+/** A list of keys whose numbers are named (`tunable`'s `named`): its names, the numbers a key takes, its keys now. */
+function namedKeys(path: string): { names: readonly string[]; key: number; now: number[] } {
+  const { now, key } = fieldOf(path);
+  const names = registry.get(path.split('.')[0])!.named[path.split('.')[1]];
+  if (key === undefined || !names) throw new Error(`${path} is no list of keys with named numbers`);
+  return { names, key, now: typeof now === 'number' ? [now] : [...now] };
+}
+
+/** A list of keys with named numbers as a table: a line of the names, then a line a key, numbered from 1. */
+function keyTable(path: string): string {
+  const { names, key, now } = namedKeys(path);
+  const width = Math.max(...names.map((name) => name.length), 6);
+  const cell = (text: string) => text.padStart(width);
+  const lines = [`    ${names.map(cell).join(' ')}`];
+  for (let row = 0; row * key < now.length; row++) {
+    const numbers = now.slice(row * key, (row + 1) * key).map((value) => cell(String(+value.toFixed(3))));
+    lines.push(`${String(row + 1).padStart(3)} ${numbers.join(' ')}`);
+  }
+  return lines.join('\n');
+}
+
+/** Sets some of key `row`'s numbers (from 1) of a list of keys with named numbers, each by its name. */
+function tuneKey(path: string, row: number, set: Record<string, number>): void {
+  const { names, key, now } = namedKeys(path);
+  const rows = now.length / key;
+  if (!Number.isInteger(row) || row < 1 || row > rows) throw new Error(`${path} has keys 1 to ${rows}, no ${row}`);
+  for (const [name, value] of Object.entries(set)) {
+    const column = names.indexOf(name);
+    if (column < 0) throw new Error(`${path}'s keys have no ${name} (they have: ${names.join(', ')})`);
+    now[(row - 1) * key + column] = value;
+  }
+  tune(path, now);
+}
+
 declare global {
   interface Window {
     /** dev builds: sets a tunable value (`tunable`), and reads one */
     __tune?: (path: string, value: number[]) => void;
     __tuned?: (path: string) => number[];
+    /** dev builds: a list of keys with named numbers as a table, and some of a key's numbers set by name */
+    __keyTable?: (path: string) => string;
+    __tuneKey?: (path: string, row: number, set: Record<string, number>) => void;
   }
 }
 
 if (import.meta.env.DEV) {
   window.__tune = tune;
   window.__tuned = tuned;
+  window.__keyTable = keyTable;
+  window.__tuneKey = tuneKey;
 }
