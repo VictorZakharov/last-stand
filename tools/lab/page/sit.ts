@@ -1460,7 +1460,11 @@ function pushOutOfHand(lab: Lab, frame: number): (() => void) | null {
  *  chose the whole slow reverse when a key gets him up: a greatsword out of the ground, then up, then onto his
  *  shoulder, about 2.3 s; with nothing in his hands, 0.8 s) */
 function riseMost(lab: Lab, c: SeatCase): number {
-  const hands = lab.player.sitHands(!!c.pick(G.arena.seats)?.ground);
+  const ground = !!c.pick(G.arena.seats)?.ground;
+  // (getting up, his hands' own stage: a two-hander taken up off the floor by a fire takes longer than laying it down)
+  const sat = lab.player.sitHands(ground);
+  const rising = lab.model.sitHandsUp?.(ground);
+  const hands = rising && rising.before > sat.before ? rising : sat;
   const [before, after] = SIT.handsUp;
   const up = hands.up ?? SIT.up;
   const started = hands.last ? up : up * (1 - SIT.handsFrom);

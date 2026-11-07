@@ -74,26 +74,30 @@ const PICK_COLUMNS = [
 type PickColumn = typeof PICK_COLUMNS[number];
 const PICK = tunable('warriorPick', {
   keys: [
-    // (the body's numbers read off a real squat pick-up, CMU's clip 69_70: `npm run lab -- live mocap`; its 0.8 s down,
-    // 0.4 s at the bottom and 0.6 s up kept in step. The hips drop 0.62 m and go 10 cm back, the trunk leans 0.54 going
-    // down and 0.37 at the bottom: guessed, he folded over at 1.2 with his hips high)
+    // (the body's numbers read off a real squat pick-up, CMU's clip 69_70: `npm run lab -- live mocap`. The hips drop
+    // 0.62 m and go 10 cm back, the trunk leans 0.54 going down and 0.37 at the bottom: guessed, he folded over at 1.2
+    // with his hips high. The clip's 0.8 s down, 0.4 at the bottom and 0.6 up, with a step before and the shoulder
+    // after, don't fit the 2.6 s of his hands' stage: shared out so nothing is hurried most, the tip-up the longest)
     // k   step drop back  lean twist lies held butt: right up  ahead  way: left up   ahead  along: R   L    on: R L  carry look
     0,     0,   0,    0,    0,    0,    1,   0,   0.3,  0.03, 0.33,  1,    0,    0,     0.12, 0.5,  0,   0,   0,   0,
-    0.2,   1,   0,    0.02, 0.25, 0,    1,   0,   0.3,  0.03, 0.33,  1,    0,    0,     0.12, 0.5,  0,   0,   0,   0.3,
-    0.33,  1,   0.3,  0.11, 0.54, 0,    1,   0,   0.3,  0.03, 0.33,  1,    0,    0,     0.12, 0.5,  0.5, 0.2, 0,   0.25,
-    // (deeper over at the bottom than the clip's person, whose object stood 15 cm up: this one lies on the floor)
-    0.45,  1,   0.55, 0.08, 0.75, 0,    1,   0,   0.3,  0.03, 0.33,  1,    0,    0,     0.15, 0.5,  1,   0.6, 0,   0.25,
+    0.15,  1,   0,    0.02, 0.25, 0,    1,   0,   0.3,  0.03, 0.33,  1,    0,    0,     0.12, 0.5,  0,   0,   0,   0.3,
+    0.26,  1,   0.3,  0.11, 0.5,  0,    1,   0,   0.3,  0.03, 0.33,  1,    0,    0,     0.12, 0.5,  0.5, 0.2, 0,   0.15,
+    // (the clip's chest up at the bottom, his hips lower to reach the floor: leaned over 0.75 to reach it, he folded
+    // over his knees, his head down to them, from review; his right hand on it, then his left)
+    0.37,  1,   0.66, 0.08, 0.55, 0,    1,   0,   0.3,  0.03, 0.33,  1,    0,    0,     0.15, 0.5,  1,   0.6, 0,   0.1,
+    0.45,  1,   0.66, 0.08, 0.55, 0,    1,   0,   0.3,  0.03, 0.33,  1,    0,    0,     0.15, 0.5,  1,   1,   0,   0.1,
     // (its head tipped up off the floor, its butt left on it to turn about, as a heavy tool is taken up: leaning out
-    // to his right, clear of his face, where it stood up before his face from ahead of him on 50 frames)
-    0.55,  1,   0.55, 0.08, 0.6,  0,    0,   1,   0.3,  0.03, 0.33,  -0.15, 0.95, 0.15,  0.3,  0.6,  1,   1,   0,   0.1,
+    // to his right, clear of his face, where it stood up before his face from ahead of him on 50 frames. Over a tenth
+    // of the stage its head went 40 cm a frame)
+    0.6,   1,   0.55, 0.08, 0.5,  0,    0,   1,   0.3,  0.03, 0.33,  -0.15, 0.95, 0.15,  0.3,  0.6,  1,   1,   0,   0.05,
     // (his legs drive him up, the haft upright at his right side, its butt by his knee)
-    0.75,  1,   0.03, 0,    0.15, 0,    0,   1,   0.25, 0.45, 0.3,   -0.05, 1,    0.05,  0.3,  0.6,  1,   1,   0,   -0.05,
+    0.74,  1,   0.03, 0,    0.15, 0,    0,   1,   0.25, 0.45, 0.3,   -0.05, 1,    0.05,  0.3,  0.6,  1,   1,   0,   -0.05,
     // (held still by both hands while his right one slides up it at his side, never across his chest: on his shoulder
     // his right fist is 88 cm up it, near its head; slid up before his chest, his forearm went 22 cm into it)
-    0.84,  1,   0,    0,    0.05, 0,    0,   0,   0.25, 0.45, 0.3,   -0.05, 1,    0.05,  0.85, 0.6,  1,   1,   0,   0,
-    // (tipped back over his right shoulder, its butt coming forward, both hands on it until it's there: the carry's own
-    // numbers at the end, `live hold 0` says them)
-    0.92,  1,   0,    0,    0.03, 0,    0,   1,   0.1,  0.7,  0.55,  -0.15, 0.85, -0.45, 0.88, 0.6,  1,   1,   0.4, 0,
+    0.82,  1,   0,    0,    0.05, 0,    0,   0,   0.25, 0.45, 0.3,   -0.05, 1,    0.05,  0.85, 0.6,  1,   1,   0,   0,
+    // (tipped back over his right shoulder over the rest, its butt coming forward, both hands on it until it's there:
+    // tipped over a tenth, it swung from upright to over his shoulder at once, from review)
+    0.91,  1,   0,    0,    0.03, 0,    0,   1,   0.15, 0.6,  0.45,  -0.12, 0.92, -0.25, 0.86, 0.6,  1,   1,   0.35, 0,
     1,     1,   0,    0,    0,    0,    0,   1,   0.03, 0.79, 0.89,  -0.26, 0.67, -0.7, 0.88, 0.5,  1,   0,   1,   0,
   ],
 }, { keys: PICK_COLUMNS.length }, { keys: PICK_COLUMNS });
@@ -114,7 +118,7 @@ function pickAt(column: PickColumn, k: number): number {
   return curve(pickKeys.columns.get(column)!, k);
 }
 
-const SIT_HANDS = tunable('warriorSit', { roll: [0, 0], rise: 0.005, slant: 0.1, along: 0.35, over: 0.09, armIn: 1, floorIn: 0.7, arc: 0.15, lapR: [0.85, -0.1, 0.5], fistBelow: 0.08, swordRest: [-0.03, -0.32, -0.5, 0.05, 0.3, 0.12, 0, 1.08, 0.2], maulRest: [0.05, 0.05, -0.58, 0.1, 0.25, 0.7, -0.4, 0.93, 0.32], axeRest: [-0.01, 0.13, -0.54, 0.1, 0.25, 0.5, -0.4, 0.95, 0.32], stuckIn: 0.32, plantX: -0.4, plantPole: [-0.5, -1, -0.6], flatEdge: [-1, 0, 0], frontAt: [-0.12, 1.34, 0.38], frontWay: [-0.05, 0.6, 0.8], leanTo: 0.12, regripOpen: 0.7, leanDraws: 0.4, flatSide: [1, 0, 0], lowHand: [-0.14, 0.54], lowEndX: -0.45, pathOut: 0.25, besideFrom: 0.6, besideBy: 0.35, handDownBy: 0.7, offOpen: 0.75, floorFrontAt: [-0.2, 1.05, 0.35], floorFrontWay: [-0.9, 0.35, 0.25], floorFlat: [0.25, 0.25, 0.9], floorLowHand: [-0.35, 0.25], floorLowY: 0.58, floorCrouch: [0.22, 0.08, 0.22], floorHaftAhead: 0.13, floorOut: [-0.6, 0.8], floorLowOut: [-0.8, 0.6], floorPathOut: 0, floorPathAhead: 0.18, floorGripY: 0.04, floorGripZ: 0.2, floorLaidFlat: [0, -1, 0], liftBy: 0.34, floorLiftBy: 0.42, floorTurnIn: 0.88, floorFistFromButt: 0.12, floorHandsApart: 0.38, floorStandOff: 0.2, floorPickFist: [0.15, 0.8, 0.3], floorPickTilt: [0.6, 0.55], floorHeadHeld: 0.25, floorShoulderAt: 0.2, floorTakeFrom: 0.9, floorTakeBy: 0.8, floorPickFrom: 0.75, floorPickCrouch: [0.22, 0.22, 0.85], floorPickDownFrom: 0.97, lowerBy: 0.72, helpFrom: 0.02, helpBy: 0.14, helpOff: 0.4, floorLetGo: 0.85, plantFrom: 0.15, plantBy: 0.8, lowerOver: 0.04, caneAhead: [0.1, -0.25, 1], seatHip: 0.86, sinkBy: 1, leftAbove: -0.13, beside: [-0.5, 0.09, 0.1], besidePole: [-1, -0.1, -0.2], besideAhead: 0.95, twoR: [0.8, -0.08, 0.6], twoL: [-0.8, -0.2, 0.6], twoAlong: [0, 0], twoOverL: 0.09, viaR: [-0.15, 0.2, 0.95], viaL: [0.15, 0.2, 0.95], viaAt: 0.45, floorBack: 0, viaFloorR: [-0.15, 0.5, 0.85], viaFloorL: [0.15, 0.5, 0.85], kneesR: [0.88, -0.2, 0.42], kneesL: [-0.7, -0.3, 0.65], turnFrom: 0.15, turnLate: 0.5, turnIn: 0.12, shieldOut: 0.09, upLeftAbove: 0.22, upLeftFrom: 0.42, upPlantFrom: 0.55, upPlantBy: 0.75, plantLetGo: 0.8, upWay: [-0.08, 0.99, 0.02], upRestAt: [-0.35, -0.15, 0.62], upLeanWay: [-0.1, 0.95, 0.25], upLeanFrom: 0.6, upSlipFrom: 0.25, upSlipBy: 0.6, upTurn: [0.3, -0.9, 0.2], upButt: 0.56, floorShieldOut: 0.12, floorShieldLow: 0.14, edgeDown: 0.2, });
+const SIT_HANDS = tunable('warriorSit', { roll: [0, 0], rise: 0.005, slant: 0.1, along: 0.35, over: 0.09, armIn: 1, floorIn: 0.7, arc: 0.15, lapR: [0.85, -0.1, 0.5], fistBelow: 0.08, swordRest: [-0.03, -0.32, -0.5, 0.05, 0.3, 0.12, 0, 1.08, 0.2], maulRest: [0.05, 0.05, -0.58, 0.1, 0.25, 0.7, -0.4, 0.93, 0.32], axeRest: [-0.01, 0.13, -0.54, 0.1, 0.25, 0.5, -0.4, 0.95, 0.32], stuckIn: 0.32, plantX: -0.4, plantPole: [-0.5, -1, -0.6], flatEdge: [-1, 0, 0], frontAt: [-0.12, 1.34, 0.38], frontWay: [-0.05, 0.6, 0.8], leanTo: 0.12, regripOpen: 0.7, leanDraws: 0.4, flatSide: [1, 0, 0], lowHand: [-0.14, 0.54], lowEndX: -0.45, pathOut: 0.25, besideFrom: 0.6, besideBy: 0.35, handDownBy: 0.7, offOpen: 0.75, floorFrontAt: [-0.2, 1.05, 0.35], floorFrontWay: [-0.9, 0.35, 0.25], floorFlat: [0.25, 0.25, 0.9], floorLowHand: [-0.35, 0.25], floorLowY: 0.58, floorCrouch: [0.22, 0.08, 0.22], floorHaftAhead: 0.13, floorOut: [-0.6, 0.8], floorLowOut: [-0.8, 0.6], floorPathOut: 0, floorPathAhead: 0.18, floorGripY: 0.04, floorGripZ: 0.2, floorLaidFlat: [0, -1, 0], liftBy: 0.34, floorLiftBy: 0.42, floorTurnIn: 0.88, floorFistFromButt: 0.12, floorHandsApart: 0.38, floorStandOff: 0.27, floorPickFist: [0.15, 0.8, 0.3], floorPickTilt: [0.6, 0.55], floorHeadHeld: 0.25, floorShoulderAt: 0.2, floorTakeFrom: 0.9, floorTakeBy: 0.8, floorPickFrom: 0.75, floorPickCrouch: [0.22, 0.22, 0.85], floorPickDownFrom: 0.97, lowerBy: 0.72, helpFrom: 0.02, helpBy: 0.14, helpOff: 0.4, floorLetGo: 0.85, plantFrom: 0.15, plantBy: 0.8, lowerOver: 0.04, caneAhead: [0.1, -0.25, 1], seatHip: 0.86, sinkBy: 1, leftAbove: -0.13, beside: [-0.5, 0.09, 0.1], besidePole: [-1, -0.1, -0.2], besideAhead: 0.95, twoR: [0.8, -0.08, 0.6], twoL: [-0.8, -0.2, 0.6], twoAlong: [0, 0], twoOverL: 0.09, viaR: [-0.15, 0.2, 0.95], viaL: [0.15, 0.2, 0.95], viaAt: 0.45, floorBack: 0, viaFloorR: [-0.15, 0.5, 0.85], viaFloorL: [0.15, 0.5, 0.85], kneesR: [0.88, -0.2, 0.42], kneesL: [-0.7, -0.3, 0.65], turnFrom: 0.15, turnLate: 0.5, turnIn: 0.12, shieldOut: 0.09, upLeftAbove: 0.22, upLeftFrom: 0.42, upPlantFrom: 0.55, upPlantBy: 0.75, plantLetGo: 0.8, upWay: [-0.08, 0.99, 0.02], upRestAt: [-0.35, -0.15, 0.62], upLeanWay: [-0.1, 0.95, 0.25], upLeanFrom: 0.6, upSlipFrom: 0.25, upSlipBy: 0.6, upTurn: [0.3, -0.9, 0.2], upButt: 0.56, floorShieldOut: 0.12, floorShieldLow: 0.14, edgeDown: 0.2, });
 const _sitTurn: RestTurn = { roll: [0, 0], bend: [0, 0], along: [0, 0], over: [0, 0], armIn: [0, 0], arc: [0, 0], out: [0, 0], low: [0, 0] };
 const _lifted: number[] = [], _resting: number[] = [];
 
@@ -1771,7 +1775,10 @@ export function buildWarrior(): Model {
   const _behindInverse = new THREE.Matrix4(), _behindBox = new THREE.Box3();
   const _stanceFacing = new THREE.Vector3(), _stanceLeft = new THREE.Vector3(), _stanceFloor = new THREE.Vector3();
   const _floorTurn: SitTurn = { angle: 0, inTo: 0, backFrom: 0, backTo: 0, yaw: 0, at: [0, 0] };
-  const _floorHands: SitHands = { ...TWO_FLOOR_HANDS, turn: _floorTurn };
+  // (taking it up by a fire his hands' stage is a real body's pick-up long: CMU's clip 69_70 squats and rises in about
+  // 1.8 s, and there's a step before and the shoulder after. In 2.6 s its head swung up off the floor at 15 m/s, from
+  // review "a snap, not a lift")
+  const _floorHands: SitHands = { ...TWO_FLOOR_HANDS, before: 3.6, turn: _floorTurn };
   const _lean = new THREE.Vector3(), _leanWay = new THREE.Vector3();
   const _inverseRoot = new THREE.Matrix4();
   const _pathEnd = new THREE.Vector3(), _pathEnd2 = new THREE.Vector3(), _pathPole = new THREE.Vector3();
@@ -3746,6 +3753,8 @@ export function buildWarrior(): Model {
         _pw.copy(_pole).applyQuaternion(j.chest.getWorldQuaternion(_cq));
         // (and its elbow from where the pose had it: from the grip's pole alone, the elbow went 20 cm in the first
         // frame of the ease, the hand still nearly where the pose had it)
+        // (taking it up by a fire, its elbow's move capped a frame through the whole keyed pick-up: from the capped solve to
+        // the free one halfway through the ease, it went over to its other side, 57 cm in a frame)
         // (its turn about the handle, about an axis through the grip, as far as the hand is on it: in full off it, the
         // hand went 15 to 20 cm round the grip in a frame as it began to ease)
         if (easing) {
@@ -3754,7 +3763,7 @@ export function buildWarrior(): Model {
           // into his chest, and its elbow went over to its other side in a frame, his hand 41 cm)
           _cur.add(_letS.set(0, 0, 1).transformDirection(root.matrixWorld).multiplyScalar(EASE_AHEAD * j.root.scale.x * Math.sin(Math.PI * k)));
         }
-        const fit = easing && k < 0.5 ? solveArm(j, true, { wrist: _cur, hand: _fq, pole: _pw, body, maxMove: EASE_ELBOW / j.root.scale.x }) : solveArm(j, true, { wrist: _cur, hand: _fq, roll: { axis: _hd, range: easing ? 1.1 * k : 1.1, at: _gw }, pole: _pw, body: fp ? undefined : body, slant: SLANT, slantOnHandle: true, glide: 1, shoulder, flexion: GRIPPED_FLEXION });
+        const fit = easing && k < 0.5 ? solveArm(j, true, { wrist: _cur, hand: _fq, pole: _pw, body, maxMove: EASE_ELBOW / j.root.scale.x }) : solveArm(j, true, { wrist: _cur, hand: _fq, roll: { axis: _hd, range: easing ? 1.1 * k : 1.1, at: _gw }, pole: _pw, body: fp ? undefined : body, slant: SLANT, slantOnHandle: true, glide: 1, shoulder, flexion: GRIPPED_FLEXION, maxMove: pickKeyed ? EASE_ELBOW / j.root.scale.x : undefined });
         slantL = fit.slant;
         _up.applyAxisAngle(_hd, fit.roll);
         // (a grip out of reach for a frame or two is held through: a hand doesn't let go for 50 ms; and while the hand
@@ -3850,6 +3859,7 @@ export function buildWarrior(): Model {
     get lowerGrip() { return held?.off != null ? grasp : null; },
     // (a two-hander lifted before he goes down, and its weight brought up slower: in the sit's own time, its
     // tip went 15 cm a frame coming off the shoulder)
+    sitHandsUp: (floor) => (floor && held?.off != null ? _floorHands : NO_HANDS),
     sitHands: (floor) => {
       if (held?.off == null) return NO_HANDS;
       if (floor && !twoSit.pickingUp) return TWO_FLOOR_HANDS;

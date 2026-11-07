@@ -480,6 +480,9 @@ export interface Model {
    *  once he's sat (a blade stuck into the ground), on a seat or on the floor (`floor`); getting up, the same back in
    *  turn (none if absent) */
   sitHands?(floor: boolean): SitHands;
+  /** the hands' stage his getting up will take, asked while he's sat (a two-hander taken up off the floor by a fire
+   *  takes longer than it took to lay down), where it differs from `sitHands` */
+  sitHandsUp?(floor: boolean): SitHands;
   dispose(): void;
 }
 
