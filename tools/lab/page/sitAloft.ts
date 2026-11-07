@@ -24,6 +24,9 @@ const LIFTED = 0.1;
  *  "the axe is lifted head-down, through his legs" (its head by the floor under his fists, which reading it only once
  *  off the floor missed) */
 const HEAD_UNDER_MOST = 0.1;
+/** how far apart along its handle his fists must be to take it up off the floor, its weight out along it (m): from
+ *  review, "both fists are bunched at the butt end of the haft ... nobody lifts a heavy axe that way" */
+const APART_LEAST = 0.3;
 
 const _grip = new THREE.Vector3();
 const _way = new THREE.Vector3();
@@ -51,6 +54,26 @@ export interface Holds {
   headUnder?: number;
   /** his left arm on the lower grip as the model solved it, or none without one */
   grasp?: LowerGrip;
+  /** his fists' places up its handle from its butt (m), right and left */
+  fromButt?: [number, number];
+}
+
+/** Whether a weapon so held, as he takes it up off the floor, has his fists too near each other on its handle to lift
+ *  it: his left on it and some of it still on the floor. */
+export function takenBunched(holds: Holds): boolean {
+  if (!holds.left || holds.over > ON_FLOOR || !holds.fromButt) return false;
+  const [right, left] = holds.fromButt;
+  return Math.abs(left - right) < APART_LEAST;
+}
+
+/** The canary: both fists by its butt, it on the floor, reads as bunched; half a metre apart, or lifted, or his left
+ *  off it, it doesn't. */
+export function bunchedCanary(): boolean {
+  const bunched: Holds = { over: 0, shoulder: 0.5, left: true, fromButt: [0.1, 0.2] };
+  const caught = takenBunched(bunched);
+  const others = [{ ...bunched, fromButt: [0.1, 0.6] as [number, number] }, { ...bunched, over: 0.3 },
+    { ...bunched, left: false }];
+  return caught && others.every((each) => !takenBunched(each));
 }
 
 /** Whether a weapon so held is up in his right hand alone. */
@@ -93,6 +116,10 @@ export class HeldAloft {
   private beforeWas = 0;
   /** the frames lifted head down getting up, the furthest its far end hung under his fist and where */
   private headDown = { frames: 0, most: 0, at: '' };
+  /** the frames taken up with his fists bunched getting up, the nearest they came and where */
+  private bunched = { frames: 0, least: Infinity, at: '', fromButt: [0, 0] as [number, number] };
+  /** getting up with it still on the floor: the frames, those with his left fist on it, and his fists' nearest */
+  private taking = { frames: 0, leftOn: 0, least: Infinity, at: '', off: '' };
 
   /** Notes this frame, if he stands in a sit's hands stage with a two-hander. */
   observe(lab: Lab, frame: string): void {
@@ -103,6 +130,8 @@ export class HeldAloft {
     const gettingUp = pose.before < this.beforeWas;
     this.beforeWas = pose.before;
     if (gettingUp && liftedHeadDown(holds)) this.noteHeadDown(holds.headUnder ?? 0, frame);
+    if (gettingUp && takenBunched(holds)) this.noteBunched(holds.fromButt!, frame);
+    if (gettingUp && holds.over <= ON_FLOOR) this.noteTaking(holds, frame);
     if (!aloftInOne(holds)) return;
     this.frames++;
     if (!this.lifted && holds.grasp && holds.over > LIFTED) this.lifted = { grasp: { ...holds.grasp }, at: frame };
@@ -129,6 +158,47 @@ export class HeldAloft {
       + `${(down.most * 100).toFixed(0)} cm under his fist (${down.at})`;
   }
 
+  /** Taken up with his fists bunched as words, or none if it never was. */
+  describeBunched(name: string): string {
+    const bunched = this.bunched;
+    if (bunched.frames === 0) return '';
+    const [right, left] = bunched.fromButt.map((along) => (along * 100).toFixed(0));
+    return `sit: by the ${name}, taking his two-hander up off the floor with his fists ${(bunched.least * 100).toFixed(0)} `
+      + `cm apart on its handle on ${bunched.frames} frames, the right ${right} cm and the left ${left} cm up it from `
+      + `its butt (${bunched.at})`;
+  }
+
+  /** How he took it off the floor as words: his left fist on it how long, his fists' nearest along it. */
+  describeTaking(name: string): string {
+    const taking = this.taking;
+    if (taking.frames === 0) return '';
+    const least = Number.isFinite(taking.least) ? `, his fists ${(taking.least * 100).toFixed(0)} cm apart along it at `
+      + `the nearest (${taking.at})` : '';
+    const off = taking.off ? `; the last off it, his left hand: ${taking.off}` : '';
+    return `  by the ${name}, getting up with his two-hander on the floor ${taking.frames} frames, his left fist on it `
+      + `${taking.leftOn}${least}${off}`;
+  }
+
+  private noteTaking(holds: Holds, frame: string): void {
+    this.taking.frames++;
+    if (!holds.left && holds.grasp) this.taking.off = `${whyLetGo(holds.grasp)} (${frame})`;
+    if (!holds.left || !holds.fromButt) return;
+    this.taking.leftOn++;
+    const apart = Math.abs(holds.fromButt[1] - holds.fromButt[0]);
+    if (apart >= this.taking.least) return;
+    this.taking.least = apart;
+    this.taking.at = frame;
+  }
+
+  private noteBunched(fromButt: [number, number], frame: string): void {
+    this.bunched.frames++;
+    const apart = Math.abs(fromButt[1] - fromButt[0]);
+    if (apart >= this.bunched.least) return;
+    this.bunched.least = apart;
+    this.bunched.at = frame;
+    this.bunched.fromButt = [...fromButt];
+  }
+
   private noteHeadDown(under: number, frame: string): void {
     this.headDown.frames++;
     if (under <= this.headDown.most) return;
@@ -149,7 +219,9 @@ export class HeldAloft {
     const shoulder = line.closestPointToPoint(_shoulder, true, _point).distanceTo(_shoulder);
     const fists = lab.model.fists ?? [];
     const headUnder = _grip.y - ends[1].y;
-    return { over, shoulder, left: leftOn(fists), grasp: lab.model.lowerGrip ?? undefined, headUnder };
+    const fromButt = [lab.joints.handR, lab.joints.handL].map((hand) => upFrom(ends[0], ends[1], hand)) as
+      [number, number];
+    return { over, shoulder, left: leftOn(fists), grasp: lab.model.lowerGrip ?? undefined, headUnder, fromButt };
   }
 }
 
@@ -159,6 +231,13 @@ function lowestOver(grip: THREE.Object3D): number {
   _box.setFromObject(grip, true);
   _box.getCenter(_point);
   return _box.min.y - groundHeight(_point.x, _point.z);
+}
+
+/** How far up the line from `butt` to `far` the place nearest `hand`'s wrist is (m). */
+function upFrom(butt: THREE.Vector3, far: THREE.Vector3, hand: THREE.Object3D): number {
+  hand.getWorldPosition(_point);
+  const line = new THREE.Line3(butt, far);
+  return line.closestPointToPointParameter(_point, true) * line.distance();
 }
 
 /** Whether his left fist is closed on its handle. */
