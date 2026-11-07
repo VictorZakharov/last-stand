@@ -147,6 +147,9 @@ export async function buildArena(scene: THREE.Scene, renderer: THREE.WebGLRender
   let active = places.village.b;
   /** the place and the props' revision its still shadows were last drawn for (`drawStillShadows`) */
   const stillDrawn = { place: null as PlaceId | 'hall' | null, rev: -1, lamps: 0, sun: '' };
+  /** the props' revision each place's breakables' shadows were last made at: in a frame's update they're made in one
+   *  frame and the still shadows drawn in the next (in one, a run's start held its frame up 24 ms for both) */
+  const breakablesAt = new Map<PlaceId, number>();
   /** whether the hall of heroes' room stands in the place's stead */
   let hallShown = false;
   /** the village's look now (`setHour`: it changes with the hour, applied every frame while it's shown) */
@@ -197,12 +200,12 @@ export async function buildArena(scene: THREE.Scene, renderer: THREE.WebGLRender
     get props() { return active.props; },
     /** every biome's props whole again (a new run, the lobby) */
     restoreProps() { for (const id of BIOME_IDS) restoreProps(places[id].b.props); },
-    /** every biome's run-shaped props built again from a run's seed (`Biome.roll`) */
     /** One more piece of every biome's run-shaped props for `seed` built ahead (`Biome.rollAhead`): true once all
      *  are. */
     rollAhead(seed: number): boolean {
-      return BIOME_IDS.every((id) => biomes[id].b.rollAhead?.(seed) ?? true);
+      return BIOME_IDS.every((id) => places[id].b.rollAhead?.(seed) ?? true);
     },
+    /** every biome's run-shaped props built again from a run's seed (`Biome.roll`) */
     rollProps(seed: number) {
       for (const id of BIOME_IDS) places[id].b.roll?.(seed);
       // (their circles' heights and girths: the navigation's grid made again)
@@ -256,8 +259,12 @@ export async function buildArena(scene: THREE.Scene, renderer: THREE.WebGLRender
       const sun = now === 'village' ? moon.position.toArray().map((v) => Math.round(v * SUN_STEPS)).join() : '';
       if (held || stillDrawn.place !== now || stillDrawn.rev !== propState.rev || stillDrawn.lamps !== lamps
         || stillDrawn.sun !== sun) {
-        // (and its breakables' shadows cast as one, each standing prop's: `world/breakableShadows.ts`)
-        if (!hallShown) places[shown].breakables?.refresh();
+        // (and its breakables' shadows cast as one, each standing prop's, a frame before: `world/breakableShadows.ts`)
+        if (!hallShown && breakablesAt.get(shown) !== propState.rev) {
+          places[shown].breakables?.refresh();
+          breakablesAt.set(shown, propState.rev);
+          return;
+        }
         drawStillShadows(renderer, scene, G.camera, hallShown ? hallGroup : places[shown].group, moon.shadow);
         stillDrawn.place = now;
         stillDrawn.rev = propState.rev;

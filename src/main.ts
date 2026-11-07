@@ -28,7 +28,7 @@ import { initGround, updateGround, clearGround } from './game/groundItems';
 import { saveSlot, setSaveSlot } from './loot/saveSlots';
 import { initRun, startRun, updateRun, continueRun, bankRun, abandonRun, playerOut, hostLeft, endRun } from './game/run';
 import { updateFloaters } from './ui/floaters';
-import { initHud, showHud, buildHotbar, banner, showDecision, hideDecision, resetDecision, updateHud, updateVillageMinimap, readyMinimap, renderSpoils } from './ui/hud';
+import { initHud, showHud, layOutHudAhead, buildHotbar, banner, showDecision, hideDecision, resetDecision, updateHud, updateVillageMinimap, readyMinimap, renderSpoils } from './ui/hud';
 import { initMenus, layOutMenuAhead, showMenu, showSummary, hideSummary, showPause, menuStowed, lobbyPractice, selectedWave, lobbyViewShift, renderMenu, markNew, clearOverlays, openPanels, panelsOpen, showHelp, helpOpen, hideHelp, changeHero as askForHeroes, type Panels } from './ui/menus';
 import { initVillageCard, showVillageCard, villageCardOf } from './ui/villageCard';
 import { initVillage, prepareLamps, updateVillage, closedFrom, inYard, villageObject, goUse, goTo, objectNear, heroLookedAt } from './game/village';
@@ -156,6 +156,8 @@ async function boot() {
   initNetHud();
   initBattleLog();
   buildHotbar(G.player);
+  // (the run's HUD rastered under the loading screen, as the lobby's panels are: ui/hud.ts)
+  layOutHudAhead();
   // (the practice's bar laid out under the loading screen too, so its first raster builds Chrome's Skia programs there:
   // shown first as the hero walked into the yard, a first visit's held Chrome's GPU process 0.25 to 0.4 s; the lobby
   // hides it as it's entered)
