@@ -21,12 +21,26 @@ function fresh(classId: string): Profile {
     for (let i = 0; i < 20 && cls.starterGear.some((s) => s.slot === 'offhand') && isTwoHanded(it, cls); i++) it = makeItem({ ...g, cls });
     equipped[g.slot] = it;
   }
-  return {
+  const p: Profile = {
     classId: cls.id,
     equipped,
     stash: [],
     records: { bestWave: 0, bestBanked: {}, runs: 0, banked: 0, bestScore: 0, kills: 0, time: 0 },
   };
+  giveStarterStash(p);
+  return p;
+}
+
+/** Its class's starter stash into a profile that hasn't had it, as much as the bag holds; whether it gave any. */
+function giveStarterStash(p: Profile): boolean {
+  const cls = CLASSES[p.classId];
+  if (p.starterGiven || !cls?.starterStash) return false;
+  for (const g of cls.starterStash) {
+    if (p.stash.length >= RUN.bagLimit) break;
+    p.stash.push(makeItem({ ...g, cls }));
+  }
+  p.starterGiven = true;
+  return true;
 }
 
 function read(key: string): Profile | null {
@@ -40,8 +54,13 @@ function read(key: string): Profile | null {
 
 export function loadProfile(classId: string): Profile {
   try {
-    const p = read(KEY(classId));
-    if (p) return { ...p, classId };
+    const saved = read(KEY(classId));
+    if (saved) {
+      const p = { ...saved, classId };
+      // (a profile played before its class had a starter stash gets it now, once)
+      if (giveStarterStash(p)) saveProfile(p);
+      return p;
+    }
     if (classId === 'mage' && saveSlot() === 1) {
       const old = read(LEGACY);
       if (old) {

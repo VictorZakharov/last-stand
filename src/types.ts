@@ -188,6 +188,9 @@ export interface ClassDef {
   base: BaseStats;
   skills: SkillDef[];
   starterGear: { slot: Slot; rarity: RarityId; ilvl: number }[];
+  /** items in his stash from the start, each of a named base: given once to his profile, a new one or one already
+   *  played (`Profile.starterGiven`), so every weapon style can be tried without finding one */
+  starterStash?: { slot: Slot; rarity: RarityId; ilvl: number; base: string }[];
   /** item base names per slot (default: data/items SLOT_INFO) */
   bases?: Partial<Record<Slot, string[]>>;
   /** stats that never roll on this class's items (no skill of the class uses them) */
@@ -237,6 +240,8 @@ export interface Profile {
   records: { bestWave: number; bestBanked: Partial<Record<BiomeId, number>>; runs: number; banked: number; bestScore: number; kills?: number; time?: number };
   /** when it was last saved (ms since the epoch): shown as "last played" on the save slots screen */
   saved?: number;
+  /** its class's starter stash has been given to it (`ClassDef.starterStash`) */
+  starterGiven?: boolean;
 }
 
 // ---------------------------------------------------------------------------
