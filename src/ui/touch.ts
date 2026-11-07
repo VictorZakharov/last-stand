@@ -90,19 +90,6 @@ export function initTouch(v: TouchVillage): void {
   });
   $('#touch-village .tv-bag').addEventListener('click', () => village.inventory());
   $('#touch-village .tv-map').addEventListener('click', () => village.map());
-  // (full screen as the pause menu's: the browser's bars take a lot of a phone's screen; its icon says which way it
-  // goes, and it's left out where the page can't go full screen, an iPhone's)
-  const full = $('#touch-village .tv-full');
-  full.classList.toggle('hidden', !document.fullscreenEnabled);
-  const syncFull = () => full.classList.toggle('on', !!document.fullscreenElement);
-  full.addEventListener('click', () => {
-    const asked = document.fullscreenElement
-      ? document.exitFullscreen()
-      : document.documentElement.requestFullscreen({ navigationUI: 'hide' });
-    asked.catch(() => {});
-  });
-  document.addEventListener('fullscreenchange', syncFull);
-  syncFull();
   // start in touch mode on a device whose main pointer is a finger
   setTouchMode(matchMedia('(pointer: coarse)').matches);
   window.addEventListener('pointerdown', (e) => setTouchMode(e.pointerType !== 'mouse'), true);
@@ -162,6 +149,7 @@ export function initTouch(v: TouchVillage): void {
   // (the view as V changes it: top-down, over the shoulder, through the eyes)
   $('#btn-view').addEventListener('click', () => input.pressed.add('v'));
   lookByDrag();
+  initFullScreen();
 
   ring = new THREE.Mesh(new THREE.RingGeometry(0.62, 0.8, 40).rotateX(-Math.PI / 2), additive(0xffe0a0, 1.6, 0.9));
   ring.name = 'touch-aim-ring';

@@ -14,7 +14,7 @@
 // a second, flickered the loading screen as it left for the lobby)
 #diag.booting { display: none; }
 #diag > * { flex-shrink: 0; pointer-events: auto; }
-body.touch #diag { --top: #{touch(128px)}; }
+body.touch #diag { --top: #{touch(180px)}; }
 // (a short screen's overlay scrolls within the screen, its Profile button high in it: on a phone held sideways its
 // last lines and the button lay under the screen's foot, "the perf panel doesn't fit")
 #diag > #perf { flex-shrink: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }

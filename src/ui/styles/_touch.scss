@@ -38,6 +38,17 @@ body.unarmed #touch-skills { visibility: hidden; }
   background: rgba(10,9,11,.75); color: var(--accent); pointer-events: auto; scale: var(--touch, 1);
   transform-origin: left top; }
 #btn-view svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linejoin: round; }
+// (full screen an icon alone under the pause button, round as it is: its arrows out, or in while the page is full
+// screen; none where the page can't go full screen)
+#btn-full { position: absolute; top: touch(62px); left: $touch-edge; width: 44px; height: 44px; align-items: center;
+  justify-content: center; z-index: 9; border-radius: 50%; border: 1px solid rgba($frame, .6);
+  background: rgba(10,9,11,.75); color: var(--accent); pointer-events: auto; scale: var(--touch, 1);
+  transform-origin: left top; touch-action: manipulation; }
+#btn-full svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round;
+  stroke-linejoin: round; }
+#btn-full .full-leave, #btn-full.on .full-enter { display: none; }
+#btn-full.on .full-leave { display: block; }
+body.touch #btn-full.cant { display: none !important; }
 /* touch HUD: the hotbar gives way to the buttons, the bars move up out of the thumbs' way */
 body.touch #hotbar { display: none; }
 body.touch #bottombar { left: $touch-beside; top: 12px; bottom: auto; transform: none; flex-direction: column; align-items: stretch; gap: 4px; scale: var(--touch, 1); transform-origin: left top; }
@@ -76,9 +87,4 @@ body.touch .mouse-only { display: none; } body.touch .touch-inline { display: in
   border-radius: 24px; border: 1px solid rgba($accent, .55); background: rgba(8, 7, 9, .78); color: #f3e1b0;
   font: 600 15px var(--font-display); letter-spacing: .04em; cursor: $cursor-hand; }
 // (full screen an icon alone, round: its arrows out, or in while the page is full screen)
-#touch-village .tv-full { width: 48px; min-width: 0; padding: 0; display: grid; place-items: center; }
-#touch-village .tv-full svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2;
-  stroke-linecap: round; stroke-linejoin: round; }
-#touch-village .tv-full .tv-leave, #touch-village .tv-full.on .tv-enter { display: none; }
-#touch-village .tv-full.on .tv-leave { display: block; }
 #touch-village .tv-use { border-color: var(--accent); box-shadow: 0 0 12px rgba($highlight, .45); color: #ffe7b0; }

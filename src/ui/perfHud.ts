@@ -14,7 +14,7 @@ import { atlasUse } from './overlay/atlas';
 import { QUALITY } from '../data/quality';
 import { loadingLeft, loadingSteps } from './loading';
 import { isWarm, isWarming } from '../game/warm';
-import { gpuMarks, viewMode, sceneRatio, sceneSize } from '../core/renderer';
+import { gpuMarks, viewMode, sceneRatio, sceneSamples, sceneSize } from '../core/renderer';
 import { recorder } from '../perf/recorder';
 
 const COOKIE = 'last-stand-perf-hud';
