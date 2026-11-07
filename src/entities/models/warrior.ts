@@ -16,7 +16,7 @@ import { bodyShape, clampWrist, GRIPPED_FLEXION } from './anatomy';
 import { curve, PoseFade, type Keys } from './motion';
 import { buildFlask, drink, drinkUp, holdFlask, DRINK_SHEATHED, type DrinkHold } from './flask';
 import { taperTube, twist, plate, edgeTube, strap, belt, buckle, stud, disc, furTufts, Skirt, SkirtLimbs, armOffThigh, merge, scaleUV, lod, type SurfaceFn, type JointPoint } from './armor';
-import { buildHead, buildNeck, toGroup, handSkin, HEAD_MM } from './head';
+import { buildHead, buildNeck, toGroup, handSkin, HEAD_MM, HERO_HEADS } from './head';
 import { NECKLINE_BACK } from './tunic';
 import { buildHand, poseHand, hold, seat, fistReach, fistTurn, fistOn, gripTurn, bare, handCapsules, SLANT, fistLength } from './hands';
 import { axe, greataxe, greatsword, mace, maul, sword, STRIKES_WITH, type WeaponMaterials } from './weapons';
@@ -682,7 +682,7 @@ export function buildWarrior(): Model {
   // equipped: a steel skull with a low crest, bands riveted over it and round the brow, a nasal down the nose,
   // cheek guards over the ears and a mail curtain over the nape. It is shaped on the head itself (padded over
   // the scalp); the face stays bare.
-  const head = buildHead(j.head, kit, 'warrior', { hair: 'loose' });
+  const head = buildHead(j.head, kit, HERO_HEADS.warrior.who, HERO_HEADS.warrior);
   // (a point just before the lips, for the flask)
   const mouth = new THREE.Object3D(); mouth.name = 'mouth'; head.group.add(mouth); toGroup(0, 50, 112, mouth.position);
   buildNeck(j.neck, kit, 'warrior', j.P.neckL, j.head);
@@ -2502,7 +2502,9 @@ export function buildWarrior(): Model {
       else if (held?.off != null && grasp.held) fists.push({ hand: 'left', ...fistOn(handL, offGrip, held.r) });
       return fists;
     },
-    reset: () => { legs.reset(); fade.reset(); },
+    // (the fight forgotten too: a hall's hero chosen away from as his showcase's strike landed stood on its dais finishing
+    // it, the end of the blow held on one bent knee, "warrior is dancing on one leg like irish dancer")
+    reset: () => { legs.reset(); fade.reset(); fightT = -9; lastName = ''; lastK = 1; tailT = 0; chopTail = 0; },
     // through the eyes the fur at the elbows passes right by the camera: a ring of spikes filling the view
     armsFov: () => EYES.fov,
     firstPerson: (on) => { fp = on; for (const f of elbowFur) f.visible = !on && gloved; },

@@ -1,0 +1,354 @@
+// What the hero can see from where he stands, from above (from play, "we have a bug that allows character to see inside
+// buildings while staying outside, we need to evaluate cone of possible view (360) and hide the areas player cannot
+// possibly see (black out)"): rays all round him against the walls, as far as each goes kept in a strip of a texture, and
+// each pixel of the frame fogged as the post chain starts (before the bloom, so nothing unseen glows), its place in the
+// world read from the frame's depth. One program, for every renderer; a wall is a line on the floor, so nothing else in
+// the scene compiles or draws more. Through the eyes and over the shoulder the camera stands where he does, and walls hide
+// what they hide.
+import * as THREE from 'three';
+
+/** A wall as a line on the floor, from (x0, z0) to (x1, z1). */
+export interface SightWall { x0: number; z0: number; x1: number; z1: number }
+
+/** A house's roof from above: its middle, its half sides, and its turn about y (as `SightWall`s are turned). */
+export interface SightRoof { x: number; z: number; halfW: number; halfD: number; cos: number; sin: number }
+
+/** how many rays go round him, and how far one goes that meets nothing (m) */
+const RAYS = 1024;
+const FAR = 120;
+/** how far he must move for the rays to be cast again (m) */
+const MOVED = 0.02;
+/** A ray's reach jumping by this much in one cast has passed a corner (m), and what the jump uncovers or covers fades in
+ *  place over this long (s). A reach that only slides, as he walks up to a wall, follows at once: eased too, the fog lagged
+ *  him past the wall by half a metre, walking; and a reach eased across the jump swept a far place from fog to sight in a
+ *  frame all the same. From play, "fog of war should ease in/out, not jerk", "sometimes it's jerking left and right as I'm
+ *  walking in straight line": a corner's edge crossed the rays a whole ray at a time, 12 cm a step at 20 m. */
+const JUMP = 0.5;
+const FADES_OVER = 0.22;
+
+/** the rays' strip, four half floats a ray: the band of a jump's nearer and further reach, how much of it is seen */
+const strip = new Uint16Array(RAYS * 4);
+const sightTexture = new THREE.DataTexture(strip, RAYS, 1, THREE.RGBAFormat, THREE.HalfFloatType);
+// (each ray read alone: filtered, two rays' bands in the middle of their own fades met as a third that neither was)
+sightTexture.minFilter = sightTexture.magFilter = THREE.NearestFilter;
+sightTexture.wrapS = THREE.RepeatWrapping;
+sightTexture.wrapT = THREE.ClampToEdgeWrapping;
+sightTexture.needsUpdate = true;
+
+/** each ray's reach before its last jump, its reach as last cast, and how far it has faded from the one to the other */
+const from = new Float32Array(RAYS).fill(FAR);
+const to = new Float32Array(RAYS).fill(FAR);
+const faded = new Float32Array(RAYS).fill(1);
+
+/** Where the roofs are, in a map of the ground: what stands high over what's unseen stays seen on a roof alone. By height
+ *  alone a tree's lower crown read as one, bright green over the fog (from play, "and tree leaves should be grey too?"). */
+const ROOFS_TEXELS = 256;
+export const ROOFS_HALF = 64;
+/** how far past its walls a roof reaches (m), and how far it's soft (the eaves) */
+const ROOF_EAVES = 1.1;
+const roofMap = new Uint8Array(ROOFS_TEXELS * ROOFS_TEXELS);
+const roofTexture = new THREE.DataTexture(roofMap, ROOFS_TEXELS, ROOFS_TEXELS, THREE.RedFormat, THREE.UnsignedByteType);
+roofTexture.minFilter = roofTexture.magFilter = THREE.LinearFilter;
+roofTexture.needsUpdate = true;
+
+/** what the map holds within a house's walls, and under its eaves past them: a roof's alpha lets the fog off what's under
+ *  it within its walls alone, as a house's inside is always hidden from him. Under the eaves too, the ground past the wall
+ *  lay half out of the fog, a strip of green round a house he can't see past (from play, "and here should be all grey,
+ *  right ?") */
+const WITHIN_WALLS = 255;
+const UNDER_EAVES = 127;
+/** the roofs last painted, and whether a harness has their eaves count as within their walls, as they did */
+let roofsPainted: readonly SightRoof[] = [];
+let eavesHeld = false;
+
+/** For a harness (tools/lab): the roofs' eaves letting the fog off what's under them, as they did. */
+export function holdEavesAsWithin(held: boolean): void {
+  eavesHeld = held;
+  paintRoofs(roofsPainted);
+}
+
+/** The roofs painted into their map. */
+function paintRoofs(roofs: readonly SightRoof[]): void {
+  roofsPainted = roofs;
+  roofMap.fill(0);
+  const texel = (ROOFS_HALF * 2) / ROOFS_TEXELS;
+  for (const roof of roofs) {
+    const reach = Math.hypot(roof.halfW, roof.halfD) + ROOF_EAVES;
+    const first = (at: number): number => Math.max(0, Math.floor((at - reach + ROOFS_HALF) / texel));
+    const last = (at: number): number => Math.min(ROOFS_TEXELS - 1, Math.ceil((at + reach + ROOFS_HALF) / texel));
+    for (let row = first(roof.z); row <= last(roof.z); row++) {
+      for (let column = first(roof.x); column <= last(roof.x); column++) {
+        const dx = (column + 0.5) * texel - ROOFS_HALF - roof.x;
+        const dz = (row + 0.5) * texel - ROOFS_HALF - roof.z;
+        // (back by the turn `turned` in the village's walls made)
+        const alongW = dx * roof.cos - dz * roof.sin;
+        const alongD = dx * roof.sin + dz * roof.cos;
+        if (Math.abs(alongW) <= roof.halfW + ROOF_EAVES && Math.abs(alongD) <= roof.halfD + ROOF_EAVES) {
+          const within = Math.abs(alongW) <= roof.halfW && Math.abs(alongD) <= roof.halfD;
+          roofMap[row * ROOFS_TEXELS + column] = within || eavesHeld ? WITHIN_WALLS : UNDER_EAVES;
+        }
+      }
+    }
+  }
+  roofTexture.needsUpdate = true;
+}
+
+/** The uniforms of the frame's sight, the same objects in WebGL's pass and WebGPU's nodes. */
+export const SIGHT = {
+  tSight: { value: sightTexture as THREE.Texture },
+  tSightRoofs: { value: roofTexture as THREE.Texture },
+  /** how much of the fog is on: 0 where it's off, eased in as the view comes down from above */
+  uSightOn: { value: 0 },
+  uSightFrom: { value: new THREE.Vector2() },
+  uSightInverse: { value: new THREE.Matrix4() },
+  /** the building that may be shut to him (least x, least z, most x, most z), and how shut it is: eased as he walks in
+   *  and out of it */
+  uSightSealed: { value: new THREE.Vector4(1, 1, 0, 0) },
+  uSightShut: { value: 0 },
+  /** whether what's seen through a roof away from him is taken as unseen (`seenColour`): 1, or 0 under a harness */
+  uSightRoofOne: { value: 1 },
+  uSightFarWall: { value: 1 },
+};
+
+/** How far past a wall's near face the fog is whole, none of it nearer than `wallFrom` (m): from a wall's line the place
+ *  past it is unseen at once, and it took 2.3 m past the wall to come in, a green band round the hall as he stood in it
+ *  (from play, "grass should be grey outside through a wall"). Across a ray its edge is soft instead, by reading the
+ *  rays beside it, `edge` m aside at most `edgeAngle` rad (a corner's edge is the only one the wall doesn't stand over).
+ *  How high over what's unseen stays seen: from `over` to `roofs` (a house's roof, over its walls), a crown over that
+ *  fogged as the ground under it is (from play, "and tree leaves should be grey too?"); over a building shut to him, up
+ *  from `overSealed`, its roof's own height whatever it is. What the fog leaves of what's unseen, and how much of its
+ *  colour goes to the fog's own (from play, "solid black does not look good": a wedge of black read as a hole in the
+ *  picture, where a dim, colourless village still reads as the place he's in). Its light is pressed into a narrow range,
+ *  `floor` up to `floor + range` as `light / (light + knee)` goes: only dimmed, its shadows fell to black and its white
+ *  walls stayed the brightest thing there (a review). The inside of a building shut to him keeps a share of that, over a
+ *  share of the floor: with none it was a pure black mass over him on the terrace, a void (a review). */
+export const SIGHT_LOOK = {
+  roofNear: 0.8, roofFar: 1.8, pastFarWall: 0.6, eaves: 0.5, eavesBy: 2.5, groundFrom: 0.4, groundTo: 0.7, wallFrom: 0.05, wall: 0.5, edge: 0.6, edgeAngle: 0.12, over: 3.2, roofs: 5.3, overSealed: 8, overSoft: 0.4,
+  floor: 0.022, range: 0.2, knee: 0.5, sealed: 0.25, sealedFloor: 0.35, grey: 0.85,
+  tint: [0.72, 0.82, 1] as const,
+};
+
+let walls: readonly SightWall[] = [];
+let building: THREE.Vector4 | null = null;
+let castFrom: { x: number; z: number } | null = null;
+let heldOff = false;
+/** whether a harness has the rays shown as cast, at once and one read a pixel, as they were */
+let heldSharp = false;
+
+/** The walls that stop his sight, the building a wall of which he may be outside (its least x and z, its most), and the
+ *  roofs over what they stand round. */
+export function sightWalls(
+  lines: readonly SightWall[],
+  sealedBuilding: THREE.Vector4 | null,
+  roofs: readonly SightRoof[],
+): void {
+  walls = lines;
+  paintRoofs(roofs);
+  building = sealedBuilding;
+  castFrom = null;
+  if (sealedBuilding) SIGHT.uSightSealed.value.copy(sealedBuilding);
+}
+
+/** The fog held off whatever else asks for it (`lab village --only sightBlacksOut`'s canary). */
+export function holdSightOff(off: boolean): void {
+  heldOff = off;
+}
+
+/** For a harness (tools/lab): what's seen through a roof by the rays alone, as it was. */
+export function holdRoofByRays(held: boolean): void {
+  SIGHT.uSightRoofOne.value = held ? 0 : 1;
+}
+
+/** For a harness (tools/lab): a far wall's ghost through a roof read by the rays, as it was. */
+export function holdFarWallByRays(held: boolean): void {
+  SIGHT.uSightFarWall.value = held ? 0 : 1;
+}
+
+/** For a harness (tools/lab): the rays shown as they're cast, at once, as they were (`--only fogHoldsSteady`'s canary). */
+export function holdSightSharp(sharp: boolean): void {
+  heldSharp = sharp;
+}
+
+/** How far a ray from (x, z) along (dx, dz) goes before a wall. */
+function rayReach(x: number, z: number, dx: number, dz: number): number {
+  let nearest = FAR;
+  for (const wall of walls) {
+    const ex = wall.x1 - wall.x0;
+    const ez = wall.z1 - wall.z0;
+    const facing = dx * ez - dz * ex;
+    if (Math.abs(facing) < 1e-6) continue;
+    const ox = wall.x0 - x;
+    const oz = wall.z0 - z;
+    const along = (ox * ez - oz * ex) / facing;
+    const on = (ox * dz - oz * dx) / facing;
+    if (along > 0 && along < nearest && on >= 0 && on <= 1) nearest = along;
+  }
+  return nearest;
+}
+
+/** The rays cast again from (x, z): a jump fades from where the ray stood, a slide moves its band with it. */
+function castRays(x: number, z: number): void {
+  for (let i = 0; i < RAYS; i++) {
+    // (as the shader reads them: an angle by `atan(z, x)`, from -pi to pi over the strip, a ray at a texel's middle)
+    const angle = ((i + 0.5) / RAYS - 0.5) * Math.PI * 2;
+    const now = rayReach(x, z, Math.cos(angle), Math.sin(angle));
+    const change = now - to[i];
+    if (Math.abs(change) <= JUMP) from[i] += change;
+    else if (faded[i] >= 1) {
+      from[i] = to[i];
+      faded[i] = 0;
+    } else if ((now - to[i]) * (to[i] - from[i]) < 0) {
+      // (a jump back within a fade goes on from where it had come to; one further on goes on as it was: begun again at
+      // each, a ray along a wall he's crossing the line of, which jumps every frame, took a place to and fro)
+      from[i] = to[i];
+      faded[i] = 1 - faded[i];
+    }
+    to[i] = now;
+  }
+}
+
+/** Each ray's fade taken on by `by`, and the strip written if anything changed. */
+function showRays(moved: boolean, by: number): void {
+  let any = moved;
+  for (let i = 0; i < RAYS; i++) {
+    if (faded[i] < 1) {
+      any = true;
+      faded[i] = heldSharp ? 1 : Math.min(1, faded[i] + by);
+    }
+  }
+  if (!any) return;
+  for (let i = 0; i < RAYS; i++) {
+    const growing = to[i] > from[i];
+    strip[i * 4] = THREE.DataUtils.toHalfFloat(growing ? from[i] : to[i]);
+    strip[i * 4 + 1] = THREE.DataUtils.toHalfFloat(growing ? to[i] : from[i]);
+    strip[i * 4 + 2] = THREE.DataUtils.toHalfFloat(growing ? faded[i] : 1 - faded[i]);
+  }
+  sightTexture.needsUpdate = true;
+}
+
+/** The hero at (x, z), the fog `wanted` or not: eased in and out over the frames, `rate` a share a frame, `dt` long. */
+export function seeFrom(x: number, z: number, wanted: boolean, rate: number, dt: number): void {
+  const target = wanted && !heldOff ? 1 : 0;
+  const on = SIGHT.uSightOn;
+  on.value += Math.max(-rate, Math.min(rate, target - on.value));
+  if (on.value <= 0) return;
+  const moved = !castFrom || Math.hypot(castFrom.x - x, castFrom.z - z) > MOVED;
+  if (moved) {
+    castRays(x, z);
+    castFrom = { x, z };
+  }
+  showRays(moved, dt / FADES_OVER);
+  SIGHT.uSightFrom.value.set(x, z);
+  const inside = building && x > building.x && x < building.z && z > building.y && z < building.w;
+  const shut = SIGHT.uSightShut;
+  shut.value += Math.max(-rate, Math.min(rate, (building && !inside ? 1 : 0) - shut.value));
+}
+
+/** Whether the fog lies over (x, z), from where the rays were last cast (a thing in it needn't move). */
+export function inTheFog(x: number, z: number): boolean {
+  if (SIGHT.uSightOn.value < 0.5 || !castFrom) return false;
+  const dx = x - castFrom.x;
+  const dz = z - castFrom.z;
+  const away = Math.hypot(dx, dz);
+  if (away < 0.3) return false;
+  return away > rayReach(castFrom.x, castFrom.z, dx / away, dz / away) + SIGHT_LOOK.wall;
+}
+
+/** How far a place `away` m off is seen along the ray at `across` (a share of the strip), as `seenAlong` reads it. */
+function seenAlongRay(across: number, away: number): number {
+  const ray = ((Math.floor(across * RAYS) % RAYS) + RAYS) % RAYS;
+  const seenPast = (reach: number): number => {
+    const span = SIGHT_LOOK.wall - SIGHT_LOOK.wallFrom;
+    const past = Math.min(1, Math.max(0, (away - reach - SIGHT_LOOK.wallFrom) / span));
+    return 1 - past * past * (3 - 2 * past);
+  };
+  const nearer = seenPast(THREE.DataUtils.fromHalfFloat(strip[ray * 4]));
+  const further = seenPast(THREE.DataUtils.fromHalfFloat(strip[ray * 4 + 1]));
+  return nearer + (further - nearer) * THREE.DataUtils.fromHalfFloat(strip[ray * 4 + 2]);
+}
+
+/** For a harness (tools/lab): how far (x, z) is seen now, 0 to 1, as `SIGHT_GLSL` reads it off the rays (a harness can't
+ *  draw a grid of places a frame). */
+export function seenShareAt(x: number, z: number): number {
+  const place = SIGHT.uSightFrom.value;
+  const dx = x - place.x;
+  const dz = z - place.y;
+  const away = Math.hypot(dx, dz);
+  const across = Math.atan2(dz, dx) / (Math.PI * 2) + 0.5;
+  const aside = Math.min(SIGHT_LOOK.edge / Math.max(away, 0.01), SIGHT_LOOK.edgeAngle) / (Math.PI * 2);
+  let open = 0;
+  for (let tap = -4; tap <= 4; tap++) open += seenAlongRay(across + (aside * tap) / 4, away) / 9;
+  return open;
+}
+
+/** The frame's camera told to the fog, as it's about to be drawn. */
+export function aimSight(camera: THREE.Camera): void {
+  if (SIGHT.uSightOn.value <= 0) return;
+  camera.updateMatrixWorld();
+  SIGHT.uSightInverse.value.multiplyMatrices(camera.matrixWorld, camera.projectionMatrixInverse);
+}
+
+/** WebGL's pass: `colour` at `uv` as he sees it, in the fog where he can't. */
+export const SIGHT_GLSL = /* glsl */`
+  uniform sampler2D tSight; uniform sampler2D tSightDepth; uniform sampler2D tSightRoofs; uniform float uSightOn; uniform vec2 uSightFrom;
+  uniform mat4 uSightInverse; uniform vec4 uSightSealed; uniform float uSightShut; uniform float uSightRoofOne; uniform float uSightFarWall;
+  float seenAlong(float across, float away) {
+    vec3 ray = texture2D(tSight, vec2(across, 0.5)).rgb;
+    float nearer = 1.0 - smoothstep(ray.r + ${SIGHT_LOOK.wallFrom.toFixed(2)}, ray.r + ${SIGHT_LOOK.wall.toFixed(2)}, away);
+    float further = 1.0 - smoothstep(ray.g + ${SIGHT_LOOK.wallFrom.toFixed(2)}, ray.g + ${SIGHT_LOOK.wall.toFixed(2)}, away);
+    return mix(nearer, further, ray.b);
+  }
+  vec3 seenColour(vec3 colour, vec2 uv, float under) {
+    if (uSightOn <= 0.0) return colour;
+    float depth = texture2D(tSightDepth, uv).r;
+    if (depth >= 0.99999) return colour;
+    vec4 world = uSightInverse * vec4(uv * 2.0 - 1.0, depth * 2.0 - 1.0, 1.0);
+    vec3 place = world.xyz / world.w;
+    vec2 to = place.xz - uSightFrom;
+    // (atan(0, 0) is undefined, and NaN smears over the frame in the bloom)
+    float away = length(to);
+    if (away < 0.3) return colour;
+    float across = atan(to.y, to.x) / ${(Math.PI * 2).toFixed(6)} + 0.5;
+    float aside = min(${SIGHT_LOOK.edge.toFixed(2)} / away, ${SIGHT_LOOK.edgeAngle.toFixed(2)}) / ${(Math.PI * 2).toFixed(6)};
+    float open = 0.0;
+    for (int tap = -4; tap <= 4; tap++) open += seenAlong(across + aside * float(tap) * 0.25, away);
+    open /= 9.0;
+    // (the ground seen through a roof, away from him, isn't by the rays: the edge of what he sees past a house's corner,
+    // under the far eave, stood across the roof as a straight cut, from play, "why we cut off a portion / triangle?". The
+    // ground, and the far wall's ghost, which keeps its depth, so the rays read it and a strip of bright grass stood across
+    // the roof down to that wall's top, a review; not the near wall: under its eave the wall he sees lay in a band of fog.
+    // The far one has no house past it along the view)
+    vec4 eyeWorld = uSightInverse * vec4(uv * 2.0 - 1.0, -1.0, 1.0);
+    vec2 alongView = place.xz - eyeWorld.xz / eyeWorld.w;
+    vec2 pastIt = place.xz + alongView / max(length(alongView), 0.001) * ${SIGHT_LOOK.pastFarWall.toFixed(2)};
+    float noHousePast = 1.0 - smoothstep(0.6, 0.9, texture2D(tSightRoofs, pastIt / ${(ROOFS_HALF * 2).toFixed(1)} + 0.5).r);
+    float offGround = smoothstep(${SIGHT_LOOK.groundFrom.toFixed(2)}, ${SIGHT_LOOK.groundTo.toFixed(2)}, place.y);
+    float farWall = uSightFarWall * offGround * noHousePast;
+    float throughRoof = uSightRoofOne * (1.0 - smoothstep(0.9, 0.99, under))
+      * smoothstep(${SIGHT_LOOK.roofNear.toFixed(2)}, ${SIGHT_LOOK.roofFar.toFixed(2)}, away)
+      * max(1.0 - offGround, farWall);
+    open *= 1.0 - throughRoof;
+    float inIt = step(uSightSealed.x, place.x) * step(place.x, uSightSealed.z)
+      * step(uSightSealed.y, place.z) * step(place.z, uSightSealed.w);
+    float shut = inIt * uSightShut;
+    float over = mix(${SIGHT_LOOK.over.toFixed(2)}, ${SIGHT_LOOK.overSealed.toFixed(2)}, shut);
+    float above = smoothstep(over, over + ${SIGHT_LOOK.overSoft.toFixed(2)}, place.y);
+    float roof = texture2D(tSightRoofs, place.xz / ${(ROOFS_HALF * 2).toFixed(1)} + 0.5).r;
+    // (read through a roof, by what's under it, eaves and all: fogged whole past its walls, the roof's own colour went
+    // with it, and its eaves stood round it as a dark plate, a review)
+    float letOff = mix(1.0, under, max(smoothstep(0.6, 0.9, roof), throughRoof));
+    if (inIt <= 0.0) {
+      above *= min(roof * 2.0, 1.0) * (1.0 - smoothstep(${SIGHT_LOOK.roofs.toFixed(2)},
+        ${(SIGHT_LOOK.roofs + SIGHT_LOOK.overSoft).toFixed(2)}, place.y));
+    }
+    float light = dot(colour, vec3(0.2126, 0.7152, 0.0722));
+    vec3 tint = vec3(${SIGHT_LOOK.tint.map((part) => part.toFixed(2)).join(', ')});
+    float pressed = ${SIGHT_LOOK.range.toFixed(3)} * light / (light + ${SIGHT_LOOK.knee.toFixed(3)});
+    float kept = mix(${SIGHT_LOOK.floor.toFixed(3)} + pressed, ${(SIGHT_LOOK.floor * SIGHT_LOOK.sealedFloor).toFixed(3)} + pressed * ${SIGHT_LOOK.sealed.toFixed(3)}, shut);
+    vec3 fogged = mix(colour * kept / max(light, 0.001), tint * kept, ${SIGHT_LOOK.grey.toFixed(2)});
+    vec3 shown = mix(colour, fogged, (1.0 - max(open, above)) * uSightOn * letOff);
+    // (the eaves, past its walls, in the fog's hue and their own light: the lit grass under them stood green round the roof)
+    float eaves = throughRoof * (1.0 - smoothstep(0.6, 0.9, roof)) * uSightOn;
+    return mix(shown, tint * light * ${SIGHT_LOOK.eaves.toFixed(2)}, eaves * min(under * ${SIGHT_LOOK.eavesBy.toFixed(1)}, 1.0));
+  }
+`;

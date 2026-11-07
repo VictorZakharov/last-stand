@@ -11,12 +11,14 @@
 import * as THREE from 'three';
 import { G } from '../../../src/state';
 import * as hall from '../../../src/game/hall';
+import { pressHeld } from './holdPress';
 import { sfx } from '../../../src/core/audio';
 import { makeItem } from '../../../src/loot/items';
 import type { WeaponStyle } from '../../../src/loot/loadout';
 import type { Model } from '../../../src/types';
 import type { Lab, Report } from './lab';
 import { OpenTones } from './soundsLeft';
+import * as heroesUi from './uiHeroes';
 
 /** What `lab hall` takes. */
 export interface HallOptions {
@@ -91,19 +93,22 @@ function holdInProfile(): void {
 }
 
 /** The run the set-up held in its countdown abandoned from the pause menu, back to the lobby (Change hero is the
- *  lobby's). */
+ *  lobby's). Abandon acts only once held (`holdPress.ts`): clicked, it stayed in the run and every command leaving it
+ *  timed out. */
 export async function toLobby(lab: Lab): Promise<void> {
   await lab.step(1, () => ({ keys: ['escape'] }));
   const abandon = document.getElementById('btn-abandon');
   if (!abandon) throw new Error('lab: hall: no pause menu to leave the run by');
-  await lab.clickOn(abandon);
+  await pressHeld(abandon);
   await lab.until(() => G.mode === 'menu', LOBBY_FRAMES, 'hall: the run giving way to the lobby');
   await lab.step(LOBBY_FRAMES);
 }
 
-/** The hall opened from the lobby (Change hero), waited for until it's up. */
+/** The hall opened from the lobby (Change hero: in the village's pause menu, Esc first; an older tree's lobby shows
+ *  it, `changeHeroLink` missing there), waited for until it's up. */
 export async function openHall(lab: Lab): Promise<boolean> {
-  const button = document.getElementById('btn-hero');
+  const link = (heroesUi as { changeHeroLink?: (lab: Lab) => Promise<HTMLElement | null> }).changeHeroLink;
+  const button = link ? await link(lab) : document.getElementById('btn-hero');
   if (!button) return false;
   await lab.clickOn(button);
   await lab.until(() => hall.hallOpen(), OPEN_FRAMES, 'hall: the hall to open');

@@ -11,7 +11,8 @@
 import * as THREE from 'three';
 import { G } from '../state';
 import { input } from '../core/input';
-import { cameraYaw, zoomBy } from '../core/renderer';
+import { cameraYaw, lookBy, viewMode, zoomBy } from '../core/renderer';
+import { completeStep } from '../game/training';
 import { additive } from '../core/materials';
 import { groundHeight } from '../world/ground';
 import { SKILL_KEYS } from '../loot/loadout';
@@ -19,6 +20,7 @@ import { makeSkillSlot } from './hud';
 import { hideTooltip } from './tooltip';
 import { uiScales } from './scale';
 import type { SkillDef, SkillKey } from '../types';
+import type { VillageObject } from '../data/village';
 
 const $ = (s: string): HTMLElement => document.querySelector<HTMLElement>(s)!;
 
@@ -65,7 +67,29 @@ function setTouchMode(on: boolean): void {
 export const isTouch = (): boolean => input.touchMode;
 export function onTouchMode(f: (touch: boolean) => void): void { listeners.push(f); }
 
-export function initTouch(): void {
+/** The village's touch buttons (the lobby's alone): what the hero can use, the inventory, the map. */
+export interface TouchVillage {
+  /** whether the village takes the hero's input now */
+  active(): boolean;
+  /** the object the hero is near, if any: Use's */
+  near(): VillageObject | null;
+  use(o: VillageObject): void;
+  inventory(): void;
+  map(): void;
+}
+
+let village: TouchVillage;
+/** what the village's row last showed: shown at all, and Use's verb ('' hidden) */
+let villageShown = false, useSays = '';
+
+export function initTouch(v: TouchVillage): void {
+  village = v;
+  $('#touch-village .tv-use').addEventListener('click', () => {
+    const o = village.near();
+    if (o) village.use(o);
+  });
+  $('#touch-village .tv-bag').addEventListener('click', () => village.inventory());
+  $('#touch-village .tv-map').addEventListener('click', () => village.map());
   // start in touch mode on a device whose main pointer is a finger
   setTouchMode(matchMedia('(pointer: coarse)').matches);
   window.addEventListener('pointerdown', (e) => setTouchMode(e.pointerType !== 'mouse'), true);
@@ -117,11 +141,14 @@ export function initTouch(): void {
     const d = dist(e.touches);
     // one zoom notch per 12% change in finger spread
     const n = Math.log(pinch.d / d) / Math.log(1.12);
-    if (Math.abs(n) >= 1) { zoomBy(Math.trunc(n)); pinch.d = d; }
+    if (Math.abs(n) >= 1) { zoomBy(Math.trunc(n)); pinch.d = d; completeStep('zoom'); }
   }, { passive: true });
   window.addEventListener('touchend', (e) => { if (e.touches.length < 2) pinch = null; }, { passive: true });
 
   $('#btn-pause').addEventListener('click', () => input.pressed.add('escape'));
+  // (the view as V changes it: top-down, over the shoulder, through the eyes)
+  $('#btn-view').addEventListener('click', () => input.pressed.add('v'));
+  lookByDrag();
   initFullScreen();
 
   ring = new THREE.Mesh(new THREE.RingGeometry(0.62, 0.8, 40).rotateX(-Math.PI / 2), additive(0xffe0a0, 1.6, 0.9));
@@ -198,6 +225,31 @@ export function buildTouchSkills(): void {
   });
 }
 
+/** how far the view turns for a finger's css px, against the mouse's (a finger crosses fewer px for a turn) */
+const LOOK_TOUCH = 1.6;
+
+/**
+ * In the close views a finger dragged over the world turns the view, as the mouse looks (from play, "a camera icon...
+ * it will toggle top down, third and 1st person": touch play had stayed top-down, with no mouse to look round). One
+ * finger at a time, never while two pinch.
+ */
+function lookByDrag(): void {
+  let look: { id: number; x: number; y: number } | null = null;
+  window.addEventListener('pointerdown', (e) => {
+    if (e.pointerType !== 'touch' || look || viewMode() === 'top' || !(e.target instanceof HTMLCanvasElement)) return;
+    look = { id: e.pointerId, x: e.clientX, y: e.clientY };
+  });
+  window.addEventListener('pointermove', (e) => {
+    if (look?.id !== e.pointerId) return;
+    if (!pinch) lookBy((e.clientX - look.x) * LOOK_TOUCH, (e.clientY - look.y) * LOOK_TOUCH);
+    look.x = e.clientX;
+    look.y = e.clientY;
+  });
+  const end = (e: PointerEvent) => { if (look?.id === e.pointerId) look = null; };
+  window.addEventListener('pointerup', end);
+  window.addEventListener('pointercancel', end);
+}
+
 /** The nearest foe in reach, or a spot a few metres ahead. */
 function autoAim(out: THREE.Vector3): THREE.Vector3 {
   const p = G.player.pos;
@@ -247,6 +299,21 @@ function giveUp(p: Press): void {
 }
 
 /** Per frame, before the player updates: the aim point, and whether the controls show at all. */
+/** The village's row shown (`on`), Use naming what it would do, or hidden with nothing near; the page touched only
+ *  when either changes. */
+function updateVillageRow(on: boolean): void {
+  if (on !== villageShown) {
+    villageShown = on;
+    $('#touch-village').classList.toggle('hidden', !on);
+  }
+  const says = on ? village.near()?.verb ?? '' : '';
+  if (says === useSays) return;
+  useSays = says;
+  const use = $('#touch-village .tv-use');
+  use.textContent = says;
+  use.classList.toggle('hidden', !says);
+}
+
 export function updateTouch(dt: number): void {
   const menu = $('#menu');
   const show = input.touchMode && !G.menuOpen && (G.mode === 'run'
@@ -254,6 +321,7 @@ export function updateTouch(dt: number): void {
     : menu.classList.contains('stowed'));
 
   $('#touch').classList.toggle('hidden', !show);
+  updateVillageRow(show && G.mode === 'menu' && village.active());
   if (!show && (press || stick)) {
     if (press) giveUp(press);
     press = null; stick = null; input.stick.x = input.stick.y = 0; input.touch.clear();

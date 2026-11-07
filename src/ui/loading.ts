@@ -15,8 +15,12 @@ function showTip(): void {
   t.classList.add('on');
 }
 
+/** each step the loading screen showed and when (the page's clock, ms), for the perf report's boot */
+export const loadingSteps: { at: number; label: string }[] = [];
+
 /** Show a step, then wait until the browser has painted it: the work that follows blocks the main thread. */
 export async function loadingStep(label: string, progress: number): Promise<void> {
+  loadingSteps.push({ at: performance.now(), label });
   if (!tipTimer) { showTip(); tipTimer = window.setInterval(showTip, 6000); }
   sub().textContent = label;
   recorder.bootStep(label);
@@ -29,16 +33,16 @@ export async function loadingStep(label: string, progress: number): Promise<void
 // use (on a first visit its shader cache is cold), and that should not be seen as a stutter
 const SMOOTH_FRAMES = 8, SMOOTH_MS = 70, MAX_WAIT_MS = 4000;
 
-// the logo's particle field gathers into the lobby's logo (a first visit's hero selection screen's, ui/heroSelect.ts,
-// where it opens on that). A plain fade instead with reduced motion, on low
+// the logo's particle field gathers into the lobby's logo (a first visit opens on the hero selection screen, which
+// has none: it blows away). A plain fade instead with reduced motion, on low
 // graphics quality (picked, or where Auto settled last time), and on a device where the particles were too slow
 // before
 const plainExit = (): boolean => matchMedia('(prefers-reduced-motion: reduce)').matches || qualityLevel() === 'low' || logoWindOff();
 /** the logo's exit, made ready from when the lobby is laid out (`lobbyLaidOut`) */
 let exit: Promise<LogoBlow | null> | null = null;
 const blowFor = (l: HTMLElement): Promise<LogoBlow | null> => {
-  const target = document.querySelector<HTMLElement>('#heroes:not(.hidden) .logo-art')
-    ?? document.querySelector<HTMLElement>('#menu .logo-art');
+  const onHeroes = document.querySelector('#heroes:not(.hidden)') !== null;
+  const target = onHeroes ? null : document.querySelector<HTMLElement>('#menu .logo-art');
   return prepareBlow(l.querySelector<HTMLElement>('.ld-logo')!, target);
 };
 

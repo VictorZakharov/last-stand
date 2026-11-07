@@ -25,6 +25,7 @@ npm run stalls -- --scenario sweep --stash 60 --item-ms 100 --seconds 8 --rounds
 npm run stalls -- --scenario hover --stash 60 --listed 40   # every frame of 40 ms+ listed with what was busy
 npm run stalls -- --scenario stow --view top --perf --press-ms 100 --rounds 4  # Space pressed 10 times a second
 npm run stalls -- --scenario heroes --seconds 20 --listed 50  # the hero screen opened and left three times
+npm run stalls -- --scenario hall --seconds 12 --listed 60 --js --return  # into the hall of heroes, a hero chosen there
 npm run stalls -- --scenario boot --url this,https://last-stand.cc/ --rounds 3  # the boot
 npm run stalls -- --scenario boot --cpu-slowdown 4 --js   # on a phone's CPU, its JS by function
 npm run stalls -- --scenario boot --url this,ref:HEAD~2 --rounds 3  # this tree beside a commit of its own
@@ -95,12 +96,16 @@ The report is printed and written to `tools/stalls/out/report.txt`.
     Space pressed every 200 ms for the rest (`--press-ms`), the mouse over the world throughout.
   - `pause`: the pause menu opened and closed with Esc twice, the screen pictured every 150 ms for 1.5 s after each
     press (`out/end-N-pause-<press>-<n>.png`), and how long the menu took to show or go said for each.
+  - `choosing`: a hero chosen on the hero selection screen three times, each opening and each choice a phase of its own.
   - `heroes`: the hero selection screen opened by the lobby's Change hero and left by Back, three times, after a
     fifth of the time in the lobby (the frames to beat): each trip's way in and way out a phase of its own, so the
     first opening is read apart from the ones after ("brief lag when reentering hero selection room").
   - `switch`: another hero chosen from the hero selection screen, the warrior, the ranger and the mage in turn, each
     choice a phase of its own, and how long each took to bring the lobby back said ("changing hero is a little
     slow": WebGPU's 306 to 331 ms, WebGL's 213 to 270, the hero's build most of both).
+  - `hall`: the hero sent to the village's hall of heroes by its map, through its door and down its length to the
+    dais, its screen opening as he gets there, and another hero chosen on it, each a phase of its own: the first
+    time of each, as a player meets them.
   - `storm`: the mage in a run, walking away from the foes a side of a square at a time and casting Maelstrom back
     at those following him in a line, every other side: its storm draws them in and whirls what it kills.
   - `boot` (`boot.mjs`): no set-up and nothing played. In a fresh Chrome the game is loaded as a first visit has it
@@ -110,7 +115,10 @@ The report is printed and written to `tools/stalls/out/report.txt`.
     by default). Its steps are the loading screen's, read off it as it's drawn (`page.mjs` `bootRecording`), so
     a build without marks of its own is timed alike: the document fetched, `Loading…` (the scripts fetched and
     run), each label `loadingStep` shows, the loop started (the bar full, waiting for smooth frames), the logo
-    blown away, the lobby revealed. `--cpu-slowdown N` slows the page's CPU as a phone's (any scenario).
+    blown away, the lobby revealed; on a first visit, the hero chosen on the screen it opens on (`--hero`, or the
+    one in focus), a step of its own watched as long again before anything else is pressed (from play, a phone's
+    "insane slowdown when choosing a hero upon first entry"). `--cpu-slowdown N` slows the page's CPU as a phone's
+    (any scenario).
     `--stall-blow ms` holds the page up once in the logo blow's first frames, as a fast machine stalled by the GPU
     busy elsewhere: the blow's watchdog must not take it for a slow device (`src/ui/logoWind.ts`). A build that
     warms the fight's programs after the lobby shows (one with the fight's loading bar, `#readying`) is watched till

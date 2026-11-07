@@ -11,7 +11,7 @@ import { G } from '../../state';
 import { QUALITY } from '../../data/quality';
 import { qualityLevel } from '../../core/quality';
 import type { Model } from '../../types';
-import { CROWD_LAYER } from '../../core/layers';
+import { CROWD_LAYER, HERO_SHADOW_LAYER } from '../../core/layers';
 import { WEBGPU, refreshedInFull, uploadTexture } from '../../core/webgpu';
 import { crowdNodeMaterial } from './crowdNodes';
 
@@ -131,6 +131,8 @@ function kindOf(model: Model, pieces: THREE.Mesh[]): Kind | null {
       : crowdMaterial(base, kind, slot);
     const mesh = new THREE.Mesh(geometry, material);
     mesh.castShadow = list.some((p) => castsOf(p.mesh));
+    // (drawn over the kept shadows, as the heroes are: `world/moonShadow.ts`)
+    mesh.layers.enable(HERO_SHADOW_LAYER);
     mesh.receiveShadow = true;
     mesh.frustumCulled = false;
     // (on WebGPU the shadow is drawn by the slot's own material, skinned by its position node)

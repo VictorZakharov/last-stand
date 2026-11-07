@@ -1,10 +1,12 @@
-// A fire burning on a prop (a brazier's coals, a bonfire's logs): flames as a volume, their light gathered along each
-// ray through a box over the bed, their stuff rising through them as noise in the world that eats their tops into
-// tongues, coloured by its heat (dull red at its edges, orange, yellow, near white in its core low down), so they hold
-// their shape as the camera goes round them (sheets turned to the camera turned with it); a bed of coal lumps glowing
+// A fire burning on a prop (a brazier's coals, a bonfire's logs): flames as a volume, a fluid simulated once
+// (world/fireBake.ts) and played as a loop, each ray through a box over the bed gathering the light its burning gas gives
+// and losing what's behind to it, as hot gas does (emission and absorption by one coefficient, after Fire Pro's,
+// https://github.com/dgreenheck/threejs-fire-pro, MIT), coloured as a blackbody's heat, so they hold their shape as the
+// camera goes round them (sheets turned to the camera turned with it); a bed of coal lumps glowing
 // through cracks in their char; embers drifting up and smoke over it. One swell of the flames' height and the light's (a fire a metre across puffs about
 // 1.5 times a second) moves them together. `tools/lab` `fire` measures it.
 import * as THREE from 'three';
+import { inTheFog } from '../core/sight';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { particles, col } from '../fx/particles';
 import { rand } from '../util';
@@ -13,6 +15,7 @@ import type { Updater } from './props';
 import { runPhase } from './runPhase';
 import { WEBGPU } from '../core/webgpu';
 import { emberNodes, flameMaterial, type EmberLooks, type FlameUniforms } from './fireNodes';
+import { BAKE, DOMAIN, FLAME_LOOK, LOOP, TILES } from './fireBake';
 
 /** A fire to build: its bed and flames, and the biome's light it flickers. */
 export interface FireSpec {
@@ -40,39 +43,20 @@ export interface FireSpec {
 }
 
 /** the steps a ray takes through the flames' box: fewer, and the flames read as slices across the view */
-const STEPS = 48;
-/** the flames' light a metre of them, at their heat's own colour, and how much of the light behind it a metre of
- *  them holds back (its share kept is e to minus this) */
-const GLOW_PER_METRE = 3.2;
-const SOOT_PER_METRE = 3;
-/** the noise volume's side (voxels), its octaves' periods across it (cells) and their weights */
-const NOISE_SIZE = 32;
-const NOISE_OCTAVES = [{ period: 4, weight: 0.57 }, { period: 8, weight: 0.29 }, { period: 16, weight: 0.14 }];
-/** the noise's scale through the flames (its volume's sides a unit of its bed's radius across, and of its flames'
- *  height up), and how fast it rises through them (its sides a second): its stuff rises about a flame's height a
- *  second, as a wood fire's does, the fine noise faster */
-const NOISE_SCALE = { across: 0.45, up: 0.16, fineAcross: 0.8, fineUp: 0.4 };
-/** the flames' half-width at their foot and their tip (a share of the bed's radius), and how far the noise bends them
- *  aside at their tip (a share of it, from `BEND_FOOT` of that at their foot by the square of their height: bent as
- *  much half way up, where they're still wide, the whole of them leant out past a brazier's rim) */
-const FLAME_FOOT = 0.9;
-const FLAME_TIP = 0.15;
-const TONGUE_BEND = 1.0;
-const BEND_FOOT = 0.15;
-/** The flames' half-width at `h` (a share of their height), and how far the noise bends them there, as the shader has
- *  them (shares of the bed's radius). */
-const widthAt = (h: number): number => FLAME_FOOT + (FLAME_TIP - FLAME_FOOT) * h ** 0.9;
-const bendAt = (h: number): number => TONGUE_BEND * (BEND_FOOT + (1 - BEND_FOOT) * h * h);
-/** how far from the bed's middle they reach (a share of its radius): bent as far as all but the noise's rarest, 0.6
- *  of its most (bent further, they're cut where their box ends) */
-const FLAME_REACH = Math.max(...Array.from({ length: 11 }, (_, at) => widthAt(at / 10) + 0.6 * bendAt(at / 10)));
-const NOISE_RISE = { coarse: 0.39, fine: 0.72 };
+const STEPS = 64;
+/** the frames a second the loop plays at, as it was simulated */
+const LOOP_RATE = 60 / LOOP.stepsEach;
+/** how far round its bed the box reaches and how far up it stands, shares of the bed's radius and of the flames' height */
+const FLAME_REACH = DOMAIN.half / DOMAIN.bed;
+const FLAME_TOP = DOMAIN.high / DOMAIN.flames;
 /** a puff's swell of the flames' height, slow and quick (a share of it) */
 const PUFF_SLOW = 0.18;
 const PUFF_QUICK = 0.04;
 /** the slow and quick swells' rates (Hz): value noise at a rate carries its swing under it */
 const PUFF_SLOW_HZ = 1.7;
 const PUFF_QUICK_HZ = 6.3;
+/** how much of a puff the flames' own height takes: the simulation has swells of its own */
+const PUFF_SHOWS = 0.25;
 /** how much of a puff the light swells by (a share of the flames' swell) */
 const LIGHT_SWELL = 1.2;
 /** how far the light sways with a puff (m) */
@@ -80,7 +64,7 @@ const LIGHT_SWAY = 0.05;
 /** how hot a fire's bed glows, against a log's char */
 const BED_HEAT = 1.5;
 /** a puff of smoke's opacity as it leaves the flames */
-const SMOKE_ALPHA = 0.3;
+const SMOKE_ALPHA = 0.16;
 
 /** Value noise in one dimension: smooth, between 0 and 1. */
 function noise1(x: number): number {
@@ -115,56 +99,40 @@ const NOISE = /* glsl */`
     return v;
   }`;
 
-/** A number from 0 to 1 for a lattice point of the noise volume, by its place and its channel. */
-function latticeValue(x: number, y: number, z: number, channel: number): number {
-  let h = Math.imul(x, 374761393) ^ Math.imul(y, 668265263) ^ Math.imul(z, 1274126177) ^ Math.imul(channel, 362437);
-  h = Math.imul(h ^ (h >>> 13), 1274126177);
-  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+/** The flames' loop, every fire's (1 by 1 by 1 and empty until its worker has made it: a texture's size is all that
+ *  changes, so no program does), and the wait for it. */
+const flamesVolume = new THREE.Data3DTexture(new Uint8Array(1), 1, 1, 1);
+flamesVolume.format = THREE.RedFormat;
+flamesVolume.minFilter = flamesVolume.magFilter = THREE.LinearFilter;
+flamesVolume.wrapS = flamesVolume.wrapT = flamesVolume.wrapR = THREE.ClampToEdgeWrapping;
+flamesVolume.unpackAlignment = 1;
+flamesVolume.needsUpdate = true;
+let flamesBaked: Promise<void> = Promise.resolve();
+
+/** The fire's simulation made by a worker as the game loads, or read back as it was kept. */
+export function preloadFlames(): void {
+  if (typeof Worker === 'undefined') return;
+  flamesBaked = new Promise((resolve) => {
+    const worker = new Worker(new URL('./fireBake.worker.ts', import.meta.url), { type: 'module' });
+    worker.onmessage = (e: MessageEvent<{ data: Uint8Array; width: number; height: number; depth: number }>) => {
+      worker.terminate();
+      // (a new size: its storage is made again, by every renderer, on its next use)
+      flamesVolume.dispose();
+      flamesVolume.image = e.data as unknown as typeof flamesVolume.image;
+      flamesVolume.needsUpdate = true;
+      resolve();
+    };
+    worker.onerror = () => {
+      worker.terminate();
+      resolve();
+    };
+    // (the name the lab's pages keep what they make under, `keepAs` in core/kept.ts)
+    worker.postMessage({ keepName: (globalThis as { __labMapsAs?: string }).__labMapsAs });
+  });
 }
 
-/** Value noise at (`x`, `y`, `z`) in cells of a lattice `period` cells round, wrapping (so the volume tiles). */
-function wrappedNoise(x: number, y: number, z: number, period: number, channel: number): number {
-  const [ix, iy, iz] = [Math.floor(x), Math.floor(y), Math.floor(z)];
-  const ease = (f: number) => f * f * f * (f * (f * 6 - 15) + 10);
-  const [fx, fy, fz] = [ease(x - ix), ease(y - iy), ease(z - iz)];
-  const at = (dx: number, dy: number, dz: number) => latticeValue(
-    (ix + dx) % period, (iy + dy) % period, (iz + dz) % period, channel);
-  const lerp = (a: number, b: number, f: number) => a + (b - a) * f;
-  const row = (dy: number, dz: number) => lerp(at(0, dy, dz), at(1, dy, dz), fx);
-  const plane = (dz: number) => lerp(row(0, dz), row(1, dz), fy);
-  return lerp(plane(0), plane(1), fz);
-}
-
-/** The flames' stuff: a volume of noise that tiles, `NOISE_SIZE` voxels a side, made once. Two channels of noise of
- *  `NOISE_OCTAVES` each, apart: the flames' own and the warp and streaks that move it. */
-let noiseVolume: THREE.Data3DTexture | null = null;
-function flameNoise(): THREE.Data3DTexture {
-  if (noiseVolume) return noiseVolume;
-  const size = NOISE_SIZE;
-  const data = new Uint8Array(size * size * size * 2);
-  for (let z = 0; z < size; z++) {
-    for (let y = 0; y < size; y++) {
-      for (let x = 0; x < size; x++) {
-        for (let channel = 0; channel < 2; channel++) {
-          let value = 0;
-          for (const { period, weight } of NOISE_OCTAVES) {
-            const cells = period / size;
-            value += weight * wrappedNoise(x * cells, y * cells, z * cells, period, channel);
-          }
-          data[((z * size + y) * size + x) * 2 + channel] = Math.round(value * 255);
-        }
-      }
-    }
-  }
-  const texture = new THREE.Data3DTexture(data, size, size, size);
-  texture.format = THREE.RGFormat;
-  texture.minFilter = texture.magFilter = THREE.LinearFilter;
-  texture.wrapS = texture.wrapT = texture.wrapR = THREE.RepeatWrapping;
-  texture.unpackAlignment = 1;
-  texture.needsUpdate = true;
-  noiseVolume = texture;
-  return texture;
-}
+/** Resolved once the flames' loop has come (the lab's pages wait for it: landing mid-command, a fire's frame differed). */
+export const flamesCome = (): Promise<void> => flamesBaked;
 
 /** `value` written into a shader, as a float whatever it is */
 const glsl = (value: number): string => value.toFixed(4);
@@ -176,60 +144,54 @@ const FLAME_VERTEX = /* glsl */`
     gl_Position = projectionMatrix * viewMatrix * vec4(vFlameWp, 1.0);
   }`;
 
-/** The flames' light, gathered along each ray through their box: at each step their heat there, from the noise
- *  rising through a body wide at its foot and drawn in to its tip, coloured by heat as a wood fire burns (dull red,
- *  orange, yellow, near white in its core). A flame's light passes through it, so nothing is taken from the ray. */
+/** The flames' light, gathered along each ray through their box: the simulation's flames there, what a flame gives by its
+ *  life (a blackbody's colour and radiance), what's behind it held back by the hot gas alone. */
 const FLAME_FRAGMENT = /* glsl */`
-  uniform sampler3D uNoise;
+  uniform sampler3D uFlames;
   uniform vec3 uCentre;
   uniform vec3 uBox;
   uniform float uRadius;
   uniform float uHeight;
   uniform float uPuff;
   uniform float uGlow;
-  uniform vec2 uRise;
-  uniform vec3 uSeed;
+  uniform float uFrame;
+  uniform vec2 uTurn;
   uniform vec2 uBowl[3];
   varying vec3 vFlameWp;
-  vec3 flameColour(float heat) {
-    vec3 c = mix(vec3(0.5, 0.04, 0.005), vec3(0.95, 0.22, 0.02), smoothstep(0.05, 0.3, heat));
-    c = mix(c, vec3(1.0, 0.45, 0.06), smoothstep(0.3, 0.6, heat));
-    c = mix(c, vec3(1.0, 0.72, 0.22), smoothstep(0.6, 0.85, heat));
-    return mix(c, vec3(1.0, 0.9, 0.62), smoothstep(0.85, 1.0, heat));
+  // the gas's light at a flame's life: a blackbody's, its colour and radiance by its heat
+  vec3 flameColour(float life) {
+${FLAME_LOOK.blackbody.slice(1).map(([at, r, g, b, bright], i) => {
+    const [before, r0, g0, b0, bright0] = FLAME_LOOK.blackbody[i];
+    return `    if (life <= ${glsl(at)}) return mix(vec3(${glsl(r0)}, ${glsl(g0)}, ${glsl(b0)}) * ${glsl(bright0)}, `
+      + `vec3(${glsl(r)}, ${glsl(g)}, ${glsl(b)}) * ${glsl(bright)}, (life - ${glsl(before)}) / ${glsl(at - before)});`;
+  }).join('\n')}
+    return vec3(1.0);
   }
-  // the flames' heat at p (m from the bed's middle, up from it), 0 outside them
-  float flameHeat(vec3 p) {
-    float h = p.y / (uHeight * uPuff);
-    if (h <= 0.0 || h >= 1.0) return 0.0;
-    // as wide as their foot low down, drawn in to a tip
-    vec2 across = p.xz / uRadius;
-    // (as widthAt and bendAt have them)
-    float halfWidth = mix(${glsl(FLAME_FOOT)}, ${glsl(FLAME_TIP)}, pow(h, 0.9));
-    float bend = ${glsl(TONGUE_BEND)} * mix(${glsl(BEND_FOOT)}, 1.0, h * h);
-    // (the bend is a vector of two noises, as long as 0.71 of it: cut at half, a tongue's side was cut straight)
-    if (length(across) > halfWidth + bend * 0.71) return 0.0;
-    // the noise bends the body aside more as it rises, slowly up its height and fast across it, so it splits into
-    // tongues (in the shape, not its light: the light of a noise summed along a ray evened out into a smooth cone)
-    vec3 coarse = vec3(across.x * ${glsl(NOISE_SCALE.across)}, h * ${glsl(NOISE_SCALE.up)} - uRise.x,
-      across.y * ${glsl(NOISE_SCALE.across)});
-    vec2 a = texture(uNoise, coarse + uSeed).rg;
-    vec2 bent = across + (a - 0.5) * bend;
-    float outward = length(bent) / halfWidth;
-    if (outward >= 1.0) return 0.0;
-    // (even within, falling off at their edge: their light summed along a ray shows their shape, brighter where they're
-    // thicker; falling off from their middle, they read as a soft blob)
-    float body = 1.0 - smoothstep(0.7, 1.0, outward);
-    // each tongue's own height, and streaks rising through it
-    vec3 fine = vec3(bent.x * ${glsl(NOISE_SCALE.fineAcross)}, h * ${glsl(NOISE_SCALE.fineUp)} - uRise.y,
-      bent.y * ${glsl(NOISE_SCALE.fineAcross)});
-    vec2 b = texture(uNoise, fine + uSeed * 1.7).rg;
-    float tip = 0.35 + 1.3 * (b.r - 0.25);
-    float tongue = 1.0 - smoothstep(tip - 0.15, tip, h);
-    // hot low down, cooling as they rise, streaked (hotter, every ray through their core summed to cream)
-    float heat = body * tongue * (0.95 - h * 0.6) * (0.35 + 0.9 * smoothstep(0.3, 0.7, b.g));
-    // thin into their bed (where every ray met their foot, a patch of cream), gone at their tip
-    heat *= smoothstep(0.0, 0.15, h) * (1.0 - smoothstep(0.86, 1.0, h));
-    return clamp(heat, 0.0, 1.0);
+  // the loop at one frame's tile: q's x and y in cells, its z a share of the depth
+  float flameTile(vec3 q, float frame) {
+    vec2 tile = vec2(mod(frame, ${glsl(TILES.across)}), floor(frame / ${glsl(TILES.across)}));
+    vec2 size = vec2(${glsl(BAKE.nx)}, ${glsl(BAKE.ny)});
+    vec2 cell = (tile * size + clamp(q.xy * size, vec2(0.5), size - 0.5)) / (size * vec2(${glsl(TILES.across)}, ${glsl(TILES.down)}));
+    return texture(uFlames, vec3(cell, q.z)).r;
+  }
+  // a flame's life at p (m from the bed's middle, up from it), its loop's two frames either side of now eased between
+  float flameLife(vec3 p) {
+    vec2 across = vec2(p.x * uTurn.x - p.z * uTurn.y, p.x * uTurn.y + p.z * uTurn.x) / uBox.x;
+    vec3 q = vec3(across.x * 0.5 + 0.5, p.y / (uHeight * uPuff), across.y * 0.5 + 0.5);
+    if (q.y <= 0.0 || q.y >= 1.0 || dot(across, across) >= 1.0) return 0.0;
+    float first = floor(uFrame);
+    float next = mod(first + 1.0, ${glsl(LOOP.frames)});
+    float life = mix(flameTile(q, first), flameTile(q, next), uFrame - first);
+    if (life <= 0.004) return 0.0;
+    // (the strands: the loop's own middle read finer, mirrored as it repeats so no seam shows)
+    vec3 fine = vec3(abs(fract(q.x * ${glsl(FLAME_LOOK.strandsAcross)}) * 2.0 - 1.0) * 0.3 + 0.35,
+      0.1 + fract(q.y * ${glsl(FLAME_LOOK.strandsUp)}) * 0.4,
+      abs(fract(q.z * ${glsl(FLAME_LOOK.strandsAcross)}) * 2.0 - 1.0) * 0.3 + 0.35);
+    float strands = flameTile(fine, first);
+    life *= 1.0 - ${glsl(FLAME_LOOK.strandsTake)} * (1.0 - strands);
+    float sideFrom = mix(${glsl(FLAME_LOOK.sideFadeFoot)}, ${glsl(FLAME_LOOK.sideFade)}, smoothstep(0.0, ${glsl(FLAME_LOOK.footNarrows)}, q.y));
+    float side = 1.0 - smoothstep(sideFrom, sideFrom + 0.3, length(across));
+    return life * side * smoothstep(0.0, ${glsl(FLAME_LOOK.footFade)}, q.y);
   }
   // where a ray from eye along dir is among the flames, a cylinder as far round as they bend and as high as they are
   // now (its first and last distance, the first 0 from inside it; the box's corners and its top took steps from them)
@@ -306,31 +268,32 @@ const FLAME_FRAGMENT = /* glsl */`
     // (each pixel starts its steps a little further in than its neighbours, at random: in step, the slices showed,
     // and by a pattern's offsets, its stripes did through a thin tongue)
     float jitter = fract(sin(dot(gl_FragCoord.xy, vec2(12.9898, 78.233))) * 43758.5453);
-    // (from the camera out, what's nearer hiding some of what's behind it: a wood fire's soot holds back its light,
-    // and summed through it all, a fire looked down on from above was a ball of cream)
+    // (from the camera out: burning gas gives light and holds back what's behind it by one coefficient, so it has a body
+    // and an edge, where light added alone summed along each ray into a soft cone)
     vec3 light = vec3(0.0);
     float through = 1.0;
     for (int i = 0; i < ${STEPS}; i++) {
-      float heat = flameHeat(eye + dir * (span.x + (float(i) + jitter) * stride));
-      if (heat <= 0.0) continue;
-      float flame = smoothstep(0.04, 0.4, heat);
-      light += through * flameColour(heat) * flame * (0.2 + heat * 1.4);
-      through *= exp(-flame * stride * ${glsl(SOOT_PER_METRE)});
+      float life = flameLife(eye + dir * (span.x + (float(i) + jitter) * stride));
+      if (life <= 0.004) continue;
+      float thick = 1.0 - exp(-clamp(life / ${glsl(FLAME_LOOK.glowFullLife)}, 0.0, 1.0) * stride * ${glsl(FLAME_LOOK.thickPerMetre)});
+      light += through * thick * flameColour(life);
+      through *= 1.0 - thick * smoothstep(${glsl(FLAME_LOOK.holdsFrom)}, ${glsl(FLAME_LOOK.holdsFully)}, life);
       if (through < 0.02) break;
     }
-    gl_FragColor = vec4(light * stride * ${glsl(GLOW_PER_METRE)} * uGlow * (1.0 - seeFade()), 1.0);
+    float kept = 1.0 - seeFade();
+    gl_FragColor = vec4(light * ${glsl(FLAME_LOOK.glow)} * uGlow * kept, (1.0 - through) * kept);
   }`;
 
 /** the numbers the flames' shader is written with, for its WGSL (fireNodes.ts) */
 const FLAME_SHAPE = {
-  steps: STEPS, glowPerMetre: GLOW_PER_METRE, sootPerMetre: SOOT_PER_METRE, foot: FLAME_FOOT, tip: FLAME_TIP,
-  tongueBend: TONGUE_BEND, bendFoot: BEND_FOOT, noise: NOISE_SCALE,
+  steps: STEPS, look: FLAME_LOOK,
+  tiles: TILES, cells: BAKE, frames: LOOP.frames,
 };
 
 /** A fire's flames' box over its bed's middle (m): as far round as their tongues bend, as high as their tallest puff. */
 function flameBox(radius: number, height: number): THREE.Vector3 {
   const reach = radius * FLAME_REACH;
-  return new THREE.Vector3(reach, height * (1 + PUFF_SLOW + PUFF_QUICK) * 1.02, reach);
+  return new THREE.Vector3(reach, height * FLAME_TOP * (1 + PUFF_SLOW + PUFF_QUICK) * 1.02, reach);
 }
 
 /** A bowl the flames' shader knows as none (its rim under its foot). */
@@ -340,15 +303,16 @@ const noBowl = (): THREE.Vector2[] => [0, 0, -1].map((y) => new THREE.Vector2(y,
 function flameMat(radius: number, height: number, seed: number): THREE.ShaderMaterial {
   const mat = new THREE.ShaderMaterial({
     uniforms: {
-      uNoise: { value: flameNoise() },
+      uFlames: { value: flamesVolume },
       uCentre: { value: new THREE.Vector3() },
       uBox: { value: flameBox(radius, height) },
       uRadius: { value: radius },
-      uHeight: { value: height },
+      uHeight: { value: height * FLAME_TOP },
       uPuff: { value: 1 },
       uGlow: { value: 1 },
-      uRise: { value: new THREE.Vector2() },
-      uSeed: { value: new THREE.Vector3(seed % 1, (seed * 7.31) % 1, (seed * 3.17) % 1) },
+      // (each fire its own moment of the loop and its own way round, so no two show the same flames)
+      uFrame: { value: 0 },
+      uTurn: { value: new THREE.Vector2(Math.cos(seed * 6.283), Math.sin(seed * 6.283)) },
       // (none: its rim under its foot)
       uBowl: { value: noBowl() },
     },
@@ -356,7 +320,10 @@ function flameMat(radius: number, height: number, seed: number): THREE.ShaderMat
     fragmentShader: FLAME_FRAGMENT,
     transparent: true,
     depthWrite: false,
-    blending: THREE.AdditiveBlending,
+    // (its light over what it hides: added, it washed out over anything bright, the daylit forest above all)
+    blending: THREE.CustomBlending,
+    blendSrc: THREE.OneFactor,
+    blendDst: THREE.OneMinusSrcAlphaFactor,
   });
   // (it fades as the prop under it dissolves, not left burning in the air)
   return seeThroughFade(mat, 'prop');
@@ -490,39 +457,50 @@ export function buildFire(scene: THREE.Object3D, spec: FireSpec, updaters: Updat
   const coals = new THREE.Mesh(coalsGeo(radius, spec.dish, rng), bed);
   coals.position.copy(at);
   scene.add(coals);
-  const seed = rng() * 100;
+  const seed = rng();
   const flames = flameMat(radius, height, seed);
-  flames.uniforms.uCentre.value.copy(at);
+  // (the shader, the embers and the smoke read the world: laid out in a group turned and moved, as the yard's torches
+  // are, the sparks rose from the group's own numbers, on the plaza, "weird particles like fire burning")
+  scene.updateWorldMatrix(true, false);
+  const inWorld = at.clone().applyMatrix4(scene.matrixWorld);
+  flames.uniforms.uCentre.value.copy(inWorld);
   flames.uniforms.uGlow.value = spec.glow ?? 1;
   if (spec.bowl) flames.uniforms.uBowl.value = spec.bowl.map(([y, r]) => new THREE.Vector2(y, r));
   const box = flameBox(radius, height);
   const drawnWith = WEBGPU ? flameMaterial(flames.uniforms as unknown as FlameUniforms, FLAME_SHAPE) : flames;
   const volume = new THREE.Mesh(new THREE.BoxGeometry(box.x * 2, box.y, box.z * 2).translate(0, box.y / 2, 0), drawnWith);
+  volume.userData.noMeshlets = true;
   // (its box stands over the bed unturned: the shader reads the ray in the world, from `uCentre`)
   volume.position.copy(at);
   // (drawn after the smoke, before the glows)
   volume.renderOrder = 15;
   scene.add(volume);
-  const rise: THREE.Vector2 = flames.uniforms.uRise.value;
   const lightAt = light.position.clone();
   const due = runPhase({ embers: 0, smoke: 0 });
-  updaters.push((dt, t) => {
+  // (how long it has stood still in the fog: what he can't see plays out nothing, from play, "fire should not animate when
+  // in fog of war")
+  let stoodStill = 0;
+  updaters.push((dt, gameTime) => {
+    emberTime.value = gameTime;
+    if (inTheFog(inWorld.x, inWorld.z)) {
+      stoodStill += dt;
+      return;
+    }
+    const t = gameTime - stoodStill;
     const puff = puffAt(t, seed);
-    flames.uniforms.uPuff.value = puff;
-    // (the noise tiles: its offsets wrap without a seam, and stay small however long the game runs)
-    rise.set((t * NOISE_RISE.coarse) % 1, (t * NOISE_RISE.fine) % 1);
-    emberTime.value = t;
+    flames.uniforms.uPuff.value = 1 + (puff - 1) * PUFF_SHOWS;
+    flames.uniforms.uFrame.value = (t * LOOP_RATE + seed * LOOP.frames) % LOOP.frames;
     light.intensity = spec.intensity * (1 + (puff - 1) * LIGHT_SWELL);
     light.position.set(lightAt.x + (puff - 1) * LIGHT_SWAY, lightAt.y + (puff - 1) * LIGHT_SWAY * 2, lightAt.z);
     due.embers += dt * spec.embers;
     while (due.embers >= 1) {
       due.embers -= 1;
-      spawnEmber(at, radius, height);
+      spawnEmber(inWorld, radius, height);
     }
     due.smoke += dt * spec.smoke;
     while (due.smoke >= 1) {
       due.smoke -= 1;
-      spawnSmoke(at, radius, height * puff, spec.smokeColour);
+      spawnSmoke(inWorld, radius, height * puff, spec.smokeColour);
     }
   });
 }
@@ -536,11 +514,11 @@ function spawnEmber(at: THREE.Vector3, radius: number, height: number): void {
     y: at.y + rand(0.1, 0.45) * height,
     z: at.z + Math.sin(angle) * out,
     vx: rand(-0.45, 0.45),
-    vy: rand(1.1, 2.6),
+    vy: rand(1.4, 3.2),
     vz: rand(-0.45, 0.45),
-    life: rand(0.8, 2.2),
-    size: rand(0.03, 0.06),
-    sizeEnd: 0.015,
+    life: rand(0.7, 1.9),
+    size: rand(0.018, 0.036),
+    sizeEnd: 0.008,
     color: col(0xffc060, 4),
     colorEnd: col(0xff3000, 0.6),
     gravity: -0.35,

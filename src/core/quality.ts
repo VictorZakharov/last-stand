@@ -6,6 +6,7 @@
 // screen's own pixels: what's cut is other work,
 // never the resolution (from play, "I want to run the game at full phone res, if we need
 // to cut, we need to cut something else, not resolution").
+import { WEBGPU } from './webgpu';
 import * as THREE from 'three';
 import { G } from '../state';
 import { QUALITY, QUALITY_ORDER, AUTO_QUALITY, type QualityLevel, type QualitySetting } from '../data/quality';
@@ -15,6 +16,10 @@ import { readCookie, writeCookie } from './cookies';
 import { setHeroDetail } from '../entities/models/armor';
 import { setRubbleShadows } from '../fx/rubble';
 import { setReliefSteps } from './parallax';
+import { setGrassSpread } from '../world/meadow';
+import { setDrapeRounds } from '../entities/models/armor';
+import { setLampQuality } from './lamps';
+import { setShadowsOnMove } from '../world/shadowsOnMove';
 import { setHdrAllowed } from './hdr';
 import { setSkullDetail } from '../world/skull';
 
@@ -118,16 +123,24 @@ function apply(l: QualityLevel, most = Infinity): void {
   const shadow = G.arena.moon.shadow;
   if (shadow.mapSize.x !== p.shadowMap) {
     shadow.mapSize.set(p.shadowMap, p.shadowMap);
-    shadow.map?.dispose();
-    shadow.map = null;   // recreated at the new size on the next render
+    // (on WebGPU three's shadow node resizes the map it holds, and a map disposed here was a destroyed texture used in the
+    // next submit, a frame's passes refused)
+    if (!WEBGPU) {
+      shadow.map?.dispose();
+      shadow.map = null;   // recreated at the new size on the next render
+    }
   }
   // (a uniform: as wide on the floor at every map's size)
   shadow.radius = PENUMBRA * p.shadowMap / (shadow.camera.right - shadow.camera.left);
   setRubbleShadows(p.minCasterRadius);
   setReliefSteps(p.relief);
+  setGrassSpread(p.grassSpread);
+  setLampQuality(p.lampReach, p.lampShadows);
+  setShadowsOnMove(p.shadowsOnMove);
+  setBloomShare(p.bloomShare);
+  setDrapeRounds(p.drapeRounds);
   setHdrAllowed(p.hdr);
   setSkullDetail(p.coarseProps);
-  setBloomShare(p.bloomShare);
   for (const p of G.players) applyShadowDetail(p.obj);
   for (const e of G.enemies) applyShadowDetail(e.obj);
   restart();
@@ -158,10 +171,18 @@ export function holdQuality(): void {
   settle = AUTO_QUALITY.settle;
 }
 
+/** whether Auto is held where it is (the perf overlay's profile: it would answer every switch the profile makes) */
+let autoHeld = false;
+export function holdAuto(held: boolean): void {
+  autoHeld = held;
+  restart();
+  settle = AUTO_QUALITY.settle;
+}
+
 /** Feed the real (unclamped) frame delta each frame while the game is running. Returns Auto's step, if it took one
  *  (`low`), for the performance trace to mark. */
 export function sampleQuality(dt: number): string | null {
-  if (setting !== 'auto' || (atBottom() && !aboveNext)) return null;
+  if (setting !== 'auto' || (atBottom() && !aboveNext) || autoHeld) return null;
   if (dt > AUTO_QUALITY.longestFrame) return null;   // tab switch, breakpoint: not a performance signal
   if (settle > 0) { settle -= dt; return null; }   // let a level change take effect first
   if (aboveNext) return tryAbove();

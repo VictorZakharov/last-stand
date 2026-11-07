@@ -28,6 +28,7 @@ import { drawAsOne, type OneDraw } from './models/drawAsOne';
 import { countDown, countHealed, countTaken } from '../game/stats';
 import type { ActionState, CastAnim, ClassDef, DamageType, DerivedStats, Gear, Model, Profile, SkillDef, SkillKey, Struck } from '../types';
 import type { Enemy } from './enemy';
+import { walkPath } from '../world/walkPath';
 
 const _lookFrom = new THREE.Vector3(), _lookAt = new THREE.Vector3();
 /** an overhead blow comes down on a foe whose near side is within this ahead (m: a two-hander's reach past the hands
@@ -46,6 +47,10 @@ export interface Ward { amount: number; t: number; onHit?(absorbed: number): voi
 const AIM_HOLD = 0.45;
 /** s: how long the hero must have been free of any action before the hotbar shows a consumable usable again */
 const BUSY_HOLD = 0.15;
+/** how near a point on his way to a spot the hero comes before heading for the next (m: about a stride) */
+const ROUTE_PASSED = 0.6;
+/** how far round his middle a hero's body keeps off what's round it (m) */
+export const HERO_RADIUS = 0.45;
 /** how fast the body turns at most onto the way it goes (rad/s): eased alone, it swung half round in four frames at a
  *  reversal, 38 degrees in the first, and the pelvis and legs snapped round with it */
 const TURN_MOST = 9;
@@ -171,7 +176,7 @@ export class Player {
   readonly aim = new THREE.Vector3();
   /** the foe whose body the aim is on (the local hero's: the eye's ray met it, `input.foe`) */
   aimFoe: Enemy | null = null;
-  readonly radius = 0.45;
+  readonly radius = HERO_RADIUS;
   facing = Math.PI;
   /** how much longer the body stays on its aim after an attack or cast (s), see AIM_HOLD */
   private aimHold = 0;
@@ -189,6 +194,14 @@ export class Player {
   private phaseDir = 1;
   /** true in the lobby: free casting, no costs, no cooldowns */
   sandbox = false;
+  /** whether the hero may cast (in the village, in its training yard alone: game/village.ts) */
+  armed = true;
+  /** where he walks of himself, with no key or stick held (the village: an object clicked, walked to and used), or
+   *  null; a key or the stick takes him back */
+  walkTo: THREE.Vector3 | null = null;
+  /** the way to `walkTo` (`world/walkPath.ts`): the points he heads for in turn, and the spot it was found for */
+  private route: [number, number][] = [];
+  private routeFor: THREE.Vector3 | null = null;
 
   /** all skills of the class, by id */
   readonly known = new Map<string, KnownSkill>();
@@ -252,7 +265,11 @@ export class Player {
   /** a remote player holds its revive key (reported with its state) */
   reviving = false;
 
+  /** the heroes built so far (a build is 100 to 200 ms: the lab counts those a screen's first opening makes) */
+  static built = 0;
+
   constructor(classId: string, equipped: Profile['equipped'], local = true) {
+    Player.built++;
     this.cls = CLASSES[classId];
     this.local = local;
     this.sandbox = !local;   // a remote player's casts replay as its owner fires them: no costs here
@@ -282,16 +299,30 @@ export class Player {
     this.reset();
   }
 
+  /** Out of the scene, to be brought back whole (`into`): a hero built ahead (`game/hall.ts`). His lights stay: they're
+   *  every hero's (`heroLights`), and the scene's count of them every program's. */
+  stowed(): void {
+    G.scene.remove(this.obj);
+  }
+
+  /** Back in the scene from `stowed`, as if just built in `equipped`. */
+  unstowed(equipped: Profile['equipped']): void {
+    G.scene.add(this.obj);
+    this.recomputeStats(equipped);
+    this.reset();
+  }
+
   /** Take the character out of the scene (switching class in the lobby). */
   dispose(): void {
     this.stopChannel();
     this.ward?.onEnd?.();
-    G.scene.remove(this.obj, ...(this.staffLight ? [this.staffLight] : []), ...(this.handLight ? [this.handLight] : []));
+    G.scene.remove(this.obj);
     this.shadow.dispose();
     this.drawn.dispose();
     this.obj.traverse((o) => { const m = o as THREE.SkinnedMesh; if (m.isSkinnedMesh) { m.skeleton.dispose(); (m.material as THREE.Material).dispose(); } });   // (skinned meshes own a copy of their material)
     this.model.dispose();
-    // (its lights are the next hero's: `heroLights`)
+    // (its lights stay in the scene, the next hero's: `heroLights`. Taken out with a spare hero let go, the frame's 20
+    // were 18 and a wave compiled 14 programs late)
   }
 
   /** Bind a skill (or nothing) to a key and persist the loadout (of the weapon style held). */
@@ -462,6 +493,7 @@ export class Player {
     if (isDown('d') || isDown('arrowright')) mx += 1;
     // the touch stick is analog: a small push walks
     if (!mx && !mz) { mx = input.stick.x; mz = input.stick.y; }
+    if (mx || mz) this.walkTo = null;
     const len = Math.hypot(mx, mz);
     let speed = this.stats.moveSpeed;
     if (this.casting && !this.casting.skill.def.freeMove) speed *= 0.45;
@@ -469,7 +501,16 @@ export class Player {
     if (this.rooted) speed = 0;
     const yaw = cameraYaw(), cy = Math.cos(yaw), sy = Math.sin(yaw);
     const k = len ? speed * Math.min(1, len) / len : 0;
-    const tx = (mx * cy + mz * sy) * k, tz = (mz * cy - mx * sy) * k;
+    let tx = (mx * cy + mz * sy) * k, tz = (mz * cy - mx * sy) * k;
+    // (walking of himself to a spot: along its way round what's in it, slowing over its last metre)
+    if (this.walkTo && !len) {
+      const [wx, wz] = this.routeStep(this.walkTo);
+      const last = this.route.length <= 1;
+      const dx = wx - this.pos.x, dz = wz - this.pos.z, d = Math.hypot(dx, dz);
+      const v = d > 1e-3 ? (speed * (last ? Math.min(1, d) : 1)) / d : 0;
+      tx = dx * v;
+      tz = dz * v;
+    }
     // (as a body moves itself, pushing and braking against the ground: turning round from a run takes a braking step
     // and a push the other way, `entities/movement.ts`)
     this.goal.set(tx, 0, tz);
@@ -482,6 +523,13 @@ export class Player {
 
     // a channel ends when the key that started it is released
     if (this.channel && !isDown(this.channel.key)) this.stopChannel();
+    // (out of the village's yard nothing is cast: what was held is let go, what was aimed given up)
+    if (!this.armed) {
+      if (this.channel) this.stopChannel();
+      this.endAim();
+      this.queued = null;
+      return;
+    }
     this.holdAim();
     if ((input.mouse.overUI && !input.touchMode) || this.dashShut() || this.staggered) return;
     // the shot remembered from a press while busy: drawn now, and loosed at once if its key is up again (a tap)
@@ -669,6 +717,21 @@ export class Player {
    *  on it, as its own would). */
   private dashShut(): boolean {
     return !!this.dash && (!this.dash.open || !!this.dash.ride);
+  }
+
+  /** The point the hero heads for on his way to `to`: the way found again when `to` changed, each point passed once
+   *  he's within a stride of it (`ROUTE_PASSED`). */
+  private routeStep(to: THREE.Vector3): [number, number] {
+    if (this.routeFor !== to) {
+      this.routeFor = to;
+      this.route = walkPath(this.pos.x, this.pos.z, to.x, to.z, this.radius);
+    }
+    while (this.route.length > 1) {
+      const [x, z] = this.route[0];
+      if (Math.hypot(x - this.pos.x, z - this.pos.z) > ROUTE_PASSED) break;
+      this.route.shift();
+    }
+    return this.route[0] ?? [to.x, to.z];
   }
 
   /**

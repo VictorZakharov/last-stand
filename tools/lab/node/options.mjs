@@ -24,8 +24,8 @@ const KINDS = [
 export const UI_STATES = [
   'lobby', 'tooltip', 'glow', 'help', 'saves', 'heroes', 'readying', 'readyingHeroes', 'clicked', 'views',
   'behindProps',
-  'logLobby', 'perfAsk',
-  'heroesWarming', 'skillTipsTouch', 'sheetTouch', 'litTouch', 'buttonsTouch',
+  'logLobby', 'perfAsk', 'pauseLobby',
+  'villageHud', 'villageMap', 'villageHudTouch', 'heroesWarming', 'skillTipsTouch', 'sheetTouch', 'litTouch', 'buttonsTouch',
   'run', 'scores', 'perf', 'decision', 'perfAskBreak', 'pause', 'pauseSettings', 'pauseAbandon', 'summary', 'skillTips', 'log', 'logTouch',
   'hudTouch', 'decisionTouch', 'perfAskTouch', 'buttonsRunTouch',
 ];
@@ -291,6 +291,7 @@ export const COMMANDS = {
       ping: { kind: 'number', usage: 'ms', help: 'the link\'s least round trip (300 by default)' },
       jitter: { kind: 'number', usage: 'ms', help: 'how much later each way a message may come (60 by default)' },
       pictures: { kind: 'switch', help: 'picture both screens at a scenario\'s moments (into out/coop)' },
+      canary: { kind: 'switch', help: 'plant a fault the start must catch: the host told no guest readies the run' },
       ...COMMON_OPTIONS,
     },
   },
@@ -363,17 +364,18 @@ export const COMMANDS = {
           + 'its panel leaves, its parts within the window and none over another, the hero beside clicked into focus, '
           + 'Esc back to the lobby), readying (the fight\'s loading bar over the lobby: within the window, its label '
           + 'on a line), readyingHeroes (Change hero clicked with the heroes\' programs cold: the bar says it readies '
-          + 'the heroes), clicked (a battleground\'s button clicked and a '
-          + 'key pressed after it: '
-          + 'where the focus went), views (the lobby\'s camera switched through its views: the labels over the '
-          + 'dummies against their anchors), behindProps (a column planted between the camera and each dummy\'s label: '
+          + 'the heroes), clicked (the crypt\'s portal card left by its Leave clicked and a key pressed after it: '
+          + 'where the focus went), views (the lobby\'s camera switched through its views from the training yard: '
+          + 'the labels over the dummies against their anchors), '
+          + 'behindProps (a column planted between the camera and each dummy\'s label: '
           + 'every label hidden behind it, every one shown with it gone; the canary plants it aside), run (the HUD '
           + 'with a hurt foe\'s bar and damage numbers), '
           + 'scores, perf, decision, pause, summary, skillTips (each skill\'s tooltip on the hotbar opened by the '
           + 'mouse, within the window; the tallest pictured; skillTipsTouch: the lobby\'s by a finger\'s tap), log '
           + '(the battle log with hits dealt and taken: every '
           + 'line shown, within the screen, over nothing of the HUD), logLobby (the same over the lobby, clear of its '
-          + 'panels), '
+          + 'panels), pauseLobby (the pause menu in the village: its time of day shown, holding the hour it is '
+          + 'moved to and giving the clock back at Auto; none in the pause menu of a run), '
           + 'logTouch (the same in touch mode: clear of the touch HUD, touches let through), hudTouch (the touch '
           + 'HUD\'s top corners at the screen\'s edges, none of its corners\' controls over another; --insets for a '
           + 'phone\'s cutout), decisionTouch (the choice after a wave in touch mode: on a short screen within its top '
@@ -543,12 +545,31 @@ export const COMMANDS = {
       + 'a shader compiled as it\'s timed and a canary unseen are problems (a phone\'s: --screen 832x384@3.75 '
       + '--quality low@518400 --throttle 4; --class mage)',
     argument: 'skills',
+    mayOmit: true,
     options: {
       biome: {
         kind: 'choice',
         choices: ['crypt', 'forest'],
         usage: 'crypt|forest',
         help: 'the biome (forest by default)',
+      },
+      village: {
+        kind: 'switch',
+        help: 'in the lobby\'s village instead, no skills: the hero standing on its square, then walking (--at, '
+          + '--facing where he stands)',
+      },
+      parts: {
+        kind: 'switch',
+        help: 'after the phases, the biggest draws timed on the GPU, each drawn and hidden in turns',
+      },
+      spin: {
+        kind: 'switch',
+        help: 'with --village, the view turned right round on the spot three times, each turn a phase',
+      },
+      hour: {
+        kind: 'number',
+        usage: 'h',
+        help: 'with --village, the hour it\'s lit for (0 to 24: by night its lamps are lit)',
       },
       facing: { kind: 'number', usage: 'degrees', help: 'the way the hero faces and casts (0, +z, by default)' },
       at: SETUP_OPTIONS.at,
@@ -1106,6 +1127,12 @@ export const COMMANDS = {
         help: 'compile each program again alone, salted so no cache answers, and time it: by kind, by what uses '
           + 'them, by the point lights they\'re lit by, the longest (a minute or more; its canary: the cache)',
       },
+      of: {
+        kind: 'text',
+        usage: 'user',
+        help: 'with --cost, every program a user uses listed alone, the longest first, with its kind and what '
+          + 'it was made for (a scene\'s top-level object, as "by what uses them" names it: village, forest)',
+      },
       ...COMMON_OPTIONS,
     },
   },
@@ -1207,6 +1234,25 @@ export const COMMANDS = {
       ...COMMON_OPTIONS,
     },
   },
+  village: {
+    help: "the lobby's village as a player walks it: every object usable from its stand, casting in the yard alone, "
+      + "no walk out past the palisade or along a way out, the stair up to the hall, the first visit's training ticked "
+      + "step by step with the portal shut till it's done or skipped, and no program compiled as the hour changes",
+    options: {
+      canary: {
+        kind: 'switch',
+        help: "a fault planted for each check (an object's stand moved, the yard read outside it, a hero put past the "
+          + 'palisade, the stair walked at beside it, the notice board left unread, a new material at noon): all '
+          + 'must be found',
+      },
+      only: {
+        kind: 'text',
+        usage: 'names',
+        help: 'only the checks whose names have any of these in them (lampsAlike,hallWalls): the whole takes minutes',
+      },
+      ...COMMON_OPTIONS,
+    },
+  },
   columns: {
     help: 'the crypt\'s broken columns roll after roll: each mesh welded, an edge one triangle uses above the '
       + 'shaft\'s foot is a hole; the break\'s face inside the flutes no steeper than 75 degrees',
@@ -1284,6 +1330,16 @@ export const COMMANDS = {
         choices: ['crypt', 'forest'],
         usage: 'crypt|forest',
         help: 'the biome (as the page has it by default)',
+      },
+      hour: {
+        kind: 'number',
+        usage: 'h',
+        help: 'with --village, the hour it\'s lit for (0 to 24: by night its lamps are lit, two casting shadows)',
+      },
+      village: {
+        kind: 'switch',
+        help: 'in the lobby\'s village instead (the run the set-up starts left, no foes; --at and --facing where the '
+          + 'hero stands there, the square by default)',
       },
       canary: {
         kind: 'switch',

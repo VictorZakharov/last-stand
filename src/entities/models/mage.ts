@@ -10,7 +10,7 @@ import { engravedSteel, embroidered, projectUV, steelRegion } from '../../core/e
 import { buildHumanoid, joint, part, resetPose, walkCycle, idle, deathFall, pulse, ramp, groundFeet, reachArm, runShareOf, disposeGeometries } from './rig';
 import { Sculpt, stripRig, limb, lathe } from './shapes';
 import { taperTube, lod, plate, edgeTube, strap, belt, buckle, stud, disc, stitches, gem as gemGeo, Skirt, SkirtLimbs, armOffThigh, scaleUV, type SurfaceFn, type JointPoint } from './armor';
-import { buildHead, buildNeck, toGroup, handSkin, HEAD_MM } from './head';
+import { buildHead, buildNeck, toGroup, handSkin, HEAD_MM, HERO_HEADS } from './head';
 import { EYE } from './face';
 import { buildHand, poseHand, hold, seat, gripTurn, bare, handCapsules, glowOutline, SLANT } from './hands';
 import { clamp, lerp, damp, TAU, mulberry, smooth } from '../../util';
@@ -265,7 +265,9 @@ export function buildMage(): Model {
   const glow = kit.glow(0xff6fe0, 1.5);
   // the staff's crystal: glowing softly, a little more while casting (animate() sets it each frame)
   const GEM_GLOW = 0.4;
-  const gem = kit.phys({ color: 0xff4fd8, emissive: 0xff4fd8, emissiveIntensity: GEM_GLOW, roughness: 0.05, metalness: 0, clearcoat: 1, flatShading: true });
+  // (rough, its coat thin and rough, its highlight weak: polished, each facet as it turned mirrored a street lamp by night,
+  // 4 times as bright as its glow for a frame or two, "mage's staff flickers too bright at times"; `lab village --only staffAtNight`)
+  const gem = kit.phys({ color: 0xff4fd8, emissive: 0xff4fd8, emissiveIntensity: GEM_GLOW, roughness: 0.7, metalness: 0, clearcoat: 0.1, clearcoatRoughness: 0.7, specularIntensity: 0.3, flatShading: true });
   // the grimoire's set stone: red, lit from within a little
   const stone = kit.phys({ color: 0x7a0f1a, emissive: 0xff2a3a, emissiveIntensity: 0.5, roughness: 0.08, metalness: 0, clearcoat: 1, flatShading: true });
   // the coat's front panels: oxblood, a brass-thread border and a column of diamonds down each, as the sheet's
@@ -616,7 +618,7 @@ export function buildMage(): Model {
   void hang; void panel;
 
   // --- the head: face, a full beard, hair, and a hood (worn with a head item equipped: setGear) in the coat's wool
-  const head = buildHead(j.head, kit, 'mage', { hair: 'short', crop: true });
+  const head = buildHead(j.head, kit, HERO_HEADS.mage.who, HERO_HEADS.mage);
   // (a point just before the lips, for the flask)
   const mouth = new THREE.Object3D(); mouth.name = 'mouth'; head.group.add(mouth); toGroup(0, 50, 112, mouth.position);
   buildNeck(j.neck, kit, 'mage', j.P.neckL, j.head);

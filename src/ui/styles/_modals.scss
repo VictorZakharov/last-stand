@@ -28,8 +28,11 @@
 .controls-help .k { font-family: var(--font-display); color: var(--accent); text-align: right; }
 .controls-help.diagrams { display: flex; flex-direction: column; align-items: center; gap: 14px; }
 /* keyboard: the left of a real one, staggered rows; lit keys show what they do (ui/menus.ts keyboardDiagram) */
-.kb { --u: 52px; display: flex; flex-direction: column; gap: 4px; align-self: stretch;
-  -webkit-mask-image: linear-gradient(90deg, #000 90%, transparent); mask-image: linear-gradient(90deg, #000 90%, transparent); }
+/* (keys as narrow as I in its place needs, within its column (the pause menu's: a container), 9.5 keys and their gaps
+   to it and the faded edge after; the rows cut by the box there) */
+.kb { --u: min(46px, (100cqw - 58px) / 9.5); display: flex; flex-direction: column; gap: 4px; align-self: stretch; overflow: hidden;
+  -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 24px), transparent);
+  mask-image: linear-gradient(90deg, #000 calc(100% - 24px), transparent); }
 .kb-row { display: flex; gap: 4px; }
 .kb-row:first-child .kb-key { height: 34px; }
 .kb-key { position: relative; flex: none; width: calc(var(--u) * var(--w, 1) + 4px * (var(--w, 1) - 1)); height: 54px; box-sizing: border-box; border-radius: 5px;
@@ -109,7 +112,7 @@
 .pb-tabs { width: min(420px, 100%); margin: 0 auto 4px; }
 /* both pages share one cell, so the box keeps the taller page's height on either tab */
 .pb-pages { display: grid; text-align: left; min-height: 0; }
-.pb-page { grid-area: 1 / 1; min-width: 0; padding: 2px 12px; }
+.pb-page { grid-area: 1 / 1; min-width: 0; padding: 2px 12px; container-type: inline-size; }
 .pb-page.off { visibility: hidden; }
 .pause-box .controls-help { gap: 4px 14px; font-size: 14px; width: fit-content; margin: 0 auto; }
 .pb-opts { display: grid; grid-template-columns: 1fr 1fr; gap: 0 32px; align-content: start; }
@@ -122,6 +125,8 @@
 .renderer-note { font-size: 12px; color: var(--ink-dim); }
 .hdr-level { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--ink-dim); cursor: $cursor-hand; }
 .hdr-level > span { width: 76px; }
+.hour-row .hdr-level { width: 100%; }
+.hour-row .hdr-level output { width: 72px; }
 .opt-row .hdr-level input { flex: 1; width: auto; min-width: 0; height: 16px; }
 .hdr-level output { width: 40px; text-align: right; color: var(--ink); font-variant-numeric: lining-nums tabular-nums; }
 #pause .build-info { color: #7d7466; font-size: 12px; text-align: center; user-select: text; }
@@ -129,6 +134,10 @@
 #help .modal-box:has(.diagrams) { width: 960px; max-width: calc(94vw / var(--ui, 1)); max-height: calc(94vh / var(--ui, 1)); }
 .help-cols:has(.diagrams) { display: grid; grid-template-columns: auto 1fr; gap: 24px; align-items: center; }
 @media (max-width: 720px) { .help-cols:has(.diagrams) { grid-template-columns: 1fr; } }
+/* its Got it at the box's right, where a dialog's way on is read ("lets move got it button to the right") */
+/* (the notice board's Restart training beside Got it) */
+.help-actions { display: flex; justify-content: flex-end; align-items: center; gap: 12px; }
+#btn-help-close { display: block; }
 /* short screens (phones held sideways): everything tighter so it fits without scrolling */
 @media (max-height: 520px) {
   .pause-box { padding: 10px 22px 10px; gap: 6px; }

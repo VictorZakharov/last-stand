@@ -1,6 +1,7 @@
 // The game on three's WebGPURenderer, behind `?renderer=webgpu` (docs/research/webgpu.md): the renderer made and
 // given what the WebGL code around it asks of a WebGLRenderer, and the post chain as a node pipeline.
 import * as THREE from 'three';
+import { SIGHT, ROOFS_HALF, SIGHT_LOOK } from './sight';
 import type { ClusterWait } from './meshlets';
 import type { RenderPipeline, WebGPURenderer } from 'three/webgpu';
 import { RUNNING } from './rendererChoice';
@@ -56,6 +57,14 @@ export const webgpuSceneTarget = (): THREE.RenderTarget => sceneTarget!;
 /** a light node of three's as `shadeEnvironmentNodes` reads it */
 type LitNode = { light?: THREE.DirectionalLight; shadowNode?: { x: unknown } | null };
 
+/** what each lit material builds after its lights (`lightAfterLights`) */
+const builtAfterLights: { build(builder: unknown): void }[] = [];
+
+/** `node` built in each lit material's lighting, after its lights (the village's lamps: `core/lampNodes.ts`). */
+export function lightAfterLights(node: { build(builder: unknown): void }): void {
+  builtAfterLights.push(node);
+}
+
 /**
  * The ambient light and the environment's reflection darkened in the sun's shadow, as `shadeEnvironment` in
  * core/renderer.ts has WebGL's chunks do it (`inShadow` the share of each left there). The lights' nodes have all added
@@ -75,6 +84,7 @@ export function shadeEnvironmentNodes(inShadow: { environment: number; ambient: 
   const setupLights = lights.setupLights;
   lights.setupLights = function (builder, nodes) {
     setupLights.call(this, builder, nodes);
+    for (const after of builtAfterLights) after.build(builder);
     if (!builder.object.receiveShadow) return;
     const sun = nodes.find((node) => node.light?.isDirectionalLight && node.light.castShadow)?.shadowNode;
     if (!sun) return;
@@ -884,6 +894,8 @@ export function stillForMeshlets(...roots: THREE.Object3D[]): void {
   if (!RUNNING.meshlets) return;
   for (const root of roots) {
     root.traverse((object) => {
+      // (a ray-march in a box: nothing in it to cull, and its copy in a batch drew its flames as a pale mound)
+      if (object.userData.noMeshlets) return;
       still.add(object);
       const { material } = object as THREE.Mesh;
       if (Array.isArray(material)) material.forEach(givingMaterial);
@@ -1156,6 +1168,65 @@ function sanitized(colour: any): any {
   return select(nan.or(inf), vec4(0, 0, 0, 1), clamp(colour, 0, 64));
 }
 
+/** `colour` in the fog where he can't see (core/sight.ts's `SIGHT_GLSL`, on WebGPU's clip space: depth from 0, y from the top). */
+function seenOnly(colour: any, depthNode: any): any {
+  const { atan, dot, length, max, min, mix, reference, screenUV, select, smoothstep, step, texture, vec2, vec3, vec4 } = tsl as any;
+  const on = reference('value', 'float', SIGHT.uSightOn);
+  const from = reference('value', 'vec2', SIGHT.uSightFrom);
+  const inverse = reference('value', 'mat4', SIGHT.uSightInverse);
+  const sealed = reference('value', 'vec4', SIGHT.uSightSealed);
+  const shutBy = reference('value', 'float', SIGHT.uSightShut);
+  const clip = vec4(screenUV.x.mul(2).sub(1), screenUV.y.mul(2).oneMinus(), depthNode.r, 1);
+  const world = inverse.mul(clip);
+  const place = world.xyz.div(world.w);
+  const to = place.xz.sub(from);
+  const away = length(to);
+  // (atan(0, 0) is undefined, and NaN smears over the frame in the bloom)
+  const toSafe = select(away.lessThan(0.3), vec2(1, 0), to);
+  const across = atan(toSafe.y, toSafe.x).div(Math.PI * 2).add(0.5);
+  const aside = min(away.max(0.01).reciprocal().mul(SIGHT_LOOK.edge), SIGHT_LOOK.edgeAngle).div(Math.PI * 2);
+  const seenAlong = (ray: any): any => {
+    const band = texture(SIGHT.tSight.value, vec2(ray, 0.5));
+    const nearer = smoothstep(band.r.add(SIGHT_LOOK.wallFrom), band.r.add(SIGHT_LOOK.wall), away).oneMinus();
+    const further = smoothstep(band.g.add(SIGHT_LOOK.wallFrom), band.g.add(SIGHT_LOOK.wall), away).oneMinus();
+    return mix(nearer, further, band.b);
+  };
+  let open = seenAlong(across);
+  for (const tap of [-1, -0.75, -0.5, -0.25, 0.25, 0.5, 0.75, 1]) open = open.add(seenAlong(across.add(aside.mul(tap))));
+  open = open.div(9);
+  // (what's seen through a roof, away from him, isn't by the rays: `seenColour`)
+  const eyeWorld = inverse.mul(vec4(clip.x, clip.y, 0, 1));
+  const alongView = place.xz.sub(eyeWorld.xz.div(eyeWorld.w));
+  const pastIt = place.xz.add(alongView.div(max(length(alongView), 0.001)).mul(SIGHT_LOOK.pastFarWall));
+  const noHousePast = smoothstep(0.6, 0.9, texture(SIGHT.tSightRoofs.value, pastIt.div(ROOFS_HALF * 2).add(0.5)).r).oneMinus();
+  const offGround = smoothstep(SIGHT_LOOK.groundFrom, SIGHT_LOOK.groundTo, place.y);
+  const farWall = offGround.mul(noHousePast).mul(reference('value', 'float', SIGHT.uSightFarWall));
+  const throughRoof = smoothstep(0.9, 0.99, min(colour.a, 1)).oneMinus()
+    .mul(smoothstep(SIGHT_LOOK.roofNear, SIGHT_LOOK.roofFar, away)).mul(reference('value', 'float', SIGHT.uSightRoofOne))
+    .mul(max(offGround.oneMinus(), farWall));
+  open = open.mul(throughRoof.oneMinus());
+  const inIt = step(sealed.x, place.x).mul(step(place.x, sealed.z)).mul(step(sealed.y, place.z)).mul(step(place.z, sealed.w));
+  const shut = inIt.mul(shutBy);
+  const over = mix(SIGHT_LOOK.over, SIGHT_LOOK.overSealed, shut);
+  const belowRoofs = smoothstep(SIGHT_LOOK.roofs, SIGHT_LOOK.roofs + SIGHT_LOOK.overSoft, place.y).oneMinus();
+  const roof = texture(SIGHT.tSightRoofs.value, place.xz.div(ROOFS_HALF * 2).add(0.5)).r;
+  const onRoof = min(roof.mul(2), 1);
+  const above = smoothstep(over, over.add(SIGHT_LOOK.overSoft), place.y).mul(max(belowRoofs.mul(onRoof), inIt));
+  const near = away.lessThan(0.3).or(depthNode.r.greaterThanEqual(0.99999));
+  const unseen = select(near, 0, max(open, above).oneMinus().mul(on));
+  const light = dot(colour.rgb, vec3(0.2126, 0.7152, 0.0722));
+  const pressed = light.div(light.add(SIGHT_LOOK.knee)).mul(SIGHT_LOOK.range);
+  const keptOpen = pressed.add(SIGHT_LOOK.floor);
+  const keptShut = pressed.mul(SIGHT_LOOK.sealed).add(SIGHT_LOOK.floor * SIGHT_LOOK.sealedFloor);
+  const kept = mix(keptOpen, keptShut, shut);
+  const fogged = mix(colour.rgb.mul(kept).div(max(light, 0.001)), vec3(...SIGHT_LOOK.tint).mul(kept), SIGHT_LOOK.grey);
+  const letOff = mix(1, min(colour.a, 1), max(smoothstep(0.6, 0.9, roof), throughRoof));
+  const eaves = throughRoof.mul(smoothstep(0.6, 0.9, roof).oneMinus()).mul(on);
+  const shown = mix(colour.rgb, fogged, unseen.mul(letOff));
+  return vec4(mix(shown, vec3(...SIGHT_LOOK.tint).mul(light).mul(SIGHT_LOOK.eaves),
+    eaves.mul(min(min(colour.a, 1).mul(SIGHT_LOOK.eavesBy), 1))), max(colour.a, 1));
+}
+
 /** the light's weights, as the WebGL grade reads an area's and a pixel's */
 const LUM = [0.2126, 0.7152, 0.0722] as const;
 
@@ -1327,7 +1398,7 @@ export async function makePipeline(renderer: THREE.WebGLRenderer, scene: THREE.S
     return drawn;
   };
   const raw = scenePass.getTextureNode('output');
-  const color = sanitized(raw);
+  const color = seenOnly(sanitized(raw), scenePass.getTextureNode('depth'));
   pipeline = new RenderPipeline(gpu);
   // (tone mapped and in sRGB here, the grade after: the pipeline's own conversion off)
   pipeline.outputColorTransform = false;

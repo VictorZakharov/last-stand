@@ -124,6 +124,10 @@ export const limestone = (seed: number): PBRCanvases => pbrCanvases('limestone',
 export const moss = (seed: number): PBRCanvases => pbrCanvases('moss', seed);
 export const grunge = (): PBRCanvases => pbrCanvases('grunge');
 export const wood = (): PBRCanvases => pbrCanvases('wood');
+/** Oak boards side by side, a dark line where they meet, along v (the stash's chest). */
+export const boards = (): PBRCanvases => pbrCanvases('boards');
+/** Hammered iron, shallow dents side by side (the stash's chest's straps). */
+export const hammered = (): PBRCanvases => pbrCanvases('hammered');
 export const burlap = (): PBRCanvases => pbrCanvases('burlap');
 export const forestFloor = (): PBRCanvases => pbrCanvases('forestFloor');
 /** Bare earth: clumpy soil and grit, no litter (where the crypt's dead trees grow). */

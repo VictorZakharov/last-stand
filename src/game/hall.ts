@@ -21,6 +21,7 @@ import { hallSpot } from '../world/heroHall';
 import { heroDetail } from '../entities/models/armor';
 import { applyShadowDetail, qualityLevel } from '../core/quality';
 import type { Profile } from '../types';
+import { HALL, TERRACE } from '../data/village';
 import { heroShare } from './warm';
 
 /** the way the heroes face (to the camera) */
@@ -67,6 +68,8 @@ const RIM = { color: 0x8fb4ff, intensity: 5, distance: 6, behind: 1.3, side: -0.
  *  from rest and settles (eased in a frame by the angle alone, he set off at full speed: turning back to the camera
  *  after Power Strike, the axe's tip went from still to 11 cm a frame) */
 const TURN = 7;
+/** how fast a hero is still turning back to the camera (rad/s), at which he's stood at rest as he's left */
+const TURNING = 0.01;
 /** a drag along the row (ui/heroSelect.ts): how far past either end it may pull the camera (heroes), and how fast the
  *  camera follows it (`stageCamera`'s glide: about a frame and a half behind the finger) */
 const DRAG = { over: 0.35, glide: 24 };
@@ -110,6 +113,34 @@ let dragged: number | null = null;
 let upright = false;
 const reduced = (): boolean => matchMedia('(prefers-reduced-motion: reduce)').matches;
 
+/** the other classes' heroes standing on the plinths in the village's hall (`standHeroes`), each on his class's,
+ *  and the meshes of each that cast a shadow until he stood there (under its roof he casts none: the sun's shadow map
+ *  drew his every part for nothing) */
+let standing: Player[] = [];
+const castersOf = new Map<Player, THREE.Object3D[]>();
+
+/** `p`'s shadows off while he stands in the village's hall, or back as they were. */
+function castShadows(p: Player, on: boolean): void {
+  if (on) {
+    for (const o of castersOf.get(p) ?? []) o.castShadow = true;
+    castersOf.delete(p);
+    return;
+  }
+  const casters: THREE.Object3D[] = [];
+  p.obj.traverse((o) => { if (o.castShadow) { casters.push(o); o.castShadow = false; } });
+  castersOf.set(p, casters);
+}
+
+/** Those standing in the village's hall taken down, their shadows back. */
+function standDown(): void {
+  for (const p of standing) {
+    G.scene.remove(p.obj);
+    castShadows(p, true);
+  }
+  standing = [];
+  waited.clear();
+}
+
 export const hallOpen = (): boolean => heroes.length > 0;
 export const hallHeroes = (): readonly HallHero[] => heroes;
 export const hallFocus = (): number => focus;
@@ -123,11 +154,14 @@ const spot = (i: number): THREE.Vector3 => {
 /**
  * The hall built, the hero of class `focusId` in focus: the lobby's dummies and skill visuals cleared, its hero and
  * a co-op room's partners hidden. Each hero wears his profile in the save slot in play (the local hero's own, a class never played there its
- * starter gear, kept for it if it's chosen). The camera flies in from the lobby's view, or is there at once (`cut`: a
- * first visit's, under the loading screen).
+ * starter gear, kept for it if it's chosen). The camera is there at once (it flew in from the lobby's view: from play,
+ * "remove the effect when entering hero hall, just show heroes immediately").
  */
-export function openHall(focusId: string, cut = false): void {
+export function openHall(focusId: string): void {
+  atRest = new WeakSet();
   if (hallOpen()) return;
+  // (those standing in the village's hall go to the room's plinths with the rest)
+  standDown();
   clearEnemies(); clearProjectiles(); clearEffects(); particles.clear();
   G.player.idle = true;
   G.player.show(false);
@@ -137,11 +171,12 @@ export function openHall(focusId: string, cut = false): void {
   heroes = CLASS_IDS.map((id, i) => {
     const profile = profileOf(id);
     const player = heroIn(id, profile);
-    const at = spot(i);
-    player.spawn.copy(at);
-    player.reset();
-    player.shine = SHINE;
-    place(player, at, ROW.facing);
+    // (at rest since he last showed off, 11 poses saved: each opening took 70 ms of them, the first 50 more)
+    if (stillSince.has(player)) movedAtRest(player, spot(i), ROW.facing);
+    else {
+      standAtRest(player, spot(i), ROW.facing);
+      stillSince.add(player);
+    }
     // (a cold hero hidden from the start, as `updateHall` keeps him: added shown, a first visit's hall drew the other
     // heroes in the frame after the loading screen's last step, compiling their programs there, a task of 2.7 s)
     player.obj.visible = heroShare(player.cls.model) >= 1;
@@ -149,7 +184,119 @@ export function openHall(focusId: string, cut = false): void {
   });
   opened = G.time;
   lights = [flash({ ...KEY, life: 1, hold: Infinity }), flash({ ...RIM, life: 1, hold: Infinity })];
-  focusHall(Math.max(0, CLASS_IDS.indexOf(focusId)), cut);
+  focusHall(Math.max(0, CLASS_IDS.indexOf(focusId)), true);
+}
+
+/** The other classes' heroes standing on the plinths in the village's hall, each on his class's (the lobby's own
+ *  class's empty: he's walking it), idle and glancing round, while `on` (the hero near it, their programs warm); taken
+ *  out of the scene otherwise. One is built a frame at most (a hero's first build is 100 to 250 ms). */
+export function standHeroes(on: boolean, dt: number, ahead = false): void {
+  if (hallOpen()) return;
+  // (built ahead as he nears, a hero a frame, out of the scene: built as he came to the door, each held it 100 to
+  // 250 ms the first time)
+  if (!on && ahead) buildAhead();
+  const want = on ? CLASS_IDS.filter((id) => id !== G.profile.classId) : [];
+  // (those built so far kept while they're the ones wanted: the row is built a hero a frame)
+  if (standing.length > want.length || standing.some((p, i) => p.cls.id !== want[i])) {
+    standDown();
+  }
+  if (standing.length < want.length) {
+    const id = want[standing.length], i = CLASS_IDS.indexOf(id);
+    const player = heroIn(id, profileOf(id));
+    const at = new THREE.Vector3(TERRACE.x + HALL.plinths[i], 0, HALL.plinthZ);
+    at.y = groundHeight(at.x, at.z);
+    // (facing the door, a little in toward the room's middle; at rest already unless the hall's screen has had him: the 11
+    // poses, every time the doorway came on screen, took 47 ms of a frame as the view first turned to it)
+    const facing = -HALL.plinths[i] * 0.06;
+    if (atRest.has(player)) place(player, at, facing);
+    else restOn(player, at, facing);
+    castShadows(player, false);
+    standing.push(player);
+  }
+  // (posed in turn, one a frame, each with the time since his last pose: posed every frame, the two heroes on the
+  // dais took 3 to 6 ms of each frame's update in the hall, which dropped to 62 to 80 frames a second, from play "still
+  // FPS drop when entering the hall"; at 144 a second each is still posed 72 times a second, and an idle stance hides it)
+  for (const p of standing) waited.set(p, (waited.get(p) ?? 0) + dt);
+  if (standing.length) {
+    const p = standing[poseTurn++ % standing.length];
+    p.glances = true;
+    p.update(waited.get(p) ?? dt);
+    waited.set(p, 0);
+  }
+  for (const p of standing) haloRound(p, dt);
+}
+
+/** the time each standing hero has waited since he was last posed, and whose turn it is (`standHeroes`) */
+const waited = new Map<Player, number>();
+let poseTurn = 0;
+
+/** One of the classes' heroes not yet kept built, out of the scene; false once every one is. (The lobby's own class's
+ *  too, for the hall's screen: built as it first opened, it held that frame 110 ms, from play "choosing here freezes".) */
+function buildAhead(): boolean {
+  const id = CLASS_IDS.find((c) => !kept.has(c));
+  if (!id) return false;
+  const player = heroIn(id, profileOf(id));
+  const i = CLASS_IDS.indexOf(id);
+  const at = new THREE.Vector3(TERRACE.x + HALL.plinths[i], 0, HALL.plinthZ);
+  at.y = groundHeight(at.x, at.z);
+  restOn(player, at, -HALL.plinths[i] * 0.06);
+  G.scene.remove(player.obj);
+  return true;
+}
+
+/** The heroes standing in the village's hall built before the lobby shows, a hero a task (`next` between them), as
+ *  its warm-up waits on the GPU (`game/warmup.ts`): built as the hero neared the hall, even a hero a frame, each held
+ *  the village up 90 to 240 ms (from play: "entering the hall", frames of 250 and 90 ms). */
+export async function buildStandingAhead(next: () => Promise<unknown>): Promise<void> {
+  do await next(); while (buildAhead() || spareAhead());
+}
+
+/** A hero of each other class as the lobby's own would be, built ahead and kept out of the scene, for the first time
+ *  he's chosen (`takeSpareHero`): built as he was chosen, it held the click 150 to 290 ms (from play, "choosing here
+ *  freezes ... first time only"). */
+const spares = new Map<string, { player: Player; gear: string }>();
+
+/** One other class's spare built; false once every one is. */
+function spareAhead(): boolean {
+  const id = CLASS_IDS.find((c) => c !== G.profile.classId && !spares.has(c));
+  if (!id) return false;
+  const { equipped } = profileOf(id);
+  const player = new Player(id, equipped);
+  player.stowed();
+  spares.set(id, { player, gear: gearOf(equipped) });
+  return true;
+}
+
+/** Class `id`'s spare in the scene if he's built in `equipped` at this detail (dropped if not), else null. */
+export function takeSpareHero(id: string, equipped: Profile['equipped']): Player | null {
+  const spare = spares.get(id);
+  if (!spare) return null;
+  spares.delete(id);
+  if (spare.gear !== gearOf(equipped)) {
+    spare.player.dispose();
+    return null;
+  }
+  spare.player.unstowed(equipped);
+  return spare.player;
+}
+
+/** Every spare let go, as if none had been built (the lab's canary). */
+export function dropSpareHeroes(): void {
+  for (const spare of spares.values()) spare.player.dispose();
+  spares.clear();
+}
+
+/** The heroes standing on the village's hall's dais. */
+export const heroesStanding = (): readonly Player[] => standing;
+
+/** The class of the hero standing nearest (x, z) in the village's hall, or null. */
+export function standingNear(x: number, z: number): string | null {
+  let best: string | null = null, bestD = Infinity;
+  for (const p of standing) {
+    const d = Math.hypot(p.pos.x - x, p.pos.z - z);
+    if (d < bestD) { best = p.cls.id; bestD = d; }
+  }
+  return best;
 }
 
 /** The profile class `id`'s hero wears in the hall: the lobby's own, else his in the save slot in play; one never
@@ -162,11 +309,14 @@ function profileOf(id: string): Profile {
   return unplayed ? hero.profile : loadProfile(id);
 }
 
+/** What a hero built for `equipped` now is built of: he's built again for anything else. */
+const gearOf = (equipped: Profile['equipped']): string => `${heroDetail()} ${JSON.stringify(equipped)}`;
+
 /** Class `id`'s hero in the gear `profile` wears, in the scene: the one kept from the hall's last opening if he wore
  *  the same at the same detail (a save slot switched, gear changed or the quality's detail since builds him again),
  *  his shadows as the quality has them now. */
 function heroIn(id: string, profile: Profile): Player {
-  const gear = `${heroDetail()} ${JSON.stringify(profile.equipped)}`;
+  const gear = gearOf(profile.equipped);
   let hero = kept.get(id);
   if (hero?.gear !== gear) {
     if (hero) halos.delete(hero.player);
@@ -210,7 +360,8 @@ function glowingHead(player: Player): void {
   });
 }
 
-/** The hall taken down, the lobby's hero shown again; its heroes kept out of the scene for its next opening. */
+/** The hall taken down, the lobby's hero shown again; its heroes kept out of the scene for its next opening, the camera
+ *  back at once (from play, "no need to zoom to new character after choosing"). */
 export function closeHall(): void {
   if (!hallOpen()) return;
   // (a showcase under way let go: a channel left open, Void Lance's hum played on in the lobby)
@@ -222,17 +373,30 @@ export function closeHall(): void {
   lights = [];
   clearProjectiles(); clearEffects(); particles.clear();
   G.arena.showHall(false);
+  // (on the floor he stood on at once: hidden, his height followed the room's floor, and from the terrace he rose 1.6 m
+  // out of the ground back to it, from play "when hero is not picked/cancelled, he rises from ground")
+  for (const p of [G.player, ...partners]) p.place(p.pos, p.facing);
   G.player.show(true);
   for (const p of partners) if (G.players.includes(p)) p.show(true);
   partners = [];
   G.player.idle = false;
-  stageCamera(null);
+  stageCamera(null, true);
 }
 
-/** Hero `i` in focus: the camera comes to him (`cut`: at once), and once it nears him he shows off his skill. */
+/** Hero `i` in focus, the one left standing at rest: the camera comes to him (`cut`: at once; a drag let go glides onto
+ *  him), and soon after he shows off his skill. */
 export function focusHall(i: number, cut = false): void {
   const n = heroes.length;
+  const left = heroes[focus];
   focus = ((i % n) + n) % n;
+  if (left && left !== heroes[focus] && (left.cast || Math.abs(left.spin) > TURNING)) {
+    if (left.cast?.endAt !== undefined) left.player.replay({ t: 'che' });
+    left.cast = null;
+    left.facing = ROW.facing;
+    left.spin = 0;
+    standAtRest(left.player, spot(heroes.indexOf(left)), ROW.facing);
+    stillSince.add(left.player);
+  }
   for (const [j, h] of heroes.entries()) h.due = j === focus && G.time - h.shown > SHOWCASE.again ? G.time + SHOWCASE.after : Infinity;
   stageCamera(shotAlong(focus, G.time), cut || reduced());
 }
@@ -284,6 +448,44 @@ export function frameHall(k: number, up = false): void {
 function place(p: Player, at: THREE.Vector3, facing: number): void {
   Object.assign(p.remote, { x: at.x, z: at.z, vx: 0, vz: 0, f: facing, ax: at.x + Math.sin(facing) * 4, az: at.z + Math.cos(facing) * 4 });
   p.place(at, facing);
+}
+
+/** how long a hero is posed in one go as he's stood at rest (s): past what's left of any action's easing out; then the
+ *  poses given his feet to step into his stance, and each one's time (s) */
+const REST_POSE = 1;
+const REST_STEPS = 10;
+const REST_STEP = 0.1;
+
+/** Hero `p` standing at `at` at once, whatever he was last doing. His last action eases out of his pose over a moment,
+ *  and his feet, planted where that pose had them, stepped back under him as it went, on one bent knee (from play, "the
+ *  previous hero starts irish dancing"), and a foot stepped into his stance after: both are run through before he shows. */
+function standAtRest(p: Player, at: THREE.Vector3, facing: number): void {
+  p.spawn.copy(at);
+  p.reset();
+  p.shine = SHINE;
+  place(p, at, facing);
+  p.update(REST_POSE);
+  place(p, at, facing);
+  for (let step = 0; step < REST_STEPS; step++) p.update(REST_STEP);
+}
+
+/** the heroes stood at rest since the hall's screen last had them, and those who haven't shown off since they were (who
+ *  need no more of it for its row: the dais needs it again, or the warrior stepped 11 cm as he came to stand there) */
+let atRest = new WeakSet<Player>();
+const stillSince = new WeakSet<Player>();
+
+/** `standAtRest`, and kept so. */
+function restOn(p: Player, at: THREE.Vector3, facing: number): void {
+  standAtRest(p, at, facing);
+  atRest.add(p);
+  stillSince.add(p);
+}
+
+/** Hero `p`, at rest, stood at `at`: his feet brought with him, or they stepped there from where they stood. */
+function movedAtRest(p: Player, at: THREE.Vector3, facing: number): void {
+  place(p, at, facing);
+  p.update(REST_POSE);
+  place(p, at, facing);
 }
 
 /** The hall's frame: each hero stepped, the one in focus showing off when due, the lights on him, the camera's
@@ -346,6 +548,7 @@ function turnTo(h: HallHero, dt: number): void {
 
 /** Hero `h` begins his showcase: the cast reported as his game would report it (a drawn shot drawn to full). */
 function showOff(h: HallHero, t: number): void {
+  stillSince.delete(h.player);
   h.due = Infinity;
   h.shown = t;
   const { skill, at, hold = 0 } = CLASSES[h.id].hall.showcase;

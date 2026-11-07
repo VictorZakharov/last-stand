@@ -190,6 +190,30 @@ function intoShadow(camera: THREE.Camera): () => void {
   };
 }
 
+/** The shadow map's own draw: of `lights`' maps, of `scene` as `camera`'s layers show it. */
+export type ShadowDraw = (lights: THREE.Light[], scene: THREE.Scene, camera: THREE.Camera) => void;
+/** Work run after each draw of the shadow map, with that draw to draw more by (`afterShadows`). */
+type AfterShadows = (draw: ShadowDraw, scene: THREE.Scene, camera: THREE.Camera, still: boolean) => void;
+const afterShadow = new Set<AfterShadows>();
+
+/** `after` run after each draw of the shadow map, still or not (`drawingStill`), inside the work round it (a hero's
+ *  shadow cast as one stays set up for it): the lamps' shadows keep their still maps and draw the heroes over them
+ *  (`world/lampShadows.ts`). */
+export function afterShadows(after: AfterShadows): void {
+  afterShadow.add(after);
+}
+
+/** Whether the work after a shadow map's draw may be let go this time, told whether the draw is a still one
+ *  (`skipAfterShadows`). */
+type SkipsAfter = (camera: THREE.Camera, still: boolean) => boolean;
+let skipsAfter: SkipsAfter | null = null;
+
+/** `skips` asked before each draw's work after it (`afterShadows`): true lets it go, the maps left as they stand
+ *  (`world/shadowsOnMove.ts`: on Low, nothing that moves has). */
+export function skipAfterShadows(skips: SkipsAfter): void {
+  skipsAfter = skips;
+}
+
 /** Culls the meshes culled in cells as `renderer` draws `scene`: each render's camera's cells in view packed before
  *  it draws (after the scene's matrices are updated), and the shadow casters shown only while the shadow map draws. */
 export function cullWhileDrawn(scene: THREE.Scene, renderer: THREE.WebGLRenderer): void {
@@ -208,6 +232,8 @@ export function cullWhileDrawn(scene: THREE.Scene, renderer: THREE.WebGLRenderer
     const back = intoShadow(camera);
     try {
       draw(lights, scene, camera);
+      const still = stillOf !== null;
+      if (!skipsAfter?.(camera, still)) for (const then of afterShadow) then(draw, scene, camera, still);
     } finally {
       back();
     }
