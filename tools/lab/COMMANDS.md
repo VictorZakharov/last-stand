@@ -601,7 +601,10 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   ANGLE spends on it; summed by kind, by what uses them, each step's by what uses them (what that step's warm-up
   waits for its links on) and by the point lights they're lit by, the longest listed with their fragment shader's
   size, and a plain lit material's compile as the scene lights it and with its point lights, environment map,
-  shadows and fog each taken away. Its canary is the cache: the longest compiled again with its salt must come back
+  shadows and fog each taken away; `--of <user>` (`--of village`) lists every program that user uses alone, the
+  longest first, after every field setting its programs of a kind apart (what one program fewer would take: the
+  village's first visit compiled 54, 32 of them lit at 1.2 to 2.5 s each, where main's forest lobby has 25).
+  Its canary is the cache: the longest compiled again with its salt must come back
   in under a quarter of its time, and with a new salt in over half. It found the lit programs 36 of the 40 s (0.56
   s each, 16 point lights written out), 23 s once lit in a loop; and the spells' 91 programs 14.4 s, the hero's 6 s,
   the effects' samples 3.9 s, the lobby's biome 3.5 s (now compiled as the arena is built). A minute or more.

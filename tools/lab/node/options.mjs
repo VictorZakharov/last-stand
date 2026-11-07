@@ -1127,6 +1127,12 @@ export const COMMANDS = {
         help: 'compile each program again alone, salted so no cache answers, and time it: by kind, by what uses '
           + 'them, by the point lights they\'re lit by, the longest (a minute or more; its canary: the cache)',
       },
+      of: {
+        kind: 'text',
+        usage: 'user',
+        help: 'with --cost, every program a user uses listed alone, the longest first, with its kind and what '
+          + 'it was made for (a scene\'s top-level object, as "by what uses them" names it: village, forest)',
+      },
       ...COMMON_OPTIONS,
     },
   },

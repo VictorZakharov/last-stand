@@ -20,6 +20,8 @@ import { cacheCanary, costs, lightsText, longestText, partsText, summedText, typ
 export interface ProgramsOptions {
   canary: boolean;
   cost: boolean;
+  /** with `cost`, the user whose every program is listed alone (none when empty) */
+  of: string;
 }
 
 /** the step a program made after the boot is listed under (`watchPrograms`'s) */
@@ -199,8 +201,27 @@ function stepsCostText(measured: ProgramCost[]): string[] {
   });
 }
 
-/** What compiling each of `made` costs, alone (`programCost.ts`), and the cache's canary. */
-async function costReport(made: ProgramMade[]): Promise<Report> {
+/** Each of `measured` that `user` uses, the longest first: its cost, its kind and what it was made for, after
+ *  every field setting apart its programs of a kind (what a program fewer would take). */
+function ofUserText(measured: ProgramCost[], user: string): string[] {
+  const used = measured.filter(({ entry }) => entry.users.has(user)).sort((a, b) => b.ms - a.ms);
+  const total = used.reduce((sum, { ms }) => sum + ms, 0);
+  const each = used.map(({ entry, ms }) => {
+    return `    ${(ms / 1000).toFixed(2)} s: ${groupOf(entry)}, ${entry.step}, for ${entry.owner}`;
+  });
+  const kinds = kindsApart(used.map(({ entry }) => ({
+    kind: kindOf(entry.type, entry.program.cacheKey),
+    fields: fieldsOf(entry.program.cacheKey),
+  })));
+  const apart = kinds
+    .filter(({ count }) => count > 1)
+    .map(({ kind, count, apart: fields }) => `    ${kind}: ${count}, set apart by ${fields.map(apartText).join('; ')}`);
+  return [`  each ${user} uses: ${used.length}, ${(total / 1000).toFixed(1)} s`, ...apart, ...each];
+}
+
+/** What compiling each of `made` costs, alone (`programCost.ts`), and the cache's canary; with `of`, each
+ *  program that user uses listed alone. */
+async function costReport(made: ProgramMade[], of: string): Promise<Report> {
   const gl = G.renderer.getContext() as WebGL2RenderingContext;
   const measured = await costs(gl, made);
   const total = measured.reduce((sum, { ms }) => sum + ms, 0);
@@ -215,6 +236,7 @@ async function costReport(made: ProgramMade[]): Promise<Report> {
     `  by the point lights they're lit by: ${lightsText(measured)}`,
     '  the longest:',
     ...longestText(measured, groupOf),
+    ...(of ? ofUserText(measured, of) : []),
     await partsText(G.renderer, G.scene, G.camera),
     canaryReport.text,
   ];
@@ -234,7 +256,7 @@ export async function programs(lab: Lab, options: ProgramsOptions): Promise<Repo
   const lines = [...listing(boot), `made after the reveal (the lab's set-up): ${later.length}${laterText}`, late.text];
   const counts: Record<string, number> = { programs: boot.length };
   if (options.cost) {
-    const report = await costReport(boot);
+    const report = await costReport(boot, options.of);
     lines.push(report.text);
     problems.push(...report.problems);
     Object.assign(counts, report.counts);
