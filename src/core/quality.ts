@@ -1,7 +1,9 @@
 // Graphics quality: the player's setting (auto / high / medium / low, cookie) and the
-// level in effect. Auto starts from the level it last settled on and steps down the
-// levels while the frame rate stays low; it never steps back up on its own, to avoid
-// oscillating. Every level renders the screen's own pixels: what's cut is other work,
+// level in effect. Auto steps down the levels while the frame rate stays low, and never
+// steps back up within a session, to avoid oscillating; each boot, once the game is shown, it
+// tries the level above the one it last settled on, kept once it holds its frame rate for a
+// window, else left for the settled one at once (`bootAuto`). Every level renders the
+// screen's own pixels: what's cut is other work,
 // never the resolution (from play, "I want to run the game at full phone res, if we need
 // to cut, we need to cut something else, not resolution").
 import { WEBGPU } from './webgpu';
@@ -180,9 +182,10 @@ export function holdAuto(held: boolean): void {
 /** Feed the real (unclamped) frame delta each frame while the game is running. Returns Auto's step, if it took one
  *  (`low`), for the performance trace to mark. */
 export function sampleQuality(dt: number): string | null {
-  if (setting !== 'auto' || atBottom() || autoHeld) return null;
+  if (setting !== 'auto' || (atBottom() && !aboveNext) || autoHeld) return null;
   if (dt > AUTO_QUALITY.longestFrame) return null;   // tab switch, breakpoint: not a performance signal
   if (settle > 0) { settle -= dt; return null; }   // let a level change take effect first
+  if (aboveNext) return tryAbove();
   quick.push(dt);
   quickTime += dt;
   // (far below the target, judged by the window's middle frame, which a hitch doesn't move: to Low at once; a device
