@@ -83,6 +83,14 @@ body.touch .mouse-only { display: none; } body.touch .touch-inline { display: in
   align-items: center; justify-content: flex-end; scale: var(--touch, 1); transform-origin: right top;
   pointer-events: none; }
 #touch-village.hidden, #touch-village .hidden { display: none; }
+// (full screen at the head of its row, beside the minimap, the row a button further in: put beside the minimap, it
+// lay over Map)
+body:has(#touch-village:not(.hidden)) #btn-full { top: 8px; right: calc(var(--minimap-room, 224px) * var(--hud, 1) + 8px); }
+body:has(#touch-village:not(.hidden)) #touch-village {
+  right: calc(var(--minimap-room, 224px) * var(--hud, 1) + 8px + 54px * var(--touch, 1)); }
+// (the lobby's panels open lie over the touch HUD's corner and have a Close of their own: its buttons are hidden
+// till they're put away; under them they took no tap, and beside a tablet's, pause put the panels away instead)
+body.touch:has(#menu:not(.hidden):not(.stowed)) :is(#btn-pause, #btn-full, #btn-view) { display: none !important; }
 #touch-village button { pointer-events: auto; touch-action: manipulation; height: 48px; min-width: 56px; padding: 0 14px;
   border-radius: 24px; border: 1px solid rgba($accent, .55); background: rgba(8, 7, 9, .78); color: #f3e1b0;
   font: 600 15px var(--font-display); letter-spacing: .04em; cursor: $cursor-hand; }
