@@ -20,6 +20,10 @@ const LEFT_OFF_MOST = 0.03;
 const STANDS_TILL = 0.05;
 /** how far off the floor it's plainly lifted, for why his left hand wasn't on it then (m) */
 const LIFTED = 0.1;
+/** how far under his fist its far end may hang as he takes it up getting up (m): it rises head first, from review,
+ *  "the axe is lifted head-down, through his legs" (its head by the floor under his fists, which reading it only once
+ *  off the floor missed) */
+const HEAD_UNDER_MOST = 0.1;
 
 const _grip = new THREE.Vector3();
 const _way = new THREE.Vector3();
@@ -37,12 +41,14 @@ interface Reach {
 
 /** What holds a weapon this frame: the floor, his shoulder, his left hand. */
 export interface Holds {
-  /** its lowest end over the floor (m) */
+  /** its lowest point over the floor (m) */
   over: number;
   /** its line's nearest to his right shoulder's joint (m) */
   shoulder: number;
   /** his left fist closed on its handle */
   left: boolean;
+  /** how far its far end is under his fist (m) */
+  headUnder?: number;
   /** his left arm on the lower grip as the model solved it, or none without one */
   grasp?: LowerGrip;
 }
@@ -61,7 +67,21 @@ export function aloftCanary(): boolean {
   return caught && passed;
 }
 
-/** A two-hander's frames up in one hand while he stands, the highest and where. */
+/** Whether a weapon so held, as he gets up, is lifted head down. */
+export function liftedHeadDown(holds: Holds): boolean {
+  return holds.shoulder > ON_SHOULDER && (holds.headUnder ?? 0) > HEAD_UNDER_MOST;
+}
+
+/** The canary: its far end 30 cm under his fist, by the floor or off it, it reads as head down; level or on his
+ *  shoulder, it doesn't. */
+export function headDownCanary(): boolean {
+  const down: Holds = { over: 0.4, shoulder: 0.5, left: true, headUnder: 0.3 };
+  const caught = liftedHeadDown(down) && liftedHeadDown({ ...down, over: 0 });
+  const others = [{ ...down, headUnder: 0 }, { ...down, shoulder: 0.1 }];
+  return caught && others.every((each) => !liftedHeadDown(each));
+}
+
+/** A two-hander's frames up in one hand while he stands, the highest and where; and lifted head down getting up. */
 export class HeldAloft {
   private reach: Reach | null = null;
   private frames = 0;
@@ -69,6 +89,10 @@ export class HeldAloft {
   private at = '';
   /** his left arm on the lower grip as it was first plainly lifted in one hand, and when, as why it didn't hold it */
   private lifted: { grasp: LowerGrip; at: string } | null = null;
+  /** his hands' stage last frame, to tell getting up (it runs back) */
+  private beforeWas = 0;
+  /** the frames lifted head down getting up, the furthest its far end hung under his fist and where */
+  private headDown = { frames: 0, most: 0, at: '' };
 
   /** Notes this frame, if he stands in a sit's hands stage with a two-hander. */
   observe(lab: Lab, frame: string): void {
@@ -76,6 +100,9 @@ export class HeldAloft {
     const grip = lab.model.tip?.parent;
     if (!pose || pose.w > STANDS_TILL || !grip || !lab.model.offGrip) return;
     const holds = this.holdsOf(lab, grip);
+    const gettingUp = pose.before < this.beforeWas;
+    this.beforeWas = pose.before;
+    if (gettingUp && liftedHeadDown(holds)) this.noteHeadDown(holds.headUnder ?? 0, frame);
     if (!aloftInOne(holds)) return;
     this.frames++;
     if (!this.lifted && holds.grasp && holds.over > LIFTED) this.lifted = { grasp: { ...holds.grasp }, at: frame };
@@ -94,6 +121,21 @@ export class HeldAloft {
       + `(${this.at})${left}`;
   }
 
+  /** Lifted head down getting up as words, or none if it never was. */
+  describeHeadDown(name: string): string {
+    const down = this.headDown;
+    if (down.frames === 0) return '';
+    return `sit: by the ${name}, his two-hander lifted head down getting up on ${down.frames} frames, its far end `
+      + `${(down.most * 100).toFixed(0)} cm under his fist (${down.at})`;
+  }
+
+  private noteHeadDown(under: number, frame: string): void {
+    this.headDown.frames++;
+    if (under <= this.headDown.most) return;
+    this.headDown.most = under;
+    this.headDown.at = frame;
+  }
+
   private holdsOf(lab: Lab, grip: THREE.Object3D): Holds {
     lab.model.root.updateMatrixWorld(true);
     const reach = (this.reach ??= reachOf(grip));
@@ -101,13 +143,22 @@ export class HeldAloft {
     _way.set(0, 1, 0).transformDirection(grip.matrixWorld);
     const scale = _point.setFromMatrixScale(grip.matrixWorld).y;
     const ends = [reach.down, reach.up].map((along) => _end.copy(_grip).addScaledVector(_way, along * scale).clone());
-    const over = Math.min(...ends.map((end) => end.y - groundHeight(end.x, end.z)));
+    const over = lowestOver(grip);
     lab.joints.shoulderR.getWorldPosition(_shoulder);
     const line = new THREE.Line3(ends[0], ends[1]);
     const shoulder = line.closestPointToPoint(_shoulder, true, _point).distanceTo(_shoulder);
     const fists = lab.model.fists ?? [];
-    return { over, shoulder, left: leftOn(fists), grasp: lab.model.lowerGrip ?? undefined };
+    const headUnder = _grip.y - ends[1].y;
+    return { over, shoulder, left: leftOn(fists), grasp: lab.model.lowerGrip ?? undefined, headUnder };
   }
+}
+
+/** How far the lowest point of the weapon hung from `grip` is over the floor under it, read from its vertices as drawn
+ *  (its handle's ends alone, a maul lying on the floor read 10 cm up, held there by its head). */
+function lowestOver(grip: THREE.Object3D): number {
+  _box.setFromObject(grip, true);
+  _box.getCenter(_point);
+  return _box.min.y - groundHeight(_point.x, _point.z);
 }
 
 /** Whether his left fist is closed on its handle. */

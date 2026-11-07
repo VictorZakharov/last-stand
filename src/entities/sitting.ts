@@ -268,7 +268,7 @@ export class Sitting {
       if (this.u > 0) this.u = Math.max(0, this.u - dt / (hands.up ?? SIT.up));
       if (hands.last ? this.u <= 0 : this.u < SIT.handsFrom) st.before = hands.before > 0 ? Math.max(0, st.before - dt / (hands.before * before)) : 0;
     }
-    this.place(me, dt, turnFor(hands.turn, st.before));
+    this.place(me, dt, turnFor(hands.turn, st.before), stepFor(hands.turn, st.before));
     // Hands without a separate stage finish halfway up; the body must finish too, or its weapon jumps to standing.
     if (this.u > 0 || st.before > 0) return true;
     // (up: let go of the seat only as he leaves it, from as near as he stands, or its circles would throw him off it)
@@ -278,17 +278,21 @@ export class Sitting {
   }
 
   /** Placed as far down as he is: his hips over the seat, his feet where he stood, his back to it. */
-  private place(me: Sitter, dt: number, turn = 0): void {
+  private place(me: Sitter, dt: number, turn = 0, step: readonly [number, number] = NO_STEP): void {
     const s = this.spot!, w = smooth(this.u);
     // (the hips come back over the seat as he goes down, sooner than they drop: a body sits back onto a seat)
     const back = smooth(Math.min(1, this.u * 1.25));
-    me.pos.x = this.from.x + (s.x - this.from.x) * back;
-    me.pos.z = this.from.z + (s.z - this.from.z) * back;
+    // (and where he stands stepped by `step`, in the seat's frame)
+    const [left, ahead] = step;
+    const fromX = this.from.x + Math.cos(s.yaw) * left + Math.sin(s.yaw) * ahead;
+    const fromZ = this.from.z - Math.sin(s.yaw) * left + Math.cos(s.yaw) * ahead;
+    me.pos.x = fromX + (s.x - fromX) * back;
+    me.pos.z = fromZ + (s.z - fromZ) * back;
     me.facing = turnedTo(me.facing, s.yaw + turn, dt);
     this.state.w = w;
     this.state.hip = s.hip;
     // (his feet where he stood, from where his hips are now)
-    this.state.foot = Math.hypot(this.from.x - me.pos.x, this.from.z - me.pos.z);
+    this.state.foot = Math.hypot(fromX - me.pos.x, fromZ - me.pos.z);
   }
 
   /** Off the seat he got up from: kept off its circles only as far as he's gone from them. */
@@ -336,6 +340,15 @@ const smooth = (u: number) => u * u * (3 - 2 * u);
 
 /** Of `t` from `a` to `b` (either way round), within 0 and 1. */
 const ramp = (t: number, a: number, b: number): number => Math.min(1, Math.max(0, (t - a) / (b - a)));
+
+const NO_STEP: readonly [number, number] = [0, 0];
+
+/** How far he has stepped as he gets up, his hands' stage at `before` (`SitTurn.step`), in the seat's frame. */
+function stepFor(turn: SitTurn | undefined, before: number): readonly [number, number] {
+  if (!turn?.step) return NO_STEP;
+  const stepped = smooth(ramp(before, 1, turn.inTo));
+  return [turn.step[0] * stepped, turn.step[1] * stepped];
+}
 
 /** How far his facing is turned from the seat's as he gets up, his hands' stage at `before` (`SitHands.turn`). */
 function turnFor(turn: SitTurn | undefined, before: number): number {

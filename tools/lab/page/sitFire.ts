@@ -9,8 +9,9 @@ import type { Lab } from './lab';
 
 /** the flames' reach as a share of the fire's circle, which takes in its ring of stones */
 const FLAMES_OF_CIRCLE = 0.7;
-/** the points read along the weapon, from the grip to the far end */
-const WEAPON_POINTS = 8;
+/** the points read along the weapon, from the end of its handle behind his fist to the far end (from his fist on, a
+ *  greataxe's 78 cm of haft behind it swept through his legs into the fire as he took it up, unread) */
+const WEAPON_POINTS = 12;
 /** how far a weapon lying on the floor may be off where it first lay (m): a float's rounding */
 const LAID_MOST = 0.002;
 /** how far the canaries put a weapon wrong (m) */
@@ -32,9 +33,38 @@ const TOUCH_CLEAR = 0.08;
 const RIM_MOST = 0.03;
 
 const _box = new THREE.Box3();
-const _grip = new THREE.Vector3();
+const _butt = new THREE.Vector3();
+const _inverse = new THREE.Matrix4();
+/** how far each weapon reaches behind its grip, along its grip's down (m, in the grip's space), read once */
+const behindOf = new WeakMap<THREE.Object3D, number>();
 const _tip = new THREE.Vector3();
 const _point = new THREE.Vector3();
+
+/** Where the weapon whose far end is `tip` ends behind the fist that holds it, its handle's butt, into `out`. */
+function buttOf(tip: THREE.Object3D, out: THREE.Vector3): THREE.Vector3 {
+  const grip = tip.parent!;
+  grip.updateWorldMatrix(true, true);
+  let behind = behindOf.get(grip);
+  if (behind === undefined) {
+    behind = reachBehind(grip);
+    behindOf.set(grip, behind);
+  }
+  return out.set(0, behind, 0).applyMatrix4(grip.matrixWorld);
+}
+
+/** How far the meshes hung from `grip` reach behind it along its down (m, in its space, 0 or less). */
+function reachBehind(grip: THREE.Object3D): number {
+  _inverse.copy(grip.matrixWorld).invert();
+  let behind = 0;
+  grip.traverse((object) => {
+    const mesh = object as THREE.Mesh;
+    if (!mesh.isMesh || !mesh.geometry) return;
+    mesh.geometry.computeBoundingBox();
+    _box.copy(mesh.geometry.boundingBox!).applyMatrix4(mesh.matrixWorld).applyMatrix4(_inverse);
+    behind = Math.min(behind, _box.min.y);
+  });
+  return behind;
+}
 
 /** How far `point` is inside a circle round (`x`, `z`) on the floor (m, up to its radius), or 0. */
 export function insideCircle(point: THREE.Vector3, x: number, z: number, radius: number): number {
@@ -116,11 +146,11 @@ export class FireClear {
   /** The nearest a point of the weapon under `STONES_TOP` over the floor at `floorY` is to a circle round the fire of
    *  `radius` (m), or Infinity with none so low. */
   private lowGapOf(tip: THREE.Object3D, radius: number, floorY: number): number {
-    tip.parent!.getWorldPosition(_grip);
+    buttOf(tip, _butt);
     tip.getWorldPosition(_tip);
     let nearest = Infinity;
     for (let i = 0; i <= WEAPON_POINTS; i++) {
-      _point.lerpVectors(_grip, _tip, i / WEAPON_POINTS);
+      _point.lerpVectors(_butt, _tip, i / WEAPON_POINTS);
       if (_point.y - floorY > STONES_TOP) continue;
       nearest = Math.min(nearest, Math.hypot(_point.x - this.seat.ax, _point.z - this.seat.az) - radius);
     }
@@ -153,11 +183,11 @@ export class FireClear {
 
   /** The nearest a point of the weapon from its grip to `tip` is to a circle round the fire of `radius` (m). */
   private gapOf(tip: THREE.Object3D, radius: number): number {
-    tip.parent!.getWorldPosition(_grip);
+    buttOf(tip, _butt);
     tip.getWorldPosition(_tip);
     let nearest = Infinity;
     for (let i = 0; i <= WEAPON_POINTS; i++) {
-      _point.lerpVectors(_grip, _tip, i / WEAPON_POINTS);
+      _point.lerpVectors(_butt, _tip, i / WEAPON_POINTS);
       nearest = Math.min(nearest, Math.hypot(_point.x - this.seat.ax, _point.z - this.seat.az) - radius);
     }
     return nearest;
@@ -202,11 +232,11 @@ export class FireClear {
     const tip = lab.model.tip;
     const grip = tip?.parent;
     if (!tip || !grip) return 0;
-    grip.getWorldPosition(_grip);
+    buttOf(tip, _butt);
     tip.getWorldPosition(_tip);
     let deepest = 0;
     for (let i = 0; i <= WEAPON_POINTS; i++) {
-      _point.lerpVectors(_grip, _tip, i / WEAPON_POINTS);
+      _point.lerpVectors(_butt, _tip, i / WEAPON_POINTS);
       deepest = Math.max(deepest, insideCircle(_point, this.seat.ax, this.seat.az, this.flames()));
     }
     return deepest;
