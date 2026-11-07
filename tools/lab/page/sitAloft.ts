@@ -6,9 +6,9 @@
 
 import * as THREE from 'three';
 import { groundHeight } from '../../../src/world/ground';
-import type { Fist } from '../../../src/types';
+import type { Fist, LowerGrip } from '../../../src/types';
 import type { Lab } from './lab';
-import { FIST_OPEN } from './range';
+import { FIST_OPEN, whyLetGo } from './range';
 
 /** how near the floor an end counts as on it, its weight taken there (m) */
 const ON_FLOOR = 0.04;
@@ -18,6 +18,8 @@ const ON_SHOULDER = 0.2;
 const LEFT_OFF_MOST = 0.03;
 /** how far into his way down he still stands (the sit's share) */
 const STANDS_TILL = 0.05;
+/** how far off the floor it's plainly lifted, for why his left hand wasn't on it then (m) */
+const LIFTED = 0.1;
 
 const _grip = new THREE.Vector3();
 const _way = new THREE.Vector3();
@@ -41,8 +43,8 @@ export interface Holds {
   shoulder: number;
   /** his left fist closed on its handle */
   left: boolean;
-  /** how far his left fist is off its handle (m), or none without one */
-  leftOff?: number;
+  /** his left arm on the lower grip as the model solved it, or none without one */
+  grasp?: LowerGrip;
 }
 
 /** Whether a weapon so held is up in his right hand alone. */
@@ -65,8 +67,8 @@ export class HeldAloft {
   private frames = 0;
   private highest = 0;
   private at = '';
-  /** his left fist's nearest to its handle over those frames, as it says why it wasn't holding it (m) */
-  private leftNearest = Infinity;
+  /** his left arm on the lower grip as it was first plainly lifted in one hand, and when, as why it didn't hold it */
+  private lifted: { grasp: LowerGrip; at: string } | null = null;
 
   /** Notes this frame, if he stands in a sit's hands stage with a two-hander. */
   observe(lab: Lab, frame: string): void {
@@ -76,7 +78,7 @@ export class HeldAloft {
     const holds = this.holdsOf(lab, grip);
     if (!aloftInOne(holds)) return;
     this.frames++;
-    this.leftNearest = Math.min(this.leftNearest, holds.leftOff ?? Infinity);
+    if (!this.lifted && holds.grasp && holds.over > LIFTED) this.lifted = { grasp: { ...holds.grasp }, at: frame };
     if (holds.over <= this.highest) return;
     this.highest = holds.over;
     this.at = frame;
@@ -86,9 +88,8 @@ export class HeldAloft {
   describe(name: string): string {
     if (this.frames === 0) return '';
     const highest = (this.highest * 100).toFixed(0);
-    const left = Number.isFinite(this.leftNearest)
-      ? `, his left fist ${(this.leftNearest * 100).toFixed(0)} cm off its handle at the nearest`
-      : '';
+    const lifted = this.lifted;
+    const left = lifted ? `; as it was first lifted (${lifted.at}), his left hand: ${whyLetGo(lifted.grasp)}` : '';
     return `sit: by the ${name}, his two-hander up in one hand on ${this.frames} frames, ${highest} cm off the floor `
       + `(${this.at})${left}`;
   }
@@ -105,18 +106,13 @@ export class HeldAloft {
     const line = new THREE.Line3(ends[0], ends[1]);
     const shoulder = line.closestPointToPoint(_shoulder, true, _point).distanceTo(_shoulder);
     const fists = lab.model.fists ?? [];
-    return { over, shoulder, left: leftOn(fists), leftOff: leftFist(fists)?.off };
+    return { over, shoulder, left: leftOn(fists), grasp: lab.model.lowerGrip ?? undefined };
   }
-}
-
-/** His left fist, if he has one on a handle. */
-function leftFist(fists: readonly Fist[]): Fist | undefined {
-  return fists.find((fist) => fist.hand === 'left');
 }
 
 /** Whether his left fist is closed on its handle. */
 function leftOn(fists: readonly Fist[]): boolean {
-  const left = leftFist(fists);
+  const left = fists.find((fist) => fist.hand === 'left');
   return !!left && left.curl >= FIST_OPEN && left.off <= LEFT_OFF_MOST;
 }
 
