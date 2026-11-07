@@ -20,6 +20,14 @@ const CANARY_BY = 0.2;
  *  lay on the stones, lit by the flames, "on screen it reads as the weapon put in or against the fire" */
 const RING_CLEAR = 0.15;
 
+/** how high over the floor the fire's ring of stones reaches, with room for the weapon's own width (m): a point of it
+ *  lower than this over the ring touches the stones. From play, of a two-hander laid by a fire: "it should not touch
+ *  rocks/fire" */
+const STONES_TOP = 0.3;
+/** how far outside the ring the weapon's line must keep, low by it, for its sides to keep off the stones (m): half a
+ *  maul's head across */
+const TOUCH_CLEAR = 0.08;
+
 /** how far a shield resting on the floor may be off it (m) */
 const RIM_MOST = 0.03;
 
@@ -57,12 +65,16 @@ export class FireClear {
   /** the nearest a point of it lay to the ring while let go of on the floor (m, less than 0 inside it), and where */
   private laidGap = Infinity;
   private laidAt = '';
+  /** the nearest a point of it low over the floor came to the ring at any moment (m, less than 0 inside it), and where */
+  private lowGap = Infinity;
+  private lowAt = '';
 
   constructor(private readonly seat: Seat) {}
 
   /** Notes this frame's weapon, whatever part of the sit it's in. */
   observe(lab: Lab, frame: string): void {
     if (this.seat.ground) this.noteLaid(lab, frame);
+    if (this.seat.ground) this.noteLow(lab, frame);
     const depth = this.seat.ground ? this.depthOf(lab) : 0;
     if (depth <= 0) return;
     this.frames++;
@@ -88,6 +100,55 @@ export class FireClear {
     if (gap >= this.laidGap) return;
     this.laidGap = gap;
     this.laidAt = frame;
+  }
+
+  /** Notes how near the weapon's points low over the floor came to the ring of stones this frame, held or not. */
+  private noteLow(lab: Lab, frame: string): void {
+    const tip = lab.model.tip;
+    const circle = this.seat.circles[0];
+    if (!tip || !circle) return;
+    const gap = this.lowGapOf(tip, circle.r, lab.player.pos.y);
+    if (gap >= this.lowGap) return;
+    this.lowGap = gap;
+    this.lowAt = frame;
+  }
+
+  /** The nearest a point of the weapon under `STONES_TOP` over the floor at `floorY` is to a circle round the fire of
+   *  `radius` (m), or Infinity with none so low. */
+  private lowGapOf(tip: THREE.Object3D, radius: number, floorY: number): number {
+    tip.parent!.getWorldPosition(_grip);
+    tip.getWorldPosition(_tip);
+    let nearest = Infinity;
+    for (let i = 0; i <= WEAPON_POINTS; i++) {
+      _point.lerpVectors(_grip, _tip, i / WEAPON_POINTS);
+      if (_point.y - floorY > STONES_TOP) continue;
+      nearest = Math.min(nearest, Math.hypot(_point.x - this.seat.ax, _point.z - this.seat.az) - radius);
+    }
+    return nearest;
+  }
+
+  /** The touch canary: low over the stones it must read as touching, and low well clear of them, not. */
+  caughtTouch(): boolean {
+    const on = new FireClear(this.seat);
+    on.lowGap = 0;
+    const clear = new FireClear(this.seat);
+    clear.lowGap = TOUCH_CLEAR + CANARY_BY;
+    return on.describeTouch('canary') !== '' && clear.describeTouch('canary') === '';
+  }
+
+  /** How near the weapon came to the ring low over the floor, as words, or none if it never came low by a fire. */
+  summaryTouch(name: string): string {
+    if (this.lowGap === Infinity) return '';
+    const gap = (this.lowGap * 100).toFixed(0);
+    return `    by the ${name}, his weapon low over the floor ${gap} cm outside the fire's ring of stones at the nearest`;
+  }
+
+  /** The weapon touching the ring of stones (or within them) as a fault, or none. */
+  describeTouch(name: string): string {
+    if (this.lowGap >= TOUCH_CLEAR) return '';
+    const gap = (this.lowGap * 100).toFixed(0);
+    return `sit: by the ${name}, his weapon touched the fire's ring of stones, low over the floor ${gap} cm outside it `
+      + `(at least ${TOUCH_CLEAR * 100}; ${this.lowAt})`;
   }
 
   /** The nearest a point of the weapon from its grip to `tip` is to a circle round the fire of `radius` (m). */
