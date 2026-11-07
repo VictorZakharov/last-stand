@@ -32,8 +32,6 @@ export interface QualityPreset {
   /** whether the village draws what moves into its kept shadow maps only on frames it moved
    *  (`world/shadowsOnMove.ts`) */
   shadowsOnMove: boolean;
-  /** the share of the scene's pixels each way bloom draws at (`setBloomShare` in core/renderer.ts) */
-  bloomShare: number;
   /** the rounds a skirt's cloth is draped over the limbs a frame (`setDrapeRounds` in entities/models/armor.ts) */
   drapeRounds: number;
   /** whether the frame may be shown in HDR on a display in HDR mode (`setHdrAllowed` in core/hdr.ts): its copy of
@@ -42,6 +40,9 @@ export interface QualityPreset {
   /** whether the props sculpted for close looks are drawn coarser (the crypt's skulls: `setSkullDetail` in
    *  world/skull.ts) */
   coarseProps: boolean;
+  /** the share of the scene's pixels each way bloom draws at (`setBloomShare` in core/renderer.ts): Low's half,
+   *  a quarter of the pixels (an S25 Edge's bloom was 6 ms of an 80 ms frame at full res) */
+  bloomShare: number;
 }
 
 export const QUALITY: Record<QualityLevel, QualityPreset> = {
