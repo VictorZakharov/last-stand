@@ -81,16 +81,17 @@ const PICK = tunable('warriorPick', {
     0.33,  1,   0.3,  0.11, 0.54, 0,    1,   0,   0.3,  0.03, 0.33,  1,    0,    0,     0.12, 0.5,  0.5, 0.2, 0,   0.25,
     // (deeper over at the bottom than the clip's person, whose object stood 15 cm up: this one lies on the floor)
     0.45,  1,   0.55, 0.08, 0.75, 0,    1,   0,   0.3,  0.03, 0.33,  1,    0,    0,     0.15, 0.5,  1,   0.6, 0,   0.25,
-    // (its head tipped up off the floor, its butt left on it to turn about, as a heavy tool is taken up)
-    0.55,  1,   0.55, 0.08, 0.6,  0,    0,   1,   0.3,  0.03, 0.33,  0.35, 0.9,  0.1,   0.3,  0.6,  1,   1,   0,   0.1,
-    // (his legs drive him up, the haft upright before his chest, where his fist took it: the keys say where it went)
-    0.75,  1,   0.03, 0,    0.15, 0,    0,   1,   0.1,  0.72, 0.29,  0.15, 1,    0.05,  0.3,  0.6,  1,   1,   0,   -0.05,
-    // (held still upright by both hands while his right one slides up it: on his shoulder his right fist is 88 cm up
-    // it, near its head)
-    0.84,  1,   0,    0,    0.05, 0,    0,   0,   0.1,  0.72, 0.29,  0.15, 1,    0.05,  0.85, 0.6,  1,   1,   0,   0,
-    // (tipped back over his right shoulder, its butt coming forward, the left hand letting go: the carry's own numbers
-    // at the end, `live hold 0` says them)
-    0.92,  1,   0,    0,    0.03, 0,    0,   1,   0.06, 0.8,  0.5,   -0.1, 0.85, -0.4,  0.88, 0.6,  1,   0.4, 0.4, 0,
+    // (its head tipped up off the floor, its butt left on it to turn about, as a heavy tool is taken up: leaning out
+    // to his right, clear of his face, where it stood up before his face from ahead of him on 50 frames)
+    0.55,  1,   0.55, 0.08, 0.6,  0,    0,   1,   0.3,  0.03, 0.33,  -0.15, 0.95, 0.15,  0.3,  0.6,  1,   1,   0,   0.1,
+    // (his legs drive him up, the haft upright at his right side, its butt by his knee)
+    0.75,  1,   0.03, 0,    0.15, 0,    0,   1,   0.25, 0.45, 0.3,   -0.05, 1,    0.05,  0.3,  0.6,  1,   1,   0,   -0.05,
+    // (held still by both hands while his right one slides up it at his side, never across his chest: on his shoulder
+    // his right fist is 88 cm up it, near its head; slid up before his chest, his forearm went 22 cm into it)
+    0.84,  1,   0,    0,    0.05, 0,    0,   0,   0.25, 0.45, 0.3,   -0.05, 1,    0.05,  0.85, 0.6,  1,   1,   0,   0,
+    // (tipped back over his right shoulder, its butt coming forward, both hands on it until it's there: the carry's own
+    // numbers at the end, `live hold 0` says them)
+    0.92,  1,   0,    0,    0.03, 0,    0,   1,   0.1,  0.7,  0.55,  -0.15, 0.85, -0.45, 0.88, 0.6,  1,   1,   0.4, 0,
     1,     1,   0,    0,    0,    0,    0,   1,   0.03, 0.79, 0.89,  -0.26, 0.67, -0.7, 0.88, 0.5,  1,   0,   1,   0,
   ],
 }, { keys: PICK_COLUMNS.length }, { keys: PICK_COLUMNS });
@@ -1646,6 +1647,8 @@ export function buildWarrior(): Model {
     from: [new THREE.Quaternion(), new THREE.Quaternion(), new THREE.Quaternion()],
     fromAt: new THREE.Vector3(),
     fromSlant: 0,
+    /** whether `from` was kept standing still at least once */
+    fromStill: false,
     /** the path it comes down, in his frame: taken in both hands before him, then lowered till its far end is on the ground */
     frontAt: new THREE.Vector3(),
     frontWay: new THREE.Vector3(),
@@ -1736,6 +1739,9 @@ export function buildWarrior(): Model {
   const _pickHeld = new THREE.Vector3(), _pickSeatedAt = new THREE.Vector3(), _pickSeatedQ = new THREE.Quaternion();
   /** how far the weapon is still eased from where the keyed pick-up left it in the world (1 to 0, over `PICK_OFF` s) */
   let pickOff = 0;
+  /** by a fire, taking it up: his right hand sliding along it, and how far that hand is still open, off it */
+  let pickSliding = false;
+  let pickOpen = 0;
   const PICK_OFF = 0.3;
   const _pickLastAt = new THREE.Vector3(), _pickLastQ = new THREE.Quaternion();
   const _slideWay = new THREE.Vector3(), _slideScale = new THREE.Vector3();
@@ -1940,6 +1946,8 @@ export function buildWarrior(): Model {
     grip.getWorldPosition(_pickLastAt);
     grip.getWorldQuaternion(_pickLastQ);
     weapon.group.userData.laid = lies >= 1;
+    pickSliding = lies <= 0 && pickAt('held', k) < 1;
+    pickOpen = 1 - on;
     // (where it lay is kept, `laidAt`, and his fist has it as the keys place it: not laid, so it's seated again once he's up)
     twoSit.laid = false;
     twoSit.keyedUp = true;
@@ -3561,7 +3569,8 @@ export function buildWarrior(): Model {
       // fist on its own, from play "maul cannot slide up without jedi force he doesn't have")
       if (upright) buttDown(held!, planting, before, twoSit.settingDown);
       // (said on the grip, which `lab sit` follows as the piece hung from his hand)
-      grip.userData.slidesAlong = upright;
+      // (his hand sliding up it to take it again higher, the weapon held still by the keys: `held`)
+      grip.userData.slidesAlong = upright || pickSliding;
       grip.userData.stoodOn = false;
       if (!pickKeyed) layDown(st.sit!, held!, floor);
       const stuck = inGround && turned > 0 && floorRest(held!) === SIT_HANDS.swordRest;
@@ -3576,7 +3585,10 @@ export function buildWarrior(): Model {
       // (the arm as it's drawn standing still, which it's lifted from as he sits and carried in as he's taken it up
       // again: kept as he walked to the seat, his arm caught mid-swing, the pick-up ended on another carry than the one he
       // stood in once up, and the weapon turned a metre at its tip in a frame)
-      if (move < 0.05) {
+      // (and walking, until he has stood still once: `lab sit` walks him to the fire from his set-up, and no carry was
+      // kept at all, so he ended the pick-up holding it upright at his side, his arm hanging)
+      if (move < 0.05 || !twoSit.fromStill) {
+        twoSit.fromStill ||= move < 0.05;
         _rightArm.forEach((joint, i) => twoSit.from[i].copy(joint.quaternion));
         twoSit.fromAt.copy(j.shoulderR.position);
         twoSit.fromSlant = slantR;
@@ -3765,6 +3777,8 @@ export function buildWarrior(): Model {
     if (held && twoSits && twoSit.stood) holdStood(held, slantR);
     else if (held) {
       hold(handR, along(grip), held.r, undefined, slantR);
+      // (reaching for it as it lies, his hand open until it's on it: closed, his fist was 90 cm off its handle)
+      if (pickKeyed && pickOpen > 0) loosen(handR, SIT_HANDS.offOpen * smooth(pickOpen));
       // (off what he laid down, its hand as an empty one lies on his knee)
       if (twoSit.laid) {
         const off = smooth(st.sit?.after ?? 0);
@@ -3823,7 +3837,7 @@ export function buildWarrior(): Model {
     get fists() {
       const fists: Fist[] = [];
       // (a weapon stood or laid down as he sits isn't held by its grip: his palm on its top, or his hand on a knee)
-      if (held && !twoSit.laid) fists.push({ hand: 'right', ...fistOn(handR, grip, held.r) });
+      if (held && !twoSit.laid && !(pickKeyed && pickOpen > 0.01)) fists.push({ hand: 'right', ...fistOn(handR, grip, held.r) });
       if (offHeld && !sheathed) fists.push({ hand: 'left', ...fistOn(handL, gripL, offHeld.r) });
       else if (held?.off != null && grasp.held) fists.push({ hand: 'left', ...fistOn(handL, offGrip, held.r) });
       return fists;
