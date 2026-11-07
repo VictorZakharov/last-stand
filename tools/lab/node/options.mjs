@@ -23,7 +23,7 @@ const KINDS = [
 /** the UI's states `ui` pictures, in the order it runs them: the lobby's, then the run's (page/ui.ts `UiState`) */
 export const UI_STATES = [
   'lobby', 'tooltip', 'glow', 'help', 'saves', 'heroes', 'readying', 'readyingHeroes', 'clicked', 'views',
-  'behindProps',
+  'behindProps', 'sitHint',
   'logLobby', 'perfAsk',
   'heroesWarming', 'skillTipsTouch', 'sheetTouch', 'litTouch', 'buttonsTouch',
   'run', 'scores', 'perf', 'decision', 'perfAskBreak', 'pause', 'pauseSettings', 'pauseAbandon', 'summary', 'skillTips', 'log', 'logTouch',
@@ -367,7 +367,8 @@ export const COMMANDS = {
           + 'key pressed after it: '
           + 'where the focus went), views (the lobby\'s camera switched through its views: the labels over the '
           + 'dummies against their anchors), behindProps (a column planted between the camera and each dummy\'s label: '
-          + 'every label hidden behind it, every one shown with it gone; the canary plants it aside), run (the HUD '
+          + 'every label hidden behind it, every one shown with it gone; the canary plants it aside), sitHint (the mouse rested '
+          + 'on the nearest seat: the hint E Sit shown within the window, gone once it leaves; the canary hides it), run (the HUD '
           + 'with a hurt foe\'s bar and damage numbers), '
           + 'scores, perf, decision, pause, summary, skillTips (each skill\'s tooltip on the hotbar opened by the '
           + 'mouse, within the window; the tallest pictured; skillTipsTouch: the lobby\'s by a finger\'s tap), log '
@@ -1617,6 +1618,26 @@ export const COMMANDS = {
         help: 'plant a fault the measure must catch: the right shoulder turned for a frame after the showcase '
           + '(with --glow, the tip\'s glow lit up three times over for a second)',
       },
+      ...SETUP_OPTIONS,
+      ...COMMON_OPTIONS,
+    },
+  },
+  sit: {
+    help: 'an idle hero\'s sit on a log or a stone: walked to from 3 m off, sat on his side of it, his hips on its '
+      + 'top, his feet down or hanging as its height has them, every joint within its range, glancing round; then '
+      + 'asked to act, a tap and a key held: up first each time, a tap left undone, a held key done once he\'s up',
+    options: {
+      seats: { kind: 'list', usage: 'a,b', help: 'the seats tried: log, stone, column, fire, brazier (all by default)' },
+      poses: {
+        kind: 'switch',
+        help: 'no measures: the warrior sat, each way of holding his gear on each seat, numbered pictures from three sides',
+      },
+      frames: { kind: 'switch', help: 'list every frame his skirts jerked as he sat (their first 40)' },
+      trace: {
+        kind: 'text', usage: 'piece',
+        help: 'list a carried piece frame by frame (shield, Greatsword...): how far it went and turned, held or not',
+      },
+      canary: { kind: 'switch', help: 'plant a fault the measure must catch: his body raised off the seat as he sits' },
       ...SETUP_OPTIONS,
       ...COMMON_OPTIONS,
     },

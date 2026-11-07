@@ -63,6 +63,7 @@ import { initSync } from './net/sync';
 import { initSession, joinRoom, invitedRoom, sendLook, sendLobby, sendStart, sendControl, syncAway, updateSession, playSession, partnerInRun } from './net/session';
 import { isCoop, isGuest, isHost, simulates } from './net/role';
 import { initCoop, renderCoop, updateCoopHud, touchReviving } from './ui/coop';
+import { updateSitHint } from './ui/sitHint';
 import { updateScoreboard } from './ui/scoreboard';
 import type { BiomeId } from './data/biomes';
 import type { Profile } from './types';
@@ -532,6 +533,7 @@ function update(dt: number): void {
   perfLap('enemies');
   updateSession(dt, G.player.reviving);
   syncPractice();
+  updateSitHint();
   if (G.mode === 'run') {
     updateHud();
     updateCoopHud();
@@ -544,7 +546,7 @@ function update(dt: number): void {
   const vs = heroSelectOpen() ? heroSelectShift() : view === 'top' || input.touchMode ? lobbyViewShift() : { x: 0, y: 0 };
   setViewShift(vs.x, vs.y);
   const focus = focusPlayer();
-  updateCamera(dt, focus.pos, focus.model.height);
+  updateCamera(dt, focus.pos, focus.framedHeight());
   updateLowLife(dt);
   // through the eyes the body would fill the view (it still casts, animates and blocks): only the
   // arms and what they hold show
