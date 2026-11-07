@@ -41,6 +41,8 @@ export interface Holds {
   shoulder: number;
   /** his left fist closed on its handle */
   left: boolean;
+  /** how far his left fist is off its handle (m), or none without one */
+  leftOff?: number;
 }
 
 /** Whether a weapon so held is up in his right hand alone. */
@@ -63,6 +65,8 @@ export class HeldAloft {
   private frames = 0;
   private highest = 0;
   private at = '';
+  /** his left fist's nearest to its handle over those frames, as it says why it wasn't holding it (m) */
+  private leftNearest = Infinity;
 
   /** Notes this frame, if he stands in a sit's hands stage with a two-hander. */
   observe(lab: Lab, frame: string): void {
@@ -72,6 +76,7 @@ export class HeldAloft {
     const holds = this.holdsOf(lab, grip);
     if (!aloftInOne(holds)) return;
     this.frames++;
+    this.leftNearest = Math.min(this.leftNearest, holds.leftOff ?? Infinity);
     if (holds.over <= this.highest) return;
     this.highest = holds.over;
     this.at = frame;
@@ -81,8 +86,11 @@ export class HeldAloft {
   describe(name: string): string {
     if (this.frames === 0) return '';
     const highest = (this.highest * 100).toFixed(0);
+    const left = Number.isFinite(this.leftNearest)
+      ? `, his left fist ${(this.leftNearest * 100).toFixed(0)} cm off its handle at the nearest`
+      : '';
     return `sit: by the ${name}, his two-hander up in one hand on ${this.frames} frames, ${highest} cm off the floor `
-      + `(${this.at})`;
+      + `(${this.at})${left}`;
   }
 
   private holdsOf(lab: Lab, grip: THREE.Object3D): Holds {
@@ -96,13 +104,19 @@ export class HeldAloft {
     lab.joints.shoulderR.getWorldPosition(_shoulder);
     const line = new THREE.Line3(ends[0], ends[1]);
     const shoulder = line.closestPointToPoint(_shoulder, true, _point).distanceTo(_shoulder);
-    return { over, shoulder, left: leftOn(lab.model.fists ?? []) };
+    const fists = lab.model.fists ?? [];
+    return { over, shoulder, left: leftOn(fists), leftOff: leftFist(fists)?.off };
   }
+}
+
+/** His left fist, if he has one on a handle. */
+function leftFist(fists: readonly Fist[]): Fist | undefined {
+  return fists.find((fist) => fist.hand === 'left');
 }
 
 /** Whether his left fist is closed on its handle. */
 function leftOn(fists: readonly Fist[]): boolean {
-  const left = fists.find((fist) => fist.hand === 'left');
+  const left = leftFist(fists);
   return !!left && left.curl >= FIST_OPEN && left.off <= LEFT_OFF_MOST;
 }
 
