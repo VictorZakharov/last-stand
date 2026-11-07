@@ -28,7 +28,7 @@ import { initGround, updateGround, clearGround } from './game/groundItems';
 import { saveSlot, setSaveSlot } from './loot/saveSlots';
 import { initRun, startRun, updateRun, continueRun, bankRun, abandonRun, playerOut, hostLeft, endRun } from './game/run';
 import { updateFloaters } from './ui/floaters';
-import { initHud, showHud, buildHotbar, banner, showDecision, hideDecision, resetDecision, updateHud, updateVillageMinimap, renderSpoils } from './ui/hud';
+import { initHud, showHud, buildHotbar, banner, showDecision, hideDecision, resetDecision, updateHud, updateVillageMinimap, readyMinimap, renderSpoils } from './ui/hud';
 import { initMenus, layOutMenuAhead, showMenu, showSummary, hideSummary, showPause, menuStowed, lobbyPractice, selectedWave, lobbyViewShift, renderMenu, markNew, clearOverlays, openPanels, panelsOpen, showHelp, helpOpen, hideHelp, changeHero as askForHeroes, type Panels } from './ui/menus';
 import { initVillageCard, showVillageCard, villageCardOf } from './ui/villageCard';
 import { initVillage, prepareLamps, updateVillage, closedFrom, inYard, villageObject, goUse, goTo, objectNear, heroLookedAt } from './game/village';
@@ -224,6 +224,7 @@ async function boot() {
   }
   await loadingStep('Lighting the lobby', 0.85);
   render();   // one full frame compiles the post-processing passes (bloom, grade...)
+  readyMinimap();
   pinPrograms(renderer);
   // (from here a program not made by a warm-up is a hitch: marked once the fight's were warm, a new build's lobby, its
   // fight cold till Start, had the perf report count every program late, `lab programs --cold`)

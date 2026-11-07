@@ -196,7 +196,7 @@ export async function warmLobby(hall = false): Promise<void> {
     objects: extra, leaveOut, before: mapsArrived, also: () => compileOutline(dummies()),
   });
   // (its compile is made as it's called, the scene walked before the foes are built, then the hall's heroes)
-  const ahead = buildAhead(theFight()).then(() => buildStandingAhead(nextTask));
+  const ahead = buildAhead(theFight()).then(() => buildStandingAhead(nextTask)).then(buildHeroesAhead);
   const took = await warming;
   performance.measure('warm the lobby', { start, duration: performance.now() - start, detail: took });
   hero.dispose();
@@ -289,6 +289,24 @@ async function buildAhead(parts: Part[]): Promise<void> {
 }
 
 /** the models of the classes other than the lobby's hero's */
+/** the other classes' heroes with all they can wear, built before the lobby shows (`buildHeroesAhead`), each taken
+ *  by his part's build */
+const heroesAhead = new Map<string, Model>();
+
+/**
+ * The other heroes built as the lobby's warm-up waits on the GPU, a task each, for their warm-up behind the lobby
+ * (or under a loading bar): built there, each hero's build was a task of 75 to 135 ms that held the village's frame
+ * up, on a first visit and a return alike (`npm run stalls -- --scenario boot --js`, the lobby's frames held up:
+ * `warmInTasks`, `heroAllWorn`). Their skills' samples are made with the part, as the lobby's warm-up clears the
+ * effects it ends with.
+ */
+async function buildHeroesAhead(): Promise<void> {
+  for (const model of otherHeroModels()) {
+    await nextTask();
+    if (!heroesAhead.has(model)) heroesAhead.set(model, heroAllWorn(model, AWAY));
+  }
+}
+
 const otherHeroModels = (): string[] =>
   [...new Set(Object.values(CLASSES).map((c) => c.model))].filter((m) => m !== G.player.cls.model);
 
@@ -314,7 +332,8 @@ function heroModelParts(): Part[] {
   return otherHeroModels().map((model): Part => ({
     name: model,
     build() {
-      const hero = heroAllWorn(model, AWAY);
+      const hero = heroesAhead.get(model) ?? heroAllWorn(model, AWAY);
+      heroesAhead.delete(model);
       const parts = [hero.root, ...skillSamples(model)];
       return { compile: parts, objects: parts, drawn: [], outlined: [], done: () => hero.dispose() };
     },

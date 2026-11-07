@@ -61,6 +61,11 @@ export function updateVillageMinimap(dt: number, visible: boolean): void {
   if (visible) tickMinimap(dt);
 }
 
+/** The minimap drawn once under the loading screen: its village is drawn into a canvas of its own the first time,
+ *  20 ms that held the village's frame up 60 ms as the minimap first showed after the reveal (`npm run stalls --
+ *  --scenario boot --js`: `drawVillageOnMinimap`). */
+export function readyMinimap(): void { drawMinimap(); }
+
 /** The minimap drawn when its turn has come: a 200px canvas, so 30 Hz is plenty. */
 function tickMinimap(dt: number): void {
   minimapT -= dt;

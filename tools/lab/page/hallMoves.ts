@@ -11,6 +11,7 @@
 import * as THREE from 'three';
 import { G } from '../../../src/state';
 import * as hall from '../../../src/game/hall';
+import { ABANDON_HOLD_MS } from '../../../src/ui/menus';
 import { sfx } from '../../../src/core/audio';
 import { makeItem } from '../../../src/loot/items';
 import type { WeaponStyle } from '../../../src/loot/loadout';
@@ -92,12 +93,15 @@ function holdInProfile(): void {
 }
 
 /** The run the set-up held in its countdown abandoned from the pause menu, back to the lobby (Change hero is the
- *  lobby's). */
+ *  lobby's). Abandon acts only once held (`lab ui --states pauseAbandon` checks the hold): its hold made 0 ms for
+ *  the click, as clicked it stayed in the run and every command leaving it timed out. */
 export async function toLobby(lab: Lab): Promise<void> {
   await lab.step(1, () => ({ keys: ['escape'] }));
   const abandon = document.getElementById('btn-abandon');
   if (!abandon) throw new Error('lab: hall: no pause menu to leave the run by');
+  abandon.dataset.holdMs = '0';
   await lab.clickOn(abandon);
+  abandon.dataset.holdMs = String(ABANDON_HOLD_MS);
   await lab.until(() => G.mode === 'menu', LOBBY_FRAMES, 'hall: the run giving way to the lobby');
   await lab.step(LOBBY_FRAMES);
 }
