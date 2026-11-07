@@ -46,7 +46,7 @@ import type { ActionState, AnimState, Blade, Fist, Gear, KeyedArm, LowerGrip, Mo
 /** sat, how a hand that holds a weapon turns as it goes down to his thigh (`models/sit.ts`, `restHands`), the left's
  *  and the right's, the weapon pointing down to where it's stood; an empty hand rests palm down. The small rise keeps
  *  his shield-side forearm over the thigh. */
-const SIT_HANDS = tunable('warriorSit', { roll: [0, 0], rise: 0.005, slant: 0.1, along: 0.35, over: 0.09, armIn: 1, floorIn: 0.7, arc: 0.15, lapR: [0.85, -0.1, 0.5], fistBelow: 0.08, swordRest: [-0.03, -0.32, -0.5, 0.05, 0.3, 0.12, 0, 1.08, 0.2], maulRest: [0.05, 0.05, -0.58, 0.1, 0.25, 0.7, -0.4, 0.93, 0.32], axeRest: [-0.01, 0.13, -0.54, 0.1, 0.25, 0.5, -0.4, 0.95, 0.32], stuckIn: 0.32, plantX: -0.4, plantPole: [-0.5, -1, -0.6], flatEdge: [-1, 0, 0], frontAt: [-0.12, 1.34, 0.38], frontWay: [-0.05, 0.6, 0.8], leanTo: 0.12, regripOpen: 0.7, leanDraws: 0.4, flatSide: [1, 0, 0], lowHand: [-0.14, 0.54], lowEndX: -0.45, pathOut: 0.25, besideFrom: 0.6, besideBy: 0.35, handDownBy: 0.7, offOpen: 0.75, floorFrontAt: [-0.2, 1.05, 0.35], floorFrontWay: [-0.9, 0.35, 0.25], floorFlat: [0.25, 0.25, 0.9], floorLowHand: [-0.35, 0.25], floorLowY: 0.58, floorCrouch: [0.22, 0.08, 0.22], floorHaftAhead: 0.13, floorOut: [-0.6, 0.8], floorLowOut: [-0.8, 0.6], floorPathOut: 0, floorPathAhead: 0.18, floorGripY: 0.04, floorGripZ: 0.2, floorLaidFlat: [0, -1, 0], liftBy: 0.34, floorLiftBy: 0.42, floorTurnIn: 0.88, floorFistFromButt: 0.12, floorHandsApart: 0.42, floorStandOff: 0.45, floorPickFist: [0.15, 0.8, 0.3], floorPickTilt: [0.6, 0.55], floorHeadHeld: 0.25, floorShoulderAt: 0.2, floorTakeFrom: 0.9, floorTakeBy: 0.8, floorPickFrom: 0.75, floorPickCrouch: [0.22, 0.22, 0.85], floorPickDownFrom: 0.97, lowerBy: 0.72, helpFrom: 0.02, helpBy: 0.14, helpOff: 0.4, floorLetGo: 0.85, plantFrom: 0.15, plantBy: 0.8, lowerOver: 0.04, caneAhead: [0.1, -0.25, 1], seatHip: 0.86, sinkBy: 1, leftAbove: -0.13, beside: [-0.5, 0.09, 0.1], besidePole: [-1, -0.1, -0.2], besideAhead: 0.95, twoR: [0.8, -0.08, 0.6], twoL: [-0.8, -0.2, 0.6], twoAlong: [0, 0], twoOverL: 0.09, viaR: [-0.15, 0.2, 0.95], viaL: [0.15, 0.2, 0.95], viaAt: 0.45, floorBack: 0, viaFloorR: [-0.15, 0.5, 0.85], viaFloorL: [0.15, 0.5, 0.85], kneesR: [0.88, -0.2, 0.42], kneesL: [-0.7, -0.3, 0.65], turnFrom: 0.15, turnLate: 0.5, turnIn: 0.12, shieldOut: 0.09, upLeftAbove: 0.22, upLeftFrom: 0.42, upPlantFrom: 0.55, upPlantBy: 0.75, plantLetGo: 0.8, upWay: [-0.08, 0.99, 0.02], upRestAt: [-0.35, -0.15, 0.62], upLeanWay: [-0.1, 0.95, 0.25], upLeanFrom: 0.6, upSlipFrom: 0.25, upSlipBy: 0.6, upTurn: [0.3, -0.9, 0.2], upButt: 0.56, floorShieldOut: 0.12, floorShieldLow: 0.14, edgeDown: 0.2, });
+const SIT_HANDS = tunable('warriorSit', { roll: [0, 0], rise: 0.005, slant: 0.1, along: 0.35, over: 0.09, armIn: 1, floorIn: 0.7, arc: 0.15, lapR: [0.85, -0.1, 0.5], fistBelow: 0.08, swordRest: [-0.03, -0.32, -0.5, 0.05, 0.3, 0.12, 0, 1.08, 0.2], maulRest: [0.05, 0.05, -0.58, 0.1, 0.25, 0.7, -0.4, 0.93, 0.32], axeRest: [-0.01, 0.13, -0.54, 0.1, 0.25, 0.5, -0.4, 0.95, 0.32], stuckIn: 0.32, plantX: -0.4, plantPole: [-0.5, -1, -0.6], flatEdge: [-1, 0, 0], frontAt: [-0.12, 1.34, 0.38], frontWay: [-0.05, 0.6, 0.8], leanTo: 0.12, regripOpen: 0.7, leanDraws: 0.4, flatSide: [1, 0, 0], lowHand: [-0.14, 0.54], lowEndX: -0.45, pathOut: 0.25, besideFrom: 0.6, besideBy: 0.35, handDownBy: 0.7, offOpen: 0.75, floorFrontAt: [-0.2, 1.05, 0.35], floorFrontWay: [-0.9, 0.35, 0.25], floorFlat: [0.25, 0.25, 0.9], floorLowHand: [-0.35, 0.25], floorLowY: 0.58, floorCrouch: [0.22, 0.08, 0.22], floorHaftAhead: 0.13, floorOut: [-0.6, 0.8], floorLowOut: [-0.8, 0.6], floorPathOut: 0, floorPathAhead: 0.18, floorGripY: 0.04, floorGripZ: 0.2, floorLaidFlat: [0, -1, 0], liftBy: 0.34, floorLiftBy: 0.42, floorTurnIn: 0.88, floorFistFromButt: 0.12, floorHandsApart: 0.38, floorStandOff: 0.33, floorPickFist: [0.15, 0.8, 0.3], floorPickTilt: [0.6, 0.55], floorHeadHeld: 0.25, floorShoulderAt: 0.2, floorTakeFrom: 0.9, floorTakeBy: 0.8, floorPickFrom: 0.75, floorPickCrouch: [0.22, 0.22, 0.85], floorPickDownFrom: 0.97, lowerBy: 0.72, helpFrom: 0.02, helpBy: 0.14, helpOff: 0.4, floorLetGo: 0.85, plantFrom: 0.15, plantBy: 0.8, lowerOver: 0.04, caneAhead: [0.1, -0.25, 1], seatHip: 0.86, sinkBy: 1, leftAbove: -0.13, beside: [-0.5, 0.09, 0.1], besidePole: [-1, -0.1, -0.2], besideAhead: 0.95, twoR: [0.8, -0.08, 0.6], twoL: [-0.8, -0.2, 0.6], twoAlong: [0, 0], twoOverL: 0.09, viaR: [-0.15, 0.2, 0.95], viaL: [0.15, 0.2, 0.95], viaAt: 0.45, floorBack: 0, viaFloorR: [-0.15, 0.5, 0.85], viaFloorL: [0.15, 0.5, 0.85], kneesR: [0.88, -0.2, 0.42], kneesL: [-0.7, -0.3, 0.65], turnFrom: 0.15, turnLate: 0.5, turnIn: 0.12, shieldOut: 0.09, upLeftAbove: 0.22, upLeftFrom: 0.42, upPlantFrom: 0.55, upPlantBy: 0.75, plantLetGo: 0.8, upWay: [-0.08, 0.99, 0.02], upRestAt: [-0.35, -0.15, 0.62], upLeanWay: [-0.1, 0.95, 0.25], upLeanFrom: 0.6, upSlipFrom: 0.25, upSlipBy: 0.6, upTurn: [0.3, -0.9, 0.2], upButt: 0.56, floorShieldOut: 0.12, floorShieldLow: 0.14, edgeDown: 0.2, });
 const _sitTurn: RestTurn = { roll: [0, 0], bend: [0, 0], along: [0, 0], over: [0, 0], armIn: [0, 0], arc: [0, 0], out: [0, 0], low: [0, 0] };
 const _lifted: number[] = [], _resting: number[] = [];
 
@@ -1776,17 +1776,18 @@ export function buildWarrior(): Model {
     twoSit.pickAt.copy(twoSit.laidAt).addScaledVector(along, fistAlong).addScaledVector(facing, -SIT_HANDS.floorStandOff);
   }
   /** The first key taking it up, in the path's frame: his right fist before his belly and the haft head up, leaning to
-   *  his left, as he faces where he stands to (`floorPickFist`: right, up, ahead of where he stands; `floorPickTilt`: to
-   *  his left, ahead). */
+   *  his left, as he faces now (`floorPickFist`: right, up, ahead of him; `floorPickTilt`: to his left, ahead). Off him
+   *  as he stands and turns, not where he stood to take it: kept there as he turned back after lifting it, his arms
+   *  stood out at his side holding it upright before his face */
   function pickKey(): void {
-    const facing = _stanceFacing.set(Math.sin(twoSit.pickYaw), 0, Math.cos(twoSit.pickYaw));
+    root.updateMatrixWorld(true);
+    const facing = root.getWorldDirection(_stanceFacing).setY(0).normalize();
     const left = _stanceLeft.set(facing.z, 0, -facing.x);
     const [right, up, ahead] = SIT_HANDS.floorPickFist;
     const [tiltLeft, tiltAhead] = SIT_HANDS.floorPickTilt;
-    root.updateMatrixWorld(true);
-    const floorY = root.getWorldPosition(_stanceFloor).y;
+    const stands = root.getWorldPosition(_stanceFloor);
     _sitFrameInverse.copy(pathFrame()).invert();
-    twoSit.frontAt.copy(twoSit.pickAt).setY(floorY + up * root.scale.y).addScaledVector(left, -right)
+    twoSit.frontAt.copy(stands).setY(stands.y + up * root.scale.y).addScaledVector(left, -right)
       .addScaledVector(facing, ahead).applyMatrix4(_sitFrameInverse);
     twoSit.frontWay.set(0, 1, 0).addScaledVector(left, tiltLeft).addScaledVector(facing, tiltAhead).normalize()
       .transformDirection(_sitFrameInverse);
@@ -3617,8 +3618,11 @@ export function buildWarrior(): Model {
         _floorTurn.yaw = twoSit.pickYaw;
         _floorTurn.at = [twoSit.pickAt.x, twoSit.pickAt.z];
         _floorTurn.inTo = SIT_HANDS.floorTurnIn;
-        _floorTurn.backFrom = floorLiftBy(held);
-        _floorTurn.backTo = SIT_HANDS.helpBy;
+        // (and left facing the way he took it up, shouldering it there, as a man does: turned back to the seat's way
+        // as he lifted it, its haft swung round upright before his face at arm's length, from review "the lift snaps
+        // from horizontal to near-vertical in front of his face", "his arms lock straight out at shoulder height")
+        _floorTurn.backFrom = 0;
+        _floorTurn.backTo = -1;
         return _floorHands;
       }
       return headUp(held) ? TWO_UP_HANDS : TWO_SIT_HANDS;
