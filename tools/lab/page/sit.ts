@@ -1337,7 +1337,7 @@ interface AskRead {
 }
 
 /** Whether he's sat with all of it done: his body down and his hands' part after it (`SitState.after`). */
-function satWhole(pose: SitState | null): boolean {
+export function satWhole(pose: SitState | null): boolean {
   return !!pose && pose.w >= 1 && pose.after >= 1;
 }
 
