@@ -22,7 +22,7 @@ import type { BiomeId } from '../../../src/data/biomes';
 import type { Fixture, Lab, Pictured, Report, ViewName } from './lab';
 import type { Fist } from '../../../src/types';
 import { describeShieldRim, FireClear, LaidStill, shieldRimOver } from './sitFire';
-import { aloftCanary, HeldAloft } from './sitAloft';
+import { aloftCanary, headDownCanary, HeldAloft } from './sitAloft';
 import { BladesApart, bladesCanary } from './sitBlades';
 import { HaftSlide, slideCanary } from './sitSlide';
 import { jerkCanary, SitJerks } from './sitJerks';
@@ -742,6 +742,9 @@ function judgeWatch(name: string, watch: Watch, out: Out): void {
   const aloft = watch.aloft.describe(name);
   if (aloft) out.problems.push(aloft);
   if (!aloftCanary()) out.problems.push('sit: the canary (a two-hander up in one hand) was missed');
+  const headDown = watch.aloft.describeHeadDown(name);
+  if (headDown) out.problems.push(headDown);
+  if (!headDownCanary()) out.problems.push('sit: the canary (a two-hander lifted head down) was missed');
   const bladesRead = watch.blades.summary(name);
   if (bladesRead) out.text.push(bladesRead);
   const blades = watch.blades.describe(name);
@@ -1373,18 +1376,25 @@ async function askOf(lab: Lab, c: SeatCase, ask: Ask, out: Out, watch: Watch): P
   const input = ask.what === 'step' ? { keys: ['w'] } : { m0: true, aim };
   const most = riseMost(lab, c);
   const frames = Math.round((most + AFTER_UP) * RATE);
+  // (and the weapon in his hand through his legs or trunk as he takes it up: read sitting down alone, a greataxe's haft
+  // behind his fist through his thighs getting up by a fire went unsaid, from review "the haft goes into or under his
+  // knee and shin")
+  const into = new IntoBody(`${c.name}, getting up`, !ask.held);
   const reads = await lab.step(frames, (f) => (ask.held || f < TAP ? input : { aim }), (frame): AskRead => {
     const w = player.sitting.pose?.w ?? 0;
     // (the way up is followed until he acts: a held attack swings what he holds as it means to)
     const stage = stageOf(player.sitting.pose);
     const at = `${(w * 100).toFixed(0)}% down${stage}, getting up (${ask.what} tapped, frame ${frame})`;
     if (!ask.held) watchFrame(lab, c.name, at, watch, skirts);
+    if (!ask.held && player.sitting.pose) into.observe(lab, at);
     watch.film.take(lab, w, 'up', moving(player.sitting.pose), shortStage(player.sitting.pose));
     const left = sitLeft(player.sitting.pose);
     return { w, left, at: player.pos.clone(), cast: Boolean(player.casting || player.channel) };
   });
   const what = `the ${c.name}, ${ask.held ? 'held' : 'tapped'} ${ask.what}`;
   judgeAsk(what, ask, reads, out, most);
+  for (const said of into.problems()) out.problems.push(`sit: by the ${c.name}, getting up, ${said}`);
+  if (into.moment) out.moments.push(into.moment);
   if (!ask.held) judgeHeldAgain(lab, what, watch, out);
 }
 

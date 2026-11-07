@@ -402,7 +402,12 @@ export interface SitHands {
   turn?: SitTurn;
 }
 
-export interface SitTurn { angle: number; inTo: number; backFrom: number; backTo: number }
+export interface SitTurn {
+  angle: number; inTo: number; backFrom: number; backTo: number;
+  /** and a step as he turns in, kept once he's up (m, in the seat's frame: x to his left, z ahead), to stand by what he
+   *  takes up */
+  step?: [number, number];
+}
 
 export interface SitState { w: number; hip: number; foot: number; before: number; after: number }
 
