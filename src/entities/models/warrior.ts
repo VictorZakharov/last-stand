@@ -1491,6 +1491,8 @@ export function buildWarrior(): Model {
   const TWO_FLOOR_HANDS = { before: 2.6, after: 0.6, up: 1.4, last: true };
   /** the length a two-hander is lifted off his shoulder by a fire in `floorLiftBy` (m): the maul's */
   const FLOOR_LIFT_LEN = 1.1;
+  /** by a fire, of the lift by when his arm is placed by the weapon's path alone, the carry's joints eased off */
+  const FLOOR_JOINTS_BY = 0.3;
   const _rightArm = [j.shoulderR, j.elbowR, j.handR];
   const _lapX = new THREE.Vector3(), _lapY = new THREE.Vector3(), _lapZ = new THREE.Vector3();
   const _lapWorld = new THREE.Matrix4(), _lapHand = new THREE.Matrix4();
@@ -3128,10 +3130,14 @@ export function buildWarrior(): Model {
         twoSit.carryWay.set(0, 1, 0).transformDirection(ARM_R.grip.matrixWorld).applyQuaternion(_rootTurn).normalize();
       }
       weaponOnPath(falling, held!, down, floor ? up : 1);
-      _rightArm.forEach((joint, i) => joint.quaternion.slerp(twoSit.from[i], 1 - up));
+      // (by a fire the path already starts where it lay on his shoulder, so the carry's joints are eased off over the
+      // lift's first part alone, as his elbow settles: over all of it, they held its head up by his face until late, and
+      // it was made up at the end, from his face to his hip in a tenth of a second)
+      const fromCarry = floor ? 1 - smooth(ramp(up, 0, FLOOR_JOINTS_BY)) : 1 - up;
+      _rightArm.forEach((joint, i) => joint.quaternion.slerp(twoSit.from[i], fromCarry));
       // (his shoulder too, which the path's hold may have lowered: left there, a maul on his shoulder stood 5 cm off it
       // as he sat with it, and jumped 13 cm back as he came up)
-      j.shoulderR.position.lerp(twoSit.fromAt, 1 - up);
+      j.shoulderR.position.lerp(twoSit.fromAt, fromCarry);
       // (head up, from his shoulder's slant to the one it stands with by his knee as it comes off: at that one already, it
       // stood 5 cm off his shoulder and slid 7 cm in his fist as he walked to the seat)
       slantR = upright ? lerp(twoSit.fromSlant, twoSit.lowSlant, up)
