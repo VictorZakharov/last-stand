@@ -73,7 +73,7 @@ export type UiState =
   | 'lobby' | 'tooltip' | 'glow' | 'help' | 'saves' | 'heroes' | 'readying' | 'readyingHeroes' | 'clicked' | 'views'
   | 'behindProps'
   | 'logLobby' | 'perfAsk' | 'pauseLobby'
-  | 'villageHud' | 'villageMap' | 'villageHudTouch' | 'heroesWarming' | 'skillTipsTouch' | 'sheetTouch' | 'litTouch' | 'run' | 'scores' | 'perf'
+  | 'villageHud' | 'villageMap' | 'villageHudTouch' | 'heroesWarming' | 'skillTipsTouch' | 'sheetTouch' | 'litTouch' | 'buttonsTouch' | 'run' | 'scores' | 'perf'
   | 'decision' | 'perfAskBreak' | 'pause' | 'pauseSettings' | 'pauseAbandon' | 'summary' | 'skillTips' | 'log' | 'logTouch' | 'hudTouch' | 'decisionTouch'
   | 'perfAskTouch' | 'buttonsRunTouch';
 
@@ -1086,6 +1086,11 @@ export async function ui(lab: Lab, options: UiOptions): Promise<Report> {
     const caught = found.problems.some((problem) => problem.includes(VILLAGE_MAP_CANARY.name));
     lines.push(`  canary: ${VILLAGE_MAP_CANARY.what} ${caught ? 'caught' : 'went unseen'}`);
     if (!caught) missed.push(`${state}: the canary's ${VILLAGE_MAP_CANARY.what} went unseen`);
+  }
+  if (state === 'buttonsTouch' || state === 'buttonsRunTouch') {
+    const caught = found.problems.some((problem) => problem.includes(BUTTONS_CANARY.name));
+    lines.push(`  canary: ${BUTTONS_CANARY.what} ${caught ? 'caught' : 'went unseen'}`);
+    if (!caught) missed.push(`${state}: the canary's ${BUTTONS_CANARY.what} went unseen`);
   }
   if (state === 'heroesWarming') {
     const caught = found.problems.some((problem) => problem.includes(HEROES_WARMING_CANARY.name));

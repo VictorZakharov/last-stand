@@ -288,26 +288,9 @@ async function buildAhead(parts: Part[]): Promise<void> {
   }
 }
 
-/** the other classes' heroes with all they can wear, built before the lobby shows (`buildHeroesAhead`), each taken
- *  by his part's build */
-const heroesAhead = new Map<string, Model>();
-
 /** the models of the classes other than the lobby's hero's */
 const otherHeroModels = (): string[] =>
   [...new Set(Object.values(CLASSES).map((c) => c.model))].filter((m) => m !== G.player.cls.model);
-
-/**
- * The other heroes built as the lobby's warm-up waits on the GPU, a task each, for a first visit's hall of heroes,
- * whose warm-up takes them once the loading screen has left: built there, each hero's build was a task of 78 to
- * 83 ms that held the lobby's frame up (`npm run stalls -- --scenario boot`, the lobby's frames held up). Their
- * skills' samples are made with the part, as the lobby's warm-up clears the effects it ends with.
- */
-async function buildHeroesAhead(): Promise<void> {
-  for (const model of otherHeroModels()) {
-    await nextTask();
-    if (!heroesAhead.has(model)) heroesAhead.set(model, heroAllWorn(model, AWAY));
-  }
-}
 
 /** The heroes' parts: the hall of heroes' room they're chosen in (`hallPart`), and each other class's hero
  *  (`heroModelParts`). */
@@ -331,8 +314,7 @@ function heroModelParts(): Part[] {
   return otherHeroModels().map((model): Part => ({
     name: model,
     build() {
-      const hero = heroesAhead.get(model) ?? heroAllWorn(model, AWAY);
-      heroesAhead.delete(model);
+      const hero = heroAllWorn(model, AWAY);
       const parts = [hero.root, ...skillSamples(model)];
       return { compile: parts, objects: parts, drawn: [], outlined: [], done: () => hero.dispose() };
     },

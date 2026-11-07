@@ -41,7 +41,8 @@
   #stash-filter { top: calc(100% + 6px); bottom: auto; }
   #minimap-wrap .mm-title, #minimap-wrap .objectives { display: none; }
   /* the minimap at the corner, a thin line round it in place of the bezel and its dark ring */
-  #minimap-wrap { width: 180px; align-items: flex-end; }
+  #hud { --mm-room: 180px; }
+  #minimap-wrap { align-items: flex-end; }
   #touch-village { --minimap-room: 160px; }
   /* no room under the minimap above the skill buttons' arc (it hid three of them): the training beside it, under the
      village's touch buttons */
@@ -88,4 +89,5 @@
   body.touch:not(.unarmed) #training { right: 240px; }
   /* (and the minimap a little smaller, its spoils' line clear of the arc's top button) */
   #minimap-wrap { zoom: .85; }
+  #hud { --mm-room: 153px; }
 }
