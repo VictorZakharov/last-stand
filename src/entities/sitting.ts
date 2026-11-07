@@ -268,13 +268,27 @@ export class Sitting {
       if (this.u > 0) this.u = Math.max(0, this.u - dt / (hands.up ?? SIT.up));
       if (hands.last ? this.u <= 0 : this.u < SIT.handsFrom) st.before = hands.before > 0 ? Math.max(0, st.before - dt / (hands.before * before)) : 0;
     }
-    this.place(me, dt, turnFor(hands.turn, st.before), stepFor(hands.turn, st.before));
+    const turn = this.inSeatFrame(hands.turn);
+    this.place(me, dt, turnFor(turn, st.before), stepFor(turn, st.before));
     // Hands without a separate stage finish halfway up; the body must finish too, or its weapon jumps to standing.
     if (this.u > 0 || st.before > 0) return true;
     // (up: let go of the seat only as he leaves it, from as near as he stands, or its circles would throw him off it)
     this.leaving = { circles: this.spot!.seat.circles, r: SEAT.near };
     this.giveUp();
     return true;
+  }
+
+  /** A turn as the seat's own: its angle from the seat's facing, its step in the seat's frame from where he stood,
+   *  from a facing and a place in the world if it gives them (`SitTurn.yaw`, `at`). */
+  private inSeatFrame(turn: SitTurn | undefined): SitTurn | undefined {
+    if (!turn || (turn.yaw === undefined && !turn.at)) return turn;
+    const yaw = this.spot!.yaw;
+    const angle = turn.yaw === undefined ? turn.angle : Math.atan2(Math.sin(turn.yaw - yaw), Math.cos(turn.yaw - yaw));
+    if (!turn.at) return { ...turn, angle };
+    const dx = turn.at[0] - this.from.x, dz = turn.at[1] - this.from.z;
+    const left = Math.cos(yaw) * dx - Math.sin(yaw) * dz;
+    const ahead = Math.sin(yaw) * dx + Math.cos(yaw) * dz;
+    return { ...turn, angle, step: [left, ahead] };
   }
 
   /** Placed as far down as he is: his hips over the seat, his feet where he stood, his back to it. */

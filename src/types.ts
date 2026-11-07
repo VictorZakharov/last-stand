@@ -401,6 +401,10 @@ export interface SitTurn {
   /** and a step as he turns in, kept once he's up (m, in the seat's frame: x to his left, z ahead), to stand by what he
    *  takes up */
   step?: [number, number];
+  /** or turned to face `yaw` and stepped to `at`, both in the world (rad, m on the floor): to stand where what he takes
+   *  up lies, wherever it lies */
+  yaw?: number;
+  at?: [number, number];
 }
 
 export interface SitState { w: number; hip: number; foot: number; before: number; after: number }
