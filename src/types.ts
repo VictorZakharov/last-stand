@@ -394,7 +394,15 @@ export interface AnimState {
 /** How far an idle hero has sat (`entities/sitting.ts`): his hands' work before his body goes down (`before`: 0..1,
  *  `Model.sitHands`), his body's way down (`w`), his hands' work once he's sat (`after`), his hips' height and his
  *  feet's way ahead (m). Getting up, each runs back in turn. */
-export interface SitHands { before: number; after: number; /** his hands only once he's up, not on his way */ last?: boolean; /** his way up, if not the sit's own (s) */ up?: number }
+export interface SitHands {
+  before: number; after: number; /** his hands only once he's up, not on his way */ last?: boolean; /** his way up, if not the sit's own (s) */ up?: number;
+  /** getting up, his facing turned from the seat's by `angle` (radians, + to his left) as his hands' stage runs back:
+   *  in from its end to `inTo`, back from `backFrom` to `backTo` (a two-hander picked up off the floor by a fire, turned
+   *  to face it) */
+  turn?: SitTurn;
+}
+
+export interface SitTurn { angle: number; inTo: number; backFrom: number; backTo: number }
 
 export interface SitState { w: number; hip: number; foot: number; before: number; after: number }
 
