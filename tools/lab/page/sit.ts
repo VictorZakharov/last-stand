@@ -51,6 +51,8 @@ export interface SitOptions {
   seats?: string[];
   /** list every frame his skirts jerked as he sat */
   frames?: boolean;
+  /** no pictures: E pressed from all round every seat of each kind (`sitRound.ts`) */
+  round?: boolean;
   /** list this carried piece frame by frame */
   trace?: string;
   canary?: boolean;
@@ -288,6 +290,7 @@ export async function sit(lab: Lab, options: SitOptions): Promise<Report> {
   const moments: Pictured[] = [];
   const cases = CASES.filter((c) => !options.seats?.length || options.seats.includes(c.name));
   const fixture = options.fixture ?? {};
+  if (options.round) return (await import('./sitRound')).sitRound(lab, cases, fixture);
   if (options.canary) return canaryOn(lab, cases[0], fixture, { text, problems, moments });
   for (const each of cases) await trySeat(lab, each, fixture, options, { text, problems, moments });
   return { text: text.join('\n'), problems, moments };
@@ -432,7 +435,7 @@ async function trySeat(lab: Lab, c: SeatCase, fixture: Fixture, options: SitOpti
 }
 
 /** Whether `done` comes true within `frames` frames, stepped one at a time until it does. */
-async function within(lab: Lab, done: () => boolean, frames: number): Promise<boolean> {
+export async function within(lab: Lab, done: () => boolean, frames: number): Promise<boolean> {
   for (let frame = 0; frame < frames; frame++) {
     if (done()) return true;
     await lab.step(1);
@@ -441,7 +444,7 @@ async function within(lab: Lab, done: () => boolean, frames: number): Promise<bo
 }
 
 /** The point of a seat the mouse is put over: its middle, on its top (a fire's a little over the floor). */
-function seatMiddle(seat: Seat): THREE.Vector3 {
+export function seatMiddle(seat: Seat): THREE.Vector3 {
   const x = (seat.ax + seat.bx) / 2, z = (seat.az + seat.bz) / 2;
   const y = seat.ground ? groundHeight(x, z) + FIRE_AIM : seatTopAt(seat, x, z);
   return new THREE.Vector3(x, y, z);
@@ -458,7 +461,7 @@ function whyUnlit(player: Lab['player'], pointed: Seat): string {
 }
 
 /** Whether the seat is outlined white round its first target. */
-function seatLit(seat: Seat): boolean {
+export function seatLit(seat: Seat): boolean {
   const look = outlinedLook();
   return !!look && look.root === seat.outline[0]?.root && look.color === 0xffffff;
 }
@@ -953,13 +956,13 @@ function startOff(seat: Seat): { at: [number, number]; facing: number } {
   for (const turn of [0, Math.PI, 0.5, -0.5, Math.PI + 0.5, Math.PI - 0.5]) {
     const way = sideFirst + turn;
     const x = mx + Math.sin(way) * START_OFF, z = mz + Math.cos(way) * START_OFF;
-    if (clear(x, z)) return { at: [x, z], facing: Math.atan2(mx - x, mz - z) };
+    if (clearOfProps(x, z)) return { at: [x, z], facing: Math.atan2(mx - x, mz - z) };
   }
   throw new Error('lab: no clear floor round the seat to stand on');
 }
 
 /** Whether a hero stands at (`x`, `z`) clear of every prop by a body's width, and of the wall. */
-function clear(x: number, z: number): boolean {
+export function clearOfProps(x: number, z: number): boolean {
   if (G.arena.wall.roomOut(x, z, BODY) <= 0) return false;
   return G.arena.obstacles.every((o) => Math.hypot(x - o.x, z - o.z) > o.r + BODY);
 }

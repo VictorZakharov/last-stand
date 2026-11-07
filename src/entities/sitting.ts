@@ -11,13 +11,27 @@ import { G } from '../state';
 import { angleDamp } from '../util';
 import { SEAT, seatPointed, seatSpot, seatSpotAt, seatStands, type Relaxed, type Seat, type SeatSpot } from '../world/seats';
 import { outline } from '../ui/overlay/outline';
+import { navTarget, steerClear } from '../world/navigation';
+import type { Obstacle } from '../types';
 
 export const SIT = {
   /** how long he stands idle before he goes to sit (s), and how far off a seat may be (m, to where he'd sit) */
   after: 6, within: 6,
-  /** his walk there (a share of his speed), how near where he'd stand counts as there (m) and how long he may go on
-   *  getting no nearer before he gives it up (s, a prop in his way) */
-  walk: 0.45, there: 0.1, stuck: 1.2,
+  /** his walk there (a share of his speed), how near where he'd stand counts as there (m), how long he may stand
+   *  held (s, pressed into a prop in his way: moving slower than `held`, m/s) and how long he may go on getting no
+   *  nearer while he walks before he gives it up (s: going round a log took him further off for 1.5 s) */
+  walk: 0.45, there: 0.1, stuck: 1.2, held: 0.15, lost: 4,
+  /** how far ahead on his way to it he starts to go round what stands in it (m), and how near a waypoint of his way
+   *  round the props he heads for the spot itself instead (m: the field ends a cell or two short of it) */
+  steerAhead: 3, waypointNear: 0.6,
+  /** going round the seat to its far side: how far out from as near as he may come he goes (m), and how far round he
+   *  heads at a time once he's there (rad) */
+  roundBy: 0.05, roundStep: 0.5,
+  /** how far off the seat the way round the other props is found to (m: the field begins only from a clear line to
+   *  it of 0.3 m, `world/navigation.ts`) */
+  fieldOff: 0.4,
+  /** how near the spot he goes the rest of the way straight but round the seat (m) */
+  lastStraight: 1,
   /** how fast he turns his back to the seat (1/s), as fast as a person turns at most (rad/s), and how long it may take
    *  (s). (Eased alone, he spun about at up to 21 rad/s, a snap, and the axe in his hand went 42 cm in a frame) */
   turn: 7, turnFastest: 5, turnMost: 1.2,
@@ -56,6 +70,8 @@ export interface Sitter {
   readonly pos: THREE.Vector3;
   facing: number;
   readonly radius: number;
+  /** his co-op slot: the field he finds his way to a seat by is his own (`world/navigation.ts`) */
+  readonly slot: number;
   /** how long his hands take before he goes down and once he's sat, on a seat or the floor (`Model.sitHands`) */
   sitHands(floor: boolean): SitHands;
 }
@@ -75,9 +91,14 @@ export class Sitting {
   private readonly pointedAt = new THREE.Vector3();
   private pointedFor = 0;
   private lit = false;
-  /** walking there: the nearest he has come and for how long he's come no nearer */
+  /** walking there: the nearest he has come, for how long he's come no nearer, how long of it he's stood held, and
+   *  where he was last frame */
   private best = Infinity;
   private noNearer = 0;
+  private heldFor = 0;
+  /** where he last headed for on his way (`walkGoal`) */
+  private readonly towards = new THREE.Vector3();
+  private readonly last = new THREE.Vector3();
   private turnFor = 0;
   /** how far down he is (0 standing, 1 sat), and where he stood as he began to sit */
   private u = 0;
@@ -185,12 +206,23 @@ export class Sitting {
     }
   }
 
-  /** His walk's goal toward where he'd stand to sit, at `speed` (m/s, his own), easing in as he comes. */
+  /** His walk's goal toward where he'd stand to sit, at `speed` (m/s, his own), easing in as he comes, round what
+   *  stands in his way short of it: walked straight at a spot on the far side of a stone (his own side taken by
+   *  another prop), he stood pressed into the stone until he gave up, "he runs up to the stone but does not sit". */
   walkGoal(me: Sitter, speed: number, goal: THREE.Vector3): void {
     const s = this.spot!;
-    const dx = s.fx - me.pos.x, dz = s.fz - me.pos.z, d = Math.hypot(dx, dz) || 1;
+    const d = Math.hypot(s.fx - me.pos.x, s.fz - me.pos.z) || 1;
     const v = Math.min(speed * SIT.walk, d * 2.5);
-    goal.set(dx / d * v, 0, dz / d * v);
+    // (round the seat itself to a spot on its far side along its circles, as near as he may come to them: bent round it
+    // by the steering, which bent him back round another prop, he stood still 2 m off the spot, 7 of 231 starts round
+    // the crypt's columns; round the other props by the way foes find theirs, then steered round what's left near)
+    const seat = s.seat.circles;
+    wayTo(me, s.fx, s.fz, seat, _to);
+    this.towards.set(_to.x, 0, _to.z);
+    const tx = _to.x - me.pos.x, tz = _to.z - me.pos.z, td = Math.hypot(tx, tz) || 1;
+    const skip = (o: Obstacle, ahead: number) => ahead >= td || seat.includes(o);
+    steerClear(me.pos.x, me.pos.z, me.radius, tx / td, tz / td, Math.min(td, SIT.steerAhead), _way, skip);
+    goal.set(_way.x * v, 0, _way.z * v);
   }
 
   /** Standing idle: long enough, the nearest seat's spot taken to walk to. */
@@ -209,16 +241,24 @@ export class Sitting {
     this.phase = 'walk';
     this.best = Infinity;
     this.noNearer = 0;
+    this.heldFor = 0;
+    this.last.copy(me.pos);
   }
 
   private walk(me: Sitter, dt: number, go: boolean): boolean {
     const s = this.spot!;
     const d = Math.hypot(s.fx - me.pos.x, s.fz - me.pos.z);
+    const moved = Math.hypot(me.pos.x - this.last.x, me.pos.z - this.last.z);
+    this.last.copy(me.pos);
     if (d < this.best - 0.02) {
       this.best = d;
       this.noNearer = 0;
-    } else this.noNearer += dt;
-    if (!go || this.noNearer > SIT.stuck) {
+      this.heldFor = 0;
+    } else {
+      this.noNearer += dt;
+      if (moved < SIT.held * dt) this.heldFor += dt;
+    }
+    if (!go || this.heldFor > SIT.stuck || this.noNearer > SIT.lost) {
       if (go) this.retryIn = SIT.retry;
       this.giveUp();
       return false;
@@ -355,6 +395,89 @@ export function foeNear(x: number, z: number): boolean {
 }
 
 const smooth = (u: number) => u * u * (3 - 2 * u);
+const _way = { x: 0, z: 0 }, _to = { x: 0, z: 0 }, _off = { x: 0, z: 0 };
+
+/** Whether the line from (`ax`, `az`) to (`bx`, `bz`) is clear for a body of `radius` of every prop but `but`. */
+function clearBut(ax: number, az: number, bx: number, bz: number, radius: number, but: readonly Obstacle[]): boolean {
+  const dx = bx - ax, dz = bz - az, len2 = dx * dx + dz * dz;
+  for (const o of G.arena.obstacles) {
+    if (but.includes(o)) continue;
+    const k = len2 > 1e-9 ? Math.min(1, Math.max(0, ((o.x - ax) * dx + (o.z - az) * dz) / len2)) : 0;
+    const px = ax + dx * k - o.x, pz = az + dz * k - o.z, r = o.r + radius;
+    if (px * px + pz * pz < r * r) return false;
+  }
+  return true;
+}
+/** the navigation's slots of the heroes' fields to their seats, past the players' and the lures' */
+const SIT_SLOT = 32;
+
+/** Where he heads for to reach (`x`, `z`): straight at it, round the seat's own circles as near as `SEAT.near` lets
+ *  him (`roundSeat`), while nothing else his body can't pass stands across his way there or he's within
+ *  `SIT.lastStraight` of it; else the next waypoint of a field of his own round the props. Tested by half his body, a
+ *  gap between two drums too narrow for him read as clear, and he was held in it. */
+function wayTo(me: Sitter, x: number, z: number, seat: readonly Obstacle[], out: { x: number; z: number }): void {
+  out.x = x;
+  out.z = z;
+  roundSeat(me.pos.x, me.pos.z, seat, out);
+  // (the last of the way straight: the field's cells, half a metre across, sent him back and forth there)
+  if (Math.hypot(x - me.pos.x, z - me.pos.z) < SIT.lastStraight) return;
+  if (clearBut(me.pos.x, me.pos.z, out.x, out.z, me.radius, seat)) return;
+  // (the field's way to a point off the seat: it begins from cells with a clear line to its target, and none has one
+  // to the spot, `SEAT.near` from the seat, so it had no way at all)
+  offSeat(x, z, seat, _off);
+  navTarget(me.pos.x, me.pos.z, me.radius, _off.x, _off.z, SIT_SLOT + me.slot, out);
+  // (the field's end a cell or two short of the spot, or no way in it at all (it gives the spot back): round the seat)
+  const near = Math.hypot(out.x - me.pos.x, out.z - me.pos.z) < SIT.waypointNear;
+  if (near || (out.x === _off.x && out.z === _off.z)) roundSeat(me.pos.x, me.pos.z, seat, out, x, z);
+}
+
+/** (`x`, `z`) moved out from the seat's nearest circle until it's `SIT.fieldOff` off it. */
+function offSeat(x: number, z: number, seat: readonly Obstacle[], out: { x: number; z: number }): void {
+  out.x = x;
+  out.z = z;
+  let nearest: Obstacle | null = null, gap = Infinity;
+  for (const o of seat) {
+    const g = Math.hypot(x - o.x, z - o.z) - o.r;
+    if (g < gap) {
+      gap = g;
+      nearest = o;
+    }
+  }
+  if (!nearest || gap >= SIT.fieldOff) return;
+  const d = Math.hypot(x - nearest.x, z - nearest.z) || 1e-3;
+  const by = nearest.r + SIT.fieldOff;
+  out.x = nearest.x + (x - nearest.x) / d * by;
+  out.z = nearest.z + (z - nearest.z) / d * by;
+}
+
+/** Where he heads from (`x`, `z`) for `out` (the spot, or `tx`, `tz`) with the seat in his way: the point of the
+ *  first of its circles his way crosses where he'd go round it, on the spot's side, as near as `SEAT.near` lets him
+ *  (on it already, a little further round). `out` is left as it is when the seat isn't in his way. */
+function roundSeat(x: number, z: number, seat: readonly Obstacle[], out: { x: number; z: number }, tx = out.x, tz = out.z)
+  : void {
+  out.x = tx;
+  out.z = tz;
+  const dx = tx - x, dz = tz - z, len2 = dx * dx + dz * dz;
+  if (len2 < 1e-6) return;
+  let first: Obstacle | null = null, firstK = Infinity;
+  for (const o of seat) {
+    const k = Math.min(1, Math.max(0, ((o.x - x) * dx + (o.z - z) * dz) / len2));
+    const px = x + dx * k - o.x, pz = z + dz * k - o.z, r = o.r + SEAT.near;
+    if (px * px + pz * pz < r * r && k < firstK) {
+      first = o;
+      firstK = k;
+    }
+  }
+  if (!first) return;
+  const R = first.r + SEAT.near + SIT.roundBy;
+  const ox = x - first.x, oz = z - first.z, d = Math.hypot(ox, oz) || 1e-3;
+  // (round on the spot's side: the way from him round the centre towards it)
+  const side = Math.sign(ox * (tz - first.z) - oz * (tx - first.x)) || 1;
+  const turn = side * (d > R ? Math.acos(R / d) : SIT.roundStep);
+  const c = Math.cos(turn), sn = Math.sin(turn), ux = ox / d, uz = oz / d;
+  out.x = first.x + (ux * c - uz * sn) * R;
+  out.z = first.z + (ux * sn + uz * c) * R;
+}
 
 /** Of `t` from `a` to `b` (either way round), within 0 and 1. */
 const ramp = (t: number, a: number, b: number): number => Math.min(1, Math.max(0, (t - a) / (b - a)));

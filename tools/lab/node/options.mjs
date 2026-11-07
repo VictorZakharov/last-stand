@@ -1691,6 +1691,10 @@ export const COMMANDS = {
         kind: 'switch',
         help: 'no measures: the warrior sat, each way of holding his gear on each seat, numbered pictures from three sides',
       },
+      round: {
+        kind: 'switch',
+        help: 'no pictures: E pressed from 12 ways round every seat of each kind, from near and far, and why he did not sit',
+      },
       frames: { kind: 'switch', help: 'list every frame his skirts jerked as he sat (their first 40)' },
       trace: {
         kind: 'text', usage: 'piece',

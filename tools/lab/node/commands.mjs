@@ -1488,6 +1488,7 @@ export const COMMANDS = {
         fixture: fixtureFrom(options),
         seats: options.seats,
         frames: Boolean(options.frames),
+        round: Boolean(options.round),
         trace: options.trace,
         canary: Boolean(options.canary),
         poses: Boolean(options.poses),
