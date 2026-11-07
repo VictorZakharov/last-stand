@@ -75,9 +75,8 @@ const lightOf = (i: number): number => placeOf(i) + 4;
 /** how soft a lamp's light is close to (m squared, added to the square of the distance: as if a ball of about 2 m lit it);
  *  its light on a head under it halved, on the ground 5 m off a tenth less. A pooled light is as soft by its `decay`. */
 export const LAMP_SOFT = 4;
-const LAMPS_LIT = `
-#if defined( RE_Direct )
-	{
+/** the side of the shelter a lit point is on (1 inside, -1 outside), and its place and normal in the world */
+const LAMPS_SIDE = `
 		vec3 seen = transpose( mat3( viewMatrix ) ) * ( geometryPosition - viewMatrix[ 3 ].xyz );
 		vec3 seenNormal = transpose( mat3( viewMatrix ) ) * geometryNormal;
 		vec4 shelter = lamps[ 0 ];
@@ -86,26 +85,63 @@ const LAMPS_LIT = `
 		// light and the street lamps', "this wall in hall of heroes is z-fighting / flickering")
 		vec2 sideAt = seen.xz + seenNormal.xz * lamps[ LAMPS_SHADOWS ].y;
 		float side = all( greaterThan( sideAt, shelter.xy ) ) && all( lessThan( sideAt, shelter.zw ) ) ? 1.0 : - 1.0;
-		for ( int i = 0; i < LAMPS_MOST; i ++ ) {
-			vec4 lampLight = lamps[ 2 + i * 2 ];
+`;
+/** lamp `lampAt`'s light on the point as `directLight`, or on to the next where it lights none of it */
+const LAMP_LIGHT = `
+			vec4 lampLight = lamps[ 2 + lampAt * 2 ];
 			if ( lampLight.w != side ) continue;
-			vec4 lamp = lamps[ 1 + i * 2 ];
+			vec4 lamp = lamps[ 1 + lampAt * 2 ];
 			vec3 toLamp = ( viewMatrix * vec4( lamp.xyz, 1.0 ) ).xyz - geometryPosition;
 			float lampDistance = length( toLamp );
 			if ( lampDistance >= lamp.w ) continue;
 			float lampLit = 1.0;
 			if ( lamps[ LAMPS_SHADOWS ].x > 0.0 ) {
-				lampLit = lampShadowAt( i, seen + seenNormal * ${SHADOW_OUT.toFixed(3)} - lamp.xyz );
+				lampLit = lampShadowAt( lampAt, seen + seenNormal * ${SHADOW_OUT.toFixed(3)} - lamp.xyz );
 				if ( lampLit <= 0.0 ) continue;
 			}
 			directLight.direction = toLamp / lampDistance;
 			directLight.color = lampLight.rgb * getDistanceAttenuation( lampDistance, lamp.w, ${(2 + LAMP_SOFT).toFixed(1)} ) * lampLit;
 			directLight.visible = true;
-			RE_Direct( directLight, geometryPosition, geometryNormal, geometryViewDir, geometryClearcoatNormal, material, reflectedLight );
+`;
+/** three's lighting of `directLight` on the point, as it lights a point light */
+const RE_DIRECT = 'RE_Direct( directLight, geometryPosition, geometryNormal, geometryViewDir, geometryClearcoatNormal, material, reflectedLight );';
+/** the lamps in a loop of their own, where a shader has no point lights to share one with */
+const LAMPS_LIT = `
+#if defined( RE_Direct ) && ( NUM_POINT_LIGHTS == 0 )
+	{${LAMPS_SIDE}
+		for ( int lampAt = 0; lampAt < LAMPS_MOST; lampAt ++ ) {${LAMP_LIGHT}
+			${RE_DIRECT}
 		}
 	}
 #endif
 `;
+/** the point lights' loop as `loopPointLights` (core/renderer.ts) leaves it, the shadowed ones written out before it */
+const POINT_LOOP = `	for ( int i = unshadowedFrom; i < NUM_POINT_LIGHTS; i ++ ) {
+		pointLight = pointLights[ i ];
+		toLight = pointLight.position - geometryPosition;
+		if ( pointLight.color == vec3( 0.0 ) || ( pointLight.distance > 0.0 && dot( toLight, toLight ) >= pointLight.distance * pointLight.distance ) ) continue;
+		getPointLightInfo( pointLight, geometryPosition, directLight );
+		if ( directLight.visible ) ${RE_DIRECT}
+	}`;
+/**
+ * The lamps lit in the point lights' own loop, a light a turn and three's lighting written once for both: in a loop of
+ * their own after it, its lighting written out a second time, every lit shader took about a third longer to compile
+ * than main's (`npm run lab -- programs --cost`: 0.95 s against 0.61 without the lamps), a first visit's 147
+ * programs 94.5 s against main's 49.3.
+ */
+const POINT_LOOP_WITH_LAMPS = `${LAMPS_SIDE}
+	for ( int i = unshadowedFrom; i < NUM_POINT_LIGHTS + LAMPS_MOST; i ++ ) {
+		if ( i < NUM_POINT_LIGHTS ) {
+			pointLight = pointLights[ i ];
+			toLight = pointLight.position - geometryPosition;
+			if ( pointLight.color == vec3( 0.0 ) || ( pointLight.distance > 0.0 && dot( toLight, toLight ) >= pointLight.distance * pointLight.distance ) ) continue;
+			getPointLightInfo( pointLight, geometryPosition, directLight );
+			if ( ! directLight.visible ) continue;
+		} else {
+			int lampAt = i - NUM_POINT_LIGHTS;${LAMP_LIGHT}
+		}
+		${RE_DIRECT}
+	}`;
 const LAMPS_DECLARED = `
 #define LAMPS_MOST ${LAMPS_MOST}
 #define LAMPS_SHADOWS ( 1 + LAMPS_MOST * 2 )
@@ -170,7 +206,11 @@ export function lightTheLamps(): void {
     return;
   }
   THREE.ShaderChunk.lights_pars_begin = THREE.ShaderChunk.lights_pars_begin.replace(FALLOFF_BY_POW, FALLOFF_SOFT) + LAMPS_DECLARED;
-  THREE.ShaderChunk.lights_fragment_begin = begin.replace(SPOT_LIGHTS_IF, LAMPS_LIT + SPOT_LIGHTS_IF);
+  const looped = begin.replace(SPOT_LIGHTS_IF, LAMPS_LIT + SPOT_LIGHTS_IF);
+  if (!looped.includes(POINT_LOOP)) {
+    console.error('lightTheLamps: the point lights\' loop has changed: the lamps light nothing where point lights are');
+  }
+  THREE.ShaderChunk.lights_fragment_begin = looped.replace(POINT_LOOP, POINT_LOOP_WITH_LAMPS);
   for (const shader of Object.values(THREE.ShaderLib)) {
     if (!('pointLights' in shader.uniforms)) continue;
     shader.uniforms.lamps = { value: list };
