@@ -1757,6 +1757,10 @@ export function buildWarrior(): Model {
   const _pickHeld = new THREE.Vector3(), _pickSeatedAt = new THREE.Vector3(), _pickSeatedQ = new THREE.Quaternion();
   /** how far the weapon is still eased from where the keyed pick-up left it in the world (1 to 0, over `PICK_OFF` s) */
   let pickOff = 0;
+  /** his right arm as the standing pose has it this frame, its shoulder's place, and the slant its fit last took */
+  const _standArm = [new THREE.Quaternion(), new THREE.Quaternion(), new THREE.Quaternion()];
+  const _standAt = new THREE.Vector3();
+  let _carrySlant = 0;
   /** by a fire, taking it up: his right hand sliding along it, and how far that hand is still open, off it */
   let pickSliding = false;
   let pickOpen = 0;
@@ -1908,10 +1912,18 @@ export function buildWarrior(): Model {
     // (his arm hanging at rest, which his hand reaches from: from the arm as other stages had left it, it stood straight
     // out at his side as he stepped to it)
     _rightArm.forEach((_joint, i) => _pickOwn[i].identity());
-    // (on his shoulder as he carries it standing: his arm as it was drawn so, the weapon seated in his fist)
-    _rightArm.forEach((joint, i) => joint.quaternion.copy(twoSit.from[i]));
-    j.shoulderR.position.copy(twoSit.fromAt);
-    seat(handR, grip, weapon.r, twoSit.fromSlant);
+    // (on his shoulder as he'll carry it standing: his arm as this frame's pose has it, fitted as the game fits it once
+    // he's up, the weapon seated in his fist by the slant that fit took. Ended on his arm as it was last kept standing,
+    // the pick-up ended in another carry than the one he was drawn in once up, and the weapon went 192 cm in a frame)
+    // (turned in his fist as he held it before he laid it down: `seat` puts it on the fist's axis and leaves its turn,
+    // so the keys' last turn stayed in his hand for good, 95 degrees off how he held it before he sat)
+    _rightArm.forEach((joint, i) => joint.quaternion.copy(_standArm[i]));
+    j.shoulderR.position.copy(_standAt);
+    grip.quaternion.copy(twoSit.laidGrip);
+    seat(handR, grip, weapon.r, _carrySlant);
+    root.updateMatrixWorld(true);
+    _carrySlant = fitArm(j, false, gripTurn(handR, grip, _vr), body, undefined).slant;
+    seat(handR, grip, weapon.r, _carrySlant);
     root.updateMatrixWorld(true);
     grip.getWorldQuaternion(_carryQ);
     _pickWay.set(0, 1, 0).applyQuaternion(_carryQ);
@@ -1934,8 +1946,8 @@ export function buildWarrior(): Model {
     // (his right fist up its handle, reached from his arm's own pose as far as his hand is on it)
     _pickFist.copy(_pickButt).addScaledVector(_pickWay, pickAt('rightAlong', k) * root.scale.y);
     _rightArm.forEach((joint, i) => joint.quaternion.copy(_pickOwn[i]));
-    j.shoulderR.position.copy(twoSit.fromAt);
-    seat(handR, grip, weapon.r, twoSit.fromSlant);
+    j.shoulderR.position.copy(_standAt);
+    seat(handR, grip, weapon.r, _carrySlant);
     wayInHisFrame(_pickPole, -0.6, -0.7, -0.2);
     holdInWorld(ARM_R, _pickFist, _pickWay, _pickPole, 1);
     const on = pickAt('rightOn', k);
@@ -1947,7 +1959,8 @@ export function buildWarrior(): Model {
     // 17 cm out of his fist as he rose. As a pick-up is made elsewhere: the hand reaches the object, then the object
     // goes with the hand)
     root.updateMatrixWorld(true);
-    seat(handR, grip, weapon.r, twoSit.fromSlant);
+    grip.quaternion.copy(twoSit.laidGrip);
+    seat(handR, grip, weapon.r, _carrySlant);
     _pickSeatedAt.copy(grip.position);
     _pickSeatedQ.copy(grip.quaternion);
     grip.updateMatrixWorld(true);
@@ -3236,6 +3249,9 @@ export function buildWarrior(): Model {
       twoSit.taken = false;
     }
     else if (!twoSit.taken) takeTwoRest(st.sit!, t, held!);
+    // (his arm as the standing pose has it, before the sit places his hands: the carry the keyed pick-up ends on)
+    _rightArm.forEach((joint, i) => _standArm[i].copy(joint.quaternion));
+    _standAt.copy(j.shoulderR.position);
     restHands(j, st.sit, _resting, _sitTurn, SIT_HANDS.rise, _lifted);
     if (st.sit && !fp && st.dead < 0) {
       // (ahead over his far knee on a seat, down across his shins by a fire, as a palm on the knee holds it: straight
@@ -3637,6 +3653,9 @@ export function buildWarrior(): Model {
     else if (held && pickOff > 0) {
       pickOff = Math.max(0, pickOff - dt / PICK_OFF);
       const ease = smooth(pickOff);
+      // (from it seated as he holds it each frame: blended from last frame's blend, it never came back to his grip)
+      grip.quaternion.copy(twoSit.laidGrip);
+      seat(handR, grip, held.r, slantR);
       root.updateMatrixWorld(true);
       grip.getWorldPosition(_hw1).lerp(_pickLastAt, ease);
       grip.getWorldQuaternion(_pickSeatedQ).slerp(_pickLastQ, ease);
