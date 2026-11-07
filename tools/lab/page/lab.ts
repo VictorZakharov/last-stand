@@ -28,6 +28,7 @@ type RunPhaseModule = typeof import('../../../src/world/runPhase');
 import { buildHotbar } from '../../../src/ui/hud';
 import * as culling from '../../../src/world/culling';
 import { loadProfile } from '../../../src/loot/profile';
+import { pressHeld } from './holdPress';
 import * as textures from '../../../src/core/textures';
 import * as anatomy from '../../../src/entities/models/anatomy';
 import { drawLook, jointsByObject, partName, withBones, type Look, type PartOnScreen } from './looks';
@@ -690,9 +691,9 @@ export class Lab {
       await this.step(1, () => ({ keys: ['escape'] }));
       const abandon = document.getElementById('btn-abandon');
       if (!abandon) throw new Error('lab: no pause menu to leave the run by');
-      // (clicked as the run is started, by the element: clicked by the mouse, a set-up waited for the menu's slide in
-      // by the browser's clock, 60 ms of its 300)
-      abandon.click();
+      // (pressed as the run is started, by the element: clicked by the mouse, a set-up waited for the menu's slide in
+      // by the browser's clock, 60 ms of its 300; held, as it acts only once held)
+      await pressHeld(abandon);
       await this.until(() => G.mode === 'menu', 600, 'the run never gave way to the lobby');
     }
     G.profile = loadProfile(G.profile.classId);

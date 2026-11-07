@@ -13,6 +13,7 @@
 // of the square (where mouse look holds it), the notice board never read, a new material shown at one hour; walks to
 // a spot walked straight; an orb far past white hung in the first light read.
 import * as THREE from 'three';
+import { pressHeld } from './holdPress';
 import type { Lab, Pictured, Report } from './lab';
 import { G } from '../../../src/state';
 import {
@@ -238,7 +239,7 @@ export async function toVillage(lab: Lab): Promise<void> {
   await lab.step(1, () => ({ keys: ['escape'] }));
   const abandon = document.getElementById('btn-abandon');
   if (!abandon) throw new Error('lab: no pause menu to leave the run by');
-  abandon.click();
+  await pressHeld(abandon);
   await lab.until(() => G.mode === 'menu' && G.arena.place === 'village', 600, 'the run never gave way to the village');
   await lab.step(SETTLE);
 }

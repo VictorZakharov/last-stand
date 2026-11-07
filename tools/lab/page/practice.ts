@@ -7,6 +7,7 @@
 // practice (a co-op guest's, as its host starts) kept the lobby's free casting through the whole run. With a canary,
 // that run again with free casting planted, which must be caught.
 import * as THREE from 'three';
+import { pressHeld } from './holdPress';
 import type { Lab, Report } from './lab';
 import type { SkillDef, SkillKey } from '../../../src/types';
 import type { Enemy } from '../../../src/entities/enemy';
@@ -226,7 +227,7 @@ async function enterRun(lab: Lab, start: () => Promise<void>): Promise<() => voi
 async function leaveRun(lab: Lab, unhold: () => void): Promise<void> {
   unhold();
   await lab.step(1, () => ({ keys: ['escape'] }));
-  await lab.clickOn(byId('btn-abandon'));
+  await pressHeld(byId('btn-abandon'));
   await lab.until(() => G.mode === 'menu', RUN_FRAMES, 'practice: the run never gave way to the lobby');
   await lab.step(LOBBY_FRAMES);
   await standIn(lab);

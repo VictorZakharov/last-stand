@@ -201,6 +201,36 @@ function stepsCostText(measured: ProgramCost[]): string[] {
   });
 }
 
+/** the most fields two programs of a kind may differ in to be listed as near (one program fewer for a change or two) */
+const NEAR_FIELDS = 2;
+
+/** The fields in which programs `a` and `b` differ, each as `field a/b` (a flag missing read as off). */
+function differing(a: Map<string, string>, b: Map<string, string>): string[] {
+  const names = [...new Set([...a.keys(), ...b.keys()])].sort();
+  const valueOf = (fields: Map<string, string>, name: string): string => {
+    return fields.get(name) ?? (name.startsWith('flag ') ? 'off' : '-');
+  };
+  return names
+    .filter((name) => valueOf(a, name) !== valueOf(b, name))
+    .map((name) => `${name} ${valueOf(a, name) || '""'}/${valueOf(b, name) || '""'}`);
+}
+
+/** The pairs of `used` of one kind that differ in `NEAR_FIELDS` fields or fewer, each with what it was made for:
+ *  where one program could serve both. */
+function nearText(used: ProgramCost[]): string[] {
+  const lines: string[] = [];
+  for (let i = 0; i < used.length; i++) {
+    for (let j = i + 1; j < used.length; j++) {
+      const [a, b] = [used[i].entry, used[j].entry];
+      if (kindOf(a.type, a.program.cacheKey) !== kindOf(b.type, b.program.cacheKey)) continue;
+      const apart = differing(fieldsOf(a.program.cacheKey), fieldsOf(b.program.cacheKey));
+      if (apart.length > NEAR_FIELDS) continue;
+      lines.push(`      ${apart.join(', ')}: ${a.owner} | ${b.owner}`);
+    }
+  }
+  return lines.length ? [`    near (${NEAR_FIELDS} fields apart at most): ${lines.length}`, ...lines] : [];
+}
+
 /** Each of `measured` that `user` uses, the longest first: its cost, its kind and what it was made for, after
  *  every field setting apart its programs of a kind (what a program fewer would take). */
 function ofUserText(measured: ProgramCost[], user: string): string[] {
@@ -216,7 +246,8 @@ function ofUserText(measured: ProgramCost[], user: string): string[] {
   const apart = kinds
     .filter(({ count }) => count > 1)
     .map(({ kind, count, apart: fields }) => `    ${kind}: ${count}, set apart by ${fields.map(apartText).join('; ')}`);
-  return [`  each ${user} uses: ${used.length}, ${(total / 1000).toFixed(1)} s`, ...apart, ...each];
+  const head = `  each ${user} uses: ${used.length}, ${(total / 1000).toFixed(1)} s`;
+  return [head, ...apart, ...nearText(used), ...each];
 }
 
 /** What compiling each of `made` costs, alone (`programCost.ts`), and the cache's canary; with `of`, each
