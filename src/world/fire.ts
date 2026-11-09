@@ -130,8 +130,13 @@ const decoded = new Uint8Array(FRAME_CELLS);
 
 /** The texture holding the frames either side of `moment` (a frame of the loop), each decoded into its slot as it's
  *  first needed: one frame a step of the loop. */
+/** TEMPORARY trial for the owner's phone (removed before the PR is ready): `?fire=off` draws no flames, `?fire=still`
+ *  never rewrites their texture after its first moment. */
+const FIRE_TRIAL = new URLSearchParams(location.search).get('fire');
+
 function showMoment(moment: number): void {
   if (!loop) return;
+  if (FIRE_TRIAL === 'still' && inSlot.some((frame) => frame >= 0)) return;
   const first = Math.floor(moment);
   const data = flamesVolume.image.data as Uint8Array;
   const width = KEPT_SIZE.x * TILES.across;
@@ -581,6 +586,7 @@ export function buildFire(scene: THREE.Object3D, spec: FireSpec, updaters: Updat
   // (drawn after the smoke, before the glows)
   volume.renderOrder = 15;
   scene.add(volume);
+  if (FIRE_TRIAL === 'off') volume.visible = false;
   const lightAt = light.position.clone();
   const due = runPhase({ embers: 0, smoke: 0 });
   updaters.push((dt, t) => {
@@ -591,7 +597,7 @@ export function buildFire(scene: THREE.Object3D, spec: FireSpec, updaters: Updat
     // on its own swell)
     const moment = (t * LOOP_RATE) % LOOP.frames;
     showMoment(moment);
-    flames.uniforms.uFrame.value = moment;
+    flames.uniforms.uFrame.value = FIRE_TRIAL === 'still' ? 0 : moment;
     light.intensity = spec.intensity * (1 + (puff - 1) * LIGHT_SWELL);
     light.position.set(lightAt.x + (puff - 1) * LIGHT_SWAY, lightAt.y + (puff - 1) * LIGHT_SWAY * 2, lightAt.z);
     due.embers += dt * spec.embers;
