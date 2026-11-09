@@ -687,6 +687,8 @@ export const COMMANDS = {
       },
       rounds: { kind: 'number', usage: 'n', default: '6', help: 'the rounds of turns, each of 6 renders a side' },
       canary: { kind: 'switch', help: 'draw the scene twice: it must read at least 1.6 times once' },
+      at: { kind: 'pair', usage: 'x,z', help: 'where the hero stands (the arena\'s middle by default): 17.5,17.5 by the '
+        + 'forest\'s bonfire' },
       each: { kind: 'switch', help: 'time each see-through or cut-out mesh alone too, the costliest listed' },
       frame: {
         kind: 'switch',

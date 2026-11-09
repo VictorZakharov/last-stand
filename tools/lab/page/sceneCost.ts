@@ -23,6 +23,8 @@ export interface SceneCostOptions {
   level: QualityLevel;
   /** the rounds of turns, each with a side's renders */
   rounds: number;
+  /** where the hero stands (x, z), the arena's middle without it */
+  at?: [number, number];
   /** draw the scene twice: it must read as more */
   canary: boolean;
   /** each see-through or cut-out mesh timed alone too, the costliest listed */
@@ -255,9 +257,9 @@ function atFullPixels(level: QualityLevel): string {
 /** `lab scenecost`, one scenario: what each part of the scene pass takes of the GPU. */
 export async function sceneCost(lab: Lab, command: SceneCostOptions): Promise<Report> {
   const { biome, view, level } = command;
-  const name = `${biome} ${view}`;
+  const name = command.at ? `${biome} ${view} at ${command.at.join(', ')}` : `${biome} ${view}`;
   const settings = atFullPixels(level);
-  await standIn(lab, { biome, view, facing: 0 });
+  await standIn(lab, { biome, view, facing: 0, ...(command.at ? { at: command.at } : {}) });
   const drawing = lab.drawing;
   lab.drawing = true;
   const turns = { rounds: command.rounds, renders: TURN_RENDERS };

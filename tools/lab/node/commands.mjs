@@ -781,9 +781,9 @@ export const COMMANDS = {
       for (const biome of options.biomes) {
         for (const view of options.views) {
           const { level, rounds } = options;
-          const { canary, each, frame } = options;
+          const { canary, each, frame, at } = options;
           const switches = { canary: Boolean(canary), each: Boolean(each), frame: Boolean(frame) };
-          const command = { biome, view, level, rounds, ...switches };
+          const command = { biome, view, level, rounds, ...switches, ...(at ? { at } : {}) };
           reports.push(await side.command('sceneCost', command));
         }
       }
