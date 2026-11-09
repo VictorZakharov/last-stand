@@ -24,6 +24,7 @@ import { clearProjectiles } from '../../../src/combat/projectiles';
 import { clearEffects } from '../../../src/fx/effects';
 import { clearLights } from '../../../src/fx/lights';
 import { particles } from '../../../src/fx/particles';
+import { groundHeight } from '../../../src/world/ground';
 type RunPhaseModule = typeof import('../../../src/world/runPhase');
 import { buildHotbar } from '../../../src/ui/hud';
 import * as culling from '../../../src/world/culling';
@@ -387,6 +388,8 @@ export interface CaptureOptions {
    *  (its turn still the hero's facing's) */
   at?: THREE.Vector3;
   distance?: number;
+  /** Keep a ground-level close-up's camera at least this far above the terrain (m). */
+  aboveGround?: number;
   /** how the frame is drawn (looks.ts): as the player sees it (`lit`, the default), or the hero's wireframe, his
    *  faces' orientation, his parts each a colour, or his skeleton over the frame */
   look?: Look;
@@ -612,6 +615,8 @@ export class Lab {
     if (fixture.gear) this.hold(fixture.gear, fixture.weapon);
     if (fixture.wear) this.dress(fixture.wear);
     if (fixture.rarity) this.glowAs(fixture.rarity);
+    // (never off to sit on a log nearby as he stands for a measure: `sit` lets him once set up)
+    this.player.sits = false;
     this.player.place(spot, facing);
     // (the camera too, for a hero built afresh: a commit from before it has none, and its camera glides)
     if (fixture.fresh) renderer.settleCamera?.(spot);
@@ -697,21 +702,34 @@ export class Lab {
   }
 
   /**
+   * The run left for the lobby by the pause menu's Abandon run, opened with Esc. Abandon acts only once held (2 s, its
+   * `data-hold-ms`), so its hold is made nothing for the click and put back after, as `ui`'s abandon canary makes it:
+   * clicked as it stood, every set-up afresh on a kept page waited 600 frames for the lobby and failed, and with it
+   * every job of a check. Clicked by the mouse (the hold starts on a pointer's press, which the element's own click
+   * never makes), once the menu has slid in.
+   */
+  async abandonRun(): Promise<void> {
+    await this.step(1, () => ({ keys: ['escape'] }));
+    const abandon = document.getElementById('btn-abandon');
+    if (!abandon) throw new Error('lab: no pause menu to leave the run by');
+    const holdMs = abandon.dataset.holdMs;
+    abandon.dataset.holdMs = '0';
+    try {
+      await this.clickOn(abandon);
+      await this.until(() => G.mode === 'menu', 600, 'the run never gave way to the lobby');
+    } finally {
+      if (holdMs !== undefined) abandon.dataset.holdMs = holdMs;
+    }
+  }
+
+  /**
    * A run started anew from the lobby, as a booted page's first set-up starts one, for a set-up afresh on a page kept
    * from a command before (`begin`): the run left by the pause menu, the profile read again as the boot read it, and
    * the random numbers started again for the run's start. Kept, a run carried the commands' leavings into the next:
    * the game's timers still pending, the wave's state, the props broken and the run's rolled columns.
    */
   private async runAfresh(): Promise<void> {
-    if (G.mode === 'run') {
-      await this.step(1, () => ({ keys: ['escape'] }));
-      const abandon = document.getElementById('btn-abandon');
-      if (!abandon) throw new Error('lab: no pause menu to leave the run by');
-      // (clicked as the run is started, by the element: clicked by the mouse, a set-up waited for the menu's slide in
-      // by the browser's clock, 60 ms of its 300)
-      abandon.click();
-      await this.until(() => G.mode === 'menu', 600, 'the run never gave way to the lobby');
-    }
+    if (G.mode === 'run') await this.abandonRun();
     G.profile = loadProfile(G.profile.classId);
     window.__labSeed(COMMAND_SEED);
     // (the run stamps what it starts with the game's clock, before a set-up moves it: at the moment the boot's own
@@ -1114,6 +1132,10 @@ export class Lab {
       centre.y + closeUp.rise * distance / BODY_DISTANCE,
       centre.z + Math.cos(angle) * distance,
     );
+    if (options.aboveGround !== undefined) {
+      camera.position.y = Math.max(camera.position.y,
+        groundHeight(camera.position.x, camera.position.z) + options.aboveGround);
+    }
     camera.fov = CLOSE_UP_FOV;
     camera.near = 0.05;
     camera.updateProjectionMatrix();
@@ -1129,7 +1151,7 @@ export class Lab {
     renderer.setView(view === 'third' ? 'third' : 'top');
     if (view !== 'third') renderer.setZoom(view === 'lobby' ? CAMERA.lobbyZoom : 1);
     // (a long step: every glide and ease of the camera at its end)
-    for (let i = 0; i < 3; i++) renderer.updateCamera(10, this.player.pos, this.model.height);
+    for (let i = 0; i < 3; i++) renderer.updateCamera(10, this.player.pos, this.framedHeight());
     const camera = G.camera;
     camera.updateMatrixWorld();
     const hips = this.joints.hips.getWorldPosition(new THREE.Vector3()).project(camera);
@@ -1144,6 +1166,13 @@ export class Lab {
       width: height * 0.6,
       height,
     };
+  }
+
+  /** The height the game's camera frames the hero by (`Player.framedHeight`: lowered as he sits), or his own in a
+   *  commit from before it. */
+  framedHeight(): number {
+    const player = this.player as { framedHeight?: () => number };
+    return player.framedHeight?.() ?? this.model.height;
   }
 
   /** The game's camera and its rig as they are now, and a function that puts them back. */

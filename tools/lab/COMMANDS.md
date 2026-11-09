@@ -815,6 +815,7 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   to be packed again), and the tag must be drawn in a slot within 3 frames. On main it never was: a label that found
   no slot was marked painted and never asked again, so a co-op tag that met a fight's numbers vanished until its bar
   stepped ("name tags sometimes appear, then disappear"). `--canary` gives none back, and the tag must stay undrawn.
+- `sit`: an idle hero's sit on a log, a stone or the floor by a fire: in full in [`commands/sit.md`](commands/sit.md).
 - `coat`: the hero's skirts and hood (`page/coat.ts`; `models/armor.ts` `Skirt` and `models/hood.ts` `HoodCloth`,
   found by their geometries' names, 'skirt' and 'hood', or a commit from before by the ranger's mesh's, 'tunic hem') as
   he stands at idle in his head item and body armour, `--seconds` (5 by default): every point of the cloth in its own

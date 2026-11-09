@@ -67,6 +67,7 @@ import type { CoatOptions } from './coat';
 import type { LabelsOptions } from './labels';
 import type { PosesOptions } from './poses';
 import type { GlanceOptions } from './glance';
+import type { SitOptions } from './sit';
 import type { LiveInspect, LivePicture, LivePictured } from './live';
 import type { EyesOptions } from './eyes';
 import type { SwingOptions } from './swing';
@@ -97,6 +98,46 @@ export async function liveFrames(lab: Lab, command: { count: number }): Promise<
 export async function livePicture(lab: Lab, command: LivePicture): Promise<LivePictured> {
   const { picture } = await import('./live');
   return picture(lab, command);
+}
+
+/** `lab live mocap`: the live session's hero posed as a motion-capture clip has its person, and pictured
+ *  (mocap.ts). */
+export async function liveMocap(lab: Lab, command: import('./mocap').LiveMocap): Promise<unknown> {
+  const { mocap } = await import('./mocap');
+  return mocap(lab, command);
+}
+
+/** `lab live holds`: the live session's hero held getting up at moments, pictured at each (liveSit.ts). */
+export async function liveHolds(lab: Lab, command: { moments: number[]; picture: import('./live').LivePicture }):
+  Promise<unknown> {
+  const { holds } = await import('./liveSit');
+  return holds(lab, command.moments, command.picture);
+}
+
+/** `lab live sit`: the live session's hero sat on a seat (liveSit.ts). */
+export async function liveSit(lab: Lab, command: { seat: string; fixture: Fixture }): Promise<string> {
+  const { sit } = await import('./liveSit');
+  return sit(lab, command.seat, command.fixture);
+}
+
+/** `lab live hold`: the live session's hero held getting up at a moment of his hands' stage (liveSit.ts). */
+export async function liveHold(lab: Lab, command: { hands: number }): Promise<string> {
+  const { hold } = await import('./liveSit');
+  return hold(lab, command.hands);
+}
+
+/** `lab live keys`: a keyed move's keys as a table, each number named (tuning.ts). */
+export async function liveKeys(_lab: Lab, command: { path: string }): Promise<string> {
+  if (!window.__keyTable) throw new Error('live keys: this game has no keyed tunables');
+  return window.__keyTable(command.path);
+}
+
+/** `lab live key`: some of a keyed move's key's numbers set by name, and the keys as they are then. */
+export async function liveKey(_lab: Lab, command: { path: string; row: number; set: Record<string, number> }):
+  Promise<string> {
+  if (!window.__tuneKey || !window.__keyTable) throw new Error('live key: this game has no keyed tunables');
+  window.__tuneKey(command.path, command.row, command.set);
+  return window.__keyTable(command.path);
 }
 
 /** `lab live inspect`: the live session's scene listed. */
@@ -164,6 +205,18 @@ export async function coat(lab: Lab, command: CoatOptions): Promise<Report> {
  *  problem. */
 export async function glance(lab: Lab, command: GlanceOptions): Promise<Report> {
   const { glance: follow } = await import('./glance');
+  return follow(lab, command);
+}
+
+/** `lab sit`: an idle hero's sit on a log or a stone; a sit never come, off its side, on air or in the seat, feet that
+ *  neither reach the floor nor hang, a joint past its range, no glance, an ask done before he's up or a tap done after,
+ *  or a canary it missed, is a problem. */
+export async function sit(lab: Lab, command: SitOptions): Promise<Report> {
+  if (command.poses) {
+    const { sitPoses } = await import('./sitPoses');
+    return sitPoses(lab, command.seats, command.fixture);
+  }
+  const { sit: follow } = await import('./sit');
   return follow(lab, command);
 }
 
