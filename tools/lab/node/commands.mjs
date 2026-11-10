@@ -854,6 +854,7 @@ export const COMMANDS = {
         level: options.level ?? (options.device ? qualityOf(options.quality).level : undefined),
         frames: options.frames === undefined ? undefined : Math.round(options.frames),
         features: Boolean(options.features),
+        paused: Boolean(options.paused),
         canary: Boolean(options.canary),
       };
       return side.command('passesHere', command);

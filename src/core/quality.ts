@@ -18,7 +18,7 @@ import { setHeroDetail } from '../entities/models/armor';
 import { setRubbleShadows } from '../fx/rubble';
 import { setReliefSteps } from './parallax';
 import { setHdrAllowed } from './hdr';
-import { WEBGPU } from './webgpu';
+import { WEBGPU, setPlainLitOnWebGPU } from './webgpu';
 import { setSkullDetail } from '../world/skull';
 import { setSunShadowStill } from '../world/props';
 import { setClutterShare } from '../world/culling';
@@ -198,6 +198,7 @@ function apply(l: QualityLevel, most = Infinity): void {
   // (its map made anew at another size, or its casters another set: drawn again)
   G.arena.sunShadowChanged();
   setParticleShare(p.particles);
+  if (WEBGPU) setPlainLitOnWebGPU(p.plainLit);
   for (const p of G.players) applyShadowDetail(p.obj);
   for (const e of G.enemies) applyShadowDetail(e.obj);
   restart();

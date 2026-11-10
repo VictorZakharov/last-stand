@@ -130,6 +130,9 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   frame drawn. `--canary` draws the first frame at twice the exposure, which must come out brighter, and in HDR at
   1.2 times the paper white, which the check under the knee must catch. With `--ab` the SDR frames agree with main,
   line for line.
+  With `--renderer webgpu` the canvas is read through a 2D canvas in the same task as the draw (`webGpuPixels` in
+  `page/pixels.ts`, SDR only): with `--levels`, it caught WebGPU's Low and Very low a fifth brighter than High in the
+  forest, their shadows untaken. Run it with `--boot verylow` too, where a level's pipelines are built plain.
 - `passes`: what each of the frame's renders takes of the GPU on WebGPU (`page/gpuPasses.ts`, `--renderer webgpu`,
   `--device` to play a slow device's GPU): three's own timestamps (the renderer is made with `trackTimestamp`), every
   render call of each frame named by what it draws and the size it draws into (the scene, its shadow maps, each of
@@ -146,7 +149,10 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   low, its pass drawn once a frame by its calls, which a line counts): read it as the frame's scene work.
   At a phone's pixels (`--device phone --level verylow`) the forest's point lights took 13.8 ms of the scene's 18.2
   before they passed over the lights out of reach, 5.0 after (the pictures the same); bloom's bright pass and first
-  blur drew at the scene's 7646x3528 before taking the quality's share.
+  blur drew at the scene's 7646x3528 before taking the quality's share. `--paused` pauses the game as its pause menu
+  does (no update, the same scene drawn): a phone's GPU took 11.5 ms a frame paused and 24 in the lobby, the same view
+  and level (traces N5TH-2XC9, R5FJ-9TNN); here the crypt's scene pass read 5.25 ms paused and 6.24 updating, at the
+  phone's pixels.
 - `profile`: the game's profiler (`src/perf/profiler.ts`, the pause menu's Performance tab: Profile this spot) run
   in the lab (`page/profile.ts`), the hero stood at `--at x,z` in `--biome` (forest) in `--view` (top) at `--level`
   (the player's own otherwise; with `--device`, that device's level and screen). The game's frames are held, the
