@@ -146,7 +146,10 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   low, its pass drawn once a frame by its calls, which a line counts): read it as the frame's scene work.
   At a phone's pixels (`--device phone --level verylow`) the forest's point lights took 13.8 ms of the scene's 18.2
   before they passed over the lights out of reach, 5.0 after (the pictures the same); bloom's bright pass and first
-  blur drew at the scene's 7646x3528 before taking the quality's share.
+  blur drew at the scene's 7646x3528 before taking the quality's share. `--paused` pauses the game as its pause menu
+  does (no update, the same scene drawn): a phone's GPU took 11.5 ms a frame paused and 24 in the lobby, the same view
+  and level (traces N5TH-2XC9, R5FJ-9TNN); here the crypt's scene pass read 5.25 ms paused and 6.24 updating, at the
+  phone's pixels.
 - `profile`: the game's profiler (`src/perf/profiler.ts`, the pause menu's Performance tab: Profile this spot) run
   in the lab (`page/profile.ts`), the hero stood at `--at x,z` in `--biome` (forest) in `--view` (top) at `--level`
   (the player's own otherwise; with `--device`, that device's level and screen). The game's frames are held, the

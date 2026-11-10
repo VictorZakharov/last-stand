@@ -761,6 +761,11 @@ export const COMMANDS = {
         help: 'each feature of the lit shading (the environment, the shadows, the point lights, the fog) '
           + 'taken off the scene\'s pass in turns, drawn alone',
       },
+      paused: {
+        kind: 'switch',
+        help: 'the game paused as its pause menu pauses it (no update, the same scene drawn): what a game that '
+          + 'updates adds to the GPU',
+      },
       canary: { kind: 'switch', help: 'a render of its own, the scene again: found once a frame, with a time' },
       ...COMMON_OPTIONS,
     },
