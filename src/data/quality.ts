@@ -43,8 +43,9 @@ export interface QualityPreset {
    *  each is drawn over what's behind it, so fewer is less of the GPU's fill */
   particles: number;
   /** the lit shading made plain on WebGPU (`setPlainLitOnWebGPU` in core/webgpu.ts): no surface maps (normal,
-   *  roughness, metalness, occlusion) and no shadows taken, a uniform's branch: half a phone's frame there (trace
-   *  DM4B-R468). WebGL's lit shading cost that phone 0.8 ms at Medium (EZJ6-YGPE), and is left whole */
+   *  roughness, metalness, occlusion) and no shadows taken: built without that code at the boot's level, a
+   *  uniform's branch once the game shows. Half a phone's frame there (trace DM4B-R468). WebGL's lit shading cost
+   *  that phone 0.8 ms at Medium (EZJ6-YGPE), and is left whole */
   plainLit: boolean;
 }
 
