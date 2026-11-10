@@ -131,7 +131,7 @@ export async function buildArena(scene: THREE.Scene, renderer: THREE.WebGLRender
     hemi.color.set(L.hemi.sky); hemi.groundColor.set(L.hemi.ground); hemi.intensity = L.hemi.intensity;
     moon.color.set(L.moon.color); moon.intensity = L.moon.intensity; moon.position.set(...L.moon.pos);
     scene.environment = envMap(renderer, L.env);
-    oneEnvironment(scene);
+    oneEnvironment(scene, L.env);
     scene.environmentIntensity = L.envIntensity;
     setAdaptScale(L.adapt ?? 1);
   }
