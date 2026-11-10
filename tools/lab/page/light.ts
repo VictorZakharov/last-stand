@@ -18,6 +18,8 @@ import * as renderer from '../../../src/core/renderer';
 import { CAMERA } from '../../../src/data/balance';
 import { hdrOutput } from './hdrOutput';
 import { useQuality } from '../../../src/core/quality';
+import { WEBGPU } from '../../../src/core/webgpu';
+import { webGpuPixels } from './pixels';
 import type { QualityLevel } from '../../../src/data/quality';
 import type { BiomeId } from '../../../src/data/biomes';
 import type { WeaponStyle } from '../../../src/loot/loadout';
@@ -155,6 +157,7 @@ export function topLight(canvas: Canvas, at: number): number {
 
 /** The canvas's size in its own pixels. */
 export function canvasSize(): { width: number; height: number } {
+  if (WEBGPU) return { width: G.renderer.domElement.width, height: G.renderer.domElement.height };
   const gl = G.renderer.getContext();
   return { width: gl.drawingBufferWidth, height: gl.drawingBufferHeight };
 }
@@ -168,9 +171,10 @@ function channelsOf(bytes: Uint8Array): Float32Array {
 
 /** The canvas's pixels as last drawn: all of them, or those of `box`. */
 function readCanvas(box?: CanvasBox): Canvas {
-  const gl = G.renderer.getContext() as WebGL2RenderingContext & { drawingBufferFormat: number };
   G.renderer.setRenderTarget(null);
   const { left, bottom, width, height } = box ?? { left: 0, bottom: 0, ...canvasSize() };
+  if (WEBGPU) return readWebGpuCanvas({ left, bottom, width, height });
+  const gl = G.renderer.getContext() as WebGL2RenderingContext & { drawingBufferFormat: number };
   if (gl.drawingBufferFormat === gl.RGBA16F) {
     const pixels = new Float32Array(width * height * 4);
     gl.readPixels(left, bottom, width, height, gl.RGBA, gl.FLOAT, pixels);
@@ -178,6 +182,21 @@ function readCanvas(box?: CanvasBox): Canvas {
   }
   const bytes = new Uint8Array(width * height * 4);
   gl.readPixels(left, bottom, width, height, gl.RGBA, gl.UNSIGNED_BYTE, bytes);
+  return { pixels: channelsOf(bytes), width, height, hdr: false };
+}
+
+/** `box` of the WebGPU canvas as last drawn, its rows from the bottom up as WebGL's reads come. Its HDR canvas isn't
+ *  read so: SDR only. */
+function readWebGpuCanvas(box: CanvasBox): Canvas {
+  const { left, bottom, width, height } = box;
+  const top = G.renderer.domElement.height - bottom - height;
+  const rows = webGpuPixels({ left, top, width, height }).data;
+  const bytes = new Uint8Array(width * height * 4);
+  const rowBytes = width * 4;
+  for (let row = 0; row < height; row++) {
+    const from = (height - 1 - row) * rowBytes;
+    bytes.set(rows.subarray(from, from + rowBytes), row * rowBytes);
+  }
   return { pixels: channelsOf(bytes), width, height, hdr: false };
 }
 

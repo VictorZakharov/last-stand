@@ -130,6 +130,9 @@ takes and the options every command takes. [`AGENTS.md`](AGENTS.md) has the lab'
   frame drawn. `--canary` draws the first frame at twice the exposure, which must come out brighter, and in HDR at
   1.2 times the paper white, which the check under the knee must catch. With `--ab` the SDR frames agree with main,
   line for line.
+  With `--renderer webgpu` the canvas is read through a 2D canvas in the same task as the draw (`webGpuPixels` in
+  `page/pixels.ts`, SDR only): with `--levels`, it caught WebGPU's Low and Very low a fifth brighter than High in the
+  forest, their shadows untaken. Run it with `--boot verylow` too, where a level's pipelines are built plain.
 - `passes`: what each of the frame's renders takes of the GPU on WebGPU (`page/gpuPasses.ts`, `--renderer webgpu`,
   `--device` to play a slow device's GPU): three's own timestamps (the renderer is made with `trackTimestamp`), every
   render call of each frame named by what it draws and the size it draws into (the scene, its shadow maps, each of
