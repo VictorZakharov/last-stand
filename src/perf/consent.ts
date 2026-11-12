@@ -146,11 +146,13 @@ function ask(slow: Slow, bytes: number): void {
   place();
 }
 
-/** what a report sent without asking found, said to the player */
+/** what a report sent without asking found, said to the player in a few words ("Froze for 1.2 s", "Ran slowly in the
+ *  fight") */
 const FOUND = (slow: Slow | undefined): string => {
   const v = slow?.verdict;
-  if (v && v.longest >= 1000) return `The game froze for ${(v.longest / 1000).toFixed(1)} s`;
-  return slow ? `The game ${WHERE[slow.scene]}` : 'The game ran slowly';
+  if (v && v.longest >= 1000) return `Froze for ${(v.longest / 1000).toFixed(1)} s`;
+  const what = slow ? WHERE[slow.scene] : 'ran slowly';
+  return what[0].toUpperCase() + what.slice(1);
 };
 
 /** The packed report sent; `unasked`: sent without asking (Always, or a severe stretch under Ask), the player told so
@@ -171,8 +173,8 @@ async function send(unasked = false): Promise<void> {
   if (recorder.automaticSuppressed()) { letGo(); return; }
   box.querySelector('.pa-note')!.innerHTML = 'code' in sent
     ? unasked
-      ? `${found}: a performance report was sent so it can be fixed. Its code: <b class="gold">${sent.code}</b>. `
-        + 'Pause menu, Performance: Slow-game reports turns this off.'
+      // (short: from the owner, "Froze for 1.2 s, performance report sent (BBC2-BWCZ). Turn off in Pause → Performance.")
+      ? `${found}, performance report sent (<b class="gold">${sent.code}</b>). Turn off in Pause → Performance.`
       : `Performance report sent, thank you. Its code: <b class="gold">${sent.code}</b>`
     : `The performance report couldn't be sent (${sent.error}).`;
   box.className = 'sent';

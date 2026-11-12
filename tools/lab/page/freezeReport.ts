@@ -48,6 +48,9 @@ async function stalls(lab: Lab): Promise<void> {
   await lab.step(JUDGED);
 }
 
+/** a report's code in the note the player is shown ("... performance report sent (BBC2-BWCZ) ...") */
+const REPORT_CODE = /\(([0-9A-Z]{4}-[0-9A-Z]{4})\)/;
+
 export interface FreezeFound { lines: string[]; problems: string[]; moments: Pictured[] }
 
 /** The freeze sent and the milder stretch asked about, under Ask (`canary`: the freeze judged as before #567). */
@@ -75,12 +78,12 @@ export async function freezeReport(lab: Lab, send: string, canary: boolean): Pro
       return s.prompt === 'sent';
     });
     const after = traceState();
-    const code = /code: (\S+?)\./.exec(after.note)?.[1] ?? '';
+    const code = REPORT_CODE.exec(after.note)?.[1] ?? '';
     lines.push(`  a ${(FREEZE_MS / 1000).toFixed(1)} s freeze under Ask: ${sent ? `sent without asking, code ${code}` : asked ? 'asked, not sent' : 'nothing'}`
       + `${sent ? `; the player told: "${after.note}"` : ''}`);
     if (!sent) problems.push(`a ${FREEZE_MS / 1000} s freeze under Ask was ${asked ? 'asked about, not sent without asking' : 'never sent'}`);
     if (sent && asked) problems.push('a freeze under Ask was asked about before it was sent');
-    if (sent && (!code || !after.note.includes('froze'))) problems.push(`the player wasn't told the freeze's report was sent, with its code ("${after.note}")`);
+    if (sent && (!code || !/froze/i.test(after.note))) problems.push(`the player wasn't told the freeze's report was sent, with its code ("${after.note}")`);
     if (sent && after.sent !== 1) problems.push(`the freeze's send counted ${after.sent} against the day's, not 1`);
     if (sent && !canary) moments.push(await lab.screen('a freeze sent without asking, under Ask', [after.note]));
     putAway();
@@ -109,7 +112,7 @@ export async function freezeReport(lab: Lab, send: string, canary: boolean): Pro
     if (sentDefault && !canary) moments.push(await lab.screen('slow play sent by default (never chosen)', [byDefault.note]));
     if (byDefault.consent !== 'always') problems.push(`a player who never chose is on ${byDefault.consent}, not Always`);
     if (!sentDefault || askedDefault) problems.push(`slow play was ${askedDefault ? 'asked about' : 'never sent'} for a player who never chose, not sent by default`);
-    else if (!/code: \S+/.test(byDefault.note)) problems.push(`the player wasn't told the default report was sent, with its code ("${byDefault.note}")`);
+    else if (!REPORT_CODE.test(byDefault.note)) problems.push(`the player wasn't told the default report was sent, with its code ("${byDefault.note}")`);
   } finally {
     putAway();
     recorder.release();
