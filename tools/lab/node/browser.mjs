@@ -360,13 +360,16 @@ function seededRandom() {
 
 /**
  * Every boot a first boot: nothing kept from the last (a saved profile loaded where the first boot rolled one made
- * a frame's difference), and no logo wind (the loading screen's watchdog counted as having cut it short on the
+ * a frame's difference), no slow-game reports sent, and no logo wind (the loading screen's watchdog counted as having cut it short on the
  * launches in a row it takes to switch it off).
  */
 export function freshStorage() {
   try {
     localStorage.clear();
     localStorage.setItem('last-stand.logo-wind-slow', '2');
+    // (slow-game reports off: sent by default, a lab page's slow frames would go to the game's own traces service; a
+    // measure of them sets its own choice and the lab's service, page/freezeReport.ts)
+    localStorage.setItem('last-stand-perf-traces', '{"consent":"off","refusals":0,"sent":[]}');
   } catch {
     // storage blocked: the intro plays, slower but harmless
   }

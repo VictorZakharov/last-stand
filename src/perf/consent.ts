@@ -1,8 +1,9 @@
-// Asking the player before a trace is sent (src/perf/AGENTS.md). A slow stretch the recorder found waits for a moment
-// that isn't a fight (the choice after a wave, the summary, the lobby, the hero selection screen), then the player is
-// asked in a small prompt that blocks nothing: Send, Not now or Always. Always is kept and sends from then on without
-// asking (the pause menu's Slow-game reports turns it back, or off); Not now asks no more this session, and after
-// three the game stops asking. A severe stretch (a freeze of a second or more, or a 1% low under 15 frames a second:
+// When a trace is sent (src/perf/AGENTS.md). A slow stretch the recorder found waits for a moment that isn't a fight
+// (the choice after a wave, the summary, the lobby, the hero selection screen). By default (Always: a player who never
+// chose) it's then sent without asking, the player told with its code (from play, #567: "by default, it should be
+// sending, unless toggled off in settings"); the pause menu's Slow-game reports sets Ask or Off. Under Ask the player
+// is asked in a small prompt that blocks nothing: Send, Not now or Always; Not now asks no more this session, and
+// after three the game stops asking. A severe stretch (a freeze of a second or more, or a 1% low under 15 frames a second:
 // `severe` in detect.ts) is sent without asking under Ask too, and the player told it was, with its code (from play,
 // #567: "if game detects lag/freezes, it should send report automatically"); Off sends nothing, and a player who said
 // Not now three times isn't sent one either. However asked, a game sends at most 10 in any 24 hours, kept across
@@ -50,10 +51,11 @@ const $ = (s: string): HTMLElement => document.querySelector<HTMLElement>(s)!;
 function kept(): Kept {
   try {
     const k = JSON.parse(localStorage.getItem(KEY) ?? 'null') as Partial<Kept> | null;
-    const consent = k?.consent === 'always' || k?.consent === 'off' ? k.consent : 'ask';
+    // (a player who never chose sends: Always is the default; Ask and Off are kept as chosen)
+    const consent = k?.consent === 'ask' || k?.consent === 'off' ? k.consent : 'always';
     const sent = Array.isArray(k?.sent) ? k.sent.filter((t) => typeof t === 'number' && Date.now() - t < DAY_MS) : [];
     return { consent, refusals: Number(k?.refusals) || 0, sent };
-  } catch { return { consent: 'ask', refusals: 0, sent: [] }; }
+  } catch { return { consent: 'always', refusals: 0, sent: [] }; }
 }
 function keep(k: Kept): void { try { localStorage.setItem(KEY, JSON.stringify(k)); } catch { /* private mode */ } }
 
@@ -115,8 +117,7 @@ function look(): void {
   if (!wanted(slow.verdict)) { letGo(); return; }
   if (packed?.slow !== slow) { void pack(slow); return; }
   const k = kept();
-  if (k.consent === 'always') void send();
-  else if (sentUnasked(k, slow.verdict)) void send(true);
+  if (k.consent === 'always' || sentUnasked(k, slow.verdict)) void send(true);
   else ask(slow, packed.body.length);
 }
 
@@ -145,11 +146,15 @@ function ask(slow: Slow, bytes: number): void {
   place();
 }
 
-/** what a report sent without asking under Ask found, said to the player */
-const FOUND = (v: Verdict | null): string =>
-  v && v.longest >= 1000 ? `The game froze for ${(v.longest / 1000).toFixed(1)} s` : 'The game ran very slowly';
+/** what a report sent without asking found, said to the player */
+const FOUND = (slow: Slow | undefined): string => {
+  const v = slow?.verdict;
+  if (v && v.longest >= 1000) return `The game froze for ${(v.longest / 1000).toFixed(1)} s`;
+  return slow ? `The game ${WHERE[slow.scene]}` : 'The game ran slowly';
+};
 
-/** The packed report sent; `unasked`: a severe stretch sent under Ask, the player told so and where to turn it off. */
+/** The packed report sent; `unasked`: sent without asking (Always, or a severe stretch under Ask), the player told so
+ *  and where to turn it off. */
 async function send(unasked = false): Promise<void> {
   const box = $('#perf-ask');
   const body = packed?.body;
@@ -160,7 +165,7 @@ async function send(unasked = false): Promise<void> {
   keep({ ...k, sent: [...k.sent, Date.now()] });
   box.className = 'sending';
   box.querySelector('.pa-note')!.textContent = 'Sending the performance report...';
-  const found = unasked ? FOUND(packed?.slow.verdict ?? null) : '';
+  const found = unasked ? FOUND(packed?.slow) : '';
   const sent = await sendTrace(body, target);
   sending = false;
   if (recorder.automaticSuppressed()) { letGo(); return; }

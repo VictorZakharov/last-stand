@@ -1,6 +1,7 @@
 // `lab recorder`'s freeze report (#567): under Slow-game reports' Ask, a freeze (one frame of 1.2 s, the lab's clock
 // jumped) must be sent without asking, at the next calm moment, to the lab's own traces service, and the player told
-// so with its code; then a stretch that's slow but not severe (three stalls of 0.3 s) must still ask first. Its
+// so with its code; then a stretch that's slow but not severe (three stalls of 0.3 s) must still ask first; and for a
+// player who never chose (Always, the default), the same stalls must be sent without asking, the player told. Its
 // canary has the game judge the freeze as the game did before (`wanted` told nothing of the stretch: a freeze asked
 // like any slow stretch), which must be caught as asked, not sent.
 import type { Lab } from './lab';
@@ -35,6 +36,16 @@ async function playUntil(lab: Lab, done: () => boolean): Promise<boolean> {
     await new Promise((resolve) => setTimeout(resolve, 50));
   }
   return done();
+}
+
+/** `STALLS` stalls of `STALL_MS`, slow but not severe, and the frames the detector needs to judge them. */
+async function stalls(lab: Lab): Promise<void> {
+  await lab.step(BETWEEN);
+  for (let i = 0; i < STALLS; i++) {
+    await longFrame(lab, STALL_MS);
+    await lab.step(BETWEEN);
+  }
+  await lab.step(JUDGED);
 }
 
 export interface FreezeFound { lines: string[]; problems: string[] }
@@ -73,17 +84,29 @@ export async function freezeReport(lab: Lab, send: string, canary: boolean): Pro
     putAway();
 
     // slow, not severe: asked first
-    await lab.step(BETWEEN);
-    for (let i = 0; i < STALLS; i++) {
-      await longFrame(lab, STALL_MS);
-      await lab.step(BETWEEN);
-    }
-    await lab.step(JUDGED);
+    await stalls(lab);
     const askedMild = await playUntil(lab, () => traceState().prompt.includes('asking'));
     const mild = traceState();
     lines.push(`  ${STALLS} stalls of ${(STALL_MS / 1000).toFixed(1)} s under Ask: ${askedMild ? 'asked first' : `not asked (${mild.prompt})`}, ${mild.sent - (sent ? 1 : 0)} sent`);
     if (!askedMild) problems.push(`${STALLS} stalls of ${STALL_MS / 1000} s under Ask were never asked about`);
     if (mild.sent > (sent ? 1 : 0)) problems.push(`${STALLS} stalls of ${STALL_MS / 1000} s under Ask were sent without asking`);
+    putAway();
+
+    // a player who never chose: sent by default, without asking
+    keepTraceState(null);
+    await stalls(lab);
+    let askedDefault = false;
+    const sentDefault = await playUntil(lab, () => {
+      const s = traceState();
+      askedDefault ||= s.prompt.includes('asking');
+      return s.prompt === 'sent';
+    });
+    const byDefault = traceState();
+    lines.push(`  ${STALLS} stalls of ${(STALL_MS / 1000).toFixed(1)} s, never chosen (${byDefault.consent}): `
+      + `${sentDefault ? `sent without asking; the player told: "${byDefault.note}"` : askedDefault ? 'asked, not sent' : 'nothing'}`);
+    if (byDefault.consent !== 'always') problems.push(`a player who never chose is on ${byDefault.consent}, not Always`);
+    if (!sentDefault || askedDefault) problems.push(`slow play was ${askedDefault ? 'asked about' : 'never sent'} for a player who never chose, not sent by default`);
+    else if (!/code: \S+/.test(byDefault.note)) problems.push(`the player wasn't told the default report was sent, with its code ("${byDefault.note}")`);
   } finally {
     putAway();
     recorder.release();
