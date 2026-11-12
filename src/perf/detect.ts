@@ -30,6 +30,8 @@ export const BIG_STALL_MS = 1000;
 export const STALL_MOST = 5000;
 /** stalls in the stretch that are slow: this many, or one big */
 export const STALLS = 3;
+/** a 1% low under this is extreme lag (frames a second): with a freeze, `severe` */
+export const SEVERE_LOW_FPS = 15;
 /** a boot whose own work (its time less the download's) took longer than this is slow (ms) */
 export const BOOT_WORK_MS = 15_000;
 /** a loading bar up longer than this is slow (ms) */
@@ -95,6 +97,14 @@ export function judge(frames: Frames, refreshMs: number): Verdict {
   const why = low ? 'low' : missed > MISSED_SHARE && meanFps < MEAN_FPS ? 'missed' : stalled ? 'stalls' : '';
   return { slow: why !== '', why, playMs, meanFps, lowFps, missed, stalls, longest, refreshHz };
 }
+
+/**
+ * Whether a slow stretch is severe: a freeze (a frame of `BIG_STALL_MS` or more, the machine asleep left out) or extreme
+ * lag (a 1% low under `SEVERE_LOW_FPS`). Its report is sent without asking the player, as a choice of Always is
+ * (`consent.ts`; from play, #567: "if game detects lag/freezes, it should send report automatically").
+ */
+export const severe = (v: Verdict | null): boolean =>
+  !!v && (v.longest >= BIG_STALL_MS || (Number.isFinite(v.lowFps) && v.lowFps < SEVERE_LOW_FPS));
 
 /** The display's frame (ms) by the fastest second seen: its frames' 10th percentile, kept as the least so far
  *  (a slow game never shows the display's own rate; at most 360 Hz, at least 30). */

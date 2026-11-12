@@ -671,8 +671,8 @@
         <label class="opt-row"><input type="checkbox" id="opt-net"> Show network stats</label>
         </div>
         <div class="pb-opt-col">
-        <!-- a report sent when the game runs slowly (perf/consent.ts): asked first, sent without asking, or never -->
-        <div class="opt-row quality-row"><span>Slow-game reports</span>
+        <!-- a report sent when the game runs slowly (perf/consent.ts): asked first (a freeze or extreme lag sent without asking), sent without asking, or never -->
+        <div class="opt-row quality-row" title="Ask: a freeze or very slow play is sent by itself, other slow play asks first. Always: sent without asking. Off: never sent."><span>Slow-game reports</span>
           <div class="seg" id="opt-traces"><button data-t="ask">Ask</button><button data-t="always">Always</button><button data-t="off">Off</button></div>
         </div>
         <div class="opt-row quality-row"><span>Performance recording</span>

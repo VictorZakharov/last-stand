@@ -48,7 +48,7 @@ export async function manualRecording(lab: Lab, server: string, canary: boolean)
     recorder.mark('outside the manual interval');
     await lab.clickOn(button('btn-recording'));
     if (recorder.recordingSince() === null) throw new Error('lab: manual recording never started');
-    if (recorder.wanted() || !recorder.automaticSuppressed() || recorder.pending()) {
+    if (recorder.wanted(null) || !recorder.automaticSuppressed() || recorder.pending()) {
       problems.push('automatic report detection was not suppressed by Start recording');
     }
     await lab.clickOn(document.querySelector('#opt-resolution [data-r="0.5"]')!);

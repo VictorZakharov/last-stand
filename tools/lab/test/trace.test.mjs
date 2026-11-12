@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { gzipSync } from 'node:zlib';
 import { decodeTrace, encodeTrace, NONE, PACKING, STATE, traceHeader } from '../../../src/perf/traceFormat.ts';
-import { judge, refreshOf, slowBoot, slowReadying } from '../../../src/perf/detect.ts';
+import { judge, refreshOf, severe, slowBoot, slowReadying } from '../../../src/perf/detect.ts';
 import { replayCommand, traceReport } from '../../../src/perf/traceReport.ts';
 import { readEnvFile, reportOf } from '../node/trace.mjs';
 import { parseCommandLine } from '../node/options.mjs';
@@ -219,3 +219,16 @@ test('the env file and the command line', () => {
   assert.equal(parseCommandLine(['trace', '--build', 'abc1234']).options.build, 'abc1234');
 });
 
+
+test('a freeze of a second or extreme lag is severe (sent without asking, #567); three short stalls or a low of 25 are not', () => {
+  const hz60 = 1000 / 60;
+  const freeze = judge(ring([...frames(20, hz60), [1200, 0], ...frames(2, hz60)]), hz60);
+  assert.ok(freeze.slow && severe(freeze), 'a 1.2 s freeze');
+  const extreme = judge(ring(frames(20, 1000 / 12)), hz60);
+  assert.ok(extreme.slow && severe(extreme), 'a steady 12 frames a second');
+  const stalls = judge(ring([...frames(18, hz60), [300, 0], ...frames(1, hz60), [300, 0], ...frames(1, hz60), [300, 0]]), hz60);
+  assert.ok(stalls.slow && !severe(stalls), 'three stalls of 0.3 s: slow, not severe');
+  const low = judge(ring(frames(20, 40)), hz60);
+  assert.ok(low.slow && !severe(low), 'a steady 25 frames a second: slow, not severe');
+  assert.equal(severe(null), false, 'a boot or a loading bar has no verdict');
+});

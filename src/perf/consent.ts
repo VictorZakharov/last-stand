@@ -2,12 +2,17 @@
 // that isn't a fight (the choice after a wave, the summary, the lobby, the hero selection screen), then the player is
 // asked in a small prompt that blocks nothing: Send, Not now or Always. Always is kept and sends from then on without
 // asking (the pause menu's Slow-game reports turns it back, or off); Not now asks no more this session, and after
-// three the game stops asking. However asked, a game sends at most 10 in any 24 hours, kept across reloads (the
-// traces server holds each address to the same). In co-op each game asks its own player about its own frames.
+// three the game stops asking. A severe stretch (a freeze of a second or more, or a 1% low under 15 frames a second:
+// `severe` in detect.ts) is sent without asking under Ask too, and the player told it was, with its code (from play,
+// #567: "if game detects lag/freezes, it should send report automatically"); Off sends nothing, and a player who said
+// Not now three times isn't sent one either. However asked, a game sends at most 10 in any 24 hours, kept across
+// reloads (the traces server holds each address to the same), and none without asking within 10 minutes of the last.
+// In co-op each game asks its own player about its own frames.
 import { G } from '../state';
 import { sfx } from '../core/audio';
 import { isReadying } from '../game/warm';
 import { recorder, type Slow } from './recorder';
+import { severe, type Verdict } from './detect';
 import { canSend, packTrace, sendTrace, type Sent } from './upload';
 
 /** what the player chose: asked each time, sent without asking, or never */
@@ -31,6 +36,10 @@ const UNDER_GAP = 8;
 const NOTE_MS = 9000;
 
 let askedThisSession = false;
+/** where reports go: the game's traces service, or a harness's own (`setTraceTarget`) */
+let target: string | undefined;
+/** Reports sent to `base` from now on (the lab's own traces service), or the game's again (undefined). */
+export function setTraceTarget(base: string | undefined): void { target = base; }
 let calmSince = 0, packing = false, sending = false, noteTimer = 0;
 /** the stretch the player was asked about (shown again after a fight hid it) */
 let askedFor: Slow | null = null;
@@ -52,14 +61,19 @@ export const traceConsent = (): TraceConsent => kept().consent;
 /** The pause menu's choice: asking again starts the refusals over. */
 export function setTraceConsent(consent: TraceConsent): void { keep({ ...kept(), consent, refusals: 0 }); }
 
-/** Whether a slow stretch found now could go anywhere: the recorder snapshots one only then. */
-function wanted(): boolean {
+/** Whether a slow stretch found now, judged `verdict`, could go anywhere: the recorder snapshots one only then. */
+function wanted(verdict: Verdict | null): boolean {
   if (!canSend() || recorder.automaticSuppressed()) return false;
   const k = kept();
   if (k.consent === 'off' || k.sent.length >= MOST_A_DAY) return false;
-  if (k.consent === 'always') return Date.now() - Math.max(0, ...k.sent) > SENT_APART_MS;
+  if (k.consent === 'always' || sentUnasked(k, verdict)) return Date.now() - Math.max(0, ...k.sent) > SENT_APART_MS;
   return !askedThisSession && k.refusals < MOST_REFUSALS;
 }
+
+/** Whether a stretch judged `verdict` goes without asking under Ask: a severe one, unless the player has said Not now
+ *  three times (the game stops asking then, and doesn't send behind their back either). */
+const sentUnasked = (k: Kept, verdict: Verdict | null): boolean =>
+  k.consent === 'ask' && k.refusals < MOST_REFUSALS && severe(verdict);
 
 /** A moment the prompt may show in: no fight, no loading bar, the tab in view, the pause menu shut. */
 const calm = (): boolean =>
@@ -98,9 +112,11 @@ function look(): void {
   calmSince ||= performance.now();
   if (performance.now() - calmSince < CALM_MS || packing || sending) return;
   if (askedFor === slow) { if (box.classList.contains('hidden')) box.className = 'asking'; return; }
-  if (!wanted()) { letGo(); return; }
+  if (!wanted(slow.verdict)) { letGo(); return; }
   if (packed?.slow !== slow) { void pack(slow); return; }
-  if (kept().consent === 'always') void send();
+  const k = kept();
+  if (k.consent === 'always') void send();
+  else if (sentUnasked(k, slow.verdict)) void send(true);
   else ask(slow, packed.body.length);
 }
 
@@ -129,7 +145,12 @@ function ask(slow: Slow, bytes: number): void {
   place();
 }
 
-async function send(): Promise<void> {
+/** what a report sent without asking under Ask found, said to the player */
+const FOUND = (v: Verdict | null): string =>
+  v && v.longest >= 1000 ? `The game froze for ${(v.longest / 1000).toFixed(1)} s` : 'The game ran very slowly';
+
+/** The packed report sent; `unasked`: a severe stretch sent under Ask, the player told so and where to turn it off. */
+async function send(unasked = false): Promise<void> {
   const box = $('#perf-ask');
   const body = packed?.body;
   if (!body || sending || recorder.automaticSuppressed()) return;
@@ -139,11 +160,15 @@ async function send(): Promise<void> {
   keep({ ...k, sent: [...k.sent, Date.now()] });
   box.className = 'sending';
   box.querySelector('.pa-note')!.textContent = 'Sending the performance report...';
-  const sent = await sendTrace(body);
+  const found = unasked ? FOUND(packed?.slow.verdict ?? null) : '';
+  const sent = await sendTrace(body, target);
   sending = false;
   if (recorder.automaticSuppressed()) { letGo(); return; }
   box.querySelector('.pa-note')!.innerHTML = 'code' in sent
-    ? `Performance report sent, thank you. Its code: <b class="gold">${sent.code}</b>`
+    ? unasked
+      ? `${found}: a performance report was sent so it can be fixed. Its code: <b class="gold">${sent.code}</b>. `
+        + 'Pause menu, Performance: Slow-game reports turns this off.'
+      : `Performance report sent, thank you. Its code: <b class="gold">${sent.code}</b>`
     : `The performance report couldn't be sent (${sent.error}).`;
   box.className = 'sent';
   letGo(false);
@@ -177,6 +202,19 @@ export async function askNow(): Promise<void> {
   ask(slow, packed.body.length);
 }
 
+/** Where the reports stand (a harness's: `lab recorder`): what the player chose, the Not nows, and the sends in the last
+ *  day; and the prompt's state now (`asking`, `sending`, `sent`, `hidden`) and its note. */
+export function traceState(): { consent: TraceConsent; refusals: number; sent: number; prompt: string; note: string } {
+  const k = kept(), box = $('#perf-ask');
+  return { consent: k.consent, refusals: k.refusals, sent: k.sent.length, prompt: box.className || 'shown', note: box.querySelector('.pa-note')?.textContent ?? '' };
+}
+
+/** The kept choice put back as `k` was (a harness's, after it set its own). */
+export function keepTraceState(k: string | null): void {
+  try { if (k === null) localStorage.removeItem(KEY); else localStorage.setItem(KEY, k); } catch { /* private mode */ }
+}
+export const keptTraceState = (): string | null => { try { return localStorage.getItem(KEY); } catch { return null; } };
+
 /** The prompt put away, as Not now does without counting it. */
 export function putAway(): void { letGo(); }
 
@@ -193,5 +231,5 @@ export async function sendProfile(lines: string[]): Promise<Sent> {
   const slow: Slow = {
     scene: 'profile', verdict: null, tookMs: 0, at: performance.now(), snapshot: recorder.snapshot(), profile: lines,
   };
-  return sendTrace(await packTrace(slow));
+  return sendTrace(await packTrace(slow), target);
 }

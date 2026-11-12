@@ -162,7 +162,7 @@ function found(where: Scene, verdict: Verdict | null, tookMs: number): void {
   if (manualHeld) return;
   // (a slow boot's trace, still waiting, takes in whatever else is slow meanwhile: the one ask a session is its)
   if (slowBootAt && where !== 'boot') return;
-  if (pending || !recorder.wanted()) return;
+  if (pending || !recorder.wanted(verdict)) return;
   mark(`slow: ${where === 'boot' ? 'boot' : verdict ? verdict.why : where}`);
   pending = { scene: where, verdict, tookMs, at: performance.now(), snapshot: takeSnapshot() };
   for (const fn of listeners) fn(pending);
@@ -346,15 +346,16 @@ export const recorder = {
   /** A slow boot revealed at `now`: its trace waits `bootTailMs` for the play after it (the lab's `recorder` calls it
    *  to check the wait). */
   slowBootRevealed(now: number): void {
-    if (manualHeld || pending || !recorder.wanted()) return;
+    if (manualHeld || pending || !recorder.wanted(null)) return;
     slowBootAt = now;
     mark('slow: boot, its trace waits for the play after it', now);
   },
   /** how long a slow boot's trace waits after the reveal (ms): `BOOT_TAIL_MS`, the lab's canary none */
   bootTailMs: BOOT_TAIL_MS,
 
-  /** Whether a slow stretch found now could go anywhere (`consent.ts` says): none is snapshotted otherwise. */
-  wanted: (): boolean => false,
+  /** Whether a slow stretch found now, judged `verdict` (null: a boot or a loading bar's wait), could go anywhere
+   *  (`consent.ts` says): none is snapshotted otherwise. */
+  wanted: (_verdict: Verdict | null): boolean => false,
   /** Calls `fn` with each slow stretch found (one at a time: none till the last is taken). */
   onSlow(fn: (slow: Slow) => void): void { listeners.push(fn); },
   /** The slow stretch waiting to be sent or let go. */

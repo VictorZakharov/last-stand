@@ -13,6 +13,7 @@ import { foesAhead } from './cast';
 import { quantile, timeCalls, type Timing } from './timing';
 import { G } from '../../../src/state';
 import { manualRecording } from './manualRecording';
+import { freezeReport } from './freezeReport';
 
 export interface RecorderOptions {
   /** frames played and timed */
@@ -224,7 +225,14 @@ export async function recorderCost(lab: Lab, options: RecorderOptions): Promise<
   const manual = await manualRecording(lab, options.send, options.canary);
   lines.push(manual.text);
   problems.push(...manual.problems);
+  const freeze = await freezeReport(lab, options.send, false);
+  lines.push('  a freeze sent without asking (#567):', ...freeze.lines);
+  problems.push(...freeze.problems);
   if (!options.canary) return { text: lines.join('\n'), problems };
+  const freezeCanary = await freezeReport(lab, options.send, true);
+  const freezeCaught = freezeCanary.problems.some((problem) => problem.includes('freeze'));
+  lines.push(`  canary, a freeze judged as before #567 (asked, not sent): ${freezeCaught ? 'caught' : 'went unseen'}`);
+  if (!freezeCaught) problems.push('canary: a freeze asked about, not sent without asking, went unseen');
   const tailCanary = await bootTail(lab, 0);
   const tailCaught = tailCanary.problems.length > 0;
   lines.push(`  canary, a slow boot's trace taken at the reveal: ${tailCaught ? 'caught' : 'went unseen'}`);
