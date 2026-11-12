@@ -784,6 +784,10 @@ export const COMMANDS = {
         await service.close();
       }
     },
+    // (the screen as each report sent without asking tells the player so: out/recorder/sheet.png)
+    finish(results, options, session) {
+      return textWithMoments(results, session.outFor('recorder'), session.browser);
+    },
     textOf: asText,
     problemsOf: problemsIn,
   },

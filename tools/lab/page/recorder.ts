@@ -228,7 +228,8 @@ export async function recorderCost(lab: Lab, options: RecorderOptions): Promise<
   const freeze = await freezeReport(lab, options.send, false);
   lines.push('  a freeze sent without asking (#567):', ...freeze.lines);
   problems.push(...freeze.problems);
-  if (!options.canary) return { text: lines.join('\n'), problems };
+  const moments = freeze.moments;
+  if (!options.canary) return { text: lines.join('\n'), problems, moments };
   const freezeCanary = await freezeReport(lab, options.send, true);
   const freezeCaught = freezeCanary.problems.some((problem) => problem.includes('freeze'));
   lines.push(`  canary, a freeze judged as before #567 (asked, not sent): ${freezeCaught ? 'caught' : 'went unseen'}`);
@@ -246,5 +247,5 @@ export async function recorderCost(lab: Lab, options: RecorderOptions): Promise<
   }
   const caught = planted.mean > BUDGET_MS;
   lines.push(planted.line, `  canary: ${caught ? 'the slower recording caught' : 'the slower recording went unseen'}`);
-  return { text: lines.join('\n'), problems: caught ? problems : [...problems, 'canary: the slower recording went unseen'] };
+  return { text: lines.join('\n'), problems: caught ? problems : [...problems, 'canary: the slower recording went unseen'], moments };
 }
