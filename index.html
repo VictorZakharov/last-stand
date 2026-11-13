@@ -23,10 +23,10 @@
   <!-- Loading screen styles inline, so it shows before the bundle has loaded. Everything that
        moves animates transform/opacity only: those keep running on the compositor while a
        loading step blocks the main thread. -->
-  <style>html,body{background:#050303}:root{--cursor-art:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='.8' y2='1'%3E%3Cstop offset='0' stop-color='%23fff0c4'/%3E%3Cstop offset='.5' stop-color='%23d4a65c'/%3E%3Cstop offset='1' stop-color='%236e4519'/%3E%3C/linearGradient%3E%3C/defs%3E%3Cpath d='M3 2v22.5l5.6-5.2 4 8.5 4-1.8-3.9-8.4H20z' fill='url(%23g)' stroke='%23140c05' stroke-width='1.6' stroke-linejoin='round'/%3E%3Cpath d='M4.7 6v14.2M5 5.8l9.5 8.7' stroke='%23fff7de' stroke-opacity='.5' stroke-width='.9' stroke-linecap='round'/%3E%3C/svg%3E");--cursor-hand-art:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='.8' y2='1'%3E%3Cstop offset='0' stop-color='%23fffaec'/%3E%3Cstop offset='.5' stop-color='%23f2c464'/%3E%3Cstop offset='1' stop-color='%23935a1c'/%3E%3C/linearGradient%3E%3Cfilter id='f' x='-30%25' y='-30%25' width='160%25' height='160%25'%3E%3CfeGaussianBlur stdDeviation='1.3'/%3E%3C/filter%3E%3C/defs%3E%3Cpath d='M3 2v22.5l5.6-5.2 4 8.5 4-1.8-3.9-8.4H20z' fill='%23ff7a20' stroke='%23ff7a20' stroke-width='2' stroke-linejoin='round' filter='url(%23f)'/%3E%3Cpath d='M3 2v22.5l5.6-5.2 4 8.5 4-1.8-3.9-8.4H20z' fill='url(%23g)' stroke='%23140c05' stroke-width='1.6' stroke-linejoin='round'/%3E%3Cpath d='M4.7 6v14.2M5 5.8l9.5 8.7' stroke='%23fffbea' stroke-opacity='.7' stroke-width='.9' stroke-linecap='round'/%3E%3C/svg%3E");--cursor:var(--cursor-art) 3 2, default;--cursor-hand:var(--cursor-hand-art) 3 2, pointer}html{cursor:var(--cursor)}#loading{--u:max(.6px, min(100vw / 1500, 100vh / 780))}@media (orientation:portrait) and (width<=1000px){#loading{--u:max(.6px, min(1.25px, 100vw / 720))}}@media (height<=520px){#loading{--u:max(.6px, min(1px, 100vh / 520, 100vw / 1150))}}#loading{z-index:100;justify-content:center;align-items:center;gap:calc(14 * var(--u));padding:calc(16 * var(--u));color:#a8988a;flex-direction:column;font-family:Alegreya Sans,system-ui,sans-serif;display:flex;position:fixed;inset:0;overflow:hidden}#loading .ld-back{pointer-events:none;background:radial-gradient(80% 60% at 50% 46%,#2a0a06 0%,#120504 45%,#050303 100%);position:absolute;inset:0;overflow:hidden}#loading.blowing>:is(.ld-rule,.ld-bar,.ld-sub,.ld-tip){opacity:0;transition:opacity .4s}#loading.done{pointer-events:none}#loading.done>.ld-back,#loading.done.plain{opacity:0;transition:opacity .9s}#loading .ld-smoke{object-fit:cover;opacity:0;will-change:transform;pointer-events:none;width:150%;height:150%;transition:opacity .6s;animation:38s ease-in-out infinite alternate ld-drift;position:absolute;top:-25%;left:-25%}#loading .ld-smoke.on{opacity:.55}#loading .ld-smoke.b{animation-duration:55s;animation-direction:alternate-reverse;scale:-1.3 1.3}#loading .ld-smoke.b.on{opacity:.35}#loading .ld-glow{pointer-events:none;background:radial-gradient(#c8280e57,#7810061f 45%,#0000 70%);border-radius:50%;width:90vmin;height:55vmin;animation:3.4s ease-in-out infinite alternate ld-breathe;position:absolute;top:44%;left:50%;translate:-50% -50%}.logo-art{aspect-ratio:700/330;position:relative}.logo-art svg{width:100%;height:100%;position:absolute;inset:0;overflow:visible}#loading .ld-logo{width:min(calc(620 * var(--u)), 88vw);opacity:0;transition:opacity .6s}.fonts-ready #loading .ld-logo{opacity:1}#loading .logo-glow{animation:2.6s ease-in-out infinite alternate ld-flicker}#loading .ld-rule{align-items:center;gap:calc(10 * var(--u));width:min(calc(380 * var(--u)), 72vw);display:flex;position:relative}#loading .ld-rule:before,#loading .ld-rule:after{content:"";height:calc(1 * var(--u));background:linear-gradient(90deg,#0000,#7a2a1a);flex:1}#loading .ld-rule:after{background:linear-gradient(90deg,#7a2a1a,#0000)}#loading .ld-rule i{width:calc(7 * var(--u));height:calc(7 * var(--u));border:calc(1 * var(--u)) solid #b0473a;box-shadow:0 0 calc(8 * var(--u)) #e64628b3;background:#3a0c08;rotate:45deg}#loading .ld-bar{width:min(calc(380 * var(--u)), 72vw);height:calc(6 * var(--u));border-radius:calc(3 * var(--u));box-shadow:inset 0 calc(1 * var(--u)) calc(2 * var(--u)) #000, 0 0 0 calc(1 * var(--u)) #3a1a14, 0 0 0 calc(2 * var(--u)) #0a0303, 0 calc(1 * var(--u)) 0 calc(2 * var(--u)) #c896821f;background:#140606;position:relative;overflow:hidden}#loading .ld-fill{transform-origin:0;transform:scaleX(var(--p,.04));box-shadow:0 0 calc(12 * var(--u)) #ff5a1ecc;background:linear-gradient(90deg,#5a0e06,#c2300e 55%,#ff8a3a 92%,#ffe0a0);transition:transform .35s ease-out;position:absolute;inset:0}#loading .ld-bar:after{content:"";background:linear-gradient(90deg,#0000,#ffdcb459,#0000);width:30%;animation:1.6s linear infinite ld-sweep;position:absolute;top:0;bottom:0;left:0}#loading .ld-sub{min-height:1.4em;font-family:Cinzel,Georgia,serif;font-size:calc(14 * var(--u));letter-spacing:.24em;text-transform:uppercase;text-align:center;color:#c9b8a6;text-shadow:0 0 calc(10 * var(--u)) #dc3c1e73;font-weight:700;position:relative}#loading .ld-tip{left:50%;bottom:max(calc(24 * var(--u)), 6vh);width:min(calc(560 * var(--u)), calc(100vw - calc(32 * var(--u))));text-align:center;font-size:calc(17 * var(--u));color:#8a7a6e;opacity:0;font-style:italic;transition:opacity .6s;position:absolute;translate:-50%}#loading .ld-tip.on{opacity:1}#loading .ld-tip b{color:#b0473a;letter-spacing:.16em;font-style:normal;font-size:calc(12 * var(--u));margin-right:calc(8 * var(--u))}#loading .ld-ember{width:calc(4 * var(--u));height:calc(4 * var(--u));box-shadow:0 0 calc(6 * var(--u)) calc(1 * var(--u)) #ff6e28e6;opacity:0;background:#ffb060;border-radius:50%;animation:7s linear infinite ld-rise;position:absolute;bottom:-10px}#loading .ld-ember.s{width:calc(2.5 * var(--u));height:calc(2.5 * var(--u));animation-duration:9.5s}#loading.failed .ld-bar,#loading.failed .ld-tip{display:none}#loading.failed .ld-sub{color:#e08070;text-transform:none;letter-spacing:.04em;max-width:calc(560 * var(--u));font-family:Alegreya Sans,system-ui,sans-serif}@keyframes ld-sweep{0%{transform:translate(-100%)}to{transform:translate(340%)}}@keyframes ld-breathe{to{opacity:.6;scale:1.08}}@keyframes ld-flicker{0%{opacity:.75}40%{opacity:1}55%{opacity:.82}to{opacity:.95}}@keyframes ld-drift{0%{transform:translate(-6%,3%)}to{transform:translate(6%,-4%)}}@keyframes ld-rise{0%{opacity:0;transform:translate(0)}10%{opacity:.95}60%{transform:translate(var(--dx,calc(20 * var(--u))), -55vh)}to{transform:translate(calc(var(--dx,calc(20 * var(--u))) * -.4), -95vh);opacity:0}}@media (height<=520px){#loading{gap:calc(10 * var(--u))}#loading .ld-logo{width:min(calc(620 * var(--u)), 88vw, (100vh - calc(190 * var(--u))) * 2.12);width:min(calc(620 * var(--u)), 88vw, (100dvh - calc(190 * var(--u))) * 2.12)}#loading .ld-tip{margin-top:calc(4 * var(--u));font-size:calc(15 * var(--u));min-height:2.6em;line-height:1.3;position:relative;bottom:auto;left:auto;translate:none}}@media (prefers-reduced-motion:reduce){#loading .ld-glow,#loading .logo-glow,#loading .ld-smoke,#loading .ld-bar:after{animation:none}#loading .ld-ember{display:none}}</style>
-  <script type="module" crossorigin src="./assets/index-Bhe9uJzO.js"></script>
-  <link rel="modulepreload" crossorigin href="./assets/three-DFwjcp3_.js">
-  <link rel="stylesheet" crossorigin href="./assets/index-CvQlFxXX.css">
+  <style>html,body{background:#050303}:root{--cursor-art:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='.8' y2='1'%3E%3Cstop offset='0' stop-color='%23fff0c4'/%3E%3Cstop offset='.5' stop-color='%23d4a65c'/%3E%3Cstop offset='1' stop-color='%236e4519'/%3E%3C/linearGradient%3E%3C/defs%3E%3Cpath d='M3 2v22.5l5.6-5.2 4 8.5 4-1.8-3.9-8.4H20z' fill='url(%23g)' stroke='%23140c05' stroke-width='1.6' stroke-linejoin='round'/%3E%3Cpath d='M4.7 6v14.2M5 5.8l9.5 8.7' stroke='%23fff7de' stroke-opacity='.5' stroke-width='.9' stroke-linecap='round'/%3E%3C/svg%3E");--cursor-hand-art:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='.8' y2='1'%3E%3Cstop offset='0' stop-color='%23fffaec'/%3E%3Cstop offset='.5' stop-color='%23f2c464'/%3E%3Cstop offset='1' stop-color='%23935a1c'/%3E%3C/linearGradient%3E%3Cfilter id='f' x='-30%25' y='-30%25' width='160%25' height='160%25'%3E%3CfeGaussianBlur stdDeviation='1.3'/%3E%3C/filter%3E%3C/defs%3E%3Cpath d='M3 2v22.5l5.6-5.2 4 8.5 4-1.8-3.9-8.4H20z' fill='%23ff7a20' stroke='%23ff7a20' stroke-width='2' stroke-linejoin='round' filter='url(%23f)'/%3E%3Cpath d='M3 2v22.5l5.6-5.2 4 8.5 4-1.8-3.9-8.4H20z' fill='url(%23g)' stroke='%23140c05' stroke-width='1.6' stroke-linejoin='round'/%3E%3Cpath d='M4.7 6v14.2M5 5.8l9.5 8.7' stroke='%23fffbea' stroke-opacity='.7' stroke-width='.9' stroke-linecap='round'/%3E%3C/svg%3E");--cursor:var(--cursor-art) 3 2, default;--cursor-hand:var(--cursor-hand-art) 3 2, pointer}html{cursor:var(--cursor)}#loading{--u:max(.6px, min(100vw / 1500, 100vh / 780))}@media (orientation:portrait) and (width<=1000px){#loading{--u:max(.6px, min(1.25px, 100vw / 720))}}@media (height<=520px){#loading{--u:max(.6px, min(1px, 100vh / 520, 100vw / 1150))}}#loading{z-index:100;justify-content:center;align-items:center;gap:calc(14 * var(--u));padding:calc(16 * var(--u));color:#a8988a;flex-direction:column;font-family:Alegreya Sans,system-ui,sans-serif;display:flex;position:fixed;inset:0;overflow:hidden}#loading .ld-back{pointer-events:none;background:radial-gradient(80% 60% at 50% 46%,#2a0a06 0%,#120504 45%,#050303 100%);position:absolute;inset:0;overflow:hidden}#loading.blowing>:is(.ld-rule,.ld-bar,.ld-sub,.ld-tip){opacity:0;transition:opacity .4s}#loading.done{pointer-events:none}#loading.done>.ld-back,#loading.done.plain{opacity:0;transition:opacity .9s}#loading .ld-smoke{object-fit:cover;opacity:0;will-change:transform;pointer-events:none;width:150%;height:150%;transition:opacity .6s;animation:38s ease-in-out infinite alternate ld-drift;position:absolute;top:-25%;left:-25%}#loading .ld-smoke.on{opacity:.55}#loading .ld-smoke.b{animation-duration:55s;animation-direction:alternate-reverse;scale:-1.3 1.3}#loading .ld-smoke.b.on{opacity:.35}#loading .ld-glow{pointer-events:none;background:radial-gradient(#c8280e57,#7810061f 45%,#0000 70%);border-radius:50%;width:90vmin;height:55vmin;animation:3.4s ease-in-out infinite alternate ld-breathe;position:absolute;top:44%;left:50%;translate:-50% -50%}.logo-art{aspect-ratio:700/330;position:relative}.logo-art svg{width:100%;height:100%;position:absolute;inset:0;overflow:visible}#loading .ld-logo{width:min(calc(620 * var(--u)), 88vw);opacity:0;transition:opacity .6s}.fonts-ready #loading .ld-logo{opacity:1}#loading .logo-glow{animation:2.6s ease-in-out infinite alternate ld-flicker}#loading .ld-rule{align-items:center;gap:calc(10 * var(--u));width:min(calc(380 * var(--u)), 72vw);display:flex;position:relative}#loading .ld-rule:before,#loading .ld-rule:after{content:"";height:calc(1 * var(--u));background:linear-gradient(90deg,#0000,#7a2a1a);flex:1}#loading .ld-rule:after{background:linear-gradient(90deg,#7a2a1a,#0000)}#loading .ld-rule i{width:calc(7 * var(--u));height:calc(7 * var(--u));border:calc(1 * var(--u)) solid #b0473a;box-shadow:0 0 calc(8 * var(--u)) #e64628b3;background:#3a0c08;rotate:45deg}#loading .ld-bar{width:min(calc(380 * var(--u)), 72vw);height:calc(6 * var(--u));border-radius:calc(3 * var(--u));box-shadow:inset 0 calc(1 * var(--u)) calc(2 * var(--u)) #000, 0 0 0 calc(1 * var(--u)) #3a1a14, 0 0 0 calc(2 * var(--u)) #0a0303, 0 calc(1 * var(--u)) 0 calc(2 * var(--u)) #c896821f;background:#140606;position:relative;overflow:hidden}#loading .ld-fill{transform-origin:0;transform:scaleX(var(--p,.04));box-shadow:0 0 calc(12 * var(--u)) #ff5a1ecc;background:linear-gradient(90deg,#5a0e06,#c2300e 55%,#ff8a3a 92%,#ffe0a0);transition:transform .35s ease-out;position:absolute;inset:0}#loading .ld-bar:after{content:"";background:linear-gradient(90deg,#0000,#ffdcb459,#0000);width:30%;animation:1.6s linear infinite ld-sweep;position:absolute;top:0;bottom:0;left:0}#loading .ld-sub{min-height:1.4em;font-family:Cinzel,Georgia,serif;font-size:calc(14 * var(--u));letter-spacing:.24em;text-transform:uppercase;text-align:center;color:#c9b8a6;text-shadow:0 0 calc(10 * var(--u)) #dc3c1e73;font-weight:700;position:relative}#loading .ld-tip{left:50%;bottom:max(calc(24 * var(--u)), 6vh);width:min(calc(560 * var(--u)), calc(100vw - calc(32 * var(--u))));text-align:center;font-size:calc(17 * var(--u));color:#8a7a6e;opacity:0;font-style:italic;transition:opacity .6s;position:absolute;translate:-50%}#loading .ld-tip.on{opacity:1}#loading .ld-tip b{color:#b0473a;letter-spacing:.16em;font-style:normal;font-size:calc(12 * var(--u));margin-right:calc(8 * var(--u))}#loading .ld-ember{width:calc(4 * var(--u));height:calc(4 * var(--u));box-shadow:0 0 calc(6 * var(--u)) calc(1 * var(--u)) #ff6e28e6;opacity:0;background:#ffb060;border-radius:50%;animation:7s linear infinite ld-rise;position:absolute;bottom:-10px}#loading .ld-ember.s{width:calc(2.5 * var(--u));height:calc(2.5 * var(--u));animation-duration:9.5s}#loading.failed .ld-bar,#loading.failed .ld-tip{display:none}#loading.failed .ld-sub{color:#e08070;text-transform:none;letter-spacing:.04em;max-width:calc(560 * var(--u));font-family:Alegreya Sans,system-ui,sans-serif}@keyframes ld-sweep{0%{transform:translate(-100%)}to{transform:translate(340%)}}@keyframes ld-breathe{to{opacity:.6;scale:1.08}}@keyframes ld-flicker{0%{opacity:.75}40%{opacity:1}55%{opacity:.82}to{opacity:.95}}@keyframes ld-drift{0%{transform:translate(-6%,3%)}to{transform:translate(6%,-4%)}}@keyframes ld-rise{0%{opacity:0;transform:translate(0)}10%{opacity:.95}60%{transform:translate(var(--dx,calc(20 * var(--u))), -55vh)}to{transform:translate(calc(var(--dx,calc(20 * var(--u))) * -.4), -95vh);opacity:0}}@media (height<=520px){#loading{gap:calc(10 * var(--u))}#loading .ld-logo{width:min(calc(620 * var(--u)), 88vw, (100vh - calc(190 * var(--u))) * 2.12);width:min(calc(620 * var(--u)), 88vw, (100dvh - calc(190 * var(--u))) * 2.12)}#loading .ld-tip{margin-top:calc(4 * var(--u));font-size:calc(15 * var(--u));min-height:2.6em;line-height:1.3;position:relative;bottom:auto;left:auto;translate:none}}#loading.still,#loading.still *,#loading.still :after{animation-play-state:paused!important}@media (prefers-reduced-motion:reduce){#loading .ld-glow,#loading .logo-glow,#loading .ld-smoke,#loading .ld-bar:after{animation:none}#loading .ld-ember{display:none}}</style>
+  <script type="module" crossorigin src="./assets/index-oCl3ZVkw.js"></script>
+  <link rel="modulepreload" crossorigin href="./assets/three-C-DttWAn.js">
+  <link rel="stylesheet" crossorigin href="./assets/index-C-1aqRDc.css">
   <script id="boot-fullscreen">(() => {
 /** Self-contained because the build serializes this function into a classic script before any game imports. */
 function installBootFullScreen(force = false) {
@@ -110,6 +110,7 @@ installBootFullScreen();
             <feMerge><feMergeNode in="shadow"/><feMergeNode in="rim"/><feMergeNode in="lit"/></feMerge>
           </filter>
       <filter id="logo-glow-blur" x="-30%" y="-40%" width="160%" height="180%"><feGaussianBlur stdDeviation="14"/></filter>
+      <g id="village-words"><text font-family="Cinzel, Georgia, serif" font-weight="900" text-anchor="middle" x="350" y="112" font-size="104" letter-spacing="4" textLength="670" lengthAdjust="spacingAndGlyphs">WARDENHOLLOW</text></g>
       <g id="logo-words"><text font-family="Cinzel, Georgia, serif" font-weight="900" text-anchor="middle" x="350" y="118" font-size="104" letter-spacing="14" textLength="400" lengthAdjust="spacingAndGlyphs">LAST</text><text font-family="Cinzel, Georgia, serif" font-weight="900" text-anchor="middle" x="350" y="282" font-size="170" letter-spacing="10" textLength="640" lengthAdjust="spacingAndGlyphs">STAND</text><text font-family="Cinzel, Georgia, serif" font-weight="900" text-anchor="middle" x="350" y="118" font-size="104" letter-spacing="14" textLength="400" lengthAdjust="spacingAndGlyphs">LAST</text><text font-family="Cinzel, Georgia, serif" font-weight="900" text-anchor="middle" x="350" y="282" font-size="170" letter-spacing="10" textLength="640" lengthAdjust="spacingAndGlyphs">STAND</text></g>
     </defs>
   </svg>
@@ -164,6 +165,13 @@ installBootFullScreen();
         <div class="sp-title">Unbanked spoils <b class="sp-count">0</b></div>
         <div class="sp-list"></div>
       </div>
+      <!-- the first visit's training (ui/training.ts): its steps, ticked as they're done, under the village's minimap -->
+      <div id="training" data-lobby="village" class="hidden" role="status">
+        <div class="tr-title">Training</div>
+        <ol class="tr-steps"></ol>
+        <div class="tr-finished">Training complete: the portals are open.</div>
+        <button class="link tr-skip">Skip training</button>
+      </div>
     </div>
 
     <div id="crosshair" class="hidden"></div>
@@ -207,6 +215,7 @@ installBootFullScreen();
     </div>
     <button id="btn-revive" class="hidden">Revive</button>
     <div id="hurt-vignette"></div>
+    <button id="btn-view" data-lobby="village" class="touch-only" aria-label="Change view"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h3l1.5-2h7L17 8h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg></button>
     <button id="btn-pause" class="touch-only" aria-label="Pause"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg></button>
     <button id="btn-full" class="touch-only" aria-label="Full screen"><svg class="full-enter" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5"/></svg><svg class="full-leave" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4v5H4M20 9h-5V4M15 20v-5h5M4 15h5v5"/></svg></button>
   </div>
@@ -216,6 +225,12 @@ installBootFullScreen();
     <div id="touch-pad"></div>
     <div id="touch-stick"><div class="knob"></div></div>
     <div id="touch-skills"></div>
+    <!-- the village's (the lobby's alone): use what the hero is near, the inventory, the map -->
+    <div id="touch-village" data-lobby="village" class="hidden">
+      <button class="tv-use hidden"></button>
+      <button class="tv-bag" aria-label="Inventory">Bag</button>
+      <button class="tv-map" aria-label="Map">Map</button>
+    </div>
   </div>
 
   <!-- Phones held upright: the arena needs the width -->
@@ -229,14 +244,21 @@ installBootFullScreen();
   <div id="readying" role="status" aria-live="polite"><div class="rd-box"><div class="rd-sub">Readying the fight</div><div class="rd-bar"><div class="rd-fill"></div></div></div></div>
   <div id="menu" class="hidden" data-tab="hero">
     <!-- short screens (phones held sideways) show one panel at a time, picked here -->
-    <nav id="lobby-rail" class="panel" aria-label="Lobby">
+    <nav id="lobby-rail" class="panel" aria-label="Lobby" data-lobby="panels">
       <button data-lt="hero" class="active"><span class="ri">⚔</span>Hero</button>
       <button data-lt="gear"><span class="ri">⛨</span>Gear</button>
       <button data-lt="skills"><span class="ri">✦</span>Skills</button>
       <button id="rail-practice"><span class="ri">◎</span><span class="sh-hide">Practice</span><span class="sh-show">Back</span></button>
       <button id="rail-play" class="play"><span class="ri">▶</span>Play</button>
     </nav>
-    <div class="menu-left panel">
+    <!-- short screens (phones held sideways) show one panel of the inventory at a time, picked here -->
+    <nav id="lobby-rail" class="panel" aria-label="Inventory" data-lobby="village">
+      <button data-lt="gear" class="active"><span class="ri">⛨</span>Gear</button>
+      <button data-lt="skills"><span class="ri">✦</span>Skills</button>
+      <button id="rail-close"><span class="ri">✕</span>Close</button>
+    </nav>
+    <!-- the village's crest: its name (the loading screen's logo gathers into it), and a co-op room's bar under it -->
+    <div class="menu-left panel" data-lobby="panels">
       <!-- folds the panel away to the left, and back (the tab stays at the screen's edge) -->
       <button id="hero-fold" class="fold-tab" aria-expanded="true" title="Hide the hero panel" aria-label="Hide the hero panel"><svg viewBox="0 0 12 20" aria-hidden="true"><path d="M8.5 3l-6 7 6 7" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="fold-label">Hero</span></button>
       <!-- the contents scroll inside the frame (a screen too short for them), so the tab can stand outside it -->
@@ -282,12 +304,21 @@ installBootFullScreen();
         </div>
       </div>
     </div>
+    <div class="menu-crest" data-lobby="village">
+      <div class="logo">
+        <div class="logo-art" role="img" aria-label="Wardenhollow">
+          <svg class="logo-glow" viewBox="0 0 700 150" aria-hidden="true"><use href="#village-words" fill="#e0280c" filter="url(#logo-glow-blur)"/></svg>
+          <svg viewBox="0 0 700 150" aria-hidden="true"><use href="#village-words" fill="url(#logo-steel)" filter="url(#logo-metal)"/></svg>
+        </div>
+      </div>
+      <div id="coop-bar" class="hidden" role="button" tabindex="0"></div>
+    </div>
     <div class="menu-center">
-      <div class="stow-hint"><kbd>Space</kbd><span class="sh-hide">Hide the lobby to practice on the dummies</span><span class="sh-show">Show the lobby</span></div>
+      <div class="stow-hint" data-lobby="panels"><kbd>Space</kbd><span class="sh-hide">Hide the lobby to practice on the dummies</span><span class="sh-show">Show the lobby</span></div>
       <!-- the key bar; the skill book slides up over it only to remap (ui/loadoutEditor.ts) -->
       <div id="loadout" class="panel">
         <!-- folds the panel away to the bottom, and back (the tab stays at the screen's edge) -->
-        <button id="skills-fold" class="fold-tab" aria-expanded="true" title="Hide the skills" aria-label="Hide the skills"><svg viewBox="0 0 20 12" aria-hidden="true"><path d="M3 3l7 6.5 7-6.5" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="fold-label">Skills</span></button>
+        <button id="skills-fold" class="fold-tab" data-lobby="panels" aria-expanded="true" title="Hide the skills" aria-label="Hide the skills"><svg viewBox="0 0 20 12" aria-hidden="true"><path d="M3 3l7 6.5 7-6.5" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="fold-label">Skills</span></button>
         <div class="lo-book" id="lo-book">
           <div class="lo-head"><div class="lo-top"><span class="lo-title">Spellbook</span>
             <span class="lo-style"><span class="lo-style-name"></span><button class="link" id="btn-lo-reset">Reset to defaults</button></span></div>
@@ -303,7 +334,7 @@ installBootFullScreen();
     </div>
     <div class="menu-right panel">
       <!-- folds the panel away to the right, and back (the tab stays at the screen's edge) -->
-      <div class="fold-tabs fold-right">
+      <div class="fold-tabs fold-right" data-lobby="panels">
         <button id="gear-fold" class="fold-tab" aria-expanded="true" title="Hide the equipment" aria-label="Hide the equipment"><svg viewBox="0 0 12 20" aria-hidden="true"><path d="M3.5 3l6 7-6 7" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="fold-label">Equipment</span></button>
         <button id="attrs-fold" class="fold-tab fold-extra" title="Show attributes" aria-label="Show attributes"><svg viewBox="0 0 12 20" aria-hidden="true"><path d="M3.5 3l6 7-6 7" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="fold-label">Attributes</span></button>
       </div>
@@ -449,6 +480,42 @@ installBootFullScreen();
         <div id="stats"></div>
       </div>
     </div>
+    <!-- the card a village object opens (ui/villageCard.ts): a portal's starting wave and its way in, the chronicle's
+         save slots -->
+    <div id="vcard" data-lobby="village" class="panel hidden" role="dialog" aria-labelledby="vc-title">
+      <div class="vc-title" id="vc-title"></div>
+      <div class="vc-sub"></div>
+      <div class="vc-page" data-page="portal">
+        <div class="biome-row vc-grounds hidden"><span class="br-label">Battleground</span>
+          <div class="seg" id="opt-biome"></div>
+        </div>
+        <div class="biome-row"><span class="br-label">Starting wave</span>
+          <div class="seg" id="opt-wave">
+            <button data-d="-1000" aria-label="First wave">&laquo;</button><button data-d="-1" aria-label="Earlier wave">&lsaquo;</button><span class="wv-val"></span><button data-d="1" aria-label="Later wave">&rsaquo;</button><button data-d="1000" aria-label="Best wave">&raquo;</button>
+          </div>
+        </div>
+        <button class="btn primary big" id="btn-start">Enter</button>
+        <div class="vc-training hidden">
+          <p>Your training isn't finished. Walk the village first: its tracker says what's left.</p>
+          <button class="btn vc-skip">Skip training</button>
+        </div>
+      </div>
+      <div class="vc-page" data-page="chronicle">
+        <div class="records"></div>
+        <div class="vc-row"><button class="btn" id="btn-saves">Save slot 1</button><button class="btn danger" id="btn-reset">Reset profile</button></div>
+      </div>
+      <button class="link vc-close">Leave</button>
+    </div>
+  </div>
+
+  <!-- the village's map (ui/villageMap.ts): M in the lobby; its panels and names are filled in by it -->
+  <div id="vmap" data-lobby="village" class="hidden" aria-hidden="true" role="dialog" aria-label="Map of the village">
+    <div class="vm-sheet">
+      <div class="vm-panels"></div>
+      <div class="vm-names"></div>
+      <div class="vm-you"></div>
+      <button class="vm-close">Close · M</button>
+    </div>
   </div>
 
   <!-- save slots (ui/saves.ts): the three saves side by side, to play one or delete one -->
@@ -456,7 +523,7 @@ installBootFullScreen();
   <div id="heroes" class="hidden" role="dialog" aria-modal="true" aria-label="Choose your hero">
     <div class="hs-shade" aria-hidden="true"></div>
     <header class="hs-top">
-      <div class="hs-logo logo-art" role="img" aria-label="Last Stand">
+      <div class="hs-logo logo-art" data-lobby="panels" role="img" aria-label="Last Stand">
         <svg class="logo-glow" viewBox="0 0 700 330" aria-hidden="true"><use href="#logo-words" fill="#e0280c" filter="url(#logo-glow-blur)"/></svg>
         <svg viewBox="0 0 700 330" aria-hidden="true"><use href="#logo-words" fill="url(#logo-steel)" filter="url(#logo-metal)"/></svg>
       </div>
@@ -540,6 +607,13 @@ installBootFullScreen();
     <button class="btn fp-back">Back to window</button>
   </div>
 
+  <!-- a beta is on (the village lobby): said as the game opens, with the way back (ui/beta.ts) -->
+  <div id="beta-notice" class="hidden" role="status">
+    <span><b>Beta</b> You're trying the village lobby.</span>
+    <button class="btn" id="btn-beta-back">Back to the old lobby</button>
+    <button class="btn bn-close" id="btn-beta-close" aria-label="Close" title="Close">✕</button>
+  </div>
+
   <!-- the game ran slowly: may a performance report be sent? (perf/consent.ts) -->
   <div id="perf-ask" class="hidden" role="dialog" aria-live="polite" aria-label="Performance report">
     <div class="pa-ask">
@@ -580,6 +654,7 @@ installBootFullScreen();
       <button class="tab active" data-pause-tab="controls" role="tab" aria-selected="true">Controls</button>
       <button class="tab" data-pause-tab="settings" role="tab" aria-selected="false">Settings</button>
       <button class="tab" data-pause-tab="performance" role="tab" aria-selected="false">Performance</button>
+      <button class="tab" data-pause-tab="beta" role="tab" aria-selected="false">Beta</button>
     </div>
     <div class="pb-pages">
       <section class="pb-page" data-pause-page="controls" role="tabpanel">
@@ -667,8 +742,31 @@ installBootFullScreen();
           <ol class="profile-parts hidden"></ol>
           <button class="btn hidden" id="btn-profile-send">Send the report</button>
         </div>
+        <!-- the village's hour held for a look at it at any time (in the village alone: game/clock.ts), Auto its clock -->
+        <div class="opt-row hour-row"><label class="opt-level" title="The hour the village is lit for: Auto follows your clock"><span>Time of day</span><input type="range" id="opt-hour" min="-0.5" max="23.5" step="0.5"><output id="opt-hour-value"></output></label></div>
         </div>
       </section>
+      <!-- features to try before they're the game's (ui/beta.ts, core/beta.ts): switched here, taken up by a reload -->
+      <section class="pb-page pb-opts off" data-pause-page="beta" role="tabpanel">
+        <div class="pb-opt-col beta-col">
+          <div class="beta-lead">Features still being worked on. Try one, and switch it off again here at any time.</div>
+          <div class="opt-row quality-row"><span>Village lobby</span>
+            <div class="seg" id="opt-village"><button data-v="on">On</button><button data-v="off">Off</button></div>
+            <small id="beta-state"></small>
+          </div>
+          <div class="beta-note">The lobby as a village to walk: portals to the battlegrounds, the stash's chest, the hall
+            of heroes, a training yard. Off, the lobby is its panels over the battleground, as before. Your heroes and
+            saves are the same either way.</div>
+          <div id="beta-apply" class="hidden"><span></span><button class="btn primary" id="btn-beta-reload">Reload</button></div>
+        </div>
+      </section>
+    </div>
+    <!-- in the lobby: what the village's objects open, from here too -->
+    <div class="pb-links menu-links" data-lobby="village">
+      <button class="link" id="btn-hero">Change hero</button>
+      <button class="link" id="btn-coop">Play together</button>
+      <button class="link" id="btn-help">How to play</button>
+      <button class="link hidden" id="btn-install">Install</button>
     </div>
     <div class="build-info"></div>
   </div></div>
@@ -701,7 +799,10 @@ installBootFullScreen();
       <p><b class="gold">Play together</b> (in the lobby) opens a room for a friend. Each keeps their own spoils; a fallen hero can be raised by a teammate before bleeding out.</p>
     </div>
     </div>
-    <button class="btn primary" id="btn-help-close">Got it</button>
+    <div class="help-actions">
+      <button class="btn hidden" id="btn-help-restart">Restart training</button>
+      <button class="btn primary" id="btn-help-close">Got it</button>
+    </div>
   </div></div>
 
   <div id="tooltip" class="hidden"></div>
@@ -753,5 +854,20 @@ installBootFullScreen();
     <div class="ld-tip"></div>
   </div>
 
+  <!-- The lobby is the game's panels over the battleground, or the village (a beta the player opts into: the pause
+       menu's Beta tab, src/core/beta.ts): the address's `village` kept in a cookie, then the cookie. Each lobby's own
+       markup is marked `data-lobby`, and the other's is taken out here, so every id stays one element's. -->
+  <script>
+    (() => {
+      const asked = new URLSearchParams(location.search).get('village');
+      const kept = (document.cookie.match(/(?:^|; )last-stand-beta-village=([01])/) || [])[1];
+      if (asked === '1' || asked === '0') document.cookie = `last-stand-beta-village=${asked}; max-age=31536000; path=/; SameSite=Lax`;
+      const lobby = (asked === '1' || asked === '0' ? asked : kept) === '1' ? 'village' : 'panels';
+      document.documentElement.dataset.lobby = lobby;
+      for (const part of document.querySelectorAll('[data-lobby]')) {
+        if (part !== document.documentElement && part.dataset.lobby !== lobby) part.remove();
+      }
+    })();
+  </script>
 </body>
 </html>
