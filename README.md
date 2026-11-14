@@ -52,6 +52,10 @@ Up to four players can hold the arena together over the internet, each under a n
 - At 0 health you go **down** rather than die. A teammate can raise you by standing next to you and holding **E** (the **Revive** button on touch) for 3 seconds. If you're not raised within 20 seconds, or you're still down when the wave ends, you fall and lose your spoils. With nobody left standing, the run is lost for everyone still in it.
 - The game can't pause for one player: the pause menu only stops your hero. If the host leaves mid-run, the others keep what they found, as if banked.
 
+### Report a bug
+
+**Report a bug**, at the foot of the pause menu (`Esc`), opens a short form: pick what it's about (gameplay, looks, speed, sound, controls, playing together, menus, saves, a crash, an idea), say what happened, and a picture of the game as it was goes along unless you untick it. The game adds where you were, its version and your device's make, never your name tag, a room's code or your saves, and shows you the whole report first. Nothing leaves your device until you press **Copy report** or **Open on GitHub**, which opens a new issue here with the report filled in.
+
 ### Install and play offline
 
 Last Stand is an installable web app. Use the **Install** link in the lobby (Chrome, Edge, Android), or *Add to Home Screen* on iOS. Once it has loaded, it also plays without a connection. A new version downloads in the background, and the lobby offers a reload when it's ready.
