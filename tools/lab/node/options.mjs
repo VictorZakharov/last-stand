@@ -849,7 +849,7 @@ export const COMMANDS = {
       level: {
         kind: 'choice',
         usage: 'level',
-        choices: ['high', 'medium', 'low'],
+        choices: ['high', 'medium', 'low', 'verylow'],
         default: 'low',
         help: 'the quality level whose settings the scene takes, its pixels all the screen\'s',
       },
