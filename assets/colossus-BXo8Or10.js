@@ -1,1 +1,0 @@
-import{m as e,v as t}from"./index-QOUp6Prn.js";t({colossus:()=>e(`colossus`)});
