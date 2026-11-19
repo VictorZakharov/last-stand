@@ -1,0 +1,1 @@
+import{m as e,v as t}from"./index-DOXA95IB.js";t({colossus:()=>e(`colossus`)});
