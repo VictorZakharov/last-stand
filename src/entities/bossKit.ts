@@ -1,17 +1,29 @@
-// What a boss's fight is made of beyond its own look and its own attacks (the Ossuary Twins', entities/twins.ts), so a
-// boss is mostly data (`EnemyDef.bossKit`) and its model. Class-agnostic.
+// The shared boss toolkit: what a boss's fight is made of beyond its own look and its own attacks, so a new boss is
+// mostly data (`EnemyDef.bossKit`) and its model. Class-agnostic, and for a boss that never moves as much as one that
+// walks.
 //
 // - **Phases** by the share of its life left (`BossKitDef.phases`): entered in order where the fight is simulated (the
-//   host's game in co-op) as its life falls past each, every one passed through entered, and told to every game through
-//   enemyAI's `fx('bossPhase')`: its banner, its cue (`BossHooks.cue`), `Enemy.bossPhase` set. Its own gameplay of the
-//   phase (`BossHooks.enter`, `exit`) runs where it's simulated alone.
+//   host's game in co-op) as its life falls past each, every one passed through entered (a blow that takes it from 70%
+//   to 20% enters the second and the third), and told to every game through enemyAI's `fx('bossPhase')`: its banner,
+//   its cue (`BossHooks.cue`), `Enemy.bossPhase` set. Its own gameplay of the phase (`BossHooks.enter`, `exit`) runs
+//   where it's simulated alone.
 // - **Telegraphed attacks** (`telegraphed`, `BossKitDef.attacks`): an action of its own name whose hit lands as its
 //   warning ends, the model told the share (`ActionState.hit`, from the data, so a guest's copy has it too) to show it
-//   coming, and a ring on the floor where it will land where the attack has one. A fight's warned hits are kept apart
-//   (`claimBeat`), so two never land together.
-// - **A shared life** (data/biomes.ts `BossWave.twin`, `EnemyDef.shares`): two bosses rising together, each given the
+//   coming (a glow, a wind-up, a creak), and a ring on the floor where it will land where the attack has one. A
+//   fight's warned hits are kept apart (`claimBeat`), so two never land together.
+// - **Weak-spot windows** (`openWeak`, `BossKitDef.weak`): a time it takes `taken` times the damage from every hero's
+//   hit (`damageTaken`, read by combat/damage `hitEnemy` as its marks are), told to every game; shown by its aura
+//   turning the window's colour and swelling at a beat a second (no faster: the root's flash rule), and by its model
+//   through `AnimState.boss.weak`.
+// - **Breakable parts** (`BossKitDef.parts`): pieces of it with a life of their own, each struck by a hero's hits from
+//   its side, broken one at a time (`BossHooks.broke`, every one broken `allBroken`) and made whole again
+//   (`restoreParts`), each told to every game (`Enemy.broken`, a bit a part, which its model shows).
+// - **A shared life** (data/biomes.ts `BossRung.twin`, `EnemyDef.shares`): two bosses rising together, each given the
 //   pair's whole life, a hit on either taking it from both (`shareHit`), each counting what it took (`Enemy.taken`); a
 //   killing blow fells both, the second paying no spoils (`Enemy.noSpoils`), so the pair pays once.
+// - **Encounters** (data/biomes.ts `BossRung.guards`): a main boss with lesser bosses as its guards (`Enemy.guard`, at
+//   their `EnemyDef.asGuard` life and damage), warded while any stands (`wardWhileGuarded`, `BossKitDef.ward`: it takes
+//   `taken` times the damage, told to every game), and the fight's warned hits kept apart (`claimBeat`).
 import { G } from '../state';
 import { fx } from './enemyAI';
 import type { Enemy } from './enemy';
@@ -36,7 +48,8 @@ export function checkPhase(e: Enemy, amount = 0): void {
   if (amount > 0) hooksOf(e.type)?.hurt?.(e, amount);
   // (its hurt may have felled it: the Twins' collapse at half)
   if (!e.alive) return;
-  const to = phaseAt(e, e.life / e.maxLife);
+  // (an encounter's guard keeps its first phase: no banner, no cue, nothing harder of its own)
+  const to = e.guard ? 0 : phaseAt(e, e.life / e.maxLife);
   while (e.bossPhase < to) fx('bossPhase', e.id, e.bossPhase + 1);
 }
 
@@ -88,13 +101,92 @@ const beat = { from: -Infinity, to: -Infinity };
 /**
  * Where simulated: may a boss start a warned attack whose hits land from `hitIn` s on over `span` s, no other boss's
  * landing within `gap` s of them? Taken if so (the next must keep clear of it): the Twins' slam and skulls never land
- * together.
+ * together, and an encounter's bosses hit in turn (a toll's stun chained into grave hands no one could step out of).
  */
 export function claimBeat(hitIn: number, gap: number, span = 0): boolean {
   const from = G.time + hitIn, to = from + span;
   if (from < beat.to + gap && to > beat.from - gap) return false;
   beat.from = from; beat.to = to;
   return true;
+}
+
+/** Where the fight is simulated: a weak-spot window opened for `seconds`, told to every game. */
+export function openWeak(e: Enemy, seconds: number): void {
+  if (e.net || !e.def.bossKit?.weak) return;
+  fx('bossWeak', e.id, seconds);
+}
+
+/** How many times its damage a foe takes from a hero's hit now: warded by its guards, the ward's; else its weak-spot
+ *  window's; else 1. */
+export const damageTaken = (e: Enemy): number =>
+  e.warded ? e.def.bossKit?.ward?.taken ?? 1 : e.weak > 0 ? e.def.bossKit?.weak?.taken ?? 1 : 1;
+
+/** Where simulated: an encounter's main boss warded while any of its guards stands, let go as the last falls, told to
+ *  every game (enemyAI's `bossWard` fx). */
+export function wardWhileGuarded(e: Enemy): void {
+  if (e.net || !e.def.bossKit?.ward) return;
+  const guarded = G.enemies.some((x) => x.alive && x.guard);
+  if (guarded !== e.warded) fx('bossWard', e.id, guarded ? 1 : 0);
+}
+
+/** The fight's warned hits as taken (the lab's encounter check reads them). */
+export const beatTaken = (): Readonly<typeof beat> => beat;
+
+/** A boss's aura through its weak-spot window: the window's colour, swelling once a second; its own colour after. */
+export function weakLooks(e: Enemy): void {
+  const kit = e.def.bossKit?.weak;
+  if (!kit || !e.auraMat || !e.aura) return;
+  // (warded: the ward's colour, steady and close in; it takes little then)
+  if (e.warded && e.def.bossKit?.ward) {
+    e.auraMat.color.setHex(e.def.bossKit.ward.edge).multiplyScalar(1.2);
+    e.aura.scale.setScalar(e.radius * 1.35);
+    return;
+  }
+  const on = e.weak > 0, beat = on ? 0.5 + 0.5 * Math.sin(G.time * Math.PI * 2) : 0;
+  // (an encounter's guard: its ring at rest fainter and tighter, the encounter's boss its main one)
+  const rest = e.guard ? 0.9 : 1.6;
+  e.auraMat.color.setHex(on ? kit.edge : e.auraColor ?? 0x9a40ff).multiplyScalar(on ? 1.6 + beat * 1.4 : rest);
+  e.aura.scale.setScalar(e.radius * (on ? 1.9 + beat * 0.35 : e.guard ? 1.25 : 1.6));
+}
+
+/** How many breakable parts `e` has. */
+const partsOf = (e: Enemy): number => e.def.bossKit?.parts?.angles.length ?? 0;
+
+/** Where simulated: a hero's hit of `amount` from `from` taken by the part on that side, which breaks at none left. */
+export function partHit(e: Enemy, from: { x: number; z: number }, amount: number): void {
+  const parts = e.def.bossKit?.parts;
+  if (!parts || e.net) return;
+  const way = Math.atan2(from.x - e.pos.x, from.z - e.pos.z) - e.facing;
+  let best = -1, bestOff = Infinity;
+  parts.angles.forEach((a, i) => {
+    if (e.broken & (1 << i)) return;
+    const off = Math.abs(Math.atan2(Math.sin(way - a), Math.cos(way - a)));
+    if (off < bestOff) { bestOff = off; best = i; }
+  });
+  if (best < 0) return;
+  e.partLife[best] ??= parts.life * e.maxLife;
+  e.partLife[best] -= amount * parts.share;
+  if (e.partLife[best] <= 0) fx('bossPart', e.id, best, 1);
+}
+
+/** Part `part` broken (`on` 1) or whole again (0) on this game (enemyAI's `bossPart` fx). */
+export function partChanged(e: Enemy, part: number, on: number): void {
+  const bit = 1 << part;
+  if (on) {
+    if (e.broken & bit) return;
+    e.broken |= bit;
+    hooksOf(e.type)?.broke?.(e, part);
+    if (!e.net && e.broken === (1 << partsOf(e)) - 1) hooksOf(e.type)?.allBroken?.(e);
+  } else {
+    e.broken &= ~bit;
+    if (!e.net) e.partLife[part] = (e.def.bossKit?.parts?.life ?? 0) * e.maxLife;
+  }
+}
+
+/** Where simulated: every part made whole again, told to every game. */
+export function restoreParts(e: Enemy): void {
+  if (e.net) return;
+  for (let i = 0; i < partsOf(e); i++) if (e.broken & (1 << i)) fx('bossPart', e.id, i, 0);
 }
 
 /** Each frame a boss lives, on every game: its own `frame` (`BossHooks.frame`). */
@@ -119,5 +211,5 @@ export function shareHit(e: Enemy, amount: number): void {
 
 /** What a boss's model is told of its fight this frame (`AnimState.boss`). */
 export function bossLook(e: Enemy): BossLook | undefined {
-  return e.def.bossKit ? { phase: e.bossPhase } : undefined;
+  return e.def.bossKit ? { phase: e.bossPhase, weak: e.weak, broken: e.broken, warded: e.warded } : undefined;
 }

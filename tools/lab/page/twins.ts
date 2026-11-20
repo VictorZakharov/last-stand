@@ -49,7 +49,7 @@ export interface TwinsOptions {
   canary: boolean;
 }
 
-/** the wave the Twins first come on, and every how many after (data/biomes.ts `bossWaves`, as it ships) */
+/** the wave the Twins first come on, and every how many after (its rung on the Crypt's ladder, data/biomes.ts `bosses`, as it ships) */
 const FIRST_WAVE = 15;
 const EVERY = 20;
 /** the boss waves each battleground's are judged on */
@@ -122,10 +122,15 @@ const keepWhole = (): Record<string, never> => {
 
 // --- the waves ---------------------------------------------------------------------------------------------
 
-/** What wave `wave` of `biome` should send: the Twins on the Crypt's 15th and every 20th after, else its own boss. */
+/** What wave `wave` of `biome` should send: the Twins on the Crypt's 15th and every 20th after, else its ladder's rung
+ *  for the wave (data/biomes.ts `bosses`, round again past its end) and that rung's guards. */
 function wantedOf(biome: BiomeId, wave: number): EnemyId[] {
   const twins = biome === 'crypt' && wave >= FIRST_WAVE && (wave - FIRST_WAVE) % EVERY === 0;
-  return twins ? ['twinslab', 'twinreliquary'] : [BIOMES[biome].boss];
+  if (twins) return ['twinslab', 'twinreliquary'];
+  const ladder = BIOMES[biome].bosses.filter((rung) => !rung.twin);
+  const rung = BIOMES[biome].bosses[(wave / WAVES.bossEvery - 1) % BIOMES[biome].bosses.length];
+  if (rung.twin) return [ladder[0].id];
+  return [rung.id, ...Array.from({ length: rung.guards?.count ?? 0 }, () => rung.guards!.id)];
 }
 
 /** Wave `wave` set off from its countdown as the game begins one (`startNextWave`: its banner put up), then let
@@ -160,7 +165,7 @@ async function judgeWaves(lab: Lab, biome: BiomeId, lines: string[], problems: s
     if (boss && !sent.banner.includes(boss.banner)) {
       problems.push(`waves: ${biome} wave ${wave}: the banner said "${sent.banner}", not its boss's line "${boss.banner}"`);
     }
-    const named = wanted[0] === 'twinslab' ? 'Ossuary Twins' : BIOMES[biome].bossShort;
+    const named = wanted[0] === 'twinslab' ? 'Ossuary Twins' : BIOMES[biome].bosses.find((rung) => rung.id === wanted[0])?.short;
     if (boss?.short !== named) problems.push(`waves: ${biome} wave ${wave}: the Continue button would name ${boss?.short}`);
   }
   lines.push(`waves: ${biome}: ${met.join(', ')}`);
@@ -188,8 +193,9 @@ async function twinsCome(lab: Lab, lines: string[], problems: string[]): Promise
 
 /** Each battleground's boss waves, then the Twins let come. */
 async function waves(lab: Lab, options: TwinsOptions, lines: string[], problems: string[]): Promise<void> {
-  const special = BIOMES.crypt.bossWaves;
-  if (options.canary) BIOMES.crypt.bossWaves = undefined;
+  // (the canary: the Crypt's ladder without its Twins' rung)
+  const ladder = BIOMES.crypt.bosses;
+  if (options.canary) BIOMES.crypt.bosses = ladder.filter((rung) => !rung.twin);
   try {
     for (const biome of BIOME_IDS) {
       await standIn(lab, options.fixture, biome);
@@ -202,7 +208,7 @@ async function waves(lab: Lab, options: TwinsOptions, lines: string[], problems:
       await twinsCome(lab, lines, problems);
     }
   } finally {
-    BIOMES.crypt.bossWaves = special;
+    BIOMES.crypt.bosses = ladder;
   }
 }
 
