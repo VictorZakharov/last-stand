@@ -31,6 +31,7 @@ import { pageHeight } from '../../../src/entities/models/book';
 import { toVillage } from './village';
 import { DOOR_FRAMES, stand, useByE, viewAs } from './houses';
 import { holdThroughDoor } from './housesDoor';
+import { roundsChecked } from './scholarRounds';
 
 export interface ScholarOptions {
   /** the views of the close-ups (`front,left,right,back,above` by default) */
@@ -38,6 +39,8 @@ export interface ScholarOptions {
   /** the points of his loop pictured (s) */
   at?: number[];
   canary: boolean;
+  /** instead, him pictured close at each beat of each task (page/scholarMoments.ts) */
+  moments?: boolean;
 }
 
 /** the frame a pose is stepped by (s): the game at 60 a second */
@@ -48,10 +51,10 @@ const SNAP = 5;
 /** how far his head must turn and his hand go over the loop (deg, m), or he's a statue */
 const MOVES = { head: 8, hand: 0.15 };
 /** how far off the hero his face may point while he's looked at (deg) and how far off it must point once he's not */
-const LOOKED = { at: 25, away: 35 };
+export const LOOKED = { at: 25, away: 35 };
 /** where the hero stands to talk to him as the player is pictured doing it (the room's frame): beside his table on its
  *  right, a step back, so the camera behind him sees the scholar's face ahead and to the left, within his reach */
-const SEEN_FROM: [number, number] = [-1.6, 2.4];
+export const SEEN_FROM: [number, number] = [-1.6, 2.4];
 /** how far his sleeves' cloth may come below the table's top inside its edges (m), and how far below the top a point
  *  is still read as through it (further down, it's cloth hanging past the table's edge, under it) */
 const THROUGH = { most: 0.004, depth: 0.2 };
@@ -110,7 +113,8 @@ function throughTable(s: Scholar, raise = 0): { depth: number; mesh: string } {
   const rootInverse = s.root.matrixWorld.clone().invert();
   let depth = 0, mesh = '';
   for (const m of s.parts) {
-    if (!/sleeve|bell|lining|cuff/.test(m.name)) continue;
+    // (the sleeves he wears sat: the standing set is hidden while he sits at it)
+    if (!/sleeve|bell|lining|cuff/.test(m.name) || / standing$/.test(m.name)) continue;
     toRoot.multiplyMatrices(rootInverse, m.matrixWorld);
     const at = m.geometry.attributes.position;
     for (let i = 0; i < at.count; i++) {
@@ -537,7 +541,7 @@ function walkLoop(s: Scholar, canary: boolean): { lines: string[]; problems: str
 }
 
 /** How far off the hero his face points (deg). */
-function offHero(s: Scholar): number {
+export function offHero(s: Scholar): number {
   const head = s.root.getObjectByName('scholar cap')!.parent!;
   s.root.updateMatrixWorld(true);
   const from = head.getWorldPosition(new THREE.Vector3()), facing = new THREE.Vector3(0, 0, 1).applyQuaternion(head.getWorldQuaternion(new THREE.Quaternion()));
@@ -563,6 +567,9 @@ export async function scholar(lab: Lab, options: ScholarOptions): Promise<Report
   await lab.until(() => G.arena.room === 'library', DOOR_FRAMES, "the library's door never took him in");
   await lab.step(15);
   const s = room.folk?.();
+  // (held at his table for the checks of him sat reading; his rounds are let go after them)
+  const rounds = room.rounds?.();
+  if (rounds) rounds.hold = true;
   if (!s) return { text: 'the library has no scholar seated', problems: ['no scholar seated'] };
   let triangles = 0;
   s.root.traverse((o) => { const m = o as THREE.Mesh; if (m.isMesh && m.visible) triangles += (m.geometry.index?.count ?? m.geometry.attributes.position.count) / 3; });
@@ -581,6 +588,12 @@ export async function scholar(lab: Lab, options: ScholarOptions): Promise<Report
   if (options.canary) {
     lines.push(`canary: ${loop.caught ? 'every planted fault found' : 'a planted fault went unseen'}`);
     if (!loop.caught) problems.push('canary: a planted fault went unseen');
+    // (and his rounds' own: a book he carries off his hands)
+    if (rounds) {
+      const planted = await roundsChecked(lab, s, rounds, true);
+      lines.push(...planted.lines);
+      problems.push(...planted.problems);
+    }
     return { text: lines.join('\n'), problems, moments };
   }
 
@@ -637,6 +650,14 @@ export async function scholar(lab: Lab, options: ScholarOptions): Promise<Report
     G.player.place(placed, turn + Math.PI);
     moments.push(lab.picture(`scholar-${what.replace(/\s+/g, '-')}-table`, ['above'], [`${what}: his book from above, ahead of him`], { at: book, distance: 0.8 }));
     G.player.place(placed, turn);
+  }
+
+  // --- his rounds: let go from his table, followed through a browse, a keep and a restock ---
+  if (rounds) {
+    const done = await roundsChecked(lab, s, rounds, false);
+    lines.push(...done.lines);
+    problems.push(...done.problems);
+    moments.push(...done.moments);
   }
   return { text: lines.join('\n'), problems, moments };
 }
