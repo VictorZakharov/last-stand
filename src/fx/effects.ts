@@ -16,12 +16,13 @@ type Pos = { x: number; y?: number; z: number };
 const floor = (pos: Pos): number => Math.max(pos.y ?? 0, groundHeight(pos.x, pos.z));
 
 const active: Effect[] = [];
-const GEO = {} as Record<'ring' | 'disc' | 'plane' | 'spike' | 'pillar' | 'crystal', THREE.BufferGeometry>;
+const GEO = {} as Record<'ring' | 'thinRing' | 'disc' | 'plane' | 'spike' | 'pillar' | 'crystal', THREE.BufferGeometry>;
 const TEX = {} as Record<'scorch' | 'frost' | 'soft' | 'rune' | 'cracks', THREE.Texture>;
 
 export function initEffects(): void {
   initRubble();
   GEO.ring = new THREE.RingGeometry(0.82, 1, 64, 1).rotateX(-Math.PI / 2);
+  GEO.thinRing = new THREE.RingGeometry(0.965, 1, 160, 1).rotateX(-Math.PI / 2);
   GEO.disc = new THREE.CircleGeometry(1, 48).rotateX(-Math.PI / 2);
   GEO.plane = new THREE.PlaneGeometry(2, 2).rotateX(-Math.PI / 2);
   GEO.spike = new THREE.ConeGeometry(0.22, 1.6, 5, 1).translate(0, 0.8, 0);
@@ -81,6 +82,42 @@ export function groundFlash(pos: Pos, { color = 0xffffff, intensity = 2, radius 
   return addEffect({ update(dt: number) { t += dt; mat.opacity = Math.max(0, 1 - t / life); return t < life; }, dispose });
 }
 
+/**
+ * A ring of sound rolling out over the floor (the Bell-Warden's toll): its radius grows at `speed` m/s, linear as the
+ * gameplay's front is (a shockwave eases out), from `from` to `reach`, fading as it goes, `thickness` its band's share
+ * of the radius. Dim and one sweep a ring (the root's flash rule: a pattern crossing the view flashes too). `onStep`
+ * is told the radius before and after each frame's growth (the toll judges its hero there).
+ */
+export function soundRing(pos: Pos, { color = 0xd8e4ff, intensity = 1.3, speed = 9, from = 1, reach = 24, delay = 0,
+  onStep = null as ((r0: number, r1: number) => void) | null } = {}) {
+  const mat = additive(color, intensity, 0);
+  const inner = additive(color, intensity * 0.35, 0);
+  const m = new THREE.Mesh(GEO.thinRing, mat), wash = new THREE.Mesh(GEO.ring, inner);
+  const g = new THREE.Group();
+  g.add(m, wash);
+  g.position.set(pos.x, floor(pos) + 0.09, pos.z);
+  g.visible = false;
+  const dispose = tracked(g, [mat, inner]);
+  let t = -delay, r = from;
+  return addEffect({
+    update(dt: number) {
+      t += dt;
+      if (t < 0) return true;
+      const r0 = r;
+      r = from + speed * t;
+      onStep?.(r0, Math.min(r, reach));
+      const k = Math.min(1, (r - from) / (reach - from));
+      g.visible = true;
+      m.scale.set(r, 1, r);
+      wash.scale.set(r * 0.93, 1, r * 0.93);
+      mat.opacity = (1 - k) ** 1.4;
+      inner.opacity = (1 - k) ** 2 * 0.8;
+      return r < reach;
+    },
+    dispose,
+  });
+}
+
 // Ground decal that fades out (scorch / frost).
 export function decal(pos: Pos, { type = 'scorch' as 'scorch' | 'frost', size = 2.5, life = 6, opacity = 1 } = {}) {
   const mat = new THREE.MeshBasicMaterial({ map: TEX[type], transparent: true, depthWrite: false, opacity, polygonOffset: true, polygonOffsetFactor: -2 });
@@ -120,6 +157,31 @@ export function telegraph(pos: Pos, radius: number, duration: number, color: THR
   });
   e.group = g;
   return e;
+}
+
+/**
+ * A soft glow on the floor that drifts (the Rootmother's spore clouds): the ground flash's disc, `radius` m, moved to
+ * where `at` says each frame (false: gone), swelling in over its first half second and fading over its last. A slow
+ * churn (well under a beat a second).
+ */
+export function driftGlow(at: (t: number, out: THREE.Vector3) => boolean, radius: number, life: number,
+  { color = 0x8adf40, intensity = 0.9 } = {}): Effect {
+  const mat = additive(color, intensity);
+  mat.map = TEX.soft;
+  const m = new THREE.Mesh(GEO.plane, mat);
+  const dispose = tracked(m, [mat]);
+  const pos = new THREE.Vector3();
+  let t = 0;
+  return addEffect({
+    update(dt: number) {
+      t += dt;
+      if (!at(t, pos)) return false;
+      m.position.set(pos.x, floor(pos) + 0.055, pos.z);
+      m.scale.setScalar(radius * (0.9 + 0.1 * Math.sin(t * 2.1)) * Math.min(1, 0.4 + t * 1.2));
+      mat.opacity = Math.min(1, t * 2, Math.max(0, life - t)) * (0.75 + 0.25 * Math.sin(t * 1.7));
+      return t < life;
+    }, dispose,
+  });
 }
 
 // A pool of lava left where a chunk landed (the Cinder Brute's, entities/throws.ts): a glowing disc over a scorch,
@@ -194,12 +256,17 @@ export function lightning(from: THREE.Vector3, to: THREE.Vector3, { color = 0x9f
   });
 }
 
-// Ice spikes erupting from the ground in a radius.
-export function iceSpikes(center: Pos, radius: number, count = 28, inner = 0): Effect {
-  const mat = new THREE.MeshPhysicalMaterial({
-    color: 0xbfe8ff, emissive: 0x3aa0ff, emissiveIntensity: 0.6, roughness: 0.15, metalness: 0,
-    transparent: true, opacity: 0.9, clearcoat: 1, flatShading: true,
-  });
+/** What spikes erupting from the ground are: ice (a frost skill's), or thorns (the Rootmother's: dark wood, a little
+ *  sap in it). The same material's program either way: its colours and strengths alone differ. */
+const SPIKES = {
+  ice: { color: 0xbfe8ff, emissive: 0x3aa0ff, emissiveIntensity: 0.6, roughness: 0.15, opacity: 0.9, clearcoat: 1 },
+  thorn: { color: 0x2e2216, emissive: 0x3a6a10, emissiveIntensity: 0.12, roughness: 0.75, opacity: 1, clearcoat: 0.1 },
+};
+
+// Spikes erupting from the ground in a radius (ice by default), standing `life` s in all, `height` times their size.
+export function iceSpikes(center: Pos, radius: number, count = 28, inner = 0,
+  { look = 'ice' as keyof typeof SPIKES, life = 2.2, height = 1 } = {}): Effect {
+  const mat = new THREE.MeshPhysicalMaterial({ ...SPIKES[look], metalness: 0, transparent: true, flatShading: true });
   const inst = new THREE.InstancedMesh(GEO.spike, mat, count);
   inst.castShadow = true;
   const data: { x: number; z: number; s: number; delay: number; tilt: number; rot: number; tilt2: number }[] = [];
@@ -209,7 +276,7 @@ export function iceSpikes(center: Pos, radius: number, count = 28, inner = 0): E
   }
   const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), s = new THREE.Vector3(), p = new THREE.Vector3();
   G.scene.add(inst);
-  let t = 0; const life = 2.2;
+  let t = 0;
   return addEffect({
     update(dt: number) {
       t += dt;
@@ -219,7 +286,7 @@ export function iceSpikes(center: Pos, radius: number, count = 28, inner = 0): E
         let k = lt <= 0 ? 0 : Math.min(1, lt / 0.12);
         if (t > life - 0.5) k *= Math.max(0, (life - t) / 0.5);
         e.set(d.tilt, d.rot, d.tilt2); q.setFromEuler(e);
-        s.set(d.s * (0.6 + 0.4 * k), d.s * k + 0.001, d.s * (0.6 + 0.4 * k));
+        s.set(d.s * (0.6 + 0.4 * k), d.s * k * height + 0.001, d.s * (0.6 + 0.4 * k));
         p.set(d.x, groundHeight(d.x, d.z) - 0.1, d.z);
         m4.compose(p, q, s);
         inst.setMatrixAt(i, m4);
