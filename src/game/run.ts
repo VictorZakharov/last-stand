@@ -12,7 +12,7 @@ import { G } from '../state';
 import { RUN, COOP, partyScale } from '../data/balance';
 import { WAVES, LOOT } from '../data/waves';
 import { ENEMIES, HERO, SCALING } from '../data/enemies';
-import { BIOMES, bossOfWave } from '../data/biomes';
+import { BIOMES, bossOfWave, isBossWave } from '../data/biomes';
 import { spawnEnemy } from '../entities/spawner';
 import { inObstacle, resolveWorld } from '../world/collision';
 import { clearEnemies, forgetFrustum, RISE_TIME } from '../entities/enemy';
@@ -139,6 +139,7 @@ export function initRun(uiHooks: RunUI): void {
     const line = boss.def.bossKit?.phases[phase]?.banner;
     if (line) ui.banner(boss.name, line);
   });
+  on('bossCall', (boss, line) => ui.banner(boss.name, line));
 }
 
 function cleanupWorld(): void {
@@ -154,6 +155,8 @@ function cleanupWorld(): void {
   clearTimers();
   forgetFields();
   forgetFrustum();
+  // (the canopy a boss closed over the battleground open again: the Rootmother's second phase)
+  G.arena.setShade(0, true);
 }
 
 /** Start at `wave`: banked waves in the arena, reached waves in Training grounds.
@@ -235,7 +238,7 @@ function buildWave(w: number): SpawnUnit[][] {
   // a party meets more foes (and more life on each: `spawnGroup`)
   let budget = WAVES.budget(w) * partyScale(r.party).foes;
   const units: SpawnUnit[] = [];
-  if (w % WAVES.bossEvery === 0) budget *= 0.55;
+  if (isBossWave(w)) budget *= 0.55;
   while (budget > 0) {
     const type = weighted(pool);
     budget -= ENEMIES[type].cost;
@@ -356,7 +359,9 @@ function spawnGroup(group: SpawnUnit[]): void {
       const u = group[next++];
       const def = ENEMIES[u.type];
       portal.pulse();
-      const pos = riseSpot(portal, def.radius * (u.hero ? HERO.scale : 1), !!def.boss);
+      // (a boss that comes on in the arena's middle grows up out of it: the Rootmother)
+      const pos = def.bossKit?.comes === 'middle' ? new THREE.Vector3(0, 0, 0)
+        : riseSpot(portal, def.radius * (u.hero ? HERO.scale : 1), !!def.boss);
       if (bosses && group.length > 1) {
         // (the twins abreast, rising together)
         pos.addScaledVector(new THREE.Vector3(-portal.dir.z, 0, portal.dir.x), (j ? 1 : -1) * 3.5);
@@ -634,6 +639,8 @@ function onEnemyKilled(e: Enemy): void {
   const r = G.run;
   if (!r || isGuest()) return;
   if (r.training || e.training) return;
+  // (what a boss brings into its fight is no foe: a seed pod popped or hatched counts for nothing)
+  if (e.def.broughtBy) return;
   r.kills++;
   r.score += e.score * RUN.scorePerKill * r.multiplier;
   r.multTimer = 0;

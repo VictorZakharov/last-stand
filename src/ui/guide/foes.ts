@@ -1,9 +1,12 @@
 // The guide's foes and bosses: every foe a wave brings, its figures from the game's data (data/enemies.ts, its growth
 // by wave, the biome that brings it and from which wave, how it throws, dodges and calls help) and how to fight it
 // (data/guide.ts). Its blow against the hero's own armour and resistance is worked out as the page opens.
-import { BIOMES, BIOME_IDS, type BiomeId } from '../../data/biomes';
+import { BIOMES, BIOME_IDS, bossOfWave, type BiomeId } from '../../data/biomes';
 import { BOSS_AI, ENEMIES, HERO, SCALING, type EnemyId } from '../../data/enemies';
+import { BELL_WARDEN } from '../../data/foes/bellwarden';
 import { TWINS } from '../../data/foes/twins';
+import { ROOTMOTHER } from '../../data/foes/rootmother';
+import { STAG } from '../../data/foes/stag';
 import { WAVES } from '../../data/waves';
 import { DAMAGE_COLORS, partyScale, COOP } from '../../data/balance';
 import { AI_NOTES, FOE_NOTES, type FoeNote } from '../../data/guide';
@@ -37,12 +40,14 @@ export function foes(): { common: Foe[]; bosses: Foe[] } {
   return { common: common.sort(order), bosses: bosses.sort(order) };
 }
 
-/** Where `id` is met first: the first biome whose pool or boss has it, and the first wave there. */
+/** Where `id` is met first: the first biome whose pool or boss has it, and the first wave there; a foe a boss brings
+ *  (`broughtBy`: the Rootmother's seed pods, in no pool) where its boss is. */
 function metAt(id: EnemyId): { biome: BiomeId; from: number } | null {
+  const by = ENEMIES[id].broughtBy as EnemyId | undefined;
+  if (by && by !== id) return metAt(by);
   for (const biome of BIOME_IDS) {
-    if (BIOMES[biome].boss === id) return { biome, from: WAVES.bossEvery };
-    const special = BIOMES[biome].bossWaves?.find((s) => s.id === id || s.twin === id);
-    if (special) return { biome, from: special.wave };
+    const first = bossWavesOf(biome, id)[0];
+    if (first) return { biome, from: first };
     for (let w = 1; w <= LAST_LOOKED; w++) if (BIOMES[biome].pool(w).some(([e]) => e === id)) return { biome, from: w };
   }
   return null;
@@ -91,11 +96,25 @@ function figures(foe: Foe): string {
   return tiles(items);
 }
 
-/** When a boss comes: its biome's boss waves, or a special boss wave's (data/biomes.ts `bossWaves`). */
+/** the waves the guide looks through for a boss's first coming and its return */
+const LOOKED_THROUGH = 200;
+
+/** The boss waves of `biome` that `id` holds, first to last within `LOOKED_THROUGH` (its ladder's rung or an exception
+ *  over it, a twin with the boss it rises with: data/biomes.ts `bossOfWave`). */
+function bossWavesOf(biome: BiomeId, id: EnemyId): number[] {
+  const waves: number[] = [];
+  for (let wave = WAVES.bossEvery; wave <= LOOKED_THROUGH; wave += WAVES.bossEvery) {
+    const boss = bossOfWave(biome, wave);
+    if (boss && (boss.id === id || boss.twin === id)) waves.push(wave);
+  }
+  return waves;
+}
+
+/** When a boss comes: its first boss wave, then how often it comes again. */
 function comes(foe: Foe): [string, string] {
-  const special = BIOMES[foe.biome].bossWaves?.find((s) => s.id === foe.id || s.twin === foe.id);
-  if (special) return [`wave ${special.wave}`, `then every ${special.every}th · ${BIOMES[foe.biome].title}`];
-  return [`every ${WAVES.bossEvery}th wave`, BIOMES[foe.biome].title];
+  const [first, next] = bossWavesOf(foe.biome, foe.id);
+  const again = next ? `then every ${next - first} waves` : 'once';
+  return [`wave ${first}`, `${again}· ${BIOMES[foe.biome].title}`];
 }
 
 /** Its attacks, each with its figures. */
@@ -117,6 +136,9 @@ function attacks(foe: Foe): string[] {
     out.push(`<b>Vine:</b> from ${metres(th.from)} to ${metres(th.reach)} away it sends a vine creeping along the floor at ${num(th.creep[0])} m/s, through anything in its way. If its tip comes within ${metres(th.creep[1])} of you, you are held to the spot for ${secs(th.creep[2])}; a dash or a blink tears you free.`);
   }
   if (d.ai === 'twins') out.push(...twinsAttacks(foe));
+  if (d.ai === 'bellWarden') out.push(...bellWardenAttacks(foe));
+  if (d.ai === 'rootmother') out.push(...rootmotherAttacks(foe));
+  if (d.ai === 'stag') out.push(...stagAttacks(foe));
   if (d.boss && d.ai === 'boss') {
     const radius = d.slamRadius ?? 5;
     out.push(`<b>Slam:</b> up close (within ${metres(d.range + BOSS_AI.slamReach)}) it slams all round itself: ${hit} ${typed(d)} damage within ${metres(radius)}, marked by a ring ${secs(d.windup)} before it lands.`);
@@ -159,6 +181,52 @@ function twinsAttacks(foe: Foe): string[] {
   ];
 }
 
+/** The Bell-Warden's fight, each with its figures (data/enemies.ts `BELL_WARDEN` and its boss kit). */
+function bellWardenAttacks(foe: Foe): string[] {
+  const d = foe.def, b = BELL_WARDEN, t = b.toll, kit = d.bossKit!, hit = damage(d, foe.from);
+  const warn = kit.attacks?.toll?.warn ?? d.windup;
+  const [, split, kneel] = kit.phases;
+  const husk = ENEMIES[(d.summon ?? 'husk') as EnemyId].name;
+  return [
+    `<b>Toll:</b> the bell swings back and glows for ${secs(warn)}, then a ring of sound rolls out across the floor at ${num(t.speed)} m/s. Within ${metres(t.stunsTo)} it stuns whoever it reaches for ${secs(t.stun)} and deals ${whole(hit * t.hurt)} ${typed(d)} damage; past that it has faded. A shield raised towards it, a dash or a leap carries you through.`,
+    `<b>Hollow Husks:</b> every ${b.raiseEvery === 2 ? 'second' : `${b.raiseEvery}th`} toll raises ${b.raise[0]} to ${b.raise[1]} ${husk}s round the arena, while fewer than ${b.aliveMost} foes stand.`,
+    `<b>Ghosts:</b> they circle the bell and swoop low; one that passes within ${metres(b.grab.reach)} of you carries you ${metres(b.grab.away)} out and drops you for ${whole(hit * b.grab.hurt)} damage. None takes you again for ${secs(b.grab.grace)}.`,
+    `<b>Its chains:</b> each bearer's chain breaks under hits from its side; with all four broken the bell drops for ${secs(b.down)}, taking ${num(kit.weak?.taken ?? 2)}× damage, then the bearers rise with the chains whole.`,
+    split ? `<b>Under ${pct(split.below)}:</b> it tolls twice, a fast ring then a slow one, and your hits may break bronze shards off it that lie ${secs(b.shards.lies)} burning ${whole(hit * b.shards.hurt)} damage every ${secs(b.shards.tick)} within ${metres(b.shards.radius)}.` : '',
+    kneel ? `<b>Under ${pct(kneel.below)}:</b> its bearers kneel and it tolls every ${secs(b.lastEvery)} where it stands.` : '',
+  ].filter(Boolean);
+}
+
+/** The Rootmother's fight, each with its figures (data/enemies.ts `ROOTMOTHER` and her boss kit). */
+function rootmotherAttacks(foe: Foe): string[] {
+  const d = foe.def, r = ROOTMOTHER, kit = d.bossKit!, hit = damage(d, foe.from);
+  const warn = (name: string): number => kit.attacks?.[name]?.warn ?? d.windup;
+  const [, late] = kit.phases;
+  const brood = ENEMIES[(d.summon ?? 'thornling') as EnemyId].name;
+  const spot = kit.weak?.spot?.taken ?? 1;
+  return [
+    `<b>Creeping vines:</b> her arms drawn back for ${secs(warn('vines'))}, then ${r.vines.count[0]} to ${r.vines.count[1]} vines crawl out from her roots along the floor at ${num(r.vines.speed)} m/s, each after a hero, turning slowly. Any of it that touches you holds you for ${secs(r.vines.hold)}, and she drags herself towards you meanwhile; a dash or a blink tears you free, and one arrow cuts a vine whole.`,
+    `<b>Seed pods:</b> she flings ${r.seeds.count} pods across the arena; each one left ${secs(r.seeds.hatch)} bursts into ${r.seeds.brood} ${brood}s. One hit of anything pops a pod.`,
+    `<b>Thorns:</b> while you stand within ${metres(r.thorns.near)} of her, her arms rise for ${secs(warn('thorns'))} and thorns burst from the earth out to ${metres(r.thorns.radius)} for ${secs(r.thorns.last)}, dealing ${whole(hit * r.thorns.hurt)} ${typed(d)} damage every ${secs(r.thorns.tick)} to whoever stands in them.`,
+    `<b>Her heart:</b> ${secs(r.heart.first)} after she rises and every ${secs(r.heart.every)} after, it opens in her trunk for ${secs(r.heart.open)}. Shots that strike it deal ${num(spot)}× damage; she attacks nothing meanwhile, flinging ${r.heart.pods} pods round the arena instead.`,
+    late ? `<b>Under ${pct(late.below)}:</b> the canopy closes. Spore clouds ${metres(r.spores.radius)} wide drift over the floor, dealing ${whole(hit * r.spores.hurt)} damage every ${secs(r.spores.tick)} to whoever stands in one, and the earth cracks under a hero for ${secs(warn('erupt'))} before spikes burst from it, ${metres(r.erupt.radius)} round, for ${whole(hit * r.erupt.hurt)} damage.` : '',
+  ].filter(Boolean);
+}
+
+/** The Stag of Ash's fight, each with its figures (data/enemies.ts `STAG` and its boss kit). */
+function stagAttacks(foe: Foe): string[] {
+  const d = foe.def, s = STAG, kit = d.bossKit!, hit = damage(d, foe.from);
+  const warn = (name: string): number => kit.attacks?.[name]?.warn ?? d.windup;
+  const [, late] = kit.phases;
+  const taken = kit.weak?.taken ?? 2;
+  return [
+    `<b>Charge:</b> at a hero ${metres(s.charge.near)} off or more, it paws the ground for ${secs(warn('charge'))} as a lane burns onto the floor towards you, fixed once it starts. Then it runs down it at ${num(s.charge.speed)} m/s, to ${metres(s.charge.over)} past where you stood, goring whoever is still in it for ${whole(hit * s.charge.hurt)} ${typed(d)} damage. The lane it ran burns for ${secs(s.fire.life)}, dealing ${whole(hit * s.fire.hurt)} damage every ${secs(s.fire.tick)} to whoever stands in it.`,
+    `<b>The crash:</b> a charge that runs into a rock, a tree, the wall or a raised shield stops dead: it is stunned for ${secs(s.charge.stun)} and takes ${num(taken)}× damage.`,
+    `<b>Up close:</b> it never stops attacking, a moment between each. Every other attack, if you stand before its head, it drops its antlers to the earth for ${secs(warn('toss'))}, then scoops you up and throws you ${metres(s.toss.far)} across the arena for ${whole(hit * s.toss.hurt)} damage as you land; a step aside, a dash or a raised shield saves you. Otherwise it sweeps its antlers round before it for ${whole(hit * s.sweep.hurt)} damage, after ${secs(warn('sweep'))}.`,
+    late ? `<b>Under ${pct(late.below)}:</b> a charge that misses turns straight round into another, its fire burns ${secs(s.fire.late)}, and every ${secs(s.embers.every)} ${s.embers.count} embers fall round the heroes, each marked by a ring ${secs(s.embers.fall)} before it lands, for ${whole(hit * s.embers.hurt)} damage.` : '',
+  ].filter(Boolean);
+}
+
 /** Elites: any common foe may come as one, from the wave they start to show. */
 function eliteLine(foe: Foe): string {
   if (foe.def.boss) return '';
@@ -171,7 +239,7 @@ function eliteLine(foe: Foe): string {
 function bossParty(foe: Foe): string {
   if (!foe.def.boss) return '';
   const lives = Array.from({ length: COOP.maxPlayers }, (_, i) => life(foe.def, foe.from) * partyScale(i + 1).boss);
-  const summon = foe.def.summon && foe.def.summon in ENEMIES ? ENEMIES[foe.def.summon as EnemyId].name : '';
+  const summon = foe.def.ai === 'boss' && foe.def.summon && foe.def.summon in ENEMIES ? ENEMIES[foe.def.summon as EnemyId].name : '';
   return head(`Health with a party, wave ${foe.from}`) + partyBars(lives)
     + (summon ? head('Calls for help') + summonTimeline(summon) : '');
 }
