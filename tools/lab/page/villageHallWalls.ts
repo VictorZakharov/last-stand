@@ -9,9 +9,10 @@
 // `roomColumnsStay`: in the doorway the room's columns he sees over the wall stay: "when entering hall, pillars inside
 // disappear". A shaft shows if the frame changes with the columns hidden. `--canary`: they're hidden.
 //
-// `doorConeFromStair` ("when player is down even one stair, then in top down he cannot see into the hall, even tho he
-// clearly can in 3rd person view"): from a step down the stair and on down it, the floor past the door shows as at it.
-// `--canary`: the cone held shut.
+// `doorConeFromStair`: from a step down the stair and on down it, looking in, the front wall stays solid (`hallFront`
+// 0.00) while sight through the open doorway sees down the aisle and leaves the room's wings unseen behind the wall.
+// `--canary`: lets `hallFront` thin outside (`holdFrontOutsideThins`) and drops his line-of-sight door wedge
+// (`holdDoorWedgeOff`).
 //
 // `heroesSeenFromAbove`: from above the plinths' heroes stand while he can see a plinth: "pedestals are empty from this
 // position, they should display heroes if character can see them from their cone of view". `--canary`: read as none.
@@ -22,7 +23,7 @@ import * as THREE from 'three';
 import type { Lab, Pictured } from './lab';
 import { G } from '../../../src/state';
 import { HALL, TERRACE, VILLAGE_OBJECTS, type VillageObject } from '../../../src/data/village';
-import { goTo, holdHallWallsAllThin, holdHeroLightOff, holdSeenFloorWalls, seenFloorHidden,
+import { goTo, holdFrontOutsideThins, holdHallWallsAllThin, holdHeroLightOff, seenFloorHidden,
   spotToUse } from '../../../src/game/village';
 import { holdHour } from '../../../src/game/clock';
 import { heroesStanding } from '../../../src/game/hall';
@@ -35,7 +36,7 @@ import { groundHeight } from '../../../src/world/ground';
 import { walkLength } from '../../../src/world/walkPath';
 import { drawFrame } from './light';
 import {
-  floorMark, fromAboveAtNoon, inFrame, LEAST_SHOWN, LOOKING_IN, shownMarks, standFacing,
+  floorMark, fromAboveAtNoon, inFrame, LOOKING_IN, shownMarks, standFacing,
 } from './villageHallOpens';
 import { hisPixels, shownOf } from './villageHeroInView';
 import type { LightsChecked } from './villageLights';
@@ -301,6 +302,8 @@ const STAIR_FLOOR_IN = [3.5, 4, 4.5, 5, 5.5, 6.5];
 const BESIDE_ACROSS = 4.5;
 const BESIDE_IN = 0.5;
 const MOST_BESIDE = 0.25;
+const MOST_STAIR_SHOWN = 0.25;
+const LEAST_STAIR_AISLE = 0.9;
 const ZOOM_FRAMES = 120;
 
 /** `read` from above at noon, the camera as far out as the owner's pictures have it, put back after it. */
@@ -317,32 +320,43 @@ async function fromAboveAsPictured<T>(lab: Lab, read: () => Promise<T>, zoom = O
   });
 }
 
-/** On the stair below the terrace, looking in, the floor he sees through the door shown through the wall over it, from
- *  each stand. */
+/** On the stair below the terrace, looking in, the front wall stays solid while doorway sight sees down the aisle
+ *  and stays out of the wings beside the door. */
 export async function doorConeFromStair(lab: Lab, canary: boolean): Promise<LightsChecked> {
   return fromAboveAsPictured(lab, async () => {
-    holdSeenFloorWalls(canary);
+    holdFrontOutsideThins(canary);
     holdDoorWedgeOff(canary);
     const lines: string[] = [];
     let wrong = false;
+    let wallCaught = false;
+    let wedgeCaught = false;
     const moments = [];
-    for (const down of STAIR_DOWN) {
-      await standFacing(lab, TERRACE.x, TERRACE.front + down, LOOKING_IN);
-      const marks = STAIR_FLOOR_IN.map((inside) => floorMark(TERRACE.x, HALL.inFront - inside))
-        .filter((mark) => inFrame(mark.position) || (G.scene.remove(mark), false));
-      if (!marks.length) throw new Error(`lab: village: no mark past the hall's door is in the frame, ${down} m down`);
-      const shown = shownMarks(lab, marks);
-      if (!canary) moments.push(await lab.screen(`${down} m down the stair: what he sees through the door`, []));
-      for (const mark of marks) G.scene.remove(mark);
-      const beside = seenBesideDoor();
-      lines.push(`${down} m down the hall's stair, the floor past its door shown: ${(shown * 100).toFixed(0)}% `
-        + `(at least ${LEAST_SHOWN * 100}%), the wall thinned ${wholeShare('hallFront').toFixed(2)}; beside the door past his `
-        + `line of sight seen ${(beside * 100).toFixed(0)}% (at most ${MOST_BESIDE * 100}%)`);
-      wrong ||= shown < LEAST_SHOWN || beside > MOST_BESIDE;
+    try {
+      for (const down of STAIR_DOWN) {
+        await standFacing(lab, TERRACE.x, TERRACE.front + down, LOOKING_IN);
+        const marks = STAIR_FLOOR_IN.map((inside) => floorMark(TERRACE.x, HALL.inFront - inside))
+          .filter((mark) => inFrame(mark.position) || (G.scene.remove(mark), false));
+        if (!marks.length) throw new Error(`lab: village: no mark past the hall's door is in the frame, ${down} m down`);
+        const shown = shownMarks(lab, marks);
+        if (!canary) moments.push(await lab.screen(`${down} m down the stair: front wall solid, doorway open`, []));
+        for (const mark of marks) G.scene.remove(mark);
+        const frontShare = wholeShare('hallFront');
+        const aisleSeen = seenShareAt(TERRACE.x, HALL.inFront - 3.5);
+        const beside = seenBesideDoor();
+        lines.push(`${down} m down the hall's stair, hallFront ${frontShare.toFixed(2)} (expected 0), floor past wall `
+          + `shown: ${(shown * 100).toFixed(0)}% (at most ${MOST_STAIR_SHOWN * 100}%), aisle seen ${(aisleSeen * 100).toFixed(0)}% `
+          + `(at least ${LEAST_STAIR_AISLE * 100}%); beside the door past his line of sight seen ${(beside * 100).toFixed(0)}% `
+          + `(at most ${MOST_BESIDE * 100}%)`);
+        if (shown > MOST_STAIR_SHOWN) wallCaught = true;
+        if (beside > MOST_BESIDE) wedgeCaught = true;
+        wrong ||= (!canary && frontShare > 0) || shown > MOST_STAIR_SHOWN || aisleSeen < LEAST_STAIR_AISLE
+          || beside > MOST_BESIDE;
+      }
+    } finally {
+      holdFrontOutsideThins(false);
+      holdDoorWedgeOff(false);
     }
-    holdSeenFloorWalls(false);
-    holdDoorWedgeOff(false);
-    if (canary) return { lines, problems: [], caught: wrong, moments: [] };
+    if (canary) return { lines, problems: [], caught: wallCaught && wedgeCaught, moments: [] };
     return { lines, problems: wrong ? lines : [], caught: null, moments };
   });
 }
@@ -474,7 +488,8 @@ function seenOverFront(point: THREE.Vector3): boolean {
   const eye = G.camera.position;
   if (passesPortico(point)) return false;
   if (eye.z <= HALL.door) return true;
-  const along = (HALL.door - eye.z) / (point.z - eye.z);
+  // (the front wall is 0.6 m thick from `HALL.door` to `HALL.inFront`, so a downward ray is lowest over `HALL.inFront`)
+  const along = (HALL.inFront - eye.z) / (point.z - eye.z);
   return eye.y + (point.y - eye.y) * along > WALL_TOP + OVER_TOP;
 }
 

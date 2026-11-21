@@ -330,6 +330,14 @@ export const OVER_SHAFT = 'overShaft';
 /** Whether `material` is a column's capital's (`OVER_SHAFT`). */
 export const overShaft = (material: THREE.Material): boolean => material.userData[OVER_SHAFT] === true;
 
+/** A hall column standing inside the room (`userData`): drawn before walls that thin before it, and solid to the
+ *  fog's alpha read so unseen columns behind a thinned front wall take the room's full fog instead of painting bright
+ *  over the wall (`drawnInTurn`). */
+export const IN_HALL_COLUMN = 'inHallColumn';
+
+/** Whether `material` belongs to an interior hall column (`IN_HALL_COLUMN`). */
+export const inHallColumn = (material: THREE.Material): boolean => material.userData[IN_HALL_COLUMN] === true;
+
 /** how much less of itself a pale surface keeps as it thins by blending (`Kind.pale`): of what's thinned, a share by
  *  its albedo's luminance from `from` to `to`. A pale stucco shaft's ghost over him at the dark granite's share washed
  *  him out, from play, "this needs to be ghosted more... maybe need to vary by color" */
@@ -561,9 +569,10 @@ export function seeThrough<M extends THREE.Material>(m: M, kind: keyof typeof ki
   if (blended) {
     m.transparent = true;
     m.depthWrite = true;
-    // (a column too: its depth let go, the fog fogged its own share with the ground past it, a dark slab over the
-    // portico, "without 'slanted roof' on it")
-    if (kind === 'roof' || kind === 'gable' || kind === 'hallColumn') tellsItsShare(m);
+    // (a portico column too: its depth let go, the fog fogged its own share with the ground past it, a dark slab over
+    // the portico, "without 'slanted roof' on it"; an interior column keeps normal blending so its alpha stays 1 under
+    // a thinned front wall, letting the fog dark-tint it whole instead of showing through the wall)
+    if (kind === 'roof' || kind === 'gable' || (kind === 'hallColumn' && !inHallColumn(m))) tellsItsShare(m);
     if (kind !== 'built' && kind !== 'fence') thinningWhole.set(kind, [...(thinningWhole.get(kind) ?? []), m]);
   }
   const prev = m.onBeforeCompile, key = m.customProgramCacheKey();
@@ -682,18 +691,12 @@ function middleOf(object: THREE.Object3D): THREE.Vector3 {
   return middle;
 }
 
-/** Which comes first of what thins by blending: the depth of what's left whole, so nothing behind it draws over it
- *  whatever the order, then the walls, what stands free before them (drawn under them, a column's ghost was gone, its
- *  capital left in the air, from play, "this geometry is messed up"), the roofs over all (from above nothing built stands
- *  over a roof). */
-function drawnInTurn(material: THREE.Material): number {
-  const see = (material as { seeThrough?: SeeThrough }).seeThrough;
-  // (a column's depth after the walls it stands over, before its own colour)
-  if (see?.wholeOnly) return see.k === COLUMN_K && !columnsUnderWalls ? 1.5 : 0;
-  if (see?.k === ROOF_K) return 3;
-  if (see?.k === COLUMN_K && !columnsUnderWalls) return overShaft(material) ? 2.5 : 2;
-  return 1;
-}
+/** middle of the hall's interior colonnade, for comparing wall distance against the columns inside */
+const HALL_MIDDLE = new THREE.Vector3(
+  TERRACE.x,
+  TERRACE.high + HALL.wallHigh * 0.5,
+  (HALL.columnZ[0] + HALL.columnZ[HALL.columnZ.length - 1]) * 0.5,
+);
 
 /** whether a harness has what stands free drawn in with the walls, as it was */
 let columnsUnderWalls = false;
@@ -701,6 +704,46 @@ let columnsUnderWalls = false;
 /** For a harness (tools/lab): what stands free in the hall drawn in with its walls, as it was. */
 export function holdColumnsUnderWalls(held: boolean): void {
   columnsUnderWalls = held;
+}
+
+/** whether a harness draws interior hall columns after the thinned front wall, as they were */
+let roomColumnsOverWalls = false;
+
+/** For a harness (tools/lab): interior hall columns drawn over thinned walls, as they were. */
+export function holdRoomColumnsOverWalls(held: boolean): void {
+  roomColumnsOverWalls = held;
+}
+
+/** Which comes first of what thins by blending: the depth of what's left whole, then while all solid the legacy
+ *  walls/columns/roofs turns; while anything thins, interior columns draw before a thinned wall nearer the eye so
+ *  the wall blends over them rather than letting unseen columns paint bright over the front wall and jambs. */
+function drawnInTurn(material: THREE.Material, object: THREE.Object3D, nearFirst: boolean): number {
+  const see = (material as { seeThrough?: SeeThrough }).seeThrough;
+  if (nearFirst) {
+    if (see?.wholeOnly) return see.k === COLUMN_K && !columnsUnderWalls ? 1.5 : 0;
+    if (see?.k === ROOF_K) return 3;
+    if (see?.k === COLUMN_K && !columnsUnderWalls) return overShaft(material) ? 2.5 : 2;
+    return 1;
+  }
+  if (columnsUnderWalls && see?.k === COLUMN_K) return 0.5;
+  if (see?.k === ROOF_K) return 3;
+  if (see?.wholeOnly) {
+    if (see.k !== COLUMN_K) return 0;
+    if (inHallColumn(material)) return roomColumnsOverWalls ? 2.0 : 1.2;
+    return sortEye.value.z >= HALL.door ? 2.0 : 0.6;
+  }
+  if (see?.k === COLUMN_K) {
+    if (inHallColumn(material)) {
+      if (roomColumnsOverWalls) return overShaft(material) ? 2.5 : 2.2;
+      return overShaft(material) ? 1.6 : 1.4;
+    }
+    if (sortEye.value.z >= HALL.door) return overShaft(material) ? 2.5 : 2.2;
+    return overShaft(material) ? 0.8 : 0.7;
+  }
+  if (see?.k === HALL_K && !material.depthWrite && awayFromEye(object) < HALL_MIDDLE.distanceToSquared(sortEye.value)) {
+    return 1.8;
+  }
+  return 1;
 }
 
 /** For a harness (tools/lab): the hall's columns hidden, or back. */
@@ -738,7 +781,7 @@ function blendedOrder(a: Sorted, b: Sorted): number {
   const nearFirst = orderHeld === 'nearFirst' || (orderHeld === 'asIs' && solidNow && BLENDED_ORDER.nearFirst > 0);
   // (in their turns either way: where two lie at one depth, a column's base on its block, the turn decides which shows,
   // as it did; ordered by distance alone, which showed changed with what else was drawn, the hall's doorway culling)
-  const turn = drawnInTurn(a.material) - drawnInTurn(b.material);
+  const turn = drawnInTurn(a.material, a.object, nearFirst) - drawnInTurn(b.material, b.object, nearFirst);
   if (turn !== 0) return turn;
   if (nearFirst) {
     const nearer = awayFromEye(a.object) - awayFromEye(b.object);
@@ -961,9 +1004,14 @@ export function depthOfWhatStaysWhole(root: THREE.Object3D): void {
     if (!mesh.isMesh || (mesh as THREE.InstancedMesh).isInstancedMesh || Array.isArray(mesh.material)) return;
     const kind = ([...HALL_WALL_KINDS, 'hallColumn'] as const).find((name) => thinningWhole.get(name)?.includes(mesh.material as THREE.Material));
     if (!kind) return;
-    const key = `${kind}|${mesh.material.side}`;
+    const inside = inHallColumn(mesh.material);
+    const key = `${kind}|${mesh.material.side}|${inside ? 'in' : ''}`;
     let material = made.get(key);
-    if (!material) made.set(key, material = wholeDepthMaterial(kind, mesh.material.side));
+    if (!material) {
+      material = wholeDepthMaterial(kind, mesh.material.side);
+      if (inside) material.userData[IN_HALL_COLUMN] = true;
+      made.set(key, material);
+    }
     const twin = new THREE.Mesh(mesh.geometry, material);
     mesh.updateWorldMatrix(true, false);
     twin.matrix.copy(mesh.matrixWorld);
