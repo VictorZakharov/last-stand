@@ -17,6 +17,7 @@ import { asGrass, type Updater } from './props';
 import { hiddenByHallDoor } from './hallPortal';
 import { registerCull } from './culls';
 import { wholeView } from '../core/wholeView';
+import { BLADE_ROOM, SOLID_RANGE } from './meadowSolids';
 
 /** The rings: each cell's size (m), how far out it's drawn (m) and the segments along each blade. */
 const RINGS = [
@@ -325,11 +326,14 @@ const VERTEX_HEAD = /* glsl */ `
   uniform float uTuft;
   uniform float uTime;
   uniform float uWindWild;
+  uniform sampler2D uSolid;
+  uniform float uRoom;
   ${MEADOW_AT_GLSL}
   varying vec3 vBladeColour;
   varying vec2 vBlade;
   varying vec2 vStrands;
   varying vec2 vGrowing;
+  varying vec3 vBladeAt;
   varying float vTufted;
   varying float vDrop;
   uniform float uViewHigh;
@@ -391,6 +395,8 @@ const VERTEX_BLADE = /* glsl */ `
   float byStrand = uByStrand * uCombed * max(step(1.5, uWider), step(1.5, uTuft));
   float share = fract(h.z * 3.17) * ${(1 - BLADE_GROWS).toFixed(2)};
   on *= mix(smoothstep(share, share + ${BLADE_GROWS.toFixed(2)}, band), step(0.001, band), byStrand);
+  // (none grows where a solid leaves it no room: \`BLADE_ROOM\` in meadowSolids.ts)
+  on *= step(uRoom, texture2D(uSolid, root / (2.0 * uMeadowHalf) + 0.5).r * ${SOLID_RANGE.toFixed(2)});
   vGrowing = vec2(band, byStrand);
   // (a tuft's blades, where the grass isn't spread: each its own way, lean, bend and height, from one crown)
   float tufted = step(1.5, uTuft);
@@ -454,6 +460,15 @@ const VERTEX_BLADE = /* glsl */ `
   vec2 swayWay = mix(windWay, turned * dot(windWay, turned), tufted);
   vec3 wind = vec3(swayWay.x, 0.0, swayWay.y) * (t * t * height * (blowing * 0.1 + flutter * 0.5 + 0.015) * uWindWild);
   vec3 bladePos = vec3(root.x, 0.0, root.y) + local + wind;
+  // (no part of it above the lowest solid over where that part is, \`solidsOver\` in meadowSolids.ts: rooted under a
+  // log it lies under it, and leant into a post it's bent down where it meets it; from play, "grass grows through logs")
+  float solidOver = texture2D(uSolid, bladePos.xz / (2.0 * uMeadowHalf) + 0.5).r * ${SOLID_RANGE.toFixed(2)};
+  // (a part of it reaching in under a solid lower than a blade's room narrows to nothing there, never lying flat on the
+  // ground: flat, it fought the ground for the depth under a log)
+  // (a straight ramp, not a smoothstep: \`uRoom\` may come down to the ramp's foot, and a smoothstep's edges then meet)
+  bladePos -= across * (side * w * 0.5) * (1.0 - clamp((solidOver - 0.04) / max(uRoom - 0.04, 0.001), 0.0, 1.0));
+  bladePos.y = min(bladePos.y, max(solidOver - 0.01, 0.0));
+  vBladeAt = bladePos;
   // its upper face along the arc, rounded across: lit as a surface, from both sides
   vec3 face = vec3(0.0, 1.0, 0.0) * sin(ang) - lean * cos(ang);
   // (a tuft's card is lit as the ground under it, nearly: by its own face a whole tuft stood pale and the next one
@@ -475,6 +490,11 @@ const FRAGMENT_COLOUR = /* glsl */ `
   float cardSeed = mix(floor(vStrands.y * 1024.0 + 0.5) / 1024.0, vStrands.y, uDropByPixel);
   float foldB = vBlade.y, strandShade = 0.5;
 #ifdef COMBED
+  // (a card or a sheet is wide: its corners held under the solids leave its middle slanting up through a log between
+  // them, short tips standing out of the seat logs' tops seen from above, a review's "Not fixed"; where the program
+  // cuts its blades already, each point of it is held under the lowest solid over where it is)
+  float solidHere = texture2D(uSolid, vBladeAt.xz / (2.0 * uMeadowHalf) + 0.5).r * ${SOLID_RANGE.toFixed(2)};
+  if (vBladeAt.y > solidHere - 0.005 || solidHere < uRoom) discard;
   if (vTufted > 0.5) {
     // (a card is as many cards of the first ring side by side as it is wide: a far ring's sheet is drawn as theirs)
     float tuftsAcross = max(1.0, floor(sqrt(vStrands.x) + 0.5));
@@ -559,6 +579,10 @@ const FRAGMENT_COLOUR = /* glsl */ `
 
 /** A ring's uniforms, set as it's drawn. */
 interface RingUniforms extends MaskUniforms {
+  /** the lowest solid over each cell of the meadow (meadowSolids.ts) */
+  uSolid: { value: THREE.Texture };
+  /** the least room a blade needs under a solid (m: `BLADE_ROOM`, every ring's the same; a harness's canary lowers it) */
+  uRoom: { value: number };
   uOrigin: { value: THREE.Vector2 };
   uCell: { value: number };
   uWider: { value: number };
@@ -795,7 +819,7 @@ function bladeMaterial(u: RingUniforms, combed: boolean, ring: string): THREE.Me
     shader.uniforms.uViewHigh = viewHigh;
     shader.uniforms.uDropByPixel = dropByPixel;
     shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', '#include <common>\nvarying vec3 vBladeColour;\nvarying vec2 vBlade;\nvarying vec2 vStrands;\nvarying vec2 vGrowing;\nvarying float vTufted;\nvarying float vDrop;\nuniform float uTuft;\nuniform float uDropByPixel;')
+      .replace('#include <common>', '#include <common>\nvarying vec3 vBladeColour;\nvarying vec2 vBlade;\nvarying vec2 vStrands;\nvarying vec2 vGrowing;\nvarying float vTufted;\nvarying float vDrop;\nvarying vec3 vBladeAt;\nuniform float uTuft;\nuniform float uDropByPixel;\nuniform sampler2D uSolid;\nuniform float uMeadowHalf;\nuniform float uRoom;')
       .replace('vec4 diffuseColor = vec4( diffuse, opacity );', FRAGMENT_COLOUR)
       // (the face bent up is the lit one from either side: flipped on the back, every blade's back was dark)
       // (a tuft in the sun's shadow keeps a share of the sun, as light comes through blades and leaves: at none of it,
@@ -952,13 +976,16 @@ export function focusOf(camera: THREE.Camera, out: THREE.Vector2): THREE.Vector2
 }
 
 /** The meadow's grass over `mask`'s square, swaying on the game's clock (an updater keeps the time). */
-export function buildMeadow(mask: MeadowMask, maskTexture: THREE.Texture, updaters: Updater[]): THREE.Group {
+export function buildMeadow(mask: MeadowMask, maskTexture: THREE.Texture, updaters: Updater[], solids: THREE.Texture): THREE.Group {
   const group = new THREE.Group();
   group.name = 'meadow';
   // (where it grows, for the lab and the village's map)
   group.userData.mask = mask;
   meadowHalf = mask.half;
   group.userData.maskTexture = maskTexture;
+  group.userData.solids = solids;
+  const room = { value: BLADE_ROOM };
+  group.userData.room = room;
   const time = { value: 0 };
   updaters.push((_dt, t) => { time.value = t; });
   // (a tile with no grass in it is never drawn: over the square, the roads and what's built, every blade of it was
@@ -991,6 +1018,8 @@ export function buildMeadow(mask: MeadowMask, maskTexture: THREE.Texture, update
       uTime: time,
       uMeadow: { value: maskTexture },
       uMeadowHalf: { value: mask.half },
+      uSolid: { value: solids },
+      uRoom: room,
     };
     if (above) u.uBand.value.set(-2, -1, ring.radius - AT_ONCE, ring.radius);
     else bandOf(u.uBand.value, k, HAND_OVER);
