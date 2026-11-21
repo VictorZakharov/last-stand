@@ -1,0 +1,1 @@
+import{m as e,v as t}from"./index-BOTinne8.js";t({colossus:()=>e(`colossus`)});
