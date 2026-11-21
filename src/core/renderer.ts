@@ -17,6 +17,9 @@ import {
   setSceneShare, shadeEnvironmentNodes, webgpuSceneTarget,
 } from './webgpu';
 import { G } from '../state';
+import { RUNNING } from './rendererChoice';
+import { bootRust, drawRust, RUST } from '../engine';
+import { perfClock } from './perfClock';
 import { sunShadowStill } from '../world/props';
 import { moonShadowKept } from '../world/moonShadow';
 import { CAMERA } from '../data/balance';
@@ -885,6 +888,7 @@ export async function initRenderer(container: HTMLElement, hdrAllowed: boolean) 
   if (!WEBGPU && !/[?&]programSort=0/.test(location.search)) opaqueByProgram(renderer as THREE.WebGLRenderer);
   if (!WEBGPU) firstVertexProvokes(renderer.getContext());
   container.appendChild(renderer.domElement);
+  if (RUNNING.rust) await bootRust(renderer.domElement);
   if (!WEBGPU) initHdr(renderer.domElement, renderer.getContext() as WebGL2RenderingContext);
   fenceFrames(renderer);
 
@@ -1604,6 +1608,7 @@ export function markPassesWith(mark: (name: string) => void): void {
  * said where.
  */
 export function render(): void {
+  const renderBegan = perfClock.now();
   // a change the resize event missed: fit, and tell the rest of the page (UI scale...) too
   if (fitViewport()) window.dispatchEvent(new Event('resize'));
   // (the grade's, WebGPU's too: core/webgpu.ts `graded`)
@@ -1628,11 +1633,29 @@ export function render(): void {
   sunShadowInTurns();
   aimSight(G.camera);
   framePart('render: its set-up');
+  if (RUNNING.rust) {
+    const pixels = sceneTarget();
+    const graded = {
+      small: u.uSmall.value, large: u.uLarge.value, cap: u.uCap.value, vignette: u.uVignette.value as number,
+      hurt: u.uHurt.value as number, low: u.uLow.value as number, samples: sceneSamples(),
+    };
+    if (drawRust(G.scene, G.camera, G.time, pixels.width, pixels.height, gl, graded)) {
+      // (three's canvas over the engine's: clear, but for the world's overlays)
+      gl.setRenderTarget(null);
+      gl.setClearColor(0x000000, 0);
+      gl.clear(true, true, false);
+      if (overlaysShown) overFrame.draw();
+      framePart('render: drawn (Rust)');
+      RUST.renderMs = perfClock.now() - renderBegan;
+      return;
+    }
+  }
   if (WEBGPU) {
     renderWebGPU();
     framePart('render: drawn (WebGPU)');
     shotTaken();
     if (overlaysShown) overFrame.draw();
+    RUST.renderMs = perfClock.now() - renderBegan;
     return;
   }
   // (its depth read back from above alone: in every other view no pixel reads it)

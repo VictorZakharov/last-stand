@@ -3,7 +3,7 @@
 // page loads (the renderer is made once, before anything is built): `?renderer=`, `&meshlets=1`, `&lights=each`.
 
 /** a renderer the pause menu offers */
-export type RendererKind = 'webgl' | 'webgpu';
+export type RendererKind = 'webgl' | 'webgpu' | 'rust';
 
 /** what the address says of the renderer */
 const ADDRESS_PARAMS = ['renderer', 'meshlets', 'lights'];
@@ -11,10 +11,16 @@ const ADDRESS_PARAMS = ['renderer', 'meshlets', 'lights'];
 const params = new URLSearchParams(location.search);
 
 /** the renderer this page runs: the address's (`webgpu`, `webgpu-gl` its WebGL 2 backend), else WebGL */
-const asked = params.get('renderer');
+// (this branch is the Rust engine's experiment: its plain address loads the engine; `?renderer=webgpu` and
+// `?renderer=webgl` load three's, to compare)
+const asked = params.get('renderer') ?? 'rust';
 export const RUNNING = {
   /** three's WebGPURenderer draws it */
-  webgpu: asked === 'webgpu' || asked === 'webgpu-gl',
+  webgpu: asked === 'webgpu' || asked === 'webgpu-gl' || asked === 'rust',
+  /** the frame's scene drawn by our Rust engine, over three's WebGPU renderer (`src/engine`, an experiment) */
+  rust: asked === 'rust',
+  /** which of the pause menu's three this page runs */
+  kind: (asked === 'rust' ? 'rust' : asked === 'webgpu' || asked === 'webgpu-gl' ? 'webgpu' : 'webgl') as RendererKind,
   /** on WebGPURenderer's WebGL 2 backend */
   webgpuOnGl: asked === 'webgpu-gl',
   /** three's GPU-driven meshlets */
@@ -29,6 +35,6 @@ export const RUNNING = {
 export function addressOn(kind: RendererKind): string {
   const url = new URL(location.href);
   for (const name of ADDRESS_PARAMS) url.searchParams.delete(name);
-  if (kind === 'webgpu') url.searchParams.set('renderer', 'webgpu');
+  url.searchParams.set('renderer', kind);
   return url.href;
 }
