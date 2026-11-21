@@ -1,0 +1,1 @@
+import{m as e,v as t}from"./index-D5ZNTk-Q.js";t({colossus:()=>e(`colossus`)});
