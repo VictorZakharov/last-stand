@@ -1,0 +1,1 @@
+import{m as e,v as t}from"./index-wJL2ERIW.js";t({colossus:()=>e(`colossus`)});
