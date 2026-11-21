@@ -27,7 +27,7 @@ import {
   ashlar, bannerCloth, bark, canvasOf, ctx2d, flagstone, granite, limestone, pbrMaterialMaps, slate, soil, textureFromCanvas,
   boards, hammered, wood, cobblestone, grunge,
 } from '../core/textures';
-import { OVER_SHAFT, hallRoomIs, seeThrough, sortByNearest } from '../core/seeThrough';
+import { IN_HALL_COLUMN, OVER_SHAFT, hallRoomIs, seeThrough, sortByNearest } from '../core/seeThrough';
 import type { FadesWhole } from '../core/seeThrough';
 import { particles, col } from '../fx/particles';
 import { mulberry, rand, TAU } from '../util';
@@ -1493,13 +1493,14 @@ function buildHall(scene: THREE.Object3D, wall: Wall, levels: Levels, M: Mats, o
   for (const part of frontWall.children.slice(inWall)) wall.add(part, false, 'wall', true);
   const ceiling = y0 + eaves - ROOF.ceiling - 0.32;
   const look = torchLook();
-  // (what stands free in it, thinned further: a group of its own)
-  const free = new THREE.Group();
-  scene.add(free);
+  // (what stands free in it, thinned further: interior columns and the portico as separate groups so interior columns
+  // blend behind a thinned front wall while portico columns stand over it)
+  const roomColumns = new THREE.Group();
+  scene.add(roomColumns);
   // (their capitals with them: left whole, from over the roof one stood over him as a tall dark slab, from play, "why this
   // not becoming transparent ?")
   const capital = capitalStone(M.granite);
-  const torches = hallColumns(free, capital, M, look, obstacles, ceiling);
+  const torches = hallColumns(roomColumns, capital, M, look, obstacles, ceiling);
   const dais = hallDais(scene, walls, levels, M, obstacles);
   const daisTop = y0 + HALL.daisHigh;
   for (const s of [-1, 1]) {
@@ -1512,15 +1513,17 @@ function buildHall(scene: THREE.Object3D, wall: Wall, levels: Levels, M: Mats, o
   const porch = [-1, 1].map((s) => wallTorch(frontWall, M, look, X + s * PORCH_TORCH.x, y0 + PORCH_TORCH.up, face, 0, 1, true,
     PORCH_TORCH.out));
   // the portico: a pair of columns either side, one entablature across the whole front
+  const portico = new THREE.Group();
+  scene.add(portico);
   for (const s of [-1, 1]) {
     for (const x of COLONNADE.x) {
       const cx = X + s * x, cz = COLONNADE.z;
-      wall.add(block(free, 1.0, 0.4, 1.0, cx, y0, cz, M.granite), true, 'wall', true);
+      wall.add(block(portico, 1.0, 0.4, 1.0, cx, y0, cz, M.granite), true, 'wall', true);
       const shaft = new THREE.CylinderGeometry(COLONNADE.radius * 0.88, COLONNADE.radius, COLONNADE.high, 18);
-      solid(free, shaft, M.column).position.set(cx, y0 + 0.4 + COLONNADE.high / 2, cz);
+      solid(portico, shaft, M.column).position.set(cx, y0 + 0.4 + COLONNADE.high / 2, cz);
       // (thinned with it: left whole, it stood solid over him from the square, the shaft under it a ghost, from play "why
       // this not becoming transparent ?")
-      block(free, 0.95, 0.32, 0.95, cx, y0 + 0.4 + COLONNADE.high, cz, capital);
+      block(portico, 0.95, 0.32, 0.95, cx, y0 + 0.4 + COLONNADE.high, cz, capital);
     }
   }
   const beam = new THREE.Group();
@@ -1533,7 +1536,8 @@ function buildHall(scene: THREE.Object3D, wall: Wall, levels: Levels, M: Mats, o
   fadesWhole(beam, 'hallBeam');
   fadesWhole(sideWalls[0], 'hallWest');
   fadesWhole(sideWalls[1], 'hallEast');
-  fadesWhole(free, 'hallColumn');
+  fadesWhole(roomColumns, 'hallColumn', true);
+  fadesWhole(portico, 'hallColumn');
   return { cutaway: [roof, frontWall], torches, dais, porch };
 }
 
@@ -1677,14 +1681,16 @@ const glowTwins: [THREE.MeshStandardMaterial, THREE.MeshStandardMaterial][] = []
 
 /** What's under `group` drawn in materials of its own that thin as `kind` says (`fadeWhole`): the hall's cut away parts,
  *  as a material a hole round the hero alone has is the rest of the village's too. */
-function fadesWhole(group: THREE.Object3D, kind: FadesWhole): void {
+function fadesWhole(group: THREE.Object3D, kind: FadesWhole, inHall = false): void {
   const fading = new Map<THREE.Material, THREE.Material>();
   group.traverse((object) => {
     const mesh = object as THREE.Mesh;
     if (!mesh.isMesh) return;
     const was = mesh.material as THREE.Material;
     if (!fading.has(was)) {
-      const twin = seeThrough(was.clone(), kind);
+      const copy = was.clone();
+      if (inHall) copy.userData[IN_HALL_COLUMN] = true;
+      const twin = seeThrough(copy, kind);
       fading.set(was, twin);
       if ((was as THREE.MeshStandardMaterial).emissiveMap) glowTwins.push([was as THREE.MeshStandardMaterial, twin as THREE.MeshStandardMaterial]);
     }

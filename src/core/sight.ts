@@ -50,10 +50,12 @@ export const DOOR_SOFT = 0.3;
  *  the whole room counted as seen and none of it lay in the fog, the walls thinned over it, from play, "whree is fog
  *  of war inside the building ?" */
 const WEDGE_FROM = 0.3;
+/** how near a door's middle (fraction of `door.half`) the forward lean `WEDGE_FROM` stays full before easing to 0 */
+const WEDGE_CENTER = 0.5;
 /** how far aside of a door he may stand and still look in through it: its half width and this share of how far out he
  *  stands. Stood against its wall beside it he saw the doorway edge on, and the whole room came out of the fog, the
  *  portico's column before him cleared with it (`lab village --only columnsStayGhosts`) */
-const DOOR_ASIDE = 0.5;
+const DOOR_ASIDE = 0.25;
 // (each ray read alone: filtered, two rays' bands in the middle of their own fades met as a third that neither was)
 sightTexture.minFilter = sightTexture.magFilter = THREE.NearestFilter;
 sightTexture.wrapS = THREE.RepeatWrapping;
@@ -170,6 +172,8 @@ let doorCast: SightDoor | null = null;
 let doorsHeldOff = false;
 /** whether a harness has the door's rays cast without his line of sight through it, as they were */
 let wedgeLeft = false;
+/** whether a harness has the door's wedge shift horizontally toward the doorway center even when standing near a jamb */
+let wedgeCenteredHeld = false;
 let heldOff = false;
 /** whether a harness has the rays shown as cast, at once and one read a pixel, as they were */
 let heldSharp = false;
@@ -194,6 +198,12 @@ export function sightWalls(
 /** For a harness (tools/lab): the doors left out, his rays alone telling what he sees past one, as they did. */
 export function holdDoorsOff(off: boolean): void {
   doorsHeldOff = off;
+}
+
+/** For a harness (tools/lab): the door's wedge shifted toward the doorway center at the jambs, as it was. */
+export function holdDoorWedgeCentered(held: boolean): void {
+  wedgeCenteredHeld = held;
+  doorCast = null;
 }
 
 /** For a harness (tools/lab): the door's rays cast as from the doorway alone, his line of sight through it left out, as
@@ -340,10 +350,23 @@ function castDoor(door: SightDoor, hx: number, hz: number): void {
   // (seen from `WEDGE_FROM` nearer the door than him: from the doorway the room beside the door too;
   // from the stair the wedge through the jambs; within it of the door, the whole room)
   const out = -((hx - door.x) * door.nx + (hz - door.z) * door.nz);
-  const fromDoor = out > WEDGE_FROM ? (out - WEDGE_FROM) / out : 0;
-  const ax = door.x + (hx - door.x) * fromDoor;
-  const az = door.z + (hz - door.z) * fromDoor;
-  const wedged = !wedgeLeft && fromDoor > 0;
+  let ax: number;
+  let az: number;
+  let wedged: boolean;
+  if (wedgeCenteredHeld) {
+    const fromDoor = out > WEDGE_FROM ? (out - WEDGE_FROM) / out : 0;
+    ax = door.x + (hx - door.x) * fromDoor;
+    az = door.z + (hz - door.z) * fromDoor;
+    wedged = !wedgeLeft && fromDoor > 0;
+  } else {
+    const aside = Math.abs((hx - door.x) * door.nz - (hz - door.z) * door.nx);
+    const centered = 1 - THREE.MathUtils.smoothstep(aside, 0, door.half * WEDGE_CENTER);
+    const lean = WEDGE_FROM * centered;
+    const step = Math.min(out, lean);
+    ax = hx + door.nx * step;
+    az = hz + door.nz * step;
+    wedged = !wedgeLeft && out > lean;
+  }
   for (let i = 0; i < RAYS; i++) {
     const angle = ((i + 0.5) / RAYS - 0.5) * Math.PI * 2;
     const dx = Math.cos(angle);

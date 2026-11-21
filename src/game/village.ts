@@ -440,40 +440,45 @@ function hallInside(dt: number): void {
   const deep = THREE.MathUtils.clamp((HALL.door - p.pos.z) / WALL_DEEP, 0, 1);
   const wallGhost = WALL_GHOST + (DEEP_GHOST - WALL_GHOST) * deep;
   propsLeftWhole(roofAway);
-  // (stood at the door, the wall over it hides what he sees through it: it's past him, so it doesn't thin of itself)
+  const outsideInFront = !inside && G.camera.position.z > HALL.door;
+  // (looking in from outside: kept only under a canary hold; normally the front wall stays solid until he steps inside)
   const offDoor = p.pos.z - HALL.inFront;
-  // (looking in: from over the room, the wall before him thins as any wall does)
-  const atDoor = lobby && view === 'top' && Math.abs(p.pos.x - TERRACE.x) < HALL.half && G.camera.position.z > HALL.door
+  const atDoor = lobby && view === 'top' && frontOutsideThinsHeld
+    && Math.abs(p.pos.x - TERRACE.x) < HALL.half && G.camera.position.z > HALL.door
     ? (1 - THREE.MathUtils.smoothstep(offDoor, DOOR_CONE.near, DOOR_CONE.far)) * THREE.MathUtils.smoothstep(offDoor, DOOR_CONE.inFrom, DOOR_CONE.in)
       * seesThroughDoor()
     : 0;
-  // (a ghost from above whatever it hides, as every roof is: `ROOF_GHOST_ABOVE`; away while he sees in through the door,
-  // as inside: a ghost over the room, from the stair the floor past the door showed a sliver of it under the roof)
+  // (a ghost from above whatever it hides, as every roof is: `ROOF_GHOST_ABOVE`; away while he sits inside or hidden by the hall)
   const seesIn = !seenFloorHeld && atDoor > AT_DOOR_CONE;
   const roofWanted = roofAway || seesIn ? ROOF_GHOST : lobby && view === 'top' ? ROOF_GHOST_ABOVE : 0;
   roofFade = THREE.MathUtils.damp(roofFade, roofWanted, CUT_AWAY_FADE, dt);
   // (each wall by itself, and each whole or not at all: while it hides him or the floor round him, or any floor he
-  // sees, from above. What he doesn't see behind its ghost is the fog's to mark: thinned over the floor he sees alone,
-  // a cone of his sight cut across each wall as a slanted pane, from play, "didnt we agree to thin whole wall? but mark
-  // unseen regions with fog of war ?", "this geometry is messed up")
+  // sees, from above, except `hallFront` while he stands outside the hall with the camera out front)
   const fromAbove = lobby && view === 'top' && !wallsNoneHeld;
   for (const wall of HALL_WALL_SIDES) {
     const hidesHim = roofAway && wallHidesNearHim(wall);
-    const wanted = fromAbove && (wallsAllThinHeld || hidesHim || hidesSeenFloor(wall.kind, wallSpan(wall)));
+    const canSeePast = !(wall.kind === 'hallFront' && outsideInFront) || frontOutsideThinsHeld;
+    let hidesFloor = false;
+    if (canSeePast) hidesFloor = hidesSeenFloor(wall.kind, wallSpan(wall));
+    else {
+      hidingSeen.delete(wall.kind);
+      hiddenSeen.set(wall.kind, '0 ()');
+    }
+    const wanted = fromAbove && (wallsAllThinHeld || hidesHim || hidesFloor);
     const was = wallFades.get(wall.kind) ?? 0;
     const fade = THREE.MathUtils.damp(was, !wanted ? 0 : hidesHim ? wallGhost : SIGHT_GHOST, CUT_AWAY_FADE, dt);
     wallFades.set(wall.kind, fade);
     fadeWhole(wall.kind, fade < CUT_AWAY_NONE ? 0 : fade);
   }
-  // (the columns alone still thin by the floor each hides, a column as one, by its middle)
-  const coneWanted = fromAbove ? SIGHT_GHOST : 0;
+  // (the columns alone still thin by the floor each hides inside; outside, portico columns stay solid unless hiding the hero)
+  const coneWanted = fromAbove && (inside || porticoConeOutsideHeld) ? SIGHT_GHOST : 0;
   sightCone = THREE.MathUtils.damp(sightCone, coneWanted, CUT_AWAY_FADE, dt);
   hallSightCone(sightCone < CUT_AWAY_NONE ? 0 : sightCone, inside, under && !inside);
   columnsFade(dt);
-  // (the portico's beam as a wall: past him too, where it lay solid over the square he sees, from play, "also this top
-  // concrete bar should be thinned too")
+  // (the portico's beam as a wall: solid while he is outside with the front wall whole, unless it directly hides him)
   const beamHides = roofAway && beamHidesHim();
-  const beamThins = fromAbove && (beamHides || seesIn || hidesSeenFloor('hallBeam', BEAM_SPAN));
+  const beamSeen = (!outsideInFront || frontOutsideThinsHeld) && hidesSeenFloor('hallBeam', BEAM_SPAN);
+  const beamThins = fromAbove && (beamHides || seesIn || beamSeen);
   beamFade = THREE.MathUtils.damp(beamFade, !beamThins ? 0 : beamHides || seesIn ? WALL_GHOST : SIGHT_GHOST, CUT_AWAY_FADE, dt);
   fadeWhole('hallBeam', beamFade < CUT_AWAY_NONE ? 0 : beamFade);
   lightHim(lobby && view === 'top' && inside ? 1 : 0, dt);
@@ -486,7 +491,9 @@ function hallInside(dt: number): void {
   // (on the portico, its columns are what hides him: at the room's ghost one before him by the chest stood half solid
   // over him, from play "this column thins less than others somehow")
   const columnGhost = roofAway && inside ? COLUMN_GHOST
-    : roofAway || (lobby && view !== 'first' && porticoHidesHim()) ? OUTSIDE_GHOST : 0;
+    : (lobby && view === 'top' && hallHidesHim() && !under) || (lobby && view !== 'first' && porticoHidesHim())
+      || (roofAway && porticoConeOutsideHeld)
+      ? OUTSIDE_GHOST : 0;
   columnFade = THREE.MathUtils.damp(columnFade, columnGhost, CUT_AWAY_FADE, dt);
   // (all their depth kept in the hall alone: outside it, the fog read a ghost's place in the hall, unseen, as a slab)
   // (on the portico too: there the fog read a portico column's back, which he can't see, by its depth kept, and stood it
@@ -773,10 +780,24 @@ const hiddenSeen = new Map<string, string>();
 export const seenFloorHidden = (): string => [...hiddenSeen].map(([name, said]) => `${name} ${said}`).join('; ');
 /** whether a harness holds the walls whole over the floor he sees, as they stood */
 let seenFloorHeld = false;
+/** whether a harness lets `hallFront`, `hallBeam`, and `atDoor` thin while standing outside the hall, as they did */
+let frontOutsideThinsHeld = false;
+/** whether a harness thins portico columns via the sight cone while standing outside on the portico, as it did */
+let porticoConeOutsideHeld = false;
 
 /** For a harness (tools/lab): no wall of the hall thinned for the floor he sees behind it. */
 export function holdSeenFloorWalls(held: boolean): void {
   seenFloorHeld = held;
+}
+
+/** For a harness (tools/lab): let the hall front wall/beam thin for seen floor while standing outside in front of it, as it did. */
+export function holdFrontOutsideThins(held: boolean): void {
+  frontOutsideThinsHeld = held;
+}
+
+/** For a harness (tools/lab): thin portico columns outside via the sight cone even when not hiding the hero, as it did. */
+export function holdPorticoConeOutside(held: boolean): void {
+  porticoConeOutsideHeld = held;
 }
 
 /** Whether (x, z) lies on the terrace or in the hall, whose floor stands at the terrace's height. */
@@ -795,6 +816,8 @@ function hidesSeenFloor(name: string, span: WallSpan): boolean {
     for (let place = 0; place < HIDES.along; place++) {
       const along = (place + 0.5) / HIDES.along;
       const x = span.fromX + (span.toX - span.fromX) * along, z = span.fromZ + (span.toZ - span.fromZ) * along;
+      if (name === 'hallFront' && !frontOutsideThinsHeld && Math.abs(x - TERRACE.x) < HALL.doorHalf
+        && y < TERRACE.high + HALL.doorHigh) continue;
       // (on down to the terrace's floor, and where that's past the terrace, to the ground)
       let down = (eye.y - TERRACE.high) / (eye.y - y);
       if (!onTerrace(eye.x + (x - eye.x) * down, eye.z + (z - eye.z) * down)) down = eye.y / (eye.y - y);
