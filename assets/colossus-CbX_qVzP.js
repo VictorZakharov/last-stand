@@ -1,0 +1,1 @@
+import{m as e,v as t}from"./index-DAUb_2Hh.js";t({colossus:()=>e(`colossus`)});
