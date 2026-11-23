@@ -1,0 +1,1 @@
+(function(){self.onmessage=e=>{let{id:t,ms:n}=e.data;setTimeout(()=>self.postMessage(t),n)}})();
