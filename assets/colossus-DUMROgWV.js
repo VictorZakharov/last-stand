@@ -1,0 +1,1 @@
+import{o as e}from"./foeKit-NnmHDb9b.js";import{m as t}from"./index-D6hp7HZ1.js";e({colossus:()=>t(`colossus`)});
