@@ -1,0 +1,1 @@
+(function(){let e;self.onmessage=t=>{clearInterval(e),e=setInterval(()=>self.postMessage(0),t.data)}})();
