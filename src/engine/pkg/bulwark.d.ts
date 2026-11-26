@@ -13,9 +13,18 @@ export class Engine {
     add_material(params: Float32Array | number[], maps: Uint32Array | number[], key: number): number;
     add_mesh(positions: Float32Array | number[], normals: Float32Array | number[], uvs: Float32Array | number[], colors: Float32Array | number[], color_size: number, indices: Uint32Array | number[], joints: Uint16Array | number[], weights: Float32Array | number[]): number;
     /**
+     * A node under `parent` (`u32::MAX`: under nothing), for what moves (nodes.rs): its place, turn and size
+     * written by the page into `node_locals`, ten floats a node by its id, and whether it's shown into `node_shown`.
+     */
+    add_node(parent: number): number;
+    /**
      * A shader of the page's: WGSL for the lit shader's two hooks (lit/*.wgsl). Its id.
      */
     add_shader(hooks: string): number;
+    /**
+     * A skin whose bones follow the nodes `joints`, each bound with its inverse in `inverses`, 16 floats a bone.
+     */
+    add_skin(joints: Uint32Array | number[], inverses: Float32Array | number[]): number;
     /**
      * A map from its RGBA bytes; 0 if they don't fit its size.
      */
@@ -61,6 +70,12 @@ export class Engine {
      * The engine drawing to `canvas`, at the canvas's own size.
      */
     static create(canvas: HTMLCanvasElement): Promise<Engine>;
+    /**
+     * A record drawn on a node every frame it's seen: `record` as the page writes one, its matrix the node's after
+     * `offset` (16 floats) where `placed`, else `offset` alone; on `skin`'s bones (`u32::MAX`: none); culled by a
+     * sphere `reach` round the node (0: not here).
+     */
+    draw_on_node(node: number, record: Float32Array | number[], offset: Float32Array | number[], placed: boolean, skin: number, reach: number): number;
     drop_instances(id: number): void;
     /**
      * A run of kept records let go.
@@ -72,6 +87,18 @@ export class Engine {
     drop_lights(): void;
     drop_material(id: number): void;
     drop_mesh(id: number): void;
+    /**
+     * A node let go.
+     */
+    drop_node(id: number): void;
+    /**
+     * A record drawn on a node let go.
+     */
+    drop_node_drawn(id: number): void;
+    /**
+     * A skin let go.
+     */
+    drop_skin(id: number): void;
     drop_texture(id: number): void;
     /**
      * Where the page writes the frame's globals (`Globals` in common.wgsl).
@@ -97,6 +124,27 @@ export class Engine {
      * How many records the engine keeps.
      */
     kept(): number;
+    /**
+     * Where the page writes the nodes' numbers, ten floats a node by its id. Adding a node may move it.
+     */
+    node_locals(): number;
+    /**
+     * Where the page writes whether each node is shown, a byte a node by its id. Adding a node may move it.
+     */
+    node_shown(): number;
+    /**
+     * Where every node's matrix is, 16 floats a node by its id, as last placed. Adding a node may move it.
+     */
+    node_worlds(): number;
+    /**
+     * What the last frame drew of the nodes: their records, their bones' floats, how many were out of view, and
+     * how many nodes are held.
+     */
+    nodes_drawn(): Float32Array;
+    /**
+     * Every node's matrix made now, ahead of the frame, for the page to read back (`node_worlds`).
+     */
+    place_nodes(): void;
     /**
      * The frame's time read if it has come back, with no frame drawn (`stats` says when it has).
      */
@@ -183,6 +231,14 @@ export class Engine {
      */
     set_mesh_vertices(id: number, positions: Float32Array | number[], normals: Float32Array | number[], uvs: Float32Array | number[], colors: Float32Array | number[], color_size: number): boolean;
     /**
+     * A record drawn on a node given other flags.
+     */
+    set_node_drawn_flags(id: number, flags: number): void;
+    /**
+     * A node moved under another.
+     */
+    set_node_parent(id: number, parent: number): void;
+    /**
      * The scene drawn by the lit shaders made for the plain levels alone, or not (`Gpu::set_plain_only`).
      */
     set_plain_only(on: boolean): void;
@@ -229,7 +285,9 @@ export interface InitOutput {
     readonly engine_add_custom_material: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number) => number;
     readonly engine_add_material: (a: number, b: number, c: number, d: number, e: number, f: number) => number;
     readonly engine_add_mesh: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: number, n: number, o: number, p: number) => number;
+    readonly engine_add_node: (a: number, b: number) => number;
     readonly engine_add_shader: (a: number, b: number, c: number) => number;
+    readonly engine_add_skin: (a: number, b: number, c: number, d: number, e: number) => number;
     readonly engine_add_texture: (a: number, b: number, c: number, d: number, e: number, f: number) => number;
     readonly engine_add_texture_from: (a: number, b: any, c: number, d: number) => number;
     readonly engine_add_volume: (a: number, b: number, c: number, d: number, e: number, f: number) => number;
@@ -240,17 +298,26 @@ export interface InitOutput {
     readonly engine_breakdown_by_shader: (a: number, b: number) => void;
     readonly engine_breakdown_names: (a: number, b: number) => void;
     readonly engine_create: (a: any) => any;
+    readonly engine_draw_on_node: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number) => number;
     readonly engine_drop_instances: (a: number, b: number) => void;
     readonly engine_drop_kept: (a: number, b: number, c: number) => void;
     readonly engine_drop_lights: (a: number) => void;
     readonly engine_drop_material: (a: number, b: number) => void;
     readonly engine_drop_mesh: (a: number, b: number) => void;
+    readonly engine_drop_node: (a: number, b: number) => void;
+    readonly engine_drop_node_drawn: (a: number, b: number) => void;
+    readonly engine_drop_skin: (a: number, b: number) => void;
     readonly engine_drop_texture: (a: number, b: number) => void;
     readonly engine_globals: (a: number) => number;
     readonly engine_hold_shadow: (a: number, b: number) => void;
     readonly engine_join_shaders: (a: number, b: number, c: number) => number;
     readonly engine_keep: (a: number, b: number, c: number) => number;
     readonly engine_kept: (a: number) => number;
+    readonly engine_node_locals: (a: number) => number;
+    readonly engine_node_shown: (a: number) => number;
+    readonly engine_node_worlds: (a: number) => number;
+    readonly engine_nodes_drawn: (a: number, b: number) => void;
+    readonly engine_place_nodes: (a: number) => void;
     readonly engine_poll_clock: (a: number) => void;
     readonly engine_ready_material: (a: number, b: number, c: number, d: number) => void;
     readonly engine_ready_material_layers: (a: number, b: number, c: number, d: number, e: number) => void;
@@ -274,6 +341,8 @@ export interface InitOutput {
     readonly engine_set_material_custom: (a: number, b: number, c: number, d: number) => void;
     readonly engine_set_material_params: (a: number, b: number, c: number, d: number) => void;
     readonly engine_set_mesh_vertices: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number) => number;
+    readonly engine_set_node_drawn_flags: (a: number, b: number, c: number) => void;
+    readonly engine_set_node_parent: (a: number, b: number, c: number) => void;
     readonly engine_set_plain_only: (a: number, b: number) => void;
     readonly engine_set_quality: (a: number, b: number, c: number) => void;
     readonly engine_set_sight: (a: number, b: number, c: number, d: number, e: number) => void;
@@ -283,12 +352,12 @@ export interface InitOutput {
     readonly engine_show_kept: (a: number, b: number, c: number, d: number) => void;
     readonly engine_stats: (a: number, b: number) => void;
     readonly start: () => void;
-    readonly __wasm_bindgen_func_elem_1801: (a: number, b: number, c: number, d: any) => void;
-    readonly __wasm_bindgen_func_elem_1826: (a: number, b: number, c: any, d: any) => void;
-    readonly __wasm_bindgen_func_elem_675: (a: number, b: number, c: number, d: any) => void;
-    readonly __wasm_bindgen_func_elem_675_61: (a: number, b: number, c: number, d: any) => void;
-    readonly __wasm_bindgen_func_elem_675_62: (a: number, b: number, c: number, d: any) => void;
-    readonly __wasm_bindgen_func_elem_677: (a: number, b: number, c: any) => void;
+    readonly __wasm_bindgen_func_elem_1832: (a: number, b: number, c: number, d: any) => void;
+    readonly __wasm_bindgen_func_elem_1857: (a: number, b: number, c: any, d: any) => void;
+    readonly __wasm_bindgen_func_elem_706: (a: number, b: number, c: number, d: any) => void;
+    readonly __wasm_bindgen_func_elem_706_74: (a: number, b: number, c: number, d: any) => void;
+    readonly __wasm_bindgen_func_elem_706_75: (a: number, b: number, c: number, d: any) => void;
+    readonly __wasm_bindgen_func_elem_708: (a: number, b: number, c: any) => void;
     readonly __wbindgen_export: (a: number, b: number) => number;
     readonly __wbindgen_export2: (a: number, b: number, c: number, d: number) => number;
     readonly __wbindgen_export3: (a: number, b: number, c: number) => void;

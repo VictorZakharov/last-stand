@@ -42,6 +42,16 @@ interface Drawn {
   skeleton: THREE.Skeleton;
   /** its pieces left unplaced from frame to frame, none if they're placed */
   unplaced: THREE.Mesh[];
+  /** how far from its root it reaches, at its root's scale of 1 (its kind's, a limb flung out and its shadow) */
+  reach: number;
+}
+
+/** A body drawn as one as the engine's nodes take it (`engine/bodies.ts`): its meshes, its joints (the skeleton's
+ *  bones, in its order) and how far from its root it reaches. */
+export interface AsOne {
+  readonly meshes: readonly THREE.SkinnedMesh[];
+  skeleton: THREE.Skeleton;
+  reach: number;
 }
 
 /** A piece in its slot: the mesh, and the joint it hangs on (-1: skinned on the skeleton's bones). */
@@ -288,7 +298,7 @@ export function drawAsOne(body: CrowdBody): boolean {
   holderOf().add(...meshes);
   const unplaced = BODY_AS_ONE.unplaced ? pieces : [];
   for (const piece of unplaced) leaveUnplaced(piece);
-  drawn.set(body, { meshes, skeleton, unplaced });
+  drawn.set(body, { meshes, skeleton, unplaced, reach: kind.reach + REACH_SLACK + SHADOW_MARGIN });
   return true;
 }
 
@@ -337,6 +347,14 @@ export function slotPieces(body: CrowdBody): THREE.Mesh[][] {
   const pieces = mergedPieces(body.model);
   return kind.members.map((list) => list.map((k) => pieces[k]));
 }
+
+/** Every body drawn as one now, by its key, for the engine's nodes (`engine/bodies.ts`). */
+export function eachAsOne(visit: (body: CrowdBody, one: AsOne) => void): void {
+  for (const [body, one] of drawn) visit(body, one);
+}
+
+/** What the bodies' meshes hang under, if any hang yet: the engine's nodes draw them, and hide it from its walk. */
+export const holderAsOne = (): THREE.Group | null => holder;
 
 /** Whether `body` is drawn as one. */
 export const drawnAsOne = (body: CrowdBody): boolean => drawn.has(body);

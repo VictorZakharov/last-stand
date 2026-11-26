@@ -26,6 +26,7 @@ import { Levels } from './levels';
 import { FrameLook } from './frameLook';
 import { Lights } from './lights';
 import { Kept } from './kept';
+import { Bodies, onNode } from './bodies';
 import { Maps } from './maps';
 import { Materials, type AnyMaterial } from './materials';
 import { SEE_FLAGS, SeeKinds } from './seeKinds';
@@ -95,6 +96,8 @@ export class Bridge {
   /** how many of each the engine holds */
   readonly held: Core['held'];
 
+  /** the foes drawn as one, kept by the engine as nodes (`bodies.ts`) */
+  readonly bodies: Bodies;
   private stack: THREE.Object3D[] = [];
   /** what's handed over ahead of its first frame (`ahead.ts`) */
   readonly ahead: Ahead;
@@ -122,6 +125,7 @@ export class Bridge {
     this.lit.ownSlot = (light) => this.lampShadows.ownSlot(light);
     this.particles = new Sprites(core);
     this.kept = new Kept(core, this.materials, this.seeKinds, (mesh) => this.addMesh(mesh), (object) => this.visit(object));
+    this.bodies = new Bodies(core, wasm, this.materials);
     this.stats = core.stats;
     this.skipped = core.skipped;
     this.held = core.held;
@@ -131,6 +135,7 @@ export class Bridge {
   private forget(): void {
     // (what's kept is written by the ids forgotten here)
     this.kept.forget();
+    this.bodies.forget();
     this.geometries.forget();
     this.maps.forget();
     this.materials.forget();
@@ -200,6 +205,17 @@ export class Bridge {
       r.set(mesh.matrixWorld.elements, at + 8);
     }
     core.count++;
+  }
+
+  /** The records `mesh` is drawn by this frame, written and taken back out of it: what a body kept as nodes draws
+   *  (`bodies.ts`), its bones the engine's. */
+  private recordsOf(mesh: THREE.Mesh): Float32Array {
+    const core = this.core, count = core.count, boneFloats = core.boneFloats;
+    this.addMesh(mesh);
+    const records = core.records.slice(count * RECORD, core.count * RECORD);
+    core.count = count;
+    core.boneFloats = boneFloats;
+    return records;
   }
 
   private addMesh(mesh: THREE.Mesh): void {
@@ -273,6 +289,12 @@ export class Bridge {
     if (kept.placedLate) {
       kept.placedLate = false;
       moved = true;
+    }
+    // (placed by the engine's nodes, its matrix read back: what hangs under it that isn't one placed from it)
+    if (onNode(object)) {
+      const children = object.children;
+      for (let i = 0; i < children.length; i++) this.placeShown(children[i], true, depth + 1);
+      return;
     }
     // (down to every leaf: handed to three's own recursion past the hidden places' levels, a body's pieces drawn as
     // one were placed every frame all the same, 0.75 s of the bridge's 2.9 at wave 36)
@@ -406,6 +428,9 @@ export class Bridge {
     this.lampShadows.moved((mesh) => this.addMesh(mesh), moving ? G.players.map((player) => player.obj) : []);
     core.skipped.clear();
     stats.newMeshes = stats.movedMeshes = stats.newTextures = stats.newMaterials = stats.arms = stats.solid = stats.casters = 0;
+    // (the foes drawn as one placed by the engine first, their joints' matrices read back: `bodies.ts`)
+    if (!core.tape) this.bodies.place((mesh) => this.recordsOf(mesh));
+    core.freshViews();
     if (scene.matrixWorldAutoUpdate) {
       if (TUNE.still) this.placeShown(scene, false, 0);
       else scene.updateMatrixWorld();
@@ -417,7 +442,10 @@ export class Bridge {
     this.kept.begin(camera, grade);
     this.walk(scene);
     this.kept.finish();
-    if (this.watched) this.kept.eachDrawn((mesh) => this.watched!.add(mesh));
+    if (this.watched) {
+      this.kept.eachDrawn((mesh) => this.watched!.add(mesh));
+      this.bodies.eachDrawn((mesh) => this.watched!.add(mesh));
+    }
     for (const light of shownPointLights()) this.lit.add(light);
     this.lit.addLamps();
     this.lightCache.tell();
