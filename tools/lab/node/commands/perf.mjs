@@ -61,6 +61,12 @@ export default {
       usage: 'n',
       help: 'how many of the biome\'s commonest foes come at him (10 by default; 0: none)',
     },
+    wave: {
+      kind: 'number',
+      usage: 'n',
+      help: 'wave n set off as the run sends it and let fill the arena before the casts, in place of --foes '
+        + '(its own mix of foes, as many standing as it lets stand)',
+    },
     apart: { kind: 'number', usage: 's', help: 'from one press to the next (1 s by default)' },
     after: { kind: 'number', usage: 's', help: 'from the last press to the end (4 s by default)' },
     quality: {
@@ -92,6 +98,8 @@ export default {
   },
   check(options) {
     if (options.foes !== undefined && !(options.foes >= 0)) throw labError('perf --foes: 0 or more');
+    if (options.wave !== undefined && !(options.wave >= 1)) throw labError('perf --wave: 1 or more');
+    if (options.wave !== undefined && (options.village || options.lobby)) throw labError('perf --wave: in a run');
     if (options.apart !== undefined && !(options.apart > 0)) throw labError('perf --apart: more than 0 s');
     if (options.after !== undefined && !(options.after > 0)) throw labError('perf --after: more than 0 s');
     if (options.throttle !== undefined && !(options.throttle >= 1)) throw labError('perf --throttle: 1 or more');
@@ -119,6 +127,7 @@ export default {
       at: options.at,
       gear: options.gear,
       foes: options.foes === undefined ? 10 : Math.round(options.foes),
+      wave: options.wave === undefined ? undefined : Math.round(options.wave),
       apart: options.apart ?? 1,
       after: options.after ?? 4,
       quality: options.quality === undefined ? undefined : qualityOf(options.quality),

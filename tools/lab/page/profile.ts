@@ -21,6 +21,7 @@ import { groundHeight } from '../../../src/world/ground';
 import { RUST } from '../../../src/engine';
 import { holdFrames } from '../../../src/core/frameLoop';
 import { watchWakeLock, wakeProblems } from './profileAwake';
+import { waveCome, waveLine, type WaveCome } from './perfWave';
 
 export interface ProfileCommand {
   biome: BiomeId;
@@ -40,6 +41,8 @@ export interface ProfileCommand {
   village: boolean;
   /** with `village`, the hour it's lit for (the page's own when not given) */
   hour?: number;
+  /** a wave set off and let fill the arena first, as the run sends it (`perfWave.ts`) */
+  wave?: number;
 }
 
 
@@ -373,6 +376,7 @@ export async function profileHere(lab: Lab, command: ProfileCommand): Promise<Re
   if (command.level) quality.useQuality(command.level);
   await standAt(lab, command);
   if (command.arrows) plantArrows(lab, command.arrows);
+  const come: WaveCome | null = command.wave ? await waveCome(lab, command.wave) : null;
   const drawing = lab.drawing;
   lab.drawing = true;
   try {
@@ -411,6 +415,7 @@ export async function profileHere(lab: Lab, command: ProfileCommand): Promise<Re
     const name = `${place} ${command.view}, ${quality.qualityLevel()}`;
     const lines = profileLines(found);
     const text = [name, ...lines.map((line) => `  ${line}`)];
+    if (come) text.splice(1, 0, `  ${waveLine(come)}`);
     if (command.send) {
       const sent = await sentProfile(lines, command.send);
       text.push(sent.text);

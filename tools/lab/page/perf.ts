@@ -43,6 +43,7 @@ import { groundHeight } from '../../../src/world/ground';
 import { viewBy } from './villageHallCull';
 import { endFlight, flewFrom, flightLegs, flyTo, takeFlight, whereFlown, type Flown, type Leg } from './perfFly';
 import { PLANTED, plantOverVillage } from './perfFly';
+import { waveCome, waveLine, type WaveCome } from './perfWave';
 
 export interface PerfOptions {
   biome: BiomeId;
@@ -64,6 +65,8 @@ export interface PerfOptions {
   after: number;
   /** how many of the biome's commonest foes come at the hero */
   foes: number;
+  /** a wave set off and let fill the arena instead, as the run sends it (`perfWave.ts`) */
+  wave?: number;
   /** the quality level, and the most pixels the scene renders (none: no budget; no quality: as the page has it) */
   quality?: { level: QualityLevel; pixels?: number };
   /** how many times slower the CPU runs (1: as it is) */
@@ -828,7 +831,9 @@ async function perfAtQuality(lab: Lab, options: PerfOptions): Promise<Report> {
   // (from where he stands once there: the lobby puts him on its own spot)
   const way = THREE.MathUtils.degToRad(options.facing);
   const aim = hero.pos.clone().add(new THREE.Vector3(Math.sin(way), 0, Math.cos(way)).multiplyScalar(AIM_AHEAD));
-  if (!options.lobby && !options.village && options.foes) await foesAhead(lab, options.biome, options.foes);
+  let come: WaveCome | null = null;
+  if (!options.lobby && !options.village && options.wave) come = await waveCome(lab, options.wave);
+  else if (!options.lobby && !options.village && options.foes) await foesAhead(lab, options.biome, options.foes);
   const restore = await measuring(lab, options);
   const compiled = programsCompiledInGame();
   const lateBefore = lateCompiles.length;
@@ -843,6 +848,7 @@ async function perfAtQuality(lab: Lab, options: PerfOptions): Promise<Report> {
     const hour = options.hour === undefined ? '' : ` at ${options.hour}:00`;
     const where = options.village ? `the village${hour}` : options.biome;
     lines.push(`${where}, ${options.lobby ? 'the lobby' : `the ${options.view} view`}, ${cpu}`);
+    if (come) lines.push(waveLine(come));
     const spun: { phases: Phase[]; lines: string[]; problems?: string[] } | null = options.village && options.spin
       ? await spinPhases(lab, options.facing * Math.PI / 180)
       : options.village && options.fly ? await flyPhases(lab, options.canary)

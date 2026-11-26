@@ -38,6 +38,12 @@ export default {
         + 'its GPU played by this one drawing its screen at more pixels',
     },
     rounds: { kind: 'number', usage: 'n', help: 'the rounds of turns a part (the game\'s own, 3, by default)' },
+    wave: {
+      kind: 'number',
+      usage: 'n',
+      help: 'wave n set off as the run sends it and let fill the arena first (its own mix of foes, as many standing '
+        + 'as it lets stand)',
+    },
     arrows: {
       kind: 'number',
       usage: 'n',
@@ -64,6 +70,8 @@ export default {
   },
   check(options) {
     if (options.rounds !== undefined && !(options.rounds >= 1)) throw labError('profile --rounds: 1 or more');
+    if (options.wave !== undefined && !(options.wave >= 1)) throw labError('profile --wave: 1 or more');
+    if (options.wave !== undefined && options.village) throw labError('profile --wave: in a run, not --village');
     if (options.device) playAsDevice(options);
   },
   async each(side, options) {
@@ -77,6 +85,7 @@ export default {
         at: options.at,
         level: options.level ?? (options.device ? qualityOf(options.quality).level : undefined),
         rounds: options.rounds === undefined ? undefined : Math.round(options.rounds),
+        wave: options.wave === undefined ? undefined : Math.round(options.wave),
         canary: Boolean(options.canary),
         send: service.url,
         arrows: options.arrows === undefined ? undefined : Math.round(options.arrows),
