@@ -129,6 +129,10 @@ export class Engine {
      */
     node_locals(): number;
     /**
+     * Where every node's matrix under its parent is, 16 floats a node by its id, as last placed.
+     */
+    node_matrices(): number;
+    /**
      * Where the page writes whether each node is shown, a byte a node by its id. Adding a node may move it.
      */
     node_shown(): number;
@@ -314,6 +318,7 @@ export interface InitOutput {
     readonly engine_keep: (a: number, b: number, c: number) => number;
     readonly engine_kept: (a: number) => number;
     readonly engine_node_locals: (a: number) => number;
+    readonly engine_node_matrices: (a: number) => number;
     readonly engine_node_shown: (a: number) => number;
     readonly engine_node_worlds: (a: number) => number;
     readonly engine_nodes_drawn: (a: number, b: number) => void;
@@ -352,12 +357,12 @@ export interface InitOutput {
     readonly engine_show_kept: (a: number, b: number, c: number, d: number) => void;
     readonly engine_stats: (a: number, b: number) => void;
     readonly start: () => void;
-    readonly __wasm_bindgen_func_elem_1832: (a: number, b: number, c: number, d: any) => void;
-    readonly __wasm_bindgen_func_elem_1857: (a: number, b: number, c: any, d: any) => void;
-    readonly __wasm_bindgen_func_elem_706: (a: number, b: number, c: number, d: any) => void;
-    readonly __wasm_bindgen_func_elem_706_74: (a: number, b: number, c: number, d: any) => void;
-    readonly __wasm_bindgen_func_elem_706_75: (a: number, b: number, c: number, d: any) => void;
-    readonly __wasm_bindgen_func_elem_708: (a: number, b: number, c: any) => void;
+    readonly __wasm_bindgen_func_elem_1833: (a: number, b: number, c: number, d: any) => void;
+    readonly __wasm_bindgen_func_elem_1858: (a: number, b: number, c: any, d: any) => void;
+    readonly __wasm_bindgen_func_elem_707: (a: number, b: number, c: number, d: any) => void;
+    readonly __wasm_bindgen_func_elem_707_75: (a: number, b: number, c: number, d: any) => void;
+    readonly __wasm_bindgen_func_elem_707_76: (a: number, b: number, c: number, d: any) => void;
+    readonly __wasm_bindgen_func_elem_709: (a: number, b: number, c: any) => void;
     readonly __wbindgen_export: (a: number, b: number) => number;
     readonly __wbindgen_export2: (a: number, b: number, c: number, d: number) => number;
     readonly __wbindgen_export3: (a: number, b: number, c: number) => void;

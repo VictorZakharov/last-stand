@@ -26,7 +26,9 @@ import { Levels } from './levels';
 import { FrameLook } from './frameLook';
 import { Lights } from './lights';
 import { Kept } from './kept';
-import { Bodies, onNode } from './bodies';
+import { BODY_NODES, Bodies } from './bodies';
+import { Mirror, mirrored, onNode } from './mirror';
+import { MirrorMeshes, type Recorded } from './mirrorMeshes';
 import { Maps } from './maps';
 import { Materials, type AnyMaterial } from './materials';
 import { SEE_FLAGS, SeeKinds } from './seeKinds';
@@ -96,8 +98,13 @@ export class Bridge {
   /** how many of each the engine holds */
   readonly held: Core['held'];
 
-  /** the foes drawn as one, kept by the engine as nodes (`bodies.ts`) */
+  /** the scene's moving parts as the engine's nodes (`mirror.ts`), their meshes drawn on them (`mirrorMeshes.ts`),
+   *  and the foes drawn as one among them (`bodies.ts`) */
+  readonly mirror: Mirror;
+  readonly mirrorMeshes: MirrorMeshes;
   readonly bodies: Bodies;
+  /** the roots handed to the mirror this frame */
+  private wanted = new Set<THREE.Object3D>();
   private stack: THREE.Object3D[] = [];
   /** what's handed over ahead of its first frame (`ahead.ts`) */
   readonly ahead: Ahead;
@@ -125,7 +132,10 @@ export class Bridge {
     this.lit.ownSlot = (light) => this.lampShadows.ownSlot(light);
     this.particles = new Sprites(core);
     this.kept = new Kept(core, this.materials, this.seeKinds, (mesh) => this.addMesh(mesh), (object) => this.visit(object));
-    this.bodies = new Bodies(core, wasm, this.materials);
+    this.mirrorMeshes = new MirrorMeshes(core, this.materials, this.geometries, this.seeKinds);
+    this.mirror = new Mirror(core, wasm, this.mirrorMeshes);
+    this.mirrorMeshes.watch(this.mirror);
+    this.bodies = new Bodies(core, this.materials, this.mirror);
     this.stats = core.stats;
     this.skipped = core.skipped;
     this.held = core.held;
@@ -136,6 +146,7 @@ export class Bridge {
     // (what's kept is written by the ids forgotten here)
     this.kept.forget();
     this.bodies.forget();
+    this.mirrorMeshes.forget();
     this.geometries.forget();
     this.maps.forget();
     this.materials.forget();
@@ -207,15 +218,36 @@ export class Bridge {
     core.count++;
   }
 
+  /** The frame's moving parts handed to the engine's nodes: every hero's and foe's root in the scene, the foes
+   *  drawn as one, every node placed and its matrix read back, each mesh's records kept. */
+  private handOver(camera: THREE.Camera): void {
+    const mirror = this.mirror, wanted = this.wanted;
+    wanted.clear();
+    if (BODY_NODES.on) {
+      for (const player of G.players) if (inScene(player.obj)) wanted.add(player.obj);
+      for (const enemy of G.enemies) if (inScene(enemy.obj)) wanted.add(enemy.obj);
+    }
+    for (const root of [...mirror.rootsNow]) if (!wanted.has(root)) mirror.leave(root);
+    for (const root of wanted) mirror.take(root);
+    const recordsOf = (mesh: THREE.Mesh): Recorded => this.recordsOf(mesh);
+    this.bodies.sync(recordsOf);
+    mirror.place();
+    this.mirrorMeshes.keep(camera, this.grade.arms ?? null, recordsOf);
+  }
+
   /** The records `mesh` is drawn by this frame, written and taken back out of it: what a body kept as nodes draws
    *  (`bodies.ts`), its bones the engine's. */
-  private recordsOf(mesh: THREE.Mesh): Float32Array {
-    const core = this.core, count = core.count, boneFloats = core.boneFloats;
+  private recordsOf(mesh: THREE.Mesh): Recorded {
+    const core = this.core, stats = core.stats, count = core.count, boneFloats = core.boneFloats;
+    const solid = stats.solid, casters = stats.casters;
     this.addMesh(mesh);
     const records = core.records.slice(count * RECORD, core.count * RECORD);
+    const made = { records, solid: stats.solid - solid, casters: stats.casters - casters };
     core.count = count;
     core.boneFloats = boneFloats;
-    return records;
+    stats.solid = solid;
+    stats.casters = casters;
+    return made;
   }
 
   private addMesh(mesh: THREE.Mesh): void {
@@ -279,8 +311,9 @@ export class Bridge {
    * "bugs").
    */
   private placeShown(object: THREE.Object3D, moved: boolean, depth: number): void {
-    // (a piece of a body drawn as one, unseen: placed only where it's read, `models/bodyAsOne.ts`)
-    if (object.userData.unplaced) return;
+    // (a piece of a body drawn as one, unseen: placed only where it's read, `models/bodyAsOne.ts`; a root handed
+    // over whole is placed by the engine's nodes, `mirror.ts`)
+    if (object.userData.unplaced || mirrored(object)) return;
     const kept = object as unknown as { placedLate?: boolean };
     if (!object.visible && depth > 0 && depth <= HIDDEN_PLACES) {
       kept.placedLate = true;
@@ -398,6 +431,8 @@ export class Bridge {
       if (!object.visible) continue;
       // (a part that stands still is the engine's to draw, handed over once: `kept.ts`)
       if (this.kept.takes(object)) continue;
+      // (a root handed over whole is drawn on the engine's nodes: what's made each frame of it is visited below)
+      if (mirrored(object)) continue;
       this.visit(object);
       const children = object.children;
       for (let i = 0; i < children.length; i++) stack.push(children[i]);
@@ -428,8 +463,8 @@ export class Bridge {
     this.lampShadows.moved((mesh) => this.addMesh(mesh), moving ? G.players.map((player) => player.obj) : []);
     core.skipped.clear();
     stats.newMeshes = stats.movedMeshes = stats.newTextures = stats.newMaterials = stats.arms = stats.solid = stats.casters = 0;
-    // (the foes drawn as one placed by the engine first, their joints' matrices read back: `bodies.ts`)
-    if (!core.tape) this.bodies.place((mesh) => this.recordsOf(mesh));
+    // (the moving parts placed by the engine first, their matrices read back: `mirror.ts`)
+    if (!core.tape) this.handOver(camera);
     core.freshViews();
     if (scene.matrixWorldAutoUpdate) {
       if (TUNE.still) this.placeShown(scene, false, 0);
@@ -441,10 +476,12 @@ export class Bridge {
     core.globals.fill(0, GLOBALS.camPos, GLOBALS.floats);
     this.kept.begin(camera, grade);
     this.walk(scene);
+    for (const object of this.mirrorMeshes.rest) if (this.mirror.seen(object)) this.visit(object);
     this.kept.finish();
     if (this.watched) {
       this.kept.eachDrawn((mesh) => this.watched!.add(mesh));
       this.bodies.eachDrawn((mesh) => this.watched!.add(mesh));
+      this.mirrorMeshes.eachDrawn((mesh) => this.watched!.add(mesh));
     }
     for (const light of shownPointLights()) this.lit.add(light);
     this.lit.addLamps();
@@ -470,4 +507,10 @@ export class Bridge {
       lampFaces: this.lampShadows.facesNow.still, moverFaces: this.lampShadows.facesNow.movers,
     });
   }
+}
+
+/** Whether `object` hangs in a scene, up from it. */
+function inScene(object: THREE.Object3D): boolean {
+  for (let at: THREE.Object3D | null = object; at; at = at.parent) if ((at as THREE.Scene).isScene) return true;
+  return false;
 }
