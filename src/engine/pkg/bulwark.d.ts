@@ -279,6 +279,13 @@ export class Engine {
     stats(): Float32Array;
 }
 
+/**
+ * Cloth hung from a waist draped over a body's limbs, in place (cloth.rs): `points` three floats each, `cols` a row
+ * and its first row the waist; `down` and `round` each point's length to the one above and the next round, as cut;
+ * `limbs` eight floats each (an axis's two ends, its radius at each), the hands' `hands` first, then the legs'.
+ */
+export function drape_cloth(points: Float32Array, down: Float32Array | number[], round: Float32Array | number[], limbs: Float64Array | number[], hands: number, cols: number, layer: number, slit: boolean, tucked: boolean, angles: Float32Array | number[], passes: number): void;
+
 export function start(): void;
 
 export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembly.Module;
@@ -286,6 +293,7 @@ export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembl
 export interface InitOutput {
     readonly memory: WebAssembly.Memory;
     readonly __wbg_engine_free: (a: number, b: number) => void;
+    readonly drape_cloth: (a: number, b: number, c: any, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: number, n: number, o: number, p: number, q: number) => void;
     readonly engine_add_custom_material: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number) => number;
     readonly engine_add_material: (a: number, b: number, c: number, d: number, e: number, f: number) => number;
     readonly engine_add_mesh: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: number, n: number, o: number, p: number) => number;
@@ -357,12 +365,12 @@ export interface InitOutput {
     readonly engine_show_kept: (a: number, b: number, c: number, d: number) => void;
     readonly engine_stats: (a: number, b: number) => void;
     readonly start: () => void;
-    readonly __wasm_bindgen_func_elem_1833: (a: number, b: number, c: number, d: any) => void;
-    readonly __wasm_bindgen_func_elem_1858: (a: number, b: number, c: any, d: any) => void;
-    readonly __wasm_bindgen_func_elem_707: (a: number, b: number, c: number, d: any) => void;
-    readonly __wasm_bindgen_func_elem_707_75: (a: number, b: number, c: number, d: any) => void;
-    readonly __wasm_bindgen_func_elem_707_76: (a: number, b: number, c: number, d: any) => void;
-    readonly __wasm_bindgen_func_elem_709: (a: number, b: number, c: any) => void;
+    readonly __wasm_bindgen_func_elem_1841: (a: number, b: number, c: number, d: any) => void;
+    readonly __wasm_bindgen_func_elem_1866: (a: number, b: number, c: any, d: any) => void;
+    readonly __wasm_bindgen_func_elem_715: (a: number, b: number, c: number, d: any) => void;
+    readonly __wasm_bindgen_func_elem_715_76: (a: number, b: number, c: number, d: any) => void;
+    readonly __wasm_bindgen_func_elem_715_77: (a: number, b: number, c: number, d: any) => void;
+    readonly __wasm_bindgen_func_elem_717: (a: number, b: number, c: any) => void;
     readonly __wbindgen_export: (a: number, b: number) => number;
     readonly __wbindgen_export2: (a: number, b: number, c: number, d: number) => number;
     readonly __wbindgen_export3: (a: number, b: number, c: number) => void;

@@ -7,6 +7,7 @@ import type * as THREE from 'three';
 import { Bridge, TUNE, type Grade } from './bridge';
 import { perfClock } from '../core/perfClock';
 import { cullForEngine } from '../world/doorways';
+import { rustCallsReady } from './rustCalls';
 import { AHEAD, PIPELINES, pipelinesAside } from './pipelinesAside';
 import { deviceSaid, fault, keepWhatsSaid, watchFrame } from './said';
 
@@ -75,8 +76,10 @@ export const rustSwitching = (): boolean => RUST.bridge?.levels.plainSwitching ?
 export async function bootRust(under: HTMLCanvasElement): Promise<void> {
   try {
     const began = performance.now();
-    const { default: init, Engine } = await import('./pkg/bulwark');
+    const module = await import('./pkg/bulwark');
+    const { default: init, Engine } = module;
     const wasm = await init();
+    rustCallsReady(module);
     const loaded = performance.now();
     canvas = document.createElement('canvas');
     canvas.id = 'rust-canvas';

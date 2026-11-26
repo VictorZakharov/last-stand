@@ -144,4 +144,10 @@ export const COMMON_OPTIONS = {
       + 'run\'s problems side by side, the runs with the fewest named (needs npm run lab:serve and a command that '
       + 'takes --tune): warriorSwings.twoBack[46,52]=-6|-10 sets those two numbers; warriorEyes.roll=1|1.2 the list',
   },
+  lines: {
+    kind: 'text',
+    usage: 'words',
+    help: 'with --sweep, the report lines of each run that hold any of these words (split by |) printed under it: '
+      + '--sweep "bodyNodes.on=1|0|1|0" --lines "work|records" times a switch both ways in turn',
+  },
 };

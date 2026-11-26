@@ -7,7 +7,8 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { taperTube, twist } from './shapes';
 import { part, joint } from './rig';
 import { built } from './steps';
-import { clamp, lerp, smooth } from '../../util';
+import { clamp, lerp } from '../../util';
+import { rustCalls } from '../../engine/rustCalls';
 import { tunable } from '../../core/tuning';
 
 /** The heroes' geometric detail, 1 = full (the quality preset's `heroDetail`): heroes built from now on
@@ -681,12 +682,31 @@ export class Skirt {
     return true;
   }
 
+  /** the limbs as the engine's cloth takes them, eight numbers each (its axis's ends, its radius at each), the hands
+   *  first: kept and filled again each drape */
+  private limbFloats = new Float64Array(0);
+  private limbsFor(hands: SkirtBody[], legs: SkirtBody[]): Float64Array {
+    const count = hands.length + legs.length;
+    if (this.limbFloats.length !== count * 8) this.limbFloats = new Float64Array(count * 8);
+    const out = this.limbFloats;
+    for (let q = 0; q < count; q++) {
+      const limb = q < hands.length ? hands[q] : legs[q - hands.length], at = q * 8;
+      out[at] = limb.a.x; out[at + 1] = limb.a.y; out[at + 2] = limb.a.z;
+      out[at + 3] = limb.b.x; out[at + 4] = limb.b.y; out[at + 5] = limb.b.z;
+      out[at + 6] = limb.ra; out[at + 7] = limb.rb;
+    }
+    return out;
+  }
+
   /** each point's length to the one above it and to the next round, as cut */
   private lens?: { down: Float32Array; round: Float32Array };
-  private boxes = new Float32Array(0);
-  /** The posed cloth over the limbs: a few rounds of putting each point the limbs reach out of them and holding the points to
-   *  their lengths (a little give: cloth stretches) down the cloth from the waist and round it, ending off the limbs. */
+  /** The posed cloth over the limbs, draped by the engine (Bulwark's cloth.rs, the script's own steps as they were,
+   *  `lab sit` alike line for line): a few rounds of putting each point the limbs reach out of them and holding the
+   *  points to their lengths (a little give: cloth stretches) down the cloth from the waist and round it, ending off
+   *  the limbs. Before the engine's module has loaded it hangs as laid. */
   private drape(legs: SkirtBody[], hands: SkirtBody[]): void {
+    const calls = rustCalls();
+    if (!calls) return;
     const P = (this.geo.attributes.position as THREE.BufferAttribute).array as Float32Array, C = this.cols, n = P.length / 3, R = this.rest;
     if (!this.lens) {
       const down = new Float32Array(n), round = new Float32Array(n), d = (a: number, b: number) => Math.hypot(R[a * 3] - R[b * 3], R[a * 3 + 1] - R[b * 3 + 1], R[a * 3 + 2] - R[b * 3 + 2]);
@@ -694,165 +714,9 @@ export class Skirt {
       for (let j = 0; j < n; j++) if (j % C < C - 1) round[j] = d(j, j + 1);
       this.lens = { down, round };
     }
-    const { down, round } = this.lens, layer = this.o.layer ?? 0, slit = !!this.o.slit;
-    // (limb by limb, each point a limb's box doesn't hold skipped, and the limbs in runs whose boxes overlap, a point outside a
-    // run's box skipping all of it: most points are nowhere near most limbs, a hand's dozen capsules among them; each point
-    // still meets the hands before the legs)
-    const nb = hands.length + legs.length, B = this.boxes.length >= (nb * 2 + 1) * 6 ? this.boxes : (this.boxes = new Float32Array((nb * 2 + 1) * 6));
-    const body = (q: number): SkirtBody => (q < hands.length ? hands[q] : legs[q - hands.length]);
-    const runs: number[] = [];
-    for (let q = 0; q < nb; q++) {
-      const b = body(q), r = Math.max(b.ra, b.rb) + (q < hands.length ? HAND_REACH : layer), k = q * 6;
-      B[k] = Math.min(b.a.x, b.b.x) - r; B[k + 1] = Math.max(b.a.x, b.b.x) + r; B[k + 2] = Math.min(b.a.y, b.b.y) - r;
-      B[k + 3] = Math.max(b.a.y, b.b.y) + r; B[k + 4] = Math.min(b.a.z, b.b.z) - r; B[k + 5] = Math.max(b.a.z, b.b.z) + r;
-      const g = (nb + runs.length / 2 - 1) * 6, joins = runs.length > 0 && q !== hands.length
-        && B[k] <= B[g + 1] && B[k + 1] >= B[g] && B[k + 2] <= B[g + 3] && B[k + 3] >= B[g + 2] && B[k + 4] <= B[g + 5] && B[k + 5] >= B[g + 4];
-      if (joins) { runs[runs.length - 1] = q + 1; for (let c = 0; c < 6; c += 2) { B[g + c] = Math.min(B[g + c], B[k + c]); B[g + c + 1] = Math.max(B[g + c + 1], B[k + c + 1]); } }
-      else { runs.push(q, q + 1); const h = (nb + runs.length / 2 - 1) * 6; for (let c = 0; c < 6; c++) B[h + c] = B[k + c]; }
-    }
-    const offAll = (lines: boolean) => {
-      for (let g = 0; g < runs.length; g += 2) {
-        const G = (nb + g / 2) * 6, q0 = runs[g], q1 = runs[g + 1], leg = q0 >= hands.length, withLines = leg && lines;
-        const gx0 = B[G], gx1 = B[G + 1], gy0 = B[G + 2], gy1 = B[G + 3], gz0 = B[G + 4], gz1 = B[G + 5];
-        // (row by row and round each, as j runs from the first row's first point: no division a point)
-        for (let j = C, c = 0; j < n; j++, c = c === C - 1 ? 0 : c + 1) {
-          const x = P[j * 3], y = P[j * 3 + 1], z = P[j * 3 + 2];
-          // (a point outside the run's box, the cloth to its neighbours aside, skipped before anything else is read)
-          if (!withLines && (x < gx0 || x > gx1 || y < gy0 || y > gy1 || z < gz0 || z > gz1)) continue;
-          // (against a leg, the cloth from the point above and to the next round too: their box; the last column is the first's
-          // copy, so the one before it goes on to the first, and the copy itself to none; parted in a slit, the last is a
-          // point of its own and the one before it goes on to it)
-          const a = (j - C) * 3, nx = c === C - 2 && !slit ? j + 2 - C : c === C - 1 ? j : j + 1, e = nx * 3;
-          let x0 = x, x1 = x, y0 = y, y1 = y, z0 = z, z1 = z;
-          if (withLines) {
-            x0 = Math.min(x, P[a], P[e]); x1 = Math.max(x, P[a], P[e]); y0 = Math.min(y, P[a + 1], P[e + 1]);
-            y1 = Math.max(y, P[a + 1], P[e + 1]); z0 = Math.min(z, P[a + 2], P[e + 2]); z1 = Math.max(z, P[a + 2], P[e + 2]);
-            if (x1 < gx0 || x0 > gx1 || y1 < gy0 || y0 > gy1 || z1 < gz0 || z0 > gz1) continue;
-          }
-          for (let q = q0; q < q1; q++) {
-            const k = q * 6;
-            if (x1 < B[k] || x0 > B[k + 1] || y1 < B[k + 2] || y0 > B[k + 3] || z1 < B[k + 4] || z0 > B[k + 5]) continue;
-            if (!leg) { this.off(P, j, body(q), 0, true); continue; }
-            // (tucked under him, its back lies under his seat: put out of the thighs' tops there, up and out, it stood
-            // back up round his hips)
-            if (this.tucked && Math.cos(this.ang[c]) < TUCKED_FROM) continue;
-            const b = body(q);
-            this.off(P, j, b, layer, false);
-            if (!lines) continue;
-            this.over(P, j, j - C, down[j], b, layer);
-            // (and round it: of two neighbours either side of a leg, the one nearer the skirt's middle is inside it, under a raised
-            // knee, and goes round)
-            if (c < C - 1) {
-              if (P[j * 3] ** 2 + P[j * 3 + 2] ** 2 < P[e] ** 2 + P[e + 2] ** 2) this.over(P, j, nx, round[j], b, layer, ROUND_SLACK);
-              else this.over(P, nx, j, round[j], b, layer, ROUND_SLACK);
-            }
-          }
-        }
-      }
-    };
-    // (the lines between points kept out of the legs in the last passes only: the first pull the cloth most of the way)
-    const passes = Math.min(DRAPE.passes, drapeRounds);
-    for (let it = 0; it < passes; it++) {
-      offAll(it >= passes - 1);
-      // (down the cloth from the waist, which stays: each point no further from the one above than its length and a little)
-      for (let j = C; j < n; j++) pull(P, j, j - C, down[j] * 1.04, 1);
-      // (round it: neighbours no further apart than theirs and a little, both moving; across the seam the last column but one
-      // with the first, the last being a copy of the first: tied to that copy, the cloth parted down the front)
-      for (let j = C; j < n; j++) if (j % C < C - 1) pull(P, j, j % C === C - 2 && !slit ? j + 2 - C : j + 1, round[j] * 1.15, 0.5);
-      // (the seam where the last column meets the first, unless it's parted in a slit: welded every frame, a slit closed)
-      if (!slit) for (let j = C - 1; j < n; j += C) for (let k = 0; k < 3; k++) P[j * 3 + k] = P[(j - C + 1) * 3 + k];
-    }
-    // (ending off the limbs: the lengths last pulled points back into a thigh; and the seam closed again, unless it's a slit)
-    offAll(true);
-    if (!slit) for (let j = C - 1; j < n; j += C) for (let k = 0; k < 3; k++) P[j * 3 + k] = P[(j - C + 1) * 3 + k];
-  }
-
-  /** Point `j` put out of limb `b` (and `extra` further): a leg's moved away from the skirt's middle and up until it is clear
-   *  (the cloth hangs from the waist outside the legs and over a raised thigh, never under it; put out by the nearest side, the
-   *  points round a knee went every way round it and the cloth crumpled), a hand's on its side towards the middle. */
-  private off(P: Float32Array, j: number, b: SkirtBody, extra: number, inward: boolean): void {
-    _sp.set(P[j * 3], P[j * 3 + 1], P[j * 3 + 2]);
-    _sab.subVectors(b.b, b.a);
-    const L2 = _sab.lengthSq(), u = L2 > 1e-9 ? Math.min(1, Math.max(0, _sq.subVectors(_sp, b.a).dot(_sab) / L2)) : 0;
-    _sq.copy(b.a).addScaledVector(_sab, u);
-    const rad = b.ra + (b.rb - b.ra) * u + extra, dn = _sn.subVectors(_sp, _sq), d = dn.length();
-    if (inward) { this.behind(P, j, dn, rad, L2); return; }
-    if (d >= rad) return;
-    // (the way out preferred: from the skirt's middle and up; across the limb)
-    _so.set(_sp.x, 0, _sp.z).normalize(); _so.y += 0.6;
-    if (L2 > 1e-9) _so.addScaledVector(_sab, -_so.dot(_sab) / L2);
-    if (_so.lengthSq() > 1e-12) {
-      // (along that way to where it leaves the limb: the distance to the axis grows no faster than the step)
-      _so.normalize();
-      for (let it = 0, g = rad - d; it < 8 && g > 0; it++) {
-        _sp.addScaledVector(_so, g + 1e-4);
-        const w = L2 > 1e-9 ? Math.min(1, Math.max(0, _sq.subVectors(_sp, b.a).dot(_sab) / L2)) : 0;
-        g = b.ra + (b.rb - b.ra) * w + extra - _sp.distanceTo(_sq.copy(b.a).addScaledVector(_sab, w));
-      }
-      P[j * 3] = _sp.x; P[j * 3 + 1] = _sp.y; P[j * 3 + 2] = _sp.z;
-      return;
-    }
-    if (d < 1e-6 || dn.dot(_so) < 0) dn.copy(_so);
-    if (dn.lengthSq() < 1e-12) return;
-    _sp.copy(_sq).addScaledVector(dn.normalize(), rad);
-    P[j * 3] = _sp.x; P[j * 3 + 1] = _sp.y; P[j * 3 + 2] = _sp.z;
-  }
-
-  /** Point `j` (at `_sp`, `dn` from the nearest point on a limb's axis, `rad` its radius there, `L2` its axis's length
-   *  squared in `_sab`) held in behind a limb lying on the cloth from outside (a hand, a bow): moved straight in, towards
-   *  the skirt's middle across the limb, until it lies behind the limb's surface there, as much as the limb overlaps it
-   *  seen from outside, and eased to nothing over `HAND_REACH` past the limb's side. A hanging hand's sway brought points
-   *  in and out of its reach, and each put round onto its far side jumped by the hand's width: the ranger's coat jumped up
-   *  to 11 cm a frame behind his hands as he stood, "moving unnaturally". */
-  private behind(P: Float32Array, j: number, dn: THREE.Vector3, rad: number, L2: number): void {
-    _so.set(-_sp.x, 0, -_sp.z);
-    if (L2 > 1e-9) _so.addScaledVector(_sab, -_so.dot(_sab) / L2);
-    if (_so.lengthSq() < 1e-12) return;
-    _so.normalize();
-    // (how far behind the axis it lies, and how far to the side of the way in)
-    const back = dn.dot(_so), side = Math.sqrt(Math.max(0, dn.lengthSq() - back * back));
-    if (side >= rad + HAND_REACH) return;
-    const depth = side < rad ? Math.sqrt(rad * rad - side * side) : 0;
-    const k = side <= rad ? 1 : 1 - smooth((side - rad) / HAND_REACH);
-    const need = (depth - back) * k;
-    if (need <= 0) return;
-    P[j * 3] += _so.x * need; P[j * 3 + 1] += _so.y * need; P[j * 3 + 2] += _so.z * need;
-  }
-
-  /** The cloth from point `i` down to point `j` (`len` apart) kept out of leg `b` too (`extra` further): where it passes through
-   *  the leg, `j` is on the leg's far side from where the cloth comes (outside, under a raised thigh or in front of a raised knee),
-   *  and it is put round onto the leg's surface where that line went deepest and on over it, along the surface, by the length
-   *  left. Points outside a leg were left where they were, and the cloth between a point over a thigh raised near level and the
-   *  next under it went through it: the front's middle split round it and the leg came out between two columns; put only where
-   *  the line went deepest, the cloth came up short over the thigh. */
-  private over(P: Float32Array, j: number, i: number, len: number, b: SkirtBody, extra: number, slack = 0): void {
-    // (the closest points of the line and the leg's axis)
-    _sp.set(P[i * 3], P[i * 3 + 1], P[i * 3 + 2]); _sd.set(P[j * 3] - _sp.x, P[j * 3 + 1] - _sp.y, P[j * 3 + 2] - _sp.z);
-    _sab.subVectors(b.b, b.a); _sn.subVectors(_sp, b.a);
-    const A = _sd.dot(_sd), E = _sab.dot(_sab), F = _sab.dot(_sn);
-    if (A < 1e-12 || E < 1e-12) return;
-    // (a line out of a point inside the leg is the push's to settle, however near its start the line goes deepest:
-    // the robe's waist lies inside the top of the thigh, and judged by where its line went deepest, a hair off that
-    // point the point below was put round onto the thigh, 2.5 cm a frame at idle)
-    const ui = Math.min(1, Math.max(0, F / E)), ri = b.ra + (b.rb - b.ra) * ui + extra;
-    if (_sn.lengthSq() - 2 * ui * F + ui * ui * E < ri * ri) return;
-    const Cc = _sd.dot(_sn), Bb = _sd.dot(_sab), den = A * E - Bb * Bb;
-    let sl = den > 1e-12 ? Math.min(1, Math.max(0, (Bb * F - Cc * E) / den)) : 0, t = (Bb * sl + F) / E;
-    if (t < 0) { t = 0; sl = Math.min(1, Math.max(0, -Cc / A)); } else if (t > 1) { t = 1; sl = Math.min(1, Math.max(0, (Bb - Cc) / A)); }
-    // (a line ending inside it is the push's to settle too)
-    if (sl <= 1e-3 || sl >= 1 - 1e-3) return;
-    _sp.addScaledVector(_sd, sl); _sq.copy(b.a).addScaledVector(_sab, t);
-    const rad = b.ra + (b.rb - b.ra) * t + extra, dn = _sn.subVectors(_sp, _sq), d = dn.length();
-    if (d >= rad - slack) return;
-    if (d < 1e-6) dn.set(P[i * 3] - _sq.x, P[i * 3 + 1] - _sq.y, P[i * 3 + 2] - _sq.z).addScaledVector(_sab, -dn.dot(_sab) / E);
-    if (dn.lengthSq() < 1e-12) return;
-    _sp.copy(_sq).addScaledVector(dn.normalize(), rad + 1e-4);
-    // (on from there, across the surface the way the cloth was going)
-    _sd.set(_sp.x - P[i * 3], _sp.y - P[i * 3 + 1], _sp.z - P[i * 3 + 2]);
-    const rest = len - _sd.length();
-    _sd.addScaledVector(dn, -_sd.dot(dn));
-    if (rest > 0 && _sd.lengthSq() > 1e-12) _sp.addScaledVector(_sd.normalize(), rest);
-    P[j * 3] = _sp.x; P[j * 3 + 1] = _sp.y; P[j * 3 + 2] = _sp.z;
+    const { down, round } = this.lens;
+    calls.drape_cloth(P, down, round, this.limbsFor(hands, legs), hands.length, C, this.o.layer ?? 0, !!this.o.slit,
+      this.tucked, this.ang, Math.min(DRAPE.passes, drapeRounds));
   }
 }
 
@@ -882,33 +746,14 @@ export function vertexNormals(geo: THREE.BufferGeometry): void {
   normal.needsUpdate = true;
 }
 
-/** points `a` and `b` (of a flat array) held no further apart than `max`: `a` moved by `wa` of the excess, `b` by the rest */
-function pull(P: Float32Array, a: number, b: number, max: number, wa: number): void {
-  const dx = P[a * 3] - P[b * 3], dy = P[a * 3 + 1] - P[b * 3 + 1], dz = P[a * 3 + 2] - P[b * 3 + 2], d2 = dx * dx + dy * dy + dz * dz;
-  if (d2 <= max * max || d2 < 1e-18) return;
-  const d = Math.sqrt(d2);
-  const e = (d - max) / d;
-  P[a * 3] -= dx * e * wa; P[a * 3 + 1] -= dy * e * wa; P[a * 3 + 2] -= dz * e * wa;
-  const wb = 1 - wa;
-  P[b * 3] += dx * e * wb; P[b * 3 + 1] += dy * e * wb; P[b * 3 + 2] += dz * e * wb;
-}
-const _sp = new THREE.Vector3(), _sq = new THREE.Vector3(), _sab = new THREE.Vector3(), _sn = new THREE.Vector3(), _so = new THREE.Vector3(), _sd = new THREE.Vector3();
+const _sp = new THREE.Vector3(), _sq = new THREE.Vector3(), _sab = new THREE.Vector3(), _sn = new THREE.Vector3();
 /** the drape's passes a frame (and one more ending off the limbs): each puts the cloth out of the limbs and holds its
  *  lengths, the last the lines between points too; most of a hero's update a frame (four, the mage's 0.94 ms) */
 const DRAPE = tunable('drape', { passes: 3 });
-/** how far outside a hand's capsule the cloth beside it is still held in behind it (m): about the skirts' points' spacing */
-const HAND_REACH = 0.035;
 /** the share of its length a skirt's cloth on the floor lies out over, bunched (`Skirt.keepAbove`) */
 const LIES_OUT = 0.35;
-/** the columns tucked under a hero sat on the floor are kept off his thighs no more: those further round than this
- *  from the front (the cosine of their angle) */
-const TUCKED_FROM = -0.3;
 /** how long a sat hero's skirt takes to ease to where it's draped (s): `Skirt.ease` */
 const SETTLE = 0.4;
 /** how late in the sit that ease comes in (a power of the way down) */
 const SETTLE_IN = 8;
-/** how far into a leg's gap the cloth between neighbours round a row may dip before it is put round (m): between two points
- *  lying on a thigh the line dips a millimetre or two into the gap, and moving them for it pushed the cloth out into the free
- *  hand's cuff */
-const ROUND_SLACK = 0.005;
 
