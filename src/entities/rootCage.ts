@@ -16,7 +16,7 @@
 //   game's hero within the ring hurt hard, a shield raised towards her blocking what it blocks of any blow. It lands on the cage's place
 //   alone: a hero who got out is safe. No other hit of hers lands within `gap` s of its shut or its blow (`claimBeat`),
 //   and no branch is thrown at a hero it holds (`caged`).
-import * as THREE from 'three';
+import * as THREE from '../engine/three';
 import { G } from '../state';
 import { ROOTMOTHER } from '../data/foes/rootmother';
 import { hurtPlayer } from '../combat/damage';

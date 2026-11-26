@@ -18,7 +18,7 @@
 //   bombs bursting after a fuse and throwing a hero back, Reliquary's poison lying as a cloud; at half the one left
 //   standing takes its brother's belt.
 // Their warned hits never land together (`claimBeat`).
-import * as THREE from 'three';
+import * as THREE from '../engine/three';
 import { G } from '../state';
 import { TWINS } from '../data/foes/twins';
 import { DAMAGE_TYPES, hurtPlayer } from '../combat/damage';

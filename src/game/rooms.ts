@@ -2,7 +2,7 @@
 // the village's stead (`Arena.showRoom`), and its door inside back out before the cottage's door; the walls the camera
 // stands outside of left out every frame (`Room.cutAway`); the house of records' boards and trophies written from the
 // save slot's heroes' records as he comes in. A run or the hall of heroes taking the lobby from under him takes him out.
-import * as THREE from 'three';
+import * as THREE from '../engine/three';
 import { G } from '../state';
 import { HOUSES, insideOf, outsideOf, ROOM_IDS, TROPHIES, type RoomId } from '../data/houses';
 import { BIOMES, BIOME_IDS, bossesOf, rungBoss } from '../data/biomes';

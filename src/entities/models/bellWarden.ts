@@ -11,7 +11,7 @@
 //   shuddering as it rings; its bronze's veins and its clapper glowing over the warning.
 // - **As it falls** its haunting fails and it sinks to the floor, tipped on its lip, its ghost scattered.
 // Drawn in its crowd (models/crowd.ts): every change is a joint's place or a glow's strength, nothing hidden.
-import * as THREE from 'three';
+import * as THREE from '../../engine/three';
 import { additive, createKit } from '../../core/materials';
 import { grunge, pbrMaterialMaps, radialDecal, veins } from '../../core/textures';
 import { joint, ramp } from './rig';

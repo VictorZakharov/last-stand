@@ -7,7 +7,7 @@
 // A prop raised in the fight (the ranger's Hedgeward: `raiseProp`) is one like any other, worn by the same hits; and
 // every breakable prop is worn by the foes' blows that land on it (`hurtPropsNear`), and broken outright by a big foe
 // walking into it (`trampleProps`: from the owner, "Big enemies should break it by simply walking over it").
-import * as THREE from 'three';
+import * as THREE from '../engine/three';
 import type { Obstacle } from '../types';
 import type { Updater } from './props';
 import { simulates, hurtsProps } from '../net/role';

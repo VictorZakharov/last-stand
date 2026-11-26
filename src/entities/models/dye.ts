@@ -1,7 +1,7 @@
 // A hero's cloth dyed in a player's colour (data/heroColours.ts): the colour of each material a model names, and of
 // its rim light, set again; nothing else. A colour is a material's value, never a variant of its shader, so a dye
 // compiles nothing (root AGENTS.md: shaders compile at load).
-import * as THREE from 'three';
+import * as THREE from '../../engine/three';
 import { heroColour, type HeroColourId } from '../../data/heroColours.ts';
 import type { KitLooks } from '../../core/materials';
 

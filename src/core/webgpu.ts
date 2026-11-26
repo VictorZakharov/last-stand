@@ -1,7 +1,7 @@
 // three's WebGPURenderer, the host of our engine (`src/engine`, docs/research/webgpu.md): the renderer made and given
 // what the code around it asks of a WebGLRenderer. It draws what lies over the engine's frame (the labels, the
 // outline); the scene is the engine's alone.
-import * as THREE from 'three';
+import * as THREE from '../engine/three';
 import type { WebGPURenderer } from 'three/webgpu';
 import { initHdrForWebGPU } from './hdr';
 import type { KitLooks } from './materials';

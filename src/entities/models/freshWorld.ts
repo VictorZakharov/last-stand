@@ -3,7 +3,7 @@
 // time. A skirt's limbs placed so (`SkirtLimbs.place`, `armOffThigh` in armor.ts) were a third of the warrior's pose:
 // his update 3.6 ms a frame on a laptop's CPU at Very low, the largest of its stages. Made once a pass, the numbers
 // are the same to the bit (`tools/lab/test/freshWorld.test.mjs`): nothing moves within one.
-import * as THREE from 'three';
+import * as THREE from '../../engine/three';
 
 /** the objects whose world matrix this pass has made */
 const fresh = new Set<THREE.Object3D>();

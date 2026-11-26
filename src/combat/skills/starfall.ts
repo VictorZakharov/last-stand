@@ -3,7 +3,7 @@
 // (light pillar, erupting crystals that later shatter, glowing cracks, debris).
 // Held, the area its first crystal strikes is shown on the floor where it would fall (red while letting go would cast
 // nothing, its cooldown counting down in it), and it's called down as the key is let go.
-import * as THREE from 'three';
+import * as THREE from '../../engine/three';
 import { additive, nearGlow } from '../../core/materials';
 import { G } from '../../state';
 import { hitEnemy } from '../damage';

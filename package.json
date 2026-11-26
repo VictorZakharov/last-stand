@@ -9,6 +9,7 @@
     "build": "tsc --noEmit && vite build",
     "typecheck": "tsc --noEmit",
     "check:engine": "node scripts/engine-pkg.mjs",
+    "check:three": "node scripts/three-imports.mjs",
     "check:hubs":"node scripts/hubs.mjs",
     "check:pages": "node scripts/check-pages-build.mjs",
     "check:sorted": "node scripts/sorted.mjs",

@@ -5,7 +5,7 @@
 // pixel is covered, green how near to nothing the Health must be for it to show (the seep's front comes in level by
 // level, a drip runs down as it falls), blue its shade (dark and clotted at the edge, brighter where it runs). The grade
 // shows what the Health reaches, so the blood spreads with no shader change and nothing on the page repainting.
-import * as THREE from 'three';
+import * as THREE from '../engine/three';
 import { mulberry } from '../util';
 
 /** the seep's depth in from an edge at its fullest, and how much deeper it runs into a corner (screen heights) */

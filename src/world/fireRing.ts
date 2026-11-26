@@ -8,7 +8,7 @@
 // finger's gap, as a ring is laid by hand: each at a set angle whatever its size, neighbours ran into each other, one
 // lumpy band ("merged stones", "fused stones"; `lab village --only campfireStonesApart`). One mesh, one draw, its
 // colours a vertex's.
-import * as THREE from 'three';
+import * as THREE from '../engine/three';
 import { mergeGeometries, mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 import { valueNoise3 } from '../core/patterns';
 import { boxUVs } from './props';

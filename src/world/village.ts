@@ -16,7 +16,7 @@ import { unrepeatedNodes } from './villageNodes';
 import { rustLook } from '../engine/custom';
 import { pavingLook } from '../engine/looks/paving';
 import { villageSkyMaterial } from './skyNodes';
-import * as THREE from 'three';
+import * as THREE from '../engine/three';
 import type { SightDoor, SightRoof, SightWall } from '../core/sight';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import {

@@ -3,7 +3,7 @@
 // cost nothing extra to draw. A tuft's weight along its length is its uv's v (0 at the root, 1 at the tip:
 // `furTufts` scales it by three), so roots stay put and tips swing. One material copy per mesh, because a
 // uniform is only uploaded when the material changes, and the meshes each have their own lag.
-import * as THREE from 'three';
+import * as THREE from '../../engine/three';
 import { sameLooks } from '../../core/materials';
 import type { OwnLooks } from '../../core/shaderPorts';
 import { tsl } from '../../core/webgpu';

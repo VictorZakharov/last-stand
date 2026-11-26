@@ -3,7 +3,7 @@
 // of a head with a heavy brow, knot-hole eyes, a hollow maw and a beard of moss and hanging roots; branch
 // antlers and shoulders in leaf, shelf fungi on its flank, hands of root fingers. The Thornheart carries
 // a glowing heart in a cage of roots, a crown of branches in glowing blossom and a ring of orbiting thorns.
-import * as THREE from 'three';
+import * as THREE from '../../engine/three';
 import { createKit } from '../../core/materials';
 import { bark, grunge, pbrMaterialMaps, veins } from '../../core/textures';
 import { buildHumanoid, joint, resetPose, walkCycle, idle, deathFall, ramp } from './rig';

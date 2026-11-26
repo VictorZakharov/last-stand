@@ -1,7 +1,7 @@
 // A hand's looks on WebGPU (core/webgpu.ts), where the GLSL patches of models/dualQuaternion.ts and models/triplanar.ts
 // are WebGL's alone: its bones blended as dual quaternions, and its maps read flat along each axis of the space it was
 // sculpted in. Given the node material three converts its copy to (`OwnLooks` in core/shaderPorts.ts).
-import * as THREE from 'three';
+import * as THREE from '../../engine/three';
 import { tsl } from '../../core/webgpu';
 
 // (untyped: TSL's types don't follow its conversions across these calls yet)

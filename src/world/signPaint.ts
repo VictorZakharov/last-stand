@@ -4,7 +4,7 @@
 // bloom lets it stay readable. From Viktor, of the first ones (dark boards, thin gilt letters): "signs need better
 // visibility at the distance... maybe bolder text, different wood grain", and of the houses' after the arms were
 // painted so: "labels on houses should be high contrast as well".
-import * as THREE from 'three';
+import * as THREE from '../engine/three';
 import { mulberry } from '../util';
 import { tsl } from '../core/webgpu';
 import type { OwnLooks } from '../core/shaderPorts';

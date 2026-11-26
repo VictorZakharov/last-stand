@@ -1,6 +1,6 @@
 // The look of rubble pieces (`rubble.ts` throws them around): procedural geometry and painted textures. Every
 // builder is deterministic (seeded), and a piece is about 1 in half-extent so its instance scale sizes it.
-import * as THREE from 'three';
+import * as THREE from '../engine/three';
 import { mulberry } from '../util';
 import { ctx2d, textureFromCanvas } from '../core/textures';
 

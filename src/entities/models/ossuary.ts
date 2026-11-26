@@ -16,7 +16,7 @@
 //
 // Every bone is built pointing down -y from its joint (a thigh from the hip, a shin from the knee) for the left side
 // of the body (+x), its inner side towards -x: the right side is its mirror image (`Sculpt.pair`).
-import * as THREE from 'three';
+import * as THREE from '../../engine/three';
 import { clamp } from '../../util';
 import { ellipsoid, fieldOf, IDENTITY, type Part, type Shape } from './sdf';
 import { netGeometry, skullParts, SKULL_BOX } from '../../world/skull';

@@ -6,7 +6,7 @@
 // and never more than a share of the view's height: the world's particles fade within 3.5 m of the camera
 // (fx/particles.ts), so through the eyes, the arrowhead under a metre off, nothing of them showed. Nothing gathers at
 // the head itself: a star of light there read as a bright spark, and was too bright in every view.
-import * as THREE from 'three';
+import * as THREE from '../engine/three';
 import { addEffect } from './effects';
 import { portShader } from '../core/shaderPorts';
 import { effectLook, num, rgb, effectShader } from '../engine/effects';

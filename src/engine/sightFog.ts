@@ -2,7 +2,7 @@
 // his sight, the rays cast round him while any of it is on, and the roofs' map when it changes. The engine fogs each
 // surface by its own place as it's lit (Bulwark's gpu/sight.rs), where the game's own pass reads the scene's depth
 // back: no pass of its own, and what's blended is fogged by where it is, not by what's behind it.
-import type * as THREE from 'three';
+import type * as THREE from './three';
 import { SIGHT } from '../core/sight';
 import type { Core } from './core';
 import { TUNE } from './globals';

@@ -24,7 +24,7 @@
 //   hurting a hero inside it a little every `poison.every` s: a tick to walk out of, not a burst.
 // Played through enemyAI's `fx` (`beltSkull`), so every co-op game flies the same skull and keeps the same belt counts,
 // each judging its own hero alone.
-import * as THREE from 'three';
+import * as THREE from '../engine/three';
 import { G } from '../state';
 import { TWINS } from '../data/foes/twins';
 import { hurtPlayer } from '../combat/damage';

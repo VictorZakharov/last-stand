@@ -6,7 +6,7 @@
 // drawn whatever the doorway showed of them). Its windows are openings too, seen through both ways as the doorway is:
 // their glass shows what's past it (from play, "make hall windows semi transparent, so they actually show what's
 // outside behind them").
-import * as THREE from 'three';
+import * as THREE from '../engine/three';
 import { fadedWhole } from '../core/seeThrough';
 import { SIGHT, nearDoorAt, seesIntoRoom } from '../core/sight';
 import { HALL, TERRACE, inHall } from '../data/village';

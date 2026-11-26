@@ -2,7 +2,7 @@
 // flat ring segment whose glowing head sweeps across it, leaving a fading trail, or that glows all along. A cut's mark
 // is the trail its blade leaves (fx/swingTrail.ts): an arc of its own, laid flat at its tip's height, drew a second
 // one, level across the view while the cut through the eyes ran down it.
-import * as THREE from 'three';
+import * as THREE from '../../engine/three';
 import { nearGlow } from '../../core/materials';
 import { portShader } from '../../core/shaderPorts';
 import { effectLook, num, rgb, effectShader } from '../../engine/effects';

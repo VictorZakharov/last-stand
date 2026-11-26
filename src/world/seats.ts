@@ -1,7 +1,7 @@
 // What a hero idle long enough sits on (`entities/sitting.ts`): a fallen log or column along its length, a stone of
 // a seat's height at its rim, the floor round a fire, facing it. Each biome lists its own (`Biome.seats`); a broken
 // prop is no seat.
-import * as THREE from 'three';
+import * as THREE from '../engine/three';
 import type { Obstacle } from '../types';
 import type { OutlineTarget } from '../ui/overlay/outline';
 import { G } from '../state';

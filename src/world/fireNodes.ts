@@ -4,7 +4,7 @@
 // early. The flames fade as the prop under them dissolves (`seeThroughFade`, core/shaderPorts.ts `seeFade`, as one by their middle's). The bed's
 // and the logs' char and embers (`emberMat`) are its look's functions as WGSL, set on the lit material three converts
 // it to (`emberNodes`).
-import * as THREE from 'three';
+import * as THREE from '../engine/three';
 import { gpu, tsl } from '../core/webgpu';
 import { seeFade, seeUniforms, type SeeNodes } from '../core/shaderPorts';
 import { rustLook } from '../engine/custom';

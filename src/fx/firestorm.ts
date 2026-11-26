@@ -7,7 +7,7 @@
 // from above, a bright spiral round a black eye. Its walls are thin where they face the camera and thicken towards
 // their edges, as a shell of smoke and fire is seen through: with wide ribbons solid up to 0.95 and a grain of fibres
 // across them, it read as painted walls, not a storm.
-import * as THREE from 'three';
+import * as THREE from '../engine/three';
 import { portShader, wgslNoise, type Tsl } from '../core/shaderPorts';
 import { NEAR_GLOW } from '../core/materials';
 import { effectLook, num, rgb, effectShader } from '../engine/effects';

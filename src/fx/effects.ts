@@ -1,6 +1,6 @@
 // Transient visual effects (shockwaves, decals, telegraphs, lightning, ice).
 // Each effect is { update(dt) -> boolean alive, dispose() }.
-import * as THREE from 'three';
+import * as THREE from '../engine/three';
 import { initRubble, updateRubble, clearRubble } from './rubble';
 import { burst, smokePuff } from './particles';
 import { G } from '../state';

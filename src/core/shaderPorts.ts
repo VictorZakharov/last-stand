@@ -4,7 +4,7 @@
 // material stays the one the game holds and drives: the port reads its uniforms by reference (`uniformsOf`), and the
 // draw takes its blending, sides and depth from it as they are. On WebGL nothing changes.
 import { HALL, TERRACE } from '../data/village';
-import * as THREE from 'three';
+import * as THREE from '../engine/three';
 import type { WebGPURenderer } from 'three/webgpu';
 import { NEAR_GLOW, itemGlowUniforms, type KitLooks } from './materials';
 import {

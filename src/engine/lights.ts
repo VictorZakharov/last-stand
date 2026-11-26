@@ -1,6 +1,6 @@
 // The frame's lights written to the engine's globals: the sky's and the flat light summed, the sun chosen, each point
 // light of the scene and of the shown place, and the village's lamps with the shelter they light their own side of.
-import * as THREE from 'three';
+import * as THREE from './three';
 import { lampList, lampShadowsAllowed, LAMPS_MOST, shelterOpenings } from '../core/lamps';
 import type { Taking } from './lampShadows';
 import { HALL, TERRACE } from '../data/village';

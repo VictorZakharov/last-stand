@@ -4,7 +4,7 @@
 // Everything here stands still, so it's merged into a few meshes by material (`mergeChildren`: dozens of pieces, a
 // handful of draws), on the room's materials and a few of its own, all shown with the room and so warmed with it. No
 // light is added (the room keeps its ten): the hanging lanterns' panes glow by themselves.
-import * as THREE from 'three';
+import * as THREE from '../engine/three';
 import { HOUSES } from '../data/houses';
 import { box, drum, type Mats } from './rooms';
 import { mergeChildren } from './props';

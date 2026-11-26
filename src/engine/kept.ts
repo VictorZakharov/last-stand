@@ -6,7 +6,7 @@
 // can't be kept is walked each frame as before (`rest`): a light, a mesh moved by bones or placed by its look, a
 // set of instances. What nothing tells (a mesh given another material, a child added) is found by an audit that
 // writes a few meshes' records again each frame and compares: counted (`stale`), and put right.
-import * as THREE from 'three';
+import * as THREE from './three';
 import { RECORD, type Core } from './core';
 import { lookOf } from './custom';
 import { TUNE, type Grade } from './globals';

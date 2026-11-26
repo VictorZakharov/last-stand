@@ -5,7 +5,7 @@
 // meshoptimizer: no vertex moved, so his colours, normals and skin are as they were), and its own again within
 // `FAR.back`. A swap of geometry: no program, no material. `?farDetail=0` draws every triangle at any distance, for
 // A/B.
-import * as THREE from 'three';
+import * as THREE from '../../engine/three';
 import { coarseIndex, detailSettled, farIndex, shadowDetailVersion, shadowsWhole, tickDetail } from './shadowDetail';
 
 /** how far from the camera he goes coarse, and how near he comes back whole (m): apart, so he never flips on a line.

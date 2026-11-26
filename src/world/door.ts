@@ -4,7 +4,7 @@
 // angle before a dark hole and read as broken (from play, "Don't have the door animation, remove it"); the hold's
 // prompt filling is all that moves. Each part merged into a mesh a material, in materials the place already has, so
 // nothing compiles. And the sign over a house's door, its name painted on a board hung from an iron arm.
-import * as THREE from 'three';
+import * as THREE from '../engine/three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { canvasOf, ctx2d, textureFromCanvas } from '../core/textures';
 import { mulberry } from '../util';

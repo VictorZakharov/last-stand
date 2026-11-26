@@ -2,7 +2,7 @@
 // underneath, a gaunt pale face with hollow eyes and mouth tendrils; layered robes threaded with glowing
 // mycelium, shelf fungi growing over the shoulders and back, long knotted fingers, spore sacs on the belt,
 // and a gnarled staff whose roots cage a glowing spore pod (the cast origin).
-import * as THREE from 'three';
+import * as THREE from '../../engine/three';
 import { createKit } from '../../core/materials';
 import { bark, grunge, pbrMaterialMaps, veins } from '../../core/textures';
 import { buildHumanoid, joint, resetPose, walkCycle, idle, deathFall, ramp } from './rig';

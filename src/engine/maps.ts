@@ -1,6 +1,6 @@
 // The game's maps handed to the engine: a picture of the page's copied on the GPU, bytes for what can't be (a data
 // texture, a frame written down as a tape), and a base map joined to its alpha map on the page.
-import * as THREE from 'three';
+import * as THREE from './three';
 import type { Core } from './core';
 import { TUNE } from './globals';
 

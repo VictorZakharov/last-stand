@@ -1,7 +1,7 @@
 // Screen-door dissolve of world geometry between the camera and the character it follows, so
 // nothing hides the player. Only the main pass: shadow maps render with their own depth
 // material, so shadows stay whole.
-import * as THREE from 'three';
+import * as THREE from '../engine/three';
 import { HALL, TERRACE } from '../data/village';
 import { DOOR_ROW, DOOR_SOFT, HIS_ROW, SIGHT, SIGHT_LOOK } from './sight';
 import { onWholeView, wholeView } from './wholeView';

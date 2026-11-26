@@ -17,7 +17,7 @@
 // box on the ground is a shelter (the hall of heroes' inside), and each lamp lights either what's inside it or what's
 // outside (its torches lit the terrace through the hall's walls, and the street lamps its room; switched over at its
 // door, the lamps went out as the hero walked in, "lights turn off when I enter the hall").
-import * as THREE from 'three';
+import * as THREE from '../engine/three';
 import { BOUNDS_TEST } from './lightBounds';
 
 /** the most lamps the list holds */

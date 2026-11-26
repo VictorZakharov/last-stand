@@ -2,7 +2,7 @@
 // bushes, their leaves and its rocks, a few hundred instances of three geometries of thousands of triangles each.
 // Cast against every triangle by three's raycaster, the forest's wall took 0.7 s at boot; against each instance's
 // hull by three, 0.2 s, most of it the raycaster's own cost a call.
-import * as THREE from 'three';
+import * as THREE from '../engine/three';
 import { ConvexGeometry } from 'three/addons/geometries/ConvexGeometry.js';
 
 /** A hull: its faces' planes, (nx, ny, nz, d) each, its inside where n·p + d ≤ 0; and its geometry (for its sphere). */

@@ -1,6 +1,6 @@
 // The game's materials handed to the engine: each described by its numbers, maps and key, look-alikes sharing one
 // engine material so their meshes batch, and a material with a look of its own (`custom.ts`) by its shader's numbers.
-import * as THREE from 'three';
+import * as THREE from './three';
 import { COLUMN_SHAFT, type SeeThrough } from '../core/seeThrough';
 import type { Core } from './core';
 import { lookOf, LOOK_FLOATS, RUST_SHADERS, type RustLook, type RustShader } from './custom';

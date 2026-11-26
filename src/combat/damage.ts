@@ -1,6 +1,6 @@
 // Damage rolls and application for both sides.
 import { damageTaken, spotTaken } from '../entities/bossKit';
-import type * as THREE from 'three';
+import type * as THREE from '../engine/three';
 import { G } from '../state';
 import { NUMBER_COLORS } from '../data/balance';
 import { floatText } from '../ui/floaters';

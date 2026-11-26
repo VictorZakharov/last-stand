@@ -1,6 +1,6 @@
 // Iron Bellow: a war cry that hurls back nearby foes and raises three spectral shields that circle
 // the warrior as a damage-absorbing ward; each blow they soak flares them, and they shatter at the end.
-import * as THREE from 'three';
+import * as THREE from '../../engine/three';
 import { nearGlow } from '../../core/materials';
 import { portShader } from '../../core/shaderPorts';
 import { effectLook, num, rgb, effectShader } from '../../engine/effects';

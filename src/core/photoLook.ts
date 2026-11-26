@@ -2,7 +2,7 @@
 // each a uniform of the post chain the boot compiled (the grade's `uPhoto` branch in core/renderer.ts, bloom's strength),
 // so nothing compiles as a slider moves ("Settings switch live", the root's rules). With photo mode off the grade
 // passes its branch by (`uPhoto` 0) and every value is the game's own again.
-import * as THREE from 'three';
+import * as THREE from '../engine/three';
 import { BLOOM_STRENGTH, gradeUniforms, setBloomStrength } from './renderer';
 
 /** the colour filters, by name */

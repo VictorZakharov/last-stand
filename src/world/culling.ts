@@ -5,7 +5,7 @@
 // camera's view are packed to the front of its instances: one draw a mesh as before, of what is in view. (Split into
 // meshes of their own, a cell each, they cut as many triangles but drew 45 to 60 times more a frame.) What casts a
 // shadow casts it from a copy of its own, drawn by the shadow map alone, of the instances in the map's box.
-import * as THREE from 'three';
+import * as THREE from '../engine/three';
 import { TAU } from '../util';
 
 /** The cell an instance standing `at` (in its mesh's frame), the `i`th, is in. */

@@ -1,5 +1,5 @@
 // Rending Cleave: a wide melee sweep in front of the caster that restores energy per hit.
-import * as THREE from 'three';
+import * as THREE from '../../engine/three';
 import { G } from '../../state';
 import { hitEnemy } from '../damage';
 import { particles, col } from '../../fx/particles';

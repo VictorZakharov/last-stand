@@ -11,7 +11,7 @@
 // it falls too far behind where it should stand, then steps there (so he never slides, and turns on the spot in small
 // steps). Every place is in the shop's frame (`S`: the room's group, his root's parent); what his hands do is in his
 // root's frame, worked out each frame from where he stands.
-import * as THREE from 'three';
+import * as THREE from '../../engine/three';
 import { clamp, damp, mulberry, smooth } from '../../util';
 
 /** A place he stands, facing `yaw` (0 faces +z, the shop's door, over his counter). */

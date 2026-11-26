@@ -3,7 +3,7 @@
 // the palm and first knuckles (the fingertips bare), or bare (`bare`: no hands item worn). A hand holding something
 // stays on its wrist and turns so the handle runs across the palm, the weapon seated in it (`seat`), whatever angle
 // it is held at, and wraps its fingers round the handle's actual radius (`hold`).
-import * as THREE from 'three';
+import * as THREE from '../../engine/three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { joint } from './rig';
 import { onBones, posedSkin, type FistFinger } from './fistBones';

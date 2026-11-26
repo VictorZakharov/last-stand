@@ -3,7 +3,7 @@
 // leather bends rather than dents, and what's sewn onto it (a pocket, its stitching) carried with the points nearest
 // it. Hung rigid on the hips, the apron's skirt had his thighs through it as he bent and walked (from play: "it goes
 // through his legs when he bends and walks"), where the library's Hollis has his robe pushed by his legs.
-import * as THREE from 'three';
+import * as THREE from '../../engine/three';
 
 /** A leg's part as a capsule: a joint to the next, and how thick round it the cloth keeps (m). */
 export interface LegPart { from: THREE.Object3D; to: THREE.Object3D; r: number }

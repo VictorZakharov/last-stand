@@ -4,7 +4,7 @@
 // floor's own level, where everything on the floor stands (feet, arrows, marks). The steps a ray takes are a uniform the
 // quality preset sets (none on Low), so switching presets compiles nothing. On WebGPU the same walk is WGSL, and the
 // build's context moves each of the floor's maps to where it meets the ray (`reliefContext`).
-import type * as THREE from 'three';
+import type * as THREE from '../engine/three';
 import { tsl } from './webgpu';
 
 // (untyped: TSL's types don't follow its conversions across these calls yet)

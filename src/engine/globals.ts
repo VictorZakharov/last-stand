@@ -1,6 +1,6 @@
 // The frame's globals as the engine reads them (`Globals` in its common.wgsl): where each part begins, what's tuned
 // by hand, the camera's projection, and the camera, sun, sky, fog and grade written for a frame.
-import * as THREE from 'three';
+import * as THREE from './three';
 import { tunable } from '../core/tuning';
 import { holeNow } from '../core/seeThrough';
 

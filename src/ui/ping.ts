@@ -6,7 +6,7 @@
 // under its foe, and a pin over it with who pinged and how
 // far, held at the screen's edge pointing the way when it's off screen: a label of the overlay, ui/overlay) and on the
 // minimap (drawn with it, hud.ts). The rings' material is the effects' additive one, warmed with them (game/warmup.ts).
-import * as THREE from 'three';
+import * as THREE from '../engine/three';
 import { G } from '../state';
 import { PING } from '../data/balance';
 import { input, isDown, pointerLocked } from '../core/input';

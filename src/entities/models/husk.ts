@@ -1,7 +1,7 @@
 // Hollow Husk: a gaunt, hunched corpse animated by arcane crystal. Its skin has split over a bare
 // ribcage, crystals erupt from its back and shoulder, glowing veins run where they took root; a
 // rotted shroud hangs off its shoulders, a broken shackle and chain swing from one wrist.
-import * as THREE from 'three';
+import * as THREE from '../../engine/three';
 import { createKit } from '../../core/materials';
 import { grunge, pbrMaterialMaps, veins } from '../../core/textures';
 import { buildHumanoid, joint, resetPose, walkCycle, idle, deathFall, pulse, ramp } from './rig';

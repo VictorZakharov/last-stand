@@ -14,7 +14,7 @@
 // The skin's points are kept as the open hand is bound, so a point moved in the fist is taken back through its own
 // bones' blend: the shut fist has points and normals of its own (`hands.ts` `shadeShut`), swapped in as it shuts,
 // with the same bones, weights and program.
-import * as THREE from 'three';
+import * as THREE from '../../engine/three';
 import { tunable } from '../../core/tuning';
 
 /** a skin as its bones pose it, in a frame of its own: each point, its normal, and the turn and move that took it */

@@ -1,7 +1,7 @@
 // The sun's (the moon's) shadow map in the village. It was kept there, drawn once of what stands still and what moves
 // drawn over a copy each frame, its depth copied by raw GL; the engine draws its own shadows, and nothing keeps this
 // map now. What the game and the lab still ask of it is answered here.
-import type * as THREE from 'three';
+import type * as THREE from '../engine/three';
 
 /**
  * The sun's map drawn again whole, in the village (`_on`) as everywhere else: nothing keeps it now (its depth was

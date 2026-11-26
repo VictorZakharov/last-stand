@@ -8,7 +8,7 @@
 //   unmake  one thing taken out, or all
 // A thing belongs to the place it was made in (the village, a biome, a room, the hall) and is shown there alone. It
 // stays when the agent leaves, until the page is left or the panel's Remove is pressed: it's the player's to look at.
-import * as THREE from 'three';
+import * as THREE from '../engine/three';
 import { G } from '../state';
 import type { AgentStep } from './agentSteps';
 import { gameModules, isGameModule } from './gameModules';

@@ -3,7 +3,7 @@
 // screen space), so it reads from the top-down camera and stays a hairline through the eyes; it fades out near the
 // camera (through the eyes it starts at the bow, under the view) and eases in and out, never flashing. It isn't
 // dimmed with distance (`nearGlow`): a fixed width in pixels never grows to fill the view up close.
-import * as THREE from 'three';
+import * as THREE from '../engine/three';
 import { G } from '../state';
 import { addEffect } from './effects';
 import { sceneRatio, sceneSize } from '../core/renderer';

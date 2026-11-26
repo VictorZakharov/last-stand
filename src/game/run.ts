@@ -5,7 +5,7 @@
 // the run at once, and the next wave starts once all who stay chose Continue. A player at 0
 // health goes down until a teammate raises them (or they bleed out); with nobody left standing
 // the run is lost for everyone still in it.
-import * as THREE from 'three';
+import * as THREE from '../engine/three';
 import { readyNextBoss } from './bossReady';
 import { foeWarm } from './warmup';
 import { G } from '../state';

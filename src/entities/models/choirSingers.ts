@@ -5,7 +5,7 @@
 // They're the Bell-Warden's ghosts' own shroud and face (models/bellGhosts.ts), each part an instanced mesh of every
 // singer in an additive material lit by its instance's colour, as the ghosts' tails are: the program the guards'
 // ghosts compile with their warm-up, so nothing compiles in the fight. Two draws for the whole choir.
-import * as THREE from 'three';
+import * as THREE from '../../engine/three';
 import { additive } from '../../core/materials';
 import { faceGeometry, shroudGeometry } from './bellGhosts';
 

@@ -9,6 +9,7 @@ The rules across the game are the [root AGENTS.md](../AGENTS.md).
 - `issue.sh` and `commit.sh`: the fork workflow (a prompt starting `new issue:`, the root's Workflow).
 - `engine-pkg.mjs`: `npm run check:engine`, the engine's build (`src/engine/pkg`) names the Bulwark commit it was built from (`pkg/BUILT_FROM`, a full id), and a branch that changes the build changes that too (`src/engine/AGENTS.md`).
 - `hubs.mjs`: `npm run check:hubs`, the shared files a branch touches since it left main (`HUBS`, each with the way a feature adds to it without editing it); the PR checks write it into their summary as warnings, never a failure.
+- `three-imports.mjs`: `npm run check:three`, every file of `src` takes three.js through `src/engine/three.ts`, never from 'three' itself (#973: each of three's names moved to the engine's own there); `-- --fix` points a file's imports at it.
 - `sorted.mjs`: `npm run check:sorted`, every list marked `// sorted` (or `<!-- sorted -->` before a Markdown list) in alphabetical order, so PRs adding entries add them in different places, not all at the end.
 
 ## Gotchas

@@ -5,7 +5,7 @@
 //   smoke and falling embers; it bursts into flame, debris and a scorch mark.
 // The orbs are blended over the scene (they read as things, not glare); the tail and halo are added
 // light and dim near the camera like every effect glow.
-import * as THREE from 'three';
+import * as THREE from '../engine/three';
 import { G } from '../state';
 import { nearGlow } from '../core/materials';
 import { portShader, wgslNoise, type Port, type Tsl } from '../core/shaderPorts';

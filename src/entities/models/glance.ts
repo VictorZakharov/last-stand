@@ -3,7 +3,7 @@
 // glances, how far and how long each is held are drawn from a seeded random stream of his own, so the lab sees the
 // same glances every run and no hero glances in a loop. Cosmetic: a co-op partner's copy glances on its own clock, and
 // nothing of it is sent. Applied by `LookAt` (ik.ts) on top of the pose, when nothing else is looked at.
-import * as THREE from 'three';
+import * as THREE from '../../engine/three';
 import type { Joints } from './rig';
 import { mulberry } from '../../util';
 

@@ -5,7 +5,7 @@
 // torches on the columns and dust in the firelight. Its point lights are as many as a biome's (10, two casting the still
 // shadows: the braziers'), so showing it compiles nothing the lobby's programs don't have; its materials are the
 // crypt's stone (core/textures.ts recipes, the same maps), warmed with the heroes (game/warmup.ts `heroParts`).
-import * as THREE from 'three';
+import * as THREE from '../engine/three';
 import { ARENA } from '../data/balance';
 import { CLASSES, CLASS_IDS } from '../data/classes/index';
 import { ashlar, bannerCloth, flagstone, granite, limestone, pbrMaterialMaps } from '../core/textures';

@@ -2,7 +2,7 @@
 // e.faceTo(), and starts timed actions whose events apply the effects.
 // An enemy goes for its target (e.target, the nearest player in the fight). What its attacks look
 // like goes through `fx`, which co-op guests replay: their copies of the enemies don't think.
-import * as THREE from 'three';
+import * as THREE from '../engine/three';
 import { G } from '../state';
 import { DAMAGE_COLORS, partyScale } from '../data/balance';
 import { hurtPlayer, DAMAGE_TYPES } from '../combat/damage';

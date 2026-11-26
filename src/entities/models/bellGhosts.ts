@@ -10,7 +10,7 @@
 // added light, as an effect's, in `additive` materials (nearGlow: the shockwave's program, and its instanced twin for
 // the motes, compiled with the boss's warm-up), their own per body, made with the model and let go with it. A ghost
 // is four draws (shroud, halo, face, heart) and every ghost's motes one: a mesh a mote was 30 draws for three ghosts.
-import * as THREE from 'three';
+import * as THREE from '../../engine/three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { additive } from '../../core/materials';
 import { mulberry } from '../../util';

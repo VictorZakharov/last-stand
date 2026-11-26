@@ -1,7 +1,7 @@
 // Items on the lobby floor. Gear thrown out of the stash lands here instead of vanishing, so it can be
 // picked up again (click its name) or, in co-op, by a partner. Whatever is left there is lost when a run
 // starts. In co-op every game shows every drop, and the host says who got one first (net/session).
-import * as THREE from 'three';
+import * as THREE from '../engine/three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { G } from '../state';
 import { additive } from '../core/materials';

@@ -14,6 +14,11 @@ const KINDS = {
   renderers: /(Renderer|RenderTarget|Pass)$|^(WebGLRenderer|PMREMGenerator)$/,
 };
 
+/** an import of three's, from three itself or through the game's own module of it (`src/engine/three.ts`) */
+const THREE_FROM = /from '(three[^']*|\.[^']*\/three)'/g;
+/** a named import of three's: `import { Vector3 } from 'three'` */
+const NAMED_FROM = /import\s+(?:type\s+)?\{([^}]*)\}\s+from\s+'(?:three|\.[^']*\/three)'/g;
+
 /** the kind of a three name, or `constants` (a blending, a side, a colour space...) */
 function kindOf(name) {
   for (const [kind, pattern] of Object.entries(KINDS)) {
@@ -36,13 +41,13 @@ function sources(dir) {
 /** what one file takes of three: its imports and each name's uses */
 function fileUse(path) {
   const text = readFileSync(path, 'utf8');
-  const imports = [...text.matchAll(/from '(three[^']*)'/g)].map((match) => match[1]);
+  const imports = [...text.matchAll(THREE_FROM)].map((match) => match[1]);
   const names = new Map();
   for (const match of text.matchAll(/\bTHREE\.([A-Z][A-Za-z0-9]*)/g)) {
     names.set(match[1], (names.get(match[1]) ?? 0) + 1);
   }
   // (a named import's uses: `import { Vector3 } from 'three'`)
-  for (const match of text.matchAll(/import\s+(?:type\s+)?\{([^}]*)\}\s+from\s+'three'/g)) {
+  for (const match of text.matchAll(NAMED_FROM)) {
     for (const name of match[1].split(',').map((part) => part.trim().split(/\s+as\s+/).pop()).filter(Boolean)) {
       const uses = text.match(new RegExp(`\\b${name}\\b`, 'g'))?.length ?? 1;
       names.set(name, (names.get(name) ?? 0) + uses - 1);

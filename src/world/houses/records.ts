@@ -3,7 +3,7 @@
 // the east wall (each boss's model its own, world/trophies/; an empty shield or stand where its boss still stands), the great ledger and the boards of bests and feats it writes
 // (game/rooms.ts `writeRecords`), the Chronicle's lectern. Built of the rooms' kit (world/rooms.ts) and found by
 // world/houses.ts with every other house's room in this folder.
-import * as THREE from 'three';
+import * as THREE from '../../engine/three';
 import { HOUSES, TROPHIES, TROPHY_AT, type RoomId, type TrophyDef, type TrophyKind, type TrophyPlace } from '../../data/houses';
 import { TROPHY_PLACES } from '../../data/houses/records';
 import { glowOf, part, type TrophyModel } from '../trophyKit';

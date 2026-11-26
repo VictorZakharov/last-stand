@@ -1,7 +1,7 @@
 // What a place of the village is built with (world/places/<id>.ts `build`, world/places.ts): the village's scene, its
 // wall, its materials, what stands (circles) and its updaters, each a place adds to as the village's own builder does.
 // Types alone, so a place's module imports nothing of the village's builder.
-import type * as THREE from 'three';
+import type * as THREE from '../engine/three';
 import type { Mats } from './village';
 import type { Wall } from './wall';
 import type { Updater } from './props';

@@ -4,7 +4,7 @@
 // frame: 32 of the forest lobby's 93 shadow draws, about 11 µs of the frame's JS a draw on WebGPU. A prop that breaks
 // or comes back has its stretches of the casters put away or back (`refresh`, by the props' revision); props built
 // again or moved make the casters again.
-import * as THREE from 'three';
+import * as THREE from '../engine/three';
 import { inShadowsOnly, outOfShadowsOnly } from './culling';
 
 /** a stretch of one caster: a piece of a breakable mesh (a material's group of it), its vertices from `start` */

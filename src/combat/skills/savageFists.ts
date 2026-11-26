@@ -4,7 +4,7 @@
 // Frenzy every third blow was a two-fisted hammer, taken out: from play, "lets remove two handed strike under
 // freenzy, it makes no sense, practically".)
 // With a shield and no weapon the free hand punches alone (its style's tuning, lighter, and no Frenzy).
-import * as THREE from 'three';
+import * as THREE from '../../engine/three';
 import { G } from '../../state';
 import { particles, col } from '../../fx/particles';
 import { addShake, liftView, rollView, viewMode } from '../../core/renderer';

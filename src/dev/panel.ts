@@ -3,7 +3,7 @@
 // frame costs (the scene's draws and programs, its parts taken out live with the performance overlay showing the
 // difference, each part's milliseconds timed by Profile this spot from where the camera is). Its own page pieces,
 // made here, so a production build's page has none of them.
-import * as THREE from 'three';
+import * as THREE from '../engine/three';
 import { loadFoe } from '../entities/bosses';
 import { G } from '../state';
 import { input } from '../core/input';

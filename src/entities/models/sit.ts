@@ -2,7 +2,7 @@
 // his feet left on the floor where he stood to sit if they reach it, else hanging from the knees, swinging a little; the
 // trunk leant forward over the way down and up, as a body sits and stands, and upright with a slouch once sat. By a
 // fire he sits on the floor, knees up and apart, his pelvis rolled back and his hands on his knees.
-import * as THREE from 'three';
+import * as THREE from '../../engine/three';
 import type { SitState } from '../../types';
 import { reachArm, type Joints } from './rig';
 import { clampWrist } from './anatomy';

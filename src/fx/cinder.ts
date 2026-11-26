@@ -8,7 +8,7 @@
 //   nothing of it blinks.
 // Additive meshes of the kit's plain glow material (the same program as a shockwave's) and the particle pools:
 // nothing new to compile.
-import * as THREE from 'three';
+import * as THREE from '../engine/three';
 import { additive } from '../core/materials';
 import { addEffect, shockwave, decal, crackDecal } from './effects';
 import { particles, col, smokePuff, debris } from './particles';

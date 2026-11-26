@@ -1,6 +1,6 @@
 // The particle pools on WebGPU (core/webgpu.ts), which draws points a pixel wide: each particle an instanced quad
 // (three's sprite path of `PointsNodeMaterial`), sized, faded and dimmed as particles.ts's GLSL does it.
-import * as THREE from 'three';
+import * as THREE from '../engine/three';
 import { NEAR_GLOW } from '../core/materials';
 import { gpu, tsl } from '../core/webgpu';
 

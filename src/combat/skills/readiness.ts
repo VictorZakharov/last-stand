@@ -1,7 +1,7 @@
 // A held skill's preview while letting go would cast nothing (on its cooldown, short of energy): turned red, with the
 // seconds of its cooldown counting down in it, and back to the skill's own look as it's ready, so it can be held
 // through the cooldown and let go once it is. Veilstep's first, now every aimed skill's (`SkillDef.aimed`).
-import * as THREE from 'three';
+import * as THREE from '../../engine/three';
 import { damp } from '../../util';
 import { anchorLabel, textArt } from '../../ui/floaters';
 import { ORDER, type Label } from '../../ui/overlay/layer';

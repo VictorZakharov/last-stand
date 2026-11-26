@@ -1,6 +1,6 @@
 // The atlas the world's overlays are drawn from (ui/overlay): one texture, every label painted into a slot of its
 // own, and a slot uploaded alone when its label changes (its region, straight from the canvas it was painted on).
-import * as THREE from 'three';
+import * as THREE from '../../engine/three';
 import { G } from '../../state';
 import { copyCanvasInto } from '../../core/webgpu';
 

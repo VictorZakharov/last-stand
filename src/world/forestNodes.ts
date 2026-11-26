@@ -2,7 +2,7 @@
 // plain materials (three copies them onto the node material it makes of each): the moss tinted over the floor in
 // world space, and the grass's tufts swaying in the wind; and foliage.ts's shafts of light as a node material of their
 // own. The floor's relief is core/parallax.ts's `reliefContext`.
-import * as THREE from 'three';
+import * as THREE from '../engine/three';
 import { gpu, tsl } from '../core/webgpu';
 import { rustLook } from '../engine/custom';
 import { shaftsLook } from '../engine/looks/forest';

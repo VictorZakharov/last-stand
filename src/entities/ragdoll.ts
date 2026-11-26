@@ -2,7 +2,7 @@
 // that killed it and falling under gravity onto the floor, onto and against the props and against the arena's wall.
 // Each frame the rig's joints are posed from the points, so whatever the body wears falls with it. Every foe but the
 // training dummy is built on the shared rig (models/rig.ts), so one body serves them all.
-import * as THREE from 'three';
+import * as THREE from '../engine/three';
 import { G } from '../state';
 import { groundHeight, groundUnder } from '../world/ground';
 import type { Joints } from './models/rig';

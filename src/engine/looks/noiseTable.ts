@@ -5,7 +5,7 @@
 // (269.5, 183.3), and a value is one gather of its four corners, eased between them as before.
 // Its pattern repeats every 256 cells (42 m at the sward's finest, 6.1 a metre), and its corners are a GPU's own
 // rounding of the same formula no longer: the same on every device.
-import * as THREE from 'three';
+import * as THREE from '../three';
 
 /** cells a side of the table, which the noise repeats after */
 const SIDE = 256;

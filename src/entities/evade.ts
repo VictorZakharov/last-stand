@@ -3,7 +3,7 @@
 // the attack's hits (its hero's own, net/role `dealsDamage`), and only for an attack from a hero in front of it: a
 // partner shooting it from behind isn't seen. The host's foe evades there and every guest is told (the `evade` fx);
 // a guest's copy evades on its own game at once, as its screen shows the shot, and the host is told with its hits.
-import * as THREE from 'three';
+import * as THREE from '../engine/three';
 import { G } from '../state';
 import { dealsDamage } from '../net/role';
 import { tellHost } from '../combat/damage';

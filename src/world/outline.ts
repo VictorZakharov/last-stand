@@ -2,7 +2,7 @@
 // through at a body's heights, a convex polygon a body is kept off. Read as a line out from the middle instead, each
 // rock or bush poking in from the thicket hid the floor beside and behind it (the ray from the middle met its front),
 // and the hero walking along the thicket met a square face there, in the open: stopped 19 to 23 times a lap round it.
-import * as THREE from 'three';
+import * as THREE from '../engine/three';
 
 /** A convex outline on the floor: its corners (x, z each) anticlockwise seen from above (from +x toward +z), and its
  *  sides' normals out of it. */

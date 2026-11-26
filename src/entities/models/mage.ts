@@ -3,7 +3,7 @@
 // buckled in brass; his shirt's charcoal sleeves pushed up over forearms inked with runes, a grimoire chained at his hip,
 // tall worn boots, and a gnarled staff cradling a floating crystal. The longcoat with its collar, shoulders, harness and
 // skirts is the chest item's, the bracers the hands item's: without them the waistcoat and bare forearms. Fully procedural.
-import * as THREE from 'three';
+import * as THREE from '../../engine/three';
 import { createKit } from '../../core/materials';
 import { leather as leatherMaps, cloth as clothMaps, steel as steelMaps, wood as woodMaps, wool as woolMaps, oiled, pbrMaterialMaps, ctx2d } from '../../core/textures';
 import { engravedSteel, embroidered, projectUV, steelRegion } from '../../core/engraving';

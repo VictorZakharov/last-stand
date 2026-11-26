@@ -1,5 +1,5 @@
 // Circle-vs-world collision: static obstacles and the arena's wall as it's drawn (`world/wall.ts`).
-import * as THREE from 'three';
+import * as THREE from '../engine/three';
 import { G } from '../state';
 import { groundHeight } from './ground';
 import { state as props, type Prop } from './destructible';

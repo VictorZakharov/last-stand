@@ -5,7 +5,7 @@
 // what was placed (`vertex_hook`). Placed at every vertex, a blade of nine was placed nine times in every pass
 // that drew it, one dropped as often as one kept: on a phone over the shoulder at Very low the grass was 8.4 ms
 // of a 16.8 ms frame, 1.7 of it its shading (J0RW-1EP5, SSB2-NWEB).
-import * as THREE from 'three';
+import * as THREE from '../three';
 import type { BladeNumbers, BladeUniforms } from '../../world/meadowNodes';
 import { rustShader, type RustLook, type RustShader } from '../custom';
 import { TUNE } from '../globals';

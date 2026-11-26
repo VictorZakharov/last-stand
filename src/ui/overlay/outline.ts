@@ -4,7 +4,7 @@
 // scene with only its layer shown would see none of the scene's lights, and every lit material would look for its
 // program again in the next frame. Each mesh is drawn with a mask material made for its own, its alpha test kept (a
 // leaf card drawn whole outlined as a box), so the programs are few and all compiled at load (`warmOutline`).
-import * as THREE from 'three';
+import * as THREE from '../../engine/three';
 import { FullScreenQuad } from 'three/addons/postprocessing/Pass.js';
 import { G } from '../../state';
 import { uiScales } from '../scale';

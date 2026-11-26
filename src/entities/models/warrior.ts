@@ -3,7 +3,7 @@
 // strapped boots. Carries the equipped weapon and shield, and wears only the armour
 // equipped: without a chest item the quilted gambeson, trousers and boots under it, without a hands item
 // bare hands below the gambeson's sleeves. Fully procedural.
-import * as THREE from 'three';
+import * as THREE from '../../engine/three';
 import { createKit } from '../../core/materials';
 import { leather as leatherMaps, mail as mailMaps, cloth as clothMaps, steel as steelMaps, fur as furMaps, wood as woodMaps, pbrMaterialMaps } from '../../core/textures';
 import { engravedSteel, projectUV, steelRegion } from '../../core/engraving';

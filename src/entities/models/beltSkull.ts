@@ -14,7 +14,7 @@
 //
 // Its materials are a kit of its own, made once and never disposed: a skull thrown keeps lying after its thrower has
 // fallen and gone, and its pipelines are made with the Twins' warm-up, as their ropes wear the same skulls.
-import * as THREE from 'three';
+import * as THREE from '../../engine/three';
 import { createKit } from '../../core/materials';
 import { jaw, readyOssuary, skull, SKULL_EYE, SKULL_NECK } from './ossuary';
 

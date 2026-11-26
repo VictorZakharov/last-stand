@@ -3,7 +3,7 @@
 // till a cage places them in the world each frame. So they're warmed with her at her wave and nothing is made in the
 // fight. A cage's root rises out of the earth along +y and arches over towards -x (the cage's middle, as placed); the
 // great root stands along +y from its foot, to be laid over onto the cage.
-import * as THREE from 'three';
+import * as THREE from '../../engine/three';
 import { ROOTMOTHER } from '../../data/foes/rootmother';
 import { organic, taperTube } from './shapes';
 

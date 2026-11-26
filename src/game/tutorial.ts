@@ -4,7 +4,7 @@
 // and holds nobody else. Kept in a cookie as the steps ever done, so the board says what's been walked; a station can
 // be walked again from there. The sparring shade is its own too: a harmless foe of a first wave, in the training
 // grounds' look, come up in the yard for the steps that need a foe that strikes, and gone with them.
-import * as THREE from 'three';
+import * as THREE from '../engine/three';
 import { G } from '../state';
 import { emit, on } from '../events';
 import { readCookie, writeCookie } from '../core/cookies';

@@ -7,7 +7,7 @@
 // selection screen is up (the hall on the village's terrace is its door).
 // The hemisphere light and the shadow-casting moon are shared; the place shown sets their look, the village's by the
 // hour (`setHour`).
-import * as THREE from 'three';
+import * as THREE from '../engine/three';
 import { ARENA } from '../data/balance';
 import { BIOME_IDS, type BiomeId, type PlaceId } from '../data/biomes';
 import { groundHeight, setRelief } from './ground';

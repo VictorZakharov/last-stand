@@ -1,6 +1,6 @@
 // Shared mutable game state. Systems read/write through this object instead of
 // passing long parameter lists around. Keep it flat and documented.
-import type * as THREE from 'three';
+import type * as THREE from './engine/three';
 import type { Arena } from './world/arena';
 import type { Player } from './entities/player';
 import type { Enemy } from './entities/enemy';

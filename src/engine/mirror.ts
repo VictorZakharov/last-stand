@@ -6,7 +6,7 @@
 // reads of them: no walk of what's handed over, no matrix made here, no record written a frame. The bridge's placing
 // and its walk pass a root that's handed over by whole (`mirrored`). What a body drawn as one asks for is held here
 // too (`hold`: its joints, `bodies.ts`).
-import * as THREE from 'three';
+import * as THREE from './three';
 import type { Core } from './core';
 
 /** no node: the engine's `nodes::NONE` */

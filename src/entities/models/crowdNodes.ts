@@ -2,7 +2,7 @@
 // texture by its instance, and the kit's looks (core/materials.ts: dissolve and its edge, frost, char, hit flash)
 // from its row, its glows dimmed near the camera and its rim as the kit has them, dissolved as a screen door at the
 // camera, as TSL nodes; and its shadow, skinned the same, its pieces too small for the quality's shadows cut.
-import * as THREE from 'three';
+import * as THREE from '../../engine/three';
 import { NEAR_GLOW, type KitLooks } from '../../core/materials';
 import { gpu, stillNodes, tsl } from '../../core/webgpu';
 

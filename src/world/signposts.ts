@@ -9,7 +9,7 @@
 // distance... maybe bolder text, different wood grain"): painted boards, ivory, each name lettered plain and heavy in
 // dark paint, filling the board, on taller and longer arms, their faces flat (`signPaint.ts`). Their lowest arm hangs
 // over a hero's head and his staff (from Viktor: "make signs a little higher so players dont bump into them").
-import * as THREE from 'three';
+import * as THREE from '../engine/three';
 import { SIGNPOSTS, type Signpost } from '../data/signposts';
 import { canvasOf, ctx2d, textureFromCanvas } from '../core/textures';
 import { boxWithUV } from './props';

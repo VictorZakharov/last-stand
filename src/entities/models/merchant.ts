@@ -9,7 +9,7 @@
 // to them, his trunk bent and turned, his head on what he looks at, his arms from their rest (hanging, or on the
 // counter at his desk) to where his hands are wanted, and the things he handles moved into and out of his hands.
 // A trade made earns a nod (`odoNods`).
-import * as THREE from 'three';
+import * as THREE from '../../engine/three';
 import { createKit } from '../../core/materials';
 import { cloth as clothMaps, felt as feltMaps, leather as leatherMaps, wool as woolMaps, pbrMaterialMaps } from '../../core/textures';
 import { buildHumanoid, reachArm, updateJoints, type Joints } from './rig';

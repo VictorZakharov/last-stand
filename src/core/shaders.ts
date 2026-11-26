@@ -2,7 +2,7 @@
 // aside (`engine/pipelinesAside.ts`): a warm-up hands it what a part would draw and waits for them, before the
 // first frame that shows it. (three's own programs were pinned and listed here while three drew the scene.)
 import { AHEAD, LATE_PIPELINES, PIPELINES, pipelinesReady } from '../engine/pipelinesAside';
-import * as THREE from 'three';
+import * as THREE from '../engine/three';
 
 let loaded = false;
 /** The engine's pipelines first asked for in play, each described, for the perf report: the engine draws the game,

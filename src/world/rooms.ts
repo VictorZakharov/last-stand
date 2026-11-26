@@ -8,7 +8,7 @@
 // barrels, banners, boards written on). The walls and the ceiling the camera stands outside of aren't drawn
 // (`cutAway`): from above the room is seen as a dollhouse, and over the shoulder the camera's boom stops at the walls
 // (`Room.wall`).
-import * as THREE from 'three';
+import * as THREE from '../engine/three';
 import type { TavernKeeper } from './tavernKeeper';
 import type { Keeper } from '../entities/models/keeper';
 import type { Player } from '../entities/player';

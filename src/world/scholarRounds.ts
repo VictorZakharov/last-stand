@@ -8,7 +8,7 @@
 // hero can't walk through. A hero coming near is glanced up at (his model's glance) and he carries on; only being
 // talked to stops him, wherever he is, turned to the hero, and he takes up his task again after. The spot he's talked
 // to at follows him. Each frame sets his model's `act` (what he's doing) and places his root.
-import * as THREE from 'three';
+import * as THREE from '../engine/three';
 import type { Obstacle } from '../types';
 import type { VillageObject } from '../data/village';
 import { WALK, type HandAim, type Pinch, type Scholar } from '../entities/models/scholar';

@@ -1,7 +1,7 @@
 // The Thornwood: a sunlit clearing walled in by thickets, boulders and old trees, ancient giants
 // standing over the forest beyond, with four root-arch spawn gates, a mossy stone dais ringed by
 // standing stones, glowcap mushroom clusters and two bonfires. Stumps, logs and boulders break up the floor.
-import * as THREE from 'three';
+import * as THREE from '../engine/three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { seeThrough } from '../core/seeThrough';
 import { ARENA } from '../data/balance';

@@ -13,7 +13,7 @@ import { rustLook } from '../engine/custom';
 import { bladeLook, swardLook } from '../engine/looks/meadow';
 import { ONE_GRASS, oneBand } from './meadowOne';
 import { bladeNodes, swardColorNode } from './meadowNodes';
-import * as THREE from 'three';
+import * as THREE from '../engine/three';
 import { canvasOf, ctx2d, readCtx2d } from '../core/textures';
 import { asGrass, type Updater } from './props';
 import { hiddenByDoorway } from './doorways';

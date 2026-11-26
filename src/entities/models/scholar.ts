@@ -7,7 +7,7 @@
 // each line and down the page, now and then he turns a page, strokes his beard, pushes his spectacles up or leans in to
 // look closer; he breathes all the while. A hero coming near is glanced up at, and while he's talked to he looks up and
 // holds the hero's eye, his reading slowed nearly to a stop.
-import * as THREE from 'three';
+import * as THREE from '../../engine/three';
 import { createKit } from '../../core/materials';
 import { cloth as clothMaps, felt as feltMaps, leather as leatherMaps, wool as woolMaps, pbrMaterialMaps } from '../../core/textures';
 import { buildHumanoid, reachArm, resetPose, walkCycle, type Joints } from './rig';

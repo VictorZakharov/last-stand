@@ -1,7 +1,7 @@
 // Tools for the heroes' authored motion: keyframed curves (a move written as keys over its progress, with a
 // smooth monotone cubic between them, so it eases in and out of each key without overshooting what isn't
 // keyed) and a pose crossfade that hides every cut between poses (an action starting, restarting or ending).
-import * as THREE from 'three';
+import * as THREE from '../../engine/three';
 import type { Joints } from './rig';
 
 /** a keyframed curve: [progress, value] pairs, progress rising; held flat before the first and after the last */

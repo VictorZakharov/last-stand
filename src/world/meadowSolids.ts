@@ -9,7 +9,7 @@
 //
 // Its size: one byte a cell, 768 x 768 over the village's 96 m, 576 KB on the GPU and as much in memory while it's
 // built, read by every grass ring's vertices (nearest, no mipmaps). Nothing is kept across visits.
-import * as THREE from 'three';
+import * as THREE from '../engine/three';
 import { shapesOf } from './simpleTrees';
 import type { MeadowMask } from './meadow';
 

@@ -1,6 +1,6 @@
 // The game's geometry handed to the engine: a mesh's vertices (written in place where they only moved), an instanced
 // mesh's set of matrices and tints, and a skinned mesh's bones, written into the frame's own memory.
-import * as THREE from 'three';
+import * as THREE from './three';
 import type { Core } from './core';
 
 /** (its attributes as handed over too: a geometry given others in their place, a hero's piece at another detail,

@@ -2,7 +2,7 @@
 // shoulder first, through a line of foes: each it meets is struck once as he passes, and none is carried (Bull Rush's
 // is a weapon's charge, carrying what it meets). Each foe struck builds a stack of Frenzy, up to `frenzyMost` a dash
 // (combat/frenzy.ts).
-import * as THREE from 'three';
+import * as THREE from '../../engine/three';
 import { G } from '../../state';
 import { hitEnemy } from '../damage';
 import { evades } from '../../entities/evade';

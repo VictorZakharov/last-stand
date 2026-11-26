@@ -14,7 +14,7 @@
 // out at every pixel: the point lights were 5.8 ms of a phone's 25 ms frame by the braziers at Very low (a
 // report from play, QJ5A-BD6Q). The campfire isn't: it dims by the hour on its own, and one strength reads all
 // that's no lamp.
-import * as THREE from 'three';
+import * as THREE from './three';
 import { lampList, lampStill, LAMPS_MOST } from '../core/lamps';
 import { perfClock } from '../core/perfClock';
 import type { Core } from './core';

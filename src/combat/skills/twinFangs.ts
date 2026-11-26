@@ -1,6 +1,6 @@
 // Twin Fangs: a weapon in each hand. An instant lunge at the aim and two quick crossing strikes, right
 // then left, each hitting hard in a narrow arc in front.
-import * as THREE from 'three';
+import * as THREE from '../../engine/three';
 import { schedule } from '../../core/timers';
 import { addShake } from '../../core/renderer';
 import { sfx } from '../../core/audio';

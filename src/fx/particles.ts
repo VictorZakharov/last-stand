@@ -1,6 +1,6 @@
 // CPU-simulated, GPU-rendered point particles. One additive pool (glows, sparks)
 // and one alpha-blended pool (smoke, dust, debris).
-import * as THREE from 'three';
+import * as THREE from '../engine/three';
 import { G } from '../state';
 import { nearGlow } from '../core/materials';
 import { pointScale } from '../core/renderer';

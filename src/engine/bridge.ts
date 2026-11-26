@@ -7,7 +7,7 @@
 // (`materials.ts`), the geometry and bones (`geometry.ts`), the lights (`lights.ts`), the kinds of see-through
 // (`seeKinds.ts`), the particles (`sprites.ts`) and the frame's globals (`globals.ts`). Here: the scene's matrices,
 // the walk, a record a mesh, what's handed over ahead, and a frame drawn or written down.
-import * as THREE from 'three';
+import * as THREE from './three';
 import type { Engine, InitOutput } from './pkg/bulwark';
 import { perfClock } from '../core/perfClock';
 import { shownPlace, shownPointLights } from '../core/webgpu';

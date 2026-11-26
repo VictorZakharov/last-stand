@@ -1,6 +1,6 @@
 // Procedural textures: cobblestone, ashlar, flagstones, marble, slate, forest floor, bark, grunge, rune circles, decals.
 // Everything is generated on the CPU once at startup (no external art assets).
-import * as THREE from 'three';
+import * as THREE from '../engine/three';
 import { makeFbm, mulberry, clamp } from '../util';
 import { RECIPES, PRELOAD, recipeKey, makeVoronoi, photosFor, type PBRData, type RecipeName, type RecipeArgs } from './pbr';
 import type { FaceId } from '../entities/models/face';

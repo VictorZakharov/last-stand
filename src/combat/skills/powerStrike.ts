@@ -1,5 +1,5 @@
 // Power Strike: a second and a half of gathering strength around the weapon, then a crushing overhead blow.
-import * as THREE from 'three';
+import * as THREE from '../../engine/three';
 import { addEffect, shockwave, groundFlash, crackDecal, decal } from '../../fx/effects';
 import { particles, col, debris, smokePuff } from '../../fx/particles';
 import { flash } from '../../fx/lights';

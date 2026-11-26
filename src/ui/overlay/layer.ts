@@ -3,7 +3,7 @@
 // a downed partner's marker. Each is a label painted with the canvas into the atlas (atlas.ts) when what it shows
 // changes, and placed every frame where it shows; all of them are one draw. (As page elements over the canvas,
 // moved every frame by a transform, Chrome repainted the page round them, and froze for seconds on Windows.)
-import * as THREE from 'three';
+import * as THREE from '../../engine/three';
 import { G } from '../../state';
 import { frameRect, overFrame } from '../../core/renderer';
 import { drawOverFrame, labelsMaterial } from '../../core/webgpu';

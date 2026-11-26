@@ -3,7 +3,7 @@
 // a distance field meshed with surface nets, its hollows darkened in its vertex colours, as the Twins' own are made
 // from), Slab's broad with an ember in its sockets, Reliquary's drawn long with a cold light and the third eye in its
 // brow; the links are the Twins' chain's (entities/models/twins.ts). Nothing of the Twins' own chunk is loaded for it.
-import * as THREE from 'three';
+import * as THREE from '../../engine/three';
 import { skullGeometry } from '../skull';
 import { organic } from '../../entities/models/shapes';
 import type { TrophyDef } from '../../data/houses';

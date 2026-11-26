@@ -2,7 +2,7 @@
 // (models/surfaceNets.ts): a tapering tube, an ellipsoid, a tapering rounded slab, a half-space, each in a frame of
 // its own (a joint's), joined softly to the rest or cut away. Each knows a sphere that holds it, so a point far from
 // it is never asked of it: asked of every part, a hand's field took 5 s to mesh.
-import * as THREE from 'three';
+import * as THREE from '../../engine/three';
 import { clamp } from '../../util';
 import type { Field } from './surfaceNets';
 

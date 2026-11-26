@@ -8,7 +8,7 @@
 // each weight slows it and at its most it stops there; a boss is struck but never carried, and stops it. A charge that
 // rammed a crowd staggers him at its stop (#560, `SkillDef.ram`). Both are his own game's to judge, as it moves him
 // (combat/ram.ts).
-import * as THREE from 'three';
+import * as THREE from '../../engine/three';
 import { G } from '../../state';
 import { carryEnemy, hitEnemy } from '../damage';
 import { evades } from '../../entities/evade';

@@ -7,7 +7,7 @@
 // draw again. A body's sway at rest under a step stays out of its shadow until it moves: a step of a centimetre, and
 // the ranger's bow, quiver and head took the maps drawn again on 92 to 100% of the frames he stood (`lab village
 // --only shadowsOnMove`: 3 cm, 2 to 8%). A quality switch, live.
-import * as THREE from 'three';
+import * as THREE from '../engine/three';
 import { G } from '../state';
 import { skipAfterShadows, stillChangesKeptMaps } from './culling';
 import { shadowMovers } from './props';

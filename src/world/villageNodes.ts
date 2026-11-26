@@ -2,7 +2,7 @@
 // fountain.ts as TSL nodes, written line for line. What's a plain property of the material is set on it (three copies
 // it onto the node material it makes, and the GPU-driven drawing takes it from there too); what reaches into three's
 // lighting model is a look of the converted material (`webgpuLooks`, core/shaderPorts.ts).
-import type * as THREE from 'three';
+import type * as THREE from '../engine/three';
 import { tsl } from '../core/webgpu';
 
 // (untyped: TSL's types don't follow its conversions across these calls yet)

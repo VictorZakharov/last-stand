@@ -4,7 +4,7 @@
 // co-op relay (server/traces). The service worker never sees it: it only answers GETs of the game's own files.
 import { framesUncapped } from '../core/frameLoop';
 import { keyboardLockState } from '../ui/autoFullScreen';
-import * as THREE from 'three';
+import * as THREE from '../engine/three';
 import { G } from '../state';
 import { qualityBudget, qualityLevel, qualitySetting } from '../core/quality';
 import { QUALITY } from '../data/quality';

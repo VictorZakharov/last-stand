@@ -1,7 +1,7 @@
 // The houses' rooms, each built by its file in world/houses/ (its `build`, of the rooms' kit in world/rooms.ts; its
 // cottage, size and what's used in it are its file in data/houses/): a new house is a file in each folder, and touches
 // no list. Built once at boot, each into a group of its own, hidden till shown (`Arena.showRoom`).
-import * as THREE from 'three';
+import * as THREE from '../engine/three';
 import { ROOM_IDS, type RoomId } from '../data/houses';
 import type { Room } from './rooms';
 

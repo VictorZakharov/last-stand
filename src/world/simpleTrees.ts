@@ -5,7 +5,7 @@
 // materials (a lump's faces lie on the middle of the leaves' picture, where it's all leaves), so a quality switches it
 // live by a swap of geometry, no program made, and the tree stands where it stood: its trunk, which a body and an arrow
 // meet, is the grown one's.
-import * as THREE from 'three';
+import * as THREE from '../engine/three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { mulberry, TAU } from '../util';
 import type { TreeKind } from './ezTrees';

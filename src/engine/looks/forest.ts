@@ -1,7 +1,7 @@
 // The Thornwood's floor, grass and light under the Rust engine: `world/forestNodes.ts`'s nodes as WGSL for the
 // engine's hooks: the moss tinted over the floor (its pebbles and leaves stood up out of the soil:
 // looks/relief.ts), the grass's tufts swaying in the wind, the shafts of light.
-import type * as THREE from 'three';
+import type * as THREE from '../three';
 import type { Sway } from '../../world/forestNodes';
 import type { FloorRelief } from '../../core/parallax';
 import { rustShader, type RustLook, type RustShader } from '../custom';

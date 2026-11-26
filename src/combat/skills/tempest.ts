@@ -3,7 +3,7 @@
 // that ring, and dust kicked up where it strikes; let go, the whirl runs down and fades rather than vanishing. All of
 // it is lit steadily (nothing pulses with the strikes): the trails overlap round the circle, so a patch of the screen
 // the whirl turns past keeps about the same light.
-import * as THREE from 'three';
+import * as THREE from '../../engine/three';
 import { G } from '../../state';
 import { hitEnemy } from '../damage';
 import { sfx } from '../../core/audio';

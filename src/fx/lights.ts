@@ -1,6 +1,6 @@
 // Fixed-size pool of dynamic point lights. The count never changes, so the
 // renderer never recompiles shaders; unused lights sit at intensity 0.
-import * as THREE from 'three';
+import * as THREE from '../engine/three';
 
 const POOL = 8;
 

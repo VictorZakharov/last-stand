@@ -2,7 +2,7 @@
 // hero's dye, most at its edges, wisps drifting slowly up it and breathing (`ITEM_GLOW` in core/materials.ts). No
 // light and no program of its own: each item's parts draw with copies of their kit materials (`kitCopy`), the same
 // program as every kit material's, their glow a uniform's colour of their own.
-import * as THREE from 'three';
+import * as THREE from '../../engine/three';
 import { ITEM_GLOW, kitCopy, ownAura } from '../../core/materials';
 import { RARITIES } from '../../data/items';
 import type { Gear, GlowSlot, RarityId } from '../../types';

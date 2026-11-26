@@ -19,7 +19,7 @@
 // - In co-op the host's game runs him and the ledger (`tv`: the ledger as it changes and his body ten times a second),
 //   and a guest's asks go to it (`tv?`: ale, a mug taken up, a mug set down): two heroes can't take one mug.
 // Everything that comes and goes is drawn at no size when it isn't there, never hidden: the room's warm-up draws it.
-import * as THREE from 'three';
+import * as THREE from '../engine/three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { G } from '../state';
 import { createKit } from '../core/materials';

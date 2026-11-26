@@ -3,7 +3,7 @@
 // tusks and ridged horns, forged pauldrons, a harness and a belt of chains, huge rock fists with
 // spiked knuckles and broken shackles. The Colossus is pale stone and violet crystal: a crown,
 // crystals erupting from its back and a ring of shards orbiting it.
-import * as THREE from 'three';
+import * as THREE from '../../engine/three';
 import { createKit } from '../../core/materials';
 import { grunge, pbrMaterialMaps, cracks } from '../../core/textures';
 import { buildHumanoid, joint, resetPose, walkCycle, idle, deathFall, ramp } from './rig';

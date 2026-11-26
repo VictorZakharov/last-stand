@@ -6,7 +6,7 @@
 // of a float texture the shaders read by `gl_InstanceID`. The bodies keep their own meshes on a layer the camera
 // doesn't draw (`CROWD_LAYER`), for what reads them: an arrow lodges in them, the outline draws them.
 // `?crowd=0` draws each body on its own again, for A/B.
-import * as THREE from 'three';
+import * as THREE from '../../engine/three';
 import { G } from '../../state';
 import { QUALITY } from '../../data/quality';
 import { qualityLevel } from '../../core/quality';

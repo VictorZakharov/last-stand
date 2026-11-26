@@ -6,7 +6,7 @@
 // a branch (led whole), a pair (where he stands, then led), a fan (its middle led), a line (half led) and her rain
 // (one branch after another, each aimed as it leaves her hand, led whole, half, not at all, whole). Each branch is a
 // `branch` fx every game flies and judges its own hero by (entities/rootmother.ts `branchAt`).
-import * as THREE from 'three';
+import * as THREE from '../engine/three';
 import { G } from '../state';
 import { ROOTMOTHER } from '../data/foes/rootmother';
 import { ARENA } from '../data/balance';

@@ -1,5 +1,5 @@
 // Generic projectile system used by player skills and enemies.
-import * as THREE from 'three';
+import * as THREE from '../engine/three';
 import { G } from '../state';
 import { particles, col, burst } from '../fx/particles';
 import { flash, flashFree, release, type LightSlot } from '../fx/lights';

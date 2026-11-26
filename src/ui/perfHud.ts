@@ -3,7 +3,7 @@
 // kept in a cookie. Its timings run whether it's shown or not, for the always-on recorder (src/perf/recorder.ts),
 // which they hand every frame to.
 import { framesUncapped } from '../core/frameLoop';
-import * as THREE from 'three';
+import * as THREE from '../engine/three';
 import { RUST } from '../engine';
 import type { FrameStats } from '../engine/bridge';
 import { G } from '../state';

@@ -1,7 +1,7 @@
 // A man's plain tunic over the rig's chest (the mage's under his robe, the ranger's coat): its shape round the chest and
 // over the shoulders, the neckline round the neck and its rolled hem there, and the waist below it. Shared by the heroes
 // built on the same frame, so each meets the neck as a man's does.
-import * as THREE from 'three';
+import * as THREE from '../../engine/three';
 import { belt, TILE } from './armor';
 import { curve, type Keys } from './motion';
 import { clamp } from '../../util';

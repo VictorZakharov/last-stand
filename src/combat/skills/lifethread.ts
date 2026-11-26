@@ -6,7 +6,7 @@
 // It heals a flat `heal` raised by the healer's All Damage and `healPct` of the healed one's most Health, so it still
 // counts at wave 40's 5 to 6 thousand; held on one ally it grows by its `ramp` (`Ramp`), every game following it from
 // whom its own copy of the beam lands on, so the healed one's game, the one that heals, ramps as its screen shows.
-import * as THREE from 'three';
+import * as THREE from '../../engine/three';
 import { G } from '../../state';
 import { additive } from '../../core/materials';
 import { healsHere } from '../../net/role';

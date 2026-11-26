@@ -1,6 +1,6 @@
 // Training dummy: a straw-stuffed burlap sack on a wooden post, with a glowing
 // target rune. It wobbles on a spring when hit (lobby target practice).
-import * as THREE from 'three';
+import * as THREE from '../../engine/three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { createKit } from '../../core/materials';
 import { DUMMY_SACK_BOTTOM } from '../../data/foes/dummy';

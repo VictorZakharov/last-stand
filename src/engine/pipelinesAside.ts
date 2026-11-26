@@ -7,7 +7,7 @@
 // aside, and a draw with a stand-in not yet ready is left out (the thing shows a few frames late; nothing waits).
 // Only the engine's device, and only the pipelines of its scene (their labels): its post chain's and its maps' are
 // made as it boots and drawn with at once.
-import type * as THREE from 'three';
+import type * as THREE from './three';
 import { afterItsFirst } from './compileOnce';
 import { probeDepthOnly } from './depthProbe';
 import { fault, watchDevice } from './said';

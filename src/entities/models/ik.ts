@@ -13,7 +13,7 @@
 // (`dropPelvis`), and each leg solved onto its target (`solveLeg`). What the steps share is the frame's `GaitFrame`.
 //
 // `LookAt` turns the neck and head onto a point of interest, within limits.
-import * as THREE from 'three';
+import * as THREE from '../../engine/three';
 import type { Joints } from './rig';
 import { reachArm, updateJoints } from './rig';
 import { groundHeight } from '../../world/ground';

@@ -1,6 +1,6 @@
 // The arena's wall as a shape (the crypt's octagon, the Thornwood's ring of thicket) with its four gates, for what flies
 // into it.
-import * as THREE from 'three';
+import * as THREE from '../engine/three';
 import { WALL_R, GATE_W } from './props';
 import { wallShape, type PlaceId } from '../data/biomes';
 

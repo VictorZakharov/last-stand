@@ -1,6 +1,6 @@
 // Void Lance: channeled piercing beam. The hand first draws a portal in the air (a spark tracing a
 // circle that opens into turning rune rings); only once it is open does the lance pour out of it.
-import * as THREE from 'three';
+import * as THREE from '../../engine/three';
 import { nearGlow } from '../../core/materials';
 import { portShader, wgslNoise } from '../../core/shaderPorts';
 import { effectLook, num, rgb, effectShader } from '../../engine/effects';

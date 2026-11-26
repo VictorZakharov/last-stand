@@ -6,7 +6,7 @@
 // forest's pass from 3.8 ms to 6.5); what it reads of a light it passes over is one packed value, tested before
 // the light itself is read: 13% of the scene pass, in the crypt and the forest. A uniform's values, made anew at
 // each render for its camera, so nothing compiles. WebGL only: WebGPU's lights are its nodes'.
-import * as THREE from 'three';
+import * as THREE from '../engine/three';
 
 /** Whether a light out of reach is passed over on its packed bounds (`?lightBounds=0`: on three's own values, as
  *  before; read at every render, so a measure times the frame both ways). */

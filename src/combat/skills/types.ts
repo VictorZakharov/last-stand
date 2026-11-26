@@ -1,5 +1,5 @@
 // Contract for skill behaviors. Class data (SkillDef) references an impl by name.
-import type * as THREE from 'three';
+import type * as THREE from '../../engine/three';
 import type { Player } from '../../entities/player';
 import type { ActionState, CastAnim, DamageType, DerivedStats, SkillDef } from '../../types';
 

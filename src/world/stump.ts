@@ -7,7 +7,7 @@
 // by a worker while the game loads (`preloadStump`: on the page it took 0.2 s a stump), and here only if that failed.
 // The worker sculpts a pool of them (`POOL`), each its own girth, break, slant and splinters (`rollShape`), which the
 // forest deals out to its stumps anew for every run.
-import * as THREE from 'three';
+import * as THREE from '../engine/three';
 import { fieldOf, IDENTITY, type Part, type Shape } from '../entities/models/sdf';
 import { surfaceNets } from '../entities/models/surfaceNets';
 import { valueNoise3 } from '../core/patterns';

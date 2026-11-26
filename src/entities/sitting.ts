@@ -6,7 +6,7 @@
 // (`world/seats.ts`), turns his back to it and sits (`models/sit.ts` poses him); any key, a foe coming near or a hit
 // gets him up again first, and only a key still held once he's up acts. His look round goes on throughout: sat, he
 // stands idle.
-import * as THREE from 'three';
+import * as THREE from '../engine/three';
 import type { SitHands, SitState, SitTurn } from '../types';
 import { G } from '../state';
 import { angleDamp } from '../util';

@@ -5,7 +5,7 @@
 // looked off at the one he talked to; "Also add this for the other character npc's in the game ... Real picture of
 // their face, looking at camera"). One of the folk is pictured with an entry in `FOLK`: how his model is built, its
 // head and eyes, how it's posed looking at a place, and the room behind him.
-import * as THREE from 'three';
+import * as THREE from '../../engine/three';
 import { scholarBook, scholarSteps } from '../../entities/models/scholar';
 import { odoShop, odoSteps } from '../../entities/models/merchant';
 import { keeperSteps, KEEPER_MADE } from '../../entities/models/keeper';

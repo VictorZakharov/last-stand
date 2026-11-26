@@ -3,7 +3,7 @@
 // Laid in one plane at its middle's height, it went under the dais where it crossed the step and stood in the air off
 // it; laid by the ground's height at each of its points, a triangle across a step sloped from one level to the other,
 // and the parts of it under the dais's top left jagged notches along its edge.
-import * as THREE from 'three';
+import * as THREE from '../engine/three';
 import { GROUND_EDGES, GROUND_LEVELS } from '../world/ground';
 
 /** each patch's triangles as made, flat round its middle: the x and z of their corners */

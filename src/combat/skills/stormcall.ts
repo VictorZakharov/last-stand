@@ -2,7 +2,7 @@
 // lightning leaps from the orb to the aim and bursts there. The longer it was held the harder it strikes and the
 // wider it reaches, and a quick tap still looses a spark. The foe at its middle is dazed for `duration` s, those
 // round it for less the further out they stand; elites and bosses aren't dazed.
-import * as THREE from 'three';
+import * as THREE from '../../engine/three';
 import { G } from '../../state';
 import { hitEnemy, dazeEnemy } from '../damage';
 import { blastCorpses } from '../../entities/corpse';

@@ -4,7 +4,7 @@ import { Enemy, type EnemyOpts } from './enemy';
 import { shockwave } from '../fx/effects';
 import { flash } from '../fx/lights';
 import { sfx } from '../core/audio';
-import type * as THREE from 'three';
+import type * as THREE from '../engine/three';
 import type { EnemyId } from '../data/enemies';
 
 /** Co-op: where the host reports each new enemy to the guests (set by net/sync). */

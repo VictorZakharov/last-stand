@@ -19,7 +19,7 @@
 // whole body goes under the floor by `bury.depth`, the floor hiding what's under it. Both are set by her burrow's
 // effect on every game (`root.userData.bury`).
 // Drawn in its crowd (models/crowd.ts): every change is a joint's place or a glow's strength, nothing hidden.
-import * as THREE from 'three';
+import * as THREE from '../../engine/three';
 import { createKit } from '../../core/materials';
 import { bark, grunge, pbrMaterialMaps, veins } from '../../core/textures';
 import { joint, ramp } from './rig';

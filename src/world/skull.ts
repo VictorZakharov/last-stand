@@ -2,7 +2,7 @@
 // the brow, the cheekbones and the upper jaw with its teeth, the eye sockets and the nose cut out of them. Its
 // hollows are darkened in its vertex colours (the field asked along each normal: a socket's walls close in), as the
 // game's light leaves a socket as pale as the brow round it. Faces +z, its lowest point at y 0.
-import * as THREE from 'three';
+import * as THREE from '../engine/three';
 import { ellipsoid, fieldOf, IDENTITY, type Part, type Shape } from '../entities/models/sdf';
 import { surfaceNets } from '../entities/models/surfaceNets';
 

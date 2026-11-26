@@ -4,7 +4,7 @@
 // it casts, its range, a see-through's kind, the frame's grade). What's made each frame (a light, a set of instances,
 // a look run before its draw or listing its own rows, the particles, a mesh off the camera's layers: his arms
 // through his eyes) is left to the bridge's walk as before (`rest`), placed by its node.
-import * as THREE from 'three';
+import * as THREE from './three';
 import { RECORD, type Core } from './core';
 import { lookOf } from './custom';
 import { TUNE } from './globals';

@@ -3,7 +3,7 @@
 // for a rain of arrows. It takes their blows without harm, rocking under them, and sinks back into the ground when its
 // time is up (it doesn't burst). Every game shows it; only the one simulating the fight has foes it can lure.
 // The scarecrow itself is entities/models/scarecrow.ts.
-import * as THREE from 'three';
+import * as THREE from '../../engine/three';
 import { G } from '../../state';
 import { addEffect, shockwave } from '../../fx/effects';
 import { debris } from '../../fx/particles';

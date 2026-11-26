@@ -44,7 +44,7 @@
 // (She moves only so: a lure never draws her, `EnemyDef.ignoresLures`.)
 // Every attack goes through enemyAI's `fx`, so each co-op game plays it from the same numbers and judges its own hero
 // alone (`hurtPlayer` on the local player, `Player.root` on his own game).
-import * as THREE from 'three';
+import * as THREE from '../engine/three';
 import { G } from '../state';
 import { emit } from '../events';
 import type { EnemyId } from '../data/enemies';

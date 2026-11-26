@@ -1,6 +1,6 @@
 // Thunder Crescent: a great weapon driven into the ground looses a crackling arc of lightning along it, striking each foe
 // it passes once.
-import * as THREE from 'three';
+import * as THREE from '../../engine/three';
 import { G } from '../../state';
 import { hitEnemy } from '../damage';
 import { evades } from '../../entities/evade';
