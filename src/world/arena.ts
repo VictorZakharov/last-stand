@@ -12,6 +12,7 @@ import { ARENA } from '../data/balance';
 import { BIOME_IDS, type BiomeId, type PlaceId } from '../data/biomes';
 import { groundHeight, setRelief } from './ground';
 import { setAdaptScale } from '../core/renderer';
+import type { GameScreen } from '../core/screen';
 import { rigMorePointLights, rigPointLights } from '../core/webgpu';
 import { castBreakablesAsOne, type BreakableShadows } from './breakableShadows';
 import { bakeStaticShadows, drawStillShadows, envMap, lampFaceDrawn, lampShadowsAsked, mergeStill, nextLampFace, type Biome, type BiomeBuilder, type BiomeLook } from './props';
@@ -91,7 +92,7 @@ export const painted = (): Promise<void> => new Promise((resolve) => {
 /** the most of the village's build run in one task before the boot paints a frame (ms) */
 const VILLAGE_SLICE_MS = 40;
 
-export async function buildArena(scene: THREE.Scene, renderer: THREE.WebGLRenderer) {
+export async function buildArena(scene: THREE.Scene, renderer: GameScreen) {
   const hemi = new THREE.HemisphereLight();
   const moon = new THREE.DirectionalLight();
   moon.target.position.set(0, 0, 0);
@@ -102,7 +103,7 @@ export async function buildArena(scene: THREE.Scene, renderer: THREE.WebGLRender
   moon.shadow.bias = -0.0004;
   moon.shadow.normalBias = 0.03;
   scene.add(hemi, moon, moon.target);
-  cullWhileDrawn(scene, renderer);
+  cullWhileDrawn(scene, {});
   // (each point light's reach packed for the shaders' loop, before each render: `core/lightBounds.ts`)
   packWhileDrawn(scene);
   const fog = scene.fog = new THREE.Fog(0);

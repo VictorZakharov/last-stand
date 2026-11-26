@@ -96,7 +96,7 @@ const PIPELINES_WAIT_MOST = 15000;
  * frame. Nothing of the scene is three's to compile or draw: the engine's own pipelines are made as it boots, and it
  * takes each mesh as it's first shown (src/engine).
  */
-export async function warmUp(_renderer: THREE.WebGLRenderer, _scene: THREE.Scene, _camera: THREE.Camera, _target: THREE.WebGLRenderTarget, how: WarmUp = {}): Promise<WarmedUp> {
+export async function warmUp(_renderer: unknown, _scene: THREE.Scene, _camera: THREE.Camera, _target: THREE.WebGLRenderTarget, how: WarmUp = {}): Promise<WarmedUp> {
   AHEAD.prepare?.([...(how.drawn ?? []), ...(how.objects ?? []), ...(how.swap ? [how.swap.show] : [])]);
   await pipelinesReady(PIPELINES_WAIT_MOST);
   // (left as a warm-up leaves it: what it shows to draw, hidden again)

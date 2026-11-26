@@ -29,7 +29,7 @@ import { G } from '../../../src/state';
 import { RUST } from '../../../src/engine';
 import type { Bridge } from '../../../src/engine/bridge';
 import {
-  bloomShareNow, overCanvasLeftOut, sceneSamples, sceneSize, showOverlays,
+  bloomShareNow, sceneSamples, sceneSize, showOverlays,
 } from '../../../src/core/renderer';
 import { drawnLabels } from '../../../src/ui/overlay/layer';
 import { outlineShown } from '../../../src/ui/overlay/outline';
@@ -189,33 +189,47 @@ async function solidAndCoarse(lab: Lab, bridge: Bridge): Promise<Checked> {
 }
 
 /**
- * three's canvas lies over the engine's for the world's labels and the outline alone: with none to draw it's left
- * out of the page's frame (no opacity: the browser lays no second canvas of the screen's pixels over the first),
- * and it's back the frame one is. The overlays hidden, as the profiler hides them, stand for none to draw.
+ * The page's game has one canvas, the engine's, and it takes the pointer (#973: three's renderer, whose canvas lay
+ * over the engine's for the world's labels and the outline, is gone; the engine draws them). Its canary: a canvas of
+ * three's laid over it, as there was, is found.
  */
 async function overCanvas(lab: Lab): Promise<Checked> {
   const drawing = lab.drawing;
   lab.drawing = true;
   try {
     await lab.step(3);
-    // (the labels and the outline are the engine's: three's canvas has nothing to draw)
-    const none = true;
+    const wrong = canvasWrong();
+    const planted = plantedCanvas();
+    const caught = canvasWrong();
+    planted.remove();
     const shown = `${drawnLabels().length} labels${outlineShown() ? ' and an outline' : ''}`;
-    if (overCanvasLeftOut() !== none) {
-      return failed(`with ${shown} to draw, three's canvas is ${overCanvasLeftOut() ? 'left out' : 'laid over the frame'}`);
-    }
-    showOverlays(false);
-    await lab.step(2);
-    const hidden = overCanvasLeftOut() && G.renderer.domElement.style.opacity === '0';
-    showOverlays(true);
-    await lab.step(2);
-    if (!hidden) return failed('with no overlay to draw three\'s canvas is still laid over the engine\'s each frame');
-    if (overCanvasLeftOut() !== none) return failed('three\'s canvas didn\'t come back as the overlays did');
-    return passed(`three's canvas left out of the page's frame with no overlay to draw, back with one (${shown} now)`);
+    if (wrong) return failed(wrong);
+    if (!caught) return failed('canary: a canvas laid over the engine\'s went unseen');
+    return passed(`one canvas, the engine's, taking the pointer (${shown} drawn by it; the canary: ${caught})`);
   } finally {
-    showOverlays(true);
     lab.drawing = drawing;
   }
+}
+
+/** What's wrong with the game's canvases, or null: one, the engine's, the game's input taking it, and the
+ *  pointer at the screen's middle meeting it or the page's UI over it. */
+function canvasWrong(): string | null {
+  const engine = document.getElementById('rust-canvas');
+  const others = [...document.querySelectorAll('#game canvas')].filter((canvas) => canvas !== engine);
+  if (!engine) return 'no engine canvas on the page';
+  if (G.renderer.domElement !== engine) return 'the game\'s input takes another canvas than the engine\'s';
+  if (others.length) return `${others.length} more canvas${others.length > 1 ? 'es' : ''} over the game`;
+  const middle = document.elementFromPoint(innerWidth / 2, innerHeight / 2);
+  if (middle instanceof HTMLCanvasElement && middle !== engine) return 'the pointer meets another canvas';
+  return null;
+}
+
+/** The canary's canvas: one laid over the game's, as three's was. */
+function plantedCanvas(): HTMLCanvasElement {
+  const canvas = document.createElement('canvas');
+  canvas.style.cssText = 'position:absolute;inset:0;width:100%;height:100%';
+  document.getElementById('game')!.appendChild(canvas);
+  return canvas;
 }
 
 /**

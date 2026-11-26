@@ -6,7 +6,6 @@ import { BIOMES, type BiomeId } from '../../../src/data/biomes';
 import { faceCamera, overCanvasLeftOut, type ViewMode } from '../../../src/core/renderer';
 import { outlinedLook } from '../../../src/ui/overlay/outline';
 import { drawnLabels } from '../../../src/ui/overlay/layer';
-import { lastFrameParts } from '../../../src/perf/webgpuPasses';
 import { G } from '../../../src/state';
 import { perfClock } from '../../../src/core/perfClock';
 import { RUST } from '../../../src/engine';
@@ -84,15 +83,12 @@ const BOSS_RISE_FRAMES = 300;
 /** the frames a level switched to is given to settle in */
 const LEVEL_FRAMES = 30;
 
-/** What three draws over the engine's frame (the world's labels, the outline: core/renderer.ts `overFrame`): whether
- *  its canvas is in the page's frame, what's outlined, and its passes' time on the GPU by three's own timestamps. */
+/** What the engine draws over its frame (the world's labels, the outline: core/renderer.ts `overFrame`): how many
+ *  labels and what's outlined, on the page's one canvas. */
 function overLine(): string {
-  if (overCanvasLeftOut()) return '  three\'s canvas over the engine\'s: left out, nothing to draw on it';
   const outlined = outlinedLook();
   const what = outlined ? `an outline round ${outlined.root.name || outlined.root.type}` : 'no outline';
-  const ms = lastFrameParts(G.renderer)?.['over frame'];
-  return `  three's canvas over the engine's: ${drawnLabels().length} labels, ${what}; its passes `
-    + `${ms === undefined ? 'not timed' : `${ms.toFixed(2)} ms on the GPU`}`;
+  return `  over the frame, drawn by the engine: ${drawnLabels().length} labels, ${what}`;
 }
 
 /** the GPU's time for a frame before the command's levels were stepped through (ms; none with no level asked): the

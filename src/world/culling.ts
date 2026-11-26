@@ -273,9 +273,11 @@ export function skipAfterShadows(skips: SkipsAfter): void {
 
 /** Culls the meshes culled in cells as `renderer` draws `scene`: each render's camera's cells in view packed before
  *  it draws (after the scene's matrices are updated), and the shadow casters shown only while the shadow map draws. */
-export function cullWhileDrawn(scene: THREE.Scene, renderer: THREE.WebGLRenderer): void {
+/** what of a renderer the cull hooks into: three's shadow map, where a renderer of three's draws (none now) */
+type ShadowsHost = { shadowMap?: THREE.WebGLShadowMap };
+export function cullWhileDrawn(scene: THREE.Scene, renderer: ShadowsHost): void {
   const shadows = renderer.shadowMap;
-  if (!shadows.render) {
+  if (!shadows?.render) {
     shadowsAsRenders(scene);
     return;
   }

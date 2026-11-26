@@ -46,6 +46,9 @@ import { PLANTED, plantOverVillage } from './perfFly';
 import { waveCome, waveLine, type WaveCome } from './perfWave';
 import { bodyCensus, censusLines } from './bodyRecords';
 
+/** three's renderer as a tree before #973 has it (an A/B's other commit): its render, which this tree hasn't got */
+type ThreesRender = { render?: (scene: THREE.Object3D, camera: THREE.Camera) => unknown };
+
 export interface PerfOptions {
   biome: BiomeId;
   view: renderer.ViewMode;
@@ -439,12 +442,15 @@ function plantCost(): () => void {
     }
     update.call(this, dt);
   };
-  const gl = G.renderer;
+  // (three's render drawn twice, where the tree has a renderer of three's: an A/B's older commit)
+  const gl = G.renderer as unknown as ThreesRender;
   const render = gl.render;
-  gl.render = (scene, camera) => {
-    if (scene === G.scene) render.call(gl, scene, camera);
-    render.call(gl, scene, camera);
-  };
+  if (render) {
+    gl.render = (scene, camera) => {
+      if (scene === G.scene) render.call(gl, scene, camera);
+      render.call(gl, scene, camera);
+    };
+  }
   const pools = [particles.glow, particles.smoke];
   const updates = pools.map((pool) => pool.update);
   for (const pool of pools) {
@@ -456,7 +462,7 @@ function plantCost(): () => void {
   }
   return () => {
     Player.prototype.update = update;
-    gl.render = render;
+    if (render) gl.render = render;
     pools.forEach((pool, i) => {
       pool.update = updates[i];
     });

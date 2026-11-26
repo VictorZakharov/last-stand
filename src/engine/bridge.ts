@@ -10,6 +10,7 @@
 import * as THREE from './three.ts';
 import type { Engine, InitOutput } from './pkg/bulwark';
 import { writeOutlined } from './outlined';
+import type { LookHost } from './index';
 import { perfClock } from '../core/perfClock';
 import { shownPlace, shownPointLights } from '../core/webgpu';
 import { Core, MAX_MAP, RECORD } from './core';
@@ -112,7 +113,7 @@ export class Bridge {
   /** what's handed over ahead of its first frame (`ahead.ts`) */
   readonly ahead: Ahead;
   private grade: Grade = PLAIN_GRADE;
-  private renderer: THREE.WebGLRenderer | null = null;
+  private renderer: LookHost | null = null;
   private scene: THREE.Scene | null = null;
   private camera: THREE.Camera | null = null;
 
@@ -259,7 +260,7 @@ export class Bridge {
     const geometry = mesh.geometry;
     const look = Array.isArray(mesh.material) ? undefined : lookOf(mesh.material);
     if (look?.before && this.renderer) {
-      mesh.onBeforeRender(this.renderer, this.scene!, this.camera!, geometry, mesh.material as THREE.Material,
+      mesh.onBeforeRender(this.renderer as unknown as THREE.WebGLRenderer, this.scene!, this.camera!, geometry, mesh.material as THREE.Material,
         null as unknown as THREE.Group);
     }
     // (a geometry of instances it counts itself: each placed by its material's look, from its index)
@@ -443,7 +444,7 @@ export class Bridge {
   }
 
   /** A frame of `scene` from `camera`, drawn by the engine. The scene's matrices are made here, as three's render would. */
-  draw(scene: THREE.Scene, camera: THREE.PerspectiveCamera, time: number, renderer: THREE.WebGLRenderer | null = null,
+  draw(scene: THREE.Scene, camera: THREE.PerspectiveCamera, time: number, renderer: LookHost | null = null,
     grade: Grade = PLAIN_GRADE): void {
     const began = perfClock.now();
     const core = this.core, stats = core.stats;

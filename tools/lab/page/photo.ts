@@ -31,6 +31,10 @@ import { standIn } from './light';
 import { boxOf, touchMode } from './uiTouch';
 import { middleOf } from './lab';
 
+/** the world's overlays' hook: `labels` (the engine draws them), or three's `draw` in a tree before #973 (an A/B's other commit) */
+const OVER = overFrame as unknown as Record<'labels' | 'draw', (...args: unknown[]) => void>;
+const OVER_KEY: 'labels' | 'draw' = 'labels' in overFrame ? 'labels' : 'draw';
+
 export interface PhotoOptions {
   /** plant the faults the checks must catch: the page's UI shown, the world's overlays drawn */
   canary?: boolean;
@@ -180,18 +184,19 @@ function uiHidden(where: string, canary: boolean): Found {
 
 /** The world's overlays left out of the frames drawn (with the canary, drawn again). */
 async function overlaysLeftOut(lab: Lab, where: string, canary: boolean): Promise<Found> {
-  const draw = overFrame.draw;
+  const draw = OVER[OVER_KEY];
   let drawn = 0;
-  overFrame.draw = () => {
-    drawn++;
-    draw();
+  // (the labels' hook is called every frame, `shown` false where they're left out; three's `draw` only when drawn)
+  OVER[OVER_KEY] = (...args: unknown[]) => {
+    if (OVER_KEY === 'draw' || args[0] === true) drawn++;
+    draw(...args);
   };
   if (canary) showOverlays(true);
   lab.drawing = true;
   await lab.step(READ_FRAMES);
   lab.drawing = false;
   if (canary) showOverlays(false);
-  overFrame.draw = draw;
+  OVER[OVER_KEY] = draw;
   const problems = drawn ? [`${where}: the world's ${PHOTO_CANARIES[1].name} ${drawn} times`] : [];
   return { lines: [`${where}: the world's overlays drawn ${drawn} times in ${READ_FRAMES} frames`], problems };
 }

@@ -5,7 +5,6 @@
 // draw takes its blending, sides and depth from it as they are. On WebGL nothing changes.
 import { HALL, TERRACE } from '../data/village';
 import * as THREE from '../engine/three.ts';
-import type { WebGPURenderer } from 'three/webgpu';
 import { NEAR_GLOW, itemGlowUniforms, type KitLooks } from './materials';
 import {
   BLEND_GONE, HOLE_UNDER, MIDDLE_ATTRIBUTE, PALE, PLACED_BY_MIDDLE, SIGHT_CONE, overShaft, type SeeThrough,
@@ -547,46 +546,3 @@ function refreshedEachDraw(material: THREE.Material): void {
  *  Its uniforms are read off the material drawn (`materialReference`), as three shares the build. */
 export interface OwnLooks { webgpuLooks: (converted: N) => void }
 
-/** three's library made to take each ported material's node material in its place (its blending, sides and depth
- *  copied over every time three asks: the draw reads them off the game's material, the build off this one). */
-export function takePorts(renderer: WebGPURenderer): void {
-  const library = renderer.library as unknown as { fromMaterial(material: THREE.Material): THREE.Material | null };
-  const fromMaterial = library.fromMaterial.bind(library);
-  library.fromMaterial = (material) => {
-    const port = ports.get(material);
-    if (!port) {
-      // (three logs only "ShaderMaterial is not compatible": which one, by its fragment shader's start)
-      const fragment = (material as THREE.ShaderMaterial).isShaderMaterial && (material as THREE.ShaderMaterial).fragmentShader;
-      if (fragment) console.error(`Not ported to WebGPU: ${material.name || fragment.trim().slice(0, 60).replace(/\s+/g, ' ')}`);
-      const converted = fromMaterial(material);
-      // (the props' and canopies' dissolve: their GLSL patch is WebGL's alone)
-      const see = (material as { seeThrough?: SeeThrough }).seeThrough;
-      const kit = (material as { kitLooks?: KitLooks }).kitLooks;
-      const own = (material as Partial<OwnLooks>).webgpuLooks;
-      // (a material three converts afresh each time: its own node materials, the crowds', are left as they are)
-      if (converted && !(material as N).isNodeMaterial) {
-        if (see) thinBy(converted as N, see);
-        // (a hair card: `bothSidesOut` in models/head.ts, its normal the surface's, not turned over for a back face)
-        if ((material as { litBothSides?: boolean }).litBothSides) (converted as N).normalNode = (tsl as any).normalViewGeometry;
-        // (an effect's plain material: `nearGlow`'s GLSL patch is WebGL's alone. Its node reads nothing of the frame's
-        // that three must refresh)
-        if (material.customProgramCacheKey() === 'nearGlow') (converted as N).colorNode = nearGlowed((tsl as any).vec4((tsl as any).materialColor));
-        if (kit) kitNodes(converted, kit);
-        if (own) own(converted);
-        // (a see-through's own uniforms are set once a render: `seeOfKind`, and its node no reason for a refresh; a
-        // kit's looks are refreshed as they change, `stillWhereStill` in core/webgpu.ts. Its node is given all the
-        // same, for the meshlets' copy of it: their pipeline draws a copy of the material, which takes the node with
-        // its other properties and isn't still; without one, the batches' draws stayed as they first drew, and once
-        // the clusters' pool grew a few seconds in, the forest's standing stones and boulders were drawn nowhere)
-        if (kit || see || own) refreshedEachDraw(material);
-        if (!own && (kit || see)) stillNodes.add(material);
-      }
-      return converted;
-    }
-    let node = made.get(material);
-    if (!node) made.set(material, node = madeFrom(material as THREE.ShaderMaterial, port));
-    THREE.Material.prototype.copy.call(node, material);
-    refreshedEachDraw(material);
-    return node;
-  };
-}

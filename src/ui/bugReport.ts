@@ -112,10 +112,9 @@ export function closeBugReport(): void {
 export function bugReportAfterRender(): void {
   if (!shotWanted) return;
   shotWanted = false;
-  // (under the Rust engine the frame is on its canvas, three's over it holding the world's overlays alone: read
-  // by three's, the picture was blank)
-  const view = rustFrame(G.renderer.domElement, true) ?? G.renderer.domElement;
+  // (the engine's frame, its labels in it, copied in the frame's own task while its canvas still holds it)
   const { left, top, width, height } = frameRect();
+  const view = rustFrame(width, height) ?? G.renderer.domElement;
   if (!width || !height) { shotState(NO_SHOT, false); return; }
   const k = Math.min(1, BUG_REPORT.shotSide / Math.max(width, height));
   const canvas = document.createElement('canvas');

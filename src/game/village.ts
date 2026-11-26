@@ -1151,7 +1151,7 @@ function placeTheLamps(): LampPlace[] {
 
 /** The village's lamps placed in the lit shaders' list and their shadows of what stands still drawn, as the boot
  *  builds the world (`world/lampAtlas.ts`: a program of its own, compiled there and not at the first frame). */
-export function prepareLamps(renderer: THREE.WebGLRenderer, village: THREE.Object3D): void {
+export function prepareLamps(renderer: unknown, village: THREE.Object3D): void {
   bakeLampShadows(renderer, village, placeTheLamps());
   lampsPlaced = true;
 }

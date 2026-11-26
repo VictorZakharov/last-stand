@@ -21,7 +21,7 @@ function casts(mesh: THREE.Mesh): boolean {
 
 /** Each of `lamps`' shadows of what stands still under `place` asked of the engine, which draws its own of these
  *  casters: src/engine/lampShadows.ts. */
-export function bakeLampShadows(_renderer: THREE.WebGLRenderer, place: THREE.Object3D, lamps: readonly LampPlace[]): void {
+export function bakeLampShadows(_renderer: unknown, place: THREE.Object3D, lamps: readonly LampPlace[]): void {
   place.updateMatrixWorld(true);
   const casters: THREE.Mesh[] = [];
   place.traverse((object) => { if (casts(object as THREE.Mesh)) casters.push(object as THREE.Mesh); });

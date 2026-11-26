@@ -12,7 +12,7 @@ import { render } from '../core/renderer';
 import { RUST, rustSwitching } from '../engine';
 import { keepAwake } from './awake';
 import { gpuParts, type GpuParts } from './gpuParts';
-import { gpuDone, holdPipelines, pipelinesMade } from '../core/webgpu';
+import { gpuDone, pipelinesMade } from '../core/webgpu';
 import { frameParts, type ScenePart } from './sceneParts';
 
 /** How the turns run: their rounds, a side's frames in each, and the frames drawn untimed after each change. */
@@ -341,7 +341,6 @@ export async function profile(options: ProfileOptions = {}): Promise<Profile> {
   const atDraw = pipelinesMade().atDraw;
   ENGINE_FRAMES.waited = ENGINE_FRAMES.idle = 0;
   holdFrames(true);
-  holdPipelines(G.renderer, true);
   // (the screen kept on: a phone left alone through it dims and locks, and its frames stop)
   keepAwake('profile', true);
   try {
@@ -375,7 +374,6 @@ export async function profile(options: ProfileOptions = {}): Promise<Profile> {
     return { ...found, gpuTimed, idle, byParts };
   } finally {
     keepAwake('profile', false);
-    holdPipelines(G.renderer, false);
     holdFrames(false);
   }
 }

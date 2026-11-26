@@ -1,11 +1,11 @@
-// The renderer (three's, the host of our engine, `src/engine`), the frame's grade values and the camera rig: top-down,
-// over the shoulder or first person. The engine draws the scene; three's canvas lies over the engine's for the
-// world's overlays.
+// The frame: the page's canvas (the engine's, core/screen.ts: three's renderer is gone, #973), the frame's grade
+// values handed to the engine (`src/engine`), and the camera rig: top-down, over the shoulder or first person.
 import * as THREE from '../engine/three.ts';
 import { lightTheLamps } from './lamps';
 import { aimSight } from './sight';
 import { setWholeView, wholeView } from './wholeView';
-import { clearOverFrame, countOverPass, holdSceneTarget, makeWebGPURenderer, overFrameUncleared } from './webgpu';
+import { loadNodeModules } from './webgpu';
+import { GameScreen } from './screen';
 import { G } from '../state';
 import { bootRust, drawRust, rustFrame, rustPlain, rustSamples, RUST } from '../engine';
 import { perfClock } from './perfClock';
@@ -15,16 +15,15 @@ import { groundHeight } from '../world/ground';
 import { keepOffPosts, postsReach } from './nearPosts';
 import { CAMERA } from '../data/balance';
 import { clamp, damp } from '../util';
-import { blendedBuiltFirst, sortBlendedFrom, updateSeeThrough } from './seeThrough';
+import { sortBlendedFrom, updateSeeThrough } from './seeThrough';
 import { builtOpening, fenceOpened, holeOpening, propsHideHim, propsOpening } from './heroHidden';
 import type { QualityPreset } from '../data/quality';
 import { hdrLevels } from './hdr';
 import { bloodMask, fitBloodMask } from './bloodEdges';
 import { ARMS_LAYER, WARM_LAYER, GHOST_COUNT_LAYER } from './layers';
-import { takePorts } from './shaderPorts';
 import { BOUNDS_TEST, declarePointBounds } from './lightBounds';
-import type { WebGPURenderer } from 'three/webgpu';
-import { glFence, gpuFence, setFrameFence } from './frameLoop';
+import { gpuFence, setFrameFence } from './frameLoop';
+import { engineWorkDone } from '../engine/pipelinesAside';
 
 /** Final colour: above HI_KNEE the brightest channel eases towards HI_CAP (hue kept); in HDR towards as much more
  *  as the peak has room over the paper white (`uCap`), so the highlights it grows aren't all held at SDR's. */
@@ -112,12 +111,7 @@ const grade = {
 /** The grade's values (`grade`): photo mode's look sets them. */
 export const gradeUniforms = (): typeof grade.uniforms => grade.uniforms;
 
-let gl: THREE.WebGLRenderer, sceneRT: THREE.WebGLRenderTarget;
-
-/** What is drawn straight onto the canvas (`onScreen`: the overlay's) compiled now, ahead of its first draw. */
-export function compilePasses(onScreen: THREE.Scene[]): void {
-  for (const scene of onScreen) gl.compile(scene, passCamera);
-}
+let gl: GameScreen, sceneRT: THREE.WebGLRenderTarget;
 
 /** A pass's full-screen triangle as three's full-screen quad has it, to compile a pass's material on: positions and
  *  uvs alone, as normals would make another program. Seen through `passCamera`. */
@@ -412,45 +406,28 @@ function shadeEnvironment(): void {
     `radiance *= mix( ${ENV_IN_SHADOW.toFixed(2)}, 1.0, sunShadow );\n\t${ENV_SPECULAR}`);
 }
 
-/** Each uncapped frame's GPU work fenced (`core/frameLoop.ts`), so the frames never queue ahead of the GPU. */
-function fenceFrames(renderer: THREE.WebGLRenderer): void {
-  // (where WebGPURenderer found no WebGPU device it has a WebGL 2 context instead)
-  const backend = (renderer as unknown as { backend: { device?: GPUDevice; gl?: WebGL2RenderingContext } }).backend;
-  if (backend.device) setFrameFence(gpuFence(backend.device.queue));
-  else if (backend.gl) setFrameFence(glFence(backend.gl));
-}
+/** the side of the largest texture the overlays' atlas is sized within (WebGPU's least limit is 8192) */
+const MOST_TEXTURE_SIDE = 8192;
 
-/** The renderer made in `container`; `hdrAllowed`, whether the quality level the boot starts at lets HDR show
- *  (WebGPU makes its canvas in HDR or not once, `initHdrForWebGPU`). */
-export async function initRenderer(container: HTMLElement, hdrAllowed: boolean) {
+/** The engine made on the page's canvas in `container`, and the scene and camera the game is drawn from. (Its
+ *  `_hdrAllowed` is unread: the engine's frame is SDR, core/AGENTS.md's HDR output.) */
+export async function initRenderer(container: HTMLElement, _hdrAllowed: boolean) {
   loopPointLights();
   pointShadowInReach();
   shadeEnvironment();
   // (the village's lamps in every lit shader, and its lights' soft falloff)
   lightTheLamps();
-  const renderer = gl = await makeWebGPURenderer(hdrAllowed);
-  takePorts(renderer as unknown as WebGPURenderer);
+  await loadNodeModules();
+  const canvas = await bootRust(container);
+  const renderer = gl = new GameScreen(canvas, MOST_TEXTURE_SIDE);
   const cr = canvasRatio();
   const cw = window.innerWidth, ch = window.innerHeight;
   renderer.setPixelRatio(cr);
   renderer.setSize(cw, ch);
   canvasFitted.w = cw; canvasFitted.h = ch; canvasFitted.pr = cr;
-  renderer.setTransparentSort(blendedBuiltFirst as never);
-  renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = THREE.PCFShadowMap;
-  renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.05;
-  renderer.outputColorSpace = THREE.SRGBColorSpace;
-  // three's checks of a program as it's first used are round trips to the GPU's process, one after another for
-  // each of the boot's programs: a production build checks them all once after the reveal (`checkPrograms`)
-  renderer.debug.checkShaderErrors = import.meta.env.DEV;
-  // asked now, while the GPU's process is idle: three asks it as the first texture is uploaded and keeps it, and a
-  // round trip waits for everything sent before it (a first visit's lobby warm-up waited 0.45 s there, behind its
-  // programs)
-  renderer.capabilities.getMaxAnisotropy();
-  container.appendChild(renderer.domElement);
-  await bootRust(renderer.domElement);
-  fenceFrames(renderer);
+  // (each uncapped frame waits for the GPU to be done with all but the last frame: the engine's queue, which draws
+  // it. Fenced on three's own device, the fence waited for the overlays' canvas alone, never the engine's frame.)
+  setFrameFence(gpuFence({ onSubmittedWorkDone: engineWorkDone }));
 
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x030307);
@@ -460,7 +437,6 @@ export async function initRenderer(container: HTMLElement, hdrAllowed: boolean) 
   const size = sceneSize(new THREE.Vector2());
   // (never drawn into: it holds the scene's size and samples for what reads them, `pointScale`, `sceneSamples`)
   sceneRT = new THREE.WebGLRenderTarget(size.x, size.y, { type: THREE.HalfFloatType, samples: 4 });
-  holdSceneTarget(sceneRT);
   grade.uniforms.tBlood.value = bloodMask;
   G.scene = scene; G.camera = camera; G.renderer = renderer;
   window.addEventListener('resize', fitViewport);
@@ -477,15 +453,12 @@ const fitted = { w: 0, h: 0, dpr: 0, cw: 0, ch: 0 };
 /** the CSS size and pixel ratio the backing canvas was last allocated at */
 const canvasFitted = { w: 0, h: 0, pr: 0 };
 
-/** The frame's box within three's canvas, in physical pixels. */
+/** The frame's box on the screen, in physical pixels: the window's whole. */
 export function frameRect(): FrameRect {
-  const dom = gl.domElement;
   const pr = gl.getPixelRatio();
-  const w = fitted.w || window.innerWidth;
-  const h = fitted.h || window.innerHeight;
-  const width = Math.min(dom.width, Math.floor(w * pr));
-  const height = Math.min(dom.height, Math.floor(h * pr));
-  return { left: 0, top: 0, bottom: dom.height - height, width, height };
+  const width = Math.floor((fitted.w || window.innerWidth) * pr);
+  const height = Math.floor((fitted.h || window.innerHeight) * pr);
+  return { left: 0, top: 0, bottom: 0, width, height };
 }
 
 /** For `lab resize`: the canvas and the viewport fitted again now. (The canvas is the window's own on this renderer,
@@ -1174,36 +1147,14 @@ export function updateCamera(dt: number, focus: THREE.Vector3, height: number, f
 
 const ease = (t: number): number => t * t * (3 - 2 * t);
 const _fwd = new THREE.Vector3(), _pivot = new THREE.Vector3(), _look = new THREE.Vector3(), _quat = new THREE.Quaternion(), _quat2 = new THREE.Quaternion();
-/** What is drawn over the finished frame: the outline on three's canvas at its own pixel ratio (`draw`), the labels
- *  handed to the engine for its frame (`labels`, each frame before it's drawn; ui/overlay). */
+/** What is drawn over the finished frame: the world's labels and the outline, handed to the engine for its frame
+ *  (`labels`, each frame before it's drawn, `shown` false for none; ui/overlay). */
 export const overFrame = {
-  draw: (): void => {},
-  empty: (): boolean => false,
   labels: (_shown: boolean): void => {},
 };
-/** whether three's canvas is left out of the page's frame under the Rust engine: nothing is drawn over the
- *  engine's (`leaveOverOut`) */
-let overLeftOut = false;
-/**
- * Under the Rust engine three's canvas lies over the engine's for the world's overlays alone (the labels, the
- * outline). Cleared and shown every frame, the browser laid a second canvas of the screen's every pixel over the
- * first each frame, whatever was on it: on a phone 4.5 million pixels blended for nothing in most of the
- * village's frames. With nothing to draw it's left as it is and given no opacity, which the browser's
- * compositor leaves out, and still takes the pointer; `out` false: drawn again from this frame on.
- */
-function leaveOverOut(out: boolean): void {
-  if (out === overLeftOut) return;
-  overLeftOut = out;
-  gl.domElement.style.opacity = out ? '0' : '';
-}
-/** three's canvas cleared by a pass of its own, now. */
-function clearOverNow(): void {
-  overFrameUncleared();
-  gl.clear(true, true, false);
-  countOverPass();
-}
-/** For a harness: whether three's canvas is left out of the page's frame now. */
-export const overCanvasLeftOut = (): boolean => overLeftOut;
+/** For a harness: whether a canvas of three's lies over the engine's: none, there is one canvas (the lab's checks of
+ *  the overlays ask it of this tree and of main's). */
+export const overCanvasLeftOut = (): boolean => true;
 /** whether the world's overlays are drawn over the frame (photo mode leaves them out: `showOverlays`) */
 let overlaysShown = true;
 /** The world's overlays (labels, names, bars, damage numbers) drawn over the frame, or left out (photo mode). */
@@ -1250,7 +1201,7 @@ function drawApart(width: number, height: number, graded: Parameters<typeof draw
   };
   try {
     drawRust(G.scene, ask.camera, G.time, width, height, gl, plain);
-    const frame = rustFrame(gl.domElement, false);
+    const frame = rustFrame(frameRect().width, frameRect().height);
     if (frame) ask.taken(frame);
   } finally {
     setWholeView(whole);
@@ -1323,24 +1274,10 @@ export function render(): void {
   if (frameApart.take) drawApart(pixels.width, pixels.height, graded);
   overFrame.labels(overlaysShown);
   drawRust(G.scene, G.camera, G.time, pixels.width, pixels.height, gl, graded);
-  // (a photo's picture: the engine's frame, taken before anything is drawn over it)
+  // (a photo's picture: the engine's frame, the labels in it as photo mode leaves them out)
   if (frameShot.take) {
-    const frame = rustFrame(gl.domElement, false);
+    const frame = rustFrame(frameRect().width, frameRect().height);
     if (frame) shotTaken(frame);
-  }
-  // (three's canvas over the engine's: clear, but for the world's overlays; left out with none to draw)
-  const none = !overlaysShown || overFrame.empty();
-  leaveOverOut(none);
-  if (!none) {
-    // (cleared by the first of the overlays' draws, as its pass begins: `clearOverFrame`; by a pass of its
-    // own only where none drew, or with the switch off, as it was: a profile's, to time the two)
-    gl.setRenderTarget(null);
-    gl.setClearColor(0x000000, 0);
-    const asItWas = RUST.tune.overCleared <= 0;
-    clearOverFrame();
-    if (asItWas) clearOverNow();
-    overFrame.draw();
-    if (overFrameUncleared()) clearOverNow();
   }
   framePart('render: drawn (Rust)');
   RUST.renderMs = perfClock.now() - renderBegan;

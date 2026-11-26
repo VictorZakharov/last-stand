@@ -1,5 +1,5 @@
 // `lab rustcheck`'s check of the outline drawn by the engine (engine/outlined.ts, Bulwark's gpu/outline.rs): the
-// hero outlined shows in the page's picture with three's canvas left out of the page's frame, another barely shown
+// hero outlined shows in the page's picture, another barely shown
 // in its place leaves nothing of the first, and none is left once it's let go. Read off the page's picture: the
 // canary hands the engine none while the page still outlines him. (Drawn by three on a canvas over the engine's, an
 // outline cost a phone that canvas's passes over the screen: 10.9 ms a frame, a report from play, 64P8-0VPK.)
@@ -37,7 +37,7 @@ async function outlined(lab: Lab, colour: number | null, strength: number, label
 }
 
 /**
- * The hero outlined by the engine: in the page's picture with three's canvas left out, nothing of it left under
+ * The hero outlined by the engine: in the page's picture, nothing of it left under
  * another outline barely shown, none once let go. The canary: the engine handed nothing while the page outlines
  * him, and no outline may show.
  */
@@ -59,7 +59,7 @@ export async function overCanvasCleared(lab: Lab): Promise<Checked> {
     if (after > first / 20) return failed(`${after} of the first outline's ${first} pixels are left under the next frame's`);
     if (gone > first / 20) return failed(`${gone} of the outline's ${first} pixels are left once it's let go`);
     if (canary > first / 2) return failed(`the canary: none handed to the engine, ${canary} pixels still showed`);
-    return passed(`the hero outlined by the engine in ${first} pixels, three's canvas left out; ${after} left under `
+    return passed(`the hero outlined by the engine in ${first} pixels; ${after} left under `
       + `another, ${gone} once let go (the canary, none handed over: ${canary})`);
   } finally {
     overFrame.labels = send;

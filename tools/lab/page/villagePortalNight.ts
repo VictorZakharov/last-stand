@@ -18,6 +18,9 @@ import { groundHeight } from '../../../src/world/ground';
 import type { LightsChecked } from './villageLights';
 import { PIPELINES } from '../../../src/engine/pipelinesAside';
 
+/** three's renderer as a tree before #973 has it (an A/B's other commit): its render, which this tree hasn't got */
+type ThreesRender = { render?: (scene: THREE.Object3D, camera: THREE.Camera) => unknown };
+
 /** the hour held, midnight, when the lamps cast */
 const MIDNIGHT = 0;
 /** frames for the lamps to take the casting lights, and the run's first frames read */
@@ -45,14 +48,21 @@ function castingNow(): number {
 
 /** Every render of the scene watched till the undoing returned is called: the most point lights casting at one. */
 function watchRenders(): { most: () => number; stop: () => void } {
-  const renderer = G.renderer;
+  // (three's render, where the tree has a renderer of three's: an A/B's older commit. Under the engine nothing
+  // calls it, and the lights casting are read as the reading is asked for)
+  const renderer = G.renderer as unknown as ThreesRender;
   const render = renderer.render;
   let most = 0;
-  renderer.render = (scene, camera) => {
-    if (scene === G.scene) most = Math.max(most, castingNow());
-    render.call(renderer, scene, camera);
+  if (render) {
+    renderer.render = (scene, camera) => {
+      if (scene === G.scene) most = Math.max(most, castingNow());
+      render.call(renderer, scene, camera);
+    };
+  }
+  const stop = (): void => {
+    if (render) renderer.render = render;
   };
-  return { most: () => most, stop: () => { renderer.render = render; } };
+  return { most: () => Math.max(most, castingNow()), stop };
 }
 
 /** The programs the renderer holds now. */

@@ -30,7 +30,7 @@ const state = {
 };
 const _euler = new THREE.Euler(0, 0, 0, 'YXZ'), _move = new THREE.Vector3();
 /** the overlays' draw, kept while the free camera leaves it out */
-let drawOverlays: { draw: () => void; labels: (shown: boolean) => void } | null = null;
+let drawOverlays: { labels: (shown: boolean) => void } | null = null;
 
 export const freeCamOn = (): boolean => state.on;
 export const freeCamSpeed = (): number => state.speed;
@@ -62,14 +62,12 @@ export function setFreeCamLabels(on: boolean): void {
 
 function showLabels(on: boolean): void {
   if (on && drawOverlays) {
-    overFrame.draw = drawOverlays.draw;
     overFrame.labels = drawOverlays.labels;
     drawOverlays = null;
   }
   if (!on && !drawOverlays) {
     const labels = overFrame.labels;
-    drawOverlays = { draw: overFrame.draw, labels };
-    overFrame.draw = () => {};
+    drawOverlays = { labels };
     // (handed over as none, every frame: the engine keeps the last rows it was given)
     overFrame.labels = () => labels(false);
   }

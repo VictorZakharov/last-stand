@@ -70,7 +70,7 @@ export async function labelsByTheEngine(lab: Lab): Promise<Checked> {
     if (!leftOut) return failed('with a label shown and no outline three\'s canvas is still laid over the frame');
     if (gone > shown / 20) return failed(`${gone} of the label's ${shown} pixels are left once it's taken off`);
     if (canary > shown / 2) return failed(`the canary: none handed to the engine, ${canary} pixels still showed`);
-    return passed(`a label drawn by the engine in ${shown} pixels, three's canvas left out; ${gone} left once taken `
+    return passed(`a label drawn by the engine in ${shown} pixels; ${gone} left once taken `
       + `off (the canary, none handed over: ${canary})`);
   } finally {
     overFrame.labels = send;

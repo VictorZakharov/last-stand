@@ -13,7 +13,7 @@ import { qualityLevel } from '../../core/quality';
 import type { Model } from '../../types';
 import { drawAsOne, drawnAsOne, leaveAsOne } from './bodyAsOne';
 import { CROWD_LAYER, HERO_SHADOW_LAYER } from '../../core/layers';
-import { refreshedInFull, uploadTexture } from '../../core/webgpu';
+import { refreshedInFull } from '../../core/webgpu';
 import { crowdNodeMaterial } from './crowdNodes';
 
 // (the Rust engine's trial draws each body on its own too: a crowd's rows are read by a shader of three's)
@@ -337,8 +337,6 @@ function writeRows(): void {
     _sphere.radius += kind.reach * scale;
     for (const slot of kind.slots) slot.geometry.boundingSphere!.copy(_sphere);
     kind.uniforms.uCrowd.value.needsUpdate = true;
-    // (its materials are still: their refresh sends no texture, core/webgpu.ts)
-    uploadTexture(kind.uniforms.uCrowd.value);
   }
 }
 

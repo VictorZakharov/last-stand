@@ -177,7 +177,6 @@ function sendLabels(shown: boolean): void {
 }
 // (all of it the engine's: nothing is drawn on three's canvas, left out of the page's frame)
 overFrame.labels = sendLabels;
-overFrame.empty = () => true;
 
 /** The labels drawn last frame, lowest first (tools/lab's `ui` measures their boxes). */
 export function drawnLabels(): readonly Label[] { return drawn; }

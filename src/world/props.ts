@@ -195,7 +195,7 @@ export const lampShadowsAsked = (): number => lampsAsked;
  * Where the shadow maps of `shown`'s still-shadow lights were drawn again, of what stands in it alone. Nothing is
  * drawn now:
  */
-export function drawStillShadows(_renderer: THREE.WebGLRenderer, _scene: THREE.Scene, _camera: THREE.Camera,
+export function drawStillShadows(_renderer: unknown, _scene: THREE.Scene, _camera: THREE.Camera,
   _shown: THREE.Group, _kept: THREE.LightShadow, _drawn: StillDrawn = ALL_STILL): void {
   // (under the Rust engine none of three's shadow maps is read: the engine casts the sun's own. Drawn all the same,
   // three built its shaders for every still thing in view at each change of place, 4 s on a warm page and 20 s on
@@ -675,7 +675,7 @@ const ENVIRONMENT_SET = new THREE.Texture();
  * its pipelines in the GPU's process's main thread as a run began (a frame of 118 ms after Start, `npm run stalls --
  * --scenario boot --dawn`), compiled again with each generator.
  */
-export function envMap(_renderer: THREE.WebGLRenderer, _colours: EnvColours): THREE.Texture {
+export function envMap(_renderer: unknown, _colours: EnvColours): THREE.Texture {
   return ENVIRONMENT_SET;
 }
 

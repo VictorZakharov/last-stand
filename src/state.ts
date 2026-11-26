@@ -7,6 +7,7 @@ import type { Enemy } from './entities/enemy';
 import type { Projectile } from './combat/projectiles';
 import type { RunState } from './game/run';
 import type { Profile } from './types';
+import type { GameScreen } from './core/screen';
 
 export interface GameState {
   time: number;                 // seconds since start (unpaused)
@@ -20,7 +21,8 @@ export interface GameState {
   // three.js core (set by core/renderer)
   scene: THREE.Scene;
   camera: THREE.PerspectiveCamera;
-  renderer: THREE.WebGLRenderer;
+  /** the page's canvas and its size (the engine's: core/screen.ts) */
+  renderer: GameScreen;
 
   // world
   arena: Arena;

@@ -431,3 +431,17 @@ a return against 30, the lobby shown at the same time or sooner (10.1 s against 
 - [ ] Left: the flames, the embers and the meadow's blades a module each (about 1.2 s); the plain levels' set is
   compiled the same way and not counted here (`--boot verylow`).
 - [ ] The owner's next boot report to read: whether the GPU's process still holds the page.
+
+## 2026-11-26: three's renderer out of the game (#973)
+
+The engine's canvas is the page's one (`bootRust` adds it to `#game`; `G.renderer` is `core/screen.ts`, its size and
+pixel ratio, no drawing), and the labels and the outline are drawn by the engine over its graded frame. Gone with
+three's WebGPURenderer: its device (the page held two), its canvas over the engine's (left out of the page's frame
+with nothing to draw, it still took the pointer), its passes' timer (`perf/webgpuPasses.ts`), its pipelines' hooks
+and its compile of the overlays' passes. The uncapped frames' fence waits on the engine's queue: on three's device it
+never waited for the engine's frame. `lab rustcheck` holds the page to one canvas taking the pointer, with a canary.
+
+- [x] 284 of 583 files still import three (its maths, its scene, its node materials' modules): the next stages.
+- [ ] HDR output: three's canvas gave it; the engine's is SDR (`initHdrForWebGPU` unused).
+- [ ] The lab's hooks round three's `render` (the skip-draw, `perf`'s canary doubling, `villagePortalNight`'s count of
+  renders) reach nothing under the engine: kept optional for `--ab` against main, each to read the engine instead.

@@ -21,6 +21,10 @@ import { middleOf, realWait, type Lab, type Pictured, type Report } from './lab'
 import { PIPELINES } from '../../../src/engine/pipelinesAside';
 import { RUST } from '../../../src/engine';
 
+/** the world's overlays' hook: `labels` (the engine draws them), or three's `draw` in a tree before #973 (an A/B's other commit) */
+const OVER = overFrame as unknown as Record<'labels' | 'draw', (...args: unknown[]) => void>;
+const OVER_KEY: 'labels' | 'draw' = 'labels' in overFrame ? 'labels' : 'draw';
+
 const element = <T extends HTMLElement = HTMLElement>(selector: string): T => {
   const found = document.querySelector<T>(selector);
   if (!found) throw new Error(`dev: missing ${selector}`);
@@ -129,11 +133,11 @@ export async function devMode(lab: Lab, options: { canary: boolean }): Promise<R
   check(!G.player.obj.visible, 'unchecking Hero did not hide it');
   await action('parts');
   check(G.player.obj.visible && parts.every((part) => part.checked), 'Check all did not restore the frame');
-  const draw = overFrame.draw;
+  const draw = OVER[OVER_KEY];
   await action('labels');
-  check(overFrame.draw !== draw, 'World labels did nothing outside flight');
+  check(OVER[OVER_KEY] !== draw, 'World labels did nothing outside flight');
   await action('labels');
-  check(overFrame.draw === draw, 'World labels did not restore their draw');
+  check(OVER[OVER_KEY] === draw, 'World labels did not restore their draw');
   // Trees, Leaves and Grass: out of what's drawn everywhere at once, held through a biome change, no program made.
   const programs = (): number => PIPELINES.made;
   const markedCosts: string[] = [];

@@ -38,6 +38,9 @@ import * as shadowDetail from '../../../src/entities/models/shadowDetail';
 import { drawLook, jointsByObject, partName, withBones, type Look, type PartOnScreen } from './looks';
 import { canvasOf, readOpaque, type Area } from './pixels';
 
+/** three's renderer as a tree before #973 has it (an A/B's other commit): its render, which this tree hasn't got */
+type ThreesRender = { render?: (scene: THREE.Object3D, camera: THREE.Camera) => unknown };
+
 /**
  * The clock the session installs before the page's own scripts (`tools/lab/node/browser.mjs`). While its mode is
  * `manual`, the game's animation frames are queued for the lab to run instead of the browser.
@@ -525,9 +528,10 @@ export class Lab {
     // commit has no sit)
     (Player as { sitsAtFirst?: boolean }).sitsAtFirst = false;
     (G.player as { sits?: boolean }).sits = false;
-    const gl = G.renderer;
-    const draw = gl.render.bind(gl);
-    gl.render = (scene, camera) => {
+    // (three's render, where the tree has a renderer of three's: an A/B's older commit)
+    const gl = G.renderer as unknown as ThreesRender;
+    const draw = gl.render?.bind(gl);
+    if (draw) gl.render = (scene, camera) => {
       // (a biome's still shadows are drawn once, as it's shown: skipped, the first frame drawn drew them of everything,
       // the hero's shadow with them, and compiled a program then)
       // (an older commit has no `isDrawingStill`)

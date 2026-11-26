@@ -6,7 +6,6 @@ import { G } from './state';
 import { keepBootPaceHidden } from './core/hiddenBoot';
 import { sceneReady } from './engine/pipelinesAside';
 import { rustSwitching } from './engine';
-import { pipelinesAtOnceFromNow } from './core/webgpu';
 import { initRenderer, updateCamera, render, zoomBy, orbitBy, lookBy, setZoom, setViewShift, setView, faceCamera, viewMode, viewSettled, VIEWS, type ViewMode, eyesInGlide } from './core/renderer';
 import { CAMERA, COOP } from './data/balance';
 import { START_SPOTS, YARD_DUMMIES, YARD_DUMMY_FACING, biomeOfHour, inHall, type VillageObject } from './data/village';
@@ -428,7 +427,6 @@ async function boot() {
     revealed = true;
     recorder.revealed(!navigator.serviceWorker?.controller);
     startHeartbeat();
-    pipelinesAtOnceFromNow();
     // the overlays down the left (performance, network, the battle log) once the loading screen is gone (_perf.scss)
     void loadingLeft.then(() => $('#diag').classList.remove('booting'));
     // an invite link: straight into the friend's room (asked for a name tag first if none is kept)
