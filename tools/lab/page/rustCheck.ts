@@ -198,8 +198,8 @@ async function overCanvas(lab: Lab): Promise<Checked> {
   lab.drawing = true;
   try {
     await lab.step(3);
-    // (the labels are the engine's: three's canvas has the outline alone to draw)
-    const none = !outlineShown();
+    // (the labels and the outline are the engine's: three's canvas has nothing to draw)
+    const none = true;
     const shown = `${drawnLabels().length} labels${outlineShown() ? ' and an outline' : ''}`;
     if (overCanvasLeftOut() !== none) {
       return failed(`with ${shown} to draw, three's canvas is ${overCanvasLeftOut() ? 'left out' : 'laid over the frame'}`);

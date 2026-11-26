@@ -125,6 +125,10 @@ export class Engine {
      */
     kept(): number;
     /**
+     * No outline from the next frame on.
+     */
+    no_outline(): void;
+    /**
      * Where the page writes the nodes' numbers, ten floats a node by its id. Adding a node may move it.
      */
     node_locals(): number;
@@ -257,6 +261,12 @@ export class Engine {
      */
     set_node_parent(id: number, parent: number): void;
     /**
+     * An outline from the next frame on round the records the page flags `OUTLINED`: in `red`, `green`, `blue`
+     * (as the screen shows them) at `strength`, its line `line` screen pixels wide and its glow reaching `glow`,
+     * drawn within the box `x`, `y`, `width`, `height` (screen pixels from the top left).
+     */
+    set_outline(red: number, green: number, blue: number, strength: number, line: number, glow: number, x: number, y: number, width: number, height: number): void;
+    /**
      * The scene drawn by the lit shaders made for the plain levels alone, or not (`Gpu::set_plain_only`).
      */
     set_plain_only(on: boolean): void;
@@ -339,6 +349,7 @@ export interface InitOutput {
     readonly engine_join_shaders: (a: number, b: number, c: number) => number;
     readonly engine_keep: (a: number, b: number, c: number) => number;
     readonly engine_kept: (a: number) => number;
+    readonly engine_no_outline: (a: number) => void;
     readonly engine_node_locals: (a: number) => number;
     readonly engine_node_matrices: (a: number) => number;
     readonly engine_node_shown: (a: number) => number;
@@ -373,6 +384,7 @@ export interface InitOutput {
     readonly engine_set_mesh_vertices: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number) => number;
     readonly engine_set_node_drawn_flags: (a: number, b: number, c: number) => void;
     readonly engine_set_node_parent: (a: number, b: number, c: number) => void;
+    readonly engine_set_outline: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number) => void;
     readonly engine_set_plain_only: (a: number, b: number) => void;
     readonly engine_set_quality: (a: number, b: number, c: number) => void;
     readonly engine_set_sight: (a: number, b: number, c: number, d: number, e: number) => void;
@@ -382,12 +394,12 @@ export interface InitOutput {
     readonly engine_show_kept: (a: number, b: number, c: number, d: number) => void;
     readonly engine_stats: (a: number, b: number) => void;
     readonly start: () => void;
-    readonly __wasm_bindgen_func_elem_1851: (a: number, b: number, c: number, d: any) => void;
-    readonly __wasm_bindgen_func_elem_1876: (a: number, b: number, c: any, d: any) => void;
-    readonly __wasm_bindgen_func_elem_725: (a: number, b: number, c: number, d: any) => void;
-    readonly __wasm_bindgen_func_elem_725_79: (a: number, b: number, c: number, d: any) => void;
-    readonly __wasm_bindgen_func_elem_725_80: (a: number, b: number, c: number, d: any) => void;
-    readonly __wasm_bindgen_func_elem_727: (a: number, b: number, c: any) => void;
+    readonly __wasm_bindgen_func_elem_1857: (a: number, b: number, c: number, d: any) => void;
+    readonly __wasm_bindgen_func_elem_1882: (a: number, b: number, c: any, d: any) => void;
+    readonly __wasm_bindgen_func_elem_731: (a: number, b: number, c: number, d: any) => void;
+    readonly __wasm_bindgen_func_elem_731_81: (a: number, b: number, c: number, d: any) => void;
+    readonly __wasm_bindgen_func_elem_731_82: (a: number, b: number, c: number, d: any) => void;
+    readonly __wasm_bindgen_func_elem_733: (a: number, b: number, c: any) => void;
     readonly __wbindgen_export: (a: number, b: number) => number;
     readonly __wbindgen_export2: (a: number, b: number, c: number, d: number) => number;
     readonly __wbindgen_export3: (a: number, b: number, c: number) => void;

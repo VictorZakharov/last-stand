@@ -9,6 +9,7 @@
 // the walk, a record a mesh, what's handed over ahead, and a frame drawn or written down.
 import * as THREE from './three';
 import type { Engine, InitOutput } from './pkg/bulwark';
+import { writeOutlined } from './outlined';
 import { perfClock } from '../core/perfClock';
 import { shownPlace, shownPointLights } from '../core/webgpu';
 import { Core, MAX_MAP, RECORD } from './core';
@@ -480,6 +481,8 @@ export class Bridge {
     this.walk(scene);
     for (const object of this.mirrorMeshes.rest) if (this.mirror.seen(object)) this.visit(object);
     this.kept.finish();
+    // (what the page outlines, its records again beside the frame's for the outline's mask alone)
+    if (!core.tape) writeOutlined(core, (mesh) => this.addMesh(mesh));
     if (this.watched) {
       this.kept.eachDrawn((mesh) => this.watched!.add(mesh));
       this.bodies.eachDrawn((mesh) => this.watched!.add(mesh));

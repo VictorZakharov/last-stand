@@ -1,14 +1,13 @@
-// `lab rustcheck`'s check of what three draws over the engine's frame (the world's labels, the outline): its canvas
-// is cleared by the first of those draws as its pass begins (core/webgpu.ts `clearOverFrame`), never by a pass of its
-// own before them. On a phone's GPU, which draws by tiles, each pass after a clear read the whole canvas back first:
-// 10.9 ms a frame with an outline shown, a report from play (64P8-0VPK).
+// `lab rustcheck`'s check of the outline drawn by the engine (engine/outlined.ts, Bulwark's gpu/outline.rs): the
+// hero outlined shows in the page's picture with three's canvas left out of the page's frame, another barely shown
+// in its place leaves nothing of the first, and none is left once it's let go. Read off the page's picture: the
+// canary hands the engine none while the page still outlines him. (Drawn by three on a canvas over the engine's, an
+// outline cost a phone that canvas's passes over the screen: 10.9 ms a frame, a report from play, 64P8-0VPK.)
 import type { Lab } from './lab';
 import { type Checked, failed, passed, pictureIn } from './rustPixels';
 import { G } from '../../../src/state';
-import { RUST } from '../../../src/engine';
 import { outline } from '../../../src/ui/overlay/outline';
-import { drawnLabels } from '../../../src/ui/overlay/layer';
-import { overFramePasses } from '../../../src/core/webgpu';
+import { overCanvasLeftOut, overFrame } from '../../../src/core/renderer';
 
 /** the outline's colours here: one no scene has (magenta), then another barely shown */
 const FIRST = 0xff00ff;
@@ -28,42 +27,42 @@ function magenta(picture: ImageData): number {
   return count;
 }
 
-/** The page pictured with the hero outlined in `colour` at `strength` for a few frames. */
-async function outlined(lab: Lab, colour: number, strength: number, label: string): Promise<ImageData> {
+/** The page pictured with the hero outlined in `colour` at `strength` (none: nothing outlined) for a few frames. */
+async function outlined(lab: Lab, colour: number | null, strength: number, label: string): Promise<ImageData> {
   for (let frame = 0; frame < FRAMES; frame++) {
-    outline(G.player.obj, colour, strength);
+    outline(colour === null ? null : G.player.obj, colour ?? 0, strength);
     await lab.step(1);
   }
   return pictureIn(lab, undefined, label);
 }
 
 /**
- * An outline drawn over the engine's frame, then another barely shown in its place: nothing of the first is left
- * on the canvas, and the frame drew a pass for the outline and one for the labels if any are shown, none to
- * clear it (the labels are the engine's, on its own canvas). The canary (`rust.overCleared=0`, as it was): a pass more.
+ * The hero outlined by the engine: in the page's picture with three's canvas left out, nothing of it left under
+ * another outline barely shown, none once let go. The canary: the engine handed nothing while the page outlines
+ * him, and no outline may show.
  */
 export async function overCanvasCleared(lab: Lab): Promise<Checked> {
   const drawing = lab.drawing;
   lab.drawing = true;
+  const send = overFrame.labels;
   try {
     const before = magenta(await outlined(lab, THEN, FAINT, 'before an outline'));
     const first = magenta(await outlined(lab, FIRST, 1, 'the hero outlined')) - before;
-    if (first < SHOWN_LEAST) return failed(`the hero's outline showed in ${first} pixels: none was drawn over the frame`);
+    const leftOut = overCanvasLeftOut();
     const after = magenta(await outlined(lab, THEN, FAINT, 'another outline in its place')) - before;
+    const gone = magenta(await outlined(lab, null, 0, 'let go')) - before;
+    overFrame.labels = () => send(false);
+    const canary = magenta(await outlined(lab, FIRST, 1, 'the canary: handed over as none')) - before;
+    overFrame.labels = send;
+    if (first < SHOWN_LEAST) return failed(`the hero's outline showed in ${first} pixels: none was drawn over the frame`);
+    if (!leftOut) return failed('with the hero outlined three\'s canvas is laid over the frame');
     if (after > first / 20) return failed(`${after} of the first outline's ${first} pixels are left under the next frame's`);
-    // (the outline's alone: the labels are drawn by the engine)
-    const draws = 1;
-    const passes = overFramePasses();
-    if (passes !== draws) return failed(`the overlays' canvas took ${passes} passes a frame for its ${draws} draws`);
-    RUST.tune.overCleared = 0;
-    await outlined(lab, THEN, FAINT, 'the canary');
-    const asItWas = overFramePasses();
-    if (asItWas !== draws + 1) return failed(`the canary: cleared by a pass of its own, ${asItWas} passes, not ${draws + 1}`);
-    return passed(`the overlays' canvas is cleared by its first draw: ${passes} passes a frame for an outline and `
-      + `${drawnLabels().length} labels (cleared by a pass of its own, ${asItWas}); an outline of ${first} pixels gone `
-      + `the frame after (${after} left)`);
+    if (gone > first / 20) return failed(`${gone} of the outline's ${first} pixels are left once it's let go`);
+    if (canary > first / 2) return failed(`the canary: none handed to the engine, ${canary} pixels still showed`);
+    return passed(`the hero outlined by the engine in ${first} pixels, three's canvas left out; ${after} left under `
+      + `another, ${gone} once let go (the canary, none handed over: ${canary})`);
   } finally {
-    RUST.tune.overCleared = 1;
+    overFrame.labels = send;
     outline(null);
     await lab.step(2);
     lab.drawing = drawing;

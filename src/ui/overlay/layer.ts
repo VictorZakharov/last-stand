@@ -7,7 +7,7 @@ import { G } from '../../state';
 import { frameRect, overFrame } from '../../core/renderer';
 import { OVERLAY_ROW, overlayRows } from '../../engine/overlay';
 import { uiScales } from '../scale';
-import { drawOutline, outlineShown } from './outline';
+import { sendOutline } from './outline';
 import {
   atlasCrowded, atlasSide, clearAtlas, fits, freeSlot, paintCanvas, takeSlot, uploadSlot, type Slot,
 } from './atlas';
@@ -168,18 +168,16 @@ export function layoutLabels(): void {
   filled = n;
 }
 
-/** This frame's labels handed to the engine, drawn over its frame from now on (none where `shown` is
- *  false: photo mode, the free camera's World labels off). */
+/** This frame's labels and outline handed to the engine, drawn over its frame from now on (none where `shown`
+ *  is false: photo mode, the free camera's World labels off). */
 function sendLabels(shown: boolean): void {
   const f = frameRect();
   overlayRows(rows, shown ? filled : 0, f.width, f.height);
+  sendOutline(shown);
 }
-// (the outline over the frame on three's canvas; the labels on the engine's, under it for now: the outline
-// moves to the engine next)
-overFrame.draw = drawOutline;
+// (all of it the engine's: nothing is drawn on three's canvas, left out of the page's frame)
 overFrame.labels = sendLabels;
-// (nothing to draw on three's canvas with nothing outlined)
-overFrame.empty = () => !outlineShown();
+overFrame.empty = () => true;
 
 /** The labels drawn last frame, lowest first (tools/lab's `ui` measures their boxes). */
 export function drawnLabels(): readonly Label[] { return drawn; }
