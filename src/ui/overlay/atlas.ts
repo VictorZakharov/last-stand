@@ -1,8 +1,6 @@
 // The atlas the world's overlays are drawn from (ui/overlay): one texture, every label painted into a slot of its
 // own, and a slot uploaded alone when its label changes (its region, straight from the canvas it was painted on).
-import * as THREE from '../../engine/three';
-import { G } from '../../state';
-import { copyCanvasInto } from '../../core/webgpu';
+import { overlayAtlas, overlayPaint } from '../../engine/overlay';
 
 /** the atlas's side, px, for each canvas pixel a px of a label's art takes (the canvas's ratio times the UI's scale;
  *  rounded up to a multiple of `SIDE_STEP`, at least `SIDE_MIN`): a label's pixels go with that ratio's square, and
@@ -10,6 +8,8 @@ import { copyCanvasInto } from '../../core/webgpu';
 const SIDE_PER_RATIO = 1536;
 const SIDE_MIN = 2048;
 const SIDE_STEP = 512;
+/** the largest side WebGPU promises every device's textures (`maxTextureDimension2D`'s least) */
+const MOST_SIDE = 8192;
 /** a slot's height rounds up to one of these (px): each shelf of the atlas holds slots of one height (a downed
  *  partner's marker is some 200 px of art, 1000 at an 8K screen's UI scale at 100%) */
 const HEIGHTS = [16, 24, 32, 48, 64, 96, 128, 192, 256, 384, 512, 768, 1024];
@@ -26,8 +26,6 @@ export interface Slot { x: number; y: number; w: number; h: number }
 
 interface Shelf { y: number; h: number; used: number }
 
-/** the texture the labels are drawn from: a render target's, so its storage needs no copy in memory */
-let target: THREE.WebGLRenderTarget | null = null;
 const shelves: Shelf[] = [];
 /** slots given back, by their height, for the next label of that height they hold (a fight's numbers come in every
  *  width: kept for their own width alone, the atlas filled with slots no new one fitted) */
@@ -40,31 +38,13 @@ let full = false;
 /** what the labels are painted on before their slot is uploaded */
 let canvas: HTMLCanvasElement | null = null;
 let ctx: CanvasRenderingContext2D | null = null;
-/** the canvas as a texture three uploads from (never drawn itself: `copyTextureToTexture` reads its image) */
-let source: THREE.Texture | null = null;
 let warned = false;
 
 /** The atlas's side, px. */
 export const atlasSide = (): number => side;
 
-/** The atlas's texture (made and cleared on first use). */
-export function atlasTexture(): THREE.Texture {
-  if (target) return target.texture;
-  target = new THREE.WebGLRenderTarget(side, side, { depthBuffer: false, generateMipmaps: false });
-  const t = target.texture;
-  t.minFilter = t.magFilter = THREE.LinearFilter;
-  // (canvas pixels in, as the page's colours: drawn as they are, premultiplied by their alpha on the way)
-  t.colorSpace = THREE.NoColorSpace;
-  t.flipY = false;
-  t.premultiplyAlpha = true;
-  const gl = G.renderer, was = gl.getRenderTarget(), clear = gl.getClearAlpha(), col = gl.getClearColor(new THREE.Color());
-  gl.setRenderTarget(target);
-  gl.setClearColor(0x000000, 0);
-  gl.clear(true, false, false);
-  gl.setClearColor(col, clear);
-  gl.setRenderTarget(was);
-  return t;
-}
+/** The atlas made in the engine at its side (cleared when that changes); false before the engine has started. */
+export const atlasReady = (): boolean => overlayAtlas(side);
 
 /** Whether `slot` holds a label of `w` by `h` px, and isn't too large for it. */
 export function fits(slot: Slot, w: number, h: number): boolean {
@@ -124,7 +104,7 @@ export const atlasCrowded = crowded;
 /** The atlas's side for labels painted at `ratio` canvas pixels per px of their art. */
 function sideFor(ratio: number): number {
   const grown = Math.ceil((SIDE_PER_RATIO * ratio) / SIDE_STEP) * SIDE_STEP;
-  return Math.min(G.renderer.capabilities.maxTextureSize, Math.max(SIDE_MIN, grown));
+  return Math.min(MOST_SIDE, Math.max(SIDE_MIN, grown));
 }
 
 /**
@@ -136,10 +116,6 @@ export function clearAtlas(ratio: number): void {
   const wanted = sideFor(ratio);
   if (wanted !== side) {
     side = wanted;
-    target?.dispose();
-    target = null;
-    source?.dispose();
-    source = null;
     canvas = null;
   }
   shelves.length = 0;
@@ -168,8 +144,6 @@ export function paintCanvas(slot: Slot): CanvasRenderingContext2D {
     canvas.width = side;
     canvas.height = HEIGHTS[HEIGHTS.length - 1];
     ctx = canvas.getContext('2d', { willReadFrequently: false })!;
-    source = new THREE.Texture(canvas);
-    source.flipY = false;
   }
   const c = ctx!;
   c.setTransform(1, 0, 0, 1, 0, 0);
@@ -177,15 +151,8 @@ export function paintCanvas(slot: Slot): CanvasRenderingContext2D {
   return c;
 }
 
-const region = new THREE.Box2(), at = new THREE.Vector2();
-/** Uploads what was painted (the paint canvas's top left, a slot's size) into the slot. */
-export function uploadSlot(slot: Slot): void {
-  atlasTexture();
-  region.min.set(0, 0);
-  region.max.set(slot.w, slot.h);
-  at.set(slot.x, slot.y);
-  if (copyCanvasInto(G.renderer, canvas!, target!.texture, slot.w, slot.h, slot.x, slot.y)) return;
-  // (copied by three otherwise, the canvas's texture as last uploaded: uploaded again first)
-  source!.needsUpdate = true;
-  G.renderer.copyTextureToTexture(source!, target!.texture, region, at);
+/** Uploads what was painted (the paint canvas's top left, a slot's size) into the slot: false where it
+ *  can't be yet (the engine not started), the label to be painted again. */
+export function uploadSlot(slot: Slot): boolean {
+  return atlasReady() && overlayPaint(canvas!, slot.w, slot.h, slot.x, slot.y);
 }

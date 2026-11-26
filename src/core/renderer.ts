@@ -1174,8 +1174,13 @@ export function updateCamera(dt: number, focus: THREE.Vector3, height: number, f
 
 const ease = (t: number): number => t * t * (3 - 2 * t);
 const _fwd = new THREE.Vector3(), _pivot = new THREE.Vector3(), _look = new THREE.Vector3(), _quat = new THREE.Quaternion(), _quat2 = new THREE.Quaternion();
-/** What is drawn over the finished frame, on the canvas at its own pixel ratio: the world's overlays (ui/overlay). */
-export const overFrame = { draw: (): void => {}, empty: (): boolean => false };
+/** What is drawn over the finished frame: the outline on three's canvas at its own pixel ratio (`draw`), the labels
+ *  handed to the engine for its frame (`labels`, each frame before it's drawn; ui/overlay). */
+export const overFrame = {
+  draw: (): void => {},
+  empty: (): boolean => false,
+  labels: (_shown: boolean): void => {},
+};
 /** whether three's canvas is left out of the page's frame under the Rust engine: nothing is drawn over the
  *  engine's (`leaveOverOut`) */
 let overLeftOut = false;
@@ -1316,6 +1321,7 @@ export function render(): void {
   };
   // (a picture asked for from another camera: drawn first, the frame's own draw after it is what the page shows)
   if (frameApart.take) drawApart(pixels.width, pixels.height, graded);
+  overFrame.labels(overlaysShown);
   drawRust(G.scene, G.camera, G.time, pixels.width, pixels.height, gl, graded);
   // (a photo's picture: the engine's frame, taken before anything is drawn over it)
   if (frameShot.take) {

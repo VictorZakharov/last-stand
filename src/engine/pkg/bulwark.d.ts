@@ -146,6 +146,20 @@ export class Engine {
      */
     nodes_drawn(): Float32Array;
     /**
+     * The overlay's atlas made `side` pixels square, cleared, if it isn't so already.
+     */
+    overlay_atlas(side: number): void;
+    /**
+     * The top left `width` by `height` pixels of a canvas of the page's copied into the atlas at `x`, `y`, its
+     * colours premultiplied by its alpha (as the overlay draws them); false for a source it can't take.
+     */
+    overlay_paint(source: any, width: number, height: number, x: number, y: number): boolean;
+    /**
+     * The overlay's rows from the next frame on (`ROW_FLOATS` each: a box of the screen in its pixels, its slot's
+     * corners' uv, its share), over a screen of `width` by `height` pixels; none, nothing laid over it.
+     */
+    overlay_rows(rows: Float32Array | number[], width: number, height: number): void;
+    /**
      * Every node's matrix made now, ahead of the frame, for the page to read back (`node_worlds`).
      */
     place_nodes(): void;
@@ -330,6 +344,9 @@ export interface InitOutput {
     readonly engine_node_shown: (a: number) => number;
     readonly engine_node_worlds: (a: number) => number;
     readonly engine_nodes_drawn: (a: number, b: number) => void;
+    readonly engine_overlay_atlas: (a: number, b: number) => void;
+    readonly engine_overlay_paint: (a: number, b: any, c: number, d: number, e: number, f: number) => number;
+    readonly engine_overlay_rows: (a: number, b: number, c: number, d: number, e: number) => void;
     readonly engine_place_nodes: (a: number) => void;
     readonly engine_poll_clock: (a: number) => void;
     readonly engine_ready_material: (a: number, b: number, c: number, d: number) => void;
@@ -365,12 +382,12 @@ export interface InitOutput {
     readonly engine_show_kept: (a: number, b: number, c: number, d: number) => void;
     readonly engine_stats: (a: number, b: number) => void;
     readonly start: () => void;
-    readonly __wasm_bindgen_func_elem_1841: (a: number, b: number, c: number, d: any) => void;
-    readonly __wasm_bindgen_func_elem_1866: (a: number, b: number, c: any, d: any) => void;
-    readonly __wasm_bindgen_func_elem_715: (a: number, b: number, c: number, d: any) => void;
-    readonly __wasm_bindgen_func_elem_715_76: (a: number, b: number, c: number, d: any) => void;
-    readonly __wasm_bindgen_func_elem_715_77: (a: number, b: number, c: number, d: any) => void;
-    readonly __wasm_bindgen_func_elem_717: (a: number, b: number, c: any) => void;
+    readonly __wasm_bindgen_func_elem_1851: (a: number, b: number, c: number, d: any) => void;
+    readonly __wasm_bindgen_func_elem_1876: (a: number, b: number, c: any, d: any) => void;
+    readonly __wasm_bindgen_func_elem_725: (a: number, b: number, c: number, d: any) => void;
+    readonly __wasm_bindgen_func_elem_725_79: (a: number, b: number, c: number, d: any) => void;
+    readonly __wasm_bindgen_func_elem_725_80: (a: number, b: number, c: number, d: any) => void;
+    readonly __wasm_bindgen_func_elem_727: (a: number, b: number, c: any) => void;
     readonly __wbindgen_export: (a: number, b: number) => number;
     readonly __wbindgen_export2: (a: number, b: number, c: number, d: number) => number;
     readonly __wbindgen_export3: (a: number, b: number, c: number) => void;

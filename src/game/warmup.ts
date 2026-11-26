@@ -16,7 +16,7 @@ import { lampsLetGo } from './village';
 import * as THREE from '../engine/three';
 import { G } from '../state';
 import { behindTheLobby, warmUp, type Swap, type WarmedUp } from '../core/shaders';
-import { compilePasses, sceneTarget } from '../core/renderer';
+import { sceneTarget } from '../core/renderer';
 import { COMPILE_SLICE, compileSlice } from '../core/webgpu';
 import { mapsArrived } from '../core/textures';
 import { ENEMIES, type EnemyId } from '../data/enemies';
@@ -43,7 +43,6 @@ import { vineSamples } from '../fx/vine';
 import { swingTrailSamples } from '../fx/swingTrail';
 import { groundSamples } from './groundItems';
 import { compileOutline, warmOutline, type OutlineTarget } from '../ui/overlay/outline';
-import { labelsScene } from '../ui/overlay/layer';
 import { pingSamples } from '../ui/ping';
 import { buildHallAhead, hallOpen, prepareSpareHero } from './hall';
 import {
@@ -140,7 +139,6 @@ export async function compileTheBiome(villageFirst = true): Promise<void> {
   G.scene.add(staff, hand);
   // (nothing of the scene is three's to compile ahead; the page let go)
   await nextTask();
-  compilePasses([labelsScene()]);
   await sceneAhead();
 }
 

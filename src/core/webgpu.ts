@@ -101,41 +101,6 @@ interface GpuBackend {
   get(texture: THREE.Texture): { texture?: object };
 }
 
-/**
- * `w` by `h` px of `canvas` from its top left copied into `texture` at `x`, `y`, premultiplied by their alpha on
- * the way (the labels' slots, ui/overlay/atlas.ts): three's own copy reads a texture's upload, which would send the
- * whole canvas each time. False where it can't (WebGPURenderer's WebGL 2 backend, a texture not yet on the GPU).
- */
-export function copyCanvasInto(renderer: THREE.WebGLRenderer, canvas: HTMLCanvasElement, texture: THREE.Texture,
-  w: number, h: number, x: number, y: number): boolean {
-  const backend = (renderer as unknown as WebGPURenderer).backend as unknown as GpuBackend;
-  const into = backend.device && backend.get(texture).texture;
-  if (!backend.device || !into) return false;
-  backend.device.queue.copyExternalImageToTexture(
-    { source: canvas, origin: { x: 0, y: 0 } },
-    { texture: into, origin: { x, y }, premultipliedAlpha: true },
-    { width: w, height: h },
-  );
-  return true;
-}
-
-/** The labels' material on WebGPU (ui/overlay/layer.ts's shader as nodes): each instance a box of the canvas
- *  (`aRect`, px) showing its slot of the atlas (`aUv`) at its alpha (`aAlpha`), premultiplied. */
-export function labelsMaterial(atlas: THREE.Texture, view: THREE.Vector2): {
-  material: THREE.Material;
-  setAtlas(texture: THREE.Texture): void;
-} {
-  const { attribute, positionGeometry, vec4, mix, varying, texture, uniform } = tsl;
-  const rect = attribute('aRect', 'vec4'), slot = attribute('aUv', 'vec4');
-  const size = uniform(view);
-  const px = rect.xy.add(positionGeometry.xy.mul(rect.zw));
-  const material = new gpu.MeshBasicNodeMaterial();
-  material.vertexNode = vec4(px.x.div(size.x).mul(2).sub(1), px.y.div(size.y).mul(2).oneMinus(), 0, 1);
-  const shown = texture(atlas, varying(mix(slot.xy, slot.zw, positionGeometry.xy)));
-  material.fragmentNode = shown.mul(varying(attribute('aAlpha', 'float')));
-  return { material, setAtlas: (t) => { shown.value = t; } };
-}
-
 /** whether the next draw over the frame clears the canvas as its pass begins (`clearOverFrame`) */
 let overClears = false;
 /**

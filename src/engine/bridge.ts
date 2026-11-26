@@ -78,6 +78,8 @@ function radiusOf(mesh: THREE.Mesh): number {
 
 export class Bridge {
   private core: Core;
+  /** The engine's handle, for the calls of the parts kept apart from the bridge (the overlay: engine/overlay.ts). */
+  get handle(): Engine { return this.core.engine; }
   private maps: Maps;
   private seeKinds: SeeKinds;
   private materials: Materials;

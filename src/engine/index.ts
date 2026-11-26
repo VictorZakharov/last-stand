@@ -41,6 +41,8 @@ export const RUST = {
 };
 
 let canvas: HTMLCanvasElement | null = null;
+/** The engine's canvas, none before it has started (engine/overlay.ts sizes the labels by it). */
+export const engineCanvas = (): HTMLCanvasElement | null => canvas;
 
 let resize: ((width: number, height: number) => void) | null = null;
 

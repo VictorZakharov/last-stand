@@ -13,6 +13,7 @@ import { brokenDownSameFrame } from './rustPartsCheck';
 import { levelSwitchLeavesNothingOut, plainShaderSameFrame } from './rustPlain';
 import { sceneWaitsItsPipelines } from './rustReveal';
 import { overCanvasCleared } from './rustOver';
+import { labelsByTheEngine } from './rustLabels';
 import { type Checked, failed, passed } from './rustPixels';
 import { frames, THREE_DRAWS_MOST } from './rustFrames';
 import { hallFromAbove, house, lampShadows, lightCache, shelter, sunShadowInTurns } from './rustVillageChecks';
@@ -197,7 +198,8 @@ async function overCanvas(lab: Lab): Promise<Checked> {
   lab.drawing = true;
   try {
     await lab.step(3);
-    const none = drawnLabels().length === 0 && !outlineShown();
+    // (the labels are the engine's: three's canvas has the outline alone to draw)
+    const none = !outlineShown();
     const shown = `${drawnLabels().length} labels${outlineShown() ? ' and an outline' : ''}`;
     if (overCanvasLeftOut() !== none) {
       return failed(`with ${shown} to draw, three's canvas is ${overCanvasLeftOut() ? 'left out' : 'laid over the frame'}`);
@@ -335,6 +337,7 @@ export async function rustCheck(lab: Lab, command: RustCheckCommand): Promise<Re
       checks.push(await sunShadowInTurns(lab, bridge));
       checks.push(await overCanvas(lab));
       checks.push(await overCanvasCleared(lab));
+      checks.push(await labelsByTheEngine(lab));
       checks.push(await house(lab, bridge, command.room as RoomId));
       checks.push(await blankCanvas(lab, bridge));
       checks.push(await mapPaintedLate(lab, bridge));
