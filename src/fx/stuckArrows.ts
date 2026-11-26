@@ -10,6 +10,7 @@ import { G } from '../state';
 import { addEffect } from './effects';
 import { arrowGeometry, arrowLite, ARROW } from '../entities/models/bow';
 import { hullHit } from '../entities/models/hulls';
+import { placeUnplaced } from '../entities/models/bodyAsOne';
 import { groundHeight } from '../world/arena';
 import { pavedAt } from '../world/villagePlan';
 import { basinTop, FOUNTAIN } from '../world/fountain';
@@ -334,6 +335,7 @@ function solid(o: THREE.Object3D): boolean {
  *  to the rigid ones' tenth of a millisecond. */
 function cast(root: THREE.Object3D, by: THREE.Raycaster = ray): THREE.Intersection | null {
   _hits.length = 0;
+  placeUnplaced(root);
   root.traverse((o) => { if (!(o as THREE.SkinnedMesh).isSkinnedMesh && solid(o)) (o as THREE.Mesh).raycast(by, _hits); });
   let best: THREE.Intersection | null = null;
   for (const h of _hits) if (!best || h.distance < best.distance) best = h;
@@ -344,6 +346,7 @@ function cast(root: THREE.Object3D, by: THREE.Raycaster = ray): THREE.Intersecti
  *  a bone (models/hulls.ts): the aim as it's drawn. */
 export function castSolid(root: THREE.Object3D, by: THREE.Raycaster): THREE.Intersection | null {
   _hits.length = 0;
+  placeUnplaced(root);
   root.traverse((o) => {
     if (!solid(o)) return;
     if (!(o as THREE.SkinnedMesh).isSkinnedMesh) { (o as THREE.Mesh).raycast(by, _hits); return; }
@@ -364,7 +367,8 @@ export function stickIn(root: THREE.Object3D, from: THREE.Vector3, dir: THREE.Ve
   ray.set(from, dir); ray.far = 3;
   const hit = cast(root);
   if (!hit) return false;
-  const on = hit.object;
+  // (a piece left unplaced from frame to frame, its body drawn as one, rides its joint: it hangs still on it)
+  const on = hit.object.userData.unplaced ? hit.object.parent! : hit.object;
   const tip = hit.point.clone().addScaledVector(dir, SINK.body);
   const q = new THREE.Quaternion().setFromUnitVectors(FWD, dir), p = tip.clone().addScaledVector(dir, -ARROW / 2);
   on.updateWorldMatrix(true, false);

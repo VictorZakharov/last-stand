@@ -46,6 +46,13 @@ const HIDDEN_PLACES = 2;
 /** three's own update of an object's matrices: a kind with another is left to its own */
 const PLAIN_UPDATE = THREE.Object3D.prototype.updateMatrixWorld;
 
+/** Whether `update` is three's own `updateMatrixWorld`, or a harness's wrapper round it that says so (`wraps`: the
+ *  lab's count of three's visits, `tools/lab/page/matrixWalks.ts`). Taken for an override, every object in the lab
+ *  was placed by three's recursion and none by `placeShown`, so the lab's timings of it were never the players'. */
+function plainUpdate(update: THREE.Object3D['updateMatrixWorld']): boolean {
+  return update === PLAIN_UPDATE || (update as { wraps?: unknown }).wraps === PLAIN_UPDATE;
+}
+
 const scratchMatrix = new THREE.Matrix4();
 
 /** each still mesh's radius in the world (m), found once: it doesn't move */
@@ -256,8 +263,10 @@ export class Bridge {
    * "bugs").
    */
   private placeShown(object: THREE.Object3D, moved: boolean, depth: number): void {
+    // (a piece of a body drawn as one, unseen: placed only where it's read, `models/bodyAsOne.ts`)
+    if (object.userData.unplaced) return;
     const kept = object as unknown as { placedLate?: boolean };
-    if (!object.visible && depth > 0) {
+    if (!object.visible && depth > 0 && depth <= HIDDEN_PLACES) {
       kept.placedLate = true;
       return;
     }
@@ -265,7 +274,9 @@ export class Bridge {
       kept.placedLate = false;
       moved = true;
     }
-    if (depth === HIDDEN_PLACES || object.updateMatrixWorld !== PLAIN_UPDATE) { object.updateMatrixWorld(moved); return; }
+    // (down to every leaf: handed to three's own recursion past the hidden places' levels, a body's pieces drawn as
+    // one were placed every frame all the same, 0.75 s of the bridge's 2.9 at wave 36)
+    if (!plainUpdate(object.updateMatrixWorld)) { object.updateMatrixWorld(moved); return; }
     if (object.matrixAutoUpdate) object.updateMatrix();
     if (object.matrixWorldNeedsUpdate || moved) {
       if (object.matrixWorldAutoUpdate) {

@@ -20,6 +20,7 @@ import { glowGoneInTheFog } from './rustSight';
 import { sunCastsShadows } from './rustSun';
 import { bloodAtLowHealth, frameShotHoldsTheFrame, photoLookDrawn } from './rustLook';
 import { grassBandsEdgeToEdge, grassDrawnByItsRings } from './rustGrass';
+import { bodiesAsOne, drawnFor } from './rustAsOne';
 import * as THREE from 'three';
 import type { Lab, Report } from './lab';
 import type { BiomeId } from '../../../src/data/biomes';
@@ -70,6 +71,15 @@ function playersPage(): Checked {
   return passed('the plain address draws by the engine, the pause menu has no renderer to choose');
 }
 
+/** An object by its name and its parents', nearest first, up to the scene: what a list of the misplaced names. */
+function pathOf(object: THREE.Object3D): string {
+  const names: string[] = [];
+  for (let at: THREE.Object3D | null = object; at && at !== G.scene; at = at.parent) {
+    names.push(at.name || at.type);
+  }
+  return names.join(' < ');
+}
+
 /** Every shown object stands where its own position, turn and scale put it under its parent. */
 function placedRight(where: string): Checked {
   const expected = new THREE.Matrix4();
@@ -78,13 +88,15 @@ function placedRight(where: string): Checked {
   let checked = 0;
   const visit = (object: THREE.Object3D): void => {
     if (!object.visible) return;
+    // (a piece of a foe drawn as one is left unplaced unseen, placed where it's read: `models/bodyAsOne.ts`)
+    if (object.userData.unplaced) return;
     if (object.parent && object.matrixAutoUpdate && object.matrixWorldAutoUpdate) {
       local.compose(object.position, object.quaternion, object.scale);
       expected.multiplyMatrices(object.parent.matrixWorld, local);
       const now = object.matrixWorld.elements;
       const apart = Math.max(...expected.elements.map((value, index) => Math.abs(value - now[index])));
       checked++;
-      if (apart > PLACED_WITHIN) off.push(`${object.name || object.type} ${apart.toFixed(3)} m`);
+      if (apart > PLACED_WITHIN) off.push(`${pathOf(object)} ${apart.toFixed(3)} m`);
     }
     object.children.forEach(visit);
   };
@@ -229,8 +241,8 @@ async function flamesAtFewerPixels(lab: Lab, bridge: Bridge): Promise<Checked> {
 }
 
 
-/** Every foe of the fight is handed to the engine, and three draws none of the scene. */
-async function fight(lab: Lab, bridge: Bridge, foes: number): Promise<Checked> {
+/** Every foe of the fight is handed to the engine, and three draws none of the scene; each drawn as one. */
+async function fight(lab: Lab, bridge: Bridge, foes: number): Promise<Checked[]> {
   const spots = crowdPlaces(foes, G.player.pos, G.player.facing);
   const standing = await foesAt(lab, spots, spots.map(() => 1));
   const drawing = lab.drawing;
@@ -244,14 +256,11 @@ async function fight(lab: Lab, bridge: Bridge, foes: number): Promise<Checked> {
   }
   const watched = bridge.watched;
   bridge.watched = null;
-  const hidden = standing.filter((foe) => {
-    let drawn = false;
-    foe.obj.traverse((part) => { drawn ||= watched.has(part); });
-    return !drawn;
-  });
-  if (hidden.length) return failed(`${hidden.length} of ${standing.length} foes aren't drawn by the engine (${hidden[0].type})`);
-  if (three > THREE_DRAWS_MOST) return failed(`in the fight three drew ${three} things of its own in a frame`);
-  return passed(`all ${standing.length} foes drawn by the engine, ${bridge.stats.draws} draws; three's own ${three}`);
+  const hidden = standing.filter((foe) => !drawnFor(foe, watched));
+  const asOne = await bodiesAsOne(standing);
+  if (hidden.length) return [failed(`${hidden.length} of ${standing.length} foes aren't drawn by the engine (${hidden[0].type})`), asOne];
+  if (three > THREE_DRAWS_MOST) return [failed(`in the fight three drew ${three} things of its own in a frame`), asOne];
+  return [passed(`all ${standing.length} foes drawn by the engine, ${bridge.stats.draws} draws; three's own ${three}`), asOne];
 }
 
 /** Each skill on the hero's keys held in turn: nothing of it left undrawn. */
@@ -344,7 +353,7 @@ export async function rustCheck(lab: Lab, command: RustCheckCommand): Promise<Re
       checks.push(shelter(bridge, `the ${command.biome}`, false));
       // (in a run: the lobby shows no low-Health look)
       checks.push(await bloodAtLowHealth(lab));
-      checks.push(await fight(lab, bridge, command.foes));
+      checks.push(...await fight(lab, bridge, command.foes));
       checks.push(...await casts(lab, bridge));
       checks.push(await armsThroughTheEyes(lab, bridge, command.biome));
     }

@@ -11,6 +11,7 @@ import { G } from '../../state';
 import { QUALITY } from '../../data/quality';
 import { qualityLevel } from '../../core/quality';
 import type { Model } from '../../types';
+import { drawAsOne, drawnAsOne, leaveAsOne } from './bodyAsOne';
 import { CROWD_LAYER, HERO_SHADOW_LAYER } from '../../core/layers';
 import { refreshedInFull, uploadTexture } from '../../core/webgpu';
 import { crowdNodeMaterial } from './crowdNodes';
@@ -69,14 +70,14 @@ const _box = new THREE.Box3(), _sphere = new THREE.Sphere();
 const _m = new THREE.Matrix4(), _s = new THREE.Vector3(), _v = new THREE.Vector3(), _n = new THREE.Matrix3();
 
 /** The kit material `material` is, or is a copy of (a skinned piece's: models/shapes.ts), or null. */
-function baseOf(model: Model, material: THREE.Material): THREE.MeshStandardMaterial | null {
+export function baseOf(model: Model, material: THREE.Material): THREE.MeshStandardMaterial | null {
   const mats = model.kit.mats as THREE.MeshStandardMaterial[];
   if (mats.includes(material as THREE.MeshStandardMaterial)) return material as THREE.MeshStandardMaterial;
   return mats.find((m) => m.onBeforeCompile === material.onBeforeCompile) ?? null;
 }
 
 /** The pieces of `model` its kind shares (`Sculpt`'s), in a solid material of its kit: what the crowd draws. */
-function piecesOf(model: Model): THREE.Mesh[] {
+export function piecesOf(model: Model): THREE.Mesh[] {
   const out: THREE.Mesh[] = [];
   model.root.traverse((o) => {
     const m = o as THREE.Mesh;
@@ -88,13 +89,13 @@ function piecesOf(model: Model): THREE.Mesh[] {
 }
 
 /** An object's largest scale in the world, as core/quality.ts judges a piece's shadow by. */
-function maxScale(o: THREE.Object3D): number {
+export function maxScale(o: THREE.Object3D): number {
   o.getWorldScale(_s);
   return Math.max(_s.x, _s.y, _s.z);
 }
 
 /** Whether a piece casts a shadow by the model's own choice (core/quality.ts keeps it in `userData.casts`). */
-const castsOf = (m: THREE.Mesh): boolean => (m.userData.casts as boolean | undefined) ?? m.castShadow;
+export const castsOf = (m: THREE.Mesh): boolean => (m.userData.casts as boolean | undefined) ?? m.castShadow;
 
 /** A piece in its slot: the mesh, and the joint it hangs on (-1: skinned on the skeleton's bones). */
 type Part = { mesh: THREE.Mesh; joint: number };
@@ -213,7 +214,7 @@ function merged(list: Part[], rootInv: THREE.Matrix4, rootScale: number, colors:
  * Every point of `from` placed by `m` into `to` from vertex `at`, as `Vector3.applyMatrix4` places each, read off the
  * array: read and written a vector at a time, the crowd's merge took 0.36 s of a boot's warm-up.
  */
-function placeAll(from: THREE.BufferAttribute | THREE.InterleavedBufferAttribute, m: THREE.Matrix4,
+export function placeAll(from: THREE.BufferAttribute | THREE.InterleavedBufferAttribute, m: THREE.Matrix4,
   to: Float32Array, at: number): void {
   const e = m.elements;
   for (let i = 0, o = at * 3; i < from.count; i++, o += 3) {
@@ -226,7 +227,7 @@ function placeAll(from: THREE.BufferAttribute | THREE.InterleavedBufferAttribute
 }
 
 /** Every normal of `from` turned by `m` into `to` from vertex `at` and made a unit long, as `Vector3`'s would be. */
-function turnAll(from: THREE.BufferAttribute | THREE.InterleavedBufferAttribute, m: THREE.Matrix3,
+export function turnAll(from: THREE.BufferAttribute | THREE.InterleavedBufferAttribute, m: THREE.Matrix3,
   to: Float32Array, at: number): void {
   const e = m.elements;
   for (let i = 0, o = at * 3; i < from.count; i++, o += 3) {
@@ -250,7 +251,9 @@ const EYE_CLEAR = { from: 0.2, to: 0.5 };
  */
 export function joinCrowd(body: CrowdBody): boolean {
   const name = body.model.root.userData.crowdKind as string | undefined;
-  if (!ON || !name || seats.has(body)) return false;
+  // (under the engine, which never runs the crowd's shader, each body is drawn as one: `bodyAsOne.ts`)
+  if (!ON) return drawAsOne(body);
+  if (!name || seats.has(body)) return false;
   const pieces = piecesOf(body.model);
   if (!pieces.length) return false;
   let kind = kinds.get(name);
@@ -281,10 +284,11 @@ export function crowdSlots(model: Model): THREE.Object3D[] {
 }
 
 /** Whether `body` is drawn in its kind's crowd (the lab's `coop` asks of every foe). */
-export const inCrowd = (body: CrowdBody): boolean => seats.has(body);
+export const inCrowd = (body: CrowdBody): boolean => seats.has(body) || drawnAsOne(body);
 
 /** `body` out of its crowd (disposed). */
 export function leaveCrowd(body: CrowdBody): void {
+  leaveAsOne(body);
   const seat = seats.get(body);
   if (!seat) return;
   seats.delete(body);

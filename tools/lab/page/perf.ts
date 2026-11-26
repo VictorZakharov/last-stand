@@ -44,6 +44,7 @@ import { viewBy } from './villageHallCull';
 import { endFlight, flewFrom, flightLegs, flyTo, takeFlight, whereFlown, type Flown, type Leg } from './perfFly';
 import { PLANTED, plantOverVillage } from './perfFly';
 import { waveCome, waveLine, type WaveCome } from './perfWave';
+import { bodyCensus, censusLines } from './bodyRecords';
 
 export interface PerfOptions {
   biome: BiomeId;
@@ -54,6 +55,8 @@ export interface PerfOptions {
   at?: [number, number];
   /** the way the hero holds his weapons (as rolled when not given) */
   gear?: WeaponStyle;
+  /** `--tune`'s values, set before the set-up (`bodyAsOne.on=0`: each foe drawn piece by piece) */
+  tune?: Record<string, number[]>;
   /** the casts made in the lobby, the run abandoned for it: its camera is lower and nearer than a run's */
   lobby?: boolean;
   /** after the phases, the biggest draws timed on the GPU, drawn and hidden in turns (`perfParts.ts`) */
@@ -823,7 +826,7 @@ async function perfAtQuality(lab: Lab, options: PerfOptions): Promise<Report> {
   G.arena.restoreProps();
   const scenario = { biome: options.biome, view: options.view, facing: options.facing, gear: options.gear };
   if (options.village) await setUpVillage(lab, options);
-  else await standIn(lab, { ...scenario, at: options.at, fresh: Boolean(options.quality) });
+  else await standIn(lab, { ...scenario, at: options.at, fresh: Boolean(options.quality), tune: options.tune });
   const hero = G.player;
   for (const wanted of options.casts) bindKnown(wanted);
   hero.cooldowns.clear();
@@ -848,7 +851,7 @@ async function perfAtQuality(lab: Lab, options: PerfOptions): Promise<Report> {
     const hour = options.hour === undefined ? '' : ` at ${options.hour}:00`;
     const where = options.village ? `the village${hour}` : options.biome;
     lines.push(`${where}, ${options.lobby ? 'the lobby' : `the ${options.view} view`}, ${cpu}`);
-    if (come) lines.push(waveLine(come));
+    if (come) lines.push(waveLine(come), ...censusLines(await bodyCensus(lab)));
     const spun: { phases: Phase[]; lines: string[]; problems?: string[] } | null = options.village && options.spin
       ? await spinPhases(lab, options.facing * Math.PI / 180)
       : options.village && options.fly ? await flyPhases(lab, options.canary)

@@ -1,7 +1,7 @@
 // `npm run lab -- perf`: its command line (help, options) and its work on a side (node/commands/AGENTS.md).
 import { DEVICES } from '../devices.mjs';
 import { labError } from '../errors.mjs';
-import { playAsDevice, qualityOf, asText, problemsIn } from '../commandKit.mjs';
+import { fixtureFrom, playAsDevice, qualityOf, asText, problemsIn } from '../commandKit.mjs';
 import { SETUP_OPTIONS, COMMON_OPTIONS } from '../optionKit.mjs';
 
 /** `lab perf`, as the command line reads it and each side runs it (node/commands/AGENTS.md). */
@@ -56,6 +56,7 @@ export default {
     at: SETUP_OPTIONS.at,
     view: SETUP_OPTIONS.view,
     gear: SETUP_OPTIONS.gear,
+    tune: SETUP_OPTIONS.tune,
     foes: {
       kind: 'number',
       usage: 'n',
@@ -126,6 +127,7 @@ export default {
       facing: options.facing ?? 0,
       at: options.at,
       gear: options.gear,
+      tune: fixtureFrom(options).tune,
       foes: options.foes === undefined ? 10 : Math.round(options.foes),
       wave: options.wave === undefined ? undefined : Math.round(options.wave),
       apart: options.apart ?? 1,

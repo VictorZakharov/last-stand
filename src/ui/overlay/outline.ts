@@ -8,6 +8,7 @@ import * as THREE from 'three';
 import { FullScreenQuad } from 'three/addons/postprocessing/Pass.js';
 import { G } from '../../state';
 import { uiScales } from '../scale';
+import { placeUnplaced } from '../../entities/models/bodyAsOne';
 import { CROWD_LAYER } from '../../core/layers';
 import { frameRect, passCamera, passTriangle } from '../../core/renderer';
 import { portShader } from '../../core/shaderPorts';
@@ -245,6 +246,8 @@ function drawTarget(gl: THREE.WebGLRenderer, target: OutlineTarget): void {
 
 /** Draws `targets`' mask into the mask's target, at the canvas's size. */
 function drawMask(gl: THREE.WebGLRenderer, targets: readonly OutlineTarget[]): THREE.WebGLRenderTarget {
+  // (a foe drawn as one leaves its pieces unplaced: placed for its mask)
+  for (const each of targets) placeUnplaced(each.root);
   const f = frameRect();
   canvasSize.set(f.width, f.height);
   const target = maskOfSize(canvasSize.x, canvasSize.y);
@@ -276,6 +279,7 @@ const area = new THREE.Vector4();
 /** `targets`' box in the world, into `box`. */
 function boxOf(targets: readonly OutlineTarget[]): THREE.Box3 {
   box.makeEmpty();
+  for (const target of targets) placeUnplaced(target.root);
   for (const target of targets) {
     if (target.instance === undefined) {
       box.union(each.setFromObject(target.root));
