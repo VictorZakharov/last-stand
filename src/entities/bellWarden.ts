@@ -14,7 +14,7 @@
 //   you when coming near the bell").
 // - **Its dead**: a few raised round it every so often while it stands (`raiseInTurn`; from play, "make sure they spawn
 //   mobs once in a while").
-import * as THREE from '../engine/three';
+import * as THREE from '../engine/three.ts';
 import { G } from '../state';
 import { BELL_WARDEN } from '../data/foes/bellwarden';
 import { CANTOR } from '../data/foes/cantor';

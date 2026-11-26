@@ -4,7 +4,7 @@
 // nothing is made in the fight. A mound where she went under (heaved up, then settling) and where she'll rise
 // (bulging through the warning, then torn open by her rising and settling), and the ridge of soil travelling over
 // her way under the floor: each a lump of earth, its foot in the floor, along +z for the ridge.
-import * as THREE from '../../engine/three';
+import * as THREE from '../../engine/three.ts';
 import { organic } from './shapes';
 import { CAGE_NO_SIZE } from './rootCage';
 

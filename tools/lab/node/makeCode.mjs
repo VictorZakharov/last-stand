@@ -12,6 +12,8 @@ import { REPO } from './paths.mjs';
 
 /** the names a made thing goes by in the game */
 export const MAKE_NAME = /^[\w-]{1,40}$/;
+/** the game's module of three, from the repository's root (src/engine/three.ts) */
+const THREE_MODULE = 'src/engine/three';
 
 /** A relative import of `file`'s as its path from the repository's root, which must be the game's (`src/...`). */
 function fromRoot(file, asked) {
@@ -19,7 +21,8 @@ function fromRoot(file, asked) {
   if (!path.startsWith('src/')) {
     throw labError(`make: ${file} imports "${asked}", which isn't under src: a made thing imports three and the game's modules`);
   }
-  return path;
+  // (the game's own module of three is three as the page answers it: `require('three')`)
+  return path === THREE_MODULE ? 'three' : path;
 }
 
 /** `code`'s relative `require`s written from the repository's root. */

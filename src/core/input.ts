@@ -1,6 +1,6 @@
 // Keyboard + mouse state. `pressed` holds keys that went down this frame. Touch controls
 // (ui/touch.ts) feed the same state: a move stick, held skill keys and an aim point.
-import * as THREE from '../engine/three';
+import * as THREE from '../engine/three.ts';
 import { DUMMY_SACK_BOTTOM } from '../data/foes/dummy';
 import { keyDeliveryDelay } from './keyDelivery';
 import { G } from '../state';

@@ -25,7 +25,8 @@ function sources(dir) {
 
 /** the module's path as `path`'s import names it */
 function moduleFrom(path) {
-  const to = relative(dirname(path), MODULE).split(sep).join('/').replace(/\.ts$/, '');
+  // (with its extension: the lab's Node tests run the game's modules as they are, and Node takes none for it)
+  const to = relative(dirname(path), MODULE).split(sep).join('/');
   return to.startsWith('.') ? to : `./${to}`;
 }
 

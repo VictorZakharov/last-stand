@@ -1,7 +1,7 @@
 // A tall leather riding boot (the ranger's): its foot sculpted over a last (a rounded heel counter, the instep falling to
 // a broad ball and a toe box lifted at its tip) on a welted sole with a stacked heel, its shaft up the shin to below the
 // knee, bending with the ankle and creased where it bends, a cuff turned down at its top, and buckled straps round it.
-import * as THREE from '../../engine/three';
+import * as THREE from '../../engine/three.ts';
 import { Sculpt, lathe } from './shapes';
 import { belt, buckle, lod } from './armor';
 import { curve, type Keys } from './motion';

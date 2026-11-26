@@ -8,7 +8,7 @@
 // hero's hits on its rivals as its own screen shows them (entities/rival.ts) and tells the struck hero's game, which
 // works each hit out as its own screen has him (his block, his ward, a blink away) and reports his life and his fall
 // as it does in any run.
-import * as THREE from '../engine/three';
+import * as THREE from '../engine/three.ts';
 import { G } from '../state';
 import { COOP, PVP } from '../data/balance';
 import { BIOME_IDS, type BiomeId } from '../data/biomes';

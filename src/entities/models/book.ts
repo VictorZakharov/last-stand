@@ -5,7 +5,7 @@
 // printed page on each covering its block from edge to spine. (Two boxes with a print laid on each stopped short of
 // the spine, a plain strip of block and a dark gap between them, and the turned page lifted out of that strip, from
 // play: "fill in the pages, they don't reach the edges here. They should reach the middle".)
-import * as THREE from '../../engine/three';
+import * as THREE from '../../engine/three.ts';
 import { clamp, lerp, smooth } from '../../util';
 
 /** An open book's measures (m), for a book `size` across: each half's width from the spine to its outer edge and its

@@ -1,7 +1,7 @@
 // Rift Witch: a legless floating caster. Layered tattered robes end in a torn hem that trails void
 // wisps; a deep hood hides everything but a horned bone mask with burning eyes; a ragged mantle of
 // bone charms; bell sleeves and long clawed fingers cradling a void orb bound by turning rune rings.
-import * as THREE from '../../engine/three';
+import * as THREE from '../../engine/three.ts';
 import { createKit } from '../../core/materials';
 import { grunge, pbrMaterialMaps, veins } from '../../core/textures';
 import { buildHumanoid, joint, resetPose, idle, ramp } from './rig';

@@ -6,7 +6,7 @@
 // a blow lands as its swing shows and is judged against where the guest stands on its own screen.
 // Its own character stays its own to move and cast, and what its skills hit, it deals there and
 // then on its copies and reports to the host, which deals it on its foes (the guest's kill).
-import * as THREE from '../engine/three';
+import * as THREE from '../engine/three.ts';
 import { readyNextBoss } from '../game/bossReady';
 import { biomeReady, readyBiome } from '../game/biomeReady';
 import { foeWarm } from '../game/warmup';

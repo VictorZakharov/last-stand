@@ -7,7 +7,7 @@
 //   make, makes, unmake   things built into the scene as the player watches (agentMakes.ts)
 //   say      a line of the agent's in the game's chat, to the player (agentChat.ts)
 // Nothing here runs until the owner has accepted the agent (agent.ts holds every message till then).
-import * as THREE from '../engine/three';
+import * as THREE from '../engine/three.ts';
 import { G } from '../state';
 import { frameApart, frameRect, frameShot, viewMode } from '../core/renderer';
 import { qualityLevel, qualitySetting, resolutionSetting } from '../core/quality';

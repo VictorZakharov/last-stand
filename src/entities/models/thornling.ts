@@ -1,7 +1,7 @@
 // Thornling: a small, quick creature of braided twigs. Sap glows through the grain of its wood; a gourd
 // of a head carved into a snarl, splinter teeth, deep sockets with burning eyes, a crown of thorny
 // branches in leaf; thorns down its back and forearms, long hooked twig claws, root toes and a vine tail.
-import * as THREE from '../../engine/three';
+import * as THREE from '../../engine/three.ts';
 import { createKit } from '../../core/materials';
 import { bark, pbrMaterialMaps, veins } from '../../core/textures';
 import type { AnimState, Model } from '../../types';

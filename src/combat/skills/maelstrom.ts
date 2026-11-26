@@ -1,5 +1,5 @@
 // Maelstrom: a roaming firestorm that pulls enemies in and lashes them with lightning (its look: fx/firestorm.ts).
-import * as THREE from '../../engine/three';
+import * as THREE from '../../engine/three.ts';
 import { G } from '../../state';
 import { hitEnemy } from '../damage';
 import { hurtPropsIn, PROP_DAMAGE } from '../../world/destructible';

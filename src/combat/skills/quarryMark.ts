@@ -2,7 +2,7 @@
 // takes more damage from every player's hits (`amp`, combat/damage.ts). Killed, it gives the ranger his cooldowns back (not the draught's) and the mark is spent;
 // with no kill in `duration` it fades. One mark per ranger: marking another moves it. Every game marks its own copy of the foe (a co-op guest's for the look and the cooldowns, the host's
 // for the damage), as each sees the cast land.
-import * as THREE from '../../engine/three';
+import * as THREE from '../../engine/three.ts';
 import { G } from '../../state';
 import { addEffect } from '../../fx/effects';
 import { burst } from '../../fx/particles';

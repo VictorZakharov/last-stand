@@ -2,7 +2,7 @@
 // `vertex_hook` and `surface_hook`: the engine's lit.wgsl), the numbers and maps that shader reads, and what the
 // bridge does for its meshes. A material with a look is drawn by it; one moved or cut by three's nodes and with no
 // look isn't drawn (`Bridge.skipped`). Each look's shader is in `looks/`, beside the game's code it ports.
-import type * as THREE from './three';
+import type * as THREE from './three.ts';
 import type { SeeThrough } from '../core/seeThrough';
 
 /** how many floats a shader has to itself (`m.c`, 48 vec4s: `CUSTOM_FLOATS` in the engine's gpu.rs) */

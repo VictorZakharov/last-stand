@@ -1,6 +1,6 @@
 // Procedural humanoid rig: a hierarchy of joint Groups with primitive meshes,
 // plus reusable procedural animation helpers. Forward is +Z, left is +X.
-import * as THREE from '../../engine/three';
+import * as THREE from '../../engine/three.ts';
 import { clampAnkle, clampAnkleRoll } from './anatomy';
 import { groundHeight } from '../../world/ground';
 import { tunable } from '../../core/tuning';

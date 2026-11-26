@@ -4,7 +4,7 @@
 // sarcophagi and gravestones break up the floor; a ruined necropolis and dead trees stand beyond.
 import { rustLook } from '../engine/custom';
 import { beaconLook, dampLook, outsideLook } from '../engine/looks/crypt';
-import * as THREE from '../engine/three';
+import * as THREE from '../engine/three.ts';
 import { portShader, seeKept, seeUniforms, wgslNoise } from '../core/shaderPorts';
 import { dampNodes, outsideOutputNode } from './cryptNodes';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';

@@ -1,6 +1,6 @@
 // World-anchored overlays: damage numbers and floating words, and labels over a point of the world (foes' bars, the
 // props' gauges, the dummies' meters, the partners' tags), drawn over the frame by the renderer (ui/overlay).
-import * as THREE from '../engine/three';
+import * as THREE from '../engine/three.ts';
 import { G } from '../state';
 import { Label, ORDER, layoutLabels } from './overlay/layer';
 import { drawText, measure, roundRect, type Shadow, type TextStyle } from './overlay/paint';

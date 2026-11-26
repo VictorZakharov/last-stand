@@ -2,7 +2,7 @@
 // `Pass.edges`): photo mode's exposure, contrast, saturation, colour filter, focus and bloom (core/photoLook.ts), and
 // the blood round the screen's edges as the hero's Health runs low (core/bloodEdges.ts, core/lowLife.ts). Without it
 // a photo was the frame as played whatever its look, and low health only drained the colour.
-import type * as THREE from './three';
+import type * as THREE from './three.ts';
 import type { Core } from './core';
 import type { Grade } from './globals';
 import type { Maps } from './maps';

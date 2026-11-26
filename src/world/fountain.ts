@@ -11,7 +11,7 @@ import { rustLook } from '../engine/custom';
 import { causticsLook, fallingLook, waterLook } from '../engine/looks/water';
 import type { OwnLooks } from '../core/shaderPorts';
 import { causticNodes, fallingNodes, waterLooks, waterNodes } from './villageNodes';
-import * as THREE from '../engine/three';
+import * as THREE from '../engine/three.ts';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { canvasOf, ctx2d } from '../core/textures';
 import { seeThrough } from '../core/seeThrough';

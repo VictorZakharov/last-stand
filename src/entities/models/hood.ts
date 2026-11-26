@@ -6,7 +6,7 @@
 // verlet, distance constraints, the body as elliptical capsules on its joints. (Shaped once on the head, a hood turned
 // with it through the shoulders, and laid close it read as a helmet; cut flat and settled by its weight, it drifted from
 // where it was laid in ways no tuning converged on, a bell over the shoulders and a cone over the head.)
-import * as THREE from '../../engine/three';
+import * as THREE from '../../engine/three.ts';
 
 /** `?cloth=0` holds the hood at its cut shape, as the sleeves are */
 const CLOTH = typeof location === 'undefined' || !/[?&]cloth=0/.test(location.search);

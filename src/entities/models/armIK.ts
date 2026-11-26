@@ -5,7 +5,7 @@
 // their ends, and the hand (and what it holds) turns only as far as they let it. A hand round a handle may also turn
 // about it (`roll`), its wrist going round with it. A two-bone solve whose pole alone chose the elbow put it wherever
 // the pole said: behind the back, up past the head, the wrist bent double round a handle.
-import * as THREE from '../../engine/three';
+import * as THREE from '../../engine/three.ts';
 import type { Joints } from './rig';
 import { GIRDLE, GRIPPED_FLEXION, ROM_ON, capsuleDepth, clampWrist, girdlePlace, shoulderExcess, type BodyShape, type Solid } from './anatomy';
 

@@ -2,7 +2,7 @@
 // the light it spills over the floor, as WGSL functions (`wgslFn`) written line for line from the GLSL, each a node
 // material's whole output as `gl_FragColor` was, the membrane fading as the gate round it dissolves
 // (`seeThroughFade`, core/shaderPorts.ts `seeKept`).
-import * as THREE from '../engine/three';
+import * as THREE from '../engine/three.ts';
 import { gpu, tsl } from '../core/webgpu';
 import { seeKept, seeUniforms } from '../core/shaderPorts';
 import { rustLook } from '../engine/custom';

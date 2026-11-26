@@ -6,7 +6,7 @@
 // the hour turned). Talked to (main.ts `useObject`), it opens the training grounds' card on its battleground. It's no
 // foe: not in `G.enemies`, so nothing aims at it, strikes it or counts it. It's drawn in its kind's crowd while it's
 // shown (`models/crowd.ts`): drawn on its own, a thornling was 46 of the village's draws.
-import * as THREE from '../engine/three';
+import * as THREE from '../engine/three.ts';
 import { BIOMES, BIOME_IDS, type BiomeId } from '../data/biomes';
 import { ENEMIES, type EnemyId } from '../data/enemies';
 import { GHOST, biomeOfHour } from '../data/village';

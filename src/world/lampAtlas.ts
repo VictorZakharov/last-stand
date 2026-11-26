@@ -5,7 +5,7 @@
 // What's drawn is what casts as the world is built (the merged caster the shadow maps alone draw, the instanced posts
 // and trunks); a leaf card, which casts by its picture's alpha, is left out (drawn whole, it would cast a square).
 import { AHEAD } from '../engine/pipelinesAside';
-import type * as THREE from '../engine/three';
+import type * as THREE from '../engine/three.ts';
 import type { LampPlace } from '../core/lamps';
 import { drawnInShadowsOnly } from './culling';
 

@@ -1,6 +1,6 @@
 // Shared domain types. Data files (src/data) are typed against these, and the
 // systems consume them, so adding a class / enemy / skill is type-checked.
-import type * as THREE from './engine/three';
+import type * as THREE from './engine/three.ts';
 import type { createKit } from './core/materials';
 import type { Joints } from './entities/models/rig';
 import type { Dye } from './entities/models/dye';

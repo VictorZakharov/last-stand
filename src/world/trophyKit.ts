@@ -2,7 +2,7 @@
 // records (world/houses/records.ts) sets each on its place, a shield on the back wall or a stand in the trophy cabinet.
 // A trophy is its own small mesh, its boss's look taken from its model's shapes and colours (entities/models/), never
 // the boss's own chunk (entities/bosses/, loaded at its wave alone): the village draws it from the boot.
-import * as THREE from '../engine/three';
+import * as THREE from '../engine/three.ts';
 import type { TrophyDef } from '../data/houses';
 import type { Mats } from './rooms';
 

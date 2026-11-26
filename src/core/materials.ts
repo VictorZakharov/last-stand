@@ -1,7 +1,7 @@
 // Material kit: every entity builds its materials through a kit so that
 // shared per-entity FX uniforms (dissolve, frozen, charred, hit flash) can be driven
 // with a single write each frame.
-import * as THREE from '../engine/three';
+import * as THREE from '../engine/three.ts';
 import { tunable } from './tuning';
 import { readCookie, writeCookie } from './cookies';
 

@@ -3,7 +3,7 @@
 // ferrule where it goes into the head, the straw bound round in three courses of twine and splayed at its foot, its
 // tips ragged. Its origin is where his upper hand holds it, its bristles out along +y (as `CARRY.broom` and the sweep
 // hold it). Each material is one mesh, its pieces merged: four draws.
-import * as THREE from '../engine/three';
+import * as THREE from '../engine/three.ts';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { mulberry } from '../util';
 

@@ -2,7 +2,7 @@
 // more detail": struck coins of four designs, cut gems, a chased goblet, a crown, gold bars; the pictures they're
 // drawn in, the quilted lining and the lock's engraved plate. Every picture is made with its height beside it: a colour
 // alone read as a flat decal on the metal under a lamp.
-import * as THREE from '../engine/three';
+import * as THREE from '../engine/three.ts';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { canvasOf, ctx2d } from '../core/textures';

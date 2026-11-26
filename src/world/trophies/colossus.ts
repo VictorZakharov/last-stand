@@ -3,7 +3,7 @@
 // place on the head and in its colours, grown 1.65 times: the low skull of pale cracked stone, violet light in its
 // cracks gone dim, the heavy brow over burning eyes, the jaw with its tusks, the ridged horns sweeping out and up, and
 // its crown of violet crystal, dimmed; a stump of its neck into the shield behind it.
-import * as THREE from '../../engine/three';
+import * as THREE from '../../engine/three.ts';
 import { grunge, pbrMaterialMaps, cracks } from '../../core/textures';
 import { horn, organic } from '../../entities/models/shapes';
 import type { TrophyDef } from '../../data/houses';

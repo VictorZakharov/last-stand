@@ -14,7 +14,7 @@
 // hips and the trunk turning, the rear heel lifting, the weight onto the front foot. Through the eyes the same: the
 // fist comes from the bottom corner of the view, across to just under the crosshair, its shoulder sent in after it
 // and the other fist drawn back down, so the view sees a whole arm thrown, not a hand poked out.
-import * as THREE from '../../engine/three';
+import * as THREE from '../../engine/three.ts';
 import { reachArm, ramp, type Joints } from './rig';
 import { curve, type Keys } from './motion';
 import { fromEyes, fromScreen } from '../viewModel';

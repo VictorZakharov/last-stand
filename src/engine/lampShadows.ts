@@ -3,7 +3,7 @@
 // its atlas (core/lamps.ts `lampShadowAt`). Asked for where the game asks three for its atlas (world/lampAtlas.ts
 // `bakeLampShadows`), and drawn a lamp a frame at the head of the frames after, so no frame waits on all of them.
 // From play, of the lamps shining through every wall and post: "and lights have no shadows".
-import * as THREE from './three';
+import * as THREE from './three.ts';
 import { lampList, LAMPS_MOST } from '../core/lamps';
 import type { Core } from './core';
 import { GLOBALS, projectionOf, TUNE } from './globals';

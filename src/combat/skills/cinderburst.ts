@@ -1,7 +1,7 @@
 // Cinderburst: the fire staff's spell (#402). A slow, heavy orb of fire that bursts where it strikes: the foe it
 // meets takes it whole, those round it a share easing down to the blast's edge, and each may be set alight
 // (combat/burn.ts). Cast a third as often as an arcane staff's bolt.
-import * as THREE from '../../engine/three';
+import * as THREE from '../../engine/three.ts';
 import { G } from '../../state';
 import { spawnProjectile } from '../projectiles';
 import { hitEnemy } from '../damage';

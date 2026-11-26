@@ -5,7 +5,7 @@
 // pass read as the shadow's in every frame the sun's shadow drew in it (three draws it inside the scene's call, and
 // numbers the scene's id after it). From the owner's phone: its GPU took 11.5 ms a frame paused and 24 in the lobby,
 // the same view (traces N5TH-2XC9, R5FJ-9TNN), where this PC drew the two alike: the split says which pass grows.
-import * as THREE from '../engine/three';
+import * as THREE from '../engine/three.ts';
 import { G } from '../state';
 
 /** what of three's WebGPU renderer this reads: its inspector, told of each render, and its pool of timestamps */

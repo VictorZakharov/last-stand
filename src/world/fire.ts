@@ -7,7 +7,7 @@
 // 1.5 times a second) moves them together. `tools/lab` `fire` measures it.
 import { rustLook } from '../engine/custom';
 import { emberLook } from '../engine/looks/fire';
-import * as THREE from '../engine/three';
+import * as THREE from '../engine/three.ts';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { particles, col } from '../fx/particles';
 import { rand } from '../util';

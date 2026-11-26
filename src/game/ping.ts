@@ -6,7 +6,7 @@ import { G } from '../state';
 import { PING } from '../data/balance';
 import { sfx } from '../core/audio';
 import { aimedFoe } from '../combat/skills/quarryMark';
-import type * as THREE from '../engine/three';
+import type * as THREE from '../engine/three.ts';
 import type { Enemy } from '../entities/enemy';
 import type { Player } from '../entities/player';
 import { onMessages } from '../net/messages';

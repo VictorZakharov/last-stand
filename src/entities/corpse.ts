@@ -2,7 +2,7 @@
 // once it has come to rest and then dissolving. Frozen, it falls stiff and shatters where it lands; shocked, it
 // twitches and sparks as it falls; burnt, it chars, glowing in its cracks, and smokes. The skills move the fallen too:
 // a storm whirls them round it and a beam carries them along it (`addField`), a blast throws them out (`blastCorpses`).
-import * as THREE from '../engine/three';
+import * as THREE from '../engine/three.ts';
 import { G } from '../state';
 import { Ragdoll, type Field } from './ragdoll';
 import { groundHeight } from '../world/ground';

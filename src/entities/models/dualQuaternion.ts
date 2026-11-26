@@ -3,7 +3,7 @@
 // them twists: the thumb, a half turn round its length as it closes over a handle, folded its glove into a fin across
 // the web and creased the thenar. Blended as dual quaternions, a vertex halfway goes halfway round. Its four bones'
 // matrices are made one in `skinbase_vertex`, and three's own chunks then apply it as they would any.
-import * as THREE from '../../engine/three';
+import * as THREE from '../../engine/three.ts';
 
 const FUNCTIONS = /* glsl */ `
 #ifdef USE_SKINNING

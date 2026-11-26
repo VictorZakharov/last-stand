@@ -2,7 +2,7 @@
 // through the shoulder, the grip, the weapon's way, its flat and the elbow placed in the view from it (`swingAt`); and
 // the other way round, the key that holds a grip and a weapon's way chosen in the view (`swingKeyFor`: a pose decided
 // as a person holds it, then keyed; the lab's `swing`).
-import * as THREE from '../engine/three';
+import * as THREE from '../engine/three.ts';
 import { curve, type Keys } from './models/motion';
 import { ROM } from './models/anatomy';
 

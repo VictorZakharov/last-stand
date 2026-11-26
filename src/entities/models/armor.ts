@@ -1,7 +1,7 @@
 // Geometry for the heroes' gear: solid plates bent to any surface (with rolled edges), straps that
 // wrap round the body, fur tufts, studs, medallions, gloved fingers, and a skirt of cloth or mail that
 // swings with the legs. Static pieces go through `Sculpt` (entities/models/shapes.ts) to merge per joint.
-import * as THREE from '../../engine/three';
+import * as THREE from '../../engine/three.ts';
 import { freshLocal, freshPass, freshWorld } from './freshWorld';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { taperTube, twist } from './shapes';

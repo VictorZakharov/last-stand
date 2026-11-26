@@ -5,7 +5,7 @@
 // The tavern's ale is drunk by the same move with beats of its own (`ALE_KEYS`: the mug taken off the bar, three long
 // swallows, lowered to the chest through a contented breath), from a stave mug held round its body in the flask's place
 // (`buildMug`, in the flask's group: shown in its stead while the drink is the ale).
-import * as THREE from '../../engine/three';
+import * as THREE from '../../engine/three.ts';
 import type { Joints } from './rig';
 import { curve, type Keys } from './motion';
 import { hold, fistReach, fistTurn, seatHeld, SLANT, type Hand } from './hands';

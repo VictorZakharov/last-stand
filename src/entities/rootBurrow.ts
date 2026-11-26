@@ -16,7 +16,7 @@
 //   from half under till she rises (`Enemy.invulnerable`, `Enemy.buried`).
 // - The host moves her only while she's wholly under, at `speed`; a guest's copy follows the host's reports, under
 //   the floor too by then.
-import * as THREE from '../engine/three';
+import * as THREE from '../engine/three.ts';
 import { G } from '../state';
 import { ROOTMOTHER } from '../data/foes/rootmother';
 import { ARENA } from '../data/balance';

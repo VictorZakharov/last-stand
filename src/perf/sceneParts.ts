@@ -5,7 +5,7 @@
 // parts are those of the place the player stands in. The lab's `scenecost` (tools/lab/page/sceneCost.ts) keeps its own
 // parts, some changing programs (a light hidden, a shadow or the environment taken off), compiled before it times: an
 // A/B copies the lab's page modules into the other commit's tree, where this module isn't on a commit older than it.
-import * as THREE from '../engine/three';
+import * as THREE from '../engine/three.ts';
 import { G } from '../state';
 import { QUALITY } from '../data/quality';
 import { qualityBudget, qualityLevel } from '../core/quality';

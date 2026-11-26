@@ -13,7 +13,7 @@
 // The village folk are pictured here too, each first as his card asks for it (Brother Hollis's talk, Odo's trade):
 // another of him built on his own model, looking into the camera, head and shoulders in the room behind him
 // (`folkPortraits.ts`; from play, "lets have an actual picture of him, of his actual face", "Have him look straight").
-import * as THREE from '../../engine/three';
+import * as THREE from '../../engine/three.ts';
 import { foeLoaded, loadFoe } from '../../entities/bosses';
 import { ENEMIES, type EnemyId } from '../../data/enemies';
 import { CLASSES, CLASS_IDS } from '../../data/classes/index';

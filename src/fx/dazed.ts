@@ -1,7 +1,7 @@
 // A dazed foe's stars: three small stars floating round over its head, fading as it comes to. Plain stars, drawn as
 // they are and not as lights: four glows each leaving a trail made a bright ring over every dazed foe (a crowd dazed
 // at once was a field of them). Drawn each frame from where they are then, one draw for every dazed foe.
-import * as THREE from '../engine/three';
+import * as THREE from '../engine/three.ts';
 import { G } from '../state';
 import { pointScale } from '../core/renderer';
 import { starQuads, type StarQuads } from './particleNodes';

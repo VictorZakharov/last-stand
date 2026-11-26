@@ -3,7 +3,7 @@
 // draw, and the model is placed so the camera sits just above its neck, turned and tilted with the view
 // and tipped back a little so the hands and weapon sit in the frame. The placement holds until the next
 // frame's pose, so skills cast in between leave from the weapon in view (`Player.castPoint`).
-import * as THREE from '../engine/three';
+import * as THREE from '../engine/three.ts';
 import type { Model } from '../types';
 import { drawArms } from '../core/renderer';
 import { ARMS_LAYER, HIDDEN_LAYER, WORLD_LAYER } from '../core/layers';

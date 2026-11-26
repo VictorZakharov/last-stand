@@ -2,7 +2,7 @@
 // or an IK solution can be checked against what a body can do. The ranges are the usual adult norms (AAOS). The rig's
 // rest pose is standing with the arms hanging, the palms facing back (the forearms turned fully over): a joint's rest
 // frame lines up with its parent's, its bone along -Y, +X the character's left, +Z forward.
-import * as THREE from '../../engine/three';
+import * as THREE from '../../engine/three.ts';
 import type { Joints } from './rig';
 
 /** `?rom=0` lets the joints go past their ranges again (the IK and the pose as they were), for A/B comparison */

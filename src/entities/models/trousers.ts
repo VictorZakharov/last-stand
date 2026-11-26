@@ -3,7 +3,7 @@
 // roll where it's tucked into the boot, a welted seam down the outside). Skinned down the leg's chain, hips to ankle,
 // so nothing opens at a joint. (Two round-topped tubes hung from the hip joints, with no pelvis between them, were
 // "logs", and the world showed between their tops under the belt: #520, #346.)
-import * as THREE from '../../engine/three';
+import * as THREE from '../../engine/three.ts';
 import { strap, lod, heroDetail, TILE } from './armor';
 import { curve, type Keys } from './motion';
 import { clamp, lerp } from '../../util';

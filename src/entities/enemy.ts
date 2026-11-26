@@ -1,6 +1,6 @@
 // Enemy entity: movement, status effects, actions, damage, death.
 // Decision-making lives in enemyAI; visuals come from models/.
-import * as THREE from '../engine/three';
+import * as THREE from '../engine/three.ts';
 import { gaitRate, legLength, type LegIK } from './models/ik';
 import { G } from '../state';
 import { ENEMIES, HERO, SCALING, type EnemyId } from '../data/enemies';

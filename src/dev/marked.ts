@@ -6,7 +6,7 @@
 // Thornwood's tufts, the crypt's weeds, the village's meadow (`asGrass`). Only what's drawn changes: a tree taken out
 // still stands where it stood for bodies, arrows and the foes' paths, and a young tree's dark patch on the floor
 // (`contactShadows`) stays to say where.
-import * as THREE from '../engine/three';
+import * as THREE from '../engine/three.ts';
 import { G } from '../state';
 import { HIDDEN_LAYER } from '../core/layers';
 import { materialsOf } from '../perf/sceneParts';

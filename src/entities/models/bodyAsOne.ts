@@ -9,7 +9,7 @@
 // each body draws with its own materials, so both reach it); a mesh hidden or a material swapped on one foe shows on
 // none. Its pieces stay where they hang, on a layer no camera draws (`CROWD_LAYER`), for what reads them (an arrow
 // lodged in one, the aim's hulls, the outline). `--tune bodyAsOne.on=0` draws each piece on its own again.
-import * as THREE from '../../engine/three';
+import * as THREE from '../../engine/three.ts';
 import { G } from '../../state';
 import { CROWD_LAYER } from '../../core/layers';
 import { tunable } from '../../core/tuning';

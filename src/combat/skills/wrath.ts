@@ -3,7 +3,7 @@
 // has as he begins it (`ActionState.form`): under `FRENZY.slam` a single hook into the foe before him; from it both
 // fists brought down together in a slam that strikes everything within `radius` of where they land too; from
 // `FRENZY.quake` the slam cracks the ground and throws the foes round it back. Cast only with a stack or more.
-import * as THREE from '../../engine/three';
+import * as THREE from '../../engine/three.ts';
 import { G } from '../../state';
 import { hitEnemy } from '../damage';
 import { shockwave, groundFlash, crackDecal, decal } from '../../fx/effects';

@@ -1,7 +1,7 @@
 // A spore orb (the Thornheart's and the Sporecallers' volleys): a ball of swirling toxic spores, drawn as animated noise with sap
 // veins crawling over it and soft, see-through edges. It is blended over the scene, not added as light, so
 // it reads as a thing thrown at you without glare, near or far. It trails spores and smoke.
-import * as THREE from '../engine/three';
+import * as THREE from '../engine/three.ts';
 import { G } from '../state';
 import { particles, col } from './particles';
 import { portShader, wgslNoise } from '../core/shaderPorts';

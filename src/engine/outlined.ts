@@ -2,7 +2,7 @@
 // the engine (Bulwark's gpu/outline.rs): each frame the named meshes' records are written again beside the frame's
 // own, flagged `OUTLINED`, so the engine draws them into the outline's mask alone, whatever stands before them, and
 // the mask's edge over its finished frame. The page drew it with three's renderer on a canvas laid over the engine's.
-import * as THREE from './three';
+import * as THREE from './three.ts';
 import { RECORD, type Core } from './core';
 import { engineCanvas } from './index';
 

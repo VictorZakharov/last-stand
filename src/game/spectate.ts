@@ -4,7 +4,7 @@
 // before; Q and E (or a middle drag, in every view, or two fingers twisted) turn it round him; F lets it fly free
 // (WASD, or the move stick) and back. The bar over the HUD (`ui/coop.ts`) shows who is watched and has a button for
 // each but the turns, for touch.
-import * as THREE from '../engine/three';
+import * as THREE from '../engine/three.ts';
 import { G } from '../state';
 import { ARENA, CAMERA } from '../data/balance';
 import { input, isDown, wasPressed } from '../core/input';

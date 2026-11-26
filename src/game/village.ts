@@ -3,7 +3,7 @@
 // click or a tap on it from anywhere, which walks him there first); the panel or card a use opened put away as he walks
 // off; and his skills cast in the training yard alone. In the top view the pointer picks an object; in the close views
 // the one he's near, E using it.
-import * as THREE from '../engine/three';
+import * as THREE from '../engine/three.ts';
 import { seeFrom, seenShareAt, sightWalls } from '../core/sight';
 import {
   columnsKeepAllDepth, fadeHallDoor, fadeWhole, HALL_WALL_KINDS, type HallWallKind, columnsSeen, hallSightCone,

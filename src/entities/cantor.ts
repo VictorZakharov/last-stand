@@ -21,7 +21,7 @@
 //   fight's owner rolls, warned by a ring of grave light first; each an ordinary breakable prop (world/risenGraves.ts),
 //   so they block paths and shots, at most `graves.most` standing, sinking back as it falls (`graveStoneAt`).
 // Its warned hits and the guards' tolls never land together (`claimBeat`).
-import * as THREE from '../engine/three';
+import * as THREE from '../engine/three.ts';
 import { G } from '../state';
 import { CANTOR } from '../data/foes/cantor';
 import { hurtPlayer } from '../combat/damage';

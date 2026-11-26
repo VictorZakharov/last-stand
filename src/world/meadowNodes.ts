@@ -3,7 +3,7 @@
 // instance's cell (`bladeNodes`), and the ground's sward under them (`swardColorNode`). A ring's uniforms are set once
 // a render (`renderGroup`, as `onBeforeRender` sets them just before its first draw): the grass stands still to three,
 // and a still material's refresh sends nothing of the object's.
-import type * as THREE from '../engine/three';
+import type * as THREE from '../engine/three.ts';
 import { stillNodes, tsl } from '../core/webgpu';
 import { SOLID_RANGE } from './meadowSolids';
 

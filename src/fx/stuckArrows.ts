@@ -5,7 +5,7 @@
 // one (`arrowLite`, 18 triangles to its 301) beyond. Only the moving ones (riding, falling, fading) are written each
 // frame. Purely visual: every game keeps its own, from the arrows it sees.
 import { thinsByBlending } from '../core/seeThrough';
-import * as THREE from '../engine/three';
+import * as THREE from '../engine/three.ts';
 import { G } from '../state';
 import { addEffect } from './effects';
 import { arrowGeometry, arrowLite, ARROW } from '../entities/models/bow';

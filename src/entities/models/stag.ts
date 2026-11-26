@@ -11,7 +11,7 @@
 // while it bears the stag, and the leg's joints are solved to reach it (`stepLegs`; `lab boss --parts stagStride`). Through its weak-spot window it has crashed: it reels, its head hung
 // and shaking. Killed, its legs fold and it sinks, its embers going out.
 // Drawn in its crowd (models/crowd.ts): every change is a joint's place or a glow's strength, nothing hidden.
-import * as THREE from '../../engine/three';
+import * as THREE from '../../engine/three.ts';
 import { createKit } from '../../core/materials';
 import { bark, grunge, pbrMaterialMaps, veins } from '../../core/textures';
 import { joint, ramp } from './rig';

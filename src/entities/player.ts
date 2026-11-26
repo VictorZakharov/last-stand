@@ -5,7 +5,7 @@ import { clickTaken } from '../game/keyTakers';
 import { drinkChoice } from '../game/drinkChoice';
 /** the share of his pace he walks at with a mug of the tavern's ale in his hand */
 const ALE_CARRY_PACE = 0.55;
-import * as THREE from '../engine/three';
+import * as THREE from '../engine/three.ts';
 import { gaitRate, legLength, LookAt, type LegIK } from './models/ik';
 import { stepVelocity } from './movement';
 import { foeNear, Sitting } from './sitting';

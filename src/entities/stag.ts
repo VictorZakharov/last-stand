@@ -51,7 +51,7 @@
 // enemyAI's `fx`: the host decides the charge and what it meets (a partner's raised shield as the host's copy of him
 // shows it), and each game judges its own hero against the fire, the gore, the stamp, the toss and the embers
 // (`hurtPlayer`).
-import * as THREE from '../engine/three';
+import * as THREE from '../engine/three.ts';
 import { G } from '../state';
 import { STAG } from '../data/foes/stag';
 import { BLOCK } from '../data/balance';

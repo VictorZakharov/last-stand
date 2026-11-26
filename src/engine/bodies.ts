@@ -2,7 +2,7 @@
 // are records drawn on its root's node, skinned by the engine from its joints' nodes (the mirror's, `mirror.ts`:
 // its foe handed over whole) and culled by its sphere there. Written a record and its bones a frame, a wave 36's 34
 // foes were half the page's work a frame with their placing (`lab perf --wave 36 --profile`).
-import * as THREE from './three';
+import * as THREE from './three.ts';
 import type { Core } from './core';
 import { RECORD } from './core';
 import { tunable } from '../core/tuning';

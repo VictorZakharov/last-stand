@@ -9,7 +9,7 @@
 // plain ring shows the spot for one with no preview of its own), or after a tap at the nearest foe; a movement skill
 // (Veilstep) tapped goes the way the move stick points, or the way the hero faces. The mode follows the last input
 // used, so touch laptops work too.
-import * as THREE from '../engine/three';
+import * as THREE from '../engine/three.ts';
 import { G } from '../state';
 import { input } from '../core/input';
 import { cameraYaw, lookBy, viewMode, zoomBy } from '../core/renderer';

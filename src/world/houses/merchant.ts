@@ -7,7 +7,7 @@
 // round the walls and its two showpieces are merchantWares.ts; its counter and display tops an oiled wood apart from the
 // floor's planks (`oiledWood`). As every
 // room: 10 point lights, two casting (the hearth and the chandelier).
-import * as THREE from '../../engine/three';
+import * as THREE from '../../engine/three.ts';
 import { HOUSES, type RoomId } from '../../data/houses';
 import {
   BODY, CANDLE, CROSS_UNDER, DISPLAY, LANTERN, barrel, begin, box, candle, chandelier, drum, finish, framed, hearth, lantern, onWall, rug,

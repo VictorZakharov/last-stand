@@ -1,7 +1,7 @@
 // The count of ghosts lying over each pixel (core/seeThrough.ts `countGhosts`, `LAYERS_SHARE_GLSL`) was drawn by the
 // WebGL renderer alone: nothing is counted now, each ghost kept as one alone is. What's left is what the lab's village
 // checks still ask of it.
-import type * as THREE from '../engine/three';
+import type * as THREE from '../engine/three.ts';
 
 /** For a harness (tools/lab): nothing counted, as it is whatever is asked. */
 export function holdGhostsUncounted(_held: boolean): void {}

@@ -12,7 +12,7 @@
 // screen's own pixels: what's cut is other work,
 // never the resolution (from play, "I want to run the game at full phone res, if we need
 // to cut, we need to cut something else, not resolution").
-import * as THREE from '../engine/three';
+import * as THREE from '../engine/three.ts';
 import { G } from '../state';
 import { QUALITY, QUALITY_ORDER, AUTO_QUALITY, type QualityLevel, type QualityPreset, type QualitySetting } from '../data/quality';
 import { setBloomShare, setRenderQuality, setResolutionShare, setShadowInTurns } from './renderer';

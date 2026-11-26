@@ -3,7 +3,7 @@
 // net/role.ts `dealsDamage`), the lobby's own hero hidden meanwhile. The camera comes to the hero in focus, lit by a key
 // light and a rim light from the pool (fx/lights.ts: the count never changes), and he shows off a skill of his as it
 // arrives (`HallDef.showcase`). Every hero's programs are warm before it opens (game/warm.ts, the `heroes` need).
-import * as THREE from '../engine/three';
+import * as THREE from '../engine/three.ts';
 import { G } from '../state';
 import { CLASSES, CLASS_IDS } from '../data/classes/index';
 import { Player } from '../entities/player';

@@ -6,7 +6,7 @@
 // Her great pod (`buildGreatPod`, from Kenneth: "stronger mobs come from larger cacoons"): the same husk built 1.8
 // times as large in six segments, a glowing vein raised down the middle of each, its glow amber where the small pod's
 // is green: from the top-down camera its size, its veins and its colour tell it apart at a glance.
-import * as THREE from '../../engine/three';
+import * as THREE from '../../engine/three.ts';
 import { createKit } from '../../core/materials';
 import { grunge, pbrMaterialMaps } from '../../core/textures';
 import { joint } from './rig';

@@ -3,7 +3,7 @@
 // of its own laid over three's. The game still boots on three's WebGPU renderer, which goes on making what the
 // engine doesn't yet (warm-ups, portraits, the overlays); only the frame's scene is the engine's. Loaded where the
 // browser has WebGPU; where it hasn't, or the engine doesn't start, the loading screen says so (no other renderer).
-import type * as THREE from './three';
+import type * as THREE from './three.ts';
 import { Bridge, TUNE, type Grade } from './bridge';
 import { perfClock } from '../core/perfClock';
 import { cullForEngine } from '../world/doorways';

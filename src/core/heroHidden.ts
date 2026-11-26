@@ -2,7 +2,7 @@
 // a few lines from the camera to points of his body, read against what's built and the circles of what stands free.
 // Thinned all the time it took apart whatever he stood beside; with a hole his own size alone he showed by himself
 // behind a wall ("character and context around character needs to be visible even if the character is behind props").
-import * as THREE from '../engine/three';
+import * as THREE from '../engine/three.ts';
 import { G } from '../state';
 import { FENCE, STANDS_FREE, wallHit } from '../world/wall';
 import { clamp, damp } from '../util';

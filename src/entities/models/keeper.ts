@@ -15,7 +15,7 @@
 // (His first form, from play: "Character is bad... make him thinner, work on hair, body, clothing detail. Work on his
 // face, mouth, textures. What the hell is happening with his hands": a barrel of a man on the warrior's head, its
 // hair taken off and cards stuck on a bare shell, claws for hands, a fist through his mug.)
-import * as THREE from '../../engine/three';
+import * as THREE from '../../engine/three.ts';
 import { createKit } from '../../core/materials';
 import { cloth as clothMaps, oiled as oiledMaps, leather as leatherMaps, wool as woolMaps, pbrMaterialMaps } from '../../core/textures';
 import { buildHumanoid, reachArm, resetPose, type Joints } from './rig';

@@ -3,7 +3,7 @@
 // portal in the crypt's stone arch before the door; the Thornwood's, a path into a grove of the forest's own trees,
 // ferns and mossy rocks, its portal between two great roots. Each is laid out in its own frame: x across its way, z back
 // toward the village (its far end at -z), and bounded by what's built (walls a body is kept off, world/wall.ts).
-import * as THREE from '../engine/three';
+import * as THREE from '../engine/three.ts';
 import { ENTRANCES, GAP_HALF, portalPlace } from '../data/village';
 import type { BiomeId } from '../data/biomes';
 import { ashlar, pbrMaterialMaps, rock } from '../core/textures';

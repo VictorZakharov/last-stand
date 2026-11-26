@@ -4,7 +4,7 @@
 // lectern before the back wall between two candle stands (used, it opens the in-game guide); reading desks with candles,
 // open books, scrolls and a quill; a globe; a hearth with an armchair before it; rugs; the front windows lit warm from
 // outside and dust drifting by them. As every room: 10 point lights, two casting (the hearth and the chandelier).
-import * as THREE from '../../engine/three';
+import * as THREE from '../../engine/three.ts';
 import { HOUSES, type RoomId } from '../../data/houses';
 import type { Obstacle } from '../../types';
 import { canvasOf, ctx2d, textureFromCanvas } from '../../core/textures';

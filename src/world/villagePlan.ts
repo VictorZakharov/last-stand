@@ -1,7 +1,7 @@
 // The village's plan as geometry (data/village.ts lays it out): the palisade's winding line and its gaps, the roads'
 // lines, the cottages' doors and footpaths, and what stands where, so the builder (world/village.ts), the meadow's
 // mask and the trees all read one plan: grass and trees go wherever nothing's built or trodden.
-import * as THREE from '../engine/three';
+import * as THREE from '../engine/three.ts';
 import {
   CAMPFIRE, COTTAGES, ENTRANCES, GAP_HALF, HALL, NOTICE, PALISADE_LINE, RACK, ROADS, TERRACE, YARD, worldToYard,
   type Cottage, type Spot,

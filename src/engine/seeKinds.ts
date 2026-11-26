@@ -1,6 +1,6 @@
 // The game's kinds of see-through as the engine holds them (`SeeKind` in its common.wgsl): what's dissolved where it
 // hides the hero, each kind's numbers written to the frame's globals as the game has them (core/seeThrough.ts).
-import * as THREE from './three';
+import * as THREE from './three.ts';
 import { BLEND_GONE, SIGHT_CONE, coverRuleNow, type SeeThrough } from '../core/seeThrough';
 import { SIGHT, nearDoorAt, seesInAt, seesIntoRoom } from '../core/sight';
 import { HALL, TERRACE } from '../data/village';

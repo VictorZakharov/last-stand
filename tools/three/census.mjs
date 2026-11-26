@@ -15,9 +15,9 @@ const KINDS = {
 };
 
 /** an import of three's, from three itself or through the game's own module of it (`src/engine/three.ts`) */
-const THREE_FROM = /from '(three[^']*|\.[^']*\/three)'/g;
+const THREE_FROM = /from '(three[^']*|\.[^']*\/three(?:\.ts)?)'/g;
 /** a named import of three's: `import { Vector3 } from 'three'` */
-const NAMED_FROM = /import\s+(?:type\s+)?\{([^}]*)\}\s+from\s+'(?:three|\.[^']*\/three)'/g;
+const NAMED_FROM = /import\s+(?:type\s+)?\{([^}]*)\}\s+from\s+'(?:three|\.[^']*\/three(?:\.ts)?)'/g;
 
 /** the kind of a three name, or `constants` (a blending, a side, a colour space...) */
 function kindOf(name) {

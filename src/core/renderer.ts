@@ -1,7 +1,7 @@
 // The renderer (three's, the host of our engine, `src/engine`), the frame's grade values and the camera rig: top-down,
 // over the shoulder or first person. The engine draws the scene; three's canvas lies over the engine's for the
 // world's overlays.
-import * as THREE from '../engine/three';
+import * as THREE from '../engine/three.ts';
 import { lightTheLamps } from './lamps';
 import { aimSight } from './sight';
 import { setWholeView, wholeView } from './wholeView';

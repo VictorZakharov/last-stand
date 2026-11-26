@@ -3,7 +3,7 @@
 // in their place, still and the same every frame (from play, "hall lights are completely broken and static", "these
 // lights are super lame"). Its light is a lamp of the village's (game/village.ts), never a light of its own: the
 // fire sways a light the scene never holds, whose strength the lamp is read by (`TorchFire.flicker`).
-import * as THREE from '../engine/three';
+import * as THREE from '../engine/three.ts';
 import { buildFire } from './fire';
 import type { Updater } from './props';
 

@@ -1,6 +1,6 @@
 // The skies under the Rust engine: `world/skyNodes.ts`'s domes for the engine's hooks, their WGSL as it is there.
 // Each is drawn on the far plane, unlit and out of the fog.
-import type * as THREE from '../three';
+import type * as THREE from '../three.ts';
 import { rustShader, type RustLook, type RustShader } from '../custom';
 
 type Uniforms = Record<string, THREE.IUniform>;

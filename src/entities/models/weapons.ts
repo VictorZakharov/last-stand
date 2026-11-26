@@ -4,7 +4,7 @@
 // bearded head thinning to a bright edge, its socket, poll, langets and rivets; a mace's flanges swept to their
 // points round a socket; a maul's banded head with its striking faces. Drawn as boxes and discs, through the eyes a
 // maul was a stick, an axe a haft with a plate on it and a mace a block.
-import * as THREE from '../../engine/three';
+import * as THREE from '../../engine/three.ts';
 import { lathe, mirrorX, skipping, type Sculpt } from './shapes';
 import { taperTube, twist, scaleUV } from './armor';
 import { clamp, lerp } from '../../util';

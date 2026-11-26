@@ -1,5 +1,5 @@
 // Healing Draught.
-import * as THREE from '../../engine/three';
+import * as THREE from '../../engine/three.ts';
 import { particles, col } from '../../fx/particles';
 import { flash } from '../../fx/lights';
 import { sfx } from '../../core/audio';

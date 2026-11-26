@@ -1,7 +1,7 @@
 // What the scene holds handed to the engine ahead of its first frame: each mesh's geometry, its materials with
 // their maps, and the pipeline each will draw with, so a place first shown, a warm-up's sample or a skill's
 // effect first cast compiles nothing in the frame it's first drawn in.
-import type * as THREE from './three';
+import type * as THREE from './three.ts';
 import { perfClock } from '../core/perfClock';
 import type { SeeThrough } from '../core/seeThrough';
 import type { Core } from './core';

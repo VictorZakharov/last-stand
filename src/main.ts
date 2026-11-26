@@ -1,5 +1,5 @@
 // Entry point: boots every system, owns the main loop and the lobby (the village) <-> run flow.
-import * as THREE from './engine/three';
+import * as THREE from './engine/three.ts';
 import { afterBiome, biomeReady, everyBiomeReady, readyBiome, readyEveryBiome } from './game/biomeReady';
 import { bossReady, everyBossWarm, readyEveryBoss, readyNextBoss } from './game/bossReady';
 import { G } from './state';

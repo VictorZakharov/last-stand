@@ -1,7 +1,7 @@
 // A hero's wrist: a flattened tube from the forearm onto the heel of the hand, bent through joints turned part of the way
 // from the forearm to the hand as it's drawn. Round, with the hand's bend blended into it over a few centimetres, it stood
 // out of the palm by its rim wherever the wrist bent, and the hand looked apart from the arm.
-import * as THREE from '../../engine/three';
+import * as THREE from '../../engine/three.ts';
 import { clamp, smooth } from '../../util';
 import { joint } from './rig';
 import { lathe } from './shapes';

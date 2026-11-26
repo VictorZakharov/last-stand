@@ -6,7 +6,7 @@
 // wall laid over a step of the dais stands in both levels.
 // Its geometry is made once and shared by every cast; each wall has materials of its own on a kit (`createKit`), so
 // it comes apart (`uDissolve`) on its own as it breaks or its time runs out.
-import * as THREE from '../../engine/three';
+import * as THREE from '../../engine/three.ts';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { pbrMaterialMaps, wood } from '../../core/textures';
 import { createKit } from '../../core/materials';

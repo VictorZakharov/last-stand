@@ -1,7 +1,7 @@
 // The skies on WebGPU (core/webgpu.ts): props.ts's night and day domes as WGSL functions (`wgslFn`), written line
 // for line from their GLSL, each a node material's whole output as `gl_FragColor` was, set on the far plane as the
 // GLSL set `gl_Position.z` to its `w` (drawn after everything opaque, the depth test skips every covered pixel).
-import * as THREE from '../engine/three';
+import * as THREE from '../engine/three.ts';
 import { gpu, tsl } from '../core/webgpu';
 import { rustLook } from '../engine/custom';
 import { daySkyLook, nightSkyLook, villageSkyLook } from '../engine/looks/sky';

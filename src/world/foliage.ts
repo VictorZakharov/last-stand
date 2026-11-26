@@ -1,7 +1,7 @@
 // Foliage for the Thornwood: canvas-painted leaf textures (a cluster of leaves, a fern frond, a single
 // leaf) cut out with alpha test, and the geometry that carries them: canopies and bushes of leaf cards
 // round a dark core, fern clumps, leaf litter, and shafts of sunlight slanting down through the canopy.
-import * as THREE from '../engine/three';
+import * as THREE from '../engine/three.ts';
 import { shaftsMaterial } from './forestNodes';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { ctx2d, textureFromCanvas } from '../core/textures';

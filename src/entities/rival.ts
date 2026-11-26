@@ -2,7 +2,7 @@
 // that every skill meets him as it meets a foe (they all look through `G.enemies` and strike through `hitEnemy`). He is
 // where the hero's reports have him, drawn by nothing (the hero's own body is what's seen), and takes no damage here:
 // what a skill deals him is told to his own game (`RivalHooks.dealt`), which works the hit out as its screen has it.
-import * as THREE from '../engine/three';
+import * as THREE from '../engine/three.ts';
 import { Enemy, type DamageInfo } from './enemy';
 import { HERO_RADIUS, type Player } from './player';
 import { createKit } from '../core/materials';

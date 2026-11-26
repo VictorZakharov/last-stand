@@ -2,7 +2,7 @@
 // (knotwork filigree on a breastplate, medallions, knee cops) and embroidered cloth panels. Each is a
 // height field drawn with strokes; albedo, normal and roughness maps are derived from it, so an
 // engraved band catches the light like the real thing. Made once, shared by every hero.
-import * as THREE from '../engine/three';
+import * as THREE from '../engine/three.ts';
 import { albedoPixels, ctx2d, readCtx2d, steel } from './textures';
 import { deriveMaps, steelTint, type BasePixels, type DerivedPixels, type Tint } from './engravingMaps';
 import { clamp, mulberry } from '../util';

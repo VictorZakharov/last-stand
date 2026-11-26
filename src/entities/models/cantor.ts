@@ -17,7 +17,7 @@
 // opens with the chant (`ActionState.hit`). With its weak-spot window open its ribs swing apart and the bell-heart
 // beats at a pulse a second; its candles flare from its second phase, its halo turns faster in its last. Drawn in its
 // crowd (models/crowd.ts): every change is a joint's place or a glow's strength, nothing hidden.
-import * as THREE from '../../engine/three';
+import * as THREE from '../../engine/three.ts';
 import { createKit } from '../../core/materials';
 import { grunge, pbrMaterialMaps, veins } from '../../core/textures';
 import { joint, ramp } from './rig';

@@ -6,7 +6,7 @@
 // frame as the post chain drew it, at the canvas's own pixels, as a PNG download. Solo the game stands frozen meanwhile
 // (as the pause menu holds it); in co-op it can't, and the world moves on, the hero standing idle. Its own code, none
 // of the developer mode's (`src/dev` never ships).
-import * as THREE from '../engine/three';
+import * as THREE from '../engine/three.ts';
 import { G } from '../state';
 import { ARENA } from '../data/balance';
 import { HOUSES } from '../data/houses';

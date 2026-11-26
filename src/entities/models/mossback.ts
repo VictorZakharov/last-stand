@@ -2,7 +2,7 @@
 // moss and old stones sprouting ferns and glowcaps; moss hangs in beards from its jaw, belly and arms.
 // A broad bony skull with a heavy brow, amber eyes deep in their sockets and upcurled tusks; gorilla
 // arms ending in knuckled fists with hooked claws.
-import * as THREE from '../../engine/three';
+import * as THREE from '../../engine/three.ts';
 import { createKit } from '../../core/materials';
 import { grunge, pbrMaterialMaps } from '../../core/textures';
 import { buildHumanoid, joint, resetPose, walkCycle, idle, deathFall, pulse, ramp } from './rig';

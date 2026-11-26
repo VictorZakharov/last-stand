@@ -3,7 +3,7 @@
 // shake and the follow carry on underneath and come back as they were when it's let go. The hero stands idle while it
 // flies (WASD is the camera's), and the page's own pieces that follow the world (the labels) are left off unless
 // asked for, as they're placed by the game's camera, not this one.
-import * as THREE from '../engine/three';
+import * as THREE from '../engine/three.ts';
 import { G } from '../state';
 import { isDown } from '../core/input';
 import { overFrame } from '../core/renderer';

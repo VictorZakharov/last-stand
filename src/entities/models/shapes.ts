@@ -2,7 +2,7 @@
 // profiles, organic noise displacement, ragged cloth, and `Sculpt`, which merges the static pieces
 // of each joint per material into one mesh, so a detailed creature stays a few draw calls. A creature
 // is built once per kind: later ones replay the merged geometry (see Sculpt), so spawning stays cheap.
-import * as THREE from '../../engine/three';
+import * as THREE from '../../engine/three.ts';
 import { sameLooks } from '../../core/materials';
 import { mergeGeometries, mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 import { mulberry } from '../../util';

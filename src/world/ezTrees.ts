@@ -3,7 +3,7 @@
 // at boot from a preset with its detail capped (a preset's whole tree was 4k to 24k triangles, and 120 of them stand
 // round the clearing), its many small leaves made fewer, bigger cards carrying a cluster of leaves each, and scaled to
 // a height of 1 with its foot at the origin, for instancing.
-import * as THREE from '../engine/three';
+import * as THREE from '../engine/three.ts';
 import { Tree, TreePreset } from 'ez-tree';
 import { mulberry } from '../util';
 

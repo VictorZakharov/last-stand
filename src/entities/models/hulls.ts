@@ -3,7 +3,7 @@
 // poses every vertex first (1 to 9 ms a body), this takes microseconds. The aim meets a body's skinned limbs so
 // (fx/stuckArrows.ts `castSolid`, core/input.ts `aimAlong`): met on its rigid meshes alone, the eye's ray over a boss's
 // skinned limbs went on to the floor behind it, and Quarry Mark marked a small foe there.
-import * as THREE from '../../engine/three';
+import * as THREE from '../../engine/three.ts';
 
 /**
  * A part of a skinned mesh: the triangles of one piece it was merged from that one bone moves the most of their first

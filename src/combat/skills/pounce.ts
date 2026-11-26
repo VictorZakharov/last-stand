@@ -4,7 +4,7 @@
 // lands, and he's free at once for whatever he casts next. (It pinned the foe under four blows after the landing,
 // taken out: from play, "lets change pounce to only jump, this allows stacking it with other attacks naturally", then
 // "lets change pounce strike to attack with both hands from two opposite sides" and "no, pounce does damage".)
-import * as THREE from '../../engine/three';
+import * as THREE from '../../engine/three.ts';
 import { G } from '../../state';
 import { dazeEnemy, hitEnemy } from '../damage';
 import { gainFrenzy } from '../frenzy';

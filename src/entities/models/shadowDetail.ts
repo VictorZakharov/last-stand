@@ -8,7 +8,7 @@
 // the page, a piece's one call (up to 15 ms, the hair's) held the lobby's first frames 12 to 16 ms (`npm run lab --
 // lobbystart`). A harness has them made on the page, a frame's slice at a time, which its fixed clock steps the same
 // on every run (`detailWork`). `?shadowDetail=1` casts and draws every triangle, for A/B.
-import * as THREE from '../../engine/three';
+import * as THREE from '../../engine/three.ts';
 import { perfClock } from '../../core/perfClock.ts';
 import { simplifiedIndex, type Detail, type Simplifier } from './simplifyIndex.ts';
 import type { SimplifyAsked, SimplifyMade } from './simplify.worker.ts';

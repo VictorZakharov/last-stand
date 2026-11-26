@@ -2,7 +2,7 @@
 // its length, so as the nock goes back the tips come back and in, each limb bending along its working part and not in
 // its stiff recurved tip. Loosed, the limbs spring forward past rest and ring out. The bow's own frame: the grip's pivot at
 // the origin, +y up its limbs, +z its back (towards the target), +x the archer's left; metres at the model's scale.
-import * as THREE from '../../engine/three';
+import * as THREE from '../../engine/three.ts';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { taperTube, twist, scaleUV } from './armor';
 import { clamp } from '../../util';

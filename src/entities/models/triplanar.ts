@@ -3,7 +3,7 @@
 // squarely the surface faces each. Read where it lay as it was sculpted (its vertices' own places, before skinning),
 // the grain stays on the skin as it bends. (Read flat along the one axis each vertex faced most, the glove's leather
 // broke into streaks down the hand's sides wherever the axis changed.)
-import * as THREE from '../../engine/three';
+import * as THREE from '../../engine/three.ts';
 
 /** how sharply the planes give way to one another (higher: a narrower blend where the surface turns between them) */
 const SHARPNESS = 4;

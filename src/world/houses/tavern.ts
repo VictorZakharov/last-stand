@@ -1,7 +1,7 @@
 // The tavern's room, the Ember & Oak (data/houses/tavern.ts: its cottage, its size, what's used in it): the hearth, the
 // bar with its shelves of bottles and kegs, the party's round table with the village's map on it and the party board.
 // Built of the rooms' kit (world/rooms.ts) and found by world/houses.ts with every other house's room in this folder.
-import * as THREE from '../../engine/three';
+import * as THREE from '../../engine/three.ts';
 import { HOUSES, type RoomId } from '../../data/houses';
 import { boards, pbrMaterialMaps, wood } from '../../core/textures';
 import {

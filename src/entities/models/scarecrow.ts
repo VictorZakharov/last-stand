@@ -3,7 +3,7 @@
 // the hem, a stuffed sack for a head with a stitched smile, under a frayed straw hat with a red band. Its geometry and
 // materials are made once and shared by every cast: a cast is five meshes on them (the body's wood, cloth and straw;
 // the head's cloth and straw, on a joint of its own so it lolls under a blow).
-import * as THREE from '../../engine/three';
+import * as THREE from '../../engine/three.ts';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { burlap, pbrMaterialMaps, wood } from '../../core/textures';
 import { mulberry } from '../../util';

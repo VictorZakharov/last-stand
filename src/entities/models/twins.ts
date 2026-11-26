@@ -22,7 +22,7 @@
 // bombs, their eyes a hot orange; Reliquary's poison, a sickly green), a hand unhooking one, drawing it back over its
 // shoulder and throwing it (the `bomb` and `poison` actions); the one left standing at half wears its brother's too.
 // Drawn in their crowds (models/crowd.ts): every change is a joint's place or a glow's strength.
-import * as THREE from '../../engine/three';
+import * as THREE from '../../engine/three.ts';
 import { additive, createKit } from '../../core/materials';
 import { grunge, pbrMaterialMaps, veins } from '../../core/textures';
 import { joint, ramp } from './rig';

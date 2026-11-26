@@ -4,7 +4,7 @@
 // wooden prop, the thicket, a tree beyond it or a foe's body, or off stone onto the floor. The wall is met where it's
 // drawn (world/wall.ts): an arrow over it flies on. The ranger's
 // other skills: arrowRain.ts, quarryMark.ts, strawman.ts.
-import * as THREE from '../../engine/three';
+import * as THREE from '../../engine/three.ts';
 import { G } from '../../state';
 import { spawnProjectile, type Projectile } from '../projectiles';
 import { hitEnemy } from '../damage';

@@ -6,7 +6,7 @@
 // wind-up and a walk's swing of the arm leave none. Each frame's place of the weapon is a point of a curve through
 // them (centripetal Catmull-Rom), cut into steps a few centimetres long, so a swing a frame crosses half a metre in
 // stays round. Light adds up: added white, dimmed with distance (`nearGlow`), a thin edge over a faint band.
-import * as THREE from '../engine/three';
+import * as THREE from '../engine/three.ts';
 import { G } from '../state';
 import { nearGlow } from '../core/materials';
 import { portShader } from '../core/shaderPorts';

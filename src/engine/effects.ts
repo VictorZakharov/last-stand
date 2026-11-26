@@ -2,7 +2,7 @@
 // three's nodes beside it, `core/shaderPorts.ts`) given a look for the engine, beside both, in the file that makes
 // the material. Its hooks are the port's WGSL again; its numbers are read off the material's own uniforms each frame
 // it's drawn. Without a look a shader material isn't drawn at all (from play: "no mage visual effects on spells").
-import type * as THREE from './three';
+import type * as THREE from './three.ts';
 import { NEAR_GLOW } from '../core/materials';
 import { rustLook, rustShader, type RustLook } from './custom';
 

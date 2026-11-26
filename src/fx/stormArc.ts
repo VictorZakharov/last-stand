@@ -5,7 +5,7 @@
 // core in a wider glow of its colour, forks branching off it as the head passes them, sparks thrown off along it.
 // Ribbons turned to the camera each frame, as fx/effects.ts's `lightning`; it eases out and never blinks (a thin
 // thing, but one that stays is held to the root's Bright effects all the same).
-import * as THREE from '../engine/three';
+import * as THREE from '../engine/three.ts';
 import { G } from '../state';
 import { additive } from '../core/materials';
 import { addEffect } from './effects';

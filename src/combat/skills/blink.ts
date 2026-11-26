@@ -5,7 +5,7 @@
 // comes apart until he starts to form again, and the foes round where he vanished are left dazed (`Enemy.daze`),
 // standing there a moment while the rest come on. Every game shows it; his own game moves him and judges the daze, as
 // it judges his hits (`dazeEnemy`).
-import * as THREE from '../../engine/three';
+import * as THREE from '../../engine/three.ts';
 import { G } from '../../state';
 import { addEffect, shockwave } from '../../fx/effects';
 import { particles, col } from '../../fx/particles';

@@ -15,7 +15,7 @@
 // In the village, where the others can't cast to break it, a partner walking into it breaks it (`touchedByPartner`,
 // told to every game: net/wardTouch.ts); its caster's own touch and a fight leave it standing.
 // The wall itself is entities/models/hedgeward.ts.
-import * as THREE from '../../engine/three';
+import * as THREE from '../../engine/three.ts';
 import { G } from '../../state';
 import { on } from '../../events';
 import { addEffect, shockwave } from '../../fx/effects';

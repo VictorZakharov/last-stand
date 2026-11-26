@@ -1,5 +1,5 @@
 // Splintering Bolt: a fan of homing arcane bolts that split on impact.
-import * as THREE from '../../engine/three';
+import * as THREE from '../../engine/three.ts';
 import { spawnProjectile } from '../projectiles';
 import { hitEnemy } from '../damage';
 import { burst } from '../../fx/particles';

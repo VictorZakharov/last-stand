@@ -3,7 +3,7 @@
 // field's gradient; each grid edge the surface crosses has a quad across it, joining the four cells round it. Its
 // normals are the field's own gradient, so it shades smooth at any grid size. Organic shapes (a hand's palm, its
 // knuckles and the webs between its fingers) are sculpted as distance fields and meshed with it.
-import * as THREE from '../../engine/three';
+import * as THREE from '../../engine/three.ts';
 
 /** A signed distance (m): negative inside the shape, positive outside. A field made of parts may give one of only
  *  the parts near a ball (`within`: right in it, its sign and its value near the surface), cheaper to ask. */

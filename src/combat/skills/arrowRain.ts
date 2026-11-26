@@ -7,7 +7,7 @@
 // fell), and stays in it; one that comes down on a prop goes into its top (off it, if it's stone), the rest into the
 // floor (off it on stone: fx/stuckArrows). The area follows the aim at a walk, and what's in the air when the key is let
 // go still comes down.
-import * as THREE from '../../engine/three';
+import * as THREE from '../../engine/three.ts';
 import { G } from '../../state';
 import { hitEnemy } from '../damage';
 import { evades } from '../../entities/evade';

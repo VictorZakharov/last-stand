@@ -6,7 +6,7 @@
 // quality, one program), the sap in its grooves its only glow.
 // Every vertex knows how far along its piece it is (`aAlong`): a piece is grown to `grow` metres (`uGrow`), each part
 // swelling from nothing as the growth passes it, and withers back (`uWither`).
-import * as THREE from '../engine/three';
+import * as THREE from '../engine/three.ts';
 import { portShader, type Port, type Tsl } from '../core/shaderPorts';
 import { effectLook, num, rgb, effectShader } from '../engine/effects';
 import { groundHeight } from '../world/ground';

@@ -3,7 +3,7 @@
 // arms or crown flew on through it, and one aimed past a small foe's shoulder at the boss behind struck the small foe
 // it went by. (A column within its circle as well struck imps where nothing of them is drawn.) What it met tells a
 // headshot from a body's hit (`Struck`, `onHead`).
-import * as THREE from '../engine/three';
+import * as THREE from '../engine/three.ts';
 import type { Enemy } from '../entities/enemy';
 import type { HullHit } from '../entities/models/hulls';
 import { castSolid } from '../fx/stuckArrows';

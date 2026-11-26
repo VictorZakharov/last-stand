@@ -4,7 +4,7 @@
 // drawn as one instanced mesh of the crypt's own headstone in its own carved stone, made with the crypt
 // (`buildRisenGraves`), so they're the crypt's headstones' draw and nothing compiles in the fight; a stone not standing
 // is shrunk away under the floor.
-import * as THREE from '../engine/three';
+import * as THREE from '../engine/three.ts';
 import { CANTOR } from '../data/foes/cantor';
 import { lowerProp, raiseProp, type Prop } from './destructible';
 

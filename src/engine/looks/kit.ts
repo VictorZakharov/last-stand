@@ -4,7 +4,7 @@
 // material by its `kitLooks`, and shared by what it holds, so a kind's bodies still batch; a painted face's hair in
 // another colour, a worn item's glow in its rarity's colour, the hood's shade, the fur's sway
 // (entities/models/furSway.ts), and a hand's maps read triplanar (entities/models/triplanar.ts). A held blade's highlights through the eyes are held to a most (`kit.u.uShine`).
-import type * as THREE from '../three';
+import type * as THREE from '../three.ts';
 import { NEAR_GLOW, itemGlowUniforms, type KitLooks } from '../../core/materials';
 import { rustLook, rustShader, type RustLook, type RustShader } from '../custom';
 

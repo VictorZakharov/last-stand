@@ -10,7 +10,7 @@
 // material, whose program is theirs. It's made a slice a frame (`SLICE_MS`), each set drawn in its parts' place as
 // it's made (its upload a frame of its own), and made again from the start as soon as a part it was made of changes
 // (his far detail, his gear shown or hidden). `?stillAsOne=0` draws each part on its own.
-import * as THREE from '../../engine/three';
+import * as THREE from '../../engine/three.ts';
 import { perfClock } from '../../core/perfClock';
 
 /** Whether a still hero is drawn as a few meshes (`?stillAsOne=0`: each part on its own), read at each step. Off on

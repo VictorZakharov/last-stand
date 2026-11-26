@@ -7,7 +7,7 @@
 // floor is read once, with rays out from the middle at a body's heights: the nearest surface along each slice, a
 // line round the ring a body's circle is kept off.
 import { thinsByBlending } from '../core/seeThrough';
-import * as THREE from '../engine/three';
+import * as THREE from '../engine/three.ts';
 import { TAU } from '../util';
 import { faceAt, pastWall } from './edge';
 import { WALL_R } from './props';

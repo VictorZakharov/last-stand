@@ -1,7 +1,7 @@
 // The crypt's floor and what stands beyond its wall under the Rust engine: `world/cryptNodes.ts`'s nodes as WGSL for
 // the engine's hooks: the cobbles' damp, drift and moss, the earth round the small dead trees' feet, and the world
 // past the wall darkened in the top-down view; the cobbles' relief is looks/relief.ts.
-import type * as THREE from '../three';
+import type * as THREE from '../three.ts';
 import type { Damp, Outside } from '../../world/cryptNodes';
 import type { FloorRelief } from '../../core/parallax';
 import { rustShader, type RustLook, type RustShader } from '../custom';

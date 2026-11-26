@@ -3,7 +3,7 @@
 // skids and a heavy beam across them, four long swords stood in it point down, their tips in a trough at its foot and
 // their blades leant on the beam: a flame-bladed two-hander, a sabre, a longsword with a ring on its guard, an arming
 // sword. Where a party sets up a duel (from play: "Item you come up to to interact (open menu), is a weapons rack").
-import * as THREE from '../../engine/three';
+import * as THREE from '../../engine/three.ts';
 import { RACK } from '../../data/village';
 import { boxWithUV } from '../props';
 import type { Obstacle } from '../../types';

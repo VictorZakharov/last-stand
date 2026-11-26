@@ -3,7 +3,7 @@
 // and moss and the earth round the small dead trees' feet (`dampGround`), and the world past the wall darkened in the
 // top-down view (`dimOutside`); the cobbles' relief is core/parallax.ts's `reliefContext`. The dimming comes after the
 // fog here, before it in the GLSL.
-import type * as THREE from '../engine/three';
+import type * as THREE from '../engine/three.ts';
 import { tsl } from '../core/webgpu';
 
 // (untyped: TSL's types don't follow its conversions across these calls yet)

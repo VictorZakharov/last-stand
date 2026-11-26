@@ -2,7 +2,7 @@
 // own (entities/models/treant.ts, the Thornheart's variant) in its colours: a burl of heartwood split open over its
 // glowing heart in a cage of roots, the crown of branches in blossom rising from it, two great branching antlers
 // thorned along their limbs, a few leaves, and a beard of moss and hanging roots under it.
-import * as THREE from '../../engine/three';
+import * as THREE from '../../engine/three.ts';
 import { bark, pbrMaterialMaps } from '../../core/textures';
 import { branches, leaf, organic, taperTube } from '../../entities/models/shapes';
 import { mulberry } from '../../util';

@@ -5,7 +5,7 @@
 // world read from the frame's depth. One program, for every renderer; a wall is a line on the floor, so nothing else in
 // the scene compiles or draws more. Through the eyes and over the shoulder the camera stands where he does, and walls hide
 // what they hide.
-import * as THREE from '../engine/three';
+import * as THREE from '../engine/three.ts';
 import { onWholeView, wholeView } from './wholeView';
 
 /** A wall as a line on the floor, from (x0, z0) to (x1, z1). */

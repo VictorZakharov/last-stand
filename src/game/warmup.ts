@@ -13,7 +13,7 @@ import { painted } from '../world/arena';
 import { AHEAD } from '../engine/pipelinesAside';
 import { isLazyFoe, loadFoe } from '../entities/bosses';
 import { lampsLetGo } from './village';
-import * as THREE from '../engine/three';
+import * as THREE from '../engine/three.ts';
 import { G } from '../state';
 import { behindTheLobby, warmUp, type Swap, type WarmedUp } from '../core/shaders';
 import { sceneTarget } from '../core/renderer';

@@ -7,7 +7,7 @@
 // pillow with rows of sausages on it, the segments parted at every bent joint; with a ball at each joint, the fingers
 // were strings of beads.) The glove is the same surface a little further out, cut off over each finger's first
 // segment and round the thumb's, and the nails are plates laid on the backs of the fingertips.
-import * as THREE from '../../engine/three';
+import * as THREE from '../../engine/three.ts';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { surfaceNets, type Field, type Net } from './surfaceNets';
 import { above, beyond, capsule, distanceOf, ellipsoid, fieldOf, frameIn, IDENTITY, slab, smax, tube } from './sdf';

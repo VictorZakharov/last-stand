@@ -13,7 +13,7 @@
 // Both are played through `fx` (enemyAI.ts), so every co-op game plays them the same from the same numbers, and each
 // judges its own hero alone: hurt where `hurtPlayer` allows, rooted by its own game. A partner's copy is shown held
 // as this game sees the vine reach it.
-import * as THREE from '../engine/three';
+import * as THREE from '../engine/three.ts';
 import { G } from '../state';
 import { ENEMIES, type EnemyId } from '../data/enemies';
 import { hurtPlayer, type Attacker } from '../combat/damage';

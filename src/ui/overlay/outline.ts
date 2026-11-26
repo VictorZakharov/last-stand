@@ -5,7 +5,7 @@
 // meshes and the box on the screen it's drawn within; the engine's pipelines for it are made as it starts, so nothing
 // is compiled for it at load or in play. (Drawn by three on a canvas of its own laid over the engine's, it needed
 // that canvas and three's renderer; three's mask kept a cut-out's alpha test, the engine's draws it whole.)
-import * as THREE from '../../engine/three';
+import * as THREE from '../../engine/three.ts';
 import { G } from '../../state';
 import { uiScales } from '../scale';
 import { placeUnplaced } from '../../entities/models/bodyAsOne';

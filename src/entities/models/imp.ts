@@ -1,7 +1,7 @@
 // Voidling: a small, fast, wiry demon. Ridged horns curl back from a long skull, a glowing maw full of
 // needle teeth, torn bat wings, hooked claws and spurs, a spined back and a whipping barbed tail;
 // void light shows through veins in its skin and a split in its belly.
-import * as THREE from '../../engine/three';
+import * as THREE from '../../engine/three.ts';
 import { createKit } from '../../core/materials';
 import { grunge, pbrMaterialMaps, veins } from '../../core/textures';
 import type { AnimState, Model } from '../../types';

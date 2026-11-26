@@ -4,7 +4,7 @@
 // topples onto its broad face (nothing rests on its end), stays a few seconds and shrinks away. One instanced mesh
 // per shape variant, from fixed pools (the oldest piece is reused when one runs out). Every material is a standard
 // one, so the few programs are all warmed in `warmup.ts`.
-import * as THREE from '../engine/three';
+import * as THREE from '../engine/three.ts';
 import { G } from '../state';
 import { groundHeight } from '../world/ground';
 import { rand } from '../util';

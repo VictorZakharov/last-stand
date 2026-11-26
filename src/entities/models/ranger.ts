@@ -6,7 +6,7 @@
 // tips forward in the loose fist; then the hand takes the next arrow from the quiver over his right shoulder and nocks
 // it. Between shots he carries the bow in his fist at his side, an arrow nocked, his draw hand free; a fan of arrows is
 // shot with the bow laid over flat, the arrows lying across its top.
-import * as THREE from '../../engine/three';
+import * as THREE from '../../engine/three.ts';
 import { createKit } from '../../core/materials';
 import { leather, oiled, wool as woolMaps, felt as feltMaps, wood, bowWood as bowWoodMaps, pbrMaterialMaps } from '../../core/textures';
 import { SKIRT_TUCK, WRIST_INSIDE, floorUnder, freeHands, onFloor, restHands, satBy, sitPose, type RestTurn } from './sit';
