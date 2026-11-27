@@ -74,11 +74,7 @@
 @keyframes crosshair-beat { 0% { scale: 1; animation-timing-function: ease-out; } 35% { scale: 1.5; animation-timing-function: ease-out; } 100% { scale: 1; } }
 @media (prefers-reduced-motion: reduce) { #crosshair.full { animation: none; } }
 #look-hint { position: absolute; left: 50%; top: 58%; transform: translateX(-50%); padding: 0.5em 1em; border-radius: 6px; background: rgba(8, 8, 14, 0.75); color: #f0e6d0; font-size: hud(15px); white-space: nowrap; }
-#banner { position: absolute; top: 22%; left: 50%; transform: translateX(-50%); text-align: center; animation: banner 2.8s ease forwards; }
-.b-title { font-family: var(--font-display); font-size: 54px; font-weight: 900; letter-spacing: 4px; color: #f3e1b0;
-  text-shadow: 0 0 20px rgba(0,0,0,.9), 0 4px 6px #000, 0 0 40px rgba($accent-glow, .35); }
-.b-sub { font-size: 20px; color: var(--ink-dim); letter-spacing: 2px; text-shadow: 0 2px 4px #000; }
-@keyframes banner { 0% { opacity: 0; transform: translate(-50%, 10px) scale(.96); } 12% { opacity: 1; transform: translate(-50%, 0) scale(1); } 80% { opacity: 1; } 100% { opacity: 0; } }
+/* the banner is drawn by the engine (ui/bannerPanel.ts): `#banner` out of sight (`.kit-mirror`) */
 
 /* a duel (ui/duelHud.ts): each side's name either side of the round's badge, the score and the round's time under
    the badge; nothing of a run's spoils; the result where the banner stands */
@@ -109,5 +105,4 @@
    Uses the individual `scale` property so it composes with existing transforms;
    elements centred with translateX(-50%) scale from their left edge (= screen centre).
    The scale leaves an element's offsets from the screen's edges alone: give those as hud() too. */
-#banner    { scale: var(--hud, 1); transform-origin: left top; }
 #buffs     { scale: var(--hud, 1); transform-origin: left bottom; left: calc(50% - 470px * var(--hud, 1)); bottom: hud(76px); }

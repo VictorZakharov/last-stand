@@ -497,7 +497,9 @@ the SCSS. In the order they're taken: the kit's own pieces first, then what show
   751x298 holds their boxes to main's; `village --only minimapOut` and `tutorial` read the drawn boxes. Not drawn
   yet: the spoils' bump as a rarity's count rises. The rooms' two-round pipelines, asked by the walk once the lobby
   shows, counted as compiled in play and failed the tutorial (6): asked behind the lobby now (`ahead.ts`).
-- [ ] The rest of the run's HUD (`hud.html`): the buffs, the banner, the party's frames, the downed note and the
+- [x] The run's banner (`ui/bannerPanel.ts`: its keyframes' fade and rise, not its 0.96 scale): `lab ui --states
+  banner`, held half way (a state of its own; main's side has none to compare with).
+- [ ] The rest of the run's HUD (`hud.html`): the buffs, the party's frames, the downed note and the
   revive, the duel's score and result, the look hint, the crosshair and the charge ring.
 - [ ] The overlays down the left (`diag.html`: the performance overlay, the net's, the battle log), the chat.
 - [ ] The touch controls (`touch.html`).

@@ -30,6 +30,7 @@ import { aleBoost } from '../game/aleBoost';
 import { ALE_BOOST } from '../data/tavern';
 import { showTarget } from './targetFrame';
 import { drawWaveBadge } from './waveBadge';
+import { drawBanner } from './bannerPanel';
 import { drawDecision } from './decisionPanel';
 import { drawBottomBar } from './bottomBar';
 
@@ -42,6 +43,8 @@ let slots: HotbarSlot[] = [];
 /** the hero the hotbar was built for */
 let builtFor: Player | null = null;
 let bannerTimer: ReturnType<typeof setTimeout> | undefined;
+/** how many times the banner was shown: the engine's begins again at each (`bannerPanel.ts`) */
+let bannersShown = 0;
 let mmCtx: CanvasRenderingContext2D;
 /** how much larger the hero's arrow is on the village's minimap, which is drawn smaller than a fight's */
 const VILLAGE_ARROW = 1.4;
@@ -50,6 +53,7 @@ export function initHud(): void {
   // (the choice first: the badge is drawn over it, as its z-index had it)
   drawDecision();
   drawWaveBadge();
+  drawBanner();
   drawBottomBar();
   // (the minimap's column, the training's tracker in it)
   initMinimapColumn();
@@ -171,6 +175,7 @@ export function banner(title: string, sub = ''): void {
   else for (const animation of b.getAnimations()) { animation.cancel(); animation.play(); }
   $('.b-title', b).textContent = title;
   $('.b-sub', b).textContent = sub;
+  b.dataset.shown = String(++bannersShown);
   // gone as its fade ends (its end follows the animation wherever it's taken: the lab ends it before a picture, and
   // left to a timer of its own it hid by the browser's clock, so a picture had it on the page or not, the HUD's
   // layers laid out another way); the timer only where no fade runs
