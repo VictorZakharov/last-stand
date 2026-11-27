@@ -53,6 +53,11 @@ export class GameScreen {
     this.cssHeight = height;
   }
 
+  /** The frame's size in css px, into `out`. */
+  getSize(out: THREE.Vector2): THREE.Vector2 {
+    return out.set(this.cssWidth, this.cssHeight);
+  }
+
   /** The frame's size in the screen's pixels, into `out`. */
   getDrawingBufferSize(out: THREE.Vector2): THREE.Vector2 {
     return out.set(Math.floor(this.cssWidth * this.ratio), Math.floor(this.cssHeight * this.ratio));

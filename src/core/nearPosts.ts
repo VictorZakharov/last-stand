@@ -3,7 +3,7 @@
 // column, which the wall's casts never meet, and the near plane at 0.5 m cut away all of it facing the camera but its
 // two edges: in the hall of heroes a column between the camera and him was a thin pale sliver from top to bottom of the
 // screen, its ghost cut away with it (#948, `lab village --only columnsNotCut`).
-import * as THREE from 'three';
+import * as THREE from '../engine/three.ts';
 
 /** each place's posts, by its name (`G.arena.place`) */
 const posts = new Map<string, readonly THREE.Box3[]>();

@@ -8,7 +8,7 @@
 // triangles of no area at its corners, each a step larger than the next's: their keys keep the steps between them
 // from wherever the camera stands, so they're drawn in the turns given. (Given the same box, their keys were equal and
 // the engine drew them in its own turns, the shafts first: each plinth stood over the foot of its own shaft.)
-import * as THREE from 'three';
+import * as THREE from '../engine/three.ts';
 
 /** how much larger each turn's box is than the next's, each way (m): far over the engine's rounding at a few tens of
  *  metres, and nothing to its culling */
