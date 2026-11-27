@@ -1341,7 +1341,7 @@ line is At a glance below, made from its module; [`WRITING.md`](WRITING.md) how 
   0.55 in 10,000 (a star of light on the arrowhead glared in one of 0.64 to 3.6, and was too bright, and motes bright
   enough to bloom merged into blobs of 0.9 to 1.6; the motes' specks are 0.41 at most) and a shader compiled meanwhile
   are problems. In the close views the crosshair is read every frame too (`page/crosshair.ts`: its lines' thickness as
-  the page's styles draw them, and its animations): bold held at full draw on 90% of the frames, on none before it or
+  drawn, the engine's `src/ui/aimMarks.ts` or the page's styles on a commit before it, and its beats): bold held at full draw on 90% of the frames, on none before it or
   with nothing drawn, and one beat into it, run once and swelling about its middle, which moves no more than half a
   css px from where it was at the beat's height and once bold (centred by `transform`, it swelled about where its box
   was before that and moved 10 css px up and left; the page's motion is let run meanwhile, `lab.reduceMotion`); with

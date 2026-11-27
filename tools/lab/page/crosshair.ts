@@ -3,8 +3,23 @@
 // it swelled with (its animations). A drawn shot held at full draw shows it bold, swelling into it once as a heart
 // knocks and never pulsing on; nothing else does. It swells about its middle, which stays where it was. With motion
 // reduced it comes to bold with no beat. The beat runs on the page's clock, not the lab's, and the lab opens a page
-// with its motion reduced: `draw` lets it run.
-import type { Clip, Lab, Pictured } from './lab';
+// with its motion reduced: `draw` lets it run. Where the engine draws it (`src/ui/aimMarks.ts`, #973) it's read off
+// the engine's crosshair, brought up to the page as it stands at each reading (`followAimMarks`), its beat counted,
+// held and ended through `CROSSHAIR`; where the page draws it (another commit's), off the page's styles.
+import { boxOf, type Clip, type Lab, type Pictured } from './lab';
+
+/** The engine's crosshair's module, as the lab reads it. */
+interface AimMarks {
+  CROSSHAIR: {
+    bar: number; scale: number; beats: number; beatLength: number; beatSwell: number; beatHeight: number;
+    hold: number | null; aboutCorner: boolean;
+  };
+  followAimMarks(): void;
+  finishBeat(): void;
+}
+
+/** the engine's crosshair, where this commit draws it (an A/B's other commit may not: none there) */
+const KIT = Object.values(import.meta.glob<AimMarks>('../../../src/ui/aimMarks.ts', { eager: true }))[0];
 
 /** how much thicker than regular its lines must be to count as bold */
 const BOLD_RATIO = 1.3;
@@ -46,7 +61,14 @@ export function crosshairShown(): boolean {
 
 /** Its lines' thickness as drawn now (css px). */
 function thickness(): number {
-  return parseFloat(getComputedStyle(crosshair(), '::before').width);
+  if (!KIT) return parseFloat(getComputedStyle(crosshair(), '::before').width);
+  KIT.followAimMarks();
+  return KIT.CROSSHAIR.bar;
+}
+
+/** The engine's beat as the page's numbers have one: once, its length, its largest swell. */
+function kitBeat(kit: AimMarks): Beat {
+  return { runs: 1, length: kit.CROSSHAIR.beatLength, swell: kit.CROSSHAIR.beatSwell };
 }
 
 /** A beat as its numbers. */
@@ -65,6 +87,8 @@ function beatOf(animation: Animation): Beat {
 export class CrosshairWatch {
   readonly frames: CrosshairFrames;
   private readonly seen = new Set<Animation>();
+  /** the engine's beats begun before it was watched */
+  private kitBeats = KIT?.CROSSHAIR.beats ?? 0;
 
   /** Watched from now, its lines as they're drawn now taken as regular. */
   constructor() {
@@ -78,6 +102,7 @@ export class CrosshairWatch {
 
   /** A frame of the shot: idle, drawn short of full, or held at full. */
   frame(phase: 'idle' | 'drawing' | 'full'): void {
+    for (; KIT && this.kitBeats < KIT.CROSSHAIR.beats; this.kitBeats++) this.frames.beats.push(kitBeat(KIT));
     for (const animation of crosshair().getAnimations()) {
       if (this.seen.has(animation)) continue;
       this.seen.add(animation);
@@ -97,7 +122,11 @@ export class CrosshairWatch {
 export function forceBold(bold: boolean): void {
   crosshair().classList.toggle('full', bold);
   crosshair().getAnimations();
+  KIT?.followAimMarks();
 }
+
+/** The beats it swelled with so far: the page's running now, or the engine's begun. */
+const beatsNow = (): number => (KIT ? KIT.CROSSHAIR.beats : crosshair().getAnimations().length);
 
 /** The crosshair come to full draw with motion reduced: whether it's bold, and the beats it swelled with. */
 export interface Reduced {
@@ -113,8 +142,9 @@ export interface Reduced {
 export async function boldWithMotionReduced(lab: Lab, watch: CrosshairWatch, canary: boolean): Promise<Reduced> {
   await lab.reduceMotion(!canary);
   try {
+    const before = KIT ? beatsNow() : 0;
     forceBold(true);
-    const reduced = { bold: watch.bold(), beats: crosshair().getAnimations().length };
+    const reduced = { bold: watch.bold(), beats: beatsNow() - before };
     forceBold(false);
     return reduced;
   } finally {
@@ -138,7 +168,7 @@ export function reducedProblems(reduced: Reduced): string[] {
 
 /** The area round the crosshair's middle a picture takes in. */
 function crosshairArea(): Clip {
-  const box = crosshair().getBoundingClientRect();
+  const box = boxOf(crosshair());
   const x = box.left + box.width / 2;
   const y = box.top + box.height / 2;
   return { x: x - AROUND, y: y - AROUND, width: AROUND * 2, height: AROUND * 2 };
@@ -155,6 +185,12 @@ export function pictureCrosshair(lab: Lab, label: string): Promise<Pictured> {
  */
 export async function pictureBeat(lab: Lab, label: string): Promise<Pictured[]> {
   const pictures: Pictured[] = [];
+  if (KIT) {
+    KIT.CROSSHAIR.hold = KIT.CROSSHAIR.beatHeight;
+    pictures.push(await pictureCrosshair(lab, `${label}, at its beat's height`));
+    KIT.CROSSHAIR.hold = null;
+    KIT.finishBeat();
+  }
   for (const animation of crosshair().getAnimations()) {
     holdAtHeight(animation);
     pictures.push(await pictureCrosshair(lab, `${label}, at its beat's height`));
@@ -173,7 +209,8 @@ function holdAtHeight(animation: Animation): void {
 
 /** The middle of the crosshair's box as drawn (css px), its transforms with it. */
 function middle(): { x: number; y: number } {
-  const box = crosshair().getBoundingClientRect();
+  KIT?.followAimMarks();
+  const box = boxOf(crosshair());
   return { x: box.left + box.width / 2, y: box.top + box.height / 2 };
 }
 
@@ -189,8 +226,16 @@ export function driftThroughBeat(canary: boolean): number {
   const before = middle();
   const away = () => Math.hypot(middle().x - before.x, middle().y - before.y);
   if (canary) element.style.transformOrigin = '0 0';
+  if (KIT) KIT.CROSSHAIR.aboutCorner = canary;
   forceBold(true);
   let drift = 0;
+  if (KIT) {
+    KIT.CROSSHAIR.hold = KIT.CROSSHAIR.beatHeight;
+    drift = away();
+    KIT.CROSSHAIR.hold = null;
+    KIT.finishBeat();
+    KIT.CROSSHAIR.aboutCorner = false;
+  }
   for (const animation of element.getAnimations()) {
     holdAtHeight(animation);
     drift = Math.max(drift, away());

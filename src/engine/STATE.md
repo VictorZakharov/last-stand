@@ -499,8 +499,11 @@ the SCSS. In the order they're taken: the kit's own pieces first, then what show
   shows, counted as compiled in play and failed the tutorial (6): asked behind the lobby now (`ahead.ts`).
 - [x] The run's banner (`ui/bannerPanel.ts`: its keyframes' fade and rise, not its 0.96 scale): `lab ui --states
   banner`, held half way (a state of its own; main's side has none to compare with).
+- [x] The crosshair, the charge ring and the look hint (`ui/aimMarks.ts`): `lab draw --class ranger --views third
+  --ab` holds the crosshair's pictures to main's as it's drawn, at its beat's height and bold, its beat and drift
+  read off the engine's (`CROSSHAIR`), both canaries caught.
 - [ ] The rest of the run's HUD (`hud.html`): the buffs, the party's frames, the downed note and the
-  revive, the duel's score and result, the look hint, the crosshair and the charge ring.
+  revive, the duel's score and result.
 - [ ] The overlays down the left (`diag.html`: the performance overlay, the net's, the battle log), the chat.
 - [ ] The touch controls (`touch.html`).
 - [ ] The damage meter, the sit hint.

@@ -31,6 +31,7 @@ import { ALE_BOOST } from '../data/tavern';
 import { showTarget } from './targetFrame';
 import { drawWaveBadge } from './waveBadge';
 import { drawBanner } from './bannerPanel';
+import { drawAimMarks } from './aimMarks';
 import { drawDecision } from './decisionPanel';
 import { drawBottomBar } from './bottomBar';
 
@@ -54,6 +55,7 @@ export function initHud(): void {
   drawDecision();
   drawWaveBadge();
   drawBanner();
+  drawAimMarks();
   drawBottomBar();
   // (the minimap's column, the training's tracker in it)
   initMinimapColumn();
