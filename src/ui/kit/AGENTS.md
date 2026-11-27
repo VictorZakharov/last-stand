@@ -11,7 +11,11 @@ the minimap's column (`ui/minimapColumn.ts`), the training's tracker (`ui/traini
 (`ui/bannerPanel.ts`), the close views' crosshair, charge ring and look hint (`ui/aimMarks.ts`), the buffs
 (`ui/buffsPanel.ts`), a duel's score and result (`ui/duelPanels.ts`), the party's frames (`ui/partyPanel.ts`),
 the downed and watching UI (`ui/downedPanels.ts`), the overlays down the left (`ui/diagPanels.ts`,
-`netLogPanels.ts`) and the chat (`ui/chatPanels.ts`).
+`netLogPanels.ts`), the chat (`ui/chatPanels.ts`) and the touch controls (`ui/touchPanels.ts`).
+- **A page's control laid out by the page and drawn by the kit is a ghost** (`.kit-ghost`, `_base.scss`): laid out
+  and taking the pointer (a finger's capture, two fingers, a press held), painting nothing by `filter: opacity(0)`,
+  never `opacity: 0`, which the lab's and the game's `checkVisibility` read as hidden (`lab ui` found no pause
+  button). Its panel stands at its box, read each frame. A page's SVG icon is drawn as styled (`svgArt`).
 - **A press can leave the focus where it is** (`Pressable.keepsFocus`, `textField`'s last argument): the canvas
   takes every press, and its `mousedown` blurred the chat's field, whose blur shut the box under the press.
 - **A button held, not clicked, says so** (`Pressable.held`: told as a press on it begins and as it ends, wherever

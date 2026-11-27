@@ -524,7 +524,12 @@ the SCSS. In the order they're taken: the kit's own pieces first, then what show
 - [x] The chat (`ui/chatPanels.ts`): `lab ui --states chat,chatOpen,chatTouch --ab`, every box within 3 px of
   main's (main's Send showed the system's cursor); `lab coop --scenarios chat` types, sends, shuts and fades it.
   The kit's presses keep the field's focus where main's prevented `pointerdown` (`Pressable.keepsFocus`).
-- [ ] The touch controls (`touch.html`).
+- [x] The touch controls (`ui/touchPanels.ts`: the stick, the skill buttons, the round buttons, the village's Use,
+  Bag and Map): `lab ui --states hudTouch,buttonsTouch,buttonsRunTouch,villageHudTouch --ab`, every box main's and
+  each button pictured beside main's; `lab touch`, `lab tap --class mage`, `lab longpress` pass. Their page elements
+  stay laid out and take the fingers (`.kit-ghost`: painting nothing by a filter, so their opacity still says
+  whether they show), the panels standing where each is laid out; an icon of the page's SVG is drawn as it's styled
+  (`kit/svgArt.ts`). A fade of a round button's opacity isn't followed: shown or not.
 - [ ] The damage meter, the sit hint.
 - [ ] The tooltip and the item's sheet.
 - [ ] The lobby (`menu.html`: the rail, the loadout and spellbook, the equipment, the stash and its filter, the

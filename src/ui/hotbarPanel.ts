@@ -91,8 +91,8 @@ function artOf(icon: HTMLElement | null): string | undefined {
   return /url\(["']?(.*?)["']?\)/.exec(background ?? '')?.[1];
 }
 
-/** What the page's slot shows now. */
-function faceOf(page: HTMLElement): SlotFace {
+/** What the page's slot shows now (a touch skill button's too, `touchPanels.ts`). */
+export function faceOf(page: HTMLElement): SlotFace {
   const icon = page.querySelector<HTMLElement>('.icon');
   const art = artOf(icon);
   const looks = page.classList;

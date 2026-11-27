@@ -1,0 +1,44 @@
+// An SVG icon of the page's drawn as a panel's picture (#973: the touch buttons' icons, styled by the page's CSS).
+// The page's `<svg>` is cloned with the paint its stylesheet gives it (fill, stroke, its width and ends, its colour)
+// written on it, and loaded as an image once for each look; the picture paints that image.
+
+/** the paint an icon takes from the stylesheet, as written on its clone */
+const PAINT = ['fill', 'stroke', 'stroke-width', 'stroke-linecap', 'stroke-linejoin', 'opacity'] as const;
+
+const images = new Map<string, HTMLImageElement>();
+const markups = new WeakMap<SVGSVGElement, { look: string; markup: string }>();
+
+/** `svg` as markup that draws alone: its stylesheet's paint written on it, `currentColor` its colour. */
+function markupOf(svg: SVGSVGElement): string {
+  const style = getComputedStyle(svg);
+  const clone = svg.cloneNode(true) as SVGSVGElement;
+  clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+  for (const name of PAINT) clone.setAttribute(name, style.getPropertyValue(name));
+  // (each shape's own paint, where the stylesheet gives one: a graph's line)
+  clone.querySelectorAll<SVGElement>('[class]').forEach((shape, at) => {
+    const own = getComputedStyle(svg.querySelectorAll('[class]')[at]);
+    for (const name of PAINT) shape.setAttribute(name, own.getPropertyValue(name));
+  });
+  return clone.outerHTML.replace(/currentColor/g, style.color);
+}
+
+/** `svg` drawn as the page draws it, once its image has loaded (null till then: ask again the next frame); and a
+ *  key that changes as its look does. */
+export function svgArt(svg: SVGSVGElement): { key: string; image: HTMLImageElement | null } {
+  // (its styles read again only as its button's classes or the page's change: a class's colour, a state)
+  const look = `${svg.parentElement?.className ?? ''}|${document.body.className}`;
+  let known = markups.get(svg);
+  if (known?.look !== look) {
+    known = { look, markup: markupOf(svg) };
+    markups.set(svg, known);
+  }
+  const markup = known.markup;
+  let image = images.get(markup);
+  if (!image) {
+    image = new Image();
+    image.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(markup)}`;
+    images.set(markup, image);
+  }
+  const ready = image.complete && image.naturalWidth > 0;
+  return { key: markup, image: ready ? image : null };
+}

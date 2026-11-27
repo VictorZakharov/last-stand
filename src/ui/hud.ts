@@ -38,6 +38,7 @@ import { drawParty } from './partyPanel';
 import { drawDownedPanels } from './downedPanels';
 import { drawDiag } from './diagPanels';
 import { drawChat } from './chatPanels';
+import { drawTouch } from './touchPanels';
 import { drawDecision } from './decisionPanel';
 import { drawBottomBar } from './bottomBar';
 
@@ -68,6 +69,7 @@ export function initHud(): void {
   drawDownedPanels();
   drawDiag();
   drawChat();
+  drawTouch();
   drawBottomBar();
   // (the minimap's column, the training's tracker in it)
   initMinimapColumn();

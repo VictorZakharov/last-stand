@@ -70,12 +70,12 @@ function roundedPath(c: CanvasRenderingContext2D, x: number, y: number, w: numbe
 }
 
 /** The slot's inset shadows over what's painted: the frame's 1 px line (or a cast's 2 px gold ring) and its shade. */
-function paintInset(c: CanvasRenderingContext2D, face: SlotFace, scale: number): void {
+function paintInset(c: CanvasRenderingContext2D, face: SlotFace, scale: number, radius: number): void {
   const size = FACE;
   if (face.active) {
     c.lineWidth = 2;
     c.strokeStyle = HIGHLIGHT;
-    roundedPath(c, 1, 1, size - 2, size - 2, Math.max(0, FACE_RADIUS - 1));
+    roundedPath(c, 1, 1, size - 2, size - 2, Math.max(0, radius - 1));
     c.stroke();
     return;
   }
@@ -86,18 +86,18 @@ function paintInset(c: CanvasRenderingContext2D, face: SlotFace, scale: number):
   c.fillStyle = '#000';
   c.beginPath();
   c.rect(-size, -size, size * 3, size * 3);
-  c.roundRect(0, 0, size, size, FACE_RADIUS);
+  c.roundRect(0, 0, size, size, radius);
   c.fill('evenodd');
   c.restore();
   c.lineWidth = 1;
   c.strokeStyle = face.nomana ? NOMANA_LINE : FRAME_LINE;
-  roundedPath(c, 0.5, 0.5, size - 1, size - 1, FACE_RADIUS - 0.5);
+  roundedPath(c, 0.5, 0.5, size - 1, size - 1, radius - 0.5);
   c.stroke();
 }
 
 /** The glyph's slot: a shade of its colour round a point 40% down (`radial-gradient(circle at 50% 40%, c40,
  *  #0b0a0c 75%)`), the glyph glowing over it. */
-function paintGlyph(c: CanvasRenderingContext2D, face: SlotFace, scale: number): void {
+function paintGlyph(c: CanvasRenderingContext2D, face: SlotFace, scale: number, radius: number): void {
   const size = FACE;
   const x = size / 2;
   const y = size * 0.4;
@@ -107,7 +107,7 @@ function paintGlyph(c: CanvasRenderingContext2D, face: SlotFace, scale: number):
   shade.addColorStop(1, '#0b0a0c');
   c.fillStyle = shade;
   c.fillRect(0, 0, size, size);
-  paintInset(c, face, scale);
+  paintInset(c, face, scale, radius);
   c.save();
   c.filter = iconFilter(face);
   c.font = fontOf({ face: 'body', size: GLYPH_SIZE, color: face.color ?? '#fff' });
@@ -120,12 +120,14 @@ function paintGlyph(c: CanvasRenderingContext2D, face: SlotFace, scale: number):
   c.restore();
 }
 
-/** Paints `face` (its painted icon `image`, if loaded) at `scale` canvas pixels a px, its top left at the origin. */
+/** Paints `face` (its painted icon `image`, if loaded) at `scale` canvas pixels a px, its top left at the origin;
+ *  `round`, as a touch button is (`border-radius: 50%`), its inset line and shade round with it. */
 export function paintFace(c: CanvasRenderingContext2D, face: SlotFace, image: HTMLImageElement | null,
-  scale: number): void {
+  scale: number, round = false): void {
   const size = FACE;
+  const radius = round ? size / 2 : FACE_RADIUS;
   c.save();
-  roundedPath(c, 0, 0, size, size, FACE_RADIUS);
+  roundedPath(c, 0, 0, size, size, radius);
   c.clip();
   if (face.art) {
     if (image) {
@@ -138,11 +140,11 @@ export function paintFace(c: CanvasRenderingContext2D, face: SlotFace, image: HT
       c.drawImage(image, (size - w) / 2, (size - h) / 2, w, h);
       c.restore();
     }
-    paintInset(c, face, scale);
+    paintInset(c, face, scale, radius);
   } else if (face.glyph) {
-    paintGlyph(c, face, scale);
+    paintGlyph(c, face, scale, radius);
   } else {
-    paintInset(c, face, scale);
+    paintInset(c, face, scale, radius);
   }
   c.restore();
 }
