@@ -170,7 +170,9 @@ function growAfresh(g: Grow): TreeKind {
   const bark = ourGeometry(tree.branchesMesh.geometry), leaves = ourGeometry(tree.leavesMesh.geometry);
   barkAlongByGirth(bark, branches);
   for (const mesh of [tree.branchesMesh, tree.leavesMesh]) {
-    (Array.isArray(mesh.material) ? mesh.material : [mesh.material]).forEach((material) => material.dispose());
+    // (ez-tree's own types name three's, which the game doesn't install: typed here by what's called)
+    const materials: { dispose(): void }[] = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+    for (const material of materials) material.dispose();
   }
   const box = new Box3().setFromBufferAttribute(bark.attributes.position)
     .union(new Box3().setFromBufferAttribute(leaves.attributes.position));
