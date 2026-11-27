@@ -24,6 +24,8 @@ export interface Pressable {
   press?: () => void;
   /** shows `state` (each change once) */
   shows?: (state: PressState) => void;
+  /** told as a press on it begins and as it ends, wherever it's let go (a button held: the touch revive's) */
+  held?: (on: boolean) => void;
 }
 
 const pressables = new Map<number, Pressable>();
@@ -44,7 +46,10 @@ export function unpressable(panel: Panel): void {
   if (!p) return;
   pressables.delete(panel.id);
   shown.delete(p);
-  if (down === p) down = null;
+  if (down === p) {
+    p.held?.(false);
+    down = null;
+  }
 }
 
 /** The pressable panel under (`x`, `y`) css px that can be pressed now, if any. */
@@ -81,11 +86,13 @@ function listen(): void {
   window.addEventListener('pointerdown', (e) => {
     if (!onCanvas(e) || e.button !== 0) return;
     down = pressableAt(e.clientX, e.clientY);
+    down?.held?.(true);
     showAll(down);
   }, true);
   window.addEventListener('pointerup', (e) => {
     const pressed = down;
     down = null;
+    pressed?.held?.(false);
     const over = onCanvas(e) ? pressableAt(e.clientX, e.clientY) : null;
     showAll(e.pointerType === 'mouse' ? over : null);
     // (a finger that dragged a list to scroll it pressed nothing)
@@ -97,6 +104,7 @@ function listen(): void {
     tipUnder(e);
   }, true);
   window.addEventListener('pointercancel', () => {
+    down?.held?.(false);
     down = null;
     showAll(null);
   }, true);

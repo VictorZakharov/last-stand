@@ -13,7 +13,7 @@ import { groundDrops, throwItem } from '../../../src/game/groundItems';
 import { groundHeight } from '../../../src/world/ground';
 import { labelAt } from '../../../src/ui/overlay/layer';
 import { rollDrop } from '../../../src/loot/items';
-import type { Frame, Lab, MouseButton, Screen } from './lab';
+import { boxOf, type Frame, type Lab, type MouseButton, type Screen } from './lab';
 
 /** the game's spectating, where the tree has it (an older one's watching follows the first partner alone) */
 type Spectate = typeof import('../../../src/game/spectate');
@@ -134,7 +134,8 @@ export async function coopDragEnd(lab: Lab): Promise<void> {
 function barButton(name: string): { x: number; y: number } | null {
   const button = document.querySelector(`#spectate .sp-${name}`);
   if (!button) return null;
-  const box = button.getBoundingClientRect();
+  // (where the engine draws it, src/ui/downedPanels.ts: the page's is out of sight)
+  const box = boxOf(button);
   return { x: box.left + box.width / 2, y: box.top + box.height / 2 };
 }
 
@@ -299,9 +300,10 @@ function nameOf(element: Element): string {
   return first ? `${element.tagName.toLowerCase()}.${first}` : element.tagName.toLowerCase();
 }
 
-/** Whether an element shows on the page: laid out with an area, visible and not see-through. */
+/** Whether an element shows on the page (or where the engine draws it): laid out with an area, visible and not
+ *  see-through. */
 function showing(element: Element): boolean {
-  const box = element.getBoundingClientRect();
+  const box = boxOf(element);
   if (box.width < 1 || box.height < 1) return false;
   const style = getComputedStyle(element);
   return style.visibility !== 'hidden' && Number(style.opacity) > 0;
@@ -310,13 +312,13 @@ function showing(element: Element): boolean {
 /** The parts of the HUD and the touch controls shown under the watching bar (the outermost of each, not a layer over
  *  the whole window). */
 function partsUnder(bar: HTMLElement): string[] {
-  const barBox = bar.getBoundingClientRect();
+  const barBox = boxOf(bar);
   const window_ = window.innerWidth * window.innerHeight;
   const found: Element[] = [];
   for (const element of document.querySelectorAll('#hud *, #touch *')) {
     if (bar.contains(element) || element.contains(bar)) continue;
     if (found.some((outer) => outer.contains(element)) || !showing(element)) continue;
-    const box = element.getBoundingClientRect();
+    const box = boxOf(element);
     if (box.width * box.height > window_ * LAYER_SHARE) continue;
     if (overlap(box, barBox)) found.push(element);
   }
@@ -328,13 +330,13 @@ function barFitHere(): BarFit {
   const bar = document.getElementById('spectate');
   const screen = `${window.innerWidth}x${window.innerHeight}`;
   if (!bar || !showing(bar)) return { line: `${screen}: no watching bar`, problems: [`${screen}: no watching bar`] };
-  const box = bar.getBoundingClientRect();
+  const box = boxOf(bar);
   const problems: string[] = [];
   const edges = { left: 0, top: 0, right: window.innerWidth, bottom: window.innerHeight };
   if (!within(box, edges)) problems.push(`${screen}: the watching bar runs past the window`);
   const touch = document.body.classList.contains('touch');
   for (const button of bar.querySelectorAll('.sp-btn')) {
-    const at = button.getBoundingClientRect();
+    const at = boxOf(button);
     if (!within(at, box)) problems.push(`${screen}: the bar's ${nameOf(button)} runs out of it`);
     if (touch && at.height < FINGER_PX) problems.push(`${screen}: the bar's ${nameOf(button)} is ${at.height} px tall`);
   }

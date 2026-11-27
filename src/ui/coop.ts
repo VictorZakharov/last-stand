@@ -145,6 +145,10 @@ let invited = '';
 let tagNote = '';
 /** Whether the touch revive button is held. */
 export const touchReviving = (): boolean => touchRevive;
+/** The touch revive button held or let go (where the engine draws it, `ui/downedPanels.ts`). */
+export function holdRevive(on: boolean): void {
+  touchRevive = on;
+}
 
 export function initCoop(): void {
   $('#btn-coop-close').onclick = () => { sfx.click(); openCoop(false); };

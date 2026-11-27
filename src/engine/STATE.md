@@ -512,7 +512,10 @@ the SCSS. In the order they're taken: the kit's own pieces first, then what show
   main's (the state's partners now made with the game's own markup, `tagFor`'s), `lab portraits` reading the
   drawn card. The overlay atlas keeps 2 px clear round each slot: a label filling its slot was sampled with a row
   of the slot under it, and the cards' words were underlined in the bar's red.
-- [ ] The rest of the run's HUD (`hud.html`): the downed note and the revive, the watching bar.
+- [x] The downed note, the revive prompt and touch button, the watching bar (`ui/downedPanels.ts`): `lab ui
+  --states downed,downedTouch --ab`, every box main's; `lab coop --scenarios walk` taps the bar's buttons where
+  they're drawn. The touch revive is held through the kit's presses (`Pressable.held`). The prompt's key cap
+  keeps its drop shadow, not its glow.
 - [ ] The overlays down the left (`diag.html`: the performance overlay, the net's, the battle log), the chat.
 - [ ] The touch controls (`touch.html`).
 - [ ] The damage meter, the sit hint.

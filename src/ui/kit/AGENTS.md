@@ -9,7 +9,10 @@ the run's target frame (`ui/targetFrame.ts`), the wave's badge (`ui/waveBadge.ts
 (`ui/decisionPanel.ts`), the bottom bar (`ui/bottomBar.ts`, `hotbarPanel.ts`, `slotFace.ts`, `frenzyPips.ts`),
 the minimap's column (`ui/minimapColumn.ts`), the training's tracker (`ui/trainingPanel.ts`), the banner
 (`ui/bannerPanel.ts`), the close views' crosshair, charge ring and look hint (`ui/aimMarks.ts`), the buffs
-(`ui/buffsPanel.ts`), a duel's score and result (`ui/duelPanels.ts`) and the party's frames (`ui/partyPanel.ts`).
+(`ui/buffsPanel.ts`), a duel's score and result (`ui/duelPanels.ts`), the party's frames (`ui/partyPanel.ts`)
+and the downed and watching UI (`ui/downedPanels.ts`).
+- **A button held, not clicked, says so** (`Pressable.held`: told as a press on it begins and as it ends, wherever
+  it's let go): the touch revive. **A placement past the screen's safe area reads it** (`safeInsets`, `safeArea.ts`).
 - **A new state of `lab ui` runs on main's side only with `--fresh`** the first time: an A/B's kept side was run
   with the states of its day, and says nothing of one added since.
 

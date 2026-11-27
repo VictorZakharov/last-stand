@@ -35,6 +35,7 @@ import { drawAimMarks } from './aimMarks';
 import { drawBuffs } from './buffsPanel';
 import { drawDuelPanels } from './duelPanels';
 import { drawParty } from './partyPanel';
+import { drawDownedPanels } from './downedPanels';
 import { drawDecision } from './decisionPanel';
 import { drawBottomBar } from './bottomBar';
 
@@ -62,6 +63,7 @@ export function initHud(): void {
   drawBuffs();
   drawDuelPanels();
   drawParty();
+  drawDownedPanels();
   drawBottomBar();
   // (the minimap's column, the training's tracker in it)
   initMinimapColumn();
