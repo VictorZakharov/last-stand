@@ -115,11 +115,12 @@ export function isText(element: Element): boolean {
   return words || [...element.children].some((child) => INLINE.has(child.tagName) && child.textContent?.trim());
 }
 
-/** What an element's rules depend on: its own name, classes and attributes (the `style` aside). */
-export function ownKey(element: Element): string {
+/** What an element's rules depend on: its own name, classes and attributes, its `style` only where `styled` (a sheet
+ *  with rules on it: a placed element's style changes as it moves, matched again at each move). */
+export function ownKey(element: Element, styled = false): string {
   let key = element.tagName;
   for (const attribute of element.attributes) {
-    if (attribute.name !== 'style') key += ` ${attribute.name}=${attribute.value}`;
+    if (styled || attribute.name !== 'style') key += ` ${attribute.name}=${attribute.value}`;
   }
   if ((element as HTMLButtonElement).disabled) key += ' :disabled';
   return key;

@@ -541,8 +541,11 @@ the SCSS. In the order they're taken: the kit's own pieces first, then what show
   than main's, so the duel's card is 11 px taller (479 to 468). On a phone held sideways the duel's Begin button
   spans its row where main's is as wide as its words. `ui --states clicked` presses Leave where it's drawn; `lab
   training` passes; `lab practice` fails on main alike (fanShot's cooldown, Hedgeward never cast).
-- [ ] The tooltip and the item's sheet (drawn over the lobby's panels: after them, as the page's elements stand over
-  every panel).
+- [x] The tooltip and the item's sheet (`ui/tooltipPanel.ts`, `itemSheetPanel.ts`; the modals' backdrop and box
+  `modalSheet.ts`): the tooltip laid out and placed by the page as before (`.kit-ghost`), its cards drawn where it
+  stands, over every other screen; the sheet's box as wide as its cards ask. `ui --states tooltip,skillTips,
+  skillTipsTouch,sheetTouch --ab` pass, the sheet 667x214 against main's 666x218 on a phone, 667x361 with a card
+  longer than the window; its canary caught.
 - [x] The lobby's panels (`ui/lobbyPanels.ts`, its sheets `lobbySheet.ts`, `stashSheet.ts`, `loadoutSheet.ts`: the
   rail, the key bar and spellbook with each slot's face painted as the skill bar's, the equipment and its doll, the
   attributes, the stash, its chips and its filter lifted over the doll, the slot focus's light, the stowed panels'

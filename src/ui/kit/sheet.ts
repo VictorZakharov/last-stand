@@ -62,11 +62,14 @@ export class SheetTree implements Forwarded {
   /** the panel over the whole screen a lifted node stands in, made after the root's so drawn over it */
   private readonly top: Panel;
   private readonly stop: () => void;
+  /** whether a rule reads an inline style (`[style*=...]`): the elements' keys then hold their styles */
+  private readonly styled: boolean;
 
   /** `element` (kept out of sight) drawn by `sheet` in a panel inside `parent` (none: on the screen), its px those
    *  of `scaled`; `base` the text it starts from. */
   constructor(element: Element, private readonly sheet: Sheet, private readonly scaled: Scaled,
     parent: Panel | null = null, private readonly base: TextStyle = BODY) {
+    this.styled = sheet.some((rule) => rule.at.includes('[style'));
     const room = parent ?? new Panel(null, { position: 'absolute', inset: 0 }, {}, scaled);
     this.root = this.make(element, room);
     this.top = new Panel(null, { position: 'absolute', inset: 0 }, {}, scaled);
@@ -144,7 +147,7 @@ export class SheetTree implements Forwarded {
   private follow(node: Node, around: TextStyle & SheetText, parentKey: string, hitsRound: boolean,
     round: Node | null): void {
     const element = node.element;
-    const key = `${parentKey}>${ownKey(element)}`;
+    const key = `${parentKey}>${ownKey(element, this.styled)}`;
     const style = gather(this.rulesOf(node, key), element, round?.panel ?? null, node.state, around);
     node.hits = style.hits ?? hitsRound;
     if (style.scrolls && !node.scrolling) {

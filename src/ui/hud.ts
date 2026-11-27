@@ -41,6 +41,8 @@ import { drawChat } from './chatPanels';
 import { drawTouch } from './touchPanels';
 import { drawVillageCard } from './villageCardPanel';
 import { drawLobbyPanels } from './lobbyPanels';
+import { drawTooltip } from './tooltipPanel';
+import { drawItemSheet } from './itemSheetPanel';
 import { drawDecision } from './decisionPanel';
 import { drawBottomBar } from './bottomBar';
 
@@ -74,6 +76,9 @@ export function initHud(): void {
   drawTouch();
   drawLobbyPanels();
   drawVillageCard();
+  // (the tooltip last: over the modals, as its z-index stood it)
+  drawItemSheet();
+  drawTooltip();
   drawBottomBar();
   // (the minimap's column, the training's tracker in it)
   initMinimapColumn();
