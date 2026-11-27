@@ -6,8 +6,8 @@ import { RUST } from './index';
 
 /** A length: px of the UI's reference layout, a percent of the container, or auto. */
 export type Length = number | `${number}%` | 'auto';
-/** Four sides as CSS gives them: one for all, or top, right, bottom, left. */
-export type Sides<T> = T | [T, T, T, T];
+/** Four sides as CSS gives them: one for all, top and bottom then the sides, or top, right, bottom, left. */
+export type Sides<T> = T | [T, T] | [T, T, T, T];
 type Align = 'start' | 'end' | 'center' | 'stretch' | 'baseline';
 type Spread = 'start' | 'end' | 'center' | 'between' | 'around' | 'evenly';
 
@@ -46,8 +46,11 @@ export interface PanelShadow { blur: number; y?: number; color: string }
 
 /** A panel's look. Colours are CSS's (`#rgb`, `#rrggbb`, `rgb()`, `rgba()`). */
 export interface PanelLook {
-  /** its fill, or its fill from top to bottom */
+  /** its fill, or its fill from top to bottom (or round a centre: `radial`) */
   fill?: string | [string, string];
+  /** its two fills round a centre across its middle, `y` of the way down, the second reached `stop` of the way to
+   *  its farthest corner (CSS's `radial-gradient(circle at 50% y, a, b stop)`) */
+  radial?: { y: number; stop: number };
   border?: string;
   /** its corners' radii: one for all, or top left, top right, bottom right, bottom left (px) */
   radius?: Sides<number>;
@@ -75,8 +78,9 @@ const DIRECTION = { row: 0, column: 1, 'row-reverse': 2, 'column-reverse': 3 } a
 const OVERFLOW = { visible: 0, hidden: 1, scroll: 2 } as const;
 
 /** Four sides of `sides`, top first. */
-function four<T>(sides: Sides<T>): [T, T, T, T] {
-  return Array.isArray(sides) ? sides : [sides, sides, sides, sides];
+export function four<T>(sides: Sides<T>): [T, T, T, T] {
+  if (!Array.isArray(sides)) return [sides, sides, sides, sides];
+  return sides.length === 2 ? [sides[0], sides[1], sides[0], sides[1]] : sides;
 }
 
 /** A length's value and unit, px scaled by `scale`; `fallback`'s where none is given. */
@@ -137,6 +141,10 @@ export function lookFloats(l: PanelLook, scale: number): Float32Array {
     f.set(l.picture.uv, 18);
     if (l.picture.tint) f.set(rgba(l.picture.tint), 22);
     f[33] = (l.picture.bleed ?? 0) * scale;
+  }
+  if (l.radial) {
+    f[34] = l.radial.stop;
+    f[35] = l.radial.y;
   }
   f[26] = (l.scroll ?? 0) * scale;
   if (l.shadow) {

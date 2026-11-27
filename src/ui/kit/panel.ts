@@ -8,18 +8,20 @@ import { uiScales } from '../scale';
 import { atlasSide } from '../overlay/atlas';
 import { Label } from '../overlay/layer';
 import { drawText, measure, shadowReach, type TextStyle } from '../overlay/paint';
+import { normalLine } from './lineHeight';
 import { engineCanvas } from '../../engine/index';
 import { overFrame } from '../../core/renderer';
 import {
-  lookFloats, styleFloats, uiContent, uiMake, uiRect, uiRelook, uiRemove, uiRestyle, uiScreen,
-  type PanelLook, type PanelStyle,
+  four, lookFloats, styleFloats, uiContent, uiMake, uiRect, uiRelook, uiRemove, uiRestyle, uiScreen,
+  type Length, type PanelLook, type PanelStyle,
 } from '../../engine/ui';
 
 /** The UI's scale a panel is drawn at. */
 export type Scaled = 'hud' | 'ui';
 
-/** A line of text a panel shows: what it says and how. */
-interface Text { text: string; style: TextStyle; label: Label; w: number; h: number; reach: number }
+/** A line of text a panel shows: what it says and how, and how far its line's box reaches past the face's own each
+ *  side (px: negative where its line height is shorter, as CSS's half-leading). */
+interface Text { text: string; style: TextStyle; label: Label; w: number; h: number; reach: number; lead: number }
 
 const panels = new Set<Panel>();
 let nextId = 0;
@@ -56,7 +58,7 @@ export class Panel {
   style(style: PanelStyle): this {
     if (!differs(this.styleNow, style)) return this;
     this.styleNow = { ...this.styleNow, ...style };
-    uiRestyle(this.id, styleFloats(this.styleNow, this.scale()));
+    uiRestyle(this.id, this.styleFloats());
     return this;
   }
 
@@ -86,18 +88,34 @@ export class Panel {
     const h = Math.ceil(measured.h + reach * 2);
     label.sizedBy = this.scaled;
     label.show({ w, h, paint: (c, s) => drawText(c, measured, reach, reach, style, s) });
-    this.text = { text, style, label, w: measured.w, h: measured.h, reach };
+    // (its line's box as the page's: its line height, or the font's normal one)
+    const line = style.line ? style.line * style.size : normalLine(style);
+    const lead = line ? (line - measured.h) / 2 : 0;
+    const restyle = (this.text?.lead ?? 0) !== lead;
+    this.text = { text, style, label, w: measured.w, h: measured.h, reach, lead };
     this.paintedAt = 0;
+    if (restyle) uiRestyle(this.id, this.styleFloats());
     return this;
+  }
+
+  /** Its layout as the engine takes it: its text's line height laid out as margins round the face's box. */
+  private styleFloats(): Float32Array {
+    const lead = this.text?.lead ?? 0;
+    if (!lead) return styleFloats(this.styleNow, this.scale());
+    const [top, right, bottom, left] = four(this.styleNow.margin ?? 0);
+    const led = (side: Length) => (typeof side === 'number' ? side + lead : side);
+    return styleFloats({ ...this.styleNow, margin: [led(top), right, led(bottom), left] }, this.scale());
   }
 
   /** It says nothing: its text's picture and size let go. */
   private silence(): this {
     if (!this.text) return this;
     this.text.label.remove();
+    const led = this.text.lead !== 0;
     this.text = null;
     this.paintedAt = 0;
     uiContent(this.id, null);
+    if (led) uiRestyle(this.id, this.styleFloats());
     uiRelook(this.id, lookFloats(this.fullLook(), this.scale()));
     return this;
   }
@@ -105,6 +123,14 @@ export class Panel {
   /** Its box as it will be drawn next (css px), if it's shown. */
   rect(): { x: number; y: number; w: number; h: number } | null {
     return uiRect(this.id);
+  }
+
+  /** Whether it can be seen: it and every panel round it with some opacity (a page element's `checkVisibility`). */
+  get seen(): boolean {
+    for (let panel: Panel | null = this; panel; panel = panel.parent) {
+      if ((panel.lookNow.opacity ?? 1) <= 0) return false;
+    }
+    return true;
   }
 
   /** What it says, if anything (the lab reads it). */
@@ -161,7 +187,7 @@ export class Panel {
     }
     if (this.writtenAt !== k) {
       this.writtenAt = k;
-      uiRestyle(this.id, styleFloats(this.styleNow, k));
+      uiRestyle(this.id, this.styleFloats());
       relook = true;
       if (text) uiContent(this.id, { w: text.w * k, h: text.h * k });
     }
@@ -194,11 +220,21 @@ function screenPanel(): Panel {
   return screen;
 }
 
+const everyFrame = new Set<() => void>();
+/** `tick` run before each frame's panels are brought up to date (an animation's step), until `stop` is called. */
+export function onFrame(tick: () => void): () => void {
+  everyFrame.add(tick);
+  return () => everyFrame.delete(tick);
+}
+
 /** Every panel brought up to date before the engine's frame (the screen's size and ratio, each text painted), all
  *  of them shown or not. */
 function refreshPanels(shown: boolean): void {
   const canvas = engineCanvas();
-  if (!canvas || !screen) return;
+  if (!canvas) return;
+  // (an animation's step may make the first panel, and the screen's with it)
+  for (const tick of everyFrame) tick();
+  if (!screen) return;
   uiScreen(innerWidth, innerHeight, canvas.width / Math.max(1, innerWidth));
   screen.show(shown);
   const ratio = G.renderer.getPixelRatio();

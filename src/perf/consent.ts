@@ -4,6 +4,7 @@
 // asking (the pause menu's Slow-game reports turns it back, or off); Not now asks no more this session, and after
 // three the game stops asking. However asked, a game sends at most 10 in any 24 hours, kept across reloads (the
 // traces server holds each address to the same). In co-op each game asks its own player about its own frames.
+import { drawnAt } from '../ui/kit/press';
 import { G } from '../state';
 import { sfx } from '../core/audio';
 import { isReadying } from '../game/warm';
@@ -182,7 +183,9 @@ function letGo(close = true): void {
  *  middle: the prompt hid the choice's buttons). Its top is zoomed with it, so it's given in the UI's px. */
 function place(): void {
   const choice = document.getElementById('decision');
-  const under = choice && !choice.classList.contains('hidden') ? choice.getBoundingClientRect().bottom + UNDER_GAP : 0;
+  // (the choice is drawn by the engine, its page's own out of sight: ui/decisionPanel.ts)
+  const drawn = choice && !choice.classList.contains('hidden') ? drawnAt(choice) : null;
+  const under = drawn ? drawn.y + drawn.h + UNDER_GAP : 0;
   $('#perf-ask').style.top = under > UNDER_GAP ? `calc(${Math.round(under)}px / var(--ui, 1))` : '';
 }
 

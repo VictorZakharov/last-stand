@@ -413,8 +413,6 @@ body.touch .sp-keys { display: none; }
 #btn-revive { position: absolute; right: calc(290px * var(--touch, 1) + env(safe-area-inset-right, 0px)); bottom: touch(24px); width: 84px; height: 84px; border-radius: 50%;
   font-family: var(--font-display); font-size: 16px; color: #ffe6a0; background: radial-gradient(circle at 50% 40%, #5a4a20, #1a140a 75%); border: 2px solid var(--highlight);
   box-shadow: 0 0 16px rgba($highlight, .5); touch-action: none; pointer-events: auto; }
-.dc-party { color: $ally-text; font-size: 15px; margin: -4px 0 10px; }
-.dc-buttons .cont:disabled { cursor: $cursor; filter: grayscale(.5) brightness(.85); }
 .sm-note { color: $ally-text; }
 .sm-note:empty { display: none; }
 #hud.watching #bottombar, #hud.watching #buffs, #hud.watching #spoils, #hud.watching #crosshair { display: none; }

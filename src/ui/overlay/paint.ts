@@ -16,6 +16,8 @@ export interface TextStyle {
   /** px between letters */
   spacing?: number;
   upper?: boolean;
+  /** its line's height, times its size, where a panel lays it out (CSS's `line-height`; none: the face's own box) */
+  line?: number;
 }
 
 /** the page's text shadow for labels over the world (`$outline` in the theme) */

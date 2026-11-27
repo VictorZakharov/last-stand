@@ -66,5 +66,12 @@ html.charging, html.charging * { cursor: none !important; }
 #charge-cursor > b > i { position: absolute; inset: 0; background: var(--cursor-hand-art) no-repeat; will-change: transform; }
 html, body { touch-action: manipulation; -webkit-tap-highlight-color: transparent; -webkit-touch-callout: none; overscroll-behavior: none; }
 #game { touch-action: none; }
+/* a part of the UI drawn by the engine (ui/kit) stays on the page out of sight, for its buttons' handlers and focus
+   and a screen reader's reading of it: none of it shows or takes the pointer (ui/kit/press.ts presses its buttons) */
+.kit-mirror { position: absolute !important; inset: auto !important; left: 0 !important; top: 0 !important;
+  width: 1px !important; height: 1px !important; margin: -1px !important; padding: 0 !important; border: 0 !important;
+  overflow: hidden !important; clip-path: inset(50%) !important; white-space: nowrap; animation: none !important;
+  transition: none !important; }
+.kit-mirror, .kit-mirror * { pointer-events: none !important; }
 
 /* #loading is styled inline in index.html so it paints before this stylesheet and the bundle load */

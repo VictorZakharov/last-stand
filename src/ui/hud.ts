@@ -1,4 +1,5 @@
-// In-run HUD: bars, hotbar, score, target frame, minimap, spoils, decision panel.
+// In-run HUD: bars, hotbar, score, minimap, spoils, the choice after a wave (the page's, out of sight: the engine draws
+// it and the wave's badge, decisionPanel.ts and waveBadge.ts, from what this writes there).
 import { duelObjective } from './duelHud';
 import { G } from '../state';
 import { input } from '../core/input';
@@ -25,6 +26,8 @@ import type { Item, SkillDef, SkillKey } from '../types';
 import { aleBoost } from '../game/aleBoost';
 import { ALE_BOOST } from '../data/tavern';
 import { showTarget } from './targetFrame';
+import { drawWaveBadge } from './waveBadge';
+import { drawDecision } from './decisionPanel';
 
 /** querySelector that asserts the element exists (HUD markup is static). */
 const $ = <T extends Element = HTMLElement>(s: string, root: ParentNode = document): T => root.querySelector<T>(s)!;
@@ -40,6 +43,9 @@ let mmCtx: CanvasRenderingContext2D;
 const VILLAGE_ARROW = 1.4;
 
 export function initHud(): void {
+  // (the choice first: the badge is drawn over it, as its z-index had it)
+  drawDecision();
+  drawWaveBadge();
   mmCtx = $<HTMLCanvasElement>('#minimap').getContext('2d')!;
   on('lootGained', renderSpoils);
   on('waveStarted', () => renderSpoils());

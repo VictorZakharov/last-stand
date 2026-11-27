@@ -134,8 +134,25 @@ export const onTheClock = (animation: Animation): boolean => animation.timeline 
 
 /** The middle of `element`'s box, css px: where a measure puts the mouse or a finger to point at it. */
 export function middleOf(element: Element): PagePoint {
-  const box = element.getBoundingClientRect();
+  // (a page's button the engine draws in its place, out of sight on the page: pressed where the engine draws it)
+  const box = boxOf(element);
   return { x: box.left + box.width / 2, y: box.top + box.height / 2 };
+}
+
+/** `element`'s box on the screen: where the engine draws it, for a page's element it draws in its place (out of
+ *  sight on the page, `.kit-mirror`: none where it draws none), else the page's own. */
+export function boxOf(element: Element): DOMRect {
+  if (!KIT_PRESS || !element.closest('.kit-mirror')) return element.getBoundingClientRect();
+  const drawn = KIT_PRESS.drawnAt(element);
+  return drawn ? new DOMRect(drawn.x, drawn.y, drawn.w, drawn.h) : new DOMRect(0, 0, 0, 0);
+}
+
+/** Whether `element` can be seen: where the UI kit draws it, its panel's opacity; else the page's own. */
+export function seenOf(element: Element): boolean {
+  if (!KIT_PRESS || !element.closest('.kit-mirror')) {
+    return element.checkVisibility({ opacityProperty: true, visibilityProperty: true });
+  }
+  return KIT_PRESS.drawnSeen(element);
 }
 
 /** the pointer events a touch makes, any of which says the page has handled it */
@@ -232,6 +249,12 @@ const SETUP_TIME = 60;
 const SETTLE_FRAMES = 90;
 
 /** the game's emitters' phases (src/world/runPhase.ts), where the tree has them: an A/B's older commit has none */
+/** the UI kit's presses (src/ui/kit/press.ts), where the tree has them (main's had none: `--ab`) */
+interface KitPress {
+  drawnAt(element: Element): { x: number; y: number; w: number; h: number } | null;
+  drawnSeen(element: Element): boolean;
+}
+const KIT_PRESS = Object.values(import.meta.glob<KitPress>('../../../src/ui/kit/press.ts', { eager: true }))[0];
 const RUN_PHASES = Object.values(import.meta.glob<RunPhaseModule>('../../../src/world/runPhase.ts', { eager: true }));
 
 /**
@@ -1460,7 +1483,7 @@ function clipOf(around: string | Clip): Clip {
 function clipRound(selector: string): Clip {
   const element = document.querySelector(selector);
   if (!element) throw new Error(`lab: screen: nothing on the page is ${selector}`);
-  const box = element.getBoundingClientRect();
+  const box = boxOf(element);
   if (box.width === 0 || box.height === 0) throw new Error(`lab: screen: ${selector} isn't shown`);
   return withinWindow({ x: box.left, y: box.top, width: box.width, height: box.height }, SCREEN_MARGIN);
 }

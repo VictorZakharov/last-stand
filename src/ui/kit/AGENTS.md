@@ -5,7 +5,8 @@ kit: a `Panel` is a box in a tree, laid out as CSS's flexbox lays one out (`Pane
 (`PanelLook`: a fill or a fill from top to bottom, a border, rounded corners, an opacity, a shadow, a scroll), holding
 other panels or a line of text (`say`). The engine lays the tree out and draws it in one call over its frame, after
 the world's labels (Bulwark's `ui.rs` and `gpu/panels.rs`, the page's calls in `engine/ui.ts`). Moved onto it so far:
-the run's target frame (`ui/targetFrame.ts`).
+the run's target frame (`ui/targetFrame.ts`), the wave's badge (`ui/waveBadge.ts`) and the choice after a wave
+(`ui/decisionPanel.ts`).
 
 The rules across the game are the [root AGENTS.md](../../../AGENTS.md).
 
@@ -27,6 +28,25 @@ The rules across the game are the [root AGENTS.md](../../../AGENTS.md).
 - **A change sends only what changed** (`style` and `look` compare the fields given): a look changed is painted
   again in the engine, a layout changed laid out again. Set a width each frame and the tree is laid out each frame
   it moves (the target frame's bar does, a microsecond a slot: `lab panels` in Bulwark).
+- **A panel that takes presses stands for a button of the page's, kept out of sight** (`press.ts`, `.kit-mirror` in
+  `_base.scss`): the engine's canvas takes the press, one let go on the panel it began on clicks the page's button,
+  so its handler, its keyboard focus, its name for a screen reader and its `disabled` are the panel's, and the
+  game's code and the lab press it as they did. A press on any panel that takes the pointer is never the world's
+  (`overPanels` in `core/input.ts`: no attack, no look by a finger's drag; a right press still is, as over the
+  page's HUD). A panel drawn in place of an element of the page's says so (`standIn`): `drawnAt` gives its box, and
+  the lab's `boxOf` and `middleOf` (`tools/lab/page/lab.ts`) read and press it there.
+- **A panel moved off the page can follow the page's element each frame** (`onFrame`): the choice and the badge read
+  their words and classes off their hidden elements, so whatever writes those (the run, a duel, co-op) is as it was.
+  Their CSS animations are stepped there (`motion.ts`: the page's clock, CSS's easing curves and keyframes, still
+  under reduced motion, which the lab runs with: a fold read as not begun there left the choice's details at
+  nought). The lab finishes them as it finishes the page's (`finishMotion`, `unfolded` in `uiDecision.ts`).
+- **A text's line is as tall as the page's** (`lineHeight.ts`): its `line` times its size, or the font's normal line
+  height read off a hidden element of the page's once a font; the canvas's box leaves out the line gap, and the
+  choice's chips stood 4 px short. **A panel's words are drawn across its box**: a line wider than its words (a
+  row's whole width, a key cap's least) holds them in a panel of their own, centred, or they stretch.
+- **Lengths are laid out to fractions of a px** (Bulwark's taffy tree, rounding off): rounded, a 1 px border at a
+  HUD's scale of 0.6 lost its top side. **A fill may go round a centre** (`radial`: CSS's `radial-gradient(circle
+  at 50% y, a, b stop)`, sized by the box inside its border, as CSS sizes a background): the badge's gem.
 - **Check a panel against main's page with `npm run lab -- ui --states <state> --ab`**: its box's lines and its
   pictures beside main's (`ui --states target`: the frame's box 384x52 at 113 on both, its name and line read off
   the engine's frame where the tree has it, off `#target` on main's).

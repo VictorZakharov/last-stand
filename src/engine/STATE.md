@@ -461,8 +461,13 @@ frame's GPU clock ends at that pass where it draws: the labels, the outline and 
 - [x] The run's target frame on it (`ui/targetFrame.ts`; `#target` and its rules gone from the page). `lab ui
   --states target --ab`: its box 384x52 at 113 on both trees, the name, its line and the boss's look as main's
   pictures; its canary aims away from every foe.
-- [ ] Clicks: the kit finds the panel under a point (`uiHit`); nothing routes the page's pointer to it yet, as no
-  panel moved takes one. The next panels (the bottom bar's bars and hotbar, the badge, the choice after a wave) do.
+- [x] Clicks: a press on the engine's canvas over a panel is the panel's (`ui/kit/press.ts`), standing for a button
+  of the page's kept out of sight. The wave's badge and the choice after a wave are on the kit (`ui/waveBadge.ts`,
+  `ui/decisionPanel.ts`), their rules gone from the SCSS: `lab ui --states run,decision,decisionTouch,perfAskBreak,
+  summary,waveAfterDuel --ab` holds their boxes to main's within a px (the choice 716x242 against 717x243, its
+  touch buttons 55.0 px tall against 54.5), on a phone's 844x390 at 3 too; the mouse over Bank is shown on it and
+  counted over the UI (its canary: Bank made unpressable); `lab bosswave` clicks Continue on the canvas. Not drawn:
+  the unfolding's flare and sweep, and Continue's spinning key while it's sent (a pulsing dot).
 - [ ] Text that wraps: a line is painted whole; a panel with paragraphs needs the page to break them at its width.
 - [ ] The rows are painted again whole for any change (a twentieth of a layout): kept by panel when a large panel
   (the stash) changes often.

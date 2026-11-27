@@ -12,6 +12,7 @@ import { hideSummary, showSummary } from '../../../src/ui/menus';
 import { itemTooltip, showTooltipAt } from '../../../src/ui/tooltip';
 import type { Item } from '../../../src/types';
 import type { Lab, Pictured } from './lab';
+import { unfolded } from './uiDecision';
 
 /** What the check found: lines for its report, and its problems. */
 export interface SummaryFound {
@@ -112,6 +113,7 @@ export async function summaryPictures(lab: Lab): Promise<Pictured[]> {
   G.run.bag = bagOfEveryRarity();
   showDecision();
   finishAnimations(document.getElementById('decision')!);
+  await unfolded(lab);
   const counts = [...document.querySelectorAll<HTMLElement>('#decision .dc-bag .chip[data-r]')];
   const notes = counts.map((chip) => `${chip.dataset.r}: ${chip.textContent}`);
   const pictured = await lab.screen('summary-bag', notes, '#decision');

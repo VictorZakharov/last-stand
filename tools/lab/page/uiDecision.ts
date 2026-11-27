@@ -8,12 +8,39 @@
 // it was still half shown in the next state's picture.
 import { hideDecision, resetDecision } from '../../../src/ui/hud';
 import { BIOMES } from '../../../src/data/biomes';
+import { measure, type TextStyle } from '../../../src/ui/overlay/paint';
+import type { Lab } from './lab';
+import { input } from '../../../src/core/input';
+import { uiScales } from '../../../src/ui/scale';
+
+/** A box on the screen (css px). */
+type Box = { x: number; y: number; w: number; h: number };
+/** A button the engine draws (src/ui/decisionPanel.ts): its words and its parts' boxes. */
+interface DrawnButton { label: string; stake: string; box: Box | null; labelBox: Box | null; stakeBox: Box | null;
+  keyBox: Box | null }
+/** The choice drawn by the engine, where the tree has it (main's is the page's: `--ab`). */
+interface DecisionPanel { decisionShown(): { box: Box | null; inner: Box | null; buttons: DrawnButton[] } | null }
+const PANEL = Object.values(import.meta.glob<DecisionPanel>('../../../src/ui/decisionPanel.ts', { eager: true }))[0];
+/** a stake's text, a button's padding either side, its key's gap and the gap between buttons (px of the HUD's
+ *  layout: `_hud.scss`, `_controls.scss`) */
+const STAKE_STYLE: TextStyle = { face: 'body', size: 10.5, color: '#9a8f7c', spacing: 0.3 };
+const BUTTON_PAD = 18;
+const KEY_GAP = 6;
+const BUTTON_GAP = 12;
 
 /** What the check found: lines for its report, and its problems. */
 export interface DecisionFound {
   lines: string[];
   problems: string[];
 }
+
+/** The kit's presses (src/ui/kit/press.ts): how each pressable panel shows the pointer. */
+interface KitPresses { pressablesShown(): { label: string; state: string }[] }
+const PRESSES = Object.values(import.meta.glob<KitPresses>('../../../src/ui/kit/press.ts', { eager: true }))[0];
+/** Whether the tree draws the choice by the engine (main's is the page's): its pointer's check and canary are its. */
+export const DRAWN = !!PANEL && !!PRESSES;
+/** the problem the pointer's canary must raise: the Bank's page button disabled, so its panel takes no press */
+export const POINTER_CANARY = { name: 'isn\'t shown on it', what: 'Bank made unpressable' };
 
 /** the choice's width the canary sets (css px): too narrow for the buttons' labels on one line */
 const CANARY_WIDTH = '300px';
@@ -46,6 +73,8 @@ function readLine(state: string, part: HTMLElement, lines: string[], problems: s
 /** Each of the choice's buttons whose label, or its stake under it, runs onto more than one line, as problems of
  *  `state`. */
 export function labelsOnOneLine(state: string): DecisionFound {
+  const drawn = PANEL?.decisionShown();
+  if (drawn) return drawnOnOneLine(state, drawn);
   const lines: string[] = [];
   const problems: string[] = [];
   for (const button of document.querySelectorAll<HTMLElement>('#decision .dc-buttons .btn')) {
@@ -56,6 +85,55 @@ export function labelsOnOneLine(state: string): DecisionFound {
   }
   longestStakes(state, lines, problems);
   return { lines, problems };
+}
+
+/** Whether `inner` lies within `outer`, to a pixel. */
+function within(inner: Box, outer: Box): boolean {
+  return inner.x >= outer.x - 1 && inner.y >= outer.y - 1 && inner.x + inner.w <= outer.x + outer.w + 1
+    && inner.y + inner.h <= outer.y + outer.h + 1;
+}
+
+/** Whether `inner` lies across `outer`'s width, to a pixel. */
+function across(inner: Box, outer: Box): boolean {
+  return inner.x >= outer.x - 1 && inner.x + inner.w <= outer.x + outer.w + 1;
+}
+
+/** The engine's buttons read as the page's are: a label or stake is a line the engine never wraps, so one that runs
+ *  past its button, or a button past the choice, is what wrapped on the page; and the longest stakes, measured as
+ *  the engine lays them out, must leave both buttons on one row. */
+function drawnOnOneLine(state: string, drawn: NonNullable<ReturnType<DecisionPanel['decisionShown']>>): DecisionFound {
+  const lines: string[] = [];
+  const problems: string[] = [];
+  const room = drawn.inner;
+  for (const b of drawn.buttons) {
+    for (const [text, part] of [[b.label, b.labelBox], [b.stake, b.stakeBox]] as const) {
+      if (!text || !part || !b.box) continue;
+      const fits = within(part, b.box) && (!room || across(b.box, room));
+      lines.push(`  ${text}: ${fits ? 1 : 2} line${fits ? '' : 's'}`);
+      if (!fits) problems.push(`${state}: the button "${text}" runs onto 2 lines (past its button or the choice)`);
+    }
+  }
+  if (room) {
+    const rows = rowsWithLongestStakes(drawn.buttons, room);
+    lines.push(`  the buttons with the longest stakes: ${rows} row${rows === 1 ? '' : 's'}`);
+    if (rows > 1) problems.push(`${state}: with the longest stakes the buttons take ${rows} rows`);
+  }
+  return { lines, problems };
+}
+
+/** The rows the drawn buttons would take with each stake at its longest, in the `room` inside the choice: each
+ *  button as wide as its key, its padding and the wider of its label and that stake, as the engine lays it out. */
+function rowsWithLongestStakes(buttons: DrawnButton[], room: Box): number {
+  const hud = uiScales.hud;
+  const texts = longestStakeTexts();
+  const widths = buttons.map((b, i) => {
+    const longest = b.stake ? measure(i === 0 ? texts.bank : texts.cont, STAKE_STYLE).w * hud : 0;
+    const words = Math.max(b.labelBox?.w ?? 0, b.stakeBox?.w ?? 0, longest);
+    const key = b.keyBox && b.keyBox.w > 0 ? b.keyBox.w + KEY_GAP * hud : 0;
+    return words + key + (BUTTON_PAD * 2 + 2) * hud;
+  });
+  const total = widths.reduce((sum, w) => sum + w, 0) + BUTTON_GAP * hud * (widths.length - 1);
+  return total <= room.w + 1 ? 1 : 2;
 }
 
 /** The longest words each button's stake can say (`showDecision` in `ui/hud.ts`). */
@@ -90,14 +168,63 @@ function longestStakes(state: string, lines: string[], problems: string[]): void
   for (const { stake, shown } of planted) stake.textContent = shown;
 }
 
+/** frames for a change of the page's choice to reach the one the engine draws, and for it to be laid out again */
+const FOLLOW_FRAMES = 3;
+
+/** The kit's animations' clock (src/ui/kit/motion.ts), where the tree has it. */
+interface KitMotion { finishMotion(): void }
+const MOTION = Object.values(import.meta.glob<KitMotion>('../../../src/ui/kit/motion.ts', { eager: true }))[0];
+
+/** The choice drawn by the engine unfolded whole, where the tree draws it so, as the page's animations are finished
+ *  (main's is the page's, finished by the state's opening): a frame for it to begin, then its end. */
+export async function unfolded(lab: Lab): Promise<void> {
+  if (!PANEL || !MOTION) return;
+  await lab.step(1);
+  MOTION.finishMotion();
+  await lab.step(FOLLOW_FRAMES);
+}
+
+/** The mouse over the Bank the engine draws: shown on it, and the game counting it over the UI, so a press there is
+ *  the button's, never an attack. With the canary, Bank made unpressable first, which must be found. */
+async function pointerOnBank(lab: Lab, canary: boolean): Promise<DecisionFound> {
+  const bank = PANEL?.decisionShown()?.buttons[0]?.box;
+  const button = document.querySelector<HTMLButtonElement>('#decision .bank');
+  if (!bank || !button || !PRESSES) return { lines: [], problems: ['decision: no Bank drawn to point at'] };
+  if (canary) button.disabled = true;
+  // (read as the move is handled: a frame the lab steps sets the game's mouse as its own input has it)
+  await lab.mouseTo({ x: bank.x + bank.w / 2, y: bank.y + bank.h / 2 });
+  const shown = PRESSES.pressablesShown().find((p) => p.label.includes('Bank'))?.state ?? 'none';
+  const overUi = input.mouse.overUI;
+  await lab.mouseTo({ x: 4, y: innerHeight - 4 });
+  if (canary) button.disabled = false;
+  const lines = [`  the mouse over Bank: it shows ${shown}, the game counts it over the UI: ${overUi ? 'yes' : 'no'}`];
+  const problems: string[] = [];
+  if (shown !== 'hover') problems.push(`decision: the pointer over Bank isn't shown on it (${shown})`);
+  if (!overUi) problems.push('decision: a press over Bank would be the world\'s (an attack)');
+  return { lines, problems };
+}
+
 /** The choice's buttons checked; with the canary, again with the choice made narrow, which must be found. */
-export function decisionShown(canary: boolean): DecisionFound {
+export async function decisionShown(canary: boolean, lab: Lab): Promise<DecisionFound> {
+  await unfolded(lab);
   const found = labelsOnOneLine('decision');
+  if (DRAWN) {
+    const pointer = await pointerOnBank(lab, false);
+    found.lines.push(...pointer.lines);
+    found.problems.push(...pointer.problems);
+  }
   if (!canary) return found;
+  if (DRAWN) {
+    const planted = await pointerOnBank(lab, true);
+    found.lines.push(...planted.lines.map((line) => `${line} (canary)`));
+    found.problems.push(...planted.problems);
+  }
   const box = document.getElementById('decision')!;
   box.style.width = CANARY_WIDTH;
+  if (PANEL) await lab.step(FOLLOW_FRAMES);
   const planted = labelsOnOneLine('decision');
   box.style.width = '';
+  if (PANEL) await lab.step(FOLLOW_FRAMES);
   return { lines: found.lines, problems: [...found.problems, ...planted.problems] };
 }
 

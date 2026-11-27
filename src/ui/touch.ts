@@ -11,7 +11,7 @@
 // used, so touch laptops work too.
 import * as THREE from '../engine/three.ts';
 import { G } from '../state';
-import { input } from '../core/input';
+import { input, overPanels } from '../core/input';
 import { cameraYaw, lookBy, viewMode, zoomBy } from '../core/renderer';
 import { CAMERA } from '../data/balance';
 import { completeStep } from '../game/training';
@@ -311,6 +311,8 @@ function lookByDrag(): void {
   let look: { id: number; x: number; y: number } | null = null;
   window.addEventListener('pointerdown', (e) => {
     if (e.pointerType !== 'touch' || look || viewMode() === 'top' || !(e.target instanceof HTMLCanvasElement)) return;
+    // (a finger on a panel drawn by the engine presses it: ui/kit/press.ts)
+    if (overPanels.at(e.clientX, e.clientY)) return;
     look = { id: e.pointerId, x: e.clientX, y: e.clientY };
   });
   window.addEventListener('pointermove', (e) => {

@@ -8,6 +8,7 @@
 // shows the same lines and the same pictures on both, whatever the screens' pixel ratios: a 4K screen at 300% as at
 // 100%.
 import * as THREE from 'three';
+import { boxOf, seenOf } from './lab';
 import type { Frame, Lab, Pictured, Report } from './lab';
 import { NUMBER_COLORS } from '../../../src/data/balance';
 import { floatText } from '../../../src/ui/floaters';
@@ -56,13 +57,16 @@ const NUMBER_FRAMES = 12;
 /** the system's cursors listed of a state at most */
 const CURSORS_LISTED = 5;
 
-/** Each named element shown (an id, a box with an area, visible), its box as shares of the window. */
+/** Each named element shown (an id, a box with an area, visible), its box as shares of the window: one the engine's
+ *  UI kit draws in its place (`.kit-mirror`, out of sight) where it's drawn, its parts left to the state's checks. */
 function namedBoxes(): string[] {
   const lines: string[] = [];
   for (const element of document.querySelectorAll<HTMLElement>('[id]')) {
-    const rect = element.getBoundingClientRect();
+    const mirrored = element.closest('.kit-mirror');
+    if (mirrored && mirrored !== element) continue;
+    const rect = boxOf(element);
     if (rect.width < 1 || rect.height < 1) continue;
-    if (!element.checkVisibility({ opacityProperty: true, visibilityProperty: true })) continue;
+    if (!seenOf(element)) continue;
     lines.push(`#${element.id} ${boxText({ x: rect.left, y: rect.top, w: rect.width, h: rect.height })}`);
   }
   return lines;
