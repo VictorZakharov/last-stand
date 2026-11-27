@@ -23,7 +23,9 @@ function boxWidth(box: Element): number {
 
 const SHEET: Sheet = [
   ...CARDS,
-  { at: '#item-sheet .modal-box', box: (element) => ({ width: boxWidth(element), maxWidth: windowShare(0.96).w }) },
+  // (its cards scroll inside it, the box itself never: its buttons stay in view)
+  { at: '#item-sheet .modal-box', box: (element) => ({ width: boxWidth(element), maxWidth: windowShare(0.96).w,
+    overflow: 'hidden' }) },
   { at: '#item-sheet .is-card', flex: true, scrolls: true,
     box: { direction: 'row', justify: 'center', shrink: 1, minHeight: 0, overflow: 'scroll' }, text: { align: 'start' } },
   { at: '#item-sheet .tt-cards', box: { wrap: true, justify: 'center' } },

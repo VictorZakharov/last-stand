@@ -11,7 +11,7 @@ import { hideDecision, resetDecision, showDecision } from '../../../src/ui/hud';
 import { hideSummary, showSummary } from '../../../src/ui/menus';
 import { itemTooltip, showTooltipAt } from '../../../src/ui/tooltip';
 import type { Item } from '../../../src/types';
-import type { Lab, Pictured } from './lab';
+import { boxOf, type Lab, type Pictured } from './lab';
 import { unfolded } from './uiDecision';
 
 /** What the check found: lines for its report, and its problems. */
@@ -35,15 +35,16 @@ function finishAnimations(element: Element): void {
   for (const animation of element.getAnimations({ subtree: true })) animation.finish();
 }
 
-/** The summary of a banked run with a bag of every rarity, its reveal brought to its end, and the best item's card
- *  opened where the mouse over its chip opens it. */
-export function openSummary(): void {
+/** The summary of a banked run with a bag of every rarity, its reveal brought to its end (the page's animations, and
+ *  the kit's clock where the kit draws it), and the best item's card opened where the mouse over its chip opens it. */
+export async function openSummary(lab: Lab): Promise<void> {
   const bag = bagOfEveryRarity();
   showSummary({ outcome: 'banked', wave: 12, score: 48_310, kills: 214, bag });
   finishAnimations(document.getElementById('summary')!);
+  await unfolded(lab);
   const best = revealed()[0];
   if (!best) return;
-  const box = best.getBoundingClientRect();
+  const box = boxOf(best);
   const item = bag.find((it) => it.name === best.textContent)!;
   showTooltipAt(itemTooltip(item)(), { clientX: box.left + box.width / 2, clientY: box.bottom });
 }
@@ -61,7 +62,7 @@ function chipsChecked(chips: HTMLElement[]): SummaryFound {
   for (const chip of chips) {
     const id = chip.dataset.r as Item['rarity'] | undefined;
     const rank = id ? rarityIndex(id) : -1;
-    const box = chip.getBoundingClientRect();
+    const box = boxOf(chip);
     lines.push(`  ${id ?? '?'}: "${chip.textContent}"`);
     if (rank < 0) problems.push(`summary: "${chip.textContent}" says no rarity`);
     if (rank > before) {

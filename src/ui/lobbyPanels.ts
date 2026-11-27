@@ -5,6 +5,7 @@
 // pointer's events where the panels are drawn (`kit/forward.ts`: a tooltip's enter and leave, a right-click, a drag
 // between the stash and the equipment). The crest stays on the page (its letters are the loading screen's logo
 // gathered into it), and the card is `villageCardPanel.ts`'s.
+import { LAYERS, layer } from './kit/panel';
 import { SheetTree, type Sheet } from './kit/sheet';
 import { CONTROLS } from './controlsSheet';
 import { LOBBY } from './lobbySheet';
@@ -24,7 +25,7 @@ export function drawLobbyPanels(): void {
   const menu = document.getElementById('menu');
   if (!menu || lobby) return;
   for (const selector of DRAWN) menu.querySelector(selector)?.classList.add('kit-mirror');
-  lobby = new SheetTree(menu, SHEET, 'ui');
+  lobby = new SheetTree(menu, SHEET, 'ui', layer(LAYERS.lobby));
 }
 
 /** The lobby's panel, once it's drawn (the lab reads it). */

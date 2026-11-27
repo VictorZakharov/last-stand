@@ -72,7 +72,8 @@ export class SheetTree implements Forwarded {
     this.styled = sheet.some((rule) => rule.at.includes('[style'));
     const room = parent ?? new Panel(null, { position: 'absolute', inset: 0 }, {}, scaled);
     this.root = this.make(element, room);
-    this.top = new Panel(null, { position: 'absolute', inset: 0 }, {}, scaled);
+    // (after the root in its room, so drawn over it)
+    this.top = new Panel(room, { position: 'absolute', inset: 0 }, {}, scaled);
     standIn(element, this.root.panel);
     this.stop = onFrame(() => this.follow(this.root, this.base, aroundKey(element), false, null));
     forwards(this);

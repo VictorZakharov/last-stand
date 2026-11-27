@@ -3,7 +3,7 @@
 // kept out of sight (`.kit-mirror`), written and listened to by its module as before, a sheet following it each frame.
 // A modal's own rules follow these in its sheet. Sizes are px of the lobby's scale (the box's `zoom: var(--ui)`); the
 // backdrop's are the screen's.
-import { Panel } from './kit/panel';
+import { Panel, LAYERS, layer } from './kit/panel';
 import { SheetTree, type Sheet } from './kit/sheet';
 import { CONTROLS, TOUCH, framed } from './controlsSheet';
 import { uiScales } from './scale';
@@ -30,12 +30,15 @@ export const MODAL: Sheet = [
   {
     at: '.modal-box',
     flex: true,
+    scrolls: true,
     ...framed(['rgba(20,17,16,.98)', 'rgba(8,7,8,.98)']),
-    box: () => ({ direction: 'column', gap: 12, width: 520, padding: [22, 26], border: 2, overflow: 'hidden',
+    box: () => ({ direction: 'column', gap: 12, width: 520, padding: [22, 26], border: 2, overflow: 'scroll',
       ...heldToWindow() }),
     text: { align: 'center' },
   },
   { at: '.modal-box', look: { shadow: { blur: 60, y: 20, color: 'rgba(0,0,0,.9)' } } },
+  // (what's in it keeps its height and the box scrolls it, as a block's children do: a flex column shrank them)
+  { at: '.modal-box > *', box: { shrink: 0 } },
   { at: '.dc-buttons', flex: true, box: { direction: 'row', gap: 12, justify: 'center', shrink: 0 } },
   { at: '.dc-buttons .btn', when: TOUCH, box: () => ({ minHeight: finger(32) }) },
 ];
@@ -46,6 +49,6 @@ export function drawModal(id: string, sheet: Sheet): SheetTree | null {
   const page = document.getElementById(id);
   if (!page) return null;
   page.classList.add('kit-mirror');
-  const room = new Panel(null, { position: 'absolute', inset: 0 }, {}, 'ui');
+  const room = new Panel(layer(LAYERS.modal), { position: 'absolute', inset: 0 }, {}, 'ui');
   return new SheetTree(page, [...MODAL, ...sheet], 'ui', room);
 }

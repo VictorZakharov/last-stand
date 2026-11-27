@@ -4,7 +4,7 @@
 // fingers as before (`touch.ts`'s pointer capture, two fingers, buttons held), but paint nothing (`.kit-ghost`: a
 // filter, so their opacity still says whether they show): each panel here stands where its element is laid out,
 // read each frame, and shows what it shows.
-import { Panel, onFrame } from './kit/panel';
+import { Panel, onFrame, LAYERS, layer } from './kit/panel';
 import { standIn } from './kit/press';
 import { svgArt } from './kit/svgArt';
 import { uiScales } from './scale';
@@ -47,7 +47,7 @@ let root: Panel | null = null;
 
 /** The panel every touch control is drawn in: the whole window, in px of the touch controls. */
 function rootOf(): Panel {
-  root ??= new Panel(null, { position: 'absolute', inset: 0 }, {}, 'touch');
+  root ??= new Panel(layer(LAYERS.touch), { position: 'absolute', inset: 0 }, {}, 'touch');
   return root;
 }
 

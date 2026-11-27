@@ -3,7 +3,7 @@
 // was `#vcard`, styled by `_lobby.scss`, `_controls.scss`, `_training.scss` and `_responsive.scss`; the page's stays,
 // out of sight (`.kit-mirror`), written by `villageCard.ts`, `menus.ts` and `pvpMenu.ts` as before, and the sheet
 // here follows it each frame. Sizes are px of the lobby's scale.
-import { Panel, onFrame } from './kit/panel';
+import { Panel, onFrame, LAYERS, layer } from './kit/panel';
 import { SheetTree, type Sheet } from './kit/sheet';
 import { CONTROLS, SHORT, SHORT_OR_UPRIGHT, TOUCH } from './controlsSheet';
 import { accent } from './diagFrame';
@@ -177,7 +177,8 @@ export function drawVillageCard(): void {
   const page = document.getElementById('vcard');
   if (!page || card) return;
   page.classList.add('kit-mirror');
-  room = new Panel(null, { position: 'absolute', inset: 0, direction: 'column', justify: 'end', alignItems: 'center' },
+  room = new Panel(layer(LAYERS.lobby), { position: 'absolute', inset: 0, direction: 'column', justify: 'end',
+    alignItems: 'center' },
     {}, 'ui');
   card = new SheetTree(page, CARD, 'ui', room);
   onFrame(() => {

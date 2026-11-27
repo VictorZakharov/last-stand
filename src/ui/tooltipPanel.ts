@@ -3,7 +3,7 @@
 // out and placed as before (`tooltip.ts`: its flip and clamp read its size), painting nothing (`.kit-ghost`), and the
 // cards are drawn where it stands, over every other of the kit's screens (made after them). Sizes are px of the lobby's
 // scale (its cards' `zoom: var(--ui)`).
-import { Panel } from './kit/panel';
+import { Panel, LAYERS, layer } from './kit/panel';
 import { SheetTree, type Sheet } from './kit/sheet';
 import { CONTROLS } from './controlsSheet';
 import { DANGER, FRAME, HIGHLIGHT, INK, INK_DIM, alpha, mix } from './kit/theme';
@@ -110,6 +110,6 @@ export function drawTooltip(): void {
   const page = document.getElementById('tooltip');
   if (!page || tooltip) return;
   page.classList.add('kit-ghost');
-  const room = new Panel(null, { position: 'absolute', inset: 0 }, {}, 'ui');
+  const room = new Panel(layer(LAYERS.tooltip), { position: 'absolute', inset: 0 }, {}, 'ui');
   tooltip = new SheetTree(page, TOOLTIP, 'ui', room);
 }

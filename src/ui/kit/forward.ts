@@ -10,7 +10,7 @@
 import { engineCanvas } from '../../engine/index';
 import { overPanels } from '../../core/input';
 import { uiHit } from '../../engine/ui';
-import { Panel } from './panel';
+import { Panel, LAYERS, layer } from './panel';
 import { uiScales } from '../scale';
 
 /** A screen whose elements take the pointer's events: the element drawn under a point, if any takes the pointer. */
@@ -136,7 +136,8 @@ function startDrag(source: Element, e: PointerEvent): void {
   const start = new DragEvent('dragstart', { bubbles: true, cancelable: true, clientX: e.clientX, clientY: e.clientY,
     dataTransfer: data });
   if (!source.dispatchEvent(start)) return;
-  const ghost = new Panel(null, { position: 'absolute', width: GHOST, height: GHOST }, GHOST_LOOK, 'touch');
+  const ghost = new Panel(layer(LAYERS.drag), { position: 'absolute', width: GHOST, height: GHOST }, GHOST_LOOK,
+    'touch');
   drag = { source, data, over: null, accepted: false, ghost };
 }
 
