@@ -13,6 +13,7 @@ import { renderMenu } from '../../../src/ui/menus';
 import { itemIconSVG } from '../../../src/ui/itemIcons';
 import { sortStash } from '../../../src/ui/stashFilter';
 import type { Item } from '../../../src/types';
+import { boxOf, middleOf } from './lab';
 import type { Lab, Screen } from './lab';
 
 type NetTrade = typeof import('../../../src/net/trade');
@@ -95,7 +96,16 @@ export async function coopTradeOffer(lab: Lab, { names, by = 'click' }: { names:
     if (!item) throw new Error(`lab: no ${name} in this game's stash`);
     await press(lab, required(`#trade [data-id="${item.id}"]`), by);
     // (a finger's tap pins the item's tooltip, whose button picks it: ui/trade.ts)
-    if (by === 'tap') await press(lab, required('#tooltip.pinned #trade-tip-act'), by);
+    if (by !== 'tap') continue;
+    const act = required('#tooltip.pinned #trade-tip-act');
+    const at = middleOf(act);
+    const under = document.elementFromPoint(at.x, at.y);
+    await press(lab, act, by);
+    await lab.step(2);
+    if (!document.querySelector(`#trade-mine [data-id="${item.id}"]`)) {
+      const where = `${Math.round(at.x)},${Math.round(at.y)}, under it ${under?.id || under?.className || 'nothing'}`;
+      throw new Error(`lab: the pinned tooltip's button (${where}) put no ${name} in the offer`);
+    }
   }
 }
 
@@ -203,14 +213,13 @@ function required(selector: string): HTMLElement {
   return element;
 }
 
-function middleOf(element: HTMLElement): { x: number; y: number } {
-  const box = element.getBoundingClientRect();
-  return { x: box.left + box.width / 2, y: box.top + box.height / 2 };
-}
-
 /** `element` pressed as `by` says, by the browser's own input. */
 async function press(lab: Lab, element: HTMLElement, by: Press): Promise<void> {
-  if (by === 'tap') await lab.tap(middleOf(element));
+  if (by === 'tap') {
+    // (a control the kit draws is tapped where it's drawn, once it's laid out)
+    await lab.step(3);
+    await lab.tap(middleOf(element));
+  }
   else await lab.clickOn(element);
 }
 
@@ -240,9 +249,9 @@ export async function coopTradeFit(lab: Lab, { index }: { index: number }): Prom
   ownScreen ??= { width: innerWidth, height: innerHeight, ratio: devicePixelRatio };
   const screen = TRADE_SCREENS[index];
   await lab.showOn(screen);
-  await lab.step(2);
+  await lab.step(3);
   const name = `${screen.width}x${screen.height}@${screen.ratio}`;
-  const box = required('#trade .modal-box').getBoundingClientRect();
+  const box = boxOf(required('#trade .modal-box'));
   const touch = document.body.classList.contains('touch');
   const problems: string[] = [];
   const edges = { left: 0, top: 0, right: innerWidth, bottom: innerHeight };
@@ -252,11 +261,11 @@ export async function coopTradeFit(lab: Lab, { index }: { index: number }): Prom
     ['the stash', '#trade-stash'], ['the line', '#trade-line'], ['Accept', '#trade-accept'], ['Cancel', '#trade-cancel'],
   ];
   for (const [part, selector] of parts) {
-    const at = required(selector).getBoundingClientRect();
+    const at = boxOf(required(selector));
     if (!within(at, box)) problems.push(`${name}: ${part} runs out of the trade window`);
   }
   for (const selector of ['#trade-accept', '#trade-cancel']) {
-    const height = required(selector).getBoundingClientRect().height;
+    const height = boxOf(required(selector)).height;
     if (touch && height < FINGER_PX) problems.push(`${name}: ${selector} is ${Math.round(height)} px tall on touch`);
   }
   const share = (value: number, of: number) => `${Math.round((value / of) * 100)}%`;

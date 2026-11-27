@@ -81,9 +81,10 @@ html, body { touch-action: manipulation; -webkit-tap-highlight-color: transparen
 .kit-ghost { filter: opacity(0) !important; }
 // (none while a modal the kit draws shows, the pause menu or a dialog: a ghost lies over the engine's canvas, so over
 // every screen the kit draws, and a finger on the pause menu's left half in a run moved the stick, where the page's
-// pause menu lay over it on main; the stick's see-through area too, under it by its z-index there)
-body:has(.modal.kit-mirror:not(.hidden)) :is(.kit-ghost, #touch),
-body:has(.modal.kit-mirror:not(.hidden)) :is(.kit-ghost, #touch) * { pointer-events: none !important; }
+// pause menu lay over it on main; the stick's see-through area too, under it by its z-index there. The tooltip is
+// drawn over the modals: pinned on touch, its foot's button is pressed there, the trade's Offer)
+body:has(.modal.kit-mirror:not(.hidden)) :is(.kit-ghost:not(#tooltip.pinned), #touch),
+body:has(.modal.kit-mirror:not(.hidden)) :is(.kit-ghost:not(#tooltip.pinned), #touch) * { pointer-events: none !important; }
 // (the village's crest stays on the page, so over the engine's canvas: none while a screen or a modal the kit draws
 // shows, which on main lay over it; the save slots showed WARDENHOLLOW across their title)
 body:has(:is(#saves, .modal).kit-mirror:not(.hidden)) .menu-crest { visibility: hidden; }

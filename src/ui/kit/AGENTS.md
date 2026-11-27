@@ -174,6 +174,8 @@ The rules across the game are the [root AGENTS.md](../../../AGENTS.md).
   the keeper's mugs): a button the page drew took the press, but a drawn one leaves its target the canvas, and the
   ale's Put down over Bertram opened his talk as it put the mug down (`lab tavern --parts touch`). A page's element
   the screens are drawn over (`seeThrough`: the touch stick's pad) is the canvas's to the lab's `elementUnder` too.
+- **The tooltip pinned on touch takes the pointer over a drawn modal** (`_base.scss`): a ghost under a modal takes
+  none, and the trade's Offer in a pinned tooltip's foot, drawn over the window, took no tap.
 - **Check a panel against main's page with `npm run lab -- ui --states <state> --ab`**: its box's lines and its
   pictures beside main's (`ui --states target`: the frame's box 384x52 at 113 on both, its name and line read off
   the engine's frame where the tree has it, off `#target` on main's).

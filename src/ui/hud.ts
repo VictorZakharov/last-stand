@@ -50,6 +50,7 @@ import { drawDialogs } from './dialogsSheet';
 import { drawSaves } from './savesSheet';
 import { drawHeroes } from './heroesSheet';
 import { drawDrink } from './screens/drink/drinkSheet';
+import { drawTrade } from './screens/trade/tradeSheet';
 import { drawDecision } from './decisionPanel';
 import { drawBottomBar } from './bottomBar';
 
@@ -91,6 +92,7 @@ export function initHud(): void {
   drawPause();
   drawDialogs();
   drawDrink();
+  drawTrade();
   drawItemSheet();
   drawTooltip();
   drawBottomBar();
