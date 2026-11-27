@@ -123,6 +123,15 @@ end touch the same lines and conflict (`npm run check:sorted` holds the order; t
   again came back in 1 ms of 519, the browser's caches keying a shader by its code. Salted alone, every pipeline
   pays its module's whole compile, which the game pays once a module: `costsShared` salts a module once for all its
   pipelines, the reading of what a boot pays (13.6 s where alone read 25.7).
+- `rustFlames.ts`, `rustStill.ts`: a check of the doorways' cull or the flames stands him in the hall turned to its
+  door (`inHallLookingOut`, `lab village`'s stand): before its dais, his back to the door, the camera looks out of no
+  doorway and into none, and from above no flame is in view, so both read nothing whatever the switch (405,428
+  triangles either way; no flame at fewer pixels). The cull is read by the frame's triangles: the engine batches
+  alike things as one instanced draw, which a hidden one leaves with an instance fewer.
+- `rustLook.ts`: photo mode's look is read at saturation 0 and 2, each 8 px block's colour apart from the frame's
+  mean tint, over the screen's middle: the engine draws the HUD's panels on its canvas, the grain is coloured pixel
+  by pixel, and the grade tints shadows cool and highlights warm after the look, so on the village's square
+  saturation 0 kept 0.36 of the colour with the look plainly grey on screen.
 - `screenCells.ts`, `trail.ts`, `fire.ts`: a frame is read off the engine's canvas in the task that drew it (`webGpuPixels`) and summed on the CPU. The sums were made on the GPU by a WebGL program of the lab's own (`gridSums.ts`, gone), and `cast`, `fire` and `trail` stopped at their first frame under the engine ("gl.readPixels is not a function"). What still meant three under the engine, and what reads the engine now: a wait for the GPU is the engine's device's queue (`gpuDone` in `core/webgpu.ts`, `engineWorkDone`: three's queue alone never waited for the engine's frame), the exposure a canary strobes is the engine's (`TUNE.exposure`: three's `toneMappingExposure` reached nothing, and `cast`'s strobe went unseen), a count of what compiled is the engine's pipelines (`PIPELINES.made`: three's `info.programs` is undefined on its WebGPU renderer, and sixteen checks read 0 whatever compiled), and a particle pool hidden by `visible` is hidden from the engine too (`engine/sprites.ts`). **The engine's first frame after the camera is aimed isn't its steady one**: `fire`'s fire put out read lit by the fire's bed (77 pixels 0.09 of white apart from the next frame), so a reading taken right after a camera cut draws a frame first and lets it go.
 - `shaderModules.ts`: `naga` reads the modules off the lab's page script's list (`__labShaderModules`), not the
   engine's census (`PIPELINES_ASKED`): the census holds the scene's pipelines alone, and a module never drawn with yet

@@ -13,7 +13,9 @@
 // facing the hall from the square, its room and heroes 128 of 429 draws whatever the doorway showed of them): a new
 // building walked into declares its doorway (`addDoorway`) and is culled with no code of its own, held to the frame
 // drawn whole from every stand by `lab village --only sweepWithinBudgets` (`registerCull` below).
-import { Box3, boundsOf, Camera, InstancedMesh, Light, Mesh, Node, Plane, Sphere, Vec3, World } from '../engine/api/index.ts';
+import {
+  Box3, boundsOf, Camera, InstancedMesh, Light, Mesh, Node, Plane, Sphere, Vec3, World,
+} from '../engine/api/index.ts';
 import { blendedSolid } from '../core/seeThrough';
 import { hideCellsWhere, isDrawingStill } from './culling';
 import { registerCull } from './culls';

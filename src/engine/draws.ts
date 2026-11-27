@@ -73,9 +73,11 @@ export class Draws {
   private view: View | null = null;
   /** the stage's node of a bone, for a skin: given by the stage */
   nodeOf: (node: Node) => number = (node) => node.engineId;
-  /** the records' totals of see-through drawn solid and of casting from fewer triangles, as written */
+  /** the kept records' totals of see-through drawn solid and of casting from fewer triangles */
   solid = 0;
   casters = 0;
+  /** whether the records being made are kept on their node, and so counted in the totals (`write`) */
+  private counting = false;
 
   constructor(private core: Core, private materials: Materials, private geometries: Geometries,
     private seeKinds: SeeKinds) {}
@@ -150,7 +152,11 @@ export class Draws {
     const key = frameKeyOf(view);
     if (key !== this.frameKey) {
       this.frameKey = key;
-      for (const mesh of this.entries.keys()) this.pending.add(mesh);
+      // (written again whatever their own inputs: what they're written under is theirs alone, `underOf`)
+      for (const [mesh, entry] of this.entries) {
+        entry.under = [];
+        this.pending.add(mesh);
+      }
     }
     for (const [material, use] of this.materialUse) {
       const stamp = this.materialStamp(material);
@@ -200,7 +206,9 @@ export class Draws {
     entry.under = under.slice();
     this.scratchCount = 0;
     const solid = this.solid, casters = this.casters;
+    this.counting = true;
     this.recordInto(mesh, false);
+    this.counting = false;
     entry.solid = this.solid - solid;
     entry.casters = this.casters - casters;
     this.keepOnNode(entry);
@@ -357,7 +365,7 @@ export class Draws {
     }
     if (casterId) {
       put(material, 0, 0, casterId, 0, 'only');
-      this.casters++;
+      if (this.counting) this.casters++;
     }
     // (his arms through his eyes cast their shadow where they are in the world, with his body's)
     if (role === 'arms' && mesh.castShadow) this.recordUnseen(mesh, material, geometryId, from, to, range.count, set,
@@ -411,7 +419,7 @@ export class Draws {
       | (sees & ~SEE_FLAGS.gone)
       // (what a game marks as costing by its pixels, `userData.lowRes`, and the fires' flames: at a share of them)
       | (TUNE.lowRes && (mesh.userData.lowRes || mesh.userData.fireFlames) ? LOW_RES : 0);
-    if (flags & SOLID) this.solid++;
+    if (flags & SOLID && this.counting) this.solid++;
     // (his arms through his eyes: by their own view, never culled by the world's, casting nothing)
     if (role === 'arms' && cast !== 'only') flags = ARMS | NEVER_CULLED;
     r[at + 6] = flags;

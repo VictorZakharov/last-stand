@@ -93,7 +93,7 @@ export async function viewBy(lab: Lab, view: ViewMode): Promise<void> {
 
 /** The hero in the hall, turned to its door with the camera over his shoulder behind him, let settle (from above,
  *  its roof is cut away and nothing is culled; the village's top view is its panels', so it's V that leaves it). */
-async function inHallLookingOut(lab: Lab): Promise<void> {
+export async function inHallLookingOut(lab: Lab): Promise<void> {
   const at = new Vec3(TERRACE.x, 0, HALL.door - IN_FROM);
   at.y = groundHeight(at.x, at.z);
   G.player.walkTo = null;

@@ -13,47 +13,55 @@ import { RUST } from '../../../src/engine';
 import type { Bridge } from '../../../src/engine/bridge';
 import { G } from '../../../src/state';
 import { standAt } from './draws';
+import { doorwayReport } from '../../../src/world/doorways';
+import { inHallLookingOut } from './villageHallCull';
 
-/** where the hero stands in the hall of heroes for the doorways' check (x, z): before its dais, his back to the door */
-const IN_HALL: [number, number] = [-1.6, -22.3];
-/** the least records the doorways' cull must leave out there (the village behind him: 76 as this was written) */
-const CULLED_LEAST = 20;
+/** the least share of the frame's triangles the doorways' cull must leave out there (the village behind him) */
+const CULLED_LEAST = 0.05;
 /** the frames a switch is given before the frame is pictured */
 const SETTLE_FRAMES = 6;
+/** the frames the doorways' switch is given: a frame drawn culled and one whole read 0.10% apart after 6 (fades
+ *  still moving), none after `lab village`'s settle */
+const DOORWAY_SETTLE = 60;
 /** the share of the frame that may be apart between two pictures of it held still (a spark, a mote) */
 const STILL_SHARE = 0.0005;
 /** the least share of the frame the still meshes must cover: hidden, that much of it changes (the canary) */
 const HIDDEN_SHARE = 0.01;
 
 /**
- * Stood in the hall of heroes, seen over his shoulder: what its doorway hides (`cullForEngine` in
- * world/doorways.ts, `rust.doorways`) is left out of the frame's records, and the frame is drawn as with it all
- * walked. The canary: with the switch off no fewer records are written.
+ * Stood in the hall of heroes turned to its door, seen over his shoulder: what its doorway hides (`cullForEngine` in
+ * world/doorways.ts, `rust.doorways`) is left out of the frame, and the frame is drawn as with it all walked. Read
+ * by the frame's triangles: the engine leaves a hidden node's records out by its shown byte, so they stay counted,
+ * and batches alike things as one instanced draw, which a hidden one leaves with an instance fewer. The canary: with
+ * the switch off no fewer are drawn.
  */
 export async function doorwaysLeaveTheFrame(lab: Lab, bridge: Bridge): Promise<Checked> {
   const drawing = lab.drawing;
   const paused = G.paused;
-  await standAt(lab, { biome: G.arena.biome, view: 'third', village: true, at: IN_HALL, hour: 12 });
+  await standAt(lab, { biome: G.arena.biome, view: 'third', village: true, hour: 12 });
   lab.drawing = true;
-  await lab.step(90);
+  // (looking out of its door: before the dais, his back to it, the camera looks out of no doorway and into none)
+  await inHallLookingOut(lab);
   G.paused = true;
   try {
     RUST.tune.doorways = 1;
-    await lab.step(SETTLE_FRAMES);
+    await lab.step(DOORWAY_SETTLE);
+    const few = bridge.stats.triangles;
     const culled = await pixelsIn(lab, undefined, 'doorways: what the doorway hides left out');
-    const few = bridge.stats.records;
     RUST.tune.doorways = 0;
-    await lab.step(SETTLE_FRAMES);
+    await lab.step(DOORWAY_SETTLE);
+    const all = bridge.stats.triangles;
     const whole = await pixelsIn(lab, undefined, 'doorways: everything walked');
-    const all = bridge.stats.records;
     const apart = apartShare(culled, whole);
-    if (all - few < CULLED_LEAST) {
-      return failed(`in the hall the doorway's cull leaves out ${all - few} of ${all} records (${CULLED_LEAST} at least)`);
+    if (all - few < CULLED_LEAST * all) {
+      const left = `${all - few} of ${all} triangles (${percent(CULLED_LEAST)} at least)`;
+      const why = doorwayReport(G.camera, G.scene.getObjectByName('village')!);
+      return failed(`in the hall the doorway's cull leaves out ${left}: ${why}`);
     }
     if (apart > STILL_SHARE) {
       return failed(`in the hall what the doorway hides changes ${percent(apart)} of the frame's pixels left out`);
     }
-    return passed(`in the hall what its doorway hides is left out of the frame: ${few} records for ${all}, the frame `
+    return passed(`in the hall what its doorway hides is left out of the frame: ${few} triangles for ${all}, the frame `
       + `the same (${percent(apart)} of its pixels apart)`);
   } finally {
     RUST.tune.doorways = 1;

@@ -14,6 +14,7 @@ import { levelSwitchLeavesNothingOut, plainShaderSameFrame } from './rustPlain';
 import { sceneWaitsItsPipelines } from './rustReveal';
 import { overCanvasCleared } from './rustOver';
 import { labelsByTheEngine } from './rustLabels';
+import { flamesAtFewerPixels } from './rustFlames';
 import { type Checked, failed, passed } from './rustPixels';
 import { frames, THREE_DRAWS_MOST } from './rustFrames';
 import { hallFromAbove, house, lampShadows, lightCache, shelter, sunShadowInTurns } from './rustVillageChecks';
@@ -231,31 +232,6 @@ function plantedCanvas(): HTMLCanvasElement {
   document.getElementById('game')!.appendChild(canvas);
   return canvas;
 }
-
-/**
- * In the hall, its braziers' flames in view: drawn by the engine's pass at a quarter of the scene's pixels
- * (what costs by its pixels, a volume marched at each: 7 ms of a phone's frame at full size). The canary: with
- * the switch off they're drawn with the scene.
- */
-async function flamesAtFewerPixels(lab: Lab, bridge: Bridge): Promise<Checked> {
-  if (bridge.levels.now().samples >= 4) return passed('at four samples a pixel the flames are drawn with the scene');
-  const drawing = lab.drawing;
-  lab.drawing = true;
-  try {
-    await lab.step(3);
-    const low = bridge.stats.lowDraws;
-    RUST.tune.lowRes = 0;
-    await lab.step(2);
-    const whole = bridge.stats.lowDraws;
-    if (!low) return failed('no flame is drawn at fewer pixels: each marched at every pixel of the scene\'s it covers');
-    if (whole) return failed(`with the switch off ${whole} draws are still at fewer pixels`);
-    return passed(`${low} draws of the flames at a quarter of the scene's pixels, laid over it`);
-  } finally {
-    RUST.tune.lowRes = 1;
-    lab.drawing = drawing;
-  }
-}
-
 
 /** Every foe of the fight is handed to the engine, and three draws none of the scene; each drawn as one. */
 async function fight(lab: Lab, bridge: Bridge, foes: number): Promise<Checked[]> {
