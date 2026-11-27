@@ -48,6 +48,7 @@ import { drawToasts } from './toastSheet';
 import { drawPause } from './pauseSheet';
 import { drawDialogs } from './dialogsSheet';
 import { drawSaves } from './savesSheet';
+import { drawHeroes } from './heroesSheet';
 import { drawDecision } from './decisionPanel';
 import { drawBottomBar } from './bottomBar';
 
@@ -84,6 +85,7 @@ export function initHud(): void {
   // (the tooltip last: over the modals, as its z-index stood it)
   drawSummary();
   drawToasts();
+  drawHeroes();
   drawSaves();
   drawPause();
   drawDialogs();

@@ -284,6 +284,8 @@ interface KitDrawn {
   scrollMore(element: Element): number;
   reveal(element: Element): void;
   elementUnder(x: number, y: number): Element | null;
+  /** once the kit's pictures asked for have loaded; whether any was loading (a tree from before it has none) */
+  picturesLoaded?(): Promise<boolean>;
 }
 const KIT_DRAWN = Object.values(import.meta.glob<KitDrawn>('../../../src/ui/kit/drawn.ts', { eager: true }))[0];
 const RUN_PHASES = Object.values(import.meta.glob<RunPhaseModule>('../../../src/world/runPhase.ts', { eager: true }));
@@ -989,6 +991,8 @@ export class Lab {
   async screen(label: string, notes: string[] = [], around?: string | Clip): Promise<Pictured> {
     if (!window.__labScreenshot) throw new Error('lab: screen: this page has no screenshots (opened by an older lab)');
     const clip = around === undefined ? undefined : clipOf(around);
+    // (the kit's pictures load on the browser's time: drawn once they have)
+    if (await KIT_DRAWN?.picturesLoaded?.()) await this.step(KIT_FRAMES);
     const drawing = this.drawing;
     this.drawing = true;
     try {

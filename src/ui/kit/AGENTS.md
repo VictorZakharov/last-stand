@@ -151,6 +151,19 @@ The rules across the game are the [root AGENTS.md](../../../AGENTS.md).
   tablet). A panel's width in its own px is `rect().w / uiScales[panel.scaled]` (`savesGrid.ts`).
 - **The lab's node side clicks where the kit draws** (`clickDrawn`, `middleDrawn` in `node/cloudDevice.mjs`):
   Playwright's own click waits on a page element the kit keeps out of sight (`.kit-mirror` takes no pointer).
+- **A tree's panels are at the tree's scale, whatever its room's** (`SheetTree.make`): a panel takes its parent's
+  scale where none is given, and a bare layer's is the HUD's. The lobby's panels and the hero selection, made in a
+  layer, were drawn at the HUD's scale, which is the lobby's everywhere but an upright tablet: there, at about half.
+- **An element whose children are boxes is `flex`**: without it its children are runs of its words, and a picture
+  or a box in it is lost (the hero selection's arrows, a name's number in its rhombus, Back's key).
+- **A control takes the pointer where its rule says `hits`**, or where a box round it does: the hero selection's
+  room takes none (its backdrop's beneath), so its link, arrows, names and Back each say so.
+- **A picture of the page's SVG loads on the browser's time** (`svgArt`): the trees follow again as it loads, and
+  the lab waits for any still loading before picturing the screen (`picturesLoaded`, `lab.screen`): a tree at rest
+  never drew the hero's name or the arrows.
+- **Marks can be the rule's to work out** (`marks: (element) => [...]`: a cold hero's bar, filled to his share) and a
+  bar a height (a tab's line along its top, the panel's corner brackets in the hero's colour); a painted picture can
+  be painted small and stretched (`Painted.size`: the hero selection's shade over the whole screen, 1/8 its size).
 - **Check a panel against main's page with `npm run lab -- ui --states <state> --ab`**: its box's lines and its
   pictures beside main's (`ui --states target`: the frame's box 384x52 at 113 on both, its name and line read off
   the engine's frame where the tree has it, off `#target` on main's).

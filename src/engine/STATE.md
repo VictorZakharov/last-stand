@@ -595,6 +595,7 @@ the SCSS. In the order they're taken: the kit's own pieces first, then what show
 - [x] How to play (`ui/helpSheet.ts`, the controls `controlsHelpSheet.ts`, the rules `helpTextSheet.ts`): `lab ui
   --states help --ab` at 1920x1080 and 844x390@3, its buttons and keyboard within 0.1% of main's; the mouse's
   callouts show their skills' pictures (the pause menu's too), the rules' bold words bold.
-- [ ] Hero selection's panels, Play together and its rooms, the village's map.
+- [x] Hero selection's panels (`heroesSheet.ts`; the choice on the hero stays on the page).
+- [ ] Play together and its rooms, the village's map.
 - [ ] The guide's pages, the talk, the trade, the merchant, the drink.
 - [ ] The loading screen (styled before any script runs: the last, if at all).

@@ -84,8 +84,8 @@ const GLOW: Rule[] = [
 export const STASH: Sheet = [
   // the paper doll: its slots round the class's silhouette
   // (as wide as the panel, as the page's grid is, its slots centred in it)
-  { at: '#equip', flex: true, box: { height: EQUIP.h, minWidth: EQUIP.w, shrink: 0 } },
-  { at: '#equip .doll', box: (_element, equip) => ({ position: 'absolute', width: DOLL_W, height: DOLL_H,
+  { at: ':is(#equip, .hs-equip)', flex: true, box: { height: EQUIP.h, minWidth: EQUIP.w, shrink: 0 } },
+  { at: ':is(#equip, .hs-equip) .doll', box: (_element, equip) => ({ position: 'absolute', width: DOLL_W, height: DOLL_H,
     inset: [-8, 'auto', 'auto', gridLeft(equip) + (EQUIP.w - DOLL_W) / 2] }),
     picture: [DOLL_W, DOLL_H] },
   { at: '.eslot', flex: true, box: slotBox, look: slotLook,

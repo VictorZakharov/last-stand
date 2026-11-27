@@ -2,10 +2,14 @@
 // The page's `<svg>` is cloned with the paint its stylesheet gives it (fill, stroke, its width and ends, its colour)
 // written on it, and loaded as an image once for each look; the picture paints that image.
 
+import { followAll } from './sheetDirty';
+
 /** the paint an icon takes from the stylesheet, as written on its clone */
 const PAINT = ['fill', 'stroke', 'stroke-width', 'stroke-linecap', 'stroke-linejoin', 'opacity'] as const;
 
 const images = new Map<string, HTMLImageElement>();
+/** the pictures still loading */
+const loading = new Set<Promise<void>>();
 const markups = new WeakMap<SVGSVGElement, { look: string; markup: string }>();
 
 /** `svg` as markup that draws alone: its stylesheet's paint written on it, `currentColor` its colour. */
@@ -62,9 +66,26 @@ export function svgArt(svg: SVGSVGElement): { key: string; image: HTMLImageEleme
   let image = images.get(markup);
   if (!image) {
     image = new Image();
+    // (an image off the page tells the window nothing as it loads: the trees drawing it follow again, or a tree at
+    // rest never drew it: the hero selection's arrows and his name stayed blank)
+    image.addEventListener('load', followAll, { once: true });
+    const shown = image;
+    const loaded: Promise<void> = new Promise<void>((resolve) => {
+      shown.addEventListener('load', () => resolve(), { once: true });
+      shown.addEventListener('error', () => resolve(), { once: true });
+    }).finally(() => loading.delete(loaded));
+    loading.add(loaded);
     image.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(markup)}`;
     images.set(markup, image);
   }
   const ready = image.complete && image.naturalWidth > 0;
   return { key: markup, image: ready ? image : null };
+}
+
+/** Once every picture asked for has loaded (the lab's, before it pictures the screen: a picture loads on the
+ *  browser's time, which its fixed clock never gives); whether any was still loading. */
+export async function picturesLoaded(): Promise<boolean> {
+  if (!loading.size) return false;
+  while (loading.size) await Promise.all([...loading]);
+  return true;
 }

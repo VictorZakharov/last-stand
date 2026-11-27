@@ -87,5 +87,6 @@ body:has(.modal.kit-mirror:not(.hidden)) :is(.kit-ghost, #touch) * { pointer-eve
 // (the village's crest stays on the page, so over the engine's canvas: none while a screen or a modal the kit draws
 // shows, which on main lay over it; the save slots showed WARDENHOLLOW across their title)
 body:has(:is(#saves, .modal).kit-mirror:not(.hidden)) .menu-crest { visibility: hidden; }
+body:has(#heroes:not(.hidden) > .kit-mirror) .menu-crest { visibility: hidden; }
 
 /* #loading is styled inline in index.html so it paints before this stylesheet and the bundle load */

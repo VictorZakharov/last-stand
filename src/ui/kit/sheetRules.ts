@@ -3,7 +3,7 @@
 // hand. Here too the helpers that read the page's markup the way CSS reads it.
 import type { Panel, Paint } from './panel';
 import type { RunStyle } from './runs';
-import type { PanelLook, PanelStyle } from '../../engine/ui';
+import type { Length, PanelLook, PanelStyle } from '../../engine/ui';
 import type { TextStyle } from '../overlay/paint';
 import { INK } from './theme';
 
@@ -19,6 +19,9 @@ export type SheetText = Partial<RunStyle> & { align?: 'start' | 'center' | 'end'
 export interface Painted {
   key: string;
   paint: Paint;
+  /** the size it's painted at (px), stretched over its box: a smooth gradient over the whole screen painted small
+   *  (the hero selection's shade), its box's own size where none */
+  size?: [number, number];
 }
 
 /** A mark over a corner of a box: where it stands (its inset, px), and a dot (its side and fill) or a glyph. */
@@ -27,7 +30,7 @@ export interface Mark {
   dot?: { side: number; fill: string };
   /** a bar down the box, this wide, in its element's colour (a side's border of another colour: `border-left: 3px
    *  solid var(--cc)`, a save's hero in his class's accent) */
-  bar?: { width: number; fill: (element: Element) => string };
+  bar?: { width?: Length; height?: number; fill: string | ((element: Element) => string) };
   says?: string;
   text?: SheetText;
 }
@@ -67,7 +70,7 @@ export interface Rule {
   /** an SVG in it drawn as a picture this size (px), as its stylesheet paints it */
   picture?: Dyn<[number, number]>;
   /** small marks laid over its corners (CSS's `::before` and `::after` boxes: a new item's dot, a better one's ▲) */
-  marks?: Mark[];
+  marks?: Dyn<Mark[]>;
   /** its picture turned this far (degrees, clockwise: CSS's `transform: rotate()` on an icon) */
   turn?: number;
   /** a picture painted across the box inside its border (`w` by `h` px of the art), under what's in it and its ring */

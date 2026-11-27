@@ -29,7 +29,7 @@ export function gather(rules: Rule[], element: Element, round: Panel | null, sta
     if (rule.says !== undefined) out.says = now(rule.says, element, round);
     if (rule.brackets) out.brackets = true;
     if (rule.picture) out.picture = now(rule.picture, element, round);
-    if (rule.marks) out.marks = [...out.marks, ...rule.marks];
+    if (rule.marks) out.marks = [...out.marks, ...now(rule.marks, element, round)];
     if (rule.turn !== undefined) out.turn = rule.turn;
     if (rule.paint) out.paint = rule.paint;
     if (rule.scrolls) out.scrolls = true;

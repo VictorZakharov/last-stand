@@ -52,6 +52,19 @@ export const TABS: Sheet = [
     hover: { text: { color: accent() } } },
 ];
 
+/** the attributes (the lobby's, and the hero selection's page of them) */
+export const STATS: Sheet = [
+  { at: ':is(#stats, .hs-stats)', flex: true, box: { direction: 'column', gap: 2 }, text: { size: 15 } },
+  { at: ':is(#stats, .hs-stats) .grp', box: { margin: [12, 0, 4, 0], padding: [0, 0, 3, 0], border: [0, 0, 1, 0] },
+    look: { border: alpha(FRAME, 0.3) }, text: () => ({ face: 'display', size: 14, color: accent() }) },
+  { at: ':is(#stats, .hs-stats) .grp:first-child', box: { margin: [0, 0, 4, 0] } },
+  { at: ':is(#stats, .hs-stats) div.row', flex: true, box: { direction: 'row', justify: 'between', padding: [3, 4] },
+    text: { color: INK_DIM } },
+  { at: ':is(#stats, .hs-stats) div.row:nth-child(odd)', look: { fill: 'rgba(255,255,255,.025)' } },
+  { at: ':is(#stats, .hs-stats) div.row[data-attr]', hover: { look: { fill: 'rgba(240,200,96,.08)' }, text: { color: INK } } },
+  { at: ':is(#stats, .hs-stats) b', text: { color: INK, weight: 500 } },
+];
+
 export const LOBBY: Sheet = [
   {
     at: '#menu',
@@ -82,16 +95,7 @@ export const LOBBY: Sheet = [
   { at: '.tab-page.off', box: { display: 'none' } },
   { at: '.tab-page[data-page="attrs"]', scrolls: true, box: { overflow: 'scroll' } },
   { at: '.tab-page .panel-title', box: { margin: [12, 0, 8, 0] } },
-  // the attributes
-  { at: '#stats', flex: true, box: { direction: 'column', gap: 2 }, text: { size: 15 } },
-  { at: '#stats .grp', box: { margin: [12, 0, 4, 0], padding: [0, 0, 3, 0], border: [0, 0, 1, 0] },
-    look: { border: alpha(FRAME, 0.3) }, text: () => ({ face: 'display', size: 14, color: accent() }) },
-  { at: '#stats .grp:first-child', box: { margin: [0, 0, 4, 0] } },
-  { at: '#stats div.row', flex: true, box: { direction: 'row', justify: 'between', padding: [3, 4] },
-    text: { color: INK_DIM } },
-  { at: '#stats div.row:nth-child(odd)', look: { fill: 'rgba(255,255,255,.025)' } },
-  { at: '#stats div.row[data-attr]', hover: { look: { fill: 'rgba(240,200,96,.08)' }, text: { color: INK } } },
-  { at: '#stats b', text: { color: INK, weight: 500 } },
+  ...STATS,
   // the rail: a short screen's or an upright tablet's, picking the one panel shown
   { at: '#lobby-rail', box: { display: 'none' } },
   // a short screen and an upright tablet: the rail, then the one panel picked

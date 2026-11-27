@@ -57,8 +57,10 @@ export function markNode(node: Node, marks: Gathered['marks']): void {
   marks.forEach((mark, at) => {
     const panel = node.marks[at];
     const side = mark.dot?.side;
-    panel.style({ inset: mark.inset, width: side ?? mark.bar?.width, height: side });
-    panel.look({ fill: mark.dot?.fill ?? mark.bar?.fill(node.element), radius: side ? side / 2 : undefined });
+    const bar = mark.bar;
+    panel.style({ inset: mark.inset, width: side ?? bar?.width, height: side ?? bar?.height });
+    const barFill = typeof bar?.fill === 'function' ? bar.fill(node.element) : bar?.fill;
+    panel.look({ fill: mark.dot?.fill ?? barFill, radius: side ? side / 2 : undefined });
     panel.say(mark.says ?? '', { ...BODY, ...mark.text });
   });
 }
@@ -74,7 +76,8 @@ export function decorate(node: Node, style: Gathered): void {
     node.painted = new Panel(node.panel, { position: 'absolute', inset: 0 }, { radius: style.look.radius });
   }
   node.painted?.show(!!painted);
-  if (painted) node.painted!.picture(`painted ${painted.key} ${w}x${h}`, w, h, painted.paint);
+  const [pw, ph] = painted?.size ?? [w, h];
+  if (painted) node.painted!.picture(`painted ${painted.key} ${pw}x${ph}`, pw, ph, painted.paint);
   const ring = style.ring;
   if (ring && !node.ring) node.ring = new Panel(node.panel, { position: 'absolute', inset: 0, border: 1 });
   if (node.ring) {

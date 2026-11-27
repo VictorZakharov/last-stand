@@ -16,7 +16,7 @@ import { G } from '../../../src/state';
 import { CLASSES } from '../../../src/data/classes';
 import { col, particles } from '../../../src/fx/particles';
 import * as menus from '../../../src/ui/menus';
-import { realWait, type Lab, type Pictured } from './lab';
+import { boxOf as drawnBox, realWait, scrollMoreOf, seenOf, type Lab, type Pictured } from './lab';
 import type { Node, Vec3 } from './sceneApi.ts';
 
 /** frames run after Change hero is clicked: the camera's flight in, the hero's showcase over (s at 60 a second) */
@@ -51,8 +51,9 @@ interface Placed {
 let opened: { before: string; screen: boolean } | null = null;
 
 const screenOf = (): HTMLElement | null => document.getElementById('heroes');
-/** whether `element` is laid out and visible (the screen is fixed: it has no `offsetParent`) */
-const shown = (element: Element | null): boolean => !!element?.checkVisibility({ visibilityProperty: true });
+/** whether `element` is shown: where the kit draws it, its panel seen (the screen is fixed: it has no
+ *  `offsetParent`) */
+const shown = (element: Element | null): boolean => !!element && seenOf(element);
 
 /** What the lobby's Change hero asks (src/ui/menus.ts), or none in a tree from before it. */
 const changeHero = (): (() => void) | undefined => (menus as { changeHero?: () => void }).changeHero;
@@ -131,8 +132,8 @@ function parts(screen: HTMLElement): [string, DOMRect][] {
 /** Where `element` is drawn: the heroes' names are a row across the room the panel leaves that takes no pointer, so
  *  the names themselves. */
 function boxOf(element: Element): DOMRect {
-  if (!element.classList.contains('hs-tabs')) return element.getBoundingClientRect();
-  const names = [...element.children].map((name) => name.getBoundingClientRect());
+  if (!element.classList.contains('hs-tabs')) return drawnBox(element);
+  const names = [...element.children].map((name) => drawnBox(name));
   const left = Math.min(...names.map((box) => box.left)), right = Math.max(...names.map((box) => box.right));
   const top = Math.min(...names.map((box) => box.top)), bottom = Math.max(...names.map((box) => box.bottom));
   return new DOMRect(left, top, right - left, bottom - top);
@@ -189,7 +190,8 @@ function heroPlaced(id: string, boxes: [string, DOMRect][]): Found {
 /** Whether `hero`'s middle shows on the screen, clear of the panel. */
 function clickable(hero: Node): boolean {
   const at = onScreen(hero);
-  const panel = document.querySelector('.hs-panel')?.getBoundingClientRect();
+  const element = document.querySelector('.hs-panel');
+  const panel = element ? drawnBox(element) : null;
   return at.x > 0 && at.x < (panel?.left ?? innerWidth) && at.y > 0 && at.y < innerHeight;
 }
 
@@ -356,16 +358,16 @@ async function labelColoured(lab: Lab, choice: HTMLElement, id: string, canary: 
   return { lines: [`  the label on the ${id} in ${colour} (his: ${wanted})`], problems };
 }
 
-/** The save slot under the title clicked, as a player clicks it to switch slots (`canary`: made to let the click
- *  through first): the save slots over the screen; then Esc, the save slots gone and the screen still up. */
+/** The save slot under the title clicked, as a player clicks it to switch slots (`canary`: held off first): the save slots over the screen; then Esc, the save slots gone and the screen still up. */
 async function slotOpens(lab: Lab, screen: HTMLElement, canary: boolean): Promise<Found> {
-  const slot = screen.querySelector<HTMLElement>('.hs-slot');
+  const slot = screen.querySelector<HTMLButtonElement>('.hs-slot');
   const saves = document.getElementById('saves');
   if (!slot || !saves) return { lines: ['  no save slot to click'], problems: [] };
-  if (canary) slot.style.pointerEvents = 'none';
+  // (held off: the kit draws the slot and takes its press, so the page's `pointer-events` are none of its)
+  if (canary) slot.disabled = true;
   await lab.clickOn(slot);
   await lab.step(1);
-  slot.style.pointerEvents = '';
+  slot.disabled = false;
   const opened = shown(saves);
   if (opened) await lab.step(1, () => ({ keys: ['escape'] }));
   const problems: string[] = [];
@@ -406,11 +408,11 @@ async function slotSwitched(lab: Lab, screen: HTMLElement): Promise<Found> {
 /** The parts laid out (`canary`: Back laid over the heroes' names first), and those over another or past the
  *  window. */
 function partsPlaced(screen: HTMLElement, canary: boolean): { boxes: [string, DOMRect][]; problems: string[] } {
-  const back = screen.querySelector<HTMLElement>('.hs-back')!;
-  const names = boxOf(screen.querySelector('.hs-tabs')!);
-  if (canary) Object.assign(back.style, { left: `${names.left}px`, top: `${names.top}px`, bottom: 'auto' });
   const boxes = parts(screen);
-  back.style.cssText = '';
+  // (Back's box laid over the names' as read: the kit draws Back by its rules, which an inline style never moves)
+  const back = boxes.find(([name]) => name === 'Back');
+  const names = boxes.find(([name]) => name === "the heroes' names");
+  if (canary && back && names) back[1] = new DOMRect(names[1].x, names[1].y, back[1].width, back[1].height);
   const problems: string[] = [];
   for (const [name, box] of boxes) if (!within(box)) problems.push(`heroes: ${name} reaches past the window`);
   for (const [i, [name, box]] of boxes.entries()) {
@@ -441,7 +443,7 @@ export async function heroesShown(canary: boolean, lab: Lab): Promise<Found> {
   if (visible !== 1) problems.push(`heroes: ${visible} cards visible`);
   if (G.player.obj.visible) problems.push('heroes: the lobby\'s hero drawn over the hall');
   const cardsBox = screen.querySelector<HTMLElement>('.hs-cards')!;
-  const scrolls = cardsBox.scrollHeight > cardsBox.clientHeight + 1;
+  const scrolls = scrollMoreOf(cardsBox) > 1;
   const choose = screen.querySelector('.hs-choose')!;
   lines.push(`  the card ${scrolls ? 'scrolls in' : 'fits'} the panel; the choice says "${choose.textContent}"`);
   if (!within(choose.getBoundingClientRect())) problems.push('heroes: the choice reaches past the window');
@@ -470,15 +472,12 @@ const STEADY_PARTS: [string, string][] = [
   ['records', '.hs-card.active .hs-records'],
 ];
 
-/** Where `element`'s box is laid out within `root` (css px), its transforms left out (a card fades up as it shows). */
+/** Where `element`'s box is drawn within `root`'s (css px): the kit draws no card's entrance, so its drawn box is
+ *  where it's laid out. */
 function laidOutIn(element: HTMLElement, root: HTMLElement): { x: number; y: number; height: number } {
-  let x = 0;
-  let y = 0;
-  for (let at: HTMLElement | null = element; at && at !== root; at = at.offsetParent as HTMLElement | null) {
-    x += at.offsetLeft;
-    y += at.offsetTop;
-  }
-  return { x, y, height: element.offsetHeight };
+  const box = drawnBox(element);
+  const round = drawnBox(root);
+  return { x: box.x - round.x, y: box.y - round.y, height: box.height };
 }
 
 /** The most `selector`'s parts move on the screen over the animations the card in focus starts as it's shown, from
@@ -488,7 +487,7 @@ function entranceMoves(screen: HTMLElement): number {
   const card = screen.querySelector<HTMLElement>('.hs-card.active');
   const animations = card?.getAnimations({ subtree: true }) ?? [];
   const parts = STEADY_PARTS.map(([, selector]) => screen.querySelector<HTMLElement>(selector)).filter((e) => !!e);
-  const boxes = (): DOMRect[] => parts.map((part) => part!.getBoundingClientRect());
+  const boxes = (): DOMRect[] => parts.map((part) => drawnBox(part!));
   for (const animation of animations) {
     animation.pause();
     animation.currentTime = 0;
@@ -500,6 +499,15 @@ function entranceMoves(screen: HTMLElement): number {
   const to = boxes();
   for (const animation of animations) animation.finish();
   return Math.max(0, ...from.map((box, i) => Math.max(Math.abs(box.x - to[i].x), Math.abs(box.y - to[i].y))));
+}
+
+/** A line of the role's put before `element`, as the page would show it, pushing it down: the canary's plant. */
+function plantBefore(element: HTMLElement): HTMLElement {
+  const line = document.createElement('div');
+  line.className = 'hs-role';
+  line.textContent = 'canary';
+  element.before(line);
+  return line;
 }
 
 /** The heroes' names in the row's order from the one after the hero in focus round to him: each click brings
@@ -517,8 +525,9 @@ function namesFromNext(screen: HTMLElement): HTMLElement[] {
 async function cardsSteady(lab: Lab, screen: HTMLElement, canary: boolean): Promise<Found> {
   const panel = screen.querySelector<HTMLElement>('.hs-panel')!;
   const names = namesFromNext(screen);
-  const planted = canary ? screen.querySelectorAll<HTMLElement>('.hs-card .hs-traits')[1] : undefined;
-  if (planted) planted.style.marginTop = '20px';
+  // (a line put before the second card's traits, as its rules draw it: an inline style is none of the kit's)
+  const traits = canary ? screen.querySelectorAll<HTMLElement>('.hs-card .hs-traits')[1] : undefined;
+  const planted = traits ? plantBefore(traits) : undefined;
   const places = new Map<string, Map<string, { x: number; y: number; height: number }>>();
   const entrances: string[] = [];
   const problems: string[] = [];
@@ -537,7 +546,7 @@ async function cardsSteady(lab: Lab, screen: HTMLElement, canary: boolean): Prom
     places.set(name.dataset.c!, parts);
   }
   await lab.reduceMotion(true);
-  if (planted) planted.style.marginTop = '';
+  planted?.remove();
   const [first, ...rest] = [...places.entries()];
   for (const [hero, parts] of rest) {
     for (const [part, at] of parts) {
@@ -596,7 +605,7 @@ async function dragged(lab: Lab, screen: HTMLElement): Promise<Found> {
   const ids = [...hallHeroes().keys()];
   const before = ids.indexOf(screen.querySelector<HTMLElement>('.hs-card.active')?.dataset.c ?? '');
   const spacing = heroSpacing();
-  const panel = screen.querySelector('.hs-panel')!.getBoundingClientRect();
+  const panel = drawnBox(screen.querySelector('.hs-panel')!);
   // (the room the panel leaves: beside it, up to it; over an upright screen's, the window's width)
   const room = panel.top < innerHeight * 0.4 ? panel.left : innerWidth;
   // (in the open scene: over an upright screen's panel, half way down the room above it, clear of the names)

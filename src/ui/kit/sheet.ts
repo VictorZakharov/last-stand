@@ -142,7 +142,8 @@ export class SheetTree implements Forwarded {
   }
 
   private make(made: Element | Text, parent: Panel): Node {
-    const panel = new Panel(parent, {});
+    // (at the tree's scale, whatever its room's: a layer's own is the HUD's, which an upright tablet's lobby's is not)
+    const panel = new Panel(parent, {}, {}, this.scaled);
     const words = made instanceof Text ? made : null;
     const element = words ? words.parentElement! : (made as Element);
     const node: Node = { element, panel, anchor: null, ring: null, brackets: null, painted: null, marks: [], line: null,

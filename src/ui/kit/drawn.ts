@@ -4,6 +4,7 @@
 import { drawnFor } from './press';
 import { elementAt } from './forward';
 import { scrollRoom, scrollTo } from './scroll';
+export { picturesLoaded } from './svgArt';
 import { uiScales } from '../scale';
 import { engineCanvas } from '../../engine/index';
 
