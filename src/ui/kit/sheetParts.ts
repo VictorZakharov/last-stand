@@ -14,8 +14,8 @@ export function gather(rules: Rule[], element: Element, round: Panel | null, sta
   const button = element instanceof HTMLButtonElement;
   const box: PanelStyle = button ? { direction: 'row', alignItems: 'center', justify: 'center' }
     : { direction: 'column' };
-  const out: Gathered = { box, look: {}, text: { ...around }, brackets: false, turn: 0, flex: false, scrolls: false,
-    ease: 0, shift: [0, 0], lift: false };
+  const out: Gathered = { box, look: {}, text: { ...around }, brackets: false, marks: [], turn: 0, flex: false,
+    scrolls: false, ease: 0, shift: [0, 0], lift: false };
   for (const rule of rules) {
     if (rule.when && !rule.when()) continue;
     if (rule.box) Object.assign(out.box, now(rule.box, element, round));
@@ -26,7 +26,8 @@ export function gather(rules: Rule[], element: Element, round: Panel | null, sta
     if (rule.hits !== undefined) out.hits = rule.hits;
     if (rule.after) out.after = rule.after;
     if (rule.brackets) out.brackets = true;
-    if (rule.picture) out.picture = rule.picture;
+    if (rule.picture) out.picture = now(rule.picture, element, round);
+    if (rule.marks) out.marks = [...out.marks, ...rule.marks];
     if (rule.turn !== undefined) out.turn = rule.turn;
     if (rule.paint) out.paint = rule.paint;
     if (rule.scrolls) out.scrolls = true;
@@ -38,6 +39,7 @@ export function gather(rules: Rule[], element: Element, round: Panel | null, sta
       if (rule.hover.look) out.look = { ...out.look, ...rule.hover.look };
       if (rule.hover.text) out.text = { ...out.text, ...rule.hover.text };
       if (rule.hover.lit) out.look = litLook(out.look, rule.hover.lit);
+      if (rule.hover.ring) out.ring = rule.hover.ring;
     }
   }
   return out;

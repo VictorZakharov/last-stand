@@ -194,11 +194,11 @@ function markedNow(): HTMLElement | null {
  *  offset is written divided by its own zoom, which scales it. */
 function placeAfloat(): void {
   if (SHORT.matches) { root.style.right = ''; return; }
-  const shown = (el: Element): boolean => (el as HTMLElement).checkVisibility(SHOWN) && el.getBoundingClientRect().width >= 1;
+  const shown = (el: Element): boolean => (el as HTMLElement).checkVisibility(SHOWN) && shownBox(el).width >= 1;
   // (the bag's panels down the right alone: the skill bar's along the foot is no wall to stand beside)
   const panels = [...document.querySelectorAll('#menu .panel:not(#lobby-rail)')]
-    .filter((p) => shown(p) && p.getBoundingClientRect().top < innerHeight / 3 && p.getBoundingClientRect().right > innerWidth / 2);
-  const beside = panels.length ? Math.min(...panels.map((p) => p.getBoundingClientRect().left)) : innerWidth;
+    .filter((p) => shown(p) && shownBox(p).top < innerHeight / 3 && shownBox(p).right > innerWidth / 2);
+  const beside = panels.length ? Math.min(...panels.map((p) => shownBox(p).left)) : innerWidth;
   const zoom = parseFloat(getComputedStyle(root).zoom) || 1;
   const right = `${Math.round((innerWidth - beside + AFLOAT_GAP) / zoom)}px`;
   if (root.style.right !== right) root.style.right = right;

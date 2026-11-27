@@ -555,7 +555,8 @@ export function lobbyViewShift(): { x: number; y: number } {
   if (!onePanel.matches || menu.classList.contains('hidden') || menu.classList.contains('stowed')) return { x: 0, y: 0 };
   const panel = [...menu.querySelectorAll<HTMLElement>('.menu-center, .menu-right')].find((p) => p.offsetParent);
   if (!panel) return { x: 0, y: 0 };
-  const r = panel.getBoundingClientRect();
+  // (as drawn: the kit draws the panels in the page's place, `lobbyPanels.ts`)
+  const r = shownBox(panel);
   return window.innerWidth > window.innerHeight ? { x: r.right / 2, y: 0 } : { x: 0, y: r.bottom / 2 };
 }
 
@@ -567,7 +568,7 @@ function lobbyClearance(): { x: number; y: number } {
   if (menu.classList.contains('hidden') || menu.classList.contains('stowed') || !onePanel.matches) return { x: 0, y: 0 };
   const panel = [...menu.querySelectorAll<HTMLElement>('#lobby-rail, .menu-center, .menu-right')].filter((p) => p.offsetParent).pop();
   if (!panel) return { x: 0, y: 0 };
-  const r = panel.getBoundingClientRect();
+  const r = shownBox(panel);
   return window.innerWidth > window.innerHeight ? { x: r.right, y: 0 } : { x: 0, y: r.bottom };
 }
 

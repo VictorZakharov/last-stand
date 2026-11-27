@@ -40,6 +40,7 @@ import { drawDiag } from './diagPanels';
 import { drawChat } from './chatPanels';
 import { drawTouch } from './touchPanels';
 import { drawVillageCard } from './villageCardPanel';
+import { drawLobbyPanels } from './lobbyPanels';
 import { drawDecision } from './decisionPanel';
 import { drawBottomBar } from './bottomBar';
 
@@ -71,6 +72,7 @@ export function initHud(): void {
   drawDiag();
   drawChat();
   drawTouch();
+  drawLobbyPanels();
   drawVillageCard();
   drawBottomBar();
   // (the minimap's column, the training's tracker in it)

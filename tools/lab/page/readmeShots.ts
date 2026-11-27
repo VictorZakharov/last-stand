@@ -201,7 +201,7 @@ async function stash(lab: Lab): Promise<Pictured> {
   }));
   menus.renderMenu();
   await standInVillage(lab, chest.stand, NORTH);
-  showPanels('chest');
+  await showPanels(lab, 'chest');
   await lab.step(SETTLE);
   const pictured = await lab.screen('stash', ['the chest: equipment and a stash of every rarity']);
   G.profile.stash = kept.stash;

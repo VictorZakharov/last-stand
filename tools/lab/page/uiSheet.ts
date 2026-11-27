@@ -68,7 +68,7 @@ async function touchGear(lab: Lab): Promise<void> {
   const world = { x: innerWidth * TAP_AT.x, y: innerHeight * TAP_AT.y };
   if (!document.body.classList.contains('touch')) await tap(lab, world);
   if (!document.body.classList.contains('touch')) throw new Error('lab: ui: the tap left the page out of touch mode');
-  showPanels('chest');
+  await showPanels(lab, 'chest');
   railTurned = !document.getElementById('stash')?.checkVisibility();
   const gearTab = document.querySelector<HTMLElement>('#lobby-rail [data-lt="gear"]');
   if (railTurned && gearTab) await tap(lab, middleOf(gearTab));

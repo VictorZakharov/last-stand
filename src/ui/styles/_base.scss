@@ -73,6 +73,8 @@ html, body { touch-action: manipulation; -webkit-tap-highlight-color: transparen
   overflow: hidden !important; clip-path: inset(50%) !important; white-space: nowrap; animation: none !important;
   transition: none !important; }
 .kit-mirror, .kit-mirror * { pointer-events: none !important; }
+/* (nothing in a mirror moves: the kit draws its motion, and the page's loops ran unseen, styled every frame) */
+.kit-mirror * { animation: none !important; transition: none !important; }
 /* (an element the kit draws over and that still takes the pointer where it's laid out: the touch controls) */
 // (painting nothing by a filter, not its opacity: its own opacity still says whether it shows, as the lab and the
 // game read it, `checkVisibility`; still laid out and taking the pointer)

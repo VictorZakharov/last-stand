@@ -33,6 +33,10 @@ let listening = false;
 let over: Element | null = null;
 let pressed: { element: Element; x: number; y: number; button: number } | null = null;
 let drag: { source: Element; data: DataTransfer; over: Element | null; accepted: boolean; ghost: Panel } | null = null;
+/** whether this press's click was told already, so the browser's own after it is none of the page's: a tap on a
+ *  stash item opened its sheet, and the browser's click of the same tap, coming after, landed on the sheet's backdrop
+ *  and shut it */
+let clicked = false;
 
 /** `screen`'s elements take the pointer's events from now on (the last one given is over the ones before). */
 export function forwards(screen: Forwarded): void {
@@ -174,9 +178,20 @@ function release(e: PointerEvent, under: Element | null): void {
   const button = shared.closest('button');
   if (button) button.click();
   else shared.dispatchEvent(mouse('click', e));
+  clicked = true;
 }
 
-/** The page's pointer listened to for the screens, once the first is given. */
+/** The browser's press `e`, told to the element under it already, stopped short of the page (heard on the window
+ *  alone): the page's own listeners hear the element's copy, as they heard the element's press before the kit drew
+ *  it. Left to go on, a finger's long press on a stash item was put out at once by the page's "a tap anywhere else"
+ *  (its target the canvas). The right button's is the world's still (the camera turns with it over the HUD). */
+function toldAlready(e: PointerEvent): void {
+  if (e.button !== 2) e.stopPropagation();
+}
+
+/** The page's pointer listened to for the screens, once the first is given: the browser's own events alone (what's
+ *  told to an element here comes round through the window too, and a move told to the item under the mouse read as
+ *  the mouse leaving the canvas, the stash's focus put out as it lit). */
 function listen(): void {
   if (listening) return;
   listening = true;
@@ -184,6 +199,7 @@ function listen(): void {
   // (a press over a screen's element taking the pointer is none of the world's)
   overPanels.at = (x, y) => elementAt(x, y) !== null || (before ? before(x, y) : uiHit(x, y) !== null);
   window.addEventListener('pointermove', (e) => {
+    if (!e.isTrusted) return;
     if (drag) {
       moveDrag(e);
       return;
@@ -212,6 +228,8 @@ function listen(): void {
     showHover();
   }, true);
   window.addEventListener('pointerdown', (e) => {
+    if (!e.isTrusted) return;
+    clicked = false;
     if (!onCanvas(e)) return;
     const under = elementAt(e.clientX, e.clientY);
     moveOver(under, e);
@@ -219,9 +237,11 @@ function listen(): void {
     pressed = { element: under, x: e.clientX, y: e.clientY, button: e.button };
     under.dispatchEvent(pointer('pointerdown', e));
     under.dispatchEvent(mouse('mousedown', e));
+    toldAlready(e);
     showHover();
   }, true);
   window.addEventListener('pointerup', (e) => {
+    if (!e.isTrusted) return;
     if (drag) {
       endDrag(e);
       showHover();
@@ -229,19 +249,30 @@ function listen(): void {
     }
     const under = onCanvas(e) ? elementAt(e.clientX, e.clientY) : null;
     release(e, under);
+    if (under) toldAlready(e);
     if (e.pointerType !== 'mouse') moveOver(null, e);
     showHover();
   }, true);
   window.addEventListener('pointercancel', (e) => {
+    if (!e.isTrusted) return;
     if (drag) endDrag(e);
     pressed = null;
     over?.dispatchEvent(pointer('pointercancel', e));
     moveOver(null, e);
     showHover();
   }, true);
+  // (stopped short of the page, but heard on the window: what listens there, as the lab's taps do, still hears it)
+  window.addEventListener('click', (e) => {
+    if (!clicked || !e.isTrusted) return;
+    clicked = false;
+    e.stopPropagation();
+    e.preventDefault();
+  }, true);
   window.addEventListener('contextmenu', (e) => {
+    if (!e.isTrusted) return;
     if (!onCanvas(e)) return;
     const under = elementAt(e.clientX, e.clientY);
     if (under && !under.dispatchEvent(mouse('contextmenu', e))) e.preventDefault();
+    if (under) e.stopPropagation();
   }, true);
 }

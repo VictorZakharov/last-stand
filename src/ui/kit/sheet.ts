@@ -37,6 +37,8 @@ interface Node {
   ring: Panel | null;
   brackets: Panel | null;
   painted: Panel | null;
+  /** its marks over its corners, drawn over what's in it */
+  marks: Panel[];
   /** its words, where it's a line of text; its picture, where it's an SVG */
   line: RunLine | null;
   picture: Panel | null;
@@ -122,7 +124,7 @@ export class SheetTree implements Forwarded {
 
   private make(element: Element, parent: Panel): Node {
     const panel = new Panel(parent, {});
-    const node: Node = { element, panel, anchor: null, ring: null, brackets: null, painted: null, line: null,
+    const node: Node = { element, panel, anchor: null, ring: null, brackets: null, painted: null, marks: [], line: null,
       picture: null, kids: [], state: 'none', hits: false, scrolling: false, moving: null,
       given: { box: [], look: [] }, matched: null };
     // (each element's box read where it's drawn: the lab's, the tutorial's ring's)
@@ -161,15 +163,23 @@ export class SheetTree implements Forwarded {
     node.given = { box: Object.keys(style.box), look: Object.keys(style.look) };
     if (style.box.display === 'none') return;
     this.decorate(node, style);
-    if (style.picture || element instanceof SVGSVGElement) {
-      this.drawPicture(node, style.picture, style.turn);
-      return;
-    }
-    if (isText(element) && !(style.flex && element.children.length)) {
-      this.sayText(node, style.text, style.after);
-      return;
-    }
-    this.followKids(node, style.text, key, node.hits);
+    if (style.picture || element instanceof SVGSVGElement) this.drawPicture(node, style.picture, style.turn);
+    else if (isText(element) && !(style.flex && element.children.length)) this.sayText(node, style.text, style.after);
+    else this.followKids(node, style.text, key, node.hits);
+    this.mark(node, style.marks);
+  }
+
+  /** Its marks, made after what's in it so drawn over it, and shown as its rules give them now. */
+  private mark(node: Node, marks: Gathered['marks']): void {
+    while (node.marks.length > marks.length) node.marks.pop()!.remove();
+    while (node.marks.length < marks.length) node.marks.push(new Panel(node.panel, { position: 'absolute' }));
+    marks.forEach((mark, at) => {
+      const panel = node.marks[at];
+      const side = mark.dot?.side;
+      panel.style({ inset: mark.inset, width: side, height: side });
+      panel.look({ fill: mark.dot?.fill, radius: side ? side / 2 : undefined });
+      panel.say(mark.says ?? '', { ...BODY, ...mark.text });
+    });
   }
 
   /** Its opacity and shift stepped in their transition, a pulse laid over: written into its look and its layout. */
@@ -212,6 +222,16 @@ export class SheetTree implements Forwarded {
 
   /** Its ring, its brackets and its painted picture, made as first asked for, shown as asked. */
   private decorate(node: Node, style: Gathered): void {
+    // (the painted picture first, so under the ring: a slot's frame is drawn over its art, as `.slot.art::after`)
+    const border = typeof style.box.border === 'number' ? style.box.border : 0;
+    const w = (typeof style.box.width === 'number' ? style.box.width : 0) - border * 2;
+    const h = (typeof style.box.height === 'number' ? style.box.height + 0 : w + border * 2) - border * 2;
+    const painted = w > 0 ? style.paint?.(node.element, w, h) ?? null : null;
+    if (painted && !node.painted) {
+      node.painted = new Panel(node.panel, { position: 'absolute', inset: 0 }, { radius: style.look.radius });
+    }
+    node.painted?.show(!!painted);
+    if (painted) node.painted!.picture(`painted ${painted.key} ${w}x${h}`, w, h, painted.paint);
     const ring = style.ring;
     if (ring && !node.ring) node.ring = new Panel(node.panel, { position: 'absolute', inset: 0, border: 1 });
     if (node.ring) {
@@ -221,14 +241,6 @@ export class SheetTree implements Forwarded {
     if (style.brackets && !node.brackets) node.brackets = makeBrackets(node.panel);
     node.brackets?.show(style.brackets);
     if (style.brackets) for (const bar of node.brackets!.inside) bar.look({ fill: accent() });
-    const painted = style.paint?.(node.element) ?? null;
-    if (painted && !node.painted) {
-      node.painted = new Panel(node.panel, { position: 'absolute', inset: 0 }, { radius: style.look.radius });
-    }
-    node.painted?.show(!!painted);
-    const w = typeof style.box.width === 'number' ? style.box.width : 0;
-    const h = typeof style.box.height === 'number' ? style.box.height : w;
-    if (painted && w > 0) node.painted!.picture(`painted ${painted.key} ${w}x${h}`, w, h, painted.paint);
   }
 
   /** Its words as styled runs, each inline element in it styled by its rules. */
@@ -278,6 +290,8 @@ export class SheetTree implements Forwarded {
         kid.anchor?.remove();
       }
       node.kids = elements.map((child) => this.make(child, node.panel));
+      // (its marks made again after them, to stay over them)
+      for (const mark of node.marks.splice(0)) mark.remove();
     }
     for (const kid of node.kids) this.follow(kid, text, key, hits, node);
   }

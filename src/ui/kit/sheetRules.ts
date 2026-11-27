@@ -21,6 +21,14 @@ export interface Painted {
   paint: Paint;
 }
 
+/** A mark over a corner of a box: where it stands (its inset, px), and a dot (its side and fill) or a glyph. */
+export interface Mark {
+  inset: PanelStyle['inset'];
+  dot?: { side: number; fill: string };
+  says?: string;
+  text?: SheetText;
+}
+
 /** One rule of a screen's style sheet. */
 export interface Rule {
   /** the SCSS rule's selector, matched by the page's own `matches` */
@@ -47,13 +55,15 @@ export interface Rule {
   /** the ornamented frame's line and corner brackets inside it (`::before` with `corner-brackets`) */
   brackets?: boolean;
   /** an SVG in it drawn as a picture this size (px), as its stylesheet paints it */
-  picture?: [number, number];
+  picture?: Dyn<[number, number]>;
+  /** small marks laid over its corners (CSS's `::before` and `::after` boxes: a new item's dot, a better one's ▲) */
+  marks?: Mark[];
   /** its picture turned this far (degrees, clockwise: CSS's `transform: rotate()` on an icon) */
   turn?: number;
-  /** a picture painted across its box (px of the art), under what's in it */
-  paint?: (element: Element) => Painted | null;
+  /** a picture painted across the box inside its border (`w` by `h` px of the art), under what's in it and its ring */
+  paint?: (element: Element, w: number, h: number) => Painted | null;
   /** what changes while the pointer's over it or pressing it (CSS's `:hover`; `lit`: `filter: brightness()`) */
-  hover?: { look?: PanelLook; text?: SheetText; lit?: number };
+  hover?: { look?: PanelLook; text?: SheetText; lit?: number; ring?: string };
   /** its opacity and its shift eased over this long (s: CSS's `transition: opacity, transform`) */
   ease?: number;
   /** moved this far across and down (px: CSS's `transform: translate()`), laid out where it was */
@@ -146,6 +156,7 @@ export interface Gathered {
   ring?: string;
   brackets: boolean;
   picture?: [number, number];
+  marks: Mark[];
   turn: number;
   paint?: Rule['paint'];
   flex: boolean;

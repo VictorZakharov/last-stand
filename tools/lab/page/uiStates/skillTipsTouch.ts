@@ -32,7 +32,7 @@ async function tapIfReached(lab: Lab, element: HTMLElement | null): Promise<bool
  * opened first by taps, as a player opens it: a short screen's rail turned to the skills, and the book's toggle.
  */
 async function openSkillTipsTouch(lab: Lab): Promise<void> {
-  showPanels('inventory');
+  await showPanels(lab, 'inventory');
   // (the first tap puts the page in touch mode, as a phone starts in it: what a finger reaches is judged in it)
   await tapIfReached(lab, document.querySelector<HTMLElement>('#lobby-rail [data-lt="skills"]'));
   // (a short screen shows it whole, with no toggle)

@@ -19,7 +19,33 @@ function markupOf(svg: SVGSVGElement): string {
     const own = getComputedStyle(svg.querySelectorAll('[class]')[at]);
     for (const name of PAINT) shape.setAttribute(name, own.getPropertyValue(name));
   });
+  withBorrowedDefs(clone);
   return clone.outerHTML.replace(/currentColor/g, style.color);
+}
+
+/** what an SVG's paint or `use` names of the page's: `url(#id)`, `href="#id"` */
+const NAMED = /url\(#([\w-]+)\)|href="#([\w-]+)"/g;
+
+/** `clone` given a copy of each gradient, filter or shape it names that the page defines elsewhere (the item icons'
+ *  shared `<defs>`, a doll's gold from the mage's doll), and of what those name in turn: drawn alone as an image, it
+ *  can't reach them. */
+function withBorrowedDefs(clone: SVGSVGElement): void {
+  const borrowed = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+  const have = new Set([...clone.querySelectorAll('[id]')].map((element) => element.id));
+  const take = (markup: string): void => {
+    for (const match of markup.matchAll(NAMED)) {
+      const id = match[1] ?? match[2];
+      if (have.has(id)) continue;
+      have.add(id);
+      const found = document.getElementById(id);
+      if (!found) continue;
+      const copy = found.cloneNode(true) as Element;
+      borrowed.appendChild(copy);
+      take(copy.outerHTML);
+    }
+  };
+  take(clone.outerHTML);
+  if (borrowed.childElementCount) clone.prepend(borrowed);
 }
 
 /** `svg` drawn as the page draws it, once its image has loaded (null till then: ask again the next frame); and a

@@ -6,7 +6,14 @@ import type { PanelStyle } from '../../engine/ui';
 import type { TextStyle } from '../overlay/paint';
 
 /** A run's style: its text's, and whether it's never broken (CSS's `white-space: nowrap`). */
-export interface RunStyle extends TextStyle { whole?: boolean }
+export interface RunStyle extends TextStyle {
+  whole?: boolean;
+  /** the line broken after it (CSS's block or a flex column's item: a rail button's icon over its word) */
+  block?: boolean;
+}
+
+/** a word standing for a run's line break */
+const BREAK = '\n';
 
 /** A run of text in one style. */
 export interface Run { text: string; style: RunStyle }
@@ -47,8 +54,11 @@ function collapsed(runs: Run[]): Run[] {
 
 /** The words of `runs`, each with the space after it, in its run's style (a run kept whole, one piece). */
 function wordsOf(runs: Run[]): Run[] {
-  return runs.flatMap((run) => (run.style.whole ? [run] : run.text.split(/(?<= )/))
-    .map((piece) => (typeof piece === 'string' ? { text: piece, style: run.style } : piece)));
+  return runs.flatMap((run) => {
+    const words = (run.style.whole ? [run] : run.text.split(/(?<= )/))
+      .map((piece) => (typeof piece === 'string' ? { text: piece, style: run.style } : piece));
+    return run.style.block ? [...words, { text: BREAK, style: run.style }] : words;
+  });
 }
 
 /** A row of words that wraps at its width: set from runs, its panels made or taken away as their count changes. */
@@ -69,7 +79,12 @@ export class RunLine {
     const words = wordsOf(runs);
     while (this.words.length > words.length) this.words.pop()!.remove();
     while (this.words.length < words.length) this.words.push(new Panel(this.panel, { shrink: 0 }));
-    words.forEach((word, at) => this.words[at].say(word.text, word.style));
+    words.forEach((word, at) => {
+      const broken = word.text === BREAK;
+      // (a break is a row's whole width and no height, so the next word starts a line of its own)
+      this.words[at].style({ basis: broken ? '100%' : undefined, height: broken ? 0 : undefined });
+      this.words[at].say(broken ? '' : word.text, word.style);
+    });
     return this;
   }
 
