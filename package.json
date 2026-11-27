@@ -25,6 +25,8 @@
     "handref": "node tools/handref/run.mjs",
     "fire-bake": "node tools/lab/node/fireBakeSheet.mjs",
     "lab:test": "node --test \"tools/lab/test/*.test.mjs\"",
+    "api:test": "node --test \"src/engine/api/**/*.test.ts\"",
+    "api:typecheck": "tsc --noEmit -p src/engine/api/tsconfig.json",
     "stalls": "node tools/stalls/stalls.mjs",
     "stalls:test": "node --test \"tools/stalls/test/*.test.mjs\"",
     "traces:build": "npm --prefix server/traces/web run build",
