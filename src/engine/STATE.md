@@ -592,6 +592,9 @@ the SCSS. In the order they're taken: the kit's own pieces first, then what show
   box is a column: its top is `justify`), the bug report's too; a box lifted over the screen took no press where it
   lay over a later column (the bug report's picture's tick on a phone: the hit test tries lifted boxes first over the
   whole tree); a `<br>` broke no line; an email address reached past its pane (`anywhere`).
-- [ ] Hero selection's panels, Play together and its rooms, How to play, the village's map.
+- [x] How to play (`ui/helpSheet.ts`, the controls `controlsHelpSheet.ts`, the rules `helpTextSheet.ts`): `lab ui
+  --states help --ab` at 1920x1080 and 844x390@3, its buttons and keyboard within 0.1% of main's; the mouse's
+  callouts show their skills' pictures (the pause menu's too), the rules' bold words bold.
+- [ ] Hero selection's panels, Play together and its rooms, the village's map.
 - [ ] The guide's pages, the talk, the trade, the merchant, the drink.
 - [ ] The loading screen (styled before any script runs: the last, if at all).

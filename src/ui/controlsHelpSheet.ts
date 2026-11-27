@@ -229,7 +229,30 @@ export const CONTROLS_HELP: Sheet = [
   { at: '.ms-do', text: { color: INK } },
   { at: '.ms-do i', text: (element) => ({ color: keyColour(element),
     shadows: [{ x: 0, y: 0, blur: 4, color: keyColour(element) }] }) },
+  // a click's skill's picture beside its name (before it on the right, after it on the left: `row-reverse`)
+  { at: '.ms-do:has(i.art)', flex: true, box: { direction: 'row', alignItems: 'center' } },
+  { at: '.ms-label.lb .ms-do:has(i.art)', box: { direction: 'row-reverse' } },
+  { at: '.ms-do i.art', box: (element) => {
+    const side = 18 * zoomOf(element);
+    return { width: side, height: side, shrink: 0, margin: [0, 5 * zoomOf(element)] };
+  }, look: { radius: 2 }, paint: calloutArt },
 ];
+
+/** A callout's skill picture, cut to its square (`background: center / cover`). */
+function calloutArt(element: Element, w: number, h: number): Painted | null {
+  const art = (element as HTMLElement).style.backgroundImage;
+  const url = art ? /url\(["']?([^"')]+)["']?\)/.exec(art)?.[1] : undefined;
+  if (!url) return null;
+  const image = artLoaded(url, () => undefined);
+  if (!image) return null;
+  return {
+    key: `${url} ${w}x${h}`,
+    paint: (c) => {
+      const side = Math.max(w, h);
+      c.drawImage(image, (w - side) / 2, (h - side) / 2, side, side);
+    },
+  };
+}
 
 /** `colour` as `#rrggbb` for `alpha` (a key's colour may be a CSS variable's value already resolved, or the accent). */
 function hexOf(colour: string): string {

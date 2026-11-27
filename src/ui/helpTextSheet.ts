@@ -13,6 +13,8 @@ export const HELP_TEXT: Sheet = [
   { at: '.help-text', flex: true, box: { direction: 'column' }, text: { size: 15, line: 1.45, align: 'start' } },
   { at: '.help-text p', box: { margin: [0, 0, PARAGRAPH, 0] } },
   { at: '.help-text p:first-child', box: { margin: [PARAGRAPH, 0, PARAGRAPH, 0] } },
+  // (`b` is bold as the browser's own style has it: the kit's runs take only what a rule gives)
+  { at: '.help-text b, .ht-lead b', text: { weight: 700 } },
   { at: '.gold', text: { color: HIGHLIGHT } },
   { at: '.red', text: { color: DANGER } },
   { at: '.sm-title', text: () => ({ face: 'display', size: 32, weight: 900, color: accent() }) },
