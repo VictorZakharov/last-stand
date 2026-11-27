@@ -10,7 +10,9 @@
 // button's `:hover` (`hover`, its `filter: brightness()` as `lit`), an SVG icon (`picture`). The cascade is the sheet's
 // order: a later rule wins, so a port lists its rules as the SCSS's specificity orders them.
 import { Panel, onFrame, type Scaled } from './panel';
-import { pressable, standIn, type PressState } from './press';
+import { standIn, type PressState } from './press';
+import { forwards, unforward, type Forwarded } from './forward';
+import { engineCanvas } from '../../engine/index';
 import { RunLine, runsOf, type RunStyle } from './runs';
 import { svgArt } from './svgArt';
 import { scrolls } from './scroll';
@@ -35,6 +37,9 @@ export interface Rule {
   box?: Dyn<PanelStyle>;
   /** laid out as CSS's flex or grid (`display: flex`): what's in it is boxes, never runs of a line of text */
   flex?: boolean;
+  /** it and all in it take the pointer (CSS's `pointer-events: auto` on a box the page's `.kit-mirror` turns off):
+   *  the pointer's events over them are the page's elements' (`forward.ts`), none of the world's */
+  hits?: boolean;
   /** what's in it scrolls (`overflow-y: auto`): the wheel and a finger's drag move it (`scroll.ts`) */
   scrolls?: boolean;
   /** words after its own (CSS's `::after` with `content`), in their style */
@@ -84,6 +89,8 @@ interface Node {
   picture: Panel | null;
   kids: Node[];
   state: PressState;
+  /** whether it takes the pointer, by its rules or what's round it */
+  hits: boolean;
   /** whether it was made to scroll */
   scrolling: boolean;
   /** the layout's and the look's fields it was last given, so a field no rule gives now is taken back */
@@ -137,7 +144,7 @@ function litLook(look: PanelLook, by: number): PanelLook {
 }
 
 /** A screen of the page's drawn by the kit, following its element each frame. */
-export class SheetTree {
+export class SheetTree implements Forwarded {
   readonly root: Node;
   private readonly stop: () => void;
 
@@ -147,7 +154,40 @@ export class SheetTree {
     private readonly base: TextStyle = BODY) {
     this.root = this.make(element, parent ?? new Panel(null, { position: 'absolute', inset: 0 }, {}, scaled));
     standIn(element, this.root.panel);
-    this.stop = onFrame(() => this.follow(this.root, this.base, ''));
+    this.stop = onFrame(() => this.follow(this.root, this.base, '', false));
+    forwards(this);
+  }
+
+  /** The deepest element taking the pointer drawn under (`x`, `y`) css px (the last drawn of those that meet). */
+  elementAt(x: number, y: number): Element | null {
+    const under = (node: Node): Element | null => {
+      if (!node.panel.seen) return null;
+      const box = node.panel.rect();
+      const inside = !!box && x >= box.x && y >= box.y && x < box.x + box.w && y < box.y + box.h;
+      // (what's in a box may reach past it, unless it's cut there)
+      if (!inside && node.panel.styled.overflow && node.panel.styled.overflow !== 'visible') return null;
+      for (let at = node.kids.length - 1; at >= 0; at--) {
+        const found = under(node.kids[at]);
+        if (found) return found;
+      }
+      return inside && node.hits ? node.element : null;
+    };
+    return under(this.root);
+  }
+
+  /** Each node shown as the pointer stands: over it or what's in it (CSS's `:hover`), pressing it (`:active`). */
+  hovers(over: Element | null, pressed: Element | null): void {
+    const show = (node: Node): void => {
+      const hovered = !!over && node.element.contains(over);
+      node.state = hovered ? (pressed && node.element.contains(pressed) ? 'down' : 'hover') : 'none';
+      for (const kid of node.kids) show(kid);
+    };
+    show(this.root);
+    const canvas = engineCanvas();
+    if (canvas && over && this.root.element.contains(over)) {
+      const hand = over.closest('button:not(:disabled), [draggable="true"], a, label, select');
+      canvas.style.cursor = hand ? 'var(--cursor-hand)' : '';
+    }
   }
 
   /** The panel standing for the screen's element. */
@@ -158,16 +198,14 @@ export class SheetTree {
   /** Taken away, the page's element left as it is. */
   remove(): void {
     this.stop();
+    unforward(this);
     this.root.panel.remove();
   }
 
   private make(element: Element, parent: Panel): Node {
     const panel = new Panel(parent, {});
     const node: Node = { element, panel, ring: null, brackets: null, line: null, picture: null, kids: [],
-      state: 'none', scrolling: false, given: { box: [], look: [] }, matched: null };
-    if (element instanceof HTMLButtonElement) {
-      pressable({ panel, mirror: element, shows: (state) => { node.state = state; } });
-    }
+      state: 'none', hits: false, scrolling: false, given: { box: [], look: [] }, matched: null };
     // (each element's box read where it's drawn: the lab's, the tutorial's ring's)
     standIn(element, panel);
     return node;
@@ -182,10 +220,12 @@ export class SheetTree {
   }
 
   /** `node` brought up to its element's markup and classes, its text from `around` (its parent's). */
-  private follow(node: Node, around: TextStyle & { align?: SheetText['align'] }, parentKey: string): void {
+  private follow(node: Node, around: TextStyle & { align?: SheetText['align'] }, parentKey: string,
+    hitsRound: boolean): void {
     const element = node.element;
     const key = `${parentKey}>${ownKey(element)}`;
     const rules = this.rulesOf(node, key);
+    node.hits = hitsRound;
     const box: PanelStyle = { direction: element instanceof HTMLButtonElement ? 'row' : 'column' };
     if (element instanceof HTMLButtonElement) Object.assign(box, { alignItems: 'center', justify: 'center' });
     let look: PanelLook = {};
@@ -200,6 +240,7 @@ export class SheetTree {
       if (rule.box) Object.assign(box, now(rule.box));
       if (rule.flex !== undefined) flex = rule.flex;
       if (rule.after) after = rule.after;
+      if (rule.hits !== undefined) node.hits = rule.hits;
       if (rule.scrolls && !node.scrolling) {
         node.scrolling = true;
         scrolls(node.panel);
@@ -219,7 +260,7 @@ export class SheetTree {
     const hidden = (element as HTMLElement).hidden || element.classList.contains('hidden');
     if (hidden) box.display = 'none';
     box.display ??= 'flex';
-    if (element instanceof HTMLButtonElement) look.hits = true;
+    if (node.hits) look.hits = true;
     node.panel.style(whole(box, node.given.box));
     node.panel.look(whole(look, node.given.look));
     node.given = { box: Object.keys(box), look: Object.keys(look) };
@@ -233,7 +274,7 @@ export class SheetTree {
       this.sayText(node, text, after);
       return;
     }
-    this.followKids(node, text, key);
+    this.followKids(node, text, key, node.hits);
   }
 
   /** Its ring and its brackets, made as first asked for, shown as asked. */
@@ -281,14 +322,14 @@ export class SheetTree {
   }
 
   /** Its elements' panels, made again where the markup changed. */
-  private followKids(node: Node, text: TextStyle, key: string): void {
+  private followKids(node: Node, text: TextStyle, key: string, hits: boolean): void {
     const elements = [...node.element.children].filter((child) => !SKIPPED.has(child.tagName.toUpperCase()));
     const same = elements.length === node.kids.length && elements.every((child, at) => node.kids[at].element === child);
     if (!same) {
       for (const kid of node.kids) kid.panel.remove();
       node.kids = elements.map((child) => this.make(child, node.panel));
     }
-    for (const kid of node.kids) this.follow(kid, text, key);
+    for (const kid of node.kids) this.follow(kid, text, key, hits);
   }
 }
 

@@ -43,6 +43,7 @@ const CARD: Sheet = [
   {
     at: '#vcard',
     flex: true,
+    hits: true,
     box: { direction: 'column', gap: 12, padding: [18, 22, 14, 22], width: 380, maxWidth: '100%', border: 2 },
     look: { fill: ['rgba(8,7,9,.94)', 'rgba(8,7,9,.86)'], border: FRAME_DARK,
       shadow: { blur: 40, y: 10, color: 'rgba(0,0,0,.8)' } },
