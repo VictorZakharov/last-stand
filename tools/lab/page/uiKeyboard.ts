@@ -3,6 +3,8 @@
 // "Nothing fixed": sized for the column alone, on a 1920 screen the keys at their 46 px left the box no room after P).
 // Said: each keyboard's width, its last lit key's end and where its fade begins. Its canary (`KEYBOARD_CANARY`)
 // shrinks the box to its rows, as it was, so P lies under the fade again.
+import { boxOf, seenOf } from './lab';
+import { uiScales } from '../../../src/ui/scale';
 import type { Found, Planted } from './uiKit';
 
 /** how wide the diagram's faded edge is (css px of the diagram: `.kb`'s mask in src/ui/styles/_modals.scss) */
@@ -15,11 +17,17 @@ export const KEYBOARD_CANARY: Planted = { name: 'under the faded edge', what: 't
 
 /** The keyboard diagrams shown now. */
 const shownKeyboards = (): HTMLElement[] =>
-  [...document.querySelectorAll<HTMLElement>('.kb')].filter((keyboard) => keyboard.checkVisibility());
+  [...document.querySelectorAll<HTMLElement>('.kb')].filter((keyboard) => seenOf(keyboard) && boxOf(keyboard).width > 0);
+
+/** The diagrams' own zoom: 0.6 in the pause menu on a short screen (`.pause-box .controls-help.diagrams`). */
+function diagramZoom(keyboard: Element): number {
+  return keyboard.closest('.pause-box') && matchMedia('(max-height: 520px)').matches ? 0.6 : 1;
+}
 
 /** The canary's plant: each keyboard shown fitted to its rows, no room after its last key (the fault as it was). */
 export function plantKeyboardFitted(): void {
-  for (const keyboard of shownKeyboards()) keyboard.style.width = 'fit-content';
+  // (every one: planted as the menu opens, before the UI kit has drawn it)
+  for (const keyboard of document.querySelectorAll<HTMLElement>('.kb')) keyboard.style.width = 'fit-content';
 }
 
 /** Each keyboard shown: every lit key's end before the start of its faded edge. */
@@ -27,14 +35,16 @@ export function keyboardWhole(): Found {
   const lines: string[] = [];
   const problems: string[] = [];
   for (const keyboard of shownKeyboards()) {
-    const box = keyboard.getBoundingClientRect();
-    // (the fade is in the diagram's own css px; the box on screen is that times the menu's scale)
-    const scale = box.width / keyboard.offsetWidth;
+    const box = boxOf(keyboard);
+    // (the fade is in the diagram's own css px; the box on screen is that times the menu's scale, the UI kit's
+    // where it draws it, the page's box out of sight)
+    const drawn = keyboard.closest('.kit-mirror');
+    const scale = drawn ? uiScales.ui * diagramZoom(keyboard) : box.width / keyboard.offsetWidth;
     const fadeFrom = box.right - FADE_PX * scale;
     const lit = [...keyboard.querySelectorAll<HTMLElement>('.kb-key.on')];
     let last = { name: '', end: -Infinity };
     for (const key of lit) {
-      const end = key.getBoundingClientRect().right;
+      const end = boxOf(key).right;
       const name = key.querySelector('b')?.textContent ?? '?';
       if (end > last.end) last = { name, end };
       if (end > fadeFrom + ROUNDING_PX) {

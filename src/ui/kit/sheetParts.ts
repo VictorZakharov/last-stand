@@ -25,6 +25,8 @@ export function gather(rules: Rule[], element: Element, round: Panel | null, sta
     if (rule.flex !== undefined) out.flex = rule.flex;
     if (rule.hits !== undefined) out.hits = rule.hits;
     if (rule.after) out.after = rule.after;
+    if (rule.before) out.before = rule.before;
+    if (rule.says !== undefined) out.says = now(rule.says, element, round);
     if (rule.brackets) out.brackets = true;
     if (rule.picture) out.picture = now(rule.picture, element, round);
     if (rule.marks) out.marks = [...out.marks, ...rule.marks];

@@ -152,6 +152,22 @@ export function kitDrawsItself(element: Element): boolean {
   return !!KIT_PRESS?.drawsItself?.(element);
 }
 
+/** How far `element` scrolls past what it shows (css px): where the UI kit draws it, its panel's; else the page's. */
+export function scrollMoreOf(element: Element): number {
+  return KIT_DRAWN ? KIT_DRAWN.scrollMore(element) : element.scrollHeight - element.clientHeight;
+}
+
+/** `element` scrolled into view (centred) where the UI kit draws it, else on the page. */
+export function revealOf(element: Element): void {
+  if (KIT_DRAWN) KIT_DRAWN.reveal(element);
+  else element.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'instant' });
+}
+
+/** The page's element under (`x`, `y`) css px taking the pointer: one the UI kit draws there, else the page's own. */
+export function elementUnder(x: number, y: number): Element | null {
+  return KIT_DRAWN ? KIT_DRAWN.elementUnder(x, y) : document.elementFromPoint(x, y);
+}
+
 /** Whether `element` can be seen: where the UI kit draws it, its panel's opacity; else the page's own. */
 export function seenOf(element: Element): boolean {
   if (!KIT_PRESS || !element.closest('.kit-mirror')) {
@@ -263,6 +279,13 @@ interface KitPress {
   drawsItself?(element: Element): boolean;
 }
 const KIT_PRESS = Object.values(import.meta.glob<KitPress>('../../../src/ui/kit/press.ts', { eager: true }))[0];
+/** what the UI kit draws read as the page's (src/ui/kit/drawn.ts), where the tree has it */
+interface KitDrawn {
+  scrollMore(element: Element): number;
+  reveal(element: Element): void;
+  elementUnder(x: number, y: number): Element | null;
+}
+const KIT_DRAWN = Object.values(import.meta.glob<KitDrawn>('../../../src/ui/kit/drawn.ts', { eager: true }))[0];
 const RUN_PHASES = Object.values(import.meta.glob<RunPhaseModule>('../../../src/world/runPhase.ts', { eager: true }));
 
 /**

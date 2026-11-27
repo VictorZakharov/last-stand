@@ -362,6 +362,9 @@ export function layer(z: number): Panel {
   return made;
 }
 
+/** Every layer made so far, with its z. */
+export const everyLayer = (): [number, Panel][] => [...layers.entries()];
+
 const everyFrame = new Set<() => void>();
 /** `tick` run before each frame's panels are brought up to date (an animation's step), until `stop` is called. */
 export function onFrame(tick: () => void): () => void {

@@ -35,12 +35,18 @@ export function scrollRoom(panel: Panel): number {
   if (!box) return 0;
   const k = uiScales[panel.scaled];
   const scrolled = panel.scrolled * k;
-  let bottom = 0;
+  // (what's in its flow reaches its foot's padding past it; what's laid absolutely, its own foot alone, as CSS counts
+  // them: a box's ring and brackets laid across it read as content and it scrolled by its padding)
+  let flowing = 0;
+  let laid = 0;
   for (const child of panel.inside) {
     const at = child.rect();
-    if (at) bottom = Math.max(bottom, at.y + at.h + footOf(child.styled.margin) * k + scrolled - box.y);
+    if (!at) continue;
+    const foot = at.y + at.h + scrolled - box.y;
+    if (child.styled.position === 'absolute') laid = Math.max(laid, foot);
+    else flowing = Math.max(flowing, foot + footOf(child.styled.margin) * k);
   }
-  const reach = bottom + (footOf(panel.styled.padding) + footOf(panel.styled.border)) * k;
+  const reach = Math.max(flowing + (footOf(panel.styled.padding) + footOf(panel.styled.border)) * k, laid);
   return Math.max(0, (reach - box.h) / k);
 }
 

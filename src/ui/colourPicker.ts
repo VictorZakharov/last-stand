@@ -6,6 +6,7 @@
 // button"; every swatch kept beside it, from review: "Lets keep the original colors, they were tested and look good"): a disc of hue round and
 // saturation out, and a slider of lightness under it, held to what reads as cloth (`CUSTOM_RANGE`); picked as the
 // finger or the mouse lifts off the disc, or as the slider is let go, so a party's host is asked once a pick.
+import { shownBox } from './kit/press';
 import { CUSTOM_RANGE, HERO_COLOURS, customColourId, heroColour } from '../data/heroColours';
 import { ownColour } from '../net/heroColour';
 import { chooseColour, session } from '../net/session';
@@ -95,7 +96,8 @@ function bindWheel(wheel: HTMLElement): void {
   const canvas = wheel.querySelector('canvas')!;
   drawDisc(canvas);
   const pickAt = (event: PointerEvent): void => {
-    const box = canvas.getBoundingClientRect();
+    // (where it's shown: the kit draws it in the pause menu, its page element out of sight)
+    const box = shownBox(canvas);
     const x = ((event.clientX - box.left) / box.width) * 2 - 1;
     const y = ((event.clientY - box.top) / box.height) * 2 - 1;
     picking.h = (Math.atan2(y, x) / (Math.PI * 2) + 1) % 1;

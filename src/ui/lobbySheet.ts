@@ -38,6 +38,21 @@ export function sidewaysRoom(): number {
   return innerWidth / uiScales.ui - left - right - RAIL - css(PAD) - RIGHT.across;
 }
 
+/** a row of tabs over its pages (`.tabs`, `.tab`: the inventory's, the pause menu's) */
+export const TABS: Sheet = [
+  { at: '.tabs', flex: true, box: { direction: 'row', gap: 4, border: [0, 0, 1, 0], margin: [0, 0, 10, 0] },
+    look: { border: alpha(FRAME, 0.45) } },
+  {
+    at: '.tab',
+    box: { grow: 1, basis: 0, padding: [8, 6], border: [1, 1, 0, 1] },
+    look: { fill: WELL, border: alpha(FRAME, 0.35), radius: [3, 3, 0, 0] },
+    text: { face: 'display', size: 13, weight: 700, spacing: 0.5, color: INK_DIM, whole: true, align: 'center' },
+    hover: { text: { color: INK } },
+  },
+  { at: '.tab.active', look: { fill: WELL_LIT }, text: () => ({ color: accent() }),
+    hover: { text: { color: accent() } } },
+];
+
 export const LOBBY: Sheet = [
   {
     at: '#menu',
@@ -63,17 +78,7 @@ export const LOBBY: Sheet = [
     box: { direction: 'column', width: RIGHT.width, padding: [12, 14, 14, 14], border: 2 },
     brackets: true,
   },
-  { at: '.tabs', flex: true, box: { direction: 'row', gap: 4, border: [0, 0, 1, 0], margin: [0, 0, 10, 0] },
-    look: { border: alpha(FRAME, 0.45) } },
-  {
-    at: '.tab',
-    box: { grow: 1, basis: 0, padding: [8, 6], border: [1, 1, 0, 1] },
-    look: { fill: WELL, border: alpha(FRAME, 0.35), radius: [3, 3, 0, 0] },
-    text: { face: 'display', size: 13, weight: 700, spacing: 0.5, color: INK_DIM, whole: true, align: 'center' },
-    hover: { text: { color: INK } },
-  },
-  { at: '.tab.active', look: { fill: WELL_LIT }, text: () => ({ color: accent() }),
-    hover: { text: { color: accent() } } },
+  ...TABS,
   { at: '.tab-page', flex: true, box: { direction: 'column', minHeight: 0, grow: 1 } },
   { at: '.tab-page.off', box: { display: 'none' } },
   { at: '.tab-page[data-page="attrs"]', scrolls: true, box: { overflow: 'scroll' } },

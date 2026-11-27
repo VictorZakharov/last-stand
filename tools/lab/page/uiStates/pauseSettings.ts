@@ -14,7 +14,7 @@ const joinFound = (a: Found, b: Found): Found => ({
 
 /** The tab within the window (with the canary, the tab alone); else its colours picked and no hour in a run. */
 async function settingsChecked(canary: boolean, lab: Lab): Promise<Found> {
-  if (canary) return pauseShown('settings');
+  if (canary) return pauseShown(lab, 'settings');
   return joinFound(await pauseColourChecked(lab), hourHiddenInRun());
 }
 

@@ -12,6 +12,7 @@ import { overPanels } from '../../core/input';
 import { uiHit } from '../../engine/ui';
 import { Panel, LAYERS, layer } from './panel';
 import { uiScales } from '../scale';
+import { beginAltRange, dragAltRange, endAltRange } from '../altForms';
 
 /** A screen whose elements take the pointer's events: the element drawn under a point, if any takes the pointer. */
 export interface Forwarded {
@@ -37,6 +38,8 @@ let drag: { source: Element; data: DataTransfer; over: Element | null; accepted:
  *  stash item opened its sheet, and the browser's click of the same tap, coming after, landed on the sheet's backdrop
  *  and shut it */
 let clicked = false;
+/** whether a slider's being dragged (`altForms.ts`) */
+let sliding = false;
 
 /** `screen`'s elements take the pointer's events from now on (the last one given is over the ones before). */
 export function forwards(screen: Forwarded): void {
@@ -51,7 +54,7 @@ export function unforward(screen: Forwarded): void {
 }
 
 /** The element drawn under (`x`, `y`) taking the pointer, of the screen laid over the others first. */
-function elementAt(x: number, y: number): Element | null {
+export function elementAt(x: number, y: number): Element | null {
   for (let at = screens.length - 1; at >= 0; at--) {
     const found = screens[at].elementAt(x, y);
     if (found) return found;
@@ -181,14 +184,19 @@ function endDrag(e: PointerEvent): void {
 function release(e: PointerEvent, under: Element | null): void {
   const began = pressed;
   pressed = null;
+  // (told where it began too, as the pointer's capture would tell it: a held button let go off it, a colour disc's
+  // drag ended past its edge)
+  if (began && (!under || !began.element.contains(under))) began.element.dispatchEvent(pointer('pointerup', e));
   if (!under) return;
   under.dispatchEvent(pointer('pointerup', e));
   under.dispatchEvent(mouse('mouseup', e));
   if (!began || began.button !== e.button || e.button !== 0) return;
   const shared = chainOf(began.element).find((element) => element === under || element.contains(under));
   if (!shared) return;
-  const button = shared.closest('button');
-  if (button) button.click();
+  // (a button, a label, a ticked box and a summary by their own `click`: a dispatched click ticks nothing, and a
+  // disabled button refuses its own)
+  const own = shared.closest('button, label, input, summary');
+  if (own instanceof HTMLElement) own.click();
   else shared.dispatchEvent(mouse('click', e));
   clicked = true;
 }
@@ -214,6 +222,10 @@ function listen(): void {
     if (!e.isTrusted) return;
     if (drag) {
       moveDrag(e);
+      return;
+    }
+    if (sliding) {
+      dragAltRange({ x: e.clientX, y: e.clientY });
       return;
     }
     if (!onCanvas(e)) {
@@ -249,11 +261,17 @@ function listen(): void {
     pressed = { element: under, x: e.clientX, y: e.clientY, button: e.button };
     under.dispatchEvent(pointer('pointerdown', e));
     under.dispatchEvent(mouse('mousedown', e));
+    // (a slider pressed is dragged along, wherever the pointer goes, till it's let go)
+    if (e.button === 0) sliding = beginAltRange(under, { x: e.clientX, y: e.clientY });
     toldAlready(e);
     showHover();
   }, true);
   window.addEventListener('pointerup', (e) => {
     if (!e.isTrusted) return;
+    if (sliding) {
+      sliding = false;
+      endAltRange();
+    }
     if (drag) {
       endDrag(e);
       showHover();
@@ -268,6 +286,10 @@ function listen(): void {
   window.addEventListener('pointercancel', (e) => {
     if (!e.isTrusted) return;
     if (drag) endDrag(e);
+    if (sliding) {
+      sliding = false;
+      endAltRange();
+    }
     pressed = null;
     over?.dispatchEvent(pointer('pointercancel', e));
     moveOver(null, e);

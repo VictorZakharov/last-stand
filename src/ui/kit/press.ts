@@ -219,7 +219,7 @@ export function drawnSeen(element: Element): boolean {
 }
 
 /** The panel drawn in place of `element`: its own, else the nearest round it (a slot's before its bar's). */
-function drawnFor(element: Element): Panel | null {
+export function drawnFor(element: Element): Panel | null {
   forgetGone();
   let nearest: { panel: Panel; depth: number } | null = null;
   const consider = (shown: Element, panel: Panel) => {

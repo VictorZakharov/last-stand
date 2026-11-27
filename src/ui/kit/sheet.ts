@@ -18,6 +18,7 @@ import { RunLine, runsOf, type RunStyle } from './runs';
 import { svgArt } from './svgArt';
 import { INK, alpha } from './theme';
 import { textField, type Field, type FieldInput } from './field';
+import { isSlider, isTicked, slider, tickBox, type Control } from './formControls';
 import { scrolls } from './scroll';
 import { uiScales } from '../scale';
 import { accent } from '../diagFrame';
@@ -44,6 +45,11 @@ interface Node {
   /** its words, where it's a line of text; its picture, where it's an SVG; its field, where it's a text field */
   line: RunLine | null;
   field: Field | null;
+  /** its ticked box or slider, where it's one */
+  control: Control | null;
+  /** the words it stands for, where it's a run of words beside boxes in its parent (CSS's anonymous box: a label's
+   *  words after its ticked box), its `element` then the parent's */
+  words: Text | null;
   picture: Panel | null;
   kids: Node[];
   state: PressState;
@@ -130,14 +136,25 @@ export class SheetTree implements Forwarded {
     this.top.remove();
   }
 
-  private make(element: Element, parent: Panel): Node {
+  private make(made: Element | Text, parent: Panel): Node {
     const panel = new Panel(parent, {});
+    const words = made instanceof Text ? made : null;
+    const element = words ? words.parentElement! : (made as Element);
     const node: Node = { element, panel, anchor: null, ring: null, brackets: null, painted: null, marks: [], line: null,
-      field: null, picture: null, kids: [], state: 'none', hits: false, scrolling: false, moving: null,
-      given: { box: [], look: [] }, matched: null };
-    // (each element's box read where it's drawn: the lab's, the tutorial's ring's)
-    standIn(element, panel);
+      field: null, control: null, words, picture: null, kids: [], state: 'none', hits: false, scrolling: false,
+      moving: null, given: { box: [], look: [] }, matched: null };
+    // (each element's box read where it's drawn: the lab's, the tutorial's ring's; a run of words stands for none)
+    if (!words) standIn(element, panel);
     return node;
+  }
+
+  /** A run of words beside boxes, in the text round it, its spaces at either end dropped as CSS's are there. */
+  private sayWords(node: Node, around: TextStyle & SheetText, hitsRound: boolean): void {
+    node.hits = hitsRound;
+    node.panel.look({ hits: hitsRound || undefined });
+    node.line ??= new RunLine(node.panel);
+    const text = (node.words!.textContent ?? '').replace(/\s+/g, ' ').trim();
+    node.line.set([{ text, style: around }]);
   }
 
   /** The rules matching `node`'s element, found again only as its key (its and its ancestors') changes. */
@@ -151,6 +168,10 @@ export class SheetTree implements Forwarded {
   /** `node` brought up to its element's markup and classes, its text from `around` (its parent's), inside `round`. */
   private follow(node: Node, around: TextStyle & SheetText, parentKey: string, hitsRound: boolean,
     round: Node | null): void {
+    if (node.words) {
+      this.sayWords(node, around, hitsRound);
+      return;
+    }
     const element = node.element;
     const key = `${parentKey}>${ownKey(element, this.styled)}`;
     const style = gather(this.rulesOf(node, key), element, round?.panel ?? null, node.state, around);
@@ -160,7 +181,8 @@ export class SheetTree implements Forwarded {
       scrolls(node.panel);
     }
     // (said each frame, shown too: a style keeps the fields it isn't given, and a card hidden once stayed hidden)
-    const hidden = (element as HTMLElement).hidden || element.classList.contains('hidden');
+    const hidden = (element as HTMLElement).hidden || element.classList.contains('hidden')
+      || (element as HTMLElement).style?.display === 'none';
     if (hidden) style.box.display = 'none';
     // (claimed again while it shows: an element moved to another tree and back, as the duel's ask into the rack's card
     // and out, kept the other's stand-in, and the lab read the card's page round it)
@@ -176,7 +198,12 @@ export class SheetTree implements Forwarded {
     this.decorate(node, style);
     if (style.picture || element instanceof SVGSVGElement) this.drawPicture(node, style.picture, style.turn);
     else if (isField(element)) this.fieldOf(node, element, style.text);
-    else if (isText(element) && !(style.flex && element.children.length)) this.sayText(node, style.text, style.after);
+    else if (isTicked(element) || isSlider(element)) {
+      node.control ??= isTicked(element) ? tickBox(node.panel, element) : slider(node.panel, element);
+      node.control.follow();
+    }
+    else if (isText(element) && !(style.flex && element.children.length)) this.sayText(node, style.text, style.after,
+      style.before, style.says);
     else this.followKids(node, style.text, key, node.hits);
     this.mark(node, style.marks);
   }
@@ -266,9 +293,10 @@ export class SheetTree implements Forwarded {
   }
 
   /** Its words as styled runs, each inline element in it styled by its rules. */
-  private sayText(node: Node, text: TextStyle & SheetText, after: Rule['after']): void {
+  private sayText(node: Node, text: TextStyle & SheetText, after: Rule['after'], before?: Rule['before'],
+    says?: string): void {
     node.line ??= new RunLine(node.panel);
-    const runs = runsOf(node.element, text, (inline, outer) => {
+    const runs = says !== undefined ? [{ text: says, style: text }] : runsOf(node.element, text, (inline, outer) => {
       if (inline.classList.contains('hidden') || (inline as HTMLElement).hidden) return null;
       let style: RunStyle = { ...outer };
       for (const rule of this.sheet) {
@@ -278,6 +306,7 @@ export class SheetTree implements Forwarded {
       return style;
     });
     if (after) runs.push({ text: after.says, style: { ...text, ...after.text } });
+    if (before) runs.unshift({ text: before.says, style: { ...text, ...before.text } });
     node.line.set(runs);
     const align = text.align === 'center' ? 'center' : text.align === 'end' ? 'end' : 'start';
     node.line.panel.style({ justify: align });
@@ -304,9 +333,13 @@ export class SheetTree implements Forwarded {
 
   /** Its elements' panels, made again where the markup changed. */
   private followKids(node: Node, text: TextStyle, key: string, hits: boolean): void {
-    const elements = [...node.element.children].filter((child) => !SKIPPED.has(child.tagName.toUpperCase())
-      && !this.sheet.some((rule) => rule.apart && child.matches(rule.at)));
-    const same = elements.length === node.kids.length && elements.every((child, at) => node.kids[at].element === child);
+    // (its elements, and any words of its own beside them, each a box)
+    const elements = [...node.element.childNodes].filter((child): child is Element | Text => child instanceof Text
+      ? !!child.textContent?.trim()
+      : child instanceof Element && !SKIPPED.has(child.tagName.toUpperCase())
+        && !this.sheet.some((rule) => rule.apart && child.matches(rule.at)));
+    const same = elements.length === node.kids.length
+      && elements.every((child, at) => (node.kids[at].words ?? node.kids[at].element) === child);
     if (!same) {
       for (const kid of node.kids) {
         stopFields(kid);
@@ -324,6 +357,7 @@ export class SheetTree implements Forwarded {
 /** Whether `element` is a field typed into: a text input or a text area (not a box ticked, a slider or a button). */
 function isField(element: Element): element is FieldInput {
   if (element instanceof HTMLTextAreaElement) return true;
+  // (a ticked box and a slider are `formControls.ts`'s)
   return element instanceof HTMLInputElement && !NOT_TYPED.has(element.type);
 }
 

@@ -49,6 +49,10 @@ export interface Rule {
   scrolls?: boolean;
   /** words after its own (CSS's `::after` with `content`), in their style */
   after?: { says: string; text?: SheetText };
+  /** words before its own (CSS's `::before`, a `summary`'s marker), in their style */
+  before?: { says: string; text?: SheetText };
+  /** words in place of its own (a `::after` laid over them with `content`: a held button's hint) */
+  says?: Dyn<string>;
   /** its look (not inherited) */
   look?: Dyn<PanelLook>;
   /** its text's style, inherited by everything inside it as CSS inherits font and colour */
@@ -165,6 +169,8 @@ export interface Gathered {
   paint?: Rule['paint'];
   flex: boolean;
   after?: Rule['after'];
+  before?: Rule['before'];
+  says?: string;
   hits?: boolean;
   scrolls: boolean;
   ease: number;

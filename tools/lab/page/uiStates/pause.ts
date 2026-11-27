@@ -12,8 +12,8 @@ const STATE: Steps = {
     if (asked.canary) plantKeyboardFitted();
   },
   close: closePause,
-  check: () => {
-    const shown = pauseShown('controls');
+  check: async (_canary, lab) => {
+    const shown = await pauseShown(lab, 'controls');
     const keyboard = keyboardWhole();
     return { lines: [...shown.lines, ...keyboard.lines], problems: [...shown.problems, ...keyboard.problems] };
   },
