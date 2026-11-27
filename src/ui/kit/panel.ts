@@ -10,6 +10,7 @@ import { atlasSide } from '../overlay/atlas';
 import { Label } from '../overlay/layer';
 import { drawText, measure, shadowReach, type TextStyle } from '../overlay/paint';
 import { normalLine } from './lineHeight';
+import { drawWrapped, wrapText, wrappedHeight, type TextAlign, type Wrapped } from './wrap';
 import { engineCanvas } from '../../engine/index';
 import { overFrame } from '../../core/renderer';
 import {
@@ -31,6 +32,9 @@ interface Text {
   h: number;
   reach: number;
   lead: number;
+  /** how its lines stand where it wraps at its panel's width, and the lines it was last broken into */
+  align: TextAlign | null;
+  wrapped: Wrapped | null;
 }
 
 /** How a picture is painted: its top left at the origin, `scale` the canvas's pixels per px of it. */
@@ -91,10 +95,14 @@ export class Panel {
   }
 
   /** It says `text` in `style` from now on (painted again only when either changed); nothing at all for '', laid
-   *  out as CSS lays out an empty box (no line: as high as its padding and border). */
-  say(text: string, style: TextStyle): this {
+   *  out as CSS lays out an empty box (no line: as high as its padding and border). With `wrap`, its lines are
+   *  broken at its own width inside its padding, standing as `wrap` says: that width is its parent's to give (a
+   *  width, a share of the row, or stretched across a column), as its text asks for none. */
+  say(text: string, style: TextStyle, wrap: TextAlign | null = null): this {
     if (text === '') return this.silence();
-    if (this.text && this.text.text === text && this.text.style === style) return this;
+    const same = this.text && this.text.text === text && this.text.style === style;
+    if (same && this.text!.align === wrap) return this;
+    if (wrap) return this.sayWrapped(text, style, wrap);
     const label = this.text?.label ?? new Label(0);
     const measured = measure(text, style);
     const reach = shadowReach(style);
@@ -106,10 +114,52 @@ export class Panel {
     const line = style.line ? style.line * style.size : normalLine(style);
     const lead = line ? (line - measured.h) / 2 : 0;
     const restyle = (this.text?.lead ?? 0) !== lead;
-    this.text = { text, style, label, w: measured.w, h: measured.h, reach, lead };
+    this.text = { text, style, label, w: measured.w, h: measured.h, reach, lead, align: null, wrapped: null };
     this.paintedAt = 0;
     if (restyle) uiRestyle(this.id, this.styleFloats());
     return this;
+  }
+
+  /** `say`'s text broken at its panel's width, as wide as that and as tall as its lines (`wrapAgain`). */
+  private sayWrapped(text: string, style: TextStyle, align: TextAlign): this {
+    const label = this.text?.label ?? new Label(0);
+    label.sizedBy = this.scaled;
+    const restyle = (this.text?.lead ?? 0) !== 0;
+    const width = this.text?.wrapped?.width ?? 0;
+    this.text = { text, style, label, w: 0, h: 0, reach: shadowReach(style), lead: 0, align, wrapped: null };
+    this.wrapAt(width);
+    if (restyle) uiRestyle(this.id, this.styleFloats());
+    return this;
+  }
+
+  /** Its wrapped text broken again at `width` (px of the reference layout), its picture and size with it. */
+  private wrapAt(width: number): void {
+    const text = this.text;
+    if (!text?.style || !text.align) return;
+    const style = text.style;
+    const wrapped = wrapText(text.text, style, width, text.align);
+    const reach = text.reach;
+    text.wrapped = wrapped;
+    text.w = width;
+    text.h = wrappedHeight(wrapped);
+    const w = Math.ceil(width + reach * 2);
+    const h = Math.ceil(text.h + reach * 2);
+    text.label.show({ w, h, paint: (c, s) => drawWrapped(c, wrapped, reach, reach, style, s) });
+    this.paintedAt = 0;
+  }
+
+  /** Its wrapped text broken again where its panel's width inside its padding and border has changed. */
+  private wrapAgain(k: number): void {
+    const text = this.text;
+    if (!text?.align) return;
+    const box = uiRect(this.id);
+    if (!box) return;
+    const [, right, , left] = four(this.styleNow.padding ?? 0);
+    const [, edgeRight, , edgeLeft] = four(this.styleNow.border ?? 0);
+    const sides = [right, left].reduce<number>((sum, side) => sum + (typeof side === 'number' ? side : 0), 0);
+    const width = Math.max(0, box.w / k - sides - edgeRight - edgeLeft);
+    if (Math.abs(width - (text.wrapped?.width ?? -1)) < 0.5) return;
+    this.wrapAt(width);
   }
 
   /** It shows a picture `w` by `h` px painted by `paint`, laid out as an image is, and painted again only when
@@ -120,7 +170,7 @@ export class Panel {
     label.sizedBy = this.scaled;
     label.show({ w, h, paint });
     const restyle = (this.text?.lead ?? 0) !== 0;
-    this.text = { text: key, style: null, label, w, h, reach: 0, lead: 0 };
+    this.text = { text: key, style: null, label, w, h, reach: 0, lead: 0, align: null, wrapped: null };
     this.paintedAt = 0;
     if (restyle) uiRestyle(this.id, this.styleFloats());
     return this;
@@ -159,6 +209,21 @@ export class Panel {
       if ((panel.lookNow.opacity ?? 1) <= 0) return false;
     }
     return true;
+  }
+
+  /** The panels inside it. */
+  get inside(): readonly Panel[] {
+    return [...this.children];
+  }
+
+  /** Its layout as it was last given. */
+  get styled(): Readonly<PanelStyle> {
+    return this.styleNow;
+  }
+
+  /** How far what's inside it is scrolled up (px of the reference layout). */
+  get scrolled(): number {
+    return this.lookNow.scroll ?? 0;
   }
 
   /** What it says, if anything (the lab reads it). */
@@ -207,6 +272,7 @@ export class Panel {
     const k = this.scale();
     const text = this.text;
     let relook = false;
+    if (text?.align) this.wrapAgain(k);
     if (text) {
       const paint = ratio * k;
       const label = text.label;
@@ -214,7 +280,7 @@ export class Panel {
         label.paint(paint);
         if (label.painted === paint) {
           this.paintedAt = paint;
-          uiContent(this.id, { w: text.w * k, h: text.h * k });
+          uiContent(this.id, contentOf(text, k));
           relook = true;
         }
       }
@@ -223,10 +289,16 @@ export class Panel {
       this.writtenAt = k;
       uiRestyle(this.id, this.styleFloats());
       relook = true;
-      if (text) uiContent(this.id, { w: text.w * k, h: text.h * k });
+      if (text) uiContent(this.id, contentOf(text, k));
     }
     if (relook) uiRelook(this.id, lookFloats(this.fullLook(), k));
   }
+}
+
+/** The size a panel's text asks of its layout (px of the screen): a wrapped text asks for no width (its panel's is
+ *  given it, and a width asked would hold the panel from narrowing as the window does), only its lines' height. */
+function contentOf(text: Text, k: number): { w: number; h: number } {
+  return { w: text.align ? 0 : text.w * k, h: text.h * k };
 }
 
 /** Whether any of `change`'s fields differs from `now`'s (a list or an object by its parts as text). */

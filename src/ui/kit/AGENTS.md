@@ -63,6 +63,23 @@ The rules across the game are the [root AGENTS.md](../../../AGENTS.md).
   and a bar rebuilt for touch otherwise kept the desktop's skill bar standing in for `#hotbar`.
 - **What the page's CSS laid over its neighbours, the kit draws after them**: the skill bar is laid over the bottom
   bar's row in a room of its own size (as its z-index drew it over the bars' shadows), and the Frenzy over it.
+- **Text wraps at its panel's width** (`say(text, style, align)`, `wrap.ts`): broken at spaces as CSS breaks it,
+  each line under the last at its line height, standing left, centred or right. Its width is its parent's to give (a
+  width, a share of a row, or stretched across a column): a wrapped text asks for no width of its own, as a width
+  asked would hold its panel from narrowing with the window, so in a row with nothing to size it, it's 0 wide. It's
+  broken again as that width changes (read after the layout, in the same frame). Left unwrapped, a line too long
+  for its panel is squeezed across it (its words drawn across its box), never spilt past it: `lab kit` counts the
+  lines. Its panel takes no padding of its own (put it on the parent): the picture is drawn across the box.
+- **A panel scrolls** (`scrolls(panel)`, `scroll.ts`): its overflow `scroll`, so the engine clips what's inside it
+  to its box and draws it moved up by its look's `scroll`; the mouse's wheel over it (never the world's zoom then)
+  and a finger's drag on it move that, held within what's inside it, as CSS's flexbox reaches (each child's margin
+  under it and the panel's own padding at its foot counted: without the last row's margin it stopped 10 px short).
+  A finger that dragged presses nothing as it lifts (`pressDragged`).
+- **A text field** (`textField(panel, input, style, placeholder)`, `field.ts`): the page's input stays on the page
+  out of sight (`.kit-mirror`), holding the focus, the keys, a phone's keyboard and its name for a screen reader; a
+  press on the panel focuses it at its end (`Pressable.press`, which a click of an input wouldn't), and each frame
+  the panel shows its value (a password's as dots, its placeholder dimmed while it's empty) and a caret where the
+  input's is while it has the focus, its words at its left half way down it.
 - **Check a panel against main's page with `npm run lab -- ui --states <state> --ab`**: its box's lines and its
   pictures beside main's (`ui --states target`: the frame's box 384x52 at 113 on both, its name and line read off
   the engine's frame where the tree has it, off `#target` on main's).

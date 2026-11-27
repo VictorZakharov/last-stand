@@ -10,6 +10,7 @@ import { uiHit } from '../../engine/ui';
 import { engineCanvas } from '../../engine/index';
 import { overPanels } from '../../core/input';
 import type { Panel } from './panel';
+import { pressDragged } from './scroll';
 
 /** How a pressable panel shows the pointer: not on it, over it, or pressing it. */
 export type PressState = 'none' | 'hover' | 'down';
@@ -17,8 +18,10 @@ export type PressState = 'none' | 'hover' | 'down';
 /** A panel that takes presses: the page's button it stands for, and how it shows the pointer. */
 export interface Pressable {
   panel: Panel;
-  /** the button on the page it stands for: clicked by a press, its `disabled` the panel's */
-  mirror: HTMLButtonElement;
+  /** the control on the page it stands for: clicked by a press, its `disabled` the panel's */
+  mirror: HTMLButtonElement | HTMLInputElement | HTMLTextAreaElement;
+  /** what a press does in place of clicking it (a field's: its input focused) */
+  press?: () => void;
   /** shows `state` (each change once) */
   shows?: (state: PressState) => void;
 }
@@ -85,7 +88,8 @@ function listen(): void {
     down = null;
     const over = onCanvas(e) ? pressableAt(e.clientX, e.clientY) : null;
     showAll(e.pointerType === 'mouse' ? over : null);
-    if (pressed && over === pressed) pressed.mirror.click();
+    // (a finger that dragged a list to scroll it pressed nothing)
+    if (pressed && over === pressed && !(e.pointerType !== 'mouse' && pressDragged())) pressOf(pressed);
   }, true);
   window.addEventListener('pointermove', (e) => {
     if (e.pointerType !== 'mouse') return;
@@ -96,6 +100,12 @@ function listen(): void {
     down = null;
     showAll(null);
   }, true);
+}
+
+/** What a press on `p` does: its own, else its control clicked. */
+function pressOf(p: Pressable): void {
+  if (p.press) p.press();
+  else p.mirror.click();
 }
 
 /** the panels that show a tip under the mouse and take no press, each with the page element it stands for */

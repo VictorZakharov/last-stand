@@ -476,6 +476,31 @@ frame's GPU clock ends at that pass where it draws: the labels, the outline and 
   energy, a cooldown); each fill as drawn held to the page's share (its canary a share never followed);
   `skillTips` opens every slot's tooltip by the mouse (7 of 7), `cursor` by the Alt cursor. Not checked in a
   picture: the Frenzy (the lab's warrior holds a weapon), a slot's glow as it's cast.
-- [ ] Text that wraps: a line is painted whole; a panel with paragraphs needs the page to break them at its width.
+- [x] Text that wraps (2026-11-27: `kit/wrap.ts`, `lab kit`).
 - [ ] The rows are painted again whole for any change (a twentieth of a layout): kept by panel when a large panel
   (the stash) changes often.
+
+## 2026-11-27: the rest of the UI onto the kit, a census (#973)
+
+What's still on the page, by its markup (`src/ui/html/`, `src/ui/screens/`) and its styles (`src/ui/styles/`,
+265 KB of SCSS, some 1,900 rules, on 2026-11-27). Each part is ported rule for rule into typed panels
+(`ui/kit/AGENTS.md`), held to the commit before it by `lab ui --states <its states> --ab`, its rules taken out of
+the SCSS. In the order they're taken: the kit's own pieces first, then what shows in a fight, then the lobby's.
+
+- [x] The guide's portraits drawn by the engine (`sceneApart`, `ui/guide/portraitDraw.ts`).
+- [x] The kit: text that wraps at its panel's laid-out width.
+- [x] The kit: a panel that scrolls, its children clipped to it.
+- [x] The kit: a text field (the page's input kept out of sight, its value and caret drawn).
+- [ ] The run's HUD (`hud.html`): the minimap's frame, the spoils, the buffs, the banner, the party's frames, the
+  downed note and the revive, the duel's score and result, the look hint, the crosshair and the charge ring.
+- [ ] The overlays down the left (`diag.html`: the performance overlay, the net's, the battle log), the chat.
+- [ ] The touch controls (`touch.html`).
+- [ ] The training's tracker, the damage meter, the sit hint.
+- [ ] The tooltip and the item's sheet.
+- [ ] The lobby (`menu.html`: the rail, the loadout and spellbook, the equipment, the stash and its filter, the
+  stats, the village's card, the duel's menu), the summary, the dialogs (duel ask, install, rotate, perf ask,
+  save delete, cloud).
+- [ ] The pause menu (`pause.html`: its tabs, the settings, the performance tab), the bug report, photo mode.
+- [ ] The save slots, hero selection's panels, Play together and its rooms, How to play, the village's map.
+- [ ] The guide's pages, the talk, the trade, the merchant, the drink.
+- [ ] The loading screen (styled before any script runs: the last, if at all).
