@@ -44,6 +44,7 @@ import { drawLobbyPanels } from './lobbyPanels';
 import { drawTooltip } from './tooltipPanel';
 import { drawItemSheet } from './itemSheetPanel';
 import { drawSummary } from './summaryPanel';
+import { drawToasts } from './toastSheet';
 import { drawDecision } from './decisionPanel';
 import { drawBottomBar } from './bottomBar';
 
@@ -79,6 +80,7 @@ export function initHud(): void {
   drawVillageCard();
   // (the tooltip last: over the modals, as its z-index stood it)
   drawSummary();
+  drawToasts();
   drawItemSheet();
   drawTooltip();
   drawBottomBar();

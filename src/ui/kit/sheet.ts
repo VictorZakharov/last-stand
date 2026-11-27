@@ -16,6 +16,8 @@ import { forwards, unforward, type Forwarded } from './forward';
 import { engineCanvas } from '../../engine/index';
 import { RunLine, runsOf, type RunStyle } from './runs';
 import { svgArt } from './svgArt';
+import { INK, alpha } from './theme';
+import { textField, type Field, type FieldInput } from './field';
 import { scrolls } from './scroll';
 import { uiScales } from '../scale';
 import { accent } from '../diagFrame';
@@ -39,8 +41,9 @@ interface Node {
   painted: Panel | null;
   /** its marks over its corners, drawn over what's in it */
   marks: Panel[];
-  /** its words, where it's a line of text; its picture, where it's an SVG */
+  /** its words, where it's a line of text; its picture, where it's an SVG; its field, where it's a text field */
   line: RunLine | null;
+  field: Field | null;
   picture: Panel | null;
   kids: Node[];
   state: PressState;
@@ -121,6 +124,7 @@ export class SheetTree implements Forwarded {
   /** Taken away, the page's element left as it is. */
   remove(): void {
     this.stop();
+    stopFields(this.root);
     unforward(this);
     this.root.panel.remove();
     this.top.remove();
@@ -129,7 +133,7 @@ export class SheetTree implements Forwarded {
   private make(element: Element, parent: Panel): Node {
     const panel = new Panel(parent, {});
     const node: Node = { element, panel, anchor: null, ring: null, brackets: null, painted: null, marks: [], line: null,
-      picture: null, kids: [], state: 'none', hits: false, scrolling: false, moving: null,
+      field: null, picture: null, kids: [], state: 'none', hits: false, scrolling: false, moving: null,
       given: { box: [], look: [] }, matched: null };
     // (each element's box read where it's drawn: the lab's, the tutorial's ring's)
     standIn(element, panel);
@@ -158,6 +162,9 @@ export class SheetTree implements Forwarded {
     // (said each frame, shown too: a style keeps the fields it isn't given, and a card hidden once stayed hidden)
     const hidden = (element as HTMLElement).hidden || element.classList.contains('hidden');
     if (hidden) style.box.display = 'none';
+    // (claimed again while it shows: an element moved to another tree and back, as the duel's ask into the rack's card
+    // and out, kept the other's stand-in, and the lab read the card's page round it)
+    else standIn(element, node.panel);
     style.box.display ??= 'flex';
     this.move(node, style);
     if (style.lift) this.lift(node, round, style.box.display !== 'none');
@@ -168,9 +175,20 @@ export class SheetTree implements Forwarded {
     if (style.box.display === 'none') return;
     this.decorate(node, style);
     if (style.picture || element instanceof SVGSVGElement) this.drawPicture(node, style.picture, style.turn);
+    else if (isField(element)) this.fieldOf(node, element, style.text);
     else if (isText(element) && !(style.flex && element.children.length)) this.sayText(node, style.text, style.after);
     else this.followKids(node, style.text, key, node.hits);
     this.mark(node, style.marks);
+  }
+
+  /** Its text field, made the first time it shows, its words in `text` (its placeholder dimmed) where its rules
+   *  stand them (`text-align`). */
+  private fieldOf(node: Node, input: FieldInput, text: TextStyle & SheetText): void {
+    if (node.field) return;
+    const placeholder = { ...text, color: dimmed(text.color) };
+    node.field = textField(node.panel, input, text, placeholder);
+    const justify = text.align === 'center' ? 'center' : text.align === 'end' ? 'end' : 'start';
+    node.panel.style({ justify });
   }
 
   /** Its marks, made after what's in it so drawn over it, and shown as its rules give them now. */
@@ -291,6 +309,7 @@ export class SheetTree implements Forwarded {
     const same = elements.length === node.kids.length && elements.every((child, at) => node.kids[at].element === child);
     if (!same) {
       for (const kid of node.kids) {
+        stopFields(kid);
         kid.panel.remove();
         kid.anchor?.remove();
       }
@@ -300,4 +319,25 @@ export class SheetTree implements Forwarded {
     }
     for (const kid of node.kids) this.follow(kid, text, key, hits, node);
   }
+}
+
+/** Whether `element` is a field typed into: a text input or a text area (not a box ticked, a slider or a button). */
+function isField(element: Element): element is FieldInput {
+  if (element instanceof HTMLTextAreaElement) return true;
+  return element instanceof HTMLInputElement && !NOT_TYPED.has(element.type);
+}
+
+/** the inputs that aren't typed into */
+const NOT_TYPED = new Set(['checkbox', 'radio', 'range', 'button', 'submit', 'reset', 'color', 'file', 'hidden']);
+
+/** A placeholder's colour: its field's at half its opacity (the browser's own `::placeholder`), where it's `#rrggbb`. */
+function dimmed(color: string | undefined): string {
+  const hex = color && /^#[0-9a-f]{6}$/i.test(color) ? color : INK;
+  return alpha(hex, 0.5);
+}
+
+/** Every text field in `node` and what's in it stops following its input (taken away). */
+function stopFields(node: Node): void {
+  node.field?.stop();
+  for (const kid of node.kids) stopFields(kid);
 }
