@@ -13,7 +13,3 @@
 @keyframes tut-ring { from { opacity: 1; } to { opacity: .4; } }
 @media (prefers-reduced-motion: reduce) { #tut-ring.on { animation: none; opacity: 1; } }
 
-/* a portal's card while the training is unfinished: its warning and its skip in Enter's place */
-.vc-training { display: flex; flex-direction: column; gap: 10px; align-items: center; }
-.vc-training.hidden { display: none; }
-.vc-training p { margin: 0; font-size: 14px; color: #f0c88a; }
