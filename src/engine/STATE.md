@@ -521,7 +521,9 @@ the SCSS. In the order they're taken: the kit's own pieces first, then what show
   placed by the page (its clearance, a finger's place), the panels following its offsets. Full is 3% shorter than
   main's, whose grid wrapped "Foes / Proj / Fx" onto two lines. `lab log`, `lab cursor` pass; `lab touchpad` and
   `lab overui` fail on main alike (the developer panel open over the stick; Hedgeward's key over the UI).
-- [ ] The chat.
+- [x] The chat (`ui/chatPanels.ts`): `lab ui --states chat,chatOpen,chatTouch --ab`, every box within 3 px of
+  main's (main's Send showed the system's cursor); `lab coop --scenarios chat` types, sends, shuts and fades it.
+  The kit's presses keep the field's focus where main's prevented `pointerdown` (`Pressable.keepsFocus`).
 - [ ] The touch controls (`touch.html`).
 - [ ] The damage meter, the sit hint.
 - [ ] The tooltip and the item's sheet.

@@ -26,6 +26,9 @@ export interface Pressable {
   shows?: (state: PressState) => void;
   /** told as a press on it begins and as it ends, wherever it's let go (a button held: the touch revive's) */
   held?: (on: boolean) => void;
+  /** a press on it takes no focus from what has it (the chat's Send and field: the field's blur shut the box under
+   *  the press), as a `pointerdown` prevented on the page's button kept it */
+  keepsFocus?: boolean;
 }
 
 const pressables = new Map<number, Pressable>();
@@ -86,6 +89,7 @@ function listen(): void {
   window.addEventListener('pointerdown', (e) => {
     if (!onCanvas(e) || e.button !== 0) return;
     down = pressableAt(e.clientX, e.clientY);
+    if (down?.keepsFocus) e.preventDefault();
     down?.held?.(true);
     showAll(down);
   }, true);

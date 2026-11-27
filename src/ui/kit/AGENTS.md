@@ -10,8 +10,10 @@ the run's target frame (`ui/targetFrame.ts`), the wave's badge (`ui/waveBadge.ts
 the minimap's column (`ui/minimapColumn.ts`), the training's tracker (`ui/trainingPanel.ts`), the banner
 (`ui/bannerPanel.ts`), the close views' crosshair, charge ring and look hint (`ui/aimMarks.ts`), the buffs
 (`ui/buffsPanel.ts`), a duel's score and result (`ui/duelPanels.ts`), the party's frames (`ui/partyPanel.ts`),
-the downed and watching UI (`ui/downedPanels.ts`) and the overlays down the left (`ui/diagPanels.ts`,
-`netLogPanels.ts`).
+the downed and watching UI (`ui/downedPanels.ts`), the overlays down the left (`ui/diagPanels.ts`,
+`netLogPanels.ts`) and the chat (`ui/chatPanels.ts`).
+- **A press can leave the focus where it is** (`Pressable.keepsFocus`, `textField`'s last argument): the canvas
+  takes every press, and its `mousedown` blurred the chat's field, whose blur shut the box under the press.
 - **A button held, not clicked, says so** (`Pressable.held`: told as a press on it begins and as it ends, wherever
   it's let go): the touch revive. **A placement past the screen's safe area reads it** (`safeInsets`, `safeArea.ts`).
 - **A gap of two values is `[across, down]`** (`gap: [8, 0]`), the reverse of CSS's `gap: row column`: Mini's

@@ -46,13 +46,14 @@ function caretAt(input: FieldInput, style: TextStyle): number {
  * the words' colour while the input has the focus. The panel's own style and look are its box's (padding, border,
  * fill); its words stand at its left, as an input's do, clipped to it.
  */
-export function textField(panel: Panel, input: FieldInput, style: TextStyle, placeholder: TextStyle): Field {
+export function textField(panel: Panel, input: FieldInput, style: TextStyle, placeholder: TextStyle,
+  keepsFocus = false): Field {
   panel.style({ overflow: 'hidden', direction: 'row', alignItems: 'center', justify: 'start' });
   // (its words and caret in a line of their own, so the field's padding moves both)
   const line = new Panel(panel, { position: 'relative', alignItems: 'center', shrink: 0 });
   const words = new Panel(line, { shrink: 0 });
   const caret = new Panel(line, { position: 'absolute', width: CARET_W }, { fill: style.color });
-  pressable({ panel, mirror: input, press: () => focusAtEnd(input) });
+  pressable({ panel, mirror: input, press: () => focusAtEnd(input), keepsFocus });
   const stop = onFrame(() => follow(words, caret, input, style, placeholder));
   return { panel, words, caret, input, stop };
 }
