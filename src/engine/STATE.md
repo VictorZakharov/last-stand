@@ -281,7 +281,7 @@ not intend to support the old way of rendering".
   start fails the boot, and the loading screen says where the browser has no WebGPU.
 - [x] The branches for three's WebGL renderer and for three's WebGPU renderer drawing the scene are folded out
   of the game and the tools; the lab and stalls ask for no other renderer.
-- three's WebGPURenderer is still the engine's host: the labels' and the outline's canvas, the portraits. The
+- three's WebGPURenderer was the engine's host then: the labels' and the outline's canvas, the portraits (all the engine's now, #973). The
   comparisons with WebGL above (`--webgl`, `--three`, `&renderer=webgl`) can't be run again from this tree:
   `--ab` against a commit before this one is what's left of them.
 - [x] The hall's column bands and torch cups from above: a shaft was drawn over its own band, all that blends

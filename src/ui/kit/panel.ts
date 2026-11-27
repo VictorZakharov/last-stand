@@ -275,3 +275,4 @@ function refreshPanels(shown: boolean): void {
   for (const panel of panels) panel.refresh(ratio);
 }
 overFrame.panels = refreshPanels;
+overFrame.hidePanels = () => { screen?.show(false); };

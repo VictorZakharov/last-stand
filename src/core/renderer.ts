@@ -24,6 +24,8 @@ import { bloodMask, fitBloodMask } from './bloodEdges';
 import { ARMS_LAYER, WARM_LAYER, GHOST_COUNT_LAYER } from './layers';
 import { gpuFence, setFrameFence } from './frameLoop';
 import { engineWorkDone } from '../engine/pipelinesAside';
+import { overlayRows } from '../engine/overlay';
+import { outlineForEngine } from '../engine/outlined';
 
 /** Final colour: above HI_KNEE the brightest channel eases towards HI_CAP (hue kept); in HDR towards as much more
  *  as the peak has room over the paper white (`uCap`), so the highlights it grows aren't all held at SDR's. */
@@ -1023,6 +1025,8 @@ const _fwd = new Vec3(), _pivot = new Vec3(), _look = new Vec3(), _quat = new Qu
 export const overFrame = {
   labels: (_shown: boolean): void => {},
   panels: (_shown: boolean): void => {},
+  /** the panels hidden for a draw apart, none of the kit's animations stepped (`sceneApart`) */
+  hidePanels: (): void => {},
 };
 /** For a harness: whether a canvas of three's lies over the engine's: none, there is one canvas (the lab's checks of
  *  the overlays ask it of this tree and of main's). */
@@ -1079,6 +1083,28 @@ function drawApart(width: number, height: number, graded: Parameters<typeof draw
     setWholeView(whole);
     aimSight(G.camera);
   }
+}
+
+/**
+ * A scene of its own drawn apart before the frame (the guide's portraits, ui/guide/portraits.ts), handed the
+ * frame's size and grade (drawn with another level's samples or bloom, every pipeline and target the engine has is
+ * made again, twice a frame: 80,941 pipelines in a minute, and the GPU ran out of memory): called once in the frame's task, with nothing laid over what it draws (no labels, outline or
+ * panels: the frame's own sends them again after it), and set again by it for the next frame if it must be.
+ */
+export const sceneApart = {
+  take: null as ((width: number, height: number, graded: Parameters<typeof drawRust>[6] & object) => void) | null,
+};
+/** no rows: the labels left out of a draw apart */
+const NO_ROWS = new Float32Array(0);
+/** `sceneApart`'s draw, the labels, the outline and the panels taken off the engine's frame first. */
+function drawSceneApart(width: number, height: number, graded: Parameters<typeof drawRust>[6] & object): void {
+  const take = sceneApart.take;
+  if (!take) return;
+  sceneApart.take = null;
+  overlayRows(NO_ROWS, 0, width, height);
+  outlineForEngine(null);
+  overFrame.hidePanels();
+  take(width, height, graded);
 }
 
 /** what marks each of the render's passes as a part of the frame (`markPassesWith`; none until the game sets it) */
@@ -1144,6 +1170,7 @@ export function render(): void {
   };
   // (a picture asked for from another camera: drawn first, the frame's own draw after it is what the page shows)
   if (frameApart.take) drawApart(pixels.width, pixels.height, graded);
+  if (sceneApart.take) drawSceneApart(pixels.width, pixels.height, graded);
   overFrame.labels(overlaysShown);
   overFrame.panels(!document.body.classList.contains('photo'));
   drawRust(G.scene, G.camera, G.time, pixels.width, pixels.height, gl, graded);
