@@ -158,6 +158,14 @@ end touch the same lines and conflict (`npm run check:sorted` holds the order; t
   comes before confirming Drink because the choice holds the cast at 16%. On touch, position the mug clear of
   the movement pad and put it down from an open edge within reach of the bar.
 - `throws.ts`: the vine's shot lets the bow go `SHOT.loosedAfter` frames into the hold, drawn as far as it is: held for its whole draw and the quiver's fetch from the throw, the arrow left a frame after the vine let him go (on main too).
+- `tour.ts`: `lab tour`, the game at 20 fixed stands as the player sees them (the square, the campfire, the hall
+  from above, inside and after hero selection, every cottage's door, every house's room, each biome), held to another
+  commit's pictures by `--ab=<commit>` (`463b90dfc` is the last drawn by three). Under three's removal the hall's
+  floor, columns and dais stood at the world's middle, and no check pictured the hall from above. Each stand's frame
+  is drawn twice at one moment (`drawFrame`), the eye's adaptation held, and the two held to each other: held by
+  `G.paused` instead, a stand over the shoulder showed the pause menu. A door's stand is set up once and then turned:
+  `inVillage` again left a run already left, its Escape opening the lobby's pause menu. A module an A/B's other
+  commit hasn't got (the engine's API) isn't imported here. `--canary` hides the hero for the second draw.
 - `trail.ts`: the trail is read with the engine's bloom out (`TUNE.bloom` 0): the game's `holdBloom` holds three's
   passes alone, and the trail was read with its glow.
 - `twins.ts`: the compiles' canary is a material of a blending, side and depth none else has together (as `compiles`'s):

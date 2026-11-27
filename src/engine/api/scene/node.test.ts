@@ -94,3 +94,33 @@ test('lookAt turns a node\'s +z to the target, under a turned parent', () => {
   node.lookAt(4, 0, -2);
   near(node.quaternion.toArray(), [0.084237907, 0.778384657, -0.106992702, 0.612840813], 1e-8);
 });
+
+test('a node frozen as world/props.ts freezes still things stands where it was placed, matrices never read before', () => {
+  const root = new Node();
+  const group = new Node();
+  const part = new Node();
+  root.add(group);
+  group.add(part);
+  group.position.set(0, 1, 0);
+  part.position.set(-1.6, 2, -22.3);
+  // (standStill: the matrices made, then frozen)
+  group.updateMatrixWorld(true);
+  group.traverse((node) => { node.matrixAutoUpdate = false; });
+  group.matrixWorldAutoUpdate = false;
+  near(part.matrixWorld.elements.slice(12, 15), [-1.6, 3, -22.3], 1e-9);
+});
+
+test('a frozen node turned off without its matrices made still stands where it was placed', () => {
+  const part = new Node();
+  part.position.set(4, 0, 2);
+  part.matrixAutoUpdate = false;
+  near(part.matrixWorld.elements.slice(12, 15), [4, 0, 2], 1e-9);
+});
+
+test('updateMatrix makes a frozen node\'s matrix from where it now stands, as three\'s does', () => {
+  const part = new Node();
+  part.matrixAutoUpdate = false;
+  part.position.set(1, 2, 3);
+  part.updateMatrix();
+  near(part.matrixWorld.elements.slice(12, 15), [1, 2, 3], 1e-9);
+});

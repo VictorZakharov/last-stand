@@ -44,7 +44,21 @@ export class Stage implements StageLink {
   private shownBytes = new Uint8Array(0);
   private written = 0;
 
-  constructor(private core: Core, private wasm: InitOutput, private draws: Draws) {}
+  constructor(private core: Core, private wasm: InitOutput, private draws: Draws) {
+    draws.nodeOf = (node) => this.jointOf(node);
+  }
+
+  /**
+   * The engine's node of a skin's bone: its own where it's under the shown world; one of its own at the root where
+   * it's in no scene at all (no parent: under three such a bone stood at the world's origin, unmoved, and the skin
+   * was bound to that); none where it's under a node not in the world yet (entered loose, it would stay at the root
+   * once its parent came).
+   */
+  private jointOf(node: Node): number {
+    if (node.engineId !== NONE || node.parent) return node.engineId;
+    this.enter(node, NONE);
+    return node.engineId;
+  }
 
   /** What the stage holds now. */
   get count(): StageCount {

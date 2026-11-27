@@ -122,7 +122,9 @@ Data the engine reads, nothing compiled on the page.
 - **`matrixWorld` is made when it's read** (a getter): a node knows the move it was last made for (`stamp`), and
   every move anywhere advances the world's move count; read after a move, it's made again from its parent's (made
   the same way) and its own. `updateMatrixWorld()` is kept for the game's calls and does nothing more than make
-  them now. The engine makes its own matrices for drawing (`place_nodes`); nothing is read back each frame.
+  them now. Freezing a node (`matrixAutoUpdate`, `matrixWorldAutoUpdate` set false) makes its matrix (and its world
+  matrix) as it stands first: frozen unmade, the parts `standStill` froze stood at the world's middle
+  (`node.test.ts`). The engine makes its own matrices for drawing (`place_nodes`); nothing is read back each frame.
 - **A node is in the engine while it's under a shown world** (`World.shown`, the stage's): added under one, it and
   everything under it get nodes and draws; taken out, they're let go. A node elsewhere (a template a model clones,
   a warm-up's sample not yet shown) costs the engine nothing.

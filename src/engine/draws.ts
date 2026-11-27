@@ -455,11 +455,12 @@ export class Draws {
    *  the mesh's bind after it. */
   private skinOf(mesh: SkinnedMesh): number {
     const skeleton = mesh.skeleton!;
-    const key = `${skeleton.version}|${mesh.bindMatrix.elements.join(',')}`;
+    // (by its bones' nodes as they are now too: a body that left the shown world and came back has new ones)
+    const joints = skeleton.bones.map((bone) => this.nodeOf(bone));
+    const key = `${skeleton.version}|${mesh.bindMatrix.elements.join(',')}|${joints.join(',')}`;
     let binds = this.skins.get(skeleton);
     const known = binds?.get(key);
     if (known !== undefined) return known;
-    const joints = skeleton.bones.map((bone) => this.nodeOf(bone));
     const inverses = new Float32Array(skeleton.bones.length * 16);
     const folded = new Mat4();
     skeleton.boneInverses.forEach((inverse, at) => {

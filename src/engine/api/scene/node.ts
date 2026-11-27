@@ -11,6 +11,7 @@ import { firstUnder } from './nodeSearch.ts';
 import {
   movedAlong, placedUnder, turnedAbout, turnFacing, worldFacingOf, worldSizeOf, worldTurnOf,
 } from './nodeSpace.ts';
+import { copyNode } from './nodeCopy.ts';
 import { WatchedEuler, WatchedQuat, WatchedVec3, type Mover } from './watched.ts';
 
 /** the next node's number (three's `Object3D.id`) */
@@ -71,8 +72,7 @@ export class Node implements LayersOwner {
     castShadow: false, receiveShadow: false, frustumCulled: true, renderOrder: 0,
   };
   private _matrixAutoUpdate = true;
-  /** whether its world matrix is made from its parent's (false: the game writes it) */
-  matrixWorldAutoUpdate = true;
+  private _matrixWorldAutoUpdate = true;
   private _world = new Mat4();
   /** its own moves, counted, and the count its world matrix was made at */
   private moves = 0;
@@ -175,7 +175,20 @@ export class Node implements LayersOwner {
   get matrixAutoUpdate(): boolean { return this._matrixAutoUpdate; }
   set matrixAutoUpdate(value: boolean) {
     if (value === this._matrixAutoUpdate) return;
+    // (its matrix made from where it stands as it's frozen: three's is made by the update before the switch, which
+    // only made it when read here, and parts nothing had read stood frozen at the world's middle)
+    if (!value) this.matrix.compose(this.position, this.quaternion, this.scale);
     this._matrixAutoUpdate = value;
+    this.moved();
+  }
+
+  /** whether its world matrix is made from its parent's (false: kept as it was last made, or as the game writes it) */
+  get matrixWorldAutoUpdate(): boolean { return this._matrixWorldAutoUpdate; }
+  set matrixWorldAutoUpdate(value: boolean) {
+    if (value === this._matrixWorldAutoUpdate) return;
+    // (made now, before it's kept: kept unmade, it and all under it stood at the world's middle)
+    if (!value) this.makeWorld();
+    this._matrixWorldAutoUpdate = value;
     this.moved();
   }
 
@@ -193,7 +206,7 @@ export class Node implements LayersOwner {
       parent.makeWorld();
       parentMakes = parent.makes;
     }
-    if (!this.matrixWorldAutoUpdate) return;
+    if (!this._matrixWorldAutoUpdate) return;
     const same = this.builtAt === this.moves && this.builtUnder === parent && this.builtUnderMakes === parentMakes;
     if (same) return;
     if (this._matrixAutoUpdate) this.matrix.compose(this.position, this.quaternion, this.scale);
@@ -210,16 +223,19 @@ export class Node implements LayersOwner {
   /** never: its world matrix is made when read */
   get matrixWorldNeedsUpdate(): boolean { return false; }
 
-  /** Its matrix made from its place, turn and size now; one the game writes is taken as changed. */
+  /** Its matrix made from its place, turn and size now, whether or not it's made so each time (as three's). */
   updateMatrix(): void {
-    if (this._matrixAutoUpdate) this.matrix.compose(this.position, this.quaternion, this.scale);
-    else this.moved();
+    this.matrix.compose(this.position, this.quaternion, this.scale);
+    this.moved();
   }
 
-  /** Kept for the game's calls: matrices are made when read. A matrix the game writes, here and under it, is taken
-   *  as changed. */
+  /** Its world matrix and those under it made now (they're made when read too): a matrix the game writes, here
+   *  and under it, is taken as changed first. */
   updateMatrixWorld(_force?: boolean): void {
-    this.traverse((node) => { if (!node._matrixAutoUpdate) node.moved(); });
+    this.traverse((node) => {
+      if (!node._matrixAutoUpdate) node.moved();
+      node.makeWorld();
+    });
   }
 
   /** Kept for the game's calls (three's `updateWorldMatrix`): its own matrix taken as changed if the game writes
@@ -369,23 +385,7 @@ export class Node implements LayersOwner {
 
   /** `source`'s own state copied onto it (its children too where `recursive`); itself. */
   copy(source: Node, recursive = true): this {
-    this.name = source.name;
-    this.up.copy(source.up);
-    this.position.copy(source.position);
-    this.quaternion.copy(source.quaternion);
-    this.scale.copy(source.scale);
-    this.matrix.copy(source.matrix);
-    this.matrixAutoUpdate = source.matrixAutoUpdate;
-    this.matrixWorldAutoUpdate = source.matrixWorldAutoUpdate;
-    this.layers.mask = source.layers.mask;
-    this.visible = source.visible;
-    this.castShadow = source.castShadow;
-    this.receiveShadow = source.receiveShadow;
-    this.frustumCulled = source.frustumCulled;
-    this.renderOrder = source.renderOrder;
-    // (as three copies it: what JSON keeps, functions and references dropped)
-    this.userData = JSON.parse(JSON.stringify(source.userData));
-    if (recursive) for (const child of source.children) this.add(child.clone());
+    copyNode(this, source, recursive);
     return this;
   }
 
