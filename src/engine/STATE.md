@@ -555,8 +555,31 @@ the SCSS. In the order they're taken: the kit's own pieces first, then what show
   stash grows to the panel's foot); `village --only wornStaysOn`, `tutorial` and `tutorial --touch` (a phone's),
   `touch`, `tap` pass. Not drawn: the stash's fade where a row is cut, the glow's arc and sheen (motion alone), an
   item's glow past its border, a picture's brightness on hover (its fill and border are lit instead).
-- [ ] The summary, the dialogs (duel ask, install, rotate, perf ask, save delete, cloud).
-- [ ] The pause menu (`pause.html`: its tabs, the settings, the performance tab), the bug report, photo mode.
+- [x] The summary (`ui/summaryPanel.ts`), the prompts (`ui/toastSheet.ts`: the performance report's ask, the
+  duel's), Install (`ui/dialogsSheet.ts`). Left on the page, as they show over the loading screen: the full screen
+  prompt, the update toast, the turn-me cover. The save slots' delete and cloud dialogs move with the save slots (a
+  dialog over a page screen can't be drawn under it).
+- [x] The pause menu (`ui/pauseSheet.ts`, the keyboard and the mouse `controlsHelpSheet.ts`, the colour picker
+  `colourPickerSheet.ts`; the kit's ticks and sliders `kit/formControls.ts`): `lab ui --states pause,pauseSettings,
+  pausePerformance --ab` at 1920x1080, 1024x700, 844x390@3 and 820x1180@2, every box within 0.5% of main's (a
+  phone's Performance tab with a profile scrolls 22 px in its pages' cell, main's 25); volume, the colour wheel,
+  advanced graphics, the kept tab pass.
+- [x] The bug report (`ui/bugReportSheet.ts`; the kit's text area `kit/field.ts`, a `pre`'s lines `kit/keptText.ts`):
+  `lab ui --states bugReport,bugReportTouch --ab` pass, the form 54.7% of the window's width as main's, 56.9% of its
+  height against 56.3%. A short screen's grid is the right column's two halves as boxes of their own, the picture
+  placed under what was expected from the drawn boxes.
+- [x] Photo mode stays on the page: the kit draws on the engine's canvas, which a photo is, so its panel would be in
+  every shot; it shows only while the world is posed and moves nothing each frame.
+- [x] What the kit costs a frame (`lab ui --cost`, `tools/lab/page/uiKitCost.ts`, its canary a 3 ms tick): every
+  sheet followed its page each frame, the pause menu 6.2 ms of the main thread on this PC standing still. A tree
+  follows only when what it reads changes now (`kit/sheetDirty.ts`): 0.1 to 0.2 ms standing still in every state, 0.3
+  to 3 ms a frame after a change. The labels' atlas held every text's slot, shown or not (57% used at boot, full
+  after opening the bug report twice: the engine's fault): a text not seen gives its slot back (15% at boot). The
+  stick's area and the ghosts took the pointer over a modal the kit draws: a finger on the pause menu's left half
+  moved the stick (`_base.scss`).
+- [ ] Seen failing on main too: `lab ui --states target` run after the lobby's states (the frame not shown);
+  `glow --canary`'s two loops (the glow check reads the page's CSS loops, which the lobby's port stopped: to read
+  the kit's).
 - [ ] The save slots, hero selection's panels, Play together and its rooms, How to play, the village's map.
 - [ ] The guide's pages, the talk, the trade, the merchant, the drink.
 - [ ] The loading screen (styled before any script runs: the last, if at all).
