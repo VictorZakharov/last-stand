@@ -4,6 +4,7 @@
 // (`--clear-x`, `--clear-y`, `clearOverlays` in `menus.ts`), and kept on the screen: the performance overlay whole
 // inside the window, however it was put on a screen of another size.
 import { readCookie, writeCookie } from '../core/cookies';
+import { shownBox } from './kit/press';
 
 /** the cookie the place is kept in: `x,y`, the overlays' offset from their corner (css px) */
 const PLACE_COOKIE = 'last-stand-overlays-place';
@@ -47,7 +48,8 @@ function boundsNow(): Bounds | null {
   }
   const key = boundsKey();
   if (bounds?.key === key) return bounds.within;
-  const box = overlay.getBoundingClientRect();
+  // (where the engine draws it, `diagPanels.ts`: the page's is out of sight)
+  const box = shownBox(overlay);
   const now = offsetNow();
   const left = box.left - now.x, top = box.top - now.y;
   const within = { left: -left, right: innerWidth - box.width - left, top: -top, bottom: innerHeight - box.height - top };

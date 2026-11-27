@@ -7,8 +7,9 @@ export interface Shadow { x: number; y: number; blur: number; color: string }
 
 /** How a run of text is drawn. */
 export interface TextStyle {
-  /** 'display' (Cinzel) or 'body' (Alegreya Sans) */
-  face: 'display' | 'body';
+  /** 'display' (Cinzel), 'body' (Alegreya Sans) or 'mono' (the system's monospaced face: the overlays down the
+   *  left's) */
+  face: 'display' | 'body' | 'mono';
   size: number;
   weight?: number;
   /** slanted (CSS's `font-style: italic`) */
@@ -28,6 +29,8 @@ export interface TextStyle {
 export const OUTLINE: Shadow[] = [{ x: 0, y: 1, blur: 2, color: '#000' }, { x: 0, y: 0, blur: 6, color: '#000' }];
 
 let faces: Record<TextStyle['face'], string> | null = null;
+/** the overlays down the left's face (`_perf.scss`) */
+const MONO = "ui-monospace, 'SF Mono', Menlo, Consolas, monospace";
 /** The page's font stacks, as its stylesheet sets them (`--font-display`, `--font-body`), the body's lining twin
  *  first (until it has loaded, the canvas paints in the next). */
 function fontFaces(): Record<TextStyle['face'], string> {
@@ -37,7 +40,7 @@ function fontFaces(): Record<TextStyle['face'], string> {
   const body = css.getPropertyValue('--font-body').trim() || "'Alegreya Sans', 'Segoe UI', sans-serif";
   const family = body.split(',')[0].replace(/['"]/g, '').trim();
   lining = loadLining(family).catch(() => undefined);
-  faces = { display, body: `'${family}${LINING}', ${body}` };
+  faces = { display, body: `'${family}${LINING}', ${body}`, mono: MONO };
   return faces;
 }
 

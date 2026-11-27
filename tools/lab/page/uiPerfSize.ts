@@ -4,7 +4,7 @@
 // the most, the press kept in the overlay's cookie and its button lit. Then Full and Off are pressed and held to the
 // same, and the cookie of the builds before Mini ('1': shown) must read as Full. Its canary loses the cookie before
 // it's read back, which must be caught unsaved.
-import type { Lab } from './lab';
+import { boxOf, seenOf, type Lab } from './lab';
 import { pauseTab, showPause } from '../../../src/ui/menus';
 // (read through the module's namespace: `ui --ab` copies this page into commits from before Mini, where these names
 // aren't exported, and a named import of one would stop every state of `ui` loading there, not this one alone)
@@ -64,7 +64,7 @@ export async function openPerfMini(lab: Lab, canary: boolean): Promise<void> {
   loseCookie = canary;
   setPerfHudSize('full', false);
   await lab.step(DRAW_FRAMES);
-  fullArea = areaOf(overlay().getBoundingClientRect());
+  fullArea = areaOf(boxOf(overlay()));
   await press(lab, 'mini');
   if (loseCookie) removeCookie(PERF_HUD_COOKIE);
 }
@@ -79,20 +79,22 @@ export function closePerfMini(): void {
 function miniShown(): PerfSizeFound {
   const problems: string[] = [];
   const panel = overlay();
-  if (!panel.checkVisibility() || perfHudSize() !== 'mini') {
+  if (!seenOf(panel) || perfHudSize() !== 'mini') {
     return { lines: [], problems: [`perfMini: Mini pressed, the overlay is ${perfHudSize()}`] };
   }
   for (const selector of MINI_SHOWN) {
-    if (!panel.querySelector(selector)?.checkVisibility()) problems.push(`perfMini: Mini shows no ${selector}`);
+    const part = panel.querySelector(selector);
+    if (!part || !seenOf(part)) problems.push(`perfMini: Mini shows no ${selector}`);
   }
   for (const selector of MINI_HIDDEN) {
-    if (panel.querySelector(selector)?.checkVisibility()) problems.push(`perfMini: Mini shows ${selector}`);
+    const part = panel.querySelector(selector);
+    if (part && seenOf(part)) problems.push(`perfMini: Mini shows ${selector}`);
   }
   const rate = panel.querySelector('[data-p="fps"]')?.textContent ?? '';
   const drawn = (panel.querySelector('.pf-line')?.getAttribute('d') ?? '').length > 0;
   if (!/^\d/.test(rate)) problems.push(`perfMini: Mini's frame rate reads "${rate}"`);
   if (!drawn) problems.push('perfMini: Mini\'s graph has no line');
-  const box = panel.getBoundingClientRect();
+  const box = boxOf(panel);
   const outside = box.left < 0 || box.top < 0 || box.right > innerWidth || box.bottom > innerHeight;
   if (outside) problems.push('perfMini: Mini reaches past the window');
   const share = areaOf(box) / fullArea;

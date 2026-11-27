@@ -42,6 +42,7 @@ const $ = (s: string): HTMLElement => document.querySelector<HTMLElement>(s)!;
 // and the graph's time)
 export { perfClock } from '../core/perfClock';
 import { perfClock } from '../core/perfClock';
+import { shownBox } from './kit/press';
 
 /** One frame: rAF time, interval since the previous one, our total / update / render time,
  *  how late our callback started after the rAF timestamp, the update split by stage, and what was on screen. */
@@ -457,7 +458,8 @@ export function copyPerfReportAt(x: number, y: number): void {
 /** Whether the overlay is shown at this point of the page (css px): a finger held there moves it (`ui/touch.ts`). */
 export function perfHudAt(x: number, y: number): boolean {
   if (!enabled || !el) return false;
-  const box = el.getBoundingClientRect();
+  // (where the engine draws it, `diagPanels.ts`: the page's is out of sight)
+  const box = shownBox(el);
   return x >= box.left && x <= box.right && y >= box.top && y <= box.bottom;
 }
 

@@ -9,7 +9,7 @@ import { G } from '../../../src/state';
 import { input } from '../../../src/core/input';
 import { setPerfHud } from '../../../src/ui/perfHud';
 import { setBattleLog } from '../../../src/ui/battleLog';
-import type { Fixture, Lab, PagePoint, Pictured, Report } from './lab';
+import { boxOf, type Fixture, type Lab, type PagePoint, type Pictured, type Report } from './lab';
 import { showTouchControls, slide } from './touchStick';
 import { dragsOverlay } from './perfDrag';
 
@@ -239,7 +239,7 @@ async function copiesOnTap(lab: Lab, part: string): Promise<boolean> {
   const element = overlay?.querySelector(part);
   if (!overlay || !element) throw new Error(`lab: touchpad: the performance overlay has no ${part}`);
   overlay.classList.remove('said');
-  const box = element.getBoundingClientRect();
+  const box = boxOf(element);
   const at = { x: box.left + box.width / 2, y: box.top + box.height / 2 };
   await lab.touchDown(at);
   await lab.touchUp();

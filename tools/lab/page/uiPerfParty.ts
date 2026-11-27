@@ -52,7 +52,7 @@ export function closePerfParty(): void {
 /** The overlay against the party's frames: clear of each, within the window. */
 export function perfPartyChecked(): PerfPartyFound {
   const problems: string[] = [];
-  const panel = overlay().getBoundingClientRect();
+  const panel = boxOf(overlay());
   const frames = [...party().querySelectorAll<HTMLElement>('.pf')].filter((frame) => frame.checkVisibility());
   if (frames.length < PARTNERS.length) problems.push(`perfParty: ${frames.length} party frames shown, not ${PARTNERS.length}`);
   if (!overlay().checkVisibility()) problems.push('perfParty: the overlay isn\'t shown');

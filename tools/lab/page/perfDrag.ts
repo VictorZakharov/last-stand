@@ -5,7 +5,7 @@
 // whole inside it. Its canary pins the overlays to their corner, which the drag must be caught failing to move.
 import { input } from '../../../src/core/input';
 import { readCookie, removeCookie } from '../../../src/core/cookies';
-import type { Lab, PagePoint, Pictured } from './lab';
+import { boxOf, type Lab, type PagePoint, type Pictured } from './lab';
 import { slide } from './touchStick';
 
 /** the game's module that keeps the overlays' place: found by a glob, so an A/B's side from before it (#245) still
@@ -46,14 +46,14 @@ const CANARY_NAME = 'stayed in its corner';
 function overlayBox(): DOMRect {
   const overlay = document.querySelector<HTMLElement>('#perf');
   if (!overlay?.offsetParent) throw new Error('lab: touchpad: the performance overlay isn\'t shown');
-  return overlay.getBoundingClientRect();
+  return boxOf(overlay);
 }
 
 /** Where a finger takes the overlay: the middle of its frame rate's line. */
 function grip(): PagePoint {
   const head = document.querySelector('#perf .pf-head');
   if (!head) throw new Error('lab: touchpad: the performance overlay has no .pf-head');
-  const box = head.getBoundingClientRect();
+  const box = boxOf(head);
   return { x: box.left + box.width / 2, y: box.top + box.height / 2 };
 }
 

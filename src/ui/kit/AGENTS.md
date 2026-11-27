@@ -9,10 +9,17 @@ the run's target frame (`ui/targetFrame.ts`), the wave's badge (`ui/waveBadge.ts
 (`ui/decisionPanel.ts`), the bottom bar (`ui/bottomBar.ts`, `hotbarPanel.ts`, `slotFace.ts`, `frenzyPips.ts`),
 the minimap's column (`ui/minimapColumn.ts`), the training's tracker (`ui/trainingPanel.ts`), the banner
 (`ui/bannerPanel.ts`), the close views' crosshair, charge ring and look hint (`ui/aimMarks.ts`), the buffs
-(`ui/buffsPanel.ts`), a duel's score and result (`ui/duelPanels.ts`), the party's frames (`ui/partyPanel.ts`)
-and the downed and watching UI (`ui/downedPanels.ts`).
+(`ui/buffsPanel.ts`), a duel's score and result (`ui/duelPanels.ts`), the party's frames (`ui/partyPanel.ts`),
+the downed and watching UI (`ui/downedPanels.ts`) and the overlays down the left (`ui/diagPanels.ts`,
+`netLogPanels.ts`).
 - **A button held, not clicked, says so** (`Pressable.held`: told as a press on it begins and as it ends, wherever
   it's let go): the touch revive. **A placement past the screen's safe area reads it** (`safeInsets`, `safeArea.ts`).
+- **A gap of two values is `[across, down]`** (`gap: [8, 0]`), the reverse of CSS's `gap: row column`: Mini's
+  `gap: 0 8px` written as `[0, 8]` gave its parts no room between them.
+- **A line of styled runs** (`RunLine`, `runsOf` in `runs.ts`: the page's inline `b`, `em`, `small` in a line of
+  words) is a wrapping row of a panel a word, each run's style given by the port; a run of `white-space: nowrap`
+  is kept whole (`whole`), and a smaller inline run keeps its paragraph's line height. The overlays' monospaced
+  text is the `mono` face (`overlay/paint.ts`).
 - **A new state of `lab ui` runs on main's side only with `--fresh`** the first time: an A/B's kept side was run
   with the states of its day, and says nothing of one added since.
 

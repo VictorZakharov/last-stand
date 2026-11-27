@@ -203,10 +203,10 @@ export class Panel {
     return uiRect(this.id);
   }
 
-  /** Whether it can be seen: it and every panel round it with some opacity (a page element's `checkVisibility`). */
+  /** Whether it can be seen: it and every panel round it shown and with some opacity (`checkVisibility`'s). */
   get seen(): boolean {
     for (let panel: Panel | null = this; panel; panel = panel.parent) {
-      if ((panel.lookNow.opacity ?? 1) <= 0) return false;
+      if ((panel.lookNow.opacity ?? 1) <= 0 || panel.styleNow.display === 'none') return false;
     }
     return true;
   }

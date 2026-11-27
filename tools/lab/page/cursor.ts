@@ -8,7 +8,7 @@
 // shows the measure sees an attack. The lock is held and the run goes on throughout. With the canary, Ctrl is held
 // instead, a key that frees nothing: the checks must find the view turned, no cursor and the click on Pause attacking.
 // (The owner, through the eyes: "in 3rd and 1st person user cannot press on those battle log buttons".)
-import { middleOf } from './lab';
+import { middleOf, seenOf } from './lab';
 import type { Clip, Fixture, Lab, PagePoint, Pictured, Report } from './lab';
 import type { ViewMode } from '../../../src/core/renderer';
 import { G } from '../../../src/state';
@@ -131,9 +131,16 @@ function centre(): PagePoint {
 /** The element `selector` names, shown; throws, naming it, if there's none. */
 function shown(selector: string): HTMLElement {
   const found = document.querySelector<HTMLElement>(selector);
-  if (!found?.checkVisibility()) throw new Error(`lab: cursor: ${selector} isn't shown`);
+  if (!found || !seenOf(found)) throw new Error(`lab: cursor: ${selector} isn't shown`);
   return found;
 }
+
+/** the battle log as the engine draws it, where the commit has it */
+interface LogPanels { battleLogScrolled(): number }
+const LOG_PANELS = Object.values(import.meta.glob<LogPanels>('../../../src/ui/netLogPanels.ts', { eager: true }))[0];
+
+/** How far the log's lines are scrolled (css px): as drawn where the engine draws them, else the page's list's. */
+const logScrolled = (lines: HTMLElement): number => LOG_PANELS?.battleLogScrolled() ?? lines.scrollTop;
 
 /** The view's turn about the upright from `from` (rad, the short way round). */
 function turnFrom(from: number): number {
@@ -235,11 +242,11 @@ async function round(lab: Lab, log: BattleLog, view: ViewMode, held: Held): Prom
   const overLines = middleOf(lines);
   await lab.mouseTo(overLines);
   await step();
-  const top = lines.scrollTop;
+  const top = logScrolled(lines);
   await lab.wheel(overLines, WHEEL);
   const zoomed = input.wheel;
   await step();
-  const scrolled = lines.scrollTop - top;
+  const scrolled = logScrolled(lines) - top;
   // (the world clicked)
   await lab.mouseTo(middle);
   await step();

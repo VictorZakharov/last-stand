@@ -516,7 +516,12 @@ the SCSS. In the order they're taken: the kit's own pieces first, then what show
   --states downed,downedTouch --ab`, every box main's; `lab coop --scenarios walk` taps the bar's buttons where
   they're drawn. The touch revive is held through the kit's presses (`Pressable.held`). The prompt's key cap
   keeps its drop shadow, not its glow.
-- [ ] The overlays down the left (`diag.html`: the performance overlay, the net's, the battle log), the chat.
+- [x] The overlays down the left (`ui/diagPanels.ts`, `netLogPanels.ts`): `lab ui --states perf,perfMini,perfGraph,
+  perfParty,log,logLobby,logTouch --ab`, Mini 220 px as main's, the log within 0.7% of its height; `#diag` is still
+  placed by the page (its clearance, a finger's place), the panels following its offsets. Full is 3% shorter than
+  main's, whose grid wrapped "Foes / Proj / Fx" onto two lines. `lab log`, `lab cursor` pass; `lab touchpad` and
+  `lab overui` fail on main alike (the developer panel open over the stick; Hedgeward's key over the UI).
+- [ ] The chat.
 - [ ] The touch controls (`touch.html`).
 - [ ] The damage meter, the sit hint.
 - [ ] The tooltip and the item's sheet.
