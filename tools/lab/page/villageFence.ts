@@ -6,7 +6,7 @@
 // of what's built, so the layout is the same at every stand whatever stands there. Each frame is drawn as the game
 // draws it, then with the houses' hole shut, then the fence's too. `canary` reads the palisade as what's built, as it
 // was, which must take the planted house apart.
-import * as THREE from 'three';
+import { LitMaterial, Material, Mesh, shapes, Vec3 } from './sceneApi.ts';
 import type { Lab, Pictured } from './lab';
 import { G } from '../../../src/state';
 import { faceCamera, viewMode } from '../../../src/core/renderer';
@@ -60,8 +60,8 @@ function fenceHidesHim(): boolean {
 /** Whether he stands `past` m out from cottage `index`'s middle facing back in, the palisade alone hiding him. */
 async function standByFence(lab: Lab, index: number, past: number): Promise<boolean> {
   const cottage = COTTAGES[index];
-  const out = new THREE.Vector3(cottage.x, 0, cottage.z).normalize();
-  const at = new THREE.Vector3(cottage.x, 0, cottage.z).addScaledVector(out, past);
+  const out = new Vec3(cottage.x, 0, cottage.z).normalize();
+  const at = new Vec3(cottage.x, 0, cottage.z).addScaledVector(out, past);
   const facing = Math.atan2(-out.x, -out.z);
   if (!(await standAt(lab, at, facing))) return false;
   faceCamera(facing);
@@ -70,13 +70,13 @@ async function standByFence(lab: Lab, index: number, past: number): Promise<bool
 }
 
 /** A plain house of what's built planted where `placed` says from him, in `material`. */
-function plantHouse(material: THREE.Material, placed: Placed): THREE.Mesh {
+function plantHouse(material: Material, placed: Placed): Mesh {
   const hero = G.player.pos;
-  const toCamera = new THREE.Vector3(G.camera.position.x - hero.x, 0, G.camera.position.z - hero.z).normalize();
-  const aside = new THREE.Vector3(-toCamera.z, 0, toCamera.x);
+  const toCamera = new Vec3(G.camera.position.x - hero.x, 0, G.camera.position.z - hero.z).normalize();
+  const aside = new Vec3(-toCamera.z, 0, toCamera.x);
   const at = hero.clone().addScaledVector(toCamera, placed.toCamera).addScaledVector(aside, placed.aside);
-  const geometry = new THREE.BoxGeometry(placed.wide, placed.high, placed.wide).translate(0, placed.high / 2, 0);
-  const house = new THREE.Mesh(geometry, material);
+  const geometry = shapes.box(placed.wide, placed.high, placed.wide).translate(0, placed.high / 2, 0);
+  const house = new Mesh(geometry, material);
   house.position.set(at.x, groundHeight(at.x, at.z), at.z);
   house.updateMatrixWorld(true);
   G.scene.add(house);
@@ -102,7 +102,7 @@ function threeFrames(lab: Lab): { houses: number; fence: number; again: number }
 const percent = (share: number): string => `${(share * 100).toFixed(2)}%`;
 
 /** The stand by the palisade past cottage `index` with a house planted beside him, or null where none hides him. */
-async function readStand(lab: Lab, index: number, material: THREE.Material): Promise<Stand | null> {
+async function readStand(lab: Lab, index: number, material: Material): Promise<Stand | null> {
   let stood = false;
   for (const past of PASTS) stood = stood || await standByFence(lab, index, past);
   if (!stood) return null;
@@ -120,7 +120,7 @@ async function readStand(lab: Lab, index: number, material: THREE.Material): Pro
 }
 
 /** Stands by the palisade, `STANDS` of them at most. */
-async function readStands(lab: Lab, material: THREE.Material): Promise<Stand[]> {
+async function readStands(lab: Lab, material: Material): Promise<Stand[]> {
   const stands: Stand[] = [];
   for (let index = 0; index < COTTAGES.length && stands.length < STANDS; index++) {
     const stand = await readStand(lab, index, material);
@@ -133,7 +133,7 @@ async function readStands(lab: Lab, material: THREE.Material): Promise<Stand[]> 
 export async function housesBesideFence(lab: Lab, canary: boolean): Promise<LightsChecked> {
   holdHour(12);
   const kept = viewMode();
-  const material = seeThrough(new THREE.MeshStandardMaterial({ color: 0xd8c8a8 }), 'built');
+  const material = seeThrough(new LitMaterial({ color: 0xd8c8a8 }), 'built');
   holdFenceAsBuilt(canary);
   try {
     await viewBy(lab, 'top');
@@ -170,7 +170,7 @@ export async function housesBesideFence(lab: Lab, canary: boolean): Promise<Ligh
 interface PastStand { cottage: number; shown: number; picture: Pictured }
 
 /** The stand by the palisade past cottage `index` with a house planted past him, or null where none hides him. */
-async function readPastStand(lab: Lab, index: number, material: THREE.Material): Promise<PastStand | null> {
+async function readPastStand(lab: Lab, index: number, material: Material): Promise<PastStand | null> {
   let stood = false;
   for (const past of PASTS) stood = stood || await standByFence(lab, index, past);
   if (!stood) return null;
@@ -200,7 +200,7 @@ async function readPastStand(lab: Lab, index: number, material: THREE.Material):
 export async function housesPastFence(lab: Lab, canary: boolean): Promise<LightsChecked> {
   holdHour(0);
   const kept = viewMode();
-  const material = seeThrough(new THREE.MeshStandardMaterial({ color: 0xd8c8a8 }), 'built');
+  const material = seeThrough(new LitMaterial({ color: 0xd8c8a8 }), 'built');
   holdRingsByMiddle(canary);
   try {
     await viewBy(lab, 'top');

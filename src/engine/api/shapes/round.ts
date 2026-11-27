@@ -43,12 +43,12 @@ export function sphere(radius = 1, widthSegments = 32, heightSegments = 16, phiS
   const indices: number[] = [];
   for (let iy = 0; iy < down; iy++) {
     for (let ix = 0; ix < across; ix++) {
-      const a = grid[iy][ix + 1];
-      const b = grid[iy][ix];
-      const c = grid[iy + 1][ix];
-      const d = grid[iy + 1][ix + 1];
-      if (iy !== 0 || thetaStart > 0) indices.push(a, b, d);
-      if (iy !== down - 1 || thetaEnd < Math.PI) indices.push(b, c, d);
+      const cornerA = grid[iy][ix + 1];
+      const cornerB = grid[iy][ix];
+      const cornerC = grid[iy + 1][ix];
+      const cornerD = grid[iy + 1][ix + 1];
+      if (iy !== 0 || thetaStart > 0) indices.push(cornerA, cornerB, cornerD);
+      if (iy !== down - 1 || thetaEnd < Math.PI) indices.push(cornerB, cornerC, cornerD);
     }
   }
   return meshOf(indices, positions, normals, uvs);
@@ -63,7 +63,8 @@ interface CapsuleRow {
 }
 
 /** The capsule's profile at row `iy`: up the bottom cap, the side, then the top cap. */
-function capsuleRow(iy: number, radius: number, height: number, capSegments: number, heightSegments: number): CapsuleRow {
+function capsuleRow(iy: number, radius: number, height: number, capSegments: number,
+  heightSegments: number): CapsuleRow {
   const half = height / 2;
   const capArc = (Math.PI / 2) * radius;
   if (iy <= capSegments) {
@@ -151,25 +152,26 @@ export function torus(radius = 1, tube = 0.4, radialSegments = 12, tubularSegmen
   const indices: number[] = [];
   for (let j = 1; j <= rounds; j++) {
     for (let i = 1; i <= along; i++) {
-      const a = (along + 1) * j + i - 1;
-      const b = (along + 1) * (j - 1) + i - 1;
-      indices.push(a, b, a + 1);
-      indices.push(b, b + 1, a + 1);
+      const cornerA = (along + 1) * j + i - 1;
+      const cornerB = (along + 1) * (j - 1) + i - 1;
+      indices.push(cornerA, cornerB, cornerA + 1);
+      indices.push(cornerB, cornerB + 1, cornerA + 1);
     }
   }
   return meshOf(indices, positions, normals, uvs);
 }
 
 /** The torus knot's centre line at `u`, into `target`. */
-function knotAt(u: number, p: number, q: number, radius: number, target: Vec3): void {
-  const quOverP = (q / p) * u;
+function knotAt(u: number, windings: number, twists: number, radius: number, target: Vec3): void {
+  const quOverP = (twists / windings) * u;
   const cs = Math.cos(quOverP);
   target.set(radius * (2 + cs) * 0.5 * Math.cos(u), radius * (2 + cs) * Math.sin(u) * 0.5,
     radius * Math.sin(quOverP) * 0.5);
 }
 
 /** A torus knot (three's `TorusKnotGeometry`): a tube round a (p, q) knot, `p` times round and `q` through. */
-export function torusKnot(radius = 1, tube = 0.4, tubularSegments = 64, radialSegments = 8, p = 2, q = 3): Geometry {
+export function torusKnot(radius = 1, tube = 0.4, tubularSegments = 64, radialSegments = 8, windings = 2,
+  twists = 3): Geometry {
   const along = Math.floor(tubularSegments);
   const rounds = Math.floor(radialSegments);
   const positions: number[] = [];
@@ -179,24 +181,25 @@ export function torusKnot(radius = 1, tube = 0.4, tubularSegments = 64, radialSe
   const normal = new Vec3();
   const p1 = new Vec3();
   const p2 = new Vec3();
-  const t = new Vec3();
-  const n = new Vec3();
-  const b = new Vec3();
+  const tangent = new Vec3();
+  const normalWay = new Vec3();
+  const binormal = new Vec3();
   for (let i = 0; i <= along; i++) {
-    const u = (i / along) * p * Math.PI * 2;
-    knotAt(u, p, q, radius, p1);
-    knotAt(u + 0.01, p, q, radius, p2);
-    t.subVectors(p2, p1);
-    n.addVectors(p2, p1);
-    b.crossVectors(t, n);
-    n.crossVectors(b, t);
-    b.normalize();
-    n.normalize();
+    const u = (i / along) * windings * Math.PI * 2;
+    knotAt(u, windings, twists, radius, p1);
+    knotAt(u + 0.01, windings, twists, radius, p2);
+    tangent.subVectors(p2, p1);
+    normalWay.addVectors(p2, p1);
+    binormal.crossVectors(tangent, normalWay);
+    normalWay.crossVectors(binormal, tangent);
+    binormal.normalize();
+    normalWay.normalize();
     for (let j = 0; j <= rounds; j++) {
       const v = (j / rounds) * Math.PI * 2;
       const cx = -tube * Math.cos(v);
       const cy = tube * Math.sin(v);
-      vertex.set(p1.x + (cx * n.x + cy * b.x), p1.y + (cx * n.y + cy * b.y), p1.z + (cx * n.z + cy * b.z));
+      vertex.set(p1.x + (cx * normalWay.x + cy * binormal.x), p1.y + (cx * normalWay.y + cy * binormal.y),
+        p1.z + (cx * normalWay.z + cy * binormal.z));
       positions.push(vertex.x, vertex.y, vertex.z);
       normal.subVectors(vertex, p1).normalize();
       normals.push(normal.x, normal.y, normal.z);
@@ -206,10 +209,10 @@ export function torusKnot(radius = 1, tube = 0.4, tubularSegments = 64, radialSe
   const indices: number[] = [];
   for (let j = 1; j <= along; j++) {
     for (let i = 1; i <= rounds; i++) {
-      const a = (rounds + 1) * (j - 1) + (i - 1);
-      const c = (rounds + 1) * j + (i - 1);
-      indices.push(a, c, a + 1);
-      indices.push(c, c + 1, a + 1);
+      const cornerA = (rounds + 1) * (j - 1) + (i - 1);
+      const cornerC = (rounds + 1) * j + (i - 1);
+      indices.push(cornerA, cornerC, cornerA + 1);
+      indices.push(cornerC, cornerC + 1, cornerA + 1);
     }
   }
   return meshOf(indices, positions, normals, uvs);

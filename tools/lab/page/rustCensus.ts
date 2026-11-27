@@ -1,6 +1,25 @@
 // `lab rust --census` and its heaviest meshes: the shown materials by their kind and by what each asks beyond the
 // engine's reach, and the meshes that cost the frame most of its triangles.
-import * as THREE from 'three';
+import {
+  Camera, Frustum, InstancedMesh, LitMaterial, Mat4, Mesh, Node, Points, SkinnedMesh, Sphere, Sprite,
+} from './sceneApi.ts';
+
+/** the sphere `meetsView` tests */
+const placedSphere = new Sphere();
+
+/** Whether `mesh` reaches into `view`, by its bounding sphere where it's drawn (three's `Frustum.intersectsObject`:
+ *  an instanced mesh's sphere round all its instances). */
+function meetsView(view: Frustum, mesh: Mesh): boolean {
+  const instanced = mesh as InstancedMesh;
+  if (instanced.isInstancedMesh) {
+    if (!instanced.boundingSphere) instanced.computeBoundingSphere();
+    placedSphere.copy(instanced.boundingSphere!);
+  } else {
+    if (!mesh.geometry.boundingSphere) mesh.geometry.computeBoundingSphere();
+    placedSphere.copy(mesh.geometry.boundingSphere!);
+  }
+  return view.intersectsSphere(placedSphere.applyMatrix4(mesh.matrixWorld));
+}
 
 /** how many of the meshes in view the census lists by their triangles */
 const HEAVIEST = 16;
@@ -12,12 +31,12 @@ const BEYOND = [
 ];
 
 /** The shown meshes' materials by kind and by what they carry beyond the engine's reach, the most first. */
-export function census(scene: THREE.Object3D, camera: THREE.Camera): string[] {
+export function census(scene: Node, camera: Camera): string[] {
   const kinds = new Map<string, { meshes: number; names: Set<string> }>();
-  const visit = (object: THREE.Object3D): void => {
+  const visit = (object: Node): void => {
     if (!object.visible) return;
-    const mesh = object as THREE.Mesh;
-    if ((mesh.isMesh || (object as THREE.Points).isPoints || (object as THREE.Sprite).isSprite) && object.layers.test(camera.layers)) {
+    const mesh = object as Mesh;
+    if ((mesh.isMesh || (object as Points).isPoints || (object as Sprite).isSprite) && object.layers.test(camera.layers)) {
       const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
       for (const material of materials) {
         const carried = BEYOND.filter((name) => (material as unknown as Record<string, unknown>)[name]);
@@ -40,12 +59,12 @@ export function census(scene: THREE.Object3D, camera: THREE.Camera): string[] {
 }
 
 /** What a mesh's material asks that a clustered mesh can't give yet: none, it could be drawn as clusters. */
-function unclustered(mesh: THREE.Mesh): string {
+function unclustered(mesh: Mesh): string {
   const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
   const asks: string[] = [];
-  if ((mesh as unknown as THREE.SkinnedMesh).isSkinnedMesh) asks.push('skinned');
+  if ((mesh as unknown as SkinnedMesh).isSkinnedMesh) asks.push('skinned');
   if (materials.some((material) => material.transparent)) asks.push('blended');
-  if (materials.some((material) => material.alphaTest > 0 || (material as THREE.MeshStandardMaterial).alphaMap)) asks.push('cut out');
+  if (materials.some((material) => material.alphaTest > 0 || (material as LitMaterial).alphaMap)) asks.push('cut out');
   if (materials.some((material) => (material as unknown as Record<string, unknown>).positionNode)) asks.push('moved by its look');
   return asks.join(', ');
 }
@@ -54,16 +73,16 @@ function unclustered(mesh: THREE.Mesh): string {
  * The meshes in the camera's view by their triangles (an instanced mesh's, all its instances'), the heaviest
  * first, each with what keeps it from being drawn as clusters; and how many triangles nothing keeps.
  */
-export function heaviest(scene: THREE.Object3D, camera: THREE.Camera): string[] {
-  const view = new THREE.Frustum().setFromProjectionMatrix(
-    new THREE.Matrix4().multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse));
+export function heaviest(scene: Node, camera: Camera): string[] {
+  const view = new Frustum().setFromProjectionMatrix(
+    new Mat4().multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse));
   const found: { name: string; triangles: number; asks: string }[] = [];
-  const visit = (object: THREE.Object3D): void => {
+  const visit = (object: Node): void => {
     if (!object.visible) return;
-    const mesh = object as THREE.Mesh;
+    const mesh = object as Mesh;
     if (mesh.isMesh && object.layers.test(camera.layers) && mesh.geometry?.attributes.position) {
-      const instances = (mesh as THREE.InstancedMesh).isInstancedMesh ? (mesh as THREE.InstancedMesh).count : 1;
-      const inView = instances > 1 || !mesh.frustumCulled || view.intersectsObject(mesh);
+      const instances = (mesh as InstancedMesh).isInstancedMesh ? (mesh as InstancedMesh).count : 1;
+      const inView = instances > 1 || !mesh.frustumCulled || meetsView(view, mesh);
       const corners = mesh.geometry.index?.count ?? mesh.geometry.attributes.position.count;
       const name = mesh.name || mesh.parent?.name || mesh.parent?.parent?.name || '?';
       if (inView) found.push({ name: instances > 1 ? `${name} x${instances}` : name, triangles: corners / 3 * instances, asks: unclustered(mesh) });

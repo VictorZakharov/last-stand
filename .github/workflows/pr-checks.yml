@@ -44,7 +44,7 @@ jobs:
       - name: Check the engine's build names its Bulwark commit
         run: node scripts/engine-pkg.mjs origin/${{ github.base_ref }}
 
-      - name: Check the game takes three.js through its own module
+      - name: Check no file of the game or the lab imports three.js
         run: npm run check:three
 
       - name: Check the marked lists are sorted

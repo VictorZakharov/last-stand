@@ -15,13 +15,14 @@ export function tube(path: Curve<Vec3>, tubularSegments = 64, radius = 1, radial
   let point = new Vec3();
   const ringAt = (i: number): void => {
     point = path.getPointAt(i / tubularSegments, point);
-    const n = frames.normals[i];
-    const b = frames.binormals[i];
+    const normalWay = frames.normals[i];
+    const binormal = frames.binormals[i];
     for (let j = 0; j <= radialSegments; j++) {
       const v = (j / radialSegments) * Math.PI * 2;
       const sin = Math.sin(v);
       const cos = -Math.cos(v);
-      normal.set(cos * n.x + sin * b.x, cos * n.y + sin * b.y, cos * n.z + sin * b.z).normalize();
+      normal.set(cos * normalWay.x + sin * binormal.x, cos * normalWay.y + sin * binormal.y,
+        cos * normalWay.z + sin * binormal.z).normalize();
       normals.push(normal.x, normal.y, normal.z);
       positions.push(point.x + radius * normal.x, point.y + radius * normal.y, point.z + radius * normal.z);
     }
@@ -35,10 +36,10 @@ export function tube(path: Curve<Vec3>, tubularSegments = 64, radius = 1, radial
   const indices: number[] = [];
   for (let j = 1; j <= tubularSegments; j++) {
     for (let i = 1; i <= radialSegments; i++) {
-      const a = (radialSegments + 1) * (j - 1) + (i - 1);
-      const b = (radialSegments + 1) * j + (i - 1);
-      indices.push(a, b, a + 1);
-      indices.push(b, b + 1, a + 1);
+      const cornerA = (radialSegments + 1) * (j - 1) + (i - 1);
+      const cornerB = (radialSegments + 1) * j + (i - 1);
+      indices.push(cornerA, cornerB, cornerA + 1);
+      indices.push(cornerB, cornerB + 1, cornerA + 1);
     }
   }
   return meshOf(indices, positions, normals, uvs);

@@ -3,7 +3,7 @@
 // on the GPU and timed by the browser's clock (the page's stands still within a lab frame). Its canary is a part of
 // its own, the frame drawn twice, which must read at least `CANARY_LEAST` times the frame once. Its result is sent
 // as the Performance tab's Send sends it, to a traces service of the lab's own (`send`), and read back there.
-import * as THREE from 'three';
+import { PointLight, Vec3 } from './sceneApi.ts';
 import type { Lab, Pictured, Report } from './lab';
 import type { BiomeId } from '../../../src/data/biomes';
 import type { QualityLevel } from '../../../src/data/quality';
@@ -56,8 +56,8 @@ function plantArrows(lab: Lab, count: number): void {
   for (let k = 0; k < count; k++) {
     const r = ARROWS_REACH * Math.sqrt((k + 0.5) / count), a = k * 2.39996;
     const x = at.x + Math.cos(a) * r, z = at.z + Math.sin(a) * r;
-    const tip = new THREE.Vector3(x, groundHeight(x, z), z);
-    const way = new THREE.Vector3(Math.cos(a * 3), -2, Math.sin(a * 3)).normalize();
+    const tip = new Vec3(x, groundHeight(x, z), z);
+    const way = new Vec3(Math.cos(a * 3), -2, Math.sin(a * 3)).normalize();
     stickAt(tip, way, SINK.ground);
   }
 }
@@ -156,7 +156,7 @@ function sceneState(): string {
   G.scene.traverse((object) => {
     if (object.visible) shown += 1;
     if (object.castShadow) casting += 1;
-    if (object instanceof THREE.PointLight) reach += object.distance;
+    if (object instanceof PointLight) reach += object.distance;
   });
   return `pixel ratio ${G.renderer.getPixelRatio()}, ${shown} shown, ${casting} casting, reach ${reach.toFixed(3)}`;
 }

@@ -2,7 +2,7 @@
 // in the training yard, where the touch skills show too: each within the window, the tracker under the minimap on the
 // right, none over another of the corner's controls; on touch the skills hidden with him on the square first (they
 // showed there and did nothing, from play). Its canary makes the tracker as tall as the window.
-import * as THREE from 'three';
+import { Vec3 } from './sceneApi.ts';
 import { yardToWorld } from '../../../src/data/village';
 import { restartTraining, skipTraining } from '../../../src/game/training';
 import { inYard } from '../../../src/game/village';
@@ -73,7 +73,7 @@ export async function openVillageHud(lab: Lab, touch: boolean): Promise<void> {
 
 /** The hero stood at a point of the ground and the frames for the HUD to follow him run. */
 async function standAt(lab: Lab, x: number, z: number): Promise<void> {
-  lab.player.place(new THREE.Vector3(x, groundHeight(x, z), z), 0);
+  lab.player.place(new Vec3(x, groundHeight(x, z), z), 0);
   await lab.step(SHOW_FRAMES);
 }
 

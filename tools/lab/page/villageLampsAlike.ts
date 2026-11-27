@@ -5,9 +5,10 @@
 // I come close, it looks lame"). Only its shadow may come in close by: both are read with the point lights' shadows
 // held off. `canary` puts the lamp out while he's far off,
 // which must be found.
-import * as THREE from 'three';
+import { PointLight, Vec3 } from './sceneApi.ts';
 import type { Lab, Pictured } from './lab';
 import { G } from '../../../src/state';
+import * as lamps from '../../../src/core/lamps';
 import { holdHour } from '../../../src/game/clock';
 import { groundHeight } from '../../../src/world/ground';
 import { drawFrame, topLight, type Canvas } from './light';
@@ -27,7 +28,7 @@ const MOST_APART = 0.08;
 async function standOff(lab: Lab, x: number, z: number, off: number): Promise<boolean> {
   for (let k = 0; k < 16; k++) {
     const a = (k / 16) * Math.PI * 2;
-    const at = new THREE.Vector3(x + Math.sin(a) * off, 0, z + Math.cos(a) * off);
+    const at = new Vec3(x + Math.sin(a) * off, 0, z + Math.cos(a) * off);
     at.y = groundHeight(at.x, at.z);
     G.player.walkTo = null;
     G.player.place(at, a + Math.PI);
@@ -38,9 +39,9 @@ async function standOff(lab: Lab, x: number, z: number, off: number): Promise<bo
 }
 
 /** The mean light of the ground `READ` m across round `foot`, in the frame drawn over it. */
-function groundLight(canvas: Canvas, foot: THREE.Vector3): number {
+function groundLight(canvas: Canvas, foot: Vec3): number {
   const middle = foot.clone().project(G.camera);
-  const side = foot.clone().add(new THREE.Vector3(READ / 2, 0, 0)).project(G.camera);
+  const side = foot.clone().add(new Vec3(READ / 2, 0, 0)).project(G.camera);
   const x = ((middle.x + 1) / 2) * canvas.width;
   const y = ((middle.y + 1) / 2) * canvas.height;
   const half = Math.max(2, Math.abs(((side.x - middle.x) / 2) * canvas.width));
@@ -58,9 +59,9 @@ function groundLight(canvas: Canvas, foot: THREE.Vector3): number {
 
 /** The point lights' shadows held off (each its strength), and a function that gives them back. */
 function shadowsOff(): () => void {
-  const kept: [THREE.PointLight, number][] = [];
+  const kept: [PointLight, number][] = [];
   G.scene.traverse((o) => {
-    const light = o as THREE.PointLight;
+    const light = o as PointLight;
     if (!light.isPointLight || !light.castShadow) return;
     kept.push([light, light.shadow.intensity]);
     light.shadow.intensity = 0;
@@ -72,7 +73,7 @@ function shadowsOff(): () => void {
 
 /** The light round a lamp's foot, the frame drawn from over it, its point lights' shadows held off, and the game's
  *  camera given back after. */
-function readOver(lab: Lab, foot: THREE.Vector3): number {
+function readOver(lab: Lab, foot: Vec3): number {
   const camera = G.camera;
   const kept = { at: camera.position.clone(), turn: camera.quaternion.clone() };
   const shadowsBack = shadowsOff();
@@ -89,10 +90,10 @@ function readOver(lab: Lab, foot: THREE.Vector3): number {
   }
 }
 
-/** Lamp `index` put out in the lit shaders' list, reached through three's own uniforms it's shared from
- *  (`core/lamps.ts`: imported, a commit without it couldn't load `lab village`); nothing where there's no list. */
+/** Lamp `index` put out in the lamps' list (`core/lamps.ts`, read off the module as a whole: a commit without it
+ *  still loads `lab village`); nothing where there's no list. */
 function putOut(index: number): void {
-  const list = THREE.ShaderLib.standard.uniforms.lamps?.value as Float32Array | undefined;
+  const list = (lamps as { lampList?: Float32Array }).lampList;
   // (each lamp two entries after the shelter: its place, then its light, whose fourth is the side it lights, 0 out)
   if (list) list[(2 + index * 2) * 4 + 3] = 0;
 }
@@ -102,7 +103,7 @@ export async function lampsAlike(lab: Lab, canary: boolean): Promise<LightsCheck
   const lanterns = [...G.arena.village.lanterns].sort((a, b) => Math.hypot(a.x, a.z) - Math.hypot(b.x, b.z));
   const lamp = lanterns[0];
   const index = G.arena.village.lanterns.indexOf(lamp);
-  const foot = new THREE.Vector3(lamp.x, groundHeight(lamp.x, lamp.z), lamp.z);
+  const foot = new Vec3(lamp.x, groundHeight(lamp.x, lamp.z), lamp.z);
   holdHour(0);
   const moments: Pictured[] = [];
   try {

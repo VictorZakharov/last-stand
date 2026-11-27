@@ -3,7 +3,7 @@
 // reads the arms. A point of the cloth inside a leg is where the leg shows through it. From play: "knees clipping
 // through robe when sitting near fire"; the skirts' wander and jerks were read, never what they cover. The canary
 // reads a point at the left knee's joint, which must read deep in the leg.
-import * as THREE from 'three';
+import { Vec3 } from './sceneApi.ts';
 import type { Joints } from '../../../src/entities/models/rig';
 import { capsuleDepth } from './bodyDepth';
 import { legsOf, type LegPart } from './armsInLegs';
@@ -21,7 +21,7 @@ export interface LegThrough {
   depth: number;
 }
 
-const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _c = new THREE.Vector3(), _p = new THREE.Vector3();
+const _a = new Vec3(), _b = new Vec3(), _c = new Vec3(), _p = new Vec3();
 
 /** The deepest point of any skirt (the hood left out) inside a leg now, or none. */
 export function legsThrough(joints: Joints, skirts: Followed[]): LegThrough | null {
@@ -39,7 +39,7 @@ export function legsThrough(joints: Joints, skirts: Followed[]): LegThrough | nu
 /** The canary: a point at the left knee's joint read against the legs. As words, `caught ...` or `missed ...`. */
 export function legsThroughCanary(joints: Joints): string {
   joints.root.updateMatrixWorld(true);
-  const knee = joints.kneeL.getWorldPosition(new THREE.Vector3());
+  const knee = joints.kneeL.getWorldPosition(new Vec3());
   const depth = Math.max(...legsOf(joints).map((leg) => capsuleDepth(knee, leg.from, leg.to, leg.radius)));
   const read = `a cloth point at the left knee read ${(depth * 100).toFixed(1)} cm into the leg`;
   return `${depth >= CANARY_DEEP ? 'caught' : 'missed'}: ${read}`;
@@ -51,7 +51,7 @@ function deepestOf(skirt: Followed, legs: LegPart[]): LegThrough | null {
   const index = skirt.geometry.getIndex()!;
   const world = skirt.mesh.matrixWorld;
   let best: LegThrough | null = null;
-  const read = (point: THREE.Vector3) => {
+  const read = (point: Vec3) => {
     for (const leg of legs) {
       const depth = capsuleDepth(point, leg.from, leg.to, leg.radius);
       if (!best || depth > best.depth) best = { skirt: skirt.name, leg: leg.name, depth };

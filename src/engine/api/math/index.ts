@@ -1,11 +1,13 @@
 // The maths of the engine's API: value classes in place and chainable as three's, by the names the rename table
 // gives (`Vector3` is `Vec3`, `MathUtils` is `Maths`...), and the types the game names with them.
+export { Box2 } from './box2.ts';
 export { Box3 } from './box3.ts';
 export { Color, linearToSrgb, srgbToLinear } from './color.ts';
 export type { ColorRepresentation, ColorSpaceName, HSL } from './color.ts';
 export { Euler } from './euler.ts';
 export type { EulerOrder } from './euler.ts';
 export { Frustum } from './frustum.ts';
+export { fromHalfFloat, toHalfFloat } from './halfFloat.ts';
 export { Line3 } from './line3.ts';
 export { Mat3 } from './mat3.ts';
 export type { Mat3Row } from './mat3.ts';

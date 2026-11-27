@@ -4,15 +4,16 @@ import { Vec2, Vec3 } from '../math/index.ts';
 import { Curve } from './curve.ts';
 
 /** A quadratic Bézier's value at `t` of `p0, p1, p2`. */
-function quadratic(t: number, p0: number, p1: number, p2: number): number {
-  const k = 1 - t;
-  return k * k * p0 + 2 * k * t * p1 + t * t * p2;
+function quadratic(along: number, p0: number, p1: number, p2: number): number {
+  const rest = 1 - along;
+  return rest * rest * p0 + 2 * rest * along * p1 + along * along * p2;
 }
 
 /** A cubic Bézier's value at `t` of `p0` to `p3`. */
-function cubic(t: number, p0: number, p1: number, p2: number, p3: number): number {
-  const k = 1 - t;
-  return k * k * k * p0 + 3 * k * k * t * p1 + 3 * k * t * t * p2 + t * t * t * p3;
+function cubic(along: number, p0: number, p1: number, p2: number, p3: number): number {
+  const rest = 1 - along;
+  return rest * rest * rest * p0 + 3 * rest * rest * along * p1 + 3 * rest * along * along * p2
+    + along * along * along * p3;
 }
 
 /** The kinds of Catmull-Rom spline: by the distances between points to the power 0.25, 0.5, or evenly. */
@@ -38,10 +39,10 @@ class Cubic {
   }
 
   /** Its value at `t` of the segment. */
-  at(t: number): number {
-    const t2 = t * t;
-    const t3 = t2 * t;
-    return this.c0 + this.c1 * t + this.c2 * t2 + this.c3 * t3;
+  at(along: number): number {
+    const t2 = along * along;
+    const t3 = t2 * along;
+    return this.c0 + this.c1 * along + this.c2 * t2 + this.c3 * t3;
   }
 
   private init(x0: number, x1: number, t0: number, t1: number): void {
@@ -52,11 +53,11 @@ class Cubic {
   }
 }
 
-const _px = new Cubic();
-const _py = new Cubic();
-const _pz = new Cubic();
-const _before = new Vec3();
-const _after = new Vec3();
+const scratchCubicX = new Cubic();
+const scratchCubicY = new Cubic();
+const scratchCubicZ = new Cubic();
+const scratchBefore = new Vec3();
+const scratchAfter = new Vec3();
 
 /**
  * A Catmull-Rom spline through `points` (three's `CatmullRomCurve3`), round to its first if `closed`. Follows
@@ -82,30 +83,30 @@ export class CatmullRom3 extends Curve<Vec3> {
   }
 
   /** The point at `t`. */
-  getPoint(t: number, target = new Vec3()): Vec3 {
+  getPoint(along: number, target = new Vec3()): Vec3 {
     const points = this.points;
-    const l = points.length;
-    const p = (l - (this.closed ? 0 : 1)) * t;
-    let whole = Math.floor(p);
-    let weight = p - whole;
+    const count = points.length;
+    const position = (count - (this.closed ? 0 : 1)) * along;
+    let whole = Math.floor(position);
+    let weight = position - whole;
     if (this.closed) {
-      whole += whole > 0 ? 0 : (Math.floor(Math.abs(whole) / l) + 1) * l;
-    } else if (weight === 0 && whole === l - 1) {
-      whole = l - 2;
+      whole += whole > 0 ? 0 : (Math.floor(Math.abs(whole) / count) + 1) * count;
+    } else if (weight === 0 && whole === count - 1) {
+      whole = count - 2;
       weight = 1;
     }
     const p0 = this.closed || whole > 0
-      ? points[(whole - 1) % l]
-      : _before.subVectors(points[0], points[1]).add(points[0]);
-    const p1 = points[whole % l];
-    const p2 = points[(whole + 1) % l];
-    const p3 = this.closed || whole + 2 < l
-      ? points[(whole + 2) % l]
-      : _after.subVectors(points[l - 1], points[l - 2]).add(points[l - 1]);
+      ? points[(whole - 1) % count]
+      : scratchBefore.subVectors(points[0], points[1]).add(points[0]);
+    const p1 = points[whole % count];
+    const p2 = points[(whole + 1) % count];
+    const p3 = this.closed || whole + 2 < count
+      ? points[(whole + 2) % count]
+      : scratchAfter.subVectors(points[count - 1], points[count - 2]).add(points[count - 1]);
     if (this.curveType === 'catmullrom') {
-      _px.even(p0.x, p1.x, p2.x, p3.x, this.tension);
-      _py.even(p0.y, p1.y, p2.y, p3.y, this.tension);
-      _pz.even(p0.z, p1.z, p2.z, p3.z, this.tension);
+      scratchCubicX.even(p0.x, p1.x, p2.x, p3.x, this.tension);
+      scratchCubicY.even(p0.y, p1.y, p2.y, p3.y, this.tension);
+      scratchCubicZ.even(p0.z, p1.z, p2.z, p3.z, this.tension);
     } else {
       const pow = this.curveType === 'chordal' ? 0.5 : 0.25;
       let dt0 = Math.pow(p0.distanceToSquared(p1), pow);
@@ -114,11 +115,11 @@ export class CatmullRom3 extends Curve<Vec3> {
       if (dt1 < 1e-4) dt1 = 1;
       if (dt0 < 1e-4) dt0 = dt1;
       if (dt2 < 1e-4) dt2 = dt1;
-      _px.uneven(p0.x, p1.x, p2.x, p3.x, dt0, dt1, dt2);
-      _py.uneven(p0.y, p1.y, p2.y, p3.y, dt0, dt1, dt2);
-      _pz.uneven(p0.z, p1.z, p2.z, p3.z, dt0, dt1, dt2);
+      scratchCubicX.uneven(p0.x, p1.x, p2.x, p3.x, dt0, dt1, dt2);
+      scratchCubicY.uneven(p0.y, p1.y, p2.y, p3.y, dt0, dt1, dt2);
+      scratchCubicZ.uneven(p0.z, p1.z, p2.z, p3.z, dt0, dt1, dt2);
     }
-    return target.set(_px.at(weight), _py.at(weight), _pz.at(weight));
+    return target.set(scratchCubicX.at(weight), scratchCubicY.at(weight), scratchCubicZ.at(weight));
   }
 
   protected blank(): Vec3 {
@@ -141,9 +142,9 @@ export class Line3Curve extends Curve<Vec3> {
   }
 
   /** The point at `t`. */
-  getPoint(t: number, target = new Vec3()): Vec3 {
-    if (t === 1) return target.copy(this.v2);
-    return target.copy(this.v2).sub(this.v1).multiplyScalar(t).add(this.v1);
+  getPoint(along: number, target = new Vec3()): Vec3 {
+    if (along === 1) return target.copy(this.v2);
+    return target.copy(this.v2).sub(this.v1).multiplyScalar(along).add(this.v1);
   }
 
   /** The point a share `u` along (the same as at t = u). */
@@ -152,7 +153,7 @@ export class Line3Curve extends Curve<Vec3> {
   }
 
   /** Its way, the same everywhere. */
-  override getTangent(_t: number, target = new Vec3()): Vec3 {
+  override getTangent(_along: number, target = new Vec3()): Vec3 {
     return target.subVectors(this.v2, this.v1).normalize();
   }
 
@@ -188,9 +189,11 @@ export class Bezier2Curve3 extends Curve<Vec3> {
   }
 
   /** The point at `t`. */
-  getPoint(t: number, target = new Vec3()): Vec3 {
+  getPoint(along: number, target = new Vec3()): Vec3 {
     const { v0, v1, v2 } = this;
-    return target.set(quadratic(t, v0.x, v1.x, v2.x), quadratic(t, v0.y, v1.y, v2.y), quadratic(t, v0.z, v1.z, v2.z));
+    const x = quadratic(along, v0.x, v1.x, v2.x);
+    const y = quadratic(along, v0.y, v1.y, v2.y);
+    return target.set(x, y, quadratic(along, v0.z, v1.z, v2.z));
   }
 
   protected blank(): Vec3 {
@@ -219,11 +222,11 @@ export class Bezier3Curve3 extends Curve<Vec3> {
   }
 
   /** The point at `t`. */
-  getPoint(t: number, target = new Vec3()): Vec3 {
+  getPoint(along: number, target = new Vec3()): Vec3 {
     const { v0, v1, v2, v3 } = this;
-    const x = cubic(t, v0.x, v1.x, v2.x, v3.x);
-    const y = cubic(t, v0.y, v1.y, v2.y, v3.y);
-    return target.set(x, y, cubic(t, v0.z, v1.z, v2.z, v3.z));
+    const x = cubic(along, v0.x, v1.x, v2.x, v3.x);
+    const y = cubic(along, v0.y, v1.y, v2.y, v3.y);
+    return target.set(x, y, cubic(along, v0.z, v1.z, v2.z, v3.z));
   }
 
   protected blank(): Vec3 {
@@ -246,9 +249,9 @@ export class Line2Curve extends Curve<Vec2> {
   }
 
   /** The point at `t`. */
-  getPoint(t: number, target = new Vec2()): Vec2 {
-    if (t === 1) return target.copy(this.v2);
-    return target.copy(this.v2).sub(this.v1).multiplyScalar(t).add(this.v1);
+  getPoint(along: number, target = new Vec2()): Vec2 {
+    if (along === 1) return target.copy(this.v2);
+    return target.copy(this.v2).sub(this.v1).multiplyScalar(along).add(this.v1);
   }
 
   /** The point a share `u` along (the same as at t = u). */
@@ -257,7 +260,7 @@ export class Line2Curve extends Curve<Vec2> {
   }
 
   /** Its way, the same everywhere. */
-  override getTangent(_t: number, target = new Vec2()): Vec2 {
+  override getTangent(_along: number, target = new Vec2()): Vec2 {
     return target.subVectors(this.v2, this.v1).normalize();
   }
 
@@ -293,9 +296,9 @@ export class Bezier2Curve2 extends Curve<Vec2> {
   }
 
   /** The point at `t`. */
-  getPoint(t: number, target = new Vec2()): Vec2 {
+  getPoint(along: number, target = new Vec2()): Vec2 {
     const { v0, v1, v2 } = this;
-    return target.set(quadratic(t, v0.x, v1.x, v2.x), quadratic(t, v0.y, v1.y, v2.y));
+    return target.set(quadratic(along, v0.x, v1.x, v2.x), quadratic(along, v0.y, v1.y, v2.y));
   }
 
   protected blank(): Vec2 {
@@ -324,9 +327,9 @@ export class Bezier3Curve2 extends Curve<Vec2> {
   }
 
   /** The point at `t`. */
-  getPoint(t: number, target = new Vec2()): Vec2 {
+  getPoint(along: number, target = new Vec2()): Vec2 {
     const { v0, v1, v2, v3 } = this;
-    return target.set(cubic(t, v0.x, v1.x, v2.x, v3.x), cubic(t, v0.y, v1.y, v2.y, v3.y));
+    return target.set(cubic(along, v0.x, v1.x, v2.x, v3.x), cubic(along, v0.y, v1.y, v2.y, v3.y));
   }
 
   protected blank(): Vec2 {

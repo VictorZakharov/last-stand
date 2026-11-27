@@ -9,7 +9,6 @@ import { flash, flashFree, release, type LightSlot } from '../fx/lights';
 import type { Enemy } from '../entities/enemy';
 import type { Player } from '../entities/player';
 import { nearGlow } from '../core/materials';
-import { portShader } from '../core/shaderPorts';
 import { effectLook, rgb, FX_PLAIN_VERTEX, effectShader } from '../engine/effects';
 import { hurtProp, PROP_DAMAGE } from '../world/destructible';
 import type { Obstacle } from '../types';
@@ -19,28 +18,10 @@ import { cutVineAlong } from '../entities/throws';
 
 const coreGeo = shapes.sphere(1, 12, 8);
 const matCache = new Map<string, Material>();
-/**
- * A hostile bolt's core is energy, not a ball: added light, brightest in the middle, fading to a soft rim.
- */
-const orbShader = {
-  vertexShader: /* glsl */`varying vec3 vN; varying vec3 vV;
-    void main(){ vec4 mv = modelViewMatrix * vec4(position, 1.0); vN = normalize(normalMatrix * normal); vV = normalize(-mv.xyz); gl_Position = projectionMatrix * mv; }`,
-  fragmentShader: /* glsl */`uniform vec3 uColor; varying vec3 vN; varying vec3 vV;
-    void main(){
-      float f = max(dot(normalize(vN), normalize(vV)), 0.0);
-      vec3 c = uColor * (0.15 + 1.1 * f * f);
-      gl_FragColor = vec4(c, 1.0);
-    }`,
-  transparent: true, blending: AdditiveBlending, depthWrite: false,
-};
-/** `orbShader` on WebGPU (core/shaderPorts.ts) */
-const orbPort: Parameters<typeof portShader>[1] = ({ wgslFn, normalView, positionViewDirection }, u) => ({
-  fragment: wgslFn(`fn boltOrb(n: vec3f, v: vec3f, color: vec3f) -> vec4f {
-    let f = max(dot(normalize(n), normalize(v)), 0.0);
-    return vec4f(color * (0.15 + 1.1 * f * f), 1.0);
-  }`)({ n: normalView, v: positionViewDirection, color: u.uColor }),
-});
-/** the orb for the Rust engine (src/engine/effects.ts): the port's WGSL above, the view taken in the world */
+/** A hostile bolt's core is energy, not a ball: added light, brightest in the middle, fading to a soft rim (its
+ *  look, `ORB_HOOKS`). */
+const ORB_DRAW = { transparent: true, blending: AdditiveBlending, depthWrite: false } as const;
+/** the orb for the Rust engine (src/engine/effects.ts), the view taken in the world */
 const ORB_HOOKS = FX_PLAIN_VERTEX + /* wgsl */ `
 fn surface_hook(s: ptr<function, Surface>, in: VertexOut) -> bool {
   let color = m.c[0].rgb;
@@ -56,7 +37,7 @@ function coreMat(color: ColorRepresentation, intensity: number, orb: boolean): M
   if (!m) {
     const c = new Color(color).multiplyScalar(intensity);
     m = orb ? effectLook(
-        portShader(nearGlow(new LookMaterial({ ...orbShader, uniforms: { uColor: { value: c } } })), orbPort),
+        nearGlow(new LookMaterial({ ...ORB_DRAW, uniforms: { uColor: { value: c } } })),
         'bolt-orb', ORB_HOOKS, { numbers(u, out) { rgb(u, 'uColor', out, 0); } })
       : nearGlow(new UnlitMaterial({ color: c }));
     matCache.set(key, m);

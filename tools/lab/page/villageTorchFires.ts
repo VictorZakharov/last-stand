@@ -8,7 +8,7 @@
 // basket's pixels: only their box is depth-tested, and with no bowl told them the flames were drawn over the basket.
 // `canary` holds every torch's flicker still (a light of its own in each one's place that no fire moves), shows the
 // porch's fires from above and takes the torch's bowl away.
-import * as THREE from 'three';
+import { Node, PointLight, Raycaster, Vec2, Vec3 } from './sceneApi.ts';
 import type { Lab } from './lab';
 import { G } from '../../../src/state';
 import { holdHour } from '../../../src/game/clock';
@@ -21,12 +21,12 @@ import type { LightsChecked } from './villageLights';
 
 /** the most of the frame the porch's fires may change from above in the hall, where he stands for it and his way */
 const MOST_PORCH = 0.0002;
-const FROM_ABOVE = new THREE.Vector3(TERRACE.x, TERRACE.high, -20);
+const FROM_ABOVE = new Vec3(TERRACE.x, TERRACE.high, -20);
 const DAIS_WAY = Math.PI;
 
 /** The porch's fires, where this commit has them apart (an A/B's other side may not). */
-const porchFires = (): THREE.Object3D | undefined =>
-  (G.arena.village as { porchFires?: THREE.Object3D }).porchFires;
+const porchFires = (): Node | undefined =>
+  (G.arena.village as { porchFires?: Node }).porchFires;
 
 /** The share of the frame from above in the hall that the porch's fires change (shown in the canary), or null where
  *  this commit has them in no group of their own. */
@@ -57,7 +57,7 @@ const BELOW = { distance: 1.8, under: 0.15 };
 const CHANGED = 8;
 const MOST_OVER_BASKET = 0.02;
 /** a bowl the flames' shader knows as none (its rim under its foot), as `noBowl` in world/fire.ts */
-const NO_BOWL = (): THREE.Vector2[] => [new THREE.Vector2(0, 0), new THREE.Vector2(0, 0), new THREE.Vector2(-1, 0)];
+const NO_BOWL = (): Vec2[] => [new Vec2(0, 0), new Vec2(0, 0), new Vec2(-1, 0)];
 
 /** A canvas's pixels. */
 function pixelsOf(canvas: HTMLCanvasElement): Uint8ClampedArray {
@@ -76,23 +76,23 @@ const BASKET_MIDDLE = 0.13;
 /** The mesh drawing the torch's basket under a fire's flames: the first a ray meets from the aisle (`from`, the
  *  torch's light) in to the basket's middle. Its own mesh or the still meshes' merge that took it, with whatever else
  *  of the hall's iron that merge holds (the arms and bands under it: flames drawn over those are as wrong). */
-function basketUnder(flames: THREE.Object3D, from: THREE.Vector3): THREE.Object3D | undefined {
-  const middle = flames.getWorldPosition(new THREE.Vector3());
+function basketUnder(flames: Node, from: Vec3): Node | undefined {
+  const middle = flames.getWorldPosition(new Vec3());
   middle.y -= BASKET_MIDDLE;
-  const start = new THREE.Vector3(from.x, middle.y, from.z);
-  const ray = new THREE.Raycaster(start, middle.clone().sub(start).normalize(), 0, start.distanceTo(middle) + 0.2);
-  const shown = (object: THREE.Object3D): boolean => object.visible && (object.parent ? shown(object.parent) : true);
+  const start = new Vec3(from.x, middle.y, from.z);
+  const ray = new Raycaster(start, middle.clone().sub(start).normalize(), 0, start.distanceTo(middle) + 0.2);
+  const shown = (object: Node): boolean => object.visible && (object.parent ? shown(object.parent) : true);
   const hit = ray.intersectObject(G.scene, true).find((met) => met.object !== flames && shown(met.object));
   return hit?.object;
 }
 
 /** The first column torch's flames (by its lamp's place) and that place, or none. */
-function firstTorchFlames(): { flames: THREE.Object3D; light: THREE.Vector3 } | undefined {
+function firstTorchFlames(): { flames: Node; light: Vec3 } | undefined {
   const light = torches()[0].at;
-  let flames: THREE.Object3D | undefined;
+  let flames: Node | undefined;
   G.scene.traverse((object) => {
     if (!object.userData.fireFlames) return;
-    if (object.getWorldPosition(new THREE.Vector3()).distanceTo(light) < FIRE_NEAR) flames ??= object;
+    if (object.getWorldPosition(new Vec3()).distanceTo(light) < FIRE_NEAR) flames ??= object;
   });
   return flames && { flames, light };
 }
@@ -105,10 +105,10 @@ function flamesOverBasket(lab: Lab, canary: boolean): number | null {
   const basket = torch && basketUnder(torch.flames, torch.light);
   if (!torch || !basket) return null;
   const flames = torch.flames;
-  const uniforms = flames.userData.flames as { uBowl: { value: THREE.Vector2[] } };
+  const uniforms = flames.userData.flames as { uBowl: { value: Vec2[] } };
   const bowl = uniforms.uBowl.value;
   if (canary) uniforms.uBowl.value = NO_BOWL();
-  const at = flames.getWorldPosition(new THREE.Vector3());
+  const at = flames.getWorldPosition(new Vec3());
   at.y -= BELOW.under;
   const below = (): Uint8ClampedArray => pixelsOf(lab.drawn(['below'], { at, distance: BELOW.distance })[0].canvas);
   try {
@@ -133,7 +133,7 @@ function flamesOverBasket(lab: Lab, canary: boolean): number | null {
 }
 
 /** where he stands (the hall's middle), the frames given to settle and read over */
-const STAND = new THREE.Vector3(TERRACE.x, TERRACE.high, -22);
+const STAND = new Vec3(TERRACE.x, TERRACE.high, -22);
 const SETTLE = 30;
 const FRAMES = 120;
 /** how near a torch's light its fire must burn (m: the light stands out from the torch, `wallTorch`'s `out`) */
@@ -144,10 +144,10 @@ const LEAST_SWAY = 0.08;
 const DAIS_LIGHTS = 2;
 
 /** The fires' flames in the scene, where each stands in the world. */
-function flamesAt(): THREE.Vector3[] {
-  const at: THREE.Vector3[] = [];
+function flamesAt(): Vec3[] {
+  const at: Vec3[] = [];
   G.scene.traverse((object) => {
-    if (object.userData.fireFlames) at.push(object.getWorldPosition(new THREE.Vector3()));
+    if (object.userData.fireFlames) at.push(object.getWorldPosition(new Vec3()));
   });
   return at;
 }
@@ -159,7 +159,7 @@ function lampStrength(i: number): number {
 }
 
 /** The torches' places (the columns' and the door's) and their lamps' indices in the list. */
-function torches(): { at: THREE.Vector3; lamp: number }[] {
+function torches(): { at: Vec3; lamp: number }[] {
   const village = G.arena.village;
   const first = village.lanterns.length;
   const columns = village.hallTorches.slice(DAIS_LIGHTS).map((at, k) => ({ at, lamp: first + DAIS_LIGHTS + k }));
@@ -170,9 +170,9 @@ function torches(): { at: THREE.Vector3; lamp: number }[] {
 
 /** Every torch's flicker swapped for a light no fire moves; returns what puts them back. */
 function flickersHeld(): () => void {
-  const flickers = G.arena.village.torchFlickers as THREE.PointLight[];
+  const flickers = G.arena.village.torchFlickers as PointLight[];
   const kept = [...flickers];
-  for (let k = 0; k < flickers.length; k++) flickers[k] = new THREE.PointLight(0xffffff, 1);
+  for (let k = 0; k < flickers.length; k++) flickers[k] = new PointLight(0xffffff, 1);
   return () => {
     for (let k = 0; k < kept.length; k++) flickers[k] = kept[k];
   };

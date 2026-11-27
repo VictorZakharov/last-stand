@@ -5,7 +5,7 @@
 import {
   Attribute, CanvasTexture, CatmullRom3, ClampToEdgeWrapping, Color, DataTexture, DoubleSide, floats, Geometry,
   LinearFilter, LinearMipmapLinearFilter, LitMaterial, Material, mergeGeometries, Mesh, NoColorSpace, Node,
-  RepeatWrapping, RGBAFormat, ShaderChunk, SRGBColorSpace, Texture, Vec2, Vec3, Vec4,
+  RepeatWrapping, RGBAFormat, SRGBColorSpace, Texture, Vec2, Vec3, Vec4,
 } from '../../engine/api/index.ts';
 import * as shapes from '../../engine/api/shapes/index.ts';
 import { lod, heroDetail } from './armor';
@@ -1292,17 +1292,10 @@ const strandTex = new Map<boolean, DataTexture>();
  */
 /**
  * A thin two-sided material lit on both sides as its front: a hair card is a lock of strands, not a sheet with an
- * inside, but three turns a back face's normal over, into the head, and seen from behind (along the hair's outline)
- * it shaded near black against the sky. Its own program, compiled with the rest at the boot's warm-up.
+ * inside, but a back face's normal turned over points into the head, and seen from behind (along the hair's
+ * outline) it shaded near black against the sky. A flag the renderer reads.
  */
 function bothSidesOut(m: Material): void {
-  const base = m.onBeforeCompile.bind(m), key = m.customProgramCacheKey.bind(m);
-  m.onBeforeCompile = (shader, renderer) => {
-    base(shader, renderer);
-    shader.fragmentShader = shader.fragmentShader.replace('#include <normal_fragment_begin>',
-      ShaderChunk.normal_fragment_begin.replace('normal *= faceDirection;', ''));
-  };
-  m.customProgramCacheKey = () => key() + '-bothsides';
   (m as unknown as { litBothSides: boolean }).litBothSides = true;
 }
 

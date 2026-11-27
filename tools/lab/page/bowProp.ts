@@ -9,7 +9,7 @@
 // the crosshair's point on anything within 5 m is put on along its ray, `AIM.near` in src/core/input.ts, so the aim is
 // never on a prop beside him there.) First, the point the pose aims from is held to the arrow drawn level (`shotFrom`
 // in src/combat/skills/ranger.ts). `canary` aims the pose from the arrow again.
-import * as THREE from 'three';
+import { Node, Vec3 } from './sceneApi.ts';
 import type { Fixture, Frame, Lab, Pictured, Report } from './lab';
 import type { Obstacle } from '../../../src/types';
 import { BIOME_IDS, type BiomeId } from '../../../src/data/biomes';
@@ -58,7 +58,7 @@ const PICTURED_BEFORE = 1;
 /** A part measured, and its world position now. */
 interface Part {
   name: string;
-  at: () => THREE.Vector3;
+  at: () => Vec3;
 }
 
 /** One part's reading over a hold. */
@@ -82,8 +82,8 @@ interface Stand {
 
 /** The parts read: the nocked arrow's middle, the bow's upper tip, and the hero himself. */
 function partsOf(lab: Lab): Part[] {
-  const world = (object: THREE.Object3D | undefined) => () => {
-    return (object ?? lab.model.root).getWorldPosition(new THREE.Vector3());
+  const world = (object: Node | undefined) => () => {
+    return (object ?? lab.model.root).getWorldPosition(new Vec3());
   };
   return [
     { name: 'arrow', at: world(lab.model.tip) },
@@ -98,10 +98,10 @@ class ReversalCount {
   largestMove = 0;
   /** the frame of the largest move */
   largestAt = 0;
-  private last: THREE.Vector3 | null = null;
-  private lastMove: THREE.Vector3 | null = null;
+  private last: Vec3 | null = null;
+  private lastMove: Vec3 | null = null;
 
-  observe(at: THREE.Vector3, frame: number): void {
+  observe(at: Vec3, frame: number): void {
     const move = this.last ? at.clone().sub(this.last) : null;
     this.last = at;
     if (!move) return;
@@ -131,37 +131,37 @@ function propsOfEachKind(): Obstacle[] {
 }
 
 /** Where he stands `gap` off `prop`'s circle, on its side towards the arena's middle. */
-function standAt(prop: Obstacle, gap: number): THREE.Vector3 {
-  const toMiddle = new THREE.Vector3(-prop.x, 0, -prop.z).normalize();
-  return new THREE.Vector3(prop.x, 0, prop.z).addScaledVector(toMiddle, prop.r + gap);
+function standAt(prop: Obstacle, gap: number): Vec3 {
+  const toMiddle = new Vec3(-prop.x, 0, -prop.z).normalize();
+  return new Vec3(prop.x, 0, prop.z).addScaledVector(toMiddle, prop.r + gap);
 }
 
 /** The way that faces `to` from `from` (rad, as the hero's facing). */
-const facingTo = (from: THREE.Vector3, to: THREE.Vector3): number => Math.atan2(to.x - from.x, to.z - from.z);
+const facingTo = (from: Vec3, to: Vec3): number => Math.atan2(to.x - from.x, to.z - from.z);
 
 /** The shot drawn and held on `aim` for `frames` (the mouse over it and the crosshair turned to it). */
-const holding = (aim: THREE.Vector3): Frame => ({ aim, sight: aim, m0: true });
+const holding = (aim: Vec3): Frame => ({ aim, sight: aim, m0: true });
 
 /** The shot let go aimed off behind him, so its arrow flies away from the prop. */
-async function letGoAway(lab: Lab, from: THREE.Vector3, prop: Obstacle): Promise<void> {
-  const away = from.clone().multiplyScalar(2).sub(new THREE.Vector3(prop.x, AIM_HEIGHT, prop.z));
+async function letGoAway(lab: Lab, from: Vec3, prop: Obstacle): Promise<void> {
+  const away = from.clone().multiplyScalar(2).sub(new Vec3(prop.x, AIM_HEIGHT, prop.z));
   await lab.step(TURN_AWAY_FRAMES, () => holding(away));
   await lab.step(1, () => ({ aim: away, sight: away }));
 }
 
 /** The point the pose aims from, where the tree has one (a commit from before #317 aims from the arrow as posed). */
-type ShotFrom = (player: Player) => THREE.Vector3;
+type ShotFrom = (player: Player) => Vec3;
 const shotFrom = (ranger as { shotFrom?: ShotFrom }).shotFrom;
 
 /** How far the point the pose aims from stands off the arrow's middle, drawn level ahead (m). */
 async function levelOff(lab: Lab, fixture: Fixture, from: ShotFrom): Promise<number> {
   await lab.setup({ ...fixture, nocked: true });
   const hero = lab.player.pos.clone();
-  const ahead = new THREE.Vector3(Math.sin(lab.player.facing), 0, Math.cos(lab.player.facing));
+  const ahead = new Vec3(Math.sin(lab.player.facing), 0, Math.cos(lab.player.facing));
   const aim = hero.addScaledVector(ahead, LEVEL.ahead).setY(LEVEL.height);
   await lab.step(LEVEL.frames, () => holding(aim));
   if (!lab.player.casting?.drawT) throw new Error('lab: the level draw never drew');
-  const arrow = lab.model.tip!.getWorldPosition(new THREE.Vector3());
+  const arrow = lab.model.tip!.getWorldPosition(new Vec3());
   return from(lab.player).distanceTo(arrow);
 }
 
@@ -180,9 +180,9 @@ const THROUGH_SLACK = 0.3;
  * beyond the prop's circle. Pressed against a prop, the arrow loosed from in it went through it (#640, from Victor:
  * "laser goes through, it should not").
  */
-function pastProp(prop: Obstacle, hero: THREE.Vector3): number {
-  const way = new THREE.Vector3(prop.x - hero.x, 0, prop.z - hero.z).normalize();
-  const farSide = new THREE.Vector3(prop.x - hero.x, 0, prop.z - hero.z).dot(way) + prop.r;
+function pastProp(prop: Obstacle, hero: Vec3): number {
+  const way = new Vec3(prop.x - hero.x, 0, prop.z - hero.z).normalize();
+  const farSide = new Vec3(prop.x - hero.x, 0, prop.z - hero.z).dot(way) + prop.r;
   let most = 0;
   for (const path of laserPaths()) {
     // (a prop whose top is under the arrow's line it flies over, as it should: a log, a low fire)
@@ -193,9 +193,9 @@ function pastProp(prop: Obstacle, hero: THREE.Vector3): number {
 }
 
 /** The set-up of a stand against `prop` from `gap`: his spot, and the point on the prop aimed at. */
-async function standBy(lab: Lab, fixture: Fixture, prop: Obstacle, gap: number): Promise<THREE.Vector3> {
+async function standBy(lab: Lab, fixture: Fixture, prop: Obstacle, gap: number): Promise<Vec3> {
   const at = standAt(prop, gap);
-  const target = new THREE.Vector3(prop.x, AIM_HEIGHT, prop.z);
+  const target = new Vec3(prop.x, AIM_HEIGHT, prop.z);
   await lab.setup({ ...fixture, at: [at.x, at.z], facing: facingTo(at, target), nocked: true });
   return target;
 }
@@ -254,9 +254,9 @@ const DUMMY_GAPS = [0.1, 0.3];
 async function standAgainstDummy(lab: Lab, fixture: Fixture, gap: number): Promise<{ line: string; problems: string[] }> {
   const label = `${G.arena.biome}, a training dummy, ${gap} m off it`;
   // (he's set up first: a set-up clears the foes)
-  const spot = new THREE.Vector3(2, 0, -6), radius = ENEMIES.dummy.radius;
+  const spot = new Vec3(2, 0, -6), radius = ENEMIES.dummy.radius;
   const at = standAt({ x: spot.x, z: spot.z, r: radius, h: 2 }, gap);
-  const target = new THREE.Vector3(spot.x, AIM_HEIGHT, spot.z);
+  const target = new Vec3(spot.x, AIM_HEIGHT, spot.z);
   await lab.setup({ ...fixture, at: [at.x, at.z], facing: facingTo(at, target), nocked: true });
   const dummy = lab.spawnFoe('dummy', spot);
   await lab.until(() => dummy.spawning <= 0, 360, 'the dummy never rose');

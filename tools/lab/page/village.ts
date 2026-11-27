@@ -13,7 +13,7 @@
 // of the square (where mouse look holds it), the notice board never read, a new material shown at one hour; walks to
 // a spot walked straight; an orb far past white hung in the first light read.
 import { fogOneGrey, fogPastCottages } from './villageFogPast';
-import * as THREE from 'three';
+import { BackSide, CustomBlending, LitMaterial, Mesh, OneFactor, shapes, Vec2, Vec3 } from './sceneApi.ts';
 import { pressHeld } from './holdPress';
 import { inShard } from './shards';
 import { villageCost } from './villageCosts';
@@ -333,13 +333,13 @@ export async function toVillage(lab: Lab): Promise<void> {
 /** The hero put at (x, z) on the ground there, still, and let settle. */
 async function stand(lab: Lab, [x, z]: Spot, facing = 0): Promise<void> {
   G.player.walkTo = null;
-  G.player.place(new THREE.Vector3(x, groundHeight(x, z), z), facing);
+  G.player.place(new Vec3(x, groundHeight(x, z), z), facing);
   await lab.step(SETTLE);
 }
 
 /** The hero walked of himself toward (x, z) for `frames` frames. */
 async function walkToward(lab: Lab, [x, z]: Spot, frames = WALK): Promise<void> {
-  G.player.walkTo = new THREE.Vector3(x, 0, z);
+  G.player.walkTo = new Vec3(x, 0, z);
   await lab.step(frames);
   G.player.walkTo = null;
 }
@@ -643,7 +643,7 @@ async function grassSteady(lab: Lab, canary: boolean): Promise<Checked> {
   await pressV(lab);
   await pressV(lab);
   if (renderer.viewMode() !== 'first') throw new Error('lab: V never took the village through the eyes');
-  const at = new THREE.Vector2(), last = new THREE.Vector2(), sight = new THREE.Vector3();
+  const at = new Vec2(), last = new Vec2(), sight = new Vec3();
   let most = 0, steepest = 0, highest = -1, frames = 0;
   const tilt = (frame: number) => ({ look: [0, frame < TILT_UP ? -TILT_PX : TILT_PX] as [number, number] });
   await lab.step(TILT_UP + TILT_DOWN, tilt, (frame) => {
@@ -738,7 +738,7 @@ async function training(lab: Lab, canary: boolean): Promise<Checked> {
   await lab.step(1);
   await stand(lab, yardToWorld(0, 0));
   const [dx, dz] = YARD_DUMMIES[1];
-  const dummy = new THREE.Vector3(dx, 1, dz);
+  const dummy = new Vec3(dx, 1, dz);
   await stand(lab, [dx, dz - 3]);
   // (held, then let go: the ranger's bow looses only as it's let go, and held throughout it struck nothing)
   await lab.step(STRIKE_HELD, () => ({ m0: true, aim: dummy }));
@@ -778,12 +778,16 @@ async function hoursCompileNothing(lab: Lab, canary: boolean): Promise<Checked> 
   lab.capture(['lobby']);
   const programs = (): number => PIPELINES.made;
   const first = programs();
-  let planted: THREE.Mesh | null = null;
+  let planted: Mesh | null = null;
   for (const hour of HOURS) {
     holdHour(hour);
     if (canary && hour === 12) {
-      const unseen = new THREE.MeshPhysicalMaterial({ sheen: 1, iridescence: 1 });
-      planted = new THREE.Mesh(new THREE.SphereGeometry(0.5), unseen);
+      // (a pipeline nothing else asks: light added by one of each side's, drawn from behind; three's canary was a
+      // program of its own, an iridescent sheen, which the API's lit material hasn't got)
+      const unseen = new LitMaterial({
+        sheen: 1, side: BackSide, transparent: true, blending: CustomBlending, blendSrc: OneFactor, blendDst: OneFactor,
+      });
+      planted = new Mesh(shapes.sphere(0.5), unseen);
       planted.position.set(0, 1.5, 3);
       G.scene.add(planted);
     }

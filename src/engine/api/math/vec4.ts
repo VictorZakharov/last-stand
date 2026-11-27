@@ -31,6 +31,15 @@ export class Vec4 {
   }
 
   /** sets all four */
+  /** its `index`th of x, y, z and w */
+  getComponent(index: number): number {
+    if (index === 0) return this.x;
+    if (index === 1) return this.y;
+    if (index === 2) return this.z;
+    if (index === 3) return this.w;
+    throw new RangeError(`Vec4 has no component ${index}`);
+  }
+
   set(x: number, y: number, z: number, w: number): this {
     this.x = x;
     this.y = y;
@@ -49,19 +58,21 @@ export class Vec4 {
     return new Vec4(this.x, this.y, this.z, this.w);
   }
 
-  /** takes `v`'s numbers */
-  copy(v: Vec4): this {
-    return this.set(v.x, v.y, v.z, v.w);
+  /** takes `vector`'s numbers */
+  copy(vector: Vec4): this {
+    return this.set(vector.x, vector.y, vector.z, vector.w);
   }
 
-  /** adds `v` */
-  add(v: Vec4): this {
-    return this.set(this.x + v.x, this.y + v.y, this.z + v.z, this.w + v.w);
+  /** adds `vector` */
+  add(vector: Vec4): this {
+    return this.set(this.x + vector.x, this.y + vector.y, this.z + vector.z, this.w + vector.w);
   }
 
-  /** adds `v` times `scale` */
-  addScaledVector(v: Vec4, scale: number): this {
-    return this.set(this.x + v.x * scale, this.y + v.y * scale, this.z + v.z * scale, this.w + v.w * scale);
+  /** adds `vector` times `scale` */
+  addScaledVector(vector: Vec4, scale: number): this {
+    const x = this.x + vector.x * scale;
+    const y = this.y + vector.y * scale;
+    return this.set(x, y, this.z + vector.z * scale, this.w + vector.w * scale);
   }
 
   /** multiplies each by `scalar` */
@@ -79,32 +90,34 @@ export class Vec4 {
     return this.multiplyScalar(1 / (this.length() || 1));
   }
 
-  /** moved `alpha` of the way to `v` */
-  lerp(v: Vec4, alpha: number): this {
+  /** moved `alpha` of the way to `vector` */
+  lerp(vector: Vec4, alpha: number): this {
     const x = this.x;
     const y = this.y;
     const z = this.z;
     const w = this.w;
-    return this.set(x + (v.x - x) * alpha, y + (v.y - y) * alpha, z + (v.z - z) * alpha, w + (v.w - w) * alpha);
+    const px = x + (vector.x - x) * alpha;
+    const py = y + (vector.y - y) * alpha;
+    return this.set(px, py, z + (vector.z - z) * alpha, w + (vector.w - w) * alpha);
   }
 
-  /** multiplied by `m` (no divide by w) */
-  applyMatrix4(m: Mat4): this {
+  /** multiplied by `matrix` (no divide by w) */
+  applyMatrix4(matrix: Mat4): this {
     const x = this.x;
     const y = this.y;
     const z = this.z;
     const w = this.w;
-    const e = m.elements;
-    const px = e[0] * x + e[4] * y + e[8] * z + e[12] * w;
-    const py = e[1] * x + e[5] * y + e[9] * z + e[13] * w;
-    const pz = e[2] * x + e[6] * y + e[10] * z + e[14] * w;
-    const pw = e[3] * x + e[7] * y + e[11] * z + e[15] * w;
+    const elements = matrix.elements;
+    const px = elements[0] * x + elements[4] * y + elements[8] * z + elements[12] * w;
+    const py = elements[1] * x + elements[5] * y + elements[9] * z + elements[13] * w;
+    const pz = elements[2] * x + elements[6] * y + elements[10] * z + elements[14] * w;
+    const pw = elements[3] * x + elements[7] * y + elements[11] * z + elements[15] * w;
     return this.set(px, py, pz, pw);
   }
 
-  /** whether `v` has the same numbers */
-  equals(v: Vec4): boolean {
-    return v.x === this.x && v.y === this.y && v.z === this.z && v.w === this.w;
+  /** whether `vector` has the same numbers */
+  equals(vector: Vec4): boolean {
+    return vector.x === this.x && vector.y === this.y && vector.z === this.z && vector.w === this.w;
   }
 
   /** takes four numbers from `array` at `offset` */
@@ -115,7 +128,7 @@ export class Vec4 {
   /** the four numbers as a new array */
   toArray(): Vec4Tuple;
   /** writes the four numbers into `array` at `offset` */
-  toArray<T extends NumberArray>(array: T, offset?: number): T;
+  toArray<Out extends NumberArray>(array: Out, offset?: number): Out;
   toArray(array: NumberArray = [], offset = 0): NumberArray {
     array[offset] = this.x;
     array[offset + 1] = this.y;

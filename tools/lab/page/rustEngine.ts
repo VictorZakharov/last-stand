@@ -9,7 +9,7 @@ import { drawnLabels } from '../../../src/ui/overlay/layer';
 import { G } from '../../../src/state';
 import { perfClock } from '../../../src/core/perfClock';
 import { RUST } from '../../../src/engine';
-import type { Bridge, FrameStats } from '../../../src/engine/bridge';
+import type { FrameStats } from '../../../src/engine/bridge';
 import { canvasSaid, plainCanvasSaid } from './rustCanvas';
 import { partsSaid } from './rustParts';
 import { blendedSaid } from './rustBlended';
@@ -19,7 +19,7 @@ import { standAt } from './draws';
 import { skyLightLines, turnToSkyLight } from './skyLight';
 import { foesAt } from './death';
 import { crowdPlaces } from './crowd';
-import * as THREE from 'three';
+import { Vec3 } from './sceneApi.ts';
 import { setQuality } from '../../../src/core/quality';
 import type { QualityLevel } from '../../../src/data/quality';
 import { bindKnown, pressing, skillNamed } from './cast';
@@ -129,7 +129,7 @@ async function stand(lab: Lab, command: RustCommand): Promise<string> {
     await lab.step(LEVEL_FRAMES);
   }
   if (command.foes > 0 && !command.village) {
-    const spots: THREE.Vector3[] = crowdPlaces(command.foes, G.player.pos, G.player.facing);
+    const spots: Vec3[] = crowdPlaces(command.foes, G.player.pos, G.player.facing);
     const foes = await foesAt(lab, spots, spots.map(() => 1));
     if (command.dying) {
       for (const foe of foes) foe.takeDamage(1e6, { by: G.player });
@@ -137,7 +137,7 @@ async function stand(lab: Lab, command: RustCommand): Promise<string> {
     }
   }
   if (command.boss && !command.village) {
-    const ahead = new THREE.Vector3(Math.sin(G.player.facing), 0, Math.cos(G.player.facing)).multiplyScalar(BOSS_AHEAD);
+    const ahead = new Vec3(Math.sin(G.player.facing), 0, Math.cos(G.player.facing)).multiplyScalar(BOSS_AHEAD);
     const boss = lab.spawnFoe(BIOMES[G.arena.biome].bosses[0].id, G.player.pos.clone().add(ahead).setY(0));
     await lab.until(() => boss.spawning <= 0, BOSS_RISE_FRAMES, 'the boss never rose');
     boss.dazed = 999;
@@ -157,7 +157,7 @@ function castHeld(command: RustCommand): ((frame: number) => Frame) | undefined 
   const hero = G.player;
   bindKnown(command.cast);
   const { key } = skillNamed(command.cast);
-  const ahead = new THREE.Vector3(Math.sin(hero.facing), 0, Math.cos(hero.facing)).multiplyScalar(CAST_AHEAD);
+  const ahead = new Vec3(Math.sin(hero.facing), 0, Math.cos(hero.facing)).multiplyScalar(CAST_AHEAD);
   const aim = hero.pos.clone().add(ahead);
   return () => {
     hero.cooldowns.clear();
@@ -280,18 +280,14 @@ export async function rustEngine(lab: Lab, command: RustCommand): Promise<Report
   const canvas = document.getElementById('rust-canvas') as HTMLCanvasElement;
   const { boot, bridge: { held } } = { boot: RUST.boot, bridge };
   const leftOut = Math.max(...read.get('lightsLeftOut')!);
-  // (a tree from before the engine kept anything, an A/B's other side, has none)
-  const kept = (bridge as Partial<Pick<Bridge, 'kept'>>).kept ?? { now: { records: 0, meshes: 0, parts: 0 }, stale: 0 };
   const lines = [
     `${where} ${command.view}, ${canvas.width}x${canvas.height} drawn, medians of ${command.frames} frames`,
     `  the render: ${median(renders).toFixed(2)} ms on the CPU (its matrices ${of('placeMs').toFixed(2)}, the scene walked ${of('walkMs').toFixed(2)}, `
       + `the engine ${of('engineMs').toFixed(2)}); the GPU ${of('gpuMs').toFixed(2)} ms, at the least ${Math.min(...read.get('gpuMs')!).toFixed(2)} (shadow and scene passes)`,
     `  a whole frame: ${median(frames).toFixed(2)} ms on the CPU, the game's update and the lab's step `
       + `${(median(frames) - median(renders)).toFixed(2)} of it`,
-    `  ${of('records')} records (the page's and the kept), ${of('culled')} things out of view, ${of('objects')} objects drawn `
+    `  ${of('records')} records, ${of('culled')} things out of view, ${of('objects')} objects drawn `
       + `in ${of('draws')} draw calls (+${of('shadowDraws')} for the sun's shadow), ${of('triangles')} triangles (+${of('shadowTriangles')})`,
-    `  kept by the engine, handed over once: ${kept.now.records} of those records, of ${kept.now.meshes} `
-      + `meshes in ${kept.now.parts} parts that stand still; ${kept.stale} found changed with nothing to say so`,
     `  ${of('lowDraws')} draws at a quarter of the scene's pixels, laid over it`,
     `  fields placed ahead of their draws: ${of('fieldKept')} instances kept of ${of('fieldCounted')} counted `
       + '(none: placed at every vertex)',
@@ -349,9 +345,6 @@ export async function rustEngine(lab: Lab, command: RustCommand): Promise<Report
   }
   if (!(of('draws') > 0)) problems.push('the engine drew nothing');
   // (a cell lit by fewer lights than the one beside it shows as a square on the ground that follows the hero)
-  if (kept.stale > 0) {
-    problems.push(`${kept.stale} kept meshes changed with nothing to say so (found by the audit: engine/kept.ts)`);
-  }
   if (leftOut > 0) problems.push(`${leftOut} times a point light was left out of a ground cell it reaches`);
   // (a skill's own look left out: from play, "no mage visual effects on spells when casting them")
   if (command.cast && skipped.length) problems.push(`${command.cast} cast: not drawn by the engine: ${skipped.join(', ')}`);

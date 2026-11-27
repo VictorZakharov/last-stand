@@ -6,7 +6,7 @@
 // is compiled for it at load or in play. (Drawn by three on a canvas of its own laid over the engine's, it needed
 // that canvas and three's renderer; three's mask kept a cut-out's alpha test, the engine's draws it whole.)
 import {
-  Box3, Color, InstancedMesh, LinearSRGBColorSpace, Mat4, Material, Mesh, Node, NormalBlending, Vec3,
+  boundsOf, Box3, Color, InstancedMesh, LinearSRGBColorSpace, Mat4, Material, Mesh, Node, NormalBlending, Vec3,
 } from '../../engine/api/index.ts';
 import { G } from '../../state';
 import { uiScales } from '../scale';
@@ -106,7 +106,7 @@ function boxOf(targets: readonly OutlineTarget[]): Box3 {
   box.makeEmpty();
   for (const target of targets) {
     if (target.instance === undefined) {
-      box.union(each.setFromObject(target.root));
+      box.union(boundsOf(target.root, each));
       continue;
     }
     const mesh = target.root as InstancedMesh;

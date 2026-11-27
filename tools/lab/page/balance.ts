@@ -6,7 +6,7 @@
 // and the feet's grip must hold it; in the air nothing pushes, so the centre keeps its way and falls as anything
 // does. A push beyond any feet's grip that the game's own movement asks (the body turned round at a run in a few
 // frames) is counted apart, as nothing the legs could do about it.
-import * as THREE from 'three';
+import { Maths, Node, Vec2, Vec3 } from './sceneApi.ts';
 import type { Joints } from '../../../src/entities/models/rig';
 import type { FootShape } from '../../../src/entities/models/ik';
 import { groundHeight } from '../../../src/world/ground';
@@ -47,7 +47,7 @@ interface Segment {
 /** Something carried (a weapon, a shield, a quiver): its weight and its centre in the world now. */
 export interface Load {
   kg: number;
-  at: THREE.Vector3;
+  at: Vec3;
 }
 
 /** What the body weighs and how: its own weight, what is worn on each segment (kg, its centre the segment's) and what
@@ -97,25 +97,25 @@ function partOf(name: SegmentName): Part {
 /** The centre of mass, and each part's share of how far it lies from where the game has the body (its mass over the
  *  whole's, times its own centre's offset): the centre is the body's place plus the parts' shares. */
 interface Weighed {
-  centre: THREE.Vector3;
-  parts: Record<Part, THREE.Vector3>;
+  centre: Vec3;
+  parts: Record<Part, Vec3>;
   /** each segment's and each load's centre, its weight (kg) and its part, in one order frame after frame */
-  points: THREE.Vector3[];
+  points: Vec3[];
   masses: number[];
   pointParts: Part[];
 }
 
-const _from = new THREE.Vector3();
-const _to = new THREE.Vector3();
+const _from = new Vec3();
+const _to = new Vec3();
 
 /** The centre of mass in the world of the body as it is posed now, with what it wears and carries, and each part's
  *  share of it from `body`, where the game has the body. */
-export function weigh(joints: Joints, build: Build, body: THREE.Vector3): Weighed {
-  const parts = Object.fromEntries(PARTS.map((part) => [part, new THREE.Vector3()])) as Record<Part, THREE.Vector3>;
-  const points: THREE.Vector3[] = [];
+export function weigh(joints: Joints, build: Build, body: Vec3): Weighed {
+  const parts = Object.fromEntries(PARTS.map((part) => [part, new Vec3()])) as Record<Part, Vec3>;
+  const points: Vec3[] = [];
   const masses: number[] = [];
   const pointParts: Part[] = [];
-  const add = (at: THREE.Vector3, kg: number, part: Part) => {
+  const add = (at: Vec3, kg: number, part: Part) => {
     points.push(at.clone());
     masses.push(kg);
     pointParts.push(part);
@@ -137,41 +137,41 @@ export function weigh(joints: Joints, build: Build, body: THREE.Vector3): Weighe
 /** A foot as the balance sees it: whether the leg IK has it planted, its ankle and its shape. */
 export interface BalanceFoot {
   planted: boolean;
-  ankle: THREE.Object3D;
+  ankle: Node;
   shape: FootShape;
 }
 
 /** One frame of a body to judge. */
 export interface BalanceSample {
   /** the centre of mass (m) */
-  centre: THREE.Vector3;
+  centre: Vec3;
   /** where the game has the body (the player's position): how it moves is the game's own movement */
-  body: THREE.Vector3;
+  body: Vec3;
   /** the outline on the ground (x, z) of the planted soles' parts that touch it: empty in the air */
-  support: THREE.Vector2[];
+  support: Vec2[];
   /** the height of the ground they touch */
   ground: number;
   /** the way the body goes, if it moves (x, z, of unit length) */
-  way: THREE.Vector2 | null;
+  way: Vec2 | null;
   /** each part's share of the centre's offset from the body, and each mass's centre, weight and part (`Weighed`) */
-  parts: Record<Part, THREE.Vector3>;
-  points: THREE.Vector3[];
+  parts: Record<Part, Vec3>;
+  points: Vec3[];
   masses: number[];
   pointParts: Part[];
 }
 
 /** This frame of a body: its centre of mass, where the game has it, the soles it stands on and the way it goes. */
-export function sampleOf(joints: Joints, build: Build, body: THREE.Vector3, feet: BalanceFoot[],
-  way: THREE.Vector2 | null): BalanceSample {
-  const touching: THREE.Vector2[] = [];
+export function sampleOf(joints: Joints, build: Build, body: Vec3, feet: BalanceFoot[],
+  way: Vec2 | null): BalanceSample {
+  const touching: Vec2[] = [];
   let groundSum = 0;
   let groundCount = 0;
   for (const foot of feet) {
     if (!foot.planted) continue;
     for (const point of touchingPoints(foot)) {
       const across = acrossSole(foot.ankle);
-      touching.push(new THREE.Vector2(point.x + across.x, point.z + across.y));
-      touching.push(new THREE.Vector2(point.x - across.x, point.z - across.y));
+      touching.push(new Vec2(point.x + across.x, point.z + across.y));
+      touching.push(new Vec2(point.x - across.x, point.z - across.y));
       groundSum += groundHeight(point.x, point.z);
       groundCount++;
     }
@@ -187,9 +187,9 @@ export function sampleOf(joints: Joints, build: Build, body: THREE.Vector3, feet
 }
 
 /** A planted sole's points that touch the ground (heel to toe: rolled onto its toes, only those), or its lowest. */
-function touchingPoints(foot: BalanceFoot): THREE.Vector3[] {
+function touchingPoints(foot: BalanceFoot): Vec3[] {
   const points = solePoints(foot.ankle, foot.shape);
-  const heightOf = (point: THREE.Vector3) => point.y - groundHeight(point.x, point.z);
+  const heightOf = (point: Vec3) => point.y - groundHeight(point.x, point.z);
   const touching = points.filter((point) => heightOf(point) < CONTACT);
   if (touching.length) return touching;
   const lowest = points.reduce((best, point) => (heightOf(point) < heightOf(best) ? point : best));
@@ -197,25 +197,25 @@ function touchingPoints(foot: BalanceFoot): THREE.Vector3[] {
 }
 
 /** Half a sole's width across it, on the ground (x, z). */
-function acrossSole(ankle: THREE.Object3D): THREE.Vector2 {
-  const side = new THREE.Vector3(1, 0, 0).transformDirection(ankle.matrixWorld);
-  const flat = new THREE.Vector2(side.x, side.z);
+function acrossSole(ankle: Node): Vec2 {
+  const side = new Vec3(1, 0, 0).transformDirection(ankle.matrixWorld);
+  const flat = new Vec2(side.x, side.z);
   const length = flat.length();
   return length > 1e-6 ? flat.multiplyScalar(SOLE_HALF_WIDTH / length) : flat.set(SOLE_HALF_WIDTH, 0);
 }
 
 /** The convex outline of `points`, anticlockwise (Andrew's monotone chain). */
-function convexHull(points: THREE.Vector2[]): THREE.Vector2[] {
+function convexHull(points: Vec2[]): Vec2[] {
   if (points.length < 3) return points;
   const sorted = [...points].sort((a, b) => a.x - b.x || a.y - b.y);
-  const turn = (o: THREE.Vector2, a: THREE.Vector2, b: THREE.Vector2) =>
+  const turn = (o: Vec2, a: Vec2, b: Vec2) =>
     (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
-  const lower: THREE.Vector2[] = [];
+  const lower: Vec2[] = [];
   for (const point of sorted) {
     while (lower.length >= 2 && turn(lower[lower.length - 2], lower[lower.length - 1], point) <= 0) lower.pop();
     lower.push(point);
   }
-  const upper: THREE.Vector2[] = [];
+  const upper: Vec2[] = [];
   for (const point of [...sorted].reverse()) {
     while (upper.length >= 2 && turn(upper[upper.length - 2], upper[upper.length - 1], point) <= 0) upper.pop();
     upper.push(point);
@@ -224,7 +224,7 @@ function convexHull(points: THREE.Vector2[]): THREE.Vector2[] {
 }
 
 /** How far `point` lies outside the outline `hull` (0 inside), and the outline's nearest point. */
-function outsideOf(point: THREE.Vector2, hull: THREE.Vector2[]): { by: number; nearest: THREE.Vector2 } {
+function outsideOf(point: Vec2, hull: Vec2[]): { by: number; nearest: Vec2 } {
   if (hull.length >= 3 && insideOf(point, hull)) return { by: 0, nearest: point.clone() };
   let best = { by: Infinity, nearest: point.clone() };
   for (let i = 0; i < hull.length; i++) {
@@ -235,7 +235,7 @@ function outsideOf(point: THREE.Vector2, hull: THREE.Vector2[]): { by: number; n
   return best;
 }
 
-function insideOf(point: THREE.Vector2, hull: THREE.Vector2[]): boolean {
+function insideOf(point: Vec2, hull: Vec2[]): boolean {
   for (let i = 0; i < hull.length; i++) {
     const a = hull[i];
     const b = hull[(i + 1) % hull.length];
@@ -244,10 +244,10 @@ function insideOf(point: THREE.Vector2, hull: THREE.Vector2[]): boolean {
   return true;
 }
 
-function nearestOnSegment(point: THREE.Vector2, a: THREE.Vector2, b: THREE.Vector2): THREE.Vector2 {
+function nearestOnSegment(point: Vec2, a: Vec2, b: Vec2): Vec2 {
   const run = b.clone().sub(a);
   const length = run.lengthSq();
-  const t = length > 1e-12 ? THREE.MathUtils.clamp(point.clone().sub(a).dot(run) / length, 0, 1) : 0;
+  const t = length > 1e-12 ? Maths.clamp(point.clone().sub(a).dot(run) / length, 0, 1) : 0;
   return a.clone().addScaledVector(run, t);
 }
 
@@ -287,9 +287,9 @@ const CAUSE_LEAST = 1;
 /** Each part's and the game's share of the centre's acceleration at `frame`, along the ground or up it, the largest
  *  first (m/s²). */
 function causesAt(samples: BalanceSample[], frame: number, seconds: number, upright: boolean): string {
-  const series: [Part | 'game', THREE.Vector3[]][] = [
+  const series: [Part | 'game', Vec3[]][] = [
     ['game', samples.map((sample) => sample.body)],
-    ...PARTS.map((part): [Part, THREE.Vector3[]] => [part, samples.map((sample) => sample.parts[part])]),
+    ...PARTS.map((part): [Part, Vec3[]] => [part, samples.map((sample) => sample.parts[part])]),
   ];
   const shares = series.flatMap(([name, points]) => {
     const push = accelerationAt(points, frame, seconds);
@@ -302,7 +302,7 @@ function causesAt(samples: BalanceSample[], frame: number, seconds: number, upri
 }
 
 /** The centre's acceleration at frame `at` from where it was two frames each side (m/s²), or nothing near the ends. */
-function accelerationAt(points: THREE.Vector3[], at: number, seconds: number): THREE.Vector3 | null {
+function accelerationAt(points: Vec3[], at: number, seconds: number): Vec3 | null {
   if (at < 2 || at + 2 >= points.length) return null;
   const span = 2 * seconds;
   return points[at + 2].clone().addScaledVector(points[at], -2).add(points[at - 2]).divideScalar(span * span);
@@ -313,7 +313,7 @@ function accelerationAt(points: THREE.Vector3[], at: number, seconds: number): T
  *  point hardly at all), the push up the ground (m/s² over the whole mass), and how far the game's movement and each
  *  part moved the point off under the centre of mass (m). */
 interface PushPoint {
-  at: THREE.Vector2;
+  at: Vec2;
   lift: number;
   moved: Record<Part | 'game', number>;
 }
@@ -324,8 +324,8 @@ function pushPointAt(samples: BalanceSample[], frame: number, seconds: number): 
   if (!root) return null;
   const total = sample.masses.reduce((sum, kg) => sum + kg, 0);
   let up = 0;
-  const turning = new THREE.Vector2();
-  const shifts = Object.fromEntries(PARTS.map((part) => [part, new THREE.Vector2()])) as Record<Part, THREE.Vector2>;
+  const turning = new Vec2();
+  const shifts = Object.fromEntries(PARTS.map((part) => [part, new Vec2()])) as Record<Part, Vec2>;
   let low = 0;
   for (let i = 0; i < sample.points.length; i++) {
     const own = accelerationAt(samples.map((each) => each.points[i]), frame, seconds);
@@ -345,7 +345,7 @@ function pushPointAt(samples: BalanceSample[], frame: number, seconds: number): 
     low += kg * height;
   }
   if (up <= 1e-6) {
-    return { at: new THREE.Vector2(sample.centre.x, sample.centre.z), lift: up / total, moved: noMoves() };
+    return { at: new Vec2(sample.centre.x, sample.centre.z), lift: up / total, moved: noMoves() };
   }
   const moved = noMoves();
   for (const part of PARTS) moved[part] = shifts[part].length() / up;
@@ -368,7 +368,7 @@ function tipCauses(weightOff: number, moved: Record<Part | 'game', number>): str
 }
 
 /** Which way a fall goes against the way the body goes: behind, ahead or to a side (or just off the feet, standing). */
-function towardOf(offset: THREE.Vector2, way: THREE.Vector2 | null): string {
+function towardOf(offset: Vec2, way: Vec2 | null): string {
   if (!way || offset.lengthSq() < 1e-12) return 'off the feet';
   const along = offset.clone().normalize().dot(way);
   if (along < -0.7) return 'backwards';
@@ -419,7 +419,7 @@ export function judgeBalance(samples: BalanceSample[], seconds: number): Fall[] 
     const outside = outsideOf(push.at, sample.support);
     if (outside.by > TIP_MARGIN) {
       const toward = towardOf(push.at.clone().sub(outside.nearest), sample.way);
-      const weight = outsideOf(new THREE.Vector2(sample.centre.x, sample.centre.z), sample.support).by;
+      const weight = outsideOf(new Vec2(sample.centre.x, sample.centre.z), sample.support).by;
       falls.push({ frame, unlike: 'tips', by: outside.by, toward, causes: tipCauses(weight, push.moved) });
     }
   });

@@ -1,8 +1,8 @@
 // Building blocks shared by the biome arenas: the biome contract, UV-scaled boxes, instancing
 // and geometry helpers, the spawn-portal membrane, the environment map and the static shadow bake.
 import {
-  Attribute, BackSide, Box3, Camera, CanvasTexture, Color, Curve, DoubleSide, Euler, floats, Geometry, InstancedMesh,
-  LightShadow, LookMaterial, Mat4, Material, mergeGeometries, Mesh, Node, PointLight, Quat, SkinnedMesh, Texture,
+  Attribute, Box3, boundsOf, Camera, CanvasTexture, Color, Curve, Euler, floats, Geometry, InstancedMesh,
+  LightShadow, Mat4, Material, mergeGeometries, Mesh, Node, PointLight, Quat, SkinnedMesh, Texture,
   UnlitMaterial, Vec3, World,
 } from '../engine/api/index.ts';
 import * as shapes from '../engine/api/shapes/index.ts';
@@ -118,7 +118,7 @@ export function standStill(object: Node): void {
   object.updateMatrixWorld(true);
   object.traverse((part) => { part.matrixAutoUpdate = false; });
   object.matrixWorldAutoUpdate = false;
-  // (the engine keeps it from then on, handed over once: `engine/kept.ts`)
+  // (never written again: what doesn't move isn't, `engine/stage.ts`)
   object.userData.standsStill = true;
 }
 
@@ -475,52 +475,11 @@ export function portalMembrane(parent: Node, angle: number, colors: { a: RGB; b:
     uTime: { value: 0 }, uPower: { value: 0.4 }, uArch: { value: arch ? 1 : 0 },
     uA: { value: new Color(...colors.a) }, uB: { value: new Color(...colors.b) }, uCore: { value: new Color(...colors.core) },
   };
-  const noise = `
-      float h(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7)))*43758.5453); }
-      float n(vec2 p){ vec2 i=floor(p), f=fract(p); f=f*f*(3.0-2.0*f);
-        return mix(mix(h(i),h(i+vec2(1,0)),f.x), mix(h(i+vec2(0,1)),h(i+vec2(1,1)),f.x), f.y); }
-      float fbm(vec2 p){ float v = 0.0, a = 0.5; for (int k = 0; k < 4; k++) { v += n(p) * a; p = p * 2.03 + 17.1; a *= 0.5; } return v; }`;
-  // alpha-blended, not additive: the vortex hides what's behind the gate
-  const mat = new LookMaterial({
-    uniforms, transparent: true, depthWrite: false, side: DoubleSide,
-    vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
-    fragmentShader: `
-      varying vec2 vUv; uniform float uTime; uniform float uPower; uniform float uArch; uniform vec3 uA; uniform vec3 uB; uniform vec3 uCore;
-      ${noise}
-      void main(){
-        vec2 p = vUv*2.0-1.0;
-        // rounded rectangle filling the opening: sd < 0 inside
-        vec2 q = abs(p) - vec2(0.72, 0.8);
-        float sd = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - 0.14;
-        // or straight sides under a round top
-        float archSd = p.y > 0.08 ? length(vec2(p.x, p.y - 0.08)) - 0.8 : max(abs(p.x) - 0.8, -0.92 - p.y);
-        sd = mix(sd, archSd, uArch);
-        float r = length(p * vec2(1.0, 0.95));
-        // twist the plane round the centre, tighter towards it (no atan: no seam)
-        float tw = 3.2 * (1.0 - smoothstep(0.0, 1.1, r)) + uTime * 0.9;
-        vec2 w = mat2(cos(tw), -sin(tw), sin(tw), cos(tw)) * p;
-        float arms = fbm(w * 2.2 + vec2(0.0, uTime * 0.25));
-        float fine = fbm(w * 5.5 - uTime * 0.4);
-        vec3 c = mix(uA * 0.3, uB, smoothstep(0.35, 0.75, arms)) * (0.35 + fine * 1.3);
-        // a dark heart round a bright pinpoint core
-        c *= mix(0.25, 1.0, smoothstep(0.08, 0.6, r));
-        c += uCore * (exp(-r * r * 60.0) * 1.6 + exp(-r * r * 8.0) * 0.25);
-        // sparks swept round with the swirl
-        vec2 sg = w * 9.0 + vec2(uTime * 0.7, 0.0);
-        c += uCore * step(0.965, h(floor(sg))) * (1.0 - smoothstep(0.1, 0.5, length(fract(sg) - 0.5))) * 1.2;
-        float inside = 1.0 - smoothstep(-0.03, 0.02, sd);
-        // crackling rim along the edge
-        float crackle = 0.6 + 0.8 * n(p * 7.0 + vec2(uTime * 3.0, -uTime * 2.0));
-        vec2 e = min(vUv, 1.0 - vUv);
-        float rim = (exp(-abs(sd) * 30.0) * crackle + exp(-abs(sd) * 8.0) * 0.25) * smoothstep(0.0, 0.06, min(e.x, e.y));
-        c = c * inside + mix(uB, uCore, 0.55) * rim;
-        gl_FragColor = vec4(c * uPower * 2.3, clamp(inside * 0.94 + rim, 0.0, 1.0) * (1.0 - seeFade()));
-      }`,
-  });
-  // (it hides what's behind the gate, the hero too: it fades as the gate round it dissolves)
-  seeThroughFade(mat, 'prop');
-  const mesh = new Mesh(shapes.plane(GATE_W, 4.4), membraneMaterial(uniforms));
-  // (the lab's handle on its uniforms, which the node material it's drawn with doesn't show: `lab village`)
+  // alpha-blended, not additive: the vortex hides what's behind the gate; it hides the hero too, so it fades as the
+  // gate round it dissolves
+  const membrane = seeThroughFade(membraneMaterial(uniforms), 'prop');
+  const mesh = new Mesh(shapes.plane(GATE_W, 4.4), membrane);
+  // (the lab's handle on its uniforms: `lab village`)
   mesh.userData.portal = uniforms;
   mesh.position.set(0, 2.2, 0.1);
   parent.add(mesh);
@@ -584,34 +543,10 @@ export function portalMembrane(parent: Node, angle: number, colors: { a: RGB; b:
  * just above, `zenith` overhead, a moon towards `moonDir` and a sprinkle of stars. Unfogged, behind everything. */
 export function buildSky(fogColor: number, moonDir: Vec3, zenith: RGB = [0.004, 0.005, 0.012]): Mesh {
   const fog = new Color(fogColor);
-  const mat = new LookMaterial({
-    uniforms: { uFog: { value: new Vec3(fog.r, fog.g, fog.b) }, uMoon: { value: moonDir }, uZenith: { value: new Vec3(...zenith) } },
-    side: BackSide, depthWrite: false, fog: false,
-    // on the far plane, drawn after everything opaque: the depth test skips every covered pixel
-    vertexShader: `varying vec3 vDir; void main(){ vDir = position; gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.0); gl_Position.z = gl_Position.w; }`,
-    fragmentShader: `
-      varying vec3 vDir; uniform vec3 uFog; uniform vec3 uMoon; uniform vec3 uZenith;
-      // no sin(): its precision loss on big cell coordinates lines the stars up in rings round the zenith
-      float h(vec3 p){ p = fract(p * 0.1031); p += dot(p, p.zyx + 31.32); return fract((p.x + p.y) * p.z); }
-      void main(){
-        vec3 d = normalize(vDir);
-        float y = max(d.y, 0.0);
-        vec3 c = mix(uFog, uFog * vec3(1.5, 1.45, 1.35), 1.0 - smoothstep(0.0, 0.18, abs(y - 0.05)));
-        c = mix(c, uZenith, smoothstep(0.08, 0.7, y));
-        float m = max(dot(d, uMoon), 0.0);
-        c += vec3(0.06, 0.07, 0.12) * pow(m, 300.0) + vec3(0.02, 0.025, 0.04) * pow(m, 8.0);
-        c = mix(c, vec3(0.5, 0.54, 0.64) * (0.85 + 0.15 * h(floor(d * 900.0))), smoothstep(0.99988, 0.99993, m));
-        // cubic cells cut the sphere unevenly (more cells towards the diagonals): scale them to even the density out
-        vec3 ad = abs(d);
-        vec3 g = floor(d * 700.0);
-        float dens = 0.004 * 1.732 / (ad.x + ad.y + ad.z);
-        float b = h(g + 1.0);
-        vec3 tint = mix(vec3(0.6, 0.68, 1.0), vec3(1.0, 0.85, 0.7), h(g + 2.0));
-        c += tint * 0.55 * step(1.0 - dens, h(g)) * smoothstep(0.12, 0.4, y) * (0.25 + 1.1 * b * b * b);
-        gl_FragColor = vec4(c, 1.0);
-      }`,
-  });
-  const sky = new Mesh(shapes.sphere(150, 32, 16), nightSkyMaterial(mat.uniforms));
+  const uniforms = {
+    uFog: { value: new Vec3(fog.r, fog.g, fog.b) }, uMoon: { value: moonDir }, uZenith: { value: new Vec3(...zenith) },
+  };
+  const sky = new Mesh(shapes.sphere(150, 32, 16), nightSkyMaterial(uniforms));
   sky.renderOrder = 100;
   sky.frustumCulled = false;
   return sky;
@@ -621,34 +556,14 @@ export function buildSky(fogColor: number, moonDir: Vec3, zenith: RGB = [0.004, 
  * towards `sunDir` with a warm glow round it, and slow soft clouds. Unfogged, behind everything. */
 export function buildDaySky(horizon: number, zenith: RGB, sunDir: Vec3): { mesh: Mesh; update: (t: number) => void } {
   const hz = new Color(horizon);
-  const mat = new LookMaterial({
-    uniforms: { uHorizon: { value: new Vec3(hz.r, hz.g, hz.b) }, uZenith: { value: new Vec3(...zenith) }, uSun: { value: sunDir.clone().normalize() }, uTime: { value: 0 } },
-    side: BackSide, depthWrite: false, fog: false,
-    // on the far plane, drawn after everything opaque: the depth test skips every covered pixel
-    vertexShader: `varying vec3 vDir; void main(){ vDir = position; gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.0); gl_Position.z = gl_Position.w; }`,
-    fragmentShader: `
-      varying vec3 vDir; uniform vec3 uHorizon; uniform vec3 uZenith; uniform vec3 uSun; uniform float uTime;
-      float h(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
-      float n(vec2 p){ vec2 i = floor(p), f = fract(p); f = f*f*(3.0-2.0*f);
-        return mix(mix(h(i), h(i+vec2(1,0)), f.x), mix(h(i+vec2(0,1)), h(i+vec2(1,1)), f.x), f.y); }
-      void main(){
-        vec3 d = normalize(vDir);
-        float y = max(d.y, 0.0);
-        vec3 c = mix(uHorizon, uZenith, smoothstep(0.0, 0.55, y));
-        float m = max(dot(d, uSun), 0.0);
-        c += vec3(0.5, 0.42, 0.28) * pow(m, 12.0) * 0.35 + vec3(1.0, 0.92, 0.75) * smoothstep(0.9993, 0.9996, m) * 2.5;
-        // clouds on a plane overhead, thinning towards the horizon
-        vec2 p = d.xz / max(d.y, 0.08) * 1.6 + vec2(uTime * 0.01, uTime * 0.004);
-        float cl = n(p) * 0.55 + n(p * 2.3 + 5.0) * 0.3 + n(p * 5.1 + 9.0) * 0.15;
-        cl = smoothstep(0.5, 0.8, cl) * smoothstep(0.04, 0.3, y);
-        c = mix(c, uHorizon * 1.25 + vec3(0.08, 0.07, 0.05) * pow(m, 4.0), cl * 0.7);
-        gl_FragColor = vec4(c, 1.0);
-      }`,
-  });
-  const mesh = new Mesh(shapes.sphere(150, 32, 16), daySkyMaterial(mat.uniforms));
+  const uniforms = {
+    uHorizon: { value: new Vec3(hz.r, hz.g, hz.b) }, uZenith: { value: new Vec3(...zenith) },
+    uSun: { value: sunDir.clone().normalize() }, uTime: { value: 0 },
+  };
+  const mesh = new Mesh(shapes.sphere(150, 32, 16), daySkyMaterial(uniforms));
   mesh.renderOrder = 100;
   mesh.frustumCulled = false;
-  return { mesh, update: (t) => { mat.uniforms.uTime.value = t; } };
+  return { mesh, update: (t) => { uniforms.uTime.value = t; } };
 }
 
 /** Place a gate group on the boundary at `angle`, its local +Z facing the arena center. */
@@ -723,7 +638,7 @@ function mergeable(mesh: Mesh, kept = false): boolean {
   // (a mesh with parts of its own stays: merged, it went from the scene and they with it, the library's books' pages)
   if (mesh.children.length) return false;
   if (Object.keys(mesh.geometry.morphAttributes).length) return false;
-  return !mesh.matrixAutoUpdate && mesh.visible && mesh.onBeforeRender === Node.prototype.onBeforeRender;
+  return !mesh.matrixAutoUpdate && mesh.visible && !mesh.onBeforeRender;
 }
 
 /** What sets a geometry's merge apart: its material, its attributes, whether it's indexed. */
@@ -839,7 +754,7 @@ function mergeUnder(root: Node, kept: boolean): void {
       // plate leant back read 4 cm deeper than it is, and a pair seemed to cut into each other)
       if (import.meta.env.DEV && mesh.parent) {
         const parts = (mesh.parent.userData.mergedParts ??= []) as Box3[];
-        parts.push(new Box3().setFromObject(mesh, mesh.userData.preciseBox === true));
+        parts.push(boundsOf(mesh, new Box3(), mesh.userData.preciseBox === true));
       }
       mesh.removeFromParent();
     }

@@ -11,10 +11,11 @@
 // it's made (its upload a frame of its own), and made again from the start as soon as a part it was made of changes
 // (his far detail, his gear shown or hidden). `?stillAsOne=0` draws each part on its own.
 import {
-  Attribute, Bone, Color, DetachedBindMode, Geometry, InstancedMesh, InterleavedBufferAttribute, LookMaterial, Mat3,
+  Attribute, Bone, Color, DetachedBindMode, Geometry, InstancedMesh, LookMaterial, Mat3,
   Mat4, Material, Mesh, Node, Skeleton, SkinnedMesh, StaticDrawUsage, TypedArray, Vec3, Vec4,
 } from '../../engine/api/index.ts';
 import { perfClock } from '../../core/perfClock';
+import { kitMarkOf } from './kitTwin';
 
 /** Whether a still hero is drawn as a few meshes (`?stillAsOne=0`: each part on its own), read at each step. Off on
  *  WebGPU while it drew a hero as one its own way (`drawAsOne.ts`), and left off when that went with three's drawing
@@ -49,7 +50,7 @@ const attributesOf = (geometry: Geometry): string[] => Object.keys(geometry.attr
 function mergeable(mesh: SkinnedMesh): boolean {
   if (!mesh.isMesh || (mesh as unknown as InstancedMesh).isInstancedMesh) return false;
   if (Object.hasOwn(mesh, 'onBeforeRender') || mesh.renderOrder !== 0 || mesh.castShadow) return false;
-  if (mesh.userData.drawsAlone || mesh.morphTargetInfluences?.length || mesh.layers.mask === 0) return false;
+  if (mesh.userData.drawsAlone || mesh.layers.mask === 0) return false;
   if (mesh.isSkinnedMesh && !mesh.skeleton) return false;
   const material = mesh.material;
   if (Array.isArray(material) || material.transparent || (material as LookMaterial).isLookMaterial) return false;
@@ -78,7 +79,7 @@ interface KitLooked {
 function readsOwnSpace(material: Material): boolean {
   const aura = (material as KitLooked).kitLooks?.aura.value;
   if (aura && (aura.r > 0 || aura.g > 0 || aura.b > 0)) return true;
-  const shade = material.userData.shade?.value as Vec4 | undefined;
+  const shade = (material.userData.shade as { value: Vec4 } | undefined)?.value;
   return !!shade && shade.x > 0;
 }
 
@@ -98,16 +99,18 @@ const UNDRAWN = new Set(['id', 'uuid', 'name', 'version', 'userData', 'kitLooks'
  *  else by what it is. */
 function valueKey(value: unknown): string {
   if (value === null || typeof value !== 'object') return String(value);
-  const numbers = value as { isColor?: boolean; isVector2?: boolean; isVector3?: boolean; isVector4?: boolean;
+  const numbers = value as { isColor?: boolean; isVec2?: boolean; isVec3?: boolean; isVec4?: boolean;
     toArray?: () => number[] };
-  if (numbers.isColor || numbers.isVector2 || numbers.isVector3 || numbers.isVector4) return numbers.toArray!().join(',');
+  if (numbers.isColor || numbers.isVec2 || numbers.isVec3 || numbers.isVec4) return numbers.toArray!().join(',');
   return `#${idOf(value)}`;
 }
 
-/** What `material` draws as: its kind, its shader's patch and key, and every property and look it draws by. Two
- *  materials of one key draw the same (a skinned part's copy and the rigid parts' material it was copied from). */
+/** What `material` draws as: its kind, the kit material it is or was copied from (models/kitTwin.ts), and every
+ *  property and look it draws by. Two materials of one key draw the same (a skinned part's copy and the rigid parts'
+ *  material it was copied from). */
 function lookOf(material: Material): string {
-  const words = [material.type, String(idOf(material.onBeforeCompile)), material.customProgramCacheKey()];
+  const mark = kitMarkOf(material);
+  const words = [material.type, mark ? String(idOf(mark)) : '-'];
   for (const name of Object.keys(material).sort()) {
     if (UNDRAWN.has(name) || name.startsWith('_')) continue;
     words.push(`${name}=${valueKey((material as unknown as Record<string, unknown>)[name])}`);
@@ -254,7 +257,7 @@ function layCopied(source: Attribute, into: TypedArray, from: number, vertices: 
 
 /** Positions (`place`) or normals for `vertices` put where their bones put them, into `into` from vertex `from`. */
 function layTurned(source: Attribute, into: TypedArray, from: number, vertices: Uint32Array,
-  place: boolean, bones: BoneMatrices, skin: Record<string, Attribute | InterleavedBufferAttribute> | null): void {
+  place: boolean, bones: BoneMatrices, skin: Record<string, Attribute> | null): void {
   const array = source.array as Float32Array;
   const boneIndex = skin?.skinIndex;
   const boneWeight = skin?.skinWeight;
@@ -338,8 +341,6 @@ function meshOf(laying: Laying, skeleton: Skeleton): Mesh {
     const skinned = new SkinnedMesh(geometry, first.material);
     skinned.bindMode = DetachedBindMode;
     skinned.bind(skeleton, new Mat4());
-    skinned.boundingSphere = geometry.boundingSphere!.clone();
-    skinned.boundingBox = geometry.boundingBox!.clone();
     mesh = skinned;
   }
   mesh.name = 'still as one';

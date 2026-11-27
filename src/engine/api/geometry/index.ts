@@ -4,5 +4,5 @@ export type { TypedArray, UpdateRange } from './attribute.ts';
 export { Geometry, InstancedGeometry } from './geometry.ts';
 export type { DrawRange, Group, PointLike } from './geometry.ts';
 export { normals, unitNormals } from './normals.ts';
-export { merge, unindexed, weld } from './ops.ts';
-export { hull } from './hull.ts';
+export { mergeGeometries, mergeVertices, unindexed } from './ops.ts';
+export { convexHull } from './hull.ts';

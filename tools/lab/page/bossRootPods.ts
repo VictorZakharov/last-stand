@@ -3,7 +3,7 @@
 // and a great one side by side before the hero, as the player sees them from the top-down camera, then a great pod
 // left to ripen and burst into its Mossback, pictured every few frames through its last second and after. No verdict:
 // the `pods` part judges what each hatches and when.
-import * as THREE from 'three';
+import { Vec3 } from './sceneApi.ts';
 import type { Lab, Pictured } from './lab';
 import type { Enemy } from '../../../src/entities/enemy';
 import { G } from '../../../src/state';
@@ -22,7 +22,7 @@ const APART = 3;
 const BEFORE_BURST = 0.6;
 
 /** A pod of `kind` risen at `at`, holding still, its ripening let run. */
-async function podAt(lab: Lab, kind: 'seedpod' | 'bigpod', at: THREE.Vector3): Promise<Enemy> {
+async function podAt(lab: Lab, kind: 'seedpod' | 'bigpod', at: Vec3): Promise<Enemy> {
   const pod = lab.spawnFoe(kind, at);
   await lab.until(() => pod.spawning <= 0, RISE_FRAMES, `the ${kind} never rose`);
   return pod;
@@ -34,8 +34,8 @@ export async function podPictures(lab: Lab, options: BossOptions, lines: string[
   await standIn(lab, options.fixture, 'forest');
   lab.letWavesCome();
   const hero = G.player;
-  const ahead = new THREE.Vector3(Math.sin(hero.facing), 0, Math.cos(hero.facing));
-  const across = new THREE.Vector3(ahead.z, 0, -ahead.x);
+  const ahead = new Vec3(Math.sin(hero.facing), 0, Math.cos(hero.facing));
+  const across = new Vec3(ahead.z, 0, -ahead.x);
   const middle = hero.pos.clone().addScaledVector(ahead, AHEAD).setY(0);
   const small = await podAt(lab, 'seedpod', middle.clone().addScaledVector(across, -APART / 2));
   const great = await podAt(lab, 'bigpod', middle.clone().addScaledVector(across, APART / 2));

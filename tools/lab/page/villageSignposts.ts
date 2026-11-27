@@ -5,7 +5,7 @@
 // square within reach from which its face is turned toward the eye, its letters tall enough over the shoulder. Pictured
 // from each post's best spot at noon, and from afar in the game's own view at noon, dusk and midnight. `canary` turns one arm a quarter round and stands a post on a road's middle,
 // both of which must be found.
-import * as THREE from 'three';
+import { Vec3 } from './sceneApi.ts';
 import { screenArea, type Lab, type Pictured } from './lab';
 import { G } from '../../../src/state';
 import { CAMERA } from '../../../src/data/balance';
@@ -47,7 +47,7 @@ const AFAR_NIGHT = 0;
 const AROUND = 2.2;
 const POST_TOP = 3;
 
-const toward = new THREE.Vector3(), facing = new THREE.Vector3(), from = new THREE.Vector3();
+const toward = new Vec3(), facing = new Vec3(), from = new Vec3();
 
 /** An arm turned by `by` (rad) about its post, its matrices made again. */
 function turnArm(arm: BuiltArm, by: number): void {
@@ -96,7 +96,7 @@ function readFrom(arm: BuiltArm, outs = READ_FROM): { at: Spot; square: number; 
     for (let k = 0; k < READ_ROUND; k++) {
       const a = (k / READ_ROUND) * Math.PI * 2, x = px + Math.cos(a) * out, z = pz + Math.sin(a) * out;
       if (!pavedAt(x, z)) continue;
-      from.set(x, groundHeight(x, z) + EYE, z).sub(new THREE.Vector3(px, groundHeight(px, pz) + arm.y, pz));
+      from.set(x, groundHeight(x, z) + EYE, z).sub(new Vec3(px, groundHeight(px, pz) + arm.y, pz));
       const distance = from.length();
       const square = Math.abs(from.normalize().dot(facing));
       const tall = (LETTERS_TALL / (2 * distance * Math.tan(((CAMERA.third.fov / 2) * Math.PI) / 180))) * 1080 * square;
@@ -164,7 +164,7 @@ async function pictured(lab: Lab): Promise<Pictured[]> {
       // (looking a little past the post, so it stands beside him in the frame, not behind him)
       const look = Math.atan2(post.at[0] - spot[0], post.at[1] - spot[1]) - PICTURED_ASIDE;
       G.player.walkTo = null;
-      G.player.place(new THREE.Vector3(spot[0], groundHeight(spot[0], spot[1]), spot[1]), look);
+      G.player.place(new Vec3(spot[0], groundHeight(spot[0], spot[1]), spot[1]), look);
       faceCamera(look);
       await lab.step(SETTLE);
       moments.push(await lab.screen(`signpost at ${post.at.join(',')}`, [post.arms.map((a) => a.name).join(' / ')]));
@@ -188,12 +188,12 @@ async function fromAfar(lab: Lab): Promise<Pictured[]> {
       const spot = readFrom(arm, [AFAR])?.at ?? post.at;
       const look = Math.atan2(post.at[0] - spot[0], post.at[1] - spot[1]);
       G.player.walkTo = null;
-      G.player.place(new THREE.Vector3(spot[0], groundHeight(spot[0], spot[1]), spot[1]), look);
+      G.player.place(new Vec3(spot[0], groundHeight(spot[0], spot[1]), spot[1]), look);
       await lab.step(SETTLE);
       moments.push(await lab.screen(`signpost at ${post.at.join(',')} from afar, ${when}`, [`${AFAR} m off, the game's view`]));
       // (and round the post alone, at the screen's own pixels: the sheet shows a whole screen at half its size)
       const round = [post.at[0] - AROUND, post.at[0] + AROUND].flatMap((x) => [0, POST_TOP].flatMap((y) =>
-        [post.at[1] - AROUND, post.at[1] + AROUND].map((z) => new THREE.Vector3(x, groundHeight(post.at[0], post.at[1]) + y, z))));
+        [post.at[1] - AROUND, post.at[1] + AROUND].map((z) => new Vec3(x, groundHeight(post.at[0], post.at[1]) + y, z))));
       moments.push(await lab.screen(`signpost at ${post.at.join(',')} from afar, ${when}, close`, ['the same frame, round the post'],
         screenArea(round)));
     }

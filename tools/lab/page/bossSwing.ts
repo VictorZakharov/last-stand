@@ -6,7 +6,7 @@
 // axis, its turn off that axis, its swing's angular acceleration (a catapult's fling is a jolt: a pendulum's is its
 // swing times its rate squared), and the whole body's turn about the upright while it tolls (none: it hangs still to
 // toll); pictured from its side as it goes. `--canary` swings it as a catapult (four times as far).
-import * as THREE from 'three';
+import { Node, Quat } from './sceneApi.ts';
 import type { Lab, Pictured } from './lab';
 import type { Enemy } from '../../../src/entities/enemy';
 import { G } from '../../../src/state';
@@ -34,9 +34,9 @@ interface Read { swing: number; off: number; facing: number; share: number; toll
 function readBell(boss: Enemy): Read {
   const root = boss.model.root;
   root.updateMatrixWorld(true);
-  const bell = root.userData.bell as THREE.Object3D, hover = root.userData.hover as THREE.Object3D;
-  const rel = new THREE.Quaternion().copy(hover.getWorldQuaternion(new THREE.Quaternion())).invert()
-    .multiply(bell.getWorldQuaternion(new THREE.Quaternion()));
+  const bell = root.userData.bell as Node, hover = root.userData.hover as Node;
+  const rel = new Quat().copy(hover.getWorldQuaternion(new Quat())).invert()
+    .multiply(bell.getWorldQuaternion(new Quat()));
   const swing = 2 * Math.atan2(rel.x, rel.w);
   const off = 2 * Math.asin(Math.min(1, Math.hypot(rel.y, rel.z)));
   const action = boss.action;

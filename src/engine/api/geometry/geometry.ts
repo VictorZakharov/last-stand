@@ -3,9 +3,10 @@
 // own `version` says its numbers changed), `rangeVersion` when what's drawn of it does (the draw range, the
 // groups, an instanced geometry's count): what the stage reads to tell the engine again.
 import type { Quat } from '../math/index.ts';
-import { Box3, Mat3, Mat4, Sphere, Vec3 } from '../math/index.ts';
+import { Box3, Mat3, Mat4, Maths, Sphere, Vec3 } from '../math/index.ts';
 import { Attribute, indexOf } from './attribute.ts';
 import { normals, unitNormals } from './normals.ts';
+import { unindexed } from './ops.ts';
 
 /** A stretch of the index (or of the vertices, unindexed) drawn with one of a mesh's materials. */
 export interface Group {
@@ -36,11 +37,11 @@ export interface PointLike {
 }
 
 let nextId = 0;
-const _m = new Mat4();
-const _box = new Box3();
-const _normalMatrix = new Mat3();
-const _offset = new Vec3();
-const _point = new Vec3();
+const scratchMatrix = new Mat4();
+const scratchBox = new Box3();
+const scratchNormalMatrix = new Mat3();
+const scratchOffset = new Vec3();
+const scratchPoint = new Vec3();
 
 /** A mesh's shape: named attributes, an optional index, groups, a draw range and bounds made on asking. */
 export class Geometry {
@@ -50,6 +51,11 @@ export class Geometry {
   readonly id = nextId++;
   /** a name of its own */
   name = '';
+  /** what made it, by three's name for its generator (`LatheGeometry`), where a generator says: `Geometry` else */
+  type = 'Geometry';
+  /** what its generator was given, where it says (a lathe's `points` and `segments`) */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  parameters: Record<string, any> = {};
   /** the attributes by name (`position`, `normal`, `uv`, `color`, `skinIndex`, `skinWeight`...) */
   readonly attributes: Record<string, Attribute> = {};
   /** morph targets by attribute name (the game makes none: kept for the tests that ask) */
@@ -64,8 +70,9 @@ export class Geometry {
   boundingBox: Box3 | null = null;
   /** the sphere round its positions, once `computeBoundingSphere` has made it */
   boundingSphere: Sphere | null = null;
-  /** the game's own notes on it (shared by `clone`, as three's) */
-  userData: Record<string, unknown> = {};
+  /** the game's own notes on it, anything its own code reads back (shared by `clone`, as three's) */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  userData: Record<string, any> = {};
   /** moves when an attribute or the index is replaced */
   version = 0;
   /** moves when what's drawn of it changes: the draw range, the groups */
@@ -75,7 +82,7 @@ export class Geometry {
 
   /** a UUID of its own, made when first asked for */
   get uuid(): string {
-    this.ownUuid ??= crypto.randomUUID();
+    this.ownUuid ??= Maths.generateUUID();
     return this.ownUuid;
   }
 
@@ -91,9 +98,10 @@ export class Geometry {
     return this;
   }
 
-  /** The attribute named `name`, if it has one. */
-  getAttribute(name: string): Attribute | undefined {
-    return this.attributes[name] as Attribute | undefined;
+  /** The attribute named `name` (typed as there, as three's is: undefined where it has none, so ask
+   *  `hasAttribute` first where that can be). */
+  getAttribute(name: string): Attribute {
+    return this.attributes[name];
   }
 
   /** Sets the attribute named `name`. */
@@ -135,20 +143,20 @@ export class Geometry {
   }
 
   /** Moves its positions by `m`, its normals and tangents turned with them; bounds made again if it had them. */
-  applyMatrix4(m: Mat4): this {
+  applyMatrix4(matrix: Mat4): this {
     const position = this.getAttribute('position');
     if (position) {
-      position.applyMatrix4(m);
+      position.applyMatrix4(matrix);
       position.needsUpdate = true;
     }
     const normal = this.getAttribute('normal');
     if (normal) {
-      normal.applyNormalMatrix(_normalMatrix.getNormalMatrix(m));
+      normal.applyNormalMatrix(scratchNormalMatrix.getNormalMatrix(matrix));
       normal.needsUpdate = true;
     }
     const tangent = this.getAttribute('tangent');
     if (tangent) {
-      tangent.transformDirection(m);
+      tangent.transformDirection(matrix);
       tangent.needsUpdate = true;
     }
     if (this.boundingBox) this.computeBoundingBox();
@@ -157,41 +165,41 @@ export class Geometry {
   }
 
   /** Turns it by `q`. */
-  applyQuaternion(q: Quat): this {
-    return this.applyMatrix4(_m.makeRotationFromQuaternion(q));
+  applyQuaternion(quaternion: Quat): this {
+    return this.applyMatrix4(scratchMatrix.makeRotationFromQuaternion(quaternion));
   }
 
   /** Turns it by `angle` about x. */
   rotateX(angle: number): this {
-    return this.applyMatrix4(_m.makeRotationX(angle));
+    return this.applyMatrix4(scratchMatrix.makeRotationX(angle));
   }
 
   /** Turns it by `angle` about y. */
   rotateY(angle: number): this {
-    return this.applyMatrix4(_m.makeRotationY(angle));
+    return this.applyMatrix4(scratchMatrix.makeRotationY(angle));
   }
 
   /** Turns it by `angle` about z. */
   rotateZ(angle: number): this {
-    return this.applyMatrix4(_m.makeRotationZ(angle));
+    return this.applyMatrix4(scratchMatrix.makeRotationZ(angle));
   }
 
   /** Moves it by (x, y, z). */
   translate(x: number, y: number, z: number): this {
-    return this.applyMatrix4(_m.makeTranslation(x, y, z));
+    return this.applyMatrix4(scratchMatrix.makeTranslation(x, y, z));
   }
 
   /** Scales it by (x, y, z). */
   scale(x: number, y: number, z: number): this {
-    return this.applyMatrix4(_m.makeScale(x, y, z));
+    return this.applyMatrix4(scratchMatrix.makeScale(x, y, z));
   }
 
   /** Moves it so its box's middle is at the origin. */
   center(): this {
     this.computeBoundingBox();
     if (!this.boundingBox) return this;
-    this.boundingBox.getCenter(_offset).negate();
-    return this.translate(_offset.x, _offset.y, _offset.z);
+    this.boundingBox.getCenter(scratchOffset).negate();
+    return this.translate(scratchOffset.x, scratchOffset.y, scratchOffset.z);
   }
 
   /** Its positions from `points` (a missing `z` is 0): written into its own if it has them, else made. */
@@ -199,11 +207,11 @@ export class Geometry {
     const position = this.getAttribute('position');
     if (!position) {
       const values = new Float32Array(points.length * 3);
-      points.forEach((p, i) => values.set([p.x, p.y, p.z ?? 0], i * 3));
+      points.forEach((point, i) => values.set([point.x, point.y, point.z ?? 0], i * 3));
       return this.setAttribute('position', new Attribute(values, 3));
     }
-    const n = Math.min(points.length, position.count);
-    for (let i = 0; i < n; i++) position.setXYZ(i, points[i].x, points[i].y, points[i].z ?? 0);
+    const count = Math.min(points.length, position.count);
+    for (let i = 0; i < count; i++) position.setXYZ(i, points[i].x, points[i].y, points[i].z ?? 0);
     position.needsUpdate = true;
     return this;
   }
@@ -222,11 +230,11 @@ export class Geometry {
     const position = this.getAttribute('position');
     if (!position) return;
     const center = this.boundingSphere.center;
-    _box.setFromBufferAttribute(position).getCenter(center);
+    scratchBox.setFromBufferAttribute(position).getCenter(center);
     let most = 0;
     for (let i = 0; i < position.count; i++) {
-      _point.set(position.getX(i), position.getY(i), position.getZ(i));
-      most = Math.max(most, center.distanceToSquared(_point));
+      scratchPoint.set(position.getX(i), position.getY(i), position.getZ(i));
+      most = Math.max(most, center.distanceToSquared(scratchPoint));
     }
     this.boundingSphere.radius = Math.sqrt(most);
   }
@@ -234,6 +242,11 @@ export class Geometry {
   /** Makes its normals from its faces (`normals`): smooth through the index, flat without one. */
   computeVertexNormals(): void {
     normals(this);
+  }
+
+  /** It laid out a vertex a corner, no index (`unindexed`); itself if it has no index. */
+  toNonIndexed(): Geometry {
+    return unindexed(this);
   }
 
   /** Makes every normal unit length. */
@@ -252,6 +265,8 @@ export class Geometry {
     for (const name of Object.keys(this.attributes)) delete this.attributes[name];
     for (const name of Object.keys(this.morphAttributes)) delete this.morphAttributes[name];
     this.name = source.name;
+    this.type = source.type;
+    this.parameters = { ...source.parameters };
     this.index = source.index ? source.index.clone() : null;
     for (const [name, attribute] of Object.entries(source.attributes)) this.attributes[name] = attribute.clone();
     for (const [name, list] of Object.entries(source.morphAttributes)) {

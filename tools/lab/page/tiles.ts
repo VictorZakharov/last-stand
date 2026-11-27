@@ -9,7 +9,9 @@
 // tile and 2 up) is right on its surfaces, a photo on none. It fails where a biome shows no repeated map.
 // `--pictures` pictures each surface as the player meets it (page/tilePictures.ts), and `--ab` beside another commit's.
 // `--canary` lays a board 2 m by 0.5 m in each biome, its map repeated twice along u, which must read 1 m by 0.5 m.
-import * as THREE from 'three';
+import {
+  Geometry, InstancedMesh, LitMaterial, Material, Mesh, Node, RepeatWrapping, shapes, Texture, Vec3,
+} from './sceneApi.ts';
 import type { Lab, Pictured, Report } from './lab';
 import { BIOME_IDS, type BiomeId } from '../../../src/data/biomes';
 import { G } from '../../../src/state';
@@ -42,7 +44,7 @@ const CANARY_NAME = 'tiles canary';
 interface Readings {
   map: string;
   surface: string;
-  meshes: THREE.Mesh[];
+  meshes: Mesh[];
   pixels: number;
   u: number[];
   v: number[];
@@ -54,7 +56,7 @@ interface Readings {
 interface Tile {
   map: string;
   surface: string;
-  meshes: THREE.Mesh[];
+  meshes: Mesh[];
   area: number;
   u: Spread;
   v: Spread;
@@ -63,23 +65,23 @@ interface Tile {
 }
 
 /** The repeated map a material draws with: its colours', else its normals' or its roughness'. */
-function repeatedMapOf(material: THREE.Material): THREE.Texture | undefined {
-  const m = material as THREE.MeshStandardMaterial;
+function repeatedMapOf(material: Material): Texture | undefined {
+  const m = material as LitMaterial;
   const map = m.map ?? m.normalMap ?? m.roughnessMap ?? undefined;
   if (!map) return undefined;
-  return map.wrapS === THREE.RepeatWrapping || map.wrapT === THREE.RepeatWrapping ? map : undefined;
+  return map.wrapS === RepeatWrapping || map.wrapT === RepeatWrapping ? map : undefined;
 }
 
 /** A map's name: its recipe's key where it's one of the game's (`bark()`), else its own name or its size. (An A/B's
  *  other side may have no `mapKeyOf`.) */
-function mapNameOf(texture: THREE.Texture): string {
+function mapNameOf(texture: Texture): string {
   const keyOf = (textures as Partial<typeof textures>).mapKeyOf;
   const image = texture.image as { width?: number; height?: number } | undefined;
   return keyOf?.(texture) ?? (texture.name || `a ${image?.width}x${image?.height} map`);
 }
 
 /** A surface's name: its mesh's (its shadows' copy's as the drawn one's), else its nearest named parent's. */
-function surfaceNameOf(mesh: THREE.Object3D): string {
+function surfaceNameOf(mesh: Node): string {
   const own = mesh.name.replace(/: shadows$/, '');
   if (own) return own;
   for (let o = mesh.parent; o; o = o.parent) if (o.name) return `a part of ${o.name}`;
@@ -88,23 +90,23 @@ function surfaceNameOf(mesh: THREE.Object3D): string {
 
 /** Whether every one of `mesh`'s parents up to `group` is shown (the mesh itself may be hidden by culling, or drawn in
  *  the shadows alone). */
-function shownIn(mesh: THREE.Object3D, group: THREE.Object3D): boolean {
+function shownIn(mesh: Node, group: Node): boolean {
   for (let o = mesh.parent; o && o !== group; o = o.parent) if (!o.visible) return false;
   return true;
 }
 
 /** How many places `mesh` is drawn at: an instanced mesh's instances, else one. */
-function instancesOf(mesh: THREE.Mesh): number {
-  const instanced = mesh as THREE.InstancedMesh;
+function instancesOf(mesh: Mesh): number {
+  const instanced = mesh as InstancedMesh;
   return instanced.isInstancedMesh ? instanced.count : 1;
 }
 
 /** The meshes of `group` drawn with a repeated map, one of each geometry and material (the one with more instances:
  *  a culled mesh holds those in view, its shadows' copy every one). */
-function surfacesIn(group: THREE.Object3D): THREE.Mesh[] {
-  const byPair = new Map<string, THREE.Mesh>();
+function surfacesIn(group: Node): Mesh[] {
+  const byPair = new Map<string, Mesh>();
   group.traverse((o) => {
-    const mesh = o as THREE.Mesh;
+    const mesh = o as Mesh;
     if (!mesh.isMesh || !mesh.geometry.attributes.uv || !shownIn(mesh, group)) return;
     const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
     if (!materials.some((m) => repeatedMapOf(m))) return;
@@ -116,7 +118,7 @@ function surfacesIn(group: THREE.Object3D): THREE.Mesh[] {
 }
 
 /** The triangles of `geometry` drawn with material `index` of a mesh of several (every one where it has one). */
-function trianglesOf(geometry: THREE.BufferGeometry, index: number | undefined): Array<[number, number]> {
+function trianglesOf(geometry: Geometry, index: number | undefined): Array<[number, number]> {
   const count = geometry.index ? geometry.index.count : geometry.attributes.position.count;
   if (index === undefined || !geometry.groups.length) return [[0, count]];
   const drawn = geometry.groups.filter((g) => g.materialIndex === index);
@@ -124,7 +126,7 @@ function trianglesOf(geometry: THREE.BufferGeometry, index: number | undefined):
 }
 
 /** `mesh`'s triangles drawn with `material` (its `index`th) read into `readings`: each one's tile, at every place. */
-function read(mesh: THREE.Mesh, material: THREE.Material, index: number | undefined, readings: Readings): void {
+function read(mesh: Mesh, material: Material, index: number | undefined, readings: Readings): void {
   const map = repeatedMapOf(material)!;
   const geometry = mesh.geometry, position = geometry.attributes.position, uv = geometry.attributes.uv;
   const places = placesOf(mesh, INSTANCES_READ);
@@ -132,7 +134,7 @@ function read(mesh: THREE.Mesh, material: THREE.Material, index: number | undefi
   readings.meshes.push(mesh);
   const triangles = ranges.reduce((n, [from, to]) => n + (to - from) / 3, 0);
   const every = Math.max(1, Math.ceil((triangles * places.length) / TRIANGLES_READ));
-  const corner = new THREE.Vector3(), world = new Float64Array(9), inMap = new Float64Array(6);
+  const corner = new Vec3(), world = new Float64Array(9), inMap = new Float64Array(6);
   const vertexOf = (k: number): number => (geometry.index ? geometry.index.getX(k) : k);
   for (const place of places) {
     for (const [from, to] of ranges) {
@@ -166,7 +168,7 @@ const noReadings = (map: string, surface: string, pixels: number): Readings =>
   ({ map, surface, meshes: [], pixels, u: [], v: [], stretch: [], area: [] });
 
 /** Every surface's tile in `group`, by map and surface. */
-function tilesIn(group: THREE.Object3D, wanted: string[] | undefined): Tile[] {
+function tilesIn(group: Node, wanted: string[] | undefined): Tile[] {
   const byName = new Map<string, Readings>();
   group.updateMatrixWorld(true);
   for (const mesh of surfacesIn(group)) {
@@ -198,13 +200,13 @@ function tilesIn(group: THREE.Object3D, wanted: string[] | undefined): Tile[] {
 }
 
 /** A board 2 m by 0.5 m laid in `group`, its map repeated twice along u; it takes itself away. */
-function plantBoard(group: THREE.Object3D): () => void {
-  const texture = new THREE.Texture();
-  texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+function plantBoard(group: Node): () => void {
+  const texture = new Texture();
+  texture.wrapS = texture.wrapT = RepeatWrapping;
   texture.repeat.set(...CANARY_REPEAT);
   texture.name = CANARY_NAME;
-  const material = new THREE.MeshStandardMaterial({ map: texture });
-  const board = new THREE.Mesh(new THREE.PlaneGeometry(...CANARY_BOARD), material);
+  const material = new LitMaterial({ map: texture });
+  const board = new Mesh(shapes.plane(...CANARY_BOARD), material);
   board.name = CANARY_NAME;
   group.add(board);
   return () => {

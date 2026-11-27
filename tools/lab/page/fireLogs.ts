@@ -5,7 +5,7 @@
 // (`uLogs` in world/fire.ts). Read: where the logs are drawn (their meshes' pixels in the lab's `parts` look), the
 // share whose light the flames change, set against the same with the logs taken from the shader (the canary's
 // drawing, the bug as it was): what lit them through the logs must go, leaving the flames in front of them.
-import * as THREE from 'three';
+import { LookMaterial, Mesh, type Uniform, Vec4 } from './sceneApi.ts';
 
 /** a pixel counts as lit by the flames past this many levels (of 255) on its brightest channel (their bloom and
  *  the frame's grade move the logs by less: past 8, 85% of them were lit with the logs known and 93% unknown) */
@@ -23,7 +23,7 @@ export interface OverLogs {
   /** which pixels of the drawing the logs cover (1 where they do) */
   logsDrawn: () => Uint8Array;
   /** the flames' volume (its material's `uLogs` the logs the shader knows) */
-  flames: THREE.Mesh;
+  flames: Mesh;
   canary: boolean;
 }
 
@@ -46,11 +46,11 @@ const LOG_SHADE = [90, 90, 90];
 const LIT_SHADE = [255, 40, 40];
 
 /** The logs the flames' shader knows (a tree before them has none). */
-const logsOf = (flames: THREE.Mesh): { value: THREE.Vector4[] } | undefined =>
-  (flames.material as THREE.ShaderMaterial).uniforms.uLogs;
+const logsOf = (flames: Mesh): Uniform<Vec4[]> | undefined =>
+  (flames.material as LookMaterial).uniforms.uLogs as Uniform<Vec4[]> | undefined;
 
 /** Whether `flames` know any log. */
-export const knowsLogs = (flames: THREE.Mesh): boolean => !!logsOf(flames)?.value.some((end) => end.w > 0);
+export const knowsLogs = (flames: Mesh): boolean => !!logsOf(flames)?.value.some((end) => end.w > 0);
 
 /** Whether pixel `i` (its first channel's index) differs between `a` and `b` by more than `LIT`. */
 function changed(a: ImageData, b: ImageData, i: number): boolean {
@@ -59,7 +59,7 @@ function changed(a: ImageData, b: ImageData, i: number): boolean {
 }
 
 /** `read` with the flames hidden. */
-function withoutFlames<T>(flames: THREE.Mesh, read: () => T): T {
+function withoutFlames<T>(flames: Mesh, read: () => T): T {
   flames.visible = false;
   try {
     return read();
@@ -69,11 +69,11 @@ function withoutFlames<T>(flames: THREE.Mesh, read: () => T): T {
 }
 
 /** `read` with the logs taken from the flames' shader (each 0 thick). */
-export function logsUnknown<T>(flames: THREE.Mesh, read: () => T): T {
+export function logsUnknown<T>(flames: Mesh, read: () => T): T {
   const known = logsOf(flames);
   if (!known) return read();
   const kept = known.value;
-  known.value = kept.map(() => new THREE.Vector4());
+  known.value = kept.map(() => new Vec4());
   try {
     return read();
   } finally {

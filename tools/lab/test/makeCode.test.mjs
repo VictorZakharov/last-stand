@@ -10,18 +10,21 @@ import { REPO } from '../node/paths.mjs';
 
 const EXAMPLE = join(REPO, 'tools', 'lab', 'examples', 'beacon.ts');
 
-/** `code` run as the page runs it, `three` answered with `THREE`; its exports. */
-function run(code, THREE = {}) {
+/** the modules a made thing may ask for that `run` answers: the engine's API and its generators */
+const ANSWERED = ['src/engine/api', 'src/engine/api/shapes/index'];
+
+/** `code` run as the page runs it, the API's modules answered with `api`; its exports. */
+function run(code, api = {}) {
   const module = { exports: {} };
   const required = (id) => {
-    if (id === 'three') return THREE;
+    if (ANSWERED.includes(id)) return api;
     throw new Error(`asked for ${id}`);
   };
   new Function('exports', 'require', 'module', code)(module.exports, required, module);
   return module.exports;
 }
 
-test('the example becomes a module the page runs, asking for three alone', async () => {
+test('the example becomes a module the page runs, asking for the engine\'s API alone', async () => {
   const code = await moduleText(readFileSync(EXAMPLE, 'utf8'), EXAMPLE);
   assert.equal(typeof run(code).build, 'function');
   assert.doesNotMatch(code, /agentMakes/, 'a type\'s import is gone');
@@ -37,7 +40,7 @@ test('a relative import is written from the repository\'s root, and one from out
   const code = await moduleText(readFileSync(place, 'utf8'), place);
   assert.match(code, /require\("src\/world\/props"\)/);
   assert.match(code, /require\("src\/data\/village"\)/);
-  assert.match(code, /require\("three"\)/);
+  assert.match(code, /require\("src\/engine\/api"\)/);
   assert.doesNotMatch(code, /placeKit/, 'a type\'s import is gone');
   assert.equal(importsFromRoot('require("./props.ts")', join(REPO, 'src', 'world', 'x.ts')), 'require("src/world/props")');
   assert.throws(() => importsFromRoot('require("../node/paths.mjs")', join(REPO, 'tools', 'lab', 'examples', 'x.ts')), /isn't under src/);

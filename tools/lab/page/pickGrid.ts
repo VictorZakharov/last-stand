@@ -5,7 +5,9 @@
 // of a skinned mesh by its bones for each ray: with the hands across the view at a strike, a frame took 43 s.) It drew
 // them with three's renderer into a target of its own and read it with `readRenderTargetPixels`, which has nothing to
 // draw into under the engine: `framed` (the eyes' notes of `sheet`, `live`, `fitrest`) threw at its first frame.
-import * as THREE from 'three';
+import {
+  Camera, Color, ColorRepresentation, Material, Mesh, PerspectiveCamera, UnlitMaterial,
+} from './sceneApi.ts';
 import type { Lab } from './lab';
 import { G } from '../../../src/state';
 import { drawRust } from '../../../src/engine';
@@ -16,7 +18,7 @@ import { webGpuPixels } from './pixels';
 /** the layer the picked meshes are drawn on alone (three's last: nothing of the game's is on it) */
 const PICK_LAYER = 31;
 /** each group's colour, a channel each, and the most groups told apart */
-const CHANNELS: THREE.ColorRepresentation[] = [0xff0000, 0x00ff00, 0x0000ff];
+const CHANNELS: ColorRepresentation[] = [0xff0000, 0x00ff00, 0x0000ff];
 /** how bright a group's channel must read, and how far over the others, for a cell to be it (the grade's curve and
  *  grain move a colour off its own) */
 const LEAST_LIGHT = 64;
@@ -26,17 +28,17 @@ const PICK_GRADE: Grade = { ...PLAIN_GRADE, vignette: 0, bloomShare: 0 };
 /** the longest the draw waits for the flat materials' pipelines, compiled aside, before it gives up (ms) */
 const COMPILE_MS = 30000;
 /** the backdrop: nothing drawn is black */
-const BLACK = new THREE.Color(0);
+const BLACK = new Color(0);
 
 /** A flat unlit material of the group `index`'s colour, sided as `like` is. */
-function flatLike(like: THREE.Material, index: number): THREE.MeshBasicMaterial {
-  return new THREE.MeshBasicMaterial({ color: CHANNELS[index], side: like.side, fog: false, toneMapped: false });
+function flatLike(like: Material, index: number): UnlitMaterial {
+  return new UnlitMaterial({ color: CHANNELS[index], side: like.side, fog: false, toneMapped: false });
 }
 
 /** What a picked mesh was drawn as, to put back. */
 interface Worn {
-  mesh: THREE.Mesh;
-  material: THREE.Mesh['material'];
+  mesh: Mesh;
+  material: Mesh['material'];
   onLayer: boolean;
 }
 
@@ -45,11 +47,11 @@ interface Worn {
  * `groups` of the group whose mesh is nearest there, or -1 where none is. Drawn with the meshes' world matrices and
  * bones as they are, the draw waited out on the browser's time while their pipelines compile.
  */
-export async function pickGrid(lab: Lab, camera: THREE.Camera, groups: THREE.Mesh[][], across: number, down: number):
+export async function pickGrid(lab: Lab, camera: Camera, groups: Mesh[][], across: number, down: number):
   Promise<Int8Array> {
   if (groups.length > CHANNELS.length) throw new Error(`lab: pickGrid: at most ${CHANNELS.length} groups`);
   const worn: Worn[] = [];
-  const made: THREE.Material[] = [];
+  const made: Material[] = [];
   groups.forEach((meshes, index) => {
     for (const mesh of meshes) {
       worn.push({ mesh, material: mesh.material, onLayer: mesh.layers.isEnabled(PICK_LAYER) });
@@ -62,7 +64,7 @@ export async function pickGrid(lab: Lab, camera: THREE.Camera, groups: THREE.Mes
   const drawing = lab.drawing;
   lab.drawing = true;
   try {
-    return readGroups(await drawPicked(camera as THREE.PerspectiveCamera, across, down), groups.length);
+    return readGroups(await drawPicked(camera as PerspectiveCamera, across, down), groups.length);
   } finally {
     lab.drawing = drawing;
     for (const { mesh, material, onLayer } of worn) {
@@ -75,9 +77,9 @@ export async function pickGrid(lab: Lab, camera: THREE.Camera, groups: THREE.Mes
 
 /** The scene drawn by the engine through `camera` on the pick layer alone, `across` by `down`, until no draw is left
  *  out for a pipeline still compiling; its picture, rows from the top. */
-async function drawPicked(camera: THREE.PerspectiveCamera, across: number, down: number): Promise<ImageData> {
+async function drawPicked(camera: PerspectiveCamera, across: number, down: number): Promise<ImageData> {
   const scene = G.scene;
-  const host = G.renderer as unknown as THREE.WebGLRenderer;
+  const host = G.renderer;
   const layers = camera.layers.mask;
   const background = scene.background;
   const fog = scene.fog;

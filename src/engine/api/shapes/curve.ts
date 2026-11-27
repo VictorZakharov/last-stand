@@ -27,7 +27,7 @@ export interface FrenetFrames {
   binormals: Vec3[];
 }
 
-const _mat = new Mat4();
+const scratchMatrix = new Mat4();
 
 /** A curve from t = 0 to t = 1, its points `T`s. */
 export abstract class Curve<T extends CurvePoint<T>> {
@@ -38,7 +38,7 @@ export abstract class Curve<T extends CurvePoint<T>> {
   private lengths: number[] | null = null;
 
   /** The point at `t` (0 to 1), into `target` if given. */
-  abstract getPoint(t: number, target?: T): T;
+  abstract getPoint(along: number, target?: T): T;
 
   /** A new point of its kind, at the origin. */
   protected abstract blank(): T;
@@ -56,14 +56,14 @@ export abstract class Curve<T extends CurvePoint<T>> {
   /** `divisions + 1` points evenly in t. */
   getPoints(divisions = 5): T[] {
     const points: T[] = [];
-    for (let d = 0; d <= divisions; d++) points.push(this.getPoint(d / divisions));
+    for (let step = 0; step <= divisions; step++) points.push(this.getPoint(step / divisions));
     return points;
   }
 
   /** `divisions + 1` points evenly along its length. */
   getSpacedPoints(divisions = 5): T[] {
     const points: T[] = [];
-    for (let d = 0; d <= divisions; d++) points.push(this.getPointAt(d / divisions));
+    for (let step = 0; step <= divisions; step++) points.push(this.getPointAt(step / divisions));
     return points;
   }
 
@@ -81,8 +81,8 @@ export abstract class Curve<T extends CurvePoint<T>> {
     const lengths = [0];
     let last = this.getPoint(0);
     let sum = 0;
-    for (let p = 1; p <= divisions; p++) {
-      const current = this.getPoint(p / divisions);
+    for (let step = 1; step <= divisions; step++) {
+      const current = this.getPoint(step / divisions);
       sum += current.distanceTo(last);
       lengths.push(sum);
       last = current;
@@ -126,9 +126,9 @@ export abstract class Curve<T extends CurvePoint<T>> {
   }
 
   /** Its unit way at `t`, by two points 0.0001 to either side. */
-  getTangent(t: number, target?: T): T {
-    const pt1 = this.getPoint(Math.max(0, t - 0.0001));
-    const pt2 = this.getPoint(Math.min(1, t + 0.0001));
+  getTangent(along: number, target?: T): T {
+    const pt1 = this.getPoint(Math.max(0, along - 0.0001));
+    const pt2 = this.getPoint(Math.min(1, along + 0.0001));
     return (target ?? this.blank()).copy(pt2).sub(pt1).normalize();
   }
 
@@ -159,7 +159,7 @@ export abstract class Curve<T extends CurvePoint<T>> {
       if (vec.length() > Number.EPSILON) {
         vec.normalize();
         const theta = Math.acos(Maths.clamp(tangents[i - 1].dot(tangents[i]), -1, 1));
-        normals[i].applyMatrix4(_mat.makeRotationAxis(vec, theta));
+        normals[i].applyMatrix4(scratchMatrix.makeRotationAxis(vec, theta));
       }
       binormals[i].crossVectors(tangents[i], normals[i]);
     }
@@ -167,7 +167,7 @@ export abstract class Curve<T extends CurvePoint<T>> {
       let theta = Math.acos(Maths.clamp(normals[0].dot(normals[segments]), -1, 1)) / segments;
       if (first.dot(vec.crossVectors(normals[0], normals[segments])) > 0) theta = -theta;
       for (let i = 1; i <= segments; i++) {
-        normals[i].applyMatrix4(_mat.makeRotationAxis(tangents[i], theta * i));
+        normals[i].applyMatrix4(scratchMatrix.makeRotationAxis(tangents[i], theta * i));
         binormals[i].crossVectors(tangents[i], normals[i]);
       }
     }

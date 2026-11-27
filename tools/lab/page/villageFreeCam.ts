@@ -5,7 +5,7 @@
 // drawn alone on black: the ground 60 m and more from him where grass grows must show them. From play (#616): "in free
 // cam mode, there is a circle beyond which grass disappears, it should not", "also in free cam we should not thin
 // anything". `canary` flies the free camera as it was, the game's view's rules left on (`core/wholeView.ts` let go).
-import * as THREE from 'three';
+import { Ray, Vec3 } from './sceneApi.ts';
 import type { Lab, Pictured } from './lab';
 import { G } from '../../../src/state';
 import { COTTAGES, HALL, TERRACE } from '../../../src/data/village';
@@ -30,7 +30,7 @@ const SETTLE = 90;
 const IN_FROM_DOOR = 7;
 const OUT_OF_WALL = 1.5;
 /** high over the village, all of it in the frame */
-const HIGH: Flown = { pos: new THREE.Vector3(0, 70, 45), yaw: 0, pitch: -1 };
+const HIGH: Flown = { pos: new Vec3(0, 70, 45), yaw: 0, pitch: -1 };
 /** low over him: how high (m: under the height the ring from above draws its near blades, 35 m out), and how far
  *  down it looks along the meadow (rad) */
 const LOW_UP = 25;
@@ -61,10 +61,10 @@ function stands(): Stand[] {
 }
 
 /** Low over him, looking down the meadow past its middle. */
-function lowOver(him: THREE.Vector3): Flown {
+function lowOver(him: Vec3): Flown {
   const away = Math.hypot(him.x, him.z) || 1;
   // (a yaw's forward is (-sin, -cos): toward the meadow's middle from him)
-  return { pos: new THREE.Vector3(him.x, him.y + LOW_UP, him.z), yaw: Math.atan2(him.x / away, him.z / away), pitch: LOW_PITCH };
+  return { pos: new Vec3(him.x, him.y + LOW_UP, him.z), yaw: Math.atan2(him.x / away, him.z / away), pitch: LOW_PITCH };
 }
 
 /** The free camera flown to `flown` and a frame run from there. */
@@ -109,7 +109,7 @@ function bladesAlone(lab: Lab): Canvas {
 
 /** The grass on the ground `FAR` m and more from `him`: the pixels read there, where grass grows, and the share of
  *  them a blade lights. */
-function farGrass(lab: Lab, him: THREE.Vector3): { read: number; share: number } {
+function farGrass(lab: Lab, him: Vec3): { read: number; share: number } {
   const canvas = bladesAlone(lab);
   const mask = G.scene.getObjectByName('meadow')!.userData.mask as MeadowMask;
   const grown = mask.grassCells(MASK_CELL, 0);
@@ -124,8 +124,8 @@ function farGrass(lab: Lab, him: THREE.Vector3): { read: number; share: number }
     }
     return true;
   };
-  const ray = new THREE.Ray();
-  const ground = new THREE.Vector3();
+  const ray = new Ray();
+  const ground = new Vec3();
   let read = 0, lit = 0;
   for (let y = 0; y < canvas.height; y += STEP) {
     for (let x = 0; x < canvas.width; x += STEP) {
@@ -153,7 +153,7 @@ export async function freeCamWhole(lab: Lab, canary: boolean): Promise<LightsChe
     for (const stand of stands()) {
       const [x, z] = stand.at;
       G.player.walkTo = null;
-      G.player.place(new THREE.Vector3(x, groundHeight(x, z), z), 0);
+      G.player.place(new Vec3(x, groundHeight(x, z), z), 0);
       await lab.step(SETTLE);
       takeFlight();
       // (the free camera as it was: the game's own view's thinning, fog and grass under it)

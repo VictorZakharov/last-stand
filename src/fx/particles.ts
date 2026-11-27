@@ -1,39 +1,14 @@
 // CPU-simulated, GPU-rendered point particles. One additive pool (glows, sparks)
 // and one alpha-blended pool (smoke, dust, debris).
 import {
-  AdditiveBlending, Attribute, Blending, Color, ColorRepresentation, DynamicDrawUsage, InstancedAttribute, LookMaterial,
-  Mesh, NormalBlending, World,
+  AdditiveBlending, Attribute, Blending, Color, ColorRepresentation, DynamicDrawUsage, InstancedAttribute,
+  InstancedGeometry, LookMaterial, Material, Mesh, NormalBlending, World,
 } from '../engine/api/index.ts';
 import { G } from '../state';
 import { nearGlow } from '../core/materials';
 import { pointScale } from '../core/renderer';
 import { dazedField } from './dazed';
-import { particleQuads, type ParticleQuads } from './particleNodes';
-
-const VERT = /* glsl */`
-  attribute float aSize;
-  attribute vec4 aColor;
-  varying vec4 vColor;
-  uniform float uScale;
-  void main(){
-    vec4 mv = modelViewMatrix * vec4(position, 1.0);
-    // fade out near the lens: in first person a burst around the player starts at the camera, a bolt's
-    // trail stacks along the view as it flies at it, and each point there covers much of the screen
-    vColor = vec4(aColor.rgb, aColor.a * smoothstep(0.5, 3.5, -mv.z));
-    gl_PointSize = aSize * uScale / -mv.z;
-    gl_Position = projectionMatrix * mv;
-  }`;
-
-const FRAG = /* glsl */`
-  varying vec4 vColor;
-  uniform float uSoft;
-  void main(){
-    vec2 p = gl_PointCoord - 0.5;
-    float d = length(p) * 2.0;
-    if (d > 1.0) discard;
-    float a = pow(1.0 - d, uSoft);
-    gl_FragColor = vec4(vColor.rgb, vColor.a * a);
-  }`;
+import { particleQuads } from './particleNodes';
 
 /** Options for spawning one particle. Colors are linear RGB and may exceed 1 (HDR). */
 export interface ParticleSpawn {
@@ -59,9 +34,8 @@ class Pool {
   readonly aSize: InstancedAttribute;
   private readonly attrs: Attribute[];
   readonly mat: LookMaterial;
-  readonly points: Mesh;
-  /** the pool as instanced quads (particleNodes.ts) */
-  private readonly quads: ParticleQuads;
+  /** the pool as instanced quads (particleNodes.ts), handed to the engine as its sprites (engine/sprites.ts) */
+  readonly points: Mesh<InstancedGeometry, Material>;
 
   constructor(max: number, blending: Blending, soft: number) {
     this.max = max;
@@ -86,14 +60,12 @@ class Pool {
     this.aSize = new InstancedAttribute(this.size, 1).setUsage(DynamicDrawUsage);
     this.attrs = [this.aPos, this.aCol, this.aSize];
     this.mat = new LookMaterial({
-      vertexShader: VERT, fragmentShader: FRAG,
       uniforms: { uScale: { value: 400 }, uSoft: { value: soft } },
       transparent: true, depthWrite: false, blending,
     });
     // glowing (additive) particles dim with distance like every effect glow
     if (blending === AdditiveBlending) nearGlow(this.mat);
-    this.quads = particleQuads(this.aPos, this.aCol, this.aSize, blending, soft);
-    this.points = this.quads.mesh;
+    this.points = particleQuads({ aCenter: this.aPos, aColor: this.aCol, aSize: this.aSize }, this.mat);
     // (the profiler's particles: quads, a mesh, src/perf/sceneParts.ts)
     this.points.userData.particles = true;
     this.points.frustumCulled = false;
@@ -136,13 +108,12 @@ class Pool {
       this.col[i4 + 3] = this.a0[i] * Math.min(1, t * 12) * (1 - t * t);
       i++;
     }
-    this.quads.mesh.geometry.instanceCount = this.count;
+    this.points.geometry.instanceCount = this.count;
     // (not drawn while empty, a draw call of nothing; shown through the boot's warm-up, which runs no update)
     this.points.visible = this.count > 0;
     // upload only the live particles, not the whole pool (a zero-length range would upload all of it)
     if (this.count) for (const a of this.attrs) { a.clearUpdateRanges(); a.addUpdateRange(0, this.count * a.itemSize); a.needsUpdate = true; }
     this.mat.uniforms.uScale.value = pointScale();
-    this.quads.scale.value = pointScale();
   }
 
   kill(i: number): void {

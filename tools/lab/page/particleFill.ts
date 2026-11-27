@@ -3,15 +3,15 @@
 // scene's target, every layer counted. That is the fill a phone's GPU pays for them, which a desktop's GPU times don't
 // show. The scale is the game's own (`uScale`, as the pool's material has it this frame): sized by the canvas's height
 // while drawn into a scene of fewer pixels, #243's phone's particles were 3 times as wide as meant, 9 times the fill.
-import * as THREE from 'three';
+import { Vec3 } from './sceneApi.ts';
 import { G } from '../../../src/state';
 import { particles } from '../../../src/fx/particles';
 import * as renderer from '../../../src/core/renderer';
 
 type Pool = typeof particles.glow;
 
-const _at = new THREE.Vector3();
-const _onScreen = new THREE.Vector3();
+const _at = new Vec3();
+const _onScreen = new Vec3();
 
 /** The pixels `pool`'s live points cover in a target `height` px high, those whose disc is in view, every layer. */
 function poolFill(pool: Pool, height: number): number {

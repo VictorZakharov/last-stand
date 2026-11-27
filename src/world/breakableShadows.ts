@@ -40,13 +40,13 @@ export interface Piece {
 }
 
 /** Whether `mesh` can cast within the casters: a breakable's plain mesh casting a solid shadow (an instanced one
- *  hides an instance, a skinned one moves, an alpha-tested or custom-depth one casts a shape of its own). */
+ *  hides an instance, a skinned one moves, an alpha-tested one casts a shape of its own). */
 function castsWithin(mesh: Mesh): boolean {
   if (!mesh.isMesh || !mesh.userData.noBake) return false;
   if (!mesh.castShadow && !mesh.userData.castsWithin) return false;
   if ((mesh as InstancedMesh).isInstancedMesh || (mesh as SkinnedMesh).isSkinnedMesh) return false;
   const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
-  return materials.every((material) => material.alphaTest === 0) && !mesh.customDepthMaterial;
+  return materials.every((material) => material.alphaTest === 0);
 }
 
 /** Whether `object` is shown within `group`: it and every parent up to the group. */

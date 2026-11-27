@@ -17,7 +17,7 @@ import { CLASSES } from '../../../src/data/classes';
 import { col, particles } from '../../../src/fx/particles';
 import * as menus from '../../../src/ui/menus';
 import { realWait, type Lab, type Pictured } from './lab';
-import type * as THREE from 'three';
+import type { Node, Vec3 } from './sceneApi.ts';
 
 /** frames run after Change hero is clicked: the camera's flight in, the hero's showcase over (s at 60 a second) */
 const SETTLE_FRAMES = 300;
@@ -95,8 +95,8 @@ export async function closeHeroes(lab: Lab): Promise<void> {
 }
 
 /** The heroes the hall shows: the scene's heroes drawn (the lobby's own is hidden while it's up), by class. */
-function hallHeroes(): Map<string, THREE.Object3D> {
-  const heroes = new Map<string, THREE.Object3D>();
+function hallHeroes(): Map<string, Node> {
+  const heroes = new Map<string, Node>();
   for (const object of G.scene.children) {
     if (object.visible && object.name.startsWith('hero ')) heroes.set(object.name.slice(5), object);
   }
@@ -104,7 +104,7 @@ function hallHeroes(): Map<string, THREE.Object3D> {
 }
 
 /** Where `hero` shows on the screen. */
-function onScreen(hero: THREE.Object3D): Placed {
+function onScreen(hero: Node): Placed {
   const height = G.player.model.height;
   const to = (up: number) => {
     const point = hero.position.clone().setY(hero.position.y + up).project(G.camera);
@@ -187,7 +187,7 @@ function heroPlaced(id: string, boxes: [string, DOMRect][]): Found {
 }
 
 /** Whether `hero`'s middle shows on the screen, clear of the panel. */
-function clickable(hero: THREE.Object3D): boolean {
+function clickable(hero: Node): boolean {
   const at = onScreen(hero);
   const panel = document.querySelector('.hs-panel')?.getBoundingClientRect();
   return at.x > 0 && at.x < (panel?.left ?? innerWidth) && at.y > 0 && at.y < innerHeight;
@@ -224,7 +224,7 @@ const xyz = (at: { x: number; y: number; z: number }): string =>
   [at.x, at.y, at.z].map((value) => value.toFixed(2)).join(',');
 
 /** The live glows within `HAND_REACH` of `hand`. */
-function glowsNear(hand: THREE.Vector3): number {
+function glowsNear(hand: Vec3): number {
   const pool = particles.glow;
   let near = 0;
   for (let i = 0; i < pool.count; i++) {

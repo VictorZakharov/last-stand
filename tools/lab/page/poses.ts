@@ -7,7 +7,7 @@
 // and a gait's later strides go elsewhere after one bit (`check`'s offsets), so neither showed a speed-up kept the pose.
 // The canary moves one number of the last frame by its last bit, and the digest must change. `--lobby` makes the moves
 // in the lobby, the run abandoned for it: in co-op a hero's update cost about 30% more there than in a run (`coop`).
-import * as THREE from 'three';
+import { Attribute, DynamicDrawUsage, Mesh, Node } from './sceneApi.ts';
 import type { Fixture, Frame, Lab, Report } from './lab';
 import { quantile, timeCalls } from './timing';
 import { toLobby } from './hallMoves';
@@ -65,17 +65,17 @@ class Digest {
 }
 
 /** Folds the pose now into `digest`: each object's world matrix, and each moving geometry's positions. */
-function addPose(digest: Digest, root: THREE.Object3D): void {
+function addPose(digest: Digest, root: Node): void {
   root.traverse((object) => {
     for (const element of object.matrixWorld.elements) digest.add(element);
-    const position = (object as THREE.Mesh).geometry?.getAttribute?.('position') as THREE.BufferAttribute | undefined;
-    if (position?.usage !== THREE.DynamicDrawUsage) return;
+    const position = (object as Mesh).geometry?.getAttribute?.('position') as Attribute | undefined;
+    if (position?.usage !== DynamicDrawUsage) return;
     for (const value of position.array as Float32Array) digest.add(value);
   });
 }
 
 /** The canary: the pose's digest now, then again with one of its numbers moved by its last bit; whether they differ. */
-function caughtLastBit(root: THREE.Object3D): boolean {
+function caughtLastBit(root: Node): boolean {
   const before = new Digest();
   addPose(before, root);
   const elements = root.matrixWorld.elements;

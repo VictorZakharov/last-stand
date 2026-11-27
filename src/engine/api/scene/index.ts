@@ -16,3 +16,4 @@ export {
 export { Line, LineSegments, Points, Sprite } from './points.ts';
 export { Raycaster, type Hit, type HitFace } from './raycaster.ts';
 export { raycastMesh } from './raycast.ts';
+export { boundsOf, growByNode } from './bounds.ts';

@@ -1,5 +1,5 @@
 // Developer controls through their real panel: opened by its DEV tab, flight, frozen starts, training, refills and reset.
-import * as THREE from 'three';
+import { Mesh, Node, Vec3 } from './sceneApi.ts';
 import { G } from '../../../src/state';
 import { hurtPlayer } from '../../../src/combat/damage';
 import { cameraYaw, overFrame, viewMode, viewSettled } from '../../../src/core/renderer';
@@ -35,8 +35,8 @@ const element = <T extends HTMLElement = HTMLElement>(selector: string): T => {
 const MARKED_PARTS: [Mark, string][] = [['tree', 'the trees'], ['leaves', 'the leaves'], ['grass', 'the grass']];
 
 /** Everything in the scene bearing `mark`, as the switch finds it (`src/dev/marked.ts`). */
-function bearing(mark: Mark): THREE.Object3D[] {
-  const found: THREE.Object3D[] = [];
+function bearing(mark: Mark): Node[] {
+  const found: Node[] = [];
   G.scene.traverse((part) => {
     if (bears(part, mark)) found.push(part);
   });
@@ -44,9 +44,9 @@ function bearing(mark: Mark): THREE.Object3D[] {
 }
 
 /** Whether `part` bears `mark`: leaves by their material, the rest by their own. */
-function bears(part: THREE.Object3D, mark: Mark): boolean {
+function bears(part: Node, mark: Mark): boolean {
   if (mark !== 'leaves') return Boolean(part.userData[mark]);
-  const mesh = part as THREE.Mesh;
+  const mesh = part as Mesh;
   return Boolean(mesh.isMesh) && materialsOf(mesh).some((material) => material.userData.leaves);
 }
 
@@ -486,11 +486,11 @@ export async function devMode(lab: Lab, options: { canary: boolean }): Promise<R
   let nearFrames = 0, exposed = 0;
   await lab.step(400, () => ({}), () => {
     if (viewMode() !== 'first') return;
-    const near = neck.getWorldPosition(new THREE.Vector3()).distanceTo(G.camera.position) < 0.8;
+    const near = neck.getWorldPosition(new Vec3()).distanceTo(G.camera.position) < 0.8;
     if (!near) return;
     nearFrames++;
     neck.traverse((object) => {
-      if ((object as THREE.Mesh).isMesh && object.layers.test(G.camera.layers)
+      if ((object as Mesh).isMesh && object.layers.test(G.camera.layers)
         && !object.layers.isEnabled(HIDDEN_LAYER)) exposed++;
     });
   });

@@ -63,9 +63,9 @@ export class Quat {
     return new Quat(this.x, this.y, this.z, this.w);
   }
 
-  /** takes `q`'s numbers */
-  copy(q: Quat): this {
-    return this.set(q.x, q.y, q.z, q.w);
+  /** takes `other`'s numbers */
+  copy(other: Quat): this {
+    return this.set(other.x, other.y, other.z, other.w);
   }
 
   /** no turn */
@@ -110,35 +110,35 @@ export class Quat {
   }
 
   /**
-   * The turn of `m`'s upper 3 by 3 (a rotation, unscaled). Follows three.js 0.187.0's
+   * The turn of `matrix`'s upper 3 by 3 (a rotation, unscaled). Follows three.js 0.187.0's
    * `Quaternion.setFromRotationMatrix` (Shoemake's: from the trace, or the largest diagonal entry).
    */
-  setFromRotationMatrix(m: Mat4): this {
-    const e = m.elements;
-    const m11 = e[0];
-    const m12 = e[4];
-    const m13 = e[8];
-    const m21 = e[1];
-    const m22 = e[5];
-    const m23 = e[9];
-    const m31 = e[2];
-    const m32 = e[6];
-    const m33 = e[10];
+  setFromRotationMatrix(matrix: Mat4): this {
+    const elements = matrix.elements;
+    const m11 = elements[0];
+    const m12 = elements[4];
+    const m13 = elements[8];
+    const m21 = elements[1];
+    const m22 = elements[5];
+    const m23 = elements[9];
+    const m31 = elements[2];
+    const m32 = elements[6];
+    const m33 = elements[10];
     const trace = m11 + m22 + m33;
     if (trace > 0) {
-      const s = 0.5 / Math.sqrt(trace + 1);
-      return this.set((m32 - m23) * s, (m13 - m31) * s, (m21 - m12) * s, 0.25 / s);
+      const scale = 0.5 / Math.sqrt(trace + 1);
+      return this.set((m32 - m23) * scale, (m13 - m31) * scale, (m21 - m12) * scale, 0.25 / scale);
     }
     if (m11 > m22 && m11 > m33) {
-      const s = 2 * Math.sqrt(1 + m11 - m22 - m33);
-      return this.set(0.25 * s, (m12 + m21) / s, (m13 + m31) / s, (m32 - m23) / s);
+      const scale = 2 * Math.sqrt(1 + m11 - m22 - m33);
+      return this.set(0.25 * scale, (m12 + m21) / scale, (m13 + m31) / scale, (m32 - m23) / scale);
     }
     if (m22 > m33) {
-      const s = 2 * Math.sqrt(1 + m22 - m11 - m33);
-      return this.set((m12 + m21) / s, 0.25 * s, (m23 + m32) / s, (m13 - m31) / s);
+      const scale = 2 * Math.sqrt(1 + m22 - m11 - m33);
+      return this.set((m12 + m21) / scale, 0.25 * scale, (m23 + m32) / scale, (m13 - m31) / scale);
     }
-    const s = 2 * Math.sqrt(1 + m33 - m11 - m22);
-    return this.set((m13 + m31) / s, (m23 + m32) / s, 0.25 * s, (m21 - m12) / s);
+    const scale = 2 * Math.sqrt(1 + m33 - m11 - m22);
+    return this.set((m13 + m31) / scale, (m23 + m32) / scale, 0.25 * scale, (m21 - m12) / scale);
   }
 
   /**
@@ -159,16 +159,16 @@ export class Quat {
     return this.normalize();
   }
 
-  /** the angle between this turn and `q`, in radians */
-  angleTo(q: Quat): number {
-    return 2 * Math.acos(Math.abs(clamp(this.dot(q), -1, 1)));
+  /** the angle between this turn and `other`, in radians */
+  angleTo(other: Quat): number {
+    return 2 * Math.acos(Math.abs(clamp(this.dot(other), -1, 1)));
   }
 
-  /** turned towards `q` by at most `step` radians */
-  rotateTowards(q: Quat, step: number): this {
-    const angle = this.angleTo(q);
+  /** turned towards `other` by at most `step` radians */
+  rotateTowards(other: Quat, step: number): this {
+    const angle = this.angleTo(other);
     if (angle === 0) return this;
-    return this.slerp(q, Math.min(1, step / angle));
+    return this.slerp(other, Math.min(1, step / angle));
   }
 
   /** the turn undone (its conjugate: a unit quaternion's inverse) */
@@ -176,9 +176,14 @@ export class Quat {
     return this.set(-this.x, -this.y, -this.z, this.w);
   }
 
-  /** the dot product with `q` */
-  dot(q: Quat): number {
-    return this.x * q.x + this.y * q.y + this.z * q.z + this.w * q.w;
+  /** its conjugate, the same as `invert` for the unit quaternions turns are */
+  conjugate(): this {
+    return this.invert();
+  }
+
+  /** the dot product with `other` */
+  dot(other: Quat): number {
+    return this.x * other.x + this.y * other.y + this.z * other.z + this.w * other.w;
   }
 
   /** the length squared */
@@ -199,26 +204,26 @@ export class Quat {
     return this.set(this.x * inverse, this.y * inverse, this.z * inverse, this.w * inverse);
   }
 
-  /** becomes `this * q`: `q`'s turn first, then this one */
-  multiply(q: Quat): this {
-    return this.multiplyQuaternions(this, q);
+  /** becomes `this * q`: `other`'s turn first, then this one */
+  multiply(other: Quat): this {
+    return this.multiplyQuaternions(this, other);
   }
 
-  /** becomes `q * this`: this turn first, then `q`'s */
-  premultiply(q: Quat): this {
-    return this.multiplyQuaternions(q, this);
+  /** becomes `q * this`: this turn first, then `other`'s */
+  premultiply(other: Quat): this {
+    return this.multiplyQuaternions(other, this);
   }
 
   /** becomes `a * b` (either may be this quaternion) */
-  multiplyQuaternions(a: Quat, b: Quat): this {
-    const ax = a.x;
-    const ay = a.y;
-    const az = a.z;
-    const aw = a.w;
-    const bx = b.x;
-    const by = b.y;
-    const bz = b.z;
-    const bw = b.w;
+  multiplyQuaternions(left: Quat, right: Quat): this {
+    const ax = left.x;
+    const ay = left.y;
+    const az = left.z;
+    const aw = left.w;
+    const bx = right.x;
+    const by = right.y;
+    const bz = right.z;
+    const bw = right.w;
     const x = ax * bw + aw * bx + ay * bz - az * by;
     const y = ay * bw + aw * by + az * bx - ax * bz;
     const z = az * bw + aw * bz + ax * by - ay * bx;
@@ -227,15 +232,15 @@ export class Quat {
   }
 
   /**
-   * Turned `t` of the way to `q` along the shorter arc. Follows three.js 0.187.0's `Quaternion.slerp`: within
+   * Turned `amount` of the way to `other` along the shorter arc. Follows three.js 0.187.0's `Quaternion.slerp`: within
    * a dot of 0.9995 it blends straight and normalizes.
    */
-  slerp(q: Quat, t: number): this {
-    let x = q.x;
-    let y = q.y;
-    let z = q.z;
-    let w = q.w;
-    let dot = this.dot(q);
+  slerp(other: Quat, amount: number): this {
+    let x = other.x;
+    let y = other.y;
+    let z = other.z;
+    let w = other.w;
+    let dot = this.dot(other);
     if (dot < 0) {
       x = -x;
       y = -y;
@@ -243,8 +248,8 @@ export class Quat {
       w = -w;
       dot = -dot;
     }
-    let keep = 1 - t;
-    let take = t;
+    let keep = 1 - amount;
+    let take = amount;
     if (dot < 0.9995) {
       const theta = Math.acos(dot);
       const sine = Math.sin(theta);
@@ -259,14 +264,14 @@ export class Quat {
     return this.normalize();
   }
 
-  /** becomes the turn `t` of the way from `a` to `b` */
-  slerpQuaternions(a: Quat, b: Quat, t: number): this {
-    return this.copy(a).slerp(b, t);
+  /** becomes the turn `amount` of the way from `left` to `right` */
+  slerpQuaternions(left: Quat, right: Quat, amount: number): this {
+    return this.copy(left).slerp(right, amount);
   }
 
-  /** whether `q` has the same numbers */
-  equals(q: Quat): boolean {
-    return q.x === this.x && q.y === this.y && q.z === this.z && q.w === this.w;
+  /** whether `other` has the same numbers */
+  equals(other: Quat): boolean {
+    return other.x === this.x && other.y === this.y && other.z === this.z && other.w === this.w;
   }
 
   /** takes four numbers from `array` at `offset` */
@@ -277,7 +282,7 @@ export class Quat {
   /** the four numbers as a new array */
   toArray(): Vec4Tuple;
   /** writes the four numbers into `array` at `offset` */
-  toArray<T extends NumberArray>(array: T, offset?: number): T;
+  toArray<Out extends NumberArray>(array: Out, offset?: number): Out;
   toArray(array: NumberArray = [], offset = 0): NumberArray {
     array[offset] = this.x;
     array[offset + 1] = this.y;

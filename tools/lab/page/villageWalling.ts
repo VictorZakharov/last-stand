@@ -3,7 +3,7 @@
 // place along the face and up it: the part of a tile it's off (the same everywhere when the blocks' courses meet), its
 // spread between the blocks (from play, "misaligned texture": each block's own ran from its corner, and the one over
 // the door met the wings a part course off). `canary` moves one block's map a third of a tile.
-import * as THREE from 'three';
+import { boundsOf, Mesh, Node, Vec3 } from './sceneApi.ts';
 import { G } from '../../../src/state';
 import type { LightsChecked } from './villageLights';
 
@@ -21,18 +21,18 @@ function roundApart(a: number, b: number): number {
 }
 
 /** The front wall's walling: its meshes drawn in the material most of it is (the largest's). */
-function wallingOf(front: THREE.Object3D): THREE.Mesh[] {
-  const meshes: THREE.Mesh[] = [];
-  front.traverse((o) => { if ((o as THREE.Mesh).isMesh) meshes.push(o as THREE.Mesh); });
-  const size = (m: THREE.Mesh): number => new THREE.Box3().setFromObject(m).getSize(new THREE.Vector3()).lengthSq();
+function wallingOf(front: Node): Mesh[] {
+  const meshes: Mesh[] = [];
+  front.traverse((o) => { if ((o as Mesh).isMesh) meshes.push(o as Mesh); });
+  const size = (m: Mesh): number => boundsOf(m).getSize(new Vec3()).lengthSq();
   const largest = meshes.reduce((a, b) => (size(a) >= size(b) ? a : b));
   return meshes.filter((m) => m.material === largest.material);
 }
 
 /** Each front face's corners (facing along z): the map's part of a tile against the corner's place, along x and up. */
-function offsetsOf(mesh: THREE.Mesh, shift: number): { u: number; v: number }[] {
+function offsetsOf(mesh: Mesh, shift: number): { u: number; v: number }[] {
   const g = mesh.geometry, at = g.attributes.position, uv = g.attributes.uv, n = g.attributes.normal;
-  const world = new THREE.Vector3();
+  const world = new Vec3();
   const offsets: { u: number; v: number }[] = [];
   for (let i = 0; i < uv.count; i++) {
     if (Math.abs(n.getZ(i)) < 0.5) continue;

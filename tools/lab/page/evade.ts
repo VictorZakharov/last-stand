@@ -10,7 +10,7 @@
 // shots will miss, unless fired under their feet"; "the wraiths will teleport to a near location with 50% chance,
 // escaping the shot"; "dodge/duck should only work if player is in front of them... if another player shoots from
 // behind, they cannot see that".)
-import * as THREE from 'three';
+import { Vec3 } from './sceneApi.ts';
 import type { Fixture, Frame, Lab, Report } from './lab';
 import { viewMode } from '../../../src/core/renderer';
 import type { Enemy } from '../../../src/entities/enemy';
@@ -86,15 +86,15 @@ interface Try {
   hitsBefore: number;
   hitsAfter: number;
   /** where each of the hero's shots ended, and the foe's feet and top then (m) */
-  ends: { at: THREE.Vector3; feet: number; top: number }[];
+  ends: { at: Vec3; feet: number; top: number }[];
   /** where the hero's aim was as the key was let go */
-  aimed: THREE.Vector3;
+  aimed: Vec3;
 }
 
 /** A foe of a kind kept for every try: held to its spot, kept from shooting and from dying. */
 interface Target {
   foe: Enemy;
-  spot: THREE.Vector3;
+  spot: Vec3;
   /** where it faces, in a try from behind (rad; null: at the hero, as its own AI turns it) */
   away: number | null;
   /** the try under way, its evades and hits caught as they're played */
@@ -116,7 +116,7 @@ function defaultSkills(): string[] {
 /** A foe of `kind` risen `AHEAD` before the hero, its evades and hits caught for `target.now`. */
 async function targetOf(lab: Lab, kind: EnemyId): Promise<Target> {
   const hero = G.player;
-  const forward = new THREE.Vector3(Math.sin(hero.facing), 0, Math.cos(hero.facing));
+  const forward = new Vec3(Math.sin(hero.facing), 0, Math.cos(hero.facing));
   const spot = hero.pos.clone().addScaledVector(forward, AHEAD);
   const foe = lab.spawnFoe(kind, spot);
   await lab.until(() => foe.spawning <= 0, RISE_FRAMES, `the ${kind} never rose`);
@@ -158,7 +158,7 @@ function holdFoe(target: Target): void {
 }
 
 /** The foe and the hero set for a try: the foe back on its spot, up and about, facing as `side` has it. */
-function resetTry(target: Target, side: Side, start: THREE.Vector3, facing: number): void {
+function resetTry(target: Target, side: Side, start: Vec3, facing: number): void {
   const foe = target.foe;
   const hero = G.player;
   Object.assign(foe, { ducked: 0, forming: 0, dazed: 0, frozen: 0, chill: 0, carried: null, tossed: null });
@@ -174,28 +174,28 @@ function resetTry(target: Target, side: Side, start: THREE.Vector3, facing: numb
 }
 
 /** Where a try's attack is aimed: at the foe's body, at its feet, or for an area on the ground just short of it. */
-function aimAt(target: Target, skill: BoundSkill, side: Side): THREE.Vector3 {
+function aimAt(target: Target, skill: BoundSkill, side: Side): Vec3 {
   const spot = target.spot;
   if (THREATS[skill.def.impl] === 'area') {
     const hero = G.player.pos;
     const short = SHORT / Math.max(1e-3, Math.hypot(spot.x - hero.x, spot.z - hero.z));
-    return new THREE.Vector3(spot.x + (hero.x - spot.x) * short, 0, spot.z + (hero.z - spot.z) * short);
+    return new Vec3(spot.x + (hero.x - spot.x) * short, 0, spot.z + (hero.z - spot.z) * short);
   }
-  return new THREE.Vector3(spot.x, side === 'feet' ? 0.05 : target.foe.height * 0.55, spot.z);
+  return new Vec3(spot.x, side === 'feet' ? 0.05 : target.foe.height * 0.55, spot.z);
 }
 
 /** The frame's input aiming at `point`: the mouse over it, and in a close view the crosshair turned onto it. */
-function aiming(point: THREE.Vector3): Frame {
+function aiming(point: Vec3): Frame {
   return viewMode() === 'top' ? { aim: point } : { aim: point, sight: point };
 }
 
 /** One try: the attack cast at the foe as `side` has it, followed until it's done. */
-async function tryOnce(lab: Lab, target: Target, skill: BoundSkill, side: Side, start: THREE.Vector3): Promise<Try> {
+async function tryOnce(lab: Lab, target: Target, skill: BoundSkill, side: Side, start: Vec3): Promise<Try> {
   const facing = G.player.facing;
   resetTry(target, side, start, facing);
   const keep = (): void => holdFoe(target);
   await lab.step(SETTLE, () => aiming(aimAt(target, skill, side)), keep);
-  const now: Try = { evade: null, hitsBefore: 0, hitsAfter: 0, ends: [], aimed: new THREE.Vector3() };
+  const now: Try = { evade: null, hitsBefore: 0, hitsAfter: 0, ends: [], aimed: new Vec3() };
   target.now = now;
   const hold = CHANNELS[skill.def.impl] ?? holdFor(skill.def);
   const holdFrames = Math.max(1, Math.round(hold / frameTime()));
@@ -215,7 +215,7 @@ async function tryOnce(lab: Lab, target: Target, skill: BoundSkill, side: Side, 
 }
 
 /** Where a shot ended, against the foe's feet and top as drawn then. */
-function endOf(at: THREE.Vector3, foe: Enemy): Try['ends'][number] {
+function endOf(at: Vec3, foe: Enemy): Try['ends'][number] {
   const feet = foe.obj.position.y;
   return { at: at.clone(), feet, top: feet + foe.height };
 }

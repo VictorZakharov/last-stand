@@ -7,7 +7,7 @@
 // #261: "Fix neck sculpting, check all characters"; the column neck's flat top stood out of the head's skin under his
 // ears, a ledge the light drew as a line across the back of his neck, and none of the face harness's neck numbers
 // said so.)
-import * as THREE from 'three';
+import { Box3, Euler, Vec3, Vec3Tuple } from './sceneApi.ts';
 import type { Lab, Pictured, Report, Tile } from './lab';
 import type { Gear, Model } from '../../../src/types';
 import { cameraOn, shoot, studio, type Shot } from './studio';
@@ -38,7 +38,7 @@ const LOOK_ASIDE = { neck: 0.35, head: 0.5, bow: 0.15 };
 
 /** The studio's views of the neck: from where (the hero facing +z, his left +x; looking aside, his neck stretches
  *  on his right). */
-const VIEWS: { name: string; from: THREE.Vector3Tuple }[] = [
+const VIEWS: { name: string; from: Vec3Tuple }[] = [
   { name: 'back', from: [0, 0.15, -1] },
   { name: 'behind-left', from: [0.8, 0.2, -0.8] },
   { name: 'left', from: [1, 0.1, 0] },
@@ -68,7 +68,7 @@ const DRESSED: Record<Dress, string> = { bare: 'bare', chest: 'in his chest item
 const POSED: Record<NeckPose, string> = { rest: 'at rest', aside: 'looking aside' };
 
 /** `model`'s neck and head turned `pose`'s way from where they were built. */
-function pose(model: Model, how: NeckPose, rest: { neck: THREE.Euler; head: THREE.Euler }): void {
+function pose(model: Model, how: NeckPose, rest: { neck: Euler; head: Euler }): void {
   const { neck, head } = model.joints!;
   neck.rotation.copy(rest.neck);
   head.rotation.copy(rest.head);
@@ -86,11 +86,11 @@ async function pictureOf(lab: Lab, model: Model, look: Look): Promise<Tile[]> {
   scene.add(model.root);
   model.root.updateMatrixWorld(true);
   const { neck, head } = model.joints!;
-  const base = neck.getWorldPosition(new THREE.Vector3());
-  const top = head.getWorldPosition(new THREE.Vector3()).y + FRAME.above;
-  const box = new THREE.Box3(
-    new THREE.Vector3(base.x - FRAME.across, base.y - FRAME.below, base.z - FRAME.across),
-    new THREE.Vector3(base.x + FRAME.across, top, base.z + FRAME.across),
+  const base = neck.getWorldPosition(new Vec3());
+  const top = head.getWorldPosition(new Vec3()).y + FRAME.above;
+  const box = new Box3(
+    new Vec3(base.x - FRAME.across, base.y - FRAME.below, base.z - FRAME.across),
+    new Vec3(base.x + FRAME.across, top, base.z + FRAME.across),
   );
   const shots: Shot[] = VIEWS.map((view) => ({ name: view.name, camera: cameraOn(box, view.from) }));
   const worn = wearLook(look, meshesOf(model.root));

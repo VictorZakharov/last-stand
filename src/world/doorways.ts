@@ -13,9 +13,9 @@
 // facing the hall from the square, its room and heroes 128 of 429 draws whatever the doorway showed of them): a new
 // building walked into declares its doorway (`addDoorway`) and is culled with no code of its own, held to the frame
 // drawn whole from every stand by `lab village --only sweepWithinBudgets` (`registerCull` below).
-import { Box3, Camera, InstancedMesh, Light, Mesh, Node, Plane, Sphere, Vec3, World } from '../engine/api/index.ts';
+import { Box3, boundsOf, Camera, InstancedMesh, Light, Mesh, Node, Plane, Sphere, Vec3, World } from '../engine/api/index.ts';
 import { blendedSolid } from '../core/seeThrough';
-import { aroundShadows, hideCellsWhere, isDrawingStill } from './culling';
+import { hideCellsWhere, isDrawingStill } from './culling';
 import { registerCull } from './culls';
 import { G } from '../state';
 
@@ -137,7 +137,7 @@ function cullOf(kept: Kept, part: Node): Culled {
   if (keptAlways(part)) how = 'never';
   else if (holdsKept(part)) how = 'children';
   else {
-    _box.setFromObject(part, true);
+    boundsOf(part, _box, true);
     if (!_box.isEmpty() && !_box.intersectsBox(kept.door.box)) how = _box.getBoundingSphere(new Sphere());
   }
   kept.culled.set(part, how);
@@ -280,7 +280,7 @@ function insideOf(door: Doorway, village: Node): { part: Node; round: Sphere }[]
   const visit = (group: Node, deep: number): void => {
     for (const part of group.children) {
       if (keptAlways(part)) continue;
-      _box.setFromObject(part, true);
+      boundsOf(part, _box, true);
       if (_box.isEmpty()) continue;
       if (door.inside.containsBox(_box) && !holdsKept(part)) {
         found.push({ part, round: _box.getBoundingSphere(new Sphere()) });
@@ -384,27 +384,9 @@ export function cullForEngine(camera: Camera): () => void {
 }
 
 /** Culls `village`'s parts, the foes and what stands in a building of the scene's own by every doorway added
- *  (`addDoorway`) as `scene` is drawn. */
+ *  (`addDoorway`) as `scene` is drawn: by the engine round its frame (`cullForEngine`), and the culled cells by the
+ *  doorway too. */
 export function cullByDoorways(scene: World, village: Node): void {
   hideCellsWhere(cellHiddenByDoor);
   culled = { scene, village };
-  const before = scene.onBeforeRender;
-  scene.onBeforeRender = (...args) => {
-    // (the cone set before the cells are culled, `cullWhileDrawn`'s, which runs in `before`)
-    cullFrame(args[2], scene, village);
-    before.apply(scene, args);
-  };
-  const after = scene.onAfterRender;
-  scene.onAfterRender = (...args) => {
-    after.apply(scene, args);
-    showHidden(true);
-    hidden.length = 0;
-    lookingOutOf = null;
-    conesSet = 0;
-  };
-  // (their shadows drawn as ever: the shadow maps are drawn after the frame's list is made)
-  aroundShadows(() => {
-    showHidden(true);
-    return () => showHidden(false);
-  });
 }

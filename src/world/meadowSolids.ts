@@ -1,7 +1,7 @@
 // What stands on the meadow, as its grass meets it: over each 12.5 cm cell of the meadow's square, the lowest solid
 // above the ground there (m), read once at build from every mesh built but the ground (its triangles laid over the
 // cells: their faces' and their edges', so an upright face's foot counts as much as a log's underside). Each blade is
-// held under it (`VERTEX_BLADE` in meadow.ts, `bladeNodes` in meadowNodes.ts): one rooted under a log lies under it,
+// held under it (`bladeLook` in engine/looks/meadow.ts): one rooted under a log lies under it,
 // one beside a post grows up beside it, and one leaning into a post is bent down where it meets it. From play,
 // "grass grows through logs" and the lamps' feet; cleared round each prop by hand, the grass stood back from them, as
 // grass in life doesn't ("let grass be closer to props, like real life. Just not going through them"). What's built

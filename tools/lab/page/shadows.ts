@@ -10,7 +10,7 @@
 // hidden body uncast, as it was: each must be seen. `--cost` times the frame on the engine's GPU
 // clock in turns, each way and with him casting nothing. It compared his pieces cast as one (`castAsOne.ts`, taken
 // out with three's drawing of the scene) against each alone, in three's shadow pass, which the engine never ran.
-import * as THREE from 'three';
+import { DirectionalLight, Node } from './sceneApi.ts';
 import type { Lab, Report } from './lab';
 import type { ViewMode } from '../../../src/core/renderer';
 import type { WeaponStyle } from '../../../src/loot/loadout';
@@ -85,8 +85,8 @@ function drawnWith(lab: Lab, whole: boolean): { frame: Canvas; fewer: number } {
 
 /** What casts of the hero (of it, what `which` takes), each part's own say, while `run` runs with none of it
  *  casting. */
-function castingNothing<T>(lab: Lab, run: () => T, which: (object: THREE.Object3D) => boolean = () => true): T {
-  const casting: THREE.Object3D[] = [];
+function castingNothing<T>(lab: Lab, run: () => T, which: (object: Node) => boolean = () => true): T {
+  const casting: Node[] = [];
   lab.player.obj.traverse((object) => {
     if (object.castShadow && which(object)) casting.push(object);
   });
@@ -99,7 +99,7 @@ function castingNothing<T>(lab: Lab, run: () => T, which: (object: THREE.Object3
 }
 
 /** Whether `object` is his body hidden through the eyes, cast for its shadow alone (`entities/viewModel.ts`). */
-function unseen(object: THREE.Object3D): boolean {
+function unseen(object: Node): boolean {
   return Boolean(object.userData.castsUnseen);
 }
 
@@ -110,13 +110,13 @@ const LOOK_FRAMES = 5;
 
 /** Through the eyes, the hero turned away from the sun and looking down onto the ground his shadow falls on. */
 async function lookAtHisShadow(lab: Lab): Promise<void> {
-  let sun: THREE.DirectionalLight | null = null;
+  let sun: DirectionalLight | null = null;
   G.scene.traverse((object) => {
-    const light = object as THREE.DirectionalLight;
+    const light = object as DirectionalLight;
     if (light.isDirectionalLight && light.castShadow && light.visible) sun = light;
   });
   if (!sun) throw new Error('lab: shadows: no light casting as the sun does');
-  const light: THREE.DirectionalLight = sun;
+  const light: DirectionalLight = sun;
   const away = light.target.position.clone().sub(light.position).setY(0).normalize();
   const spot = lab.player.obj.position.clone().addScaledVector(away, SHADOW_AHEAD);
   await lab.step(LOOK_FRAMES, () => ({ sight: spot }));
@@ -124,7 +124,7 @@ async function lookAtHisShadow(lab: Lab): Promise<void> {
 
 /** His hidden body left uncast through the eyes (the eyes' canary), as from #270 to #893, while `run` runs. */
 function leftUncast<T>(lab: Lab, run: () => T): T {
-  const body: THREE.Object3D[] = [];
+  const body: Node[] = [];
   lab.player.obj.traverse((object) => {
     if (unseen(object)) body.push(object);
   });
@@ -198,7 +198,7 @@ async function shadowCost(lab: Lab): Promise<Report> {
   await lab.setup({});
   const drawing = lab.drawing;
   lab.drawing = true;
-  const casting: THREE.Object3D[] = [];
+  const casting: Node[] = [];
   lab.player.obj.traverse((object) => {
     if (object.castShadow) casting.push(object);
   });

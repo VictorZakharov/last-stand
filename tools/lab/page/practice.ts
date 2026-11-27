@@ -6,7 +6,7 @@
 // key and the cast's energy is spent. A run is started at the crypt's portal. A run begun while the lobby was
 // practice (a co-op guest's, as its host starts) kept the lobby's free casting through the whole run. With a canary,
 // that run again with free casting planted, which must be caught.
-import * as THREE from 'three';
+import { Vec3 } from './sceneApi.ts';
 import { pressHeld } from './holdPress';
 import type { Lab, Report } from './lab';
 import type { SkillDef, SkillKey } from '../../../src/types';
@@ -71,11 +71,11 @@ function skillsToCast(hero: Player): { key: SkillKey; skill: KnownSkill }[] {
 }
 
 /** Where the hero casts: at the nearest foe standing near (a mark needs one), or ahead of him. */
-function aimFor(hero: Player): THREE.Vector3 {
+function aimFor(hero: Player): Vec3 {
   const standing = G.enemies.filter((foe) => foe.alive && foe.pos.distanceTo(hero.pos) < NEAR);
   standing.sort((a, b) => a.pos.distanceTo(hero.pos) - b.pos.distanceTo(hero.pos));
   if (standing.length) return standing[0].pos.clone();
-  const ahead = new THREE.Vector3(Math.sin(hero.facing), 0, Math.cos(hero.facing)).multiplyScalar(AHEAD);
+  const ahead = new Vec3(Math.sin(hero.facing), 0, Math.cos(hero.facing)).multiplyScalar(AHEAD);
   return hero.pos.clone().add(ahead);
 }
 
@@ -113,7 +113,7 @@ const busy = (hero: Player): boolean => Boolean(hero.casting || hero.channel || 
  * `key` held as its skill is held to cast it (a frame for most, an aimed one a moment, a drawn shot to full) at
  * `aim` and let go, then frames until the hero is free, `watch` run after each.
  */
-async function castOnce(lab: Lab, key: SkillKey, def: SkillDef, aim: THREE.Vector3, watch = () => {}): Promise<void> {
+async function castOnce(lab: Lab, key: SkillKey, def: SkillDef, aim: Vec3, watch = () => {}): Promise<void> {
   const frames = Math.max(1, Math.ceil(holdFor(def) / (window.__labClock.frame / 1000)));
   await lab.step(frames, () => pressing(key, aim, true), watch);
   await lab.step(1, () => pressing(key, aim, false), watch);
@@ -173,7 +173,7 @@ function judge(twice: Twice, casting: Casting): { line: string; problems: string
 /** The hero put where a case casts in the village (the yard, by default), turned to its dummies, and let settle. */
 async function standIn(lab: Lab, spot: [number, number] = yardToWorld(0, -2)): Promise<void> {
   lab.player.walkTo = null;
-  lab.player.place(new THREE.Vector3(spot[0], groundHeight(spot[0], spot[1]), spot[1]), YARD.turn);
+  lab.player.place(new Vec3(spot[0], groundHeight(spot[0], spot[1]), spot[1]), YARD.turn);
   await lab.step(LOBBY_FRAMES);
 }
 
@@ -244,7 +244,7 @@ async function enterRun(lab: Lab, start: () => Promise<void>): Promise<() => voi
   await lab.until(() => G.mode === 'run', RUN_FRAMES, 'practice: the run never started');
   lab.beforeFrame.push(holdTheRun);
   const hero = lab.player;
-  const at = new THREE.Vector3(Math.sin(hero.facing), 0, Math.cos(hero.facing)).multiplyScalar(AHEAD).add(hero.pos);
+  const at = new Vec3(Math.sin(hero.facing), 0, Math.cos(hero.facing)).multiplyScalar(AHEAD).add(hero.pos);
   const dummy: Enemy = lab.spawnFoe('dummy', at);
   await lab.until(() => dummy.spawning <= 0, RISE_FRAMES, 'practice: the run\'s dummy never rose');
   return () => lab.beforeFrame.splice(lab.beforeFrame.indexOf(holdTheRun), 1);

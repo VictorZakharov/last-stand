@@ -1,4 +1,4 @@
-// A kit material's looks under the Rust engine (`core/shaderPorts.ts` `kitNodes`, the foes' and the heroes'): the
+// A kit material's looks under the Rust engine (the foes' and the heroes', once three's `kitNodes`): the
 // dissolve (its pixels dropped by the noise, an edge glowing round the hole), frost and char over its colour, its
 // glow dimmed near the camera, a rim of light at glancing angles, the char's embers and a hit's flash. Found on a
 // material by its `kitLooks`, and shared by what it holds, so a kind's bodies still batch; a painted face's hair in
@@ -34,7 +34,7 @@ fn kit_noise3(x: vec3f) -> f32 {
       mix(kit_hash(i + vec3f(0.0, 1.0, 1.0)), kit_hash(i + vec3f(1.0, 1.0, 1.0)), f.x), f.y), f.z);
 }
 
-// a worn item's glow (core/shaderPorts.ts auraTendrils, line for line): tendrils of light on its surface, drifting
+// a worn item's glow (three's auraTendrils once, line for line): tendrils of light on its surface, drifting
 // up on a loop
 fn aura_wrap(x: f32, per: f32) -> f32 { return x - per * floor(x / per); }
 fn aura_hash(start: vec3f, per: f32) -> f32 { return kit_hash(vec3f(start.x, aura_wrap(start.y, per), start.z)); }

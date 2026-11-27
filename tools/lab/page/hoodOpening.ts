@@ -10,7 +10,9 @@
 // - from his left, how far the face shows ahead of the rim at each height, held to the reference's: the rim frames
 //   the face it shows. (The reference's brow, nose and chin stand further ahead of its eyes than ours: laid where its
 //   rim runs from the eyes, ours stood out over the brow, "do you see hood overhang in our case?")
-import * as THREE from 'three';
+import {
+  Camera, Color, DoubleSide, Material, Node, PerspectiveCamera, UnlitMaterial, Vec2, Vec3, World,
+} from './sceneApi.ts';
 import type { Lab } from './lab';
 import { frameRect } from '../../../src/core/renderer';
 import { studioPicture } from './studio';
@@ -19,7 +21,7 @@ export type OpeningView = 'front' | 'left';
 
 /** Where the face is in a picture (px, down from its top) and its unit `E` (px). */
 export interface FaceMarks {
-  eyes: THREE.Vector2;
+  eyes: Vec2;
   unit: number;
 }
 
@@ -199,15 +201,15 @@ function faceEdges(skinAt: (x: number) => boolean, rim: number[], view: OpeningV
 }
 
 /** Where a point (world space) falls on the tile a picture from `camera` is read as (px, down from its top). */
-export function onTile(camera: THREE.Camera, tile: { width: number; height: number }):
-  (point: THREE.Vector3) => THREE.Vector2 {
+export function onTile(camera: Camera, tile: { width: number; height: number }):
+  (point: Vec3) => Vec2 {
   // (the frame the studio draws: `frameRect`'s, the tile its middle)
   const frame = frameRect();
   return (point) => {
     const ndc = point.clone().project(camera);
     const x = ((ndc.x + 1) / 2) * frame.width - (frame.width - tile.width) / 2;
     const y = ((1 - ndc.y) / 2) * frame.height;
-    return new THREE.Vector2(x, y);
+    return new Vec2(x, y);
   };
 }
 
@@ -229,15 +231,15 @@ function crossingAt(trace: InE[], up: number): number | null {
 }
 
 /** The index of the edge nearer `camera` (the mean of its points). */
-function nearerEdge(edges: THREE.Vector3[][], camera: THREE.Camera): number {
-  const from = camera.getWorldPosition(new THREE.Vector3());
-  const distance = (edge: THREE.Vector3[]) => edge.reduce((sum, p) => sum + p.distanceTo(from), 0) / edge.length;
+function nearerEdge(edges: Vec3[][], camera: Camera): number {
+  const from = camera.getWorldPosition(new Vec3());
+  const distance = (edge: Vec3[]) => edge.reduce((sum, p) => sum + p.distanceTo(from), 0) / edge.length;
   return distance(edges[0]) <= distance(edges[1]) ? 0 : 1;
 }
 
 /** Our opening from `camera`: the rim's two `edges` (world space, each from its top down) on its picture, where the
  *  face is as `marks` say, and the face shown in `skin` (a mask of the skin as drawn). */
-export function ourOpening(edges: THREE.Vector3[][], camera: THREE.Camera, skin: Mask, marks: FaceMarks,
+export function ourOpening(edges: Vec3[][], camera: Camera, skin: Mask, marks: FaceMarks,
   view: OpeningView): Opening {
   const project = onTile(camera, skin);
   const traces = edges.map((edge) => edge.map((point): InE => {
@@ -269,26 +271,26 @@ export function ourOpening(edges: THREE.Vector3[][], camera: THREE.Camera, skin:
 }
 
 /** Whether an object of ours is drawn as skin. */
-export function isSkinMesh(object: THREE.Object3D): boolean {
+export function isSkinMesh(object: Node): boolean {
   return SKIN_MESHES.has(object.name);
 }
 
 /** Whether an object draws as points, lines or a sprite (left out of a mask: a mesh's material won't do for them). */
-function isNotMesh(object: THREE.Object3D): boolean {
-  const drawn = object as THREE.Object3D & { isPoints?: boolean; isLine?: boolean; isSprite?: boolean };
+function isNotMesh(object: Node): boolean {
+  const drawn = object as Node & { isPoints?: boolean; isLine?: boolean; isSprite?: boolean };
   return Boolean(drawn.isPoints || drawn.isLine || drawn.isSprite);
 }
 
-type Drawn = THREE.Object3D & { material: THREE.Material | THREE.Material[] };
+type Drawn = Node & { material: Material | Material[] };
 
 /** `scene` drawn from `camera` flat, what `white` picks white and the rest black (`hidden` and all but meshes left
  *  out), read back as the tile `shoot` reads. */
-export async function maskOf(lab: Lab, scene: THREE.Scene, camera: THREE.PerspectiveCamera,
-  white: (object: THREE.Object3D) => boolean, hidden: THREE.Object3D[]): Promise<Mask> {
-  const paint = (color: number) => new THREE.MeshBasicMaterial({ color, side: THREE.DoubleSide });
+export async function maskOf(lab: Lab, scene: World, camera: PerspectiveCamera,
+  white: (object: Node) => boolean, hidden: Node[]): Promise<Mask> {
+  const paint = (color: number) => new UnlitMaterial({ color, side: DoubleSide });
   const paints = { white: paint(0xffffff), black: paint(0x000000) };
-  const swapped: [Drawn, THREE.Material | THREE.Material[]][] = [];
-  const shown: THREE.Object3D[] = hidden.filter((object) => object.visible);
+  const swapped: [Drawn, Material | Material[]][] = [];
+  const shown: Node[] = hidden.filter((object) => object.visible);
   scene.traverse((object) => {
     if (object.visible && isNotMesh(object)) shown.push(object);
   });
@@ -300,7 +302,7 @@ export async function maskOf(lab: Lab, scene: THREE.Scene, camera: THREE.Perspec
     drawn.material = white(object) ? paints.white : paints.black;
   });
   const background = scene.background;
-  scene.background = new THREE.Color(0x000000);
+  scene.background = new Color(0x000000);
   try {
     return maskIn(await studioPicture(lab, scene, camera));
   } finally {

@@ -36,20 +36,20 @@ export class Ray {
     return this.set(ray.origin, ray.direction);
   }
 
-  /** the point `t` along it, into `target` */
-  at(t: number, target: Vec3): Vec3 {
-    return target.copy(this.origin).addScaledVector(this.direction, t);
+  /** the point `distance` along it, into `target` */
+  at(distance: number, target: Vec3): Vec3 {
+    return target.copy(this.origin).addScaledVector(this.direction, distance);
   }
 
-  /** turned to point at `v` */
-  lookAt(v: Vec3): this {
-    this.direction.copy(v).sub(this.origin).normalize();
+  /** turned to point at `point` */
+  lookAt(point: Vec3): this {
+    this.direction.copy(point).sub(this.origin).normalize();
     return this;
   }
 
-  /** its origin moved `t` along it */
-  recast(t: number): this {
-    this.origin.copy(this.at(t, onRay));
+  /** its origin moved `distance` along it */
+  recast(distance: number): this {
+    this.origin.copy(this.at(distance, onRay));
     return this;
   }
 
@@ -98,15 +98,15 @@ export class Ray {
   distanceToPlane(plane: Plane): number | null {
     const facing = plane.normal.dot(this.direction);
     if (facing === 0) return plane.distanceToPoint(this.origin) === 0 ? 0 : null;
-    const t = -(this.origin.dot(plane.normal) + plane.constant) / facing;
-    return t >= 0 ? t : null;
+    const distance = -(this.origin.dot(plane.normal) + plane.constant) / facing;
+    return distance >= 0 ? distance : null;
   }
 
   /** where it meets `plane`, into `target`; null if it doesn't */
   intersectPlane(plane: Plane, target: Vec3): Vec3 | null {
-    const t = this.distanceToPlane(plane);
-    if (t === null) return null;
-    return this.at(t, target);
+    const distance = this.distanceToPlane(plane);
+    if (distance === null) return null;
+    return this.at(distance, target);
   }
 
   /**
@@ -114,19 +114,19 @@ export class Ray {
    * three.js 0.187.0's `Ray.intersectBox` (Williams et al.'s slabs, by each axis's inverse direction, NaN-safe).
    */
   intersectBox(box: Box3, target: Vec3): Vec3 | null {
-    const o = this.origin;
+    const origin = this.origin;
     const inverseX = 1 / this.direction.x;
     const inverseY = 1 / this.direction.y;
     const inverseZ = 1 / this.direction.z;
-    let near = ((inverseX >= 0 ? box.min.x : box.max.x) - o.x) * inverseX;
-    let far = ((inverseX >= 0 ? box.max.x : box.min.x) - o.x) * inverseX;
-    const nearY = ((inverseY >= 0 ? box.min.y : box.max.y) - o.y) * inverseY;
-    const farY = ((inverseY >= 0 ? box.max.y : box.min.y) - o.y) * inverseY;
+    let near = ((inverseX >= 0 ? box.min.x : box.max.x) - origin.x) * inverseX;
+    let far = ((inverseX >= 0 ? box.max.x : box.min.x) - origin.x) * inverseX;
+    const nearY = ((inverseY >= 0 ? box.min.y : box.max.y) - origin.y) * inverseY;
+    const farY = ((inverseY >= 0 ? box.max.y : box.min.y) - origin.y) * inverseY;
     if (near > farY || nearY > far) return null;
     if (nearY > near || Number.isNaN(near)) near = nearY;
     if (farY < far || Number.isNaN(far)) far = farY;
-    const nearZ = ((inverseZ >= 0 ? box.min.z : box.max.z) - o.z) * inverseZ;
-    const farZ = ((inverseZ >= 0 ? box.max.z : box.min.z) - o.z) * inverseZ;
+    const nearZ = ((inverseZ >= 0 ? box.min.z : box.max.z) - origin.z) * inverseZ;
+    const farZ = ((inverseZ >= 0 ? box.max.z : box.min.z) - origin.z) * inverseZ;
     if (near > farZ || nearZ > far) return null;
     if (nearZ > near || Number.isNaN(near)) near = nearZ;
     if (farZ < far || Number.isNaN(far)) far = farZ;
@@ -140,13 +140,13 @@ export class Ray {
   }
 
   /**
-   * Where it meets the triangle `a`, `b`, `c`, into `target`; null if it doesn't, or if `backfaceCulling` and it
-   * meets the back (the side `a`, `b`, `c` wind clockwise from). Follows three.js 0.187.0's
+   * Where it meets the triangle `cornerA`, `cornerB`, `cornerC`, into `target`; null if it doesn't, or if
+   * `backfaceCulling` and it meets the back (the side the corners wind clockwise from). Follows three.js 0.187.0's
    * `Ray.intersectTriangle` (Eberly's, by signed volumes against the triangle's normal).
    */
-  intersectTriangle(a: Vec3, b: Vec3, c: Vec3, backfaceCulling: boolean, target: Vec3): Vec3 | null {
-    edge1.subVectors(b, a);
-    edge2.subVectors(c, a);
+  intersectTriangle(cornerA: Vec3, cornerB: Vec3, cornerC: Vec3, backfaceCulling: boolean, target: Vec3): Vec3 | null {
+    edge1.subVectors(cornerB, cornerA);
+    edge2.subVectors(cornerC, cornerA);
     normal.crossVectors(edge1, edge2);
     let facing = this.direction.dot(normal);
     let sign: number;
@@ -159,7 +159,7 @@ export class Ray {
     } else {
       return null;
     }
-    fromA.subVectors(this.origin, a);
+    fromA.subVectors(this.origin, cornerA);
     const alongB = sign * this.direction.dot(edge2.crossVectors(fromA, edge2));
     if (alongB < 0) return null;
     const alongC = sign * this.direction.dot(edge1.cross(fromA));
@@ -185,7 +185,7 @@ export class Ray {
 
 /** a point along the ray the tests measure with */
 const onRay = new Vec3();
-/** `intersectTriangle`'s edges from `a`, the triangle's normal, and the origin from `a` */
+/** `intersectTriangle`'s edges from `cornerA`, the triangle's normal, and the origin from `cornerA` */
 const edge1 = new Vec3();
 const edge2 = new Vec3();
 const normal = new Vec3();

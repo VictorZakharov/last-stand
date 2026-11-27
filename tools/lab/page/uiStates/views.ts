@@ -1,6 +1,6 @@
 // `lab ui`'s `views` state (`../uiKit.ts` `Steps`): the lobby's camera switched through its views from the training
 // yard: the labels over the dummies against their anchors.
-import * as THREE from 'three';
+import { Vec3 } from '../sceneApi.ts';
 import { G } from '../../../../src/state';
 import { YARD, yardToWorld } from '../../../../src/data/village';
 import { anchoredLabels } from '../../../../src/ui/floaters';
@@ -33,7 +33,7 @@ let switches: Switch[] = [];
 function labelsOff(): { labels: number; worst: number } {
   const camera = G.camera.clone();
   camera.updateMatrixWorld();
-  const point = new THREE.Vector3();
+  const point = new Vec3();
   let labels = 0;
   let worst = 0;
   for (const { label, at, clamp } of anchoredLabels()) {

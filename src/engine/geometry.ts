@@ -1,7 +1,7 @@
 // The game's geometry handed to the engine: a mesh's vertices (written in place where they only moved), an instanced
 // mesh's set of matrices and tints, and a skinned mesh's bones, written into the frame's own memory.
 import {
-  Attribute, Geometry, InstancedMesh, InterleavedBufferAttribute, Mat4, Skeleton, SkinnedMesh,
+  Attribute, Geometry, InstancedMesh, Mat4, Skeleton, SkinnedMesh,
 } from './api/index.ts';
 import type { Core } from './core';
 
@@ -11,20 +11,16 @@ interface GeometryEntry {
   id: number; version: number; position: unknown; index: unknown; draws: number; indexVersion: number;
 }
 interface SetEntry { id: number; version: number; count: number }
-type AnyAttribute = Attribute | InterleavedBufferAttribute;
-
 const scratchMatrix = new Mat4();
 const IDENTITY = new Mat4();
 const EMPTY_FLOATS = new Float32Array(0), EMPTY_SHORTS = new Uint16Array(0), EMPTY_INDICES = new Uint32Array(0);
 
-/** An attribute's values as floats, whatever array holds them (interleaved, normalized bytes...). */
-function floatsOf(attribute: AnyAttribute | undefined): Float32Array {
+/** An attribute's values as floats, whatever array holds them (normalized bytes...). */
+function floatsOf(attribute: Attribute | undefined): Float32Array {
   if (!attribute) return EMPTY_FLOATS;
-  const plain = attribute as Attribute;
-  const interleaved = (attribute as InterleavedBufferAttribute).isInterleavedBufferAttribute;
-  if (!interleaved && plain.array instanceof Float32Array) {
-    return plain.array.length === attribute.count * attribute.itemSize ? plain.array
-      : plain.array.subarray(0, attribute.count * attribute.itemSize);
+  if (attribute.array instanceof Float32Array) {
+    return attribute.array.length === attribute.count * attribute.itemSize ? attribute.array
+      : attribute.array.subarray(0, attribute.count * attribute.itemSize);
   }
   const size = attribute.itemSize, out = new Float32Array(attribute.count * size);
   for (let i = 0; i < attribute.count; i++) {

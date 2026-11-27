@@ -5,7 +5,7 @@
 // hidden, with what's opaque before it hiding it as it does. The frame's light is held meanwhile: the eye's adaptation
 // (`holdAdaptation`) and the sun's shadows (`TUNE.shadows`; the lamps' are baked of what stands still, hidden or not),
 // as a record hidden took its shadow and the eye's light with it, and a third of the frame changed with each.
-import type * as THREE from 'three';
+import type { Mesh } from './sceneApi.ts';
 import type { Lab } from './lab';
 import { drawFrame } from './light';
 import { holdAdaptation } from '../../../src/core/renderer';
@@ -27,7 +27,7 @@ function steadyFrame(lab: Lab): Canvas {
 
 /** The frame with `mesh` hidden, drawn at the same moment of the game (a game frame between, the torches' flicker
  *  moved the hall's light, and every pixel of it differed). */
-function frameWithout(lab: Lab, mesh: THREE.Mesh): Canvas {
+function frameWithout(lab: Lab, mesh: Mesh): Canvas {
   const shown = mesh.visible;
   mesh.visible = false;
   try {
@@ -46,7 +46,7 @@ function differs(a: Canvas, b: Canvas, at: number): boolean {
 }
 
 /** How many pixels of the frame as drawn now are both `first`'s and `second`'s. */
-export async function pixelsShared(lab: Lab, first: THREE.Mesh, second: THREE.Mesh): Promise<number> {
+export async function pixelsShared(lab: Lab, first: Mesh, second: Mesh): Promise<number> {
   const shadows = TUNE.shadows;
   holdAdaptation(true);
   TUNE.shadows = 0;

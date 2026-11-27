@@ -15,7 +15,7 @@
 // measured from the hero's own shoulders, a held swing's (`ViewSwing.holds`) from those its guard puts, not the point
 // its plane turns about. `all` steps every swing the hero's weapons are swung with as he holds them, each turned as
 // the game turns it, so a check reads them all.
-import * as THREE from 'three';
+import { Maths, Vec3 } from './sceneApi.ts';
 import { basesHeld, type Lab, type Fixture, type Report } from './lab';
 import { armsLens } from './inFrame';
 import { triple } from './keyed';
@@ -64,7 +64,7 @@ const ROUND_TRIP_TURN = 0.5, ROUND_TRIP_REACH = 0.005, CANARY_OFF = 0.1;
 const JUNCTION_NEAR = 0.01, JUNCTION_TURN = 1;
 
 /** What one key puts where in the view (camera space). */
-interface Placed { grip: THREE.Vector3; dir: THREE.Vector3; elbow: THREE.Vector3; wrist: THREE.Vector3 }
+interface Placed { grip: Vec3; dir: Vec3; elbow: Vec3; wrist: Vec3 }
 
 /** `lab swing`: the key of a swing that holds a pose, and where its keys (or one given) put the arm. */
 export async function swing(lab: Lab, options: SwingOptions): Promise<Report> {
@@ -77,8 +77,8 @@ export async function swing(lab: Lab, options: SwingOptions): Promise<Report> {
   const lines = [planeWords(options.swing, keyed)];
   const problems: string[] = [];
   for (let i = 0; options.at && options.dir && i < options.at.length; i += 3) {
-    const at = new THREE.Vector3().fromArray(options.at, i);
-    const dir = new THREE.Vector3().fromArray(options.dir, i).normalize();
+    const at = new Vec3().fromArray(options.at, i);
+    const dir = new Vec3().fromArray(options.dir, i).normalize();
     // (keyed in the swing's plane as it is before the trunk turns it)
     const unturned = turned(keyed, -keyed.turn, { grip: at.clone(), dir: dir.clone() });
     const fit = swingKeyFor(swing, keyed.bones, unturned.grip, unturned.dir, mirror);
@@ -121,8 +121,8 @@ function stepped(lab: Lab, name: string, keyed: Keyed, trunk: Trunk | null): { l
 /** Whether the game places a swing at a share of it in the plane it has there (its `swingAt` gives the wrist), or
  *  every key in the swing's own plane. */
 function placesShares({ swing, bones, mirror }: Keyed): boolean {
-  const at = () => new THREE.Vector3();
-  const wrist = new THREE.Vector3(NaN, NaN, NaN);
+  const at = () => new Vec3();
+  const wrist = new Vec3(NaN, NaN, NaN);
   swingAt(swing, 0, bones, at(), at(), at(), at(), mirror, wrist);
   return !Number.isNaN(wrist.x);
 }
@@ -270,7 +270,7 @@ function keyFrom(numbers: number[]): SwingKey {
 
 /** A key placed with nothing in it yet. */
 function unplaced(): Placed {
-  const at = () => new THREE.Vector3();
+  const at = () => new Vec3();
   return { grip: at(), dir: at(), elbow: at(), wrist: at() };
 }
 
@@ -279,8 +279,8 @@ function unplaced(): Placed {
 function placeKey(keyed: Keyed, key: SwingKey): Placed {
   const { swing, bones, mirror } = keyed;
   const placed = unplaced();
-  swingKeyAt(swing, key, bones, placed.grip, placed.dir, new THREE.Vector3(), placed.elbow, placed.wrist, mirror);
-  const shoulder = swingShoulder(swing, new THREE.Vector3(), mirror);
+  swingKeyAt(swing, key, bones, placed.grip, placed.dir, new Vec3(), placed.elbow, placed.wrist, mirror);
+  const shoulder = swingShoulder(swing, new Vec3(), mirror);
   placed.elbow.add(shoulder);
   placed.wrist.add(shoulder);
   return turned(keyed, keyed.turn, placed);
@@ -296,9 +296,9 @@ function placeAt(keyed: Keyed, share: number, key: SwingKey): Placed {
   const placed = unplaced();
   // (a game whose `swingAt` gives no wrist placed every key in its swing's own plane)
   placed.wrist.set(NaN, NaN, NaN);
-  swingAt(swing, share, bones, placed.grip, placed.dir, new THREE.Vector3(), placed.elbow, mirror, placed.wrist);
+  swingAt(swing, share, bones, placed.grip, placed.dir, new Vec3(), placed.elbow, mirror, placed.wrist);
   if (Number.isNaN(placed.wrist.x)) return placeKey(keyed, key);
-  const pivot = swingShoulderAt(swing, share, new THREE.Vector3(), mirror);
+  const pivot = swingShoulderAt(swing, share, new Vec3(), mirror);
   placed.elbow.add(pivot);
   placed.wrist.add(pivot);
   return turned(keyed, keyed.turn, placed);
@@ -320,7 +320,7 @@ function pathOf(lab: Lab, turnedKeyed: Keyed, trunk: Trunk | null = null): PathS
   return pathShares().map((share) => {
     const keyed = turnAt ? { ...turnedKeyed, turn: turnAt(share) } : turnedKeyed;
     const placed = placeAt(keyed, share, first);
-    const pivot = turnedPoint(keyed, swingShoulderAt(swing, share, new THREE.Vector3(), mirror));
+    const pivot = turnedPoint(keyed, swingShoulderAt(swing, share, new Vec3(), mirror));
     const lower = up === null ? null : placed.grip.clone().addScaledVector(placed.dir, -up);
     const lowerPast = lower ? lower.distanceTo(ownShoulders(keyed, share).left) - reachOf(lab) : null;
     return { share, pivot, grip: placed.grip, elbow: placed.elbow, lowerPast };
@@ -348,26 +348,26 @@ function keyNumbered(swing: ViewSwing, index: number): { share: number; key: Swi
 const keysOf = (swing: ViewSwing) => Math.floor(swing.keys.length / 6);
 
 /** The spine under a swing's shoulder, which the trunk turns about (models/warrior.ts `spineUnder`). */
-function spineOf(swing: ViewSwing): THREE.Vector3 {
-  const shoulder = swingShoulder(swing, new THREE.Vector3());
-  return new THREE.Vector3(0, shoulder.y, shoulder.z);
+function spineOf(swing: ViewSwing): Vec3 {
+  const shoulder = swingShoulder(swing, new Vec3());
+  return new Vec3(0, shoulder.y, shoulder.z);
 }
 
 /** A placed arm's grip, elbow and wrist (those it has) and its weapon's way turned `turn` (rad, to the left) about the
  *  view's up through the spine, as the trunk carries a cut round (`turnWithTrunk`), in place. */
-function turned<T extends { grip: THREE.Vector3; dir: THREE.Vector3; elbow?: THREE.Vector3; wrist?: THREE.Vector3 }>(
+function turned<T extends { grip: Vec3; dir: Vec3; elbow?: Vec3; wrist?: Vec3 }>(
   { swing }: Keyed, turn: number, placed: T,
 ): T {
   if (turn === 0) return placed;
   const spine = spineOf(swing);
-  turnWithTrunk(turn, spine, placed.grip, placed.dir, new THREE.Vector3(), new THREE.Vector3());
+  turnWithTrunk(turn, spine, placed.grip, placed.dir, new Vec3(), new Vec3());
   for (const point of [placed.elbow, placed.wrist]) point?.sub(spine).applyAxisAngle(UP, turn).add(spine);
   return placed;
 }
-const UP = new THREE.Vector3(0, 1, 0);
+const UP = new Vec3(0, 1, 0);
 
 /** A point turned with the trunk as a placed arm is (`turned`), in place. */
-function turnedPoint(keyed: Keyed, point: THREE.Vector3): THREE.Vector3 {
+function turnedPoint(keyed: Keyed, point: Vec3): Vec3 {
   if (keyed.turn === 0) return point;
   const spine = spineOf(keyed.swing);
   return point.sub(spine).applyAxisAngle(UP, keyed.turn).add(spine);
@@ -399,7 +399,7 @@ function junctionOf(
   const start = placeAt(at, 0, keyNumbered(keyed.swing, 0).key);
   const end = placeAt({ ...at, swing: from }, 1, keyNumbered(from, keysOf(from) - 1).key);
   const off = start.grip.distanceTo(end.grip);
-  const turned = THREE.MathUtils.radToDeg(start.dir.angleTo(end.dir));
+  const turned = Maths.radToDeg(start.dir.angleTo(end.dir));
   const fromName = Object.keys(SWINGS_NAMED).find((named) => SWINGS_NAMED[named] === from) ?? 'the swing before';
   const line = `${name} starts ${(off * 100).toFixed(1)} cm and ${turned.toFixed(1)}° from where ${fromName} `
     + 'leaves the arm';
@@ -428,7 +428,7 @@ const smooth = (t: number) => t * t * (3 - 2 * t);
 /** A swing's plane as words: its shoulder (or the point its hands turn about, a held swing's), the way it crosses the
  *  view, and its bones. */
 function planeWords(name: string, { swing, bones, mirror, turn }: Keyed): string {
-  const shoulder = swingShoulder(swing, new THREE.Vector3(), mirror);
+  const shoulder = swingShoulder(swing, new Vec3(), mirror);
   const pivot = swing.holds ? 'the point its hands turn about (held)' : 'its shoulder';
   const arm = `the arm ${bones.upper.toFixed(2)} + ${bones.fore.toFixed(2)} + ${bones.hand.toFixed(2)} m`;
   const hand = mirror ? ', the left hand\'s, mirrored' : '';
@@ -483,13 +483,13 @@ function placedWords(lab: Lab, keyed: Keyed, placed: Placed, share: number): str
  *  keys: the right where the swing's plane turns about there (`swingShoulderAt`), but where the hands place the
  *  weapon (a held swing, or one turned from a held one: `ViewSwing.holds`) where its guard puts it, whose shoulders
  *  the arms are drawn from (models/warrior.ts `driver`); the left across the spine from the right. */
-function ownShoulders(keyed: Keyed, share: number): { right: THREE.Vector3; left: THREE.Vector3; held: boolean } {
+function ownShoulders(keyed: Keyed, share: number): { right: Vec3; left: Vec3; held: boolean } {
   const { swing } = keyed;
   const held = Boolean(swing.holds || swing.from?.holds);
-  const right = new THREE.Vector3();
+  const right = new Vec3();
   if (held) swingShoulder(TWO_REST, right);
   else swingShoulderAt(swing, share, right);
-  const left = new THREE.Vector3(-right.x, right.y, right.z);
+  const left = new Vec3(-right.x, right.y, right.z);
   const spine = spineOf(swing);
   for (const shoulder of [right, left]) shoulder.sub(spine).applyAxisAngle(UP, keyed.turn).add(spine);
   return { right, left, held };
@@ -532,7 +532,7 @@ function shownWords({ share, length }: { share: number; length: number }): strin
 }
 
 /** Whether a point in the eyes' frame is in the frame the arms are drawn in. */
-function seen(point: THREE.Vector3): boolean {
+function seen(point: Vec3): boolean {
   if (point.z >= 0) return false;
   const ndc = point.clone().applyMatrix4(armsLens().projectionMatrix);
   return Math.abs(ndc.x) <= 1 && Math.abs(ndc.y) <= 1;
@@ -566,8 +566,8 @@ function canaryMissed(turnedKeyed: Keyed): string[] {
 
 /** `CANARY_OFF` along the plane's normal at a placed key: square to the grip's way from the shoulder and the
  *  weapon's. */
-function normalOf({ swing, bones, mirror }: Keyed, placed: Placed): THREE.Vector3 {
-  const shoulder = swingShoulder(swing, new THREE.Vector3(), mirror);
+function normalOf({ swing, bones, mirror }: Keyed, placed: Placed): Vec3 {
+  const shoulder = swingShoulder(swing, new Vec3(), mirror);
   const toGrip = placed.grip.clone().sub(shoulder);
   const striking = placed.grip.clone().addScaledVector(placed.dir, bones.strike).sub(shoulder);
   return toGrip.cross(striking).normalize().multiplyScalar(CANARY_OFF);

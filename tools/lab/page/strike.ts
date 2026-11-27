@@ -8,7 +8,7 @@
 // strike according to physics... blade parallel to strike direction"; broadside to the eyes through the blow, the
 // flat led every cut. And: "it strikes with whole blade, but it should strike with tip", "strikes feel fake and having
 // no momentum".)
-import * as THREE from 'three';
+import { Maths, Mesh, Node, Quat, Vec3 } from './sceneApi.ts';
 import type { Lab } from './lab';
 import * as weaponsCode from '../../../src/entities/models/weapons';
 import type { StrikingSide } from '../../../src/entities/models/weapons';
@@ -54,7 +54,7 @@ export interface StrikeFrame {
   weapon: string;
   side: StrikingSide;
   /** where its blow lands (world), how fast it moves there (m/s, the world's), and its hilt (its grip's place) */
-  point: THREE.Vector3;
+  point: Vec3;
   speed: number;
   gripSpeed: number;
   /** how far its striking side is off the way its striking part moves square to its length (degrees: 0 its edge, bit
@@ -63,7 +63,7 @@ export interface StrikeFrame {
   /** the share of that motion along its length (a thrust or a draw rather than a cut) */
   along: number;
   /** its length's way (the world's), for the plane it's swung in */
-  axis: THREE.Vector3;
+  axis: Vec3;
   /** how many times as fast as its hilt its striking part would move swung round its pivot with the arm as one (the
    *  ratio of their distances from it), the whip's measure, and that pivot */
   rigid: number;
@@ -80,13 +80,13 @@ export type Pivot = 'shoulder' | 'body';
  *  blow lands, the shoulder of the arm holding it, the body's place, the way of its length and the eyes' place (world),
  *  and how far its lowest point is over the floor (`StrikeFrame.low`). */
 interface Held {
-  weapon: THREE.Object3D;
-  grip: THREE.Vector3;
-  point: THREE.Vector3;
-  shoulder: THREE.Vector3;
-  body: THREE.Vector3;
-  axis: THREE.Vector3;
-  eyes: THREE.Vector3;
+  weapon: Node;
+  grip: Vec3;
+  point: Vec3;
+  shoulder: Vec3;
+  body: Vec3;
+  axis: Vec3;
+  eyes: Vec3;
   low: number;
 }
 
@@ -94,7 +94,7 @@ interface Held {
 export const SIDES_NAMED = Boolean(weaponSides);
 
 /** Whether `object` is a weapon, by its name: a base this game says a striking side for, or any named. */
-export const isWeapon = (object: THREE.Object3D) => (weaponSides ? object.name in weaponSides : object.name !== '');
+export const isWeapon = (object: Node) => (weaponSides ? object.name in weaponSides : object.name !== '');
 
 /** The weapon the hero's tip is on, if any (the world matrices current). */
 function heldNow(lab: Lab): Held | null {
@@ -102,21 +102,21 @@ function heldNow(lab: Lab): Held | null {
   const grip = tip?.parent;
   const weapon = grip?.children.find((child) => child.visible && isWeapon(child));
   if (!tip || !grip || !weapon) return null;
-  const from = grip.getWorldPosition(new THREE.Vector3());
-  const point = from.clone().lerp(tip.getWorldPosition(new THREE.Vector3()), PERCUSSION);
-  const shoulder = lab.joints[`shoulder${heldIn(lab, grip)}`].getWorldPosition(new THREE.Vector3());
-  const body = lab.joints.body.getWorldPosition(new THREE.Vector3());
-  const eyes = G.camera.getWorldPosition(new THREE.Vector3());
+  const from = grip.getWorldPosition(new Vec3());
+  const point = from.clone().lerp(tip.getWorldPosition(new Vec3()), PERCUSSION);
+  const shoulder = lab.joints[`shoulder${heldIn(lab, grip)}`].getWorldPosition(new Vec3());
+  const body = lab.joints.body.getWorldPosition(new Vec3());
+  const eyes = G.camera.getWorldPosition(new Vec3());
   return { weapon, grip: from, point, shoulder, body, axis: axisOf(weapon), eyes, low: overFloor(weapon) };
 }
 
 /** How far the lowest point of `weapon` as drawn (its meshes seen, the world matrices current) is over the floor
  *  under it (m; less than 0, under it). */
-function overFloor(weapon: THREE.Object3D): number {
-  const point = new THREE.Vector3();
-  const lowest = new THREE.Vector3(0, Infinity, 0);
+function overFloor(weapon: Node): number {
+  const point = new Vec3();
+  const lowest = new Vec3(0, Infinity, 0);
   weapon.traverseVisible((object) => {
-    const mesh = object as THREE.Mesh;
+    const mesh = object as Mesh;
     const positions = mesh.isMesh ? mesh.geometry.getAttribute('position') : undefined;
     if (!positions) return;
     for (let i = 0; i < positions.count; i++) {
@@ -130,15 +130,15 @@ function overFloor(weapon: THREE.Object3D): number {
 /** How many times as far from `pivot` as its hilt the held weapon's blow lands (`StrikeFrame.rigid`): from the
  *  shoulder, or from the line up through the body (the world's up: a spin turns the body about it). */
 function rigidRound(held: Held, pivot: Pivot): number {
-  const from = (at: THREE.Vector3) => (pivot === 'shoulder'
+  const from = (at: Vec3) => (pivot === 'shoulder'
     ? at.distanceTo(held.shoulder)
     : Math.hypot(at.x - held.body.x, at.z - held.body.z));
   return from(held.point) / Math.max(1e-6, from(held.grip));
 }
 
 /** Which hand holds `grip`: the hand joint it hangs under (the right's when under neither). */
-function heldIn(lab: Lab, grip: THREE.Object3D): 'R' | 'L' {
-  for (let at: THREE.Object3D | null = grip; at; at = at.parent) {
+function heldIn(lab: Lab, grip: Node): 'R' | 'L' {
+  for (let at: Node | null = grip; at; at = at.parent) {
     if (at === lab.joints.handL) return 'L';
     if (at === lab.joints.handR) return 'R';
   }
@@ -146,8 +146,8 @@ function heldIn(lab: Lab, grip: THREE.Object3D): 'R' | 'L' {
 }
 
 /** A weapon's length (its +Y) and its striking side (its +X), the world's ways. */
-const axisOf = (weapon: THREE.Object3D) => new THREE.Vector3(0, 1, 0).transformDirection(weapon.matrixWorld);
-const sideOf = (weapon: THREE.Object3D) => new THREE.Vector3(1, 0, 0).transformDirection(weapon.matrixWorld);
+const axisOf = (weapon: Node) => new Vec3(0, 1, 0).transformDirection(weapon.matrixWorld);
+const sideOf = (weapon: Node) => new Vec3(1, 0, 0).transformDirection(weapon.matrixWorld);
 
 /** Where the held weapon's blow lands, followed from frame to frame: how far it moved since the last against the eyes,
  *  which carry the arms (a weapon changed from one hand to the other has no last place: the other's isn't its). (In
@@ -155,14 +155,14 @@ const sideOf = (weapon: THREE.Object3D) => new THREE.Vector3(1, 0, 0).transformD
  *  as slid across.) */
 class Follower {
   private last: Held | null = null;
-  private readonly carried = new THREE.Vector3();
+  private readonly carried = new Vec3();
   /** how far the hilt moved, with the blow's point (`moved`) */
-  readonly gripMoved = new THREE.Vector3();
+  readonly gripMoved = new Vec3();
   /** and the way of the weapon's length between the two frames: square to the point's move as it's turned round the
    *  hilt, as its way at either end isn't (`moved`) */
-  readonly axisBetween = new THREE.Vector3();
+  readonly axisBetween = new Vec3();
 
-  moved(now: Held | null): THREE.Vector3 | null {
+  moved(now: Held | null): Vec3 | null {
     const before = this.last;
     this.last = now;
     if (!now || !before || before.weapon !== now.weapon) return null;
@@ -190,7 +190,7 @@ export class StrikeTracker {
     if (!held) return null;
     const { weapon, axis } = held;
     const side = weaponSides?.[weapon.name] ?? ASSUMED_SIDE;
-    const velocity = (moved ?? new THREE.Vector3()).divideScalar(dt);
+    const velocity = (moved ?? new Vec3()).divideScalar(dt);
     const speed = velocity.length();
     const gripSpeed = moved ? this.follower.gripMoved.length() / dt : 0;
     // (against the weapon's way between the frames: against its way at the frame's end, a blade turned 25 degrees a
@@ -211,15 +211,15 @@ export class StrikeTracker {
  * puts every grip it held back as it was.
  */
 export function plantSlide(lab: Lab): { plant: () => void; restore: () => void } {
-  const turned = new Map<THREE.Object3D, { local: THREE.Quaternion; world: THREE.Quaternion }>();
+  const turned = new Map<Node, { local: Quat; world: Quat }>();
   const plant = () => {
     lab.model.root.updateWorldMatrix(true, true);
     const grip = lab.model.tip?.parent;
     if (!grip?.parent) return;
     if (!turned.has(grip)) {
-      turned.set(grip, { local: grip.quaternion.clone(), world: grip.getWorldQuaternion(new THREE.Quaternion()) });
+      turned.set(grip, { local: grip.quaternion.clone(), world: grip.getWorldQuaternion(new Quat()) });
     }
-    const parent = grip.parent.getWorldQuaternion(new THREE.Quaternion());
+    const parent = grip.parent.getWorldQuaternion(new Quat());
     grip.quaternion.copy(parent.invert().multiply(turned.get(grip)!.world));
     grip.updateMatrixWorld(true);
   };
@@ -235,7 +235,7 @@ export function plantSlide(lab: Lab): { plant: () => void; restore: () => void }
  * so; `restore` puts every weapon it turned back as it was.
  */
 export function plantLead(lab: Lab, angle: number): { plant: () => void; restore: () => void } {
-  const turned = new Map<THREE.Object3D, THREE.Quaternion>();
+  const turned = new Map<Node, Quat>();
   const follower = new Follower();
   const plant = () => {
     lab.model.root.updateWorldMatrix(true, true);
@@ -247,9 +247,9 @@ export function plantLead(lab: Lab, angle: number): { plant: () => void; restore
     const axis = axisOf(weapon);
     const square = moved.addScaledVector(axis, -moved.dot(axis));
     if (square.lengthSq() < 1e-10) return;
-    const want = square.normalize().applyAxisAngle(axis, THREE.MathUtils.degToRad(angle));
+    const want = square.normalize().applyAxisAngle(axis, Maths.degToRad(angle));
     const side = sideOf(weapon);
-    const turn = Math.atan2(new THREE.Vector3().crossVectors(side, want).dot(axis), side.dot(want));
+    const turn = Math.atan2(new Vec3().crossVectors(side, want).dot(axis), side.dot(want));
     weapon.rotateY(turn);
     weapon.updateMatrixWorld(true);
     // (in a mirrored grip, the left hand's, a turn about its own length goes the other way round)
@@ -265,14 +265,14 @@ export function plantLead(lab: Lab, angle: number): { plant: () => void; restore
 }
 
 /** How far `striking` (a unit way) is off `velocity` square to `axis` (degrees), as `StrikeFrame.lead`. */
-function leadOf(velocity: THREE.Vector3, axis: THREE.Vector3, striking: THREE.Vector3, side: StrikingSide):
+function leadOf(velocity: Vec3, axis: Vec3, striking: Vec3, side: StrikingSide):
   number | null {
   if (side === 'round') return null;
   const square = velocity.clone().addScaledVector(axis, -velocity.dot(axis));
   if (square.lengthSq() < 1e-8) return null;
-  const cos = THREE.MathUtils.clamp(square.normalize().dot(striking), -1, 1);
+  const cos = Maths.clamp(square.normalize().dot(striking), -1, 1);
   // (a two-sided weapon leads with whichever side is ahead)
-  return THREE.MathUtils.radToDeg(Math.acos(side === 'bit' ? cos : Math.abs(cos)));
+  return Maths.radToDeg(Math.acos(side === 'bit' ? cos : Math.abs(cos)));
 }
 
 /** A strike's frames and what they say. */
@@ -392,12 +392,12 @@ function leadsOver(strike: StrikeFrame[]): Pick<Strike, 'lead' | 'worst' | 'flat
 
 /** How far `axes` are out of the plane they're swung in (degrees, the root mean square): the plane through its
  *  first and last (the widest arc of a strike), or 0 when they're as one. */
-function planeOf(axes: THREE.Vector3[]): number {
-  const normal = new THREE.Vector3().crossVectors(axes[0], axes[axes.length - 1]);
+function planeOf(axes: Vec3[]): number {
+  const normal = new Vec3().crossVectors(axes[0], axes[axes.length - 1]);
   if (normal.lengthSq() < 1e-6) return 0;
   normal.normalize();
   const square = axes.reduce((sum, axis) => sum + axis.dot(normal) ** 2, 0) / axes.length;
-  return THREE.MathUtils.radToDeg(Math.asin(Math.min(1, Math.sqrt(square))));
+  return Maths.radToDeg(Math.asin(Math.min(1, Math.sqrt(square))));
 }
 
 const degrees = (angle: number) => `${angle.toFixed(0)}°`;

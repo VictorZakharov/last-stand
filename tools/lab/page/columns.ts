@@ -3,7 +3,7 @@
 // The break's face is read too: its steepest triangle inside the rim, where a cliff between two chips drew a dark
 // slit down across the top ("still seeing holes in concrete pillars"). `--canary` takes a triangle out of the first
 // column's break: its open edges must be found.
-import * as THREE from 'three';
+import { Attribute, Geometry, Maths, Mesh, Triangle, Vec3 } from './sceneApi.ts';
 import type { Lab, Report } from './lab';
 import { G } from '../../../src/state';
 
@@ -30,32 +30,32 @@ interface Read {
 }
 
 /** The crypt's columns' meshes. */
-function columns(): THREE.Mesh[] {
-  const found: THREE.Mesh[] = [];
+function columns(): Mesh[] {
+  const found: Mesh[] = [];
   G.arena.groupOf('crypt').traverse((object) => {
-    if (object.name === 'column' && (object as THREE.Mesh).isMesh) found.push(object as THREE.Mesh);
+    if (object.name === 'column' && (object as Mesh).isMesh) found.push(object as Mesh);
   });
   return found;
 }
 
 /** A vertex's key once welded. */
-function keyOf(pos: THREE.BufferAttribute, i: number): string {
+function keyOf(pos: Attribute, i: number): string {
   return [pos.getX(i), pos.getY(i), pos.getZ(i)].map((v) => Math.round(v / WELD)).join(',');
 }
 
 /** The vertices of a geometry's triangles, as a non-indexed or an indexed one has them. */
-function corners(geometry: THREE.BufferGeometry): number[] {
+function corners(geometry: Geometry): number[] {
   const count = geometry.index ? geometry.index.count : geometry.attributes.position.count;
   return Array.from({ length: count }, (_, k) => (geometry.index ? geometry.index.getX(k) : k));
 }
 
 /** The open edges above the shaft's foot and the face's steepest triangle of one geometry. */
-function readColumn(geometry: THREE.BufferGeometry): Read {
-  const pos = geometry.attributes.position as THREE.BufferAttribute;
+function readColumn(geometry: Geometry): Read {
+  const pos = geometry.attributes.position as Attribute;
   const at = corners(geometry);
   const edges = new Map<string, number>();
-  const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3();
-  const normal = new THREE.Vector3();
+  const a = new Vec3(), b = new Vec3(), c = new Vec3();
+  const normal = new Vec3();
   let steepest = 0;
   for (let t = 0; t + 2 < at.length; t += 3) {
     const tri = [at[t], at[t + 1], at[t + 2]];
@@ -71,16 +71,16 @@ function readColumn(geometry: THREE.BufferGeometry): Read {
     c.fromBufferAttribute(pos, tri[2]);
     const inside = [a, b, c].every((v) => Math.hypot(v.x, v.z) < FACE_INSIDE);
     if (!inside || a.y < ABOVE) continue;
-    THREE.Triangle.getNormal(a, b, c, normal);
-    steepest = Math.max(steepest, THREE.MathUtils.radToDeg(Math.acos(Math.min(1, Math.abs(normal.y)))));
+    Triangle.getNormal(a, b, c, normal);
+    steepest = Math.max(steepest, Maths.radToDeg(Math.acos(Math.min(1, Math.abs(normal.y)))));
   }
   const open = [...edges.values()].filter((uses) => uses === 1).length;
   return { open, steepest };
 }
 
 /** The first column's break with one of its face's triangles taken out. */
-function plantHole(mesh: THREE.Mesh): void {
-  const pos = mesh.geometry.attributes.position as THREE.BufferAttribute;
+function plantHole(mesh: Mesh): void {
+  const pos = mesh.geometry.attributes.position as Attribute;
   for (let t = 0; t + 2 < pos.count; t += 3) {
     const inside = [0, 1, 2].every((k) => Math.hypot(pos.getX(t + k), pos.getZ(t + k)) < FACE_INSIDE);
     if (!inside || pos.getY(t) < ABOVE) continue;

@@ -2,7 +2,7 @@
 // still till she cages it, the host comes up beside the cage and strikes the root nearest it, and the guest walks out
 // through its gap. What each game shows of the cage is read for the judge (`describeRootCage` in node/coopJudge.mjs).
 // Loaded as the scenario starts (page/coop.ts), so a tree without the cage still loads coop's module.
-import * as THREE from 'three';
+import { Vec2, Vec3 } from './sceneApi.ts';
 import { G } from '../../../src/state';
 import { ROOTMOTHER } from '../../../src/data/foes/rootmother';
 import { CAGE, CAGE_LOG, caged } from '../../../src/entities/rootCage';
@@ -83,7 +83,7 @@ function rootNearest(x: number, z: number) {
 
 /** A frame of this game's hero's basic attack at `at`, as fast as it goes: held down (queued while busy), a drawn shot
  *  let go as it reaches its least draw. */
-function strikeAt(at: THREE.Vector3): Frame {
+function strikeAt(at: Vec3): Frame {
   const hero = G.player;
   hero.facing = Math.atan2(at.x - hero.pos.x, at.z - hero.pos.z);
   const cast = hero.casting;
@@ -110,15 +110,15 @@ export function hostInput(frame: number): Frame {
   if (!root || !CAGE) {
     // (to and fro along his line to the guest: off it, a prop at the far end of a pace held him still, and caged)
     const to = guest
-      ? new THREE.Vector2(guest.pos.x - hero.pos.x, guest.pos.z - hero.pos.z).normalize()
-      : new THREE.Vector2(1, 0);
+      ? new Vec2(guest.pos.x - hero.pos.x, guest.pos.z - hero.pos.z).normalize()
+      : new Vec2(1, 0);
     const back = Math.floor(frame / PACE) % 2 ? -1 : 1;
     return { stick: stickToward(to.x * back, to.y * back) };
   }
-  const out = new THREE.Vector2(root.x - CAGE.x, root.z - CAGE.z).normalize();
+  const out = new Vec2(root.x - CAGE.x, root.z - CAGE.z).normalize();
   const spot = { x: root.x + out.x * BESIDE, z: root.z + out.y * BESIDE };
   // (aimed at its foot's thick part all the while, walking up too: aimed at nothing, the aim fell back on her)
-  const at = new THREE.Vector3(root.x, AIM_HIGH, root.z);
+  const at = new Vec3(root.x, AIM_HIGH, root.z);
   const off = Math.hypot(spot.x - hero.pos.x, spot.z - hero.pos.z);
   if (off > NEAR_ENOUGH) return { stick: stickToward(spot.x - hero.pos.x, spot.z - hero.pos.z), aim: at };
   return strikeAt(at);
@@ -129,7 +129,7 @@ export function guestInput(): Frame {
   if (!CAGE?.shut) return {};
   const gap = CAGE.roots.find((root) => root.prop?.broken);
   if (!gap) return {};
-  const way = new THREE.Vector2(gap.x - CAGE.x, gap.z - CAGE.z).normalize();
+  const way = new Vec2(gap.x - CAGE.x, gap.z - CAGE.z).normalize();
   const to = { x: CAGE.x + way.x * (C.radius + PAST), z: CAGE.z + way.y * (C.radius + PAST) };
   const hero = G.player;
   if (Math.hypot(to.x - hero.pos.x, to.z - hero.pos.z) < 0.3) return {};

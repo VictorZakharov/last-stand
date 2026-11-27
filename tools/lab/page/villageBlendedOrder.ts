@@ -7,7 +7,7 @@
 // two surfaces lie at one depth, the column's base on its block, the later one drawn wins either way). `canary` thins
 // the hall's walls and columns and draws near to far all the same, which must change the frame (a ghost drawn before
 // the wall behind it hides the wall).
-import * as THREE from 'three';
+import { Vec3 } from './sceneApi.ts';
 import type { Lab } from './lab';
 import { G } from '../../../src/state';
 import { holdHour } from '../../../src/game/clock';
@@ -40,7 +40,7 @@ const STANDS: Stand[] = [
 
 /** The hero stood at `stand`, over the shoulder, let settle. */
 async function standAt(lab: Lab, stand: Stand): Promise<void> {
-  const at = new THREE.Vector3(stand.x, 0, stand.z);
+  const at = new Vec3(stand.x, 0, stand.z);
   at.y = groundHeight(at.x, at.z);
   G.player.walkTo = null;
   G.player.place(at, stand.facing);

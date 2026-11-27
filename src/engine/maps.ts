@@ -1,6 +1,6 @@
 // The game's maps handed to the engine: a picture of the page's copied on the GPU, bytes for what can't be (a data
 // texture, a frame written down as a tape), and a base map joined to its alpha map on the page.
-import { CompressedTexture, CubeTexture, DataTexture, RGBAFormat, SRGBColorSpace, Texture } from './api/index.ts';
+import { DataTexture, RGBAFormat, SRGBColorSpace, Texture } from './api/index.ts';
 import type { Core } from './core';
 import { TUNE } from './globals';
 
@@ -44,7 +44,6 @@ export class Maps {
       const bytes = data instanceof Uint8Array ? data : new Uint8Array(data.buffer, data.byteOffset, data.length);
       return { width, height, data: bytes };
     }
-    if ((texture as CompressedTexture).isCompressedTexture || (texture as CubeTexture).isCubeTexture) return null;
     const sized = image as { naturalWidth?: number; naturalHeight?: number; videoWidth?: number; videoHeight?: number };
     const fullWidth = sized.naturalWidth || sized.videoWidth || image.width || 0;
     const fullHeight = sized.naturalHeight || sized.videoHeight || image.height || 0;
@@ -115,11 +114,10 @@ export class Maps {
 }
 
 /** Whether a map's image is a picture the GPU copies by itself: a canvas, a bitmap, an image (not bytes, nor a
- *  compressed or a cube map). */
+ *  a texture of data). */
 function pictured(texture: Texture): boolean {
   const image = texture.image as unknown;
-  if ((texture as DataTexture).isDataTexture || (texture as CompressedTexture).isCompressedTexture) return false;
-  if ((texture as CubeTexture).isCubeTexture) return false;
+  if ((texture as DataTexture).isDataTexture) return false;
   if (image instanceof HTMLCanvasElement || (typeof OffscreenCanvas !== 'undefined' && image instanceof OffscreenCanvas)) {
     // (a canvas nothing has drawn on yet has no context, and the GPU's copy of one is an error the engine's wgpu
     // doesn't survive: every call after it threw, the game stopped. Asking for its context gives it one; null is a

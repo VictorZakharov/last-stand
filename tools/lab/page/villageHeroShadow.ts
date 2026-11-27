@@ -4,7 +4,7 @@
 // still, and drawn with him hidden he cast none from them (from play: "no shadows from lights"). He stands by every
 // lamp in turn, on paving where there is some round it ("it was missing for half of them"). `canary` stops him
 // casting by the last lamp, which must be found.
-import * as THREE from 'three';
+import { DirectionalLight, Node, PointLight, Vec3 } from './sceneApi.ts';
 import type { Lab, Pictured } from './lab';
 import { G } from '../../../src/state';
 import { holdHour } from '../../../src/game/clock';
@@ -42,9 +42,9 @@ const ON_ROAD = 0.5;
 const SETTLE = 150;
 
 /** The mean light of the ground `ACROSS` m square round `at`, in the frame drawn from over it. */
-function lightRound(canvas: Canvas, at: THREE.Vector3): number {
+function lightRound(canvas: Canvas, at: Vec3): number {
   const middle = at.clone().project(G.camera);
-  const side = at.clone().add(new THREE.Vector3(ACROSS / 2, 0, 0)).project(G.camera);
+  const side = at.clone().add(new Vec3(ACROSS / 2, 0, 0)).project(G.camera);
   const x = ((middle.x + 1) / 2) * canvas.width;
   const y = ((middle.y + 1) / 2) * canvas.height;
   const half = Math.max(2, Math.abs(((side.x - middle.x) / 2) * canvas.width));
@@ -61,10 +61,10 @@ function lightRound(canvas: Canvas, at: THREE.Vector3): number {
 }
 
 /** The point lights casting now (the lamps' at midnight). */
-function castingLights(): THREE.PointLight[] {
-  const lights: THREE.PointLight[] = [];
+function castingLights(): PointLight[] {
+  const lights: PointLight[] = [];
   G.scene.traverse((o) => {
-    const light = o as THREE.PointLight;
+    const light = o as PointLight;
     if (light.isPointLight && light.castShadow && light.intensity > 0) lights.push(light);
   });
   return lights;
@@ -79,8 +79,8 @@ function engineLampShadows(strength: number): void {
 }
 
 /** The middle of `patches`. */
-function middleOf(patches: THREE.Vector3[]): THREE.Vector3 {
-  const middle = new THREE.Vector3();
+function middleOf(patches: Vec3[]): Vec3 {
+  const middle = new Vec3();
   for (const at of patches) middle.add(at);
   return middle.divideScalar(Math.max(1, patches.length));
 }
@@ -91,7 +91,7 @@ function middleOf(patches: THREE.Vector3[]): THREE.Vector3 {
  * the game's camera given back after. A frame was drawn and read back for each patch: 120 by each lamp's stand,
  * which made this check the village's longest, 309 s of the suite's 2259 on the lent PC.
  */
-function readOver(lab: Lab, patches: THREE.Vector3[], strength: number | null): number[] {
+function readOver(lab: Lab, patches: Vec3[], strength: number | null): number[] {
   if (!patches.length) return [];
   const camera = G.camera;
   const kept = { at: camera.position.clone(), turn: camera.quaternion.clone() };
@@ -119,7 +119,7 @@ function readOver(lab: Lab, patches: THREE.Vector3[], strength: number | null): 
 
 /** The hero casting no shadow (the canary's fault, and the reading without his): every part of him, or casting
  *  again as he did. */
-function heroCasts(on: boolean, kept: Map<THREE.Object3D, boolean>): void {
+function heroCasts(on: boolean, kept: Map<Node, boolean>): void {
   G.player.obj.traverse((part) => {
     if (!on) {
       if (!kept.has(part)) kept.set(part, part.castShadow);
@@ -148,7 +148,7 @@ function engineCastsAll(on: boolean): void {
 
 /** The share of the ground's light round each of `patches` the lamps' shadows take, read with them at their
  *  strength and held off. */
-function lampsTake(lab: Lab, patches: THREE.Vector3[]): number[] {
+function lampsTake(lab: Lab, patches: Vec3[]): number[] {
   const shadowed = readOver(lab, patches, null);
   const unshadowed = readOver(lab, patches, 0);
   return patches.map((_, i) => 1 - shadowed[i] / Math.max(unshadowed[i], 1e-3));
@@ -161,12 +161,12 @@ function paved(x: number, z: number): boolean {
 }
 
 /** The patches of ground behind a hero at `spot`, away from `lamp`: across a sector of it, near and far. */
-function behind(spot: THREE.Vector3, lamp: THREE.Vector3): THREE.Vector3[] {
+function behind(spot: Vec3, lamp: Vec3): Vec3[] {
   const away = Math.atan2(spot.x - lamp.x, spot.z - lamp.z);
-  const patches: THREE.Vector3[] = [];
+  const patches: Vec3[] = [];
   for (const turn of SECTOR) {
     for (const off of OFFS) {
-      const at = new THREE.Vector3(spot.x + Math.sin(away + turn) * off, 0, spot.z + Math.cos(away + turn) * off);
+      const at = new Vec3(spot.x + Math.sin(away + turn) * off, 0, spot.z + Math.cos(away + turn) * off);
       at.y = groundHeight(at.x, at.z);
       patches.push(at);
     }
@@ -176,10 +176,10 @@ function behind(spot: THREE.Vector3, lamp: THREE.Vector3): THREE.Vector3[] {
 
 /** Where round `lamp`, `by` m off it, the hero stands to be read: the first spot with paving behind him, else the
  *  first of all (on the grass), and whether it's paved. */
-function spotBy(lamp: THREE.Vector3, by: number): { spot: THREE.Vector3; paved: boolean } {
+function spotBy(lamp: Vec3, by: number): { spot: Vec3; paved: boolean } {
   const spots = Array.from({ length: SPOTS }, (_, k) => {
     const a = (k / SPOTS) * Math.PI * 2;
-    const spot = new THREE.Vector3(lamp.x + Math.sin(a) * by, 0, lamp.z + Math.cos(a) * by);
+    const spot = new Vec3(lamp.x + Math.sin(a) * by, 0, lamp.z + Math.cos(a) * by);
     spot.y = groundHeight(spot.x, spot.z);
     return spot;
   });
@@ -189,7 +189,7 @@ function spotBy(lamp: THREE.Vector3, by: number): { spot: THREE.Vector3; paved: 
 
 /** The hero stood at `spot` facing `lamp`, let settle (the casting lights to take it); the patches behind him, or
  *  null where he couldn't stand there. */
-async function standBy(lab: Lab, spot: THREE.Vector3, lamp: THREE.Vector3): Promise<THREE.Vector3[] | null> {
+async function standBy(lab: Lab, spot: Vec3, lamp: Vec3): Promise<Vec3[] | null> {
   G.player.walkTo = null;
   G.player.place(spot, Math.atan2(lamp.x - spot.x, lamp.z - spot.z));
   await lab.step(SETTLE);
@@ -199,7 +199,7 @@ async function standBy(lab: Lab, spot: THREE.Vector3, lamp: THREE.Vector3): Prom
 
 /** The most of a patch's light his shadow takes: what the lamps' shadows take there while he casts, less what they
  *  take while he doesn't (what stands still there). */
-function mostHeTakes(lab: Lab, patches: THREE.Vector3[], casts: Map<THREE.Object3D, boolean>, canary: boolean): number {
+function mostHeTakes(lab: Lab, patches: Vec3[], casts: Map<Node, boolean>, canary: boolean): number {
   if (canary) heroCasts(false, casts);
   const casting = lampsTake(lab, patches);
   heroCasts(false, casts);
@@ -209,10 +209,10 @@ function mostHeTakes(lab: Lab, patches: THREE.Vector3[], casts: Map<THREE.Object
 }
 
 /** The moon, the village's light that casts as the sun does. */
-function theMoon(): THREE.DirectionalLight {
-  let moon: THREE.DirectionalLight | null = null;
+function theMoon(): DirectionalLight {
+  let moon: DirectionalLight | null = null;
   G.scene.traverse((o) => {
-    const light = o as THREE.DirectionalLight;
+    const light = o as DirectionalLight;
     if (light.isDirectionalLight && light.castShadow) moon = light;
   });
   if (!moon) throw new Error('lab: village: no moon casting');
@@ -220,7 +220,7 @@ function theMoon(): THREE.DirectionalLight {
 }
 
 /** The patches behind a hero at `spot` away from the moon: where its shadow of him falls. */
-function behindFromMoon(spot: THREE.Vector3): THREE.Vector3[] {
+function behindFromMoon(spot: Vec3): Vec3[] {
   const moon = theMoon();
   const toMoon = moon.position.clone().sub(moon.target.position).setY(0).normalize();
   return behind(spot, spot.clone().add(toMoon));
@@ -230,7 +230,7 @@ function behindFromMoon(spot: THREE.Vector3): THREE.Vector3[] {
  *  while he doesn't, the lamps' shadows held off throughout (with `canary`, read while he casts nothing). As a share
  *  of the moon's own light it read over 100%: the moon's shadow dims the sky's light there too (`AMBIENT_IN_SHADOW`
  *  in `core/renderer.ts`), and with the lamps' shadows his lamp shadows were in it. */
-function mostOfTheMoon(lab: Lab, patches: THREE.Vector3[], casts: Map<THREE.Object3D, boolean>,
+function mostOfTheMoon(lab: Lab, patches: Vec3[], casts: Map<Node, boolean>,
   canary: boolean): number {
   if (canary) heroCasts(false, casts);
   const casting = readOver(lab, patches, 0);
@@ -242,7 +242,7 @@ function mostOfTheMoon(lab: Lab, patches: THREE.Vector3[], casts: Map<THREE.Obje
 
 /** The ground round `patches` pictured from straight over their middle, as `readOver` reads it, the lamps' shadows
  *  held off: what the moon's reading sees, to look at when it disagrees with the game's own view. */
-async function picturedOver(lab: Lab, patches: THREE.Vector3[], label: string): Promise<Pictured> {
+async function picturedOver(lab: Lab, patches: Vec3[], label: string): Promise<Pictured> {
   const camera = G.camera;
   const kept = { at: camera.position.clone(), turn: camera.quaternion.clone() };
   const over = middleOf(patches);
@@ -269,7 +269,7 @@ interface ByLamp { lamp: number; his: (number | null)[]; moon: (number | null)[]
 export async function heroShadowByLamp(lab: Lab, canary: boolean): Promise<LightsChecked> {
   const lanterns = G.arena.village.lanterns;
   holdHour(0);
-  const casts = new Map<THREE.Object3D, boolean>();
+  const casts = new Map<Node, boolean>();
   const read: ByLamp[] = [];
   const moments: Pictured[] = [];
   // (his shadow drawn every frame: it's read with him casting and not, stood still, which a level that draws the
@@ -312,20 +312,20 @@ const ALONG = [0.5, 0.4, 0.6, 0.3, 0.7];
 const LEAST_PAVED = 8;
 
 /** Two lamps and the spots between them where those two are the nearest lamps (the two casting there). */
-interface Pair { lamps: [number, number]; spots: THREE.Vector3[] }
+interface Pair { lamps: [number, number]; spots: Vec3[] }
 
 /** The patches behind a hero at `spot` away from `lamp` that lie on paving. */
-function pavedBehind(spot: THREE.Vector3, lamp: THREE.Vector3): THREE.Vector3[] {
+function pavedBehind(spot: Vec3, lamp: Vec3): Vec3[] {
   return behind(spot, lamp).filter((at) => paved(at.x, at.z));
 }
 
 /** The spots between lamps `a` and `b` with paving enough behind them away from each, and those two nearest. */
-function spotsBetween(a: number, b: number): THREE.Vector3[] {
+function spotsBetween(a: number, b: number): Vec3[] {
   const lanterns = G.arena.village.lanterns;
-  const off = (lamp: THREE.Vector3, spot: THREE.Vector3): number => Math.hypot(lamp.x - spot.x, lamp.z - spot.z);
-  const spots: THREE.Vector3[] = [];
+  const off = (lamp: Vec3, spot: Vec3): number => Math.hypot(lamp.x - spot.x, lamp.z - spot.z);
+  const spots: Vec3[] = [];
   for (const share of ALONG) {
-    const spot = new THREE.Vector3().lerpVectors(lanterns[a], lanterns[b], share);
+    const spot = new Vec3().lerpVectors(lanterns[a], lanterns[b], share);
     spot.y = groundHeight(spot.x, spot.z);
     const farthest = Math.max(off(lanterns[a], spot), off(lanterns[b], spot));
     const nearer = lanterns.some((lamp, i) => i !== a && i !== b && off(lamp, spot) < farthest);
@@ -359,7 +359,7 @@ interface BetweenRead { lamps: [number, number]; his: [number, number] | null; m
 export async function heroShadowBetweenLamps(lab: Lab, canary: boolean): Promise<LightsChecked> {
   const lanterns = G.arena.village.lanterns;
   holdHour(0);
-  const casts = new Map<THREE.Object3D, boolean>();
+  const casts = new Map<Node, boolean>();
   const read: BetweenRead[] = [];
   holdShadowsOnMove('every');
   // (the moon's map drawn on every frame read: kept on a frame between its turns, it held him casting as he

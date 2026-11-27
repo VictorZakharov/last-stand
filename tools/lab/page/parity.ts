@@ -4,7 +4,7 @@
 // and over the shoulder. The pictures are the page's own (`lab.screen`, the browser's screenshot), as WebGPU's
 // canvas can't be read back the way WebGL's is. It finds nothing itself: what differs is the A/B's verdict and the
 // pictures beside each other (tools/lab/out/parity), each difference a look one renderer misses or draws otherwise.
-import * as THREE from 'three';
+import { Vec3 } from './sceneApi.ts';
 import type { Lab, Pictured, Report } from './lab';
 import { G } from '../../../src/state';
 import { BIOME_IDS } from '../../../src/data/biomes';
@@ -54,7 +54,7 @@ async function biomes(lab: Lab, options: ParityOptions): Promise<Pictured[]> {
     if (G.arena.biome !== biome) G.arena.setBiome(biome);
     // (the biome shown in the village's place: set alone, the village stayed on screen)
     G.arena.showVillage(false);
-    G.player.place(new THREE.Vector3(0, 0, 8), Math.PI);
+    G.player.place(new Vec3(0, 0, 8), Math.PI);
     moments.push(await picture(lab, biome));
   }
   return moments;

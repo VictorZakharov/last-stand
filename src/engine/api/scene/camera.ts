@@ -5,11 +5,11 @@
 import { Mat4, Quat, Vec3, WebGPUCoordinateSystem, type CoordinateSystem } from '../math/index.ts';
 import { Node } from './node.ts';
 
-const _place = new Vec3();
-const _size = new Vec3();
-const _unit = new Vec3(1, 1, 1);
-const _turn = new Mat4();
-const _quatScratch = new Quat();
+const scratchPlace = new Vec3();
+const scratchSize = new Vec3();
+const UNIT_SCALE = new Vec3(1, 1, 1);
+const scratchTurn = new Mat4();
+const scratchQuat = new Quat();
 
 /** A part of a larger view a camera draws (three's `view`): the hero selection's hall drawn to one side. */
 export interface ViewOffset {
@@ -58,10 +58,10 @@ export class Camera extends Node {
     if (this.viewMade && sameElements(this._viewOf.elements, world.elements)) return this._view;
     this._viewOf.copy(world);
     this.viewMade = true;
-    world.decompose(_place, _quatScratch, _size);
-    const unscaled = _size.x === 1 && _size.y === 1 && _size.z === 1;
+    world.decompose(scratchPlace, scratchQuat, scratchSize);
+    const unscaled = scratchSize.x === 1 && scratchSize.y === 1 && scratchSize.z === 1;
     if (unscaled) this._view.copy(world).invert();
-    else this._view.copy(_turn.compose(_place, _quatScratch, _unit)).invert();
+    else this._view.copy(scratchTurn.compose(scratchPlace, scratchQuat, UNIT_SCALE)).invert();
     return this._view;
   }
 

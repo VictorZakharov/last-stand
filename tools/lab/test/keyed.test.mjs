@@ -2,10 +2,10 @@
 // and its shoulder and elbow only as far as the swing lays them out.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import * as THREE from 'three';
+import { Vec3 } from '../../../src/engine/api/index.ts';
 import { describeKeyed } from '../page/keyed.ts';
 
-const at = (x, y, z) => new THREE.Vector3(x, y, z);
+const at = (x, y, z) => new Vec3(x, y, z);
 /** a keyed right arm, the shoulder, elbow and grip in the eyes' space */
 const ARM = { shoulder: at(0.22, -0.3, -0.22), elbow: at(0.3, -0.6, -0.2), grip: at(0.25, -0.6, -0.6) };
 const WAY = at(0.3, 0.8, -0.45).normalize();

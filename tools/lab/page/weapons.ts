@@ -3,7 +3,7 @@
 // it's drawn with. A weapon is judged here as it's made, before it's seen in a hand: through the eyes, a maul with a
 // thin haft and a small head showed nothing of what it is, and no placement of it matched Vermintide 2's. (From
 // behind too: a face wound the wrong way shows there as a hole.)
-import * as THREE from 'three';
+import { boundsOf, Box3, Mesh, Node, Vec3, Vec3Tuple } from './sceneApi.ts';
 import type { Lab, Fixture, Report, Pictured, Tile } from './lab';
 import { cameraOn, countsOf, shoot, studio } from './studio';
 import type { WeaponStyle } from '../../../src/types';
@@ -20,7 +20,7 @@ export interface WeaponsOptions {
  *  an axe's bit +x, its flat facing +z), and what of it it frames (shares of its length from its butt) */
 interface StudioView {
   name: string;
-  from: THREE.Vector3Tuple;
+  from: Vec3Tuple;
   frames: [number, number];
 }
 
@@ -36,13 +36,13 @@ const VIEWS: StudioView[] = [
 const LEAST_DRAWN = 0.001;
 
 /** The weapon in the hero's hand (a bow's in his left), a copy of it at its own frame (unturned in the fist), or none. */
-function weaponCopy(lab: Lab): THREE.Object3D | null {
+function weaponCopy(lab: Lab): Node | null {
   // (a bow's own tip is on the bow, its limb's: its `tip` is the nocked arrow's, under the right hand, which holds no
   // weapon, and `lab weapons --class ranger` found none)
   const bow = lab.model.weaponTip?.parent;
   const grip = lab.model.tip?.parent;
   if (!bow && (!grip || grip === lab.model.root)) return null;
-  const held = (child: THREE.Object3D): boolean => child.visible && child instanceof THREE.Group && hasMeshes(child);
+  const held = (child: Node): boolean => child.visible && child instanceof Node && hasMeshes(child);
   const shown = bow ?? grip!.children.find(held);
   if (!shown) return null;
   const copy = cloneBare(shown);
@@ -54,8 +54,8 @@ function weaponCopy(lab: Lab): THREE.Object3D | null {
 }
 
 /** A clone of `object` with no `userData`, which three copies through JSON: the bow's points back at the bow. */
-function cloneBare(object: THREE.Object3D): THREE.Object3D {
-  const kept = new Map<THREE.Object3D, Record<string, unknown>>();
+function cloneBare(object: Node): Node {
+  const kept = new Map<Node, Record<string, unknown>>();
   object.traverse((child) => {
     kept.set(child, child.userData);
     child.userData = {};
@@ -69,16 +69,16 @@ function cloneBare(object: THREE.Object3D): THREE.Object3D {
   }
 }
 
-function hasMeshes(object: THREE.Object3D): boolean {
+function hasMeshes(object: Node): boolean {
   let found = false;
   object.traverse((child) => {
-    if ((child as THREE.Mesh).isMesh) found = true;
+    if ((child as Mesh).isMesh) found = true;
   });
   return found;
 }
 
 /** The part of `box` (the weapon's, its own frame) between shares `frames` of its length. */
-function partOf(box: THREE.Box3, frames: [number, number]): THREE.Box3 {
+function partOf(box: Box3, frames: [number, number]): Box3 {
   const length = box.max.y - box.min.y;
   const part = box.clone();
   part.min.y = box.min.y + length * frames[0];
@@ -88,11 +88,11 @@ function partOf(box: THREE.Box3, frames: [number, number]): THREE.Box3 {
 
 /** `copy` pictured from each of the studio's views (none of it shown with `empty`), and the least and the most of a
  *  picture drawn. */
-async function pictureOf(lab: Lab, copy: THREE.Object3D, empty = false):
+async function pictureOf(lab: Lab, copy: Node, empty = false):
   Promise<{ tiles: Tile[]; least: number; most: number }> {
   const scene = studio();
   if (!empty) scene.add(copy);
-  const box = new THREE.Box3().setFromObject(copy);
+  const box = boundsOf(copy);
   const shots = VIEWS.map((view) => ({ name: view.name, camera: cameraOn(partOf(box, view.frames), view.from) }));
   try {
     return await shoot(lab, scene, shots);
@@ -102,8 +102,8 @@ async function pictureOf(lab: Lab, copy: THREE.Object3D, empty = false):
 }
 
 /** A weapon's notes: its size in its own frame (m) and what it's drawn with. */
-function notesOn(copy: THREE.Object3D): string[] {
-  const size = new THREE.Box3().setFromObject(copy).getSize(new THREE.Vector3());
+function notesOn(copy: Node): string[] {
+  const size = boundsOf(copy).getSize(new Vec3());
   const { triangles, meshes } = countsOf(copy);
   return [
     `${size.y.toFixed(2)} m long, ${size.x.toFixed(2)} m across its width, ${size.z.toFixed(2)} m thick`,

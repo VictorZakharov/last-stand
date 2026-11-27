@@ -26,7 +26,7 @@
 // passed by; a cloud past its ring; a survivor
 // whose model shows its own rope alone.
 // This module reads twins.ts's helpers only inside its functions: twins.ts imports it.
-import * as THREE from 'three';
+import { Node, Vec3 } from './sceneApi.ts';
 import type { Lab, Pictured } from './lab';
 import type { Enemy } from '../../../src/entities/enemy';
 import type { TwinsOptions } from './twins';
@@ -70,7 +70,7 @@ const COST_TURNS = 6;
 
 const fixed = (value: number, digits = 2): string => value.toFixed(digits);
 /** a model's skulls as drawn: on its ropes, and in its hand */
-type BeltSkulls = { rope: Record<SkullKind, THREE.Object3D[]>; hand: Record<SkullKind, THREE.Object3D> };
+type BeltSkulls = { rope: Record<SkullKind, Node[]>; hand: Record<SkullKind, Node> };
 const skullsOf = (e: Enemy): BeltSkulls => e.model.root.userData.beltSkulls as BeltSkulls;
 /** how many of `kind` a twin's model shows on its ropes (a skull drawn, not left undrawn) */
 const shownOn = (e: Enemy, kind: SkullKind): number => skullsOf(e).rope[kind].filter((s) => s.visible).length;
@@ -104,8 +104,8 @@ const lastThrown = (): SkullThrown => {
 
 /** A belt skull of `kind` thrown by `by` from `THROWN_FROM` m off at (tx, tz), as its fx plays it on every game. */
 function throwAt(by: Enemy, kind: SkullKind, tx: number, tz: number, damage: number): SkullThrown {
-  const away = new THREE.Vector3(by.pos.x - tx, 0, by.pos.z - tz).normalize().multiplyScalar(THROWN_FROM);
-  const from = new THREE.Vector3(tx + away.x, 3, tz + away.z);
+  const away = new Vec3(by.pos.x - tx, 0, by.pos.z - tz).normalize().multiplyScalar(THROWN_FROM);
+  const from = new Vec3(tx + away.x, 3, tz + away.z);
   fx('beltSkull', by.id, SKULL_KINDS.indexOf(kind), from.x, from.y, from.z, tx, tz, skullFlight(THROWN_FROM), damage);
   return lastThrown();
 }
@@ -243,7 +243,7 @@ export async function belt(lab: Lab, options: TwinsOptions, lines: string[], pro
  *  skull lying where it landed. */
 /** a bomb followed: its record, his hurts, where he stood as it burst and a second on, how long it stunned him (s),
  *  and its skull lying */
-interface Blast { thrown: SkullThrown; hurts: number[]; from: THREE.Vector3; to: THREE.Vector3; stunFor: number; lay: Lying }
+interface Blast { thrown: SkullThrown; hurts: number[]; from: Vec3; to: Vec3; stunFor: number; lay: Lying }
 
 /** how near a skull's mesh must lie to where it landed (m) */
 const LYING_NEAR = 0.3;
@@ -276,7 +276,7 @@ class Lying {
 }
 
 /** A bomb thrown `beside` m off the hero, his `move` applied as it lies (none: he stands), followed past its blast. */
-async function bombBeside(lab: Lab, slab: Enemy, beside: THREE.Vector3, move?: THREE.Vector3, unlay = false): Promise<Blast> {
+async function bombBeside(lab: Lab, slab: Enemy, beside: Vec3, move?: Vec3, unlay = false): Promise<Blast> {
   const at = G.player.pos.clone().add(beside);
   let thrown: SkullThrown | undefined;
   let lay: Lying | undefined;
@@ -329,7 +329,7 @@ const SECOND_AFTER = 1.6;
 
 /** Two bombs beside the hero, the second bursting after the first's stun and within its rest. */
 async function bombsInRest(lab: Lab, slab: Enemy): Promise<{ first: SkullThrown; second: SkullThrown }> {
-  const at = G.player.pos.clone().add(new THREE.Vector3(-1, 0, 0));
+  const at = G.player.pos.clone().add(new Vec3(-1, 0, 0));
   const first = throwAt(slab, 'bomb', at.x, at.z, slab.damage * TWINS.bomb.hurt);
   await lab.until(() => !!first.landed, 3 * FPS, 'the first bomb never landed');
   await lab.step(Math.round(SECOND_AFTER * FPS));
@@ -346,7 +346,7 @@ const CLOUD_BEFORE = 0.4;
  *  none (its stun is no free hit for the pair). */
 async function cloudThroughStun(lab: Lab, slab: Enemy, reliquary: Enemy): Promise<{ during: number; after: number }> {
   const hero = G.player.pos;
-  const bombAt = hero.clone().add(new THREE.Vector3(-1, 0, 0));
+  const bombAt = hero.clone().add(new Vec3(-1, 0, 0));
   const bomb = throwAt(slab, 'bomb', bombAt.x, bombAt.z, slab.damage * TWINS.bomb.hurt);
   await lab.until(() => !!bomb.landed, 3 * FPS, 'the bomb never landed');
   // (the cloud landing on him just before the blast, so its ticks run on through the stun)
@@ -368,7 +368,7 @@ async function shieldedBlast(lab: Lab, options: TwinsOptions): Promise<{ stunned
   await standIn(lab, options.fixture, 'crypt');
   await lab.setup({ ...options.fixture, gear: 'shield', at: [G.player.pos.x, G.player.pos.z], facing: G.player.facing });
   const { slab } = await pairAt(lab, 14, false);
-  const ahead = new THREE.Vector3(Math.sin(G.player.facing), 0, Math.cos(G.player.facing)).multiplyScalar(1.5);
+  const ahead = new Vec3(Math.sin(G.player.facing), 0, Math.cos(G.player.facing)).multiplyScalar(1.5);
   const at = G.player.pos.clone().add(ahead);
   const bomb = throwAt(slab, 'bomb', at.x, at.z, slab.damage * TWINS.bomb.hurt);
   await lab.until(() => !!bomb.blast, 4 * FPS, 'the bomb never burst', () => ({ m2: true }));
@@ -389,7 +389,7 @@ export async function bomb(lab: Lab, options: TwinsOptions, lines: string[], pro
   }
   try {
     const { slab } = await pairAt(lab, 14, false);
-    const side = new THREE.Vector3(1, 0, 0);
+    const side = new Vec3(1, 0, 0);
     const still = await bombBeside(lab, slab, side.clone().multiplyScalar(-1), undefined, options.canary);
     judgeLanding(still, lines, problems);
     still.lay.judge('bomb', 'through its fuse', lines, problems);
@@ -423,7 +423,7 @@ export async function bomb(lab: Lab, options: TwinsOptions, lines: string[], pro
     // stepped out of its glow as it lies
     await standIn(lab, options.fixture, 'crypt');
     const { slab: again } = await pairAt(lab, 14, false);
-    const stepOut = new THREE.Vector3(TWINS.bomb.radius + 2, 0, 0);
+    const stepOut = new Vec3(TWINS.bomb.radius + 2, 0, 0);
     const dodged = await bombBeside(lab, again, side.clone().multiplyScalar(-0.5), stepOut);
     lines.push(`bomb: stepped ${fixed(stepOut.x, 1)} m out of its glow as it lay: hurt ${dodged.hurts.length} time(s), `
       + `stunned: ${G.player.stunned}`);
@@ -441,7 +441,7 @@ export async function bomb(lab: Lab, options: TwinsOptions, lines: string[], pro
 /** A cloud thrown `off` m from the hero, followed to its end: his hurts, and when it was gone. */
 async function cloudOff(lab: Lab, reliquary: Enemy, off: number, unlay = false):
   Promise<{ thrown: SkullThrown; hurts: number[]; lay: Lying }> {
-  const at = G.player.pos.clone().add(new THREE.Vector3(off, 0, 0));
+  const at = G.player.pos.clone().add(new Vec3(off, 0, 0));
   let thrown: SkullThrown | undefined;
   let lay: Lying | undefined;
   const hurts = await hurtsWhile(async () => {
@@ -488,7 +488,7 @@ export async function poison(lab: Lab, options: TwinsOptions, lines: string[], p
 export async function inherit(lab: Lab, options: TwinsOptions, lines: string[], problems: string[]): Promise<void> {
   await standIn(lab, options.fixture, 'crypt');
   const { slab, reliquary } = await pairAt(lab, 14, false);
-  const far = G.player.pos.clone().add(new THREE.Vector3(30, 0, 0));
+  const far = G.player.pos.clone().add(new Vec3(30, 0, 0));
   throwAt(slab, 'bomb', far.x, far.z, 0);
   await lab.step(5);
   const left = heldBy(slab, 'bomb');
@@ -594,7 +594,7 @@ async function skullShots(lab: Lab, lines: string[]): Promise<Pictured[]> {
   G.player.facing = stand.facing;
   await lab.step(2, keepWhole);
   const facing = G.player.facing;
-  const ahead = new THREE.Vector3(Math.sin(facing), 0, Math.cos(facing));
+  const ahead = new Vec3(Math.sin(facing), 0, Math.cos(facing));
   const at = G.player.pos.clone().addScaledVector(ahead, LONE.ahead).setY(G.player.pos.y + LONE.high);
   const skull = beltSkullMesh('bomb');
   skull.position.copy(at);
@@ -630,13 +630,13 @@ export async function beltPictures(lab: Lab, options: TwinsOptions, lines: strin
   try {
     await lab.step(30, keepWhole);
     // (the chain between them hidden for these: it crossed the camera's way to the waist)
-    const lay = slab.model.root.userData.layChain as (to: THREE.Vector3 | null, taut: number) => void;
-    slab.model.root.userData.layChain = (_to: THREE.Vector3 | null, taut: number) => lay(null, taut);
+    const lay = slab.model.root.userData.layChain as (to: Vec3 | null, taut: number) => void;
+    slab.model.root.userData.layChain = (_to: Vec3 | null, taut: number) => lay(null, taut);
     await lab.step(2, keepWhole);
     // (from the front quarter on its belt's side: Slab's left, Reliquary's right; the view behind the hero, turned off
     // the twin's front)
     for (const [who, name, turn] of [[slab, 'Slab', -QUARTER], [reliquary, 'Reliquary', QUARTER]] as const) {
-      const hip = new THREE.Vector3(who.pos.x, who.height * BELT_HIP, who.pos.z);
+      const hip = new Vec3(who.pos.x, who.height * BELT_HIP, who.pos.z);
       G.player.facing = Math.atan2(who.pos.x - G.player.pos.x, who.pos.z - G.player.pos.z) + turn;
       moments.push(lab.picture(`1 ${name}'s belt`, ['back'], [`${name}: four skulls on a rope at the waist`],
         { at: hip, distance: BELT_FROM }));
@@ -664,7 +664,7 @@ const BROTHER_BEHIND = 5;
 
 /** A throw from the side: Slab made to throw at the hero, pictured at its unhook, wind-up, release, flight and landing. */
 async function throwStrip(lab: Lab, slab: Enemy, reliquary: Enemy): Promise<Pictured[]> {
-  const behind = new THREE.Vector3(slab.pos.x - G.player.pos.x, 0, slab.pos.z - G.player.pos.z).normalize();
+  const behind = new Vec3(slab.pos.x - G.player.pos.x, 0, slab.pos.z - G.player.pos.z).normalize();
   reliquary.pos.copy(slab.pos).addScaledVector(behind, BROTHER_BEHIND);
   reliquary.dazed = 1e4;
   const moments: Pictured[] = [];
@@ -714,7 +714,7 @@ const GLIDE_FRAMES = 45;
 
 /** The camera put into `view` behind the hero, the hero facing `at` (the set-up's own view: the lab holds its view to
  *  the set-up's, and a view set by the renderer alone came out top-down). */
-async function intoView(lab: Lab, options: TwinsOptions, view: ViewMode, at: THREE.Vector3): Promise<void> {
+async function intoView(lab: Lab, options: TwinsOptions, view: ViewMode, at: Vec3): Promise<void> {
   const facing = Math.atan2(at.x - G.player.pos.x, at.z - G.player.pos.z);
   await lab.setup({ ...options.fixture, at: [G.player.pos.x, G.player.pos.z], facing, view });
   G.player.facing = facing;
@@ -738,7 +738,7 @@ function clearStand(): { x: number; z: number; facing: number } {
       const x = Math.sin(angle) * ring, z = Math.cos(angle) * ring;
       for (const facing of [angle + Math.PI / 2, angle - Math.PI / 2, angle + Math.PI]) {
         const farX = x + Math.sin(facing) * VIEW_CLEAR, farZ = z + Math.cos(facing) * VIEW_CLEAR;
-        const clear = lineClear(x, z, farX, farZ, VIEW_SIDE) && !inObstacle(new THREE.Vector3(x, 0, z), 1);
+        const clear = lineClear(x, z, farX, farZ, VIEW_SIDE) && !inObstacle(new Vec3(x, 0, z), 1);
         if (clear && Math.hypot(farX, farZ) < ARENA.radius - 1) return { x, z, facing };
       }
     }
@@ -747,10 +747,10 @@ function clearStand(): { x: number; z: number; facing: number } {
 }
 
 /** A spot `SHOT_AHEAD` m before the hero, the way he faces, and `SHOT_SIDE` to his side. */
-function aheadOfHero(): THREE.Vector3 {
+function aheadOfHero(): Vec3 {
   const facing = G.player.facing;
-  const ahead = new THREE.Vector3(Math.sin(facing), 0, Math.cos(facing)).multiplyScalar(SHOT_AHEAD);
-  const side = new THREE.Vector3(Math.cos(facing), 0, -Math.sin(facing)).multiplyScalar(SHOT_SIDE);
+  const ahead = new Vec3(Math.sin(facing), 0, Math.cos(facing)).multiplyScalar(SHOT_AHEAD);
+  const side = new Vec3(Math.cos(facing), 0, -Math.sin(facing)).multiplyScalar(SHOT_SIDE);
   return G.player.pos.clone().add(ahead).add(side);
 }
 
@@ -802,7 +802,7 @@ async function survivorShot(lab: Lab, slab: Enemy, reliquary: Enemy): Promise<Pi
     await lab.step(1, keepWhole);
   }
   await lab.step(60, keepWhole);
-  const hip = new THREE.Vector3(reliquary.pos.x, reliquary.height * 0.36, reliquary.pos.z);
+  const hip = new Vec3(reliquary.pos.x, reliquary.height * 0.36, reliquary.pos.z);
   G.player.facing = Math.atan2(reliquary.pos.x - G.player.pos.x, reliquary.pos.z - G.player.pos.z);
   return lab.picture('5 the survivor\'s belts', ['back', 'right'], ['Reliquary alone, its own poison and its brother\'s bombs'],
     { at: hip, distance: 5 });

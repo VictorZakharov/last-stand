@@ -2,7 +2,7 @@
 // repository VictorZakharov/bulwark), draws the game's frame on the page's one canvas, the world's labels and the
 // outline with it (three's renderer is gone from the game: VictorZakharov/last-stand#973). Where the browser has no
 // WebGPU, or the engine doesn't start, the loading screen says so (no other renderer).
-import type { Camera, PerspectiveCamera, World } from './api/index.ts';
+import type { PerspectiveCamera, World } from './api/index.ts';
 import { Bridge, TUNE, type Grade } from './bridge';
 import { perfClock } from '../core/perfClock';
 import { cullForEngine } from '../world/doorways';
@@ -24,9 +24,6 @@ export const RUST = {
   /** whether the loading screen has left (set by ui/perfHud.ts, which knows: this module can't import the page's
    *  UI, a cycle through the renderer): under it a frame may take long, handing the places over ahead */
   loaded: false,
-  /** whether what the game hangs on three's render of the scene is run (the world's culling by cells, the kept
-   *  shadow maps' draws): three's own work, which the engine has no use for */
-  hooks: false,
   /** the last frame's render, whoever drew it (core/renderer.ts `render`), ms */
   renderMs: 0,
   failed: '',
@@ -40,7 +37,8 @@ export const RUST = {
 };
 
 let canvas: HTMLCanvasElement | null = null;
-/** what a look's hook is handed for the renderer (`onBeforeRender`'s first argument: the meadow asks its target) */
+/** the game's screen as `drawRust` is handed it (`core/screen.ts`): nothing reads it since three's hooks went (a
+ *  look's `onBeforeRender` is handed its mesh alone), kept till its callers are */
 export interface LookHost { getRenderTarget(): { height: number } | null }
 /** The engine's canvas, none before it has started (engine/overlay.ts sizes the labels by it). */
 export const engineCanvas = (): HTMLCanvasElement | null => canvas;
@@ -144,11 +142,8 @@ export function drawRust(scene: World, camera: PerspectiveCamera, time: number, 
     resize?.(width, height);
   }
   const began = perfClock.now();
-  // (what the game hangs on three's render of the scene: the world's culling, the crowds' rows)
-  type Hook = (renderer: LookHost, scene: World, camera: Camera, target: null) => void;
-  if (RUST.hooks) (scene.onBeforeRender as unknown as Hook)(renderer, scene, camera, null);
-  // (of those hooks the doorways' cull alone, which leaves nothing between its two halves: `world/doorways.ts`)
-  const shown = !RUST.hooks && TUNE.doorways ? cullForEngine(camera) : null;
+  // (the doorways' cull, which leaves nothing between its two halves: `world/doorways.ts`)
+  const shown = TUNE.doorways ? cullForEngine(camera) : null;
   if (RUST.captureNext) {
     RUST.tape = bridge.capture(width, height, RUST.captureNext, scene, camera, time, renderer, grade);
     RUST.captureNext = 0;
@@ -158,7 +153,6 @@ export function drawRust(scene: World, camera: PerspectiveCamera, time: number, 
     if (budget > 0) bridge.ahead.walk(scene, budget);
   }
   shown?.();
-  if (RUST.hooks) (scene.onAfterRender as unknown as Hook)(renderer, scene, camera, null);
   if (RUST.frames++ === 0) RUST.boot.firstFrameMs = perfClock.now() - began;
   // (the frame itself checked for black a few times after the load: `said.ts`)
   if (RUST.loaded) watchFrame(canvas, ++loadedFrames);

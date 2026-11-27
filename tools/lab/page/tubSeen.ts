@@ -3,7 +3,7 @@
 // keeper away from it, the water's mean brightness against the wood round it (the tub's rim and the counter's top), and
 // the share of its surface the suds' pale heaps cover. The dark water it was (`KEEPER_WAYS5.darkWater`, the canary)
 // read as the tub's lid, and must fail it.
-import * as THREE from 'three';
+import { PerspectiveCamera, Vec3 } from './sceneApi.ts';
 import { G } from '../../../src/state';
 import { BACK, BAR, TUB } from '../../../src/data/tavern';
 import { KEEPER_WAYS5, type TavernKeeper } from '../../../src/world/tavernKeeper';
@@ -27,17 +27,17 @@ export interface TubSeen { lines: string[]; problems: string[]; moments: Picture
 export async function tubSeen(lab: Lab, tv: TavernKeeper, run: Stepper, dark: boolean): Promise<TubSeen> {
   const lines: string[] = [], problems: string[] = [], moments: Pictured[] = [];
   const room = tv.keeper()!.root.parent!;
-  const tub = room.localToWorld(new THREE.Vector3((BACK.front + BACK.wall) / 2, BACK.top + TUB.water, TUB.z));
+  const tub = room.localToWorld(new Vec3((BACK.front + BACK.wall) / 2, BACK.top + TUB.water, TUB.z));
   G.player.walkTo = null;
-  G.player.place(room.localToWorld(new THREE.Vector3(BAR.x - BAR.half - 0.45, 0, TUB.z)), Math.PI / 2);
+  G.player.place(room.localToWorld(new Vec3(BAR.x - BAR.half - 0.45, 0, TUB.z)), Math.PI / 2);
   let waited = 0;
-  while (waited++ < AWAY_IN && tv.keeper()!.root.getWorldPosition(new THREE.Vector3()).setY(tub.y).distanceTo(tub) < KEEPER_AWAY) {
+  while (waited++ < AWAY_IN && tv.keeper()!.root.getWorldPosition(new Vec3()).setY(tub.y).distanceTo(tub) < KEEPER_AWAY) {
     await run(1, () => ({}));
   }
   KEEPER_WAYS5.darkWater = dark;
   try {
     await run(3, () => ({}));
-    const read = readTub(lab, tub, TUB.r * room.getWorldScale(new THREE.Vector3()).x);
+    const read = readTub(lab, tub, TUB.r * room.getWorldScale(new Vec3()).x);
     moments.push(await lab.screen('tub-from-above', [`the tub's water from above${dark ? ' (the canary: dark)' : ''}: `
       + `${read.ratio.toFixed(2)} times as bright as the wood round it, suds ${(read.suds * 100).toFixed(0)}% of it`]));
     lines.push(`round 5: the tub from above${dark ? ' (dark, the canary)' : ''}: its water ${read.ratio.toFixed(2)} times as bright `
@@ -53,15 +53,15 @@ export async function tubSeen(lab: Lab, tv: TavernKeeper, run: Stepper, dark: bo
 }
 
 /** The frame drawn and its water and the wood round it read: their mean brightness, and the suds' share. */
-function readTub(lab: Lab, middle: THREE.Vector3, radius: number): { water: number; wood: number; ratio: number; suds: number; count: number } {
+function readTub(lab: Lab, middle: Vec3, radius: number): { water: number; wood: number; ratio: number; suds: number; count: number } {
   const frame = drawFrame(lab);
-  const camera = G.camera as THREE.PerspectiveCamera;
+  const camera = G.camera as PerspectiveCamera;
   camera.updateMatrixWorld();
-  const toPixel = (p: THREE.Vector3) => {
+  const toPixel = (p: Vec3) => {
     const ndc = p.clone().project(camera);
     return { x: (ndc.x + 1) / 2 * frame.width, y: (ndc.y + 1) / 2 * frame.height };
   };
-  const c = toPixel(middle), edge = toPixel(middle.clone().add(new THREE.Vector3(radius, 0, 0)));
+  const c = toPixel(middle), edge = toPixel(middle.clone().add(new Vec3(radius, 0, 0)));
   const r = Math.hypot(edge.x - c.x, edge.y - c.y);
   const water: number[] = [], wood: number[] = [];
   const reach = Math.ceil(r * WOOD_RING[1]);

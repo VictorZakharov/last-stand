@@ -15,15 +15,18 @@ The rules across the game are the [root AGENTS.md](../../../AGENTS.md); the engi
 | Folder | What | Imports the engine |
 | --- | --- | --- |
 | `math/` | `Vec2`, `Vec3`, `Vec4`, `Quat`, `Euler`, `Mat3`, `Mat4`, `Color`, `Box3`, `Sphere`, `Ray`, `Plane`, `Frustum`, `Line3`, `Triangle`, `Spherical`, `Maths` (the functions) | never |
-| `geometry/` | `Geometry`, `Attribute`, `InstancedAttribute`, `InstancedGeometry`; the ops (`merge`, `weld`, `unindexed`, `normals`, `tangents`, `hull`) | never |
+| `geometry/` | `Geometry`, `Attribute`, `InstancedAttribute`, `InstancedGeometry`; the ops (`mergeGeometries`, `mergeVertices`, `unindexed`, `normals`, `convexHull`); `boundsOf`, `growByNode` are the scene's | never |
 | `shapes/` | the generators as functions (`sphere`, `box`, `cylinder`, `cone`, `torus`, `torusKnot`, `lathe`, `plane`, `circle`, `ring`, `capsule`, `icosahedron`, `octahedron`, `dodecahedron`, `tetrahedron`, `tube`, `extrude`, `flat`, `roundedBox`); the curves and outlines (`Curve`, `CatmullRom3`, `Line3Curve`, `Bezier2Curve3`, `Bezier3Curve3`, `Ellipse`, `Path`, `Outline`, `triangulate`) | never |
 | `material/` | `Material`, `LitMaterial`, `UnlitMaterial`, `LookMaterial`, `PointsMaterial`, `SpriteMaterial`, `LineMaterial`; `Texture`, `CanvasTexture`, `DataTexture`, `VolumeTexture`; the constants (`constants.ts`) | never |
-| `scene/` | `Node`, `Mesh`, `InstancedMesh`, `SkinnedMesh`, `Skeleton`, `Bone`, `Points`, `Sprite`, `Line`, `World`, `Fog`, the cameras, the lights, `Layers`, `Raycaster` | through `stage.ts` alone |
-| `stage.ts` | the world handed to the engine: nodes, draws, materials, geometries, textures, told as they change | yes |
+| `scene/` | `Node`, `Mesh`, `InstancedMesh`, `SkinnedMesh`, `Skeleton`, `Bone`, `Points`, `Sprite`, `Line`, `World`, `Fog`, the cameras, the lights, `Layers`, `Raycaster`, `boundsOf` | never: a node tells its `link` (`scene/link.ts`) |
+| `../stage.ts`, `../draws.ts` (beside this folder) | the stage: the shown world's nodes as the engine's, what moved written each frame; a mesh's draws kept on its node, written again as its inputs change | yes |
 
-`math/`, `geometry/`, `shapes/` and `material/` import nothing of the engine or the page (a worker builds heads,
-hands and simplified meshes with them: `head.worker.ts`, `simplify.worker.ts`). `index.ts` exports everything; the
-game imports `* as B from '../engine/api'` or names (`import { Vec3, Mesh } from '../engine/api'`).
+`math/`, `geometry/`, `shapes/` and `material/` import nothing of the engine or the page (a worker builds heads, hands
+and simplified meshes with them: `head.worker.ts`, `simplify.worker.ts`). `index.ts` exports everything; the game
+imports names (`import { Vec3, Mesh } from '../engine/api/index.ts'`) and the generators as a namespace (`import * as
+shapes from '../engine/api/shapes/index.ts'`, `shapes.sphere(...)`), never a one-letter alias (from the owner: "B is a
+terrible name"). No one-letter names in this code either: scratch is named in full (`scratchMatrix`); loop indices and
+coordinates may stay short.
 
 ## Rules for this code
 
@@ -41,8 +44,9 @@ game imports `* as B from '../engine/api'` or names (`import { Vec3, Mesh } from
 - **No GLSL, no renderer hooks.** `onBeforeCompile`, `customProgramCacheKey`, `ShaderChunk`, `ShaderLib`,
   `onBeforeRender`'s renderer argument, render targets: none. A material's own look is WGSL (`../custom.ts`,
   `../looks/`); a `LookMaterial` is drawn by its look alone.
-- **Typed strictly, no `any`**; tools-style code: one statement per line, lines under 120 characters, a doc comment
-  on every export, files split before 400 lines.
+- **Typed strictly, no `any`** but `userData` (the game's own notes on a node, geometry, material or texture, typed as
+  three's); tools-style code: one statement per line, lines under 120 characters, a doc comment on every export, files
+  split before 400 lines.
 - **Unit tests** beside each module in `math/`, `geometry/`, `shapes/` (`*.test.ts`, `npm run api:test`: Node's own
   runner, which strips the types, so this folder's TypeScript is erasable alone: no `enum`, no parameter
   properties, no `namespace`, and every import names its file with `.ts`); each against values worked by hand or
@@ -76,10 +80,10 @@ frame (world matrices, culling, skinning, bones) is the engine's.
   (`sphere(radius, widthSegments, heightSegments, phiStart, phiLength, thetaStart, thetaLength)`), and the same
   vertices in the same order, so every model is the same shape to the vertex. Check each against three 0.187's
   output in a test (positions, normals, uvs, index), then drop three.
-- The ops: `merge(geometries, groups?)` (three's `mergeGeometries`), `weld(geometry, tolerance)` (`mergeVertices`),
-  `unindexed(geometry)` (`toNonIndexed`), `hull(points)` (the convex hull: `ConvexGeometry`),
-  `roundedBox(w, h, d, segments, radius)`. The simplifier is the `meshoptimizer` package's (MIT, its author's own
-  build, the one three vendored), never three's copy.
+- The ops keep three's names where the game calls them by those: `mergeGeometries(geometries, groups?)`,
+  `mergeVertices(geometry, tolerance)`, `unindexed(geometry)` (also `Geometry.toNonIndexed`), `convexHull(points)`
+  (three's `ConvexGeometry`), `shapes.roundedBox(w, h, d, segments, radius)`. The simplifier is the `meshoptimizer`
+  package's (MIT, its author's own build, the one three vendored), never three's copy.
 
 ## Materials and textures (`material/`)
 
@@ -162,8 +166,10 @@ Data the engine reads, nothing compiled on the page.
 | `ShapeGeometry`, `ExtrudeGeometry`, `TubeGeometry` | `flat`, `extrude`, `tube` |
 | `Shape`, `Path`, `ShapeUtils.triangulateShape` | `Outline`, `Path`, `triangulate` |
 | `CatmullRomCurve3`, `LineCurve3`, `QuadraticBezierCurve3`, `CubicBezierCurve3`, `EllipseCurve` | `CatmullRom3`, `Line3Curve`, `Bezier2Curve3`, `Bezier3Curve3`, `Ellipse` |
-| `BufferGeometryUtils.mergeGeometries`, `.mergeVertices`, `.toNonIndexed` (method) | `merge`, `weld`, `unindexed` |
-| `ConvexGeometry`, `RoundedBoxGeometry` | `hull`, `roundedBox` |
+| `BufferGeometryUtils.mergeGeometries`, `.mergeVertices`, `.toNonIndexed` (method) | the same, `unindexed` (and the method) |
+| `ConvexGeometry`, `RoundedBoxGeometry` | `convexHull`, `shapes.roundedBox` |
+| `Box3.setFromObject`, `.expandByObject` | `boundsOf(node, box)`, `growByNode(box, node)` |
+| `DataUtils.toHalfFloat`, `.fromHalfFloat` | `toHalfFloat`, `fromHalfFloat` |
 | `MeshStandardMaterial`, `MeshPhysicalMaterial`, `MeshPhongMaterial`, `MeshLambertMaterial` | `LitMaterial` |
 | `MeshBasicMaterial`, `ShaderMaterial` (and `RawShaderMaterial`) | `UnlitMaterial`, `LookMaterial` |
 | `PointsMaterial`, `SpriteMaterial`, `LineBasicMaterial` | the same, `LineMaterial` |

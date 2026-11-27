@@ -7,7 +7,9 @@
 // crystals surely strike, and every mark a preview lays on the floor must lie on it across the dais's step
 // (page/heldArea.ts). No shader may compile meanwhile: every program a preview draws with is compiled at load (the
 // outline's, src/game/warmup.ts).
-import * as THREE from 'three';
+import {
+  BackSide, boundsOf, Box2, CustomBlending, Mesh, Node, OneFactor, shapes, UnlitMaterial, Vec2, Vec3,
+} from './sceneApi.ts';
 import type { Fixture, Lab, Pictured, Report } from './lab';
 import type { Enemy } from '../../../src/entities/enemy';
 import type { ViewMode } from '../../../src/core/renderer';
@@ -100,14 +102,14 @@ async function setUpWithDummy(lab: Lab, fixture: Fixture, view: ViewMode): Promi
 const castStarted = (impl: string): boolean => G.player.casting?.skill.def.impl === impl || !!G.player.dash;
 
 /** The box `object` covers on the canvas (px from its bottom left, as the canvas is read), `room` round it. */
-function boxOnCanvas(object: THREE.Object3D, canvas: Canvas, room: number): THREE.Box2 {
-  const box = new THREE.Box3().setFromObject(object);
-  const onScreen = new THREE.Box2();
-  const corner = new THREE.Vector3();
+function boxOnCanvas(object: Node, canvas: Canvas, room: number): Box2 {
+  const box = boundsOf(object);
+  const onScreen = new Box2();
+  const corner = new Vec3();
   for (let i = 0; i < 8; i++) {
     corner.set(i & 1 ? box.max.x : box.min.x, i & 2 ? box.max.y : box.min.y, i & 4 ? box.max.z : box.min.z);
     corner.project(G.camera);
-    onScreen.expandByPoint(new THREE.Vector2((corner.x + 1) / 2 * canvas.width, (corner.y + 1) / 2 * canvas.height));
+    onScreen.expandByPoint(new Vec2((corner.x + 1) / 2 * canvas.width, (corner.y + 1) / 2 * canvas.height));
   }
   return onScreen.expandByScalar(room);
 }
@@ -130,7 +132,7 @@ function outlinePixels(lab: Lab, foe: Enemy): OutlinePixels {
   if (look) outline(look.root, look.color, look.strength);
   const near = boxOnCanvas(foe.obj, lit, NEAR_PX);
   const counted: OutlinePixels = { near: 0, away: 0 };
-  const point = new THREE.Vector2();
+  const point = new Vec2();
   for (let y = 0; y < lit.height; y++) {
     for (let x = 0; x < lit.width; x++) {
       const at = (y * lit.width + x) * 4;
@@ -249,16 +251,17 @@ async function heldOnCooldown(lab: Lab, skill: HeldSkill, options: HeldOptions):
   return { lines, problems, moments };
 }
 
-/** A program no one has drawn with yet: a mesh ahead of the camera drawn for a couple of frames (the canary's late
- *  compile), then taken away. */
+/** A pipeline no one has drawn with yet: a mesh ahead of the camera drawn for a couple of frames (the canary's late
+ *  compile), then taken away. Its material's blending, side and depth writing together are no other material's
+ *  (light added by one of each side's, drawn from behind, writing depth): under three it was a shader of its
+ *  own, which the engine has no way to draw. */
 async function compileOneLate(lab: Lab): Promise<void> {
-  const material = new THREE.ShaderMaterial({
-    vertexShader: 'void main() { gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
-    fragmentShader: 'void main() { gl_FragColor = vec4(0.0, 0.0, 0.0, 0.0); } // lab held: a late compile',
-    transparent: true,
+  const material = new UnlitMaterial({
+    color: 0x00ff00, blending: CustomBlending, blendSrc: OneFactor, blendDst: OneFactor, side: BackSide,
+    depthWrite: true, transparent: true,
   });
-  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(0.1, 0.1), material);
-  mesh.position.copy(G.camera.position).addScaledVector(G.camera.getWorldDirection(new THREE.Vector3()), 2);
+  const mesh = new Mesh(shapes.plane(0.1, 0.1), material);
+  mesh.position.copy(G.camera.position).addScaledVector(G.camera.getWorldDirection(new Vec3()), 2);
   mesh.frustumCulled = false;
   G.scene.add(mesh);
   const drawing = lab.drawing;

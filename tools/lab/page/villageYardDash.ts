@@ -7,7 +7,7 @@
 // run at 20 frames a second (`SLOW_FRAMES`, the lab's frame made that long), as a player's slow device runs them.
 // Each dash must end with him inside the fence. Said: where each dash ended in the yard's own frame. `canary` tests the world once a
 // frame again (`holdWorldSteps` in entities/player.ts), and a dash out must be found.
-import * as THREE from 'three';
+import { Vec3 } from './sceneApi.ts';
 import type { Lab } from './lab';
 import { G } from '../../../src/state';
 import { YARD, worldToYard, yardToWorld, type Spot } from '../../../src/data/village';
@@ -47,10 +47,10 @@ function bloodrush(): { range: number; speed: number } {
 }
 
 /** A way in the yard's frame as the village's (the yard is turned about y). */
-function worldWay([x, z]: readonly [number, number]): THREE.Vector3 {
+function worldWay([x, z]: readonly [number, number]): Vec3 {
   const [ox, oz] = yardToWorld(0, 0);
   const [wx, wz] = yardToWorld(x, z);
-  return new THREE.Vector3(wx - ox, 0, wz - oz).normalize();
+  return new Vec3(wx - ox, 0, wz - oz).normalize();
 }
 
 /** Whether a point of the yard's frame is inside its fence. */
@@ -64,7 +64,7 @@ async function dashAt(lab: Lab, side: string, from: readonly [number, number], w
   const dir = worldWay(way);
   const hero = G.player;
   hero.walkTo = null;
-  hero.place(new THREE.Vector3(x, groundHeight(x, z), z), Math.atan2(dir.x, dir.z));
+  hero.place(new Vec3(x, groundHeight(x, z), z), Math.atan2(dir.x, dir.z));
   await lab.step(SETTLE);
   const dur = range / speed;
   hero.startDash(dir, speed, dur);

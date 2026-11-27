@@ -2,7 +2,7 @@
 // change to its sculpt is seen in seconds. Bundled and run by `npm run handref` (`run.mjs`); writes
 // `out/ours-<build>-<pose>.json`: the skin's vertices and triangles and the joints that set the hand's frame.
 import { writeFileSync, mkdirSync } from 'node:fs';
-import * as THREE from 'three';
+import { Geometry, Node, Vec3 } from '../../src/engine/api/index.ts';
 import { sculptedSide } from '../../src/entities/models/hands';
 import { HAND_BUILDS } from '../../src/entities/models/build';
 
@@ -15,8 +15,8 @@ function option(name: string, fallback: string): string {
 }
 
 /** A joint's place in the hand's own space. */
-function placeOf(joint: THREE.Object3D): number[] {
-  return joint.getWorldPosition(new THREE.Vector3()).toArray();
+function placeOf(joint: Node): number[] {
+  return joint.getWorldPosition(new Vec3()).toArray();
 }
 
 /** The game's tunables set as `--tune` says: `fistShape.strike=88;shutFill.curl=0.9`. */
@@ -47,13 +47,13 @@ const joints = {
   little: placeOf(hand.f[3].j[0]),
 };
 /** A digit's joints' places, root first, then its tip. */
-function digitOf(digit: { j: THREE.Object3D[]; len: number[] }): number[][] {
-  const tip = new THREE.Vector3(0, -digit.len[2], 0);
+function digitOf(digit: { j: Node[]; len: number[] }): number[][] {
+  const tip = new Vec3(0, -digit.len[2], 0);
   return [...digit.j.map(placeOf), digit.j[2].localToWorld(tip).toArray()];
 }
 
 /** The bone that moves each vertex of the skin most (the hand's own 0, then three a finger, the thumb's last). */
-function bonesOf(geometry: THREE.BufferGeometry): number[] {
+function bonesOf(geometry: Geometry): number[] {
   const bone = geometry.attributes.skinIndex;
   const weight = geometry.attributes.skinWeight;
   const most: number[] = [];

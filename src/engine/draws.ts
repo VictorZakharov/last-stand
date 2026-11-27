@@ -5,7 +5,9 @@
 // (hundreds against thousands): one whose engine id, version or see-through flags moved has its meshes written
 // again. What has to be made each frame (a look run before its draw, or listing its own rows) is written into the
 // frame's records each frame, as the walk wrote every mesh.
-import * as B from './api/index.ts';
+import {
+  AttachedBindMode, Camera, Geometry, InstancedGeometry, InstancedMesh, Mat4, Mesh, NONE, Node, Skeleton, SkinnedMesh,
+} from './api/index.ts';
 import { RECORD, type Core } from './core';
 import { lookOf } from './custom';
 import { TUNE, type Grade } from './globals';
@@ -13,7 +15,6 @@ import type { Geometries } from './geometry';
 import type { AnyMaterial, Materials } from './materials';
 import { SEE_FLAGS, type SeeKinds } from './seeKinds';
 import { casterGeometry } from '../entities/models/farDetail';
-import { NONE } from './api/index.ts';
 
 /** a record's flags (plan.rs) */
 const CASTS_SHADOW = 1, NEVER_CULLED = 2, SHADOW_ONLY = 4, ARMS = 8, SOLID = 16, LOW_RES = 32;
@@ -24,19 +25,19 @@ type Cast = 'own' | 'none' | 'only';
 /** how a view draws a mesh: the world's camera, his arms' through his eyes, for its shadow alone, or none */
 type Role = 'seen' | 'arms' | 'unseen' | 'none';
 
-const IDENTITY = new Float32Array(new B.Mat4().elements);
-const _m = new B.Mat4();
+const IDENTITY = new Float32Array(new Mat4().elements);
+const scratchMatrix = new Mat4();
 
 /** What the frame's views draw by: the world's camera, his arms' (through his eyes), the grade. */
 export interface View {
-  camera: B.Camera;
-  arms: B.Camera | null;
+  camera: Camera;
+  arms: Camera | null;
   grade: Grade;
 }
 
 /** A mesh drawn on its node. */
 interface Entry {
-  mesh: B.Mesh;
+  mesh: Mesh;
   /** its records in the engine */
   drawn: number[];
   skin: number;
@@ -49,29 +50,29 @@ interface Entry {
   eachFrame: boolean;
   /** the materials and geometry it's listed under, as last written */
   materials: AnyMaterial[];
-  geometry: B.Geometry | null;
+  geometry: Geometry | null;
 }
 
 /** A material or geometry in use: what it was last seen as, and the meshes drawn by it. */
-interface Use { stamp: number; meshes: Set<B.Mesh> }
+interface Use { stamp: number; meshes: Set<Mesh> }
 
 export class Draws {
-  private entries = new Map<B.Mesh, Entry>();
-  private pending = new Set<B.Mesh>();
+  private entries = new Map<Mesh, Entry>();
+  private pending = new Set<Mesh>();
   private eachFrame = new Set<Entry>();
   private materialUse = new Map<AnyMaterial, Use>();
-  private geometryUse = new Map<B.Geometry, Use>();
-  private instanced = new Map<B.InstancedMesh, number>();
+  private geometryUse = new Map<Geometry, Use>();
+  private instanced = new Map<InstancedMesh, number>();
   /** the frame's key every record reads (the casting switches, the views' layers): all written again as it moves */
   private frameKey = '';
   private under: number[] = [];
   private scratch = new Float32Array(RECORD * 8);
   private scratchCount = 0;
   /** the skins by skeleton and bind, made once */
-  private skins = new Map<B.Skeleton, Map<string, number>>();
+  private skins = new Map<Skeleton, Map<string, number>>();
   private view: View | null = null;
   /** the stage's node of a bone, for a skin: given by the stage */
-  nodeOf: (node: B.Node) => number = (node) => node.engineId;
+  nodeOf: (node: Node) => number = (node) => node.engineId;
   /** the records' totals of see-through drawn solid and of casting from fewer triangles, as written */
   solid = 0;
   casters = 0;
@@ -85,7 +86,7 @@ export class Draws {
   }
 
   /** `mesh` drawn from the next frame. */
-  add(mesh: B.Mesh): void {
+  add(mesh: Mesh): void {
     const entry: Entry = {
       mesh, drawn: [], skin: NONE, under: [], solid: 0, casters: 0, eachFrame: false, materials: [], geometry: null,
     };
@@ -94,7 +95,7 @@ export class Draws {
   }
 
   /** `mesh` no longer drawn. */
-  remove(mesh: B.Mesh): void {
+  remove(mesh: Mesh): void {
     const entry = this.entries.get(mesh);
     if (!entry) return;
     this.dropRecords(entry);
@@ -102,13 +103,13 @@ export class Draws {
     this.eachFrame.delete(entry);
     this.entries.delete(mesh);
     this.pending.delete(mesh);
-    const instanced = mesh as B.InstancedMesh;
+    const instanced = mesh as InstancedMesh;
     if (instanced.isInstancedMesh) this.instanced.delete(instanced);
   }
 
   /** What `node` draws to be written again at the next frame. */
-  redraw(node: B.Node): void {
-    if (this.entries.has(node as B.Mesh)) this.pending.add(node as B.Mesh);
+  redraw(node: Node): void {
+    if (this.entries.has(node as Mesh)) this.pending.add(node as Mesh);
   }
 
   /** Every mesh's records written again (what was handed over is forgotten). */
@@ -123,12 +124,29 @@ export class Draws {
     for (const use of this.geometryUse.values()) use.stamp = NaN;
   }
 
+  /** The frame's views, before anything of it is written. */
+  begin(view: View): void {
+    this.view = view;
+  }
+
+  /** `mesh`'s records written into this frame's alone, as the walk wrote every mesh (a lamp's casters, an outline). */
+  recordNow(mesh: Mesh): void {
+    this.recordInto(mesh, true);
+  }
+
+  /** `mesh`'s records as they'd be kept on its node, copied out (a body drawn as one keeps them on its root's). */
+  recordsOf(mesh: Mesh): Float32Array {
+    this.scratchCount = 0;
+    this.recordInto(mesh, false);
+    return this.scratch.slice(0, this.scratchCount * RECORD);
+  }
+
   /**
    * The frame's draws: what changed written again, what's made each frame written into the frame's records. After
-   * the stage has placed its nodes, with `view` the frame's.
+   * the stage has placed its nodes, and `begin`.
    */
-  frame(view: View, seen: (node: B.Node) => boolean): void {
-    this.view = view;
+  frame(seen: (node: Node) => boolean): void {
+    const view = this.view!;
     const key = frameKeyOf(view);
     if (key !== this.frameKey) {
       this.frameKey = key;
@@ -152,11 +170,13 @@ export class Draws {
       this.instanced.set(mesh, now);
       this.pending.add(mesh);
     }
-    for (const mesh of this.pending) {
+    // (taken out first: a mesh whose node isn't the engine's yet queues itself again for the next frame)
+    const writing = [...this.pending];
+    this.pending.clear();
+    for (const mesh of writing) {
       const entry = this.entries.get(mesh);
       if (entry) this.write(entry);
     }
-    this.pending.clear();
     for (const entry of this.eachFrame) if (seen(entry.mesh)) this.recordInto(entry.mesh, true);
   }
 
@@ -164,7 +184,7 @@ export class Draws {
   private write(entry: Entry): void {
     const mesh = entry.mesh;
     this.list(entry);
-    const instanced = mesh as B.InstancedMesh;
+    const instanced = mesh as InstancedMesh;
     if (instanced.isInstancedMesh && !this.instanced.has(instanced)) {
       this.instanced.set(instanced, this.geometries.setId(instanced));
     }
@@ -188,23 +208,34 @@ export class Draws {
 
   /** The records in the scratch kept on `entry`'s node. */
   private keepOnNode(entry: Entry): void {
-    const engine = this.core.engine, mesh = entry.mesh as B.SkinnedMesh;
+    const engine = this.core.engine, mesh = entry.mesh as SkinnedMesh;
     const skin = mesh.isSkinnedMesh && mesh.skeleton ? this.skinOf(mesh) : NONE;
     // (a skinned mesh's matrix: its node's after its bind's inverse, or none where it's bound where it stands)
-    const attached = skin !== NONE && mesh.bindMode === B.AttachedBindMode;
+    const attached = skin !== NONE && mesh.bindMode === AttachedBindMode;
     const offset = skin !== NONE && !attached ? new Float32Array(mesh.bindMatrixInverse.elements) : IDENTITY;
     entry.skin = skin;
-    const reach = this.reachOf(entry.mesh);
+    // (a body drawn as one: kept on its root's node, culled there by the body's reach, `bodyAsOne.ts`)
+    const drawnOn = entry.mesh.userData.drawnOn as Node | undefined;
+    if (drawnOn && drawnOn.engineId === NONE) {
+      // (its root isn't the engine's yet: written again next frame)
+      entry.under = [];
+      this.pending.add(entry.mesh);
+      return;
+    }
+    const node = drawnOn ? drawnOn.engineId : entry.mesh.engineId;
+    const reach = drawnOn ? entry.mesh.userData.reach as number : this.reachOf(entry.mesh);
+    const placed = drawnOn ? false : !attached;
+    const placing = drawnOn ? IDENTITY : offset;
     for (let i = 0; i < this.scratchCount; i++) {
       const record = this.scratch.subarray(i * RECORD, (i + 1) * RECORD);
-      entry.drawn.push(engine.draw_on_node(entry.mesh.engineId, record, offset, !attached, skin, reach));
+      entry.drawn.push(engine.draw_on_node(node, record, placing, placed, skin, reach));
     }
     this.core.freshViews();
   }
 
   /** How far `mesh` reaches from its node's place, at its node's size: what the engine culls it by (0: never). */
-  private reachOf(mesh: B.Mesh): number {
-    if (!mesh.frustumCulled || (mesh as B.SkinnedMesh).isSkinnedMesh || (mesh as B.InstancedMesh).isInstancedMesh) {
+  private reachOf(mesh: Mesh): number {
+    if (!mesh.frustumCulled || (mesh as SkinnedMesh).isSkinnedMesh || (mesh as InstancedMesh).isInstancedMesh) {
       return 0;
     }
     const geometry = mesh.geometry;
@@ -254,7 +285,7 @@ export class Draws {
   }
 
   /** Whether `mesh`'s records are made each frame: a look run before its draw, or one listing its own rows. */
-  private madeEachFrame(mesh: B.Mesh): boolean {
+  private madeEachFrame(mesh: Mesh): boolean {
     if (mesh.userData.particles || mesh.name === 'dazed stars') return false;
     const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
     return materials.some((material) => {
@@ -264,7 +295,7 @@ export class Draws {
   }
 
   /** What `mesh`'s records are written under now. */
-  private underOf(mesh: B.Mesh): number[] {
+  private underOf(mesh: Mesh): number[] {
     const under = this.under;
     under.length = 0;
     const materials = (Array.isArray(mesh.material) ? mesh.material : [mesh.material]) as AnyMaterial[];
@@ -273,13 +304,13 @@ export class Draws {
     const range = mesh.geometry.drawRange;
     under.push(this.geometries.geometryId(mesh.geometry, look?.position), range.start, range.count,
       mesh.castShadow ? 1 : 0, mesh.receiveShadow ? 1 : 0, mesh.frustumCulled ? 1 : 0, mesh.layers.mask,
-      this.instanced.get(mesh as B.InstancedMesh) ?? 0, (mesh.geometry as B.InstancedGeometry).instanceCount ?? 0);
+      this.instanced.get(mesh as InstancedMesh) ?? 0, (mesh.geometry as InstancedGeometry).instanceCount ?? 0);
     return under;
   }
 
   /** `mesh`'s records as the frame's view draws it: into the scratch (kept on its node), or into the frame's own
    *  records (`frame`: made each frame, placed by the matrix written). */
-  private recordInto(mesh: B.Mesh, frame: boolean): void {
+  private recordInto(mesh: Mesh, frame: boolean): void {
     // (the particles' pools are handed over whole: `sprites.ts`)
     if (mesh.userData.particles || mesh.name === 'dazed stars') return;
     const role = this.roleOf(mesh);
@@ -288,7 +319,7 @@ export class Draws {
     if (frame && look?.before) mesh.onBeforeRender?.(mesh);
     const geometry = mesh.geometry;
     // (a geometry of instances it counts itself: each placed by its material's look, from its index)
-    const counted = geometry as B.InstancedGeometry;
+    const counted = geometry as InstancedGeometry;
     const raw = counted.isInstancedGeometry ? counted.instanceCount : 0;
     if (counted.isInstancedGeometry && (!look || !(raw > 0) || raw === Infinity)) {
       if (!look) this.core.skip('instanced geometry');
@@ -296,7 +327,7 @@ export class Draws {
     }
     const geometryId = this.geometries.geometryId(geometry, look?.position);
     if (!geometryId) return;
-    const instanced = mesh as B.InstancedMesh, skinned = mesh as B.SkinnedMesh;
+    const instanced = mesh as InstancedMesh, skinned = mesh as SkinnedMesh;
     if (instanced.isInstancedMesh && instanced.count === 0) return;
     const set = instanced.isInstancedMesh ? this.instanced.get(instanced) ?? this.geometries.setId(instanced) : 0;
     const bones = frame && look?.list ? this.geometries.listOf(look.list()) : skinned.isSkinnedMesh ? 0 : -1;
@@ -334,13 +365,13 @@ export class Draws {
   }
 
   /** `mesh`'s arms' record again, for their shadow alone. */
-  private recordUnseen(mesh: B.Mesh, material: AnyMaterial, geometryId: number, from: number, to: number,
+  private recordUnseen(mesh: Mesh, material: AnyMaterial, geometryId: number, from: number, to: number,
     count: number, set: number, bones: number, frame: boolean): void {
     this.record(mesh, geometryId, material, from, to === Infinity ? 0 : count, set, bones, 0, 'only', 'unseen', frame);
   }
 
   /** How the frame's views draw `mesh`. */
-  private roleOf(mesh: B.Mesh): Role {
+  private roleOf(mesh: Mesh): Role {
     const view = this.view!;
     if (mesh.layers.test(view.camera.layers)) return 'seen';
     // (on the arms' layer alone, seen through his eyes: the game draws them with a camera of their own, which the
@@ -352,7 +383,7 @@ export class Draws {
   }
 
   /** One record of `mesh`: into the scratch, or the frame's records. */
-  private record(mesh: B.Mesh, geometryId: number, material: AnyMaterial, first: number, count: number, set: number,
+  private record(mesh: Mesh, geometryId: number, material: AnyMaterial, first: number, count: number, set: number,
     bones: number, raw: number, cast: Cast, role: Role, frame: boolean): void {
     const core = this.core, grade = this.view!.grade;
     if (role === 'unseen' && cast === 'own') cast = 'only';
@@ -371,7 +402,7 @@ export class Draws {
     r[at + 5] = bones;
     // (a body moved by its bones casts only where the game says; the village's still things cast whatever a
     // level's least caster: `TUNE.castAll`)
-    const still = !(mesh as B.SkinnedMesh).isSkinnedMesh;
+    const still = !(mesh as SkinnedMesh).isSkinnedMesh;
     const casts = cast !== 'none' && (mesh.castShadow || (TUNE.castAll && mesh.receiveShadow && still
       && radiusOf(mesh) >= (grade.casterLeast ?? 0)));
     const sees = this.seeKinds.flagsOf(material);
@@ -385,9 +416,9 @@ export class Draws {
     if (role === 'arms' && cast !== 'only') flags = ARMS | NEVER_CULLED;
     r[at + 6] = flags;
     r[at + RAW_INSTANCES] = raw;
-    const skinned = mesh as B.SkinnedMesh;
+    const skinned = mesh as SkinnedMesh;
     if (skinned.isSkinnedMesh && frame) {
-      _m.multiplyMatrices(mesh.matrixWorld, skinned.bindMatrixInverse).toArray(r, at + 8);
+      scratchMatrix.multiplyMatrices(mesh.matrixWorld, skinned.bindMatrixInverse).toArray(r, at + 8);
     } else {
       r.set(mesh.matrixWorld.elements, at + 8);
     }
@@ -414,7 +445,7 @@ export class Draws {
 
   /** The engine's skin for `mesh`'s skeleton and bind: its joints the bones' nodes, each bone's inverse bind with
    *  the mesh's bind after it. */
-  private skinOf(mesh: B.SkinnedMesh): number {
+  private skinOf(mesh: SkinnedMesh): number {
     const skeleton = mesh.skeleton!;
     const key = `${skeleton.version}|${mesh.bindMatrix.elements.join(',')}`;
     let binds = this.skins.get(skeleton);
@@ -422,7 +453,7 @@ export class Draws {
     if (known !== undefined) return known;
     const joints = skeleton.bones.map((bone) => this.nodeOf(bone));
     const inverses = new Float32Array(skeleton.bones.length * 16);
-    const folded = new B.Mat4();
+    const folded = new Mat4();
     skeleton.boneInverses.forEach((inverse, at) => {
       inverses.set(folded.multiplyMatrices(inverse, mesh.bindMatrix).elements, at * 16);
     });
@@ -433,7 +464,7 @@ export class Draws {
   }
 
   /** Each mesh drawn on the nodes, with records in the engine (a harness's: what was handed over). */
-  eachDrawn(visit: (mesh: B.Mesh) => void): void {
+  eachDrawn(visit: (mesh: Mesh) => void): void {
     for (const entry of this.entries.values()) if (entry.drawn.length || entry.eachFrame) visit(entry.mesh);
   }
 }
@@ -445,18 +476,19 @@ function frameKeyOf(view: View): string {
 }
 
 /** What a geometry's records read of it: its own version and its attributes' and index's. */
-function geometryStamp(geometry: B.Geometry): number {
+function geometryStamp(geometry: Geometry): number {
   let stamp = geometry.version * 65536;
   for (const name in geometry.attributes) stamp += geometry.attributes[name].version;
   return stamp + (geometry.index?.version ?? 0) * 256;
 }
 
 /** each still mesh's radius in the world (m), found once: it doesn't move */
-const radii = new WeakMap<B.Mesh, number>();
+const radii = new WeakMap<Mesh, number>();
 
 /** How far a still mesh reaches from its middle (m): a level keeps what's smaller than its least caster from casting
- *  the sun's shadow (`minCasterRadius`), and the still things taken for casters (`TUNE.castAll`) whatever their size. */
-function radiusOf(mesh: B.Mesh): number {
+ *  the sun's shadow (`minCasterRadius`), and the still things taken for casters (`TUNE.castAll`) whatever their
+ *  size. */
+function radiusOf(mesh: Mesh): number {
   let radius = radii.get(mesh);
   if (radius === undefined) {
     if (!mesh.geometry.boundingSphere) mesh.geometry.computeBoundingSphere();
@@ -467,14 +499,14 @@ function radiusOf(mesh: B.Mesh): number {
 }
 
 /** The meshes listed under `key` (listed first, at `stamp`, if it wasn't). */
-function useOf<K>(uses: Map<K, Use>, key: K, stamp: number): Set<B.Mesh> {
+function useOf<K>(uses: Map<K, Use>, key: K, stamp: number): Set<Mesh> {
   let use = uses.get(key);
   if (!use) uses.set(key, use = { stamp, meshes: new Set() });
   return use.meshes;
 }
 
 /** `mesh` off `key`'s list, and the list gone once empty. */
-function dropUse<K>(uses: Map<K, Use>, key: K, mesh: B.Mesh): void {
+function dropUse<K>(uses: Map<K, Use>, key: K, mesh: Mesh): void {
   const use = uses.get(key);
   if (!use) return;
   use.meshes.delete(mesh);

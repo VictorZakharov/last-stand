@@ -4,7 +4,7 @@
 // and on the open square, from each view: a box round the staff's tip frame by frame, its brightest frame against its
 // median, how much of it is near white, how far its light moves in one frame, and its flashes in any second. `canary`
 // polishes the crystal as it was and lights it full, whose facets mirror what's bright round it.
-import * as THREE from 'three';
+import { Node, Vec3 } from './sceneApi.ts';
 import type { Lab, Pictured } from './lab';
 import { G } from '../../../src/state';
 import { CAMPFIRE, VILLAGE_OBJECTS } from '../../../src/data/village';
@@ -50,13 +50,13 @@ function spots(): Spot[] {
 }
 
 /** The crystal's box frame by frame as he stands at `spot`. */
-async function glowsAt(lab: Lab, tip: THREE.Object3D, spot: Spot): Promise<FrameGlow[]> {
+async function glowsAt(lab: Lab, tip: Node, spot: Spot): Promise<FrameGlow[]> {
   const [, x, z] = spot;
   G.player.walkTo = null;
-  G.player.place(new THREE.Vector3(x, groundHeight(x, z), z), 0);
+  G.player.place(new Vec3(x, groundHeight(x, z), z), 0);
   await lab.step(SETTLE);
   const glows: FrameGlow[] = [];
-  const point = new THREE.Vector3();
+  const point = new Vec3();
   let frame = 0;
   await lab.step(FRAMES, undefined, () => {
     G.player.model.root.updateMatrixWorld(true);

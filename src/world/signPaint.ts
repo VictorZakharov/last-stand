@@ -6,8 +6,6 @@
 // painted so: "labels on houses should be high contrast as well".
 import { LitMaterial, Material } from '../engine/api/index.ts';
 import { mulberry } from '../util';
-import { tsl } from '../core/webgpu';
-import type { OwnLooks } from '../core/shaderPorts';
 
 /** the paint: the board's ivory at its top and foot, its brush streaks, and the dark its border and letters are
  *  painted in */
@@ -98,23 +96,9 @@ export function flatFace<M extends Material>(m: M): M {
 }
 
 /** `m` lit no brighter than `FACE_MOST`: what it gives back scaled down to that luminance where it would be more (its
- *  hue kept), on WebGL by a line after its output (its program's key told), on WebGPU by its output node. */
+ *  hue kept), by the engine, which holds a material's light to its `litMost` (engine/materials.ts). */
 export function underBloom<M extends Material>(m: M): M {
-  // (for a renderer with no hook of three's: the Rust engine holds its light to it, engine/materials.ts)
   m.userData.litMost = FACE_MOST;
-  const prev = m.onBeforeCompile, key = m.customProgramCacheKey();
-  const most = FACE_MOST.toFixed(3);
-  m.onBeforeCompile = (shader, renderer) => {
-    prev.call(m, shader, renderer);
-    shader.fragmentShader = shader.fragmentShader.replace('#include <opaque_fragment>', `#include <opaque_fragment>
-      { float faceLit = dot(gl_FragColor.rgb, vec3(0.2126, 0.7152, 0.0722));
-        if (faceLit > ${most}) gl_FragColor.rgb *= ${most} / faceLit; }`);
-  };
-  m.customProgramCacheKey = () => `${key}|underBloom`;
-  (m as unknown as OwnLooks).webgpuLooks = (converted) => {
-    const out = tsl.output, lit = tsl.dot(out.rgb, tsl.vec3(0.2126, 0.7152, 0.0722));
-    converted.outputNode = tsl.vec4(out.rgb.mul(tsl.min(1, tsl.float(FACE_MOST).div(tsl.max(lit, 1e-4)))), out.a);
-  };
   return m;
 }
 

@@ -46,6 +46,10 @@ export class World extends Node {
   fog: Fog | FogExp2 | null = null;
   /** what's behind it: a colour, a picture, or nothing (the sky's dome draws it) */
   background: Color | Texture | null = null;
+  /** what stands for its surroundings' light: the engine reads only whether one is set (its sky's two halves light
+   *  the scene), and how strongly */
+  environment: Texture | null = null;
+  environmentIntensity = 1;
 
   constructor() {
     super();

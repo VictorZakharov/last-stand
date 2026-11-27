@@ -6,9 +6,9 @@ import type { Material } from '../material/index.ts';
 import { Mesh } from './mesh.ts';
 import type { Node } from './node.ts';
 
-const _m = new Mat4();
-const _v = new Vec3();
-const _sphere = new Sphere();
+const scratchMatrix = new Mat4();
+const scratchPoint = new Vec3();
+const scratchSphere = new Sphere();
 
 /** A geometry drawn `count` times. */
 export class InstancedMesh<G extends Geometry = Geometry, M extends Material | Material[] = Material | Material[]>
@@ -30,15 +30,15 @@ export class InstancedMesh<G extends Geometry = Geometry, M extends Material | M
     this.type = 'InstancedMesh';
     this.count = count;
     const matrices = new Float32Array(count * 16);
-    for (let i = 0; i < count; i++) _m.identity().toArray(matrices, i * 16);
+    for (let i = 0; i < count; i++) scratchMatrix.identity().toArray(matrices, i * 16);
     this.instanceMatrix = new InstancedAttribute(matrices, 16);
   }
 
   /** Instance `index`'s matrix set to `matrix` (its attribute's `needsUpdate` says when to send them). */
   setMatrixAt(index: number, matrix: Mat4): void { matrix.toArray(this.instanceMatrix.array, index * 16); }
 
-  /** Instance `index`'s matrix, into `matrix`. */
-  getMatrixAt(index: number, matrix: Mat4): void { matrix.fromArray(this.instanceMatrix.array, index * 16); }
+  /** Instance `index`'s matrix, into `matrix`; the matrix (as three's, so a call can be passed on). */
+  getMatrixAt(index: number, matrix: Mat4): Mat4 { return matrix.fromArray(this.instanceMatrix.array, index * 16); }
 
   /** Instance `index`'s tint set to `color`, a tint for each made white first if there were none. */
   setColorAt(index: number, color: Color): void {
@@ -66,11 +66,11 @@ export class InstancedMesh<G extends Geometry = Geometry, M extends Material | M
     const sphere = this.boundingSphere ?? (this.boundingSphere = new Sphere());
     sphere.makeEmpty();
     for (let i = 0; i < this.count; i++) {
-      this.getMatrixAt(i, _m);
-      _sphere.copy(own).applyMatrix4(_m);
-      sphere.union(_sphere);
+      this.getMatrixAt(i, scratchMatrix);
+      scratchSphere.copy(own).applyMatrix4(scratchMatrix);
+      sphere.union(scratchSphere);
     }
-    if (this.count === 0) sphere.set(_v.set(0, 0, 0), 0);
+    if (this.count === 0) sphere.set(scratchPoint.set(0, 0, 0), 0);
   }
 
   /** `source` copied onto it, its instances copied too; itself. */

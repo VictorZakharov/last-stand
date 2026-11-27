@@ -5,7 +5,7 @@
 // lab's clock. What each game shows is recorded frame by frame and judged against what the other one has: how late
 // and how roughly a hero or a foe follows where its own game has it, whether an arrow that struck a foe on the guest's
 // screen counted on the host, and whether a blow the guest dodged on its screen hurt it.
-import * as THREE from 'three';
+import { Mesh, Node, Vec3 } from './sceneApi.ts';
 import { G } from '../../../src/state';
 import { BRANCHES } from '../../../src/entities/rootmother';
 import { input } from '../../../src/core/input';
@@ -470,7 +470,7 @@ function wallInput(frame: number): Frame {
     G.player.cooldowns.clear();
     G.player.energy = G.player.stats.maxEnergy;
   }
-  const aim = new THREE.Vector3(WALL.aim[0], 0, WALL.aim[1]);
+  const aim = new Vec3(WALL.aim[0], 0, WALL.aim[1]);
   return { keys: frame < WALL.at + WALL.hold ? [key] : [], aim };
 }
 
@@ -495,7 +495,7 @@ function blinkInput(frame: number): Frame {
     G.player.energy = G.player.stats.maxEnergy;
   }
   const [x, z] = BLINK_SPOTS[(Math.floor(frame / BLINK_EVERY) + 1) % BLINK_SPOTS.length];
-  const aim = new THREE.Vector3(x, 0, z);
+  const aim = new Vec3(x, 0, z);
   return { keys: beat < BLINK_HOLD - 1 ? [key] : [], aim };
 }
 
@@ -521,7 +521,7 @@ function strikeInput(frame: number): Frame {
   const strike = keyOf('powerStrike');
   const rush = keyOf('bullRush');
   const [x, z] = rushAhead(RUSH_AHEAD);
-  const aim = new THREE.Vector3(x, 0, z);
+  const aim = new Vec3(x, 0, z);
   if (!strike || !rush) return { aim };
   const hero = G.player;
   if (frame === RUSH_AT) {
@@ -538,7 +538,7 @@ function strikeInput(frame: number): Frame {
 function rushInput(frame: number): Frame {
   const key = keyOf('bullRush');
   const [x, z] = rushAhead(RUSH_AHEAD);
-  const aim = new THREE.Vector3(x, 0, z);
+  const aim = new Vec3(x, 0, z);
   if (!key || frame !== RUSH_AT) return { aim };
   G.player.cooldowns.clear();
   G.player.energy = G.player.stats.maxEnergy;
@@ -573,7 +573,7 @@ function staffsGuestInput(frame: number): Frame {
   }
   if (frame < STAFFS.mend - 60) {
     const [x, z] = STAFFS.foes[0];
-    return { m0: true, aim: new THREE.Vector3(x, 0, z) };
+    return { m0: true, aim: new Vec3(x, 0, z) };
   }
   const host = G.players.find((other) => !other.local);
   if (frame < STAFFS.beam || !host) return {};
@@ -1053,8 +1053,8 @@ const play = {
   /** each foe's shown attack and how far through it was last frame */
   attacks: new Map<number, { action: unknown; share: number }>(),
   /** the chunks of lava and the vines in the scene last frame, a chunk with where it was */
-  chunks: new Map<THREE.Object3D, XZ>(),
-  vines: new WeakSet<THREE.Object3D>(),
+  chunks: new Map<Node, XZ>(),
+  vines: new WeakSet<Node>(),
 };
 
 /** Notes where each friendly arrow ends, to tell an arrow that struck a foe on this game's screen. */
@@ -1175,7 +1175,7 @@ function lookOf(player: Player): string | undefined {
 function hairShiftOf(player: Player): string | undefined {
   let shift: string | undefined;
   player.model.root.traverse((child) => {
-    const material = (child as THREE.Mesh).material as { kitLooks?: { hair?: { value: THREE.Vector3 } } } | undefined;
+    const material = (child as Mesh).material as { kitLooks?: { hair?: { value: Vec3 } } } | undefined;
     const value = child.name === 'face' ? material?.kitLooks?.hair?.value : undefined;
     if (value) shift = value.toArray().map((channel) => channel.toFixed(2)).join(',');
   });
@@ -1217,8 +1217,8 @@ export async function coopFacePartner(lab: Lab, { on }: { on: boolean }): Promis
   const partner = G.players.find((player) => !player.local);
   if (!on || !partner) { stageCamera(null, true); return; }
   const at = partner.obj.position, facing = partner.facing;
-  const pos = new THREE.Vector3(at.x + Math.sin(facing) * 3.2, at.y + 1.75, at.z + Math.cos(facing) * 3.2);
-  stageCamera({ pos, look: new THREE.Vector3(at.x, at.y + 1.45, at.z), fov: 30 }, true);
+  const pos = new Vec3(at.x + Math.sin(facing) * 3.2, at.y + 1.75, at.z + Math.cos(facing) * 3.2);
+  stageCamera({ pos, look: new Vec3(at.x, at.y + 1.45, at.z), fov: 30 }, true);
 }
 
 /** Joins the room again as `tag`: asked for another name tag, the player types one. */
@@ -1373,7 +1373,7 @@ export async function coopScenario(lab: Lab, { name, canary }: { name: string; c
   if (!lab.beforeFrame.includes(holdTheRun)) lab.beforeFrame.push(holdTheRun);
   const extraSpot = play.extra === null ? null : EXTRA_SPOTS[play.extra];
   const [x, z] = extraSpot ?? (play.role === 'host' ? scenario.host : scenario.guest);
-  G.player.place(new lab.THREE.Vector3(x, 0, z), Math.PI);
+  G.player.place(new Vec3(x, 0, z), Math.PI);
   G.player.vel.set(0, 0, 0);
   for (const player of G.players) makeUnhurt(player);
   if (play.role === 'guest' && play.extra === null && scenario.guestLife !== undefined) {
@@ -1388,7 +1388,7 @@ export async function coopScenario(lab: Lab, { name, canary }: { name: string; c
     G.run.timer = 0;
   }
   for (const foe of scenario.foes) {
-    const enemy = spawnEnemy(foe.type, new lab.THREE.Vector3(foe.at[0], 0, foe.at[1]), { wave: 1 });
+    const enemy = spawnEnemy(foe.type, new Vec3(foe.at[0], 0, foe.at[1]), { wave: 1 });
     enemy.life = UNKILLED;
     if (foe.dazed) enemy.dazed = Infinity;
   }
@@ -1494,7 +1494,7 @@ function sampleNow(): Sample {
 }
 
 /** Whether `a` is within `reach` of `b` on the floor. */
-const near = (a: THREE.Vector3, b: THREE.Vector3, reach: number): boolean => Math.hypot(a.x - b.x, a.z - b.z) < reach;
+const near = (a: Vec3, b: Vec3, reach: number): boolean => Math.hypot(a.x - b.x, a.z - b.z) < reach;
 
 /** how near a hero's feet a vine's coils are to be his (m) */
 const COILED_NEAR = 0.3;
@@ -1502,7 +1502,7 @@ const COILED_NEAR = 0.3;
 /** What the foes threw this frame as this game shows it, read from the scene by its meshes' names (`lava chunk`,
  *  `vine`, `vine coils`: an older tree has none): a chunk gone from it since last frame landed where it last was. */
 function thrownNow(self: Player, partner: Player | undefined): Sample['thrown'] {
-  const chunks = new Map<THREE.Object3D, XZ>();
+  const chunks = new Map<Node, XZ>();
   let vines = 0, coiled = false;
   for (const object of G.scene.children) {
     if (object.name === 'lava chunk') chunks.set(object, [object.position.x, object.position.z]);

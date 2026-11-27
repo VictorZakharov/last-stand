@@ -5,7 +5,6 @@ import {
 } from '../../engine/api/index.ts';
 import * as shapes from '../../engine/api/shapes/index.ts';
 import { nearGlow } from '../../core/materials';
-import { portShader } from '../../core/shaderPorts';
 import { effectLook, num, rgb, effectShader } from '../../engine/effects';
 import { G } from '../../state';
 import { hitEnemy } from '../damage';
@@ -49,33 +48,9 @@ const rimGeo = shapes.flat(rimShape, 12);
 const emblemGeo = shapes.flat(kite(0.34), 8);
 
 function faceMaterial(): LookMaterial {
-  return effectLook(portShader(nearGlow(new LookMaterial({
+  return effectLook(nearGlow(new LookMaterial({
     uniforms: { uColor: { value: new Color(GOLD) }, uFade: { value: 0 }, uFlash: { value: 0 }, uTime: { value: 0 } },
     transparent: true, depthWrite: false, blending: AdditiveBlending, side: DoubleSide,
-    vertexShader: /* glsl */`
-      varying vec2 vP;
-      void main(){ vP = position.xy; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
-    fragmentShader: /* glsl */`
-      varying vec2 vP;
-      uniform vec3 uColor; uniform float uFade, uFlash, uTime;
-      void main(){
-        // brighter towards the rim (distance from the centre), a band of light scanning down,
-        // fine horizontal striations, and a white flare when a blow lands
-        float edge = smoothstep(0.1, 0.4, length(vP * vec2(1.0, 0.85)));
-        float scan = exp(-pow(fract(vP.y * 1.2 - uTime * 0.9) - 0.5, 2.0) * 60.0);
-        float lines = 0.75 + 0.25 * sin(vP.y * 120.0 + uTime * 4.0);
-        float i = (0.12 + edge * 0.35 + scan * 0.35) * lines + uFlash * 0.35;
-        gl_FragColor = vec4(mix(uColor, vec3(1.0), uFlash * 0.3) * i * uFade, i * uFade);
-      }`,
-  })), ({ wgslFn, positionGeometry, varying }, u) => ({
-    fragment: wgslFn(`fn bellowFace(p: vec2f, color: vec3f, fade: f32, flash: f32, time: f32) -> vec4f {
-      let edge = smoothstep(0.1, 0.4, length(p * vec2f(1.0, 0.85)));
-      let s = fract(p.y * 1.2 - time * 0.9) - 0.5;
-      let scan = exp(-s * s * 60.0);
-      let lines = 0.75 + 0.25 * sin(p.y * 120.0 + time * 4.0);
-      let i = (0.12 + edge * 0.35 + scan * 0.35) * lines + flash * 0.35;
-      return vec4f(mix(color, vec3f(1.0), flash * 0.3) * i * fade, i * fade);
-    }`)({ p: varying(positionGeometry.xy), color: u.uColor, fade: u.uFade, flash: u.uFlash, time: u.uTime }),
   })), 'bellow-face', FACE_HOOKS, {
     numbers(u, out) {
       out[0] = num(u, 'uFade'); out[1] = num(u, 'uFlash'); out[2] = num(u, 'uTime');
@@ -84,7 +59,7 @@ function faceMaterial(): LookMaterial {
   });
 }
 
-/** a shield's face for the Rust engine (src/engine/effects.ts): the port's WGSL above, the kite's own plane from the
+/** a shield's face for the Rust engine (src/engine/effects.ts): the kite's own plane from the
  *  vertex */
 const FACE_HOOKS = /* wgsl */ `
 fn vertex_hook(v: ptr<function, Vertex>, instance: u32) {

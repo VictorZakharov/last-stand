@@ -3,7 +3,7 @@
 // minimap, and the host a spot; each game records every ping it shows, its own and its partner's, with whether its pin
 // and its ring show in the world and where on the arena the minimap drew it (read back from the minimap's pixels by
 // this module's own sums, not the game's).
-import * as THREE from 'three';
+import { Vec3 } from './sceneApi.ts';
 import { G } from '../../../src/state';
 import { cameraYaw, viewMode, viewSettled } from '../../../src/core/renderer';
 import type { Frame } from './lab';
@@ -51,8 +51,8 @@ export const VIEW_PRESSES = [360, 366, 480];
 let pressedOn = '';
 
 /** The foe as this game shows it nearest `at`. */
-function foeAt(at: XZ): THREE.Vector3 | null {
-  let best: THREE.Vector3 | null = null, bestDistance = Infinity;
+function foeAt(at: XZ): Vec3 | null {
+  let best: Vec3 | null = null, bestDistance = Infinity;
   for (const foe of G.enemies) {
     const distance = Math.hypot(foe.pos.x - at[0], foe.pos.z - at[1]);
     if (!foe.alive || distance >= bestDistance) continue;
@@ -70,7 +70,7 @@ function ctrlInput(p: PlannedPing, frame: number): Frame | null {
   const held = frame >= start && frame < p.frame;
   // (held first over `from`, the aim moved onto `at` for the last `HELD` frames)
   const on = p.from && frame < p.frame - HELD ? p.from : p.at;
-  const aim = p.kind === 'foe' && on === p.at ? foeAt(p.at) : new THREE.Vector3(on[0], 0, on[1]);
+  const aim = p.kind === 'foe' && on === p.at ? foeAt(p.at) : new Vec3(on[0], 0, on[1]);
   return { aim: aim ?? undefined, keys: held ? ['shiftleft'] : [] };
 }
 

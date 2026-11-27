@@ -2,7 +2,7 @@
 // on the screen sat against standing. From play: "zoom in/out with mouse wheel in 3rd person should zoom in on the
 // seated character, not the standing one (if seated)": the camera closed on where a standing hero's shoulders would
 // be, over a seated one's head.
-import * as THREE from 'three';
+import { Vec3 } from './sceneApi.ts';
 import { G } from '../../../src/state';
 import { saveCamera, setView, updateCamera, viewMode, zoomBy } from '../../../src/core/renderer';
 import type { Lab } from './lab';
@@ -31,7 +31,7 @@ export function neckOnScreen(lab: Lab): Framed {
   zoomBy(ALL_THE_WAY_IN);
   for (let i = 0; i < SETTLE; i++) updateCamera(10, lab.player.pos, lab.framedHeight());
   G.camera.updateMatrixWorld();
-  const world = lab.joints.neck.getWorldPosition(new THREE.Vector3());
+  const world = lab.joints.neck.getWorldPosition(new Vec3());
   const feet = lab.player.pos.y;
   const onScreen = world.clone().project(G.camera).y;
   const framed = { onScreen, neck: world.y - feet, camera: G.camera.position.y - feet };

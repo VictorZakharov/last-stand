@@ -9,7 +9,9 @@
 // hold a solid there no higher than the ray met. Pictured close to at noon by a seat log, a street lamp and the notice
 // board, the grass growing up to each, and the campfire's ring of stones close to by day and by night. `canary` takes one prop out of the map,
 // which must be found.
-import * as THREE from 'three';
+import {
+  Box3, CanvasTexture, DataTexture, InstancedMesh, Mat4, Mesh, Node, Raycaster, SkinnedMesh, Vec2, Vec3,
+} from './sceneApi.ts';
 import type { Lab, Pictured } from './lab';
 import { G } from '../../../src/state';
 import { CAMPFIRE, NOTICE, YARD, yardToWorld } from '../../../src/data/village';
@@ -95,12 +97,12 @@ interface Maps {
 function readMaps(): Maps {
   const meadow = G.arena.village!.meadow;
   const half = (meadow.userData.mask as { half: number }).half;
-  const canvas = (meadow.userData.maskTexture as THREE.CanvasTexture).image as HTMLCanvasElement;
+  const canvas = (meadow.userData.maskTexture as CanvasTexture).image as HTMLCanvasElement;
   const maskSide = canvas.width;
   const pixels = canvas.getContext('2d')!.getImageData(0, 0, maskSide, maskSide).data;
   const mask = new Float32Array(maskSide * maskSide);
   for (let i = 0; i < mask.length; i++) mask[i] = pixels[i * 4] / 255;
-  const solidsTexture = meadow.userData.solids as THREE.DataTexture;
+  const solidsTexture = meadow.userData.solids as DataTexture;
   const solids = (solidsTexture.image.data as Uint8Array).slice();
   return { mask, maskSide, solids, solidsSide: solidsTexture.image.width, half };
 }
@@ -166,28 +168,28 @@ function footprints(): Foot[] {
 /** Whether `mesh` is drawn as something solid, as the player sees it: its colour and depth written, nothing cut out
  *  of it. The lab's own rule, not the game's (`solid` in meadowSolids.ts): read by the game's, the check passed by the
  *  seat logs the game's rule left out of the map, which drew blades up through their tops ("Not fixed", #679). */
-function drawnSolid(mesh: THREE.Mesh): boolean {
+function drawnSolid(mesh: Mesh): boolean {
   const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
   return materials.every((m) => m.visible && m.colorWrite && m.depthWrite && m.alphaTest === 0);
 }
 
 /** What's built in the village as the grass's map is made of it, low enough to meet: shown, opaque meshes standing
  *  still but the meadow's own, each instance of an instanced one a mesh of its own, the merged ones cut into chunks for rays. */
-function builtMeshes(): THREE.Mesh[] {
+function builtMeshes(): Mesh[] {
   const village = G.arena.village!;
-  const plain: THREE.Mesh[] = [];
-  const instances: THREE.Mesh[] = [];
-  const matrix = new THREE.Matrix4();
+  const plain: Mesh[] = [];
+  const instances: Mesh[] = [];
+  const matrix = new Mat4();
   village.meadow.parent!.traverseVisible((object) => {
-    const mesh = object as THREE.Mesh;
+    const mesh = object as Mesh;
     if (!mesh.isMesh || !mesh.geometry?.attributes.position || !drawnSolid(mesh)) return;
     // (what moves stands nowhere for good: the heroes, the yard's dummies and its ghost, the chest's lid)
-    if ((mesh as THREE.SkinnedMesh).isSkinnedMesh || mesh.layers.isEnabled(CROWD_LAYER) || mesh.layers.isEnabled(HERO_SHADOW_LAYER)) return;
+    if ((mesh as SkinnedMesh).isSkinnedMesh || mesh.layers.isEnabled(CROWD_LAYER) || mesh.layers.isEnabled(HERO_SHADOW_LAYER)) return;
     // (nor the meadow, nor the ghost by the yard's gate, a projection the grass stands through: game/ghost.ts)
-    for (let up: THREE.Object3D | null = mesh; up; up = up.parent) {
+    for (let up: Node | null = mesh; up; up = up.parent) {
       if (up === village.meadow || up.name.startsWith(GHOST_NAMED)) return;
     }
-    const instanced = mesh as THREE.InstancedMesh;
+    const instanced = mesh as InstancedMesh;
     if (!instanced.isInstancedMesh) {
       plain.push(mesh);
       return;
@@ -195,7 +197,7 @@ function builtMeshes(): THREE.Mesh[] {
     // (as built: culled in cells, its instances are packed by what the last render showed)
     const built = game.culling.instancesAsBuilt(instanced);
     for (let at = 0; at < built.length; at += 16) {
-      const one = new THREE.Mesh(mesh.geometry, mesh.material);
+      const one = new Mesh(mesh.geometry, mesh.material);
       one.matrixAutoUpdate = false;
       one.name = `${meshName(instanced)} instanced`;
       one.matrixWorld.copy(mesh.matrixWorld).multiply(matrix.fromArray(built, at));
@@ -206,8 +208,8 @@ function builtMeshes(): THREE.Mesh[] {
 }
 
 /** `mesh`'s box in the world, made once. */
-const boxes = new WeakMap<THREE.Mesh, THREE.Box3>();
-function boxOf(mesh: THREE.Mesh): THREE.Box3 {
+const boxes = new WeakMap<Mesh, Box3>();
+function boxOf(mesh: Mesh): Box3 {
   let box = boxes.get(mesh);
   if (!box) {
     if (!mesh.geometry.boundingBox) mesh.geometry.computeBoundingBox();
@@ -218,7 +220,7 @@ function boxOf(mesh: THREE.Mesh): THREE.Box3 {
 }
 
 /** The meshes whose box reaches over `foot`. */
-function meshesOver(meshes: THREE.Mesh[], foot: Foot): THREE.Mesh[] {
+function meshesOver(meshes: Mesh[], foot: Foot): Mesh[] {
   return meshes.filter((mesh) => {
     const box = boxOf(mesh);
     return box.min.x <= foot.x + foot.r && box.max.x >= foot.x - foot.r && box.min.z <= foot.z + foot.r
@@ -230,10 +232,10 @@ function meshesOver(meshes: THREE.Mesh[], foot: Foot): THREE.Mesh[] {
 interface Under { x: number; z: number; met: number; foot: Foot; by: string }
 
 /** The points of each footprint where a ray down meets a solid under `SOLID_RANGE`, over ground grass grows on. */
-function pointsUnder(maps: Maps, feet: Foot[], meshes: THREE.Mesh[]): Under[] {
-  const ray = new THREE.Raycaster();
-  const down = new THREE.Vector3(0, -1, 0);
-  const from = new THREE.Vector3();
+function pointsUnder(maps: Maps, feet: Foot[], meshes: Mesh[]): Under[] {
+  const ray = new Raycaster();
+  const down = new Vec3(0, -1, 0);
+  const from = new Vec3();
   const under: Under[] = [];
   for (const foot of feet) {
     const near = meshesOver(meshes, foot);
@@ -248,7 +250,7 @@ function pointsUnder(maps: Maps, feet: Foot[], meshes: THREE.Mesh[]): Under[] {
         const hits = ray.intersectObjects(near, false).filter((hit) => hit.point.y > GROUND_UP && hit.point.y < SOLID_RANGE());
         if (!hits.length) continue;
         const lowest = hits.reduce((a, b) => (a.point.y < b.point.y ? a : b));
-        under.push({ x, z, met: lowest.point.y, foot, by: meshName(lowest.object as THREE.Mesh) });
+        under.push({ x, z, met: lowest.point.y, foot, by: meshName(lowest.object as Mesh) });
       }
     }
   }
@@ -263,9 +265,9 @@ function countBy(under: Under[]): Map<string, number> {
 }
 
 /** A mesh's name for a line: its own or its nearest parent's, and its material's. */
-function meshName(mesh: THREE.Mesh): string {
+function meshName(mesh: Mesh): string {
   const path: string[] = [];
-  for (let up: THREE.Object3D | null = mesh; up && path.length < 4; up = up.parent) path.push(up.name || up.type);
+  for (let up: Node | null = mesh; up && path.length < 4; up = up.parent) path.push(up.name || up.type);
   return path.join(' < ');
 }
 
@@ -299,18 +301,18 @@ function withoutFoot(maps: Maps, foot: Foot): Maps {
 }
 
 /** The spots pictured close to: a seat log, the street lamp nearest the campfire and the notice board. */
-function picturedSpots(): { label: string; at: THREE.Vector3 }[] {
+function picturedSpots(): { label: string; at: Vec3 }[] {
   const lamps = G.arena.village!.obstacles.filter((o) => Math.abs(o.h - LAMPS.high) < 1e-6 && Math.abs(o.r - 0.35) < 1e-6);
-  const fire = new THREE.Vector2(CAMPFIRE[0], CAMPFIRE[1]);
-  const away = (o: { x: number; z: number }): number => fire.distanceTo(new THREE.Vector2(o.x, o.z));
+  const fire = new Vec2(CAMPFIRE[0], CAMPFIRE[1]);
+  const away = (o: { x: number; z: number }): number => fire.distanceTo(new Vec2(o.x, o.z));
   const nearest = lamps.sort((a, b) => away(a) - away(b))[0];
   // (each of the campfire's three seat logs: blades stood through one alone in a review's picture)
   const logs = SEAT_LOGS.map((angle, k) => ({
     label: `seat log ${k + 1} by the campfire`,
-    at: new THREE.Vector3(CAMPFIRE[0] + Math.cos(angle) * 2.2, 0.2, CAMPFIRE[1] + Math.sin(angle) * 2.2),
+    at: new Vec3(CAMPFIRE[0] + Math.cos(angle) * 2.2, 0.2, CAMPFIRE[1] + Math.sin(angle) * 2.2),
   }));
-  const spots = [...logs, { label: 'the notice board', at: new THREE.Vector3(NOTICE.x, 0.3, NOTICE.z) }];
-  if (nearest) spots.push({ label: 'a street lamp', at: new THREE.Vector3(nearest.x, 0.3, nearest.z) });
+  const spots = [...logs, { label: 'the notice board', at: new Vec3(NOTICE.x, 0.3, NOTICE.z) }];
+  if (nearest) spots.push({ label: 'a street lamp', at: new Vec3(nearest.x, 0.3, nearest.z) });
   return spots;
 }
 
@@ -323,7 +325,7 @@ async function pictures(lab: Lab): Promise<Pictured[]> {
   // (from above alone: the low close-ups stood in the grass, a wall of blades before the camera)
   const moments: Pictured[] = picturedSpots().flatMap((spot) => PICTURE_FROM.map((distance) =>
     lab.picture(`${spot.label}, ${distance} m off`, ['above'], [], { at: spot.at, distance })));
-  const stones = new THREE.Vector3(CAMPFIRE[0], 0.1, CAMPFIRE[1]);
+  const stones = new Vec3(CAMPFIRE[0], 0.1, CAMPFIRE[1]);
   for (const hour of STONES_AT) {
     holdHour(hour);
     await lab.step(2);
@@ -338,7 +340,7 @@ async function pictures(lab: Lab): Promise<Pictured[]> {
       // (the close-up turned by his facing, 0 along +z: the camera stands out on the grass's side of the log, as the
       // review's did; on the fire's side the ground is bare)
       lab.player.facing = Math.atan2(Math.cos(angle), Math.sin(angle));
-      const log = new THREE.Vector3(CAMPFIRE[0] + Math.cos(angle) * 2.2, 0.1, CAMPFIRE[1] + Math.sin(angle) * 2.2);
+      const log = new Vec3(CAMPFIRE[0] + Math.cos(angle) * 2.2, 0.1, CAMPFIRE[1] + Math.sin(angle) * 2.2);
       moments.push(lab.picture(`seat log ${k + 1}'s foot, low, at ${hour}h`, ['front', 'above'], [], { at: log, distance: LOW_FROM }));
     });
   }
@@ -381,7 +383,7 @@ async function seatLogsSeen(lab: Lab): Promise<Pictured[]> {
   await viewBy(lab, 'third');
   for (const stand of stands().filter((s) => s.what.startsWith('seat log'))) {
     G.player.walkTo = null;
-    G.player.place(new THREE.Vector3(stand.x, groundHeight(stand.x, stand.z), stand.z), 0);
+    G.player.place(new Vec3(stand.x, groundHeight(stand.x, stand.z), stand.z), 0);
     faceCamera(Math.atan2(stand.lookX - stand.x, stand.lookZ - stand.z));
     await lab.step(SETTLE);
     for (const hour of SEEN_AT) {

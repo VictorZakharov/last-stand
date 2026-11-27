@@ -22,7 +22,7 @@ import { skillTooltip } from '../../../src/ui/tooltip';
 import { holdFor, type BoundSkill } from './cast';
 import { castAt, type Cast, type Hit, type Planting } from './hits';
 import type { Enemy } from '../../../src/entities/enemy';
-import type * as THREE from 'three';
+import type { Vec3 } from './sceneApi.ts';
 import { gearsOf } from './gears';
 
 export interface TooltipsOptions {
@@ -195,7 +195,7 @@ function raiseDamage(): boolean {
  *  those its blows drive back (stood still, Rampage's knock drove them out of its reach within a second), and his
  *  Energy kept full (its drain rises as it builds) for `seconds`; the canary's raise as it begins. */
 function heldUp(canary: boolean, seconds: number): Planting {
-  const spots = new Map<Enemy, THREE.Vector3>();
+  const spots = new Map<Enemy, Vec3>();
   let raised = false;
   return (frame, cast) => {
     if (canary && !raised) raised = raiseDamage();

@@ -39,10 +39,10 @@ export class Plane {
     return this;
   }
 
-  /** the plane through three points, facing the way `a`, `b`, `c` wind anticlockwise */
-  setFromCoplanarPoints(a: Vec3, b: Vec3, c: Vec3): this {
-    const normal = edgeA.subVectors(c, b).cross(edgeB.subVectors(a, b)).normalize();
-    return this.setFromNormalAndCoplanarPoint(normal, a);
+  /** the plane through three points, facing the way `pointA`, `pointB`, `pointC` wind anticlockwise */
+  setFromCoplanarPoints(pointA: Vec3, pointB: Vec3, pointC: Vec3): this {
+    const normal = edgeA.subVectors(pointC, pointB).cross(edgeB.subVectors(pointA, pointB)).normalize();
+    return this.setFromNormalAndCoplanarPoint(normal, pointA);
   }
 
   /** a new plane with this normal and constant */

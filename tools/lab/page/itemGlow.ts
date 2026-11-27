@@ -9,7 +9,7 @@
 // (a loop's is like the rest; a frame a cycle on against now can't tell, its shader given only the share of the
 // cycle: that check passed a join the owner saw). Its canary makes the glow ten times as strong (too bright),
 // nothing (unseen), and skips 2 s as the cycle starts over (a join).
-import * as THREE from 'three';
+import { Color, Vec3 } from './sceneApi.ts';
 import { G } from '../../../src/state';
 import { gearGlow, ITEM_GLOW, tickItemGlow } from '../../../src/core/materials';
 import { qualityLevel, useQuality } from '../../../src/core/quality';
@@ -75,7 +75,7 @@ interface Added {
   /** the share of its lit pixels within a fifth of the median */
   even: number;
   /** its light's colour (linear, summed) */
-  colour: THREE.Color;
+  colour: Color;
 }
 
 /** The close-ups drawn now, as linear light (8-bit sRGB read through gamma 2.2, as light.ts reads an SDR frame). */
@@ -104,7 +104,7 @@ function drawnAt(lab: Lab, strength: number, time: number): Light {
 function addedBy(before: Light, after: Light): Added {
   const pixels = before.length / 4;
   const lights: number[] = [];
-  const colour = new THREE.Color(0, 0, 0);
+  const colour = new Color(0, 0, 0);
   for (let at = 0; at < before.length; at += 4) {
     const red = after[at] - before[at];
     const green = after[at + 1] - before[at + 1];
@@ -157,15 +157,15 @@ function apart(one: Float32Array, other: Float32Array): number {
 }
 
 /** A colour's chroma: itself less its grey. */
-function chromaOf(colour: THREE.Color): THREE.Vector3 {
+function chromaOf(colour: Color): Vec3 {
   const grey = (colour.r + colour.g + colour.b) / 3;
-  return new THREE.Vector3(colour.r - grey, colour.g - grey, colour.b - grey);
+  return new Vec3(colour.r - grey, colour.g - grey, colour.b - grey);
 }
 
 /** How far `colour`'s hue leans `rarity`'s way: the cosine between their chromas. */
-function hueLean(colour: THREE.Color, rarity: RarityId): number {
+function hueLean(colour: Color, rarity: RarityId): number {
   const own = chromaOf(colour);
-  const wanted = chromaOf(new THREE.Color(RARITIES.find((r) => r.id === rarity)!.color));
+  const wanted = chromaOf(new Color(RARITIES.find((r) => r.id === rarity)!.color));
   if (!own.length() || !wanted.length()) return 0;
   return own.dot(wanted) / (own.length() * wanted.length());
 }

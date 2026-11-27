@@ -6,8 +6,8 @@
 // the scene compiles or draws more. Through the eyes and over the shoulder the camera stands where he does, and walls hide
 // what they hide.
 import {
-  Camera, ClampToEdgeWrapping, DataTexture, DataUtils, HalfFloatType, LinearFilter, Mat4, Maths, NearestFilter,
-  RedFormat, RepeatWrapping, RGBAFormat, Texture, UnsignedByteType, Vec2, Vec4,
+  Camera, ClampToEdgeWrapping, DataTexture, fromHalfFloat, HalfFloatType, LinearFilter, Mat4, Maths, NearestFilter,
+  RedFormat, RepeatWrapping, RGBAFormat, Texture, toHalfFloat, UnsignedByteType, Vec2, Vec4,
 } from '../engine/api/index.ts';
 import { onWholeView, wholeView } from './wholeView';
 
@@ -301,10 +301,10 @@ function showRays(moved: boolean, by: number): void {
   if (!any) return;
   for (let i = 0; i < RAYS; i++) {
     const growing = to[i] > from[i];
-    strip[i * 4] = DataUtils.toHalfFloat(growing ? from[i] : to[i]);
-    strip[i * 4 + 1] = DataUtils.toHalfFloat(growing ? to[i] : from[i]);
-    strip[i * 4 + 2] = DataUtils.toHalfFloat(growing ? faded[i] : 1 - faded[i]);
-    strip[i * 4 + 3] = DataUtils.toHalfFloat(to[i]);
+    strip[i * 4] = toHalfFloat(growing ? from[i] : to[i]);
+    strip[i * 4 + 1] = toHalfFloat(growing ? to[i] : from[i]);
+    strip[i * 4 + 2] = toHalfFloat(growing ? faded[i] : 1 - faded[i]);
+    strip[i * 4 + 3] = toHalfFloat(to[i]);
   }
   sightTexture.needsUpdate = true;
 }
@@ -396,10 +396,10 @@ function castDoor(door: SightDoor, hx: number, hz: number): void {
     const dx = Math.cos(angle);
     const dz = Math.sin(angle);
     const seen = Math.min(rayReach(x, z, dx, dz), wedged ? wedgeReach(door, ax, az, x, z, dx, dz, withDepth) : FAR);
-    const reach = DataUtils.toHalfFloat(seen);
+    const reach = toHalfFloat(seen);
     strip[row + i * 4] = reach;
     strip[row + i * 4 + 1] = reach;
-    strip[row + i * 4 + 2] = DataUtils.toHalfFloat(1);
+    strip[row + i * 4 + 2] = toHalfFloat(1);
     strip[row + i * 4 + 3] = reach;
   }
   SIGHT.uSightDoor.value.set(x, z, door.nx, door.nz);
@@ -505,9 +505,9 @@ function seenAlongRay(across: number, away: number, row: number): number {
     const past = Math.min(1, Math.max(0, (away - reach - SIGHT_LOOK.wallFrom) / span));
     return 1 - past * past * (3 - 2 * past);
   };
-  const nearer = seenPast(DataUtils.fromHalfFloat(strip[ray * 4]));
-  const further = seenPast(DataUtils.fromHalfFloat(strip[ray * 4 + 1]));
-  return nearer + (further - nearer) * DataUtils.fromHalfFloat(strip[ray * 4 + 2]);
+  const nearer = seenPast(fromHalfFloat(strip[ray * 4]));
+  const further = seenPast(fromHalfFloat(strip[ray * 4 + 1]));
+  return nearer + (further - nearer) * fromHalfFloat(strip[ray * 4 + 2]);
 }
 
 /** For a harness (tools/lab): how far (x, z) is seen now, 0 to 1, as `SIGHT_GLSL` reads it off the rays (a harness can't

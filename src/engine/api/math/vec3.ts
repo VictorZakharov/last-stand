@@ -88,14 +88,14 @@ export class Vec3 {
     return new Vec3(this.x, this.y, this.z);
   }
 
-  /** takes `v`'s numbers */
-  copy(v: Vec3): this {
-    return this.set(v.x, v.y, v.z);
+  /** takes `vector`'s numbers */
+  copy(vector: Vec3): this {
+    return this.set(vector.x, vector.y, vector.z);
   }
 
-  /** adds `v` */
-  add(v: Vec3): this {
-    return this.set(this.x + v.x, this.y + v.y, this.z + v.z);
+  /** adds `vector` */
+  add(vector: Vec3): this {
+    return this.set(this.x + vector.x, this.y + vector.y, this.z + vector.z);
   }
 
   /** adds `scalar` to each */
@@ -104,28 +104,28 @@ export class Vec3 {
   }
 
   /** becomes `a + b` */
-  addVectors(a: Vec3, b: Vec3): this {
-    return this.set(a.x + b.x, a.y + b.y, a.z + b.z);
+  addVectors(left: Vec3, right: Vec3): this {
+    return this.set(left.x + right.x, left.y + right.y, left.z + right.z);
   }
 
-  /** adds `v` times `scale` */
-  addScaledVector(v: Vec3, scale: number): this {
-    return this.set(this.x + v.x * scale, this.y + v.y * scale, this.z + v.z * scale);
+  /** adds `vector` times `scale` */
+  addScaledVector(vector: Vec3, scale: number): this {
+    return this.set(this.x + vector.x * scale, this.y + vector.y * scale, this.z + vector.z * scale);
   }
 
-  /** takes `v` away */
-  sub(v: Vec3): this {
-    return this.set(this.x - v.x, this.y - v.y, this.z - v.z);
+  /** takes `vector` away */
+  sub(vector: Vec3): this {
+    return this.set(this.x - vector.x, this.y - vector.y, this.z - vector.z);
   }
 
   /** becomes `a - b` */
-  subVectors(a: Vec3, b: Vec3): this {
-    return this.set(a.x - b.x, a.y - b.y, a.z - b.z);
+  subVectors(left: Vec3, right: Vec3): this {
+    return this.set(left.x - right.x, left.y - right.y, left.z - right.z);
   }
 
-  /** multiplies each by `v`'s */
-  multiply(v: Vec3): this {
-    return this.set(this.x * v.x, this.y * v.y, this.z * v.z);
+  /** multiplies each by `vector`'s */
+  multiply(vector: Vec3): this {
+    return this.set(this.x * vector.x, this.y * vector.y, this.z * vector.z);
   }
 
   /** multiplies each by `scalar` */
@@ -138,14 +138,24 @@ export class Vec3 {
     return this.multiplyScalar(1 / scalar);
   }
 
-  /** each the lesser of its own and `v`'s */
-  min(v: Vec3): this {
-    return this.set(Math.min(this.x, v.x), Math.min(this.y, v.y), Math.min(this.z, v.z));
+  /** each the lesser of its own and `vector`'s */
+  min(vector: Vec3): this {
+    return this.set(Math.min(this.x, vector.x), Math.min(this.y, vector.y), Math.min(this.z, vector.z));
   }
 
-  /** each the greater of its own and `v`'s */
-  max(v: Vec3): this {
-    return this.set(Math.max(this.x, v.x), Math.max(this.y, v.y), Math.max(this.z, v.z));
+  /** each the greater of its own and `vector`'s */
+  max(vector: Vec3): this {
+    return this.set(Math.max(this.x, vector.x), Math.max(this.y, vector.y), Math.max(this.z, vector.z));
+  }
+
+  /** each kept between `low`'s and `high`'s */
+  clamp(low: Vec3, high: Vec3): this {
+    return this.max(low).min(high);
+  }
+
+  /** each rounded down */
+  floor(): this {
+    return this.set(Math.floor(this.x), Math.floor(this.y), Math.floor(this.z));
   }
 
   /** each the other way */
@@ -153,9 +163,9 @@ export class Vec3 {
     return this.set(-this.x, -this.y, -this.z);
   }
 
-  /** the dot product with `v` */
-  dot(v: Vec3): number {
-    return this.x * v.x + this.y * v.y + this.z * v.z;
+  /** the dot product with `vector` */
+  dot(vector: Vec3): number {
+    return this.x * vector.x + this.y * vector.y + this.z * vector.z;
   }
 
   /** the length squared */
@@ -178,41 +188,43 @@ export class Vec3 {
     return this.normalize().multiplyScalar(length);
   }
 
-  /** moved `alpha` of the way to `v` */
-  lerp(v: Vec3, alpha: number): this {
+  /** moved `alpha` of the way to `vector` */
+  lerp(vector: Vec3, alpha: number): this {
     const x = this.x;
     const y = this.y;
     const z = this.z;
-    return this.set(x + (v.x - x) * alpha, y + (v.y - y) * alpha, z + (v.z - z) * alpha);
+    return this.set(x + (vector.x - x) * alpha, y + (vector.y - y) * alpha, z + (vector.z - z) * alpha);
   }
 
-  /** becomes the point `alpha` of the way from `a` to `b` */
-  lerpVectors(a: Vec3, b: Vec3, alpha: number): this {
-    return this.set(a.x + (b.x - a.x) * alpha, a.y + (b.y - a.y) * alpha, a.z + (b.z - a.z) * alpha);
+  /** becomes the point `alpha` of the way from `left` to `right` */
+  lerpVectors(left: Vec3, right: Vec3, alpha: number): this {
+    const x = left.x + (right.x - left.x) * alpha;
+    const y = left.y + (right.y - left.y) * alpha;
+    return this.set(x, y, left.z + (right.z - left.z) * alpha);
   }
 
-  /** becomes its cross product with `v` (`this × v`) */
-  cross(v: Vec3): this {
-    return this.crossVectors(this, v);
+  /** becomes its cross product with `vector` (`this × v`) */
+  cross(vector: Vec3): this {
+    return this.crossVectors(this, vector);
   }
 
   /** becomes `a × b` (either may be this vector) */
-  crossVectors(a: Vec3, b: Vec3): this {
-    const ax = a.x;
-    const ay = a.y;
-    const az = a.z;
-    const bx = b.x;
-    const by = b.y;
-    const bz = b.z;
+  crossVectors(left: Vec3, right: Vec3): this {
+    const ax = left.x;
+    const ay = left.y;
+    const az = left.z;
+    const bx = right.x;
+    const by = right.y;
+    const bz = right.z;
     return this.set(ay * bz - az * by, az * bx - ax * bz, ax * by - ay * bx);
   }
 
-  /** becomes its part along `v` */
-  projectOnVector(v: Vec3): this {
-    const lengthSq = v.lengthSq();
+  /** becomes its part along `vector` */
+  projectOnVector(vector: Vec3): this {
+    const lengthSq = vector.lengthSq();
     if (lengthSq === 0) return this.set(0, 0, 0);
-    const scale = v.dot(this) / lengthSq;
-    return this.copy(v).multiplyScalar(scale);
+    const scale = vector.dot(this) / lengthSq;
+    return this.copy(vector).multiplyScalar(scale);
   }
 
   /** becomes its part in the plane whose normal is `planeNormal` (one long) */
@@ -221,35 +233,35 @@ export class Vec3 {
     return this.sub(scratch);
   }
 
-  /** the angle to `v`, in radians (a right angle when either is 0) */
-  angleTo(v: Vec3): number {
-    const lengths = Math.sqrt(this.lengthSq() * v.lengthSq());
+  /** the angle to `vector`, in radians (a right angle when either is 0) */
+  angleTo(vector: Vec3): number {
+    const lengths = Math.sqrt(this.lengthSq() * vector.lengthSq());
     if (lengths === 0) return Math.PI / 2;
-    return Math.acos(clamp(this.dot(v) / lengths, -1, 1));
+    return Math.acos(clamp(this.dot(vector) / lengths, -1, 1));
   }
 
-  /** the distance to `v` */
-  distanceTo(v: Vec3): number {
-    return Math.sqrt(this.distanceToSquared(v));
+  /** the distance to `vector` */
+  distanceTo(vector: Vec3): number {
+    return Math.sqrt(this.distanceToSquared(vector));
   }
 
-  /** the distance to `v`, squared */
-  distanceToSquared(v: Vec3): number {
-    const dx = this.x - v.x;
-    const dy = this.y - v.y;
-    const dz = this.z - v.z;
+  /** the distance to `vector`, squared */
+  distanceToSquared(vector: Vec3): number {
+    const dx = this.x - vector.x;
+    const dy = this.y - vector.y;
+    const dz = this.z - vector.z;
     return dx * dx + dy * dy + dz * dz;
   }
 
-  /** turned by `q` (one long) */
-  applyQuaternion(q: Quat): this {
+  /** turned by `quaternion` (one long); follows three.js 0.187.0's `Vector3.applyQuaternion` (`t = 2 q × v`) */
+  applyQuaternion(quaternion: Quat): this {
     const vx = this.x;
     const vy = this.y;
     const vz = this.z;
-    const qx = q.x;
-    const qy = q.y;
-    const qz = q.z;
-    const qw = q.w;
+    const qx = quaternion.x;
+    const qy = quaternion.y;
+    const qz = quaternion.z;
+    const qw = quaternion.w;
     const tx = 2 * (qy * vz - qz * vy);
     const ty = 2 * (qz * vx - qx * vz);
     const tz = 2 * (qx * vy - qy * vx);
@@ -268,40 +280,44 @@ export class Vec3 {
     return this.applyQuaternion(turn.setFromAxisAngle(axis, angle));
   }
 
-  /** multiplied by `m` */
-  applyMatrix3(m: Mat3): this {
+  /** multiplied by `matrix` */
+  applyMatrix3(matrix: Mat3): this {
     const x = this.x;
     const y = this.y;
     const z = this.z;
-    const e = m.elements;
-    return this.set(e[0] * x + e[3] * y + e[6] * z, e[1] * x + e[4] * y + e[7] * z, e[2] * x + e[5] * y + e[8] * z);
+    const elements = matrix.elements;
+    const px = elements[0] * x + elements[3] * y + elements[6] * z;
+    const py = elements[1] * x + elements[4] * y + elements[7] * z;
+    return this.set(px, py, elements[2] * x + elements[5] * y + elements[8] * z);
   }
 
-  /** multiplied by the normal matrix `m`, then made one long */
-  applyNormalMatrix(m: Mat3): this {
-    return this.applyMatrix3(m).normalize();
+  /** multiplied by the normal matrix `matrix`, then made one long */
+  applyNormalMatrix(matrix: Mat3): this {
+    return this.applyMatrix3(matrix).normalize();
   }
 
-  /** placed by `m`, as a point (divided by its w: a projection's too) */
-  applyMatrix4(m: Mat4): this {
+  /** placed by `matrix`, as a point (divided by its w: a projection's too) */
+  applyMatrix4(matrix: Mat4): this {
     const x = this.x;
     const y = this.y;
     const z = this.z;
-    const e = m.elements;
-    const w = 1 / (e[3] * x + e[7] * y + e[11] * z + e[15]);
-    const px = (e[0] * x + e[4] * y + e[8] * z + e[12]) * w;
-    const py = (e[1] * x + e[5] * y + e[9] * z + e[13]) * w;
-    const pz = (e[2] * x + e[6] * y + e[10] * z + e[14]) * w;
+    const elements = matrix.elements;
+    const w = 1 / (elements[3] * x + elements[7] * y + elements[11] * z + elements[15]);
+    const px = (elements[0] * x + elements[4] * y + elements[8] * z + elements[12]) * w;
+    const py = (elements[1] * x + elements[5] * y + elements[9] * z + elements[13]) * w;
+    const pz = (elements[2] * x + elements[6] * y + elements[10] * z + elements[14]) * w;
     return this.set(px, py, pz);
   }
 
-  /** turned by `m`'s upper 3 by 3 as a direction, then made one long */
-  transformDirection(m: Mat4): this {
+  /** turned by `matrix`'s upper 3 by 3 as a direction, then made one long */
+  transformDirection(matrix: Mat4): this {
     const x = this.x;
     const y = this.y;
     const z = this.z;
-    const e = m.elements;
-    this.set(e[0] * x + e[4] * y + e[8] * z, e[1] * x + e[5] * y + e[9] * z, e[2] * x + e[6] * y + e[10] * z);
+    const elements = matrix.elements;
+    const px = elements[0] * x + elements[4] * y + elements[8] * z;
+    const py = elements[1] * x + elements[5] * y + elements[9] * z;
+    this.set(px, py, elements[2] * x + elements[6] * y + elements[10] * z);
     return this.normalize();
   }
 
@@ -315,23 +331,23 @@ export class Vec3 {
     return this.applyMatrix4(camera.projectionMatrixInverse).applyMatrix4(camera.matrixWorld);
   }
 
-  /** becomes `m`'s translation */
-  setFromMatrixPosition(m: Mat4): this {
-    const e = m.elements;
-    return this.set(e[12], e[13], e[14]);
+  /** becomes `matrix`'s translation */
+  setFromMatrixPosition(matrix: Mat4): this {
+    const elements = matrix.elements;
+    return this.set(elements[12], elements[13], elements[14]);
   }
 
-  /** becomes the scale along each of `m`'s axes */
-  setFromMatrixScale(m: Mat4): this {
-    const sx = this.setFromMatrixColumn(m, 0).length();
-    const sy = this.setFromMatrixColumn(m, 1).length();
-    const sz = this.setFromMatrixColumn(m, 2).length();
+  /** becomes the scale along each of `matrix`'s axes */
+  setFromMatrixScale(matrix: Mat4): this {
+    const sx = this.setFromMatrixColumn(matrix, 0).length();
+    const sy = this.setFromMatrixColumn(matrix, 1).length();
+    const sz = this.setFromMatrixColumn(matrix, 2).length();
     return this.set(sx, sy, sz);
   }
 
-  /** becomes `m`'s column `index` (0 to 3) */
-  setFromMatrixColumn(m: Mat4, index: number): this {
-    return this.fromArray(m.elements, index * 4);
+  /** becomes `matrix`'s column `index` (0 to 3) */
+  setFromMatrixColumn(matrix: Mat4, index: number): this {
+    return this.fromArray(matrix.elements, index * 4);
   }
 
   /** takes `euler`'s three angles */
@@ -350,9 +366,9 @@ export class Vec3 {
     return this.set(across * Math.sin(theta), Math.cos(phi) * radius, across * Math.cos(theta));
   }
 
-  /** whether `v` has the same numbers */
-  equals(v: Vec3): boolean {
-    return v.x === this.x && v.y === this.y && v.z === this.z;
+  /** whether `vector` has the same numbers */
+  equals(vector: Vec3): boolean {
+    return vector.x === this.x && vector.y === this.y && vector.z === this.z;
   }
 
   /** takes three numbers from `array` at `offset` */
@@ -363,7 +379,7 @@ export class Vec3 {
   /** the three numbers as a new array */
   toArray(): Vec3Tuple;
   /** writes the three numbers into `array` at `offset` */
-  toArray<T extends NumberArray>(array: T, offset?: number): T;
+  toArray<Out extends NumberArray>(array: Out, offset?: number): Out;
   toArray(array: NumberArray = [], offset = 0): NumberArray {
     array[offset] = this.x;
     array[offset + 1] = this.y;

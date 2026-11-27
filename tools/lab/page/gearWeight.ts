@@ -2,7 +2,7 @@
 // men are 85 kg on average; the heroes are lean), what each class wears on its segments as the gear it has equipped
 // shows it (plate and mail are most of a fifth of the body again), and what it carries, each weighed where its meshes
 // are this frame: the weapon or bow in a fist, a shield on its arm, the quiver on the back.
-import * as THREE from 'three';
+import { Box3, growByNode, Mesh, Node, Vec3 } from './sceneApi.ts';
 import type { Lab } from './lab';
 import type { Build, Load, SegmentName } from './balance';
 import { isShown, isUnder } from './geometry';
@@ -101,18 +101,18 @@ function heldKg(lab: Lab, side: number): number {
 
 /** The centre of what a hand holds: its shown meshes but the hand's own (and its fingers'), or nothing. (Told apart
  *  by the hand's meshes' mark, which went with the sculpted hands, the fist was weighed as part of the weapon.) */
-function heldCentre(hand: THREE.Object3D): THREE.Vector3 | null {
+function heldCentre(hand: Node): Vec3 | null {
   const own = drawnHand(hand);
   return meshCentre(hand, (mesh) => !isUnder(mesh, own));
 }
 
 /** The centre of the shown meshes under `object` that `keep` keeps, by their boxes in the world, or nothing. */
-function meshCentre(object: THREE.Object3D, keep: (mesh: THREE.Mesh) => boolean): THREE.Vector3 | null {
-  const box = new THREE.Box3();
+function meshCentre(object: Node, keep: (mesh: Mesh) => boolean): Vec3 | null {
+  const box = new Box3();
   object.traverse((child) => {
-    const mesh = child as THREE.Mesh;
+    const mesh = child as Mesh;
     if (!mesh.isMesh || !isShown(mesh) || !keep(mesh)) return;
-    box.expandByObject(mesh);
+    growByNode(box, mesh);
   });
-  return box.isEmpty() ? null : box.getCenter(new THREE.Vector3());
+  return box.isEmpty() ? null : box.getCenter(new Vec3());
 }

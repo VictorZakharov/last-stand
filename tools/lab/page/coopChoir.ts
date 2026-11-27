@@ -2,7 +2,7 @@
 // graves on two games. Both stand in the crypt; the host raises the Cantor, dazed, then casts its ring and warns its
 // stones at spots it rolls (`graveSpot`), as its fight does: every game shows them from the host's fx. Each frame
 // each page keeps the rings it shows (`ringsShown`: middle, radius, age) and its stones' spots, for the judge.
-import * as THREE from 'three';
+import { Vec3 } from './sceneApi.ts';
 import type { Lab } from './lab';
 import { G } from '../../../src/state';
 import { WAVES } from '../../../src/data/waves';
@@ -53,7 +53,7 @@ function holdRun(): void {
  */
 export function coopChoirSetup(lab: Lab, { at, host, canary }: { at: [number, number]; host: boolean; canary: boolean }): void {
   if (G.arena.biome !== 'crypt') G.arena.setBiome('crypt');
-  G.player.place(new THREE.Vector3(at[0], 0, at[1]), Math.atan2(-at[0], -at[1]));
+  G.player.place(new Vec3(at[0], 0, at[1]), Math.atan2(-at[0], -at[1]));
   samples.length = 0;
   sampling = () => {
     if (host) holdRun();
@@ -70,7 +70,7 @@ export function coopChoirSetup(lab: Lab, { at, host, canary }: { at: [number, nu
 /** The host: the run's foes cleared and the Cantor raised, dazed, at wave 10. Its id. */
 export function coopChoirSpawn(): number {
   for (const foe of G.enemies.filter((each) => each.alive)) foe.takeDamage(foe.life + 1, {});
-  const cantor = spawnEnemy('cantor', new THREE.Vector3(CANTOR_AT[0], 0, CANTOR_AT[1]), { wave: WAVES.bossEvery * 2 });
+  const cantor = spawnEnemy('cantor', new Vec3(CANTOR_AT[0], 0, CANTOR_AT[1]), { wave: WAVES.bossEvery * 2 });
   cantor.life = 1e7;
   cantor.dazed = Infinity;
   return cantor.id;

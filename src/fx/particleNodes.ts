@@ -1,105 +1,18 @@
-// The particle pools on WebGPU (core/webgpu.ts), which draws points a pixel wide: each particle an instanced quad
-// (three's sprite path of `PointsNodeMaterial`), sized, faded and dimmed as particles.ts's GLSL does it.
-import {
-  AdditiveBlending, Blending, Color, floats, InstancedAttribute, InstancedGeometry, Material, Mesh,
-} from '../engine/api/index.ts';
-import { NEAR_GLOW } from '../core/materials';
-import { gpu, tsl } from '../core/webgpu';
+// The particle pools' and the dazed stars' meshes: each particle an instanced quad over the pool's own attributes.
+// The engine draws neither (`userData.particles`, the name 'dazed stars': engine/draws.ts): it's handed the pools
+// whole as its sprites (engine/sprites.ts). The mesh stands in the scene for what reads it there (the profiler's
+// parts, the warm-ups). Three's node materials that drew these on WebGPU are gone with three.
+import { floats, InstancedAttribute, InstancedGeometry, Material, Mesh } from '../engine/api/index.ts';
 
-/** A pool's mesh on WebGPU and its scale (particles.ts's `uScale`: a size in metres to pixels at 1 m). */
-export interface ParticleQuads { mesh: Mesh<InstancedGeometry, Material>; scale: { value: number } }
-
-/** A quad a particle over `centers`, `colors` and `sizes` (instanced attributes), blended by `blending`. */
-/** The dazed stars on WebGPU (fx/dazed.ts's points as instanced quads), and what each frame sets: how many, and the
- *  scale their sizes are drawn at. */
-export interface StarQuads {
-  mesh: Mesh;
-  geo: InstancedGeometry;
-  scale: { value: number };
-}
-
-/** The stars at `centers`, `sizes` across and `alphas` seen, in `fill` with a `rim`: dazed.ts's shaders as nodes. */
-export function starQuads([centers, sizes, alphas]: InstancedAttribute[], fill: Color,
-  rim: Color): StarQuads {
-  // (untyped: TSL's types don't follow these conversions yet)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { attribute, uniform, varying, uv, positionView, screenDPR, smoothstep, wgslFn } = tsl as any;
-  const geo = quadGeometry();
-  geo.setAttribute('aCenter', centers);
-  geo.setAttribute('aSize', sizes);
-  geo.setAttribute('aAlpha', alphas);
-  const scale = uniform(400);
-  const material = new gpu.PointsNodeMaterial({ transparent: true, depthWrite: false });
-  material.sizeAttenuation = false;
-  const node = material as unknown as Record<'positionNode' | 'sizeNode' | 'colorNode', unknown>;
-  node.positionNode = attribute('aCenter', 'vec3');
-  const depth = positionView.z.negate();
-  node.sizeNode = attribute('aSize', 'float').mul(scale).div(depth).div(screenDPR);
-  const starDist = wgslFn(`fn starDist(pIn: vec2f, r: f32, rf: f32) -> f32 {
-    let k1 = vec2f(0.809016994375, -0.587785252292);
-    let k2 = vec2f(-k1.x, k1.y);
-    var p = pIn;
-    p.x = abs(p.x);
-    p -= 2.0 * max(dot(k1, p), 0.0) * k1;
-    p -= 2.0 * max(dot(k2, p), 0.0) * k2;
-    p.x = abs(p.x);
-    p.y -= r;
-    let ba = rf * vec2f(-k1.y, k1.x) - vec2f(0.0, 1.0);
-    let h = clamp(dot(p, ba) / dot(ba, ba), 0.0, r);
-    return length(p - ba * h) * sign(p.y * ba.x - p.x * ba.y);
-  }`);
-  const star = wgslFn(`fn dazedStar(uv: vec2f, alpha: f32, fill: vec3f, rim: vec3f) -> vec4f {
-    let d = starDist((uv - 0.5) * 2.0, 0.95, 0.45);
-    let a = 1.0 - smoothstep(-0.06, 0.06, d);
-    if (a <= 0.0) { discard; }
-    return vec4f(mix(rim, fill, 1.0 - smoothstep(-0.3, -0.12, d)), alpha * a);
-  }`, [starDist]);
-  // (gone near the lens, as every particle)
-  const seen = varying(attribute('aAlpha', 'float').mul(smoothstep(0.5, 3.5, depth)));
-  node.colorNode = star({ uv: uv(), alpha: seen, fill: uniform(fill), rim: uniform(rim) });
-  return { mesh: new Mesh(geo, material as unknown as Material), geo, scale };
-}
-
-/** A quad a particle, its instances none until a frame sets them (three's Infinity is a draw WebGPU refuses). */
-function quadGeometry(): InstancedGeometry {
-  const geo = new InstancedGeometry();
-  geo.setAttribute('position', floats([-0.5, -0.5, 0, 0.5, -0.5, 0, -0.5, 0.5, 0, 0.5, 0.5, 0], 3));
-  geo.setAttribute('uv', floats([0, 0, 1, 0, 0, 1, 1, 1], 2));
-  geo.setIndex([0, 1, 2, 2, 1, 3]);
-  geo.instanceCount = 0;
-  return geo;
-}
-
-export function particleQuads(
-  centers: InstancedAttribute, colors: InstancedAttribute, sizes: InstancedAttribute,
-  blending: Blending, soft: number,
-): ParticleQuads {
-  // (untyped: TSL's types don't follow these conversions yet)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { Fn, If, Discard, attribute, uniform, varying, vec4, uv, positionView, screenDPR, smoothstep, clamp, pow } = tsl as any;
-  const geo = quadGeometry();
-  geo.setAttribute('aCenter', centers);
-  geo.setAttribute('aColor', colors);
-  geo.setAttribute('aSize', sizes);
-  const scale = uniform(400);
-  const material = new gpu.PointsNodeMaterial({ transparent: true, depthWrite: false, blending });
-  material.sizeAttenuation = false;
-  const node = material as unknown as Record<'positionNode' | 'sizeNode' | 'colorNode', unknown>;
-  node.positionNode = attribute('aCenter', 'vec3');
-  const depth = positionView.z.negate();
-  // (its diameter in the scene's pixels, as gl_PointSize had it; three multiplies the pixel ratio back in)
-  node.sizeNode = attribute('aSize', 'float').mul(scale).div(depth).div(screenDPR);
-  const color = attribute('aColor', 'vec4');
-  // fade out near the lens (particles.ts), and an additive pool's glow dims with distance (`nearGlow`)
-  const near = varying(smoothstep(0.5, 3.5, depth));
-  const glow = blending === AdditiveBlending
-    ? varying(clamp(pow(depth.div(NEAR_GLOW.ref), NEAR_GLOW.pow), NEAR_GLOW.min, 1)) : 1;
-  const c = varying(color);
-  node.colorNode = Fn(() => {
-    const d = uv().sub(0.5).length().mul(2).toVar();
-    If(d.greaterThan(1), () => { Discard(); });
-    return vec4(c.rgb.mul(glow), c.a.mul(near).mul(pow(d.oneMinus(), soft)));
-  })();
-  const mesh = new Mesh(geo, material as unknown as Material);
-  return { mesh, scale };
+/** A quad a particle over `attributes` (instanced, by name), drawn with `material`; its instances none until a
+ *  frame sets them. */
+export function particleQuads(attributes: Record<string, InstancedAttribute>,
+  material: Material): Mesh<InstancedGeometry, Material> {
+  const geometry = new InstancedGeometry();
+  geometry.setAttribute('position', floats([-0.5, -0.5, 0, 0.5, -0.5, 0, -0.5, 0.5, 0, 0.5, 0.5, 0], 3));
+  geometry.setAttribute('uv', floats([0, 0, 1, 0, 0, 1, 1, 1], 2));
+  geometry.setIndex([0, 1, 2, 2, 1, 3]);
+  for (const [name, attribute] of Object.entries(attributes)) geometry.setAttribute(name, attribute);
+  geometry.instanceCount = 0;
+  return new Mesh(geometry, material);
 }

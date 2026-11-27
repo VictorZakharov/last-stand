@@ -103,12 +103,29 @@ function pruneExports(base, keep) {
   for (const old of others.slice(EXPORTS_KEPT - 1)) rmSync(old, { recursive: true, force: true });
 }
 
+/** The lab's stand-ins for the scene API's modules, by the path sceneApi.ts imports each by, for a tree from before
+ *  the API (VictorZakharov/last-stand#973): its game is three's, and these bind the API's names to three's. */
+const API_STAND_INS = {
+  'src/engine/api/index.ts': 'tools/lab/page/threeAsApi.js',
+  'src/engine/api/shapes/index.ts': 'tools/lab/page/threeShapes.js',
+};
+
+/** The stand-in in `treeRoot` for the API module `source` that `importer` asks for, where the tree hasn't the API
+ *  and the importer is the lab's sceneApi.ts; else null. */
+export function apiStandIn(treeRoot, source, importer) {
+  if (!importer || !toSlashes(importer).endsWith('tools/lab/page/sceneApi.ts')) return null;
+  const asked = Object.keys(API_STAND_INS).find((path) => toSlashes(source).endsWith(path));
+  if (!asked || existsSync(join(treeRoot, asked))) return null;
+  return join(treeRoot, API_STAND_INS[asked]);
+}
+
 /**
  * A Vite plugin for an exported tree, whose config finds its packages in its own node_modules, which it hasn't
- * unless its lockfile differs (`packagesRoot`): they are this tree's. It points the tree's ez-tree alias, and the stub for ez-tree's textures, at them, written
- * exactly as this tree's config writes them: a path cased otherwise opens the same file on Windows but is another
- * module to Vite (its lowercased alias bundled ez-tree with a second copy of three, and the two sides drew random
- * numbers apart).
+ * unless its lockfile differs (`packagesRoot`): they are this tree's. It points the tree's ez-tree alias, and the
+ * stub for ez-tree's textures, at them, written exactly as this tree's config writes them: a path cased otherwise
+ * opens the same file on Windows but is another module to Vite (its lowercased alias bundled ez-tree with a second
+ * copy of three, and the two sides drew random numbers apart). A tree from before the scene API is handed the lab's
+ * three-backed stand-ins for it (`apiStandIn`), so the lab's measures, written against the API, run there too.
  */
 export function exportedTreePaths(treeRoot, repoRoot) {
   const ezTree = toSlashes(join(packagesRoot(treeRoot, repoRoot), 'node_modules/@dgreenheck/ez-tree/src/lib/'));
@@ -124,6 +141,8 @@ export function exportedTreePaths(treeRoot, repoRoot) {
       }
     },
     resolveId(source, importer) {
+      const standIn = apiStandIn(treeRoot, source, importer);
+      if (standIn) return standIn;
       const fromEzTree = importer && toSlashes(importer).toLowerCase().startsWith(ezTree.toLowerCase());
       if (source !== './textures' || !fromEzTree) return null;
       return join(treeRoot, 'src/world/ezTreeTextures.ts');

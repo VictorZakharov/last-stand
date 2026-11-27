@@ -6,8 +6,10 @@
 // each battleground built, the hall of heroes' room, each house's room) is built as the warm-ups build it and drawn
 // by the game's own `warmUp`, with the hero inside: at its draw its own place must be the only one shown, and after
 // it the arena's own check (`placesWrong` in `src/world/arena.ts`, which dev builds run every frame) must find the
-// shop alone shown.
-import type * as THREE from 'three';
+// shop alone shown. (What was shown at each of its renders was read off three's `scene.onBeforeRender`; under the
+// engine a warm-up hands its place's draws to the engine and renders nothing on the page, VictorZakharov/last-stand
+// #973, so the check after it is what's left.)
+import type { Node } from './sceneApi.ts';
 import type { Lab, Pictured, Report } from './lab';
 import { G } from '../../../src/state';
 import { BIOME_IDS } from '../../../src/data/biomes';
@@ -33,38 +35,17 @@ const SETTLE = 15;
 
 /** Every place that may stand where the player is, each with its name: the village, each battleground built, the
  *  hall of heroes' room, each house's room. */
-function everyPlace(): { name: string; group: THREE.Object3D }[] {
+function everyPlace(): { name: string; group: Node }[] {
   const biomes = BIOME_IDS.filter((id) => G.arena.biomeBuilt(id)).map((id) => ({ name: id, group: G.arena.groupOf(id) }));
   const rooms = Object.values(G.arena.rooms ?? {}).map((room) => ({ name: `room ${room.id}`, group: room.group }));
   return [{ name: 'village', group: G.arena.groupOf('village') }, ...biomes, { name: 'hall', group: G.arena.hallGroup },
     ...rooms];
 }
 
-/** The places shown now, by name. */
-const shownPlaces = (): string[] => everyPlace().filter((place) => place.group.visible).map((place) => place.name);
-
-/**
- * `swap` drawn by the game's own warm-up, the places shown at each of its renders read: the scene's
- * `onBeforeRender` wrapped for the draw (the cells' culling is hooked there, so it's called on as it was).
- */
-async function drawnWith(swap: Swap | undefined): Promise<string[][]> {
-  const seen: string[][] = [];
-  const scene = G.scene;
-  const before = scene.onBeforeRender;
-  scene.onBeforeRender = function (...args) {
-    seen.push(shownPlaces());
-    before.apply(this, args);
-  };
-  try {
-    await warmUp(G.renderer, G.scene, G.camera, sceneTarget(), { compile: [], drawn: [], swap });
-  } finally {
-    scene.onBeforeRender = before;
-  }
-  return seen;
+/** `swap` drawn by the game's own warm-up. */
+async function drawnWith(swap: Swap | undefined): Promise<void> {
+  await warmUp(G.renderer, G.scene, G.camera, sceneTarget(), { compile: [], drawn: [], swap });
 }
-
-/** The name of the place `group` is. */
-const nameOf = (group: THREE.Object3D): string => everyPlace().find((place) => place.group === group)?.name ?? '?';
 
 /** The hero into the shop by its door, as the door takes him in. */
 async function intoTheShop(lab: Lab): Promise<boolean> {
@@ -79,16 +60,9 @@ async function intoTheShop(lab: Lab): Promise<boolean> {
   return G.arena.room === ROOM;
 }
 
-/** What's wrong with one part's draw: its own place not alone at a render, the shop not alone after. */
-function wrongWith(swap: Swap, seen: string[][]): string[] {
-  const wrong: string[] = [];
-  const own = nameOf(swap.show);
-  if (!seen.length) wrong.push('never drawn');
-  for (const shown of new Set(seen.map((places) => places.join(', ')))) {
-    if (shown !== own) wrong.push(`drawn with ${shown || 'nothing'} shown, where ${own} alone should be`);
-  }
-  wrong.push(...G.arena.placesWrong().map((place) => `after it, ${place}`));
-  return wrong;
+/** What's wrong after one part's draw: the shop not alone shown. */
+function wrongAfter(): string[] {
+  return G.arena.placesWrong().map((place) => `after it, ${place}`);
 }
 
 /** Each place's warm-up drawn with the hero in the shop, its lines and problems said: whether any was wrong. */
@@ -102,12 +76,12 @@ async function drawEach(lab: Lab, options: RoomWarmOptions, lines: string[], pro
     }
     // (the canary: the village hidden alone, whatever's shown, as the parts' swaps had it before #746)
     const drawn = options.canary && at === 0 ? { ...swap, hide: G.arena.groupOf('village') } : swap;
-    const seen = await drawnWith(drawn);
+    await drawnWith(drawn);
     // (and the village left shown after it, as #746 left it: found by the arena's own check, which dev builds run
     // every frame, and put back before a frame draws it, or that check's error would fail the canary's run)
     const village = G.arena.groupOf('village');
     if (options.canary && at === 0) village.visible = true;
-    const wrong = wrongWith(drawn, seen);
+    const wrong = wrongAfter();
     if (options.canary && at === 0) village.visible = false;
     lines.push(`${part.name} drawn in the shop's stead: ${wrong.join('; ') || 'alone, then the shop alone'}`);
     if (wrong.length) caught = true;

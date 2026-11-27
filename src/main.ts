@@ -1,5 +1,6 @@
 // Entry point: boots every system, owns the main loop and the lobby (the village) <-> run flow.
-import { Timer, Vec3 } from './engine/api/index.ts';
+import { Vec3 } from './engine/api/index.ts';
+import { FrameClock } from './core/clock';
 import { afterBiome, biomeReady, everyBiomeReady, readyBiome, readyEveryBiome } from './game/biomeReady';
 import { bossReady, everyBossWarm, readyEveryBoss, readyNextBoss } from './game/bossReady';
 import { G } from './state';
@@ -134,7 +135,7 @@ declare const __DEV_TOOLS__: boolean;
 import type { Profile } from './types';
 
 const $ = (s: string): HTMLElement => document.querySelector<HTMLElement>(s)!;
-const timer = new Timer();
+const timer = new FrameClock();
 let revealed = false;   // loading screen gone: the game may advance
 /** how long the loading screen waits for the fight's warm-up on WebGPU (ms) */
 const FIGHT_UNDER_LOADING = 6000;
@@ -362,7 +363,7 @@ async function boot() {
   // dev-only handle for debugging and automated screenshots (stripped from production builds)
   // (every build: the recorder's trace of now, for a harness to keep; it sends nothing, src/perf/AGENTS.md)
   Object.assign(window, { __traceNow: traceNow });
-  if (import.meta.env.DEV) Object.assign(window, { __G: G, __dev: { spawnEnemy, THREE, allWarm: () => isAllWarm() && everyBossWarm() && everyBiomeReady() && everyFolkSeated(), hurry: labHurry, holdHour, restartTraining, faceCamera,
+  if (import.meta.env.DEV) Object.assign(window, { __G: G, __dev: { spawnEnemy, allWarm: () => isAllWarm() && everyBossWarm() && everyBiomeReady() && everyFolkSeated(), hurry: labHurry, holdHour, restartTraining, faceCamera,
     village: villageReport, seen: seenShareAt } });
   // the developer mode (src/dev): a dev build's, or a PR preview's, never production's (`__DEV_TOOLS__`: vite.config.ts)
   if (import.meta.env.DEV || __DEV_TOOLS__) void loadDevMode();

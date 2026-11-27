@@ -14,7 +14,10 @@
 // seven instanced boxes, four of them far behind the camera, which must come out as four drawn outside the view, an
 // instanced mesh of none, which must come out as a draw of nothing, and through the eyes a box on the arms' layer
 // before them, which must come out as drawn by the arms' camera though it isn't the hero's.
-import * as THREE from 'three';
+import {
+  Camera, Frustum, Geometry, InstancedGeometry, InstancedMesh, LitMaterial, Mat4, Material, Mesh, Node, OrthoCamera,
+  shapes, Sphere, Vec3, World,
+} from './sceneApi.ts';
 import type { Lab, Fixture, Report } from './lab';
 import type { BiomeId } from '../../../src/data/biomes';
 import { G } from '../../../src/state';
@@ -73,32 +76,32 @@ const noDraws = (): Record<Pass, number> => ({ ghosts: 0, scene: 0, arms: 0, sha
 /** What one geometry cost the frame: its draws in each pass, the most vertices and triangles a draw of it drew, the
  *  triangles it drew in each pass and those of them outside the view of the pass that drew them, and what drew it. */
 interface Drawn {
-  geometry: THREE.BufferGeometry;
+  geometry: Geometry;
   draws: Record<Pass, number>;
   vertices: number;
   triangles: number;
   drew: Record<Pass, number>;
   off: Record<Pass, number>;
-  objects: Set<THREE.Object3D>;
-  material: THREE.Material;
-  object: THREE.Object3D;
+  objects: Set<Node>;
+  material: Material;
+  object: Node;
 }
 
 /** The scene's draws of one material's look, and the geometries they drew. */
 interface Look {
   draws: number;
-  geometries: Set<THREE.BufferGeometry>;
+  geometries: Set<Geometry>;
 }
 
 /** One frame's draws: by geometry, the scene's by look and by the scene's part, and the objects the arms' own camera
  *  drew, with their draws. */
 interface FrameDraws {
-  geometries: Map<THREE.BufferGeometry, Drawn>;
+  geometries: Map<Geometry, Drawn>;
   looks: Map<string, Look>;
   parts: Map<string, number>;
   /** the triangles drawn under each part of the scene, by pass (its shadow maps' too) */
   weights: Map<string, Record<Pass, number>>;
-  arms: Map<THREE.Object3D, number>;
+  arms: Map<Node, number>;
   /** the scene's draws by program and look, and the materials and parts of the scene they drew with */
   alike: Map<string, Alike>;
 }
@@ -106,36 +109,36 @@ interface FrameDraws {
 /** The scene's draws of one program and look: their materials, apart, and the parts of the scene that drew them. */
 interface Alike {
   draws: number;
-  materials: Set<THREE.Material>;
+  materials: Set<Material>;
   parts: Set<string>;
 }
 
 /** The vertices a draw of `geometry` (by `object`) ran: its range, times its instances. */
-function verticesOf(geometry: THREE.BufferGeometry, object: THREE.Object3D): number {
+function verticesOf(geometry: Geometry, object: Node): number {
   const vertices = geometry.index ? geometry.index.count : geometry.attributes.position?.count ?? 0;
   const range = Math.min(vertices, geometry.drawRange.count);
-  const instanced = object as THREE.InstancedMesh;
-  const shared = geometry as THREE.InstancedBufferGeometry;
+  const instanced = object as InstancedMesh;
+  const shared = geometry as InstancedGeometry;
   const instances = instanced.isInstancedMesh ? instanced.count
-    : shared.isInstancedBufferGeometry ? shared.instanceCount : 1;
+    : shared.isInstancedGeometry ? shared.instanceCount : 1;
   return range * instances;
 }
 
 /** The triangles a draw of `geometry` (by `object`) drew: none but a mesh's (a point or a line is none). */
-function trianglesOf(geometry: THREE.BufferGeometry, object: THREE.Object3D): number {
-  if (!(object as THREE.Mesh).isMesh) return 0;
+function trianglesOf(geometry: Geometry, object: Node): number {
+  if (!(object as Mesh).isMesh) return 0;
   return Math.floor(verticesOf(geometry, object) / 3);
 }
 
-const _frustum = new THREE.Frustum();
-const _viewing = new THREE.Matrix4();
-const _instance = new THREE.Matrix4();
-const _sphere = new THREE.Sphere();
+const _frustum = new Frustum();
+const _viewing = new Mat4();
+const _instance = new Mat4();
+const _sphere = new Sphere();
 
 /** How many of `object`'s instances of `geometry` lie outside `camera`'s view, each by its own bounding sphere: drawn
  *  for nothing. None for an object that isn't an instanced mesh. */
-function instancesOff(object: THREE.Object3D, geometry: THREE.BufferGeometry, camera: THREE.Camera): number {
-  const instanced = object as THREE.InstancedMesh;
+function instancesOff(object: Node, geometry: Geometry, camera: Camera): number {
+  const instanced = object as InstancedMesh;
   if (!instanced.isInstancedMesh) return 0;
   if (!geometry.boundingSphere) geometry.computeBoundingSphere();
   _frustum.setFromProjectionMatrix(_viewing.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse));
@@ -150,15 +153,15 @@ function instancesOff(object: THREE.Object3D, geometry: THREE.BufferGeometry, ca
 }
 
 /** A material as the lists show it: its type, and its colour (or its name). */
-export function lookOf(material: THREE.Material): string {
-  const colour = (material as THREE.MeshStandardMaterial).color;
+export function lookOf(material: Material): string {
+  const colour = (material as LitMaterial).color;
   const look = material.name || (colour ? `#${colour.getHexString()}` : '');
   return `${material.type.replace(/Material$/, '')}${look ? ` ${look}` : ''}`;
 }
 
 /** The pass a draw by `camera` of `scene` is in: the scene drawn by any camera but the game's is the arms' own over
  *  it, no scene the shadow map. */
-function passOf(camera: THREE.Camera, scene: THREE.Scene | null): Pass {
+function passOf(camera: Camera, scene: World | null): Pass {
   if (scene === null) return 'shadow';
   if (scene !== G.scene) return 'other';
   if (camera === G.camera && camera.layers.mask === 1 << GHOST_COUNT_LAYER) return 'ghosts';
@@ -167,11 +170,11 @@ function passOf(camera: THREE.Camera, scene: THREE.Scene | null): Pass {
 
 /** A draw as WebGPU's backend is given it (three's `RenderObject`, as far as this reads it). */
 interface RenderObject {
-  object: THREE.Object3D;
-  material: THREE.Material;
-  geometry: THREE.BufferGeometry;
-  camera: THREE.Camera;
-  scene: THREE.Scene;
+  object: Node;
+  material: Material;
+  geometry: Geometry;
+  camera: Camera;
+  scene: World;
 }
 
 /** WebGPU's backend, its draw as this hooks it. */
@@ -182,7 +185,7 @@ interface DrawingBackend {
 /** The pass a WebGPU draw is in: its shadow maps are drawn from the scene by the light's camera. */
 function webgpuPassOf(drawn: RenderObject): Pass {
   const shadowed = drawn.scene === G.scene && drawn.camera !== G.camera
-    && (drawn.camera as THREE.OrthographicCamera).isOrthographicCamera;
+    && (drawn.camera as OrthoCamera).isOrthographicCamera;
   return passOf(drawn.camera, shadowed ? null : drawn.scene);
 }
 
@@ -202,8 +205,8 @@ function recordDraws(): { record: FrameDraws; stop(): void } {
 }
 
 /** One draw call into the record: by its geometry, by its look in the scene's pass, by its object in the arms'. */
-function recordDraw(record: FrameDraws, pass: Pass, camera: THREE.Camera, geometry: THREE.BufferGeometry,
-  material: THREE.Material, object: THREE.Object3D): void {
+function recordDraw(record: FrameDraws, pass: Pass, camera: Camera, geometry: Geometry,
+  material: Material, object: Node): void {
   let drawn = record.geometries.get(geometry);
   if (!drawn) {
     drawn = {
@@ -220,7 +223,7 @@ function recordDraw(record: FrameDraws, pass: Pass, camera: THREE.Camera, geomet
   drawn.vertices = Math.max(drawn.vertices, verticesOf(geometry, object));
   drawn.triangles = Math.max(drawn.triangles, triangles);
   drawn.drew[pass] += triangles;
-  const instances = (object as THREE.InstancedMesh).count;
+  const instances = (object as InstancedMesh).count;
   if (instances) drawn.off[pass] += (instancesOff(object, geometry, camera) * triangles) / instances;
   drawn.objects.add(object);
   const under = scenePartOf(object);
@@ -241,7 +244,7 @@ function recordDraw(record: FrameDraws, pass: Pass, camera: THREE.Camera, geomet
 }
 
 /** A scene's draw by its look (`Alike`). */
-function recordAlike(record: FrameDraws, material: THREE.Material, part: string): void {
+function recordAlike(record: FrameDraws, material: Material, part: string): void {
   const key = lookOf(material);
   const alike = record.alike.get(key) ?? { draws: 0, materials: new Set(), parts: new Set() };
   alike.draws++;
@@ -260,9 +263,9 @@ function alikeRows(record: FrameDraws, rows: number): string[] {
 }
 
 /** An object's place in the scene as names (or types), from the scene down: `crowd mossback`, `forest > Group`. */
-export function placeOf(object: THREE.Object3D): string {
+export function placeOf(object: Node): string {
   const path: string[] = [];
-  for (let at: THREE.Object3D | null = object; at && at !== G.scene; at = at.parent) {
+  for (let at: Node | null = object; at && at !== G.scene; at = at.parent) {
     path.unshift(at.name || at.type);
   }
   return path.slice(0, 2).join(' > ') + (path.length > 2 ? ' > …' : '');
@@ -270,9 +273,9 @@ export function placeOf(object: THREE.Object3D): string {
 
 /** The part of the scene an object is drawn under, by its two outermost named levels (an unnamed group passed over):
  *  `village > fountain`, `hero warrior > head`; with no name under the first, its own type. */
-function scenePartOf(object: THREE.Object3D): string {
+function scenePartOf(object: Node): string {
   const named: string[] = [];
-  for (let at: THREE.Object3D | null = object; at && at !== G.scene; at = at.parent) {
+  for (let at: Node | null = object; at && at !== G.scene; at = at.parent) {
     if (at.name) named.unshift(at.name);
   }
   if (named.length < 2) named.push(object.type);
@@ -322,10 +325,10 @@ const drewNothing = (drawn: Drawn): boolean => drawn.vertices === 0 && sumOf(dra
 
 /** Why a draw of `drawn` drew nothing: an instanced mesh holding no instance, or its geometry's range empty. */
 function nothingWhy(drawn: Drawn): string {
-  const instanced = drawn.object as THREE.InstancedMesh;
-  const shared = drawn.geometry as THREE.InstancedBufferGeometry;
+  const instanced = drawn.object as InstancedMesh;
+  const shared = drawn.geometry as InstancedGeometry;
   const empty = instanced.isInstancedMesh ? instanced.count === 0
-    : shared.isInstancedBufferGeometry && shared.instanceCount === 0;
+    : shared.isInstancedGeometry && shared.instanceCount === 0;
   return `${drawn.geometry.type}, ${empty ? 'no instances' : 'nothing in its range'}`;
 }
 
@@ -348,15 +351,15 @@ function nothingRows(geometries: Drawn[], rows: number): string[] {
 }
 
 /** The local hero's swing trails' meshes, in the scene though they're his (none on a tree without `swingTrailsOf`). */
-function heroTrails(): THREE.Object3D[] {
+function heroTrails(): Node[] {
   const trails = swingTrail as Partial<typeof swingTrail>;
   return trails.swingTrailsOf?.(G.player.model) ?? [];
 }
 
 /** Whether `object` is the local hero's: his model's root or under it, or a trail of his weapons. */
-function heros(object: THREE.Object3D): boolean {
+function heros(object: Node): boolean {
   if (heroTrails().includes(object)) return true;
-  for (let up: THREE.Object3D | null = object; up; up = up.parent) {
+  for (let up: Node | null = object; up; up = up.parent) {
     if (up === G.player.model.root) return true;
   }
   return false;
@@ -443,7 +446,7 @@ function totalsOf(record: FrameDraws): string {
 function objectsOf(): string {
   let all = 0, auto = 0, hidden = 0;
   const byPart = new Map<string, number>();
-  const visit = (object: THREE.Object3D, updated: boolean, part: string): void => {
+  const visit = (object: Node, updated: boolean, part: string): void => {
     all++;
     const own = updated && object.matrixWorldAutoUpdate !== false;
     if (own && object.matrixAutoUpdate) {
@@ -464,7 +467,7 @@ function objectsOf(): string {
 const PARTS_LISTED = 8;
 
 /** A part of the scene by its name, or its first named child's, or its kind. */
-function partName(object: THREE.Object3D): string {
+function partName(object: Node): string {
   return object.name || object.children.find((child) => child.name)?.name || object.type;
 }
 
@@ -476,9 +479,9 @@ const ownArmsCamera = (): boolean => armsLens() !== G.camera;
 
 /** Through the eyes, a box of its own geometry on the arms' own layer stood within their camera's reach before the
  *  eyes, not the hero's (the canary's), or none in another view. */
-function armsBox(material: THREE.Material, way: THREE.Vector3): THREE.Mesh | null {
+function armsBox(material: Material, way: Vec3): Mesh | null {
   if (!ownArmsCamera()) return null;
-  const box = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.3, 0.3), material);
+  const box = new Mesh(shapes.box(0.3, 0.3, 0.3), material);
   box.name = ARMS_CANARY;
   box.position.copy(G.player.pos).addScaledVector(way, CANARY_ARMS_AHEAD).setY(G.camera.position.y);
   box.layers.mask = armsLens().layers.mask;
@@ -489,29 +492,29 @@ function armsBox(material: THREE.Material, way: THREE.Vector3): THREE.Mesh | nul
 /** Seven boxes of one geometry stood before the hero, and seven instanced boxes of another, `CANARY_OFF` of them far
  *  behind the camera, and through the eyes a box on the arms' layer (the canary's); returns what takes them away. */
 function plantBoxes(): () => void {
-  const geometry = new THREE.BoxGeometry(0.3, 0.3, 0.3);
-  const instancedGeometry = new THREE.BoxGeometry(0.3, 0.3, 0.3);
-  const material = new THREE.MeshStandardMaterial({ color: 0xff00ff });
-  const way = new THREE.Vector3(Math.sin(G.player.facing), 0, Math.cos(G.player.facing));
+  const geometry = shapes.box(0.3, 0.3, 0.3);
+  const instancedGeometry = shapes.box(0.3, 0.3, 0.3);
+  const material = new LitMaterial({ color: 0xff00ff });
+  const way = new Vec3(Math.sin(G.player.facing), 0, Math.cos(G.player.facing));
   const ahead = (i: number) => G.player.pos.clone().addScaledVector(way, 2 + i * 0.4).setY(0.5);
   const boxes = Array.from({ length: CANARY_BOXES }, (_, i) => {
-    const box = new THREE.Mesh(geometry, material);
+    const box = new Mesh(geometry, material);
     box.name = 'canary box';
     box.position.copy(ahead(i));
     G.scene.add(box);
     return box;
   });
-  const instanced = new THREE.InstancedMesh(instancedGeometry, material, CANARY_BOXES);
+  const instanced = new InstancedMesh(instancedGeometry, material, CANARY_BOXES);
   instanced.name = 'canary instances';
-  const behind = G.camera.getWorldDirection(new THREE.Vector3()).multiplyScalar(-CANARY_AWAY).add(G.camera.position);
+  const behind = G.camera.getWorldDirection(new Vec3()).multiplyScalar(-CANARY_AWAY).add(G.camera.position);
   for (let i = 0; i < CANARY_BOXES; i++) {
     const at = i < CANARY_OFF ? behind : ahead(i).setY(0.9);
-    instanced.setMatrixAt(i, new THREE.Matrix4().makeTranslation(at.x, at.y, at.z));
+    instanced.setMatrixAt(i, new Mat4().makeTranslation(at.x, at.y, at.z));
   }
   G.scene.add(instanced);
   // (drawn though it holds none: three culls an instanced mesh of none by its empty sphere)
-  const emptyGeometry = new THREE.BoxGeometry(0.3, 0.3, 0.3);
-  const empty = new THREE.InstancedMesh(emptyGeometry, material, 1);
+  const emptyGeometry = shapes.box(0.3, 0.3, 0.3);
+  const empty = new InstancedMesh(emptyGeometry, material, 1);
   empty.name = 'canary of nothing';
   empty.count = 0;
   empty.frustumCulled = false;
@@ -623,7 +626,7 @@ export async function inVillage(lab: Lab, [x, z]: readonly [number, number], fac
   await toLobby(lab);
   if (G.arena.place !== 'village') throw new Error('lab: draws: the run never gave way to the village');
   G.player.walkTo = null;
-  G.player.place(new THREE.Vector3(x, groundHeight(x, z), z), facing);
+  G.player.place(new Vec3(x, groundHeight(x, z), z), facing);
   // (the camera turned with him, as back from a run: the view's yaw is the set-up's otherwise)
   faceCamera(facing);
 }

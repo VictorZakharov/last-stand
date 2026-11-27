@@ -11,7 +11,7 @@
 // Then the hall is opened again and left as his showcase is under way, and any sound it leaves playing is a problem
 // (from play: "if mage was attacking in hall of heroes, going back to lobby keeps the attack sound"); its canary
 // starts Void Lance's hum there and never stops it.
-import * as THREE from 'three';
+import { Vec3 } from './sceneApi.ts';
 import { G } from '../../../src/state';
 import * as hall from '../../../src/game/hall';
 import { pressHeld } from './holdPress';
@@ -83,7 +83,7 @@ const LANDED_AFTER = 2;
 /** One point's place over the last three frames, its jerks, the worst and where, and each, as words. */
 interface Followed {
   name: PointName;
-  places: THREE.Vector3[];
+  places: Vec3[];
   frames: number;
   worst: number;
   worstAt: string;
@@ -191,7 +191,7 @@ async function leaveMidShowcase(lab: Lab, canary: boolean): Promise<Leaving> {
 }
 
 /** Where point `name` of `model` is, in his own frame. */
-function placeOf(model: Model, name: PointName, out: THREE.Vector3): THREE.Vector3 {
+function placeOf(model: Model, name: PointName, out: Vec3): Vec3 {
   // (the weapon's own tip: a bow's `tip` is where its shot leaves, the arrow's middle, there or not)
   const object = name === 'tip' ? model.weaponTip ?? model.tip : model.joints?.[name];
   if (!object) return out.set(0, 0, 0);
@@ -200,18 +200,18 @@ function placeOf(model: Model, name: PointName, out: THREE.Vector3): THREE.Vecto
 }
 
 /** How far `point` moved this frame, the frame before and the one before that (m), its places not yet moved on. */
-function movesOf(point: Followed, now: THREE.Vector3): number[] {
+function movesOf(point: Followed, now: Vec3): number[] {
   const [last, before, older] = point.places;
   return [now.distanceTo(last), last.distanceTo(before), before.distanceTo(older)];
 }
 
 /** Notes where `point` is this frame, and its jerk if it jerked (`judged`: the frame counts; `bar`: past it a jerk). */
 function follow(
-  point: Followed, now: THREE.Vector3, at: FrameName, judged: boolean, bar: number, listing: boolean,
+  point: Followed, now: Vec3, at: FrameName, judged: boolean, bar: number, listing: boolean,
 ): number {
   const [last, before, older] = point.places;
-  const move = new THREE.Vector3().subVectors(now, last);
-  const lastMove = new THREE.Vector3().subVectors(last, before);
+  const move = new Vec3().subVectors(now, last);
+  const lastMove = new Vec3().subVectors(last, before);
   const jerk = move.distanceTo(lastMove);
   older.copy(before);
   before.copy(last);
@@ -260,9 +260,9 @@ export async function hallMoves(lab: Lab, options: HallOptions): Promise<Report>
     animate({ ...state, action: { ...state.action, t: HELD_AT } });
   };
   const points: Followed[] = POINTS.map((name) => ({
-    name, places: [0, 1, 2].map(() => new THREE.Vector3()), frames: 0, worst: 0, worstAt: '', listed: [],
+    name, places: [0, 1, 2].map(() => new Vec3()), frames: 0, worst: 0, worstAt: '', listed: [],
   }));
-  const now = new THREE.Vector3();
+  const now = new Vec3();
   let frame = 0;
   let shownAt = -1;
   let canaryJerk: number | null = null;

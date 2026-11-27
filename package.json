@@ -10,7 +10,7 @@
     "typecheck": "tsc --noEmit",
     "check:engine": "node scripts/engine-pkg.mjs",
     "check:three": "node scripts/three-imports.mjs",
-    "check:hubs":"node scripts/hubs.mjs",
+    "check:hubs": "node scripts/hubs.mjs",
     "check:pages": "node scripts/check-pages-build.mjs",
     "check:sorted": "node scripts/sorted.mjs",
     "preview": "vite preview",
@@ -39,6 +39,7 @@
   },
   "dependencies": {
     "@dgreenheck/ez-tree": "^1.1.0",
+    "meshoptimizer": "1.1.1",
     "three": "0.187.0"
   },
   "devDependencies": {

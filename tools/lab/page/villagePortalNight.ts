@@ -6,7 +6,7 @@
 // lights casting at any render from the press on, and the programs the run's first frames compile, none. The lab's GPU
 // cache answers quickly, so the time isn't the measure (`tools/stalls/walks/portal.js` reads it). `canary` leaves
 // another pooled light casting, which must be found.
-import * as THREE from 'three';
+import { Camera, Node, PointLight, Vec3 } from './sceneApi.ts';
 import { realWait } from './lab';
 import type { Lab } from './lab';
 import { G } from '../../../src/state';
@@ -19,7 +19,7 @@ import type { LightsChecked } from './villageLights';
 import { PIPELINES } from '../../../src/engine/pipelinesAside';
 
 /** three's renderer as a tree before #973 has it (an A/B's other commit): its render, which this tree hasn't got */
-type ThreesRender = { render?: (scene: THREE.Object3D, camera: THREE.Camera) => unknown };
+type ThreesRender = { render?: (scene: Node, camera: Camera) => unknown };
 
 /** the hour held, midnight, when the lamps cast */
 const MIDNIGHT = 0;
@@ -40,7 +40,7 @@ const CASTING = 2;
 function castingNow(): number {
   let casting = 0;
   G.scene.traverseVisible((object) => {
-    const light = object as THREE.PointLight;
+    const light = object as PointLight;
     if (light.isPointLight && light.castShadow) casting++;
   });
   return casting;
@@ -90,7 +90,7 @@ export async function portalAtNight(lab: Lab, canary: boolean): Promise<LightsCh
   const stand = villageObject('crypt')?.stand;
   if (!stand) throw new Error('lab: village: no portal to the crypt to stand at');
   G.player.walkTo = null;
-  G.player.place(new THREE.Vector3(stand[0], groundHeight(stand[0], stand[1]), stand[1]), 0);
+  G.player.place(new Vec3(stand[0], groundHeight(stand[0], stand[1]), stand[1]), 0);
   await lab.step(SETTLE);
   if (G.arena.village.night <= 0.01) throw new Error('lab: village: midnight never fell');
   const spare = pooledLights()[CANARY_LIGHT];

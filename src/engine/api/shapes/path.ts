@@ -42,7 +42,7 @@ export class Ellipse extends Curve<Vec2> {
   }
 
   /** The point at `t`. */
-  getPoint(t: number, target = new Vec2()): Vec2 {
+  getPoint(along: number, target = new Vec2()): Vec2 {
     const twoPi = Math.PI * 2;
     let delta = this.aEndAngle - this.aStartAngle;
     const samePoints = Math.abs(delta) < Number.EPSILON;
@@ -50,7 +50,7 @@ export class Ellipse extends Curve<Vec2> {
     while (delta > twoPi) delta -= twoPi;
     if (delta < Number.EPSILON) delta = samePoints ? 0 : twoPi;
     if (this.aClockwise && !samePoints) delta = delta === twoPi ? -twoPi : delta - twoPi;
-    const angle = this.aStartAngle + t * delta;
+    const angle = this.aStartAngle + along * delta;
     let x = this.aX + this.xRadius * Math.cos(angle);
     let y = this.aY + this.yRadius * Math.sin(angle);
     if (this.aRotation !== 0) {
@@ -173,14 +173,14 @@ export class Path extends Curve<Vec2> {
   }
 
   /** The point a share `t` of its length along (its pieces' lengths added). */
-  getPoint(t: number, target?: Vec2): Vec2 {
-    const d = t * this.getLength();
+  getPoint(along: number, target?: Vec2): Vec2 {
+    const distance = along * this.getLength();
     const lengths = this.getCurveLengths();
     for (let i = 0; i < lengths.length; i++) {
-      if (lengths[i] < d) continue;
+      if (lengths[i] < distance) continue;
       const curve = this.curves[i];
       const length = curve.getLength();
-      const u = length === 0 ? 0 : 1 - (lengths[i] - d) / length;
+      const u = length === 0 ? 0 : 1 - (lengths[i] - distance) / length;
       return curve.getPointAt(u, target);
     }
     return this.curves[this.curves.length - 1].getPointAt(1, target);

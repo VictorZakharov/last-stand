@@ -11,7 +11,7 @@
 // before it, the sun's map drawn every frame: kept between turns, two frames with nothing moved read 36% apart).
 // `canary` thins the far grass in the second frame alone (`thinnedAfter`): the rings' own switches, three's hand-overs,
 // reach nothing the engine draws.
-import * as THREE from 'three';
+import { Light, Node, Ray, Vec2, Vec3 } from './sceneApi.ts';
 import type { Lab } from './lab';
 import { G } from '../../../src/state';
 import { holdHour } from '../../../src/game/clock';
@@ -27,7 +27,7 @@ import type { LightsChecked } from './villageLights';
 
 /** the hour, where the hero stands and the way he faces: open meadow ahead, the cottages' sides off to the left */
 const HOUR = 12;
-const STAND = new THREE.Vector3(10, 0, 4);
+const STAND = new Vec3(10, 0, 4);
 const FACING = Math.PI / 2;
 const SETTLE = 60;
 /** how far ahead the rings' middle is moved between the two frames (m) */
@@ -62,11 +62,11 @@ interface BandSum { blades: number; light: number; pairs: number; steps: number 
 interface BandChange { blades: number; grain: number; after: number; change: number }
 
 /** Every object up from `object` to the scene, and each one's siblings: what must hide for it alone to be drawn. */
-export function hiddenAround(object: THREE.Object3D): THREE.Object3D[] {
-  const hidden: THREE.Object3D[] = [];
-  for (let at: THREE.Object3D = object; at.parent; at = at.parent) {
+export function hiddenAround(object: Node): Node[] {
+  const hidden: Node[] = [];
+  for (let at: Node = object; at.parent; at = at.parent) {
     for (const sibling of at.parent.children) {
-      if (sibling !== at && sibling.visible && !(sibling as THREE.Light).isLight) hidden.push(sibling);
+      if (sibling !== at && sibling.visible && !(sibling as Light).isLight) hidden.push(sibling);
     }
   }
   return hidden;
@@ -87,7 +87,7 @@ function thinnedAfter(): () => void {
 
 /** The frames drawn with the meadow's blades alone, on black: with the rings' middle as the view puts it, then moved
  *  `ahead` (x, z), each the engine's steady frame; `canary` thins the far grass in the second. */
-function bladesAlone(lab: Lab, ahead: THREE.Vector2, canary: boolean): [Canvas, Canvas] {
+function bladesAlone(lab: Lab, ahead: Vec2, canary: boolean): [Canvas, Canvas] {
   const meadow = G.scene.getObjectByName('meadow');
   if (!meadow) throw new Error('lab: village: no meadow in the scene');
   const hidden = hiddenAround(meadow);
@@ -114,8 +114,8 @@ function bladesAlone(lab: Lab, ahead: THREE.Vector2, canary: boolean): [Canvas, 
 }
 
 /** The ground (y = 0) under the canvas's pixel (x, y from its bottom row), or null past the horizon. */
-export function groundUnder(canvas: Canvas, x: number, y: number, ray: THREE.Ray, out: THREE.Vector3): THREE.Vector3 | null {
-  const ndc = new THREE.Vector3((x + 0.5) / canvas.width * 2 - 1, (y + 0.5) / canvas.height * 2 - 1, 0.5);
+export function groundUnder(canvas: Canvas, x: number, y: number, ray: Ray, out: Vec3): Vec3 | null {
+  const ndc = new Vec3((x + 0.5) / canvas.width * 2 - 1, (y + 0.5) / canvas.height * 2 - 1, 0.5);
   ray.origin.setFromMatrixPosition(G.camera.matrixWorld);
   ray.direction.copy(ndc.unproject(G.camera)).sub(ray.origin).normalize();
   if (ray.direction.y > -1e-3) return null;
@@ -128,11 +128,11 @@ function lightAt(canvas: Canvas, i: number): number {
 }
 
 /** Each pixel read's band: its ground's distance from `focus` in bands, or -1 past the horizon or the farthest. */
-function bandsUnder(canvas: Canvas, focus: THREE.Vector2): Int16Array {
+function bandsUnder(canvas: Canvas, focus: Vec2): Int16Array {
   const columns = Math.ceil(canvas.width / STEP);
   const bands = new Int16Array(columns * Math.ceil(canvas.height / STEP)).fill(-1);
-  const ray = new THREE.Ray();
-  const ground = new THREE.Vector3();
+  const ray = new Ray();
+  const ground = new Vec3();
   for (let y = 0; y < canvas.height; y += STEP) {
     for (let x = 0; x < canvas.width; x += STEP) {
       if (!groundUnder(canvas, x, y, ray, ground)) continue;
@@ -173,7 +173,7 @@ function grainOf(sum: BandSum): number {
 
 /** The bands read, each `[from m, its change]`: the grass's grain before the rings moved and after, those showing
  *  too few blades left out. */
-function bandChanges(before: Canvas, after: Canvas, focus: THREE.Vector2): [number, BandChange][] {
+function bandChanges(before: Canvas, after: Canvas, focus: Vec2): [number, BandChange][] {
   const bands = bandsUnder(before, focus);
   const was = bandSums(before, bands);
   const is = bandSums(after, bands);
@@ -197,9 +197,9 @@ async function grassAsRingsMove(lab: Lab, canary: boolean): Promise<[number, Ban
     await lab.step(SETTLE);
     G.player.obj.visible = false;
     try {
-      const focus = focusOf(G.camera, new THREE.Vector2());
-      const sight = G.camera.getWorldDirection(new THREE.Vector3());
-      const ahead = new THREE.Vector2(sight.x, sight.z).normalize().multiplyScalar(MOVED);
+      const focus = focusOf(G.camera, new Vec2());
+      const sight = G.camera.getWorldDirection(new Vec3());
+      const ahead = new Vec2(sight.x, sight.z).normalize().multiplyScalar(MOVED);
       return bandChanges(...bladesAlone(lab, ahead, canary), focus);
     } finally {
       G.player.obj.visible = true;
@@ -211,7 +211,7 @@ async function grassAsRingsMove(lab: Lab, canary: boolean): Promise<[number, Ban
 }
 
 /** How much of each band's light changes between two frames, pixel by pixel, each `[from m, its share]`. */
-function pixelsChanged(before: Canvas, after: Canvas, focus: THREE.Vector2, fewest = FEWEST, cover = LEAST_COVER,
+function pixelsChanged(before: Canvas, after: Canvas, focus: Vec2, fewest = FEWEST, cover = LEAST_COVER,
 ): [number, number][] {
   const bands = bandsUnder(before, focus);
   const columns = Math.ceil(before.width / STEP);
@@ -250,9 +250,9 @@ async function changedInAStride(lab: Lab, canary: boolean): Promise<[number, num
     await lab.step(SETTLE);
     G.player.obj.visible = false;
     try {
-      const focus = focusOf(G.camera, new THREE.Vector2());
-      const sight = G.camera.getWorldDirection(new THREE.Vector3());
-      const ahead = new THREE.Vector2(sight.x, sight.z).normalize().multiplyScalar(STRIDE);
+      const focus = focusOf(G.camera, new Vec2());
+      const sight = G.camera.getWorldDirection(new Vec3());
+      const ahead = new Vec2(sight.x, sight.z).normalize().multiplyScalar(STRIDE);
       const [before, after] = bladesAlone(lab, ahead, canary);
       return pixelsChanged(before, after, focus);
     } finally {
@@ -301,9 +301,9 @@ export async function grassStillFromAbove(lab: Lab, canary: boolean): Promise<Li
     await lab.step(SETTLE);
     G.player.obj.visible = false;
     try {
-      const focus = focusOf(G.camera, new THREE.Vector2());
-      const sight = G.camera.getWorldDirection(new THREE.Vector3());
-      const ahead = new THREE.Vector2(sight.x, sight.z).normalize().multiplyScalar(STRIDE);
+      const focus = focusOf(G.camera, new Vec2());
+      const sight = G.camera.getWorldDirection(new Vec3());
+      const ahead = new Vec2(sight.x, sight.z).normalize().multiplyScalar(STRIDE);
       bands = pixelsChanged(...bladesAlone(lab, ahead, canary), focus, ABOVE_FEWEST, ABOVE_COVER);
     } finally {
       G.player.obj.visible = true;

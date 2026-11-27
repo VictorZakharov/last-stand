@@ -3,7 +3,7 @@
 // area should reset their counters"). Each frame as he steps in and out: how much of the readout is shown, none moving
 // by more than `MOST_A_FRAME`, all of it shown inside and none outside; hits counted before he leaves are gone as he
 // comes back. `canary` makes the fade all but instant, which must be found.
-import * as THREE from 'three';
+import { Vec3 } from './sceneApi.ts';
 import type { Lab } from './lab';
 import { G } from '../../../src/state';
 import { yardToWorld } from '../../../src/data/village';
@@ -32,7 +32,7 @@ async function stepTo(lab: Lab, meter: DamageMeter, [x, z]: [number, number]): P
   let last = shownOf(meter);
   let jump = 0;
   G.player.walkTo = null;
-  G.player.place(new THREE.Vector3(x, groundHeight(x, z), z), 0);
+  G.player.place(new Vec3(x, groundHeight(x, z), z), 0);
   await lab.step(FRAMES, undefined, () => {
     const now = shownOf(meter);
     jump = Math.max(jump, Math.abs(now - last));

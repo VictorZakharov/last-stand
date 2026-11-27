@@ -20,7 +20,7 @@ export interface UpdateRange {
 /** three's `StaticDrawUsage`: written once, drawn many times (`material/constants.ts` names the others) */
 export const STATIC_DRAW_USAGE = 35044;
 
-const _vector = new Vec3();
+const scratchVector = new Vec3();
 
 /** A typed array of the same kind as `like`, `length` long (zeroed). */
 export function sameKind<A extends TypedArray>(like: A, length: number): A {
@@ -143,8 +143,8 @@ export class Attribute<A extends TypedArray = TypedArray> {
   }
 
   /** Writes item `index`'s fourth number. */
-  setW(index: number, w: number): this {
-    return this.setComponent(index, 3, w);
+  setW(index: number, fourth: number): this {
+    return this.setComponent(index, 3, fourth);
   }
 
   /** Writes item `index`'s first two numbers. */
@@ -165,12 +165,12 @@ export class Attribute<A extends TypedArray = TypedArray> {
   }
 
   /** Writes item `index`'s four numbers. */
-  setXYZW(index: number, x: number, y: number, z: number, w: number): this {
+  setXYZW(index: number, x: number, y: number, z: number, fourth: number): this {
     const at = index * this.itemSize;
     this.array[at] = this.stored(x);
     this.array[at + 1] = this.stored(y);
     this.array[at + 2] = this.stored(z);
-    this.array[at + 3] = this.stored(w);
+    this.array[at + 3] = this.stored(fourth);
     return this;
   }
 
@@ -189,28 +189,28 @@ export class Attribute<A extends TypedArray = TypedArray> {
   }
 
   /** Every item (three numbers each) moved by `m`, as a point. */
-  applyMatrix4(m: Mat4): this {
+  applyMatrix4(matrix: Mat4): this {
     for (let i = 0; i < this.count; i++) {
-      this.readVector(i).applyMatrix4(m);
-      this.setXYZ(i, _vector.x, _vector.y, _vector.z);
+      this.readVector(i).applyMatrix4(matrix);
+      this.setXYZ(i, scratchVector.x, scratchVector.y, scratchVector.z);
     }
     return this;
   }
 
   /** Every item turned by the normal matrix `m`, and made unit length. */
-  applyNormalMatrix(m: Mat3): this {
+  applyNormalMatrix(matrix: Mat3): this {
     for (let i = 0; i < this.count; i++) {
-      this.readVector(i).applyNormalMatrix(m);
-      this.setXYZ(i, _vector.x, _vector.y, _vector.z);
+      this.readVector(i).applyNormalMatrix(matrix);
+      this.setXYZ(i, scratchVector.x, scratchVector.y, scratchVector.z);
     }
     return this;
   }
 
   /** Every item turned by `m` as a direction (no move), and made unit length. */
-  transformDirection(m: Mat4): this {
+  transformDirection(matrix: Mat4): this {
     for (let i = 0; i < this.count; i++) {
-      this.readVector(i).transformDirection(m);
-      this.setXYZ(i, _vector.x, _vector.y, _vector.z);
+      this.readVector(i).transformDirection(matrix);
+      this.setXYZ(i, scratchVector.x, scratchVector.y, scratchVector.z);
     }
     return this;
   }
@@ -233,7 +233,7 @@ export class Attribute<A extends TypedArray = TypedArray> {
   }
 
   private readVector(index: number): Vec3 {
-    return _vector.set(this.getX(index), this.getY(index), this.getZ(index));
+    return scratchVector.set(this.getX(index), this.getY(index), this.getZ(index));
   }
 
   private read(value: number): number {

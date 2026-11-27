@@ -11,7 +11,7 @@
 // every mug out in heroes' hands: he serves none until one comes back. Every frame, the mugs must add up to their count,
 // none may jump or go from sight but into a hero's hand, and his planted feet must not slide. Frames drawn during the
 // check must request no engine pipelines. `--canary` includes letting the hero walk while drinking.
-import * as THREE from 'three';
+import { Maths, Node, Quat, Vec3 } from './sceneApi.ts';
 import type { Frame, Lab, Pictured, Report, ViewName } from './lab';
 import { G } from '../../../src/state';
 import { enterRoom } from '../../../src/game/rooms';
@@ -117,8 +117,8 @@ const TASK_IN = 1500, SERVE_IN = 900, CLEAR_IN = 2400;
 /** how far under the head's `mouth` point the lower lip is (m: models/flask.ts `ALE_DRINK.lowerLip`) */
 const LOWER_LIP = 0.006;
 
-const _lips = new THREE.Vector3(), _rim = new THREE.Vector3(), _foot = new THREE.Vector3(), _axis = new THREE.Vector3();
-const _turn = new THREE.Quaternion();
+const _lips = new Vec3(), _rim = new Vec3(), _foot = new Vec3(), _axis = new Vec3();
+const _turn = new Quat();
 
 /** How far into his drink the hero is (0..1), or -1 while he isn't drinking the ale. */
 function drinkShare(): number {
@@ -142,10 +142,10 @@ function mugInHand(): { shown: boolean; flaskHidden: boolean; rimOff: number; ti
   const toLip = _foot.subVectors(_lips, middle);
   toLip.addScaledVector(axis, -toLip.dot(axis));
   const edge = middle.clone().addScaledVector(toLip.normalize(), MUG.rimR * scale);
-  const parts = (flask.userData.flaskParts as THREE.Object3D[] | undefined) ?? [];
+  const parts = (flask.userData.flaskParts as Node[] | undefined) ?? [];
   return {
     shown: flask.visible && mug.visible, flaskHidden: parts.every((o) => !o.visible),
-    rimOff: edge.distanceTo(_lips), tilt: Math.acos(THREE.MathUtils.clamp(axis.y, -1, 1)) * 180 / Math.PI,
+    rimOff: edge.distanceTo(_lips), tilt: Math.acos(Maths.clamp(axis.y, -1, 1)) * 180 / Math.PI,
   };
 }
 
@@ -161,26 +161,26 @@ class Watch {
   stepAt = '';
   private wasDoing = '';
   slideAt = '';
-  private readonly last: (THREE.Vector3 | null)[] = [];
+  private readonly last: (Vec3 | null)[] = [];
   private readonly lastPlace: string[] = [];
-  private readonly feet: [THREE.Vector3, THREE.Vector3] = [new THREE.Vector3(), new THREE.Vector3()];
+  private readonly feet: [Vec3, Vec3] = [new Vec3(), new Vec3()];
   private feetSeen = false;
   private plantedWas: [boolean, boolean] = [false, false];
   private readonly footYawWas = [0, 0];
-  private readonly footSpotWas = [new THREE.Vector3(), new THREE.Vector3()];
+  private readonly footSpotWas = [new Vec3(), new Vec3()];
   private placings = 0;
-  private readonly root = new THREE.Vector3();
-  private readonly rootWas = new THREE.Vector3();
+  private readonly root = new Vec3();
+  private readonly rootWas = new Vec3();
   private yawWas = 0;
   /** each foot's shape, and its sole's points this frame and the last: a slip is the least any point on the floor
    *  moved (`slipOf`, as `feet` reads the heroes': by the ankle, a foot turning on its ball read as a slide) */
   private shapes: FootShape[] | null = null;
-  private readonly soles: [THREE.Vector3[], THREE.Vector3[]] = [[], []];
-  private readonly solesWas: [THREE.Vector3[], THREE.Vector3[]] = [[], []];
+  private readonly soles: [Vec3[], Vec3[]] = [[], []];
+  private readonly solesWas: [Vec3[], Vec3[]] = [[], []];
   private stepWas = '';
   private timeWas = 0;
-  private readonly at = new THREE.Vector3();
-  private readonly scale = new THREE.Vector3();
+  private readonly at = new Vec3();
+  private readonly scale = new Vec3();
   /** his hands' smoothness, his body against the counters, the mugs never in the air (keeperWatch.ts) */
   readonly hands = new HandsSmooth();
   readonly body = new BodyClear();
@@ -398,7 +398,7 @@ export async function tavern(lab: Lab, options: TavernOptions): Promise<Report> 
     }
     const before = SIT.auto;
     G.player.walkTo = null;
-    G.player.place(room.group.localToWorld(new THREE.Vector3(BAR_STOOL_X - 0.6, 0, stoolAt)), Math.PI / 2);
+    G.player.place(room.group.localToWorld(new Vec3(BAR_STOOL_X - 0.6, 0, stoolAt)), Math.PI / 2);
     SIT.auto = true;
     G.player.sitting.only = seat;
     G.player.sits = true;
@@ -476,7 +476,7 @@ export async function tavern(lab: Lab, options: TavernOptions): Promise<Report> 
    *  mug's take never in the way (#889's `useWhileSatBy` and the tavern's mug sharing E: `game/keyTakers.ts`). */
   const partyTableSat = async (): Promise<void> => {
     const table = villageObject('partyTable');
-    const at = table ? room.group.worldToLocal(new THREE.Vector3(table.at[0], 0, table.at[1])) : null;
+    const at = table ? room.group.worldToLocal(new Vec3(table.at[0], 0, table.at[1])) : null;
     const seat = at && G.arena.rooms!.tavern.seats.filter((s) => Math.hypot(s.ax - at.x, s.az - at.z) < 1.3)
       .sort((a, b) => Math.hypot(a.ax - at.x, a.az - at.z) - Math.hypot(b.ax - at.x, b.az - at.z))[0];
     if (!seat || !at) {
@@ -485,7 +485,7 @@ export async function tavern(lab: Lab, options: TavernOptions): Promise<Report> 
     }
     const before = SIT.auto;
     G.player.walkTo = null;
-    G.player.place(room.group.localToWorld(new THREE.Vector3(seat.ax + (seat.ax - at.x), 0, seat.az + (seat.az - at.z))), 0);
+    G.player.place(room.group.localToWorld(new Vec3(seat.ax + (seat.ax - at.x), 0, seat.az + (seat.az - at.z))), 0);
     SIT.auto = true;
     G.player.sitting.only = seat;
     G.player.sits = true;
@@ -534,7 +534,7 @@ export async function tavern(lab: Lab, options: TavernOptions): Promise<Report> 
     // (from his sides along the aisle behind the bar, whichever way he faces: from the bar's front, what he does at the
     // back counter is behind him; the views go by the hero's facing, so the hero, hidden for it, is turned as he is and
     // turned back after)
-    const at = keeper.root.getWorldPosition(new THREE.Vector3()).setY(1.0), facing = G.player.facing;
+    const at = keeper.root.getWorldPosition(new Vec3()).setY(1.0), facing = G.player.facing;
     G.player.facing = keeper.root.rotation.y;
     lab.model.root.visible = false;
     moments.push(lab.picture(`step-${name}`, ['left', 'right'], [STEP_SHOTS[name]], { at, distance: 2.8 }));
@@ -547,7 +547,7 @@ export async function tavern(lab: Lab, options: TavernOptions): Promise<Report> 
     if (!film || done >= film.count || stepFor < film.from || (stepFor - film.from) % film.every) return;
     if (name === 'walk' && tv.body().speed < 0.5) return;
     filmed.set(name, done + 1);
-    const at = keeper.root.getWorldPosition(new THREE.Vector3()).setY(1.0), facing = G.player.facing;
+    const at = keeper.root.getWorldPosition(new Vec3()).setY(1.0), facing = G.player.facing;
     G.player.facing = keeper.root.rotation.y;
     lab.model.root.visible = false;
     const label = `film-${name.replace(' ', '-')}-${done + 1}`;
@@ -558,7 +558,7 @@ export async function tavern(lab: Lab, options: TavernOptions): Promise<Report> 
   /** his legs pictured from behind and above as he is now (the worst crossing of his feet, kept to the run's end) */
   let crossedShot: Pictured | null = null;
   const shootFeet = (label: string, note: string): Pictured => {
-    const at = keeper.root.getWorldPosition(new THREE.Vector3()).setY(0.35), facing = G.player.facing;
+    const at = keeper.root.getWorldPosition(new Vec3()).setY(0.35), facing = G.player.facing;
     G.player.facing = keeper.root.rotation.y;
     lab.model.root.visible = false;
     const shot = lab.picture(label, ['back', 'above'], [note], { at, distance: 1.5 });
@@ -566,7 +566,7 @@ export async function tavern(lab: Lab, options: TavernOptions): Promise<Report> 
     G.player.facing = facing;
     return shot;
   };
-  const keeperAt = (y = 1.2) => keeper.root.getWorldPosition(new THREE.Vector3()).setY(y);
+  const keeperAt = (y = 1.2) => keeper.root.getWorldPosition(new Vec3()).setY(y);
   /** the keeper pictured from the hero's side, the hero turned to him where he stands */
   const picture = async (label: string, note: string, distance = 2.4) => {
     const at = keeperAt(), me = G.player.pos;
@@ -576,12 +576,12 @@ export async function tavern(lab: Lab, options: TavernOptions): Promise<Report> 
 
   /** how far each of his hands is from where it was sent (cm), or 'free' */
   const handsOff = (): string => {
-    const at: [THREE.Vector3, THREE.Vector3] = [new THREE.Vector3(), new THREE.Vector3()], b = tv.body();
+    const at: [Vec3, Vec3] = [new Vec3(), new Vec3()], b = tv.body();
     keeper.hands(at);
     // (a hand gripping what the other holds is sent to where that thing is, not where it was asked to be)
-    const goalOf = (goal: HandGoal) => (goal.on ? goal.on.thing.localToWorld(new THREE.Vector3(0, goal.on.along, 0)) : goal.at);
+    const goalOf = (goal: HandGoal) => (goal.on ? goal.on.thing.localToWorld(new Vec3(0, goal.on.along, 0)) : goal.at);
     // (a fist round a thing seats that thing's grip on its goal: the thing measured there, not the fist's point)
-    const handAt = (goal: HandGoal, i: number) => (goal.held ? goal.held.getWorldPosition(new THREE.Vector3()) : at[i]);
+    const handAt = (goal: HandGoal, i: number) => (goal.held ? goal.held.getWorldPosition(new Vec3()) : at[i]);
     const off = (goal: HandGoal | null, i: number) => (goal ? `${(handAt(goal, i).distanceTo(goalOf(goal)) * 100).toFixed(1)} cm` : 'free');
     return `left hand ${off(b.left, 0)} from its goal, right ${off(b.right, 1)}`;
   };
@@ -781,7 +781,7 @@ export async function tavern(lab: Lab, options: TavernOptions): Promise<Report> 
     // round 4)
     if (await frames(CLEAR_IN, () => tv.doing().step === 'wash') >= 0) {
       G.player.walkTo = null;
-      G.player.place(room.group.localToWorld(new THREE.Vector3(BAR.x - BAR.half - 0.45, 0, TUB.z)), Math.PI / 2);
+      G.player.place(room.group.localToWorld(new Vec3(BAR.x - BAR.half - 0.45, 0, TUB.z)), Math.PI / 2);
       await frames(40);
       // (the whole screen as the player sees it, the room across it: a tile cut round the hero left the tub off its side)
       await viewWatched('top');

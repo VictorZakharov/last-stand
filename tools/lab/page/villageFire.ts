@@ -4,7 +4,7 @@
 // flames found by their material; and what its own light adds to the frame by night (from play, "in our case, there is
 // no light from fire, its a mistake"). `lab fire` reads the same flames in the biomes. `canary` hides them and puts
 // its light out first.
-import * as THREE from 'three';
+import { Mesh, Node, PointLight, Vec3 } from './sceneApi.ts';
 import type { Lab, Pictured } from './lab';
 import { G } from '../../../src/state';
 import { CAMPFIRE, VILLAGE_OBJECTS } from '../../../src/data/village';
@@ -39,13 +39,13 @@ const LEAST_ADDED = 10;
 const LEAST_SEEN = 2;
 
 /** The flames over the campfire: the shader with a box over its place, found by its uniforms (`flameUniforms`). */
-function campfireFlames(): THREE.Mesh {
-  let found: THREE.Mesh | null = null;
+function campfireFlames(): Mesh {
+  let found: Mesh | null = null;
   G.scene.traverse((object) => {
-    const mesh = object as THREE.Mesh;
+    const mesh = object as Mesh;
     const uniforms = flameUniforms(mesh);
     if (!uniforms?.uPuff || !uniforms.uCentre) return;
-    const centre = uniforms.uCentre.value as THREE.Vector3;
+    const centre = uniforms.uCentre.value as Vec3;
     if (Math.hypot(centre.x - CAMPFIRE[0], centre.z - CAMPFIRE[1]) < 0.5) found = mesh;
   });
   if (!found) throw new Error('lab: village: no flames over the campfire');
@@ -67,7 +67,7 @@ function roundTheFire(canvas: Canvas): { left: number; right: number; bottom: nu
     const angle = (i / ROUND_POINTS) * Math.PI * 2;
     const x = CAMPFIRE[0] + Math.cos(angle) * READ_ROUND;
     const z = CAMPFIRE[1] + Math.sin(angle) * READ_ROUND;
-    const at = new THREE.Vector3(x, groundHeight(x, z), z).project(G.camera);
+    const at = new Vec3(x, groundHeight(x, z), z).project(G.camera);
     const column = (at.x + 1) / 2 * canvas.width;
     const row = (at.y + 1) / 2 * canvas.height;
     box.left = Math.min(box.left, Math.floor(column));
@@ -111,10 +111,10 @@ const FIGURE_WIDE = 0.22;
 const FIGURE_LEAST_PX = 12;
 
 /** The campfire's own light: the point light of a fire's colour nearest it. */
-function campfireLight(): THREE.PointLight {
-  let found: THREE.PointLight | null = null;
+function campfireLight(): PointLight {
+  let found: PointLight | null = null;
   G.scene.traverse((object) => {
-    const light = object as THREE.PointLight;
+    const light = object as PointLight;
     if (!light.isPointLight || light.color.getHex() !== FIRE_LIGHT_COLOUR) return;
     if (Math.hypot(light.position.x - CAMPFIRE[0], light.position.z - CAMPFIRE[1]) < FIRE_LIGHT_NEAR) found = light;
   });
@@ -123,8 +123,8 @@ function campfireLight(): THREE.PointLight {
 }
 
 /** The share of his figure as `canvas` shows it (a box from his feet to his head) burned past `FIGURE_BURNED`. */
-function figureBurned(canvas: Canvas, at: THREE.Vector3): number {
-  const place = (height: number): THREE.Vector3 => at.clone().setY(at.y + height).project(G.camera);
+function figureBurned(canvas: Canvas, at: Vec3): number {
+  const place = (height: number): Vec3 => at.clone().setY(at.y + height).project(G.camera);
   const foot = place(0);
   const head = place(HEAD_UP);
   const across = (foot.x + head.x) / 2;
@@ -176,11 +176,11 @@ async function quiverBurned(lab: Lab): Promise<QuiverRead | null> {
       const angle = way / WAYS_ROUND * Math.PI * 2;
       const x = CAMPFIRE[0] + Math.sin(angle) * away;
       const z = CAMPFIRE[1] + Math.cos(angle) * away;
-      G.player.place(new THREE.Vector3(x, groundHeight(x, z), z), angle + Math.PI);
+      G.player.place(new Vec3(x, groundHeight(x, z), z), angle + Math.PI);
       faceCamera(angle);
       await lab.step(QUIVER_SETTLE);
       G.player.model.root.updateMatrixWorld(true);
-      const mouth = quiver.localToWorld(new THREE.Vector3(0, QUIVER_UP, 0));
+      const mouth = quiver.localToWorld(new Vec3(0, QUIVER_UP, 0));
       const glow = glowOf(drawFrame(lab, boxRound(mouth, QUIVER_BOX)), 0);
       if (glow.nearWhite > worst.share) worst = { share: glow.nearWhite, brightest: glow.max, angle, away };
     }
@@ -204,7 +204,7 @@ async function skinRoundTheFire(lab: Lab, lines: string[], problems: string[], m
         const angle = way / WAYS_ROUND * Math.PI * 2;
         const x = CAMPFIRE[0] + Math.sin(angle) * away;
         const z = CAMPFIRE[1] + Math.cos(angle) * away;
-        G.player.place(new THREE.Vector3(x, groundHeight(x, z), z), angle + Math.PI);
+        G.player.place(new Vec3(x, groundHeight(x, z), z), angle + Math.PI);
         faceCamera(angle);
         await lab.step(QUIVER_SETTLE);
         const share = bodyBurned(lab);
@@ -219,7 +219,7 @@ async function skinRoundTheFire(lab: Lab, lines: string[], problems: string[], m
   holdHour(worst.hour);
   const x = CAMPFIRE[0] + Math.sin(worst.angle) * worst.away;
   const z = CAMPFIRE[1] + Math.cos(worst.angle) * worst.away;
-  G.player.place(new THREE.Vector3(x, groundHeight(x, z), z), worst.angle + Math.PI);
+  G.player.place(new Vec3(x, groundHeight(x, z), z), worst.angle + Math.PI);
   faceCamera(worst.angle);
   await lab.step(QUIVER_SETTLE);
   moments.push(await lab.screen('his skin at its worst beside the fire', []));
@@ -232,8 +232,8 @@ const HIS_PIXEL = 0.04;
 const HIS_FEWEST = 200;
 
 /** Every fire's flames, their light left on: drawn over him, they count as his in a frame with him and without. */
-export function theFlames(): THREE.Object3D[] {
-  const flames: THREE.Object3D[] = [];
+export function theFlames(): Node[] {
+  const flames: Node[] = [];
   G.scene.traverse((object) => {
     if (flameUniforms(object)?.uFrame && object.visible) flames.push(object);
   });
@@ -294,7 +294,7 @@ export async function heroBesideFire(lab: Lab, canary: boolean): Promise<LightsC
     for (const view of VIEWS) {
       await viewBy(lab, view);
       for (const [name, x, z] of spots) {
-        const at = new THREE.Vector3(x, 0, z);
+        const at = new Vec3(x, 0, z);
         at.y = groundHeight(x, z);
         G.player.walkTo = null;
         G.player.place(at, Math.atan2(CAMPFIRE[0] - x, CAMPFIRE[1] - z));
@@ -316,7 +316,7 @@ export async function heroBesideFire(lab: Lab, canary: boolean): Promise<LightsC
         + `${quiver.away} m out at ${quiver.angle.toFixed(2)} rad`;
       lines.push(`his quiver round it at worst: ${said}`);
       if (quiver.share > QUIVER_MOST) problems.push(`his quiver beside the campfire: ${said}`);
-      G.player.place(new THREE.Vector3(CAMPFIRE[0] + Math.sin(quiver.angle) * quiver.away, 0,
+      G.player.place(new Vec3(CAMPFIRE[0] + Math.sin(quiver.angle) * quiver.away, 0,
         CAMPFIRE[1] + Math.cos(quiver.angle) * quiver.away), quiver.angle + Math.PI);
       faceCamera(quiver.angle);
       await lab.step(QUIVER_SETTLE);
@@ -344,7 +344,7 @@ export async function campfireBurns(lab: Lab, canary: boolean): Promise<LightsCh
   const kept = viewMode();
   const flames = campfireFlames();
   const light = campfireLight();
-  const at = new THREE.Vector3(CAMPFIRE[0] + BEFORE, 0, CAMPFIRE[1] + ASIDE);
+  const at = new Vec3(CAMPFIRE[0] + BEFORE, 0, CAMPFIRE[1] + ASIDE);
   at.y = groundHeight(at.x, at.z);
   G.player.walkTo = null;
   G.player.place(at, -Math.PI / 2);
@@ -384,7 +384,7 @@ export async function campfireBurns(lab: Lab, canary: boolean): Promise<LightsCh
           const share = changedShare(shown, unlit);
           const added = redAdded(shown, unlit);
           // (read off its matrix as three's lights read it: `getWorldPosition` would make it again first)
-          const place = new THREE.Vector3().setFromMatrixPosition(light.matrixWorld);
+          const place = new Vec3().setFromMatrixPosition(light.matrixWorld);
           const off = Math.hypot(place.x - CAMPFIRE[0], place.z - CAMPFIRE[1]);
           if (off > FIRE_LIGHT_NEAR) problems.push(`the campfire's light stands ${off.toFixed(1)} m from it`);
           said.push(`its light ${held.toFixed(1)} cd at ${place.toArray().map((part) => part.toFixed(1))}, `

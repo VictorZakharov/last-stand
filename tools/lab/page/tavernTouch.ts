@@ -1,5 +1,5 @@
 // `lab tavern --parts touch`: tapping a served mug and answering its choice through the real touch controls.
-import * as THREE from 'three';
+import { Vec3 } from './sceneApi.ts';
 import { KEEPER_TAKE, type TavernKeeper } from '../../../src/world/tavernKeeper';
 import { G } from '../../../src/state';
 import { input } from '../../../src/core/input';
@@ -28,7 +28,7 @@ export async function tavernTouch(lab: Lab, tv: TavernKeeper, canary: boolean): 
   const tapMug = async (): Promise<boolean | null> => {
     // Keep the mug on the canvas side of the touch stick's pad while staying within reach of the bar.
     if (mugOnPage(tv, id).x < innerWidth * 0.53) {
-      const right = new THREE.Vector3().setFromMatrixColumn(G.camera.matrixWorld, 0).setY(0).normalize();
+      const right = new Vec3().setFromMatrixColumn(G.camera.matrixWorld, 0).setY(0).normalize();
       G.player.walkTo = null;
       G.player.place(G.player.pos.clone().addScaledVector(right, -0.85), G.player.facing);
       await lab.step(60);
@@ -87,7 +87,7 @@ export async function tavernTouch(lab: Lab, tv: TavernKeeper, canary: boolean): 
   };
   // Stand at the clear front edge of the bar so Put down is offered while carrying the mug.
   G.player.walkTo = null;
-  G.player.place(room.group.localToWorld(new THREE.Vector3(BAR.x - BAR.half - 0.4, 0, -1.5)), Math.PI / 2);
+  G.player.place(room.group.localToWorld(new Vec3(BAR.x - BAR.half - 0.4, 0, -1.5)), Math.PI / 2);
   await lab.step(20);
   if (!(await tapChoice('down'))) return { text: lines.join('\n'), problems };
   const down = tv.mugs.get(id);

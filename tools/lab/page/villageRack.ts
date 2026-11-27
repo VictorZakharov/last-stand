@@ -5,7 +5,7 @@
 // it, and its name there walks him back to it; walked off, the menu is put away. Pictured from over the shoulder as he
 // comes to it, with its menu open, and on the map. `canary` sends him to its stand as a place on the map is walked to
 // (`goTo`), which uses nothing: the menu must not open.
-import * as THREE from 'three';
+import { Vec3 } from './sceneApi.ts';
 import type { Lab, Pictured } from './lab';
 import { G } from '../../../src/state';
 import { RACK, VILLAGE_OBJECTS, type Spot } from '../../../src/data/village';
@@ -39,7 +39,7 @@ const before = (out: number, aside = 0): Spot => [
 async function standBefore(lab: Lab, spot: Spot): Promise<void> {
   const facing = Math.atan2(RACK.x - spot[0], RACK.z - spot[1]);
   G.player.walkTo = null;
-  G.player.place(new THREE.Vector3(spot[0], groundHeight(spot[0], spot[1]), spot[1]), facing);
+  G.player.place(new Vec3(spot[0], groundHeight(spot[0], spot[1]), spot[1]), facing);
   faceCamera(facing);
   await lab.step(SETTLE);
 }
@@ -92,7 +92,7 @@ async function sentToTheRack(lab: Lab, canary: boolean, problems: string[], mome
   moments.push(await lab.screen('rack before the yard', []));
   // (and close, from before it and from its side, him stood back out of the frame: its timber and each sword)
   await standBefore(lab, before(9));
-  moments.push(lab.picture('rack close', ['back', 'left'], [], { at: new THREE.Vector3(RACK.x, 0.95, RACK.z), distance: 6.2 }));
+  moments.push(lab.picture('rack close', ['back', 'left'], [], { at: new Vec3(RACK.x, 0.95, RACK.z), distance: 6.2 }));
   await standBefore(lab, before(SENT_FROM, 1.6));
   goUse(rack);
   let frames = 0;
@@ -108,7 +108,7 @@ async function sentToTheRack(lab: Lab, canary: boolean, problems: string[], mome
   }
   // walked off, the menu goes
   const off = before(WALKED_OFF + 2);
-  G.player.walkTo = new THREE.Vector3(off[0], 0, off[1]);
+  G.player.walkTo = new Vec3(off[0], 0, off[1]);
   await lab.until(() => fromRack() > WALKED_OFF || !G.player.walkTo, WALK_FRAMES, 'he never walked off from the rack');
   G.player.walkTo = null;
   await lab.step(SETTLE);

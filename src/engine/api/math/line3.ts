@@ -53,9 +53,9 @@ export class Line3 {
     return this.start.distanceTo(this.end);
   }
 
-  /** the point `t` of the way from start to end (past them outside 0 to 1), into `target` */
-  at(t: number, target: Vec3): Vec3 {
-    return this.delta(target).multiplyScalar(t).add(this.start);
+  /** the point `fraction` of the way from start to end (past them outside 0 to 1), into `target` */
+  at(fraction: number, target: Vec3): Vec3 {
+    return this.delta(target).multiplyScalar(fraction).add(this.start);
   }
 
   /**
@@ -67,14 +67,14 @@ export class Line3 {
     this.delta(along);
     const lengthSq = along.dot(along);
     if (lengthSq === 0) return 0;
-    const t = along.dot(fromStart) / lengthSq;
-    return clampToLine ? clamp(t, 0, 1) : t;
+    const fraction = along.dot(fromStart) / lengthSq;
+    return clampToLine ? clamp(fraction, 0, 1) : fraction;
   }
 
   /** the point of it (or of its line, unless `clampToLine`) nearest `point`, into `target` */
   closestPointToPoint(point: Vec3, clampToLine: boolean, target: Vec3): Vec3 {
-    const t = this.closestPointToPointParameter(point, clampToLine);
-    return this.at(t, target);
+    const fraction = this.closestPointToPointParameter(point, clampToLine);
+    return this.at(fraction, target);
   }
 
   /** both ends placed by `matrix` */

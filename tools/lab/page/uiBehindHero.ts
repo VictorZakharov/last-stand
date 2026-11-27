@@ -7,7 +7,7 @@
 // crystal stands over his head; a box round them stood higher than his outline): `EDGE` px into it, the meter must be
 // hidden; as far clear of it, shown; between, it isn't judged. Its canary hides the heroes from
 // the floaters (none in `G.players` as the labels are placed), which must leave a meter shown over him.
-import * as THREE from 'three';
+import { Mesh, Node, Vec3 } from './sceneApi.ts';
 import { G } from '../../../src/state';
 import { anchoredLabels, updateFloaters } from '../../../src/ui/floaters';
 import { layoutLabels, type Label } from '../../../src/ui/overlay/layer';
@@ -47,18 +47,18 @@ export interface HeroCover {
 }
 
 /** The dummies' meters anchored now, each with where. */
-function meters(): { label: Label; at: THREE.Vector3 }[] {
+function meters(): { label: Label; at: Vec3 }[] {
   const dummies = G.enemies.filter((enemy) => enemy.def.dummy && enemy.alive);
   const near = (at: { x: number; z: number }) => dummies.some((d) => Math.hypot(d.pos.x - at.x, d.pos.z - at.z) < 1);
   return anchoredLabels()
     .filter(({ at }) => at && near(at))
-    .map(({ label, at }) => ({ label, at: new THREE.Vector3(at!.x, at!.y, at!.z) }));
+    .map(({ label, at }) => ({ label, at: new Vec3(at!.x, at!.y, at!.z) }));
 }
 
 /** Whether `object` is held in a hand (under a hand's joint): a staff, a weapon, what isn't his body. */
-function held(object: THREE.Object3D): boolean {
+function held(object: Node): boolean {
   const joints = G.player.model.joints;
-  for (let at: THREE.Object3D | null = object; at; at = at.parent) {
+  for (let at: Node | null = object; at; at = at.parent) {
     if (at === joints?.handL || at === joints?.handR) return true;
   }
   return false;
@@ -69,9 +69,9 @@ function held(object: THREE.Object3D): boolean {
 function heroBox(): ScreenBox {
   G.player.obj.updateMatrixWorld(true);
   const box = { left: Infinity, top: Infinity, right: -Infinity, bottom: -Infinity };
-  const vertex = new THREE.Vector3();
+  const vertex = new Vec3();
   G.player.obj.traverseVisible((object) => {
-    const mesh = object as THREE.Mesh;
+    const mesh = object as Mesh;
     const positions = mesh.isMesh ? mesh.geometry?.attributes.position : undefined;
     if (!positions || held(mesh)) return;
     for (let index = 0; index < positions.count; index++) {
@@ -156,8 +156,8 @@ interface Placement {
 
 /** The hero stood `back` m before `at` along the camera's way, the camera settled behind him; the meter's box as drawn
  *  (placed seeing no hero), his body's, and whether the meter showed as the game placed it. */
-async function placeBefore(lab: Lab, label: Label, at: THREE.Vector3, back: number, canary: boolean): Promise<Placement> {
-  const way = G.camera.getWorldDirection(new THREE.Vector3()).setY(0).normalize();
+async function placeBefore(lab: Lab, label: Label, at: Vec3, back: number, canary: boolean): Promise<Placement> {
+  const way = G.camera.getWorldDirection(new Vec3()).setY(0).normalize();
   G.player.pos.set(at.x - way.x * back, G.player.pos.y, at.z - way.z * back);
   await lab.step(SETTLE_FRAMES);
   placeLabels(true);

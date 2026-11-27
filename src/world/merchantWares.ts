@@ -202,7 +202,7 @@ function sacks(g: Node, G: Goods, hx: number, hz: number, obstacles: Obstacle[])
  *  its colour glowing a little in the glass. */
 function potionShelf(g: Node, M: Mats, G: Goods, hx: number): void {
   const wx = hx - 0.15;
-  const shapes = [
+  const bottles = [
     [[0, 0], [0.032, 0], [0.036, 0.06], [0.014, 0.1], [0.012, 0.13], [0, 0.13]],
     [[0, 0], [0.04, 0], [0.042, 0.035], [0.012, 0.075], [0.011, 0.1], [0, 0.1]],
     [[0, 0], [0.026, 0], [0.026, 0.12], [0.01, 0.15], [0.009, 0.17], [0, 0.17]],
@@ -212,7 +212,7 @@ function potionShelf(g: Node, M: Mats, G: Goods, hx: number): void {
     for (const sz of [-1, 1]) box(g, 0.2, 0.12, 0.03, wx + 0.02, y - 0.12, 2.6 + sz * 0.45, M.timber);
     for (let k = 0; k < 7; k++) {
       const shape = (k + n) % 3, at = V(wx - 0.02, y + 0.03, 2.2 + k * 0.13);
-      piece(g, shapes[shape], G.potions[(k + n * 2) % G.potions.length], at);
+      piece(g, bottles[shape], G.potions[(k + n * 2) % G.potions.length], at);
       piece(g, shapes.cylinder(0.01, 0.009, 0.018, 8), M.oak, at.clone().add(V(0, [0.13, 0.1, 0.17][shape], 0)));
     }
   }

@@ -6,21 +6,34 @@
 import { Euler, Mat4, Quat, Vec3 } from '../math/index.ts';
 import { Layers, type LayersOwner } from './layers.ts';
 import { NONE, type StageLink } from './link.ts';
+import { Listeners, type NodeListener } from './listeners.ts';
+import { firstUnder } from './nodeSearch.ts';
+import {
+  movedAlong, placedUnder, turnedAbout, turnFacing, worldFacingOf, worldSizeOf, worldTurnOf,
+} from './nodeSpace.ts';
 import { WatchedEuler, WatchedQuat, WatchedVec3, type Mover } from './watched.ts';
 
 /** the next node's number (three's `Object3D.id`) */
 let nextNumber = 1;
-const _q = new Quat();
-const _parentTurn = new Quat();
-const _e = new Euler();
-const _m = new Mat4();
-const _v = new Vec3();
-const _target = new Vec3();
-const _place = new Vec3();
-const _size = new Vec3();
+const scratchQuat = new Quat();
+const scratchEuler = new Euler();
+const scratchMatrix = new Mat4();
+const scratchPoint = new Vec3();
+const scratchPlace = new Vec3();
+const scratchSize = new Vec3();
+const UNIT_X = new Vec3(1, 0, 0);
+const UNIT_Y = new Vec3(0, 1, 0);
+const UNIT_Z = new Vec3(0, 0, 1);
 
-/** A listener of a node's events (`dispatchEvent`). */
-export type NodeListener = (event: { type: string; target: Node; [key: string]: unknown }) => void;
+export type { NodeListener };
+
+/** what of a node changes its draws (written again as one changes) */
+interface DrawFlags {
+  castShadow: boolean;
+  receiveShadow: boolean;
+  frustumCulled: boolean;
+  renderOrder: number;
+}
 
 /** A thing in the world. */
 export class Node implements LayersOwner {
@@ -54,10 +67,9 @@ export class Node implements LayersOwner {
   engineId = NONE;
 
   private _visible = true;
-  private _castShadow = false;
-  private _receiveShadow = false;
-  private _frustumCulled = true;
-  private _renderOrder = 0;
+  private readonly drawFlags: DrawFlags = {
+    castShadow: false, receiveShadow: false, frustumCulled: true, renderOrder: 0,
+  };
   private _matrixAutoUpdate = true;
   /** whether its world matrix is made from its parent's (false: the game writes it) */
   matrixWorldAutoUpdate = true;
@@ -73,7 +85,7 @@ export class Node implements LayersOwner {
   /** which of its two turns was written last and the other not made again since */
   private quaternionStale = false;
   private rotationStale = false;
-  private listeners: Map<string, NodeListener[]> | null = null;
+  private listeners: Listeners | null = null;
 
   constructor() {
     const self = this;
@@ -107,9 +119,9 @@ export class Node implements LayersOwner {
     if (!this.quaternionStale) return;
     this.quaternionStale = false;
     const r = this.rotation;
-    _e.set(r.x, r.y, r.z, r.order);
-    _q.setFromEuler(_e);
-    this.quaternion.store(_q.x, _q.y, _q.z, _q.w);
+    scratchEuler.set(r.x, r.y, r.z, r.order);
+    scratchQuat.setFromEuler(scratchEuler);
+    this.quaternion.store(scratchQuat.x, scratchQuat.y, scratchQuat.z, scratchQuat.w);
   }
 
   /** The angles made again from the quaternion, where it was written since. */
@@ -117,9 +129,9 @@ export class Node implements LayersOwner {
     if (!this.rotationStale) return;
     this.rotationStale = false;
     const q = this.quaternion;
-    _q.set(q.x, q.y, q.z, q.w);
-    _e.setFromQuaternion(_q, this.rotation.order);
-    this.rotation.store(_e.x, _e.y, _e.z);
+    scratchQuat.set(q.x, q.y, q.z, q.w);
+    scratchEuler.setFromQuaternion(scratchQuat, this.rotation.order);
+    this.rotation.store(scratchEuler.x, scratchEuler.y, scratchEuler.z);
   }
 
   /** Its place, turn, size or matrix changed: its world matrix is made again when next read, and the stage told. */
@@ -136,37 +148,25 @@ export class Node implements LayersOwner {
     this.link?.shown(this);
   }
 
+  /** One of what changes its draws set to `value`, its draws written again if it changed. */
+  private setDrawFlag<Key extends keyof DrawFlags>(key: Key, value: DrawFlags[Key]): void {
+    if (value === this.drawFlags[key]) return;
+    this.drawFlags[key] = value;
+    this.link?.redraw(this);
+  }
+
   /** whether it casts shadows */
-  get castShadow(): boolean { return this._castShadow; }
-  set castShadow(value: boolean) {
-    if (value === this._castShadow) return;
-    this._castShadow = value;
-    this.link?.redraw(this);
-  }
-
+  get castShadow(): boolean { return this.drawFlags.castShadow; }
+  set castShadow(value: boolean) { this.setDrawFlag('castShadow', value); }
   /** whether shadows fall on it */
-  get receiveShadow(): boolean { return this._receiveShadow; }
-  set receiveShadow(value: boolean) {
-    if (value === this._receiveShadow) return;
-    this._receiveShadow = value;
-    this.link?.redraw(this);
-  }
-
+  get receiveShadow(): boolean { return this.drawFlags.receiveShadow; }
+  set receiveShadow(value: boolean) { this.setDrawFlag('receiveShadow', value); }
   /** whether it's left out where it's off the view (false: always drawn) */
-  get frustumCulled(): boolean { return this._frustumCulled; }
-  set frustumCulled(value: boolean) {
-    if (value === this._frustumCulled) return;
-    this._frustumCulled = value;
-    this.link?.redraw(this);
-  }
-
+  get frustumCulled(): boolean { return this.drawFlags.frustumCulled; }
+  set frustumCulled(value: boolean) { this.setDrawFlag('frustumCulled', value); }
   /** where it's drawn among what blends: lower first */
-  get renderOrder(): number { return this._renderOrder; }
-  set renderOrder(value: number) {
-    if (value === this._renderOrder) return;
-    this._renderOrder = value;
-    this.link?.redraw(this);
-  }
+  get renderOrder(): number { return this.drawFlags.renderOrder; }
+  set renderOrder(value: number) { this.setDrawFlag('renderOrder', value); }
 
   /** its layers changed: its draws written again */
   layersChanged(): void { this.link?.redraw(this); }
@@ -222,7 +222,8 @@ export class Node implements LayersOwner {
     this.traverse((node) => { if (!node._matrixAutoUpdate) node.moved(); });
   }
 
-  /** Kept for the game's calls (three's `updateWorldMatrix`): its own matrix taken as changed if the game writes it. */
+  /** Kept for the game's calls (three's `updateWorldMatrix`): its own matrix taken as changed if the game writes
+   *  it. */
   updateWorldMatrix(_parents?: boolean, children?: boolean): void {
     if (children) this.updateMatrixWorld();
     else if (!this._matrixAutoUpdate) this.moved();
@@ -277,16 +278,11 @@ export class Node implements LayersOwner {
 
   /** `node` added as a child, keeping where it stands in the world; itself. */
   attach(node: Node): this {
-    _m.copy(this.matrixWorld).invert();
-    if (node.parent) _m.multiply(node.parent.matrixWorld);
-    // (its own matrix under its old parent, which `_m` already holds: its world would count that parent twice)
-    if (node.matrixAutoUpdate) node.matrix.compose(node.position, node.quaternion, node.scale);
-    node.matrix.premultiply(_m);
-    node.matrix.decompose(_place, _q, _size);
+    placedUnder(this, node, scratchPlace, scratchQuat, scratchSize);
     this.add(node);
-    node.position.copy(_place);
-    node.quaternion.copy(_q);
-    node.scale.copy(_size);
+    node.position.copy(scratchPlace);
+    node.quaternion.copy(scratchQuat);
+    node.scale.copy(scratchSize);
     return this;
   }
 
@@ -307,56 +303,35 @@ export class Node implements LayersOwner {
 
   /** The first node named `name`, itself or under it. */
   getObjectByName(name: string): Node | undefined {
-    if (this.name === name) return this;
-    for (const child of this.children) {
-      const found = child.getObjectByName(name);
-      if (found) return found;
-    }
-    return undefined;
+    return this.getObjectByProperty('name', name);
   }
+
+  /** The first node whose `key` is `value`, itself or under it. */
+  getObjectByProperty(key: string, value: unknown): Node | undefined {
+    return firstUnder(this, (node) => (node as unknown as Record<string, unknown>)[key] === value);
+  }
+
+  /** The node numbered `id`, itself or under it. */
+  getObjectById(id: number): Node | undefined { return firstUnder(this, (node) => node.id === id); }
 
   /** Its place in the world, into `target`. */
-  getWorldPosition(target: Vec3): Vec3 {
-    return target.setFromMatrixPosition(this.matrixWorld);
-  }
-
+  getWorldPosition(target: Vec3): Vec3 { return target.setFromMatrixPosition(this.matrixWorld); }
   /** Its turn in the world, into `target`. */
-  getWorldQuaternion(target: Quat): Quat {
-    this.matrixWorld.decompose(_place, target, _size);
-    return target;
-  }
-
+  getWorldQuaternion(target: Quat): Quat { return worldTurnOf(this, target); }
   /** Its size in the world, into `target`. */
-  getWorldScale(target: Vec3): Vec3 {
-    this.matrixWorld.decompose(_place, _q, target);
-    return target;
-  }
-
+  getWorldScale(target: Vec3): Vec3 { return worldSizeOf(this, target); }
   /** The way its +z faces in the world, into `target` (a camera's is its −z: `Camera` says so). */
-  getWorldDirection(target: Vec3): Vec3 {
-    const e = this.matrixWorld.elements;
-    return target.set(e[8], e[9], e[10]).normalize();
-  }
-
+  getWorldDirection(target: Vec3): Vec3 { return worldFacingOf(this, target); }
   /** `vector` under it made the world's; the vector. */
   localToWorld(vector: Vec3): Vec3 { return vector.applyMatrix4(this.matrixWorld); }
-
   /** `vector` in the world made its own; the vector. */
-  worldToLocal(vector: Vec3): Vec3 { return vector.applyMatrix4(_m.copy(this.matrixWorld).invert()); }
+  worldToLocal(vector: Vec3): Vec3 { return vector.applyMatrix4(scratchMatrix.copy(this.matrixWorld).invert()); }
 
-  /** Turned so its +z faces `x` (a point in the world, or its coordinates); a camera or a light faces it by its −z. */
+  /** Turned so its +z faces `x` (a point in the world, or its coordinates); a camera or a light faces it by its
+   *  −z. */
   lookAt(x: Vec3 | number, y = 0, z = 0): void {
-    if (typeof x === 'number') _target.set(x, y, z);
-    else _target.copy(x);
-    this.getWorldPosition(_place);
-    if (this.facesByMinusZ()) _m.lookAt(_place, _target, this.up);
-    else _m.lookAt(_target, _place, this.up);
-    _q.setFromRotationMatrix(_m);
-    if (this.parent) {
-      this.parent.getWorldQuaternion(_parentTurn);
-      _q.premultiply(_parentTurn.invert());
-    }
-    this.quaternion.copy(_q);
+    const point = typeof x === 'number' ? scratchPoint.set(x, y, z) : scratchPoint.copy(x);
+    this.quaternion.copy(turnFacing(this, point, this.facesByMinusZ(), scratchQuat));
   }
 
   /** which way is up for `lookAt` */
@@ -366,45 +341,31 @@ export class Node implements LayersOwner {
   protected facesByMinusZ(): boolean { return false; }
 
   /** Turned about its own x by `angle`; itself. */
-  rotateX(angle: number): this { return this.rotateOn(_v.set(1, 0, 0), angle); }
+  rotateX(angle: number): this { return turnedAbout(this, UNIT_X, angle); }
   /** Turned about its own y by `angle`; itself. */
-  rotateY(angle: number): this { return this.rotateOn(_v.set(0, 1, 0), angle); }
+  rotateY(angle: number): this { return turnedAbout(this, UNIT_Y, angle); }
   /** Turned about its own z by `angle`; itself. */
-  rotateZ(angle: number): this { return this.rotateOn(_v.set(0, 0, 1), angle); }
-
-  /** Turned about `axis` (its own, a unit vector) by `angle`; itself. */
-  private rotateOn(axis: Vec3, angle: number): this {
-    _q.setFromAxisAngle(axis, angle);
-    this.quaternion.multiply(_q);
-    return this;
-  }
+  rotateZ(angle: number): this { return turnedAbout(this, UNIT_Z, angle); }
+  /** Moved `distance` along its own `axis` (a unit vector, turned as it's turned); itself. */
+  translateOnAxis(axis: Vec3, distance: number): this { return movedAlong(this, axis, distance); }
+  /** Moved `distance` along its own x; itself. */
+  translateX(distance: number): this { return movedAlong(this, UNIT_X, distance); }
+  /** Moved `distance` along its own y; itself. */
+  translateY(distance: number): this { return movedAlong(this, UNIT_Y, distance); }
+  /** Moved `distance` along its own z; itself. */
+  translateZ(distance: number): this { return movedAlong(this, UNIT_Z, distance); }
 
   /** `listener` told of `type` (`added`, `removed`, `childadded`, `childremoved`, or the game's own). */
   addEventListener(type: string, listener: NodeListener): void {
-    if (!this.listeners) this.listeners = new Map();
-    const list = this.listeners.get(type);
-    if (list) {
-      if (!list.includes(listener)) list.push(listener);
-    } else {
-      this.listeners.set(type, [listener]);
-    }
+    this.listeners ??= new Listeners();
+    this.listeners.add(type, listener);
   }
 
   /** `listener` no longer told of `type`. */
-  removeEventListener(type: string, listener: NodeListener): void {
-    const list = this.listeners?.get(type);
-    if (!list) return;
-    const at = list.indexOf(listener);
-    if (at >= 0) list.splice(at, 1);
-  }
+  removeEventListener(type: string, listener: NodeListener): void { this.listeners?.remove(type, listener); }
 
   /** `event` told to its listeners of its type. */
-  dispatchEvent(event: { type: string; [key: string]: unknown }): void {
-    const list = this.listeners?.get(event.type);
-    if (!list) return;
-    const told = { ...event, target: this };
-    for (const listener of list.slice()) listener(told);
-  }
+  dispatchEvent(event: { type: string; [key: string]: unknown }): void { this.listeners?.tell(event, this); }
 
   /** `source`'s own state copied onto it (its children too where `recursive`); itself. */
   copy(source: Node, recursive = true): this {

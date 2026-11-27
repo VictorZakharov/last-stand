@@ -3,7 +3,7 @@
 // clicked on its card) cleared at wave 4,
 // Continue shows the readying bar, then the boss rises warm. The Thornwood checks the same path for its own ladder.
 // The canary loads the last selected boss early and draws a new pipeline after the wave begins.
-import * as THREE from 'three';
+import { AdditiveBlending, BackSide, Mesh, shapes, UnlitMaterial, Vec3 } from './sceneApi.ts';
 import type { Lab, Report } from './lab';
 import { G } from '../../../src/state';
 import type { EnemyId } from '../../../src/data/enemies';
@@ -149,8 +149,8 @@ const standing = () => G.enemies.filter((foe) => foe.boss && foe.alive && foe.sp
 async function drawEncounter(lab: Lab, bosses: ReturnType<typeof standing>): Promise<void> {
   try {
     for (const foe of bosses) {
-      const look = foe.obj.position.clone().add(new THREE.Vector3(0, foe.height * 0.45, 0));
-      const pos = look.clone().add(new THREE.Vector3(foe.height, foe.height, foe.height));
+      const look = foe.obj.position.clone().add(new Vec3(0, foe.height * 0.45, 0));
+      const pos = look.clone().add(new Vec3(foe.height, foe.height, foe.height));
       stageCamera({ pos, look, fov: 45 }, true);
       await lab.step(2);
     }
@@ -168,11 +168,11 @@ const CANARY_FRAMES = 30;
  * stands for a boss's own material: the Twins spawned unwarmed compiled nothing new).
  */
 async function drawUnwarmed(lab: Lab): Promise<void> {
-  const material = new lab.THREE.MeshBasicMaterial({
-    color: 0xff00ff, blending: THREE.AdditiveBlending, side: THREE.BackSide, depthWrite: true,
+  const material = new UnlitMaterial({
+    color: 0xff00ff, blending: AdditiveBlending, side: BackSide, depthWrite: true,
   });
-  const box = new lab.THREE.Mesh(new lab.THREE.BoxGeometry(0.5, 0.5, 0.5), material);
-  const way = new lab.THREE.Vector3(Math.sin(G.player.facing), 0, Math.cos(G.player.facing));
+  const box = new Mesh(shapes.box(0.5, 0.5, 0.5), material);
+  const way = new Vec3(Math.sin(G.player.facing), 0, Math.cos(G.player.facing));
   box.position.copy(G.player.pos).addScaledVector(way, 2).setY(0.5);
   G.scene.add(box);
   try {
@@ -190,7 +190,7 @@ async function usePortal(lab: Lab, biome: BiomeId): Promise<void> {
   if (!portal) throw new Error(`lab: bosswave: the village has no portal to ${biome}`);
   const [x, z] = portal.stand;
   G.player.walkTo = null;
-  G.player.place(new THREE.Vector3(x, groundHeight(x, z), z), 0);
+  G.player.place(new Vec3(x, groundHeight(x, z), z), 0);
   await lab.step(CARD_FRAMES);
   goUse(portal);
   await stepUntil(lab, () => G.arena.biome === biome, `${biome} as the portal's battleground`);

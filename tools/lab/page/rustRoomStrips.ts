@@ -3,7 +3,7 @@
 // "there is also a white strip on the other side". The strips were a few pixels wide, the side walls opened on
 // the terrace past them he saw out of their windows, and no block of the rules' read held enough of one to break.
 
-import type * as THREE from 'three';
+import type { Vec2 } from './sceneApi.ts';
 
 /** a room on the ground: its least x and z, its most */
 export type Room = readonly [number, number, number, number];
@@ -65,7 +65,7 @@ export function stripsPastRoom(
   frames: { played: ImageData; whole: ImageData; bare: ImageData },
   from: readonly [number, number],
   room: Room,
-  groundThrough: (x: number, y: number) => THREE.Vector2 | null,
+  groundThrough: (x: number, y: number) => Vec2 | null,
 ): StripRead {
   const { width, height } = frames.played;
   const found: string[] = [];

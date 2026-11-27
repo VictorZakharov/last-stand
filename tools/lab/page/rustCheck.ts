@@ -8,7 +8,7 @@ import { blankCanvas, lookTakesItsMapAgain, mapPaintedLate } from './rustMaps';
 import { grassPlacedOnce } from './rustFields';
 import { goneWholeLeftOut } from './rustGone';
 import { houseRuleHolds } from './rustHouseRule';
-import { doorwaysLeaveTheFrame, keptSameFrame } from './rustKept';
+import { doorwaysLeaveTheFrame, stillSameFrame } from './rustStill';
 import { brokenDownSameFrame } from './rustPartsCheck';
 import { levelSwitchLeavesNothingOut, plainShaderSameFrame } from './rustPlain';
 import { sceneWaitsItsPipelines } from './rustReveal';
@@ -22,7 +22,7 @@ import { sunCastsShadows } from './rustSun';
 import { bloodAtLowHealth, frameShotHoldsTheFrame, photoLookDrawn } from './rustLook';
 import { grassBandsEdgeToEdge, grassDrawnByItsRings } from './rustGrass';
 import { bodiesAsOne, drawnFor } from './rustAsOne';
-import * as THREE from 'three';
+import { DirectionalLight, Mat4, Node, PerspectiveCamera, Vec2, Vec3 } from './sceneApi.ts';
 import type { Lab, Report } from './lab';
 import type { BiomeId } from '../../../src/data/biomes';
 import { G } from '../../../src/state';
@@ -73,9 +73,9 @@ function playersPage(): Checked {
 }
 
 /** An object by its name and its parents', nearest first, up to the scene: what a list of the misplaced names. */
-function pathOf(object: THREE.Object3D): string {
+function pathOf(object: Node): string {
   const names: string[] = [];
-  for (let at: THREE.Object3D | null = object; at && at !== G.scene; at = at.parent) {
+  for (let at: Node | null = object; at && at !== G.scene; at = at.parent) {
     names.push(at.name || at.type);
   }
   return names.join(' < ');
@@ -83,11 +83,11 @@ function pathOf(object: THREE.Object3D): string {
 
 /** Every shown object stands where its own position, turn and scale put it under its parent. */
 function placedRight(where: string): Checked {
-  const expected = new THREE.Matrix4();
-  const local = new THREE.Matrix4();
+  const expected = new Mat4();
+  const local = new Mat4();
   const off: string[] = [];
   let checked = 0;
-  const visit = (object: THREE.Object3D): void => {
+  const visit = (object: Node): void => {
     if (!object.visible) return;
     // (a piece of a foe drawn as one is left unplaced unseen, placed where it's read: `models/bodyAsOne.ts`)
     if (object.userData.unplaced) return;
@@ -110,7 +110,7 @@ function placedRight(where: string): Checked {
  *  samples and 2048 whatever the level, a phone at Very low held 35 to 40 frames a second (from play). */
 function quality(bridge: Bridge): Checked {
   const asked = sceneSamples() >= 4 ? 4 : 1;
-  const sun = G.scene.getObjectByProperty('isDirectionalLight', true) as THREE.DirectionalLight | undefined;
+  const sun = G.scene.getObjectByProperty('isDirectionalLight', true) as DirectionalLight | undefined;
   const { samples, shadowSize, bloomShare } = bridge.levels.now();
   // (and its bloom at the level's share of the pixels: whole at every level, Very low drew a bloom the game
   // draws none of, 4 ms of a phone's 47 ms frame)
@@ -121,7 +121,7 @@ function quality(bridge: Bridge): Checked {
   if (engineSamples !== asked) return failed(`the engine draws ${samples} samples a pixel, the level asks for ${sceneSamples()}`);
   // (and at the level's pixels: sized by three's own target, it drew the screen's every pixel at every level)
   const canvas = document.getElementById('rust-canvas') as HTMLCanvasElement;
-  const wanted = sceneSize(new THREE.Vector2());
+  const wanted = sceneSize(new Vec2());
   if (canvas.width !== wanted.x || canvas.height !== wanted.y) {
     return failed(`the engine draws ${canvas.width}x${canvas.height}, the level's scene is ${wanted.x}x${wanted.y}`);
   }
@@ -136,10 +136,10 @@ function quality(bridge: Bridge): Checked {
  *  selection screen draws the hall to one side of its panel (a view offset), and worked out from the field of
  *  view alone the engine's heroes stood a hero's width off the outline drawn round the one in focus. */
 function viewOffsetKept(): Checked {
-  const camera = new THREE.PerspectiveCamera(50, 16 / 9, 0.1, 100);
+  const camera = new PerspectiveCamera(50, 16 / 9, 0.1, 100);
   camera.setViewOffset(1600, 900, 300, 0, 1600, 900);
   camera.updateProjectionMatrix();
-  const offset = projectionOf(camera, new THREE.Matrix4()).elements[8];
+  const offset = projectionOf(camera, new Mat4()).elements[8];
   if (Math.abs(offset) < 0.1) return failed('a camera\'s view offset is lost on the engine: its frame stands off three\'s overlays');
   return passed('the engine\'s view keeps a camera\'s view offset (the hero selection screen\'s)');
 }
@@ -289,7 +289,7 @@ async function casts(lab: Lab, bridge: Bridge): Promise<Checked[]> {
     for (const key of SKILL_KEYS) {
       const def = hero.skillAt(key)?.def;
       if (!def) continue;
-      const ahead = new THREE.Vector3(Math.sin(hero.facing), 0, Math.cos(hero.facing)).multiplyScalar(CAST_AHEAD);
+      const ahead = new Vec3(Math.sin(hero.facing), 0, Math.cos(hero.facing)).multiplyScalar(CAST_AHEAD);
       const aim = hero.pos.clone().add(ahead);
       const undrawn = new Map<string, number>();
       const made = RUST.pipelines.made;
@@ -358,7 +358,7 @@ export async function rustCheck(lab: Lab, command: RustCheckCommand): Promise<Re
       checks.push(await levelSwitchLeavesNothingOut(lab));
       checks.push(await plainShaderSameFrame(lab));
       checks.push(await sceneWaitsItsPipelines(lab));
-      checks.push(await keptSameFrame(lab, bridge));
+      checks.push(await stillSameFrame(lab));
       checks.push(await brokenDownSameFrame(lab, bridge));
       checks.push(await doorwaysLeaveTheFrame(lab, bridge));
       checks.push(await goneWholeLeftOut(lab, bridge));

@@ -3,7 +3,7 @@
 // the back counter and the tables (leaning over them, never into them), and every mug held, standing on something or
 // in the tub, never left in the air. From play: "Hand glitching when wiping table", "When he leans in to grab the cup,
 // he goes through the table", a mug left floating beside his hand.
-import * as THREE from 'three';
+import { Maths, Node, Vec3 } from './sceneApi.ts';
 import { BODY_GROWN, type Keeper } from '../../../src/entities/models/keeper';
 import { bodyShape, capsuleDepth, type Solid as BodySolid } from '../../../src/entities/models/anatomy';
 import type { TavernKeeper } from '../../../src/world/tavernKeeper';
@@ -46,7 +46,7 @@ const PARTS: readonly { joint: 'hips' | 'spine' | 'chest' | 'neck' | 'head' | 'e
 const TOP_SLAB = 0.06, THIGH_R = 0.08;
 
 /** How far a ball of radius `r` at `c` goes into `solid` (m, 0 clear of it). */
-export function depthInto(c: THREE.Vector3, r: number, solid: Solid): number {
+export function depthInto(c: Vec3, r: number, solid: Solid): number {
   if (solid.r !== undefined) return depthIntoDrum(c, r, solid);
   const bottom = solid.bottom ?? 0;
   const nx = Math.min(Math.max(c.x, solid.x0), solid.x1);
@@ -59,7 +59,7 @@ export function depthInto(c: THREE.Vector3, r: number, solid: Solid): number {
 }
 
 /** How far a ball at `c` of radius `r` goes into a round solid (a drum from the floor to its top). */
-function depthIntoDrum(c: THREE.Vector3, r: number, solid: Solid): number {
+function depthIntoDrum(c: Vec3, r: number, solid: Solid): number {
   const mx = (solid.x0 + solid.x1) / 2, mz = (solid.z0 + solid.z1) / 2, across = Math.hypot(c.x - mx, c.z - mz);
   const bottom = solid.bottom ?? 0;
   const outward = across - solid.r!, upward = c.y - solid.top, downward = bottom - c.y;
@@ -68,8 +68,8 @@ function depthIntoDrum(c: THREE.Vector3, r: number, solid: Solid): number {
 }
 
 /** whether `mesh` hangs from one of his hands (a mug taken up at his arm's length: his grip's point further off) */
-function inHandOf(mesh: THREE.Object3D, keeper: Keeper): boolean {
-  for (let o: THREE.Object3D | null = mesh.parent; o; o = o.parent) {
+function inHandOf(mesh: Node, keeper: Keeper): boolean {
+  for (let o: Node | null = mesh.parent; o; o = o.parent) {
     if (o === keeper.joints.handL || o === keeper.joints.handR) return true;
   }
   return false;
@@ -93,14 +93,14 @@ export class HandsSmooth {
   readonly elbow = new Worst();
   /** the wrists' own moves, apart from the hand's turn about them */
   readonly wrist = new Worst();
-  private readonly wristWas: THREE.Vector3[] = [];
+  private readonly wristWas: Vec3[] = [];
   /** the last frames of each hand, said with its worst jump: a goal or none, and the hand's distance from it (cm) */
   private readonly recent: string[][] = [[], []];
   private jumpTrace = '';
   private traceAfter = [0, 0];
-  private readonly now: [THREE.Vector3, THREE.Vector3] = [new THREE.Vector3(), new THREE.Vector3()];
-  private readonly was: THREE.Vector3[] = [];
-  private readonly moved: THREE.Vector3[] = [];
+  private readonly now: [Vec3, Vec3] = [new Vec3(), new Vec3()];
+  private readonly was: Vec3[] = [];
+  private readonly moved: Vec3[] = [];
   private elbowWas: number[] = [];
 
   /** what it last saw forgotten (frames the lab stepped unread) */
@@ -117,7 +117,7 @@ export class HandsSmooth {
     // against his body)
     const room = keeper.joints.chest;
     const elbows = [keeper.joints.elbowL, keeper.joints.elbowR].map(bendOf);
-    const wristAt = (hand: THREE.Object3D) => room.worldToLocal(hand.getWorldPosition(new THREE.Vector3()));
+    const wristAt = (hand: Node) => room.worldToLocal(hand.getWorldPosition(new Vec3()));
     const wrists = [keeper.joints.handL, keeper.joints.handR].map(wristAt);
     for (let i = 0; i < 2; i++) {
       const at = room.worldToLocal(this.now[i].clone()), side = i === 0 ? 'left' : 'right';
@@ -144,7 +144,7 @@ export class HandsSmooth {
         this.jumpTrace += `${this.recent[i][this.recent[i].length - 1]} `;
       }
       if (this.elbowWas.length) {
-        const turned = THREE.MathUtils.radToDeg(Math.abs(elbows[i] - this.elbowWas[i]));
+        const turned = Maths.radToDeg(Math.abs(elbows[i] - this.elbowWas[i]));
         this.elbow.see(turned, () => `${side} elbow, ${doing}`);
       }
     }
@@ -172,26 +172,26 @@ export class HandsSmooth {
 /** His body against the bar, the back counter and the tables: how far any part of it went into one. */
 export class BodyClear {
   readonly into = new Worst();
-  private readonly at = new THREE.Vector3();
+  private readonly at = new Vec3();
 
   read(keeper: Keeper, doing: string): void {
     const room = keeper.root.parent!;
     for (const part of PARTS) {
       room.worldToLocal(keeper.joints[part.joint].getWorldPosition(this.at));
       for (const solid of SOLIDS) {
-        const where = () => `his ${part.joint} into ${solid.name} at ${xyz(this.at)}, his root at ${xyz(room.worldToLocal(keeper.root.getWorldPosition(new THREE.Vector3())))} facing ${keeper.root.rotation.y.toFixed(2)}, ${doing}`;
+        const where = () => `his ${part.joint} into ${solid.name} at ${xyz(this.at)}, his root at ${xyz(room.worldToLocal(keeper.root.getWorldPosition(new Vec3())))} facing ${keeper.root.rotation.y.toFixed(2)}, ${doing}`;
         this.into.see(depthInto(this.at, part.r, solid), where);
       }
     }
     // (each thigh at its middle against the tables' tops)
     for (const [thigh, knee] of [[keeper.joints.thighL, keeper.joints.kneeL], [keeper.joints.thighR, keeper.joints.kneeR]] as const) {
       room.worldToLocal(thigh.getWorldPosition(this.at));
-      const k = room.worldToLocal(knee.getWorldPosition(new THREE.Vector3()));
+      const k = room.worldToLocal(knee.getWorldPosition(new Vec3()));
       this.at.lerp(k, 0.5);
       for (const solid of SOLIDS) {
         if (!solid.table) continue;
         const slab = { ...solid, bottom: solid.top - TOP_SLAB };
-        const where = () => `his thigh into ${solid.name}'s top at ${xyz(this.at)}, his root at ${xyz(room.worldToLocal(keeper.root.getWorldPosition(new THREE.Vector3())))}, ${doing}`;
+        const where = () => `his thigh into ${solid.name}'s top at ${xyz(this.at)}, his root at ${xyz(room.worldToLocal(keeper.root.getWorldPosition(new Vec3())))}, ${doing}`;
         this.into.see(depthInto(this.at, THIGH_R, slab), where);
       }
     }
@@ -213,7 +213,7 @@ export class MugsHeld {
   /** mug-frames seen in the air, and the first */
   inAir = 0;
   first = '';
-  private readonly hands: [THREE.Vector3, THREE.Vector3] = [new THREE.Vector3(), new THREE.Vector3()];
+  private readonly hands: [Vec3, Vec3] = [new Vec3(), new Vec3()];
 
   read(tv: TavernKeeper, keeper: Keeper, doing: string): void {
     const room = keeper.root.parent!;
@@ -229,16 +229,16 @@ export class MugsHeld {
       const inTub = Math.hypot(at.x - tubX, at.z - TUB.z) < TUB.r + 0.03 && at.y < BACK.top + 0.2;
       if (held || onTop || inTub) continue;
       this.inAir++;
-      this.first ||= `mug ${m.id} (${m.place.at}) at ${xyz(at)}, root y ${keeper.root.position.y.toFixed(2)}, body y ${keeper.joints.body.position.y.toFixed(2)} rot ${keeper.joints.body.rotation.x.toFixed(2)}, hips y ${keeper.joints.hips.position.y.toFixed(2)}, chest at ${xyz(room.worldToLocal(keeper.joints.chest.getWorldPosition(new THREE.Vector3())))}, his hands at ${xyz(room.worldToLocal(this.hands[0].clone()))} and ${xyz(room.worldToLocal(this.hands[1].clone()))}, the mug's parent ${this.parentOf(tv, m.id)}, ${doing}`;
+      this.first ||= `mug ${m.id} (${m.place.at}) at ${xyz(at)}, root y ${keeper.root.position.y.toFixed(2)}, body y ${keeper.joints.body.position.y.toFixed(2)} rot ${keeper.joints.body.rotation.x.toFixed(2)}, hips y ${keeper.joints.hips.position.y.toFixed(2)}, chest at ${xyz(room.worldToLocal(keeper.joints.chest.getWorldPosition(new Vec3())))}, his hands at ${xyz(room.worldToLocal(this.hands[0].clone()))} and ${xyz(room.worldToLocal(this.hands[1].clone()))}, the mug's parent ${this.parentOf(tv, m.id)}, ${doing}`;
     }
   }
 
   private parentOf(tv: TavernKeeper, id: number): string {
     const parent = tv.mugMesh(id).parent;
     if (!parent) return '?';
-    const w = parent.getWorldPosition(new THREE.Vector3()), sc = parent.getWorldScale(new THREE.Vector3());
+    const w = parent.getWorldPosition(new Vec3()), sc = parent.getWorldScale(new Vec3());
     const vis = parent.children.find((c) => c.userData.drawnHand) ?? parent.children[0];
-    const vw = vis?.getWorldPosition(new THREE.Vector3()), vs = vis?.getWorldScale(new THREE.Vector3());
+    const vw = vis?.getWorldPosition(new Vec3()), vs = vis?.getWorldScale(new Vec3());
     return `${parent.name} at ${xyz(w)} scale ${xyz(sc)}, its ${vis?.name || 'first child'} at ${vw ? xyz(vw) : '-'} scale ${vs ? xyz(vs) : '-'} (${parent.children.map((c) => c.name || c.type).join('/')})`;
   }
 
@@ -267,17 +267,17 @@ export class LimbsClear {
   readonly into = new Worst();
   readonly tool = new Worst();
   private solids: BodySolid[] | null = null;
-  private readonly a = new THREE.Vector3();
-  private readonly b = new THREE.Vector3();
-  private readonly c = new THREE.Vector3();
+  private readonly a = new Vec3();
+  private readonly b = new Vec3();
+  private readonly c = new Vec3();
 
-  read(keeper: Keeper, room: THREE.Object3D, doing: string): void {
+  read(keeper: Keeper, room: Node, doing: string): void {
     const j = keeper.joints;
     if (!this.solids) {
       this.solids = bodyShape(j).solids;
       for (const solid of this.solids) {
         const grown = solid.name === 'chest' ? BODY_GROWN.chest : solid.name === 'belly' ? BODY_GROWN.belly : null;
-        if (grown) solid.r.add(new THREE.Vector3(...grown));
+        if (grown) solid.r.add(new Vec3(...grown));
       }
     }
     j.root.updateMatrixWorld(true);
@@ -289,10 +289,10 @@ export class LimbsClear {
       for (const solid of trunk) {
         const fore = capsuleDepth(this.a, this.b, j.P.foreR, solid), hand = capsuleDepth(this.b, this.c, 0.035, solid);
         this.into.see(Math.max(fore, hand), () => {
-          const inHim = (at: THREE.Vector3) => xyz(j.root.worldToLocal(at.clone()));
+          const inHim = (at: Vec3) => xyz(j.root.worldToLocal(at.clone()));
           return `his ${fore > hand ? 'forearm' : 'hand'} ${side} into his ${solid.name} (in his own frame, x to his left: `
             + `his elbow at ${inHim(this.a)}, his hand at ${inHim(this.b)}; his root at `
-            + `${xyz(room.worldToLocal(j.root.getWorldPosition(new THREE.Vector3())))} facing ${j.root.rotation.y.toFixed(2)}), ${doing}`;
+            + `${xyz(room.worldToLocal(j.root.getWorldPosition(new Vec3())))} facing ${j.root.rotation.y.toFixed(2)}), ${doing}`;
         });
       }
     }
@@ -302,7 +302,7 @@ export class LimbsClear {
       thing.localToWorld(this.a.set(0, tool.from, 0));
       thing.localToWorld(this.b.set(0, tool.to, 0));
       for (const solid of this.solids.filter((s) => s.name !== 'neck')) {
-        this.tool.see(capsuleDepth(this.a, this.b, tool.r, solid), () => `the ${tool.name} into his ${solid.name} (its grip at ${xyz(room.worldToLocal(this.a.clone()))}, its far end at ${xyz(room.worldToLocal(this.b.clone()))}, his root at ${xyz(room.worldToLocal(keeper.root.getWorldPosition(new THREE.Vector3())))} facing ${keeper.root.rotation.y.toFixed(2)}), ${doing}`);
+        this.tool.see(capsuleDepth(this.a, this.b, tool.r, solid), () => `the ${tool.name} into his ${solid.name} (its grip at ${xyz(room.worldToLocal(this.a.clone()))}, its far end at ${xyz(room.worldToLocal(this.b.clone()))}, his root at ${xyz(room.worldToLocal(keeper.root.getWorldPosition(new Vec3())))} facing ${keeper.root.rotation.y.toFixed(2)}), ${doing}`);
       }
     }
   }
@@ -321,15 +321,15 @@ export class LimbsClear {
 }
 
 /** whether `thing` hangs under `root` (in his hand) */
-function isHeldBy(thing: THREE.Object3D, root: THREE.Object3D): boolean {
-  for (let o: THREE.Object3D | null = thing.parent; o; o = o.parent) if (o === root) return true;
+function isHeldBy(thing: Node, root: Node): boolean {
+  for (let o: Node | null = thing.parent; o; o = o.parent) if (o === root) return true;
   return false;
 }
 
 const cm = (m: number) => `${(m * 100).toFixed(1)} cm`;
-const xyz = (v: THREE.Vector3) => `${v.x.toFixed(2)}, ${v.y.toFixed(2)}, ${v.z.toFixed(2)}`;
+const xyz = (v: Vec3) => `${v.x.toFixed(2)}, ${v.y.toFixed(2)}, ${v.z.toFixed(2)}`;
 /** a hinge joint's bend (rad), from its turn */
-const bendOf = (joint: THREE.Object3D) => 2 * Math.acos(Math.min(1, Math.abs(joint.quaternion.w)));
+const bendOf = (joint: Node) => 2 * Math.acos(Math.min(1, Math.abs(joint.quaternion.w)));
 
 /** each hand's goal this frame, as the keeper's body was asked (`TavernKeeper.body`) */
-interface HandsAsked { left: { at: THREE.Vector3 } | null; right: { at: THREE.Vector3 } | null }
+interface HandsAsked { left: { at: Vec3 } | null; right: { at: Vec3 } | null }

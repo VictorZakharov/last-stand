@@ -5,7 +5,7 @@
 // inside the tavern, over the shoulder (from review, "Needs to work inside houses too"): zoomed. Said: the lens in
 // each case and the camera's field of view held. `canary` holds the button with the hero armed everywhere (the
 // button casting there, the lens never allowed), which must be found.
-import * as THREE from 'three';
+import { Vec3 } from './sceneApi.ts';
 import type { Lab, Pictured } from './lab';
 import { G } from '../../../src/state';
 import { lensNow, viewMode, type ViewMode } from '../../../src/core/renderer';
@@ -44,7 +44,7 @@ async function pressViewTo(lab: Lab, view: ViewMode): Promise<void> {
 /** The hero stood at (x, z), still, in view `view`, settled. */
 async function standIn(lab: Lab, [x, z]: [number, number], view: ViewMode): Promise<void> {
   G.player.walkTo = null;
-  G.player.place(new THREE.Vector3(x, groundHeight(x, z), z), 0);
+  G.player.place(new Vec3(x, groundHeight(x, z), z), 0);
   await pressViewTo(lab, view);
   await lab.step(LET_GO);
 }

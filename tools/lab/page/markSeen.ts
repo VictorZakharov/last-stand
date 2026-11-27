@@ -2,7 +2,7 @@
 // page/heldBoss.ts): found over the foe, over its top as drawn, and seen whole from the camera, none of it inside a
 // body. (Placed by the foe's height, it stood inside a boss's crown, which reaches up to 1.8 times that: its body hid
 // it in every view.)
-import * as THREE from 'three';
+import { Box3, growByNode, Mesh, Vec3 } from './sceneApi.ts';
 import type { Enemy } from '../../../src/entities/enemy';
 import { G } from '../../../src/state';
 import { drawnSolid, foeMetAlong } from './onScreen';
@@ -19,9 +19,9 @@ export interface MarkSeen {
 }
 
 /** The reticle over `foe`: the plane in the scene stood over its middle, above half its height. */
-function reticleOver(foe: Enemy): THREE.Mesh | undefined {
-  return G.scene.children.find((object): object is THREE.Mesh => {
-    const mesh = object as THREE.Mesh;
+function reticleOver(foe: Enemy): Mesh | undefined {
+  return G.scene.children.find((object): object is Mesh => {
+    const mesh = object as Mesh;
     if (!mesh.isMesh || mesh.geometry.type !== 'PlaneGeometry') return false;
     const over = Math.hypot(mesh.position.x - foe.pos.x, mesh.position.z - foe.pos.z) < OVER_MIDDLE;
     return over && mesh.position.y > foe.obj.position.y + foe.height / 2;
@@ -30,19 +30,19 @@ function reticleOver(foe: Enemy): THREE.Mesh | undefined {
 
 /** The top of `foe`'s body as it's drawn now: its solid meshes, the skinned ones as posed (m, in the world). */
 function drawnTop(foe: Enemy): number {
-  const box = new THREE.Box3();
+  const box = new Box3();
   foe.obj.updateWorldMatrix(true, true);
   foe.obj.traverse((object) => {
-    if ((object as THREE.Mesh).isMesh && drawnSolid(object)) box.expandByObject(object, true);
+    if ((object as Mesh).isMesh && drawnSolid(object)) growByNode(box, object, true);
   });
   return box.max.y;
 }
 
 /** The reticle's middle and its ring's points left, right, up and down of it, as it faces the camera. */
-function reticlePoints(reticle: THREE.Mesh): THREE.Vector3[] {
+function reticlePoints(reticle: Mesh): Vec3[] {
   const half = reticle.scale.x / 2 * RING;
-  const right = new THREE.Vector3().setFromMatrixColumn(G.camera.matrixWorld, 0);
-  const up = new THREE.Vector3().setFromMatrixColumn(G.camera.matrixWorld, 1);
+  const right = new Vec3().setFromMatrixColumn(G.camera.matrixWorld, 0);
+  const up = new Vec3().setFromMatrixColumn(G.camera.matrixWorld, 1);
   const round = [right, up].flatMap((axis) => [1, -1].map((sign) => {
     return reticle.position.clone().addScaledVector(axis, sign * half);
   }));
@@ -50,7 +50,7 @@ function reticlePoints(reticle: THREE.Mesh): THREE.Vector3[] {
 }
 
 /** Whether `point` is on the screen. */
-function onScreen(point: THREE.Vector3): boolean {
+function onScreen(point: Vec3): boolean {
   const ndc = point.clone().project(G.camera);
   return Math.abs(ndc.x) <= 1 && Math.abs(ndc.y) <= 1 && ndc.z <= 1;
 }

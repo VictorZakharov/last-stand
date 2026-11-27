@@ -2,7 +2,7 @@
 // map holds his outline alone, softened over a few texels, yet each of its draws sent every triangle of him: 134k a
 // map on High, as many as the frame drew of him, and by night three maps (the sun's and two lamps'), whenever he moved
 // (from play, the village's frame going from 400k to 900k triangles and back as he stood by the hall; `npm run lab --
-// draws --village --moving`). So each geometry's triangles are simplified once (three's meshoptimizer: the vertices
+// draws --village --moving`). So each geometry's triangles are simplified once (meshoptimizer's own build: the vertices
 // kept as they are, an index of fewer triangles over them). A hero's take 45 to 55 ms of a desktop's CPU for each use,
 // so they're made in a worker (`simplify.worker.ts`), every triangle drawn until they're ready: made a few ms a frame on
 // the page, a piece's one call (up to 15 ms, the hair's) held the lobby's first frames 12 to 16 ms (`npm run lab --
@@ -50,7 +50,7 @@ let lastId = 0;
 let worker: Worker | null = null;
 
 if (typeof location !== 'undefined') {
-  void import('three/addons/libs/meshopt_simplifier.module.js').then(async ({ MeshoptSimplifier }) => {
+  void import('meshoptimizer/simplifier').then(async ({ MeshoptSimplifier }) => {
     await MeshoptSimplifier.ready;
     simplifier = MeshoptSimplifier;
     version++;

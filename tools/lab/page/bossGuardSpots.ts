@@ -4,7 +4,7 @@
 // from its countdown as the game sets one off: both times the guards must rise at the same two spots, each the
 // other's mirror through the arena's middle, each on the crypt's paving (its walks' mesh met by a ray straight down),
 // clear of every prop by room for a hero to circle it, and well off the gates.
-import * as THREE from 'three';
+import { Raycaster, Vec3 } from './sceneApi.ts';
 import type { Fixture, Lab } from './lab';
 import type { Enemy } from '../../../src/entities/enemy';
 import { G } from '../../../src/state';
@@ -51,7 +51,7 @@ export async function guardSpots({ lab, stand, canary, lines, problems }: SpotsM
   // (the canary: guards with no spots of their own, rising at the gates as other bosses do)
   if (canary) delete rung.guards.at;
   try {
-    const tries: THREE.Vector3[][] = [];
+    const tries: Vec3[][] = [];
     for (let i = 0; i < TRIES; i++) {
       await stand();
       tries.push(await guardsRisen(lab));
@@ -63,7 +63,7 @@ export async function guardSpots({ lab, stand, canary, lines, problems }: SpotsM
 }
 
 /** The Crypt's wave 10 set off from its countdown: where each of its guards rose. */
-async function guardsRisen(lab: Lab): Promise<THREE.Vector3[]> {
+async function guardsRisen(lab: Lab): Promise<Vec3[]> {
   lab.letWavesCome();
   const run = G.run!;
   run.wave = WAVES.bossEvery * 2;
@@ -82,7 +82,7 @@ async function guardsRisen(lab: Lab): Promise<THREE.Vector3[]> {
 }
 
 /** Each try's spots against the first's, against each other's mirror, the paving, the props and the gates. */
-function judge(tries: THREE.Vector3[][], lines: string[], problems: string[]): void {
+function judge(tries: Vec3[][], lines: string[], problems: string[]): void {
   const [first] = tries;
   const said = first.map((spot) => `(${spot.x.toFixed(2)}, ${spot.z.toFixed(2)})`).join(' and ');
   lines.push(`encounter: the guards rose at ${said}, ${tries.length} tries`);
@@ -95,13 +95,13 @@ function judge(tries: THREE.Vector3[][], lines: string[], problems: string[]): v
 }
 
 /** The furthest any guard of `spots` rose from the same guard of `first` (m). */
-function furthestApart(first: THREE.Vector3[], spots: THREE.Vector3[]): number {
+function furthestApart(first: Vec3[], spots: Vec3[]): number {
   if (spots.length !== first.length) return Infinity;
   return Math.max(...spots.map((spot, i) => spot.distanceTo(first[i])));
 }
 
 /** One guard's spot: on the paving, its room to the props, its angle off the gates. */
-function judgeSpot(spot: THREE.Vector3, i: number, lines: string[], problems: string[]): void {
+function judgeSpot(spot: Vec3, i: number, lines: string[], problems: string[]): void {
   const radius = G.enemies.find((foe) => foe.guard)?.radius ?? 1;
   const paved = onWalks(spot);
   const room = Math.min(...G.arena.obstacles.map((o) => Math.hypot(o.x - spot.x, o.z - spot.z) - o.r)) - radius;
@@ -115,9 +115,9 @@ function judgeSpot(spot: THREE.Vector3, i: number, lines: string[], problems: st
 }
 
 /** Whether a ray straight down at `spot` meets the crypt's walks. */
-function onWalks(spot: THREE.Vector3): boolean {
+function onWalks(spot: Vec3): boolean {
   const walks = G.scene.getObjectByName(WALKS);
   if (!walks) return false;
-  const ray = new THREE.Raycaster(new THREE.Vector3(spot.x, 2, spot.z), new THREE.Vector3(0, -1, 0), 0, 3);
+  const ray = new Raycaster(new Vec3(spot.x, 2, spot.z), new Vec3(0, -1, 0), 0, 3);
   return ray.intersectObject(walks, false).length > 0;
 }

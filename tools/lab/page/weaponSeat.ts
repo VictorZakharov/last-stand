@@ -3,7 +3,7 @@
 // what's carried as points along its length (its box along its grip's way, the blade's or the haft's line). From
 // play: the greatsword swept down through the log he sat on, and no measure said so (they read the weapon against his
 // body and the floor alone).
-import * as THREE from 'three';
+import { Box3, Mesh, Node, Vec3 } from './sceneApi.ts';
 import type { Lab } from './lab';
 import { groundHeight } from '../../../src/world/ground';
 import { seatTopAt, type Seat } from '../../../src/world/seats';
@@ -22,15 +22,15 @@ interface IntoSeat {
   along: number;
 }
 
-const _box = new THREE.Box3();
-const _point = new THREE.Vector3();
+const _box = new Box3();
+const _point = new Vec3();
 
 /** The frames a carried piece was in the seat, and the deepest. */
 export class WeaponSeat {
   private frames = 0;
   private deepest: IntoSeat | null = null;
 
-  constructor(private readonly seat: Seat, private readonly pieceOf: (lab: Lab) => THREE.Object3D | null | undefined) {}
+  constructor(private readonly seat: Seat, private readonly pieceOf: (lab: Lab) => Node | null | undefined) {}
 
   /** Notes how far into the seat the piece is this frame (`frame`: the frame as the report names it). */
   observe(lab: Lab, frame: string): void {
@@ -58,10 +58,10 @@ export class WeaponSeat {
 
 /** The canary: `piece` moved to `into` m under the seat's top at its middle for one read, and back. Returns how deep
  *  it read (m). */
-export function seatCanary(seat: Seat, piece: THREE.Object3D, into: number): number {
+export function seatCanary(seat: Seat, piece: Node, into: number): number {
   const was = piece.position.clone();
   const x = (seat.ax + seat.bx) / 2, z = (seat.az + seat.bz) / 2;
-  const target = new THREE.Vector3(x, seatTopAt(seat, x, z) - into, z);
+  const target = new Vec3(x, seatTopAt(seat, x, z) - into, z);
   piece.position.copy(piece.parent ? piece.parent.worldToLocal(target) : target);
   piece.updateWorldMatrix(true, true);
   const depth = deepestIn(seat, piece, 'canary')?.depth ?? 0;
@@ -71,7 +71,7 @@ export function seatCanary(seat: Seat, piece: THREE.Object3D, into: number): num
 }
 
 /** The piece's point deepest in the seat: `POINTS` along the middle of its box in its own frame, from end to end. */
-function deepestIn(seat: Seat, piece: THREE.Object3D, at: string): IntoSeat | null {
+function deepestIn(seat: Seat, piece: Node, at: string): IntoSeat | null {
   piece.updateWorldMatrix(true, true);
   const box = boxInFrame(piece);
   if (box.isEmpty()) return null;
@@ -83,25 +83,25 @@ function deepestIn(seat: Seat, piece: THREE.Object3D, at: string): IntoSeat | nu
     _point.set(midX, y, midZ).applyMatrix4(piece.matrixWorld);
     const depth = depthIn(seat, _point);
     if (depth <= (deepest?.depth ?? 0)) continue;
-    const along = y * new THREE.Vector3().setFromMatrixScale(piece.matrixWorld).y;
+    const along = y * new Vec3().setFromMatrixScale(piece.matrixWorld).y;
     deepest = { depth, at, along };
   }
   return deepest;
 }
 
 /** How far under the seat's top a point is (m), if it's over the floor; 0 outside it. */
-function depthIn(seat: Seat, point: THREE.Vector3): number {
+function depthIn(seat: Seat, point: Vec3): number {
   if (point.y <= groundHeight(point.x, point.z)) return 0;
   const top = seatTopAt(seat, point.x, point.z);
   return Number.isFinite(top) ? Math.max(0, top - point.y) : 0;
 }
 
 /** The box round a piece's meshes, in the piece's own frame. */
-function boxInFrame(piece: THREE.Object3D): THREE.Box3 {
+function boxInFrame(piece: Node): Box3 {
   _box.makeEmpty();
   const toPiece = piece.matrixWorld.clone().invert();
   piece.traverseVisible((object) => {
-    const mesh = object as THREE.Mesh;
+    const mesh = object as Mesh;
     if (!mesh.isMesh) return;
     mesh.geometry.computeBoundingBox();
     const local = mesh.geometry.boundingBox!.clone().applyMatrix4(mesh.matrixWorld).applyMatrix4(toPiece);

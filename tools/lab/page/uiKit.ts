@@ -2,7 +2,7 @@
 // what it found (`Found`), what this run asked for (`asked`) and whether its run is set up (`runSetUp`), a box as
 // shares of the window, an element named for a report, the page's animations brought to rest, and the hero stood
 // elsewhere in the village and put back.
-import * as THREE from 'three';
+import { Vec3 } from './sceneApi.ts';
 import { onTheClock } from './lab';
 import type { Frame, Lab, Pictured } from './lab';
 import { groundHeight } from '../../../src/world/ground';
@@ -117,14 +117,14 @@ export const CARD_FRAMES = 2;
 export const READOUTS_IN_FRAMES = 120;
 
 /** where the hero stood before a state took him elsewhere in the village, put back as it closes */
-let stoodAt: { at: THREE.Vector3; facing: number } | null = null;
+let stoodAt: { at: Vec3; facing: number } | null = null;
 
 /** The hero stood at `spot` facing `facing`, where he stood kept for `standBack`, and let settle. */
 export async function standAt(lab: Lab, spot: Spot, facing: number): Promise<void> {
   stoodAt ??= { at: lab.player.pos.clone(), facing: lab.player.facing };
   const [x, z] = spot;
   lab.player.walkTo = null;
-  lab.player.place(new THREE.Vector3(x, groundHeight(x, z), z), facing);
+  lab.player.place(new Vec3(x, groundHeight(x, z), z), facing);
   await lab.step(CARD_FRAMES);
 }
 

@@ -3,7 +3,7 @@
 // root is turned in the world (its +z), within `MOST_OFF` of the yard's own -z. Turned to the village's middle, as a
 // foe faces the arena's, they stood 15 to 40 degrees across the yard. Said: each dummy's angle off square. `canary`
 // turns the first to the village's middle again, which must be found.
-import * as THREE from 'three';
+import { Node, Vec3 } from './sceneApi.ts';
 import type { Lab } from './lab';
 import { G } from '../../../src/state';
 import { YARD, yardToWorld } from '../../../src/data/village';
@@ -16,17 +16,17 @@ const SETTLE = 5;
 /** What the check found, as the village's checks report it. */
 interface Checked { lines: string[]; problems: string[]; caught: boolean | null }
 
-const _ahead = new THREE.Vector3();
+const _ahead = new Vec3();
 
 /** The yard's gate side, the way the dummies should face (a unit vector on the ground). */
-function gateWay(): THREE.Vector3 {
+function gateWay(): Vec3 {
   const [ox, oz] = yardToWorld(0, 0);
   const [gx, gz] = yardToWorld(0, -YARD.halfZ);
-  return new THREE.Vector3(gx - ox, 0, gz - oz).normalize();
+  return new Vec3(gx - ox, 0, gz - oz).normalize();
 }
 
 /** The angle between where a model's root faces in the world (its +z) and `way` (rad). */
-function offWay(root: THREE.Object3D, way: THREE.Vector3): number {
+function offWay(root: Node, way: Vec3): number {
   root.updateWorldMatrix(true, false);
   _ahead.set(0, 0, 1).transformDirection(root.matrixWorld).setY(0).normalize();
   return _ahead.angleTo(way);

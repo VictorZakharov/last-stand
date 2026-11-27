@@ -7,7 +7,7 @@
 import type { Frame, Lab, Pictured } from './lab';
 import type { SkillKey } from '../../../src/types';
 import type { Player } from '../../../src/entities/player';
-import type * as THREE from 'three';
+import type { Color, Mesh, UnlitMaterial, Vec3 } from './sceneApi.ts';
 import { G } from '../../../src/state';
 import { readinessOf } from '../../../src/combat/skills/readiness';
 
@@ -76,7 +76,7 @@ function previewLook(impl: string, read: PreviewReader, canary: boolean): Previe
 }
 
 /** The frame's input holding the skill key `key` over `aim`: a mouse button's, or a key's. */
-export function holdingKey(key: SkillKey, aim: THREE.Vector3): Frame {
+export function holdingKey(key: SkillKey, aim: Vec3): Frame {
   if (key === 'mouse0') return { m0: true, aim };
   if (key === 'mouse2') return { m2: true, aim };
   return { keys: [key], aim };
@@ -99,7 +99,7 @@ function noteOnCooldown(held: CooldownHeld, look: PreviewLook, left: number): vo
  * read every frame by `read`.
  */
 export async function holdThroughCooldown(
-  lab: Lab, key: SkillKey, aim: THREE.Vector3, read: PreviewReader, options: HoldOptions,
+  lab: Lab, key: SkillKey, aim: Vec3, read: PreviewReader, options: HoldOptions,
 ): Promise<{ held: CooldownHeld; moments: Pictured[] }> {
   const hero = G.player;
   const impl = hero.skillAt(key)!.def.impl;
@@ -198,14 +198,14 @@ export const canaryCaught = (held: CooldownHeld): boolean =>
   heldProblems(held).some((problem) => problem.includes('while it was cooling down'));
 
 /** Whether a glow's colour is the preview's red (not a gold, a green or a white: red well over both the others). */
-const reddish = (colour: THREE.Color): boolean => colour.r > 2 * colour.g && colour.r > 2 * colour.b;
+const reddish = (colour: Color): boolean => colour.r > 2 * colour.g && colour.r > 2 * colour.b;
 
 /** A reader of a preview drawn as a glowing mesh named `name` (Veilstep's ring, Starfall's, Strawman's spot): shown
  *  with it, and red by its colour. */
 export function meshReader(name: string): PreviewReader {
   return () => {
-    const mesh = G.scene.getObjectByName(name) as THREE.Mesh | undefined;
+    const mesh = G.scene.getObjectByName(name) as Mesh | undefined;
     if (!mesh?.visible) return { shown: false, red: false };
-    return { shown: true, red: reddish((mesh.material as THREE.MeshBasicMaterial).color) };
+    return { shown: true, red: reddish((mesh.material as UnlitMaterial).color) };
   };
 }

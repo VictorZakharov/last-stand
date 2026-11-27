@@ -5,16 +5,16 @@
 // through upright, and the elbow's drop went over to the plane's other side between two frames: 18 and 25 cm through
 // the eyes, each key as placed alone looking right.) Pure but for the placing it's given, so the canary can plant a
 // flip in the steps.
-import * as THREE from 'three';
+import { Vec3 } from './sceneApi.ts';
 
 /** One step of a swing laid out: its share, and the point its plane turns about, the grip and the elbow there (camera
  *  space, m), and how far a two-hander's lower grip is past the other arm's reach (m: under 0 within it; null for a
  *  one-hander). */
 export interface PathStep {
   share: number;
-  pivot: THREE.Vector3;
-  grip: THREE.Vector3;
-  elbow: THREE.Vector3;
+  pivot: Vec3;
+  grip: Vec3;
+  elbow: Vec3;
   lowerPast: number | null;
 }
 

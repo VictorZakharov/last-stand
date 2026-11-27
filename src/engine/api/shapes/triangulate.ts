@@ -5,9 +5,11 @@ import { earcut } from './earcut.ts';
 
 /** The signed area of the ring `contour`: above 0 counter-clockwise. */
 export function area(contour: readonly Vec2[]): number {
-  const n = contour.length;
+  const count = contour.length;
   let sum = 0;
-  for (let p = n - 1, q = 0; q < n; p = q++) sum += contour[p].x * contour[q].y - contour[q].x * contour[p].y;
+  for (let previous = count - 1, current = 0; current < count; previous = current++) {
+    sum += contour[previous].x * contour[current].y - contour[current].x * contour[previous].y;
+  }
   return sum * 0.5;
 }
 
@@ -18,8 +20,8 @@ export function isClockWise(points: readonly Vec2[]): boolean {
 
 /** Takes off a ring's last point where it repeats its first (of three or more). */
 function dropRepeatedEnd(points: Vec2[]): void {
-  const l = points.length;
-  if (l > 2 && points[l - 1].equals(points[0])) points.pop();
+  const length = points.length;
+  if (length > 2 && points[length - 1].equals(points[0])) points.pop();
 }
 
 /**

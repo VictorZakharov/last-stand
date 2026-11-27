@@ -16,7 +16,7 @@
 //   crosshair in third person, each as far as the charge, neither for a tap, both gone once it's let go.
 // `--canary` makes a tap strike as a full charge does, which the first part must catch, and takes the beam's ramp's
 // most and grace and its chain's bonus away, which its checks must catch.
-import * as THREE from 'three';
+import { Vec3 } from './sceneApi.ts';
 import type { Fixture, Frame, Lab, Pictured, Report } from './lab';
 import type { InstantSkill } from '../../../src/combat/skills/types';
 import type { Enemy } from '../../../src/entities/enemy';
@@ -128,7 +128,7 @@ async function strike(lab: Lab, fixture: Fixture, full: boolean, canary = false)
 }
 
 /** The key held (`full`: to a full charge) and let go, the foes followed until the strike has landed. */
-async function strikeHeld(lab: Lab, struck: Struck[], aim: THREE.Vector3, held: () => Frame, full: boolean,
+async function strikeHeld(lab: Lab, struck: Struck[], aim: Vec3, held: () => Frame, full: boolean,
   powers: number[], at: (frame: number) => void): Promise<Strike> {
   let frame = 0;
   if (full) {
@@ -256,9 +256,9 @@ const LANCE_READ = 36;
 
 /** The strands feeding the lance now, a finger's each: how many are drawn, and how many start nearer each hand. */
 function strandsShown(lab: Lab): { shown: number; left: number; right: number } {
-  const at = new THREE.Vector3();
-  const leftHand = lab.joints.handL.getWorldPosition(new THREE.Vector3());
-  const rightHand = lab.joints.handR.getWorldPosition(new THREE.Vector3());
+  const at = new Vec3();
+  const leftHand = lab.joints.handL.getWorldPosition(new Vec3());
+  const rightHand = lab.joints.handR.getWorldPosition(new Vec3());
   const count = { shown: 0, left: 0, right: 0 };
   G.scene.traverse((object) => {
     if (object.name !== 'Void Lance: strands' || !object.visible) return;

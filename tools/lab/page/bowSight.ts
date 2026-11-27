@@ -1,5 +1,5 @@
 // Compare the drawn bow sight with real arrow impacts in the village yard.
-import * as THREE from 'three';
+import { Vec3 } from './sceneApi.ts';
 import { input } from '../../../src/core/input';
 import { settleCamera } from '../../../src/core/renderer';
 import { YARD, YARD_DUMMIES } from '../../../src/data/village';
@@ -39,13 +39,13 @@ export async function measureBowSight(lab: Lab, { pictures, canary }: BowSightOp
   const moments: Pictured[] = [];
   toggleMenuStowed(true);
   await lab.until(() => !dummy.invulnerable, 150, 'the dummy never rose');
-  const forward = new THREE.Vector3(Math.sin(YARD.turn), 0, Math.cos(YARD.turn));
+  const forward = new Vec3(Math.sin(YARD.turn), 0, Math.cos(YARD.turn));
   for (const test of CASES) {
     const stand = dummy.pos.clone().addScaledVector(forward, -test.distance);
     stand.y = groundHeight(stand.x, stand.z);
     lab.player.place(stand, YARD.turn);
     settleCamera(stand);
-    const aim = new THREE.Vector3(x, dummy.obj.position.y + test.height, z);
+    const aim = new Vec3(x, dummy.obj.position.y + test.height, z);
     await lab.step(5, () => ({ aim }));
     const before = meter.burst;
     const earlierArrows = new Set(spentPoints().map((arrow) => arrow.p));

@@ -13,9 +13,12 @@
 // The village folk are pictured here too, each first as his card asks for it (Brother Hollis's talk, Odo's trade):
 // another of him built on his own model, looking into the camera, head and shoulders in the room behind him
 // (`folkPortraits.ts`; from play, "lets have an actual picture of him, of his actual face", "Have him look straight").
+//
+// TODO(#973): the pictures were drawn by a WebGL renderer of three's, gone with three. Until the engine draws them
+// (a render of its own into a canvas), none is made: every one asked for settles with none (`steps`), and a place
+// shows what it shows for no picture (a foe's glyph, the talk card's spinner). The staging below is kept for it.
 import {
-  ACESFilmicToneMapping, Box3, DirectionalLight, HemisphereLight, Material, Maths, Mesh, Node, PerspectiveCamera,
-  Source, SRGBColorSpace, Texture, Vec3, WebGLRenderer, World,
+  Box3, DirectionalLight, HemisphereLight, Material, Maths, Mesh, Node, PerspectiveCamera, Texture, Vec3, World,
 } from '../../engine/api/index.ts';
 import { foeLoaded, loadFoe } from '../../entities/bosses';
 import { ENEMIES, type EnemyId } from '../../data/enemies';
@@ -59,7 +62,6 @@ const made = new Map<Who, HTMLCanvasElement>();
 const waiting = new Map<Who, ((pic: HTMLCanvasElement | null) => void)[]>();
 /** the pictures still to make, the first made next */
 let pending: Who[] = [];
-let renderer: WebGLRenderer | null = null;
 /** a picture couldn't be drawn here (no WebGL): every foe shows its glyph */
 let failed = false;
 /** the browser's store read (once) and the rest queued */
@@ -233,7 +235,7 @@ interface Making {
 let making: Making[] = [];
 /** the picture drawn, waiting for the card to have drawn it before it's copied (nothing else drawn meanwhile: the
  *  renderer's canvas holds it) */
-let copying: { m: Making; sync: WebGLSync | null } | null = null;
+let copying: { m: Making } | null = null;
 /** how many are made side by side (a page's own picture is started whatever the count) */
 const SIDE_BY_SIDE = 4;
 
@@ -251,166 +253,16 @@ function finished(m: Making, pic: HTMLCanvasElement | null): void {
   settle(m.id, pic);
 }
 
-/** The pictures made, a piece at a time: the renderer, each model (a hero's in his build's own pieces), its staging,
- *  its compile asked for, its textures sent a piece each, and its draw, copied into its own canvas. Up to
- *  `SIDE_BY_SIDE` are made at once, their compiles running side by side, the first wanted (`pending`'s order) started
- *  and drawn first. While the browser compiles them and nothing else is left to do, the build leaves the queue
- *  (nothing behind the lobby waits on it) and comes back as one is done. The renderer is let go after the last. */
+/** The pictures made, a piece at a time. TODO(#973): drawn by the engine, the model staged (`modelOf`, `staged`,
+ *  `folkStaged`) and drawn with its small maps (`smallTextures`, `withSmall`) into a canvas (`copied`). three's WebGL
+ *  renderer drew them, a piece a frame (its compile asked for, its textures and buffers sent, its draw fenced and
+ *  copied once the card had done it: the file's history); none is made till then, each asked for settled with none. */
 function* steps(): Generator<void, void, undefined> {
-  for (;;) {
-    pending = pending.filter((id) => !made.has(id) || making.some((m) => m.id === id));
-    if (!pending.length && !making.length && !copying) break;
-    // (one compiled, the first wanted: drawn)
-    const order = (m: Making): number => { const i = pending.indexOf(m.id); return i < 0 ? 1e9 : i; };
-    // (one drawn, copied once the card has drawn it: copied at once, the page's paint waited 135 to 214 ms for the
-    // card's first draw with a program just compiled, behind the other pictures' compiles)
-    if (copying) {
-      const c = copying, r = renderer!;
-      const gl = r.getContext() as WebGL2RenderingContext;
-      if (!c.sync || gl.getSyncParameter(c.sync, gl.SYNC_STATUS) === gl.SIGNALED) {
-        copying = null;
-        try {
-          if (c.sync) gl.deleteSync(c.sync);
-          const pic = piece(`${c.m.id}: copied`, () => copied(r.domElement));
-          const times = portraitTimes.get(c.m.id);
-          if (times) times.onCard = times.drawn = perfClock.now();
-          // (kept for a later visit, encoded off the page's thread: nothing waits on it)
-          if (CACHE.on && !portraitPlant.allAtOnce) pic.toBlob((blob) => { if (blob) keep(c.m.id, blob); }, 'image/png');
-          piece(`${c.m.id}: let go`, () => finished(c.m, pic));
-        } catch (err) {
-          console.warn(`guide: no portrait of ${c.m.id}`, err);
-          finished(c.m, null);
-        }
-        yield;
-        continue;
-      }
-    }
-    // (its meshes' buffers sent a batch a piece once it's compiled, each batch drawn alone: sent by its draw, the
-    // scholar's held it 72 ms)
-    const buffering = copying ? undefined : making.filter((m) => m.compiled && !m.textures.length && m.meshes.length).sort((x, y) => order(x) - order(y))[0];
-    if (buffering) {
-      const batch = takeBatch(buffering.meshes);
-      piece(`${buffering.id}: buffers sent`, () => drawnAlone(renderer!, buffering, batch));
-      yield;
-      continue;
-    }
-    const ready = copying ? undefined : making.filter((m) => m.compiled && !m.textures.length && !m.meshes.length).sort((x, y) => order(x) - order(y))[0];
-    if (ready) {
-      const r = renderer!;
-      try {
-        if (portraitPlant.allAtOnce) {
-          // (the canary: drawn and encoded at once, as they were)
-          piece(`${ready.id}: drawn and encoded at once`, () => { r.render(ready.scene, ready.camera); r.domElement.toDataURL('image/png'); });
-          copying = { m: ready, sync: null };
-        } else {
-          piece(`${ready.id}: drawn`, () => {
-            withSmall(ready.swaps, () => r.render(ready.scene, ready.camera));
-            const gl = r.getContext() as WebGL2RenderingContext;
-            copying = { m: ready, sync: gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0) };
-            gl.flush();
-            const times = portraitTimes.get(ready.id);
-            if (times) times.sent = perfClock.now();
-          });
-        }
-      } catch (err) {
-        console.warn(`guide: no portrait of ${ready.id}`, err);
-        copying = null;
-        finished(ready, null);
-      }
-      if (!portraitPlant.allAtOnce) yield;
-      continue;
-    }
-    // (the next wanted not started yet: the first wanted's (a page's own) started now, and its textures sent, before
-    // another is started; another started if there's room)
-    const sending = making.filter((m) => m.textures.length).sort((x, y) => order(x) - order(y))[0];
-    const next = pending.find((id) => !made.has(id) && !making.some((m) => m.id === id));
-    const firstWaits = sending && order(sending) === 0;
-    const ownMaking = making.some((m) => m.id === own);
-    if (next && (next === pending[0] || (making.length < SIDE_BY_SIDE && !firstWaits && !ownMaking))) {
-      try {
-        if (portraitPlant.failNext === next) { portraitPlant.failNext = null; throw new Error('a planted failure'); }
-        if (!renderer) { renderer = piece('the renderer made', makeRenderer); yield; }
-        let root: Node, scene: World, camera: PerspectiveCamera;
-        if (isFolk(next)) {
-          // (built a slice at a time, as his room builds him: whole, Brother Hollis was one task of 0.9 to 2.7 s)
-          // (asked for as the hero walks into his room, before the room has built him: waited for, a while)
-          const folk = FOLK[next];
-          let building = folk.sitter();
-          for (let f = 0; !building && f < FOLK_WAIT; f++) { yield; building = folk.sitter(); }
-          if (!building) throw new Error(`${next} was never built in his room: nothing to build him on`);
-          const sitter = yield* timedSteps(`${next}: built`, building);
-          yield;
-          ({ root, scene, camera } = piece(`${next}: staged`, () => folkStaged(sitter, folk.backdrop)));
-        } else {
-          const model: Model = yield* timedSteps(`${next}: its model built`, modelOf(next));
-          yield;
-          root = model.root;
-          // (a frame each, its staging, its small textures and its compile asked for: in one, the mage's were 31 ms of
-          // a frame behind the lobby, past `lab behind`'s 30)
-          ({ scene, camera } = piece(`${next}: staged and framed`, () => staged(model)));
-        }
-        yield;
-        const swaps = piece(`${next}: its textures made small`, () => smallTextures(root));
-        yield;
-        const m: Making = { id: next, root, meshes: meshesOf(root), scene, camera, textures: [...new Set(swaps.map((w) => w.small))], swaps, compiled: false };
-        making.push(m);
-        if (portraitPlant.allAtOnce) {
-          // (the canary's: compiled as it's drawn, its textures and buffers sent then too)
-          m.compiled = true;
-          m.textures = [];
-          m.meshes = [];
-        } else {
-          const r = renderer;
-          const asked = perfClock.now();
-          const compiled = (): void => {
-            m.compiled = true;
-            portraitTimes.set(next, { compiled: perfClock.now(), sent: Infinity, onCard: Infinity, drawn: Infinity });
-            portraitPieces.push({ what: `${next}: its compile waited for (the browser's, not the page's)`, at: asked, ms: perfClock.now() - asked, waited: true });
-            requeue();
-          };
-          // (its commands sent at once, so the browser can start on it while this context waits)
-          piece(`${next}: its compile asked for`, () => { void r.compileAsync(scene, camera).then(compiled, compiled); r.getContext().flush(); });
-        }
-      } catch (err) {
-        console.warn(`guide: no portrait of ${next}`, err);
-        if (!renderer) { failed = true; for (const who of pending) settle(who, null); pending = []; making = []; return; }
-        pending = pending.filter((who) => who !== next);
-        settle(next, null);
-      }
-      yield;
-      continue;
-    }
-    // (a texture sent to the card, the first wanted's first, while they compile: sent by its first draw, a hero's held
-    // it 33 to 81 ms)
-    if (sending) {
-      const texture = sending.textures.shift()!;
-      const img = texture.image as { width?: number; height?: number; data?: unknown } | null;
-      piece(`${sending.id}: a texture sent (${img?.width ?? '?'}x${img?.height ?? '?'}${img?.data ? ', data' : ''})`, () => renderer!.initTexture(texture));
-      yield;
-      continue;
-    }
-    // (a picture drawn waits for the card: looked at again next frame)
-    if (copying) { yield; continue; }
-    // (nothing to do till the browser has compiled one: queued again then)
-    return;
-  }
-  // (its context let go: a second WebGL context held for nothing is memory a phone hasn't)
-  piece('the renderer let go', () => { renderer?.dispose(); renderer?.forceContextLoss(); renderer = null; });
-}
-
-function makeRenderer(): WebGLRenderer {
-  const canvas = document.createElement('canvas');
-  canvas.width = canvas.height = SIZE;
-  const r = new WebGLRenderer({ canvas, alpha: true, antialias: true, preserveDrawingBuffer: true });
-  r.setPixelRatio(1);
-  r.setSize(SIZE, SIZE, false);
-  r.setClearColor(0x000000, 0);
-  // (no shader's log read back as it's first used: a read waits on the browser's work, other pictures' compiles)
-  r.debug.checkShaderErrors = false;
-  r.outputColorSpace = SRGBColorSpace;
-  r.toneMapping = ACESFilmicToneMapping;
-  r.toneMappingExposure = 1.15;
-  return r;
+  failed = true;
+  for (const who of pending) settle(who, null);
+  pending = [];
+  for (const m of making) finished(m, null);
+  copying = null;
 }
 
 /** Whose model built: a foe's in one piece, or a hero's in his build's own pieces, holding his class's starting gear. */
@@ -454,7 +306,7 @@ function small(t: Texture): Texture {
     c.height = Math.max(1, Math.round(img.height * k));
     c.getContext('2d')?.drawImage(img as CanvasImageSource, 0, 0, c.width, c.height);
     made = t.clone();
-    made.source = new Source(c);
+    made.image = c;
     made.needsUpdate = true;
   }
   smallOf.set(t, made);
@@ -511,16 +363,6 @@ function takeBatch(left: Mesh[]): Mesh[] {
     batch.push(mesh);
   }
   return batch;
-}
-
-/** `m`'s scene drawn with only `batch` of its meshes shown, under its small textures, so their buffers are sent; the
- *  rest shown again after. */
-function drawnAlone(r: WebGLRenderer, m: Making, batch: Mesh[]): void {
-  const hidden: Mesh[] = [];
-  const keep = new Set(batch);
-  m.root.traverseVisible((o) => { if ((o as Mesh).isMesh && !keep.has(o as Mesh)) hidden.push(o as Mesh); });
-  for (const mesh of hidden) mesh.visible = false;
-  try { withSmall(m.swaps, () => r.render(m.scene, m.camera)); } finally { for (const mesh of hidden) mesh.visible = true; }
 }
 
 /** The lights a portrait is drawn by: a warm key from the front right, a cool rim from behind, a dim fill. */
@@ -585,7 +427,6 @@ export function remakeAllNow(): void {
   portraitPlant.allAtOnce = true;
   // (those already in flight drawn at once too, their compiles not waited for)
   for (const m of making) { m.compiled = true; m.textures = []; }
-  if (copying) copying.sync = null;
   try {
     if (!queued(JOB)) buildLater(JOB, steps(), () => undefined);
     finishNow(JOB);

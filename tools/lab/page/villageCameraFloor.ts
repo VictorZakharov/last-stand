@@ -4,7 +4,7 @@
 // cutting him off. Checks every stair/facing/pitch/boom combination plus the hall dais edge so the camera stays clear
 // above any floor under it and along its boom, stays steady over real frames, and keeps his head whole in frame.
 // `--canary` ignores elevated floors (`holdCameraFloorHeroOnly`) and verifies both under-floor and lip-blocked spots fail.
-import * as THREE from 'three';
+import { Vec3 } from './sceneApi.ts';
 import type { Lab, Pictured } from './lab';
 import { G } from '../../../src/state';
 import { faceCamera, holdCameraFloorHeroOnly, lookBy, updateCamera, zoomBy } from '../../../src/core/renderer';
@@ -61,7 +61,7 @@ function boomTo(length: number): void {
 function settleSpot(x: number, z: number, facing: number, down: number, boom: number): void {
   const y = groundHeight(x, z);
   G.player.walkTo = null;
-  G.player.place(new THREE.Vector3(x, y, z), facing);
+  G.player.place(new Vec3(x, y, z), facing);
   faceCamera(facing);
   lookDown(down);
   boomTo(boom);
@@ -69,7 +69,7 @@ function settleSpot(x: number, z: number, facing: number, down: number, boom: nu
 }
 
 /** Whether `chest -> cam` dips below any floor height along the sightline. */
-function lineBlockedByFloor(x: number, chestY: number, z: number, cam: THREE.Vector3): boolean {
+function lineBlockedByFloor(x: number, chestY: number, z: number, cam: Vec3): boolean {
   const dist = Math.hypot(cam.x - x, cam.y - chestY, cam.z - z);
   const steps = Math.max(1, Math.ceil(dist / RAY_STEP));
   for (let i = 1; i <= steps; i++) {
@@ -140,7 +140,7 @@ export async function cameraOverFloors(lab: Lab, canary: boolean): Promise<Light
       for (const sample of SAMPLES) {
         const y = groundHeight(sample.x, sample.z);
         G.player.walkTo = null;
-        G.player.place(new THREE.Vector3(sample.x, y, sample.z), sample.facing);
+        G.player.place(new Vec3(sample.x, y, sample.z), sample.facing);
         faceCamera(sample.facing);
         lookDown(sample.down);
         boomTo(CAMERA.third.boom);
@@ -153,7 +153,7 @@ export async function cameraOverFloors(lab: Lab, canary: boolean): Promise<Light
         });
         const cam = G.camera.position;
         const clear = cam.y - groundHeight(cam.x, cam.z);
-        const head = new THREE.Vector3(sample.x, y + G.player.model.height, sample.z).project(G.camera);
+        const head = new Vec3(sample.x, y + G.player.model.height, sample.z).project(G.camera);
         const inFrame = Math.abs(head.x) <= 1 && Math.abs(head.y) <= 1;
         const msg = `${sample.label}: clear ${clear.toFixed(2)} m, moved ${moved.toFixed(3)} m, crown ${inFrame ? 'in' : 'out'}`;
         lines.push(msg);

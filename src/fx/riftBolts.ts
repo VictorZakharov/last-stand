@@ -9,21 +9,12 @@ import { AdditiveBlending, Color, DoubleSide, LookMaterial, Material, Mesh, Vec3
 import * as shapes from '../engine/api/shapes/index.ts';
 import { G } from '../state';
 import { nearGlow } from '../core/materials';
-import { portShader, wgslNoise, type Port, type Tsl } from '../core/shaderPorts';
 import { effectLook, effectShader, num, rgb, FX_PLAIN_VERTEX } from '../engine/effects';
 import { particles, col, burst, smokePuff, debris } from './particles';
 import { shockwave, decal } from './effects';
 import { flashFree } from './lights';
 
 const time = { value: 0 };
-const NOISE = /* glsl */`
-  float hash(vec3 p){ p = fract(p * 0.3183099 + 0.1); p *= 17.0; return fract(p.x * p.y * p.z * (p.x + p.y + p.z)); }
-  float noise(vec3 x){ vec3 i = floor(x), f = fract(x); f = f * f * (3.0 - 2.0 * f);
-    return mix(mix(mix(hash(i), hash(i + vec3(1,0,0)), f.x), mix(hash(i + vec3(0,1,0)), hash(i + vec3(1,1,0)), f.x), f.y),
-               mix(mix(hash(i + vec3(0,0,1)), hash(i + vec3(1,0,1)), f.x), mix(hash(i + vec3(0,1,1)), hash(i + vec3(1,1,1)), f.x), f.y), f.z); }
-  float fbm(vec3 p){ return noise(p) * 0.55 + noise(p * 2.1 + 3.1) * 0.3 + noise(p * 4.3 + 7.7) * 0.15; }`;
-const VERT = /* glsl */`varying vec3 vP; varying vec3 vN; varying vec3 vV;
-  void main(){ vP = position; vec4 mv = modelViewMatrix * vec4(position, 1.0); vN = normalize(normalMatrix * normal); vV = normalize(-mv.xyz); gl_Position = projectionMatrix * mv; }`;
 
 const sphere = shapes.sphere(1, 24, 16);
 // the tail: a cone from the orb (its wide end, at the origin) back along -Z
@@ -37,54 +28,20 @@ function mat(kind: 'orb' | 'halo' | 'tail', look: Look, color: number): Material
   let m = mats.get(key);
   if (m) return m;
   const uniforms = { uColor: { value: new Color(color) }, uTime: time };
-  if (kind === 'orb' && look === 'void') m = new LookMaterial({
-    uniforms, vertexShader: VERT, transparent: true, depthWrite: false,
-    fragmentShader: /* glsl */`uniform vec3 uColor; uniform float uTime; varying vec3 vP; varying vec3 vN; varying vec3 vV; ${NOISE}
-      void main(){
-        float f = max(dot(normalize(vN), normalize(vV)), 0.0), rim = 1.0 - f;
-        // energy churning over the surface, drawn in towards the rim
-        vec3 p = vP * 2.6;
-        float n = fbm(p + vec3(fbm(p + uTime * 1.3), fbm(p - uTime * 1.1), 0.0) * 2.0 - uTime * 0.6);
-        float band = pow(max(0.0, 1.0 - abs(n - 0.5) * 5.0), 2.0);
-        vec3 c = uColor * 0.05 + uColor * (1.6 * pow(rim, 2.0) + 1.3 * band * rim) + vec3(1.0, 0.85, 1.0) * pow(rim, 5.0) * 1.2;
-        gl_FragColor = vec4(c, 0.92);
-      }`,
-  });
-  else if (kind === 'orb') m = new LookMaterial({
-    uniforms, vertexShader: VERT, transparent: true, depthWrite: true,
-    fragmentShader: /* glsl */`uniform vec3 uColor; uniform float uTime; varying vec3 vP; varying vec3 vN; varying vec3 vV; ${NOISE}
-      void main(){
-        // dark rock, split by cracks of lava (the valleys of a noise), hotter where they meet
-        float n = fbm(vP * 2.3 + 1.7);
-        float crack = pow(max(0.0, 1.0 - abs(n - 0.5) * 9.0), 1.5);
-        float pulse = 0.8 + 0.2 * sin(uTime * 9.0 + vP.x * 6.0);
-        float f = max(dot(normalize(vN), normalize(vV)), 0.0);
-        vec3 rock = vec3(0.07, 0.05, 0.045) * (0.4 + 0.8 * f) + vec3(0.12, 0.06, 0.03) * noise(vP * 8.0);
-        vec3 lava = mix(uColor, vec3(1.0, 0.85, 0.45), crack) * 2.6 * pulse;
-        gl_FragColor = vec4(mix(rock, lava, crack) + uColor * pow(1.0 - f, 3.0) * 0.8, 1.0);
-      }`,
-  });
+  // the void orb: energy churning over the surface, drawn in towards the rim
+  if (kind === 'orb' && look === 'void') m = new LookMaterial({ uniforms, transparent: true, depthWrite: false });
+  // the magma orb: dark rock, split by cracks of lava (the valleys of a noise), hotter where they meet
+  else if (kind === 'orb') m = new LookMaterial({ uniforms, transparent: true, depthWrite: true });
+  // a glow round the orb's edge: nothing over the orb itself, fading outwards
   else if (kind === 'halo') m = nearGlow(new LookMaterial({
-    uniforms, vertexShader: VERT, transparent: true, blending: AdditiveBlending, depthWrite: false,
-    fragmentShader: /* glsl */`uniform vec3 uColor; varying vec3 vN; varying vec3 vV;
-      // a glow round the orb's edge: nothing over the orb itself (inside ~f 0.8), fading outwards
-      void main(){ float f = max(dot(normalize(vN), normalize(vV)), 0.0);
-        gl_FragColor = vec4(uColor * pow(f, 2.0) * (1.0 - smoothstep(0.7, 0.86, f)) * 1.2, 1.0); }`,
+    uniforms, transparent: true, blending: AdditiveBlending, depthWrite: false,
   }));
+  // the tail: streaks flowing back along it, fading out behind
   else m = nearGlow(new LookMaterial({
-    uniforms, vertexShader: VERT, transparent: true, blending: AdditiveBlending, depthWrite: false, side: DoubleSide,
-    fragmentShader: /* glsl */`uniform vec3 uColor; uniform float uTime; varying vec3 vP; varying vec3 vN; varying vec3 vV; ${NOISE}
-      void main(){
-        // streaks flowing back along the tail (z from 0 at the orb to -1), fading out behind
-        float along = -vP.z, a = atan(vP.y, vP.x);
-        float s = fbm(vec3(cos(a) * 1.6, sin(a) * 1.6, along * 3.0 + uTime * 7.0));
-        float fade = pow(1.0 - along, 1.6) * smoothstep(0.0, 0.08, along);
-        float edge = max(dot(normalize(vN), normalize(vV)), 0.0);
-        gl_FragColor = vec4(uColor * (0.35 + 2.2 * smoothstep(0.45, 0.8, s)) * fade * sqrt(edge) * 2.0, 1.0);
-      }`,
+    uniforms, transparent: true, blending: AdditiveBlending, depthWrite: false, side: DoubleSide,
   }));
   const name = kind === 'orb' ? `rift-${look}` : `rift-${kind}`;
-  effectLook(portShader(m as LookMaterial, (t, u) => riftPort(t, u, kind, look)), name, RIFT_HOOKS[name], {
+  effectLook(m as LookMaterial, name, RIFT_HOOKS[name], {
     numbers(u, out) {
       rgb(u, 'uColor', out, 0);
       out[3] = num(u, 'uTime');
@@ -94,53 +51,13 @@ function mat(kind: 'orb' | 'halo' | 'tail', look: Look, color: number): Material
   return m;
 }
 
-/** Each bolt's material on WebGPU (core/shaderPorts.ts), its fragment shader above in WGSL */
-function riftPort(t: Tsl, u: Tsl, kind: 'orb' | 'halo' | 'tail', look: Look): Port {
-  const { wgslFn, positionGeometry, normalView, positionViewDirection, varying } = t;
-  const { noise3, fbm3: fbm } = wgslNoise();
-  const at = { pos: varying(positionGeometry), nrm: normalView, v: positionViewDirection, color: u.uColor, time: u.uTime };
-  if (kind === 'orb' && look === 'void') return { fragment: wgslFn(`fn riftVoid(pos: vec3f, nrm: vec3f, v: vec3f,
-    color: vec3f, time: f32) -> vec4f {
-    let f = max(dot(normalize(nrm), normalize(v)), 0.0);
-    let rim = 1.0 - f;
-    let p = pos * 2.6;
-    let n = fbm3(p + vec3f(fbm3(p + time * 1.3), fbm3(p - time * 1.1), 0.0) * 2.0 - time * 0.6);
-    let band = pow(max(0.0, 1.0 - abs(n - 0.5) * 5.0), 2.0);
-    let c = color * 0.05 + color * (1.6 * rim * rim + 1.3 * band * rim) + vec3f(1.0, 0.85, 1.0) * pow(rim, 5.0) * 1.2;
-    return vec4f(c, 0.92);
-  }`, [fbm])(at) };
-  if (kind === 'orb') return { fragment: wgslFn(`fn riftMagma(pos: vec3f, nrm: vec3f, v: vec3f, color: vec3f,
-    time: f32) -> vec4f {
-    let n = fbm3(pos * 2.3 + 1.7);
-    let crack = pow(max(0.0, 1.0 - abs(n - 0.5) * 9.0), 1.5);
-    let pulse = 0.8 + 0.2 * sin(time * 9.0 + pos.x * 6.0);
-    let f = max(dot(normalize(nrm), normalize(v)), 0.0);
-    let rock = vec3f(0.07, 0.05, 0.045) * (0.4 + 0.8 * f) + vec3f(0.12, 0.06, 0.03) * noise3(pos * 8.0);
-    let lava = mix(color, vec3f(1.0, 0.85, 0.45), crack) * 2.6 * pulse;
-    return vec4f(mix(rock, lava, crack) + color * pow(1.0 - f, 3.0) * 0.8, 1.0);
-  }`, [fbm, noise3])(at) };
-  if (kind === 'halo') return { fragment: wgslFn(`fn riftHalo(nrm: vec3f, v: vec3f, color: vec3f) -> vec4f {
-    let f = max(dot(normalize(nrm), normalize(v)), 0.0);
-    return vec4f(color * f * f * (1.0 - smoothstep(0.7, 0.86, f)) * 1.2, 1.0);
-  }`)({ nrm: at.nrm, v: at.v, color: at.color }) };
-  return { fragment: wgslFn(`fn riftTail(pos: vec3f, nrm: vec3f, v: vec3f, color: vec3f, time: f32) -> vec4f {
-    let along = -pos.z;
-    var a = 0.0;
-    if (length(pos.xy) > 1e-5) { a = atan2(pos.y, pos.x); }
-    let s = fbm3(vec3f(cos(a) * 1.6, sin(a) * 1.6, along * 3.0 + time * 7.0));
-    let fade = pow(max(1.0 - along, 0.0), 1.6) * smoothstep(0.0, 0.08, along);
-    let edge = max(dot(normalize(nrm), normalize(v)), 0.0);
-    return vec4f(color * (0.35 + 2.2 * smoothstep(0.45, 0.8, s)) * fade * sqrt(edge) * 2.0, 1.0);
-  }`, [fbm])(at) };
-}
-
-/** the vertex's own place handed on, as the GLSL's vP */
+/** the vertex's own place handed on */
 const RIFT_VERTEX = /* wgsl */ `
 fn vertex_hook(v: ptr<function, Vertex>, instance: u32) {
   (*v).c0 = vec4f((*v).position, 0.0);
 }
 `;
-/** each bolt's material for the Rust engine (src/engine/effects.ts): `riftPort`'s WGSL above, the view taken in the
+/** each bolt's material for the Rust engine (src/engine/effects.ts), the view taken in the
  *  world; the halo and the tail are the ones `nearGlow` wraps */
 const RIFT_HOOKS: Record<string, string> = {
   'rift-void': RIFT_VERTEX + /* wgsl */ `

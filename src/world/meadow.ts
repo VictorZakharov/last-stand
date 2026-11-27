@@ -12,7 +12,6 @@
 import { rustLook } from '../engine/custom';
 import { bladeLook, swardLook } from '../engine/looks/meadow';
 import { ONE_GRASS, oneBand } from './meadowOne';
-import { bladeNodes, swardColorNode } from './meadowNodes';
 import {
   Box3, Camera, CanvasTexture, ClampToEdgeWrapping, DataTexture, DoubleSide, floats, FloatType, Frustum,
   InstancedGeometry, LinearFilter, LitMaterial, Mat4, Mesh, NoColorSpace, Node, RGFormat, Texture, Vec2, Vec3, Vec4,
@@ -22,7 +21,8 @@ import { asGrass, type Updater } from './props';
 import { hiddenByDoorway } from './doorways';
 import { registerCull } from './culls';
 import { wholeView } from '../core/wholeView';
-import { frameRect } from '../core/renderer';
+import { sceneSize } from '../core/renderer';
+import { G } from '../state';
 import { BLADE_ROOM } from './meadowSolids';
 
 /** The rings: each cell's size (m), how far out it's drawn (m) and the segments along each blade. */
@@ -460,12 +460,9 @@ export function meadowHandOver(wide: boolean): void {
  *  after the shading for the first ring's dense blades too, which never cut). */
 function bladeMaterial(u: RingUniforms, combed: boolean, ring: string): LitMaterial {
   const m = new LitMaterial({ roughness: 0.85, side: DoubleSide });
-  bladeNodes(m, u, combed, {
-    widthInCells: WIDTH_IN_CELLS, grows: BLADE_GROWS, strandCut: STRAND_CUT, strandsRise: STRANDS_RISE,
-  });
-  // (a build of its own: sharing the first's, a ring drew with that ring's uniforms, its tiles listed for that ring's
-  // view, whole tiles of the lawn bare)
-  m.customProgramCacheKey = () => `meadow-blades-${ring}`;
+  // (a material of its own: sharing the first's, a ring drew with that ring's uniforms, its tiles listed for that
+  // ring's view, whole tiles of the lawn bare)
+  m.name = `meadow blades ${ring}`;
   rustLook(m, bladeLook(u, combed, {
     widthInCells: WIDTH_IN_CELLS, grows: BLADE_GROWS, strandCut: STRAND_CUT, strandsRise: STRANDS_RISE,
   }, () => !tufts, oneNow));
@@ -571,6 +568,8 @@ function hiddenBehind(box: Box3, eye: Vec3): boolean {
 
 const _forward = new Vec3(), _frustum = new Frustum(), _viewProj = new Mat4();
 const _box = new Box3();
+/** the scene's size, as the engine draws it (a pixel's width for the tufts) */
+const scratchSize = new Vec2();
 
 /** Where the camera looks on the ground: along its sight onto the floor, at most `FOCUS_MOST` m before it, and from
  *  a sight near level as far as one `FOCUS_STEEP` down would meet it (the camera's height over that). */
@@ -680,8 +679,10 @@ export function buildMeadow(mask: MeadowMask, maskTexture: Texture, updaters: Up
     // (the tiles are its culling: three's sphere would be round no points)
     mesh.frustumCulled = false;
     mesh.receiveShadow = true;
-    mesh.onBeforeRender = (renderer, _scene, camera) => {
-      viewHigh.value = renderer.getRenderTarget()?.height ?? frameRect().height;
+    // (run by the engine before the frame's camera draws it: its look asks, `before`)
+    mesh.onBeforeRender = () => {
+      const camera = G.camera;
+      viewHigh.value = sceneSize(scratchSize).y;
       const geo = mesh.geometry as InstancedGeometry;
       // (none listed rather than hidden: a hidden mesh compiles nothing)
       // (from above, near the ground: the first ring's blades in the far ring's tiles; uniforms alone)
@@ -810,7 +811,5 @@ export function buildMeadow(mask: MeadowMask, maskTexture: Texture, updaters: Up
 /** The ground under a meadow: its own colour (bare earth) where the mask has none, a sward's dark green where it has
  *  grass (seen between the blades), in broad patches. */
 export function meadowGround<M extends LitMaterial>(m: M, mask: MaskUniforms): M {
-  (m as M & { colorNode: unknown }).colorNode = swardColorNode(mask.uMeadow.value, mask.uMeadowHalf.value);
-  rustLook(m, swardLook(mask.uMeadow.value, mask.uMeadowHalf.value));
-  return m;
+  return rustLook(m, swardLook(mask.uMeadow.value, mask.uMeadowHalf.value));
 }

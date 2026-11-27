@@ -15,7 +15,7 @@
 // bones' blend: the shut fist has points and normals of its own (`hands.ts` `shadeShut`), swapped in as it shuts,
 // with the same bones, weights and program.
 import {
-  Attribute, Geometry, InterleavedBufferAttribute, Mat4, Quat, SkinnedMesh, Vec3,
+  Attribute, Geometry, Mat4, Quat, SkinnedMesh, Vec3,
 } from '../../engine/api/index.ts';
 import { tunable } from '../../core/tuning';
 
@@ -385,8 +385,7 @@ function straightBack(at: Float32Array, posed: PosedSkin, palmOf: (i: number) =>
 }
 
 /** the bone a point of the skin keeps to most */
-function mainBone(index: Attribute | InterleavedBufferAttribute,
-  share: Attribute | InterleavedBufferAttribute, i: number): number {
+function mainBone(index: Attribute, share: Attribute, i: number): number {
   let most = 0;
   for (let k = 1; k < 4; k++) if (share.getComponent(i, k) > share.getComponent(i, most)) most = k;
   return index.getComponent(i, most);

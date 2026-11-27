@@ -12,7 +12,7 @@
 //
 // `--canary` keeps its neck up through the gore, its fore hooves come down behind where they stood and its hind hooves
 // kick forward under it: every case must miss, and the part says so.
-import * as THREE from 'three';
+import { Vec3 } from './sceneApi.ts';
 import type { Lab } from './lab';
 import { G } from '../../../src/state';
 import { STAG } from '../../../src/data/foes/stag';
@@ -47,7 +47,7 @@ async function oneCase(lab: Lab, options: BossOptions, away: number, off: number
   const hero = G.player;
   const d = boss.radius + hero.radius + away;
   const a = Math.atan2(lane.way.x, lane.way.z) + off;
-  const at = new THREE.Vector3(boss.pos.x + Math.sin(a) * d, 0, boss.pos.z + Math.cos(a) * d);
+  const at = new Vec3(boss.pos.x + Math.sin(a) * d, 0, boss.pos.z + Math.cos(a) * d);
   hero.place(at, a + Math.PI);
   const before = BLOWS.length ? BLOWS[BLOWS.length - 1] : null;
   boss.dazed = 0;

@@ -6,8 +6,8 @@
 // meshes of their own, a cell each, they cut as many triangles but drew 45 to 60 times more a frame.) What casts a
 // shadow casts it from a copy of its own, drawn by the shadow map alone, of the instances in the map's box.
 import {
-  Attribute, Camera, Color, Frustum, Geometry, InstancedMesh, Light, LightShadow, Mat4, Mesh, Node, OrthoCamera,
-  PointLight, Sphere, Vec3, WebGLCoordinateSystem, WebGLShadowMap, World,
+  Attribute, Camera, Color, Frustum, Geometry, InstancedMesh, Light, Mat4, Mesh, Node, OrthoCamera,
+  PointLight, Sphere, Vec3, WebGPUCoordinateSystem, World,
 } from '../engine/api/index.ts';
 import { TAU } from '../util';
 
@@ -23,7 +23,7 @@ interface Culled { mesh: InstancedMesh; matrices: Float32Array; colors: Float32A
 
 const culled: Culled[] = [];
 
-/** What the shadow map alone draws, hidden from every other pass and shown while it draws (`cullWhileDrawn`). */
+/** What the shadow map alone draws, hidden from every other pass (the engine draws it for its shadow alone). */
 const shadowOnly = new Set<Mesh>();
 
 /** `mesh` drawn by the shadow map alone: a shadow caster that draws nothing in the frame (drawn there, a biome's
@@ -211,10 +211,11 @@ export function hideCellsWhere(test: (sphere: Sphere) => boolean): void {
 
 const _frustum = new Frustum(), _viewProjection = new Mat4();
 /** Each culled mesh `camera` sees packed with its cells in that camera's view, or all of them while the mesh isn't
- *  frustum-culled (the boot's warm-up draws everything). Packed again only when its cells in view change. */
-function cullFor(camera: Camera): void {
+ *  frustum-culled (the boot's warm-up draws everything). Packed again only when its cells in view change. Nothing
+ *  asks it now: three ran it before each render, and the engine culls an instance at a time itself. */
+export function cullCellsFor(camera: Camera): void {
   _viewProjection.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
-  _frustum.setFromProjectionMatrix(_viewProjection, WebGLCoordinateSystem, camera.reversedDepth);
+  _frustum.setFromProjectionMatrix(_viewProjection, WebGPUCoordinateSystem, camera.reversedDepth);
   for (const c of culled) {
     // (not for a pass that can't see it, the first person's arms: packed for their camera, packed again for the
     // world's the next frame)
@@ -231,23 +232,6 @@ function cullFor(camera: Camera): void {
     }
     if (changed) pack(c);
   }
-}
-
-/** The shadow-only casters shown and the work round a shadow map's draw run, for a draw by `camera`; returns what
- *  puts them back. */
-function intoShadow(camera: Camera): () => void {
-  // (a biome's still shadows draw its own casters alone: a hero's shadow cast as one, shown for them, stayed in the
-  // braziers' shadow where he stood, and compiled a point light's skinned program mid-fight)
-  const casters = stillOf ? [...shadowOnly].filter((caster) => isUnder(caster, stillOf!)) : [...shadowOnly];
-  for (const caster of casters) caster.visible = true;
-  const after = stillOf ? [] : [...aroundShadow].map((around) => around(camera));
-  return () => {
-    for (const undo of after) undo();
-    for (const caster of casters) caster.visible = false;
-    // (and every one made meanwhile: a hero's shadow cast as one made again round this draw, as the hall of heroes
-    // showed his gear, stayed shown, and the frame drew it in its own basic material, a program compiled there)
-    if (!stillOf) for (const caster of shadowOnly) caster.visible = false;
-  };
 }
 
 /** The shadow map's own draw: of `lights`' maps, of `scene` as `camera`'s layers show it. */
@@ -274,96 +258,9 @@ export function skipAfterShadows(skips: SkipsAfter): void {
   skipsAfter = skips;
 }
 
-/** Culls the meshes culled in cells as `renderer` draws `scene`: each render's camera's cells in view packed before
- *  it draws (after the scene's matrices are updated), and the shadow casters shown only while the shadow map draws. */
-/** what of a renderer the cull hooks into: three's shadow map, where a renderer of three's draws (none now) */
-type ShadowsHost = { shadowMap?: WebGLShadowMap };
-export function cullWhileDrawn(scene: World, renderer: ShadowsHost): void {
-  const shadows = renderer.shadowMap;
-  if (!shadows?.render) {
-    shadowsAsRenders(scene);
-    return;
-  }
-  const before = scene.onBeforeRender;
-  scene.onBeforeRender = (...args) => {
-    before.apply(scene, args);
-    cullFor(args[2]);
-  };
-  const draw = shadows.render.bind(shadows);
-  shadows.render = (lights, scene, camera) => {
-    const back = intoShadow(camera);
-    // (a render that draws no shadow map, its `autoUpdate` held off (the ghosts' count's, the outline's), has no work
-    // after one: asked all the same, the count's render and the scene's each asked whether the movers had moved, the
-    // second finding they hadn't, and Low's kept maps were left in half the frames he walked, `lab village --only
-    // shadowsOnMove`; and each such render drew the movers over the maps again)
-    const draws = shadows.autoUpdate || shadows.needsUpdate;
-    try {
-      draw(lights, scene, camera);
-      if (!draws) return;
-      const still = stillOf !== null;
-      if (!skipsAfter?.(camera, still)) for (const then of afterShadow) then(draw, scene, camera, still);
-    } finally {
-      back();
-    }
-  };
-}
-
-/** Whether `camera` is a light's shadow camera in `scene`, each camera looked up once. */
-function shadowCameraTest(scene: World): (camera: Camera) => boolean {
-  const known = new WeakMap<Camera, boolean>();
-  return (camera) => {
-    let is = known.get(camera);
-    if (is === undefined) {
-      is = false;
-      scene.traverse((part) => {
-        const light = part as Light & { shadow?: LightShadow };
-        if (light.isLight && light.shadow?.camera === camera) is = true;
-      });
-      known.set(camera, is);
-    }
-    return is;
-  };
-}
-
-/**
- * WebGPU's renderer draws each shadow map as a render of the scene by the light's camera, nested in the frame's own,
- * with no shadow map's `render` to wrap: so the shadow-only casters are shown, and the work round a shadow's draw run,
- * between the scene's hooks round such a render. Hidden there, the biomes' baked casters and the trees' shadow
- * copies cast nothing, and each piece of a hero cast on its own (125 draws of the sun's 173 a lobby frame). The
- * cells are packed for the views alone: the culled meshes cast nothing, and packed for each shadow camera too, every
- * one was packed and sent to the GPU twice a frame.
- */
-function shadowsAsRenders(scene: World): void {
-  const isShadow = shadowCameraTest(scene);
-  const backs: (() => void)[] = [];
-  const before = scene.onBeforeRender;
-  scene.onBeforeRender = (...args) => {
-    before.apply(scene, args);
-    const camera = args[2];
-    if (!isShadow(camera)) {
-      cullFor(camera);
-      backs.push(NOTHING);
-      return;
-    }
-    backs.push(intoShadow(camera));
-  };
-  const after = scene.onAfterRender;
-  scene.onAfterRender = (...args) => {
-    after.apply(scene, args);
-    backs.pop()?.();
-  };
-}
-
-const NOTHING = (): void => {};
 
 /** the biome whose still shadows are being drawn (`drawingStill`) */
 let stillOf: Node | null = null;
-
-/** Whether `object` hangs under `root`. */
-function isUnder(object: Node, root: Node): boolean {
-  for (let at: Node | null = object; at; at = at.parent) if (at === root) return true;
-  return false;
-}
 
 /** Which of the still shadows a still draw draws again: the point lights' cubes (the braziers', the lamps': all of
  *  them, none, or these lights' alone), the sun's map where it's kept; `face`: one face of those lights' cubes alone

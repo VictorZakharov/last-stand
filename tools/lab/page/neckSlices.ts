@@ -4,7 +4,9 @@
 // that side: a hair card where its texture is drawn (alpha tested), a face only from its front unless it's drawn from
 // both. Cut into segments a level, the rays meet only those of their own angle, so the whole neck is read in a fraction
 // of a second (three's own raycast posed and tested every triangle of the hero for each ray).
-import * as THREE from 'three';
+import {
+  Box2, Color, DataTexture, DoubleSide, LitMaterial, Mat3, Mat4, Maths, Mesh, Node, SkinnedMesh, Texture, Vec2, Vec3,
+} from './sceneApi.ts';
 import type { Model } from '../../../src/types';
 import { HEAD_MM } from '../../../src/entities/models/head';
 import { fallOf, type Fall, type Gap } from './neckGaps';
@@ -45,37 +47,37 @@ export interface Part {
 
 /** One triangle of the hero round his neck, in the neck's frame (m): its corners' places, shading normals, texture
  *  coordinates and vertex colours, the part it's of, its heights, and its bounds seen from above. */
-export interface Triangle {
-  places: THREE.Vector3[];
-  normals: THREE.Vector3[];
-  uvs: THREE.Vector2[];
+export interface NeckFace {
+  places: Vec3[];
+  normals: Vec3[];
+  uvs: Vec2[];
   colours: Rgb[];
-  facing: THREE.Vector3;
+  facing: Vec3;
   part: number;
   low: number;
   high: number;
-  plan: THREE.Box2;
+  plan: Box2;
 }
 
 /** A point of a cut: where (the neck's frame, m) and what's there, as a triangle's corners blend into it. */
 interface Cut {
-  place: THREE.Vector3;
-  normal: THREE.Vector3;
-  uv: THREE.Vector2;
+  place: Vec3;
+  normal: Vec3;
+  uv: Vec2;
   colour: Rgb;
 }
 
 /** A level plane's cut through one triangle. */
 interface Segment {
   ends: [Cut, Cut];
-  triangle: Triangle;
+  triangle: NeckFace;
 }
 
 /** A ray's hit: how far out from the axis (m) and what it met, blended along the segment. */
 interface Hit {
   r: number;
   cut: Cut;
-  triangle: Triangle;
+  triangle: NeckFace;
 }
 
 /** What the slices read: a line up the neck for each ray (`Line`), the girth of the skin round each row (face mm,
@@ -97,20 +99,20 @@ export interface Slices {
 
 /** What a mesh of the hero is, by its name (head.ts names the face, the ears, the hair, its crop under a hat and the
  *  beard; buildNeck the neck). */
-function kindOf(mesh: THREE.Mesh): Kind {
+function kindOf(mesh: Mesh): Kind {
   if (mesh.name === 'face' || mesh.name === 'neck' || mesh.name === 'ear') return mesh.name;
   if (mesh.name === 'hair' || mesh.name === 'crop' || mesh.name === 'beard') return 'hair';
   return 'cloth';
 }
 
 /** A texture's pixels (RGBA, 0-255), read once, or null where its image can't be read. */
-const pixelsRead = new Map<THREE.Texture, ImageData | null>();
-function pixelsOf(texture: THREE.Texture): ImageData | null {
+const pixelsRead = new Map<Texture, ImageData | null>();
+function pixelsOf(texture: Texture): ImageData | null {
   if (pixelsRead.has(texture)) return pixelsRead.get(texture)!;
   const image = texture.image as CanvasImageSource & { width: number; height: number };
   let pixels: ImageData | null = null;
   // (a data texture's pixels are its own, its first row v = 0: the hair's strand map is one)
-  const data = (texture as THREE.DataTexture).isDataTexture ? (texture.image as { data: unknown }).data : null;
+  const data = (texture as DataTexture).isDataTexture ? (texture.image as { data: unknown }).data : null;
   if (data instanceof Uint8Array && image.width && image.height) {
     pixels = new ImageData(new Uint8ClampedArray(data), image.width, image.height);
   } else if (image && image.width && image.height) {
@@ -126,7 +128,7 @@ function pixelsOf(texture: THREE.Texture): ImageData | null {
 }
 
 /** The pixel of `texture` at (u, v), wrapped as it repeats, 0-1 a channel; null where it can't be read. */
-function texel(texture: THREE.Texture, u: number, v: number): [number, number, number, number] | null {
+function texel(texture: Texture, u: number, v: number): [number, number, number, number] | null {
   const pixels = pixelsOf(texture);
   if (!pixels) return null;
   const wrap = (t: number) => t - Math.floor(t);
@@ -148,7 +150,7 @@ const PAINT_REACH = 4;
 
 /** `texture`'s colour round (u, v) in linear light, averaged over `PAINT_REACH` texels across either way and one up
  *  and down; null where it can't be read. */
-function paintRound(texture: THREE.Texture, u: number, v: number): Rgb | null {
+function paintRound(texture: Texture, u: number, v: number): Rgb | null {
   const pixels = pixelsOf(texture);
   if (!pixels) return null;
   const sum: Rgb = [0, 0, 0];
@@ -164,14 +166,14 @@ function paintRound(texture: THREE.Texture, u: number, v: number): Rgb | null {
 }
 
 /** `mesh` as a part of the slices: its kind, where its texture is drawn, and its paint. */
-function partOf(mesh: THREE.Mesh): Part {
-  const material = (Array.isArray(mesh.material) ? mesh.material[0] : mesh.material) as THREE.MeshStandardMaterial;
+function partOf(mesh: Mesh): Part {
+  const material = (Array.isArray(mesh.material) ? mesh.material[0] : mesh.material) as LitMaterial;
   const map = material.map;
   const cut = material.alphaTest > 0 && map ? material.alphaTest : 0;
-  const tint = material.color ?? new THREE.Color(1, 1, 1);
+  const tint = material.color ?? new Color(1, 1, 1);
   return {
     kind: kindOf(mesh),
-    bothSides: material.side === THREE.DoubleSide,
+    bothSides: material.side === DoubleSide,
     drawnAt(u, v) {
       if (!cut) return true;
       const pixel = texel(map!, u, v);
@@ -185,47 +187,77 @@ function partOf(mesh: THREE.Mesh): Part {
 }
 
 /** Whether `object` and every one of its parents is shown. */
-function shown(object: THREE.Object3D): boolean {
-  for (let at: THREE.Object3D | null = object; at; at = at.parent) if (!at.visible) return false;
+function shown(object: Node): boolean {
+  for (let at: Node | null = object; at; at = at.parent) if (!at.visible) return false;
   return true;
+}
+
+/** the scratch of `posedBySkin` */
+const inBind = new Vec3();
+const boneMove = new Mat4();
+const moved = new Vec3();
+
+/**
+ * `point`, near vertex `index` of `mesh` in its own space, moved by that vertex's bones as the shader moves it (three
+ * 0.187's `SkinnedMesh.applyBoneTransform`, which the API hasn't got: its `getVertexPosition` poses the vertex alone,
+ * and the shading normal is read as a point a little along it, posed the same way).
+ */
+function posedBySkin(mesh: SkinnedMesh, index: number, point: Vec3): Vec3 {
+  const geometry = mesh.geometry;
+  const bones = geometry.getAttribute('skinIndex');
+  const weights = geometry.getAttribute('skinWeight');
+  const skeleton = mesh.skeleton;
+  if (!bones || !weights || !skeleton) return point;
+  inBind.copy(point).applyMatrix4(mesh.bindMatrix);
+  point.set(0, 0, 0);
+  for (let k = 0; k < 4; k++) {
+    const weight = weights.getComponent(index, k);
+    if (weight === 0) continue;
+    const bone = bones.getComponent(index, k);
+    boneMove.multiplyMatrices(skeleton.bones[bone].matrixWorld, skeleton.boneInverses[bone]);
+    point.addScaledVector(moved.copy(inBind).applyMatrix4(boneMove), weight);
+  }
+  return point.applyMatrix4(mesh.bindMatrixInverse);
 }
 
 /** A corner of `mesh`, posed as drawn, in the frame `toNeck` takes the world to: its place and its shading normal
  *  (a skinned mesh's normal carried by its bones as the shader carries it: a point a little along it, posed). */
-function cornerOf(mesh: THREE.Mesh, index: number, toNeck: THREE.Matrix4): [THREE.Vector3, THREE.Vector3] {
+function cornerOf(mesh: Mesh, index: number, toNeck: Mat4): [Vec3, Vec3] {
   const geometry = mesh.geometry;
-  const place = new THREE.Vector3().fromBufferAttribute(geometry.attributes.position, index);
-  const normal = new THREE.Vector3().fromBufferAttribute(geometry.attributes.normal, index);
-  const toWorld = new THREE.Matrix4().multiplyMatrices(toNeck, mesh.matrixWorld);
-  if ((mesh as THREE.SkinnedMesh).isSkinnedMesh) {
-    const skinned = mesh as THREE.SkinnedMesh;
+  const place = new Vec3().fromBufferAttribute(geometry.attributes.position, index);
+  const normal = new Vec3().fromBufferAttribute(geometry.attributes.normal, index);
+  const toWorld = new Mat4().multiplyMatrices(toNeck, mesh.matrixWorld);
+  if ((mesh as SkinnedMesh).isSkinnedMesh) {
+    const skinned = mesh as SkinnedMesh;
     const along = place.clone().addScaledVector(normal, 1e-3);
-    skinned.applyBoneTransform(index, place);
-    skinned.applyBoneTransform(index, along);
+    posedBySkin(skinned, index, place);
+    posedBySkin(skinned, index, along);
     along.applyMatrix4(toWorld);
     place.applyMatrix4(toWorld);
     return [place, along.sub(place).normalize()];
   }
   place.applyMatrix4(toWorld);
-  normal.applyMatrix3(new THREE.Matrix3().getNormalMatrix(toWorld)).normalize();
+  normal.applyMatrix3(new Mat3().getNormalMatrix(toWorld)).normalize();
   return [place, normal];
 }
 
 /** The triangles of the hero's shown meshes round his neck (within `REACH` of its axis, between `low` and `high`, or
  *  the face's up to `top`), in the neck's frame, and the parts they're of. */
-function trianglesOf(model: Model, low: number, high: number, top: number): { triangles: Triangle[]; parts: Part[] } {
+function trianglesOf(
+  model: Model, low: number, high: number, top: number,
+): { triangles: NeckFace[]; parts: Part[] } {
   const neck = model.joints!.neck;
   model.root.updateMatrixWorld(true);
   const toNeck = neck.matrixWorld.clone().invert();
-  const triangles: Triangle[] = [];
+  const triangles: NeckFace[] = [];
   const parts: Part[] = [];
   model.root.traverse((object) => {
-    const mesh = object as THREE.Mesh;
+    const mesh = object as Mesh;
     if (!mesh.isMesh || !shown(mesh) || !mesh.geometry.attributes.normal) return;
     const part = partOf(mesh);
     const ceiling = part.kind === 'face' ? top : high;
     const geometry = mesh.geometry;
-    const corners = new Map<number, [THREE.Vector3, THREE.Vector3]>();
+    const corners = new Map<number, [Vec3, Vec3]>();
     const corner = (index: number) => {
       if (!corners.has(index)) corners.set(index, cornerOf(mesh, index, toNeck));
       return corners.get(index)!;
@@ -233,7 +265,7 @@ function trianglesOf(model: Model, low: number, high: number, top: number): { tr
     const count = geometry.index ? geometry.index.count : geometry.attributes.position.count;
     const indexAt = (at: number) => (geometry.index ? geometry.index.getX(at) : at);
     const uv = geometry.attributes.uv;
-    const colour = (mesh.material as THREE.MeshStandardMaterial).vertexColors ? geometry.attributes.color : undefined;
+    const colour = (mesh.material as LitMaterial).vertexColors ? geometry.attributes.color : undefined;
     let partIndex = -1;
     for (let at = 0; at + 2 < count; at += 3) {
       const indices = [indexAt(at), indexAt(at + 1), indexAt(at + 2)];
@@ -245,12 +277,12 @@ function trianglesOf(model: Model, low: number, high: number, top: number): { tr
       if (highest < low || lowest > ceiling) continue;
       if (places.every((place) => Math.hypot(place.x, place.z) > REACH)) continue;
       if (partIndex < 0) partIndex = parts.push(part) - 1;
-      const facing = new THREE.Vector3().subVectors(places[1], places[0])
-        .cross(new THREE.Vector3().subVectors(places[2], places[0])).normalize();
+      const facing = new Vec3().subVectors(places[1], places[0])
+        .cross(new Vec3().subVectors(places[2], places[0])).normalize();
       triangles.push({
         places,
         normals: posed.map(([, normal]) => normal),
-        uvs: indices.map((index) => (uv ? new THREE.Vector2(uv.getX(index), uv.getY(index)) : new THREE.Vector2())),
+        uvs: indices.map((index) => (uv ? new Vec2(uv.getX(index), uv.getY(index)) : new Vec2())),
         colours: indices.map((index) => (colour
           ? [colour.getX(index), colour.getY(index), colour.getZ(index)] as Rgb
           : [1, 1, 1] as Rgb)),
@@ -258,7 +290,7 @@ function trianglesOf(model: Model, low: number, high: number, top: number): { tr
         part: partIndex,
         low: lowest,
         high: highest,
-        plan: new THREE.Box2().setFromPoints(places.map((place) => new THREE.Vector2(place.x, place.z))),
+        plan: new Box2().setFromPoints(places.map((place) => new Vec2(place.x, place.z))),
       });
     }
   });
@@ -266,7 +298,7 @@ function trianglesOf(model: Model, low: number, high: number, top: number): { tr
 }
 
 /** The point a share `t` of the way from corner `a` to corner `b` of `triangle`. */
-function cutAlong(triangle: Triangle, a: number, b: number, t: number): Cut {
+function cutAlong(triangle: NeckFace, a: number, b: number, t: number): Cut {
   const mix = (x: number, y: number) => x + (y - x) * t;
   const [ca, cb] = [triangle.colours[a], triangle.colours[b]];
   return {
@@ -278,7 +310,7 @@ function cutAlong(triangle: Triangle, a: number, b: number, t: number): Cut {
 }
 
 /** The level plane at height `y`'s cut through `triangle`, or null where it misses it. */
-function segmentOf(triangle: Triangle, y: number): Segment | null {
+function segmentOf(triangle: NeckFace, y: number): Segment | null {
   const cuts: Cut[] = [];
   for (const [a, b] of [[0, 1], [1, 2], [2, 0]]) {
     const [ya, yb] = [triangle.places[a].y, triangle.places[b].y];
@@ -290,13 +322,13 @@ function segmentOf(triangle: Triangle, y: number): Segment | null {
 }
 
 /** The angle round the neck of a place (radians from his front, + to his left), 0 to 2π. */
-function angleOf(place: THREE.Vector3): number {
+function angleOf(place: Vec3): number {
   const angle = Math.atan2(place.x, place.z);
   return angle < 0 ? angle + Math.PI * 2 : angle;
 }
 
 /** The rays (`ANGLES` of them) each segment of the level `y` may meet: those whose angle it spans round the axis. */
-function binned(triangles: Triangle[], y: number): Segment[][] {
+function binned(triangles: NeckFace[], y: number): Segment[][] {
   const bins: Segment[][] = Array.from({ length: ANGLES }, () => []);
   const step = (Math.PI * 2) / ANGLES;
   for (const triangle of triangles) {
@@ -371,7 +403,7 @@ function sampleOf(hits: Hit[], parts: Part[], angle: number, y: number): Sample 
   return {
     y,
     r: mmOf(first.r),
-    tilt: THREE.MathUtils.radToDeg(Math.asin(THREE.MathUtils.clamp(normal.y, -1, 1))),
+    tilt: Maths.radToDeg(Math.asin(Maths.clamp(normal.y, -1, 1))),
     kind: part.kind,
     colour: isSkin(part.kind) ? part.paintAt(uv.x, uv.y, colour) : null,
   };

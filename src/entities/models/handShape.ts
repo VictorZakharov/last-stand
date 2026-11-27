@@ -102,8 +102,8 @@ let cell = CELL;
  */
 const COARSE_SHARE = { skin: 0.12, glove: 0.17 };
 const COARSE_ERROR = 0.0025;
-/** the simplifier (three's meshoptimizer), loaded only for a coarse hand: null until it's ready */
-let simplifier: typeof import('three/addons/libs/meshopt_simplifier.module.js').MeshoptSimplifier | null = null;
+/** the simplifier (meshoptimizer's own build), loaded only for a coarse hand: null until it's ready */
+let simplifier: typeof import('meshoptimizer/simplifier').MeshoptSimplifier | null = null;
 let coarseHand = false;
 /**
  * The hands sculpted from now on meshed coarse, or not (Very low's: a hand was 12,500 triangles at any level, the
@@ -116,7 +116,7 @@ export async function setHandsCoarse(coarse: boolean): Promise<void> {
   cell = coarse ? COARSE_CELL : CELL;
   coarseHand = coarse;
   if (!coarse || simplifier) return;
-  const { MeshoptSimplifier } = await import('three/addons/libs/meshopt_simplifier.module.js');
+  const { MeshoptSimplifier } = await import('meshoptimizer/simplifier');
   await MeshoptSimplifier.ready;
   simplifier = MeshoptSimplifier;
 }

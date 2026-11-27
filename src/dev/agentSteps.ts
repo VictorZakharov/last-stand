@@ -3,13 +3,15 @@
 //            the frame's parts
 //   picture  the frame as drawn, through the player's view or from a camera the agent places (the free camera)
 //   set      what the developer panel sets, by its controls' names (agentControls.ts)
-//   eval     code run in this page, with `G` (the game's state), `THREE` and `dev` (this mode's own pieces) in scope
+//   eval     code run in this page, with `G` (the game's state), `api` (the engine's scene API) and `dev` (this
+//            mode's own pieces) in scope
 //   make, makes, unmake   things built into the scene as the player watches (agentMakes.ts)
 //   say      a line of the agent's in the game's chat, to the player (agentChat.ts)
 // Nothing here runs until the owner has accepted the agent (agent.ts holds every message till then).
 import {
   Color, Euler, Maths, Mesh, Node as SceneNode, PerspectiveCamera, Quat, Raycaster, Vec2, Vec3, Vec4,
 } from '../engine/api/index.ts';
+import * as sceneApi from '../engine/api/index.ts';
 import { G } from '../state';
 import { frameApart, frameRect, frameShot, viewMode } from '../core/renderer';
 import { qualityLevel, qualitySetting, resolutionSetting } from '../core/quality';
@@ -67,7 +69,8 @@ export function plain(value: unknown, depth = PLAIN.depth, seen = new Set<object
   seen.add(object);
   try {
     if (object instanceof Vec3 || object instanceof Vec2 || object instanceof Vec4
-      || object instanceof Quat || object instanceof Euler) return (object.toArray() as unknown[]).map((n) => plain(n));
+      || object instanceof Quat) return (object.toArray() as unknown[]).map((n) => plain(n));
+    if (object instanceof Euler) return [object.x, object.y, object.z, object.order];
     if (object instanceof Color) return `#${object.getHexString()}`;
     if (ArrayBuffer.isView(object) || Array.isArray(object)) {
       const list = Array.from(object as ArrayLike<unknown>);
@@ -317,12 +320,13 @@ export async function evaluate(args: AgentStep): Promise<unknown> {
   if (typeof args.code !== 'string' || !args.code.trim()) throw new Error('eval: give code, a text');
   let run: (...scope: unknown[]) => Promise<unknown>;
   try {
-    run = new AsyncFunction('G', 'THREE', 'dev', `return (${args.code}\n);`);
+    run = new AsyncFunction('G', 'api', 'dev', `return (${args.code}\n);`);
   } catch {
     // (not one expression: statements, which say what they return)
-    run = new AsyncFunction('G', 'THREE', 'dev', args.code);
+    run = new AsyncFunction('G', 'api', 'dev', args.code);
   }
-  return plain(await run(G, THREE, devScope()));
+  // (`api`: the engine's scene API, where three stood: its maths, geometry, materials and scene)
+  return plain(await run(G, sceneApi, devScope()));
 }
 
 /** A step run; its result as plain data. Throws at one it doesn't know. */

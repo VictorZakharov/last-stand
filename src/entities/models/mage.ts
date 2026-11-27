@@ -546,11 +546,11 @@ export function* mageSteps(look: HeadSpec = headFor('mage')): ModelSteps {
   yield;
   // (his arcana: the free hand's outline lit green, breathing slowly: `HAND_GLOW`)
   const handGlow = new Color(), handBody = new Color();
-  glowOutline(handL, handGlow, handBody);
+  const shineL = glowOutline(handL, handGlow, handBody);
   // (and the other hand's with no staff in it, #402: both hands lit say both are ready for the lance; black, no
   // glow, while it holds the staff)
   const handGlowR = new Color(0), handBodyR = new Color(0);
-  glowOutline(handR, handGlowR, handBodyR);
+  const shineR = glowOutline(handR, handGlowR, handBodyR);
   const body = bodyShape(j, { L: handL.vis, R: handR.vis });
 
   yield;
@@ -1210,6 +1210,9 @@ export function* mageSteps(look: HeadSpec = headFor('mage')): ModelSteps {
     // flat mint, #425: there the outline alone)
     handBody.copy(handGlow).multiplyScalar(fp ? 0 : HAND_GLOW.body);
     if (armed) { handGlowR.setScalar(0); handBodyR.setScalar(0); } else { handGlowR.copy(handGlow); handBodyR.copy(handBody); }
+    // (each hand's emissive a colour of its materials' own: copied, not shared)
+    shineL();
+    shineR();
     const raw = st.action;
     feet = null;
     let flaskWant = 0, drinkLift = 0;

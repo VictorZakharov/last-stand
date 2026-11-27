@@ -3,7 +3,7 @@
 // there (page/onScreen.ts), and let go over the boss with the aim moving on, the boss must take the mark. (The quarry
 // was the foe whose middle was nearest the aim's point, and the aim met the rigid meshes alone: over a boss's skinned
 // limbs and crown it went on to the floor behind it, nearer a small foe.)
-import * as THREE from 'three';
+import { Node, Vec3 } from './sceneApi.ts';
 import type { Fixture, Lab, Pictured } from './lab';
 import type { HeldOptions } from './held';
 import type { Enemy } from '../../../src/entities/enemy';
@@ -56,7 +56,7 @@ export async function bossWithSmall(lab: Lab, fixture: Fixture, view: ViewMode):
   const small = (ENEMIES[kind].summon ?? 'thornling') as EnemyId;
   const toHero = hero.pos.clone().sub(boss.pos).setY(0).normalize();
   const round = (kind: EnemyId, way: number) => {
-    const at = toHero.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), way);
+    const at = toHero.clone().applyAxisAngle(new Vec3(0, 1, 0), way);
     const apart = boss.radius + ENEMIES[kind].radius + SMALL_GAP;
     return lab.spawnFoe(kind, boss.pos.clone().addScaledVector(at, apart));
   };
@@ -91,7 +91,7 @@ function hardestOver(onBoss: Over[], foes: Enemy[]): Over[] {
  * eye: of every point laid over it at the round's start, the hardest eight in third person all lay behind a small
  * foe from there, and the let-go was never measured (#486). Null if none of the first `LET_GO_TRIES` is.
  */
-async function overBossForLetGo(lab: Lab, key: SkillKey, onBoss: Over[], foes: Enemy[]): Promise<THREE.Vector3 | null> {
+async function overBossForLetGo(lab: Lab, key: SkillKey, onBoss: Over[], foes: Enemy[]): Promise<Vec3 | null> {
   const [boss] = foes;
   for (const over of hardestOver(onBoss, foes).slice(0, LET_GO_TRIES)) {
     const aimed = await aimedAt(lab, key, over.point, foes);
@@ -106,7 +106,7 @@ function oneOf(kind: string): string {
 }
 
 /** A foe (by its model's root) as the lines name it: the boss by its kind, a small one as one of its kind. */
-function foeName(root: THREE.Object3D | undefined, foes: Enemy[]): string {
+function foeName(root: Node | undefined, foes: Enemy[]): string {
   if (!root) return 'nothing';
   const foe = foes.find((one) => one.obj === root);
   if (!foe) return 'something else';
@@ -117,10 +117,10 @@ function foeName(root: THREE.Object3D | undefined, foes: Enemy[]): string {
  *  where the game had the aim. */
 interface Aimed {
   drawn: Enemy | undefined;
-  drawnAt: THREE.Vector3 | undefined;
+  drawnAt: Vec3 | undefined;
   drawnSkinned: boolean;
-  outlined: THREE.Object3D | undefined;
-  aim: THREE.Vector3;
+  outlined: Node | undefined;
+  aim: Vec3;
 }
 
 /**
@@ -128,7 +128,7 @@ interface Aimed {
  * most): the foe of `foes` drawn where the aim then is, and what the outline is round a frame later, as the game aims
  * from what it drew. Null if the crosshair never came over it.
  */
-async function aimedAt(lab: Lab, key: SkillKey, point: THREE.Vector3, foes: Enemy[]): Promise<Aimed | null> {
+async function aimedAt(lab: Lab, key: SkillKey, point: Vec3, foes: Enemy[]): Promise<Aimed | null> {
   const frame = () => ({ ...holdingKey(key, point), sight: point });
   for (let f = 0; f < SIGHT_FRAMES && aimMiss(point) > SIGHT_NEAR; f++) await lab.step(1, frame);
   if (aimMiss(point) > SIGHT_NEAR) return null;
@@ -286,7 +286,7 @@ async function overBossIn(lab: Lab, skill: HeldSkill, view: ViewMode, options: H
  * let go. (Queued, it was cast at the aim of the moment it went: the outline round the boss, the mark on a small foe.)
  */
 async function letGoWhileShooting(
-  lab: Lab, key: SkillKey, aims: { target: THREE.Vector3; movedOn: THREE.Vector3; view: ViewMode }, foes: Enemy[],
+  lab: Lab, key: SkillKey, aims: { target: Vec3; movedOn: Vec3; view: ViewMode }, foes: Enemy[],
   lines: string[], say: (problem: string) => void,
 ): Promise<void> {
   const { target, movedOn, view } = aims;
@@ -294,7 +294,7 @@ async function letGoWhileShooting(
   const hero = G.player;
   hero.cooldowns.clear();
   hero.energy = hero.stats.maxEnergy;
-  const drawing = (aim: THREE.Vector3) => ({ ...holdingKey(key, aim), m0: true, sight: aim });
+  const drawing = (aim: Vec3) => ({ ...holdingKey(key, aim), m0: true, sight: aim });
   await lab.step(HOLD_FRAMES, () => drawing(target));
   await lab.step(1, () => ({ m0: true, aim: target, sight: target }));
   const waited = !!hero.casting && hero.casting.skill.def.impl !== 'quarryMark';

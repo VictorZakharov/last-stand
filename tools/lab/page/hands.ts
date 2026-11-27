@@ -3,7 +3,10 @@
 // three-quarters, with its size against a man's and how many triangles it's drawn with. A hand is judged here as it's
 // made, before it's seen holding anything: through the eyes the fist fills a corner of the frame, and close up its
 // fingers were tubes with rounded ends round the grip.
-import * as THREE from 'three';
+import {
+  Attribute, boundsOf, Box3, LitMaterial, Material, Maths, Mesh, Node, Quat, shapes, SkinnedMesh, Vec3, Vec3Tuple,
+  Vec4
+} from './sceneApi.ts';
 import type { Lab, Fixture, Report, Pictured, Tile } from './lab';
 import { backdropDrawn, cameraOn, countsOf, drawnPixels, shoot, studio, type Shot } from './studio';
 import { marked, seenThrough } from './seeThrough';
@@ -13,7 +16,7 @@ import * as handsCode from '../../../src/entities/models/hands';
 import { clench, closeFist, hold, poseHand, seat, strainHand, type Hand } from '../../../src/entities/models/hands';
 import { disposeGeometries, joint } from '../../../src/entities/models/rig';
 import { fistLine } from '../../../src/entities/models/warriorFists';
-import * as shapes from '../../../src/entities/models/shapes';
+import * as modelShapes from '../../../src/entities/models/shapes';
 import type { ArmBuild } from '../../../src/entities/models/build';
 import { fistContact, wristBend } from './fistContact';
 
@@ -39,10 +42,10 @@ export interface HandsOptions {
  *  down -y, the palm facing -z, the thumb towards `thumb` along x), and which way is up the picture (+y, the wrist) */
 interface HandView {
   name: string;
-  from: (thumb: number) => THREE.Vector3Tuple;
-  up?: THREE.Vector3Tuple;
+  from: (thumb: number) => Vec3Tuple;
+  up?: Vec3Tuple;
   /** the part of the hand framed, close up (all of it and what it holds by default) */
-  framed?: (hand: Hand) => THREE.Box3;
+  framed?: (hand: Hand) => Box3;
 }
 
 const VIEWS: HandView[] = [
@@ -103,14 +106,14 @@ const CLOSE_UPS: HandView[] = [
 ];
 
 /** A box round `joints`' places, `margin` wider each way at the hand's scale. */
-function roundJoints(hand: Hand, joints: THREE.Object3D[], margin = CLOSE_MARGIN): THREE.Box3 {
-  const box = new THREE.Box3();
-  for (const at of joints) box.expandByPoint(at.getWorldPosition(new THREE.Vector3()));
-  return box.expandByScalar(margin * hand.vis.getWorldScale(new THREE.Vector3()).x);
+function roundJoints(hand: Hand, joints: Node[], margin = CLOSE_MARGIN): Box3 {
+  const box = new Box3();
+  for (const at of joints) box.expandByPoint(at.getWorldPosition(new Vec3()));
+  return box.expandByScalar(margin * hand.vis.getWorldScale(new Vec3()).x);
 }
 
 /** A pose: what it does to the hand on its wrist joint, and what it adds to the picture (a handle). */
-type Pose = (hand: Hand, wrist: THREE.Object3D) => void;
+type Pose = (hand: Hand, wrist: Node) => void;
 
 const POSES: Record<string, Pose> = {
   flat: (hand) => poseHand(hand, 0, 0),
@@ -127,8 +130,8 @@ const POSES: Record<string, Pose> = {
 /** the handle closed round (m: about a sword's grip) and its length */
 const HANDLE_RADIUS = 0.016;
 const HANDLE_LENGTH = 0.22;
-const HANDLE = new THREE.MeshStandardMaterial({ color: 0x3a2a1e, roughness: 0.8 });
-const UP = new THREE.Vector3(0, 1, 0);
+const HANDLE = new LitMaterial({ color: 0x3a2a1e, roughness: 0.8 });
+const UP = new Vec3(0, 1, 0);
 
 /** A man's hand (the median adult man's, as anatomy's tables give it): its length a share of his height, its breadth
  *  across the knuckles a share of its length, its thickness at the palm a share of its breadth; and each finger's
@@ -147,24 +150,24 @@ const STUDIO_FOREARM = 0.27;
 const WRAP_TRIANGLES = 400;
 
 /** The hand closed round a handle across its palm, as a fist holds a sword's grip, the handle drawn through it. */
-function closedRound(hand: Hand, wrist: THREE.Object3D): void {
+function closedRound(hand: Hand, wrist: Node): void {
   // (the handle runs across the palm, its end towards the thumb, as models/hands.ts `fist` takes it)
-  const across = new THREE.Vector3(-hand.s, 0, 0);
+  const across = new Vec3(-hand.s, 0, 0);
   const grip = joint(wrist);
   grip.quaternion.setFromUnitVectors(UP, across);
   seat(hand, grip, HANDLE_RADIUS);
   wrist.updateMatrixWorld(true);
   hold(hand, across, HANDLE_RADIUS);
-  grip.add(new THREE.Mesh(new THREE.CylinderGeometry(HANDLE_RADIUS, HANDLE_RADIUS, HANDLE_LENGTH, 24), HANDLE));
+  grip.add(new Mesh(shapes.cylinder(HANDLE_RADIUS, HANDLE_RADIUS, HANDLE_LENGTH, 24), HANDLE));
 }
 
-function clenchedFist(hand: Hand, wrist: THREE.Object3D): void {
-  if (sculpting.closeFist) sculpting.closeFist(hand, new THREE.Vector3(-hand.s, 0, 0));
+function clenchedFist(hand: Hand, wrist: Node): void {
+  if (sculpting.closeFist) sculpting.closeFist(hand, new Vec3(-hand.s, 0, 0));
   else handleFist(hand, wrist);
 }
 
 /** Canary from 0ffdabdfe. The phantom handle left the thumb beside the index and a hole inside the curl. */
-function handleFist(hand: Hand, wrist: THREE.Object3D, across = new THREE.Vector3(-hand.s, 0, 0)): void {
+function handleFist(hand: Hand, wrist: Node, across = new Vec3(-hand.s, 0, 0)): void {
   wrist.updateMatrixWorld(true);
   hold(hand, across, 0.012);
   clench(hand, [2.05, 1.6, 0.8], 0);
@@ -175,7 +178,7 @@ function fuseFingers(hand: Hand): void {
   const toMiddle = [1, 0, -1, -1];
   hand.f.forEach((finger, i) => {
     // (about the hand's length, as `closedFistPose` fans them)
-    const turn = new THREE.Quaternion().setFromAxisAngle(UP, THREE.MathUtils.degToRad(9 * toMiddle[i] * -hand.s));
+    const turn = new Quat().setFromAxisAngle(UP, Maths.degToRad(9 * toMiddle[i] * -hand.s));
     finger.j[0].quaternion.premultiply(turn);
   });
   hand.vis.updateWorldMatrix(true, true);
@@ -219,30 +222,30 @@ async function guardContact(lab: Lab, fixture: Fixture, canary?: boolean) {
 
 /** A point of the hand's surface where it's drawn (the world), and the joint it moves with. */
 interface Point {
-  at: THREE.Vector3;
-  on: THREE.Object3D;
+  at: Vec3;
+  on: Node;
 }
 
 /** The joint a vertex of `mesh` moves with: the bone that weighs most on it, or a rigid mesh's own parent. */
-function jointOf(mesh: THREE.Mesh, index: number): THREE.Object3D {
-  const skinned = mesh as THREE.SkinnedMesh;
+function jointOf(mesh: Mesh, index: number): Node {
+  const skinned = mesh as SkinnedMesh;
   if (!skinned.isSkinnedMesh) return mesh.parent!;
-  const attributes = skinned.geometry.attributes as Record<string, THREE.BufferAttribute>;
-  const weights = new THREE.Vector4().fromBufferAttribute(attributes.skinWeight, index);
-  const bones = new THREE.Vector4().fromBufferAttribute(attributes.skinIndex, index);
+  const attributes = skinned.geometry.attributes as Record<string, Attribute>;
+  const weights = new Vec4().fromBufferAttribute(attributes.skinWeight, index);
+  const bones = new Vec4().fromBufferAttribute(attributes.skinIndex, index);
   let most = 0;
   for (let i = 1; i < 4; i++) if (weights.getComponent(i) > weights.getComponent(most)) most = i;
   return skinned.skeleton.bones[bones.getComponent(most)];
 }
 
 /** Every point of the hand's visible surface, posed. */
-function pointsOf(wrist: THREE.Object3D): Point[] {
+function pointsOf(wrist: Node): Point[] {
   wrist.updateMatrixWorld(true);
   const points: Point[] = [];
   for (const mesh of meshesOf(wrist)) {
     const count = mesh.geometry.attributes.position.count;
     for (let i = 0; i < count; i++) {
-      const at = mesh.getVertexPosition(i, new THREE.Vector3()).applyMatrix4(mesh.matrixWorld);
+      const at = mesh.getVertexPosition(i, new Vec3()).applyMatrix4(mesh.matrixWorld);
       points.push({ at, on: jointOf(mesh, i) });
     }
   }
@@ -264,15 +267,15 @@ interface Size {
   fingers: number[];
 }
 
-function sizeOf(hand: Hand, wrist: THREE.Object3D): Size {
+function sizeOf(hand: Hand, wrist: Node): Size {
   const points = pointsOf(wrist);
-  const thumb = new Set<THREE.Object3D>(hand.thumb.j);
+  const thumb = new Set<Node>(hand.thumb.j);
   const palmAndFingers = points.filter((point) => !thumb.has(point.on));
-  const knuckleAt = (finger: number) => hand.f[finger].j[0].getWorldPosition(new THREE.Vector3()).y;
+  const knuckleAt = (finger: number) => hand.f[finger].j[0].getWorldPosition(new Vec3()).y;
   const middle = knuckleAt(1);
   const near = (y: number) => palmAndFingers.filter((point) => Math.abs(point.at.y - y) < BAND);
   const fingers = hand.f.map((finger, i) => {
-    const own = new Set<THREE.Object3D>(finger.j);
+    const own = new Set<Node>(finger.j);
     const tip = Math.min(...points.filter((point) => own.has(point.on)).map((point) => point.at.y));
     return knuckleAt(i) - tip;
   });
@@ -295,7 +298,7 @@ const SHAFT_AT = [0.8, 0.5];
 const STATION = 0.002;
 
 /** How broad `points` are across a finger at `along` down the frame of its joint `from` (m, the hand's own). */
-function breadthAt(points: Point[], from: THREE.Object3D, along: number): number {
+function breadthAt(points: Point[], from: Node, along: number): number {
   const across: number[] = [];
   for (const point of points) {
     const local = from.worldToLocal(point.at.clone());
@@ -305,10 +308,10 @@ function breadthAt(points: Point[], from: THREE.Object3D, along: number): number
 }
 
 /** Each finger's breadth at its middle joint over its shafts' either side of it (index to little), on a flat hand. */
-function knobsOf(hand: Hand, wrist: THREE.Object3D): number[] {
+function knobsOf(hand: Hand, wrist: Node): number[] {
   const points = pointsOf(wrist);
   return hand.f.map((finger) => {
-    const own = new Set<THREE.Object3D>(finger.j);
+    const own = new Set<Node>(finger.j);
     const its = points.filter((point) => own.has(point.on));
     const lengths = [finger.j[1].position.length(), finger.j[2].position.length()];
     const joint = breadthAt(its, finger.j[1], 0);
@@ -351,7 +354,7 @@ function sizeNotes(size: Size, scale: number, height: number): string[] {
 }
 
 /** How a copy of the hero's right hand is built on a wrist of its own, as the hero's was. */
-type Copier = (wrist: THREE.Object3D) => Hand;
+type Copier = (wrist: Node) => Hand;
 
 function copierOf(lab: Lab, glove?: boolean): Copier {
   const hero = lab.model.hands?.R;
@@ -368,22 +371,22 @@ function copierOf(lab: Lab, glove?: boolean): Copier {
  *  built again from the materials its pieces were made in, `userData.own`, bare as the hero's is or as `glove` says;
  *  bare only if the hero's is, as only a bare hand's pieces show the skin it's bare in.) */
 function oldCopier(lab: Lab, glove?: boolean): Copier {
-  const made = (object: THREE.Object3D) => object.userData.own !== undefined;
+  const made = (object: Node) => object.userData.own !== undefined;
   const vis = lab.joints.handR.children.find((child) => child.children.some(made));
   if (!vis) throw new Error(`lab: hands: no hand on the ${lab.player.cls.id}'s right wrist`);
-  const pieces: THREE.Mesh[] = [];
+  const pieces: Mesh[] = [];
   vis.traverse((object) => {
-    if (made(object)) pieces.push(object as THREE.Mesh);
+    if (made(object)) pieces.push(object as Mesh);
   });
-  const own = (mesh: THREE.Mesh) => mesh.userData.own as THREE.Material;
+  const own = (mesh: Mesh) => mesh.userData.own as Material;
   const [palm] = pieces;
   const tip = pieces[pieces.length - 1];
-  const heroBare = palm.material === own(palm) ? null : (palm.material as THREE.Material);
+  const heroBare = palm.material === own(palm) ? null : (palm.material as Material);
   if (glove === false && !heroBare) {
     throw new Error('lab: hands: --glove=false: this game\'s gloved hero shows no bare skin');
   }
   const bareIn = glove ? null : heroBare;
-  const bare = handsCode.bare as unknown as (hand: Hand, skin: THREE.Material | null) => void;
+  const bare = handsCode.bare as unknown as (hand: Hand, skin: Material | null) => void;
   return (wrist) => {
     const copy = handsCode.buildHand(wrist, -1, own(palm), own(tip), vis.scale.x);
     bare(copy, bareIn);
@@ -393,19 +396,19 @@ function oldCopier(lab: Lab, glove?: boolean): Copier {
 
 /** A fresh copy of the hero's right hand, with the game wrap when the studio shows his bare fist. */
 function posedCopy(copier: Copier, pose: Pose, scale = 1, wrap?: ArmBuild) {
-  const wrist = new THREE.Group();
+  const wrist = new Node();
   const hand = copier(wrist);
   let root = wrist;
   let updateWrap: (() => void) | undefined;
   if (wrap) {
-    const elbow = new THREE.Group();
+    const elbow = new Node();
     elbow.position.y = STUDIO_FOREARM;
     elbow.add(wrist);
     wrist.position.y = -STUDIO_FOREARM;
-    const sculpt = new shapes.Sculpt();
+    const sculpt = new modelShapes.Sculpt();
     const skin = () => [sculpting.drawnSkin?.(hand) ?? hand.bareSkin ?? hand.skin];
     const poses = handsCode.wrapPoses?.(hand) ?? [];
-    updateWrap = shapes.fighterWrap(sculpt, hand.made.glove, elbow, hand.vis, -hand.s, wrap, skin, poses);
+    updateWrap = modelShapes.fighterWrap(sculpt, hand.made.glove, elbow, hand.vis, -hand.s, wrap, skin, poses);
     sculpt.build();
     root = elbow;
   }
@@ -418,11 +421,11 @@ function posedCopy(copier: Copier, pose: Pose, scale = 1, wrap?: ArmBuild) {
 
 /** `wrist` (a hand on it) pictured from `views` as `look` draws it, and the least and most of a picture drawn; the
  *  studio framed on it but with nothing in it, `empty`. */
-async function pictureOf(lab: Lab, hand: Hand, wrist: THREE.Object3D, views: HandView[], look: Look, empty = false):
+async function pictureOf(lab: Lab, hand: Hand, wrist: Node, views: HandView[], look: Look, empty = false):
   Promise<{ tiles: Tile[]; least: number; most: number }> {
   const scene = studio();
   scene.add(wrist);
-  const whole = new THREE.Box3().setFromObject(wrist, true);
+  const whole = boundsOf(wrist, new Box3(), true);
   wrist.visible = !empty;
   const thumb = -hand.s;
   const shots: Shot[] = views.map((view) => {
@@ -447,11 +450,11 @@ const SEE_THROUGH = 0.001;
  *  is closed by the wrap's edge), drawn in the `faces` look: its skin
  *  seen from inside and the backdrop through a hole, each view's share of the hand's pixels, and a problem for each
  *  view past `SEE_THROUGH`. */
-async function seeThroughOf(lab: Lab, hand: Hand, wrist: THREE.Object3D, name: string):
+async function seeThroughOf(lab: Lab, hand: Hand, wrist: Node, name: string):
   Promise<{ line: string; problems: string[]; tiles: Tile[] }> {
   const scene = studio();
   scene.add(wrist);
-  const box = new THREE.Box3().setFromObject(hand.vis, true);
+  const box = boundsOf(hand.vis, new Box3(), true);
   const worn = wearLook('faces', meshesOf(hand.vis));
   const backdrop = await backdropDrawn();
   const readings: string[] = [];
@@ -484,7 +487,7 @@ async function seeThroughOf(lab: Lab, hand: Hand, wrist: THREE.Object3D, name: s
 const pct = (value: number) => (value * 100).toFixed(2);
 
 /** A copy's geometry freed, but what every hand of its side shares (`userData.shared`). */
-const freed = (wrist: THREE.Object3D) => disposeGeometries(wrist);
+const freed = (wrist: Node) => disposeGeometries(wrist);
 
 /** A kept sculpt's side by its key (`1`, `-1 heavy`...): left or right, and its build where it has one. */
 function sideName(key: number | string): string {
@@ -500,7 +503,7 @@ function sculptNotes(copier: Copier): { lines: string[]; problems: string[] } {
   const afresh = sculpting.sculptAfresh;
   const by = sculpting.SCULPTED_BY;
   if (!afresh || !by) return { lines: [], problems: [] };
-  const wrist = new THREE.Group();
+  const wrist = new Node();
   const hand = copier(wrist);
   const times: number[] = [];
   for (let i = 0; i < SCULPT_TIMES; i++) {
@@ -555,7 +558,7 @@ export async function hands(lab: Lab, options: HandsOptions): Promise<Report> {
   const views = chosen([...VIEWS, ...CLOSE_UPS], options.views ?? VIEWS.map((view) => view.name), 'view');
   const poses = chosen(Object.entries(POSES).map(([name, pose]) => ({ name, pose })), options.poses, 'pose');
   const look = options.look ?? 'lit';
-  const scale = lab.joints.handR.getWorldScale(new THREE.Vector3()).x;
+  const scale = lab.joints.handR.getWorldScale(new Vec3()).x;
   const flat = posedCopy(copier, POSES.flat);
   const size = sizeOf(flat.hand, flat.wrist);
   const knobs = sculpting.handLike ? knobNotes(knobsOf(flat.hand, flat.wrist)) : { lines: [], problems: [] };

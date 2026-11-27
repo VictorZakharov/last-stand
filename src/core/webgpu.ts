@@ -1,35 +1,9 @@
-// What's left of three's WebGPU build in the game (VictorZakharov/last-stand#973: three leaves it): its node
-// materials' modules, which the game's materials are still made of, and the places' point lights the engine is
-// handed. three's renderer is gone: the engine (src/engine) draws the frame on the page's canvas (core/screen.ts).
+// What's left of the game's WebGPU side beside the engine (VictorZakharov/last-stand#973: three left it): the
+// places' point lights the engine is handed, and waiting for the engine's GPU work. three's renderer is gone: the
+// engine (src/engine) draws the frame on the page's canvas (core/screen.ts).
 // What the renderer's hooks here measured is docs/agents/webgpu.md's history.
-import { Material, Node, PointLight, World } from '../engine/api/index.ts';
+import { Node, PointLight, World } from '../engine/api/index.ts';
 import { PIPELINES, engineWorkDone } from '../engine/pipelinesAside';
-
-/** how long a warm-up's slice of work runs before it yields a frame (ms, `compileSlice`): while nothing is played
- *  (the loading screen, the fight's loading bar), and while the lobby is (fitted to what the frames leave,
- *  `fitSlices` in game/warmup.ts). three's async compile read it; the warm-ups still pace themselves by it. */
-export const COMPILE_SLICE = { loading: 40, playing: 8, least: 1 };
-/** A warm-up's slice set to `ms` (`vite.config.ts` makes three's build read it). */
-export function compileSlice(ms: number): void {
-  (globalThis as { __compileSliceMs?: number }).__compileSliceMs = ms;
-}
-
-/** three's WebGPU build and its node language: what node materials are made from (`loadNodeModules`) */
-export let gpu: typeof import('three/webgpu');
-export let tsl: typeof import('three/tsl');
-
-/** three's node modules loaded, ahead of any material made of them (core/renderer.ts `initRenderer`). */
-export async function loadNodeModules(): Promise<void> {
-  gpu = await import('three/webgpu');
-  tsl = await import('three/tsl');
-}
-
-/** the materials whose nodes hold nothing an object's draw must refresh (three's renderer read it; kept for what
- *  marks them, till the materials leave three) */
-export const stillNodes = new WeakSet<Material>();
-
-/** the objects refreshed in full whatever they are (three's renderer read it; kept for what marks them) */
-export const refreshedInFull = new WeakSet<Node>();
 
 /** `group`'s point lights, those casting shadows first (as the rig has them: `rigPointLights`). */
 function pointLightsIn(group: Node): PointLight[] {
@@ -38,59 +12,21 @@ function pointLightsIn(group: Node): PointLight[] {
   return [...lights.filter((l) => l.castShadow), ...lights.filter((l) => !l.castShadow)];
 }
 
-/** `light`'s place, colour, reach and shadow given to `rigged`, and a shadow it was to draw again handed on. */
-function mirror(light: PointLight, rigged: PointLight): void {
-  light.getWorldPosition(rigged.position);
-  rigged.color.copy(light.color);
-  rigged.intensity = light.intensity;
-  rigged.distance = light.distance;
-  rigged.decay = light.decay;
-  if (light.castShadow) {
-    rigged.shadow.mapSize.copy(light.shadow.mapSize);
-    rigged.shadow.camera.near = light.shadow.camera.near;
-    rigged.shadow.bias = light.shadow.bias;
-    rigged.shadow.radius = light.shadow.radius;
-    if (light.shadow.needsUpdate) rigged.shadow.needsUpdate = true;
-    light.shadow.needsUpdate = false;
-  }
-  rigged.updateMatrixWorld();
-}
-
 /**
- * The biomes' and the hall of heroes' point lights drawn by one rig of lights, the shown one's copied onto it in the
- * scene's hook (its own hidden): three's WebGPU renderer keyed every lit pipeline by its lights' ids. The engine
- * runs no hook and is handed the shown place's own (`shownPointLights`). Each place has as many as the rig, as many
- * casting (`arena.ts` checks): the casters take its first slots.
+ * The biomes' and the hall of heroes' point lights, each place's kept for the engine to be handed the shown one's
+ * (`shownPointLights`), its own hidden from the scene's walk. three's WebGPU renderer keyed every lit pipeline by its
+ * lights' ids, so a rig of lights copied the shown place's in the scene's hook; the engine runs no hook, and the rig
+ * is gone with three. Each place has as many lights as every other, as many casting (`arena.ts` checks). (`_scene` is
+ * unread: the rig stood in it.)
  */
-export function rigPointLights(scene: World, groups: Node[]): void {
-  const lightsOf = rigPlaces.lightsOf;
+export function rigPointLights(_scene: World, groups: Node[]): void {
   for (const group of groups) rigMorePointLights(group);
-  groups = rigPlaces.groups;
-  const most = Math.max(...[...lightsOf.values()].map((lights) => lights.length));
-  const rig = Array.from({ length: most }, () => new PointLight(0xffffff, 0));
-  for (const rigged of rig) rigged.userData.rigged = true;
-  [...lightsOf.values()][0].forEach((light, i) => {
-    rig[i].castShadow = light.castShadow;
-    rig[i].shadow.autoUpdate = light.shadow.autoUpdate;
-  });
-  scene.add(...rig);
-  const before = scene.onBeforeRender;
-  scene.onBeforeRender = (...args) => {
-    const shown = groups.find((group) => group.visible);
-    const lights = shown ? lightsOf.get(shown)! : [];
-    rig.forEach((rigged, i) => {
-      if (lights[i]) mirror(lights[i], rigged);
-      else rigged.intensity = 0;
-    });
-    before.apply(scene, args);
-  };
 }
 
 /**
- * The shown place's own point lights, which the rig copies (`rigPointLights`) and the scene's walk never meets: the
- * engine runs none of the hooks the rig is set in, and walking the scene for its lights it found the rig's alone,
- * as the last hook left them: a house's candles, hearth and chandelier lit nothing (`lab rust --village --room
- * library`: "0 point lights").
+ * The shown place's own point lights (`rigPointLights`), which the scene's walk never meets, as they're hidden:
+ * walking the scene for its lights, the engine found the rig's alone, as the last hook left them, and a house's
+ * candles, hearth and chandelier lit nothing (`lab rust --village --room library`: "0 point lights").
  */
 export function shownPointLights(): readonly PointLight[] {
   const shown = rigPlaces.groups.find((group) => group.visible);
@@ -98,15 +34,14 @@ export function shownPointLights(): readonly PointLight[] {
 }
 const NO_LIGHTS: readonly PointLight[] = [];
 
-/** The place shown now, of those the rig copies its lights from (the Rust engine draws its lights' shadows of
+/** The place shown now, of those whose lights are kept (the Rust engine draws its lights' shadows of
  *  what stands still in it: engine/lampShadows.ts). */
 export const shownPlace = (): Node | undefined => rigPlaces.groups.find((group) => group.visible);
 
-/** the places the rig copies its lights from, each with its point lights (`rigPointLights`, `rigMorePointLights`) */
+/** the places whose lights are kept, each with its point lights (`rigPointLights`, `rigMorePointLights`) */
 const rigPlaces = { groups: [] as Node[], lightsOf: new Map<Node, PointLight[]>() };
 
-/** A place built after the rig was made (a fight's biome, built at the run's start: world/arena.ts) copied by it too:
- *  it has as many lights as every place, so the rig's lit pipelines take it as they are. */
+/** A place built after the others (a fight's biome, built at the run's start: world/arena.ts), its lights kept too. */
 export function rigMorePointLights(group: Node): void {
   const lights = pointLightsIn(group);
   rigPlaces.lightsOf.set(group, lights);

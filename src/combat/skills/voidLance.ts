@@ -5,7 +5,6 @@ import {
 } from '../../engine/api/index.ts';
 import * as shapes from '../../engine/api/shapes/index.ts';
 import { nearGlow } from '../../core/materials';
-import { portShader, wgslNoise } from '../../core/shaderPorts';
 import { effectLook, num, rgb, effectShader } from '../../engine/effects';
 import { G } from '../../state';
 import { hitEnemy } from '../damage';
@@ -127,100 +126,10 @@ const portalGeo = shapes.plane(2, 2);
 const RIM = 0.85;
 
 function beamMaterial(core: boolean): LookMaterial {
-  return effectLook(portShader(nearGlow(new LookMaterial({
+  return effectLook(nearGlow(new LookMaterial({
     uniforms: { uTime: { value: 0 }, uLen: { value: 10 }, uColor: { value: COLOR.clone() }, uCore: { value: core ? 1 : 0 }, uFade: { value: 0 } },
     transparent: true, depthWrite: false, blending: AdditiveBlending, side: DoubleSide,
-    vertexShader: /* glsl */`
-      varying vec2 vUv; varying float vFres;
-      void main(){
-        vUv = uv;
-        vec4 mv = modelViewMatrix * vec4(position, 1.0);
-        vec3 n = normalize(normalMatrix * normal);
-        // how far across the tube this point is, seen from the camera: the view direction flattened onto
-        // the tube's cross-section, so a beam seen along its length (the close views) keeps its bright
-        // middle instead of reading as all edge and fading away
-        vec3 axis = normalize(normalMatrix * vec3(0.0, 1.0, 0.0));
-        vec3 v = normalize(-mv.xyz);
-        vec3 across = v - axis * dot(v, axis);
-        float l = length(across);
-        // (the normal round the lance alone: where its outline widens or narrows the normal leans along it, and
-        // the widening shell lit up face on, a funnel of green glass before the eyes)
-        vec3 round = n - axis * dot(n, axis);
-        float lr = length(round);
-        vFres = l > 1e-3 && lr > 1e-3 ? abs(dot(round / lr, across / l)) : 1.0;
-        gl_Position = projectionMatrix * mv;
-      }`,
-    fragmentShader: /* glsl */`
-      varying vec2 vUv; varying float vFres;
-      uniform float uTime, uLen, uCore, uFade; uniform vec3 uColor;
-      float h(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7)))*43758.5453); }
-      float n(vec2 p){ vec2 i=floor(p), f=fract(p); f=f*f*(3.0-2.0*f);
-        return mix(mix(h(i),h(i+vec2(1,0)),f.x), mix(h(i+vec2(0,1)),h(i+vec2(1,1)),f.x), f.y); }
-      void main(){
-        float along = vUv.y * uLen;
-        float flow = n(vec2(vUv.x * 10.0, along * 1.4 - uTime * 14.0)) * 0.6 + n(vec2(vUv.x * 22.0, along * 3.0 - uTime * 22.0)) * 0.4;
-        // (the glow round the core comes in along the lance's first fifth: at the hand it's the core alone)
-        float ends = smoothstep(0.0, uCore > 0.5 ? 0.03 : 0.06, vUv.y) * (1.0 - smoothstep(0.97, 1.0, vUv.y));
-        float body = pow(vFres, uCore > 0.5 ? 2.5 : 1.2);
-        // two ribbons of brighter light winding slowly round it (a strand passes a point about once a second:
-        // faster, a pattern crossing the view flashes)
-        float wind = fract(vUv.x * 2.0 + along * 0.4 - uTime * 0.5);
-        float ribbon = smoothstep(0.0, 0.12, wind) * (1.0 - smoothstep(0.2, 0.42, wind));
-        // three finer threads winding the other way, crossing the ribbons, and rings of light racing away down
-        // it (a ring passes a point 1.4 times a second, a thread about once): seen along its length, as through
-        // the eyes, what winds round it and runs down it is what shows (from play: "beam is still a little
-        // boring in 1st person")
-        float wind2 = fract(-vUv.x * 3.0 + along * 0.55 - uTime * 0.35);
-        float thread = smoothstep(0.0, 0.05, wind2) * (1.0 - smoothstep(0.07, 0.14, wind2));
-        float rings = pow(0.5 + 0.5 * sin(along * 1.6 - uTime * 9.0), 10.0);
-        // not far over bloom's threshold: seen low along its length (the lobby) the beam covers much of the
-        // screen, and a hotter one blooms into a green haze over the ground round it. Its core keeps its colour:
-        // 0.7 of the way to white at 1.6, it was a white bar (from play: "make it less bright, not washed color")
-        // (the core white at its very middle alone, green round it; the shell mostly its ribbons, not a fog)
-        vec3 hot = mix(uColor, vec3(1.0), 0.75 * pow(vFres, 6.0)) * 1.4;
-        vec3 c = uCore > 0.5 ? hot * (1.0 + rings * 0.2)
-          : uColor * (0.2 + flow * 0.7 + ribbon * 1.5 + thread * 1.3 + rings * 1.0);
-        float shell = 0.18 + flow * 0.4 + ribbon * 0.7 + thread * 0.5 + rings * 0.6;
-        float a = body * ends * (uCore > 0.5 ? 1.0 : shell) * uFade;
-        gl_FragColor = vec4(c * a, a);
-      }`,
-  })), ({ wgslFn, uv, varying, normalView, positionViewDirection, modelViewMatrix, vec4 }, u) => {
-    const { noise2 } = wgslNoise();
-    const fres = wgslFn(`fn lanceFres(n: vec3f, v: vec3f, axis: vec3f) -> f32 {
-      let across = v - axis * dot(v, axis);
-      let l = length(across);
-      let nn = normalize(n);
-      let around = nn - axis * dot(nn, axis);
-      let lr = length(around);
-      if (l > 1e-3 && lr > 1e-3) { return abs(dot(around / lr, across / l)); }
-      return 1.0;
-    }`);
-    const axis = modelViewMatrix.mul(vec4(0, 1, 0, 0)).xyz.normalize();
-    return {
-      fragment: wgslFn(`fn lanceBeam(uv: vec2f, fres: f32, time: f32, len: f32, color: vec3f, core: f32,
-        fade: f32) -> vec4f {
-        let along = uv.y * len;
-        let flow = noise2(vec2f(uv.x * 10.0, along * 1.4 - time * 14.0)) * 0.6
-          + noise2(vec2f(uv.x * 22.0, along * 3.0 - time * 22.0)) * 0.4;
-        let ends = smoothstep(0.0, select(0.06, 0.03, core > 0.5), uv.y) * (1.0 - smoothstep(0.97, 1.0, uv.y));
-        let body = pow(fres, select(1.2, 2.5, core > 0.5));
-        let wind = fract(uv.x * 2.0 + along * 0.4 - time * 0.5);
-        let ribbon = smoothstep(0.0, 0.12, wind) * (1.0 - smoothstep(0.2, 0.42, wind));
-        let wind2 = fract(-uv.x * 3.0 + along * 0.55 - time * 0.35);
-        let thread = smoothstep(0.0, 0.05, wind2) * (1.0 - smoothstep(0.07, 0.14, wind2));
-        let rings = pow(0.5 + 0.5 * sin(along * 1.6 - time * 9.0), 10.0);
-        let hot = mix(color, vec3f(1.0), 0.75 * pow(fres, 6.0)) * 1.4;
-        let c = select(color * (0.2 + flow * 0.7 + ribbon * 1.5 + thread * 1.3 + rings * 1.0),
-          hot * (1.0 + rings * 0.2), core > 0.5);
-        let shell = 0.18 + flow * 0.4 + ribbon * 0.7 + thread * 0.5 + rings * 0.6;
-        let a = body * ends * select(shell, 1.0, core > 0.5) * fade;
-        return vec4f(c * a, a);
-      }`, [noise2])({
-        uv: uv(), fres: varying(fres({ n: normalView, v: positionViewDirection, axis })), time: u.uTime,
-        len: u.uLen, color: u.uColor, core: u.uCore, fade: u.uFade,
-      }),
-    };
-  }), 'lance-beam', BEAM_HOOKS, {
+  })), 'lance-beam', BEAM_HOOKS, {
     numbers(u, out) {
       out[0] = num(u, 'uTime'); out[1] = num(u, 'uLen'); out[2] = num(u, 'uCore'); out[3] = num(u, 'uFade');
       rgb(u, 'uColor', out, 4);
@@ -228,7 +137,7 @@ function beamMaterial(core: boolean): LookMaterial {
   });
 }
 
-/** the beam for the Rust engine (src/engine/effects.ts): the port's WGSL above, its lance's axis from the vertex */
+/** the beam for the Rust engine (src/engine/effects.ts): its lance's axis from the vertex */
 const BEAM_HOOKS = /* wgsl */ `
 fn vertex_hook(v: ptr<function, Vertex>, instance: u32) {
   (*v).c0 = vec4f(normalize((*v).axis_y), 0.0);
@@ -278,98 +187,10 @@ fn surface_hook(s: ptr<function, Surface>, in: VertexOut) -> bool {
  * fading in (0.4..1). Added light, no depth write.
  */
 function portalMaterial(): LookMaterial {
-  return effectLook(portShader(nearGlow(new LookMaterial({
+  return effectLook(nearGlow(new LookMaterial({
     uniforms: { uTime: { value: 0 }, uOpen: { value: 0 }, uFade: { value: 1 }, uColor: { value: COLOR.clone() } },
     transparent: true, depthWrite: false, blending: AdditiveBlending, side: DoubleSide,
-    vertexShader: /* glsl */`varying vec2 vP; void main(){ vP = position.xy; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
-    fragmentShader: /* glsl */`
-      varying vec2 vP; uniform float uTime, uOpen, uFade; uniform vec3 uColor;
-      const float TAU = 6.2831853, R = ${RIM.toFixed(2)};
-      float h(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7)))*43758.5453); }
-      float n(vec2 p){ vec2 i=floor(p), f=fract(p); f=f*f*(3.0-2.0*f);
-        return mix(mix(h(i),h(i+vec2(1,0)),f.x), mix(h(i+vec2(0,1)),h(i+vec2(1,1)),f.x), f.y); }
-      void main(){
-        float r = length(vP);
-        if (r > 1.0) discard;
-        // angle from the top, running clockwise the way the head traces it (atan's (0, 0) is undefined)
-        float a = r < 1e-4 ? 0.0 : atan(vP.x, vP.y);
-        float u = fract(a / TAU + 1.0);
-        float trace = clamp(uOpen / 0.7, 0.0, 1.0);
-        // how far behind the tracing head this angle is (0 at the head)
-        float behind = trace - u;
-        float drawn = trace >= 1.0 ? 1.0 : step(0.0, behind);
-        float head = trace >= 1.0 ? 0.0 : exp(-max(behind, 0.0) * 18.0) * drawn;
-        // the rim: a thin crackling band of sparks turning round
-        float crackle = n(vec2(u * 90.0 - uTime * 30.0, uTime * 9.0)) * 0.7 + n(vec2(u * 260.0 + uTime * 55.0, 3.0)) * 0.6;
-        float band = exp(-pow((r - R) / (0.018 + 0.02 * crackle), 2.0));
-        float halo = exp(-pow((r - R) / 0.09, 2.0)) * 0.25;
-        float rim = (band * (0.6 + crackle) + halo) * drawn + head * (exp(-pow((r - R) / 0.06, 2.0)) * 3.0);
-        // rune rings, turning against each other: broken bands of ticks
-        float k2 = smoothstep(0.4, 1.0, uOpen);
-        // (glyph ticks of uneven length: each cell's own height)
-        float cell1 = floor(u * 48.0 + uTime * 0.8), len1 = 0.012 + 0.03 * h(vec2(cell1, 1.0));
-        float ring1 = smoothstep(0.008, 0.0, abs(r - 0.72 * R) - len1);
-        float ticks1 = step(0.72, fract(u * 48.0 + uTime * 0.8)) * step(0.15, fract(u * 6.0 + uTime * 0.13));
-        float ring2 = smoothstep(0.008, 0.0, abs(r - 0.56 * R) - 0.014);
-        float ticks2 = step(0.62, fract(u * 30.0 - uTime * 0.9));
-        float lines = smoothstep(0.01, 0.0, abs(r - 0.8 * R) - 0.004) + smoothstep(0.01, 0.0, abs(r - 0.64 * R) - 0.003);
-        // spokes, a squared-off star turning slowly between the rings
-        float spokes = exp(-abs(sin((a + uTime * 0.25) * 4.0)) * 30.0) * step(0.3 * R, r) * step(r, 0.56 * R);
-        float runes = (ring1 * ticks1 + ring2 * ticks2 * 0.8 + lines * 0.6 + spokes * 0.5) * k2;
-        // the portal itself: a slow swirl, brightest at the middle once open
-        float sw = n(vec2(u * 6.0 + r * 5.0 - uTime * 1.5, r * 7.0 - uTime * 2.0));
-        // (faint: over the shoulder the view looks through it)
-        float inner = (sw * sw * 0.08 + exp(-r * r * 60.0) * 0.45) * k2 * smoothstep(R, 0.3, r);
-        // (its rim in its colour: over half way to white at 2.2, it bloomed into a white hoop)
-        vec3 spark = mix(uColor, vec3(1.0, 0.98, 0.85), 0.25);
-        vec3 c = spark * rim * 1.4 + uColor * runes * 1.8 + uColor * inner * 1.0;
-        gl_FragColor = vec4(c * uFade, 1.0);
-      }`,
-  })), ({ wgslFn, positionGeometry, varying }, u) => {
-    const { hash2, noise2 } = wgslNoise();
-    // (smoothstep's edges the right way round: falling ones as 1 - the rising, WGSL leaves them undefined)
-    return {
-      fragment: wgslFn(`fn lancePortal(p: vec2f, time: f32, open: f32, fade: f32, color: vec3f) -> vec4f {
-        let TAU = 6.2831853;
-        let R = ${RIM.toFixed(2)};
-        let r = length(p);
-        if (r > 1.0) { discard; }
-        var a = 0.0;
-        if (r >= 1e-4) { a = atan2(p.x, p.y); }
-        let u = fract(a / TAU + 1.0);
-        let trace = clamp(open / 0.7, 0.0, 1.0);
-        let behind = trace - u;
-        let drawn = select(step(0.0, behind), 1.0, trace >= 1.0);
-        let head = select(exp(-max(behind, 0.0) * 18.0) * drawn, 0.0, trace >= 1.0);
-        let crackle = noise2(vec2f(u * 90.0 - time * 30.0, time * 9.0)) * 0.7
-          + noise2(vec2f(u * 260.0 + time * 55.0, 3.0)) * 0.6;
-        let d1 = (r - R) / (0.018 + 0.02 * crackle);
-        let d2 = (r - R) / 0.09;
-        let d3 = (r - R) / 0.06;
-        let band = exp(-d1 * d1);
-        let halo = exp(-d2 * d2) * 0.25;
-        let rim = (band * (0.6 + crackle) + halo) * drawn + head * (exp(-d3 * d3) * 3.0);
-        let k2 = smoothstep(0.4, 1.0, open);
-        let cell1 = floor(u * 48.0 + time * 0.8);
-        let len1 = 0.012 + 0.03 * hash2(vec2f(cell1, 1.0));
-        let ring1 = 1.0 - smoothstep(0.0, 0.008, abs(r - 0.72 * R) - len1);
-        let ticks1 = step(0.72, fract(u * 48.0 + time * 0.8)) * step(0.15, fract(u * 6.0 + time * 0.13));
-        let ring2 = 1.0 - smoothstep(0.0, 0.008, abs(r - 0.56 * R) - 0.014);
-        let ticks2 = step(0.62, fract(u * 30.0 - time * 0.9));
-        let lines = (1.0 - smoothstep(0.0, 0.01, abs(r - 0.8 * R) - 0.004))
-          + (1.0 - smoothstep(0.0, 0.01, abs(r - 0.64 * R) - 0.003));
-        let spokes = exp(-abs(sin((a + time * 0.25) * 4.0)) * 30.0) * step(0.3 * R, r) * step(r, 0.56 * R);
-        let runes = (ring1 * ticks1 + ring2 * ticks2 * 0.8 + lines * 0.6 + spokes * 0.5) * k2;
-        let sw = noise2(vec2f(u * 6.0 + r * 5.0 - time * 1.5, r * 7.0 - time * 2.0));
-        let inner = (sw * sw * 0.08 + exp(-r * r * 60.0) * 0.45) * k2 * (1.0 - smoothstep(0.3, R, r));
-        let spark = mix(color, vec3f(1.0, 0.98, 0.85), 0.25);
-        let c = spark * rim * 1.4 + color * runes * 1.8 + color * inner * 1.0;
-        return vec4f(c * fade, 1.0);
-      }`, [hash2, noise2])({
-        p: varying(positionGeometry.xy), time: u.uTime, open: u.uOpen, fade: u.uFade, color: u.uColor,
-      }),
-    };
-  }), 'lance-portal', PORTAL_HOOKS, {
+  })), 'lance-portal', PORTAL_HOOKS, {
     numbers(u, out) {
       out[0] = num(u, 'uTime'); out[1] = num(u, 'uOpen'); out[2] = num(u, 'uFade');
       rgb(u, 'uColor', out, 4);
@@ -377,7 +198,7 @@ function portalMaterial(): LookMaterial {
   });
 }
 
-/** the portal for the Rust engine: the port's WGSL above */
+/** the portal for the Rust engine */
 const PORTAL_HOOKS = /* wgsl */ `
 fn vertex_hook(v: ptr<function, Vertex>, instance: u32) {
   (*v).c0 = vec4f((*v).rest.xy, 0.0, 0.0);

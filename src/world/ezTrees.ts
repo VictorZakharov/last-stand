@@ -3,7 +3,7 @@
 // at boot from a preset with its detail capped (a preset's whole tree was 4k to 24k triangles, and 120 of them stand
 // round the clearing), its many small leaves made fewer, bigger cards carrying a cluster of leaves each, and scaled to
 // a height of 1 with its foot at the origin, for instancing.
-import { Attribute, Box3, floats, Geometry, Vec3 } from '../engine/api/index.ts';
+import { Attribute, Box3, floats, Geometry, Vec3, type TypedArray } from '../engine/api/index.ts';
 import { Tree, TreePreset } from 'ez-tree';
 import { mulberry } from '../util';
 
@@ -167,10 +167,13 @@ function growAfresh(g: Grow): TreeKind {
     branches.push({ from, rings: branch.sectionCount + 1, round: branch.segmentCount + 1, level: branch.level });
   };
   tree.loadFromJson(json as never);
-  const bark = tree.branchesMesh.geometry, leaves = tree.leavesMesh.geometry;
+  const bark = ourGeometry(tree.branchesMesh.geometry), leaves = ourGeometry(tree.leavesMesh.geometry);
   barkAlongByGirth(bark, branches);
-  for (const m of [tree.branchesMesh.material, tree.leavesMesh.material]) (Array.isArray(m) ? m : [m]).forEach((x) => x.dispose());
-  const box = new Box3().setFromBufferAttribute(bark.attributes.position as Attribute).union(new Box3().setFromBufferAttribute(leaves.attributes.position as Attribute));
+  for (const mesh of [tree.branchesMesh, tree.leavesMesh]) {
+    (Array.isArray(mesh.material) ? mesh.material : [mesh.material]).forEach((material) => material.dispose());
+  }
+  const box = new Box3().setFromBufferAttribute(bark.attributes.position)
+    .union(new Box3().setFromBufferAttribute(leaves.attributes.position));
   const h = box.max.y - box.min.y, s = 1 / h;
   for (const geo of [bark, leaves]) { geo.scale(s, s, s); geo.computeBoundingSphere(); geo.computeBoundingBox(); }
   const reach = new Array<number>(REACH_BANDS).fill(0);
@@ -182,6 +185,22 @@ function growAfresh(g: Grow): TreeKind {
     }
   }
   return { bark, leaves, trunk: trunkOf(bark, branches[0]), trunkFoot: footOf(bark, branches[0]), reach, branches };
+}
+
+/** What ez-tree grows a geometry as (three's, ez-tree's own dependency): its attributes' arrays and its index. */
+interface GrownGeometry {
+  attributes: Record<string, { array: ArrayLike<number>; itemSize: number; normalized: boolean }>;
+  index: { array: ArrayLike<number> } | null;
+}
+
+/** `grown` as one of the engine's geometries, its arrays shared (ez-tree's are typed arrays: the cast says so). */
+function ourGeometry(grown: GrownGeometry): Geometry {
+  const geometry = new Geometry();
+  for (const [name, attribute] of Object.entries(grown.attributes)) {
+    geometry.setAttribute(name, new Attribute(attribute.array as TypedArray, attribute.itemSize, attribute.normalized));
+  }
+  if (grown.index) geometry.setIndex(new Attribute(grown.index.array as TypedArray, 1));
+  return geometry;
 }
 
 /** A leaf card's four corners and two triangles. */

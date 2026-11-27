@@ -32,20 +32,20 @@ export function linkedList(data: readonly number[], start: number, end: number, 
 
 /** The ring from `start` with repeated points and straight runs taken out (up to `end`). */
 export function filterPoints(start: EarNode, end: EarNode = start): EarNode {
-  let p = start;
+  let node = start;
   let stop = end;
   let again: boolean;
   do {
     again = false;
-    if (!p.steiner && (equals(p, p.next) || area(p.prev, p, p.next) === 0)) {
-      removeNode(p);
-      p = stop = p.prev;
-      if (p === p.next) break;
+    if (!node.steiner && (equals(node, node.next) || area(node.prev, node, node.next) === 0)) {
+      removeNode(node);
+      node = stop = node.prev;
+      if (node === node.next) break;
       again = true;
     } else {
-      p = p.next;
+      node = node.next;
     }
-  } while (again || p !== stop);
+  } while (again || node !== stop);
   return stop;
 }
 
@@ -58,53 +58,55 @@ interface Hash {
 
 /** Whether the triangle (ear.prev, ear, ear.next) is an ear: convex, no other point of the ring in it. */
 function isEar(ear: EarNode): boolean {
-  const a = ear.prev;
-  const c = ear.next;
-  if (area(a, ear, c) >= 0) return false;
-  const x0 = Math.min(a.x, ear.x, c.x);
-  const y0 = Math.min(a.y, ear.y, c.y);
-  const x1 = Math.max(a.x, ear.x, c.x);
-  const y1 = Math.max(a.y, ear.y, c.y);
-  for (let p = c.next; p !== a; p = p.next) {
-    const inBox = p.x >= x0 && p.x <= x1 && p.y >= y0 && p.y <= y1;
-    if (inBox && inEarExceptFirst(a, ear, c, p) && area(p.prev, p, p.next) >= 0) return false;
+  const nodeA = ear.prev;
+  const nodeC = ear.next;
+  if (area(nodeA, ear, nodeC) >= 0) return false;
+  const x0 = Math.min(nodeA.x, ear.x, nodeC.x);
+  const y0 = Math.min(nodeA.y, ear.y, nodeC.y);
+  const x1 = Math.max(nodeA.x, ear.x, nodeC.x);
+  const y1 = Math.max(nodeA.y, ear.y, nodeC.y);
+  for (let node = nodeC.next; node !== nodeA; node = node.next) {
+    const inBox = node.x >= x0 && node.x <= x1 && node.y >= y0 && node.y <= y1;
+    if (inBox && inEarExceptFirst(nodeA, ear, nodeC, node) && area(node.prev, node, node.next) >= 0) return false;
   }
   return true;
 }
 
-/** Whether `p` is in the triangle (a, b, c), not at its first corner. */
-function inEarExceptFirst(a: EarNode, b: EarNode, c: EarNode, p: EarNode): boolean {
-  return !(a.x === p.x && a.y === p.y) && pointInTriangle(a.x, a.y, b.x, b.y, c.x, c.y, p.x, p.y);
+/** Whether `node` is in the triangle (nodeA, nodeB, nodeC), not at its first corner. */
+function inEarExceptFirst(nodeA: EarNode, nodeB: EarNode, nodeC: EarNode, node: EarNode): boolean {
+  if (nodeA.x === node.x && nodeA.y === node.y) return false;
+  return pointInTriangle(nodeA.x, nodeA.y, nodeB.x, nodeB.y, nodeC.x, nodeC.y, node.x, node.y);
 }
 
 /** `isEar`, the ring's other points looked for along the z-order curve from both sides. */
 function isEarHashed(ear: EarNode, hash: Hash): boolean {
-  const a = ear.prev;
-  const c = ear.next;
-  if (area(a, ear, c) >= 0) return false;
-  const x0 = Math.min(a.x, ear.x, c.x);
-  const y0 = Math.min(a.y, ear.y, c.y);
-  const x1 = Math.max(a.x, ear.x, c.x);
-  const y1 = Math.max(a.y, ear.y, c.y);
+  const nodeA = ear.prev;
+  const nodeC = ear.next;
+  if (area(nodeA, ear, nodeC) >= 0) return false;
+  const x0 = Math.min(nodeA.x, ear.x, nodeC.x);
+  const y0 = Math.min(nodeA.y, ear.y, nodeC.y);
+  const x1 = Math.max(nodeA.x, ear.x, nodeC.x);
+  const y1 = Math.max(nodeA.y, ear.y, nodeC.y);
   const minZ = zOrder(x0, y0, hash.minX, hash.minY, hash.invSize);
   const maxZ = zOrder(x1, y1, hash.minX, hash.minY, hash.invSize);
-  const blocks = (p: EarNode): boolean => p.x >= x0 && p.x <= x1 && p.y >= y0 && p.y <= y1 && p !== a && p !== c
-    && inEarExceptFirst(a, ear, c, p) && area(p.prev, p, p.next) >= 0;
-  let p = ear.prevZ;
-  let n = ear.nextZ;
-  while (p && p.z >= minZ && n && n.z <= maxZ) {
-    if (blocks(p)) return false;
-    p = p.prevZ;
-    if (blocks(n)) return false;
-    n = n.nextZ;
+  const blocks = (node: EarNode): boolean => node.x >= x0 && node.x <= x1 && node.y >= y0 && node.y <= y1
+    && node !== nodeA && node !== nodeC
+    && inEarExceptFirst(nodeA, ear, nodeC, node) && area(node.prev, node, node.next) >= 0;
+  let node = ear.prevZ;
+  let ahead = ear.nextZ;
+  while (node && node.z >= minZ && ahead && ahead.z <= maxZ) {
+    if (blocks(node)) return false;
+    node = node.prevZ;
+    if (blocks(ahead)) return false;
+    ahead = ahead.nextZ;
   }
-  while (p && p.z >= minZ) {
-    if (blocks(p)) return false;
-    p = p.prevZ;
+  while (node && node.z >= minZ) {
+    if (blocks(node)) return false;
+    node = node.prevZ;
   }
-  while (n && n.z <= maxZ) {
-    if (blocks(n)) return false;
-    n = n.nextZ;
+  while (ahead && ahead.z <= maxZ) {
+    if (blocks(ahead)) return false;
+    ahead = ahead.nextZ;
   }
   return true;
 }
@@ -112,70 +114,72 @@ function isEarHashed(ear: EarNode, hash: Hash): boolean {
 /** Cuts off the triangles where a ring crosses itself close by. */
 function cureLocalIntersections(begin: EarNode, triangles: number[]): EarNode {
   let start = begin;
-  let p = start;
+  let node = start;
   do {
-    const a = p.prev;
-    const b = p.next.next;
-    if (!equals(a, b) && intersects(a, p, p.next, b) && locallyInside(a, b) && locallyInside(b, a)) {
-      triangles.push(a.i, p.i, b.i);
-      removeNode(p);
-      removeNode(p.next);
-      p = start = b;
+    const nodeA = node.prev;
+    const nodeB = node.next.next;
+    const crossing = !equals(nodeA, nodeB) && intersects(nodeA, node, node.next, nodeB);
+    if (crossing && locallyInside(nodeA, nodeB) && locallyInside(nodeB, nodeA)) {
+      triangles.push(nodeA.i, node.i, nodeB.i);
+      removeNode(node);
+      removeNode(node.next);
+      node = start = nodeB;
     }
-    p = p.next;
-  } while (p !== start);
-  return filterPoints(p);
+    node = node.next;
+  } while (node !== start);
+  return filterPoints(node);
 }
 
-/** Whether a diagonal from a to b lies inside the ring and crosses none of its edges. */
-function isValidDiagonal(a: EarNode, b: EarNode): boolean {
-  const ends = a.next.i !== b.i && a.prev.i !== b.i && !intersectsPolygon(a, b);
-  const seen = locallyInside(a, b) && locallyInside(b, a) && middleInside(a, b)
-    && Boolean(area(a.prev, a, b.prev) || area(a, b.prev, b));
-  const zeroLength = equals(a, b) && area(a.prev, a, a.next) > 0 && area(b.prev, b, b.next) > 0;
+/** Whether a diagonal from nodeA to nodeB lies inside the ring and crosses none of its edges. */
+function isValidDiagonal(nodeA: EarNode, nodeB: EarNode): boolean {
+  const ends = nodeA.next.i !== nodeB.i && nodeA.prev.i !== nodeB.i && !intersectsPolygon(nodeA, nodeB);
+  const seen = locallyInside(nodeA, nodeB) && locallyInside(nodeB, nodeA) && middleInside(nodeA, nodeB)
+    && Boolean(area(nodeA.prev, nodeA, nodeB.prev) || area(nodeA, nodeB.prev, nodeB));
+  const zeroLength = equals(nodeA, nodeB) && area(nodeA.prev, nodeA, nodeA.next) > 0
+    && area(nodeB.prev, nodeB, nodeB.next) > 0;
   return ends && (seen || zeroLength);
 }
 
-/** Whether a to b crosses an edge of the ring. */
-function intersectsPolygon(a: EarNode, b: EarNode): boolean {
-  let p = a;
+/** Whether nodeA to nodeB crosses an edge of the ring. */
+function intersectsPolygon(nodeA: EarNode, nodeB: EarNode): boolean {
+  let node = nodeA;
   do {
-    const touches = p.i === a.i || p.next.i === a.i || p.i === b.i || p.next.i === b.i;
-    if (!touches && intersects(p, p.next, a, b)) return true;
-    p = p.next;
-  } while (p !== a);
+    const touches = node.i === nodeA.i || node.next.i === nodeA.i || node.i === nodeB.i || node.next.i === nodeB.i;
+    if (!touches && intersects(node, node.next, nodeA, nodeB)) return true;
+    node = node.next;
+  } while (node !== nodeA);
   return false;
 }
 
 /** Splits the ring in two along a valid diagonal and cuts each. */
 function splitEarcut(start: EarNode, triangles: number[], hash: Hash | null): void {
-  let a = start;
+  let nodeA = start;
   do {
-    for (let b = a.next.next; b !== a.prev; b = b.next) {
-      if (a.i === b.i || !isValidDiagonal(a, b)) continue;
-      let c = splitPolygon(a, b);
-      a = filterPoints(a, a.next);
-      c = filterPoints(c, c.next);
-      earcutLinked(a, triangles, hash, 0);
-      earcutLinked(c, triangles, hash, 0);
+    for (let nodeB = nodeA.next.next; nodeB !== nodeA.prev; nodeB = nodeB.next) {
+      if (nodeA.i === nodeB.i || !isValidDiagonal(nodeA, nodeB)) continue;
+      let nodeC = splitPolygon(nodeA, nodeB);
+      nodeA = filterPoints(nodeA, nodeA.next);
+      nodeC = filterPoints(nodeC, nodeC.next);
+      earcutLinked(nodeA, triangles, hash, 0);
+      earcutLinked(nodeC, triangles, hash, 0);
       return;
     }
-    a = a.next;
-  } while (a !== start);
+    nodeA = nodeA.next;
+  } while (nodeA !== start);
 }
 
 /** Sets each node's z-order and links the ring in that order. */
 function indexCurve(start: EarNode, hash: Hash): void {
-  let p = start;
+  let node = start;
   do {
-    if (p.z === 0) p.z = zOrder(p.x, p.y, hash.minX, hash.minY, hash.invSize);
-    p.prevZ = p.prev;
-    p.nextZ = p.next;
-    p = p.next;
-  } while (p !== start);
-  if (p.prevZ) p.prevZ.nextZ = null;
-  p.prevZ = null;
-  sortLinked(p);
+    if (node.z === 0) node.z = zOrder(node.x, node.y, hash.minX, hash.minY, hash.invSize);
+    node.prevZ = node.prev;
+    node.nextZ = node.next;
+    node = node.next;
+  } while (node !== start);
+  if (node.prevZ) node.prevZ.nextZ = null;
+  node.prevZ = null;
+  sortLinked(node);
 }
 
 /** Sorts the z-linked list by z, merging runs of doubling length (Simon Tatham's). */
@@ -184,36 +188,36 @@ function sortLinked(head: EarNode): void {
   let inSize = 1;
   let merges: number;
   do {
-    let p: EarNode | null = list;
+    let node: EarNode | null = list;
     let tail: EarNode | null = null;
     list = null;
     merges = 0;
-    while (p) {
+    while (node) {
       merges++;
-      let q: EarNode | null = p;
+      let other: EarNode | null = node;
       let pSize = 0;
-      for (let i = 0; i < inSize && q; i++) {
+      for (let i = 0; i < inSize && other; i++) {
         pSize++;
-        q = q.nextZ;
+        other = other.nextZ;
       }
       let qSize = inSize;
-      while (pSize > 0 || (qSize > 0 && q)) {
-        let e: EarNode;
-        if (pSize !== 0 && (qSize === 0 || !q || (p as EarNode).z <= q.z)) {
-          e = p as EarNode;
-          p = e.nextZ;
+      while (pSize > 0 || (qSize > 0 && other)) {
+        let taken: EarNode;
+        if (pSize !== 0 && (qSize === 0 || !other || (node as EarNode).z <= other.z)) {
+          taken = node as EarNode;
+          node = taken.nextZ;
           pSize--;
         } else {
-          e = q as EarNode;
-          q = e.nextZ;
+          taken = other as EarNode;
+          other = taken.nextZ;
           qSize--;
         }
-        if (tail) tail.nextZ = e;
-        else list = e;
-        e.prevZ = tail;
-        tail = e;
+        if (tail) tail.nextZ = taken;
+        else list = taken;
+        taken.prevZ = tail;
+        tail = taken;
       }
-      p = q;
+      node = other;
     }
     if (tail) tail.nextZ = null;
     inSize *= 2;

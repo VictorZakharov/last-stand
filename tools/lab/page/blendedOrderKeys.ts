@@ -6,7 +6,7 @@
 // into one record, showed through the ghost of the column before him and then didn't.
 
 /** A sphere: its middle and its radius. */
-export interface Sphere { x: number; y: number; z: number; radius: number }
+export interface KeySphere { x: number; y: number; z: number; radius: number }
 
 /** A rectangle on the screen, in pixels. */
 export interface ScreenRect { left: number; top: number; right: number; bottom: number }
@@ -20,7 +20,7 @@ export interface Sorted {
   /** whether its blending adds light (order makes no difference between two that add) */
   adds: boolean;
   /** its sphere in the world */
-  sphere: Sphere;
+  sphere: KeySphere;
   /** where it covers the screen */
   rect: ScreenRect;
   /** the set of parts it's one of that must be drawn in given turns, and its turn there (the hall's columns: a plinth
@@ -32,7 +32,7 @@ export interface Sorted {
 export interface Flip { first: string; second: string; stands: [number, number] }
 
 /** The sphere round a run of xyz positions as the engine makes it: its box's middle, and the farthest point from it. */
-export function sphereOfPositions(positions: ArrayLike<number>): Sphere {
+export function sphereOfPositions(positions: ArrayLike<number>): KeySphere {
   if (positions.length < 3) return { x: 0, y: 0, z: 0, radius: 0 };
   const low = [Infinity, Infinity, Infinity];
   const high = [-Infinity, -Infinity, -Infinity];

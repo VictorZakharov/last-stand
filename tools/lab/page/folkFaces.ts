@@ -2,7 +2,7 @@
 // staged as his card's picture is, and how far his head and his eyes are turned off the camera (from play: "Have him
 // look straight"; "Real picture of their face, looking at camera": Brother Hollis's head was three-quarters round and his
 // eyes off to the side, at the one he talked to). Its canary turns the head off the camera after staging.
-import * as THREE from 'three';
+import { Maths, Node, Vec3 } from './sceneApi.ts';
 import { FOLK, folkStaged, type FolkId } from '../../../src/ui/guide/folkPortraits';
 
 /** how far off the camera a portrait's head may face, and each eye look (deg: "a few degrees off for life") */
@@ -20,11 +20,11 @@ export function faceRead(id: FolkId, turned = 0): FaceRead | null {
   while (!step.done) step = building.next();
   const sitter = step.value;
   const { camera } = folkStaged(sitter, folk.backdrop);
-  if (turned) { sitter.head.rotateY(THREE.MathUtils.degToRad(turned)); sitter.head.updateWorldMatrix(false, true); }
-  const off = (o: THREE.Object3D) => {
-    const at = o.getWorldPosition(new THREE.Vector3());
-    const facing = new THREE.Vector3(0, 0, 1).transformDirection(o.matrixWorld);
-    return THREE.MathUtils.radToDeg(facing.angleTo(camera.position.clone().sub(at)));
+  if (turned) { sitter.head.rotateY(Maths.degToRad(turned)); sitter.head.updateWorldMatrix(false, true); }
+  const off = (o: Node) => {
+    const at = o.getWorldPosition(new Vec3());
+    const facing = new Vec3(0, 0, 1).transformDirection(o.matrixWorld);
+    return Maths.radToDeg(facing.angleTo(camera.position.clone().sub(at)));
   };
   const read = { head: off(sitter.head), eyes: Math.max(0, ...sitter.eyes.map(off)), eyeCount: sitter.eyes.length };
   sitter.root.removeFromParent();

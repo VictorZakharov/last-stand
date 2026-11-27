@@ -4,7 +4,7 @@
 // moment in under a second, its keys changed by `__tune` and looked at again without a boot. From the owner, of a
 // motion that took days: "posing should take 10-20min".
 
-import * as THREE from 'three';
+import { Vec3 } from './sceneApi.ts';
 import type { Fixture, Lab } from './lab';
 import { CASES, satWhole, sitOn } from './sit';
 import { fistsUpHandle, handleOf } from './sitAloft';
@@ -59,10 +59,10 @@ function weaponSaid(lab: Lab): string {
   const handle = handleOf(lab);
   if (!handle) return 'no weapon';
   const root = lab.model.root;
-  const facing = root.getWorldDirection(new THREE.Vector3()).setY(0).normalize();
-  const left = new THREE.Vector3(facing.z, 0, -facing.x);
+  const facing = root.getWorldDirection(new Vec3()).setY(0).normalize();
+  const left = new Vec3(facing.z, 0, -facing.x);
   const scale = root.scale.y;
-  const from = handle.butt.clone().sub(root.getWorldPosition(new THREE.Vector3())).divideScalar(scale);
+  const from = handle.butt.clone().sub(root.getWorldPosition(new Vec3())).divideScalar(scale);
   const way = handle.far.clone().sub(handle.butt).normalize();
   const fixed = (value: number) => value.toFixed(2);
   const butt = `buttRight=${fixed(-from.dot(left))},buttUp=${fixed(from.y)},buttAhead=${fixed(from.dot(facing))}`;

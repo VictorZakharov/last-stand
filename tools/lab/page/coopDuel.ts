@@ -2,7 +2,7 @@
 // menu as a player sets it up (its own buttons), readied by the guest and begun by the host, then fought: each round
 // the two heroes stand a few strides apart, one of them down to a little life (its own game's to say) and the other
 // striking at it with its first skill, aimed where its own screen shows its rival.
-import * as THREE from 'three';
+import { Vec3 } from './sceneApi.ts';
 import { G } from '../../../src/state';
 import { VILLAGE_OBJECTS } from '../../../src/data/village';
 import { showVillageCard } from '../../../src/ui/villageCard';
@@ -299,7 +299,7 @@ export function coopDuelRound(lab: Lab, set: {
 }): void {
   const [x, z] = set.spot ?? SPOTS[set.role], [rx, rz] = set.faces ?? SPOTS[set.role === 'host' ? 'guest' : 'host'];
   const facing = Math.atan2(rx - x, rz - z) + (set.faceAway ? Math.PI : 0);
-  G.player.place(new THREE.Vector3(x, 0, z), facing);
+  G.player.place(new Vec3(x, 0, z), facing);
   if (set.weak) G.player.life = LITTLE_LIFE;
   play.strikes = set.strikes;
   play.heldWhole = !!set.heldWhole;
@@ -341,7 +341,7 @@ export function duelInput(frame: number): Frame | null {
   if (!duel) return null;
   if (!play.strikes || duel.phase !== 'fight' || !G.player.alive) return {};
   // (the nearest rival still standing, as this game has them among its foes: in a party the others are not all rivals)
-  const far = (foe: { pos: THREE.Vector3 }): number => foe.pos.distanceTo(G.player.pos);
+  const far = (foe: { pos: Vec3 }): number => foe.pos.distanceTo(G.player.pos);
   const rival = G.enemies.filter((foe) => (foe as { standIn?: boolean }).standIn && foe.alive).sort((a, b) => far(a) - far(b))[0];
   if (!rival) return {};
   const aim = rival.pos.clone();

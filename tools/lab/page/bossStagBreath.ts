@@ -13,7 +13,7 @@
 // pieces set alight at once burn three at most, the oldest put out.
 //
 // `--canary` narrows its cone to nothing: it burns no one in the open and sets no wood alight, and the part says so.
-import * as THREE from 'three';
+import { Vec3 } from './sceneApi.ts';
 import type { Frame, Lab } from './lab';
 import type { Enemy } from '../../../src/entities/enemy';
 import type { Obstacle } from '../../../src/types';
@@ -42,7 +42,7 @@ const LIT_AT_ONCE = STAG.forestFire.most + 1;
 const BESIDE = 0.8;
 const BESIDE_FOR = 2;
 
-const _n = new THREE.Vector3();
+const _n = new Vec3();
 
 /** How a case's hero meets its breath. */
 type How = 'open' | 'walking round' | 'behind a rock' | 'his shield raised';
@@ -125,7 +125,7 @@ function walkRound(aim: number[]): void {
   const d = Math.hypot(hero.pos.x - x, hero.pos.z - z);
   const step = Math.sign(to - from) * hero.stats.moveSpeed / FPS / d;
   const a = Math.atan2(hero.pos.x - x, hero.pos.z - z) + step;
-  hero.place(new THREE.Vector3(x + Math.sin(a) * d, 0, z + Math.cos(a) * d), a + Math.PI);
+  hero.place(new Vec3(x + Math.sin(a) * d, 0, z + Math.cos(a) * d), a + Math.PI);
 }
 
 /** what each case's breath must do: pass over him, and burn him */
@@ -178,8 +178,8 @@ const inside = (x: number, z: number, room: number): boolean => pastWall(G.arena
 function woodLane(): { wood: Obstacle; lane: Lane } {
   for (const wood of woods()) {
     for (let b = 0; b < Math.PI * 2; b += Math.PI / 12) {
-      const way = new THREE.Vector3(Math.sin(b), 0, Math.cos(b));
-      const stag = new THREE.Vector3(wood.x, 0, wood.z).addScaledVector(way, -(wood.r + PAST));
+      const way = new Vec3(Math.sin(b), 0, Math.cos(b));
+      const stag = new Vec3(wood.x, 0, wood.z).addScaledVector(way, -(wood.r + PAST));
       const hero = stag.clone().addScaledVector(way, -6);
       if (inObstacle(stag, 3) || inObstacle(hero, 1) || !inside(stag.x, stag.z, 3) || !inside(hero.x, hero.z, 1)) {
         continue;
@@ -212,8 +212,8 @@ function holdStill(boss: Enemy): void {
 
 /** The hero stood `BESIDE` m off the wood's circle across `lane`, held there `BESIDE_FOR` s: his hurts. */
 async function besideWood(lab: Lab, lane: Lane, wood: Obstacle): Promise<Hurt[]> {
-  const hero = G.player, across = new THREE.Vector3(lane.way.z, 0, -lane.way.x);
-  const beside = new THREE.Vector3(wood.x, 0, wood.z).addScaledVector(across, wood.r + BESIDE + hero.radius);
+  const hero = G.player, across = new Vec3(lane.way.z, 0, -lane.way.x);
+  const beside = new Vec3(wood.x, 0, wood.z).addScaledVector(across, wood.r + BESIDE + hero.radius);
   const hurts: Hurt[] = [];
   let frame = 0;
   hero.place(beside, hero.facing);

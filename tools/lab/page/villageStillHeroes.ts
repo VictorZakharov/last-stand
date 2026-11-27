@@ -6,7 +6,7 @@
 // same, as the game's camera sees them and from a camera of the check's own before the dais (from the square they're
 // a few hundred pixels). `canary` lays the normals as they were made, not turned as their parts are drawn, which
 // must change the close look.
-import * as THREE from 'three';
+import { Vec3 } from './sceneApi.ts';
 import type { Lab } from './lab';
 import { G } from '../../../src/state';
 import { RUST } from '../../../src/engine';
@@ -42,7 +42,7 @@ const STANDS: Stand[] = [
 
 /** The hero stood at `stand` over the shoulder, let settle. */
 async function standAt(lab: Lab, stand: Stand): Promise<void> {
-  const at = new THREE.Vector3(stand.x, 0, stand.z);
+  const at = new Vec3(stand.x, 0, stand.z);
   at.y = groundHeight(at.x, at.z);
   G.player.walkTo = null;
   G.player.place(at, stand.facing);

@@ -18,6 +18,13 @@ export function geometryOf(built: Built): Geometry {
   return geometry;
 }
 
+/** `geometry` said to be made by three's generator `type` from `parameters` (what a measure tells it by); itself. */
+export function described(geometry: Geometry, type: string, parameters: Record<string, unknown>): Geometry {
+  geometry.type = type;
+  geometry.parameters = parameters;
+  return geometry;
+}
+
 /** The usual three: positions, normals and uvs, indexed. */
 export function meshOf(index: number[], positions: number[], normals: number[], uvs: number[]): Geometry {
   return geometryOf({ index, attributes: [['position', positions, 3], ['normal', normals, 3], ['uv', uvs, 2]] });

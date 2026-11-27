@@ -1,13 +1,11 @@
 // The frame: the page's canvas (the engine's, core/screen.ts: three's renderer is gone, #973), the frame's grade
 // values handed to the engine (`src/engine`), and the camera rig: top-down, over the shoulder or first person.
 import {
-  Color, floats, Geometry, HalfFloatType, Light, Mat3, Maths, Node, OrthoCamera, PerspectiveCamera, Quat, ShaderChunk,
-  Texture, Vec2, Vec3, WebGLRenderTarget, World,
+  Color, floats, Geometry, Light, Mat3, Maths, Node, OrthoCamera, PerspectiveCamera, Quat,
+  Texture, Vec2, Vec3, World,
 } from '../engine/api/index.ts';
-import { lightTheLamps } from './lamps';
 import { aimSight } from './sight';
 import { setWholeView, wholeView } from './wholeView';
-import { loadNodeModules } from './webgpu';
 import { GameScreen } from './screen';
 import { G } from '../state';
 import { bootRust, drawRust, rustFrame, rustPlain, rustSamples, RUST } from '../engine';
@@ -24,7 +22,6 @@ import type { QualityPreset } from '../data/quality';
 import { hdrLevels } from './hdr';
 import { bloodMask, fitBloodMask } from './bloodEdges';
 import { ARMS_LAYER, WARM_LAYER, GHOST_COUNT_LAYER } from './layers';
-import { BOUNDS_TEST, declarePointBounds } from './lightBounds';
 import { gpuFence, setFrameFence } from './frameLoop';
 import { engineWorkDone } from '../engine/pipelinesAside';
 
@@ -114,7 +111,12 @@ const grade = {
 /** The grade's values (`grade`): photo mode's look sets them. */
 export const gradeUniforms = (): typeof grade.uniforms => grade.uniforms;
 
-let gl: GameScreen, sceneRT: WebGLRenderTarget;
+/** The scene's size and samples, as three's render target for it held them: nothing is drawn into it (the scene is
+ *  the engine's); what a warm-up is handed and what sizes points by. */
+export interface SceneTarget { width: number; height: number; samples: number }
+
+let gl: GameScreen;
+const sceneRT: SceneTarget = { width: 1, height: 1, samples: 4 };
 
 /** A pass's full-screen triangle as three's full-screen quad has it, to compile a pass's material on: positions and
  *  uvs alone, as normals would make another program. Seen through `passCamera`. */
@@ -187,7 +189,8 @@ function lightThePasses(scene: World): void {
     o.layers.enable(GHOST_COUNT_LAYER);
   };
   scene.traverse(onPasses);
-  scene.addEventListener('childadded', ({ child }) => child.traverse(onPasses));
+  // (the event's child is a node: the world's own events are typed loosely)
+  scene.addEventListener('childadded', ({ child }) => (child as Node).traverse(onPasses));
 }
 
 /** The arms layer drawn by its own camera at `fov` (vertical, degrees) from this frame on, or no longer (null). */
@@ -280,147 +283,12 @@ function sunShadowInTurns(): void {
 export type ViewMode = 'top' | 'third' | 'first';
 export const VIEWS: ViewMode[] = ['top', 'third', 'first'];
 
-/** three's point lights, as its lit shaders begin them: the block `loopPointLights` lights in a loop */
-const POINT_LIGHTS_IF = '#if ( NUM_POINT_LIGHTS > 0 ) && defined( RE_Direct )';
-/** the end of its written-out loop, the block's last line before its `#endif` */
-const POINT_LIGHTS_END = '#pragma unroll_loop_end';
-/** the shadowed point lights (three puts them first) written out, each with its shadow map, the rest in a loop; each
- *  lit (and its shadow looked up) only where its colour isn't 0, out of its reach or idle in the pool (three lights
- *  every one at every pixel, adding nothing) */
-const POINT_LIGHTS_LOOPED = [
-  POINT_LIGHTS_IF,
-  '\tPointLight pointLight;',
-  '\t#if defined( USE_SHADOWMAP ) && NUM_POINT_LIGHT_SHADOWS > 0',
-  '\tPointLightShadow pointLightShadow;',
-  '\t#pragma unroll_loop_start',
-  '\tfor ( int i = 0; i < NUM_POINT_LIGHT_SHADOWS; i ++ ) {',
-  '\t\tpointLight = pointLights[ i ];',
-  '\t\tgetPointLightInfo( pointLight, geometryPosition, directLight );',
-  '\t\tif ( directLight.visible ) {',
-  '\t\t#if defined( SHADOWMAP_TYPE_PCF ) || defined( SHADOWMAP_TYPE_BASIC )',
-  '\t\tpointLightShadow = pointLightShadows[ i ];',
-  '\t\tdirectLight.color *= receiveShadow ? getPointShadow( pointShadowMap[ i ], '
-    + 'pointLightShadow.shadowMapSize, pointLightShadow.shadowIntensity, pointLightShadow.shadowBias, '
-    + 'pointLightShadow.shadowRadius, vPointShadowCoord[ i ], pointLightShadow.shadowCameraNear, '
-    + 'pointLightShadow.shadowCameraFar ) : 1.0;',
-  '\t\t#endif',
-  '\t\tRE_Direct( directLight, geometryPosition, geometryNormal, geometryViewDir, geometryClearcoatNormal, material, reflectedLight );',
-  '\t\t}',
-  '\t}',
-  '\t#pragma unroll_loop_end',
-  '\tconst int unshadowedFrom = NUM_POINT_LIGHT_SHADOWS;',
-  '\t#else',
-  '\tconst int unshadowedFrom = 0;',
-  '\t#endif',
-  '\tvec3 toLight;',
-  '\tfor ( int i = unshadowedFrom; i < NUM_POINT_LIGHTS; i ++ ) {',
-  // (a light out of reach, or unlit, passed over on its packed bounds before it's read: `lightBounds.ts`)
-  ...BOUNDS_TEST,
-  '\t\tpointLight = pointLights[ i ];',
-  // (an idle light, or a point past a light's reach, where three's attenuation comes out 0, passed over on a test of
-  // the distance's square alone)
-  '\t\ttoLight = pointLight.position - geometryPosition;',
-  '\t\tif ( pointLight.color == vec3( 0.0 ) || ( pointLight.distance > 0.0 '
-    + '&& dot( toLight, toLight ) >= pointLight.distance * pointLight.distance ) ) continue;',
-  '\t\tgetPointLightInfo( pointLight, geometryPosition, directLight );',
-  '\t\tif ( directLight.visible ) RE_Direct( directLight, geometryPosition, geometryNormal, geometryViewDir, '
-    + 'geometryClearcoatNormal, material, reflectedLight );',
-  '\t}',
-].join('\n');
-
-/**
- * The point lights lit in a loop, not written out once a light as three writes them (`#pragma unroll_loop_start`,
- * which a light's shadow map needs): with 16 point lights a lit shader was 85 kB, and on a first visit ANGLE's D3D
- * compiler spent half a second on each, 36 of the 40 s the boot's programs cost (`lab programs --cost`). Only the
- * lights that cast (each biome's two warmest, `staticShadow` in `world/props.ts`) are written out; with one casting,
- * three wrote every point light out again.
- */
-function loopPointLights(): void {
-  const chunk = ShaderChunk.lights_fragment_begin;
-  const at = chunk.indexOf(POINT_LIGHTS_IF);
-  const end = at < 0 ? -1 : chunk.indexOf(POINT_LIGHTS_END, at);
-  if (end < 0) {
-    console.error('loopPointLights: three\'s lights_fragment_begin has changed: its point lights stay written out');
-    return;
-  }
-  const looped = declarePointBounds() ? POINT_LIGHTS_LOOPED : POINT_LIGHTS_LOOPED.replace(BOUNDS_TEST.join('\n'), '');
-  ShaderChunk.lights_fragment_begin = chunk.slice(0, at) + looped
-    + chunk.slice(end + POINT_LIGHTS_END.length);
-}
-
-/** where three's point shadow begins its five soft taps (the only shadow whose taps are spread by this line) */
-const POINT_SHADOW_TAPS = 'float texelSize = shadowRadius / shadowMapSize.x;';
-/** a tap as three reads it, and read at the map's one level */
-const POINT_SHADOW_TAP = 'texture( shadowMap, vec4( direction, dp ) )';
-const POINT_SHADOW_TAP_LEVEL = 'textureGrad( shadowMap, vec4( direction, dp ), vec3( 0.0 ), vec3( 0.0 ) )';
-
-/**
- * A point light's shadow read only in its light's reach. three reads it in five taps, each a read that takes the
- * screen's gradients, and no branch can leave such a read out (the compiler works it out at every pixel, then picks):
- * the loop's `directLight.visible` kept the result and paid for the ten reads at every lit pixel, 1.3 ms of the
- * crypt's 5.7 ms scene pass at 20.7 Mpx on a 4080 laptop (`lab scenecost`). Read at the map's one level (it has no
- * other, so the pixels are the same) the branch leaves them out: 0.4 ms.
- */
-function pointShadowInReach(): void {
-  const chunk = ShaderChunk.shadowmap_pars_fragment;
-  const at = chunk.indexOf(POINT_SHADOW_TAPS);
-  const tap = at < 0 ? -1 : chunk.indexOf(POINT_SHADOW_TAP, at);
-  if (tap < 0) {
-    console.error('pointShadowInReach: three\'s shadowmap_pars_fragment has changed: a point shadow is read at every pixel');
-    return;
-  }
-  ShaderChunk.shadowmap_pars_fragment = chunk.slice(0, tap) + POINT_SHADOW_TAP_LEVEL
-    + chunk.slice(tap + POINT_SHADOW_TAP.length);
-}
-
-/** three's sun's (the moon's) shadow on a lit point, as its lit shaders take it in their directional lights' loop */
-const SUN_SHADOW = 'directLight.color *= ( directLight.visible && receiveShadow ) ? getShadow( directionalShadowMap[ i ], '
-  + 'directionalLightShadow.shadowMapSize, directionalLightShadow.shadowIntensity, directionalLightShadow.shadowBias, '
-  + 'directionalLightShadow.shadowRadius, vDirectionalShadowCoord[ i ] ) : 1.0;';
-const SUN_SHADOW_KEPT = SUN_SHADOW.replace('directLight.color *= ', 'shadowSeen = ')
-  + ' directLight.color *= shadowSeen; sunShadow = min( sunShadow, shadowSeen );';
-/** the share of the environment's reflection, and of the ambient light (the sky's, the environment's), left in the
- *  sun's shadow */
-const ENV_IN_SHADOW = 0.25;
-const AMBIENT_IN_SHADOW = 0.5;
-const ENV_SPECULAR = 'RE_IndirectSpecular( radiance,';
-const AMBIENT = '#if defined( RE_IndirectDiffuse )\n';
-
-/**
- * The ambient light and the environment's reflection darkened in the sun's shadow. three lights a surface by the sky
- * and its reflection of the environment whatever stands between it and the sky, and each biome's environment has one
- * bright panel where the sun stands. The crypt's pale marble walks are lit mostly by the sky (with the moon off, as
- * bright as with it), so a column's or a tree's shadow stopped at a walk's edge, the cobbles beside it dark. (Kept:
- * the share of the sky a point in shadow still sees, `AMBIENT_IN_SHADOW`, `ENV_IN_SHADOW`.)
- */
-function shadeEnvironment(): void {
-  const begin = ShaderChunk.lights_fragment_begin, end = ShaderChunk.lights_fragment_end;
-  if (!begin.includes(SUN_SHADOW) || !end.includes(ENV_SPECULAR) || !end.includes(AMBIENT)) {
-    console.error('shadeEnvironment: three\'s lit shaders have changed: the ambient light ignores shadows');
-    return;
-  }
-  // (declared once ahead of the loop: three writes its body out once a light, in one scope)
-  ShaderChunk.lights_fragment_begin = 'float sunShadow = 1.0, shadowSeen;\n'
-    + begin.replace(SUN_SHADOW, SUN_SHADOW_KEPT);
-  // (the environment's light on a physical surface is `iblIrradiance`, taken in its indirect specular)
-  const ambient = `\tfloat ambientSeen = mix( ${AMBIENT_IN_SHADOW.toFixed(2)}, 1.0, sunShadow );\n`
-    + '\tirradiance *= ambientSeen;\n\tiblIrradiance *= ambientSeen;\n';
-  ShaderChunk.lights_fragment_end = end.replace(AMBIENT, AMBIENT + ambient).replace(ENV_SPECULAR,
-    `radiance *= mix( ${ENV_IN_SHADOW.toFixed(2)}, 1.0, sunShadow );\n\t${ENV_SPECULAR}`);
-}
-
 /** the side of the largest texture the overlays' atlas is sized within (WebGPU's least limit is 8192) */
 const MOST_TEXTURE_SIDE = 8192;
 
 /** The engine made on the page's canvas in `container`, and the scene and camera the game is drawn from. (Its
  *  `_hdrAllowed` is unread: the engine's frame is SDR, core/AGENTS.md's HDR output.) */
 export async function initRenderer(container: HTMLElement, _hdrAllowed: boolean) {
-  loopPointLights();
-  pointShadowInReach();
-  shadeEnvironment();
-  // (the village's lamps in every lit shader, and its lights' soft falloff)
-  lightTheLamps();
-  await loadNodeModules();
   const canvas = await bootRust(container);
   const renderer = gl = new GameScreen(canvas, MOST_TEXTURE_SIDE);
   const cr = canvasRatio();
@@ -439,7 +307,8 @@ export async function initRenderer(container: HTMLElement, _hdrAllowed: boolean)
 
   const size = sceneSize(new Vec2());
   // (never drawn into: it holds the scene's size and samples for what reads them, `pointScale`, `sceneSamples`)
-  sceneRT = new WebGLRenderTarget(size.x, size.y, { type: HalfFloatType, samples: 4 });
+  sceneRT.width = size.x;
+  sceneRT.height = size.y;
   grade.uniforms.tBlood.value = bloodMask;
   G.scene = scene; G.camera = camera; G.renderer = renderer;
   window.addEventListener('resize', fitViewport);
@@ -487,10 +356,7 @@ function samplesOn(asked: number, ratio: number): number {
 /** Sets the scene's MSAA to the level's samples on this screen: the engine's. */
 function fitSamples(): void {
   const samples = samplesOn(askedSamples, canvasRatio());
-  if (sceneRT.samples !== samples) {
-    sceneRT.samples = samples;
-    sceneRT.dispose();
-  }
+  sceneRT.samples = samples;
   rustSamples(samples);
 }
 /** The MSAA samples the scene renders with now. */
@@ -569,7 +435,7 @@ function fitViewport(): boolean {
 
 /** The target that holds the scene's size and samples (what a warm-up is handed): nothing is drawn into it, the
  *  scene being the engine's. */
-export const sceneTarget = (): WebGLRenderTarget => sceneRT;
+export const sceneTarget = (): SceneTarget => sceneRT;
 
 /** What a point's size (m) over its distance is multiplied by for its size in the scene's pixels: the scene's
  *  target's height over the view's height 1 m out. (Sized by the canvas's height, a point was as many times too
@@ -590,7 +456,8 @@ function applySceneRatio(): boolean {
 const _size = new Vec2();
 function fitSceneTarget(): void {
   sceneSize(_size);
-  sceneRT.setSize(_size.x, _size.y);
+  sceneRT.width = _size.x;
+  sceneRT.height = _size.y;
 }
 
 /** whether the level in use has the plain lit shading (Low and Very low: `plainLit`), for the Rust engine's */

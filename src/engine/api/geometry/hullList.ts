@@ -63,11 +63,11 @@ export class VertexList<F> {
     else vertex.next.prev = vertex.prev;
   }
 
-  /** Takes out the stretch from `a` to `b`. */
-  removeSubList(a: HullVertex<F>, b: HullVertex<F>): void {
-    if (a.prev === null) this.head = b.next;
-    else a.prev.next = b.next;
-    if (b.next === null) this.tail = a.prev;
-    else b.next.prev = a.prev;
+  /** Takes out the stretch from `from` to `to`. */
+  removeSubList(from: HullVertex<F>, to: HullVertex<F>): void {
+    if (from.prev === null) this.head = to.next;
+    else from.prev.next = to.next;
+    if (to.next === null) this.tail = from.prev;
+    else to.next.prev = from.prev;
   }
 }

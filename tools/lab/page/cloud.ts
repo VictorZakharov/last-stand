@@ -4,7 +4,7 @@
 // the cloud's sync), the cloud's state and the dialog as the player sees them, and the bar and the dialog held to the
 // window (src/ui/AGENTS.md: nothing past its edges, nothing over another). The node side drives the screens
 // (tools/lab/node/cloud.mjs).
-import * as THREE from 'three';
+import { Vec3 } from './sceneApi.ts';
 import { CLASS_IDS } from '../../../src/data/classes/index';
 import { villageObject } from '../../../src/game/village';
 import { groundHeight } from '../../../src/world/ground';
@@ -58,7 +58,7 @@ export function cloudAtChronicle(): void {
   if (!chronicle) throw new Error('lab: cloud: the village has no chronicle to open the save slots from');
   const [x, z] = chronicle.stand;
   G.player.walkTo = null;
-  G.player.place(new THREE.Vector3(x, groundHeight(x, z), z), 0);
+  G.player.place(new Vec3(x, groundHeight(x, z), z), 0);
   showVillageCard(chronicle);
 }
 

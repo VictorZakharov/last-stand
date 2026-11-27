@@ -40,8 +40,9 @@ export class Texture<I extends TextureImage = TextureImage> {
   readonly id = nextId();
   /** a name to know it by */
   name = '';
-  /** the game's own data on it (copied through JSON by `copy`, as three does) */
-  userData: Record<string, unknown> = {};
+  /** the game's own data on it, anything its own code reads back (copied through JSON by `copy`, as three does) */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  userData: Record<string, any> = {};
   /** its picture, shared with its clones */
   image: I;
   /** how it's read past its edges across u */

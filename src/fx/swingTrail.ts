@@ -11,7 +11,6 @@ import {
 } from '../engine/api/index.ts';
 import { G } from '../state';
 import { nearGlow } from '../core/materials';
-import { portShader } from '../core/shaderPorts';
 import { tunable } from '../core/tuning';
 import { effectLook, num, effectShader } from '../engine/effects';
 import { armsLayerOf } from '../entities/viewModel';
@@ -29,7 +28,7 @@ const COLUMNS = SAMPLES * STEPS_MOST + 1;
 /** the least distance between two points of the curve counted (m): one frame's place twice */
 const EPS = 1e-4;
 
-/** the trail for the Rust engine (src/engine/effects.ts): the port's WGSL below. The engine hands a vertex its
+/** the trail for the Rust engine (src/engine/effects.ts). The engine hands a vertex its
  *  position, normal, uv and colour alone, so there the trail's three numbers ride as its normal (`trailGeometry`). */
 const TRAIL_HOOKS = /* wgsl */ `
 fn vertex_hook(v: ptr<function, Vertex>, instance: u32) {
@@ -50,31 +49,9 @@ fn surface_hook(s: ptr<function, Surface>, in: VertexOut) -> bool {
 }
 `;
 
-const material = effectLook(portShader(nearGlow(new LookMaterial({
+const material = effectLook(nearGlow(new LookMaterial({
   uniforms: { uGlow: { value: TRAIL.glow }, uBand: { value: TRAIL.band } },
   transparent: true, depthWrite: false, blending: AdditiveBlending, side: DoubleSide,
-  vertexShader: /* glsl */`
-    attribute vec3 trail;
-    varying vec3 vT;
-    void main(){ vT = trail; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
-  fragmentShader: /* glsl */`
-    uniform float uGlow, uBand;
-    varying vec3 vT;
-    void main(){
-      // vT: how old (0 now .. 1 at the end of its life), how far out along the striking part (0 nearest the hand ..
-      // 1 its edge), and how fast it was swung there (0 too slow to leave a trail .. 1)
-      float fade = (1.0 - vT.x) * (1.0 - vT.x);
-      float edge = pow(vT.y, 6.0);
-      float i = vT.z * fade * (edge + uBand * vT.y) * uGlow;
-      gl_FragColor = vec4(vec3(i), i);
-    }`,
-})), ({ wgslFn, attribute, varying }, u) => ({
-  fragment: wgslFn(`fn swingTrail(t: vec3f, glow: f32, band: f32) -> vec4f {
-    let fade = (1.0 - t.x) * (1.0 - t.x);
-    let edge = pow(t.y, 6.0);
-    let i = t.z * fade * (edge + band * t.y) * glow;
-    return vec4f(vec3f(i), i);
-  }`)({ t: varying(attribute('trail', 'vec3')), glow: u.uGlow, band: u.uBand }),
 })), 'swing-trail', TRAIL_HOOKS, {
   numbers(u, out) { out[0] = num(u, 'uGlow'); out[1] = num(u, 'uBand'); },
 });

@@ -7,7 +7,7 @@
 // light goes from dark to bright and back within the three seconds is a flip; and in one frame, how far apart the
 // grass's dark cells and its bright ones lie. `canary` has a tuft take the sun's shadow where the wind has pushed it,
 // as it did, which must be found.
-import * as THREE from 'three';
+import { InstancedGeometry, Mesh, Vec3 } from './sceneApi.ts';
 import type { Lab, Pictured } from './lab';
 import { G } from '../../../src/state';
 import { holdHour } from '../../../src/game/clock';
@@ -19,9 +19,9 @@ import type { LightsChecked } from './villageLights';
 
 /** where he stands and the way he faces: open meadow by the cottages, and the grass by the campfire, under the
  *  trees' shade and in the fire's own light */
-const STANDS: { name: string; at: THREE.Vector3; facing: number }[] = [
-  { name: 'on the meadow', at: new THREE.Vector3(12, 0, 6), facing: Math.PI / 2 },
-  { name: 'by the campfire', at: new THREE.Vector3(-4, 0, 6), facing: -0.87 },
+const STANDS: { name: string; at: Vec3; facing: number }[] = [
+  { name: 'on the meadow', at: new Vec3(12, 0, 6), facing: Math.PI / 2 },
+  { name: 'by the campfire', at: new Vec3(-4, 0, 6), facing: -0.87 },
 ];
 /** a cell's side (px): wide enough that a blade swaying across it isn't a change of its light */
 const CELL = 12;
@@ -68,8 +68,8 @@ function cellsOf(canvas: Canvas): Float32Array {
 /** The meadow's blades shown or hidden (its ground stays). */
 function showBlades(shown: boolean): void {
   G.arena.village!.meadow.traverse((part) => {
-    const mesh = part as THREE.Mesh;
-    if (mesh.isMesh && (mesh.geometry as THREE.InstancedBufferGeometry).isInstancedBufferGeometry) mesh.visible = shown;
+    const mesh = part as Mesh;
+    if (mesh.isMesh && (mesh.geometry as InstancedGeometry).isInstancedGeometry) mesh.visible = shown;
   });
 }
 

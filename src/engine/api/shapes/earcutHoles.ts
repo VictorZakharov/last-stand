@@ -5,70 +5,71 @@ import { filterPoints, linkedList } from './earcut.ts';
 
 /** The ring's leftmost node (lowest of those). */
 function leftmost(start: EarNode): EarNode {
-  let p = start;
+  let node = start;
   let most = start;
   do {
-    if (p.x < most.x || (p.x === most.x && p.y < most.y)) most = p;
-    p = p.next;
-  } while (p !== start);
+    if (node.x < most.x || (node.x === most.x && node.y < most.y)) most = node;
+    node = node.next;
+  } while (node !== start);
   return most;
 }
 
 /** Orders holes by their leftmost point: x, then y, then the slope to the next point. */
-function compareXYSlope(a: EarNode, b: EarNode): number {
-  let result = a.x - b.x;
+function compareXYSlope(nodeA: EarNode, nodeB: EarNode): number {
+  let result = nodeA.x - nodeB.x;
   if (result !== 0) return result;
-  result = a.y - b.y;
+  result = nodeA.y - nodeB.y;
   if (result !== 0) return result;
-  const aSlope = (a.next.y - a.y) / (a.next.x - a.x);
-  const bSlope = (b.next.y - b.y) / (b.next.x - b.x);
+  const aSlope = (nodeA.next.y - nodeA.y) / (nodeA.next.x - nodeA.x);
+  const bSlope = (nodeB.next.y - nodeB.y) / (nodeB.next.x - nodeB.x);
   return aSlope - bSlope;
 }
 
-/** Whether m's corner holds p's (both turning in). */
-function sectorContainsSector(m: EarNode, p: EarNode): boolean {
-  return area(m.prev, m, p.prev) < 0 && area(p.next, m, m.next) < 0;
+/** Whether `bridge`'s corner holds `node`'s (both turning in). */
+function sectorContainsSector(bridge: EarNode, node: EarNode): boolean {
+  return area(bridge.prev, bridge, node.prev) < 0 && area(node.next, bridge, bridge.next) < 0;
 }
 
 /** The outline's point a bridge from `hole` (its leftmost point) goes to: the nearest it sees to its left. */
 function findHoleBridge(hole: EarNode, outer: EarNode): EarNode | null {
-  let p = outer;
+  let node = outer;
   const hx = hole.x;
   const hy = hole.y;
   let qx = -Infinity;
-  let m: EarNode | null = null;
-  if (equals(hole, p)) return p;
+  let bridge: EarNode | null = null;
+  if (equals(hole, node)) return node;
   do {
-    if (equals(hole, p.next)) return p.next;
-    if (hy <= p.y && hy >= p.next.y && p.next.y !== p.y) {
-      const x = p.x + (hy - p.y) * (p.next.x - p.x) / (p.next.y - p.y);
+    if (equals(hole, node.next)) return node.next;
+    if (hy <= node.y && hy >= node.next.y && node.next.y !== node.y) {
+      const x = node.x + (hy - node.y) * (node.next.x - node.x) / (node.next.y - node.y);
       if (x <= hx && x > qx) {
         qx = x;
-        m = p.x < p.next.x ? p : p.next;
-        if (x === hx) return m;
+        bridge = node.x < node.next.x ? node : node.next;
+        if (x === hx) return bridge;
       }
     }
-    p = p.next;
-  } while (p !== outer);
-  if (!m) return null;
-  const stop = m;
-  const mx = m.x;
-  const my = m.y;
+    node = node.next;
+  } while (node !== outer);
+  if (!bridge) return null;
+  const stop = bridge;
+  const mx = bridge.x;
+  const my = bridge.y;
   let tanMin = Infinity;
-  p = m;
+  node = bridge;
   do {
-    const ahead = hx >= p.x && p.x >= mx && hx !== p.x;
-    if (ahead && pointInTriangle(hy < my ? hx : qx, hy, mx, my, hy < my ? qx : hx, hy, p.x, p.y)) {
-      const tan = Math.abs(hy - p.y) / (hx - p.x);
-      const better = tan < tanMin || (tan === tanMin && (p.x > m.x || (p.x === m.x && sectorContainsSector(m, p))));
-      if (locallyInside(p, hole) && better) {
-        m = p;
+    const ahead = hx >= node.x && node.x >= mx && hx !== node.x;
+    if (ahead && pointInTriangle(hy < my ? hx : qx, hy, mx, my, hy < my ? qx : hx, hy, node.x, node.y)) {
+      const tan = Math.abs(hy - node.y) / (hx - node.x);
+      const further = node.x > bridge.x || (node.x === bridge.x && sectorContainsSector(bridge, node));
+      const better = tan < tanMin || (tan === tanMin && further);
+      if (locallyInside(node, hole) && better) {
+        bridge = node;
         tanMin = tan;
       }
     }
-    p = p.next;
-  } while (p !== stop);
-  return m;
+    node = node.next;
+  } while (node !== stop);
+  return bridge;
 }
 
 /** Joins `hole` into the outline by a bridge; gives back the outline's ring. */

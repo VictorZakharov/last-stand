@@ -3,7 +3,7 @@
 import { Maths, Vec3 } from '../math/index.ts';
 import type { Vec2 } from '../math/index.ts';
 import type { Geometry } from '../geometry/index.ts';
-import { geometryOf, meshOf } from './build.ts';
+import { described, geometryOf, meshOf } from './build.ts';
 
 /** A generator's numbers as it pushes them, and the groups it marks. */
 interface Pushed {
@@ -52,12 +52,12 @@ function cylinderSide(plan: CylinderPlan, out: Pushed): void {
   const start = out.indices.length;
   for (let x = 0; x < radial; x++) {
     for (let y = 0; y < rows; y++) {
-      const a = grid[y][x];
-      const b = grid[y + 1][x];
-      const c = grid[y + 1][x + 1];
-      const d = grid[y][x + 1];
-      if (radiusTop > 0 || y !== 0) out.indices.push(a, b, d);
-      if (radiusBottom > 0 || y !== rows - 1) out.indices.push(b, c, d);
+      const cornerA = grid[y][x];
+      const cornerB = grid[y + 1][x];
+      const cornerC = grid[y + 1][x + 1];
+      const cornerD = grid[y][x + 1];
+      if (radiusTop > 0 || y !== 0) out.indices.push(cornerA, cornerB, cornerD);
+      if (radiusBottom > 0 || y !== rows - 1) out.indices.push(cornerB, cornerC, cornerD);
     }
   }
   out.groups.push([start, out.indices.length - start, 0]);
@@ -85,10 +85,10 @@ function cylinderCap(plan: CylinderPlan, top: boolean, out: Pushed): void {
   }
   const start = out.indices.length;
   for (let x = 0; x < plan.radial; x++) {
-    const c = centreStart + x;
+    const cornerC = centreStart + x;
     const i = rimStart + x;
-    if (top) out.indices.push(i, i + 1, c);
-    else out.indices.push(i + 1, i, c);
+    if (top) out.indices.push(i, i + 1, cornerC);
+    else out.indices.push(i + 1, i, cornerC);
   }
   out.groups.push([start, out.indices.length - start, top ? 1 : 2]);
 }
@@ -164,13 +164,14 @@ export function lathe(points: readonly Vec2[], segments = 12, phiStart = 0, phiL
   const indices: number[] = [];
   for (let i = 0; i < steps; i++) {
     for (let j = 0; j < points.length - 1; j++) {
-      const a = j + i * points.length;
-      const b = a + points.length;
-      indices.push(a, b, a + 1);
-      indices.push(b + 1, a + 1, b);
+      const cornerA = j + i * points.length;
+      const cornerB = cornerA + points.length;
+      indices.push(cornerA, cornerB, cornerA + 1);
+      indices.push(cornerB + 1, cornerA + 1, cornerB);
     }
   }
-  return geometryOfLathe(indices, positions, uvs, normals);
+  const parameters = { points, segments, phiStart, phiLength };
+  return described(geometryOfLathe(indices, positions, uvs, normals), 'LatheGeometry', parameters);
 }
 
 /** The lathe's geometry, its attributes in three's order (position, uv, normal). */

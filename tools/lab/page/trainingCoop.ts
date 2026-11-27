@@ -1,4 +1,5 @@
 // Training-specific checks on each of the two real game pages carried by the co-op lab.
+import { Vec3 } from './sceneApi.ts';
 import type { Lab, Report } from './lab';
 import { G } from '../../../src/state';
 import { BIOME_IDS } from '../../../src/data/biomes';
@@ -60,7 +61,7 @@ export async function trainingCoop(lab: Lab, command: TrainingStep): Promise<Rep
     check(run.bag.length === 0 && run.score === 0, 'training peer accepted loot/score');
     check(JSON.stringify(G.profile) === saved, 'training peer changed its profile');
   } else if (command.step === 'spawn') {
-    const foe = lab.spawnFoe('husk', new lab.THREE.Vector3(4, 0, 4));
+    const foe = lab.spawnFoe('husk', new Vec3(4, 0, 4));
     foe.spawning = 0;
     foe.invulnerable = false;
     hitEnemy(foe, 1e9, { by: lab.player, skill: lab.player.cls.skills[0] });

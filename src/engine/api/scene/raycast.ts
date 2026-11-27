@@ -10,24 +10,21 @@ import type { Mesh } from './mesh.ts';
 import type { Hit, HitFace, Raycaster } from './raycaster.ts';
 import type { SkinnedMesh } from './skinned.ts';
 
-const _sphere = new Sphere();
-const _localRay = new Ray();
-const _nearRay = new Ray();
-const _sphereAt = new Vec3();
-const _inverse = new Mat4();
-const _instance = new Mat4();
-const _instanceWorld = new Mat4();
-const _bone = new Mat4();
-const _a = new Vec3();
-const _b = new Vec3();
-const _c = new Vec3();
-const _met = new Vec3();
-const _worldMet = new Vec3();
-const _bind = new Vec3();
-const _moved = new Vec3();
-const _edge = new Vec3();
-const _edge2 = new Vec3();
-const _toPoint = new Vec3();
+const scratchSphere = new Sphere();
+const scratchLocalRay = new Ray();
+const scratchNearRay = new Ray();
+const scratchSphereAt = new Vec3();
+const scratchInverse = new Mat4();
+const scratchInstance = new Mat4();
+const scratchInstanceWorld = new Mat4();
+const scratchCornerA = new Vec3();
+const scratchCornerB = new Vec3();
+const scratchCornerC = new Vec3();
+const scratchMet = new Vec3();
+const scratchWorldMet = new Vec3();
+const scratchEdge = new Vec3();
+const scratchEdge2 = new Vec3();
+const scratchToPoint = new Vec3();
 
 /** A mesh as it's cast against: its own triangles placed by `world`, its vertices moved by `vertex`. */
 interface Cast {
@@ -63,12 +60,12 @@ export function raycastMesh(mesh: Mesh, raycaster: Raycaster, hits: Hit[]): void
 function castPlaced(mesh: Mesh, world: Mat4, raycaster: Raycaster, hits: Hit[]): void {
   const geometry = mesh.geometry;
   if (!geometry.boundingSphere) geometry.computeBoundingSphere();
-  _sphere.copy(geometry.boundingSphere!).applyMatrix4(world);
-  _nearRay.copy(raycaster.ray).recast(raycaster.near);
-  if (!_sphere.containsPoint(_nearRay.origin)) {
-    if (_nearRay.intersectSphere(_sphere, _sphereAt) === null) return;
+  scratchSphere.copy(geometry.boundingSphere!).applyMatrix4(world);
+  scratchNearRay.copy(raycaster.ray).recast(raycaster.near);
+  if (!scratchSphere.containsPoint(scratchNearRay.origin)) {
+    if (scratchNearRay.intersectSphere(scratchSphere, scratchSphereAt) === null) return;
     const span = raycaster.far - raycaster.near;
-    if (_nearRay.origin.distanceToSquared(_sphereAt) > span * span) return;
+    if (scratchNearRay.origin.distanceToSquared(scratchSphereAt) > span * span) return;
   }
   const ray = localRay(world, raycaster);
   if (geometry.boundingBox && !ray.intersectsBox(geometry.boundingBox)) return;
@@ -77,8 +74,8 @@ function castPlaced(mesh: Mesh, world: Mat4, raycaster: Raycaster, hits: Hit[]):
 
 /** The ray in the space `world` places, into a shared ray. */
 function localRay(world: Mat4, raycaster: Raycaster): Ray {
-  _inverse.copy(world).invert();
-  return _localRay.copy(raycaster.ray).applyMatrix4(_inverse);
+  scratchInverse.copy(world).invert();
+  return scratchLocalRay.copy(raycaster.ray).applyMatrix4(scratchInverse);
 }
 
 /**
@@ -88,13 +85,13 @@ function localRay(world: Mat4, raycaster: Raycaster): Ray {
 function raycastInstances(mesh: InstancedMesh, raycaster: Raycaster, hits: Hit[]): void {
   const world = mesh.matrixWorld;
   if (!mesh.boundingSphere) mesh.computeBoundingSphere();
-  _sphere.copy(mesh.boundingSphere!).applyMatrix4(world);
-  if (!raycaster.ray.intersectsSphere(_sphere)) return;
+  scratchSphere.copy(mesh.boundingSphere!).applyMatrix4(world);
+  if (!raycaster.ray.intersectsSphere(scratchSphere)) return;
   for (let id = 0; id < mesh.count; id++) {
-    mesh.getMatrixAt(id, _instance);
-    _instanceWorld.multiplyMatrices(world, _instance);
+    mesh.getMatrixAt(id, scratchInstance);
+    scratchInstanceWorld.multiplyMatrices(world, scratchInstance);
     const first = hits.length;
-    castPlaced(mesh, _instanceWorld, raycaster, hits);
+    castPlaced(mesh, scratchInstanceWorld, raycaster, hits);
     for (let i = first; i < hits.length; i++) hits[i].instanceId = id;
   }
 }
@@ -105,30 +102,19 @@ function plainVertex(geometry: Geometry): (at: number, target: Vec3) => Vec3 {
   return (at, target) => target.set(position.getX(at), position.getY(at), position.getZ(at));
 }
 
-/**
- * A skinned mesh's vertex where its bones have moved it, in the mesh's own space: three 0.187's
- * `SkinnedMesh.applyBoneTransform` (into the bind's space, each of four bones' moves weighed, back out).
- */
+/** A mesh's vertex `at` where it's drawn in its own space (a skinned mesh's where its bones have moved it). */
+export function vertexPosition(mesh: Mesh, at: number, target: Vec3): Vec3 {
+  const skinned = mesh as SkinnedMesh;
+  if (skinned.isSkinnedMesh && skinned.skeleton) return skinnedVertex(skinned)(at, target);
+  return plainVertex(mesh.geometry)(at, target);
+}
+
+/** A skinned mesh's vertex where its bones have moved it, in the mesh's own space (`applyBoneTransform`). */
 function skinnedVertex(mesh: SkinnedMesh): (at: number, target: Vec3) => Vec3 {
-  const geometry = mesh.geometry;
-  const position = geometry.getAttribute('position')!;
-  const bones = geometry.getAttribute('skinIndex');
-  const weights = geometry.getAttribute('skinWeight');
-  const skeleton = mesh.skeleton!;
-  const inverse = mesh.bindInverseNow();
+  const position = mesh.geometry.getAttribute('position')!;
   return (at, target) => {
     target.set(position.getX(at), position.getY(at), position.getZ(at));
-    if (!bones || !weights) return target;
-    _bind.copy(target).applyMatrix4(mesh.bindMatrix);
-    target.set(0, 0, 0);
-    for (let k = 0; k < 4; k++) {
-      const weight = weights.getComponent(at, k);
-      if (weight === 0) continue;
-      const bone = bones.getComponent(at, k);
-      _bone.multiplyMatrices(skeleton.bones[bone].matrixWorld, skeleton.boneInverses[bone]);
-      target.addScaledVector(_moved.copy(_bind).applyMatrix4(_bone), weight);
-    }
-    return target.applyMatrix4(inverse);
+    return mesh.applyBoneTransform(at, target);
   };
 }
 
@@ -178,20 +164,22 @@ function castRun(cast: Cast, material: Material, materialIndex: number, start: n
  * point's barycentric weights, the normal turned toward the ray).
  */
 function castTriangle(cast: Cast, material: Material, a: number, b: number, c: number): Hit | null {
-  cast.vertex(a, _a);
-  cast.vertex(b, _b);
-  cast.vertex(c, _c);
+  cast.vertex(a, scratchCornerA);
+  cast.vertex(b, scratchCornerB);
+  cast.vertex(c, scratchCornerC);
   const met = material.side === BackSide
-    ? cast.ray.intersectTriangle(_c, _b, _a, true, _met)
-    : cast.ray.intersectTriangle(_a, _b, _c, material.side === FrontSide, _met);
+    ? cast.ray.intersectTriangle(scratchCornerC, scratchCornerB, scratchCornerA, true, scratchMet)
+    : cast.ray.intersectTriangle(scratchCornerA, scratchCornerB, scratchCornerC, material.side === FrontSide,
+      scratchMet);
   if (met === null) return null;
-  _worldMet.copy(_met).applyMatrix4(cast.world);
+  scratchWorldMet.copy(scratchMet).applyMatrix4(cast.world);
   const raycaster = cast.raycaster;
-  const distance = raycaster.ray.origin.distanceTo(_worldMet);
+  const distance = raycaster.ray.origin.distanceTo(scratchWorldMet);
   if (distance < raycaster.near || distance > raycaster.far) return null;
-  const weights = barycentric(_met, _a, _b, _c, new Vec3());
-  const face: HitFace = { a, b, c, normal: faceNormal(_a, _b, _c, new Vec3()), materialIndex: 0 };
-  const hit: Hit = { distance, point: _worldMet.clone(), object: cast.mesh, face };
+  const weights = barycentric(scratchMet, scratchCornerA, scratchCornerB, scratchCornerC, new Vec3());
+  const faceTurn = faceNormal(scratchCornerA, scratchCornerB, scratchCornerC, new Vec3());
+  const face: HitFace = { a, b, c, normal: faceTurn, materialIndex: 0 };
+  const hit: Hit = { distance, point: scratchWorldMet.clone(), object: cast.mesh, face, barycoord: weights };
   const geometry = cast.mesh.geometry;
   const uv = geometry.getAttribute('uv');
   if (uv) hit.uv = weighed2(uv, a, b, c, weights);
@@ -206,23 +194,23 @@ function castTriangle(cast: Cast, material: Material, a: number, b: number, c: n
 
 /** The way the triangle `a`, `b`, `c` faces by its winding, into `target` (nought for a triangle of no area). */
 function faceNormal(a: Vec3, b: Vec3, c: Vec3, target: Vec3): Vec3 {
-  _edge.subVectors(c, b);
-  _edge2.subVectors(a, b);
-  target.crossVectors(_edge, _edge2);
+  scratchEdge.subVectors(c, b);
+  scratchEdge2.subVectors(a, b);
+  target.crossVectors(scratchEdge, scratchEdge2);
   const length = target.length();
   return length > 0 ? target.multiplyScalar(1 / length) : target.set(0, 0, 0);
 }
 
 /** `point`'s weights on the triangle `a`, `b`, `c`'s corners, into `target` (all nought for one of no area). */
 function barycentric(point: Vec3, a: Vec3, b: Vec3, c: Vec3, target: Vec3): Vec3 {
-  _edge.subVectors(c, a);
-  _edge2.subVectors(b, a);
-  _toPoint.subVectors(point, a);
-  const cc = _edge.dot(_edge);
-  const cb = _edge.dot(_edge2);
-  const cp = _edge.dot(_toPoint);
-  const bb = _edge2.dot(_edge2);
-  const bp = _edge2.dot(_toPoint);
+  scratchEdge.subVectors(c, a);
+  scratchEdge2.subVectors(b, a);
+  scratchToPoint.subVectors(point, a);
+  const cc = scratchEdge.dot(scratchEdge);
+  const cb = scratchEdge.dot(scratchEdge2);
+  const cp = scratchEdge.dot(scratchToPoint);
+  const bb = scratchEdge2.dot(scratchEdge2);
+  const bp = scratchEdge2.dot(scratchToPoint);
   const denominator = cc * bb - cb * cb;
   if (denominator === 0) return target.set(0, 0, 0);
   const towardC = (bb * cp - cb * bp) / denominator;

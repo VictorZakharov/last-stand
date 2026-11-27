@@ -1,7 +1,7 @@
 // `lab village --only fogPastCottages`: the ground a cottage hides from him lies in the fog from above, read in the
 // frame drawn. From play, "still seeing green where character cannot see": the rays agreed with his line of sight, so
 // what's read is the picture, each place he can't see projected into it and its pixel's colour taken.
-import * as THREE from 'three';
+import { Node, Vec3 } from './sceneApi.ts';
 import type { Lab, Pictured } from './lab';
 import { RUST } from '../../../src/engine';
 import { G } from '../../../src/state';
@@ -57,22 +57,22 @@ function within(c: Cottage, p: Spot): boolean {
 
 /** The ground he can't see within the walls of the cottage he stands at, the camera over its roof: under the roof's
  *  ghost alone, no wall's hole over it (the wall he stands at is past it from the camera). */
-const underItsRoof = (c: Cottage, him: Spot): THREE.Vector3[] =>
+const underItsRoof = (c: Cottage, him: Spot): Vec3[] =>
   unseenFrom(him).filter((place) => within(c, [place.x, place.z]));
 
 /** The ground before him as he stands at `at` facing `facing`: places he sees, the camera behind him over the
  *  cottage. */
-function beforeHim(at: Spot, facing: number): THREE.Vector3[] {
+function beforeHim(at: Spot, facing: number): Vec3[] {
   const [aheadX, aheadZ] = [Math.sin(facing), Math.cos(facing)];
   return BEFORE_HIM.out.flatMap((out) => BEFORE_HIM.aside.map((aside) => {
     const x = at[0] + aheadX * out + aheadZ * aside;
     const z = at[1] + aheadZ * out - aheadX * aside;
-    return new THREE.Vector3(x, groundHeight(x, z) + 0.1, z);
+    return new Vec3(x, groundHeight(x, z) + 0.1, z);
   })).filter((place) => seenShareAt(place.x, place.z) > 0.95);
 }
 
 /** The share of `places`' pixels in the frame drawn now that read as green (`READS_GREEN`), and how many were read. */
-function greenerAt(lab: Lab, places: THREE.Vector3[]): { greener: number; read: number } {
+function greenerAt(lab: Lab, places: Vec3[]): { greener: number; read: number } {
   const canvas = drawFrame(lab);
   let sum = 0;
   let read = 0;
@@ -122,15 +122,15 @@ function offWall(p: Spot, [a, b]: Line): number {
 }
 
 /** The places round `him` a cottage's wall hides from him, clear of every wall, on the ground. */
-function unseenFrom(him: Spot): THREE.Vector3[] {
-  const places: THREE.Vector3[] = [];
+function unseenFrom(him: Spot): Vec3[] {
+  const places: Vec3[] = [];
   for (let dx = -AROUND; dx <= AROUND; dx += EVERY) {
     for (let dz = -AROUND; dz <= AROUND; dz += EVERY) {
       const place: Spot = [him[0] + dx, him[1] + dz];
       if (WALLS.some((wall) => offWall(place, wall) < OFF_WALLS)) continue;
       const hidden = (near: Spot): boolean => WALLS.some((wall) => crosses(him, near, wall));
       if (!ROUND.every(([x, z]) => hidden([place[0] + x, place[1] + z]))) continue;
-      places.push(new THREE.Vector3(place[0], groundHeight(place[0], place[1]) + 0.1, place[1]));
+      places.push(new Vec3(place[0], groundHeight(place[0], place[1]) + 0.1, place[1]));
     }
   }
   return places;
@@ -161,7 +161,7 @@ async function greenestPast(lab: Lab): Promise<{ share: number; name: string; at
   for (const [k, c] of COTTAGES.entries()) {
     for (const [s, stand] of standsRound(c).entries()) {
       G.player.walkTo = null;
-      G.player.place(new THREE.Vector3(stand.at[0], groundHeight(...stand.at), stand.at[1]), stand.facing);
+      G.player.place(new Vec3(stand.at[0], groundHeight(...stand.at), stand.at[1]), stand.facing);
       faceCamera(stand.facing);
       await lab.step(SETTLE);
       const share = greenTaken(lab, unseenFrom(stand.at)).taken;
@@ -172,7 +172,7 @@ async function greenestPast(lab: Lab): Promise<{ share: number; name: string; at
 }
 
 /** The places of `places` whose pixel in the frame is plainly green. */
-function greenOf(lab: Lab, places: THREE.Vector3[]): THREE.Vector3[] {
+function greenOf(lab: Lab, places: Vec3[]): Vec3[] {
   const canvas = drawFrame(lab);
   return places.filter((place) => {
     const onScreen = place.clone().project(G.camera);
@@ -188,7 +188,7 @@ function greenOf(lab: Lab, places: THREE.Vector3[]): THREE.Vector3[] {
 function rayRead(lab: Lab, at: Spot): string {
   const green = greenOf(lab, unseenFrom(at));
   const seen = green.filter((place) => seenShareAt(place.x, place.z) > 0.5).length;
-  const shares = (place: THREE.Vector3): string => {
+  const shares = (place: Vec3): string => {
     const onScreen = place.clone().project(G.camera);
     return `${((onScreen.x + 1) / 2).toFixed(2)},${((1 - onScreen.y) / 2).toFixed(2)}`;
   };
@@ -200,8 +200,8 @@ function rayRead(lab: Lab, at: Spot): string {
 /** The village's trees taken off every layer (their culling sets `visible` each frame): their crowns stand high and
  *  stay seen over what he can't see, and laid over that ground in the picture they read as it showing green. Returns
  *  each with the layers it had. */
-function hideTrees(): [THREE.Object3D, number][] {
-  const hidden: [THREE.Object3D, number][] = [];
+function hideTrees(): [Node, number][] {
+  const hidden: [Node, number][] = [];
   G.scene.traverse((object) => {
     if (!object.name.startsWith("village trees'")) return;
     hidden.push([object, object.layers.mask]);
@@ -237,7 +237,7 @@ export async function fogPastCottages(lab: Lab, canary: boolean): Promise<Lights
       + `green at the least (${worst.name}; at least ${LEAST_GREEN_TAKEN * 100}%)`;
     const wrong = worst.share < LEAST_GREEN_TAKEN;
     if (canary) return { lines: [line], problems: [], caught: wrong, moments: [] };
-    G.player.place(new THREE.Vector3(worst.at[0], groundHeight(...worst.at), worst.at[1]), worst.facing);
+    G.player.place(new Vec3(worst.at[0], groundHeight(...worst.at), worst.at[1]), worst.facing);
     faceCamera(worst.facing);
     await lab.step(SETTLE);
     const read = rayRead(lab, worst.at);
@@ -268,7 +268,7 @@ export async function fogOneGrey(lab: Lab, canary: boolean): Promise<LightsCheck
     for (const [k, c] of COTTAGES.entries()) {
       for (const [s, stand] of standsRound(c).entries()) {
         G.player.walkTo = null;
-        G.player.place(new THREE.Vector3(stand.at[0], groundHeight(...stand.at), stand.at[1]), stand.facing);
+        G.player.place(new Vec3(stand.at[0], groundHeight(...stand.at), stand.at[1]), stand.facing);
         faceCamera(stand.facing);
         await lab.step(SETTLE);
         const found = greenerAt(lab, underItsRoof(c, stand.at));
@@ -294,7 +294,7 @@ export async function fogOneGrey(lab: Lab, canary: boolean): Promise<LightsCheck
     // the eaves' ghost, is three surfaces blended; a read that tells the fault from the fix is still to be found, so
     // its canary goes unseen)
     const problems: string[] = [];
-    G.player.place(new THREE.Vector3(worst.at[0], groundHeight(...worst.at), worst.at[1]), worst.facing);
+    G.player.place(new Vec3(worst.at[0], groundHeight(...worst.at), worst.at[1]), worst.facing);
     faceCamera(worst.facing);
     await lab.step(SETTLE);
     const shot = await lab.screen(`the greenest ground a cottage hides: ${worst.name}`, []);

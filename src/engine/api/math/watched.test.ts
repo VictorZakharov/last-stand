@@ -28,17 +28,17 @@ function saw(watched: Watched, field: string): void {
 class WatchedVec2 extends Vec2 implements Watched {
   declare log?: string[];
   declare kept: [number, number];
-  get x(): number {
+  override get x(): number {
     return this.kept[0];
   }
-  set x(value: number) {
+  override set x(value: number) {
     (this.kept ??= [0, 0])[0] = value;
     saw(this, 'x');
   }
-  get y(): number {
+  override get y(): number {
     return this.kept[1];
   }
-  set y(value: number) {
+  override set y(value: number) {
     (this.kept ??= [0, 0])[1] = value;
     saw(this, 'y');
   }
@@ -48,24 +48,24 @@ class WatchedVec2 extends Vec2 implements Watched {
 class WatchedVec3 extends Vec3 implements Watched {
   declare log?: string[];
   declare kept: [number, number, number];
-  get x(): number {
+  override get x(): number {
     return this.kept[0];
   }
-  set x(value: number) {
+  override set x(value: number) {
     (this.kept ??= [0, 0, 0])[0] = value;
     saw(this, 'x');
   }
-  get y(): number {
+  override get y(): number {
     return this.kept[1];
   }
-  set y(value: number) {
+  override set y(value: number) {
     (this.kept ??= [0, 0, 0])[1] = value;
     saw(this, 'y');
   }
-  get z(): number {
+  override get z(): number {
     return this.kept[2];
   }
-  set z(value: number) {
+  override set z(value: number) {
     (this.kept ??= [0, 0, 0])[2] = value;
     saw(this, 'z');
   }
@@ -75,31 +75,31 @@ class WatchedVec3 extends Vec3 implements Watched {
 class WatchedVec4 extends Vec4 implements Watched {
   declare log?: string[];
   declare kept: [number, number, number, number];
-  get x(): number {
+  override get x(): number {
     return this.kept[0];
   }
-  set x(value: number) {
+  override set x(value: number) {
     (this.kept ??= [0, 0, 0, 0])[0] = value;
     saw(this, 'x');
   }
-  get y(): number {
+  override get y(): number {
     return this.kept[1];
   }
-  set y(value: number) {
+  override set y(value: number) {
     (this.kept ??= [0, 0, 0, 0])[1] = value;
     saw(this, 'y');
   }
-  get z(): number {
+  override get z(): number {
     return this.kept[2];
   }
-  set z(value: number) {
+  override set z(value: number) {
     (this.kept ??= [0, 0, 0, 0])[2] = value;
     saw(this, 'z');
   }
-  get w(): number {
+  override get w(): number {
     return this.kept[3];
   }
-  set w(value: number) {
+  override set w(value: number) {
     (this.kept ??= [0, 0, 0, 0])[3] = value;
     saw(this, 'w');
   }
@@ -109,31 +109,31 @@ class WatchedVec4 extends Vec4 implements Watched {
 class WatchedQuat extends Quat implements Watched {
   declare log?: string[];
   declare kept: [number, number, number, number];
-  get x(): number {
+  override get x(): number {
     return this.kept[0];
   }
-  set x(value: number) {
+  override set x(value: number) {
     (this.kept ??= [0, 0, 0, 1])[0] = value;
     saw(this, 'x');
   }
-  get y(): number {
+  override get y(): number {
     return this.kept[1];
   }
-  set y(value: number) {
+  override set y(value: number) {
     (this.kept ??= [0, 0, 0, 1])[1] = value;
     saw(this, 'y');
   }
-  get z(): number {
+  override get z(): number {
     return this.kept[2];
   }
-  set z(value: number) {
+  override set z(value: number) {
     (this.kept ??= [0, 0, 0, 1])[2] = value;
     saw(this, 'z');
   }
-  get w(): number {
+  override get w(): number {
     return this.kept[3];
   }
-  set w(value: number) {
+  override set w(value: number) {
     (this.kept ??= [0, 0, 0, 1])[3] = value;
     saw(this, 'w');
   }
@@ -144,31 +144,31 @@ class WatchedEuler extends Euler implements Watched {
   declare log?: string[];
   declare kept: [number, number, number];
   declare keptOrder: EulerOrder;
-  get x(): number {
+  override get x(): number {
     return this.kept[0];
   }
-  set x(value: number) {
+  override set x(value: number) {
     (this.kept ??= [0, 0, 0])[0] = value;
     saw(this, 'x');
   }
-  get y(): number {
+  override get y(): number {
     return this.kept[1];
   }
-  set y(value: number) {
+  override set y(value: number) {
     (this.kept ??= [0, 0, 0])[1] = value;
     saw(this, 'y');
   }
-  get z(): number {
+  override get z(): number {
     return this.kept[2];
   }
-  set z(value: number) {
+  override set z(value: number) {
     (this.kept ??= [0, 0, 0])[2] = value;
     saw(this, 'z');
   }
-  get order(): EulerOrder {
+  override get order(): EulerOrder {
     return this.keptOrder;
   }
-  set order(value: EulerOrder) {
+  override set order(value: EulerOrder) {
     this.keptOrder = value;
     saw(this, 'order');
   }
@@ -178,24 +178,24 @@ class WatchedEuler extends Euler implements Watched {
 class WatchedColor extends Color implements Watched {
   declare log?: string[];
   declare kept: [number, number, number];
-  get r(): number {
+  override get r(): number {
     return this.kept[0];
   }
-  set r(value: number) {
+  override set r(value: number) {
     (this.kept ??= [0, 0, 0])[0] = value;
     saw(this, 'r');
   }
-  get g(): number {
+  override get g(): number {
     return this.kept[1];
   }
-  set g(value: number) {
+  override set g(value: number) {
     (this.kept ??= [0, 0, 0])[1] = value;
     saw(this, 'g');
   }
-  get b(): number {
+  override get b(): number {
     return this.kept[2];
   }
-  set b(value: number) {
+  override set b(value: number) {
     (this.kept ??= [0, 0, 0])[2] = value;
     saw(this, 'b');
   }
@@ -205,7 +205,8 @@ class WatchedColor extends Color implements Watched {
 type Watchable = Watched & object;
 
 /** asserts each method's writes all went through the accessors: every field logged, none made an own property */
-function assertWatched<T extends Watchable>(value: T, fields: readonly string[], calls: Record<string, (v: T) => void>) {
+function assertWatched<Value extends Watchable>(value: Value, fields: readonly string[],
+  calls: Record<string, (watched: Value) => void>): void {
   for (const [name, call] of Object.entries(calls)) {
     value.log = [];
     call(value);
@@ -221,63 +222,63 @@ const XYZ = ['x', 'y', 'z'] as const;
 const XYZW = ['x', 'y', 'z', 'w'] as const;
 
 test('a watched Vec2 sees every write of its methods', () => {
-  const v = new WatchedVec2(1, 2);
-  assertWatched(v, XY, {
-    set: (u) => u.set(3, 4),
-    copy: (u) => u.copy(new Vec2(5, 6)),
-    add: (u) => u.add(new Vec2(1, 1)),
-    lerp: (u) => u.lerp(new Vec2(0, 0), 0.5),
-    normalize: (u) => u.normalize(),
-    fromArray: (u) => u.fromArray([7, 8]),
+  const vector = new WatchedVec2(1, 2);
+  assertWatched(vector, XY, {
+    set: (value) => value.set(3, 4),
+    copy: (value) => value.copy(new Vec2(5, 6)),
+    add: (value) => value.add(new Vec2(1, 1)),
+    lerp: (value) => value.lerp(new Vec2(0, 0), 0.5),
+    normalize: (value) => value.normalize(),
+    fromArray: (value) => value.fromArray([7, 8]),
   });
-  assertNear(v.toArray(), [7, 8]);
+  assertNear(vector.toArray(), [7, 8]);
 });
 
 test('a watched Vec3 sees every write of its methods, and they read through its accessors', () => {
-  const v = new WatchedVec3(1, 2, 3);
+  const vector = new WatchedVec3(1, 2, 3);
   const quarterTurnY = new Quat().setFromAxisAngle(new Vec3(0, 1, 0), Math.PI / 2);
-  assertWatched(v, XYZ, {
-    set: (u) => u.set(1, 0, 0),
-    applyQuaternion: (u) => u.applyQuaternion(quarterTurnY),
-    copy: (u) => u.copy(new Vec3(2, 0, 0)),
-    add: (u) => u.add(new Vec3(0, 3, 4)),
-    lerp: (u) => u.lerp(new Vec3(0, 0, 0), 0.5),
-    normalize: (u) => u.normalize(),
-    fromArray: (u) => u.fromArray([7, 8, 9]),
+  assertWatched(vector, XYZ, {
+    set: (value) => value.set(1, 0, 0),
+    applyQuaternion: (value) => value.applyQuaternion(quarterTurnY),
+    copy: (value) => value.copy(new Vec3(2, 0, 0)),
+    add: (value) => value.add(new Vec3(0, 3, 4)),
+    lerp: (value) => value.lerp(new Vec3(0, 0, 0), 0.5),
+    normalize: (value) => value.normalize(),
+    fromArray: (value) => value.fromArray([7, 8, 9]),
   });
-  assertNear(v.toArray(), [7, 8, 9]);
-  v.set(1, 0, 0).applyQuaternion(quarterTurnY);
-  assertNear(v.toArray(), [0, 0, -1], 1e-15);
+  assertNear(vector.toArray(), [7, 8, 9]);
+  vector.set(1, 0, 0).applyQuaternion(quarterTurnY);
+  assertNear(vector.toArray(), [0, 0, -1], 1e-15);
 });
 
 test('a watched Vec4 sees every write of its methods', () => {
-  const v = new WatchedVec4(1, 2, 3, 4);
-  assertWatched(v, XYZW, {
-    set: (u) => u.set(1, 0, 0, 0),
-    copy: (u) => u.copy(new Vec4(2, 0, 0, 0)),
-    add: (u) => u.add(new Vec4(0, 3, 4, 0)),
-    lerp: (u) => u.lerp(new Vec4(0, 0, 0, 0), 0.5),
-    normalize: (u) => u.normalize(),
-    applyMatrix4: (u) => u.applyMatrix4(new Mat4().makeTranslation(1, 2, 3)),
-    fromArray: (u) => u.fromArray([7, 8, 9, 10]),
+  const vector = new WatchedVec4(1, 2, 3, 4);
+  assertWatched(vector, XYZW, {
+    set: (value) => value.set(1, 0, 0, 0),
+    copy: (value) => value.copy(new Vec4(2, 0, 0, 0)),
+    add: (value) => value.add(new Vec4(0, 3, 4, 0)),
+    lerp: (value) => value.lerp(new Vec4(0, 0, 0, 0), 0.5),
+    normalize: (value) => value.normalize(),
+    applyMatrix4: (value) => value.applyMatrix4(new Mat4().makeTranslation(1, 2, 3)),
+    fromArray: (value) => value.fromArray([7, 8, 9, 10]),
   });
-  assertNear(v.toArray(), [7, 8, 9, 10]);
+  assertNear(vector.toArray(), [7, 8, 9, 10]);
 });
 
 test('a watched Quat sees every write of its methods', () => {
-  const q = new WatchedQuat();
+  const quaternion = new WatchedQuat();
   const other = new Quat().setFromEuler(new Euler(0.3, -0.7, 1.1));
-  assertWatched(q, XYZW, {
-    set: (u) => u.set(0, 0, 0, 1),
-    copy: (u) => u.copy(other),
-    multiply: (u) => u.multiply(other),
-    slerp: (u) => u.slerp(new Quat(), 0.3),
-    normalize: (u) => u.normalize(),
-    invert: (u) => u.invert(),
-    setFromEuler: (u) => u.setFromEuler(new Euler(0.1, 0.2, 0.3)),
-    setFromAxisAngle: (u) => u.setFromAxisAngle(new Vec3(0, 0, 1), 1),
-    setFromRotationMatrix: (u) => u.setFromRotationMatrix(new Mat4().makeRotationY(0.4)),
-    fromArray: (u) => u.fromArray([0, 0, 0, 1]),
+  assertWatched(quaternion, XYZW, {
+    set: (value) => value.set(0, 0, 0, 1),
+    copy: (value) => value.copy(other),
+    multiply: (value) => value.multiply(other),
+    slerp: (value) => value.slerp(new Quat(), 0.3),
+    normalize: (value) => value.normalize(),
+    invert: (value) => value.invert(),
+    setFromEuler: (value) => value.setFromEuler(new Euler(0.1, 0.2, 0.3)),
+    setFromAxisAngle: (value) => value.setFromAxisAngle(new Vec3(0, 0, 1), 1),
+    setFromRotationMatrix: (value) => value.setFromRotationMatrix(new Mat4().makeRotationY(0.4)),
+    fromArray: (value) => value.fromArray([0, 0, 0, 1]),
   });
 });
 
@@ -285,10 +286,10 @@ test('a watched Euler sees every write of its methods, its order among them', ()
   const euler = new WatchedEuler(0.1, 0.2, 0.3, 'YXZ');
   const turn = new Quat().setFromEuler(new Euler(0.3, -0.7, 1.1));
   assertWatched(euler, [...XYZ, 'order'], {
-    set: (u) => u.set(1, 2, 3),
-    copy: (u) => u.copy(new Euler(0.4, 0.5, 0.6, 'ZXY')),
-    setFromQuaternion: (u) => u.setFromQuaternion(turn, 'XYZ'),
-    setFromRotationMatrix: (u) => u.setFromRotationMatrix(new Mat4().makeRotationX(0.2)),
+    set: (value) => value.set(1, 2, 3),
+    copy: (value) => value.copy(new Euler(0.4, 0.5, 0.6, 'ZXY')),
+    setFromQuaternion: (value) => value.setFromQuaternion(turn, 'XYZ'),
+    setFromRotationMatrix: (value) => value.setFromRotationMatrix(new Mat4().makeRotationX(0.2)),
   });
   assertNear([euler.x, euler.y, euler.z], [0.2, 0, 0], 1e-15);
   assert.equal(euler.order, 'XYZ');
@@ -297,40 +298,40 @@ test('a watched Euler sees every write of its methods, its order among them', ()
 test('a watched Color sees every write of its methods', () => {
   const color = new WatchedColor(0xff8800);
   assertWatched(color, ['r', 'g', 'b'], {
-    set: (u) => u.set(0x112233),
-    setRGB: (u) => u.setRGB(0.1, 0.2, 0.3),
-    copy: (u) => u.copy(new Color(0.5, 0.5, 0.5)),
-    add: (u) => u.add(new Color(0.1, 0.1, 0.1)),
-    lerp: (u) => u.lerp(new Color(0, 0, 0), 0.5),
-    multiplyScalar: (u) => u.multiplyScalar(2),
-    setHSL: (u) => u.setHSL(0.3, 0.5, 0.5),
-    fromArray: (u) => u.fromArray([0.25, 0.5, 0.75]),
+    set: (value) => value.set(0x112233),
+    setRGB: (value) => value.setRGB(0.1, 0.2, 0.3),
+    copy: (value) => value.copy(new Color(0.5, 0.5, 0.5)),
+    add: (value) => value.add(new Color(0.1, 0.1, 0.1)),
+    lerp: (value) => value.lerp(new Color(0, 0, 0), 0.5),
+    multiplyScalar: (value) => value.multiplyScalar(2),
+    setHSL: (value) => value.setHSL(0.3, 0.5, 0.5),
+    fromArray: (value) => value.fromArray([0.25, 0.5, 0.75]),
   });
   assertNear(color.toArray(), [0.25, 0.5, 0.75]);
 });
 
 test('the check catches a write past the accessors (its canary)', () => {
-  const v = new WatchedVec3(1, 2, 3);
-  const pastAccessors = (u: WatchedVec3): void => {
-    Object.defineProperty(u, 'x', { value: 5, writable: true, enumerable: true, configurable: true });
+  const vector = new WatchedVec3(1, 2, 3);
+  const pastAccessors = (value: WatchedVec3): void => {
+    Object.defineProperty(value, 'x', { value: 5, writable: true, enumerable: true, configurable: true });
   };
-  assert.throws(() => assertWatched(v, XYZ, { pastAccessors }), /past its accessor/);
+  assert.throws(() => assertWatched(vector, XYZ, { pastAccessors }), /past its accessor/);
 });
 
 test('Quat and Euler call their change callback after a method writes, not on a field\'s write', () => {
   let quatChanges = 0;
   let eulerChanges = 0;
-  const q = new Quat()._onChange(() => quatChanges++);
+  const quaternion = new Quat()._onChange(() => quatChanges++);
   const euler = new Euler()._onChange(() => eulerChanges++);
-  q.setFromEuler(euler);
-  q.slerp(new Quat(0, 1, 0, 0), 0.5);
-  q.slerp(q.clone(), 0.5);
-  q.setFromEuler(euler, false);
-  q.x = 0.5;
+  quaternion.setFromEuler(euler);
+  quaternion.slerp(new Quat(0, 1, 0, 0), 0.5);
+  quaternion.slerp(quaternion.clone(), 0.5);
+  quaternion.setFromEuler(euler, false);
+  quaternion.x = 0.5;
   assert.equal(quatChanges, 3);
-  euler.setFromQuaternion(q);
+  euler.setFromQuaternion(quaternion);
   euler.set(1, 2, 3);
-  euler.setFromQuaternion(q, 'XYZ', false);
+  euler.setFromQuaternion(quaternion, 'XYZ', false);
   euler.x = 2;
   assert.equal(eulerChanges, 2);
 });

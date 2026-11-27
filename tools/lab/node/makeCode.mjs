@@ -1,7 +1,8 @@
 // A made thing's file as the game takes it (`lab join make`, src/dev/agentMakes.ts): a TypeScript or JavaScript
 // module that exports `build(kit)`, its types taken off and its imports and exports turned into the plain form the
-// page runs without a loader (CommonJS: `require('three')` is answered there with the game's own three, and a
-// module of the game's with the game's own, src/dev/gameModules.ts). A relative import is written as its path from
+// page runs without a loader (CommonJS: `require('src/engine/api')` is answered there with the game's own scene
+// API, as `require('three')` was with its three, and a module of the game's with the game's own,
+// src/dev/gameModules.ts). A relative import is written as its path from
 // the repository's root (`../props` in a file under src/world/places becomes `src/world/props`): the page has no
 // folder to read it against. The file isn't type checked here, only parsed: a syntax error is said with its line before anything is
 // sent, and `npm run typecheck` checks a file kept under `tools/lab/examples`.
@@ -12,17 +13,20 @@ import { REPO } from './paths.mjs';
 
 /** the names a made thing goes by in the game */
 export const MAKE_NAME = /^[\w-]{1,40}$/;
-/** the game's module of three, from the repository's root (src/engine/three.ts) */
-const THREE_MODULE = 'src/engine/three';
+/** the engine's scene API's module, from the repository's root, and the name the page answers it by
+ *  (src/dev/agentMakes.ts) */
+const API_MODULE = 'src/engine/api/index';
+const API_NAME = 'src/engine/api';
 
 /** A relative import of `file`'s as its path from the repository's root, which must be the game's (`src/...`). */
 function fromRoot(file, asked) {
   const path = relative(REPO, resolve(dirname(resolve(file)), asked)).replaceAll('\\', '/').replace(/\.ts$/, '');
   if (!path.startsWith('src/')) {
-    throw labError(`make: ${file} imports "${asked}", which isn't under src: a made thing imports three and the game's modules`);
+    throw labError(`make: ${file} imports "${asked}", which isn't under src: `
+      + 'a made thing imports the engine\'s API and the game\'s modules');
   }
-  // (the game's own module of three is three as the page answers it: `require('three')`)
-  return path === THREE_MODULE ? 'three' : path;
+  // (the API's module is the API as the page answers it, in a preview too: `require('src/engine/api')`)
+  return path === API_MODULE ? API_NAME : path;
 }
 
 /** `code`'s relative `require`s written from the repository's root. */

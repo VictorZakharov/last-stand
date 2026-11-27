@@ -2,7 +2,7 @@
 // skinned as the engine skins it, against the same vertex of the piece it came from, placed where that piece hangs
 // now. A joint left out, a rigid piece merged on the wrong joint or a bind pose taken in another place shows as
 // vertices metres off; the same body drawn both ways is the same to a fraction of a millimetre.
-import * as THREE from 'three';
+import { Mesh, Node, SkinnedMesh, Vec3 } from './sceneApi.ts';
 import { G } from '../../../src/state';
 import type { Enemy } from '../../../src/entities/enemy';
 
@@ -20,34 +20,34 @@ export interface BodyMatch {
 /** a merged vertex may lie this far from its piece's, m: float rounding through two matrices */
 export const MATCH_MOST = 0.002;
 
-const _drawn = new THREE.Vector3();
-const _piece = new THREE.Vector3();
+const _drawn = new Vec3();
+const _piece = new Vec3();
 
 /** The meshes a body is drawn as, by the link each keeps to its body's root. */
-function meshesFor(foe: Enemy): THREE.SkinnedMesh[] {
-  const out: THREE.SkinnedMesh[] = [];
+function meshesFor(foe: Enemy): SkinnedMesh[] {
+  const out: SkinnedMesh[] = [];
   G.scene.traverse((object) => {
-    if (object.userData.bodyOf === foe.model.root) out.push(object as THREE.SkinnedMesh);
+    if (object.userData.bodyOf === foe.model.root) out.push(object as SkinnedMesh);
   });
   return out;
 }
 
 /** Where a piece's vertex `index` is drawn now: skinned on its bones, or placed by its matrix. */
-function pieceVertex(piece: THREE.Mesh, index: number, out: THREE.Vector3): THREE.Vector3 {
-  const skinned = piece as THREE.SkinnedMesh;
+function pieceVertex(piece: Mesh, index: number, out: Vec3): Vec3 {
+  const skinned = piece as SkinnedMesh;
   if (skinned.isSkinnedMesh) return skinned.getVertexPosition(index, out).applyMatrix4(piece.matrixWorld);
   return out.fromBufferAttribute(piece.geometry.attributes.position, index).applyMatrix4(piece.matrixWorld);
 }
 
 /** The pieces a body's merged meshes came from, in the order the merge laid them, a list a mesh. */
-type PiecesOf = (foe: Enemy) => THREE.Mesh[][];
+type PiecesOf = (foe: Enemy) => Mesh[][];
 
 /**
  * `foe`'s merged vertices against its pieces'. `piecesOf` gives the pieces of each of its meshes in their merged
  * order (the module's own `slotPieces`); a piece whose geometry is indexed was merged unindexed, its vertices by
  * the index. `place` puts the pieces where they hang now, as anything that reads them asks first.
  */
-export function matchBody(foe: Enemy, piecesOf: PiecesOf, place: (root: THREE.Object3D) => void): BodyMatch | null {
+export function matchBody(foe: Enemy, piecesOf: PiecesOf, place: (root: Node) => void): BodyMatch | null {
   const meshes = meshesFor(foe);
   if (!meshes.length) return null;
   foe.model.root.updateMatrixWorld(true);

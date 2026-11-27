@@ -34,6 +34,8 @@ export interface Hit<N extends Node = Node> {
   instanceId?: number;
   /** the geometry's uv there, where it has one */
   uv?: Vec2;
+  /** where it met its triangle, as weights of the face's three corners (`a`, `b`, `c`), where it met one */
+  barycoord?: Vec3;
   /** the geometry's normal there, in the mesh's own space, turned toward the ray */
   normal?: Vec3;
 }

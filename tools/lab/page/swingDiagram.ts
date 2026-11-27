@@ -4,18 +4,18 @@
 // skill fires on yellow; the eye and the edges of its frame marked. A swing's whole arc, and the arm behind it, are
 // judged at a glance. (A film shows a frame at a time: a cut through the eyes keyed by arithmetic wound up into the
 // camera's face, its blow a frame long, and that took a film of 79 frames to see.)
-import * as THREE from 'three';
+import { Vec3 } from './sceneApi.ts';
 import type { Pictured } from './lab';
 
 /** An arm in the eyes' space: its shoulder, elbow and wrist. */
-export type ArmAt = [THREE.Vector3, THREE.Vector3, THREE.Vector3];
+export type ArmAt = [Vec3, Vec3, Vec3];
 
 /** A frame's arms and weapon in the eyes' space. */
 export interface ArmsAt {
   /** the right arm's, then the left's */
   arms: ArmAt[];
   /** the held weapon's grip and tip, if any */
-  weapon: [THREE.Vector3, THREE.Vector3] | null;
+  weapon: [Vec3, Vec3] | null;
 }
 
 /** Where a frame falls in its cast. */
@@ -39,7 +39,7 @@ export interface Lens {
  *  those units, and its guides (the eye, the frame's edges) as lines in them. */
 interface Panel {
   name: string;
-  at: (point: THREE.Vector3) => [number, number] | null;
+  at: (point: Vec3) => [number, number] | null;
   bounds: { left: number; right: number; bottom: number; top: number };
   guides: [number, number][][];
 }
@@ -113,7 +113,7 @@ class Plotter {
   }
 
   /** a line through points of the eyes' space, broken where one isn't drawn */
-  line(context: CanvasRenderingContext2D, points: THREE.Vector3[]): void {
+  line(context: CanvasRenderingContext2D, points: Vec3[]): void {
     let open = false;
     context.beginPath();
     for (const point of points) {

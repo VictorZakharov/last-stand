@@ -4,6 +4,8 @@
 import { Color, Material, Mesh, Node, SRGBColorSpace } from '../../engine/api/index.ts';
 import { heroColour, type HeroColourId } from '../../data/heroColours.ts';
 import type { KitLooks } from '../../core/materials';
+import { sameKitMaterial } from './kitTwin.ts';
+import { isDualQuaternionSkinned } from './dualQuaternion.ts';
 
 interface Dyed {
   material: Material & { color: Color };
@@ -76,7 +78,7 @@ export class Dye {
 
   /**
    * Dyes the hero under `root` in colour `id` (null, or his own: as built). A skinned part keeps a copy of its
-   * material (`Sculpt.build`), found by the shader patch it shares with its kit's.
+   * material (`Sculpt.build`), found by the kit's mark it shares with its original (models/kitTwin.ts).
    */
   apply(root: Node, id: HeroColourId | null): void {
     const copies = new Map<Dyed, Dyed['material'][]>();
@@ -84,8 +86,9 @@ export class Dye {
       const mesh = o as Mesh;
       if (!mesh.isMesh) return;
       for (const material of [mesh.material].flat()) {
-        const patch = material.onBeforeCompile;
-        const d = this.dyed.find((x) => x.material !== material && x.material.onBeforeCompile === patch);
+        // (not a hand's copy, skinned by dual quaternions: as under three, whose patch it wrapped, it isn't dyed)
+        if (isDualQuaternionSkinned(material)) continue;
+        const d = this.dyed.find((x) => x.material !== material && sameKitMaterial(x.material, material));
         if (d) copies.set(d, [...(copies.get(d) ?? []), material as Dyed['material']]);
       }
     });

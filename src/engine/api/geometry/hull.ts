@@ -7,10 +7,10 @@ import { Geometry } from './geometry.ts';
 import { VertexList } from './hullList.ts';
 import type { HullVertex } from './hullList.ts';
 
-const _line = new Line3();
-const _plane = new Plane();
-const _closest = new Vec3();
-const _triangle = new Triangle();
+const scratchLine = new Line3();
+const scratchPlane = new Plane();
+const scratchClosest = new Vec3();
+const scratchTriangle = new Triangle();
 
 /** One side of a face's edge, from the vertex before it to its own. */
 class HalfEdge {
@@ -53,11 +53,11 @@ class Face {
   deleted = false;
   edge!: HalfEdge;
 
-  static create(a: HullVertex<Face>, b: HullVertex<Face>, c: HullVertex<Face>): Face {
+  static create(first: HullVertex<Face>, second: HullVertex<Face>, third: HullVertex<Face>): Face {
     const face = new Face();
-    const e0 = new HalfEdge(a, face);
-    const e1 = new HalfEdge(b, face);
-    const e2 = new HalfEdge(c, face);
+    const e0 = new HalfEdge(first, face);
+    const e1 = new HalfEdge(second, face);
+    const e2 = new HalfEdge(third, face);
     e0.next = e1;
     e1.next = e2;
     e2.next = e0;
@@ -65,9 +65,9 @@ class Face {
     e1.prev = e0;
     e2.prev = e1;
     face.edge = e0;
-    _triangle.set(e0.tail().point, e0.head().point, e1.head().point);
-    _triangle.getNormal(face.normal);
-    _triangle.getMidpoint(face.midpoint);
+    scratchTriangle.set(e0.tail().point, e0.head().point, e1.head().point);
+    scratchTriangle.getNormal(face.normal);
+    scratchTriangle.getMidpoint(face.midpoint);
     face.constant = face.normal.dot(face.midpoint);
     return face;
   }
@@ -197,10 +197,11 @@ class Quickhull {
     const v1 = max[axis];
     let v2 = v0;
     most = 0;
-    _line.set(v0.point, v1.point);
+    scratchLine.set(v0.point, v1.point);
     for (const vertex of this.vertices) {
       if (vertex === v0 || vertex === v1) continue;
-      const distance = _line.closestPointToPoint(vertex.point, true, _closest).distanceToSquared(vertex.point);
+      const closest = scratchLine.closestPointToPoint(vertex.point, true, scratchClosest);
+      const distance = closest.distanceToSquared(vertex.point);
       if (distance > most) {
         most = distance;
         v2 = vertex;
@@ -208,10 +209,10 @@ class Quickhull {
     }
     let v3 = v0;
     most = -1;
-    _plane.setFromCoplanarPoints(v0.point, v1.point, v2.point);
+    scratchPlane.setFromCoplanarPoints(v0.point, v1.point, v2.point);
     for (const vertex of this.vertices) {
       if (vertex === v0 || vertex === v1 || vertex === v2) continue;
-      const distance = Math.abs(_plane.distanceToPoint(vertex.point));
+      const distance = Math.abs(scratchPlane.distanceToPoint(vertex.point));
       if (distance > most) {
         most = distance;
         v3 = vertex;
@@ -236,8 +237,9 @@ class Quickhull {
 
   /** The first four faces, turned out by which side of the first three the fourth is. */
   private tetrahedron(v0: Vertex, v1: Vertex, v2: Vertex, v3: Vertex): Face[] {
-    if (_plane.distanceToPoint(v3.point) < 0) {
-      const faces = [Face.create(v0, v1, v2), Face.create(v3, v1, v0), Face.create(v3, v2, v1), Face.create(v3, v0, v2)];
+    if (scratchPlane.distanceToPoint(v3.point) < 0) {
+      const faces = [Face.create(v0, v1, v2), Face.create(v3, v1, v0), Face.create(v3, v2, v1),
+        Face.create(v3, v0, v2)];
       for (let i = 0; i < 3; i++) {
         const j = (i + 1) % 3;
         faces[i + 1].getEdge(2).setTwin(faces[0].getEdge(j));
@@ -316,7 +318,7 @@ class Quickhull {
  * four points, an empty geometry. Follows three's `ConvexHull` and `ConvexGeometry` (three.js, MIT, 0.187.0), its
  * quickhull after Lloyd's and Ratcliff's: the same faces in the same order.
  */
-export function hull(points: readonly Vec3[]): Geometry {
+export function convexHull(points: readonly Vec3[]): Geometry {
   const faces = points.length >= 4 ? new Quickhull(points).compute() : [];
   const positions = new Float32Array(faces.length * 9);
   const normals = new Float32Array(faces.length * 9);

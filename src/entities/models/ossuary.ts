@@ -7,7 +7,7 @@
 // with a jaw of its own to match, hinged at its condyles. The ribs, the vertebrae, the fingers and the toes are
 // tapered tubes, each carrying vertex colours too, so every piece of a twin's bone is one material.
 //
-// Each sculpted bone is simplified once meshed (`fewer`: three's meshoptimizer, loaded with the Twins' file,
+// Each sculpted bone is simplified once meshed (`fewer`: meshoptimizer's own build, loaded with the Twins' file,
 // `readyOssuary`): a surface net lays its triangles evenly, as many on a smooth shaft as round a socket, and the edge
 // collapse leaves its kept vertices on the field's surface with their normals and hollows' shading, within an eighth of
 // its grid's cell of where it was (`FEWER_ERROR`: well under the grid's own error, so no shape moves). The twins drew 52k
@@ -53,13 +53,13 @@ export function capsule(a: V3, b: V3, r0: number, r1: number): Shape {
 const FEWER_ERROR = 0.12;
 /** and a twin's own head's, finer: simplified as its bones, its crown showed facets and Slab's crack faded */
 const HEAD_ERROR = 0.04;
-/** the simplifier (three's meshoptimizer): null until it has loaded */
-let simplifier: typeof import('three/addons/libs/meshopt_simplifier.module.js').MeshoptSimplifier | null = null;
+/** the simplifier (meshoptimizer's own build): null until it has loaded */
+let simplifier: typeof import('meshoptimizer/simplifier').MeshoptSimplifier | null = null;
 let loading: Promise<void> | null = null;
 
 /** The simplifier loaded, once: the Twins' file waits for it as it loads, so their bones are made simplified. */
 export function readyOssuary(): Promise<void> {
-  loading ??= import('three/addons/libs/meshopt_simplifier.module.js').then(async ({ MeshoptSimplifier }) => {
+  loading ??= import('meshoptimizer/simplifier').then(async ({ MeshoptSimplifier }) => {
     await MeshoptSimplifier.ready;
     simplifier = MeshoptSimplifier;
   });

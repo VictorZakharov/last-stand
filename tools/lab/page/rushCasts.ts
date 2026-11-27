@@ -10,7 +10,7 @@
 // charge's own: left to the legs stepping as he walks, they spread in a lunge as the body sped off; through the eyes,
 // where the arms alone are drawn, unseen), and how far the charge took him. A combo whose skills the weapons held
 // don't allow (Twin Fangs needs two, Raise Shield a shield) is left out.
-import * as THREE from 'three';
+import { Vec3 } from './sceneApi.ts';
 import type { Lab, Pictured } from './lab';
 import type { Enemy } from '../../../src/entities/enemy';
 import type { DashOpts, Player } from '../../../src/entities/player';
@@ -163,7 +163,7 @@ interface Cast {
   together: number;
   hidden: number;
   /** each foot as he ran, where his hips have it (their own frame), by the frames into the charge */
-  strides: Map<number, THREE.Vector3[]>;
+  strides: Map<number, Vec3[]>;
   covered: number;
   range: number;
   planted: boolean;
@@ -189,7 +189,7 @@ function castable(hero: Player, combo: Combo): boolean {
 }
 
 /** The hero's dazed foes on the line before him (the lobby's training dummies, with `dummies`). */
-async function foesBefore(lab: Lab, at: THREE.Vector3, facing: number, dummies: boolean): Promise<Enemy[]> {
+async function foesBefore(lab: Lab, at: Vec3, facing: number, dummies: boolean): Promise<Enemy[]> {
   const { forward, left } = waysOf(facing);
   const foes = FOES.map(([ahead, across]) => {
     const spot = at.clone().addScaledVector(forward, ahead).addScaledVector(left, across);
@@ -251,11 +251,11 @@ function spared(foes: Enemy[], run: () => void): void {
 }
 
 /** The hero's feet where his hips have them (in their own frame: the legs' pose, whichever way the hips turn). */
-function feetOf(hero: Player): THREE.Vector3[] {
+function feetOf(hero: Player): Vec3[] {
   const joints = hero.model.joints;
   if (!joints) return [];
   return [joints.ankleL, joints.ankleR].map((ankle) => {
-    const at = ankle.getWorldPosition(new THREE.Vector3());
+    const at = ankle.getWorldPosition(new Vec3());
     return joints.hips.worldToLocal(at);
   });
 }
@@ -368,7 +368,7 @@ async function castWith(lab: Lab, options: RushOptions, combo: Combo): Promise<C
 /** How a cast is followed: the aim carried along with the hero, the hooks' watch, whether the moment the looked-at
  *  skill lands is pictured, and whether the canary plants its fault. */
 interface Following {
-  aim: () => THREE.Vector3;
+  aim: () => Vec3;
   watch: Watch;
   pictures: boolean;
   canary: boolean;

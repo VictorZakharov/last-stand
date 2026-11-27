@@ -10,7 +10,7 @@
 // the glass by the check is never drawn by the engine; and what's past the wall hidden (83% of the window's pixels
 // changed from outside) left the trees, instanced, from inside (7%). The canary sets the glass to an opacity of 1,
 // which the engine draws as a wall's ghost: nothing past it shows, and the second reading must fail.
-import * as THREE from 'three';
+import { LitMaterial, Material, Mesh, Vec3 } from './sceneApi.ts';
 import type { Lab, Pictured } from './lab';
 import { G } from '../../../src/state';
 import { holdHour } from '../../../src/game/clock';
@@ -55,7 +55,7 @@ const WALLS = ['hallEast', 'hallRoof', 'hallFront'] as const;
 
 /** The hall's windows as this commit has them (an A/B's other side may have none: a named import of an export it
  *  lacks would stop every command loading there). */
-type HallWindows = () => { sill: THREE.Vector3; out: THREE.Vector3; half: number; high: number }[];
+type HallWindows = () => { sill: Vec3; out: Vec3; half: number; high: number }[];
 const hallWindows = (world_ as { hallWindows?: HallWindows }).hallWindows;
 
 /** Which way a stand looks through the window: from outside in (1), or from inside out (-1). */
@@ -67,38 +67,38 @@ const STANDS: Stand[] = [
 ];
 
 /** The middle east window: its middle, the way out of the hall through it, and its half width and height. */
-interface Window { middle: THREE.Vector3; out: THREE.Vector3; half: number; high: number }
+interface Window { middle: Vec3; out: Vec3; half: number; high: number }
 
 function eastWindow(): Window {
   const east = hallWindows!().filter((window) => window.out.x > 0);
   const window = east[Math.floor(east.length / 2)];
-  const middle = window.sill.clone().add(new THREE.Vector3(0, window.high / 2, 0));
+  const middle = window.sill.clone().add(new Vec3(0, window.high / 2, 0));
   return { middle, out: window.out.clone(), half: window.half, high: window.high };
 }
 
 /** A material of the village's by its name, found in the scene. */
-function materialNamed(name: string): THREE.MeshStandardMaterial | null {
-  let found: THREE.MeshStandardMaterial | null = null;
+function materialNamed(name: string): LitMaterial | null {
+  let found: LitMaterial | null = null;
   G.scene.traverse((object) => {
-    const material = (object as THREE.Mesh).material as THREE.MeshStandardMaterial | undefined;
+    const material = (object as Mesh).material as LitMaterial | undefined;
     if (material?.name === name) found = material;
   });
   return found;
 }
 
 /** The hall's glass material. */
-function hallGlass(): THREE.MeshStandardMaterial {
+function hallGlass(): LitMaterial {
   const found = materialNamed('hallGlass');
   if (!found) throw new Error('lab: village: no mesh is drawn in the hall\'s glass (a material named hallGlass)');
   return found;
 }
 
 /** The meshes drawn in the hall's glass. */
-function glassMeshes(): THREE.Mesh[] {
-  const meshes: THREE.Mesh[] = [];
+function glassMeshes(): Mesh[] {
+  const meshes: Mesh[] = [];
   G.scene.traverse((object) => {
-    const mesh = object as THREE.Mesh;
-    if (mesh.isMesh && (mesh.material as THREE.Material).name === 'hallGlass') meshes.push(mesh);
+    const mesh = object as Mesh;
+    if (mesh.isMesh && (mesh.material as Material).name === 'hallGlass') meshes.push(mesh);
   });
   return meshes;
 }
@@ -119,7 +119,7 @@ async function standBy(lab: Lab, stand: Stand): Promise<void> {
 }
 
 /** The game's camera set square on to the window, `CAMERA_OFF` on the stand's side; where it stands. */
-function aimCamera(stand: Stand): THREE.Vector3 {
+function aimCamera(stand: Stand): Vec3 {
   const { middle, out } = eastWindow();
   const eye = middle.clone().addScaledVector(out, stand.side * CAMERA_OFF);
   G.camera.position.copy(eye);
@@ -138,7 +138,7 @@ function windowBox(canvas: Canvas, kept: number): Box {
   const ys: number[] = [];
   for (const along of [-1, 1]) {
     for (const up of [-1, 1]) {
-      const corner = middle.clone().add(new THREE.Vector3(0, up * high / 2 * kept, along * half * kept));
+      const corner = middle.clone().add(new Vec3(0, up * high / 2 * kept, along * half * kept));
       corner.project(G.camera);
       xs.push((corner.x + 1) / 2 * canvas.width);
       ys.push((corner.y + 1) / 2 * canvas.height);

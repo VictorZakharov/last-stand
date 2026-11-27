@@ -9,7 +9,7 @@
 // and records in the answer. Every state's card and replies must lie within the window, each reply its own at its
 // middle. And the frame's cost with the card up, against without it (the browser's own clock). `--canary` shows every
 // line at once and pushes Leave off the window's foot, each of which must be found.
-import * as THREE from 'three';
+import { Vec3 } from './sceneApi.ts';
 import { realWait, type Lab, type PagePoint, type Pictured, type Report } from './lab';
 import { SCHOLAR_DESK } from '../../../src/data/houses/library';
 import { G } from '../../../src/state';
@@ -122,9 +122,9 @@ function replyNamed(text: string, problems: string[]): HTMLButtonElement | null 
 }
 
 /** Where his face is pictured from close (world): over his table's chair, at a seated man's eye. */
-function faceOf(): THREE.Vector3 {
+function faceOf(): Vec3 {
   const { x, z, turn } = SCHOLAR_DESK;
-  return new THREE.Vector3(x + Math.sin(turn) * 0.08, 1.2, z + Math.cos(turn) * 0.08);
+  return new Vec3(x + Math.sin(turn) * 0.08, 1.2, z + Math.cos(turn) * 0.08);
 }
 
 /** The frame's mean and slowest time (ms, the browser's clock), a game frame and a browser frame each. */

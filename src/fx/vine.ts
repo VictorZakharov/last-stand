@@ -9,7 +9,6 @@
 import {
   Attribute, Color, DoubleSide, floats, Geometry, LookMaterial, Maths, Mesh, Vec3,
 } from '../engine/api/index.ts';
-import { portShader, type Port, type Tsl } from '../core/shaderPorts';
 import { effectLook, num, rgb, effectShader } from '../engine/effects';
 import { groundHeight } from '../world/ground';
 
@@ -32,89 +31,7 @@ const CURL = { every: 1.1, length: 0.8, turns: 1.6, radius: 0.025, lag: 0.7 };
 /** what a vertex is part of (`aKind`), each shaded its own way */
 const KIND = { strand: 0, leaf: 1, curl: 2 };
 
-const VERT = /* glsl */`attribute vec3 aOff; attribute vec3 aFan; attribute float aAlong; attribute float aKind;
-  uniform float uGrow; uniform float uWither; uniform float uTime; uniform float uRise; uniform float uHead;
-  uniform vec3 uSide;
-  varying vec3 vN; varying float vAlong; varying float vKind; varying float vHead;
-  void main(){
-    float d = uGrow - aAlong;
-    float k = clamp(d / ${TIP.toFixed(2)}, 0.0, 1.0) * (1.0 - uWither);
-    float head = 1.0 - clamp(d / ${HEAD.length.toFixed(2)}, 0.0, 1.0);
-    head *= head * uHead;
-    vec3 p = position + aFan * (1.0 + ${HEAD.splay.toFixed(2)} * head) + aOff * sqrt(k);
-    p.y += uRise * head * ${HEAD.rise.toFixed(2)};
-    p += uSide * uRise * head * sin(uTime * 9.0 - aAlong * 5.0) * ${HEAD.weave.toFixed(2)};
-    vN = normalize(mat3(modelMatrix) * normal);
-    vAlong = aAlong;
-    vKind = aKind;
-    vHead = head;
-    gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);
-  }`;
-const FRAG = /* glsl */`uniform vec3 uBark; uniform vec3 uSap; uniform float uTime;
-  varying vec3 vN; varying float vAlong; varying float vKind; varying float vHead;
-  void main(){
-    vec3 n = normalize(vN);
-    // lit from above, as the scene's moon or sun would mostly light a thing on the floor (a leaf from either side)
-    float facing = dot(n, normalize(vec3(0.3, 0.9, 0.2)));
-    float lit = 0.3 + 0.7 * (vKind > 0.5 && vKind < 1.5 ? abs(facing) : max(facing, 0.0));
-    float pulse = 0.6 + 0.4 * sin(vAlong * 2.2 - uTime * 6.0);
-    if (vKind > 0.5 && vKind < 1.5) {
-      vec3 leaf = mix(vec3(0.025, 0.06, 0.012), vec3(0.07, 0.16, 0.03), lit);
-      gl_FragColor = vec4(leaf * (0.5 + 0.5 * lit) + uSap * 0.04, 1.0);
-      return;
-    }
-    float groove = 0.5 + 0.5 * sin(vAlong * 23.0 + n.x * 3.0 + n.z * 2.0);
-    vec3 c = uBark * lit * (0.7 + 0.4 * groove) * (vKind > 1.5 ? 1.2 : 1.0);
-    // the sap runs in the grooves, pulses out towards the head and glows in it
-    float vein = pow(max(0.0, 1.0 - groove * 7.0), 2.0);
-    gl_FragColor = vec4(c + uSap * (0.02 + vein * pulse * 0.8 + vHead * 0.45), 1.0);
-  }`;
-
-/** `VERT` and `FRAG` on WebGPU (core/shaderPorts.ts), in WGSL */
-function vinePort({ wgslFn, attribute, positionGeometry, normalLocal, modelWorldMatrix, vec4, varying }: Tsl,
-  u: Tsl): Port {
-  const along = attribute('aAlong', 'float');
-  const head = wgslFn(`fn vineHead(along: f32, grow: f32, headK: f32) -> f32 {
-    let h = 1.0 - clamp((grow - along) / ${HEAD.length.toFixed(2)}, 0.0, 1.0);
-    return h * h * headK;
-  }`)({ along, grow: u.uGrow, headK: u.uHead });
-  const position = wgslFn(`fn vinePosition(pos: vec3f, off: vec3f, fan: vec3f, along: f32, head: f32, grow: f32,
-    wither: f32, time: f32, rise: f32, side: vec3f) -> vec3f {
-    let k = clamp((grow - along) / ${TIP.toFixed(2)}, 0.0, 1.0) * (1.0 - wither);
-    var p = pos + fan * (1.0 + ${HEAD.splay.toFixed(2)} * head) + off * sqrt(k);
-    p.y += rise * head * ${HEAD.rise.toFixed(2)};
-    p += side * rise * head * sin(time * 9.0 - along * 5.0) * ${HEAD.weave.toFixed(2)};
-    return p;
-  }`)({
-    pos: positionGeometry, off: attribute('aOff', 'vec3'), fan: attribute('aFan', 'vec3'), along, head,
-    grow: u.uGrow, wither: u.uWither, time: u.uTime, rise: u.uRise, side: u.uSide,
-  });
-  const colour = wgslFn(`fn vineColour(nIn: vec3f, along: f32, kind: f32, head: f32, bark: vec3f, sap: vec3f,
-    time: f32) -> vec4f {
-    let n = normalize(nIn);
-    let facing = dot(n, normalize(vec3f(0.3, 0.9, 0.2)));
-    let isLeaf = kind > 0.5 && kind < 1.5;
-    let lit = 0.3 + 0.7 * select(max(facing, 0.0), abs(facing), isLeaf);
-    let pulse = 0.6 + 0.4 * sin(along * 2.2 - time * 6.0);
-    if (isLeaf) {
-      let leaf = mix(vec3f(0.025, 0.06, 0.012), vec3f(0.07, 0.16, 0.03), lit);
-      return vec4f(leaf * (0.5 + 0.5 * lit) + sap * 0.04, 1.0);
-    }
-    let groove = 0.5 + 0.5 * sin(along * 23.0 + n.x * 3.0 + n.z * 2.0);
-    let c = bark * lit * (0.7 + 0.4 * groove) * select(1.0, 1.2, kind > 1.5);
-    let vein = pow(max(0.0, 1.0 - groove * 7.0), 2.0);
-    return vec4f(c + sap * (0.02 + vein * pulse * 0.8 + head * 0.45), 1.0);
-  }`);
-  return {
-    position,
-    fragment: colour({
-      nIn: varying(modelWorldMatrix.mul(vec4(normalLocal, 0)).xyz), along: varying(along),
-      kind: varying(attribute('aKind', 'float')), head: varying(head), bark: u.uBark, sap: u.uSap, time: u.uTime,
-    }),
-  };
-}
-
-// The vine for the Rust engine (src/engine/effects.ts): the port's WGSL above. The engine hands a hook a vertex's
+// The vine for the Rust engine (src/engine/effects.ts). The engine hands a hook a vertex's
 // place, normal, uv and colour and no attribute of the vine's own, so under it a piece's geometry carries them in
 // those two (`Parts.packed`): its colour the strand's winding (`aFan`) and how far along it is with what it's part of
 // (`aAlong` + `PACK.kind` * `aKind`), its uv the swelling (`aOff`), two of its numbers in one float.
@@ -308,18 +225,15 @@ function material(bark: number, sap: number, rise: number, side: Vec3) {
     uGrow: { value: 0 }, uWither: { value: 0 }, uTime: { value: 0 }, uRise: { value: rise }, uHead: { value: 1 },
     uSide: { value: side.clone() }, uBark: { value: new Color(bark) }, uSap: { value: new Color(sap) },
   };
-  const mat = effectLook(
-    portShader(new LookMaterial({ uniforms, vertexShader: VERT, fragmentShader: FRAG, side: DoubleSide }),
-      vinePort),
-    'vine', VINE_HOOKS, {
-      numbers(u, out) {
-        out[0] = num(u, 'uGrow'); out[1] = num(u, 'uWither'); out[2] = num(u, 'uTime'); out[3] = num(u, 'uRise');
-        out[4] = num(u, 'uHead');
-        rgb(u, 'uSide', out, 8);
-        rgb(u, 'uBark', out, 12);
-        rgb(u, 'uSap', out, 16);
-      },
-    });
+  const mat = effectLook(new LookMaterial({ uniforms, side: DoubleSide }), 'vine', VINE_HOOKS, {
+    numbers(u, out) {
+      out[0] = num(u, 'uGrow'); out[1] = num(u, 'uWither'); out[2] = num(u, 'uTime'); out[3] = num(u, 'uRise');
+      out[4] = num(u, 'uHead');
+      rgb(u, 'uSide', out, 8);
+      rgb(u, 'uBark', out, 12);
+      rgb(u, 'uSap', out, 16);
+    },
+  });
   return { mat, uniforms };
 }
 

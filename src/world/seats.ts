@@ -212,7 +212,7 @@ export function seatTopAt(s: Seat, x: number, z: number): number {
   for (const m of s.meshes) {
     m.updateWorldMatrix(true, false);
     _hits.length = 0;
-    m.raycast(_ray, _hits);
+    _ray.intersectObject(m, false, _hits);
     for (const h of _hits) top = Math.max(top, h.point.y);
   }
   return top;

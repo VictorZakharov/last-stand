@@ -3,7 +3,7 @@
 // picture and a part of it kept, the scene's objects listed with where each is (in the world and on the screen),
 // and frames run. A pose is tried here by hand (a joint turned in an `eval`, a picture after it) in a second, where a
 // command boots and sets up for each look; what's found is measured by a command, on a page of its own.
-import * as THREE from 'three';
+import { Camera, Euler, InstancedMesh, Maths, Mesh, Node, Vec3 } from './sceneApi.ts';
 import { G } from '../../../src/state';
 import * as renderer from '../../../src/core/renderer';
 import type { Joints } from '../../../src/entities/models/rig';
@@ -64,8 +64,8 @@ export interface LivePictured {
 }
 
 /** `--on`'s place in the world, if it's given. */
-function placeOf(on: number[] | undefined): THREE.Vector3 | undefined {
-  return on ? new THREE.Vector3(on[0], on[1], on[2]) : undefined;
+function placeOf(on: number[] | undefined): Vec3 | undefined {
+  return on ? new Vec3(on[0], on[1], on[2]) : undefined;
 }
 
 /** `lab live picture`: the hero pictured as `options` say, each picture finished (laid over, cropped). */
@@ -144,7 +144,7 @@ export function inspect(lab: Lab, options: LiveInspect): string {
   const root = options.name ? objectNamed(lab, options.name) : lab.model.root;
   G.scene.updateMatrixWorld(true);
   const lines: string[] = [];
-  const list = (object: THREE.Object3D, depth: number, indent: string) => {
+  const list = (object: Node, depth: number, indent: string) => {
     lines.push(`${indent}${describe(object, joints)}`);
     const children = object.children;
     if (children.length === 0) return;
@@ -160,9 +160,9 @@ export function inspect(lab: Lab, options: LiveInspect): string {
 }
 
 /** The object of the scene `name` names: one of the hero's joints, or an object of that name. */
-function objectNamed(lab: Lab, name: string): THREE.Object3D {
+function objectNamed(lab: Lab, name: string): Node {
   const joint = (lab.joints as unknown as Record<string, unknown>)[name];
-  if (joint instanceof THREE.Object3D) return joint;
+  if (joint instanceof Node) return joint;
   const found = G.scene.getObjectByName(name);
   if (found) return found;
   const names = new Set<string>(lab.jointNames());
@@ -172,19 +172,19 @@ function objectNamed(lab: Lab, name: string): THREE.Object3D {
   throw new Error(`lab: live inspect: nothing is called ${name} (the names: ${[...names].join(', ')})`);
 }
 
-const metres = (vector: THREE.Vector3) => vector.toArray().map((value) => value.toFixed(3)).join(', ');
-const degrees = (euler: THREE.Euler) => [euler.x, euler.y, euler.z].map((value) => {
-  return THREE.MathUtils.radToDeg(value).toFixed(1);
+const metres = (vector: Vec3) => vector.toArray().map((value) => value.toFixed(3)).join(', ');
+const degrees = (euler: Euler) => [euler.x, euler.y, euler.z].map((value) => {
+  return Maths.radToDeg(value).toFixed(1);
 }).join(', ');
 
 /** An object on a line: what it is, where it is in the world, how it's turned and scaled in its parent, what it's
  *  drawn with and where it is on the screen. */
-function describe(object: THREE.Object3D, joints: Map<THREE.Object3D, string>): string {
+function describe(object: Node, joints: Map<Node, string>): string {
   const name = object.name || joints.get(object) || '';
   const what = name ? `${name} (${object.type})` : object.type;
-  const parts = [`at ${metres(object.getWorldPosition(new THREE.Vector3()))}`];
+  const parts = [`at ${metres(object.getWorldPosition(new Vec3()))}`];
   if (object.rotation.x || object.rotation.y || object.rotation.z) parts.push(`turned ${degrees(object.rotation)}°`);
-  if (!object.scale.equals(new THREE.Vector3(1, 1, 1))) parts.push(`scaled ${metres(object.scale)}`);
+  if (!object.scale.equals(new Vec3(1, 1, 1))) parts.push(`scaled ${metres(object.scale)}`);
   if (!object.visible) parts.push('hidden');
   if (object.layers.mask !== 1) parts.push(`layers ${object.layers.mask.toString(2)}`);
   const meshes = meshesOf(object);
@@ -196,7 +196,7 @@ function describe(object: THREE.Object3D, joints: Map<THREE.Object3D, string>): 
   return `${what}: ${parts.join('; ')}`;
 }
 
-function trianglesOf(mesh: THREE.Mesh): number {
+function trianglesOf(mesh: Mesh): number {
   const geometry = mesh.geometry;
   return (geometry.index ? geometry.index.count : geometry.attributes.position.count) / 3;
 }
@@ -219,17 +219,17 @@ interface Reach {
  * as shares across and down. (Its box in the world, projected, reached two screens past the edges for a maul held
  * by the camera.)
  */
-function onScreen(object: THREE.Object3D): string {
+function onScreen(object: Node): string {
   const reach: Reach = { left: Infinity, top: Infinity, right: -Infinity, bottom: -Infinity, seen: 0, behind: 0 };
   for (const mesh of meshesOf(object)) {
     // (a crowd's instances are each somewhere else; a mesh on a layer no camera draws isn't seen)
     const lens = lensOf(mesh);
-    if ((mesh as THREE.InstancedMesh).isInstancedMesh || !lens) continue;
+    if ((mesh as InstancedMesh).isInstancedMesh || !lens) continue;
     reachOf(mesh, lens, reach);
   }
   if (reach.seen === 0) return reach.behind ? 'behind the camera' : 'not drawn by the camera';
   const off = reach.left < 0 || reach.top < 0 || reach.right > 1 || reach.bottom > 1;
-  const share = (value: number) => `${Math.round(THREE.MathUtils.clamp(value, 0, 1) * 100)}%`;
+  const share = (value: number) => `${Math.round(Maths.clamp(value, 0, 1) * 100)}%`;
   const across = `across ${share(reach.left)}-${share(reach.right)}`;
   const down = `down ${share(reach.top)}-${share(reach.bottom)}`;
   const past = off ? ' (reaching past its edge)' : '';
@@ -238,9 +238,9 @@ function onScreen(object: THREE.Object3D): string {
 }
 
 /** `reach` widened to `mesh`'s vertices on the screen, as posed (skinned) and drawn by `camera`. */
-function reachOf(mesh: THREE.Mesh, camera: THREE.Camera, reach: Reach): void {
-  const point = new THREE.Vector3();
-  const inView = new THREE.Vector3();
+function reachOf(mesh: Mesh, camera: Camera, reach: Reach): void {
+  const point = new Vec3();
+  const inView = new Vec3();
   const count = mesh.geometry.attributes.position.count;
   const step = Math.max(1, Math.ceil(count / VERTICES_PROJECTED));
   for (let i = 0; i < count; i += step) {

@@ -2,8 +2,10 @@
 // tools/lab/examples/beacon.ts`, tools/lab/commands/join.md): the shape every made thing takes, and the one `lab
 // invite` builds to check that a made thing is drawn. A module that exports `build(kit)`: what it adds to
 // `kit.group` (or returns) stands in the scene, at the group's place on the ground; `kit.each` moves it by the game's
-// step. It imports three alone (the game answers that with its own); the game's state is `kit.G`.
-import * as THREE from 'three';
+// step. It imports the engine's scene API as a place of the game does (the game answers it with its own); the
+// game's state is `kit.G`.
+import { LitMaterial, Mesh } from '../../../src/engine/api/index.ts';
+import * as shapes from '../../../src/engine/api/shapes/index.ts';
 import type { MakeKit } from '../../../src/dev/agentMakes';
 
 /** the post's height and the stone's size (m) */
@@ -15,13 +17,13 @@ const BOB = 0.08;
 
 /** A post with a glowing stone turning over it. */
 export function build(kit: MakeKit): void {
-  const wood = new THREE.MeshStandardMaterial({ color: 0x6b4a2f, roughness: 0.9 });
-  const post = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.12, POST, 10), wood);
+  const wood = new LitMaterial({ color: 0x6b4a2f, roughness: 0.9 });
+  const post = new Mesh(shapes.cylinder(0.09, 0.12, POST, 10), wood);
   post.position.y = POST / 2;
   post.castShadow = true;
 
-  const glow = new THREE.MeshStandardMaterial({ color: 0xffd27a, emissive: 0xffa030, emissiveIntensity: 2.5 });
-  const stone = new THREE.Mesh(new THREE.OctahedronGeometry(STONE), glow);
+  const glow = new LitMaterial({ color: 0xffd27a, emissive: 0xffa030, emissiveIntensity: 2.5 });
+  const stone = new Mesh(shapes.octahedron(STONE), glow);
   stone.name = 'stone';
   stone.position.y = POST + STONE;
 

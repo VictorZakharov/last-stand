@@ -19,7 +19,7 @@
 //
 // `--canary` plants a fault each part must catch: a toll that stuns no one near it, a shield that stops nothing, a ward
 // that wards nothing, guards that drift or rise at the gates, a swing four times as wide, a program compiled.
-import * as THREE from 'three';
+import { AdditiveBlending, BackSide, Mesh, Node, shapes, UnlitMaterial, Vec3 } from './sceneApi.ts';
 import { filmedFrom, bellFilm } from './bossFilm';
 import { bossFrames } from './bossFrames';
 import { guardFilm } from './bossGuardFilm';
@@ -191,7 +191,7 @@ async function encounterAt(lab: Lab): Promise<{ cantor: Enemy; guards: Enemy[] }
   const cantor = lab.spawnFoe('cantor', clearSpot(12, ENEMIES.cantor.radius), { wave });
   // (at their rung's spots, as the run sends them: bossGuardSpots.ts holds the run to them)
   const spots = BIOMES.crypt.bosses.find((boss) => boss.id === 'cantor')?.guards?.at ?? [];
-  const guards = spots.map(([x, z]) => lab.spawnFoe('bellwarden', new THREE.Vector3(x, 0, z), { wave, guard: true }));
+  const guards = spots.map(([x, z]) => lab.spawnFoe('bellwarden', new Vec3(x, 0, z), { wave, guard: true }));
   const all = [cantor, ...guards];
   await lab.until(() => all.every((boss) => boss.spawning <= 0), RISE_FRAMES, 'the encounter never rose');
   return { cantor, guards };
@@ -435,7 +435,7 @@ function guardsHover(guards: Enemy[], ghostsMost: number[], lowestLip: number[],
 function lipOver(guard: Enemy): number {
   const root = guard.model.root;
   root.updateMatrixWorld(true);
-  const crown = (root.userData.bell as THREE.Object3D).getWorldPosition(new THREE.Vector3());
+  const crown = (root.userData.bell as Node).getWorldPosition(new Vec3());
   const size = guard.height / guard.model.height;
   return crown.y - BELL_HEIGHT * size;
 }
@@ -443,10 +443,10 @@ function lipOver(guard: Enemy): number {
 const BELL_HEIGHT = 4.6;
 
 /** How many of a Bell-Warden's ghosts are about it now, shown and free (models/bellGhosts.ts's `seen`). */
-function ghostsFree(root: THREE.Object3D): number {
+function ghostsFree(root: Node): number {
   const seen = root.userData.ghosts as GhostsSeen | undefined;
   if (!seen) return 0;
-  const at = new THREE.Vector3();
+  const at = new Vec3();
   return Array.from({ length: seen.most }, (_, i) => seen.freeAt(i, at)).filter((place) => place !== null).length;
 }
 
@@ -514,13 +514,13 @@ async function compiles(lab: Lab, options: BossOptions, lines: string[], problem
     await lab.step(60);
     if (options.canary) {
       // (a blending, side and depth no other material has together: the engine's pipelines are set apart by those)
-      const material = new THREE.MeshBasicMaterial({
+      const material = new UnlitMaterial({
         color: 0x123456,
-        blending: THREE.AdditiveBlending,
-        side: THREE.BackSide,
+        blending: AdditiveBlending,
+        side: BackSide,
         depthWrite: true,
       });
-      const odd = new THREE.Mesh(new THREE.TorusKnotGeometry(0.3, 0.1), material);
+      const odd = new Mesh(shapes.torusKnot(0.3, 0.1), material);
       odd.position.copy(boss.pos).setY(2);
       G.scene.add(odd);
       await lab.step(4);
@@ -568,7 +568,7 @@ async function film(lab: Lab, options: BossOptions, lines: string[], problems: s
   // gravestones isn't)
   if (G.arena.biome !== 'crypt') G.arena.setBiome('crypt');
   await lab.setup({ at: FILM_HERO, facing: Math.PI, ...options.fixture });
-  const boss = lab.spawnFoe('bellwarden', new THREE.Vector3(0, 0, 0), { wave: WAVES.bossEvery * 2, guard: true });
+  const boss = lab.spawnFoe('bellwarden', new Vec3(0, 0, 0), { wave: WAVES.bossEvery * 2, guard: true });
   await lab.until(() => boss.spawning <= 0, RISE_FRAMES, 'the guard never rose');
   boss.facing = boss.targetFacing = Math.atan2(G.player.pos.x - boss.pos.x, G.player.pos.z - boss.pos.z);
   const moments = await bellFilm({ lab, boss, lines, problems });
@@ -617,7 +617,7 @@ async function encounterPictures(lab: Lab, options: BossOptions, lines: string[]
   await lab.step(90, keepWhole);
   await seen('1 the choir comes', 'the Ossuary Cantor and its two Bell-Wardens, as the player sees it');
   // (the arena from straight above: both guards on the ring walk, across from each other)
-  const middle = new THREE.Vector3(0, 0, 0);
+  const middle = new Vec3(0, 0, 0);
   moments.push(lab.picture('0 from above', ['plan'], ['the crypt from above: the two guards on the ring walk, across the arena from each other'], { at: middle, distance: ABOVE }));
   close('1 the Cantor (close)', 'floating in rotted vestments: a crown of candles, a halo of skulls, a bell for a heart, its crozier and lantern; warded by its guards (the pale shell)', ['front', 'left', 'right', 'back']);
   // 1a. a guard beside the hero, for its size against his

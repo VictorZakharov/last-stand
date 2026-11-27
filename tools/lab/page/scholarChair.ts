@@ -4,7 +4,7 @@
 // and his sleeves came up through the table's top. Read here: his body against the table's top whenever he's sat or
 // half sat, his chair's feet on the floor and clear of the table and the cases, and his hands on it while it moves.
 
-import * as THREE from 'three';
+import { Box3, Mat4, Mesh, Node, Vec3 } from './sceneApi.ts';
 import type { Scholar } from '../../../src/entities/models/scholar';
 import type { Obstacle } from '../../../src/types';
 
@@ -14,22 +14,22 @@ export const TABLE_INTO_MOST = 0.02;
  *  how far a hand holding it may be from where it's put on it while it moves (m) */
 export const CHAIR = { floor: 0.005, into: 0.01, hand: 0.05 };
 /** his table's top in its group's frame (`scholarDesk`'s `TABLE`: 1.2 by 0.72 at 0.62 ahead, its top 6 cm thick at 0.76) */
-const TOP = new THREE.Box3(new THREE.Vector3(-0.6, 0.7, 0.26), new THREE.Vector3(0.6, 0.76, 0.98));
+const TOP = new Box3(new Vec3(-0.6, 0.7, 0.26), new Vec3(0.6, 0.76, 0.98));
 /** of him, what's never read against the table: what he reads on it and turns */
 const NOT_HIM = /book|page|quill/;
 
 /** his table's group: his root's parent, the frame its things are built in */
-const deskOf = (s: Scholar): THREE.Object3D => s.root.parent!;
+const deskOf = (s: Scholar): Node => s.root.parent!;
 
 /** How far into his table's top any part of him is (m), and which: each of his meshes near it, every few of its points. */
 export function intoTable(s: Scholar): { into: number; what: string } {
   const desk = deskOf(s);
   s.root.updateMatrixWorld(true);
-  const toDesk = desk.matrixWorld.clone().invert(), m = new THREE.Matrix4(), p = new THREE.Vector3(), near = TOP.clone().expandByScalar(0.05);
-  const bounds = new THREE.Box3();
+  const toDesk = desk.matrixWorld.clone().invert(), m = new Mat4(), p = new Vec3(), near = TOP.clone().expandByScalar(0.05);
+  const bounds = new Box3();
   let into = 0, what = '';
   s.root.traverse((o) => {
-    const mesh = o as THREE.Mesh;
+    const mesh = o as Mesh;
     if (!mesh.isMesh || !mesh.visible || NOT_HIM.test(mesh.name)) return;
     const pos = mesh.geometry.attributes.position;
     if (!pos) return;
@@ -51,10 +51,10 @@ export function intoTable(s: Scholar): { into: number; what: string } {
 export function chairRead(s: Scholar, cases: readonly Obstacle[]): { floor: number; into: number; intoWhat: string; out: number } {
   const desk = deskOf(s), chair = desk.getObjectByName('scholar chair')!;
   chair.updateMatrixWorld(true);
-  const toDesk = desk.matrixWorld.clone().invert(), p = new THREE.Vector3(), m = new THREE.Matrix4();
+  const toDesk = desk.matrixWorld.clone().invert(), p = new Vec3(), m = new Mat4();
   let lowest = Infinity, into = 0, intoWhat = '';
   chair.traverse((o) => {
-    const mesh = o as THREE.Mesh;
+    const mesh = o as Mesh;
     if (!mesh.isMesh) return;
     const pos = mesh.geometry.attributes.position;
     m.multiplyMatrices(toDesk, mesh.matrixWorld);
@@ -83,7 +83,7 @@ export function chairHandOff(s: Scholar): number {
   let off = Infinity;
   for (const [aim, reach, name] of [[s.act.handL, s.act.reachL, 'scholar handL'], [s.act.handR, s.act.reachR, 'scholar handR']] as const) {
     if (!aim || reach < 0.5) continue;
-    off = Math.min(off, s.root.getObjectByName(name)!.getWorldPosition(new THREE.Vector3()).distanceTo(aim.at));
+    off = Math.min(off, s.root.getObjectByName(name)!.getWorldPosition(new Vec3()).distanceTo(aim.at));
   }
   return off;
 }

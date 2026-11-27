@@ -4,7 +4,7 @@
 // the one he walked up to; from above the camera looks one way wherever he stands, and turned aside it picked the hero
 // at that side, whichever plinth he stood by. Stood before each other class's plinth with the camera turned each way,
 // that plinth is picked. `canary` asks for the other one, which must be found.
-import * as THREE from 'three';
+import { Vec3 } from './sceneApi.ts';
 import type { Lab } from './lab';
 import { G } from '../../../src/state';
 import { HALL, TERRACE } from '../../../src/data/village';
@@ -43,7 +43,7 @@ export async function heroPickedNear(lab: Lab, canary: boolean): Promise<LightsC
         const x = TERRACE.x + HALL.plinths[plinth];
         const z = HALL.plinthZ + BEFORE_PLINTH;
         G.player.walkTo = null;
-        G.player.place(new THREE.Vector3(x, groundHeight(x, z), z), 0);
+        G.player.place(new Vec3(x, groundHeight(x, z), z), 0);
         await lab.step(SETTLE);
         const picked = heroLookedAt();
         said.push(`${turn.toFixed(1)} by ${CLASS_IDS[plinth]}: ${CLASS_IDS[picked]}`);

@@ -3,7 +3,8 @@
 // boom backed out through the window and showed him from outside (from play, "it should not zoom out outside the
 // window in 3rd person"). Its glass is in the wall as what's flown into now (`hallSideWall` in world/village.ts).
 // `canary` lets the glass out of what the boom meets again: the camera must be read outside.
-import * as THREE from 'three';
+import { Vec3 } from './sceneApi.ts';
+
 import type { Lab } from './lab';
 import { G } from '../../../src/state';
 import { faceCamera, setZoom, viewMode } from '../../../src/core/renderer';
@@ -23,7 +24,7 @@ const SETTLE = 90;
 const GLASS_X = TERRACE.x + (HALL.half + HALL.inHalf) / 2;
 
 /** The hall's windows as this commit has them (an A/B's other side may have none). */
-type HallWindows = () => { sill: THREE.Vector3; out: THREE.Vector3; half: number; high: number }[];
+type HallWindows = () => { sill: Vec3; out: Vec3; half: number; high: number }[];
 const hallWindows = (world_ as { hallWindows?: HallWindows }).hallWindows;
 
 /** A part of the wall, as far as the canary reads it: its name and what it's met by. */

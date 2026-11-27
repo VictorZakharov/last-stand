@@ -27,7 +27,8 @@ in `.tmp`: it is compiled afresh on every run, with the modules beside it it imp
 copied into the other commit, so the same measure runs on both sides.
 
 What the lab gives a probe (`page/lab.ts`):
-- `lab.player`, `lab.model`, `lab.joints`, and `lab.THREE` (three.js as the game has it);
+- `lab.player`, `lab.model` and `lab.joints` (the scene's classes a probe imports from `page/sceneApi.ts`, never from
+  `src/engine/api` or three: an A/B's older side resolves that module to three);
 - `lab.setup(fixture)`: the run set up afresh (`at`, `facing`, `view`, `nocked`, `gear`, `fresh`, `yaw`), checked, and its
   report. The keys go by the camera, and the top-down camera is as the boot left it unless `yaw` turns it (0: `d` runs
   +x), which differs by class: the village opens at a spot of its own, at random (the warrior's boot faces it a half turn

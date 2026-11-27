@@ -8,7 +8,9 @@
 // it a level could do without. Its canary draws the frame twice, which must read as more. In the lobby's village its
 // own parts too: its largest parts and the hall's heroes. It timed three's scene pass by WebGL's timer queries, with
 // three's lights, shadows and materials switched, before the engine alone drew the game.
-import * as THREE from 'three';
+import {
+  Attribute, Color, Geometry, InstancedMesh, LitMaterial, Material, Mesh, Node, StaticDrawUsage, Vec2,
+} from './sceneApi.ts';
 import type { Lab, Report } from './lab';
 import { G } from '../../../src/state';
 import * as renderer from '../../../src/core/renderer';
@@ -71,10 +73,10 @@ const VILLAGE_PARTS = 10;
 const VILLAGE_SETTLE = 30;
 
 /** The village's group in the scene. */
-const villageGroup = (): THREE.Object3D | undefined => G.scene.children.find((child) => child.name === 'village');
+const villageGroup = (): Node | undefined => G.scene.children.find((child) => child.name === 'village');
 
 /** The name a mesh of the village goes under: its outermost named part below the village's group, else its own. */
-function villagePartOf(mesh: THREE.Object3D, village: THREE.Object3D): string {
+function villagePartOf(mesh: Node, village: Node): string {
   let named = mesh.name;
   for (let at = mesh.parent; at && at !== village; at = at.parent) if (at.name) named = at.name;
   return named || 'loose meshes';
@@ -84,14 +86,14 @@ function villagePartOf(mesh: THREE.Object3D, village: THREE.Object3D): string {
 function villageMeshParts(): Part[] {
   const village = villageGroup();
   if (!village) return [];
-  const parts = new Map<string, THREE.Mesh[]>();
+  const parts = new Map<string, Mesh[]>();
   village.traverseVisible((object) => {
-    const mesh = object as THREE.Mesh;
+    const mesh = object as Mesh;
     if (!mesh.isMesh) return;
     const name = villagePartOf(mesh, village);
     parts.set(name, [...(parts.get(name) ?? []), mesh]);
   });
-  const trianglesIn = (meshes: THREE.Mesh[]): number => meshes.reduce((sum, mesh) => sum + drawnTriangles(mesh), 0);
+  const trianglesIn = (meshes: Mesh[]): number => meshes.reduce((sum, mesh) => sum + drawnTriangles(mesh), 0);
   return [...parts]
     .sort((a, b) => trianglesIn(b[1]) - trianglesIn(a[1]))
     .slice(0, VILLAGE_PARTS)
@@ -102,11 +104,11 @@ function villageMeshParts(): Part[] {
 }
 
 /** A mesh's triangles as drawn: an instanced mesh's each instance, a geometry's draw range. */
-function drawnTriangles(mesh: THREE.Mesh): number {
-  const geometry = mesh.geometry as THREE.BufferGeometry & { instanceCount?: number };
+function drawnTriangles(mesh: Mesh): number {
+  const geometry = mesh.geometry as Geometry & { instanceCount?: number };
   const whole = (geometry.index ? geometry.index.count : geometry.attributes.position.count) / 3;
   const ranged = Math.min(whole, geometry.drawRange.count / 3);
-  const instanced = mesh as THREE.InstancedMesh;
+  const instanced = mesh as InstancedMesh;
   const instances = instanced.isInstancedMesh ? instanced.count : geometry.instanceCount ?? 1;
   return ranged * (Number.isFinite(instances) ? instances : 1);
 }
@@ -134,13 +136,13 @@ function partLine(part: Part, cost: TurnsCost): string {
 }
 
 /** What a mesh is, for a line: its name and its parents', its material, its instances and triangles. */
-function describe(mesh: THREE.Mesh): string {
+function describe(mesh: Mesh): string {
   const names: string[] = [];
-  for (let object: THREE.Object3D | null = mesh; object && object !== G.scene; object = object.parent) {
+  for (let object: Node | null = mesh; object && object !== G.scene; object = object.parent) {
     if (object.name) names.unshift(object.name);
   }
   const material = materialsOf(mesh)[0];
-  const instances = (mesh as THREE.InstancedMesh).isInstancedMesh ? (mesh as THREE.InstancedMesh).count : 1;
+  const instances = (mesh as InstancedMesh).isInstancedMesh ? (mesh as InstancedMesh).count : 1;
   const index = mesh.geometry.index;
   const triangles = (index ? index.count : mesh.geometry.attributes.position.count) / 3;
   const cut = material.alphaTest > 0 ? `cut at ${material.alphaTest}` : 'blended';
@@ -151,7 +153,7 @@ function describe(mesh: THREE.Mesh): string {
 async function eachSeeThrough(draw: () => void, renders: number): Promise<string[]> {
   const costs: { line: string; takes: number }[] = [];
   for (const object of shownWhere(seeThrough)) {
-    const part = { ...shownPart('', [object]), name: describe(object as THREE.Mesh) };
+    const part = { ...shownPart('', [object]), name: describe(object as Mesh) };
     const cost = await costInTurns(part.change, draw, { rounds: EACH_ROUNDS, renders });
     if (cost) costs.push({ line: partLine(part, cost), takes: cost.on - cost.off });
   }
@@ -166,35 +168,35 @@ const HERO_ROUNDS = 24;
 const NOTHING_MOST = 0.15;
 
 /** A mesh's triangles. */
-function trianglesOf(mesh: THREE.Mesh): number {
+function trianglesOf(mesh: Mesh): number {
   const index = mesh.geometry.index;
   return (index ? index.count : mesh.geometry.attributes.position.count) / 3;
 }
 
 /** The hero's meshes shown now. */
-function heroMeshes(): THREE.Mesh[] {
-  const meshes: THREE.Mesh[] = [];
+function heroMeshes(): Mesh[] {
+  const meshes: Mesh[] = [];
   G.player.model.root.traverseVisible((object) => {
-    if ((object as THREE.Mesh).isMesh) meshes.push(object as THREE.Mesh);
+    if ((object as Mesh).isMesh) meshes.push(object as Mesh);
   });
   return meshes;
 }
 
 /** Whether `mesh` hangs under an object `wanted` picks. */
-function under(mesh: THREE.Object3D, wanted: (object: THREE.Object3D) => boolean): boolean {
-  for (let at: THREE.Object3D | null = mesh; at; at = at.parent) if (wanted(at)) return true;
+function under(mesh: Node, wanted: (object: Node) => boolean): boolean {
+  for (let at: Node | null = mesh; at; at = at.parent) if (wanted(at)) return true;
   return false;
 }
 
 /** A part of the hero's meshes, named with its meshes and triangles. */
-function heroPart(name: string, meshes: THREE.Mesh[]): Part {
+function heroPart(name: string, meshes: Mesh[]): Part {
   const triangles = Math.round(meshes.reduce((sum, mesh) => sum + trianglesOf(mesh), 0));
   return { ...shownPart('', meshes), name: `${name} (${meshes.length} meshes, ${triangles} triangles)` };
 }
 
 /** A part that lets the hero cast his shadows or not (the engine casts what `castShadow` says, each piece from its
  *  fewer triangles: `casterGeometry` in models/farDetail.ts). */
-function heroShadowsPart(meshes: THREE.Mesh[]): Part {
+function heroShadowsPart(meshes: Mesh[]): Part {
   const cast = meshes.map((mesh) => mesh.castShadow);
   return {
     name: `the shadows he casts (${cast.filter(Boolean).length} meshes)`,
@@ -211,8 +213,8 @@ function heroShadowsPart(meshes: THREE.Mesh[]): Part {
 const HERO_MATERIALS = 40;
 
 /** What a material is, for a line: its kind, colour, side, and what it's drawn with. */
-function looksLike(material: THREE.Material): string {
-  const standard = material as THREE.MeshStandardMaterial;
+function looksLike(material: Material): string {
+  const standard = material as LitMaterial;
   const colour = standard.color ? `#${standard.color.getHexString()}` : '';
   const maps = standard.map ? ' mapped' : '';
   const side = ['', ' inside out', ' both sides'][material.side] ?? '';
@@ -221,13 +223,13 @@ function looksLike(material: THREE.Material): string {
 }
 
 /** `meshes` by the material each draws in, as parts, those of the most triangles first (`HERO_MATERIALS` of them). */
-function byMaterial(meshes: THREE.Mesh[]): Part[] {
-  const alike = new Map<THREE.Material, THREE.Mesh[]>();
+function byMaterial(meshes: Mesh[]): Part[] {
+  const alike = new Map<Material, Mesh[]>();
   for (const mesh of meshes) {
     const material = materialsOf(mesh)[0];
     alike.set(material, [...(alike.get(material) ?? []), mesh]);
   }
-  const trianglesIn = (group: THREE.Mesh[]): number => group.reduce((sum, mesh) => sum + trianglesOf(mesh), 0);
+  const trianglesIn = (group: Mesh[]): number => group.reduce((sum, mesh) => sum + trianglesOf(mesh), 0);
   return [...alike]
     .sort((a, b) => trianglesIn(b[1]) - trianglesIn(a[1]))
     .slice(0, HERO_MATERIALS)
@@ -235,11 +237,11 @@ function byMaterial(meshes: THREE.Mesh[]): Part[] {
 }
 
 /** A kit material's own glow colour (`kitLooks.aura` in src/core/materials.ts), where it has one. */
-type Glowing = THREE.Material & { kitLooks?: { aura?: { value: THREE.Color } } };
+type Glowing = Material & { kitLooks?: { aura?: { value: Color } } };
 
 /** The glows of `meshes`' worn items, each its rarity's colour (black: none, the pattern skipped). */
-function glowsOf(meshes: THREE.Mesh[]): THREE.Color[] {
-  const glows = new Set<THREE.Color>();
+function glowsOf(meshes: Mesh[]): Color[] {
+  const glows = new Set<Color>();
   for (const mesh of meshes) {
     const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
     for (const material of materials as Glowing[]) {
@@ -254,7 +256,7 @@ function glowsOf(meshes: THREE.Mesh[]): THREE.Color[] {
  * His gear's glow in its rarity's colour (`ITEM_GLOW`): each glowing material's colour put to black, so its lit shader
  * skips the pattern (`dot(uAura, uAura) > 0.0`), the same program either way. What a glow costs where it's drawn.
  */
-function glowPart(meshes: THREE.Mesh[]): Part {
+function glowPart(meshes: Mesh[]): Part {
   const glows = glowsOf(meshes);
   const kept = glows.map((glow) => glow.clone());
   return {
@@ -268,11 +270,11 @@ function glowPart(meshes: THREE.Mesh[]): Part {
 function heroParts(): Part[] {
   const meshes = heroMeshes();
   const head = G.player.model.joints?.head;
-  const isHand = (mesh: THREE.Mesh): boolean => under(mesh, (object) => Boolean(object.userData.drawnHand));
-  const isHead = (mesh: THREE.Mesh): boolean => under(mesh, (object) => object === head);
-  const isCloth = (mesh: THREE.Mesh): boolean => {
-    const position = mesh.geometry.attributes.position as THREE.BufferAttribute;
-    return position.usage !== THREE.StaticDrawUsage;
+  const isHand = (mesh: Mesh): boolean => under(mesh, (object) => Boolean(object.userData.drawnHand));
+  const isHead = (mesh: Mesh): boolean => under(mesh, (object) => object === head);
+  const isCloth = (mesh: Mesh): boolean => {
+    const position = mesh.geometry.attributes.position as Attribute;
+    return position.usage !== StaticDrawUsage;
   };
   const hands = meshes.filter(isHand);
   const heads = meshes.filter((mesh) => !isHand(mesh) && isHead(mesh));
@@ -344,7 +346,7 @@ async function msaaLines(level: QualityLevel, draw: () => void, turns: { rounds:
 function atFullPixels(level: QualityLevel): string {
   useQuality(level);
   renderer.setRenderQuality({ ...QUALITY[level], pixels: Infinity });
-  const size = renderer.sceneSize(new THREE.Vector2());
+  const size = renderer.sceneSize(new Vec2());
   return `the scene ${size.x}x${size.y} (${(size.x * size.y / 1e6).toFixed(2)} Mpx), ${QUALITY[level].label}'s other `
     + 'settings';
 }

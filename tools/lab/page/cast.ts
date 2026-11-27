@@ -8,7 +8,7 @@
 // each counted change the frame is drawn with each thing taken out in turn; a frame past the budget is taken apart
 // so too (page/budgetSources.ts).
 import { SKILL_IMPLS } from '../../../src/combat/skills/index';
-import * as THREE from 'three';
+import { Mesh, shapes, UnlitMaterial, Vec2, Vec3 } from './sceneApi.ts';
 import type { Frame, Lab, Pictured, Report } from './lab';
 import type { HeldStyle, SkillDef, SkillKey } from '../../../src/types';
 import type { Enemy } from '../../../src/entities/enemy';
@@ -98,7 +98,7 @@ const CANARY_SHARE = 0.5;
 const PLANT_NAME = 'lab canary: glare';
 const PLANT_RADIUS = 0.5;
 const PLANT_FROM_CAMERA = 2.5;
-const PLANT_ON_SCREEN = new THREE.Vector2(-0.25, 0.25);
+const PLANT_ON_SCREEN = new Vec2(-0.25, 0.25);
 /** the replay's measure may differ from the cast's by this share of it before it's said */
 const BUDGET_REPLAY_OFF = 0.05;
 /** with --canary: the strobe's frames on and off, and how much it raises the exposure */
@@ -138,7 +138,7 @@ export function bindKnown(wanted: string): void {
 }
 
 /** The frame's input holding `key` over `aim` (nothing held when `held` is false). */
-export function pressing(key: SkillKey, aim: THREE.Vector3, held: boolean): Frame {
+export function pressing(key: SkillKey, aim: Vec3, held: boolean): Frame {
   if (!held) return { aim };
   if (key === 'mouse0') return { m0: true, aim };
   if (key === 'mouse2') return { m2: true, aim };
@@ -146,7 +146,7 @@ export function pressing(key: SkillKey, aim: THREE.Vector3, held: boolean): Fram
 }
 
 /** The frame's input holding every one of `keys` at once over `aim` (a channel's key held as another is pressed). */
-export function holdingAll(keys: SkillKey[], aim: THREE.Vector3): Frame {
+export function holdingAll(keys: SkillKey[], aim: Vec3): Frame {
   const held = keys.map((key) => pressing(key, aim, true));
   return {
     keys: held.flatMap((frame) => frame.keys ?? []),
@@ -186,7 +186,7 @@ export async function foesAhead(lab: Lab, biome: BiomeId, count: number): Promis
   const foes = foeKinds(biome, count).map((kind, i) => {
     const across = count > 1 ? (i / (count - 1) - 0.5) * FOES_ARC : 0;
     const way = hero.facing + across;
-    const at = hero.pos.clone().add(new THREE.Vector3(Math.sin(way), 0, Math.cos(way)).multiplyScalar(FOES_AHEAD));
+    const at = hero.pos.clone().add(new Vec3(Math.sin(way), 0, Math.cos(way)).multiplyScalar(FOES_AHEAD));
     return lab.spawnFoe(kind, at);
   });
   await lab.until(() => foes.every((foe) => foe.spawning <= 0), 300, 'the foes never rose');
@@ -199,11 +199,11 @@ export async function foesAhead(lab: Lab, biome: BiomeId, count: number): Promis
 async function planted(lab: Lab, canary: CanaryPlant | null): Promise<void> {
   G.scene.getObjectByName(PLANT_NAME)?.removeFromParent();
   if (canary !== 'glare') return;
-  const ball = new THREE.Mesh(new THREE.SphereGeometry(PLANT_RADIUS, 24, 12),
-    new THREE.MeshBasicMaterial({ color: 0xffffff }));
+  const ball = new Mesh(shapes.sphere(PLANT_RADIUS, 24, 12),
+    new UnlitMaterial({ color: 0xffffff }));
   ball.name = PLANT_NAME;
-  const camera = G.camera.getWorldPosition(new THREE.Vector3());
-  const onScreen = new THREE.Vector3(PLANT_ON_SCREEN.x, PLANT_ON_SCREEN.y, 0.5).unproject(G.camera);
+  const camera = G.camera.getWorldPosition(new Vec3());
+  const onScreen = new Vec3(PLANT_ON_SCREEN.x, PLANT_ON_SCREEN.y, 0.5).unproject(G.camera);
   const way = onScreen.sub(camera).normalize();
   ball.position.copy(camera).addScaledVector(way, PLANT_FROM_CAMERA);
   G.scene.add(ball);
@@ -219,7 +219,7 @@ function strobed(frame: number, exposure: number): number {
 interface CastScene {
   key: SkillKey;
   def: SkillDef;
-  aim: THREE.Vector3;
+  aim: Vec3;
   foe?: Enemy;
   view: ViewMode;
 }
@@ -228,7 +228,7 @@ interface CastScene {
 const SIGHT_UP = 0.6;
 
 /** The scene's aim, on its foe where it was cast at one (it walks on as the key is pressed). */
-function aimOf(scene: CastScene): THREE.Vector3 {
+function aimOf(scene: CastScene): Vec3 {
   if (scene.foe?.alive) scene.aim.set(scene.foe.pos.x, 0, scene.foe.pos.z);
   return scene.aim;
 }
@@ -240,9 +240,9 @@ function pressingAt(scene: CastScene, held: boolean): Frame {
 }
 
 /** Where the crosshair is turned in `view` to aim at `foe`: none from above, or with no foe. */
-function sightOn(foe: Enemy | undefined, view: ViewMode): THREE.Vector3 | undefined {
+function sightOn(foe: Enemy | undefined, view: ViewMode): Vec3 | undefined {
   if (!foe?.alive || view === 'top') return undefined;
-  return new THREE.Vector3(foe.pos.x, foe.pos.y + foe.height * SIGHT_UP, foe.pos.z);
+  return new Vec3(foe.pos.x, foe.pos.y + foe.height * SIGHT_UP, foe.pos.z);
 }
 
 /** The cast's scene set up afresh: the hero stood in the biome and view, the skill his to cast, the foes coming. */
@@ -261,7 +261,7 @@ async function castScene(lab: Lab, options: CastOptions): Promise<CastScene> {
   const { key, def } = skillNamed(options.skill);
   hero.cooldowns.clear();
   hero.energy = hero.stats.maxEnergy;
-  const aim = hero.pos.clone().add(new THREE.Vector3(Math.sin(hero.facing), 0, Math.cos(hero.facing))
+  const aim = hero.pos.clone().add(new Vec3(Math.sin(hero.facing), 0, Math.cos(hero.facing))
     .multiplyScalar(AIM_AHEAD));
   if (options.foes) await foesAhead(lab, options.biome, options.foes);
   await planted(lab, options.canary);
@@ -293,15 +293,15 @@ async function castScene(lab: Lab, options: CastOptions): Promise<CastScene> {
  * one (`aim` moved with it, the cast's own): a fixed aim ahead, Pounce's foes walked up to him and stood at 1 m, its
  * aim 7 m past them, and it never leapt. Failing, where every foe was as it ended.
  */
-async function untilCastable(lab: Lab, ready: () => boolean, def: SkillDef, aim: THREE.Vector3, view: ViewMode,
-  first: THREE.Vector3): Promise<Enemy | undefined> {
+async function untilCastable(lab: Lab, ready: () => boolean, def: SkillDef, aim: Vec3, view: ViewMode,
+  first: Vec3): Promise<Enemy | undefined> {
   const onNearest = (): Frame => onFoe(nearestFoe(), aim, view);
   try {
     await lab.until(ready, 900, `${def.name} never had a foe to cast at`, onNearest);
     return nearestFoe();
   } catch (error) {
     const hero = G.player;
-    const at = (point: THREE.Vector3) => `${point.x.toFixed(1)}, ${point.z.toFixed(1)}`;
+    const at = (point: Vec3) => `${point.x.toFixed(1)}, ${point.z.toFixed(1)}`;
     const where = `him at ${at(hero.pos)} facing ${hero.facing.toFixed(2)}, the game's aim at ${at(input.ground)} `
       + `(${at(first)} at first)`;
     throw new Error(`${(error as Error).message}: ${where}; ${foesWhere()}`);
@@ -324,14 +324,14 @@ const FOE_LEAST = 3;
 const AIMED_NEAR = 2.5;
 
 /** The frame's input with the aim (`aim` moved with it) and the close views' crosshair on `foe`, where there's one. */
-function onFoe(foe: Enemy | undefined, aim: THREE.Vector3, view: ViewMode): Frame {
+function onFoe(foe: Enemy | undefined, aim: Vec3, view: ViewMode): Frame {
   if (foe) aim.set(foe.pos.x, 0, foe.pos.z);
   return { aim, sight: sightOn(foe, view) };
 }
 
 /** The foe the game's aim at `point` is on (the one under the crosshair, else the nearest within `AIMED_NEAR`), if
  *  it's at least `FOE_LEAST` off: nearer, over the shoulder the crosshair turned onto it passes beside it. */
-function foeAimedAt(point: THREE.Vector3): Enemy | undefined {
+function foeAimedAt(point: Vec3): Enemy | undefined {
   const hero = G.player.pos;
   const fromHero = (foe: Enemy) => Math.hypot(foe.pos.x - hero.x, foe.pos.z - hero.z);
   const fromAim = (foe: Enemy) => Math.hypot(foe.pos.x - point.x, foe.pos.z - point.z) - foe.radius;

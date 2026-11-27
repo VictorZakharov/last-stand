@@ -12,12 +12,11 @@
 // off (world/wall.ts outlines), so feet climb the steps one by one; its wall is what's built (`wallShape` 'free'). Its
 // light follows the hour (`daylight`, a uniform's change: nothing compiles), and as a biome it has 10 point lights, two
 // casting the still shadows (the hall's braziers).
-import { unrepeatedNodes } from './villageNodes';
 import { rustLook } from '../engine/custom';
 import { pavingLook } from '../engine/looks/paving';
 import { villageSkyMaterial } from './skyNodes';
 import {
-  AdditiveBlending, Attribute, BackSide, Box3, CanvasTexture, CatmullRom3, Color, DoubleSide, Euler, floats, Geometry,
+  AdditiveBlending, Attribute, BackSide, Box3, boundsOf, CanvasTexture, CatmullRom3, Color, DoubleSide, Euler, floats, Geometry,
   InstancedMesh, Light, LitMaterial, Mat4, Material, Maths, mergeGeometries, Mesh, Node, Outline, PointLight, Quat,
   RepeatWrapping, SRGBColorSpace, Texture, UnlitMaterial, Vec2, Vec3, Vec4,
 } from '../engine/api/index.ts';
@@ -361,9 +360,7 @@ const WINDOW_GLOW = 1.3;
  * obvious"). Its own program, made at the village's warm-up.
  */
 function unrepeated<M extends LitMaterial>(m: M): M {
-  unrepeatedNodes(m);
-  rustLook(m, pavingLook());
-  return m;
+  return rustLook(m, pavingLook());
 }
 
 function makeMats(): Mats {
@@ -2319,7 +2316,7 @@ function looseInHall(root: Node, kept: readonly Node[]): Node[] {
   const visit = (group: Node, deep: number): void => {
     for (const child of group.children) {
       if (kept.includes(child) || child.name.startsWith('village still')) continue;
-      box.setFromObject(child);
+      boundsOf(child, box);
       if (box.isEmpty()) continue;
       const within = box.min.x > X - HALL.inHalf - 0.05 && box.max.x < X + HALL.inHalf + 0.05
         && box.min.z > HALL.wall - 0.05 && box.max.z < HALL.inFront + 0.05 && box.min.y > TERRACE.high - 0.3;

@@ -1,7 +1,7 @@
 // The generators of flat faces: a box (six gridded faces), a plane, a circle and a ring. Each follows three
 // 0.187's of the same name (three.js, MIT) to the vertex.
 import type { Geometry } from '../geometry/index.ts';
-import { meshOf } from './build.ts';
+import { described, meshOf } from './build.ts';
 
 /** The axes a box face lays its grid along: u across, v up, w out of it. */
 type Axis = 0 | 1 | 2;
@@ -19,7 +19,7 @@ interface BoxParts {
 /** One face of a box: a grid on the u and v axes, `depth / 2` out along w, as three's `buildPlane`. */
 function boxFace(parts: BoxParts, axes: [Axis, Axis, Axis], udir: number, vdir: number,
   size: [width: number, height: number, depth: number], grid: [x: number, y: number], materialIndex: number): void {
-  const [u, v, w] = axes;
+  const [u, v, out] = axes;
   const [width, height, depth] = size;
   const [gridX, gridY] = grid;
   const vector = [0, 0, 0];
@@ -29,11 +29,11 @@ function boxFace(parts: BoxParts, axes: [Axis, Axis, Axis], udir: number, vdir: 
       const x = ix * (width / gridX) - width / 2;
       vector[u] = x * udir;
       vector[v] = y * vdir;
-      vector[w] = depth / 2;
+      vector[out] = depth / 2;
       parts.positions.push(vector[0], vector[1], vector[2]);
       vector[u] = 0;
       vector[v] = 0;
-      vector[w] = depth > 0 ? 1 : -1;
+      vector[out] = depth > 0 ? 1 : -1;
       parts.normals.push(vector[0], vector[1], vector[2]);
       parts.uvs.push(ix / gridX, 1 - iy / gridY);
     }
@@ -42,10 +42,10 @@ function boxFace(parts: BoxParts, axes: [Axis, Axis, Axis], udir: number, vdir: 
   const base = parts.vertices;
   for (let iy = 0; iy < gridY; iy++) {
     for (let ix = 0; ix < gridX; ix++) {
-      const a = base + ix + (gridX + 1) * iy;
-      const b = base + ix + (gridX + 1) * (iy + 1);
-      parts.indices.push(a, b, a + 1);
-      parts.indices.push(b, b + 1, a + 1);
+      const corner = base + ix + (gridX + 1) * iy;
+      const below = base + ix + (gridX + 1) * (iy + 1);
+      parts.indices.push(corner, below, corner + 1);
+      parts.indices.push(below, below + 1, corner + 1);
     }
   }
   parts.groups.push([start, parts.indices.length - start, materialIndex]);
@@ -88,13 +88,14 @@ export function plane(width = 1, height = 1, widthSegments = 1, heightSegments =
   const indices: number[] = [];
   for (let iy = 0; iy < gridY; iy++) {
     for (let ix = 0; ix < gridX; ix++) {
-      const a = ix + (gridX + 1) * iy;
-      const b = ix + (gridX + 1) * (iy + 1);
-      indices.push(a, b, a + 1);
-      indices.push(b, b + 1, a + 1);
+      const corner = ix + (gridX + 1) * iy;
+      const below = ix + (gridX + 1) * (iy + 1);
+      indices.push(corner, below, corner + 1);
+      indices.push(below, below + 1, corner + 1);
     }
   }
-  return meshOf(indices, positions, normals, uvs);
+  const parameters = { width, height, widthSegments, heightSegments };
+  return described(meshOf(indices, positions, normals, uvs), 'PlaneGeometry', parameters);
 }
 
 /** A disc (three's `CircleGeometry`) in xy facing +z: a fan from its middle, `segments` round. */
@@ -103,8 +104,8 @@ export function circle(radius = 1, segments = 32, thetaStart = 0, thetaLength = 
   const positions = [0, 0, 0];
   const normals = [0, 0, 1];
   const uvs = [0.5, 0.5];
-  for (let s = 0; s <= steps; s++) {
-    const angle = thetaStart + (s / steps) * thetaLength;
+  for (let segment = 0; segment <= steps; segment++) {
+    const angle = thetaStart + (segment / steps) * thetaLength;
     const x = radius * Math.cos(angle);
     const y = radius * Math.sin(angle);
     positions.push(x, y, 0);
@@ -140,10 +141,10 @@ export function ring(innerRadius = 0.5, outerRadius = 1, thetaSegments = 32, phi
   const indices: number[] = [];
   for (let j = 0; j < rows; j++) {
     for (let i = 0; i < round; i++) {
-      const a = i + j * (round + 1);
-      const b = a + round + 1;
-      indices.push(a, b, a + 1);
-      indices.push(b, b + 1, a + 1);
+      const corner = i + j * (round + 1);
+      const below = corner + round + 1;
+      indices.push(corner, below, corner + 1);
+      indices.push(below, below + 1, corner + 1);
     }
   }
   return meshOf(indices, positions, normals, uvs);

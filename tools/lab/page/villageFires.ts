@@ -3,7 +3,7 @@
 // turned and moved, threw theirs from the group's own numbers. Every ember spawned over some frames must lie near a
 // fire's flames, and
 // each fire's shader must be told where it stands. `canary` puts every ember a few metres off, as those were.
-import * as THREE from 'three';
+import { LookMaterial, Mesh, Node, Uniform, Vec3 } from './sceneApi.ts';
 import type { Lab } from './lab';
 import { G } from '../../../src/state';
 import { YARD, yardToWorld } from '../../../src/data/village';
@@ -35,25 +35,25 @@ const SETTLE = 60;
 interface Spawned { x: number; z: number; size?: number; vy?: number }
 
 /** A shader's uniforms, by name. */
-type Uniforms = Record<string, THREE.IUniform | undefined>;
+type Uniforms = Record<string, Uniform | undefined>;
 
 /** A fire's flames' uniforms, if `mesh` is one: kept on the mesh (`buildFire`), as the node material it's drawn with
  *  has none of three's `uniforms` (read off it, no fire was found). */
-export function flameUniforms(mesh: THREE.Object3D): Uniforms | undefined {
+export function flameUniforms(mesh: Node): Uniforms | undefined {
   const kept = mesh.userData.flames as Uniforms | undefined;
-  return kept ?? ((mesh as THREE.Mesh).material as THREE.ShaderMaterial | undefined)?.uniforms;
+  return kept ?? ((mesh as Mesh).material as LookMaterial | undefined)?.uniforms;
 }
 
 /** Where each fire's flames stand, and how many of their shaders are told elsewhere. */
-function fires(): { at: THREE.Vector3[]; off: number } {
-  const at: THREE.Vector3[] = [];
+function fires(): { at: Vec3[]; off: number } {
+  const at: Vec3[] = [];
   let off = 0;
   G.scene.updateWorldMatrix(true, true);
   G.scene.traverse((object) => {
-    const mesh = object as THREE.Mesh;
-    const centre = flameUniforms(mesh)?.uCentre?.value as THREE.Vector3 | undefined;
+    const mesh = object as Mesh;
+    const centre = flameUniforms(mesh)?.uCentre?.value as Vec3 | undefined;
     if (!mesh.isMesh || !centre) return;
-    const where = mesh.getWorldPosition(new THREE.Vector3());
+    const where = mesh.getWorldPosition(new Vec3());
     if (where.distanceTo(centre) > SHADER_OFF) off++;
     at.push(where);
   });
@@ -93,7 +93,7 @@ export async function firesWhereTheyStand(lab: Lab, canary: boolean): Promise<Li
   if (canary) return { lines: [line], problems: [], caught: astray > 0, moments: [] };
   const [standX, standZ] = yardToWorld(YARD.gateAt, -YARD.halfZ - BEFORE_GATE);
   G.player.walkTo = null;
-  G.player.place(new THREE.Vector3(standX, groundHeight(standX, standZ), standZ), YARD.turn);
+  G.player.place(new Vec3(standX, groundHeight(standX, standZ), standZ), YARD.turn);
   faceCamera(YARD.turn);
   await lab.step(SETTLE);
   const gate = await lab.screen('its gate', ['no fires on its posts']);

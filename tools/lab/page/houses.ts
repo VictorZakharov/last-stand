@@ -8,7 +8,7 @@
 // within the window, a reply's key leading on to his rumour, Esc ending it; and the door inside by E putting him back
 // before the cottage's door, the village shown again and the room hidden, the
 // yard's dummies still on their spots. Each in another of the views.
-import * as THREE from 'three';
+import { boundsOf, Box3, Mesh, Node, Vec3 } from './sceneApi.ts';
 import type { Lab, Pictured, Report } from './lab';
 import { G } from '../../../src/state';
 import { HOUSES, ROOM_IDS, insideOf, outsideOf, type RoomId } from '../../../src/data/houses';
@@ -120,7 +120,7 @@ const roomShown = (id: RoomId): boolean => G.arena.rooms![id].group.visible;
 /** The hero put at (x, z), facing `facing`, and let settle. */
 export async function stand(lab: Lab, [x, z]: readonly [number, number], facing: number): Promise<void> {
   G.player.walkTo = null;
-  G.player.place(new THREE.Vector3(x, groundHeight(x, z), z), facing);
+  G.player.place(new Vec3(x, groundHeight(x, z), z), facing);
   await lab.step(SETTLE);
 }
 
@@ -142,7 +142,7 @@ export async function useByE(lab: Lab, o: VillageObject, problems: string[]): Pr
 }
 
 /** Whether the room's walls keep the camera and the hero inside (m to spare), in the room's frame. */
-function inside(id: RoomId, at: THREE.Vector3, spare: number): boolean {
+function inside(id: RoomId, at: Vec3, spare: number): boolean {
   const [hx, hz] = HOUSES[id].half;
   return Math.abs(at.x) < hx + spare && Math.abs(at.z) < hz + spare && at.y < HOUSES[id].high + spare;
 }
@@ -341,7 +341,7 @@ async function visit(lab: Lab, id: RoomId, view: ViewMode, canary: boolean, mome
     lines.push(faces.line);
     if (!canary && faces.places) problems.push(faces.line);
   }
-  G.arena.rooms![id].cutAway(G.camera.getWorldPosition(new THREE.Vector3()));
+  G.arena.rooms![id].cutAway(G.camera.getWorldPosition(new Vec3()));
   // (its trophies hung again for the bosses beaten: the check showed every part)
   if (id === 'records') writeRecords();
   const caught = canary ? tapCaught && (faces?.places ?? 0) > 0 : undefined;
@@ -352,11 +352,11 @@ async function visit(lab: Lab, id: RoomId, view: ViewMode, canary: boolean, mome
   if (id === 'tavern' && view === 'third') {
     // (the shelf pottery and the sign's clearance from the ridge, close enough to judge what the player met in #733)
     moments.push(lab.picture('houses-tavern-pottery', ['back'], [], {
-      at: new THREE.Vector3(-4.3, 2.05, -3.85), distance: 5,
+      at: new Vec3(-4.3, 2.05, -3.85), distance: 5,
     }));
     // (wide enough to show the ridge beam where it meets the wall beside the sign)
     moments.push(lab.picture('houses-tavern-sign', ['right'], [], {
-      at: new THREE.Vector3(-5.35, 2.3, -1.0), distance: 10,
+      at: new Vec3(-5.35, 2.3, -1.0), distance: 10,
     }));
   }
   // (from above, the wheel turned out and in as far as it goes, before any card opens over the room: the zoom kept to the room's)
@@ -427,8 +427,8 @@ const TOUCH = 0.01;
 const LIFTED = 0.25;
 
 /** A box shrunk by `by` on every side. */
-const shrunk = (box: THREE.Box3, by: number): THREE.Box3 =>
-  box.clone().expandByVector(new THREE.Vector3(-by, -by, -by));
+const shrunk = (box: Box3, by: number): Box3 =>
+  box.clone().expandByVector(new Vec3(-by, -by, -by));
 
 /**
  * Every room's chandeliers held clear of its ceiling's beams and planks (from play, of a house's: "Fix light fixture,
@@ -440,12 +440,12 @@ const shrunk = (box: THREE.Box3, by: number): THREE.Box3 =>
 /** The box of each part under `object`, in the world: its meshes', and those of the meshes a merge of what stands
  *  still took from under it (`mergedParts`, kept by `mergeStill` in dev builds: merged, a chandelier and the ceiling's
  *  beams are no meshes of their own, and read by its meshes alone this check passed with nothing read). */
-export function partBoxes(object: THREE.Object3D): THREE.Box3[] {
-  const boxes: THREE.Box3[] = [];
+export function partBoxes(object: Node): Box3[] {
+  const boxes: Box3[] = [];
   object.traverse((o) => {
     // (a merge itself is no part: its box is round every part merged into it, the ceiling's timbers' the whole ceiling)
-    if ((o as THREE.Mesh).isMesh && !o.userData.mergedOf) boxes.push(new THREE.Box3().setFromObject(o));
-    for (const box of (o.userData.mergedParts as THREE.Box3[] | undefined) ?? []) boxes.push(box.clone());
+    if ((o as Mesh).isMesh && !o.userData.mergedOf) boxes.push(boundsOf(o));
+    for (const box of (o.userData.mergedParts as Box3[] | undefined) ?? []) boxes.push(box.clone());
   });
   return boxes;
 }
@@ -468,7 +468,7 @@ function fixturesClear(canary: boolean): { lines: string[]; problems: string[]; 
       const parts = partBoxes(fixture);
       if (!parts.length) throw new Error(`lab: houses: the ${id}'s chandelier has no parts to read`);
       // (the canary's lift: its parts are merged into the room's still meshes, so its group moves nothing drawn)
-      if (fixture === lifted) for (const part of parts) part.translate(new THREE.Vector3(0, LIFTED, 0));
+      if (fixture === lifted) for (const part of parts) part.translate(new Vec3(0, LIFTED, 0));
       through += parts.filter((part) => beams.some((beam) => beam.intersectsBox(part))).length;
     }
     const note = lifted ? ' (lifted: the canary)' : '';
@@ -484,7 +484,7 @@ function fixturesClear(canary: boolean): { lines: string[]; problems: string[]; 
     const parts = partBoxes(sign);
     if (!parts.length) throw new Error('lab: houses: the tavern sign has no parts to read');
     // (back to #733's place: west-wall local x 1.4 to 1.0 is +0.4 m in world z; its group is already merged)
-    if (canary) for (const part of parts) part.translate(new THREE.Vector3(0, 0, 0.4));
+    if (canary) for (const part of parts) part.translate(new Vec3(0, 0, 0.4));
     const ceiling = G.arena.rooms.tavern.group.getObjectByName('ceiling')!;
     const beams = partBoxes(ceiling).map((box) => shrunk(box, TOUCH));
     const through = parts.filter((part) => beams.some((beam) => beam.intersectsBox(part))).length;

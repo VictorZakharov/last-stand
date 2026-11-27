@@ -32,26 +32,26 @@ export class EarNode {
 
 /** Puts a new node for point `i` after `last` (alone if there's none) and gives it back. */
 export function insertNode(i: number, x: number, y: number, last: EarNode | null): EarNode {
-  const p = new EarNode(i, x, y);
-  if (!last) return p;
-  p.next = last.next;
-  p.prev = last;
-  last.next.prev = p;
-  last.next = p;
-  return p;
+  const point = new EarNode(i, x, y);
+  if (!last) return point;
+  point.next = last.next;
+  point.prev = last;
+  last.next.prev = point;
+  last.next = point;
+  return point;
 }
 
-/** Takes `p` out of its ring and its z-order. */
-export function removeNode(p: EarNode): void {
-  p.next.prev = p.prev;
-  p.prev.next = p.next;
-  if (p.prevZ) p.prevZ.nextZ = p.nextZ;
-  if (p.nextZ) p.nextZ.prevZ = p.prevZ;
+/** Takes `point` out of its ring and its z-order. */
+export function removeNode(point: EarNode): void {
+  point.next.prev = point.prev;
+  point.prev.next = point.next;
+  if (point.prevZ) point.prevZ.nextZ = point.nextZ;
+  if (point.nextZ) point.nextZ.prevZ = point.prevZ;
 }
 
-/** Twice the signed area of the triangle (p, q, r): below 0 a left turn as earcut winds them. */
-export function area(p: EarNode, q: EarNode, r: EarNode): number {
-  return (q.y - p.y) * (r.x - q.x) - (q.x - p.x) * (r.y - q.y);
+/** Twice the signed area of the triangle (point, middle, last): below 0 a left turn as earcut winds them. */
+export function area(point: EarNode, middle: EarNode, last: EarNode): number {
+  return (middle.y - point.y) * (last.x - middle.x) - (middle.x - point.x) * (last.y - middle.y);
 }
 
 /** Whether two nodes are at the same point. */
@@ -68,14 +68,15 @@ export function pointInTriangle(ax: number, ay: number, bx: number, by: number, 
 }
 
 /** -1, 0 or 1. */
-function sign(n: number): number {
-  return n > 0 ? 1 : n < 0 ? -1 : 0;
+function sign(value: number): number {
+  return value > 0 ? 1 : value < 0 ? -1 : 0;
 }
 
-/** Whether q lies in the box of the segment p to r (q in line with them). */
-function onSegment(p: EarNode, q: EarNode, r: EarNode): boolean {
-  return q.x <= Math.max(p.x, r.x) && q.x >= Math.min(p.x, r.x) && q.y <= Math.max(p.y, r.y)
-    && q.y >= Math.min(p.y, r.y);
+/** Whether `middle` lies in the box of the segment `point` to `last` (all three in line). */
+function onSegment(point: EarNode, middle: EarNode, last: EarNode): boolean {
+  return middle.x <= Math.max(point.x, last.x) && middle.x >= Math.min(point.x, last.x)
+    && middle.y <= Math.max(point.y, last.y)
+    && middle.y >= Math.min(point.y, last.y);
 }
 
 /** Whether the segments p1 to q1 and p2 to q2 cross or touch. */
@@ -91,34 +92,37 @@ export function intersects(p1: EarNode, q1: EarNode, p2: EarNode, q2: EarNode): 
   return o4 === 0 && onSegment(p2, q1, q2);
 }
 
-/** Whether a diagonal from a to b starts inside the ring at a. */
-export function locallyInside(a: EarNode, b: EarNode): boolean {
-  if (area(a.prev, a, a.next) < 0) return area(a, b, a.next) >= 0 && area(a, a.prev, b) >= 0;
-  return area(a, b, a.prev) < 0 || area(a, a.next, b) < 0;
+/** Whether a diagonal from nodeA to nodeB starts inside the ring at nodeA. */
+export function locallyInside(nodeA: EarNode, nodeB: EarNode): boolean {
+  if (area(nodeA.prev, nodeA, nodeA.next) < 0) {
+    return area(nodeA, nodeB, nodeA.next) >= 0 && area(nodeA, nodeA.prev, nodeB) >= 0;
+  }
+  return area(nodeA, nodeB, nodeA.prev) < 0 || area(nodeA, nodeA.next, nodeB) < 0;
 }
 
-/** Whether the middle of a to b is inside the ring (by the crossings of a line from it). */
-export function middleInside(a: EarNode, b: EarNode): boolean {
-  let p = a;
+/** Whether the middle of nodeA to nodeB is inside the ring (by the crossings of a line from it). */
+export function middleInside(nodeA: EarNode, nodeB: EarNode): boolean {
+  let point = nodeA;
   let inside = false;
-  const px = (a.x + b.x) / 2;
-  const py = (a.y + b.y) / 2;
+  const px = (nodeA.x + nodeB.x) / 2;
+  const py = (nodeA.y + nodeB.y) / 2;
   do {
-    const crosses = (p.y > py) !== (p.next.y > py) && p.next.y !== p.y;
-    if (crosses && px < (p.next.x - p.x) * (py - p.y) / (p.next.y - p.y) + p.x) inside = !inside;
-    p = p.next;
-  } while (p !== a);
+    const crosses = (point.y > py) !== (point.next.y > py) && point.next.y !== point.y;
+    const left = crosses && px < (point.next.x - point.x) * (py - point.y) / (point.next.y - point.y) + point.x;
+    if (left) inside = !inside;
+    point = point.next;
+  } while (point !== nodeA);
   return inside;
 }
 
-/** Splits the ring along a to b into two, each with copies of a and b; gives back b's copy. */
-export function splitPolygon(a: EarNode, b: EarNode): EarNode {
-  const a2 = new EarNode(a.i, a.x, a.y);
-  const b2 = new EarNode(b.i, b.x, b.y);
-  const an = a.next;
-  const bp = b.prev;
-  a.next = b;
-  b.prev = a;
+/** Splits the ring along nodeA to nodeB into two, each with copies of both; gives back nodeB's copy. */
+export function splitPolygon(nodeA: EarNode, nodeB: EarNode): EarNode {
+  const a2 = new EarNode(nodeA.i, nodeA.x, nodeA.y);
+  const b2 = new EarNode(nodeB.i, nodeB.x, nodeB.y);
+  const an = nodeA.next;
+  const bp = nodeB.prev;
+  nodeA.next = nodeB;
+  nodeB.prev = nodeA;
   a2.next = an;
   an.prev = a2;
   b2.next = a2;

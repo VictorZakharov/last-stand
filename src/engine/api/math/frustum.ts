@@ -38,27 +38,27 @@ export class Frustum {
   }
 
   /**
-   * The planes of `m` (a projection times a view), each normalized. Follows three.js 0.187.0's
+   * The planes of `matrix` (a projection times a view), each normalized. Follows three.js 0.187.0's
    * `Frustum.setFromProjectionMatrix` (Gribb and Hartmann's rows; the near plane by the coordinate system's depth
    * range, near and far swapped for a reversed depth).
    */
-  setFromProjectionMatrix(m: Mat4, coordinateSystem: CoordinateSystem = WebGLCoordinateSystem,
+  setFromProjectionMatrix(matrix: Mat4, coordinateSystem: CoordinateSystem = WebGLCoordinateSystem,
     reversedDepth = false): this {
-    const e = m.elements;
+    const elements = matrix.elements;
     const planes = this.planes;
-    fromRows(planes[0], e, 0, -1);
-    fromRows(planes[1], e, 0, 1);
-    fromRows(planes[2], e, 1, 1);
-    fromRows(planes[3], e, 1, -1);
+    fromRows(planes[0], elements, 0, -1);
+    fromRows(planes[1], elements, 0, 1);
+    fromRows(planes[2], elements, 1, 1);
+    fromRows(planes[3], elements, 1, -1);
     if (reversedDepth) {
-      fromDepthRow(planes[4], e);
-      fromRows(planes[5], e, 2, -1);
+      fromDepthRow(planes[4], elements);
+      fromRows(planes[5], elements, 2, -1);
     } else if (coordinateSystem === WebGLCoordinateSystem) {
-      fromRows(planes[4], e, 2, -1);
-      fromRows(planes[5], e, 2, 1);
+      fromRows(planes[4], elements, 2, -1);
+      fromRows(planes[5], elements, 2, 1);
     } else if (coordinateSystem === WebGPUCoordinateSystem) {
-      fromRows(planes[4], e, 2, -1);
-      fromDepthRow(planes[5], e);
+      fromRows(planes[4], elements, 2, -1);
+      fromDepthRow(planes[5], elements);
     } else {
       throw new Error('Frustum.setFromProjectionMatrix: unknown coordinate system: ' + coordinateSystem);
     }
@@ -76,8 +76,10 @@ export class Frustum {
   /** whether `box` is at least partly inside (by each plane's farthest corner along its normal) */
   intersectsBox(box: Box3): boolean {
     for (const plane of this.planes) {
-      const n = plane.normal;
-      corner.set(n.x > 0 ? box.max.x : box.min.x, n.y > 0 ? box.max.y : box.min.y, n.z > 0 ? box.max.z : box.min.z);
+      const normal = plane.normal;
+      const x = normal.x > 0 ? box.max.x : box.min.x;
+      const y = normal.y > 0 ? box.max.y : box.min.y;
+      corner.set(x, y, normal.z > 0 ? box.max.z : box.min.z);
       if (plane.distanceToPoint(corner) < 0) return false;
     }
     return true;
@@ -93,14 +95,17 @@ export class Frustum {
 }
 
 /** sets `plane` to the matrix's fourth row plus `sign` (1 or -1) times its row `i`, normalized */
-function fromRows(plane: Plane, e: readonly number[], i: number, sign: number): void {
-  plane.setComponents(e[3] + sign * e[i], e[7] + sign * e[4 + i], e[11] + sign * e[8 + i], e[15] + sign * e[12 + i]);
+function fromRows(plane: Plane, elements: readonly number[], i: number, sign: number): void {
+  const x = elements[3] + sign * elements[i];
+  const y = elements[7] + sign * elements[4 + i];
+  const z = elements[11] + sign * elements[8 + i];
+  plane.setComponents(x, y, z, elements[15] + sign * elements[12 + i]);
   plane.normalize();
 }
 
 /** sets `plane` to the matrix's third row alone (a 0 to 1 depth's near plane), normalized */
-function fromDepthRow(plane: Plane, e: readonly number[]): void {
-  plane.setComponents(e[2], e[6], e[10], e[14]);
+function fromDepthRow(plane: Plane, elements: readonly number[]): void {
+  plane.setComponents(elements[2], elements[6], elements[10], elements[14]);
   plane.normalize();
 }
 

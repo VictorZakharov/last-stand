@@ -364,16 +364,9 @@ function apply(l: QualityLevel, most = Infinity): void {
   setRenderQuality(p, most);
   setHeroDetail(p.heroDetail);
   const shadow = G.arena.moon.shadow;
-  // (the map is sized once, as it's first made: three
-  // resizes it from `mapSize` as it draws it, but the lit materials kept the old map's binding, and every frame's
-  // submit was refused for drawing with it destroyed, 543 times a lab profile, the scene's picture standing still as
-  // the game went on: a phone's hero stuck mid pose once Auto stepped down a level, trace 4CP9-45EC)
-  const resizable = shadow.map === null;
-  if (shadow.mapSize.x !== p.shadowMap && resizable) {
-    shadow.mapSize.set(p.shadowMap, p.shadowMap);
-    shadow.map?.dispose();
-    shadow.map = null;
-  }
+  // (the map's size the level's: the engine owns the map itself and sizes it from `mapSize`. three's WebGPU build
+  // sized it once, as it was first made: resized, the lit materials kept the old map's binding, trace 4CP9-45EC)
+  if (shadow.mapSize.x !== p.shadowMap) shadow.mapSize.set(p.shadowMap, p.shadowMap);
   // (a uniform: as wide on the floor at every map's size)
   shadow.radius = PENUMBRA * shadow.mapSize.x / (shadow.camera.right - shadow.camera.left);
   setRubbleShadows(p.minCasterRadius);

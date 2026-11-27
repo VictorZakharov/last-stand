@@ -25,7 +25,8 @@ export function bevelVector(point: Vec2, before: Vec2, after: Vec2): Vec2 {
     const prevShiftY = before.y + prevX / prevLength;
     const nextShiftX = after.x - nextY / nextLength;
     const nextShiftY = after.y + nextX / nextLength;
-    const sf = ((nextShiftX - prevShiftX) * nextY - (nextShiftY - prevShiftY) * nextX) / (prevX * nextY - prevY * nextX);
+    const sf = ((nextShiftX - prevShiftX) * nextY - (nextShiftY - prevShiftY) * nextX)
+      / (prevX * nextY - prevY * nextX);
     const transX = prevShiftX + prevX * sf - point.x;
     const transY = prevShiftY + prevY * sf - point.y;
     const transLengthSq = transX * transX + transY * transY;

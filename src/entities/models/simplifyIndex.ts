@@ -1,4 +1,4 @@
-// A geometry's triangles under fewer (three's meshoptimizer: the vertices kept as they are, an index of fewer
+// A geometry's triangles under fewer (meshoptimizer's own build: the vertices kept as they are, an index of fewer
 // triangles over them), from its index and positions alone: made on the page or in a worker (`simplify.worker.ts`),
 // the same either way. `shadowDetail.ts` says what for.
 
@@ -13,7 +13,7 @@ export interface Detail {
 /** the most of its triangles a simplified piece may keep to be worth keeping */
 const WORTH_UNDER = 0.8;
 
-export type Simplifier = typeof import('three/addons/libs/meshopt_simplifier.module.js').MeshoptSimplifier;
+export type Simplifier = typeof import('meshoptimizer/simplifier').MeshoptSimplifier;
 
 /** `index`'s triangles over `positions` (three floats a vertex) simplified to `detail`, or null where they give up too
  *  few. */

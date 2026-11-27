@@ -1,7 +1,7 @@
 // A mesh moved by bones: its skeleton's bones are nodes, and the engine makes its bones' matrices from them each
 // frame (Bulwark's nodes.rs skins). What the game reads of them itself (a cloth, an arrow's hit) is made here on
 // asking (`Skeleton.update`).
-import { Mat4 } from '../math/index.ts';
+import { Mat4, Vec3 } from '../math/index.ts';
 import type { Geometry } from '../geometry/index.ts';
 import type { Material } from '../material/index.ts';
 import { Mesh } from './mesh.ts';
@@ -14,7 +14,10 @@ export const AttachedBindMode: BindMode = 'attached';
 /** bound where it stood when bound (three's `DetachedBindMode`) */
 export const DetachedBindMode: BindMode = 'detached';
 
-const _m = new Mat4();
+const scratchMatrix = new Mat4();
+const scratchBone = new Mat4();
+const scratchBind = new Vec3();
+const scratchMoved = new Vec3();
 
 /** A joint of a skeleton: a node. */
 export class Bone extends Node {
@@ -72,8 +75,8 @@ export class Skeleton {
   /** Each bone's matrix for the skin made into `boneMatrices`: where it stands, after its inverse bind. */
   update(): void {
     this.bones.forEach((bone, at) => {
-      _m.multiplyMatrices(bone.matrixWorld, this.boneInverses[at]);
-      _m.toArray(this.boneMatrices, at * 16);
+      scratchMatrix.multiplyMatrices(bone.matrixWorld, this.boneInverses[at]);
+      scratchMatrix.toArray(this.boneMatrices, at * 16);
     });
   }
 
@@ -92,8 +95,8 @@ export class SkinnedMesh<G extends Geometry = Geometry, M extends Material | Mat
   extends Mesh<G, M> {
   /** what every skinned mesh says it is */
   readonly isSkinnedMesh = true;
-  /** its bones, once bound */
-  skeleton: Skeleton | null = null;
+  /** its bones, once bound (typed as bound, as three's is: read before `bind`, it's undefined) */
+  skeleton!: Skeleton;
   /** how its bind is held */
   bindMode: BindMode = AttachedBindMode;
   /** its world matrix as it was bound, and that inverted */
@@ -126,6 +129,28 @@ export class SkinnedMesh<G extends Geometry = Geometry, M extends Material | Mat
   bindInverseNow(): Mat4 {
     if (this.bindMode === AttachedBindMode) this.bindMatrixInverse.copy(this.matrixWorld).invert();
     return this.bindMatrixInverse;
+  }
+
+  /**
+   * `target` (a point in its own space, as bound) moved as its vertex `at`'s bones move it, in its own space; the
+   * point. Three 0.187's `SkinnedMesh.applyBoneTransform`: into the bind's space, each of four bones' moves weighed,
+   * back out. Unmoved where it has no skeleton or no skin's attributes.
+   */
+  applyBoneTransform(at: number, target: Vec3): Vec3 {
+    const bones = this.geometry.getAttribute('skinIndex');
+    const weights = this.geometry.getAttribute('skinWeight');
+    const skeleton = this.skeleton;
+    if (!skeleton || !bones || !weights) return target;
+    scratchBind.copy(target).applyMatrix4(this.bindMatrix);
+    target.set(0, 0, 0);
+    for (let k = 0; k < 4; k++) {
+      const weight = weights.getComponent(at, k);
+      if (weight === 0) continue;
+      const bone = bones.getComponent(at, k);
+      scratchBone.multiplyMatrices(skeleton.bones[bone].matrixWorld, skeleton.boneInverses[bone]);
+      target.addScaledVector(scratchMoved.copy(scratchBind).applyMatrix4(scratchBone), weight);
+    }
+    return target.applyMatrix4(this.bindInverseNow());
   }
 
   /** `source` copied onto it, its skeleton and bind shared; itself. */

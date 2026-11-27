@@ -5,7 +5,7 @@
 // stood under the crosshair at depths from abreast of the hero to well ahead of him, and at each the aim's way from
 // the hero is held to the way the camera looks, the dummy still the foe aimed at. `canary` takes the aim's least
 // distance off (`aim.near` in `src/core/input.ts`), which third person must show.
-import * as THREE from 'three';
+import { Maths, Ray, Vec3 } from './sceneApi.ts';
 import type { Fixture, Lab, Report } from './lab';
 import type { ViewMode } from '../../../src/core/renderer';
 import { input } from '../../../src/core/input';
@@ -30,20 +30,20 @@ const SETTLE_FRAMES = 3;
 interface Aimed { depth: number; met: boolean; off: number; far: number }
 
 /** The way the camera looks across the floor, and the crosshair's ray. */
-function crosshairRay(): { forward: THREE.Vector3; ray: THREE.Ray } {
-  const direction = G.camera.getWorldDirection(new THREE.Vector3());
-  const forward = new THREE.Vector3(direction.x, 0, direction.z).normalize();
-  return { forward, ray: new THREE.Ray(G.camera.getWorldPosition(new THREE.Vector3()), direction) };
+function crosshairRay(): { forward: Vec3; ray: Ray } {
+  const direction = G.camera.getWorldDirection(new Vec3());
+  const forward = new Vec3(direction.x, 0, direction.z).normalize();
+  return { forward, ray: new Ray(G.camera.getWorldPosition(new Vec3()), direction) };
 }
 
 /** The point of the floor under the crosshair's ray `depth` ahead of the hero the way the camera looks; null where
  *  the ray is never there. */
-function spotAt(depth: number): THREE.Vector3 | null {
+function spotAt(depth: number): Vec3 | null {
   const { forward, ray } = crosshairRay();
   const toHero = ray.origin.clone().sub(G.player.pos);
   const along = (depth - toHero.dot(forward)) / ray.direction.dot(forward);
   if (!(along > 0)) return null;
-  return ray.at(along, new THREE.Vector3()).setY(0);
+  return ray.at(along, new Vec3()).setY(0);
 }
 
 /** The aim read with a dummy stood under the crosshair `depth` ahead of the hero, on a set-up of its own. */
@@ -55,8 +55,8 @@ async function aimedAt(lab: Lab, fixture: Fixture, depth: number): Promise<Aimed
   await lab.until(() => dummy.spawning <= 0, RISE_FRAMES, 'the dummy never rose');
   await lab.step(SETTLE_FRAMES);
   const hero = G.player;
-  const way = new THREE.Vector3(hero.aim.x - hero.pos.x, 0, hero.aim.z - hero.pos.z);
-  const off = THREE.MathUtils.radToDeg(way.angleTo(crosshairRay().forward));
+  const way = new Vec3(hero.aim.x - hero.pos.x, 0, hero.aim.z - hero.pos.z);
+  const off = Maths.radToDeg(way.angleTo(crosshairRay().forward));
   return { depth, met: input.foe === dummy, off, far: way.length() };
 }
 

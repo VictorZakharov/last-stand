@@ -1,5 +1,5 @@
 // Where the village dummy's head actually goes as a real skill hits it.
-import * as THREE from 'three';
+import { Vec3 } from './sceneApi.ts';
 import { YARD_DUMMIES } from '../../../src/data/village';
 import type { Enemy } from '../../../src/entities/enemy';
 import { inYard } from '../../../src/game/village';
@@ -14,15 +14,15 @@ export interface DummyHitOptions {
 }
 
 const FROM_SIDES = [
-  ['west', new THREE.Vector3(1, 0, 0)],
-  ['east', new THREE.Vector3(-1, 0, 0)],
-  ['north', new THREE.Vector3(0, 0, 1)],
-  ['south', new THREE.Vector3(0, 0, -1)],
+  ['west', new Vec3(1, 0, 0)],
+  ['east', new Vec3(-1, 0, 0)],
+  ['north', new Vec3(0, 0, 1)],
+  ['south', new Vec3(0, 0, -1)],
 ] as const;
 const ATTACKS = { warrior: 'cleave', ranger: 'nockShot', mage: 'starfall' } as const;
 
 /** Launch a known skill and return the horizontal direction the dummy should move. */
-function strike(lab: Lab, dummy: Enemy, outward: THREE.Vector3, attack: string): THREE.Vector3 {
+function strike(lab: Lab, dummy: Enemy, outward: Vec3, attack: string): Vec3 {
   const hero = lab.player;
   const skill = hero.skillOf(attack);
   if (!skill) throw new Error(`lab: the ${hero.cls.id} does not know ${attack}`);
@@ -35,7 +35,7 @@ function strike(lab: Lab, dummy: Enemy, outward: THREE.Vector3, attack: string):
 
   const arrow = G.projectiles.find((shot) => !shot.hostile && shot.alive);
   if (!arrow) throw new Error('lab: Nockshot did not launch an arrow');
-  const flight = new THREE.Vector3(arrow.vel.x, 0, arrow.vel.z).normalize();
+  const flight = new Vec3(arrow.vel.x, 0, arrow.vel.z).normalize();
   if (flight.dot(outward) < 0.85) throw new Error('lab: the arrow did not fly in from the named side');
   // The archer changes sides after release. The dummy must still follow the arrow.
   const other = dummy.pos.clone().addScaledVector(outward, 1.6);
@@ -69,27 +69,27 @@ export async function measureDummyHit(lab: Lab, { canary, pictures }: DummyHitOp
       const label = `${attack} from ${side}`;
       const stand = dummy.pos.clone().addScaledVector(outward, -1.6);
       // For the area attack, the caster is to the side of the blast's direction.
-      if (attack === ATTACKS.mage) stand.add(new THREE.Vector3(-outward.z, 0, outward.x));
+      if (attack === ATTACKS.mage) stand.add(new Vec3(-outward.z, 0, outward.x));
       if (!inYard(stand.x, stand.z)) throw new Error(`lab: the ${side} attack started outside the yard`);
       stand.y = groundHeight(stand.x, stand.z);
       lab.player.walkTo = null;
       lab.player.place(stand, Math.atan2(outward.x, outward.z));
       await lab.step(3);
-      const atRest = head.getWorldPosition(new THREE.Vector3());
+      const atRest = head.getWorldPosition(new Vec3());
       const before = meter.burst;
       const expected = strike(lab, dummy, outward, attack);
       await lab.until(() => meter.burst.hits !== before.hits || meter.burst.total !== before.total, 90,
         `the attack from ${side} never registered on the dummy's damage meter`);
       if (attack === 'glacialNova' && dummy.frozen <= 0) problems.push(`${label}: the dummy never froze`);
 
-      const swing: THREE.Vector3[] = [head.getWorldPosition(new THREE.Vector3()).sub(atRest)];
+      const swing: Vec3[] = [head.getWorldPosition(new Vec3()).sub(atRest)];
       swing.push(...await lab.step(14, undefined, (frame) => {
         if (pictures && frame === 10 && (side === 'east' || side === 'west')) {
           moments.push(lab.picture(label, ['plan'], [], { at: atRest, distance: 3.8 }));
         }
-        return head.getWorldPosition(new THREE.Vector3()).sub(atRest);
+        return head.getWorldPosition(new Vec3()).sub(atRest);
       }));
-      const flat = (v: THREE.Vector3) => Math.hypot(v.x, v.z);
+      const flat = (v: Vec3) => Math.hypot(v.x, v.z);
       const first = swing.find((offset) => flat(offset) > 0.03);
       if (!first) problems.push(`${label}: the hit did not visibly tip the dummy`);
       const alignment = first ? first.dot(expected) / flat(first) : 0;
@@ -97,11 +97,11 @@ export async function measureDummyHit(lab: Lab, { canary, pictures }: DummyHitOp
         wrongWays++;
         if (!canary) problems.push(`${label}: the dummy did not tip away from the blow`);
       }
-      const rebound = await lab.step(28, undefined, () => head.getWorldPosition(new THREE.Vector3()).sub(atRest));
+      const rebound = await lab.step(28, undefined, () => head.getWorldPosition(new Vec3()).sub(atRest));
       const reversed = rebound.some((offset) => offset.dot(first ?? expected) < -0.001);
       if (!reversed && attack !== ATTACKS.mage) problems.push(`${label}: the dummy did not rebound`);
       await lab.step(180);
-      const drift = flat(head.getWorldPosition(new THREE.Vector3()).sub(atRest));
+      const drift = flat(head.getWorldPosition(new Vec3()).sub(atRest));
       if (drift > 0.01) problems.push(`${label}: the dummy did not settle back upright`);
       lines.push(`${label}: direction agreement ${alignment.toFixed(2)}, settled within ${(drift * 100).toFixed(2)} cm`);
     }

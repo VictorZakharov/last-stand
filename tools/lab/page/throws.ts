@@ -9,7 +9,7 @@
 // (The owner's words: "lava giants in crypt should throw lava chunks at player's location, at ballistic trajectory, if
 // far from player", "a vine that sprawls on ground, ignoring obstacles in a straight line, that makes player bound to
 // the ground for 1.5sec", "should be able to dodge while its being deployed".)
-import * as THREE from 'three';
+import { Vec3 } from './sceneApi.ts';
 import type { Fixture, Frame, Lab, Report } from './lab';
 import type { Enemy } from '../../../src/entities/enemy';
 import type { EnemyId } from '../../../src/data/enemies';
@@ -59,11 +59,11 @@ const SHOT = { ahead: 2.5, freedWithin: 15, loosedAfter: 10 };
 const CANARY = { splash: 6, reach: 4 };
 
 /** Which way he moves: W (towards the thrower) and D (aside) as the camera has them, on the floor. */
-function screenWays(): { w: THREE.Vector3; d: THREE.Vector3 } {
+function screenWays(): { w: Vec3; d: Vec3 } {
   const yaw = cameraYaw();
   return {
-    w: new THREE.Vector3(-Math.sin(yaw), 0, -Math.cos(yaw)),
-    d: new THREE.Vector3(Math.cos(yaw), 0, -Math.sin(yaw)),
+    w: new Vec3(-Math.sin(yaw), 0, -Math.cos(yaw)),
+    d: new Vec3(Math.cos(yaw), 0, -Math.sin(yaw)),
   };
 }
 
@@ -87,7 +87,7 @@ function hurtsFrom(lab: Lab, frame: () => number): { hurts: Hurt[]; stop(): void
 }
 
 /** the case's thrower and its spot, put back on it before every frame (`pinThrower`) */
-let pinned: { foe: Enemy; spot: THREE.Vector3 } | null = null;
+let pinned: { foe: Enemy; spot: Vec3 } | null = null;
 
 /** The case's thrower put back on its spot: it turns and throws as its AI has it, but never walks up. */
 function pinThrower(): void {
@@ -108,7 +108,7 @@ async function throwerOf(lab: Lab, kind: EnemyId, distance: number): Promise<Ene
 }
 
 /** The frames until the thrower's next throw, and that throw with where the hero stood as it left the hand. */
-async function nextThrow(lab: Lab, foe: Enemy): Promise<{ thrown: Thrown; stood: THREE.Vector3 } | null> {
+async function nextThrow(lab: Lab, foe: Enemy): Promise<{ thrown: Thrown; stood: Vec3 } | null> {
   const before = THROWN.at(-1);
   let thrown: Thrown | undefined;
   for (let frame = 0; frame < WAIT && !thrown; frame++) {
@@ -259,8 +259,8 @@ async function vineAt(lab: Lab, options: ThrowsOptions, how: VineCase, def: Thro
   const hold = def.creep?.[2] ?? 1.5;
   const ways = screenWays();
   const aside = stood.clone().addScaledVector(ways.d, -6);
-  let frame = 0, heldFrom = -1, heldTo = -1, heldAt: THREE.Vector3 | null = null, movedHeld = 0;
-  let pressedAt = -1, afterAt: THREE.Vector3 | null = null, loosedAt = -1, witheredAt = -1;
+  let frame = 0, heldFrom = -1, heldTo = -1, heldAt: Vec3 | null = null, movedHeld = 0;
+  let pressedAt = -1, afterAt: Vec3 | null = null, loosedAt = -1, witheredAt = -1;
   const trace: string[] = [];
   const input = (f: number): Frame => {
     if (how === 'step') return { keys: f < 50 ? ['d'] : [] };

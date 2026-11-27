@@ -3,7 +3,7 @@
 // (`bodyAsOneMatch.ts`). From play, a party at wave 36 sent 2,668 draws on a laptop whose CPU took 25 ms a frame,
 // each foe 31 to 50 pieces walked and written a frame. The canary: two of one body's joints swapped, which must put
 // its vertices metres off.
-import * as THREE from 'three';
+import { Mesh, Node, Skeleton, SkinnedMesh } from './sceneApi.ts';
 import { G } from '../../../src/state';
 import type { Enemy } from '../../../src/entities/enemy';
 import type { CrowdBody } from '../../../src/entities/models/crowd';
@@ -12,9 +12,9 @@ import { MATCH_MOST, matchBody } from './bodyAsOneMatch';
 
 /** the game's module that draws a body as one, where this tree has it (an A/B's other side may not) */
 type AsOne = {
-  slotPieces: (body: CrowdBody) => THREE.Mesh[][];
+  slotPieces: (body: CrowdBody) => Mesh[][];
   drawnAsOne: (body: CrowdBody) => boolean;
-  placeUnplaced: (root: THREE.Object3D) => void;
+  placeUnplaced: (root: Node) => void;
 };
 const AS_ONE = import.meta.glob<AsOne>('../../../src/entities/models/bodyAsOne.ts');
 
@@ -22,7 +22,7 @@ const AS_ONE = import.meta.glob<AsOne>('../../../src/entities/models/bodyAsOne.t
 const CANARY_LEAST = 0.05;
 
 /** Whether `object` was handed to the engine as part of `foe`: under its root, or drawn as one for it. */
-export function drawnFor(foe: Enemy, watched: Set<THREE.Object3D>): boolean {
+export function drawnFor(foe: Enemy, watched: Set<Node>): boolean {
   for (const object of watched) {
     if (object.userData.bodyOf === foe.model.root) return true;
   }
@@ -58,11 +58,11 @@ function farthest(foes: Enemy[], module: AsOne): { most: number; worst: string; 
 
 /** `foe`'s skeleton with two of its joints swapped while `measure` runs: the canary's fault. */
 function withJointsSwapped<T>(foe: Enemy, measure: () => T): T {
-  let skeleton: THREE.Skeleton | null = null;
+  let skeleton: Skeleton | null = null;
   G.scene.traverse((object) => {
-    if (!skeleton && object.userData.bodyOf === foe.model.root) skeleton = (object as THREE.SkinnedMesh).skeleton;
+    if (!skeleton && object.userData.bodyOf === foe.model.root) skeleton = (object as SkinnedMesh).skeleton;
   });
-  const bones = (skeleton as THREE.Skeleton | null)?.bones;
+  const bones = (skeleton as Skeleton | null)?.bones;
   if (!bones || bones.length < 2) throw new Error('lab: the canary found no skeleton to plant its fault in');
   const last = bones.length - 1;
   [bones[0], bones[last]] = [bones[last], bones[0]];

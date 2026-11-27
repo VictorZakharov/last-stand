@@ -5,7 +5,7 @@
 // cube map's one `textureLod`, and the frame's GPU time fell by about as much as runs apart differed. With `--ab` each
 // side is timed against itself, under one load. Its canary draws the frame twice with the environment, which must
 // read as more.
-import * as THREE from 'three';
+import { LitMaterial, Material, Mesh, Texture } from './sceneApi.ts';
 import type { Lab, Report } from './lab';
 import { G } from '../../../src/state';
 import * as renderer from '../../../src/core/renderer';
@@ -29,21 +29,23 @@ const CANARY_LEAST = 1.6;
 
 /** The lit materials in view that take the scene's environment (no map of their own), counted once each. */
 function takingEnvironment(): number {
-  const taking = new Set<THREE.Material>();
+  const taking = new Set<Material>();
   G.scene.traverseVisible((object) => {
-    const mesh = object as THREE.Mesh;
+    const mesh = object as Mesh;
     if (!mesh.isMesh) return;
     const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
     for (const material of materials) {
-      const lit = material as THREE.MeshStandardMaterial;
-      if (lit.isMeshStandardMaterial && !lit.envMap) taking.add(material);
+      const lit = material as LitMaterial;
+      // (the API's lit material has no map of its own: the engine lights every one by the scene's; a tree of
+      // three's, an A/B's other side, may give one its own)
+      if (lit.isLitMaterial && !(lit as { envMap?: unknown }).envMap) taking.add(material);
     }
   });
   return taking.size;
 }
 
 /** The frame timed with the scene's environment (`on`) and without, `draws` renders each time it's drawn. */
-function timedWith(environment: THREE.Texture, rounds: number, draws: number): Promise<TurnsCost | null> {
+function timedWith(environment: Texture, rounds: number, draws: number): Promise<TurnsCost | null> {
   const change = (on: boolean) => {
     G.scene.environment = on ? environment : null;
   };

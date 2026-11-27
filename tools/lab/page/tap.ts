@@ -8,7 +8,7 @@
 // and let go, it is cast where the preview last showed, the hero walking on. No tap may open a tooltip. On main a
 // tapped Veilstep went at the nearest foe, landing the mage among the foes, a held skill showed a plain ring where it
 // aimed, not its preview, and a tap's click opened the skill's tooltip pinned over the buttons.
-import * as THREE from 'three';
+import { Maths, Node, Vec3 } from './sceneApi.ts';
 import { middleOf } from './lab';
 import type { Fixture, Lab, PagePoint, Report } from './lab';
 import type { Enemy } from '../../../src/entities/enemy';
@@ -87,14 +87,14 @@ interface Aimed {
 /** A cast as the skill was given it: where the hero was and the point, on the floor, and the frame it came in (of
  *  those run since its finger lifted). */
 interface Cast {
-  from: THREE.Vector3;
-  at: THREE.Vector3;
+  from: Vec3;
+  at: Vec3;
   frame: number;
   /** where the round's foe stood as it was cast (none: a round with no foe) */
-  foe: THREE.Vector3 | null;
+  foe: Vec3 | null;
   /** for a skill that settles where it's cast (`InstantSkill.settle`), the aim it settled from and where it placed
    *  it: the Hedgeward's wall stands within its reach and clear of the props, not on the foe aimed at */
-  settled?: { aim: THREE.Vector3; placed: THREE.Vector3 };
+  settled?: { aim: Vec3; placed: Vec3 };
 }
 
 /** How a skill is tapped: the hero standing, down and up between two frames, or walking. */
@@ -110,10 +110,10 @@ interface Tapped {
   planted: Planted | null;
   cast: Cast | null;
   /** the way it should go (a movement skill's: the stick's walking, his facing standing) */
-  way: THREE.Vector3;
+  way: Vec3;
   /** where the foe stood as the finger lifted, which any other skill should be cast at, and how far it had come from
    *  where it rose (m) */
-  foe: THREE.Vector3;
+  foe: Vec3;
   drift: number;
   /** how far his facing was off the stick's way as it was tapped (walking; deg) */
   facingOff: number | null;
@@ -124,9 +124,9 @@ interface Tapped {
 /** A drag's stop as it showed. */
 interface Stop {
   /** the way the drag points on the floor */
-  way: THREE.Vector3;
+  way: Vec3;
   /** where the preview showed (none: not shown), and how far off the drag's way from the hero (deg) */
-  spot: THREE.Vector3 | null;
+  spot: Vec3 | null;
   off: number | null;
   /** how far the outlined foe stood from the one the drag points at (Quarry Mark's; m) */
   foeMiss: number | null;
@@ -134,7 +134,7 @@ interface Stop {
   ring: boolean;
   /** the hero's speed (m/s), and where he stood */
   speed: number;
-  hero: THREE.Vector3;
+  hero: Vec3;
 }
 
 /** What a drag gave: its stops, the cast as the finger lifted, and the stick and the hero after it. */
@@ -148,8 +148,8 @@ interface Dragged {
 }
 
 /** A point's place on the floor (its height dropped). */
-function flat(point: THREE.Vector3): THREE.Vector3 {
-  return new THREE.Vector3(point.x, 0, point.z);
+function flat(point: Vec3): Vec3 {
+  return new Vec3(point.x, 0, point.z);
 }
 
 /**
@@ -157,24 +157,24 @@ function flat(point: THREE.Vector3): THREE.Vector3 {
  * over it shown too. (The first of its name, shown itself, was another's in a hidden group once the village's rooms
  * came: Strawman's preview read 35 to 76° off the drag's way, and its cast 11.9 m from it, the game's as it was.)
  */
-function meshSpot(name: string): () => THREE.Vector3 | null {
+function meshSpot(name: string): () => Vec3 | null {
   return () => {
-    let shown: THREE.Object3D | null = null;
+    let shown: Node | null = null;
     G.scene.traverseVisible((object) => {
       if (!shown && object.name === name) shown = object;
     });
-    return shown ? flat((shown as THREE.Object3D).getWorldPosition(new THREE.Vector3())) : null;
+    return shown ? flat((shown as Node).getWorldPosition(new Vec3())) : null;
   };
 }
 
 /** Where the foe Quarry Mark's preview outlines stands, or null while it outlines none. */
-function outlinedSpot(): THREE.Vector3 | null {
+function outlinedSpot(): Vec3 | null {
   const look = outlinedLook();
-  return look ? flat(look.root.getWorldPosition(new THREE.Vector3())) : null;
+  return look ? flat(look.root.getWorldPosition(new Vec3())) : null;
 }
 
 /** where each held skill's preview shows, by its `impl` */
-const SPOTS: Record<string, () => THREE.Vector3 | null> = {
+const SPOTS: Record<string, () => Vec3 | null> = {
   blink: meshSpot('blink-preview'),
   starfall: meshSpot('starfall-preview'),
   strawman: meshSpot('strawman-preview-spot'),
@@ -196,24 +196,24 @@ function aimedSkills(): Aimed[] {
 }
 
 /** The camera's right along the floor (unit). */
-function cameraRight(): THREE.Vector3 {
-  return new THREE.Vector3().setFromMatrixColumn(G.camera.matrixWorld, 0).setY(0).normalize();
+function cameraRight(): Vec3 {
+  return new Vec3().setFromMatrixColumn(G.camera.matrixWorld, 0).setY(0).normalize();
 }
 
 /** The screen's down laid on the floor, towards the camera (unit), from its right. */
-function cameraDown(right: THREE.Vector3): THREE.Vector3 {
-  return new THREE.Vector3(-right.z, 0, right.x);
+function cameraDown(right: Vec3): Vec3 {
+  return new Vec3(-right.z, 0, right.x);
 }
 
 /** The way on the floor a move across the screen by `move` (css px) points, as the camera looks at the floor. */
-function groundWay(move: PagePoint): THREE.Vector3 {
+function groundWay(move: PagePoint): Vec3 {
   const right = cameraRight();
   const down = cameraDown(right);
   return right.multiplyScalar(move.x).addScaledVector(down, move.y).normalize();
 }
 
 /** The move across the screen, `length` css px long, that points the way `way` on the floor. */
-function screenMove(way: THREE.Vector3, length: number): PagePoint {
+function screenMove(way: Vec3, length: number): PagePoint {
   const right = cameraRight();
   const down = cameraDown(right);
   const x = way.dot(right);
@@ -223,19 +223,19 @@ function screenMove(way: THREE.Vector3, length: number): PagePoint {
 }
 
 /** The way from `from` to `to` on the floor (unit), or null if they're too near for one. */
-function wayTo(from: THREE.Vector3, to: THREE.Vector3): THREE.Vector3 | null {
+function wayTo(from: Vec3, to: Vec3): Vec3 | null {
   const way = flat(to).sub(flat(from));
   return way.length() < NO_WAY ? null : way.normalize();
 }
 
 /** The angle between two ways on the floor (deg). */
-function degreesOff(a: THREE.Vector3, b: THREE.Vector3): number {
-  return THREE.MathUtils.radToDeg(Math.acos(THREE.MathUtils.clamp(a.dot(b), -1, 1)));
+function degreesOff(a: Vec3, b: Vec3): number {
+  return Maths.radToDeg(Math.acos(Maths.clamp(a.dot(b), -1, 1)));
 }
 
 /** The way a facing points on the floor (unit). */
-function facingWay(facing: number): THREE.Vector3 {
-  return new THREE.Vector3(Math.sin(facing), 0, Math.cos(facing));
+function facingWay(facing: number): Vec3 {
+  return new Vec3(Math.sin(facing), 0, Math.cos(facing));
 }
 
 /** When a cast came, as the report says it. */
@@ -282,26 +282,26 @@ async function setUp(lab: Lab, fixture: Fixture): Promise<void> {
 /** Whether a foe would stand still on `spot`: inside the arena and clear of every prop. (Risen on one outside it or in
  *  a prop, a dummy was pushed in metres over its first frames: Quarry Mark, cast at it where it then stood, went
  *  8 m from where it stood as the finger lifted.) */
-function standsClear(spot: THREE.Vector3): boolean {
+function standsClear(spot: Vec3): boolean {
   return Math.hypot(spot.x, spot.z) < G.arena.radius - EDGE_BY && !inObstacle(spot, FOE_ROOM);
 }
 
 /** The first spot along `way` from `from`, at each of `distances` in turn, that a foe stands clear on (else the
  *  first). */
-function clearAlong(from: THREE.Vector3, way: THREE.Vector3, distances: number[]): THREE.Vector3 {
+function clearAlong(from: Vec3, way: Vec3, distances: number[]): Vec3 {
   const spots = distances.map((distance) => from.clone().addScaledVector(way, distance));
   return spots.find(standsClear) ?? spots[0];
 }
 
 /** The hero's side, his right or else his left, where a foe at his side stands clear (his right if neither). */
-function sideClear(at: THREE.Vector3, facing: number): THREE.Vector3 {
-  const right = new THREE.Vector3(Math.cos(facing), 0, -Math.sin(facing));
+function sideClear(at: Vec3, facing: number): Vec3 {
+  const right = new Vec3(Math.cos(facing), 0, -Math.sin(facing));
   const sides = [right, right.clone().negate()];
   return sides.find((side) => standsClear(clearAlong(flat(at), side, SIDE_FOES))) ?? right;
 }
 
 /** Training dummies risen on `spots` (they stand still). */
-async function dummiesAt(lab: Lab, spots: THREE.Vector3[]): Promise<Enemy[]> {
+async function dummiesAt(lab: Lab, spots: Vec3[]): Promise<Enemy[]> {
   const foes = spots.map((spot) => lab.spawnFoe('dummy', spot));
   await lab.until(() => foes.every((foe) => foe.spawning <= 0), RISE_FRAMES, 'the dummies never rose');
   return foes;
@@ -517,7 +517,7 @@ function tapLine(skill: Aimed, tap: Tapped): string {
 }
 
 /** The drag's stop as it shows now: the preview against the way the drag points (and Quarry Mark's foe there). */
-function readStop(skill: Aimed, way: THREE.Vector3, foe: Enemy | undefined): Stop {
+function readStop(skill: Aimed, way: Vec3, foe: Enemy | undefined): Stop {
   const spot = SPOTS[skill.impl]?.() ?? null;
   const shown = spot && wayTo(G.player.pos, spot);
   return {
@@ -611,7 +611,7 @@ function stopLine(index: number, stop: Stop): string {
   const where = `  dragged to ${drag.x},${drag.y} px`;
   const walking = `walking ${stop.speed.toFixed(2)} m/s`;
   if (!stop.spot) return `${where}: no preview, ${walking}`;
-  const at = (point: THREE.Vector3): string => `${point.x.toFixed(2)},${point.z.toFixed(2)}`;
+  const at = (point: Vec3): string => `${point.x.toFixed(2)},${point.z.toFixed(2)}`;
   // (off its way, where it and he stood: a prop it was pushed out of is read off the arena's)
   const where2 = stop.off !== null && stop.off > WAY_SLACK ? ` (at ${at(stop.spot)}, he at ${at(stop.hero)})` : '';
   const off = stop.off === null ? 'at his feet' : `${degrees(stop.off)} off the drag's way${where2}`;

@@ -28,39 +28,39 @@ export interface HSL {
 }
 
 /** an sRGB component made linear (three's `SRGBToLinear`, its constants) */
-export function srgbToLinear(c: number): number {
-  if (c < 0.04045) return c * 0.0773993808;
-  return Math.pow(c * 0.9478672986 + 0.0521327014, 2.4);
+export function srgbToLinear(component: number): number {
+  if (component < 0.04045) return component * 0.0773993808;
+  return Math.pow(component * 0.9478672986 + 0.0521327014, 2.4);
 }
 
 /** a linear component made sRGB (three's `LinearToSRGB`, its constants) */
-export function linearToSrgb(c: number): number {
-  if (c < 0.0031308) return c * 12.92;
-  return 1.055 * Math.pow(c, 0.41666) - 0.055;
+export function linearToSrgb(component: number): number {
+  if (component < 0.0031308) return component * 12.92;
+  return 1.055 * Math.pow(component, 0.41666) - 0.055;
 }
 
 /** what is made of a component going from a space into the working one (sRGB's curve undone, or nothing) */
-function intoWorking(space: ColorSpaceName): (c: number) => number {
+function intoWorking(space: ColorSpaceName): (component: number) => number {
   return space === SRGB ? srgbToLinear : unchanged;
 }
 
 /** what is made of a component going from the working space out to another */
-function outOfWorking(space: ColorSpaceName): (c: number) => number {
+function outOfWorking(space: ColorSpaceName): (component: number) => number {
   return space === SRGB ? linearToSrgb : unchanged;
 }
 
 /** a component left as it is (linear, or no colour space) */
-function unchanged(c: number): number {
-  return c;
+function unchanged(component: number): number {
+  return component;
 }
 
-/** a component of a hue's RGB, from HSL's two bounds `p` and `q` */
-function hueToRgb(p: number, q: number, t: number): number {
-  const hue = euclideanModulo(t, 1);
-  if (hue < 1 / 6) return p + (q - p) * 6 * hue;
-  if (hue < 1 / 2) return q;
-  if (hue < 2 / 3) return p + (q - p) * 6 * (2 / 3 - hue);
-  return p;
+/** a component of a hue's RGB, from HSL's two bounds `low` and `high` */
+function hueToRgb(low: number, high: number, turn: number): number {
+  const hue = euclideanModulo(turn, 1);
+  if (hue < 1 / 6) return low + (high - low) * 6 * hue;
+  if (hue < 1 / 2) return high;
+  if (hue < 2 / 3) return low + (high - low) * 6 * (2 / 3 - hue);
+  return low;
 }
 
 /** what is in `rgb(...)`: three numbers to 255 or three percents, and an alpha that is let go */
@@ -131,16 +131,16 @@ export class Color {
   }
 
   /** from hue, saturation and lightness (0 to 1) in `colorSpace` (linear unless said, as three's) */
-  setHSL(h: number, s: number, l: number, colorSpace: ColorSpaceName = LINEAR): this {
-    const hue = euclideanModulo(h, 1);
-    const saturation = clamp(s, 0, 1);
-    const lightness = clamp(l, 0, 1);
-    if (saturation === 0) return this.setRGB(lightness, lightness, lightness, colorSpace);
-    const high = lightness <= 0.5 ? lightness * (1 + saturation) : lightness + saturation - lightness * saturation;
-    const low = 2 * lightness - high;
-    const red = hueToRgb(low, high, hue + 1 / 3);
-    const green = hueToRgb(low, high, hue);
-    const blue = hueToRgb(low, high, hue - 1 / 3);
+  setHSL(hue: number, saturation: number, lightness: number, colorSpace: ColorSpaceName = LINEAR): this {
+    const turn = euclideanModulo(hue, 1);
+    const share = clamp(saturation, 0, 1);
+    const light = clamp(lightness, 0, 1);
+    if (share === 0) return this.setRGB(light, light, light, colorSpace);
+    const high = light <= 0.5 ? light * (1 + share) : light + share - light * share;
+    const low = 2 * light - high;
+    const red = hueToRgb(low, high, turn + 1 / 3);
+    const green = hueToRgb(low, high, turn);
+    const blue = hueToRgb(low, high, turn - 1 / 3);
     return this.setRGB(red, green, blue, colorSpace);
   }
 
@@ -218,7 +218,7 @@ export class Color {
   /** as a hex number in `colorSpace` (sRGB unless said), each component clamped and rounded */
   getHex(colorSpace: ColorSpaceName = SRGB): number {
     const out = outOfWorking(colorSpace);
-    const byte = (c: number): number => Math.round(clamp(out(c) * 255, 0, 255));
+    const byte = (component: number): number => Math.round(clamp(out(component) * 255, 0, 255));
     return byte(this.r) * 65536 + byte(this.g) * 256 + byte(this.b);
   }
 
@@ -262,9 +262,9 @@ export class Color {
   }
 
   /** its hue, saturation and lightness (linear) moved by the three given */
-  offsetHSL(h: number, s: number, l: number): this {
+  offsetHSL(hue: number, saturation: number, lightness: number): this {
     this.getHSL(hslA);
-    return this.setHSL(hslA.h + h, hslA.s + s, hslA.l + l);
+    return this.setHSL(hslA.h + hue, hslA.s + saturation, hslA.l + lightness);
   }
 
   /** adds `color` */
@@ -295,19 +295,21 @@ export class Color {
     return this.setRGB(r + (color.r - r) * alpha, g + (color.g - g) * alpha, b + (color.b - b) * alpha);
   }
 
-  /** becomes the colour `alpha` of the way from `a` to `b` (in linear RGB) */
-  lerpColors(a: Color, b: Color, alpha: number): this {
-    return this.setRGB(a.r + (b.r - a.r) * alpha, a.g + (b.g - a.g) * alpha, a.b + (b.b - a.b) * alpha);
+  /** becomes the colour `alpha` of the way from `from` to `to` (in linear RGB) */
+  lerpColors(from: Color, to: Color, alpha: number): this {
+    const r = from.r + (to.r - from.r) * alpha;
+    const g = from.g + (to.g - from.g) * alpha;
+    return this.setRGB(r, g, from.b + (to.b - from.b) * alpha);
   }
 
   /** moved `alpha` of the way to `color` by hue, saturation and lightness (the hue straight, not the short way) */
   lerpHSL(color: Color, alpha: number): this {
     this.getHSL(hslA);
     color.getHSL(hslB);
-    const h = lerp(hslA.h, hslB.h, alpha);
-    const s = lerp(hslA.s, hslB.s, alpha);
-    const l = lerp(hslA.l, hslB.l, alpha);
-    return this.setHSL(h, s, l);
+    const hue = lerp(hslA.h, hslB.h, alpha);
+    const saturation = lerp(hslA.s, hslB.s, alpha);
+    const lightness = lerp(hslA.l, hslB.l, alpha);
+    return this.setHSL(hue, saturation, lightness);
   }
 
   /** whether `color` has the same components */
@@ -323,7 +325,7 @@ export class Color {
   /** the three linear components as a new array */
   toArray(): [number, number, number];
   /** writes the three linear components into `array` at `offset` */
-  toArray<T extends NumberArray>(array: T, offset?: number): T;
+  toArray<Out extends NumberArray>(array: Out, offset?: number): Out;
   toArray(array: NumberArray = [], offset = 0): NumberArray {
     array[offset] = this.r;
     array[offset + 1] = this.g;

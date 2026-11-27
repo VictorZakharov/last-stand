@@ -13,7 +13,7 @@
 // a cloth point at his knee.
 import { BAR_STOOL_X, BAR_STOOLS } from '../../../src/data/tavern';
 import type { SitState } from '../../../src/types';
-import * as THREE from 'three';
+import { boundsOf, Box3, Line3, Maths, Mesh, Node, Quat, SkinnedMesh, Vec3 } from './sceneApi.ts';
 import { G } from '../../../src/state';
 import { groundHeight } from '../../../src/world/ground';
 import { seatSpot, seatStands, seatTopAt, type Seat } from '../../../src/world/seats';
@@ -323,13 +323,13 @@ interface Watch {
 /** One frame of a sit as drawn. */
 interface Read {
   w: number;
-  pivot: THREE.Vector3;
-  ankles: [THREE.Vector3, THREE.Vector3];
+  pivot: Vec3;
+  ankles: [Vec3, Vec3];
   neck: number;
   /** each empty hand (holding nothing), its palm's gap to his legs (m) */
   palms: { side: string; gap: number }[];
   /** the way his hips face, as a world point 1 m ahead of their pivot */
-  ahead: THREE.Vector3;
+  ahead: Vec3;
 }
 
 /** Runs `lab sit`. */
@@ -502,10 +502,10 @@ export async function within(lab: Lab, done: () => boolean, frames: number): Pro
 }
 
 /** The point of a seat the mouse is put over: its middle, on its top (a fire's a little over the floor). */
-export function seatMiddle(seat: Seat): THREE.Vector3 {
+export function seatMiddle(seat: Seat): Vec3 {
   const x = (seat.ax + seat.bx) / 2, z = (seat.az + seat.bz) / 2;
   const y = seat.ground ? groundHeight(x, z) + FIRE_AIM : seatTopAt(seat, x, z);
-  return new THREE.Vector3(x, y, z);
+  return new Vec3(x, y, z);
 }
 
 /** What the sit's pointing reads, said as why a seat pointed at wasn't outlined: a sit still under way, or the seat
@@ -642,8 +642,8 @@ function pictureOpenFist(lab: Lab, name: string, frame: string, watch: Watch): v
   shots.since = 0;
   shots.shots++;
   const hand = open.hand === 'left' ? lab.joints.handL : lab.joints.handR;
-  const at = hand.getWorldPosition(new THREE.Vector3());
-  const curled = THREE.MathUtils.radToDeg(open.curl).toFixed(0);
+  const at = hand.getWorldPosition(new Vec3());
+  const curled = Maths.radToDeg(open.curl).toFixed(0);
   const label = `${name}: his ${open.hand} fist let go of, curled ${curled}° (${frame}), what stands round him hidden`;
   const hides = (part: string) => FIRE_PARTS.includes(part) || PLANTS.test(part) || AROUND.test(part);
   const options = { at, distance: OPEN_SHOTS.distance, look: 'lit' as const };
@@ -667,10 +667,10 @@ function fistOffCanary(lab: Lab): boolean {
   const hands = [lab.joints.handL, lab.joints.handR]
     .map((joint) => joint.children.find((child) => child.userData.drawnHand))
     .filter((hand) => hand !== undefined);
-  for (const hand of hands) hand.translateZ(FIST_OFF_CANARY / hand.getWorldScale(new THREE.Vector3()).x);
+  for (const hand of hands) hand.translateZ(FIST_OFF_CANARY / hand.getWorldScale(new Vec3()).x);
   lab.model.root.updateMatrixWorld(true);
   const seen = closedFists(lab).some((fist) => fist.off > FIST_OFF_MOST);
-  for (const hand of hands) hand.translateZ(-FIST_OFF_CANARY / hand.getWorldScale(new THREE.Vector3()).x);
+  for (const hand of hands) hand.translateZ(-FIST_OFF_CANARY / hand.getWorldScale(new Vec3()).x);
   lab.model.root.updateMatrixWorld(true);
   return seen;
 }
@@ -734,7 +734,7 @@ function readRegrip(lab: Lab, frame: string, watch: Watch): void {
 /** A fist as he sits, close on the hand: at the sheet's other distances a closed hand and an open one look alike. */
 function fistClose(lab: Lab, name: string, fist: Fist): Pictured {
   const hand = fist.hand === 'left' ? lab.joints.handL : lab.joints.handR;
-  const at = hand.getWorldPosition(new THREE.Vector3());
+  const at = hand.getWorldPosition(new Vec3());
   const hides = (part: string) => FIRE_PARTS.includes(part) || PLANTS.test(part) || AROUND.test(part);
   const options = { at, distance: FIST_CLOSE, look: 'lit' as const };
   const label = `${name}: sat, his ${fist.hand} fist close`;
@@ -744,13 +744,13 @@ function fistClose(lab: Lab, name: string, fist: Fist): Pictured {
 /** The floor contact of what he's stood or laid down, close: no other picture shows the far end meeting it. */
 function farEndClose(lab: Lab, name: string): Pictured | null {
   lab.model.root.updateMatrixWorld(true);
-  let lowest: THREE.Vector3 | null = null;
+  let lowest: Vec3 | null = null;
   lab.model.root.traverse((object) => {
-    const mesh = object as THREE.Mesh;
+    const mesh = object as Mesh;
     if (!mesh.isMesh || !shown(mesh) || !isStood(mesh)) return;
-    _box.setFromObject(mesh, true);
+    boundsOf(mesh, _box, true);
     if (lowest && _box.min.y >= lowest.y) return;
-    lowest = _box.getCenter(new THREE.Vector3()).setY(_box.min.y);
+    lowest = _box.getCenter(new Vec3()).setY(_box.min.y);
   });
   if (!lowest) return null;
   // A laid two-hander's lowest mesh may be its grip. Find the drawn vertex nearest its tip, which can extend past the
@@ -760,11 +760,11 @@ function farEndClose(lab: Lab, name: string): Pictured | null {
     child.userData.stoodOn && child.userData.handleTo !== undefined
   ));
   if (tip && twoHander) {
-    const at = tip.getWorldPosition(new THREE.Vector3());
-    const point = new THREE.Vector3();
+    const at = tip.getWorldPosition(new Vec3());
+    const point = new Vec3();
     let nearest = Infinity;
     tip.parent!.traverse((object) => {
-      const mesh = object as THREE.Mesh;
+      const mesh = object as Mesh;
       if (!mesh.isMesh || !shown(mesh) || !isStood(mesh)) return;
       const positions = mesh.geometry.getAttribute('position');
       if (!positions) return;
@@ -778,7 +778,7 @@ function farEndClose(lab: Lab, name: string): Pictured | null {
     });
   }
   // Frame the ground surface, not a point buried by a planted blade: the cameras must remain above the floor.
-  const end = lowest as THREE.Vector3;
+  const end = lowest as Vec3;
   end.y = Math.max(end.y, groundHeight(end.x, end.z)) + 0.12;
   const hides = (part: string) => FIRE_PARTS.includes(part) || PLANTS.test(part) || AROUND.test(part);
   const options = { at: end, distance: FAR_END_CLOSE, aboveGround: 0.1, look: 'lit' as const };
@@ -786,15 +786,15 @@ function farEndClose(lab: Lab, name: string): Pictured | null {
 }
 
 /** Whether `object` is part of what's marked as stood on the floor (`userData.stoodOn`). */
-function isStood(object: THREE.Object3D): boolean {
-  for (let at: THREE.Object3D | null = object; at; at = at.parent) if (at.userData.stoodOn) return true;
+function isStood(object: Node): boolean {
+  for (let at: Node | null = object; at; at = at.parent) if (at.userData.stoodOn) return true;
   return false;
 }
 
 /** How far off the way across its palm a closed fist has its handle, this frame (deg). */
 function askewNow(lab: Lab): number {
   const closed = (lab.model.fists ?? []).filter((fist) => fist.curl >= FIST_OPEN);
-  return Math.max(0, ...closed.map((fist) => THREE.MathUtils.radToDeg(fist.across ?? 0)));
+  return Math.max(0, ...closed.map((fist) => Maths.radToDeg(fist.across ?? 0)));
 }
 
 /** A closed fist with its handle off the way across its palm, the fingers wrapped round nothing and the handle lying
@@ -931,7 +931,7 @@ const AROUND = /^(boulders|standing stone|thicket.*|stump|column)$/;
 
 /** `take` done with the biome's parts `hides` names hidden, shown again after. */
 export function withHidden<T>(hides: (name: string) => boolean, take: () => T): T {
-  const hidden: THREE.Object3D[] = [];
+  const hidden: Node[] = [];
   G.arena.groupOf(G.arena.place).traverse((object) => {
     if (hides(object.name) && object.visible) hidden.push(object);
   });
@@ -948,7 +948,7 @@ export function withHidden<T>(hides: (name: string) => boolean, take: () => T): 
  * stood between him and the camera), and `bare`, his skirts too and his skeleton drawn over him.
  */
 function closeUp(lab: Lab, label: string, views: ViewName[], bare: boolean): Pictured {
-  const at = lab.joints.hips.getWorldPosition(new THREE.Vector3());
+  const at = lab.joints.hips.getWorldPosition(new Vec3());
   at.y += CLOSE.up;
   const hides = (part: string) => FIRE_PARTS.includes(part) || PLANTS.test(part) || AROUND.test(part);
   const skirts = bare ? skirtsOf(lab.model.root).map((skirt) => skirt.mesh) : [];
@@ -965,7 +965,7 @@ function closeUp(lab: Lab, label: string, views: ViewName[], bare: boolean): Pic
 /** Him sat by a fire pictured from ahead, the fire hidden: the player's camera sees him so from across it, and the
  *  lab's view ahead through it saw nothing of his legs. */
 function fromBeyond(lab: Lab, name: string): Pictured {
-  const at = lab.joints.hips.getWorldPosition(new THREE.Vector3());
+  const at = lab.joints.hips.getWorldPosition(new Vec3());
   at.y += BEYOND.up;
   const label = `${name}: sat, from ahead (the fire hidden)`;
   return withHidden((part) => FIRE_PARTS.includes(part), () => {
@@ -973,7 +973,7 @@ function fromBeyond(lab: Lab, name: string): Pictured {
   });
 }
 
-const _box = new THREE.Box3();
+const _box = new Box3();
 
 /** The piece of him drawn deepest under the floor (a staff's foot as he sits low), and how deep (m), less what it
  *  says it's stuck in (a greatsword stood point down, `userData.stuckIn` on it or over it). */
@@ -981,10 +981,10 @@ function deepestUnder(lab: Lab): { name: string; depth: number } {
   lab.model.root.updateMatrixWorld(true);
   let deepest = { name: 'nothing', depth: 0 };
   lab.model.root.traverse((object) => {
-    const mesh = object as THREE.Mesh;
-    if (!mesh.isMesh || !shown(mesh) || (mesh as THREE.SkinnedMesh).isSkinnedMesh) return;
-    _box.setFromObject(mesh, true);
-    const mid = _box.getCenter(new THREE.Vector3());
+    const mesh = object as Mesh;
+    if (!mesh.isMesh || !shown(mesh) || (mesh as SkinnedMesh).isSkinnedMesh) return;
+    boundsOf(mesh, _box, true);
+    const mid = _box.getCenter(new Vec3());
     const depth = groundHeight(mid.x, mid.z) - _box.min.y - stuckIn(mesh);
     if (depth > deepest.depth) deepest = { name: nameOf(mesh, lab.joints), depth };
   });
@@ -998,8 +998,8 @@ function highestStood(lab: Lab): { name: string; over: number } | null {
   let highest: { name: string; over: number } | null = null;
   lab.model.root.traverse((object) => {
     if (!object.userData.stoodOn || !shown(object)) return;
-    _box.setFromObject(object, true);
-    const mid = _box.getCenter(new THREE.Vector3());
+    boundsOf(object, _box, true);
+    const mid = _box.getCenter(new Vec3());
     const over = _box.min.y - groundHeight(mid.x, mid.z);
     if (!highest || over > highest.over) highest = { name: nameOf(object, lab.joints), over };
   });
@@ -1007,8 +1007,8 @@ function highestStood(lab: Lab): { name: string; over: number } | null {
 }
 
 /** How deep `object` is meant to be in the floor (m): a weapon stood on its point, as the model says. */
-function stuckIn(object: THREE.Object3D): number {
-  for (let at: THREE.Object3D | null = object; at; at = at.parent) {
+function stuckIn(object: Node): number {
+  for (let at: Node | null = object; at; at = at.parent) {
     const depth = at.userData.stuckIn as number | undefined;
     if (depth) return depth;
   }
@@ -1016,15 +1016,15 @@ function stuckIn(object: THREE.Object3D): number {
 }
 
 /** Whether `object` is drawn: it and everything over it shown (a weapon not held is hidden by its group). */
-function shown(object: THREE.Object3D): boolean {
-  for (let at: THREE.Object3D | null = object; at; at = at.parent) if (!at.visible) return false;
+function shown(object: Node): boolean {
+  for (let at: Node | null = object; at; at = at.parent) if (!at.visible) return false;
   return true;
 }
 
 /** A piece's name, or the nearest named object over it, or the joint it hangs from. */
-function nameOf(piece: THREE.Object3D, joints: Lab['joints']): string {
+function nameOf(piece: Node, joints: Lab['joints']): string {
   const jointNames = new Map(Object.entries(joints).map(([name, joint]) => [joint, name]));
-  for (let at: THREE.Object3D | null = piece; at; at = at.parent) {
+  for (let at: Node | null = piece; at; at = at.parent) {
     if (at.name) return at.name;
     const joint = jointNames.get(at as never);
     if (joint) return `piece on the ${joint}`;
@@ -1099,7 +1099,7 @@ export async function standAt(lab: Lab, c: SeatCase, fixture: Fixture, at: [numb
   player.sits = false;
   player.sitting.clear();
   player.walkTo = null;
-  player.place(new THREE.Vector3(at[0], groundHeight(at[0], at[1]), at[1]), facing);
+  player.place(new Vec3(at[0], groundHeight(at[0], at[1]), at[1]), facing);
   await lab.step(Math.round(PLACED_SETTLE * RATE));
 }
 
@@ -1256,7 +1256,7 @@ async function readSat(lab: Lab, options: SitOptions, name: string, out: Out, wa
 }
 
 /** The ranger's bow, unless it's the main hand's grip `WeaponBody` reads already. */
-function bowApart(lab: Lab): THREE.Object3D | null {
+function bowApart(lab: Lab): Node | null {
   const bow = bowOf(lab)?.group;
   const grip = lab.model.tip?.parent;
   if (!bow || (grip && bow.getObjectById(grip.id))) return null;
@@ -1360,22 +1360,22 @@ class Spans {
   }
 }
 
-const _q = new THREE.Quaternion(), _r = new THREE.Quaternion(), _f = new THREE.Vector3();
+const _q = new Quat(), _r = new Quat(), _f = new Vec3();
 
 /** This frame as drawn: the thighs' pivot, the ankles, the head's turn from the chest. */
 function readNow(lab: Lab): Read {
   const j = lab.joints;
   j.root.updateMatrixWorld(true);
-  const pivot = j.thighL.getWorldPosition(new THREE.Vector3()).add(j.thighR.getWorldPosition(new THREE.Vector3()));
-  const ankles: [THREE.Vector3, THREE.Vector3] = [
-    j.ankleL.getWorldPosition(new THREE.Vector3()), j.ankleR.getWorldPosition(new THREE.Vector3()),
+  const pivot = j.thighL.getWorldPosition(new Vec3()).add(j.thighR.getWorldPosition(new Vec3()));
+  const ankles: [Vec3, Vec3] = [
+    j.ankleL.getWorldPosition(new Vec3()), j.ankleR.getWorldPosition(new Vec3()),
   ];
   j.chest.getWorldQuaternion(_q).invert();
   j.head.getWorldQuaternion(_r);
   _f.set(0, 0, 1).applyQuaternion(_q.multiply(_r));
   const neck = Math.atan2(_f.x, _f.z) * DEG;
   pivot.multiplyScalar(0.5);
-  const ahead = j.hips.localToWorld(new THREE.Vector3(0, 0, 1)).sub(j.hips.getWorldPosition(new THREE.Vector3()));
+  const ahead = j.hips.localToWorld(new Vec3(0, 0, 1)).sub(j.hips.getWorldPosition(new Vec3()));
   ahead.setY(0).normalize().add(pivot);
   return { w: lab.player.sitting.pose?.w ?? 0, pivot, ankles, neck, palms: emptyPalms(lab), ahead };
 }
@@ -1390,19 +1390,19 @@ function emptyPalms(lab: Lab): { side: string; gap: number }[] {
 
 /** Whether `hand` holds something: a piece shown under it that isn't skinned (the hand's own is). A weapon stood up
  *  is still under it, his palm on its top; the mage's staff and the ranger's bow are held without a `fists` entry. */
-function holdsSomething(hand: THREE.Object3D): boolean {
+function holdsSomething(hand: Node): boolean {
   let holds = false;
   hand.traverse((object) => {
-    const mesh = object as THREE.Mesh;
-    if (mesh.isMesh && !(mesh as THREE.SkinnedMesh).isSkinnedMesh && shown(mesh)) holds = true;
+    const mesh = object as Mesh;
+    if (mesh.isMesh && !(mesh as SkinnedMesh).isSkinnedMesh && shown(mesh)) holds = true;
   });
   return holds;
 }
 
-const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _line = new THREE.Line3(), _near = new THREE.Vector3();
+const _a = new Vec3(), _b = new Vec3(), _line = new Line3(), _near = new Vec3();
 
 /** How far `point` is off the nearest of his thighs' and shins' surfaces (m: the rig's capsules, bare of clothing). */
-function legGap(j: Lab['joints'], point: THREE.Vector3): number {
+function legGap(j: Lab['joints'], point: Vec3): number {
   const P = j.P, k = j.root.scale.x;
   const bones = [
     { from: j.thighL, length: P.thighL, radius: P.thighR }, { from: j.thighR, length: P.thighL, radius: P.thighR },
@@ -1468,7 +1468,7 @@ function fireOff(seat: Seat, reads: Read[]): number {
 }
 
 /** How far a point's path strays from where it began (m, over the floor). */
-function slideOf(path: THREE.Vector3[]): number {
+function slideOf(path: Vec3[]): number {
   return Math.max(...path.map((p) => Math.hypot(p.x - path[0].x, p.z - path[0].z)));
 }
 
@@ -1477,7 +1477,7 @@ function slideOf(path: THREE.Vector3[]): number {
 interface AskRead {
   w: number;
   left: number;
-  at: THREE.Vector3;
+  at: Vec3;
   cast: boolean;
 }
 
@@ -1521,7 +1521,7 @@ async function askOf(lab: Lab, c: SeatCase, ask: Ask, out: Out, watch: Watch): P
   // The ordinary repeat pictures stay out of the report, but a new collision needs its own close-up.
   if (!sat && !(await untilSat(lab, `${c.name} again`, c.views.slice(0, 2), again, watch, out.moments))) return;
   const skirts = skirtsOf(lab.model.root);
-  const ahead = new THREE.Vector3(Math.sin(player.facing), 0, Math.cos(player.facing));
+  const ahead = new Vec3(Math.sin(player.facing), 0, Math.cos(player.facing));
   const aim = player.pos.clone().addScaledVector(ahead, 4);
   const input = ask.what === 'step' ? { keys: ['w'] } : { m0: true, aim };
   const most = riseMost(lab, c);
@@ -1579,18 +1579,18 @@ function pushOutOfHand(lab: Lab, frame: number): (() => void) | null {
   const [from, to] = CANARY_PUSH.frames;
   if (frame < from || frame >= to) return null;
   const palm = lab.joints.handR.localToWorld(PALM_AT.clone());
-  let mesh: THREE.Mesh | undefined;
+  let mesh: Mesh | undefined;
   lab.model.root.traverse((object) => {
-    const each = object as THREE.Mesh;
-    if (mesh || !each.isMesh || (each as THREE.SkinnedMesh).isSkinnedMesh || !shown(each)) return;
-    if (_box.setFromObject(each, true).distanceToPoint(palm) < 0.06) mesh = each;
+    const each = object as Mesh;
+    if (mesh || !each.isMesh || (each as SkinnedMesh).isSkinnedMesh || !shown(each)) return;
+    if (boundsOf(each, _box, true).distanceToPoint(palm) < 0.06) mesh = each;
   });
   if (!mesh || !mesh.parent) return null;
   const pushed = mesh;
-  const scale = pushed.parent!.getWorldScale(new THREE.Vector3()).x;
+  const scale = pushed.parent!.getWorldScale(new Vec3()).x;
   const by = (CANARY_PUSH.from + CANARY_PUSH.by * (frame - from)) / scale;
-  const origin = pushed.parent!.getWorldPosition(new THREE.Vector3());
-  const way = pushed.parent!.worldToLocal(origin.clone().add(new THREE.Vector3(1, 0, 0)));
+  const origin = pushed.parent!.getWorldPosition(new Vec3());
+  const way = pushed.parent!.worldToLocal(origin.clone().add(new Vec3(1, 0, 0)));
   way.normalize().multiplyScalar(by);
   pushed.position.add(way);
   pushed.updateMatrixWorld(true);

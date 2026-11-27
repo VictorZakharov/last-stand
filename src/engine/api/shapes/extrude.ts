@@ -50,8 +50,8 @@ function mergeOverlappingPoints(points: Vec2[]): void {
 /** Each point's bevel way, from its neighbours round the ring. */
 function movementsOf(ring: readonly Vec2[]): Vec2[] {
   const out: Vec2[] = [];
-  for (let i = 0, l = ring.length; i < l; i++) {
-    out.push(bevelVector(ring[i], ring[(i + l - 1) % l], ring[(i + 1) % l]));
+  for (let i = 0, count = ring.length; i < count; i++) {
+    out.push(bevelVector(ring[i], ring[(i + count - 1) % count], ring[(i + 1) % count]));
   }
   return out;
 }
@@ -78,8 +78,8 @@ function addOutline(outline: Outline, options: ExtrudeOptions, geometry: Geometr
   const holes = extracted.holes;
   if (!isClockWise(contour)) {
     contour = contour.reverse();
-    holes.forEach((hole, h) => {
-      if (isClockWise(hole)) holes[h] = hole.reverse();
+    holes.forEach((hole, holeIndex) => {
+      if (isClockWise(hole)) holes[holeIndex] = hole.reverse();
     });
   }
   mergeOverlappingPoints(contour);
@@ -93,20 +93,20 @@ function addOutline(outline: Outline, options: ExtrudeOptions, geometry: Geometr
   const v = (x: number, y: number, z: number): void => {
     layers.push(x, y, z);
   };
-  const bevelLayer = (b: number, zOf: (z: number) => number, lid: Vec2[][] | null): void => {
-    const t = b / bevelSegments;
-    const z = bevelThickness * Math.cos((t * Math.PI) / 2);
-    const bs = bevelSize * Math.sin((t * Math.PI) / 2) + bevelOffset;
+  const bevelLayer = (layer: number, zOf: (z: number) => number, lid: Vec2[][] | null): void => {
+    const share = layer / bevelSegments;
+    const z = bevelThickness * Math.cos((share * Math.PI) / 2);
+    const bs = bevelSize * Math.sin((share * Math.PI) / 2) + bevelOffset;
     const rings = [contour, ...holes];
     const moves = [contourMoves, ...holeMoves];
-    rings.forEach((ring, r) => {
+    rings.forEach((ring, ringIndex) => {
       const kept: Vec2[] = [];
       ring.forEach((point, i) => {
-        const vert = moved(point, moves[r][i], bs);
+        const vert = moved(point, moves[ringIndex][i], bs);
         v(vert.x, vert.y, zOf(z));
         kept.push(vert);
       });
-      if (lid && t === 0) lid.push(kept);
+      if (lid && share === 0) lid.push(kept);
     });
   };
   let faces: number[][];
@@ -114,36 +114,38 @@ function addOutline(outline: Outline, options: ExtrudeOptions, geometry: Geometr
     faces = triangulate(contour, holes);
   } else {
     const lid: Vec2[][] = [];
-    for (let b = 0; b < bevelSegments; b++) bevelLayer(b, (z) => -z, lid);
+    for (let layer = 0; layer < bevelSegments; layer++) bevelLayer(layer, (z) => -z, lid);
     faces = triangulate(lid[0], lid.slice(1));
   }
   const bs = bevelSize + bevelOffset;
-  for (let s = 0; s <= steps; s++) {
+  for (let step = 0; step <= steps; step++) {
     for (let i = 0; i < vlen; i++) {
       const vert = bevelEnabled ? moved(vertices[i], vertexMoves[i], bs) : vertices[i];
-      v(vert.x, vert.y, (depth / steps) * s);
+      v(vert.x, vert.y, (depth / steps) * step);
     }
   }
-  for (let b = bevelSegments - 1; b >= 0; b--) bevelLayer(b, (z) => depth + z, null);
+  for (let layer = bevelSegments - 1; layer >= 0; layer--) bevelLayer(layer, (z) => depth + z, null);
   const corner = (index: number): void => {
     positions.push(layers[index * 3], layers[index * 3 + 1], layers[index * 3 + 2]);
   };
   const lidsStart = positions.length / 3;
   const top = vlen * (bevelEnabled ? steps + bevelSegments * 2 : steps);
   for (const face of faces) triangle(positions, uvs, () => [face[2], face[1], face[0]].forEach(corner));
-  for (const face of faces) triangle(positions, uvs, () => [face[0], face[1], face[2]].forEach((i) => corner(i + top)));
+  for (const face of faces) {
+    triangle(positions, uvs, () => [face[0], face[1], face[2]].forEach((i) => corner(i + top)));
+  }
   geometry.addGroup(lidsStart, positions.length / 3 - lidsStart, 0);
   const sidesStart = positions.length / 3;
   let offset = 0;
   for (const ring of [contour, ...holes]) {
     for (let i = ring.length - 1; i >= 0; i--) {
-      const k = i === 0 ? ring.length - 1 : i - 1;
-      for (let s = 0; s < steps + bevelSegments * 2; s++) {
-        const a = offset + i + vlen * s;
-        const b = offset + k + vlen * s;
-        const c = offset + k + vlen * (s + 1);
-        const d = offset + i + vlen * (s + 1);
-        [a, b, d, b, c, d].forEach(corner);
+      const previous = i === 0 ? ring.length - 1 : i - 1;
+      for (let step = 0; step < steps + bevelSegments * 2; step++) {
+        const cornerA = offset + i + vlen * step;
+        const cornerB = offset + previous + vlen * step;
+        const cornerC = offset + previous + vlen * (step + 1);
+        const cornerD = offset + i + vlen * (step + 1);
+        [cornerA, cornerB, cornerD, cornerB, cornerC, cornerD].forEach(corner);
         sideUvs(positions, uvs);
       }
     }
@@ -156,17 +158,19 @@ function addOutline(outline: Outline, options: ExtrudeOptions, geometry: Geometr
 function triangle(positions: number[], uvs: number[], push: () => void): void {
   push();
   const at = positions.length / 3 - 3;
-  for (let k = 0; k < 3; k++) uvs.push(positions[(at + k) * 3], positions[(at + k) * 3 + 1]);
+  for (let corner = 0; corner < 3; corner++) {
+    uvs.push(positions[(at + corner) * 3], positions[(at + corner) * 3 + 1]);
+  }
 }
 
 /** A side's quad, pushed as six corners (a, b, d, b, c, d): its uvs along the wall and down z. */
 function sideUvs(positions: readonly number[], uvs: number[]): void {
   const at = positions.length / 3 - 6;
-  const p = (k: number, c: number): number => positions[(at + k) * 3 + c];
+  const read = (corner: number, axis: number): number => positions[(at + corner) * 3 + axis];
   const quad = [0, 3, 4, 5];
-  const byX = Math.abs(p(0, 1) - p(3, 1)) < Math.abs(p(0, 0) - p(3, 0));
-  const uv = quad.map((k) => [byX ? p(k, 0) : p(k, 1), 1 - p(k, 2)]);
-  for (const q of [0, 1, 3, 1, 2, 3]) uvs.push(uv[q][0], uv[q][1]);
+  const byX = Math.abs(read(0, 1) - read(3, 1)) < Math.abs(read(0, 0) - read(3, 0));
+  const uv = quad.map((corner) => [byX ? read(corner, 0) : read(corner, 1), 1 - read(corner, 2)]);
+  for (const pick of [0, 1, 3, 1, 2, 3]) uvs.push(uv[pick][0], uv[pick][1]);
 }
 
 /**

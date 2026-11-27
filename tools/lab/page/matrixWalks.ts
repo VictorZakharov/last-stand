@@ -4,7 +4,7 @@
 // (`lab perf --village --profile`): a count says how much of the scene a frame walks, exactly, where the ms move with
 // the machine's load. The engine's bridge places what's shown itself (`placeShown`) and calls three's walk only for
 // an object that overrides it, so under the engine this counts those visits, not every object placed.
-import * as THREE from 'three';
+import { Node } from './sceneApi.ts';
 
 /** the visits counted since the count began */
 let visits = 0;
@@ -14,14 +14,14 @@ let wrapped = false;
 /** Starts counting three's visits of every object (once). */
 function wrap(): void {
   if (wrapped) return;
-  const walk = THREE.Object3D.prototype.updateMatrixWorld;
-  const counted = function counted(this: THREE.Object3D, force?: boolean): void {
+  const walk = Node.prototype.updateMatrixWorld;
+  const counted = function counted(this: Node, force?: boolean): void {
     visits++;
     walk.call(this, force);
   };
   // (said to be three's own, so the bridge's placing still takes it for plain: `plainUpdate` in src/engine/bridge.ts)
   Object.assign(counted, { wraps: walk });
-  THREE.Object3D.prototype.updateMatrixWorld = counted;
+  Node.prototype.updateMatrixWorld = counted;
   wrapped = true;
 }
 

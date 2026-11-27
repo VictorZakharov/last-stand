@@ -9,8 +9,6 @@
 // water's glow) follows the hour (`FountainLight`): by night it's lit by the lamps alone.
 import { rustLook } from '../engine/custom';
 import { causticsLook, fallingLook, waterLook } from '../engine/looks/water';
-import type { OwnLooks } from '../core/shaderPorts';
-import { causticNodes, fallingNodes, waterLooks, waterNodes } from './villageNodes';
 import {
   Bezier2Curve3, CanvasTexture, DoubleSide, Geometry, LitMaterial, Material, mergeGeometries, Mesh, Node, Outline,
   RepeatWrapping, Sphere, Texture, Vec2, Vec3,
@@ -355,10 +353,6 @@ function waterMaterial(time: { value: number }, colour: number): LitMaterial {
   rustLook(m, waterLook(time, skyLight, { rough: WATER_LIT_ROUGH, shine: WATER_LIT_SHINE }));
   // (each glint held under the bloom's threshold: the engine holds a material's light to it)
   m.userData.litMost = GLINT_MOST;
-  waterNodes(m, time);
-  const sky = skyLight;
-  const lit = { rough: WATER_LIT_ROUGH, shine: WATER_LIT_SHINE, glintMost: GLINT_MOST };
-  (m as typeof m & OwnLooks).webgpuLooks = (converted) => waterLooks(converted, sky, lit);
   return seeThrough(m, 'prop');
 }
 
@@ -369,7 +363,6 @@ function waterMaterial(time: { value: number }, colour: number): LitMaterial {
 function causticFloor(time: { value: number }, sunlit: { value: number }): LitMaterial {
   const m = new LitMaterial({ color: 0x8f9a92, roughness: 0.85 });
   rustLook(m, causticsLook(time, sunlit));
-  causticNodes(m, time, sunlit);
   return seeThrough(m, 'propFoot');
 }
 
@@ -384,8 +377,6 @@ function fallingWater(streaks: Texture, around: number, opacity: number): LitMat
     side: DoubleSide,
   });
   rustLook(m, fallingLook(skyLight));
-  const sky = skyLight;
-  (m as typeof m & OwnLooks).webgpuLooks = (converted) => fallingNodes(converted, sky);
   // (a hero behind the fountain showed through its stone, its water left whole over him)
   return seeThrough(m, 'prop');
 }

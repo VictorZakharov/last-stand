@@ -2,7 +2,7 @@
 // aside (`engine/pipelinesAside.ts`): a warm-up hands it what a part would draw and waits for them, before the
 // first frame that shows it. (three's own programs were pinned and listed here while three drew the scene.)
 import { AHEAD, LATE_PIPELINES, PIPELINES, pipelinesReady } from '../engine/pipelinesAside';
-import { Camera, Material, Node, Texture, WebGLRenderTarget, World } from '../engine/api/index.ts';
+import { Camera, Material, Node, Texture, World } from '../engine/api/index.ts';
 
 let loaded = false;
 /** The engine's pipelines first asked for in play, each described, for the perf report: the engine draws the game,
@@ -96,7 +96,7 @@ const PIPELINES_WAIT_MOST = 15000;
  * frame. Nothing of the scene is three's to compile or draw: the engine's own pipelines are made as it boots, and it
  * takes each mesh as it's first shown (src/engine).
  */
-export async function warmUp(_renderer: unknown, _scene: World, _camera: Camera, _target: WebGLRenderTarget, how: WarmUp = {}): Promise<WarmedUp> {
+export async function warmUp(_renderer: unknown, _scene: World, _camera: Camera, _target: unknown, how: WarmUp = {}): Promise<WarmedUp> {
   AHEAD.prepare?.([...(how.drawn ?? []), ...(how.objects ?? []), ...(how.swap ? [how.swap.show] : [])]);
   await pipelinesReady(PIPELINES_WAIT_MOST);
   // (left as a warm-up leaves it: what it shows to draw, hidden again)

@@ -7,7 +7,7 @@
 // other, with the deepest point; pictured as the player sees it (the page's own screenshot, which the engine's
 // canvas gives), from above, standing by the fire and from a seat log, at noon and midnight. `canary` tries a stone
 // against itself moved 4 cm, which must be found.
-import * as THREE from 'three';
+import { Attribute, Box3, DoubleSide, Geometry, Mesh, Raycaster, UnlitMaterial, Vec3 } from './sceneApi.ts';
 import type { Lab, Pictured } from './lab';
 import { G } from '../../../src/state';
 import { CAMPFIRE } from '../../../src/data/village';
@@ -42,13 +42,13 @@ const HOURS = [12, 0];
 const SETTLE = 15;
 
 /** One stone of the ring: its triangles' corners (x, y, z each), its points once each, and its middle and box. */
-interface Stone { corners: Float32Array; points: THREE.Vector3[]; middle: THREE.Vector3; box: THREE.Box3 }
+interface Stone { corners: Float32Array; points: Vec3[]; middle: Vec3; box: Box3 }
 
 /** The ring's mesh in the village, as built. */
-function ringMesh(): THREE.Mesh {
-  let found: THREE.Mesh | null = null;
+function ringMesh(): Mesh {
+  let found: Mesh | null = null;
   G.arena.village!.meadow.parent!.traverse((object) => {
-    if (object.name === RING_NAMED && (object as THREE.Mesh).isMesh) found = object as THREE.Mesh;
+    if (object.name === RING_NAMED && (object as Mesh).isMesh) found = object as Mesh;
   });
   if (!found) throw new Error(`lab: village: no mesh called ${RING_NAMED}`);
   return found;
@@ -59,12 +59,12 @@ const placeKey = (x: number, y: number, z: number): string =>
   `${Math.round(x * PLACE)},${Math.round(y * PLACE)},${Math.round(z * PLACE)}`;
 
 /** The pieces `mesh`'s triangles join into by the places they share, each a stone, in the world's frame. */
-function stonesOf(mesh: THREE.Mesh): Stone[] {
+function stonesOf(mesh: Mesh): Stone[] {
   mesh.updateMatrixWorld(true);
   const position = mesh.geometry.attributes.position;
   const triangles = position.count / 3;
   const world = new Float32Array(position.count * 3);
-  const v = new THREE.Vector3();
+  const v = new Vec3();
   for (let i = 0; i < position.count; i++) {
     v.fromBufferAttribute(position, i).applyMatrix4(mesh.matrixWorld);
     world.set([v.x, v.y, v.z], i * 3);
@@ -101,36 +101,36 @@ function stonesOf(mesh: THREE.Mesh): Stone[] {
     const corners = new Float32Array(list.length * 9);
     list.forEach((t, k) => corners.set(world.subarray(t * 9, t * 9 + 9), k * 9));
     const seen = new Set<string>();
-    const points: THREE.Vector3[] = [];
+    const points: Vec3[] = [];
     for (let i = 0; i < corners.length; i += 3) {
       const key = placeKey(corners[i], corners[i + 1], corners[i + 2]);
       if (seen.has(key)) continue;
       seen.add(key);
-      points.push(new THREE.Vector3(corners[i], corners[i + 1], corners[i + 2]));
+      points.push(new Vec3(corners[i], corners[i + 1], corners[i + 2]));
     }
-    const box = new THREE.Box3().setFromPoints(points);
-    const middle = points.reduce((sum, point) => sum.add(point), new THREE.Vector3()).divideScalar(points.length);
+    const box = new Box3().setFromPoints(points);
+    const middle = points.reduce((sum, point) => sum.add(point), new Vec3()).divideScalar(points.length);
     return { corners, points, middle, box };
   });
 }
 
 /** A mesh of `stone`'s faces for rays, both sides met. */
-function solidOf(stone: Stone): THREE.Mesh {
-  const geometry = new THREE.BufferGeometry();
-  geometry.setAttribute('position', new THREE.BufferAttribute(stone.corners, 3));
+function solidOf(stone: Stone): Mesh {
+  const geometry = new Geometry();
+  geometry.setAttribute('position', new Attribute(stone.corners, 3));
   geometry.computeBoundingBox();
   geometry.computeBoundingSphere();
-  const mesh = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({ side: THREE.DoubleSide }));
+  const mesh = new Mesh(geometry, new UnlitMaterial({ side: DoubleSide }));
   mesh.updateMatrixWorld(true);
   return mesh;
 }
 
 /** How many of `stone`'s points lie inside `other`'s solid, each drawn `TOUCH` in toward its own middle first, and how
  *  deep the deepest goes (m, its distance from the other's nearest point outside it, roughly: from its own box). */
-function pointsInside(stone: Stone, other: Stone, solid: THREE.Mesh): { inside: number; deepest: number } {
-  const ray = new THREE.Raycaster();
-  const out = new THREE.Vector3(1, 0.137, 0.071).normalize();
-  const tried = new THREE.Vector3();
+function pointsInside(stone: Stone, other: Stone, solid: Mesh): { inside: number; deepest: number } {
+  const ray = new Raycaster();
+  const out = new Vec3(1, 0.137, 0.071).normalize();
+  const tried = new Vec3();
   let inside = 0;
   let deepest = 0;
   for (const point of stone.points) {
@@ -147,7 +147,7 @@ function pointsInside(stone: Stone, other: Stone, solid: THREE.Mesh): { inside: 
 }
 
 /** How far `point` lies in from `stone`'s nearest point (m): its depth inside, near enough for a line. */
-function depthIn(point: THREE.Vector3, stone: Stone): number {
+function depthIn(point: Vec3, stone: Stone): number {
   let nearest = Infinity;
   for (const p of stone.points) nearest = Math.min(nearest, p.distanceToSquared(point));
   return Math.sqrt(nearest);
@@ -168,7 +168,7 @@ function runTogether(stones: Stone[]): { a: number; b: number; inside: number; d
 }
 
 /** `stone` moved by `by` (the canary's copy). */
-function moved(stone: Stone, by: THREE.Vector3): Stone {
+function moved(stone: Stone, by: Vec3): Stone {
   const corners = stone.corners.slice();
   for (let i = 0; i < corners.length; i += 3) {
     corners[i] += by.x;
@@ -185,7 +185,7 @@ async function ringFromAbove(lab: Lab): Promise<Pictured[]> {
   const moments: Pictured[] = [];
   const was = viewMode();
   await viewBy(lab, 'top');
-  const fire = new THREE.Vector3(CAMPFIRE[0], 0, CAMPFIRE[1]);
+  const fire = new Vec3(CAMPFIRE[0], 0, CAMPFIRE[1]);
   G.player.walkTo = null;
   G.player.place(fire.clone().setY(groundHeight(fire.x, fire.z)), 0);
   await lab.step(SETTLE);
@@ -196,10 +196,10 @@ async function ringFromAbove(lab: Lab): Promise<Pictured[]> {
   renderer.settleCamera?.(fire);
   await lab.step(1);
   // (the camera's way from him along the ground, then him moved that far past the fire on its other side)
-  const away = new THREE.Vector3(G.camera.position.x - fire.x, 0, G.camera.position.z - fire.z).setLength(ABOVE_PAST);
+  const away = new Vec3(G.camera.position.x - fire.x, 0, G.camera.position.z - fire.z).setLength(ABOVE_PAST);
   const x = fire.x - away.x;
   const z = fire.z - away.z;
-  G.player.place(new THREE.Vector3(x, groundHeight(x, z), z), 0);
+  G.player.place(new Vec3(x, groundHeight(x, z), z), 0);
   await lab.step(SETTLE);
   for (const hour of HOURS) {
     holdHour(hour);
@@ -220,7 +220,7 @@ async function ringSeen(lab: Lab): Promise<Pictured[]> {
     const x = CAMPFIRE[0] + Math.cos(stand.round) * stand.out;
     const z = CAMPFIRE[1] + Math.sin(stand.round) * stand.out;
     G.player.walkTo = null;
-    G.player.place(new THREE.Vector3(x, groundHeight(x, z), z), 0);
+    G.player.place(new Vec3(x, groundHeight(x, z), z), 0);
     faceCamera(Math.atan2(CAMPFIRE[0] - x, CAMPFIRE[1] - z));
     await lab.step(SETTLE);
     for (const hour of HOURS) {
@@ -243,7 +243,7 @@ export async function campfireStonesApart(lab: Lab, canary: boolean): Promise<Li
   const triangles = mesh.geometry.attributes.position.count / 3;
   const lines = [`the campfire's ring: ${stones.length} stones, ${triangles} triangles`];
   if (canary) {
-    const copy = moved(stones[0], new THREE.Vector3(CANARY_SHIFT, 0, 0));
+    const copy = moved(stones[0], new Vec3(CANARY_SHIFT, 0, 0));
     const caught = runTogether([stones[0], copy]).length > 0;
     lines.push(`canary: a stone against itself moved ${CANARY_SHIFT * 100} cm ${caught ? 'caught' : 'missed'}`);
     return { lines, problems: [], caught, moments: [] };

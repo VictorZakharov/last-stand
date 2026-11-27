@@ -5,7 +5,7 @@
 // it (LMB the next partner, RMB the one before, F a free camera, Q/E and a middle drag turning, each with the watching
 // bar's button: "in spectate mode, need to click LMB to spectate next, RMB previous..."), the lobby's floor while the
 // hall of heroes stands in its place, and the camera turned by a middle drag in the lobby.
-import * as THREE from 'three';
+import { InstancedMesh, LookMaterial, Mesh, type Uniform, Vec3 } from './sceneApi.ts';
 import { G } from '../../../src/state';
 import { cameraYaw } from '../../../src/core/renderer';
 import { project } from '../../../src/ui/floaters';
@@ -33,9 +33,9 @@ export function endInput(): Frame | null {
 }
 
 /** The world point `ahead` metres before this game's hero, on the floor: where a held shot aims. */
-export function aheadOfHero(ahead: number): THREE.Vector3 {
+export function aheadOfHero(ahead: number): Vec3 {
   const hero = G.player;
-  return new THREE.Vector3(hero.pos.x + Math.sin(hero.facing) * ahead, 0, hero.pos.z + Math.cos(hero.facing) * ahead);
+  return new Vec3(hero.pos.x + Math.sin(hero.facing) * ahead, 0, hero.pos.z + Math.cos(hero.facing) * ahead);
 }
 
 /** Each frame its hero is out of the run: what he still did (casting, channelling or aiming) and the bow's sight
@@ -71,8 +71,9 @@ export function watchOut(): void {
 function sightDrawn(): boolean {
   let drawn = false;
   G.scene.traverseVisible((object) => {
-    const uniforms = ((object as THREE.Mesh).material as THREE.ShaderMaterial | undefined)?.uniforms;
-    if (uniforms?.uNear0 && uniforms.uAlpha?.value > 0) drawn = true;
+    const uniforms = ((object as Mesh).material as LookMaterial | undefined)?.uniforms;
+    const alpha = uniforms?.uAlpha as Uniform<number> | undefined;
+    if (uniforms?.uNear0 && alpha && alpha.value > 0) drawn = true;
   });
   return drawn;
 }
@@ -232,7 +233,7 @@ export function coopWatching(): Watching {
 export function coopFloor(): { meshes: number; labels: number } {
   let meshes = 0;
   G.scene.traverseVisible((object) => {
-    const mesh = object as THREE.InstancedMesh;
+    const mesh = object as InstancedMesh;
     if (mesh.isInstancedMesh && mesh.count > 0 && mesh.geometry.type === 'OctahedronGeometry') meshes++;
   });
   let labels = 0;

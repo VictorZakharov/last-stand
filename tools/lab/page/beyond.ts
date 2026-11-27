@@ -6,7 +6,9 @@
 // them: a ray along the arrow, from behind it, must meet a surface near its point. With no height to the wall, an
 // arrow over it stood in the air at the wall's line (#290). `--canary` plants an arrow standing in the air over the
 // ground past the wall in the first biome: it must be found.
-import * as THREE from 'three';
+import {
+  BackSide, InstancedMesh, Line3, LitMaterial, Mat4, Mesh, Node, NormalBlending, Raycaster, Vec2, Vec3,
+} from './sceneApi.ts';
 import type { Lab, Report } from './lab';
 import { BIOME_IDS, BIOMES, type BiomeId } from '../../../src/data/biomes';
 import { G } from '../../../src/state';
@@ -52,7 +54,7 @@ const COVER = 2;
 
 /** A standing arrow judged: where its point is, what it's in (the surface met near it), and whether that's air. */
 interface Stood {
-  tip: THREE.Vector3;
+  tip: Vec3;
   in: string;
   air: boolean;
   /** lying on the floor inside something drawn over it */
@@ -76,9 +78,9 @@ function faceAt(biome: BiomeId, angle: number): number {
 }
 
 /** A mesh's name: its own, else its material's colour and the name up its parents. */
-function nameOf(mesh: THREE.Object3D): string {
+function nameOf(mesh: Node): string {
   if (mesh.name) return mesh.name;
-  const colour = ((mesh as THREE.Mesh).material as THREE.MeshStandardMaterial).color;
+  const colour = ((mesh as Mesh).material as LitMaterial).color;
   const look = colour ? `a mesh #${colour.getHexString()}` : 'a mesh';
   for (let at = mesh.parent; at; at = at.parent) if (at.name) return `${look} in ${at.name}`;
   return look;
@@ -88,22 +90,22 @@ function nameOf(mesh: THREE.Object3D): string {
 const AMONG = /^(grass|weeds|pebbles)/;
 
 /** Whether a mesh draws a solid surface an arrow can stand in: opaque, not cut out, seen from outside. */
-function solid(mesh: THREE.Mesh): boolean {
+function solid(mesh: Mesh): boolean {
   const material = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material;
-  if (material.transparent || material.alphaTest > 0 || material.side === THREE.BackSide) return false;
+  if (material.transparent || material.alphaTest > 0 || material.side === BackSide) return false;
   if (AMONG.test(mesh.name)) return false;
-  return material.blending === THREE.NormalBlending && !drawnInShadowsOnly(mesh);
+  return material.blending === NormalBlending && !drawnInShadowsOnly(mesh);
 }
 
 /** The biome's solid meshes, its culled ones' instances all packed: drawn once unculled (a culled mesh holds only the
  *  instances in view as it was last drawn, and the lab's frames aren't drawn). */
-function solidsOf(lab: Lab, group: THREE.Group): THREE.Mesh[] {
-  const meshes: THREE.Mesh[] = [];
+function solidsOf(lab: Lab, group: Node): Mesh[] {
+  const meshes: Mesh[] = [];
   group.traverse((object) => {
-    const mesh = object as THREE.Mesh;
+    const mesh = object as Mesh;
     if (mesh.isMesh && solid(mesh)) meshes.push(mesh);
   });
-  const culled = meshes.filter((mesh) => (mesh as THREE.InstancedMesh).isInstancedMesh && mesh.frustumCulled);
+  const culled = meshes.filter((mesh) => (mesh as InstancedMesh).isInstancedMesh && mesh.frustumCulled);
   const drawing = lab.drawing;
   for (const mesh of culled) mesh.frustumCulled = false;
   lab.drawing = true;
@@ -117,25 +119,25 @@ function solidsOf(lab: Lab, group: THREE.Group): THREE.Mesh[] {
 }
 
 /** The trees' feet (x, z) in the biome: each instance of its trees' meshes. */
-function treesOf(meshes: THREE.Mesh[]): THREE.Vector2[] {
-  const feet: THREE.Vector2[] = [];
-  const matrix = new THREE.Matrix4();
-  const at = new THREE.Vector3();
+function treesOf(meshes: Mesh[]): Vec2[] {
+  const feet: Vec2[] = [];
+  const matrix = new Mat4();
+  const at = new Vec3();
   for (const mesh of meshes.filter((one) => TREE.test(one.name))) {
-    const instanced = mesh as THREE.InstancedMesh;
+    const instanced = mesh as InstancedMesh;
     if (!instanced.isInstancedMesh) continue;
     for (let i = 0; i < instanced.count; i++) {
       instanced.getMatrixAt(i, matrix);
       at.setFromMatrixPosition(matrix.premultiply(mesh.matrixWorld));
-      feet.push(new THREE.Vector2(at.x, at.z));
+      feet.push(new Vec2(at.x, at.z));
     }
   }
   return feet;
 }
 
 /** The nearest tree out along `angle` from `from`, within TREE_SIDE either side and TREE_FURTHEST out. */
-function treeAlong(trees: THREE.Vector2[], from: THREE.Vector2, angle: number): THREE.Vector2 | null {
-  let best: THREE.Vector2 | null = null;
+function treeAlong(trees: Vec2[], from: Vec2, angle: number): Vec2 | null {
+  let best: Vec2 | null = null;
   for (const foot of trees) {
     const off = Math.atan2(foot.y - from.y, foot.x - from.x) - angle;
     const side = Math.abs(Math.atan2(Math.sin(off), Math.cos(off)));
@@ -147,21 +149,21 @@ function treeAlong(trees: THREE.Vector2[], from: THREE.Vector2, angle: number): 
 }
 
 /** Whether a prop stands near the way from `from` out to `to` (x, z). */
-function propInWay(from: THREE.Vector2, to: THREE.Vector2): boolean {
-  const way = new THREE.Line3(new THREE.Vector3(from.x, 0, from.y), new THREE.Vector3(to.x, 0, to.y));
-  const on = new THREE.Vector3();
+function propInWay(from: Vec2, to: Vec2): boolean {
+  const way = new Line3(new Vec3(from.x, 0, from.y), new Vec3(to.x, 0, to.y));
+  const on = new Vec3();
   return G.arena.obstacles.some((o) => {
-    way.closestPointToPoint(new THREE.Vector3(o.x, 0, o.z), true, on);
+    way.closestPointToPoint(new Vec3(o.x, 0, o.z), true, on);
     return Math.hypot(on.x - o.x, on.z - o.z) < o.r + PROP_CLEAR;
   });
 }
 
 /** A standing arrow judged by the surfaces drawn: one lying on the floor by what's over it (nothing but the sky, the
  *  leaves), another by the first surface met along it from behind, near its point or not. */
-function judge(p: THREE.Vector3, tip: THREE.Vector3, meshes: THREE.Mesh[]): Stood {
+function judge(p: Vec3, tip: Vec3, meshes: Mesh[]): Stood {
   if (tip.y - groundHeight(tip.x, tip.z) < LYING) return lying(tip, meshes);
   const along = tip.clone().sub(p).normalize();
-  const ray = new THREE.Raycaster(tip.clone().addScaledVector(along, -BEHIND), along, 0, BEHIND + NEAR);
+  const ray = new Raycaster(tip.clone().addScaledVector(along, -BEHIND), along, 0, BEHIND + NEAR);
   ray.layers.enableAll();
   const [hit] = ray.intersectObjects(meshes, false);
   const near = hit ? Math.abs(hit.distance - BEHIND) <= NEAR : false;
@@ -169,8 +171,8 @@ function judge(p: THREE.Vector3, tip: THREE.Vector3, meshes: THREE.Mesh[]): Stoo
 }
 
 /** An arrow lying on the floor: under the sky, or in what covers it (the stone of the wall it fell into). */
-function lying(tip: THREE.Vector3, meshes: THREE.Mesh[]): Stood {
-  const ray = new THREE.Raycaster(tip.clone().setY(tip.y + COVER), new THREE.Vector3(0, -1, 0), 0, COVER - LYING);
+function lying(tip: Vec3, meshes: Mesh[]): Stood {
+  const ray = new Raycaster(tip.clone().setY(tip.y + COVER), new Vec3(0, -1, 0), 0, COVER - LYING);
   ray.layers.enableAll();
   const [hit] = ray.intersectObjects(meshes, false);
   return { tip: tip.clone(), in: hit ? `the floor under ${nameOf(hit.object)}` : 'the floor', air: false,
@@ -178,10 +180,10 @@ function lying(tip: THREE.Vector3, meshes: THREE.Mesh[]): Stood {
 }
 
 /** The arrows standing now (their points: each spent arrow keeps its own). */
-const standing = (): Set<THREE.Vector3> => new Set(spentPoints().map((spent) => spent.tip));
+const standing = (): Set<Vec3> => new Set(spentPoints().map((spent) => spent.tip));
 
 /** One shot loosed at `point`, followed until it's over and what it struck has come to rest; the arrows it left. */
-async function shootAt(lab: Lab, point: THREE.Vector3, meshes: THREE.Mesh[]): Promise<{ ended: string;
+async function shootAt(lab: Lab, point: Vec3, meshes: Mesh[]): Promise<{ ended: string;
   stood: Stood[] }> {
   const before = standing();
   const flying = new Set(G.projectiles);
@@ -199,11 +201,11 @@ async function shootAt(lab: Lab, point: THREE.Vector3, meshes: THREE.Mesh[]): Pr
 }
 
 /** The canary's arrow, standing in the air past the wall along `angle`, judged as a shot's are. */
-function canaryArrow(biome: BiomeId, angle: number, meshes: THREE.Mesh[]): Stood | undefined {
+function canaryArrow(biome: BiomeId, angle: number, meshes: Mesh[]): Stood | undefined {
   const before = standing();
   const out = faceAt(biome, angle) + CANARY_PAST;
-  const tip = new THREE.Vector3(Math.cos(angle) * out, CANARY_UP, Math.sin(angle) * out);
-  stickAt(tip, new THREE.Vector3(Math.cos(angle), 0, Math.sin(angle)), 0);
+  const tip = new Vec3(Math.cos(angle) * out, CANARY_UP, Math.sin(angle) * out);
+  stickAt(tip, new Vec3(Math.cos(angle), 0, Math.sin(angle)), 0);
   const planted = spentPoints().find((spent) => !before.has(spent.tip));
   return planted && judge(planted.p, planted.tip, meshes);
 }
@@ -220,18 +222,18 @@ async function shotsIn(lab: Lab, biome: BiomeId, angles: number, canary: boolean
   for (let i = 0; i < angles; i++) {
     const angle = ((i + 0.5) / angles) * Math.PI * 2;
     const face = faceAt(biome, angle);
-    const out = new THREE.Vector2(Math.cos(angle), Math.sin(angle));
+    const out = new Vec2(Math.cos(angle), Math.sin(angle));
     const from = out.clone().multiplyScalar(face - STAND_IN);
-    const gate = pastWall(biome, out.x * face, out.y * face, new THREE.Vector3()).gate;
+    const gate = pastWall(biome, out.x * face, out.y * face, new Vec3()).gate;
     if (gate || propInWay(from, out.clone().multiplyScalar(face))) continue;
     if (canary && caught === null) caught = canaryArrow(biome, angle, meshes)?.air ?? false;
-    G.player.place(new THREE.Vector3(from.x, 0, from.y), Math.atan2(out.x, out.y));
+    G.player.place(new Vec3(from.x, 0, from.y), Math.atan2(out.x, out.y));
     G.player.vel.set(0, 0, 0);
     const ground = out.clone().multiplyScalar(face + GROUND_PAST);
-    const targets: [string, THREE.Vector3][] = [['the ground past the wall', new THREE.Vector3(ground.x, 0, ground.y)]];
+    const targets: [string, Vec3][] = [['the ground past the wall', new Vec3(ground.x, 0, ground.y)]];
     const tree = treeAlong(trees, from, angle);
     for (const up of tree ? TRUNK_UP : []) {
-      targets.push([`a tree ${tree!.length().toFixed(0)} m out, ${up} m up`, new THREE.Vector3(tree!.x, up, tree!.y)]);
+      targets.push([`a tree ${tree!.length().toFixed(0)} m out, ${up} m up`, new Vec3(tree!.x, up, tree!.y)]);
     }
     for (const [aimed, point] of targets) {
       const meshesNow = solidsOf(lab, G.arena.groupOf(biome));

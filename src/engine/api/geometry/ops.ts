@@ -5,8 +5,8 @@ import type { TypedArray } from './attribute.ts';
 import { Geometry } from './geometry.ts';
 
 /** The same names, in any order. */
-function sameNames(a: readonly string[], b: readonly string[]): boolean {
-  return a.length === b.length && a.every((name) => b.includes(name));
+function sameNames(left: readonly string[], right: readonly string[]): boolean {
+  return left.length === right.length && left.every((name) => right.includes(name));
 }
 
 /** `attributes` end to end in one, of the first one's kind; they must agree in kind, size and normalization. */
@@ -17,7 +17,7 @@ function joined(name: string, attributes: readonly Attribute[]): Attribute {
     const alike = attribute.array.constructor === first.array.constructor
       && attribute.itemSize === first.itemSize
       && attribute.normalized === first.normalized;
-    if (!alike) throw new Error(`merge: the attribute '${name}' differs in kind, size or normalization`);
+    if (!alike) throw new Error(`mergeGeometries: the attribute '${name}' differs in kind, size or normalization`);
     length += attribute.count * attribute.itemSize;
   }
   const array = sameKind(first.array, length);
@@ -35,20 +35,22 @@ function joined(name: string, attributes: readonly Attribute[]): Attribute {
  * same attributes. Follows three's `BufferGeometryUtils.mergeGeometries` (three.js, MIT, 0.187.0); where three
  * logs and returns null, this throws.
  */
-export function merge(geometries: readonly Geometry[], useGroups = false): Geometry {
+export function mergeGeometries(geometries: readonly Geometry[], useGroups = false): Geometry {
   const first = geometries[0];
   const indexed = first.index !== null;
   const names = Object.keys(first.attributes);
   const merged = new Geometry();
   let offset = 0;
   geometries.forEach((geometry, i) => {
-    if (indexed !== (geometry.index !== null)) throw new Error(`merge: geometry ${i} differs in having an index`);
+    if (indexed !== (geometry.index !== null)) {
+      throw new Error(`mergeGeometries: geometry ${i} differs in having an index`);
+    }
     if (!sameNames(names, Object.keys(geometry.attributes))) {
-      throw new Error(`merge: geometry ${i} has other attributes than the first`);
+      throw new Error(`mergeGeometries: geometry ${i} has other attributes than the first`);
     }
     if (!useGroups) return;
     const count = geometry.index ? geometry.index.count : geometry.getAttribute('position')?.count;
-    if (count === undefined) throw new Error(`merge: geometry ${i} has neither an index nor positions`);
+    if (count === undefined) throw new Error(`mergeGeometries: geometry ${i} has neither an index nor positions`);
     merged.addGroup(offset, count, i);
     offset += count;
   });
@@ -62,7 +64,7 @@ export function merge(geometries: readonly Geometry[], useGroups = false): Geome
     }
     merged.setIndex(values);
   }
-  for (const name of names) merged.setAttribute(name, joined(name, geometries.map((g) => g.attributes[name])));
+  for (const name of names) merged.setAttribute(name, joined(name, geometries.map((each) => each.attributes[name])));
   return merged;
 }
 
@@ -89,7 +91,7 @@ const READS = ['getX', 'getY', 'getZ', 'getW'] as const;
  * where it's first met, the rest pointing at it. Follows three's `BufferGeometryUtils.mergeVertices` (three.js,
  * MIT, 0.187.0): the same rounding of each number into a key, so the same vertices are welded.
  */
-export function weld(geometry: Geometry, tolerance = 1e-4): Geometry {
+export function mergeVertices(geometry: Geometry, tolerance = 1e-4): Geometry {
   const step = Math.max(tolerance, Number.EPSILON);
   const multiplier = Math.pow(10, Math.log10(1 / step));
   const additive = step * 0.5 * multiplier;
@@ -104,8 +106,8 @@ export function weld(geometry: Geometry, tolerance = 1e-4): Geometry {
     const vertex = index ? index.getX(i) : i;
     let key = '';
     for (const attribute of attributes) {
-      for (let k = 0; k < attribute.itemSize; k++) {
-        key += `${Math.trunc(attribute[READS[k]](vertex) * multiplier + additive)},`;
+      for (let component = 0; component < attribute.itemSize; component++) {
+        key += `${Math.trunc(attribute[READS[component]](vertex) * multiplier + additive)},`;
       }
     }
     const known = firstOf.get(key);

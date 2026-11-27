@@ -3,7 +3,7 @@
 // wide bell hung below and apart from his forearm, the forearm and its white undersleeve running out beside the cloth.
 // Read here, each frame: each forearm leaves its sleeve through the sleeve's mouth.
 
-import * as THREE from 'three';
+import { Geometry, Mat4, Mesh, Node, Quat, Vec2, Vec3 } from './sceneApi.ts';
 import type { Scholar } from '../../../src/entities/models/scholar';
 
 /** how far from its mouth's middle a forearm may cross the mouth (a share of the mouth's radius): inside its ring, with
@@ -11,11 +11,11 @@ import type { Scholar } from '../../../src/entities/models/scholar';
 export const MOUTH_MOST = 0.75;
 
 /** each side's forearm's sleeve as drawn now (sat or standing, whichever shows) */
-function sleevesShown(s: Scholar): { side: string; sleeve: THREE.Mesh; elbow: THREE.Object3D; hand: THREE.Object3D }[] {
-  const out: { side: string; sleeve: THREE.Mesh; elbow: THREE.Object3D; hand: THREE.Object3D }[] = [];
+function sleevesShown(s: Scholar): { side: string; sleeve: Mesh; elbow: Node; hand: Node }[] {
+  const out: { side: string; sleeve: Mesh; elbow: Node; hand: Node }[] = [];
   for (const side of ['L', 'R'] as const) {
     const elbow = s.root.getObjectByName(`scholar elbow${side}`)!, hand = s.root.getObjectByName(`scholar hand${side}`)!;
-    const sleeve = elbow.children.find((m) => /^scholar bell( standing)?$/.test(m.name) && m.visible) as THREE.Mesh | undefined;
+    const sleeve = elbow.children.find((m) => /^scholar bell( standing)?$/.test(m.name) && m.visible) as Mesh | undefined;
     if (sleeve) out.push({ side: side === 'L' ? 'left' : 'right', sleeve, elbow, hand });
   }
   return out;
@@ -30,23 +30,23 @@ function sleevesShown(s: Scholar): { side: string; sleeve: THREE.Mesh; elbow: TH
 export function mouthRead(s: Scholar, tip = 0): { off: number; side: string } {
   s.root.updateMatrixWorld(true);
   let off = 0, side = '';
-  const ring: THREE.Vector3[] = [], centre = new THREE.Vector3(), elbowAt = new THREE.Vector3(), wristAt = new THREE.Vector3();
+  const ring: Vec3[] = [], centre = new Vec3(), elbowAt = new Vec3(), wristAt = new Vec3();
   for (const arm of sleevesShown(s)) {
     const was = arm.sleeve.quaternion.clone();
-    if (tip) { arm.sleeve.quaternion.premultiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), tip)); arm.sleeve.updateMatrixWorld(true); }
-    const lathe = arm.sleeve.geometry as THREE.LatheGeometry, rows = lathe.parameters.points.length, sides = lathe.parameters.segments;
+    if (tip) { arm.sleeve.quaternion.premultiply(new Quat().setFromAxisAngle(new Vec3(1, 0, 0), tip)); arm.sleeve.updateMatrixWorld(true); }
+    const lathe = arm.sleeve.geometry as Geometry, rows = lathe.parameters.points.length, sides = lathe.parameters.segments;
     const pos = arm.sleeve.geometry.attributes.position;
     ring.length = 0;
     centre.set(0, 0, 0);
     for (let k = 0; k < sides; k++) {
-      const p = new THREE.Vector3().fromBufferAttribute(pos, k * rows).applyMatrix4(arm.sleeve.matrixWorld);
+      const p = new Vec3().fromBufferAttribute(pos, k * rows).applyMatrix4(arm.sleeve.matrixWorld);
       ring.push(p);
       centre.add(p);
     }
     centre.divideScalar(ring.length);
     const radius = ring.reduce((sum, p) => sum + p.distanceTo(centre), 0) / ring.length;
     // (the mouth's plane: through its middle, square to the way down its sleeve)
-    const normal = new THREE.Vector3(0, -1, 0).transformDirection(arm.sleeve.matrixWorld);
+    const normal = new Vec3(0, -1, 0).transformDirection(arm.sleeve.matrixWorld);
     arm.elbow.getWorldPosition(elbowAt);
     arm.hand.getWorldPosition(wristAt);
     const way = wristAt.clone().sub(elbowAt), across = way.dot(normal);
@@ -66,20 +66,20 @@ export const LINEN_OUT_MOST = 0.002;
 const CUFF = 0.03;
 
 /** how far a point (in a lathe sleeve's own frame) lies outside its cloth at its height (m, 0 inside or off its ends) */
-function outsideOf(lathe: THREE.Mesh, q: THREE.Vector3): number {
-  const geo = lathe.geometry as THREE.LatheGeometry, rows = geo.parameters.points.length, sides = geo.parameters.segments;
+function outsideOf(lathe: Mesh, q: Vec3): number {
+  const geo = lathe.geometry as Geometry, rows = geo.parameters.points.length, sides = geo.parameters.segments;
   const at = geo.attributes.position;
   let j = -1;
   for (let k = 0; k + 1 < rows; k++) if (q.y >= at.getY(k) && q.y <= at.getY(k + 1)) { j = k; break; }
   if (j < 0) return 0;
   const f = (q.y - at.getY(j)) / (at.getY(j + 1) - at.getY(j));
-  const ring: THREE.Vector2[] = [];
+  const ring: Vec2[] = [];
   for (let i = 0; i <= sides; i++) {
     const a = i * rows + j, b = a + 1;
-    ring.push(new THREE.Vector2(at.getX(a) + (at.getX(b) - at.getX(a)) * f, at.getZ(a) + (at.getZ(b) - at.getZ(a)) * f));
+    ring.push(new Vec2(at.getX(a) + (at.getX(b) - at.getX(a)) * f, at.getZ(a) + (at.getZ(b) - at.getZ(a)) * f));
   }
   let inside = false, near = Infinity;
-  const p = new THREE.Vector2(q.x, q.z), d = new THREE.Vector2(), foot = new THREE.Vector2();
+  const p = new Vec2(q.x, q.z), d = new Vec2(), foot = new Vec2();
   for (let i = 0; i < sides; i++) {
     const a = ring[i], b = ring[i + 1];
     if ((a.y > p.y) !== (b.y > p.y) && p.x < a.x + ((p.y - a.y) / (b.y - a.y)) * (b.x - a.x)) inside = !inside;
@@ -96,11 +96,11 @@ function outsideOf(lathe: THREE.Mesh, q: THREE.Vector3): number {
 export function linenOut(s: Scholar): { out: number; side: string; at: number } {
   s.root.updateMatrixWorld(true);
   let out = 0, side = '', at = 0;
-  const q = new THREE.Vector3(), m = new THREE.Matrix4();
+  const q = new Vec3(), m = new Mat4();
   for (const arm of sleevesShown(s)) {
-    const linen = arm.elbow.children.find((o) => o.name === 'scholar undersleeve') as THREE.Mesh | undefined;
+    const linen = arm.elbow.children.find((o) => o.name === 'scholar undersleeve') as Mesh | undefined;
     if (!linen) continue;
-    const mouth = (arm.sleeve.geometry as THREE.LatheGeometry).parameters.points[0].y;
+    const mouth = (arm.sleeve.geometry as Geometry).parameters.points[0].y;
     m.copy(arm.sleeve.matrixWorld).invert().multiply(linen.matrixWorld);
     const pos = linen.geometry.attributes.position;
     for (let i = 0; i < pos.count; i += 2) {

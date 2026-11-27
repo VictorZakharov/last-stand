@@ -4,8 +4,9 @@
 import { Geometry } from '../geometry/index.ts';
 import { UnlitMaterial, type Material } from '../material/index.ts';
 import { Node } from './node.ts';
+import type { Vec3 } from '../math/index.ts';
 import type { Hit, Raycaster } from './raycaster.ts';
-import { raycastMesh } from './raycast.ts';
+import { raycastMesh, vertexPosition } from './raycast.ts';
 
 /** A node that draws a geometry. */
 export class Mesh<G extends Geometry = Geometry, M extends Material | Material[] = Material | Material[]>
@@ -47,6 +48,9 @@ export class Mesh<G extends Geometry = Geometry, M extends Material | Material[]
 
   /** Where `raycaster`'s ray meets its triangles, added to `hits`. */
   raycast(raycaster: Raycaster, hits: Hit[]): void { raycastMesh(this, raycaster, hits); }
+
+  /** Its vertex `at` where it's drawn, in its own space: a skinned mesh's where its bones have moved it. */
+  getVertexPosition(at: number, target: Vec3): Vec3 { return vertexPosition(this, at, target); }
 
   /** `source` copied onto it, its geometry and material shared; itself. */
   override copy(source: Node, recursive = true): this {

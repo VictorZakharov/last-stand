@@ -5,7 +5,7 @@
 // straight, the walk's routing off: found, his way to a spot past a wall went round by the door, and the gaps read
 // where he ended inside, the front wall cut away over him, and never a wall he was stopped by. `canary` reads each gap
 // as if he'd gone half a metre further.
-import * as THREE from 'three';
+import { Mesh, Node, Raycaster, Vec3 } from './sceneApi.ts';
 import type { Lab } from './lab';
 import { G } from '../../../src/state';
 import { groundHeight } from '../../../src/world/ground';
@@ -74,24 +74,24 @@ function walksAtCottage(c: Cottage, index: number): HallWalk[] {
 }
 
 /** Whether `object` and everything over it is drawn in the frame (not hidden, not the shadows' alone). */
-function drawn(object: THREE.Object3D): boolean {
-  for (let o: THREE.Object3D | null = object; o; o = o.parent) {
-    if (!o.visible || drawnInShadowsOnly(o as THREE.Mesh)) return false;
+function drawn(object: Node): boolean {
+  for (let o: Node | null = object; o; o = o.parent) {
+    if (!o.visible || drawnInShadowsOnly(o as Mesh)) return false;
   }
   return true;
 }
 
 /** Whether `object` is part of a hero. */
-function ofHero(object: THREE.Object3D): boolean {
-  for (let o: THREE.Object3D | null = object; o; o = o.parent) if (o === G.player.obj) return true;
+function ofHero(object: Node): boolean {
+  for (let o: Node | null = object; o; o = o.parent) if (o === G.player.obj) return true;
   return false;
 }
 
 /** How far along `way` from `from` (at the knee's height) the first surface drawn lies (m), or Infinity. */
-function surfaceAhead(from: THREE.Vector3, way: THREE.Vector3): number {
-  const ray = new THREE.Raycaster(from, way, 0, 30);
+function surfaceAhead(from: Vec3, way: Vec3): number {
+  const ray = new Raycaster(from, way, 0, 30);
   const hits = ray.intersectObject(G.arena.groupOf('village'), true);
-  const hit = hits.find((h) => (h.object as THREE.Mesh).isMesh && drawn(h.object) && !ofHero(h.object));
+  const hit = hits.find((h) => (h.object as Mesh).isMesh && drawn(h.object) && !ofHero(h.object));
   return hit ? hit.distance : Infinity;
 }
 
@@ -100,14 +100,14 @@ async function walkUp(lab: Lab, walk: HallWalk): Promise<number> {
   const [x, z] = walk.from;
   const [wx, wz] = walk.way;
   G.player.walkTo = null;
-  G.player.place(new THREE.Vector3(x, groundHeight(x, z), z), Math.atan2(wx, wz));
+  G.player.place(new Vec3(x, groundHeight(x, z), z), Math.atan2(wx, wz));
   await lab.step(SETTLE);
-  G.player.walkTo = new THREE.Vector3(x + wx * (PAST + 3), 0, z + wz * (PAST + 3));
+  G.player.walkTo = new Vec3(x + wx * (PAST + 3), 0, z + wz * (PAST + 3));
   await lab.step(WALK);
   G.player.walkTo = null;
   if (walk.offOutline) return walk.offOutline(G.player.pos.x, G.player.pos.z);
-  const start = new THREE.Vector3(x, groundHeight(x, z) + KNEE, z);
-  const way = new THREE.Vector3(wx, 0, wz);
+  const start = new Vec3(x, groundHeight(x, z) + KNEE, z);
+  const way = new Vec3(wx, 0, wz);
   const walked = (G.player.pos.x - x) * wx + (G.player.pos.z - z) * wz;
   return surfaceAhead(start, way) - walked;
 }

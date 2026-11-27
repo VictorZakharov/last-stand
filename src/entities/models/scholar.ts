@@ -338,9 +338,7 @@ export function* scholarSteps(book: ScholarBook): Generator<void, Scholar, undef
   const white = cards.clone();
   white.color.setRGB(1.3, 1.27, 1.22);
   white.roughness = 0.85;
-  // (a clone loses the kit's hooks: the white keeps its card's, so it draws with its program)
-  white.onBeforeCompile = cards.onBeforeCompile;
-  white.customProgramCacheKey = cards.customProgramCacheKey;
+  // (a clone loses the kit's looks: the white keeps its card's, so it's drawn as they are)
   (white as unknown as { litBothSides: boolean }).litBothSides = true;
   Object.defineProperty(white, 'kitLooks', { value: (cards as unknown as { kitLooks: unknown }).kitLooks, configurable: true });
   yield* dressHead(head, white, capFelt, brass, glass);

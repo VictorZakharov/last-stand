@@ -2,7 +2,7 @@
 // frame (`--trace`, `--span`), which `lab gait` and `lab range` list after their scenarios: the way the body faces
 // and goes, the pelvis, the hips' drop, the cycle, and each foot (down, in the air or in a timed step, dragged, out of
 // reach, where in its window) with its ankle's move. What an A/B's older side doesn't keep is left out.
-import * as THREE from 'three';
+import { Vec3 } from './sceneApi.ts';
 import type { Lab } from './lab';
 import type { LegIK } from '../../../src/entities/models/ik';
 
@@ -49,7 +49,7 @@ function traceFoot(lab: Lab, legs: LegIK, side: number, motion: string): string 
   const foot = legs.feet[side];
   const window = (foot as { window?: number }).window;
   const where = window === undefined ? '' : ` w${window.toFixed(2)}`;
-  const hip = (side === 0 ? lab.joints.thighL : lab.joints.thighR).getWorldPosition(new THREE.Vector3());
+  const hip = (side === 0 ? lab.joints.thighL : lab.joints.thighR).getWorldPosition(new Vec3());
   const fromHip = Math.hypot(foot.P.x - hip.x, foot.P.z - hip.z);
   const dragged = (foot as { dragged?: boolean }).dragged ? 'd' : ' ';
   const planted = `_${cm(fromHip).padStart(5)}${foot.over ? '!' : ' '}${dragged}`;
@@ -60,7 +60,7 @@ function traceFoot(lab: Lab, legs: LegIK, side: number, motion: string): string 
 
 /** How an ankle moved this frame, for a trace: its speed (m/s) and how far its way turned from last frame's
  *  (degrees), from where it was the two frames before. */
-function ankleMotion(now: THREE.Vector3, last: THREE.Vector3 | undefined, before: THREE.Vector3 | undefined,
+function ankleMotion(now: Vec3, last: Vec3 | undefined, before: Vec3 | undefined,
   seconds: number): string {
   if (!last) return '';
   const move = now.clone().sub(last);
@@ -102,23 +102,23 @@ export class LegTrace {
   /** the frames traced so far, in order */
   readonly frames: TracedFrame[] = [];
   /** each ankle where it was last frame and the frame before */
-  private anklesWere: THREE.Vector3[] = [];
-  private anklesBefore: THREE.Vector3[] = [];
-  private lastAt: THREE.Vector3;
+  private anklesWere: Vec3[] = [];
+  private anklesBefore: Vec3[] = [];
+  private lastAt: Vec3;
   private readonly seconds: number;
 
   constructor(private readonly lab: Lab, private readonly legs: LegIK, private readonly span: TraceSpan) {
-    this.lastAt = new THREE.Vector3(lab.player.pos.x, 0, lab.player.pos.z);
+    this.lastAt = new Vec3(lab.player.pos.x, 0, lab.player.pos.z);
     this.seconds = window.__labClock.frame / 1000;
   }
 
   /** Notes this frame (its number in the scenario): its line if it is one the span lists. */
   observe(frame: number): void {
     const lab = this.lab;
-    const at = new THREE.Vector3(lab.player.pos.x, 0, lab.player.pos.z);
+    const at = new Vec3(lab.player.pos.x, 0, lab.player.pos.z);
     const speed = at.distanceTo(this.lastAt) / this.seconds;
     this.lastAt.copy(at);
-    const ankles = [lab.joints.ankleL, lab.joints.ankleR].map((ankle) => ankle.getWorldPosition(new THREE.Vector3()));
+    const ankles = [lab.joints.ankleL, lab.joints.ankleR].map((ankle) => ankle.getWorldPosition(new Vec3()));
     const motions = ankles.map((ankle, side) => {
       return ankleMotion(ankle, this.anklesWere[side], this.anklesBefore[side], this.seconds);
     });

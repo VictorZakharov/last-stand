@@ -4,7 +4,7 @@
 // the dais's step, lies on each level it covers and down the step's face: no point of it under the floor (a mark laid
 // by the ground's height at each of its points sloped from one level to the other across the step, its parts under
 // the dais's top cut jagged notches along its edge) and none standing off it.
-import * as THREE from 'three';
+import { Attribute, Maths, Mesh, Vec3 } from './sceneApi.ts';
 import type { Fixture, Lab, Pictured } from './lab';
 import type { Enemy } from '../../../src/entities/enemy';
 import type { SkillKey } from '../../../src/types';
@@ -72,14 +72,14 @@ function countHits(foe: Enemy): () => number {
 }
 
 /** The point `distance` m from `aim` at `bearing` deg from the way `hero` aims (from him to `aim`). */
-function roundAim(aim: THREE.Vector3, from: THREE.Vector3, distance: number, bearing: number): THREE.Vector3 {
+function roundAim(aim: Vec3, from: Vec3, distance: number, bearing: number): Vec3 {
   const ahead = aim.clone().sub(from).setY(0).normalize();
-  const turned = ahead.applyAxisAngle(new THREE.Vector3(0, 1, 0), THREE.MathUtils.degToRad(bearing));
+  const turned = ahead.applyAxisAngle(new Vec3(0, 1, 0), Maths.degToRad(bearing));
   return aim.clone().addScaledVector(turned, distance).setY(0);
 }
 
 /** One cast of Starfall over `aim` as the player casts it: held, let go, and the crystals' fall waited out. */
-async function castOnce(lab: Lab, skill: HeldSkill, aim: THREE.Vector3): Promise<void> {
+async function castOnce(lab: Lab, skill: HeldSkill, aim: Vec3): Promise<void> {
   const hero = G.player;
   hero.cooldowns.clear();
   hero.energy = hero.stats.maxEnergy;
@@ -141,7 +141,7 @@ export async function starfallStrikes(
 
 /** the spot aimed at for the round across the step: halfway across the dais's step, so a preview crosses both its
  *  edges; and the hero, off the dais and clear of props, facing it */
-const STEP_SPOT = new THREE.Vector3((GROUND_EDGES[0] + GROUND_EDGES[1]) / 2, 0, 0.5);
+const STEP_SPOT = new Vec3((GROUND_EDGES[0] + GROUND_EDGES[1]) / 2, 0, 0.5);
 const STEP_HERO: Fixture = { at: [GROUND_EDGES[1] + 3.5, 0.5], facing: -Math.PI / 2 };
 /** the frames after the release the marks are read again (Quarry Mark's ring round the foe it marked) */
 const AFTER_FRAMES = 20;
@@ -174,7 +174,7 @@ function highestNear(x: number, z: number): number {
 }
 
 /** The points a triangle (its world corners) is read at. */
-function readPoints(corners: THREE.Vector3[]): THREE.Vector3[] {
+function readPoints(corners: Vec3[]): Vec3[] {
   const middle = corners[0].clone().add(corners[1]).add(corners[2]).divideScalar(3);
   return [middle, ...corners.map((corner) => corner.clone().lerp(middle, CORNER_IN))];
 }
@@ -186,13 +186,13 @@ function marksLying(): Lying {
   };
   G.scene.updateMatrixWorld();
   G.scene.traverseVisible((object) => {
-    const mesh = object as THREE.Mesh;
+    const mesh = object as Mesh;
     if (!mesh.isMesh || !isFloorPatch(mesh.geometry)) return;
     lying.marks.push(mesh.name || 'unnamed');
     const position = mesh.geometry.attributes.position;
     const count = Math.min(position.count, mesh.geometry.drawRange.count);
     for (let first = 0; first + 2 < count; first += 3) {
-      const corners = [0, 1, 2].map((k) => new THREE.Vector3().fromBufferAttribute(position, first + k));
+      const corners = [0, 1, 2].map((k) => new Vec3().fromBufferAttribute(position, first + k));
       for (const corner of corners) corner.applyMatrix4(mesh.matrixWorld);
       lying.triangles++;
       noteLevel(lying, corners);
@@ -203,14 +203,14 @@ function marksLying(): Lying {
 }
 
 /** Notes the level a flat triangle lies on, or a triangle standing up. */
-function noteLevel(lying: Lying, corners: THREE.Vector3[]): void {
+function noteLevel(lying: Lying, corners: Vec3[]): void {
   const heights = corners.map((corner) => corner.y);
   if (Math.max(...heights) - Math.min(...heights) < 1e-3) lying.levels.add(Math.round(heights[0] * 100));
   else lying.faces++;
 }
 
 /** Notes how `point` of a mark lies against the floor under it and near it. */
-function noteLying(lying: Lying, point: THREE.Vector3): void {
+function noteLying(lying: Lying, point: Vec3): void {
   const under = groundHeight(point.x, point.z) - point.y;
   const above = point.y - highestNear(point.x, point.z);
   lying.worstUnder = Math.max(lying.worstUnder, under);
@@ -246,11 +246,11 @@ function describeLying(when: string, lying: Lying): string {
 function layPointByPoint(lift: number): () => void {
   const restores: (() => void)[] = [];
   G.scene.traverseVisible((object) => {
-    const mesh = object as THREE.Mesh;
+    const mesh = object as Mesh;
     if (!mesh.isMesh || !isFloorPatch(mesh.geometry)) return;
-    const position = mesh.geometry.attributes.position as THREE.BufferAttribute;
+    const position = mesh.geometry.attributes.position as Attribute;
     const kept = (position.array as Float32Array).slice();
-    const point = new THREE.Vector3();
+    const point = new Vec3();
     for (let i = 0; i < position.count; i++) {
       point.fromBufferAttribute(position, i).applyMatrix4(mesh.matrixWorld);
       position.setY(i, groundHeight(point.x, point.z) + lift);

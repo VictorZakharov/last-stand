@@ -17,7 +17,7 @@
 // at wave 15. `stagPictures` (asked for alone): the stag and each stage of its fight for the eye, and its triangles.
 // `--canary` plants a fault in each part: a fire that burns no one, a crash that stuns nothing, a second phase's share
 // moved.
-import * as THREE from 'three';
+import { Vec3 } from './sceneApi.ts';
 import type { Frame, Lab, Pictured } from './lab';
 import type { Enemy } from '../../../src/entities/enemy';
 import type { SkillKey } from '../../../src/types';
@@ -59,14 +59,14 @@ const EMBERS_HOLD = 8;
 /** the share of its life its second phase is measured at */
 const LATE = 0.45;
 
-const _n = new THREE.Vector3();
+const _n = new Vec3();
 
 /** A lane for a case: where the hero stands, where the stag rises, and the way from it to him. */
-export interface Lane { hero: THREE.Vector3; stag: THREE.Vector3; way: THREE.Vector3; prop?: Obstacle }
+export interface Lane { hero: Vec3; stag: Vec3; way: Vec3; prop?: Obstacle }
 
 /** Whether a body `ROOM` m wide goes clear along from `from` along `way` for `length` m (no prop, the wall out of
  *  reach), but for `skip` (a prop a case means it to meet). */
-function clearAlong(from: THREE.Vector3, way: THREE.Vector3, length: number, skip?: { x: number; z: number }): boolean {
+function clearAlong(from: Vec3, way: Vec3, length: number, skip?: { x: number; z: number }): boolean {
   for (let d = 0; d <= length; d += 0.5) {
     const at = from.clone().addScaledVector(way, d);
     if (pastWall(G.arena.biome, at.x, at.z, _n).by > -ROOM) return false;
@@ -81,9 +81,9 @@ export function openLane(): Lane {
   const length = Math.min(STAG.charge.most, AWAY + STAG.charge.over) + 1;
   for (let r = 4; r < 20; r += 2) {
     for (let a = 0; a < Math.PI * 2; a += Math.PI / 12) {
-      const hero = new THREE.Vector3(Math.sin(a) * r, 0, Math.cos(a) * r);
+      const hero = new Vec3(Math.sin(a) * r, 0, Math.cos(a) * r);
       for (let b = 0; b < Math.PI * 2; b += Math.PI / 12) {
-        const way = new THREE.Vector3(Math.sin(b), 0, Math.cos(b));
+        const way = new Vec3(Math.sin(b), 0, Math.cos(b));
         const stag = hero.clone().addScaledVector(way, -AWAY);
         if (clearAlong(stag, way, length)) return { hero, stag, way };
       }
@@ -97,9 +97,9 @@ export function openLane(): Lane {
 export function sideLane(): Lane {
   for (let r = 4; r < 20; r += 2) {
     for (let a = 0; a < Math.PI * 2; a += Math.PI / 12) {
-      const hero = new THREE.Vector3(Math.sin(a) * r, 0, Math.cos(a) * r);
+      const hero = new Vec3(Math.sin(a) * r, 0, Math.cos(a) * r);
       for (let b = 0; b < Math.PI * 2; b += Math.PI / 12) {
-        const way = new THREE.Vector3(Math.sin(b), 0, Math.cos(b)), across = new THREE.Vector3(way.z, 0, -way.x);
+        const way = new Vec3(Math.sin(b), 0, Math.cos(b)), across = new Vec3(way.z, 0, -way.x);
         const stag = hero.clone().addScaledVector(way, -AWAY);
         if (!clearAlong(stag, way, AWAY)) continue;
         if (clearAlong(stag, across, SIDE_CLEAR) && clearAlong(stag, across.negate(), SIDE_CLEAR)) return { hero, stag, way };
@@ -114,7 +114,7 @@ const SIDE_CLEAR = 14;
 /** A lane at a hero standing 3 m before the wall: its run carries it on into the wall. */
 function wallLane(): Lane {
   for (let a = 0; a < Math.PI * 2; a += Math.PI / 24) {
-    const out = new THREE.Vector3(Math.sin(a), 0, Math.cos(a));
+    const out = new Vec3(Math.sin(a), 0, Math.cos(a));
     for (let r = 12; r < 40; r += 0.5) {
       const hero = out.clone().multiplyScalar(r);
       const by = pastWall(G.arena.biome, hero.x, hero.z, _n);
@@ -133,8 +133,8 @@ function tossPropLane(): Lane & { prop: Obstacle } {
   for (const o of G.arena.obstacles) {
     if (o.r < 0.5 || o.r > 2.5 || o.prop?.broken) continue;
     for (let b = 0; b < Math.PI * 2; b += Math.PI / 12) {
-      const way = new THREE.Vector3(Math.sin(b), 0, Math.cos(b));
-      const hero = new THREE.Vector3(o.x, 0, o.z).addScaledVector(way, -(o.r + 4));
+      const way = new Vec3(Math.sin(b), 0, Math.cos(b));
+      const hero = new Vec3(o.x, 0, o.z).addScaledVector(way, -(o.r + 4));
       const stag = hero.clone().addScaledVector(way, -AWAY);
       if (inObstacle(hero, 1) || pastWall(G.arena.biome, hero.x, hero.z, _n).by > -2) continue;
       if (clearAlong(stag, way, AWAY - 1)) return { hero, stag, way, prop: o };
@@ -148,8 +148,8 @@ export function propLane(): Lane {
   for (const o of G.arena.obstacles) {
     if (o.r < 0.5 || o.r > 2.5) continue;
     for (let b = 0; b < Math.PI * 2; b += Math.PI / 12) {
-      const way = new THREE.Vector3(Math.sin(b), 0, Math.cos(b));
-      const hero = new THREE.Vector3(o.x, 0, o.z).addScaledVector(way, o.r + 1.6);
+      const way = new Vec3(Math.sin(b), 0, Math.cos(b));
+      const hero = new Vec3(o.x, 0, o.z).addScaledVector(way, o.r + 1.6);
       const stag = hero.clone().addScaledVector(way, -AWAY);
       const toProp = AWAY - o.r - 1.6 - o.r;
       if (inObstacle(hero, 0.6) || pastWall(G.arena.biome, hero.x, hero.z, _n).by > -1) continue;
@@ -230,7 +230,7 @@ async function chargeOn(lab: Lab, options: BossOptions, lane: Lane, held: SkillK
         result.setOffAt = frame;
         result.run = { ...run };
         // (stepped out of its lane as it sets off: it runs on past him)
-        if (dodge) hero.place(hero.pos.clone().add(new THREE.Vector3(run.dz, 0, -run.dx).multiplyScalar(ROOM + 1.6)), hero.facing);
+        if (dodge) hero.place(hero.pos.clone().add(new Vec3(run.dz, 0, -run.dx).multiplyScalar(ROOM + 1.6)), hero.facing);
       }
       if (run) result.ranTo = Math.max(result.ranTo, (boss.pos.x - run.ox) * run.dx + (boss.pos.z - run.oz) * run.dz);
       // (one charge read: its wheel-round into another held off, which `stagPhase2` reads)
@@ -288,7 +288,7 @@ async function fireCase(lab: Lab, c: ChargeCase, lines: string[], problems: stri
   const run = c.run;
   if (!run || !FIRES.length) return;
   const hero = G.player, mid = c.ranTo * 0.5;
-  const at = new THREE.Vector3(run.ox + run.dx * mid, 0, run.oz + run.dz * mid);
+  const at = new Vec3(run.ox + run.dx * mid, 0, run.oz + run.dz * mid);
   hero.place(at, hero.facing);
   const hurts: Hurt[] = [];
   let frame = 0;
@@ -300,7 +300,7 @@ async function fireCase(lab: Lab, c: ChargeCase, lines: string[], problems: stri
   lines.push(`stagCharge: the hero stood in its fire ${BURN_HOLD} s: burnt ${burns} times (a burn every ${STAG.fire.tick} s)`);
   if (Math.abs(burns - want) > BURN_SLACK) problems.push(`stagCharge: in its fire ${BURN_HOLD} s the hero was burnt ${burns} times, not about ${want}`);
   const life = STAG.fire.life;
-  hero.place(at.clone().addScaledVector(new THREE.Vector3(run.dz, 0, -run.dx), 6), hero.facing);
+  hero.place(at.clone().addScaledVector(new Vec3(run.dz, 0, -run.dx), 6), hero.facing);
   await lab.step(Math.round(life * FPS));
   lines.push(`stagCharge: ${FIRES.length} pieces of fire still burning ${life} s on`);
   if (FIRES.length) problems.push(`stagCharge: its fire still burnt past its ${life} s`);
@@ -425,7 +425,7 @@ async function closeTo(lab: Lab, options: BossOptions, lane: Lane): Promise<Enem
 /** What a toss did: when its warning began and he was seized, where he was and landed, his hurts, how high he went,
  *  the frames of his flight and those he was airborne in, and what a hit sent at him in the air dealt. */
 interface TossCase {
-  warnedAt: number; seizedAt: number; from: THREE.Vector3; to: THREE.Vector3 | null; hurts: Hurt[]; highest: number;
+  warnedAt: number; seizedAt: number; from: Vec3; to: Vec3 | null; hurts: Hurt[]; highest: number;
   flight: number; airborne: number; airHit: number;
 }
 
@@ -464,7 +464,7 @@ async function tossOn(lab: Lab, options: BossOptions, lane: Lane, step: TossStep
     boss.brain.chargeT = 99;
     if (result.warnedAt < 0 && boss.action?.name === 'toss') result.warnedAt = frame;
     if (step && result.warnedAt >= 0 && frame === result.warnedAt + Math.round(warn * FPS * 0.5)) {
-      const away = step === 'aside' ? new THREE.Vector3(lane.way.z, 0, -lane.way.x) : lane.way.clone();
+      const away = step === 'aside' ? new Vec3(lane.way.z, 0, -lane.way.x) : lane.way.clone();
       hero.place(hero.pos.clone().addScaledVector(away, STEP[step]), hero.facing);
     }
     if (tossed && !flying) {
@@ -537,7 +537,7 @@ export async function stagToss(lab: Lab, options: BossOptions, lines: string[], 
       if (by > 0) problems.push(`stagToss: ${what}: he landed ${fixed(by)} m past the wall`);
       if (inObstacle(c.to, G.player.radius * 0.8)) problems.push(`stagToss: ${what}: he landed in a prop`);
       if (what === 'before a prop') {
-        const prop = lane.prop!, along = (at: THREE.Vector3): number => (at.x - prop.x) * lane.way.x + (at.z - prop.z) * lane.way.z;
+        const prop = lane.prop!, along = (at: Vec3): number => (at.x - prop.x) * lane.way.x + (at.z - prop.z) * lane.way.z;
         lines.push(`stagToss: before a prop: landed ${fixed(-along(c.to) - prop.r)} m short of its circle`);
         if (along(c.to) > -prop.r) problems.push('stagToss: before a prop: he was thrown through it');
       }
@@ -572,7 +572,7 @@ export async function stagClose(lab: Lab, options: BossOptions, lines: string[],
       last = name;
       // (landed from a toss: put back before it, where it can reach him)
       if (!tossed && !hero.seized && Math.hypot(hero.pos.x - boss.pos.x, hero.pos.z - boss.pos.z) > CLOSE + 1.5) {
-        const ahead = new THREE.Vector3(Math.sin(boss.facing), 0, Math.cos(boss.facing));
+        const ahead = new Vec3(Math.sin(boss.facing), 0, Math.cos(boss.facing));
         hero.place(boss.pos.clone().addScaledVector(ahead, CLOSE), Math.atan2(-ahead.x, -ahead.z));
       }
       const turned = Math.abs(Math.atan2(Math.sin(boss.facing - was), Math.cos(boss.facing - was)));
@@ -710,7 +710,7 @@ export async function stagPictures(lab: Lab, options: BossOptions, lines: string
   await lab.step(30);
   await seen('2 from above', 'the game\'s own view: a huge stag of charred wood, embers in its cracks, antlers burning');
   close('3 whole', 'its whole, from before it, each side and above', ['back', 'left', 'right', 'above'], 3.4, 15);
-  const head = boss.pos.clone().add(new THREE.Vector3(Math.sin(boss.facing), 0, Math.cos(boss.facing)).multiplyScalar(2.6));
+  const head = boss.pos.clone().add(new Vec3(Math.sin(boss.facing), 0, Math.cos(boss.facing)).multiplyScalar(2.6));
   close('4 its head', 'its head and burning antlers', ['back', 'left'], 5.6, 5, head);
   // its charge
   boss.dazed = 0;
@@ -773,7 +773,7 @@ export async function stagMoves(lab: Lab, options: BossOptions): Promise<Picture
   const moments: Pictured[] = [];
   const side = (label: string, note: string, boss: Enemy, distance = 21, up = 3.2): void => {
     // (framed a little ahead of its middle, its head and antlers in the picture)
-    const ahead = new THREE.Vector3(Math.sin(boss.facing), 0, Math.cos(boss.facing)).multiplyScalar(1.6);
+    const ahead = new Vec3(Math.sin(boss.facing), 0, Math.cos(boss.facing)).multiplyScalar(1.6);
     moments.push(lab.picture(label, ['left'], [note], { at: boss.pos.clone().add(ahead).setY(up), distance }));
   };
   // its toss

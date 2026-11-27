@@ -6,6 +6,7 @@
 // the window and over no other part of the HUD) and pictured. A step that isn't ticked by doing it is a problem, as
 // are health lost to the shade, a program compiled on the way, and progress the cookie doesn't keep. Its canaries:
 // the tracker as tall as two windows, and the cookie emptied, each of which must be found.
+import { Vec3 } from './sceneApi.ts';
 import type { Frame, Lab, Pictured, Report } from './lab';
 import { boxOf, middleOf } from './lab';
 import { G } from '../../../src/state';
@@ -156,7 +157,7 @@ export async function tutorial(lab: Lab, options: TutorialOptions): Promise<Repo
 
   const stand = async ([x, z]: readonly [number, number], facing = 0): Promise<void> => {
     p.walkTo = null;
-    p.place(new lab.THREE.Vector3(x, groundHeight(x, z), z), facing);
+    p.place(new Vec3(x, groundHeight(x, z), z), facing);
     await lab.step(SHOW_FRAMES, REST);
   };
   /** A finger's tap on `target`, saying which it was if the page never heard it. */
@@ -196,7 +197,7 @@ export async function tutorial(lab: Lab, options: TutorialOptions): Promise<Repo
     return true;
   };
   /** Frames run with `frame`'s input until `step` is ticked. */
-  const until = async (step: TutorialStepId, frame?: () => { keys?: string[]; m0?: boolean; m2?: boolean; aim?: InstanceType<Lab['THREE']['Vector3']> }): Promise<void> => {
+  const until = async (step: TutorialStepId, frame?: () => { keys?: string[]; m0?: boolean; m2?: boolean; aim?: Vec3 }): Promise<void> => {
     try {
       await lab.until(() => tutorialStep()?.id !== step, STEP_FRAMES, `${step} was never ticked`, frame);
     } catch (error) {
@@ -206,7 +207,7 @@ export async function tutorial(lab: Lab, options: TutorialOptions): Promise<Repo
   };
   const keyOf = (impl: string): SkillKey | undefined => SKILL_KEYS.find((key) => p.skillAt(key)?.def.impl === impl);
   /** A skill's key held (on touch its button) while `held` frames run with the aim on `aim`. */
-  const hold = async (key: SkillKey, aim: InstanceType<Lab['THREE']['Vector3']>, done: () => boolean, limit: number): Promise<void> => {
+  const hold = async (key: SkillKey, aim: Vec3, done: () => boolean, limit: number): Promise<void> => {
     // (the mouse stays there as the key lifts: a drawn shot is loosed where it points then)
     lab.aim.copy(aim);
     if (touch) {
@@ -331,7 +332,7 @@ export async function tutorial(lab: Lab, options: TutorialOptions): Promise<Repo
   // --- combat ---
   await stand(ON_THE_SQUARE);
   await lab.step(SHOW_FRAMES * 2);
-  const dummy = new lab.THREE.Vector3(YARD_DUMMIES[1][0], 0, YARD_DUMMIES[1][1]);
+  const dummy = new Vec3(YARD_DUMMIES[1][0], 0, YARD_DUMMIES[1][1]);
   const inYard = yardToWorld(...IN_YARD);
   const toYard = async (): Promise<void> => stand(inYard, Math.atan2(dummy.x - inYard[0], dummy.z - inYard[1]));
   if (await asked('yard')) await toYard();

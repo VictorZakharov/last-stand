@@ -6,7 +6,7 @@
 // standing, one carried inside him, one that ended behind him or beside him, a living foe left unthrown, an elite
 // thrown and a boss moved at all are problems. (Thrown off the line as it was met, a foe the charge ran on past ended behind him
 // as he stopped.) Its blows with a shield and without are `rushBonus.ts`'s.
-import * as THREE from 'three';
+import { Vec3 } from './sceneApi.ts';
 import { screenArea, type Fixture, type Lab, type Pictured, type Report } from './lab';
 import type { Enemy } from '../../../src/entities/enemy';
 import { G } from '../../../src/state';
@@ -118,23 +118,23 @@ interface Followed {
   highest: number;
   shoved: boolean;
   /** where it was let go and where it landed, thrown */
-  letGo: THREE.Vector3 | null;
-  landed: THREE.Vector3 | null;
+  letGo: Vec3 | null;
+  landed: Vec3 | null;
   /** where it ended: on its feet, or its body's hips */
-  end: THREE.Vector3;
+  end: Vec3;
 }
 
 const metres = (value: number): string => `${value.toFixed(2)} m`;
 const centimetres = (value: number): string => `${(value * 100).toFixed(0)} cm`;
 const seconds = (value: number): string => `${value.toFixed(2)} s`;
 const frameTime = (): number => window.__labClock.frame / 1000;
-const flat = (from: THREE.Vector3, to: THREE.Vector3): number => Math.hypot(to.x - from.x, to.z - from.z);
+const flat = (from: Vec3, to: Vec3): number => Math.hypot(to.x - from.x, to.z - from.z);
 
 /** The charge's way along the ground and its left, for a hero facing `facing` (rad). */
 export { waysOf };
 
 /** The foes of `set` risen round a hero at `at` facing `facing`, standing dazed (still, thinking of nothing). */
-async function foesOf(lab: Lab, set: FoeSet, at: THREE.Vector3, facing: number): Promise<Followed[]> {
+async function foesOf(lab: Lab, set: FoeSet, at: Vec3, facing: number): Promise<Followed[]> {
   const { forward, left } = waysOf(facing);
   const foes = set.foes.map((placed) => {
     const spot = at.clone().addScaledVector(forward, placed.ahead).addScaledVector(left, placed.across);
@@ -167,9 +167,9 @@ function followedOf(placed: Placed, foe: Enemy): Followed {
 }
 
 /** Where a foe is: on its feet, or its body's hips once it has fallen. */
-function placeOf(foe: Enemy): THREE.Vector3 {
+function placeOf(foe: Enemy): Vec3 {
   const ragdoll = foe.corpse?.ragdoll;
-  if (!foe.alive && ragdoll) return ragdoll.hips(new THREE.Vector3());
+  if (!foe.alive && ragdoll) return ragdoll.hips(new Vec3());
   return foe.pos.clone();
 }
 
@@ -210,9 +210,9 @@ function still(one: Followed): boolean {
 interface Cast {
   set: FoeSet;
   followed: Followed[];
-  stop: THREE.Vector3;
-  forward: THREE.Vector3;
-  left: THREE.Vector3;
+  stop: Vec3;
+  forward: Vec3;
+  left: Vec3;
   moments: Pictured[];
   /** the canary's plant: whether it put a foe behind the hero */
   planted: boolean;
@@ -285,7 +285,7 @@ function stopped(): boolean {
 }
 
 /** With the canary, the first foe thrown put 2 m behind the hero as it lands: whether it was planted. */
-function plantBehind(followed: Followed[], forward: THREE.Vector3): boolean {
+function plantBehind(followed: Followed[], forward: Vec3): boolean {
   const landed = followed.find((one) => one.landed && one.foe.alive);
   if (!landed) return false;
   landed.foe.pos.copy(G.player.pos).addScaledVector(forward, -2);
@@ -300,7 +300,7 @@ async function picture(lab: Lab, followed: Followed[], label: string): Promise<P
   points.push(G.player.pos.clone());
   if (renderer.viewMode() === 'first') return lab.screen(label);
   const seen = await lab.screen(label, [], screenArea(points, PICTURE_MARGIN));
-  const middle = points.reduce((sum, point) => sum.add(point), new THREE.Vector3()).divideScalar(points.length);
+  const middle = points.reduce((sum, point) => sum.add(point), new Vec3()).divideScalar(points.length);
   const spread = Math.max(...points.map((point) => flat(point, middle)));
   middle.y = 0.6;
   const close = lab.capture(['left', 'top'], { at: middle, distance: Math.max(6, spread * 3) });

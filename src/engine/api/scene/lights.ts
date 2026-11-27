@@ -9,9 +9,9 @@ import { Node } from './node.ts';
 /** a colour as a light takes it: a colour, an sRGB hex number, or a CSS string */
 export type LightColor = Color | number | string;
 
-const _from = new Vec3();
-const _toward = new Vec3();
-const _viewProjection = new Mat4();
+const scratchFrom = new Vec3();
+const scratchToward = new Vec3();
+const scratchViewProjection = new Mat4();
 
 /** A light's shadow: the camera its map is drawn through and how it's read. */
 export class LightShadow<C extends Camera = Camera> {
@@ -45,18 +45,18 @@ export class LightShadow<C extends Camera = Camera> {
    */
   updateMatrices(light: { readonly matrixWorld: Mat4; readonly target: Node }): void {
     const camera = this.camera;
-    _from.setFromMatrixPosition(light.matrixWorld);
-    camera.position.copy(_from);
-    _toward.setFromMatrixPosition(light.target.matrixWorld);
-    camera.lookAt(_toward);
-    _viewProjection.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
+    scratchFrom.setFromMatrixPosition(light.matrixWorld);
+    camera.position.copy(scratchFrom);
+    scratchToward.setFromMatrixPosition(light.target.matrixWorld);
+    camera.lookAt(scratchToward);
+    scratchViewProjection.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
     this.matrix.set(
       0.5, 0, 0, 0.5,
       0, 0.5, 0, 0.5,
       0, 0, 1, 0,
       0, 0, 0, 1,
     );
-    this.matrix.multiply(_viewProjection);
+    this.matrix.multiply(scratchViewProjection);
   }
 
   /** `source`'s settings copied, its camera cloned; itself. */

@@ -10,8 +10,6 @@ import {
   Mesh, Node, Outline, PointLight, Quat, RepeatWrapping, UnlitMaterial, Vec2, Vec3,
 } from '../engine/api/index.ts';
 import * as shapes from '../engine/api/shapes/index.ts';
-import { portShader, seeKept, seeUniforms, wgslNoise } from '../core/shaderPorts';
-import { dampNodes, outsideOutputNode } from './cryptNodes';
 import { ARENA } from '../data/balance';
 import { cobblestone, soil, ashlar, granite, limestone, marble, slate, bark, bannerCloth, pbrMaterialMaps, runeCircle } from '../core/textures';
 import { particles, col } from '../fx/particles';
@@ -76,12 +74,10 @@ const MOON_DIR = new Vec3(-0.74, 0.3, 0.6).normalize();
  * so the eye stays on the arena; the close views look out at the full skyline.
  */
 const outside = restartsAt({ value: 0 }, { value: 1 });
-/** how far past the wall it darkens, and by how much (the nodes: `outsideOutputNode`) */
+/** how far past the wall it darkens, and by how much (its look: `outsideLook`) */
 const OUTSIDE = { from: WALL_R + 1.5, to: WALL_R + 7, most: 0.8 };
 function outsideDim<M extends Material>(m: M): M {
-  (m as M & { outputNode: unknown }).outputNode = outsideOutputNode(outside, OUTSIDE);
-  rustLook(m, outsideLook(outside, OUTSIDE));
-  return m;
+  return rustLook(m, outsideLook(outside, OUTSIDE));
 }
 
 /** World span (m) of one tile of the damp map; it repeats beyond, deep in the fog. */
@@ -150,12 +146,7 @@ function dampGround<M extends LitMaterial>(m: M, earth: Vec3[]): M {
     map: damp.value, span: DAMP_SPAN, earth, ragged: EARTH.ragged, stones: EARTH.stones, washed: EARTH.washed,
     tile: EARTH.tile, soil: litter,
   };
-  const nodes = dampNodes(m, laid);
   rustLook(m, dampLook(laid, outside, OUTSIDE, COBBLE_RELIEF));
-  Object.assign(m, {
-    colorNode: nodes.color, roughnessNode: nodes.roughness, normalNode: nodes.normal,
-    outputNode: outsideOutputNode(outside, OUTSIDE),
-  });
   reliefContext(m, COBBLE_RELIEF);
   return m;
 }
@@ -990,7 +981,8 @@ function buildNecropolis(scene: Node, wall: Wall, rng: () => number, stone: Mate
     // (sunk a little: a trunk is an open tube at its foot)
     setInstance(trees[k], used[k], x, -0.2, z, r(-0.08, 0.08), r(0, TAU), r(-0.08, 0.08), w, s, w);
     // (what an arrow over the wall meets: each tree's trunk, its limbs let go, as the forest's)
-    wall.addGeometry(kinds[k].trunk, trees[k].getMatrixAt(used[k]++, at), false, 'beyond');
+    trees[k].getMatrixAt(used[k]++, at);
+    wall.addGeometry(kinds[k].trunk, at, false, 'beyond');
   }
   trees.forEach((mesh, k) => {
     mesh.count = used[k];
@@ -1119,54 +1111,9 @@ function beaconFlameMat(updaters: Updater[]): LookMaterial {
   const mat = new LookMaterial({
     uniforms: { uTime: { value: 0 } },
     transparent: true, depthWrite: false, blending: AdditiveBlending,
-    vertexShader: `
-      uniform float uTime; varying vec3 vP; varying vec3 vN; varying vec3 vV;
-      void main(){
-        vec3 p = position;
-        float w = sin(uTime * 7.0 + p.y * 9.0) * 0.06 + sin(uTime * 11.0 - p.y * 5.0) * 0.04;
-        p.xz *= 1.0 + w * p.y;
-        p.x += sin(uTime * 3.0 + p.y * 4.0) * 0.05 * p.y * p.y;
-        vP = p;
-        vec4 mv = modelViewMatrix * vec4(p, 1.0);
-        vN = normalize(normalMatrix * normal); vV = normalize(-mv.xyz);
-        gl_Position = projectionMatrix * mv;
-      }`,
-    fragmentShader: `
-      uniform float uTime; varying vec3 vP; varying vec3 vN; varying vec3 vV;
-      float h(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
-      float n(vec2 p){ vec2 i = floor(p), f = fract(p); f = f*f*(3.0-2.0*f);
-        return mix(mix(h(i), h(i+vec2(1,0)), f.x), mix(h(i+vec2(0,1)), h(i+vec2(1,1)), f.x), f.y); }
-      void main(){
-        float rim = pow(1.0 - abs(dot(normalize(vN), vV)), 1.6);
-        float bands = n(vec2(vP.x * 6.0 + vP.z * 4.0, vP.y * 5.0 - uTime * 3.2)) * 0.6 + n(vec2(vP.z * 11.0 - vP.x * 3.0, vP.y * 9.0 - uTime * 5.0)) * 0.4;
-        float fade = 1.0 - smoothstep(0.45, 1.05, vP.y + bands * 0.25);
-        vec3 c = mix(vec3(0.1, 0.35, 1.0), vec3(0.75, 0.9, 1.0), rim * 0.6 + (1.0 - vP.y) * 0.3);
-        gl_FragColor = vec4(c * (0.25 + rim * 1.2) * (0.55 + bands * 0.9) * fade * (1.0 - seeFade()), 1.0);
-      }`,
   });
   // (it fades as the beacon under it dissolves, not left burning in the air)
   seeThroughFade(mat, 'prop');
-  portShader(mat, ({ wgslFn, positionGeometry, normalView, positionViewDirection, varying, vec4 }, u) => {
-    const moved = wgslFn(`fn beaconPosition(pos: vec3f, time: f32) -> vec3f {
-      var p = pos;
-      let w = sin(time * 7.0 + p.y * 9.0) * 0.06 + sin(time * 11.0 - p.y * 5.0) * 0.04;
-      p = vec3f(p.x * (1.0 + w * p.y), p.y, p.z * (1.0 + w * p.y));
-      p.x += sin(time * 3.0 + p.y * 4.0) * 0.05 * p.y * p.y;
-      return p;
-    }`)({ pos: positionGeometry, time: u.uTime });
-    const kept = seeKept(seeUniforms(mat.uniforms));
-    return {
-      position: moved,
-      fragment: vec4(kept, kept, kept, 1).mul(wgslFn(`fn beaconFlame(p: vec3f, nrm: vec3f, v: vec3f, time: f32) -> vec4f {
-        let rim = pow(max(1.0 - abs(dot(normalize(nrm), v)), 0.0), 1.6);
-        let bands = noise2(vec2f(p.x * 6.0 + p.z * 4.0, p.y * 5.0 - time * 3.2)) * 0.6
-          + noise2(vec2f(p.z * 11.0 - p.x * 3.0, p.y * 9.0 - time * 5.0)) * 0.4;
-        let fade = 1.0 - smoothstep(0.45, 1.05, p.y + bands * 0.25);
-        let c = mix(vec3f(0.1, 0.35, 1.0), vec3f(0.75, 0.9, 1.0), rim * 0.6 + (1.0 - p.y) * 0.3);
-        return vec4f(c * (0.25 + rim * 1.2) * (0.55 + bands * 0.9) * fade, 1.0);
-      }`, [wgslNoise().noise2])({ p: varying(moved), nrm: normalView, v: positionViewDirection, time: u.uTime })),
-    };
-  });
   updaters.push((_dt, t) => { mat.uniforms.uTime.value = t; });
   rustLook(mat, { ...beaconLook(mat.uniforms.uTime), fades: seeValue('prop') });
   return mat;

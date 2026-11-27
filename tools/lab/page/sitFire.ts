@@ -3,7 +3,7 @@
 // `FireClear` reads his weapon against the fire every frame. `LaidStill` reads a weapon the game says he's let go of
 // (`userData.laid`) against where it first lay.
 
-import * as THREE from 'three';
+import { boundsOf, Box3, Mat4, Mesh, Node, Vec3 } from './sceneApi.ts';
 import type { Seat } from '../../../src/world/seats';
 import type { Lab } from './lab';
 
@@ -32,16 +32,16 @@ const TOUCH_CLEAR = 0.08;
 /** how far a shield resting on the floor may be off it (m) */
 const RIM_MOST = 0.03;
 
-const _box = new THREE.Box3();
-const _butt = new THREE.Vector3();
-const _inverse = new THREE.Matrix4();
+const _box = new Box3();
+const _butt = new Vec3();
+const _inverse = new Mat4();
 /** how far each weapon reaches behind its grip, along its grip's down (m, in the grip's space), read once */
-const behindOf = new WeakMap<THREE.Object3D, number>();
-const _tip = new THREE.Vector3();
-const _point = new THREE.Vector3();
+const behindOf = new WeakMap<Node, number>();
+const _tip = new Vec3();
+const _point = new Vec3();
 
 /** Where the weapon whose far end is `tip` ends behind the fist that holds it, its handle's butt, into `out`. */
-function buttOf(tip: THREE.Object3D, out: THREE.Vector3): THREE.Vector3 {
+function buttOf(tip: Node, out: Vec3): Vec3 {
   const grip = tip.parent!;
   grip.updateWorldMatrix(true, true);
   let behind = behindOf.get(grip);
@@ -53,11 +53,11 @@ function buttOf(tip: THREE.Object3D, out: THREE.Vector3): THREE.Vector3 {
 }
 
 /** How far the meshes hung from `grip` reach behind it along its down (m, in its space, 0 or less). */
-function reachBehind(grip: THREE.Object3D): number {
+function reachBehind(grip: Node): number {
   _inverse.copy(grip.matrixWorld).invert();
   let behind = 0;
   grip.traverse((object) => {
-    const mesh = object as THREE.Mesh;
+    const mesh = object as Mesh;
     if (!mesh.isMesh || !mesh.geometry) return;
     mesh.geometry.computeBoundingBox();
     _box.copy(mesh.geometry.boundingBox!).applyMatrix4(mesh.matrixWorld).applyMatrix4(_inverse);
@@ -67,7 +67,7 @@ function reachBehind(grip: THREE.Object3D): number {
 }
 
 /** How far `point` is inside a circle round (`x`, `z`) on the floor (m, up to its radius), or 0. */
-export function insideCircle(point: THREE.Vector3, x: number, z: number, radius: number): number {
+export function insideCircle(point: Vec3, x: number, z: number, radius: number): number {
   return Math.max(0, radius - Math.hypot(point.x - x, point.z - z));
 }
 
@@ -76,7 +76,7 @@ export function shieldRimOver(lab: Lab): number | null {
   const shield = lab.model.root.getObjectByName('shield');
   if (!shield?.visible) return null;
   lab.model.root.updateMatrixWorld(true);
-  return _box.setFromObject(shield, true).min.y - lab.player.pos.y;
+  return boundsOf(shield, _box, true).min.y - lab.player.pos.y;
 }
 
 /** A shield's rim sat by a fire as words, or none if it rests on the floor (from play: a shield in mid-air beside him). */
@@ -147,7 +147,7 @@ export class FireClear {
 
   /** The nearest a point of the weapon under `STONES_TOP` over the floor at `floorY` is to a circle round the fire of
    *  `radius` (m), or Infinity with none so low. */
-  private lowGapOf(tip: THREE.Object3D, radius: number, floorY: number): number {
+  private lowGapOf(tip: Node, radius: number, floorY: number): number {
     buttOf(tip, _butt);
     tip.getWorldPosition(_tip);
     let nearest = Infinity;
@@ -184,7 +184,7 @@ export class FireClear {
   }
 
   /** The nearest a point of the weapon from its grip to `tip` is to a circle round the fire of `radius` (m). */
-  private gapOf(tip: THREE.Object3D, radius: number): number {
+  private gapOf(tip: Node, radius: number): number {
     buttOf(tip, _butt);
     tip.getWorldPosition(_tip);
     let nearest = Infinity;
@@ -247,7 +247,7 @@ export class FireClear {
 
 /** A weapon let go of on the floor: how far it has stirred from where it first lay, and that it was ever let go of. */
 export class LaidStill {
-  private first: THREE.Vector3 | null = null;
+  private first: Vec3 | null = null;
   private frames = 0;
   private most = 0;
   private at = '';
@@ -294,7 +294,7 @@ export class LaidStill {
 }
 
 /** Whether what `tip` belongs to says it's lying let go of: said on the weapon's group, which shares the tip's grip. */
-function isLaid(tip: THREE.Object3D): boolean {
+function isLaid(tip: Node): boolean {
   let laid = false;
   tip.parent?.traverse((object) => {
     laid ||= !!object.userData.laid;

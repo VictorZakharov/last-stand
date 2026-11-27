@@ -21,9 +21,9 @@ export class Mat4 {
 
   /** sets the 16 numbers, given row by row */
   set(...rowMajor: Mat4Row): this {
-    const e = this.elements;
+    const elements = this.elements;
     for (let row = 0; row < 4; row++) {
-      for (let column = 0; column < 4; column++) e[column * 4 + row] = rowMajor[row * 4 + column];
+      for (let column = 0; column < 4; column++) elements[column * 4 + row] = rowMajor[row * 4 + column];
     }
     return this;
   }
@@ -38,17 +38,17 @@ export class Mat4 {
     return new Mat4().fromArray(this.elements);
   }
 
-  /** takes `m`'s numbers */
-  copy(m: Mat4): this {
-    return this.fromArray(m.elements);
+  /** takes `matrix`'s numbers */
+  copy(matrix: Mat4): this {
+    return this.fromArray(matrix.elements);
   }
 
-  /** takes `m`'s translation, the rest kept */
-  copyPosition(m: Mat4): this {
-    const e = this.elements;
-    e[12] = m.elements[12];
-    e[13] = m.elements[13];
-    e[14] = m.elements[14];
+  /** takes `matrix`'s translation, the rest kept */
+  copyPosition(matrix: Mat4): this {
+    const elements = this.elements;
+    elements[12] = matrix.elements[12];
+    elements[13] = matrix.elements[13];
+    elements[14] = matrix.elements[14];
     return this;
   }
 
@@ -66,28 +66,28 @@ export class Mat4 {
   }
 
   /**
-   * Becomes `m`'s turn alone: its columns made one long, no translation (the identity where `m` is flat).
+   * Becomes `matrix`'s turn alone: its columns made one long, no translation (the identity where `matrix` is flat).
    * Follows three.js 0.187.0's `Matrix4.extractRotation`.
    */
-  extractRotation(m: Mat4): this {
-    if (determinantAffine(m.elements) === 0) return this.identity();
-    const sx = 1 / axis.setFromMatrixColumn(m, 0).length();
-    const sy = 1 / axis.setFromMatrixColumn(m, 1).length();
-    const sz = 1 / axis.setFromMatrixColumn(m, 2).length();
-    const me = m.elements;
-    const e = this.elements;
+  extractRotation(matrix: Mat4): this {
+    if (determinantAffine(matrix.elements) === 0) return this.identity();
+    const sx = 1 / axis.setFromMatrixColumn(matrix, 0).length();
+    const sy = 1 / axis.setFromMatrixColumn(matrix, 1).length();
+    const sz = 1 / axis.setFromMatrixColumn(matrix, 2).length();
+    const me = matrix.elements;
+    const elements = this.elements;
     for (let i = 0; i < 3; i++) {
-      e[i] = me[i] * sx;
-      e[4 + i] = me[4 + i] * sy;
-      e[8 + i] = me[8 + i] * sz;
+      elements[i] = me[i] * sx;
+      elements[4 + i] = me[4 + i] * sy;
+      elements[8 + i] = me[8 + i] * sz;
     }
-    e[3] = 0;
-    e[7] = 0;
-    e[11] = 0;
-    e[12] = 0;
-    e[13] = 0;
-    e[14] = 0;
-    e[15] = 1;
+    elements[3] = 0;
+    elements[7] = 0;
+    elements[11] = 0;
+    elements[12] = 0;
+    elements[13] = 0;
+    elements[14] = 0;
+    elements[15] = 1;
     return this;
   }
 
@@ -96,9 +96,9 @@ export class Mat4 {
     return this.makeRotationFromQuaternion(turn.setFromEuler(euler, false));
   }
 
-  /** becomes the turn `q` makes */
-  makeRotationFromQuaternion(q: Quat): this {
-    return this.compose(origin, q, unit);
+  /** becomes the turn `quaternion` makes */
+  makeRotationFromQuaternion(quaternion: Quat): this {
+    return this.compose(origin, quaternion, unit);
   }
 
   /**
@@ -118,26 +118,26 @@ export class Mat4 {
     }
     lookX.normalize();
     lookY.crossVectors(lookZ, lookX);
-    const e = this.elements;
-    lookX.toArray(e, 0);
-    lookY.toArray(e, 4);
-    lookZ.toArray(e, 8);
+    const elements = this.elements;
+    lookX.toArray(elements, 0);
+    lookY.toArray(elements, 4);
+    lookZ.toArray(elements, 8);
     return this;
   }
 
-  /** becomes `this × m`: `m` applied first */
-  multiply(m: Mat4): this {
-    return this.multiplyMatrices(this, m);
+  /** becomes `this × m`: `matrix` applied first */
+  multiply(matrix: Mat4): this {
+    return this.multiplyMatrices(this, matrix);
   }
 
   /** becomes `m × this`: this applied first */
-  premultiply(m: Mat4): this {
-    return this.multiplyMatrices(m, this);
+  premultiply(matrix: Mat4): this {
+    return this.multiplyMatrices(matrix, this);
   }
 
   /** becomes `a × b` (either may be this matrix) */
-  multiplyMatrices(a: Mat4, b: Mat4): this {
-    multiplyInto(this.elements, a.elements, b.elements);
+  multiplyMatrices(left: Mat4, right: Mat4): this {
+    multiplyInto(this.elements, left.elements, right.elements);
     return this;
   }
 
@@ -148,12 +148,12 @@ export class Mat4 {
 
   /** rows made columns */
   transpose(): this {
-    const e = this.elements;
+    const elements = this.elements;
     for (let row = 0; row < 4; row++) {
       for (let column = row + 1; column < 4; column++) {
-        const held = e[column * 4 + row];
-        e[column * 4 + row] = e[row * 4 + column];
-        e[row * 4 + column] = held;
+        const held = elements[column * 4 + row];
+        elements[column * 4 + row] = elements[row * 4 + column];
+        elements[row * 4 + column] = held;
       }
     }
     return this;
@@ -161,13 +161,13 @@ export class Mat4 {
 
   /** sets the translation, from a vector or three numbers */
   setPosition(x: Vec3 | number, y = 0, z = 0): this {
-    const e = this.elements;
+    const elements = this.elements;
     if (typeof x === 'number') {
-      e[12] = x;
-      e[13] = y;
-      e[14] = z;
+      elements[12] = x;
+      elements[13] = y;
+      elements[14] = z;
     } else {
-      x.toArray(e, 12);
+      x.toArray(elements, 12);
     }
     return this;
   }
@@ -180,10 +180,10 @@ export class Mat4 {
 
   /** the largest scale along any of its axes */
   getMaxScaleOnAxis(): number {
-    const e = this.elements;
-    const sx = e[0] * e[0] + e[1] * e[1] + e[2] * e[2];
-    const sy = e[4] * e[4] + e[5] * e[5] + e[6] * e[6];
-    const sz = e[8] * e[8] + e[9] * e[9] + e[10] * e[10];
+    const elements = this.elements;
+    const sx = elements[0] * elements[0] + elements[1] * elements[1] + elements[2] * elements[2];
+    const sy = elements[4] * elements[4] + elements[5] * elements[5] + elements[6] * elements[6];
+    const sz = elements[8] * elements[8] + elements[9] * elements[9] + elements[10] * elements[10];
     return Math.sqrt(Math.max(sx, sy, sz));
   }
 
@@ -195,39 +195,39 @@ export class Mat4 {
 
   /** becomes a turn of `theta` radians about x */
   makeRotationX(theta: number): this {
-    const c = Math.cos(theta);
-    const s = Math.sin(theta);
-    return this.set(1, 0, 0, 0, 0, c, -s, 0, 0, s, c, 0, 0, 0, 0, 1);
+    const cosine = Math.cos(theta);
+    const sine = Math.sin(theta);
+    return this.set(1, 0, 0, 0, 0, cosine, -sine, 0, 0, sine, cosine, 0, 0, 0, 0, 1);
   }
 
   /** becomes a turn of `theta` radians about y */
   makeRotationY(theta: number): this {
-    const c = Math.cos(theta);
-    const s = Math.sin(theta);
-    return this.set(c, 0, s, 0, 0, 1, 0, 0, -s, 0, c, 0, 0, 0, 0, 1);
+    const cosine = Math.cos(theta);
+    const sine = Math.sin(theta);
+    return this.set(cosine, 0, sine, 0, 0, 1, 0, 0, -sine, 0, cosine, 0, 0, 0, 0, 1);
   }
 
   /** becomes a turn of `theta` radians about z */
   makeRotationZ(theta: number): this {
-    const c = Math.cos(theta);
-    const s = Math.sin(theta);
-    return this.set(c, -s, 0, 0, s, c, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1);
+    const cosine = Math.cos(theta);
+    const sine = Math.sin(theta);
+    return this.set(cosine, -sine, 0, 0, sine, cosine, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1);
   }
 
   /** becomes a turn of `angle` radians about `axis` (one long) */
   makeRotationAxis(axis: Vec3, angle: number): this {
-    const c = Math.cos(angle);
-    const s = Math.sin(angle);
-    const t = 1 - c;
+    const cosine = Math.cos(angle);
+    const sine = Math.sin(angle);
+    const versine = 1 - cosine;
     const x = axis.x;
     const y = axis.y;
     const z = axis.z;
-    const tx = t * x;
-    const ty = t * y;
+    const tx = versine * x;
+    const ty = versine * y;
     return this.set(
-      tx * x + c, tx * y - s * z, tx * z + s * y, 0,
-      tx * y + s * z, ty * y + c, ty * z - s * x, 0,
-      tx * z - s * y, ty * z + s * x, t * z * z + c, 0,
+      tx * x + cosine, tx * y - sine * z, tx * z + sine * y, 0,
+      tx * y + sine * z, ty * y + cosine, ty * z - sine * x, 0,
+      tx * z - sine * y, ty * z + sine * x, versine * z * z + cosine, 0,
       0, 0, 0, 1,
     );
   }
@@ -239,7 +239,7 @@ export class Mat4 {
 
   /** becomes the move that scales by `scale`, turns by `quaternion`, then moves to `position` */
   compose(position: Vec3, quaternion: Quat, scale: Vec3): this {
-    const e = this.elements;
+    const elements = this.elements;
     const x = quaternion.x;
     const y = quaternion.y;
     const z = quaternion.z;
@@ -256,19 +256,19 @@ export class Mat4 {
     const sx = scale.x;
     const sy = scale.y;
     const sz = scale.z;
-    e[0] = (1 - (yy + zz)) * sx;
-    e[1] = (xy + wz) * sx;
-    e[2] = (xz - wy) * sx;
-    e[3] = 0;
-    e[4] = (xy - wz) * sy;
-    e[5] = (1 - (xx + zz)) * sy;
-    e[6] = (yz + wx) * sy;
-    e[7] = 0;
-    e[8] = (xz + wy) * sz;
-    e[9] = (yz - wx) * sz;
-    e[10] = (1 - (xx + yy)) * sz;
-    e[11] = 0;
-    e[15] = 1;
+    elements[0] = (1 - (yy + zz)) * sx;
+    elements[1] = (xy + wz) * sx;
+    elements[2] = (xz - wy) * sx;
+    elements[3] = 0;
+    elements[4] = (xy - wz) * sy;
+    elements[5] = (1 - (xx + zz)) * sy;
+    elements[6] = (yz + wx) * sy;
+    elements[7] = 0;
+    elements[8] = (xz + wy) * sz;
+    elements[9] = (yz - wx) * sz;
+    elements[10] = (1 - (xx + yy)) * sz;
+    elements[11] = 0;
+    elements[15] = 1;
     return this.setPosition(position.x, position.y, position.z);
   }
 
@@ -277,26 +277,26 @@ export class Mat4 {
    * mirrored matrix's x scale made negative, and a flat one (determinant 0) read as no turn at a scale of 1.
    */
   decompose(position: Vec3, quaternion: Quat, scale: Vec3): this {
-    const e = this.elements;
-    position.set(e[12], e[13], e[14]);
-    const det = determinantAffine(e);
+    const elements = this.elements;
+    position.set(elements[12], elements[13], elements[14]);
+    const det = determinantAffine(elements);
     if (det === 0) {
       scale.set(1, 1, 1);
       quaternion.identity();
       return this;
     }
-    let sx = axis.set(e[0], e[1], e[2]).length();
-    const sy = axis.set(e[4], e[5], e[6]).length();
-    const sz = axis.set(e[8], e[9], e[10]).length();
+    let sx = axis.set(elements[0], elements[1], elements[2]).length();
+    const sy = axis.set(elements[4], elements[5], elements[6]).length();
+    const sz = axis.set(elements[8], elements[9], elements[10]).length();
     if (det < 0) sx = -sx;
-    const r = unscaled.elements;
+    const rotation = unscaled.elements;
     const inverseX = 1 / sx;
     const inverseY = 1 / sy;
     const inverseZ = 1 / sz;
     for (let i = 0; i < 3; i++) {
-      r[i] = e[i] * inverseX;
-      r[4 + i] = e[4 + i] * inverseY;
-      r[8 + i] = e[8 + i] * inverseZ;
+      rotation[i] = elements[i] * inverseX;
+      rotation[4 + i] = elements[4 + i] * inverseY;
+      rotation[8 + i] = elements[8 + i] * inverseZ;
     }
     quaternion.setFromRotationMatrix(unscaled);
     scale.set(sx, sy, sz);
@@ -320,10 +320,10 @@ export class Mat4 {
     return this;
   }
 
-  /** whether `m` has the same numbers */
-  equals(m: Mat4): boolean {
+  /** whether `matrix` has the same numbers */
+  equals(matrix: Mat4): boolean {
     for (let i = 0; i < 16; i++) {
-      if (this.elements[i] !== m.elements[i]) return false;
+      if (this.elements[i] !== matrix.elements[i]) return false;
     }
     return true;
   }
@@ -337,7 +337,7 @@ export class Mat4 {
   /** the 16 numbers, column by column, as a new array */
   toArray(): number[];
   /** writes the 16 numbers, column by column, into `array` at `offset` */
-  toArray<T extends NumberArray>(array: T, offset?: number): T;
+  toArray<Out extends NumberArray>(array: Out, offset?: number): Out;
   toArray(array: NumberArray = [], offset = 0): NumberArray {
     for (let i = 0; i < 16; i++) array[offset + i] = this.elements[i];
     return array;

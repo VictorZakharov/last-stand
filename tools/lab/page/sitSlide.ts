@@ -9,7 +9,7 @@
 // (a left fist sliding along it too, kept by the right one, read as holding it, and the old jedi rise read 4 cm),
 // and whether it went down and his left fist was closed on it at all.
 
-import * as THREE from 'three';
+import { Vec3 } from './sceneApi.ts';
 import type { Fist } from '../../../src/types';
 import type { Lab } from './lab';
 import { FIST_OPEN } from './range';
@@ -25,10 +25,10 @@ const LEFT_SLIDES_MOST = 0.5;
 /** how far a closed left fist may be off the handle for it to hold it (m) */
 const LEFT_OFF_MOST = 0.03;
 
-const _grip = new THREE.Vector3();
-const _hand = new THREE.Vector3();
-const _left = new THREE.Vector3();
-const _way = new THREE.Vector3();
+const _grip = new Vec3();
+const _hand = new Vec3();
+const _left = new Vec3();
+const _way = new Vec3();
 
 /** A frame's moves (m): the weapon's along its length in the world, the right fist's along it, whether the left
  *  holds it and moves with it, whether the weapon went down, and whether the left was closed on it. */
@@ -61,7 +61,7 @@ export function slideCanary(): boolean {
 
 /** A held weapon's moves along itself through his right fist with no other hand on it. */
 export class HaftSlide {
-  private was: { grip: THREE.Vector3; hand: THREE.Vector3; left: THREE.Vector3 } | null = null;
+  private was: { grip: Vec3; hand: Vec3; left: Vec3 } | null = null;
   private frames = 0;
   private total = 0;
   private at = '';
@@ -84,7 +84,7 @@ export class HaftSlide {
       return;
     }
     _way.set(0, 1, 0).transformDirection(grip.matrixWorld);
-    const scale = new THREE.Vector3().setFromMatrixScale(grip.matrixWorld).y;
+    const scale = new Vec3().setFromMatrixScale(grip.matrixWorld).y;
     const leftSlid = Math.abs(left.y - this.was.left.y) * scale;
     const moved = _grip.clone().sub(this.was.grip).dot(_way);
     const guided = leftOn(lab.model.fists ?? []);

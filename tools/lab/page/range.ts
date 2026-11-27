@@ -8,7 +8,7 @@
 // round past the neck's range on one frame, and bends the drawn fist on its forearm, which the measure must catch.
 // `--trace` lists the leg IK frame by frame as the gait's does (`legTrace.ts`), each frame's joints past their ranges
 // after it.
-import * as THREE from 'three';
+import { Maths, Node, Quat, SkinnedMesh, Vec3 } from './sceneApi.ts';
 import type { Frame, Lab, Pictured } from './lab';
 import {
   breaches, elevationLimit, measureBody, rotationRange, ROM, type BodyAngles, type Breach,
@@ -40,11 +40,11 @@ import { ArmsPinned, describeStrain, pinnedCanary, type ArmLimits, type Ranges }
  * 60 degrees off its forearm read as within its range (the meshes' mark went with the sculpted hands, and every
  * wrist the lab read after them was the joint's).
  */
-export function drawnHand(hand: THREE.Object3D): THREE.Object3D {
+export function drawnHand(hand: Node): Node {
   const marked = hand.children.find((child) => child.userData.drawnHand);
   if (marked) return marked;
-  const drawn = (child: THREE.Object3D) => (child as THREE.SkinnedMesh).isSkinnedMesh || child.userData.own;
-  const found = hand.children.find((child) => (child as THREE.Group).isGroup && child.children.some(drawn));
+  const drawn = (child: Node) => (child as SkinnedMesh).isSkinnedMesh || child.userData.own;
+  const found = hand.children.find((child) => (child as Node).isNode && child.children.some(drawn));
   if (!found) {
     throw new Error(`lab: no drawn hand on ${hand.name || 'a hand joint'}: its wrist would be read off the joint`);
   }
@@ -118,19 +118,19 @@ export function bodyBreaches(joints: Joints, gripping: readonly Side[] = []): Bo
 
 /** the wrist canary: how far the drawn fist is bent on its forearm each way (degrees), and how near the measure must
  *  read it */
-const WRIST_CANARY = [{ axis: new THREE.Vector3(1, 0, 0), angle: 60, reads: 'flexion' },
-  { axis: new THREE.Vector3(0, 0, -1), angle: 60, reads: 'ulnar' }] as const;
+const WRIST_CANARY = [{ axis: new Vec3(1, 0, 0), angle: 60, reads: 'flexion' },
+  { axis: new Vec3(0, 0, -1), angle: 60, reads: 'ulnar' }] as const;
 const WRIST_CANARY_NEAR = 3;
 
 /** The node the right hand's sculpted surface hangs on, found from the surface (not as `drawnHand` finds it): what a
  *  turn must turn to move the hand as it's drawn. */
-function fistDrawn(hand: THREE.Object3D): THREE.Object3D {
-  let surface: THREE.Object3D | null = null;
+function fistDrawn(hand: Node): Node {
+  let surface: Node | null = null;
   hand.traverse((child) => {
-    if (!surface && (child as THREE.SkinnedMesh).isSkinnedMesh) surface = child;
+    if (!surface && (child as SkinnedMesh).isSkinnedMesh) surface = child;
   });
   if (!surface) throw new Error('lab: the wrist canary found no sculpted hand to bend');
-  return (surface as THREE.Object3D).parent!;
+  return (surface as Node).parent!;
 }
 
 /**
@@ -142,9 +142,9 @@ export function wristCanary(lab: Lab): string[] {
   const fist = fistDrawn(lab.joints.handR);
   const was = fist.quaternion.clone();
   const verdicts = WRIST_CANARY.map(({ axis, angle, reads }) => {
-    const forearm = lab.joints.elbowR.getWorldQuaternion(new THREE.Quaternion());
-    const bent = forearm.multiply(new THREE.Quaternion().setFromAxisAngle(axis, THREE.MathUtils.degToRad(angle)));
-    const parent = fist.parent!.getWorldQuaternion(new THREE.Quaternion());
+    const forearm = lab.joints.elbowR.getWorldQuaternion(new Quat());
+    const bent = forearm.multiply(new Quat().setFromAxisAngle(axis, Maths.degToRad(angle)));
+    const parent = fist.parent!.getWorldQuaternion(new Quat());
     fist.quaternion.copy(parent.invert().multiply(bent));
     const { angles } = bodyBreaches(lab.joints);
     const flexion = angles['wristR.flexion'];
@@ -427,7 +427,7 @@ async function runScenario(
     bodyMoment: null, fastest: 0, fastestAt: '',
   };
   const ankles = [lab.joints.ankleL, lab.joints.ankleR];
-  const last = ankles.map((ankle) => ankle.getWorldPosition(new THREE.Vector3()));
+  const last = ankles.map((ankle) => ankle.getWorldPosition(new Vec3()));
   const tip = new TipMoves(scenario.name);
   const flask = new FlaskMoves(scenario.name);
   const floor = new WeaponFloor(scenario.name);
@@ -518,7 +518,7 @@ async function runScenario(
       run.moment = lab.picture(`${scenario.what}, worst`, ['third', 'front', 'left'], notes);
     }
     ankles.forEach((ankle, side) => {
-      const now = ankle.getWorldPosition(new THREE.Vector3());
+      const now = ankle.getWorldPosition(new Vec3());
       const moved = now.distanceTo(last[side]);
       last[side].copy(now);
       if (run.frame === 0 || moved <= run.fastest) return;
@@ -584,7 +584,7 @@ function castPress(lab: Lab, options: RangeOptions): { frame: Frame; frames: num
   const { key, def } = skillNamed(options.skill);
   lab.player.cooldowns.clear();
   const facing = lab.player.facing;
-  const ahead = new THREE.Vector3(Math.sin(facing), 0, Math.cos(facing));
+  const ahead = new Vec3(Math.sin(facing), 0, Math.cos(facing));
   const aim = lab.player.pos.clone().addScaledVector(ahead, CAST_AIM);
   const frames = Math.max(1, Math.round(holdFor(def) / (window.__labClock.frame / 1000)));
   return { frame: pressing(key, aim, true), frames };
@@ -744,7 +744,7 @@ async function foeAhead(lab: Lab, scenario: RangeScenario, options: RangeOptions
   if (!options.foe || scenario.name !== 'cast') return null;
   const ahead = options.foeAt ?? FOE_AHEAD;
   const facing = lab.player.facing;
-  const at = lab.player.pos.clone().add(new THREE.Vector3(Math.sin(facing), 0, Math.cos(facing)).multiplyScalar(ahead));
+  const at = lab.player.pos.clone().add(new Vec3(Math.sin(facing), 0, Math.cos(facing)).multiplyScalar(ahead));
   const foe = lab.spawnFoe(options.foe as EnemyId, at);
   await lab.until(() => foe.spawning <= 0, 600, `the ${options.foe} ahead never rose`);
   return new WeaponOnFoe(foe);

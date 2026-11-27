@@ -3,7 +3,9 @@
 // each (solid with what's opaque, or blended), how many are in view, and how much of the screen their triangles cover,
 // summed, each cut to the screen (2.0: twice the screen's pixels shaded; an instanced mesh's by its box). A phone's profile had 237 of them at 41% of its
 // frame (TPRV-JMH7) with nothing saying what they were: counted before anything is built for them.
-import * as THREE from 'three';
+import {
+  AdditiveBlending, Box3, Camera, DoubleSide, Frustum, InstancedMesh, Mat4, Material, Mesh, Node, Sphere, Vec3, World,
+} from './sceneApi.ts';
 import type { SeeThrough } from '../../../src/core/seeThrough';
 import { RUST } from '../../../src/engine';
 import { trianglesCover } from './screenCover';
@@ -21,7 +23,7 @@ interface Kind {
 }
 
 /** Whether the profiler counts `mesh` as blended (`blended` in src/perf/sceneParts.ts). */
-function countedBlended(mesh: THREE.Mesh): boolean {
+function countedBlended(mesh: Mesh): boolean {
   if (!mesh.isMesh || mesh.userData.fireFlames || mesh.userData.particles) return false;
   const materials = [mesh.material].flat();
   if (materials.some((material) => material.alphaTest > 0)) return false;
@@ -29,30 +31,44 @@ function countedBlended(mesh: THREE.Mesh): boolean {
 }
 
 /** How the engine draws a see-through material: with what's opaque, added, or blended (and whether it writes depth). */
-function drawnAs(material: THREE.Material): string {
+function drawnAs(material: Material): string {
   if (RUST.bridge?.drawnSolid(material)) return 'solid';
-  if (material.blending === THREE.AdditiveBlending) return 'added';
+  if (material.blending === AdditiveBlending) return 'added';
   return material.depthWrite ? 'blended' : 'blended, no depth';
 }
 
 /** A mesh's name for the count: its own, else the first named thing above it. */
-function nameOf(mesh: THREE.Object3D): string {
-  for (let above: THREE.Object3D | null = mesh; above; above = above.parent) {
+function nameOf(mesh: Node): string {
+  for (let above: Node | null = mesh; above; above = above.parent) {
     if (above.name) return above === mesh ? above.name : `in ${above.name}`;
   }
   return '?';
 }
 
-const box = new THREE.Box3();
-const corner = new THREE.Vector3();
-const sphere = new THREE.Sphere();
+const box = new Box3();
+const corner = new Vec3();
+const sphere = new Sphere();
+const instanceBox = new Box3();
+const instanceMatrix = new Mat4();
+
+/** What `mesh`'s instances reach in its own space, into `target` (three's `InstancedMesh.boundingBox`, which the
+ *  API's instanced mesh hasn't got: it keeps a sphere alone). */
+function instancesBox(mesh: InstancedMesh, target: Box3): Box3 {
+  const geometry = mesh.geometry;
+  if (!geometry.boundingBox) geometry.computeBoundingBox();
+  target.makeEmpty();
+  for (let i = 0; i < mesh.count; i++) {
+    mesh.getMatrixAt(i, instanceMatrix);
+    target.union(instanceBox.copy(geometry.boundingBox!).applyMatrix4(instanceMatrix));
+  }
+  return target;
+}
 
 /** The share of the screen the box of `mesh` covers as `camera` sees it (0 behind it; its instances' box too). */
-function coverOf(mesh: THREE.Mesh, camera: THREE.Camera): number {
-  const instanced = mesh as THREE.InstancedMesh;
+function coverOf(mesh: Mesh, camera: Camera): number {
+  const instanced = mesh as InstancedMesh;
   if (instanced.isInstancedMesh) {
-    if (!instanced.boundingBox) instanced.computeBoundingBox();
-    box.copy(instanced.boundingBox!);
+    instancesBox(instanced, box);
   } else {
     if (!mesh.geometry.boundingBox) mesh.geometry.computeBoundingBox();
     box.copy(mesh.geometry.boundingBox!);
@@ -75,7 +91,7 @@ function coverOf(mesh: THREE.Mesh, camera: THREE.Camera): number {
 }
 
 /** Whether the sphere of `mesh` is in the camera's view. */
-function inView(mesh: THREE.Mesh, frustum: THREE.Frustum): boolean {
+function inView(mesh: Mesh, frustum: Frustum): boolean {
   if (!mesh.frustumCulled) return true;
   if (!mesh.geometry.boundingSphere) mesh.geometry.computeBoundingSphere();
   sphere.copy(mesh.geometry.boundingSphere!).applyMatrix4(mesh.matrixWorld);
@@ -83,31 +99,31 @@ function inView(mesh: THREE.Mesh, frustum: THREE.Frustum): boolean {
 }
 
 /** The triangles `mesh` draws (its instances' too). */
-function trianglesOf(mesh: THREE.Mesh): number {
+function trianglesOf(mesh: Mesh): number {
   const geometry = mesh.geometry;
   const one = (geometry.index ? geometry.index.count : geometry.attributes.position?.count ?? 0) / 3;
-  return one * ((mesh as THREE.InstancedMesh).isInstancedMesh ? (mesh as THREE.InstancedMesh).count : 1);
+  return one * ((mesh as InstancedMesh).isInstancedMesh ? (mesh as InstancedMesh).count : 1);
 }
 
 /** The lines of `lab rust --blended`: the blended meshes shown, by how they're drawn and what they are. */
-export function blendedSaid(scene: THREE.Scene, camera: THREE.Camera): string[] {
-  const frustum = new THREE.Frustum().setFromProjectionMatrix(
-    new THREE.Matrix4().multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse));
+export function blendedSaid(scene: World, camera: Camera): string[] {
+  const frustum = new Frustum().setFromProjectionMatrix(
+    new Mat4().multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse));
   const kinds = new Map<string, Kind>();
   const byDraw = new Map<string, Kind>();
-  const add = (into: Map<string, Kind>, key: string, mesh: THREE.Mesh, seen: boolean): void => {
+  const add = (into: Map<string, Kind>, key: string, mesh: Mesh, seen: boolean): void => {
     const kind = into.get(key) ?? { meshes: 0, inView: 0, cover: 0, triangles: 0 };
     kind.meshes++;
     if (seen) {
       kind.inView++;
-      const both = [mesh.material].flat().some((material) => material.side === THREE.DoubleSide);
+      const both = [mesh.material].flat().some((material) => material.side === DoubleSide);
       kind.cover += trianglesCover(mesh, camera, both) ?? coverOf(mesh, camera);
       kind.triangles += trianglesOf(mesh);
     }
     into.set(key, kind);
   };
   scene.traverseVisible((object) => {
-    const mesh = object as THREE.Mesh;
+    const mesh = object as Mesh;
     if (!countedBlended(mesh) || !mesh.layers.test(camera.layers)) return;
     const seen = inView(mesh, frustum);
     const drawn = [...new Set([mesh.material].flat().filter((material) => material.transparent).map(drawnAs))].join('+');

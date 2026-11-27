@@ -5,14 +5,14 @@
 // as a frame's draws, triangles and time. The flight is the dev tool's own camera (`src/dev/freeCam.ts`), put at each
 // frame's place of a leg: round the village high up looking in, round it low looking along the way, and straight
 // across it over the roofs. Each leg is a phase of `perf`, timed as its others are, with where its dearest frames were.
-import * as THREE from 'three';
+import { Box2, LitMaterial, Mesh, shapes, Vec2, Vec3 } from './sceneApi.ts';
 import { G } from '../../../src/state';
 import { PALISADE_LINE } from '../../../src/data/village';
 import { freeCamOn, placeFreeCam, setFreeCam } from '../../../src/dev/freeCam';
 
 /** Where the free camera is in a frame: its place, and the way it looks (rad: about y, and up from level). */
 export interface Flown {
-  pos: THREE.Vector3;
+  pos: Vec3;
   yaw: number;
   pitch: number;
 }
@@ -36,16 +36,16 @@ const ACROSS = { up: 14, down: 0.45 };
 const PLACED_WITHIN = 0.01;
 
 /** The village's middle and reach on the ground, by its palisade's line. */
-function villageRound(): { middle: THREE.Vector3; reach: number } {
-  const box = new THREE.Box2();
-  for (const [x, z] of PALISADE_LINE) box.expandByPoint(new THREE.Vector2(x, z));
-  const centre = box.getCenter(new THREE.Vector2());
-  const size = box.getSize(new THREE.Vector2());
-  return { middle: new THREE.Vector3(centre.x, 0, centre.y), reach: Math.max(size.x, size.y) / 2 };
+function villageRound(): { middle: Vec3; reach: number } {
+  const box = new Box2();
+  for (const [x, z] of PALISADE_LINE) box.expandByPoint(new Vec2(x, z));
+  const centre = box.getCenter(new Vec2());
+  const size = box.getSize(new Vec2());
+  return { middle: new Vec3(centre.x, 0, centre.y), reach: Math.max(size.x, size.y) / 2 };
 }
 
 /** The camera at `pos` looking at `target` (the free camera looks along -z turned by its yaw, then pitched). */
-function lookingAt(pos: THREE.Vector3, target: THREE.Vector3): Flown {
+function lookingAt(pos: Vec3, target: Vec3): Flown {
   const way = target.clone().sub(pos);
   const level = Math.hypot(way.x, way.z);
   return { pos, yaw: Math.atan2(-way.x, -way.z), pitch: Math.atan2(way.y, level) };
@@ -54,7 +54,7 @@ function lookingAt(pos: THREE.Vector3, target: THREE.Vector3): Flown {
 /** The flight's legs over the village. */
 export function flightLegs(): Leg[] {
   const { middle, reach } = villageRound();
-  const round = (share: number, up: number, turn: number): THREE.Vector3 => new THREE.Vector3(
+  const round = (share: number, up: number, turn: number): Vec3 => new Vec3(
     middle.x + Math.sin(turn) * reach * share,
     up,
     middle.z + Math.cos(turn) * reach * share,
@@ -80,7 +80,7 @@ export function flightLegs(): Leg[] {
       frames: LEG_FRAMES,
       at: (frame) => {
         const along = (frame / LEG_FRAMES) * 2 - 1;
-        const pos = new THREE.Vector3(middle.x + along * reach, ACROSS.up, middle.z);
+        const pos = new Vec3(middle.x + along * reach, ACROSS.up, middle.z);
         return { pos, yaw: -Math.PI / 2, pitch: -ACROSS.down };
       },
     },
@@ -95,11 +95,11 @@ const PLANTED_UP = 9;
 /** `PLANTED` boxes, a draw each, stood in a square over the village's middle; returns what takes them away. */
 export function plantOverVillage(): () => void {
   const { middle } = villageRound();
-  const geometry = new THREE.BoxGeometry(0.3, 0.3, 0.3);
-  const material = new THREE.MeshStandardMaterial({ color: 0xff00ff });
+  const geometry = shapes.box(0.3, 0.3, 0.3);
+  const material = new LitMaterial({ color: 0xff00ff });
   const side = Math.ceil(Math.sqrt(PLANTED));
   const boxes = Array.from({ length: PLANTED }, (_, at) => {
-    const box = new THREE.Mesh(geometry, material);
+    const box = new Mesh(geometry, material);
     box.name = 'canary box';
     const across = (at % side) - side / 2;
     const along = Math.floor(at / side) - side / 2;

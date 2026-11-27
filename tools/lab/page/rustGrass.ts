@@ -2,7 +2,7 @@
 // level's reach, the rings' bands lie edge to edge from the camera's foot to the grass's end, so every blade kept
 // is drawn by one ring and no ground is left bare between two. From play: "do not change grass depending on
 // viewing angle".
-import type * as THREE from 'three';
+import type { InstancedGeometry, Mesh, Node } from './sceneApi.ts';
 import { G } from '../../../src/state';
 import { ONE_GRASS, oneBand } from '../../../src/world/meadowOne';
 import { type Checked, failed, passed } from './rustPixels';
@@ -61,7 +61,7 @@ const ABOVE_RING = 'meadow grass 6';
 export function grassDrawnByItsRings(): Checked {
   const meadow = G.scene.getObjectByName('meadow');
   if (!meadow) return failed('the village has no meadow to check');
-  const blades = (mesh: THREE.Object3D): number => ((mesh as THREE.Mesh).geometry as THREE.InstancedBufferGeometry).instanceCount;
+  const blades = (mesh: Node): number => ((mesh as Mesh).geometry as InstancedGeometry).instanceCount;
   const drawn = meadow.children.filter((mesh) => blades(mesh) > 0);
   const above = drawn.filter((mesh) => mesh.name.startsWith(ABOVE_RING));
   if (above.length) return failed(`the ring of its own from above draws ${blades(above[0])} blades: another grass than the rings'`);

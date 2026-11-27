@@ -1,6 +1,6 @@
 // tools/lab keyed, read off the game: this frame's arm as a swing through the eyes keyed it (`Model.swingKeyed`) and
 // as it's drawn, in the eyes' space, for the measure (page/keyed.ts) to judge.
-import * as THREE from 'three';
+import { Node, Quat, Vec3 } from './sceneApi.ts';
 import { G } from '../../../src/state';
 import type { Lab } from './lab';
 import type { KeyedFrame } from './keyed';
@@ -13,8 +13,8 @@ export function keyedNow(lab: Lab): KeyedFrame | null {
   const weapon = keyed.hand === 'right' ? lab.model.tip : lab.model.offTip;
   const grip = weapon?.parent;
   if (!grip) return null;
-  const inEyes = (object: THREE.Object3D) => G.camera.worldToLocal(object.getWorldPosition(new THREE.Vector3()));
-  const copy = (at: { x: number; y: number; z: number }) => new THREE.Vector3(at.x, at.y, at.z);
+  const inEyes = (object: Node) => G.camera.worldToLocal(object.getWorldPosition(new Vec3()));
+  const copy = (at: { x: number; y: number; z: number }) => new Vec3(at.x, at.y, at.z);
   // (a game from before the keyed arm had a flat and its arm a share keys none, and all of the arm)
   const { flat, armShare } = keyed as Partial<typeof keyed>;
   return {
@@ -36,12 +36,12 @@ export function keyedNow(lab: Lab): KeyedFrame | null {
 
 /** a grip's axes, as the hero's hold turns them (models/warrior.ts `holdInView`): the weapon's way along its +Y, the
  *  way its flat faces along its +X (`FLAT_IN_GRIP`) */
-const WAY_IN_GRIP = new THREE.Vector3(0, 1, 0);
-const FLAT_IN_GRIP = new THREE.Vector3(1, 0, 0);
+const WAY_IN_GRIP = new Vec3(0, 1, 0);
+const FLAT_IN_GRIP = new Vec3(1, 0, 0);
 
 /** One of a grip's axes in the eyes' space, turned by the grip's turn alone, as the game turns it (the left hand's
  *  grip is mirrored: through its matrix, the left blade's flat read 180 degrees off its keys throughout its cut). */
-function axisInEyes(grip: THREE.Object3D, axis: THREE.Vector3): THREE.Vector3 {
-  const way = axis.clone().applyQuaternion(grip.getWorldQuaternion(new THREE.Quaternion()));
+function axisInEyes(grip: Node, axis: Vec3): Vec3 {
+  const way = axis.clone().applyQuaternion(grip.getWorldQuaternion(new Quat()));
   return way.transformDirection(G.camera.matrixWorldInverse);
 }

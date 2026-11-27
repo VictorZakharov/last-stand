@@ -6,7 +6,7 @@
 // that drew it, one dropped as often as one kept: on a phone over the shoulder at Very low the grass was 8.4 ms
 // of a 16.8 ms frame, 1.7 of it its shading (J0RW-1EP5, SSB2-NWEB).
 import {
-  CanvasTexture, ClampToEdgeWrapping, DataTexture, LinearFilter, NoColorSpace, RGBAFormat, Texture,
+  CanvasTexture, ClampToEdgeWrapping, DataTexture, LinearFilter, NoColorSpace, RGBAFormat, Texture, type DataImage,
 } from '../api/index.ts';
 import type { BladeNumbers, BladeUniforms } from '../../world/meadowNodes';
 import { rustShader, type RustLook, type RustShader } from '../custom';
@@ -30,7 +30,8 @@ function maskWithSolids(mask: CanvasTexture, solids: DataTexture): DataTexture {
   const canvas = mask.image as HTMLCanvasElement;
   const side = canvas.width;
   const bytes = new Uint8Array(canvas.getContext('2d')!.getImageData(0, 0, side, side).data);
-  const { data, width } = solids.image as { data: Uint8Array; width: number };
+  const image = solids.image as DataImage;
+  const data = image.data as Uint8Array, width = image.width;
   const ratio = width / side;
   for (let row = 0; row < side; row++) {
     const r0 = Math.floor(row * ratio);

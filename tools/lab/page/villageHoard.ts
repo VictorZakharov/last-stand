@@ -1,7 +1,7 @@
 // `lab village`'s chest's hoard as full as the stash is (from play, "it should be filled proportionally to how full it
 // actually is, if 0, it should be literally empty"): the frame from over the open chest drawn with the hoard and
 // without at one moment, as the stash holds more. `canary` reads five items as the empty stash, which must be found.
-import * as THREE from 'three';
+import { LitMaterial, Mesh, Node, shapes, Vec3 } from './sceneApi.ts';
 import type { Lab } from './lab';
 import { G } from '../../../src/state';
 import { RUN } from '../../../src/data/balance';
@@ -56,7 +56,7 @@ function hoardVertices(): number {
   const pile = G.scene.getObjectByName('chest-hoard');
   let vertices = 0;
   pile?.traverse((part) => {
-    const mesh = part as THREE.Mesh;
+    const mesh = part as Mesh;
     if (!mesh.isMesh || !mesh.visible) return;
     const range = mesh.geometry.drawRange.count;
     const all = mesh.geometry.index?.count ?? mesh.geometry.getAttribute('position').count;
@@ -71,7 +71,7 @@ export async function hoardShowsStash(lab: Lab, canary: boolean): Promise<Lights
   if (!stand) throw new Error('lab: village: no chest to stand by');
   const stash = G.profile.stash;
   G.player.walkTo = null;
-  G.player.place(new THREE.Vector3(stand[0], groundHeight(stand[0], stand[1]), stand[1]), 0);
+  G.player.place(new Vec3(stand[0], groundHeight(stand[0], stand[1]), stand[1]), 0);
   const shares: number[] = [];
   const drawn: number[] = [];
   try {
@@ -105,10 +105,10 @@ const CHEST_DRAWS_MOST = 40;
 const CANARY_PARTS = 12;
 
 /** The meshes drawn under the chest: each is a draw (none of them is instanced, none has two materials). */
-function chestDraws(chest: THREE.Object3D): number {
+function chestDraws(chest: Node): number {
   let draws = 0;
   chest.traverseVisible((part) => {
-    if ((part as THREE.Mesh).isMesh) draws++;
+    if ((part as Mesh).isMesh) draws++;
   });
   return draws;
 }
@@ -122,11 +122,11 @@ function chestDraws(chest: THREE.Object3D): number {
 export function chestDrawsFew(canary: boolean): LightsChecked {
   const chest = G.scene.getObjectByName('chest-hoard')?.parent;
   if (!chest) throw new Error('lab: village: no chest in the scene');
-  const planted: THREE.Mesh[] = [];
+  const planted: Mesh[] = [];
   if (canary) {
-    const geometry = new THREE.BoxGeometry(0.05, 0.05, 0.05);
-    const material = new THREE.MeshStandardMaterial();
-    for (let k = 0; k < CANARY_PARTS; k++) planted.push(new THREE.Mesh(geometry, material));
+    const geometry = shapes.box(0.05, 0.05, 0.05);
+    const material = new LitMaterial();
+    for (let k = 0; k < CANARY_PARTS; k++) planted.push(new Mesh(geometry, material));
     chest.add(...planted);
   }
   const draws = chestDraws(chest);

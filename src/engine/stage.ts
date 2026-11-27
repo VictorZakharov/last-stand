@@ -12,10 +12,10 @@ import type { Draws } from './draws';
 
 /** a node's numbers: its place, its turn, its size */
 const LOCAL = 10;
-const _p = new Vec3();
-const _q = new Quat();
-const _s = new Vec3();
-const _m = new Mat4();
+const scratchPlace = new Vec3();
+const scratchTurn = new Quat();
+const scratchSize = new Vec3();
+const scratchMatrix = new Mat4();
 
 /** What the stage holds of the shown world, counted (a harness's). */
 export interface StageCount {
@@ -41,7 +41,7 @@ export class Stage implements StageLink {
   readonly lights = new Set<Light>();
   readonly sprites = new Set<Points | Sprite | Line>();
   private locals = new Float32Array(0);
-  private shown = new Uint8Array(0);
+  private shownBytes = new Uint8Array(0);
   private written = 0;
 
   constructor(private core: Core, private wasm: InitOutput, private draws: Draws) {}
@@ -155,14 +155,14 @@ export class Stage implements StageLink {
   /** The nodes that moved written into the engine, and every node placed by it. */
   place(): void {
     this.views();
-    const locals = this.locals, shown = this.shown, moves = this.moves;
+    const locals = this.locals, shownBytes = this.shownBytes, moves = this.moves;
     for (let i = 0; i < moves.length; i++) {
       const node = moves[i];
       const id = node.engineId;
       if (id === NONE) continue;
       this.queued[id] = 0;
       writeLocals(node, locals, id * LOCAL);
-      shown[id] = node.visible ? 1 : 0;
+      shownBytes[id] = node.visible ? 1 : 0;
     }
     this.written = moves.length;
     moves.length = 0;
@@ -178,9 +178,9 @@ export class Stage implements StageLink {
     if (locals.buffer !== memory || locals.byteOffset !== localsAt || locals.length < count * LOCAL) {
       this.locals = new Float32Array(memory, localsAt, count * LOCAL);
     }
-    const shown = this.shown;
-    if (shown.buffer !== memory || shown.byteOffset !== shownAt || shown.length < count) {
-      this.shown = new Uint8Array(memory, shownAt, count);
+    const shownBytes = this.shownBytes;
+    if (shownBytes.buffer !== memory || shownBytes.byteOffset !== shownAt || shownBytes.length < count) {
+      this.shownBytes = new Uint8Array(memory, shownAt, count);
     }
   }
 
@@ -193,21 +193,23 @@ export class Stage implements StageLink {
 
 /** `node`'s place, turn and size written into `locals` at `at`: its matrix's, where the game writes its matrix. */
 function writeLocals(node: Node, locals: Float32Array, at: number): void {
-  let p: Vec3 = node.position, q: Quat = node.quaternion, s: Vec3 = node.scale;
+  let place: Vec3 = node.position;
+  let turn: Quat = node.quaternion;
+  let size: Vec3 = node.scale;
   if (!node.matrixAutoUpdate) {
-    _m.copy(node.matrix).decompose(_p, _q, _s);
-    p = _p;
-    q = _q;
-    s = _s;
+    scratchMatrix.copy(node.matrix).decompose(scratchPlace, scratchTurn, scratchSize);
+    place = scratchPlace;
+    turn = scratchTurn;
+    size = scratchSize;
   }
-  locals[at] = p.x;
-  locals[at + 1] = p.y;
-  locals[at + 2] = p.z;
-  locals[at + 3] = q.x;
-  locals[at + 4] = q.y;
-  locals[at + 5] = q.z;
-  locals[at + 6] = q.w;
-  locals[at + 7] = s.x;
-  locals[at + 8] = s.y;
-  locals[at + 9] = s.z;
+  locals[at] = place.x;
+  locals[at + 1] = place.y;
+  locals[at + 2] = place.z;
+  locals[at + 3] = turn.x;
+  locals[at + 4] = turn.y;
+  locals[at + 5] = turn.z;
+  locals[at + 6] = turn.w;
+  locals[at + 7] = size.x;
+  locals[at + 8] = size.y;
+  locals[at + 9] = size.z;
 }

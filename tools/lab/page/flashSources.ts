@@ -5,7 +5,7 @@
 // light is opened into its parts, as a light hidden changes the lights every material is compiled for, and a light
 // is put out by its intensity alone. What no thing in the scene accounts for (the grade's adaptation, the exposure,
 // the page) is the rest.
-import * as THREE from 'three';
+import { Light, Mesh, Node, Vec3 } from './sceneApi.ts';
 import type { Lab } from './lab';
 import { G } from '../../../src/state';
 import * as renderer from '../../../src/core/renderer';
@@ -31,26 +31,26 @@ const LISTED_MOST = 4;
 
 /** A name for a thing of the scene without one: what it is, its shape's kind and what it's drawn with (by its
  *  material alone, Glacial Nova's ground flash and rings were one thing, "unnamed Mesh (MeshBasicMaterial) (4)"). */
-function described(object: THREE.Object3D): string {
-  const material = (object as THREE.Mesh).material;
+function described(object: Node): string {
+  const material = (object as Mesh).material;
   const drawnWith = Array.isArray(material) ? material[0]?.type : material?.type;
-  const shape = (object as THREE.Mesh).geometry?.type;
+  const shape = (object as Mesh).geometry?.type;
   const kinds = [shape, drawnWith].filter(Boolean).join(', ');
   return `unnamed ${object.type}${kinds ? ` (${kinds})` : ''}`;
 }
 
 /** Whether `object` or anything under it is a light. */
-function holdsLight(object: THREE.Object3D): boolean {
+function holdsLight(object: Node): boolean {
   let found = false;
   object.traverse((child) => {
-    found ||= (child as THREE.Light).isLight === true;
+    found ||= (child as Light).isLight === true;
   });
   return found;
 }
 
 /** A light as a source: put out by its intensity. */
-function lightSource(light: THREE.Light, under: string): Source {
-  const at = light.getWorldPosition(new THREE.Vector3());
+function lightSource(light: Light, under: string): Source {
+  const at = light.getWorldPosition(new Vec3());
   const place = `${at.x.toFixed(1)}, ${at.y.toFixed(1)}, ${at.z.toFixed(1)}`;
   const name = `${under}${light.name || light.type} at ${place}`;
   return {
@@ -67,11 +67,11 @@ function lightSource(light: THREE.Light, under: string): Source {
 
 /** The things under `parent` gathered into `byName`, and its lights into `lights`: a group holding a light is opened
  *  into its own parts, named under it. */
-function gather(parent: THREE.Object3D, under: string, byName: Map<string, THREE.Object3D[]>, lights: Source[]): void {
+function gather(parent: Node, under: string, byName: Map<string, Node[]>, lights: Source[]): void {
   for (const child of parent.children) {
     if (!child.visible) continue;
-    if ((child as THREE.Light).isLight) {
-      if ((child as THREE.Light).intensity > 0) lights.push(lightSource(child as THREE.Light, under));
+    if ((child as Light).isLight) {
+      if ((child as Light).intensity > 0) lights.push(lightSource(child as Light, under));
       continue;
     }
     if (holdsLight(child)) {
@@ -87,7 +87,7 @@ function gather(parent: THREE.Object3D, under: string, byName: Map<string, THREE
 
 /** Everything shown in the scene now, as sources: each name's things together, each lit light alone. */
 export function sceneSources(): Source[] {
-  const byName = new Map<string, THREE.Object3D[]>();
+  const byName = new Map<string, Node[]>();
   const lights: Source[] = [];
   gather(G.scene, '', byName, lights);
   const things = [...byName].map(([name, objects]): Source => ({

@@ -120,9 +120,9 @@ function coarseGeometry(geometry: Geometry, cards: boolean): Geometry | null {
   return coarse;
 }
 
-/** Whether `mesh` can draw from fewer triangles: one material, no morphs. */
+/** Whether `mesh` can draw from fewer triangles: one material. */
 function goesCoarse(mesh: Mesh): boolean {
-  if (!mesh.isMesh || (mesh as InstancedMesh).isInstancedMesh || mesh.morphTargetInfluences?.length) return false;
+  if (!mesh.isMesh || (mesh as InstancedMesh).isInstancedMesh) return false;
   if (Array.isArray(mesh.material)) return false;
   return true;
 }

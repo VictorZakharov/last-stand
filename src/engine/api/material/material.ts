@@ -63,7 +63,7 @@ export interface MaterialFields {
 }
 
 /** A material's parameters object: any of its fields, its name and its user data. */
-export type MaterialParameters = Partial<MaterialFields> & { name?: string; userData?: Record<string, unknown> };
+export type MaterialParameters = Partial<MaterialFields> & { name?: string; userData?: Material['userData'] };
 
 /** three's defaults for every material */
 const MATERIAL_DEFAULTS: MaterialFields = {
@@ -89,8 +89,9 @@ export class Material {
   readonly id = nextId();
   /** a name to know it by */
   name = '';
-  /** the game's own data on it (copied through JSON by `copy`, as three does) */
-  userData: Record<string, unknown> = {};
+  /** the game's own data on it, anything its own code reads back (copied through JSON by `copy`, as three does) */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  userData: Record<string, any> = {};
   /** always true: it's a material */
   readonly isMaterial = true;
   private ownUuid: string | undefined;

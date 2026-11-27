@@ -9,7 +9,7 @@
 // seat's whole upper body rose 6 to 9 cm for a frame halfway down (the leg IK started afresh there). The sits as they
 // are now jerk 4 to 5 cm at most; those faults were 15 to 74.
 
-import * as THREE from 'three';
+import { Vec3 } from './sceneApi.ts';
 import type { Lab } from './lab';
 
 /** a point's change of move from one frame to the next counted as a jerk past this (m: 0.6 cm a frame squared is
@@ -29,14 +29,14 @@ type PointName = 'right hand' | 'left hand' | 'right elbow' | 'left elbow' | 'we
 /** A place a point was read at (the hero's frame), and whether it followed on from the one before it. */
 interface Place {
   at: string;
-  place: THREE.Vector3;
+  place: Vec3;
   followsOn: boolean;
 }
 
 /** A point's places in the hero's frame over the last three frames, all it was read at, its worst jerk and where. */
 interface Followed {
   name: PointName;
-  last: THREE.Vector3[];
+  last: Vec3[];
   path: Place[];
   worst: number;
   worstAt: string;
@@ -54,7 +54,7 @@ interface Jerk {
 }
 
 /** The change of move into a frame from the places over the last three frames (oldest first; m). */
-export function jerkOf(places: readonly THREE.Vector3[]): number {
+export function jerkOf(places: readonly Vec3[]): number {
   if (places.length < 3) return 0;
   const [first, second, third] = places;
   return third.clone().sub(second).sub(second.clone().sub(first)).length();
@@ -62,7 +62,7 @@ export function jerkOf(places: readonly THREE.Vector3[]): number {
 
 /** The canary: a hand moving steadily, or eased to a stop, isn't a fault; one stopped dead from 7 cm a frame is. */
 export function jerkCanary(): boolean {
-  const at = (x: number) => new THREE.Vector3(x, 0, 0);
+  const at = (x: number) => new Vec3(x, 0, 0);
   const steady = jerkOf([at(0), at(0.07), at(0.14)]);
   const eased = jerkOf([at(0), at(0.03), at(0.05)]);
   const stopped = jerkOf([at(0), at(0.07), at(0.07)]);
@@ -171,10 +171,10 @@ export class SitJerks {
 }
 
 /** A point's place in the world this frame, or none (no weapon held). */
-function placeOf(lab: Lab, name: PointName): THREE.Vector3 | null {
+function placeOf(lab: Lab, name: PointName): Vec3 | null {
   const j = lab.joints;
   const tip = lab.model.tip;
-  const at = new THREE.Vector3();
+  const at = new Vec3();
   switch (name) {
     case 'right hand': return j.handR.getWorldPosition(at);
     case 'left hand': return j.handL.getWorldPosition(at);

@@ -4,6 +4,8 @@
 // program as every kit material's, their glow a uniform's colour of their own.
 import { Color, Material, Mesh, Node } from '../../engine/api/index.ts';
 import { ITEM_GLOW, kitCopy, ownAura } from '../../core/materials';
+import { sameKitMaterial } from './kitTwin';
+import { isDualQuaternionSkinned } from './dualQuaternion';
 import { RARITIES } from '../../data/items';
 import type { Gear, GlowSlot, RarityId } from '../../types';
 
@@ -32,10 +34,11 @@ interface GlowParts {
   only?: (mesh: Mesh) => boolean;
 }
 
-/** Whether `mesh` is drawn in one of `materials`, or a copy of one sharing its hook (a skinned part's, `Sculpt.build`;
- *  not a hand's, whose hook wraps it). */
+/** Whether `mesh` is drawn in one of `materials`, or a copy of one (a skinned part's, `Sculpt.build`:
+ *  models/kitTwin.ts), not a hand's (skinned by dual quaternions: a hand is given its glow in place, `inPlace`). */
 export function drawnIn(mesh: Mesh, materials: Material[]): boolean {
-  return [mesh.material].flat().some((m) => materials.some((x) => x === m || x.onBeforeCompile === m.onBeforeCompile));
+  const isCopy = (m: Material): boolean => materials.some((x) => sameKitMaterial(x, m));
+  return [mesh.material].flat().some((m) => !isDualQuaternionSkinned(m) && isCopy(m));
 }
 
 export class ItemGlows {

@@ -6,7 +6,7 @@
 // hidden, the face's own paint compared between two colours above the mouth and below it), and nowhere else; a look
 // picked must be kept in the profile and come back as the slot's look. `--canary` plants a hair colour that leaves the
 // face's paint alone, the cards' colour unchanged and a look not kept: each must be caught.
-import * as THREE from 'three';
+import { Box3, LitMaterial, Material, Mesh, Node, PerspectiveCamera, Vec3, World } from './sceneApi.ts';
 import type { Lab, Pictured, Report, Tile } from './lab';
 import { G } from '../../../src/state';
 import { CLASSES, CLASS_IDS } from '../../../src/data/classes/index';
@@ -44,11 +44,11 @@ const LIGHT = 'white';
 /** the colours one hero is pictured in, his own first */
 const SHOWN_COLOURS: (string | null)[] = [null, 'black', 'auburn', 'ginger', 'blond', 'grey'];
 /** where the hero stands in the game's frame to be drawn by it (beside the lobby's own hero) */
-const BESIDE = new THREE.Vector3(1.4, 0, 0.6);
+const BESIDE = new Vec3(1.4, 0, 0.6);
 
 /** A hero of class `id` in look `look`, as the hall builds one, posed at rest at `at` facing +z, bareheaded (a hat or a
  *  hood hides the hair: his class's gear but its helm). */
-function heroIn(id: string, look: HeroLook, at: THREE.Vector3): Player {
+function heroIn(id: string, look: HeroLook, at: Vec3): Player {
   const { head: _hat, ...bareheaded } = loadProfile(id).equipped;
   const player = new Player(id, bareheaded, false, undefined, look);
   player.quiet = true;
@@ -62,11 +62,11 @@ function heroIn(id: string, look: HeroLook, at: THREE.Vector3): Player {
 }
 
 /** The box round `player`'s head (his head joint's world place). */
-function headBox(player: Player): THREE.Box3 {
-  const head = player.model.joints!.head.getWorldPosition(new THREE.Vector3());
-  return new THREE.Box3(
-    new THREE.Vector3(head.x - HEAD_FRAME.across, head.y - HEAD_FRAME.below, head.z - HEAD_FRAME.across),
-    new THREE.Vector3(head.x + HEAD_FRAME.across, head.y + HEAD_FRAME.above, head.z + HEAD_FRAME.across),
+function headBox(player: Player): Box3 {
+  const head = player.model.joints!.head.getWorldPosition(new Vec3());
+  return new Box3(
+    new Vec3(head.x - HEAD_FRAME.across, head.y - HEAD_FRAME.below, head.z - HEAD_FRAME.across),
+    new Vec3(head.x + HEAD_FRAME.across, head.y + HEAD_FRAME.above, head.z + HEAD_FRAME.across),
   );
 }
 
@@ -75,27 +75,27 @@ const FIGURE_FRAME = { across: 0.55, above: 0.3 };
 
 /** The box round `player`'s figure, from his feet to over his head (by his joints: a box of his meshes took in
  *  what's merged at the scene's origin, and he stood small in its corner). */
-function figureBox(player: Player): THREE.Box3 {
-  const head = player.model.joints!.head.getWorldPosition(new THREE.Vector3());
-  const feet = player.model.root.getWorldPosition(new THREE.Vector3());
-  return new THREE.Box3(
-    new THREE.Vector3(head.x - FIGURE_FRAME.across, feet.y, head.z - FIGURE_FRAME.across),
-    new THREE.Vector3(head.x + FIGURE_FRAME.across, head.y + FIGURE_FRAME.above, head.z + FIGURE_FRAME.across),
+function figureBox(player: Player): Box3 {
+  const head = player.model.joints!.head.getWorldPosition(new Vec3());
+  const feet = player.model.root.getWorldPosition(new Vec3());
+  return new Box3(
+    new Vec3(head.x - FIGURE_FRAME.across, feet.y, head.z - FIGURE_FRAME.across),
+    new Vec3(head.x + FIGURE_FRAME.across, head.y + FIGURE_FRAME.above, head.z + FIGURE_FRAME.across),
   );
 }
 
 /** The meshes under `root` named `name` (the head's: `face`, `hair`, `crop`, `beard`). */
-function meshesNamed(root: THREE.Object3D, name: string): THREE.Mesh[] {
-  const found: THREE.Mesh[] = [];
+function meshesNamed(root: Node, name: string): Mesh[] {
+  const found: Mesh[] = [];
   root.traverse((child) => {
-    if ((child as THREE.Mesh).isMesh && child.name === name) found.push(child as THREE.Mesh);
+    if ((child as Mesh).isMesh && child.name === name) found.push(child as Mesh);
   });
   return found;
 }
 
 /** `scene` drawn by `camera` and read back, the middle of the canvas at a tile's shape as the studio's pictures are
  *  (rows top first, opaque). */
-async function pixelsOf(lab: Lab, scene: THREE.Scene, camera: THREE.PerspectiveCamera):
+async function pixelsOf(lab: Lab, scene: World, camera: PerspectiveCamera):
   Promise<{ data: Uint8ClampedArray; width: number; height: number }> {
   const picture = await studioPicture(lab, scene, camera);
   return { data: picture.data, width: picture.width, height: picture.height };
@@ -132,17 +132,17 @@ interface HairChange { brows: number; cheeks: number; beard: number; cards: numb
 
 /** Hair colours `a` and `b` on `player` compared, his face from the front with his hair hidden, his head from behind;
  *  `breakFace` / `breakCards` plant a colour that leaves the face's paint or the cards' colour as it was. */
-async function hairChange(lab: Lab, player: Player, scene: THREE.Scene, a: string, b: string,
+async function hairChange(lab: Lab, player: Player, scene: World, a: string, b: string,
   plant: { face: boolean; cards: boolean }): Promise<HairChange> {
   const box = headBox(player);
   const front = cameraOn(box, [0, 0, 1]);
   const behind = cameraOn(box, [0, 0, -1]);
   const cards = [...meshesNamed(player.model.root, 'hair'), ...meshesNamed(player.model.root, 'crop')];
-  const beardCards = meshesNamed(player.model.root, 'beard').filter((mesh) => (mesh.material as THREE.Material).alphaTest > 0);
-  const picture = async (hair: string, camera: THREE.PerspectiveCamera, bare: boolean) => {
+  const beardCards = meshesNamed(player.model.root, 'beard').filter((mesh) => (mesh.material as Material).alphaTest > 0);
+  const picture = async (hair: string, camera: PerspectiveCamera, bare: boolean) => {
     player.setHair(hair);
     if (plant.face) faceShift(player).set(0, 0, 0);
-    if (plant.cards) for (const mesh of cards) (mesh.material as THREE.MeshStandardMaterial).color.setRGB(0.3, 0.2, 0.1);
+    if (plant.cards) for (const mesh of cards) (mesh.material as LitMaterial).color.setRGB(0.3, 0.2, 0.1);
     for (const mesh of [...cards, ...beardCards]) mesh.visible = !bare;
     const pixels = await pixelsOf(lab, scene, camera);
     for (const mesh of [...cards, ...beardCards]) mesh.visible = true;
@@ -164,9 +164,9 @@ async function hairChange(lab: Lab, player: Player, scene: THREE.Scene, a: strin
 }
 
 /** The face material's hair shift (`KitLooks.hair`, core/materials.ts) on `player`'s head. */
-function faceShift(player: Player): THREE.Vector3 {
+function faceShift(player: Player): Vec3 {
   const face = meshesNamed(player.model.root, 'face')[0];
-  return (face.material as unknown as { kitLooks: { hair: { value: THREE.Vector3 } } }).kitLooks.hair.value;
+  return (face.material as unknown as { kitLooks: { hair: { value: Vec3 } } }).kitLooks.hair.value;
 }
 
 /** A frame of the game run and drawn. */
@@ -184,7 +184,7 @@ async function drawnFrame(lab: Lab): Promise<void> {
 interface LookRead { lines: string[]; problems: string[]; tiles: Tile[] }
 
 /** Class `id`'s look `def` made, built, drawn in the game's frame and the studio, and its hair colours compared. */
-async function readLook(lab: Lab, id: string, def: HeroLookDef, scene: THREE.Scene, canary: boolean): Promise<LookRead> {
+async function readLook(lab: Lab, id: string, def: HeroLookDef, scene: World, canary: boolean): Promise<LookRead> {
   const look: HeroLook = { preset: def.id, hair: null };
   const name = `${id} ${def.id}`;
   const problems: string[] = [];
@@ -242,8 +242,8 @@ async function readLook(lab: Lab, id: string, def: HeroLookDef, scene: THREE.Sce
 }
 
 /** One hero of class `id` in his first look pictured face on in each of `SHOWN_COLOURS`. */
-async function readColours(lab: Lab, id: string, def: HeroLookDef, scene: THREE.Scene): Promise<Tile[]> {
-  const player = heroIn(id, { preset: def.id, hair: null }, new THREE.Vector3());
+async function readColours(lab: Lab, id: string, def: HeroLookDef, scene: World): Promise<Tile[]> {
+  const player = heroIn(id, { preset: def.id, hair: null }, new Vec3());
   const root = player.model.root;
   const home = root.parent;
   scene.add(root);

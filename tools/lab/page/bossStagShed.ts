@@ -14,7 +14,7 @@
 // - up close after it: no gore or toss, its hoof strike in their place.
 //
 // `--canary` keeps the stakes whole and standing for good: none breaks, none goes, and the part says so.
-import * as THREE from 'three';
+import { Node, Vec3 } from './sceneApi.ts';
 import type { Lab } from './lab';
 import type { Enemy } from '../../../src/entities/enemy';
 import { G } from '../../../src/state';
@@ -40,7 +40,7 @@ const CLOSE_FOR = 8;
 /** how far past the stag's body the hero stands up close after it (m) */
 const CLOSE = 1.4;
 
-const _n = new THREE.Vector3();
+const _n = new Vec3();
 
 /** The stag risen before the hero, its life taken under its second phase's share, and let shed its antlers: its stakes
  *  standing, and the pipelines made meanwhile. */
@@ -76,12 +76,12 @@ async function shedding(
 function checkParts(boss: Enemy, phase: 'before' | 'after', canary: boolean, lines: string[], problems: string[]): void {
   // The muzzle's parent locates the skull independently of the head registration being tested.
   const root = boss.model.root;
-  const skull = (root.userData.mouth as THREE.Object3D | undefined)?.parent;
+  const skull = (root.userData.mouth as Node | undefined)?.parent;
   const trunk = root.getObjectByName('stag-trunk');
   if (!skull || !trunk) throw new Error('lab: stagShed: missing skull or torso anchor');
-  const hit = (joint: THREE.Object3D, y: number, z: number): string => {
-    const from = joint.localToWorld(new THREE.Vector3(-3, y, z));
-    const to = joint.localToWorld(new THREE.Vector3(3, y, z));
+  const hit = (joint: Node, y: number, z: number): string => {
+    const from = joint.localToWorld(new Vec3(-3, y, z));
+    const to = joint.localToWorld(new Vec3(3, y, z));
     const struck = { head: false };
     if (strikesBody(boss, from, to, 0, struck) < 0) return 'miss';
     return struck.head ? 'headshot' : 'body';
@@ -138,7 +138,7 @@ function stakeFaults(s: Stake, all: Stake[]): string[] {
 /** The hero stood beside stake `s` `BESIDE_FOR` s: his hurts. */
 async function besideStake(lab: Lab, s: Stake): Promise<Hurt[]> {
   const hero = G.player, hurts: Hurt[] = [];
-  const at = new THREE.Vector3(s.x + STAG.shed.stake + STAG.shed.touch * 0.5 + hero.radius, 0, s.z);
+  const at = new Vec3(s.x + STAG.shed.stake + STAG.shed.touch * 0.5 + hero.radius, 0, s.z);
   let frame = 0;
   await noting(hurts, () => frame, () => lab.step(BESIDE_FOR * FPS, () => {
     frame++;
@@ -154,7 +154,7 @@ async function closeAfter(lab: Lab, boss: Enemy): Promise<Record<string, number>
   let last = '';
   await lab.step(CLOSE_FOR * FPS, () => {
     const d = boss.radius + hero.radius + CLOSE;
-    hero.place(new THREE.Vector3(boss.pos.x + Math.sin(boss.facing) * d, 0, boss.pos.z + Math.cos(boss.facing) * d),
+    hero.place(new Vec3(boss.pos.x + Math.sin(boss.facing) * d, 0, boss.pos.z + Math.cos(boss.facing) * d),
       boss.facing + Math.PI);
     boss.brain.chargeT = 99;
     boss.brain.breathT = 99;

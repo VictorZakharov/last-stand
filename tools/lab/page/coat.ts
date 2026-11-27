@@ -6,7 +6,7 @@
 // frames to see it moving unnaturally", "under left arm/hand too, but less". The canary kicks one point out for a
 // frame. It stands once at each frame rate (`rates`): the cloth steps at 1/60 s, so on a faster screen most frames
 // step it none and some once, which a 60 Hz clock never shows ("the hood is jerking when idle").
-import * as THREE from 'three';
+import { Geometry, Mesh, Node, Vec3 } from './sceneApi.ts';
 import * as armor from '../../../src/entities/models/armor';
 import type { WeaponStyle } from '../../../src/loot/loadout';
 import type { Joints } from '../../../src/entities/models/rig';
@@ -85,8 +85,8 @@ const FACING_OUT = 0.8;
 /** One skirt followed: its mesh and geometry, its points over the last two frames, and its jerks. */
 export interface Followed {
   name: string;
-  mesh: THREE.Mesh;
-  geometry: THREE.BufferGeometry;
+  mesh: Mesh;
+  geometry: Geometry;
   cols: number;
   last: Float32Array;
   before: Float32Array;
@@ -109,10 +109,10 @@ const OLD_NAMES = ['tunic hem'];
 const CLOTHS = ['skirt', 'hood'];
 
 /** Each skirt and hood the hero wears that's shown. */
-export function skirtsOf(root: THREE.Object3D): Followed[] {
+export function skirtsOf(root: Node): Followed[] {
   const found: Followed[] = [];
   root.traverseVisible((object) => {
-    const mesh = object as THREE.Mesh;
+    const mesh = object as Mesh;
     if (!mesh.isMesh || (!CLOTHS.includes(mesh.geometry.name) && !OLD_NAMES.includes(mesh.name))) return;
     const count = mesh.geometry.attributes.position.array.length;
     const name = mesh.name || (mesh.geometry.name === 'hood' ? 'hood' : `skirt ${found.length + 1}`);
@@ -138,8 +138,8 @@ function placeOf(point: number, cols: number, rows: number): string {
   return `row ${row} of ${rows - 1}, ${angle.toFixed(0)}° round (his ${side})`;
 }
 
-const _point = new THREE.Vector3();
-const _hand = new THREE.Vector3();
+const _point = new Vec3();
+const _hand = new Vec3();
 
 /** Which of the hero's hands point `point` of `skirt` is nearest, and how far (in words). */
 function nearestHand(skirt: Followed, point: number, joints: Joints): string {
@@ -185,7 +185,7 @@ export function follow(skirt: Followed, frame: number, judged: boolean, listing:
 function facingOut(cloth: Followed, turned: boolean): number {
   const at = cloth.geometry.attributes.position;
   const normal = cloth.geometry.attributes.normal;
-  const middle = new THREE.Vector3();
+  const middle = new Vec3();
   for (let i = 0; i < at.count; i++) middle.add(_point.fromBufferAttribute(at, i));
   middle.multiplyScalar(1 / at.count);
   let out = 0;

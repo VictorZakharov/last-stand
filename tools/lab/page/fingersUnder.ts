@@ -2,7 +2,7 @@
 // the digit's own radius, against the ground under them, frame by frame. The hands are skinned, which the floor's
 // check of the pieces he wears and holds never reads: laying the ranger's bow down by a fire, his open fingers hung a
 // finger's length below the bow lying on the floor, through it, and no measure said so (from review).
-import * as THREE from 'three';
+import { Node, Vec3 } from './sceneApi.ts';
 import type { Lab } from './lab';
 import type { Digit, Hand } from '../../../src/entities/models/hands';
 import { groundHeight } from '../../../src/world/ground';
@@ -19,8 +19,8 @@ interface Under {
   at: string;
 }
 
-const _point = new THREE.Vector3();
-const _scale = new THREE.Vector3();
+const _point = new Vec3();
+const _scale = new Vec3();
 const FINGER_NAMES = ['index', 'middle', 'ring', 'little'];
 
 /** The frames a finger was in the floor through a scenario, and the deepest. */
@@ -101,10 +101,10 @@ function digitDepth(digit: Digit): number {
   return Math.max(tip, ...joints);
 }
 
-const _tipAt = new THREE.Vector3();
+const _tipAt = new Vec3();
 
 /** How deep a ball of `radius` (the joint's own units) at `local` on `joint` is under the ground (m). */
-function ballDepth(joint: THREE.Object3D, local: THREE.Vector3, radius: number): number {
+function ballDepth(joint: Node, local: Vec3, radius: number): number {
   joint.localToWorld(_point.copy(local));
   const lowest = _point.y - radius * joint.getWorldScale(_scale).x;
   return groundHeight(_point.x, _point.z) - lowest;

@@ -10,9 +10,9 @@ export function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
 }
 
-/** the remainder of `n / m`, always of `m`'s sign (`-1 mod 3` is 2) */
-export function euclideanModulo(n: number, m: number): number {
-  return ((n % m) + m) % m;
+/** the remainder of `n / m`, always of `divisor`'s sign (`-1 mod 3` is 2) */
+export function euclideanModulo(dividend: number, divisor: number): number {
+  return ((dividend % divisor) + divisor) % divisor;
 }
 
 /** `x` mapped from the range `a1..a2` to `b1..b2` */
@@ -26,9 +26,9 @@ export function inverseLerp(x: number, y: number, value: number): number {
   return (value - x) / (y - x);
 }
 
-/** the point `t` of the way from `x` to `y` */
-export function lerp(x: number, y: number, t: number): number {
-  return (1 - t) * x + t * y;
+/** the point `amount` of the way from `x` to `y` */
+export function lerp(x: number, y: number, amount: number): number {
+  return (1 - amount) * x + amount * y;
 }
 
 /** `x` eased towards `y` at the rate `lambda` over `dt`, the same whatever the frame rate */
@@ -45,16 +45,16 @@ export function pingpong(x: number, length = 1): number {
 export function smoothstep(x: number, min: number, max: number): number {
   if (x <= min) return 0;
   if (x >= max) return 1;
-  const t = (x - min) / (max - min);
-  return t * t * (3 - 2 * t);
+  const amount = (x - min) / (max - min);
+  return amount * amount * (3 - 2 * amount);
 }
 
 /** `smoothstep` with zero slope and curvature at both ends (Perlin's) */
 export function smootherstep(x: number, min: number, max: number): number {
   if (x <= min) return 0;
   if (x >= max) return 1;
-  const t = (x - min) / (max - min);
-  return t * t * t * (t * (t * 6 - 15) + 10);
+  const amount = (x - min) / (max - min);
+  return amount * amount * amount * (amount * (amount * 6 - 15) + 10);
 }
 
 /** a random whole number from `low` to `high`, both included */
@@ -82,10 +82,10 @@ let seed = 1234567;
 export function seededRandom(newSeed?: number): number {
   if (newSeed !== undefined) seed = newSeed;
   seed += 0x6d2b79f5;
-  let t = seed;
-  t = Math.imul(t ^ (t >>> 15), t | 1);
-  t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-  return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  let amount = seed;
+  amount = Math.imul(amount ^ (amount >>> 15), amount | 1);
+  amount ^= amount + Math.imul(amount ^ (amount >>> 7), amount | 61);
+  return ((amount ^ (amount >>> 14)) >>> 0) / 4294967296;
 }
 
 /** the hex digits of a byte */

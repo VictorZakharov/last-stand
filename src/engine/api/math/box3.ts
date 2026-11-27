@@ -81,6 +81,13 @@ export class Box3 {
     return this;
   }
 
+  /** grown by `vector` on each axis's both sides */
+  expandByVector(vector: Vec3): this {
+    this.min.sub(vector);
+    this.max.add(vector);
+    return this;
+  }
+
   /** grown by `scalar` on every side */
   expandByScalar(scalar: number): this {
     this.min.addScalar(-scalar);

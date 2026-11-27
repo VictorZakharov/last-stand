@@ -6,7 +6,7 @@
 // there. And again as a wave is won: every arrow dissolves then, as a killed foe's body does, still there half way
 // through and gone after, whatever the quality level. `--canary` plants the faults: the first tree made stone (its
 // arrow glances off it) and an arrow stuck again after the switch and after the dissolve.
-import * as THREE from 'three';
+import { InstancedMesh, Line3, Mat4, Vec2, Vec3 } from './sceneApi.ts';
 import type { Lab, Report } from './lab';
 import { BIOME_IDS, type BiomeId } from '../../../src/data/biomes';
 import { G } from '../../../src/state';
@@ -38,12 +38,12 @@ const IN_TRUNK = 0.7;
 const FLIGHT_FRAMES = 300;
 const OVER_FRAMES = 240;
 /** an arrow standing in the floor before the switch, off the dais (its point, going straight down) */
-const FLOOR_ARROW = new THREE.Vector3(8, 0, 8);
-const DOWN = new THREE.Vector3(0, -1, 0);
+const FLOOR_ARROW = new Vec3(8, 0, 8);
+const DOWN = new Vec3(0, -1, 0);
 
 /** One tree in the play area: its foot, and its prop's circle (none: it isn't a prop) */
 interface Tree {
-  foot: THREE.Vector2;
+  foot: Vec2;
   mesh: string;
   circle?: Obstacle;
 }
@@ -51,15 +51,15 @@ interface Tree {
 /** Every instance of the biome's trees' meshes whose foot stands inside the wall. */
 function treesInside(biome: BiomeId): Tree[] {
   const trees: Tree[] = [];
-  const matrix = new THREE.Matrix4();
-  const at = new THREE.Vector3();
+  const matrix = new Mat4();
+  const at = new Vec3();
   G.arena.groupOf(biome).traverse((object) => {
-    const mesh = object as THREE.InstancedMesh;
+    const mesh = object as InstancedMesh;
     if (!mesh.isInstancedMesh || !TREE.test(mesh.name)) return;
     for (let i = 0; i < mesh.count; i++) {
       mesh.getMatrixAt(i, matrix);
       at.setFromMatrixPosition(matrix.premultiply(mesh.matrixWorld));
-      if (Math.hypot(at.x, at.z) < WALL_R) trees.push({ foot: new THREE.Vector2(at.x, at.z), mesh: mesh.name });
+      if (Math.hypot(at.x, at.z) < WALL_R) trees.push({ foot: new Vec2(at.x, at.z), mesh: mesh.name });
     }
   });
   for (const tree of trees) tree.circle = woodenPropAt(tree.foot);
@@ -67,31 +67,31 @@ function treesInside(biome: BiomeId): Tree[] {
 }
 
 /** The wooden prop's circle round a foot, if one stands there. */
-function woodenPropAt(foot: THREE.Vector2): Obstacle | undefined {
+function woodenPropAt(foot: Vec2): Obstacle | undefined {
   return G.arena.obstacles.find((o) => o.prop?.kind === 'wood' && Math.hypot(o.x - foot.x, o.z - foot.y) < FOOT_NEAR);
 }
 
 /** The arrows standing now, by their points. */
-const standing = (): Set<THREE.Vector3> => new Set(spentPoints().map((spent) => spent.tip));
+const standing = (): Set<Vec3> => new Set(spentPoints().map((spent) => spent.tip));
 
 /** Whether a prop other than `tree`'s stands within CLEAR of the line from `from` to its foot. */
-function propInWay(from: THREE.Vector2, tree: Tree): boolean {
-  const way = new THREE.Line3(new THREE.Vector3(from.x, 0, from.y), new THREE.Vector3(tree.foot.x, 0, tree.foot.y));
-  const on = new THREE.Vector3();
+function propInWay(from: Vec2, tree: Tree): boolean {
+  const way = new Line3(new Vec3(from.x, 0, from.y), new Vec3(tree.foot.x, 0, tree.foot.y));
+  const on = new Vec3();
   return G.arena.obstacles.some((o) => {
     if (o.prop && o.prop === tree.circle?.prop) return false;
-    way.closestPointToPoint(new THREE.Vector3(o.x, 0, o.z), true, on);
+    way.closestPointToPoint(new Vec3(o.x, 0, o.z), true, on);
     return Math.hypot(on.x - o.x, on.z - o.z) < o.r + CLEAR;
   });
 }
 
 /** Where he shoots `tree` from: STAND_IN off it, towards the middle or turned round it from there, on a line clear
  *  of the other props and inside the wall (none: no such line). */
-function standFor(tree: Tree): THREE.Vector2 | null {
+function standFor(tree: Tree): Vec2 | null {
   const inward = Math.atan2(-tree.foot.y, -tree.foot.x);
   for (const turn of TURNS) {
     const way = inward + turn;
-    const from = tree.foot.clone().add(new THREE.Vector2(Math.cos(way), Math.sin(way)).multiplyScalar(STAND_IN));
+    const from = tree.foot.clone().add(new Vec2(Math.cos(way), Math.sin(way)).multiplyScalar(STAND_IN));
     if (from.length() < WALL_R - STAND_IN / 2 && !propInWay(from, tree)) return from;
   }
   return null;
@@ -102,9 +102,9 @@ async function shootAt(lab: Lab, tree: Tree): Promise<string> {
   const from = standFor(tree);
   if (!from) return 'no clear line to it';
   const toward = tree.foot.clone().sub(from);
-  G.player.place(new THREE.Vector3(from.x, 0, from.y), Math.atan2(toward.x, toward.y));
+  G.player.place(new Vec3(from.x, 0, from.y), Math.atan2(toward.x, toward.y));
   G.player.vel.set(0, 0, 0);
-  const point = new THREE.Vector3(tree.foot.x, TRUNK_UP, tree.foot.y);
+  const point = new Vec3(tree.foot.x, TRUNK_UP, tree.foot.y);
   const before = standing();
   const flying = new Set(G.projectiles);
   await drawAt(lab, point);
@@ -124,7 +124,7 @@ async function shootAt(lab: Lab, tree: Tree): Promise<string> {
 }
 
 /** How far a point stands off a trunk's upright line (m). */
-const acrossTrunk = (tip: THREE.Vector3, foot: THREE.Vector2): number => Math.hypot(tip.x - foot.x, tip.z - foot.y);
+const acrossTrunk = (tip: Vec3, foot: Vec2): number => Math.hypot(tip.x - foot.x, tip.z - foot.y);
 
 /** Every tree inside `biome`'s wall, each judged a prop and shot at (with `canary`, the first one made stone). */
 async function treesIn(lab: Lab, biome: BiomeId, canary: boolean): Promise<{ lines: string[]; problems: string[] }> {

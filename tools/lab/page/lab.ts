@@ -6,7 +6,7 @@
 // drawn unless asked (measures need no pixels; the scene's matrices are still updated, as a draw would). A set-up is
 // checked once it's made and throws if it didn't take. A measure of a state that never happened reads as clean: a
 // probe that scripted the game before its run began twice reported no clips at full draw, because it never drew.
-import * as THREE from 'three';
+import { Camera, Maths, Mesh, Node, PerspectiveCamera, Vec3 } from './sceneApi.ts';
 import { G } from '../../../src/state';
 import { input } from '../../../src/core/input';
 import { CAMERA } from '../../../src/data/balance';
@@ -39,7 +39,7 @@ import { drawLook, jointsByObject, partName, withBones, type Look, type PartOnSc
 import { canvasOf, readOpaque, type Area } from './pixels';
 
 /** three's renderer as a tree before #973 has it (an A/B's other commit): its render, which this tree hasn't got */
-type ThreesRender = { render?: (scene: THREE.Object3D, camera: THREE.Camera) => unknown };
+type ThreesRender = { render?: (scene: Node, camera: Camera) => unknown };
 
 /**
  * The clock the session installs before the page's own scripts (`tools/lab/node/browser.mjs`). While its mode is
@@ -276,8 +276,8 @@ function restartEmitters(): void {
 const VIEW_PRESSES = 3;
 
 /** The way the close views' camera turns (rad) to look along `ahead`: about the upright (0 looks to -z), and down. */
-function turnOf(ahead: THREE.Vector3): { yaw: number; down: number } {
-  return { yaw: Math.atan2(-ahead.x, -ahead.z), down: -Math.asin(THREE.MathUtils.clamp(ahead.y, -1, 1)) };
+function turnOf(ahead: Vec3): { yaw: number; down: number } {
+  return { yaw: Math.atan2(-ahead.x, -ahead.z), down: -Math.asin(Maths.clamp(ahead.y, -1, 1)) };
 }
 
 /**
@@ -285,8 +285,8 @@ function turnOf(ahead: THREE.Vector3): { yaw: number; down: number } {
  * middle comes over it, in a frame or two (over the shoulder, the camera swings round the hero as it turns, and
  * through the eyes the hero turns with it). Nothing in the top-down view, which aims with the mouse.
  */
-function lookToward(point: THREE.Vector3): void {
-  const now = turnOf(G.camera.getWorldDirection(new THREE.Vector3()));
+function lookToward(point: Vec3): void {
+  const now = turnOf(G.camera.getWorldDirection(new Vec3()));
   const wanted = turnOf(point.clone().sub(G.camera.position).normalize());
   const yaw = Math.atan2(Math.sin(now.yaw - wanted.yaw), Math.cos(now.yaw - wanted.yaw));
   renderer.lookBy(yaw / CAMERA.lookSpeed, (wanted.down - now.down) / CAMERA.lookSpeed);
@@ -308,7 +308,7 @@ function lookAlong(facing: number): void {
 
 /** The top-down camera turned at once to `yaw` (rad), on `focus`: brought to rest first, so the turn is from where it
  *  is drawn, not from a glide's way there (a commit from before `settleCamera` turns it as it glides). */
-function turnTopDown(yaw: number, focus: THREE.Vector3): void {
+function turnTopDown(yaw: number, focus: Vec3): void {
   renderer.settleCamera?.(focus);
   renderer.turnBy(wrapAngle(yaw - renderer.cameraYaw()));
   renderer.settleCamera?.(focus);
@@ -327,9 +327,9 @@ export interface Frame {
   /** a mouse-look move, px */
   look?: [number, number];
   /** the point in the world the mouse is over (the lab's `aim` when not given) */
-  aim?: THREE.Vector3;
+  aim?: Vec3;
   /** the point in the world the crosshair of the close views is turned towards, by a mouse-look move (`lookToward`) */
-  sight?: THREE.Vector3;
+  sight?: Vec3;
   /** the touch stick pushed this far (x right, y down the screen, its length up to 1); left as it was when not given */
   stick?: [number, number];
   /** the pointer resting on the page's UI this frame, not on the world (a slot of the skill bar, a panel) */
@@ -423,7 +423,7 @@ const BODY_DISTANCE = 4.3;
 const JOINT_DISTANCE = 1.7;
 const CLOSE_UP_FOV = 30;
 /** the top of the hat over the head joint, for the hero's height on screen (m) */
-const ABOVE_HEAD = new THREE.Vector3(0, 0.3, 0);
+const ABOVE_HEAD = new Vec3(0, 0.3, 0);
 /** px: how far round the element a screen picture is clipped round (`Lab.screen`'s `around`) reaches */
 const SCREEN_MARGIN = 24;
 
@@ -465,7 +465,7 @@ export interface CaptureOptions {
   focus?: keyof Joints;
   /** a place in the world a close-up is framed on instead of the hero (a foe's body fallen there), from `distance` m
    *  (its turn still the hero's facing's) */
-  at?: THREE.Vector3;
+  at?: Vec3;
   distance?: number;
   /** Keep a ground-level close-up's camera at least this far above the terrain (m). */
   aboveGround?: number;
@@ -480,8 +480,6 @@ const AIM_AHEAD = 20;
 
 /** The lab's hold on the game in this page. */
 export class Lab {
-  /** three.js as the game uses it, for probe modules */
-  readonly THREE = THREE;
   /** the anatomy warnings the page logged, since the session last read them (its errors the session sees itself) */
   readonly warnings: string[] = [];
   /** draw each frame as the game does (off: only the scene's matrices are updated) */
@@ -496,7 +494,7 @@ export class Lab {
   /** the game's clock as the page's first run started (`runAfresh` starts its own at the same moment) */
   private firstRunAt: number | null = null;
   /** the point the mouse is over unless a frame says otherwise */
-  aim = new THREE.Vector3();
+  aim = new Vec3();
   /** the share of his most Health the hero is kept at every frame, until the next set-up (whole: 1) */
   lifeShare = 1;
   /** what every frame of the current set-up needs before its input (the foes kept away, the hero unhurt) */
@@ -605,7 +603,7 @@ export class Lab {
    * thinks as one does: a training dummy (`dummy`) stands still. `options` as a wave's spawns take them (a hero foe,
    * its name).
    */
-  spawnFoe(type: EnemyId, at: THREE.Vector3, options: Omit<EnemyOpts, 'pos'> = {}): Enemy {
+  spawnFoe(type: EnemyId, at: Vec3, options: Omit<EnemyOpts, 'pos'> = {}): Enemy {
     const foe = spawnEnemy(type, at, { wave: 1, ...options });
     this.foes.add(foe);
     return foe;
@@ -631,7 +629,7 @@ export class Lab {
   }
 
   /** Puts the mouse over a point in the world, as the player would. */
-  pointAt(point: THREE.Vector3): void {
+  pointAt(point: Vec3): void {
     const ndc = point.clone().project(G.camera);
     input.mouse.x = (ndc.x + 1) / 2 * innerWidth;
     input.mouse.y = (1 - ndc.y) / 2 * innerHeight;
@@ -726,7 +724,7 @@ export class Lab {
     await this.useView(fixture.view ?? 'top');
     const [x, z] = fixture.at ?? SPOT;
     const facing = fixture.facing ?? 0;
-    const spot = new THREE.Vector3(x, 0, z);
+    const spot = new Vec3(x, 0, z);
     this.wield(fixture);
     // (never off to sit on a log nearby as he stands for a measure: `sit` lets him once set up)
     this.player.sits = false;
@@ -743,7 +741,7 @@ export class Lab {
     this.player.facing = facing;
     lookAlong(facing);
     this.model.reset?.();
-    this.aim = new THREE.Vector3(x + Math.sin(facing) * AIM_AHEAD, 0, z + Math.cos(facing) * AIM_AHEAD);
+    this.aim = new Vec3(x + Math.sin(facing) * AIM_AHEAD, 0, z + Math.cos(facing) * AIM_AHEAD);
     // (the same moment and the same random numbers from here on, however long the run took to start: the clock is
     // only ever moved forward, so nothing the game stamped with it is left in the future; but a hero built afresh
     // has stamped nothing, and starts at the same moment exactly: at the next multiple, the idle's sway came out a
@@ -946,7 +944,7 @@ export class Lab {
   /** The names of the hero's joints (`hips`, `handL`...). */
   jointNames(): string[] {
     const joints = this.joints as unknown as Record<string, unknown>;
-    return Object.keys(joints).filter((name) => joints[name] instanceof THREE.Object3D);
+    return Object.keys(joints).filter((name) => joints[name] instanceof Node);
   }
 
   /** This moment pictured from `views`, under `label`, with `notes` beside it: for a report's `moments`. */
@@ -1312,7 +1310,7 @@ export class Lab {
       return { view, canvas: look === 'bones' ? withBones(canvas, this.joints, area) : canvas };
     }
     const joints = jointsByObject(this.joints);
-    const named = (mesh: THREE.Mesh) => partName(mesh, joints);
+    const named = (mesh: Mesh) => partName(mesh, joints);
     const { image, parts } = drawLook(look, this.model.root, area, named);
     const canvas = document.createElement('canvas');
     canvas.width = image.width;
@@ -1330,7 +1328,7 @@ export class Lab {
   private renderArmsFromOutside(): void {
     // (a model's arms at the world's lens are still drawn by their own camera: null from it is that lens)
     const ownLens = this.model.armsFov?.();
-    const fov = ownLens === undefined ? null : ownLens ?? (G.camera as THREE.PerspectiveCamera).fov;
+    const fov = ownLens === undefined ? null : ownLens ?? (G.camera as PerspectiveCamera).fov;
     const layers = G.camera.layers.mask;
     // (the arms' layer, as their own camera draws it)
     const arms = renderer.armsCamera().layers.mask;
@@ -1348,8 +1346,8 @@ export class Lab {
   private aimCloseUp(closeUp: CloseUp, options: CaptureOptions): Crop {
     const camera = G.camera;
     const focus = options.focus;
-    const target = (focus ? this.joints[focus] : this.joints.hips) as THREE.Object3D;
-    const centre = options.at?.clone() ?? target.getWorldPosition(new THREE.Vector3());
+    const target = (focus ? this.joints[focus] : this.joints.hips) as Node;
+    const centre = options.at?.clone() ?? target.getWorldPosition(new Vec3());
     const distance = options.distance ?? (focus ? JOINT_DISTANCE : BODY_DISTANCE);
     if (closeUp.down) return this.aimDown(centre, distance);
     const angle = this.player.facing + closeUp.turn;
@@ -1373,7 +1371,7 @@ export class Lab {
   }
 
   /** the game's camera straight down onto `centre` from `distance`, north (-z) up the picture; the crop a square */
-  private aimDown(centre: THREE.Vector3, distance: number): Crop {
+  private aimDown(centre: Vec3, distance: number): Crop {
     const camera = G.camera;
     const up = camera.up.clone();
     camera.position.set(centre.x, centre.y + distance, centre.z);
@@ -1397,12 +1395,12 @@ export class Lab {
     for (let i = 0; i < 3; i++) renderer.updateCamera(10, this.player.pos, this.framedHeight());
     const camera = G.camera;
     camera.updateMatrixWorld();
-    const hips = this.joints.hips.getWorldPosition(new THREE.Vector3()).project(camera);
-    const headTop = this.joints.head.getWorldPosition(new THREE.Vector3()).add(ABOVE_HEAD);
+    const hips = this.joints.hips.getWorldPosition(new Vec3()).project(camera);
+    const headTop = this.joints.head.getWorldPosition(new Vec3()).add(ABOVE_HEAD);
     const top = headTop.project(camera);
     const foot = this.player.pos.clone().project(camera);
     const heroHeight = Math.abs(top.y - foot.y) / 2 * innerHeight;
-    const height = THREE.MathUtils.clamp(heroHeight * 1.5, 160, innerHeight);
+    const height = Maths.clamp(heroHeight * 1.5, 160, innerHeight);
     return {
       centreX: (hips.x + 1) / 2 * innerWidth,
       centreY: (1 - hips.y) / 2 * innerHeight,
@@ -1571,7 +1569,7 @@ export function basesHeld(cls: ClassDef, style: WeaponStyle): string[] {
  * The area of the page the game's camera shows `points` of the world in, `margin` px out from them on every side: a
  * screen picture (`Lab.screen`) of what's round them, the UI over it included.
  */
-export function screenArea(points: THREE.Vector3[], margin = SCREEN_MARGIN): Clip {
+export function screenArea(points: Vec3[], margin = SCREEN_MARGIN): Clip {
   const xs: number[] = [];
   const ys: number[] = [];
   for (const point of points) {
@@ -1593,8 +1591,8 @@ function wholeFrame(): Crop {
 function areaOf(crop: Crop): Area {
   const width = Math.round(Math.min(crop.width, innerWidth));
   const height = Math.round(Math.min(crop.height, innerHeight));
-  const left = Math.round(THREE.MathUtils.clamp(crop.centreX - width / 2, 0, innerWidth - width));
-  const top = Math.round(THREE.MathUtils.clamp(crop.centreY - height / 2, 0, innerHeight - height));
+  const left = Math.round(Maths.clamp(crop.centreX - width / 2, 0, innerWidth - width));
+  const top = Math.round(Maths.clamp(crop.centreY - height / 2, 0, innerHeight - height));
   return { left, top, width, height };
 }
 
@@ -1716,10 +1714,10 @@ function storeAgain(stored: Stored): void {
 /** A house's room shown: its walls and ceiling that `camera` stands outside of left out, as the game leaves them out
  *  for its own (`Room.cutAway`): from a close-up's camera outside the room, its wall stood between it and the hero,
  *  and the picture was black. */
-function cutRoomFor(camera: THREE.Camera): void {
+function cutRoomFor(camera: Camera): void {
   const room = G.arena.room;
   if (!room) return;
   // (where it was just put: its world matrix is made only as it's drawn)
   camera.updateMatrixWorld();
-  G.arena.rooms?.[room]?.cutAway(camera.getWorldPosition(new THREE.Vector3()));
+  G.arena.rooms?.[room]?.cutAway(camera.getWorldPosition(new Vec3()));
 }

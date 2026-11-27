@@ -8,7 +8,7 @@
 // fails here wherever it shows, without a check of its own. `canary` reads the budgets with every cull held off (the
 // hall's inside and outside drawn whole) and the culled frames with the hall leaving out all it may, seen or not:
 // both must fail.
-import * as THREE from 'three';
+import { Vec3 } from './sceneApi.ts';
 import type { Lab } from './lab';
 import { G } from '../../../src/state';
 import { holdHour } from '../../../src/game/clock';
@@ -127,7 +127,7 @@ async function standOn(lab: Lab, stand: Stand): Promise<void> {
   await goInto(lab, stand.room);
   const [x, z] = stand.at;
   G.player.walkTo = null;
-  G.player.place(new THREE.Vector3(x, groundHeight(x, z), z), stand.facing);
+  G.player.place(new Vec3(x, groundHeight(x, z), z), stand.facing);
   faceCamera(stand.facing);
   await lab.step(SETTLE);
 }

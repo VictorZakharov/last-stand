@@ -20,7 +20,7 @@ import { castBreakablesAsOne, type BreakableShadows } from './breakableShadows';
 import { bakeStaticShadows, drawStillShadows, envMap, lampFaceDrawn, lampShadowsAsked, mergeStill, nextLampFace, type Biome, type BiomeBuilder, type BiomeLook } from './props';
 import { countGhosts, depthOfWhatStaysWhole } from '../core/seeThrough';
 import { GHOST_COUNT_LAYER } from '../core/layers';
-import { cullWhileDrawn, trimShadowCasters } from './culling';
+import { trimShadowCasters } from './culling';
 import { packWhileDrawn } from '../core/lightBounds';
 import { holdMoonShadow } from './moonShadow';
 import { hallDoorway } from './hallPortal';
@@ -105,7 +105,6 @@ export async function buildArena(scene: World, renderer: GameScreen) {
   moon.shadow.bias = -0.0004;
   moon.shadow.normalBias = 0.03;
   scene.add(hemi, moon, moon.target);
-  cullWhileDrawn(scene, {});
   // (each point light's reach packed for the shaders' loop, before each render: `core/lightBounds.ts`)
   packWhileDrawn(scene);
   const fog = scene.fog = new Fog(0);

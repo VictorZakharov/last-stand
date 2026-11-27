@@ -2,8 +2,7 @@
 // leaf) cut out with alpha test, and the geometry that carries them: canopies and bushes of leaf cards
 // round a dark core, fern clumps, leaf litter, and shafts of sunlight slanting down through the canopy.
 import {
-  AdditiveBlending, CanvasTexture, Color, DoubleSide, floats, Geometry, LookMaterial, mergeGeometries, Mesh, Node, Quat,
-  Vec3,
+  CanvasTexture, Color, floats, Geometry, mergeGeometries, Mesh, Node, Quat, Vec3,
 } from '../engine/api/index.ts';
 import * as shapes from '../engine/api/shapes/index.ts';
 import { shaftsMaterial } from './forestNodes';
@@ -165,34 +164,8 @@ export const litterGeo = (): Geometry => shapes.plane(0.13, 0.19).rotateX(-Math.
  * with slow motes of dust drifting through. Additive and faint (`color`), and they never flash.
  */
 export function lightShafts(spots: [number, number, number][], dir: Vec3, color: Color): { group: Node; update: (t: number) => void } {
-  const mat = new LookMaterial({
-    uniforms: { uTime: { value: 0 }, uColor: { value: color } },
-    transparent: true, depthWrite: false, blending: AdditiveBlending, side: DoubleSide, fog: false,
-    vertexShader: /* glsl */`
-      varying vec3 vN; varying vec3 vV; varying float vH; varying vec2 vUv;
-      void main(){
-        vUv = uv; vH = uv.y;
-        vec4 mv = modelViewMatrix * vec4(position, 1.0);
-        vN = normalize(normalMatrix * normal); vV = -mv.xyz;
-        gl_Position = projectionMatrix * mv;
-      }`,
-    fragmentShader: /* glsl */`
-      uniform float uTime; uniform vec3 uColor;
-      varying vec3 vN; varying vec3 vV; varying float vH; varying vec2 vUv;
-      float h(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
-      float n(vec2 p){ vec2 i = floor(p), f = fract(p); f = f*f*(3.0-2.0*f);
-        return mix(mix(h(i), h(i+vec2(1,0)), f.x), mix(h(i+vec2(0,1)), h(i+vec2(1,1)), f.x), f.y); }
-      void main(){
-        float facing = abs(dot(normalize(vN), normalize(vV)));
-        float core = pow(facing, 4.0);
-        // fade in below the canopy, out where it meets the ground
-        float along = smoothstep(0.0, 0.08, vH) * (1.0 - smoothstep(0.55, 1.0, vH));
-        float dust = 0.65 + 0.35 * n(vec2(vUv.x * 6.0, vH * 14.0 - uTime * 0.15));
-        float a = core * along * dust;
-        gl_FragColor = vec4(uColor * a, 1.0);
-      }`,
-  });
-  const drawnWith = shaftsMaterial(mat.uniforms.uTime, color);
+  const time = { value: 0 };
+  const drawnWith = shaftsMaterial(time, color);
   const group = new Node();
   const d = dir.clone().normalize(), up = new Vec3(0, 1, 0);
   const L = 26, at = new Node(), shafts: Geometry[] = [];
@@ -208,5 +181,5 @@ export function lightShafts(spots: [number, number, number][], dir: Vec3, color:
   m.renderOrder = 5;
   m.frustumCulled = false;
   group.add(m);
-  return { group, update: (t) => { mat.uniforms.uTime.value = t; } };
+  return { group, update: (t) => { time.value = t; } };
 }

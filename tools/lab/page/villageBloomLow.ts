@@ -8,7 +8,7 @@
 // +58%); no pipeline asked for by the bloom's switches (Low's level itself makes its plain set aside: `lab
 // rustcheck`'s); both pictured. `canary` leaves Low's bloom at full share. It read three's bloom passes, none under
 // the engine: 0 pixels both ways, and the light it added 0.
-import * as THREE from 'three';
+import { Vec3 } from './sceneApi.ts';
 import type { Lab, Pictured } from './lab';
 import { G } from '../../../src/state';
 import { holdHour } from '../../../src/game/clock';
@@ -134,7 +134,7 @@ function places(): Place[] {
 /** He stood at `place`, the camera behind him. */
 async function standAt(lab: Lab, { at: [x, z], facing }: Place): Promise<void> {
   G.player.walkTo = null;
-  G.player.place(new THREE.Vector3(x, groundHeight(x, z), z), facing);
+  G.player.place(new Vec3(x, groundHeight(x, z), z), facing);
   faceCamera(facing);
   await lab.step(SETTLE);
 }

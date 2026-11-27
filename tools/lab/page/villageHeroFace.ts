@@ -3,7 +3,7 @@
 // under the street lamps, the frame over the shoulder drawn and the blown-out share of the pixels round his head read. A gate's
 // light stood at head height, a hand's breadth from a face, and a lamp's over his head fell by the square of a short
 // way. `canary` puts the nearest light by his head, unsoftened, which must be found.
-import * as THREE from 'three';
+import { Vec3 } from './sceneApi.ts';
 import type { Lab } from './lab';
 import { G } from '../../../src/state';
 import { holdHour } from '../../../src/game/clock';
@@ -56,7 +56,7 @@ function blownRound(canvas: Canvas, x: number, y: number): number {
 async function blownAt(lab: Lab, stand: Stand, canary: boolean): Promise<number> {
   const ground = groundHeight(stand.x, stand.z);
   G.player.walkTo = null;
-  G.player.place(new THREE.Vector3(stand.x, ground, stand.z), stand.facing);
+  G.player.place(new Vec3(stand.x, ground, stand.z), stand.facing);
   faceCamera(stand.facing);
   await lab.step(SETTLE);
   const planted = canary ? pooledLights()[0] : null;
@@ -68,7 +68,7 @@ async function blownAt(lab: Lab, stand: Stand, canary: boolean): Promise<number>
   }
   const canvas = drawFrame(lab);
   if (planted) planted.intensity = 0;
-  const head = new THREE.Vector3(stand.x, ground + HEAD, stand.z).project(G.camera);
+  const head = new Vec3(stand.x, ground + HEAD, stand.z).project(G.camera);
   return blownRound(canvas, (head.x + 1) / 2 * canvas.width, (head.y + 1) / 2 * canvas.height);
 }
 

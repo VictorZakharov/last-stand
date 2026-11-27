@@ -9,7 +9,7 @@
 // drawn at 0.52 Mpx.) With `--village`, the lobby's village instead, at an hour (`--hour`): the hero standing on its
 // square, then walking, no skill cast (the owner's report, 2026-10-30: 10 to 13 ms of GPU a frame on an RTX 4070 Ti,
 // the shadows half of it, where the goal is a steady 144 frames a second).
-import * as THREE from 'three';
+import { Camera, Geometry, Maths, Mesh, Node, type Uniform, Vec2, Vec3 } from './sceneApi.ts';
 import type { Frame, Lab, Report } from './lab';
 import type { BiomeId } from '../../../src/data/biomes';
 import type { QualityLevel } from '../../../src/data/quality';
@@ -47,7 +47,7 @@ import { waveCome, waveLine, type WaveCome } from './perfWave';
 import { bodyCensus, censusLines } from './bodyRecords';
 
 /** three's renderer as a tree before #973 has it (an A/B's other commit): its render, which this tree hasn't got */
-type ThreesRender = { render?: (scene: THREE.Object3D, camera: THREE.Camera) => unknown };
+type ThreesRender = { render?: (scene: Node, camera: Camera) => unknown };
 
 export interface PerfOptions {
   biome: BiomeId;
@@ -188,7 +188,7 @@ function spreadOf(values: number[]): Spread {
 
 const ms = (value: number) => value.toFixed(1);
 const spreadWords = (spread: Spread) => `${ms(spread.median)} (90th ${ms(spread.p90)}, most ${ms(spread.most)})`;
-const megapixels = (size: THREE.Vector2) => ((size.x * size.y) / 1e6).toFixed(2);
+const megapixels = (size: Vec2) => ((size.x * size.y) / 1e6).toFixed(2);
 const millions = (count: number) => (count >= 1e6 ? `${(count / 1e6).toFixed(2)}M` : `${Math.round(count / 1e3)}k`);
 
 /** Whether this game's perf overlay can be timed by another clock and read frame by frame (a game older than it
@@ -421,9 +421,9 @@ function frameLines(phase: Phase): string[] {
 /** What the screen and the quality draw: the canvas's pixels, the scene's, the level, its budget and the hero's
  *  detail. */
 function screenLine(): string {
-  const canvas = G.renderer.getDrawingBufferSize(new THREE.Vector2());
-  const scene = renderer.sceneSize(new THREE.Vector2());
-  const budget = Number.isFinite(quality.qualityBudget()) ? ` at most ${megapixels(new THREE.Vector2(
+  const canvas = G.renderer.getDrawingBufferSize(new Vec2());
+  const scene = renderer.sceneSize(new Vec2());
+  const budget = Number.isFinite(quality.qualityBudget()) ? ` at most ${megapixels(new Vec2(
     quality.qualityBudget(), 1))} Mpx` : '';
   return `the canvas ${canvas.x}x${canvas.y} (${megapixels(canvas)} Mpx) at ${G.renderer.getPixelRatio()}, the scene `
     + `${scene.x}x${scene.y} (${megapixels(scene)} Mpx) at ${renderer.sceneRatio().toFixed(2)}; quality `
@@ -457,7 +457,7 @@ function plantCost(): () => void {
     const own = pool.update.bind(pool);
     pool.update = (dt: number) => {
       own(dt);
-      pool.mat.uniforms.uScale.value *= CANARY_WIDER;
+      (pool.mat.uniforms.uScale as Uniform<number>).value *= CANARY_WIDER;
     };
   }
   return () => {
@@ -470,7 +470,7 @@ function plantCost(): () => void {
 }
 
 /** The canary: frames as they are, then with the costs planted; its lines, and a problem for a cost unseen. */
-async function canaryRound(lab: Lab, aim: THREE.Vector3): Promise<{ lines: string[]; problems: string[] }> {
+async function canaryRound(lab: Lab, aim: Vec3): Promise<{ lines: string[]; problems: string[] }> {
   const plain = await timePhase(lab, 'the canary, as it is', CANARY_FRAMES, () => ({ aim }));
   const unplant = plantCost();
   let planted: Phase;
@@ -504,7 +504,7 @@ async function canaryRound(lab: Lab, aim: THREE.Vector3): Promise<{ lines: strin
 }
 
 /** The casts in turn, each a phase from its press, after a phase standing; with whether each cast. */
-async function castPhases(lab: Lab, options: PerfOptions, aim: THREE.Vector3): Promise<{ phases: Phase[];
+async function castPhases(lab: Lab, options: PerfOptions, aim: Vec3): Promise<{ phases: Phase[];
   uncast: string[]; }> {
   const hero = G.player;
   const frameTime = window.__labClock.frame / 1000;
@@ -545,22 +545,22 @@ async function villagePhases(lab: Lab): Promise<Phase[]> {
 
 /** Whether three has made a geometry's buffers: it listens for its disposal from then on (its `_listeners` are private,
  *  so this is checked to read something: a frame's drawn meshes must have them). */
-function onTheGpu(geometry: THREE.BufferGeometry): boolean {
+function onTheGpu(geometry: Geometry): boolean {
   return Boolean(listenersOf(geometry)?.dispose?.length);
 }
 
 /** Three's listeners on a geometry, as `EventDispatcher` keeps them. */
-function listenersOf(geometry: THREE.BufferGeometry): Record<string, unknown[]> | undefined {
+function listenersOf(geometry: Geometry): Record<string, unknown[]> | undefined {
   return (geometry as unknown as { _listeners?: Record<string, unknown[]> })._listeners;
 }
 
 /** Each geometry in the scene three hasn't made buffers for, by the name of the nearest named thing over it. */
-function notYetOnTheGpu(): Map<THREE.BufferGeometry, string> {
-  const waiting = new Map<THREE.BufferGeometry, string>();
+function notYetOnTheGpu(): Map<Geometry, string> {
+  const waiting = new Map<Geometry, string>();
   G.scene.traverse((object) => {
-    const mesh = object as THREE.Mesh;
+    const mesh = object as Mesh;
     if (!mesh.isMesh || onTheGpu(mesh.geometry)) return;
-    let named: THREE.Object3D | null = mesh;
+    let named: Node | null = mesh;
     while (named && !named.name) named = named.parent;
     waiting.set(mesh.geometry, named?.name ?? mesh.type);
   });
@@ -568,7 +568,7 @@ function notYetOnTheGpu(): Map<THREE.BufferGeometry, string> {
 }
 
 /** What of `waiting` a turn put on the GPU: how many, their vertices, and the names they came under. */
-function cameOnTheGpu(waiting: Map<THREE.BufferGeometry, string>): string {
+function cameOnTheGpu(waiting: Map<Geometry, string>): string {
   const byName = new Map<string, number>();
   let vertices = 0;
   let count = 0;
@@ -741,7 +741,7 @@ async function flyPhases(lab: Lab, canary: boolean): Promise<Flight> {
 /** The hero stood in the hall of heroes turned to its door, the square beyond it in view over his shoulder (from
  *  above its roof is cut away, and all of the village shows). */
 async function lookingOut(lab: Lab): Promise<Phase> {
-  const at = new THREE.Vector3(TERRACE.x, 0, HALL.door - OUT_FROM);
+  const at = new Vec3(TERRACE.x, 0, HALL.door - OUT_FROM);
   at.y = groundHeight(at.x, at.z);
   G.player.walkTo = null;
   // (facing 0 is along +z, out of the door)
@@ -757,7 +757,7 @@ async function lookingOut(lab: Lab): Promise<Phase> {
 async function intoTheHall(lab: Lab): Promise<Phase> {
   const hall = villageObject('hall');
   if (!hall) throw new Error('lab: perf: the village has no hall of heroes');
-  const square = new THREE.Vector3(VILLAGE_SPOT[0], 0, VILLAGE_SPOT[1]);
+  const square = new Vec3(VILLAGE_SPOT[0], 0, VILLAGE_SPOT[1]);
   G.player.place(square, G.player.facing);
   await lab.step(15);
   goTo(hall.stand[0], hall.stand[1]);
@@ -838,8 +838,8 @@ async function perfAtQuality(lab: Lab, options: PerfOptions): Promise<Report> {
   hero.cooldowns.clear();
   if (options.lobby) await toLobby(lab);
   // (from where he stands once there: the lobby puts him on its own spot)
-  const way = THREE.MathUtils.degToRad(options.facing);
-  const aim = hero.pos.clone().add(new THREE.Vector3(Math.sin(way), 0, Math.cos(way)).multiplyScalar(AIM_AHEAD));
+  const way = Maths.degToRad(options.facing);
+  const aim = hero.pos.clone().add(new Vec3(Math.sin(way), 0, Math.cos(way)).multiplyScalar(AIM_AHEAD));
   let come: WaveCome | null = null;
   if (!options.lobby && !options.village && options.wave) come = await waveCome(lab, options.wave);
   else if (!options.lobby && !options.village && options.foes) await foesAhead(lab, options.biome, options.foes);

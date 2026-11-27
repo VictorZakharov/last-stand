@@ -7,7 +7,7 @@
 // them out (`KeyedArm.armShare`): a swing its hands place (`ViewSwing.holds`, the two-hander's backhand turned about
 // the left shoulder) keys the grip, the weapon's way and its flat, and the arm is fitted to them from its own
 // shoulder; judged by an arm laid out from the left shoulder, every frame of it read 44 cm off.
-import * as THREE from 'three';
+import { Maths, Vec3 } from './sceneApi.ts';
 
 /** A joint of the arm a swing keys. */
 type Part = 'shoulder' | 'elbow' | 'grip';
@@ -20,12 +20,12 @@ export interface KeyedFrame {
   hand: 'right' | 'left';
   weight: number;
   armShare: number;
-  keyed: Record<Part, THREE.Vector3>;
-  drawn: Record<Part, THREE.Vector3>;
-  keyedWay: THREE.Vector3;
-  drawnWay: THREE.Vector3;
-  keyedFlat: THREE.Vector3 | null;
-  drawnFlat: THREE.Vector3;
+  keyed: Record<Part, Vec3>;
+  drawn: Record<Part, Vec3>;
+  keyedWay: Vec3;
+  drawnWay: Vec3;
+  keyedFlat: Vec3 | null;
+  drawnFlat: Vec3;
 }
 
 /** frames judged: only those whose arm is all the swing's (not taking over from the place before, nor fading); a
@@ -45,7 +45,7 @@ function offsOf(frame: KeyedFrame): Record<Part, number> {
 
 /** How far the weapon is drawn from its keyed way (degrees). */
 function turnedOf(frame: KeyedFrame): number {
-  return THREE.MathUtils.radToDeg(frame.drawnWay.angleTo(frame.keyedWay));
+  return Maths.radToDeg(frame.drawnWay.angleTo(frame.keyedWay));
 }
 
 /** How far the weapon's flat is drawn turned from its keyed one about the weapon's length (degrees; 0 where none was
@@ -53,10 +53,10 @@ function turnedOf(frame: KeyedFrame): number {
 function flatTurnedOf(frame: KeyedFrame): number {
   if (!frame.keyedFlat) return 0;
   const way = frame.drawnWay.clone().normalize();
-  const square = (flat: THREE.Vector3) => flat.clone().addScaledVector(way, -flat.dot(way));
+  const square = (flat: Vec3) => flat.clone().addScaledVector(way, -flat.dot(way));
   const keyed = square(frame.keyedFlat), drawn = square(frame.drawnFlat);
   if (keyed.lengthSq() < 1e-8 || drawn.lengthSq() < 1e-8) return 0;
-  return THREE.MathUtils.radToDeg(keyed.angleTo(drawn));
+  return Maths.radToDeg(keyed.angleTo(drawn));
 }
 
 /** A frame's keyed arm as words: each joint's miss, the weapon's and its flat's, the way (camera space) the elbow is
@@ -76,7 +76,7 @@ export function describeKeyedFrame(frame: KeyedFrame): string {
 }
 
 /** A point or a way as words, to the centimetre. */
-export function triple(v: THREE.Vector3): string {
+export function triple(v: Vec3): string {
   return `(${v.x.toFixed(2)}, ${v.y.toFixed(2)}, ${v.z.toFixed(2)})`;
 }
 
@@ -85,7 +85,7 @@ export interface KeyedSeen { frame: number; keyed: KeyedFrame | null }
 
 /** Whether a frame of `seen` wholly a swing's keys its grip further than `KEYED_NEAR` from `from` (camera space): an
  *  arm held still where it was there would be drawn off its keys. */
-export function keyedAway(seen: readonly KeyedSeen[], from: THREE.Vector3): boolean {
+export function keyedAway(seen: readonly KeyedSeen[], from: Vec3): boolean {
   const away = (keyed: KeyedFrame) => keyed.weight >= WHOLLY && keyed.keyed.grip.distanceTo(from) > KEYED_NEAR;
   return seen.some((now) => now.keyed !== null && away(now.keyed));
 }
@@ -139,7 +139,7 @@ interface KeyStep { moved: number; turned: number }
 function keyStep(before: KeyedFrame | null, now: KeyedFrame | null): KeyStep | null {
   if (!before || !now || before.hand !== now.hand) return null;
   const moved = now.keyed.grip.distanceTo(before.keyed.grip);
-  const turned = THREE.MathUtils.radToDeg(now.keyedWay.angleTo(before.keyedWay));
+  const turned = Maths.radToDeg(now.keyedWay.angleTo(before.keyedWay));
   return { moved, turned };
 }
 

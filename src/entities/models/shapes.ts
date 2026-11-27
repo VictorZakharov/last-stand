@@ -4,7 +4,7 @@
 // is built once per kind: later ones replay the merged geometry (see Sculpt), so spawning stays cheap.
 import {
   Attribute, Bone, CatmullRom3, Euler, floats, Geometry, LitMaterial, Mat4, Material, Maths, mergeGeometries,
-  mergeVertices, Mesh, MeshDepthMaterial, Node, Quat, Raycaster, RGBADepthPacking, Skeleton, SkinnedMesh, Vec2, Vec3,
+  mergeVertices, Mesh, Node, Quat, Raycaster, Skeleton, SkinnedMesh, Vec2, Vec3,
 } from '../../engine/api/index.ts';
 import * as shapes from '../../engine/api/shapes/index.ts';
 import { sameLooks } from '../../core/materials';
@@ -123,6 +123,23 @@ interface StillSkin {
 /** how thick a slab of a still skin is (m, up the forearm): a ray meets only its own slab's triangles */
 const STILL_SLAB = 0.004;
 const _still = new Vec3();
+const scratchBasis = new Vec3(), scratchSkinned = new Vec3();
+
+/** Vertex `i` of `skin` where its bones put it now, in its own space (as linear skinning poses it: three's
+ *  `getVertexPosition`), into `target`; `boneMatrices` each bone's world matrix after its inverse bind. */
+function posedVertex(skin: SkinnedMesh, boneMatrices: readonly Mat4[], i: number, target: Vec3): Vec3 {
+  const geometry = skin.geometry;
+  const index = geometry.attributes.skinIndex, weight = geometry.attributes.skinWeight;
+  scratchBasis.fromBufferAttribute(geometry.attributes.position, i).applyMatrix4(skin.bindMatrix);
+  target.set(0, 0, 0);
+  for (let k = 0; k < 4; k++) {
+    const share = weight.getComponent(i, k);
+    if (share === 0) continue;
+    const bone = boneMatrices[index.getComponent(i, k)];
+    target.addScaledVector(scratchSkinned.copy(scratchBasis).applyMatrix4(bone), share);
+  }
+  return target.applyMatrix4(skin.bindMatrixInverse);
+}
 
 /**
  * `skin` as it's drawn now, for the rays a wrap's lay casts at it, which run level in `elbow`'s frame: a skinned
@@ -135,8 +152,11 @@ function stillSkin(skin: Node, elbow: Node): StillSkin {
   if (!(skin instanceof SkinnedMesh)) return { slab: () => [skin], dispose: () => {} };
   const from = skin.geometry.attributes.position, count = from.count;
   const at = new Float32Array(count * 3), heights = new Float32Array(count);
+  const skeleton = skin.skeleton;
+  const boneMatrices = skeleton.bones.map((bone, n) => new Mat4().multiplyMatrices(bone.matrixWorld,
+    skeleton.boneInverses[n]));
   for (let i = 0; i < count; i++) {
-    skin.getVertexPosition(i, _still).applyMatrix4(skin.matrixWorld);
+    posedVertex(skin, boneMatrices, i, _still).applyMatrix4(skin.matrixWorld);
     at[i * 3] = _still.x;
     at[i * 3 + 1] = _still.y;
     at[i * 3 + 2] = _still.z;
@@ -572,9 +592,6 @@ const _m = new Mat4(), _q = new Quat(), _e = new Euler(), _s = new Vec3();
 const CACHE = new Map<string, Geometry[]>();
 /** Skin weights across joints (prototype, issue #85): `?skin=0` puts every spanning piece back on its one joint */
 export const SKINNING = typeof location === 'undefined' || !/[?&]skin=0/.test(location.search);
-/** The shadow pass draws every caster with one shared depth material, so a skinned caster among rigid ones made
- *  three rebuild that material's program parameters at each switch; skinned meshes get a depth material of their own */
-export const SKIN_DEPTH = new MeshDepthMaterial({ depthPacking: RGBADepthPacking });
 /** pieces smaller than this (bounding radius, m) cast no shadow: chain links, claws, charms */
 const SHADOW_MIN = 0.07;
 
@@ -759,17 +776,17 @@ export class Sculpt {
           if (this.kind) g.userData.shared = true;
         }
         made.push(g);
-        // its own copy of the material: one shared with rigid meshes makes three rebuild its program's
-        // parameters on every switch between the two (it was the whole cost of a crowd)
+        // its own copy of the material (kept from three, where one shared with rigid meshes rebuilt its program's
+        // parameters at every switch; the dye and the crowd find it by its looks, models/kitTwin.ts)
         let sm = twins.get(mat);
-        if (!sm) { twins.set(mat, sm = mat.clone()); sm.onBeforeCompile = mat.onBeforeCompile; sm.customProgramCacheKey = mat.customProgramCacheKey; sameLooks(sm, mat); }
+        if (!sm) {
+          twins.set(mat, sm = mat.clone());
+          sameLooks(sm, mat);
+        }
         const mesh = new SkinnedMesh(g, sm);
-        // (its sphere the bind pose's: three would pose every vertex for it at its first draw)
-        mesh.boundingSphere = g.boundingSphere!.clone();
         mesh.castShadow = !this.noShadow.has(mat) && g.boundingSphere!.radius > SHADOW_MIN;
         mesh.receiveShadow = true;
         mesh.frustumCulled = false;   // the bounds are the bind pose's
-        mesh.customDepthMaterial = SKIN_DEPTH;
         parent.add(mesh);
         mesh.updateWorldMatrix(true, false);
         mesh.bind(skeleton);

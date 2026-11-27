@@ -11,13 +11,13 @@
 // swordfighting/cuts.html); a two-hander's head, with several times a sword's moment of inertia, turns about 1/1.7 as
 // fast for the same work. An animator gives a heavy weapon a slower wind-up and recovery, and one arc with no kinks
 // in it: kinks and uneven spacing read as weightless.
-import * as THREE from 'three';
+import { Quat, Vec3 } from './sceneApi.ts';
 
 /** A frame of a held weapon's swing: where its blow lands (world), the way of its length (world), and where that point
  *  is on the screen (0..1 across and down) and whether it's in the frame. */
 export interface SwingFrame {
-  point: THREE.Vector3;
-  axis: THREE.Vector3;
+  point: Vec3;
+  axis: Vec3;
   x: number;
   y: number;
   on: boolean;
@@ -33,7 +33,7 @@ export interface Momentum {
   speed: number;
   turn: number;
   /** the way it turns about at its blow (world, a unit way: its plane's, and which way round) */
-  about: THREE.Vector3;
+  about: Vec3;
   /** how long its speed takes to build from `BUILT_FROM` of its fastest to it, and to die away from it to `DIES_TO`
    *  of it (ms; null: not within the frames) */
   rise: number | null;
@@ -114,9 +114,9 @@ function speedsOf(frames: SwingFrame[], frameMs: number): number[] {
  *  doesn't turn). */
 function turnsOf(frames: SwingFrame[]): Turn[] {
   return frames.map((frame, i) => {
-    if (!i) return { angle: 0, about: new THREE.Vector3() };
+    if (!i) return { angle: 0, about: new Vec3() };
     const before = frames[i - 1].axis;
-    const about = new THREE.Vector3().crossVectors(before, frame.axis);
+    const about = new Vec3().crossVectors(before, frame.axis);
     const angle = before.angleTo(frame.axis) * DEG;
     return { angle, about: about.lengthSq() > 1e-12 ? about.normalize() : about };
   });
@@ -131,7 +131,7 @@ function fastestNear(speeds: number[], near: number): number {
   return fastest;
 }
 
-type Turn = { angle: number; about: THREE.Vector3 };
+type Turn = { angle: number; about: Vec3 };
 
 /** Whether the weapon turns the other way round from its blow's on frame `i`, and more than all but still. */
 const turnsBack = (turns: Turn[], i: number, fastest: number) =>
@@ -393,12 +393,12 @@ function hurried(frames: SwingFrame[]): SwingFrame[] {
 /** The weapon tipped out of its plane each frame after `fastest` by as much again as it turns in it at its blow, the
  *  frames' screen places kept: lifted out of its plane as it moves on, half a right angle off it. */
 function lifted(frames: SwingFrame[], fastest: number): SwingFrame[] {
-  const about = new THREE.Vector3().crossVectors(frames[fastest].axis, frames[fastest + 1].axis).normalize();
-  const tip = new THREE.Vector3().crossVectors(about, frames[fastest].axis).normalize();
+  const about = new Vec3().crossVectors(frames[fastest].axis, frames[fastest + 1].axis).normalize();
+  const tip = new Vec3().crossVectors(about, frames[fastest].axis).normalize();
   const step = frames[fastest].axis.angleTo(frames[fastest + 1].axis);
   return frames.map((frame, i) => {
     if (i <= fastest) return frame;
-    const turn = new THREE.Quaternion().setFromAxisAngle(tip, (i - fastest) * step);
+    const turn = new Quat().setFromAxisAngle(tip, (i - fastest) * step);
     return { ...frame, axis: frame.axis.clone().applyQuaternion(turn) };
   });
 }

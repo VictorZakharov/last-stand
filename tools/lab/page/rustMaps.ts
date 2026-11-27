@@ -1,6 +1,6 @@
 // `lab rustcheck`'s checks of the maps the game hands the engine: a canvas nothing has drawn on (it stopped the
 // engine for good), and one painted after the engine first met it (the village's ground stayed white).
-import * as THREE from 'three';
+import { CanvasTexture, Mesh, shapes, Texture, UnlitMaterial, Vec3 } from './sceneApi.ts';
 import type { Lab } from './lab';
 import { type Checked, failed, passed } from './rustPixels';
 import { G } from '../../../src/state';
@@ -12,9 +12,9 @@ import { lookOf } from '../../../src/engine/custom';
 export async function blankCanvas(lab: Lab, bridge: Bridge): Promise<Checked> {
   const canvas = document.createElement('canvas');
   canvas.width = canvas.height = 32;
-  const map = new THREE.CanvasTexture(canvas);
-  const card = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 0.5), new THREE.MeshBasicMaterial({ map }));
-  card.position.copy(G.player.pos).add(new THREE.Vector3(0, 3, 0));
+  const map = new CanvasTexture(canvas);
+  const card = new Mesh(shapes.plane(0.5, 0.5), new UnlitMaterial({ map }));
+  card.position.copy(G.player.pos).add(new Vec3(0, 3, 0));
   G.scene.add(card);
   const drawing = lab.drawing;
   lab.drawing = true;
@@ -53,9 +53,9 @@ async function mapsTakenOver(lab: Lab, bridge: Bridge, frames: number): Promise<
 export async function mapPaintedLate(lab: Lab, bridge: Bridge): Promise<Checked> {
   const canvas = document.createElement('canvas');
   canvas.width = canvas.height = BLANK_WIDE;
-  const map = new THREE.CanvasTexture(canvas);
-  const card = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 0.5), new THREE.MeshBasicMaterial({ map }));
-  card.position.copy(G.player.pos).add(new THREE.Vector3(0, 3, 0));
+  const map = new CanvasTexture(canvas);
+  const card = new Mesh(shapes.plane(0.5, 0.5), new UnlitMaterial({ map }));
+  card.position.copy(G.player.pos).add(new Vec3(0, 3, 0));
   G.scene.add(card);
   const drawing = lab.drawing;
   lab.drawing = true;
@@ -85,10 +85,10 @@ export async function mapPaintedLate(lab: Lab, bridge: Bridge): Promise<Checked>
 }
 
 /** The maps of their own of the looks shown here (`RustLook.maps`): the village's ground's, its paving's. */
-function looksOwnMaps(): THREE.Texture[] {
-  const maps = new Set<THREE.Texture>();
+function looksOwnMaps(): Texture[] {
+  const maps = new Set<Texture>();
   G.scene.traverseVisible((object) => {
-    const mesh = object as THREE.Mesh;
+    const mesh = object as Mesh;
     if (!mesh.isMesh || Array.isArray(mesh.material)) return;
     const look = lookOf(mesh.material);
     if (!look || look.shared) return;
@@ -98,7 +98,7 @@ function looksOwnMaps(): THREE.Texture[] {
 }
 
 /** Every map of `maps` marked changed, as one painted again is. */
-function marked(maps: THREE.Texture[]): void {
+function marked(maps: Texture[]): void {
   for (const map of maps) map.needsUpdate = true;
 }
 

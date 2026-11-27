@@ -1,7 +1,7 @@
 // `lab rustcheck`'s checks of the fog over what the hero can't see, as the Rust engine draws it (`src/engine/
 // sightFog.ts`, Bulwark's watch.rs): what is no surface is gone there. From play: "smoke above campfire should
 // disappear instantly once it moves into fog of war".
-import * as THREE from 'three';
+import { Mesh, Node, Raycaster, Vec3 } from './sceneApi.ts';
 import type { Clip, Lab } from './lab';
 import { G } from '../../../src/state';
 import { RUST } from '../../../src/engine';
@@ -26,25 +26,25 @@ const EDGE = 0.9;
 /** the share of the pixels round a glow that it must change to count as shown */
 const SHOWN_SHARE = 0.03;
 
-const ray = new THREE.Raycaster();
+const ray = new Raycaster();
 
 /** Whether nothing of the scene's meshes stands between the camera and `place` (a roof over it, a wall before it). */
-function clearFromCamera(place: THREE.Vector3): boolean {
-  const from = G.camera.getWorldPosition(new THREE.Vector3());
+function clearFromCamera(place: Vec3): boolean {
+  const from = G.camera.getWorldPosition(new Vec3());
   const toward = place.clone().sub(from);
   const far = toward.length();
   ray.set(from, toward.normalize());
   ray.far = far - GLOW.wide;
-  const solid: THREE.Object3D[] = [];
+  const solid: Node[] = [];
   G.scene.traverseVisible((object) => {
-    const mesh = object as THREE.Mesh;
+    const mesh = object as Mesh;
     if (mesh.isMesh && !mesh.userData.particles) solid.push(mesh);
   });
   return ray.intersectObjects(solid, false).length === 0;
 }
 
 /** A place round the hero seen by `wanted` of it (0 unseen, 1 seen) and well within the screen, or null. */
-function placeSeen(wanted: number, tried: THREE.Vector3[] = []): THREE.Vector3 | null {
+function placeSeen(wanted: number, tried: Vec3[] = []): Vec3 | null {
   const hero = G.player.pos;
   // (under the engine three draws no scene, and nothing else keeps the camera's inverse for a projection)
   G.camera.updateMatrixWorld();
@@ -52,7 +52,7 @@ function placeSeen(wanted: number, tried: THREE.Vector3[] = []): THREE.Vector3 |
   for (let far = RING.from; far <= RING.to; far += RING.step) {
     for (let turn = 0; turn < RING.turns; turn++) {
       const angle = (turn / RING.turns) * Math.PI * 2;
-      const place = new THREE.Vector3(hero.x + Math.cos(angle) * far, hero.y + GLOW.up, hero.z + Math.sin(angle) * far);
+      const place = new Vec3(hero.x + Math.cos(angle) * far, hero.y + GLOW.up, hero.z + Math.sin(angle) * far);
       const around = [0, RING.clear, -RING.clear].flatMap((dx) => [0, RING.clear, -RING.clear].map((dz) => seenShareAt(place.x + dx, place.z + dz)));
       if (!around.every((seen) => Math.abs(seen - wanted) < 0.01)) continue;
       const onScreen = place.clone().project(G.camera);
@@ -64,7 +64,7 @@ function placeSeen(wanted: number, tried: THREE.Vector3[] = []): THREE.Vector3 |
 }
 
 /** The square of the page round a place of the world. */
-function clipRound(place: THREE.Vector3): Clip {
+function clipRound(place: Vec3): Clip {
   const onScreen = place.clone().project(G.camera);
   const x = (onScreen.x * 0.5 + 0.5) * window.innerWidth;
   const y = (0.5 - onScreen.y * 0.5) * window.innerHeight;
@@ -72,7 +72,7 @@ function clipRound(place: THREE.Vector3): Clip {
 }
 
 /** A still, bright cluster of the glow pool's particles hung at `place`. */
-function hangGlow(place: THREE.Vector3): void {
+function hangGlow(place: Vec3): void {
   const color = col(0xff40ff, GLOW.bright);
   for (let i = 0; i < GLOW.count; i++) {
     particles.glow.spawn({ x: place.x, y: place.y, z: place.z, life: 1e4, size: GLOW.wide, sizeEnd: GLOW.wide, color, colorEnd: color });
@@ -80,7 +80,7 @@ function hangGlow(place: THREE.Vector3): void {
 }
 
 /** The share of the pixels round `place` that a glow hung there changes. */
-async function glowShows(lab: Lab, place: THREE.Vector3, label: string): Promise<number> {
+async function glowShows(lab: Lab, place: Vec3, label: string): Promise<number> {
   const clip = clipRound(place);
   particles.clear();
   await lab.step(2);
@@ -103,7 +103,7 @@ export async function glowGoneInTheFog(lab: Lab): Promise<Checked> {
   // (by the campfire, the cottages over it: their walls hide the ground behind them)
   const was = { at: G.player.pos.clone(), facing: G.player.facing };
   const zoomWas = cameraTargetZoom();
-  G.player.place(new THREE.Vector3(CAMPFIRE[0] + BY_FIRE[0], was.at.y, CAMPFIRE[1] + BY_FIRE[1]), 0);
+  G.player.place(new Vec3(CAMPFIRE[0] + BY_FIRE[0], was.at.y, CAMPFIRE[1] + BY_FIRE[1]), 0);
   // (from further up: the ground the cottages hide is 10 m and more off, past the lobby's own view's edge)
   setZoom(ZOOM_OUT);
   try {
@@ -122,9 +122,9 @@ async function glowAtTheStand(lab: Lab): Promise<Checked> {
   if (!seen) return failed('no place in sight within the screen to hang a glow at');
   const inSight = await glowShows(lab, seen, 'in sight');
   // (a place out of sight that the camera sees: under a roof or a tree's crown a glow is hidden with the fog off too)
-  const tried: THREE.Vector3[] = [];
+  const tried: Vec3[] = [];
   let fogOff = 0;
-  let unseen: THREE.Vector3 | null = null;
+  let unseen: Vec3 | null = null;
   RUST.tune.sightFog = 0;
   try {
     while (tried.length < TRIES && fogOff < SHOWN_SHARE) {

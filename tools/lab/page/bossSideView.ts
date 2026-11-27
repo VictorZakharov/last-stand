@@ -4,7 +4,7 @@
 // across it, and one crop of the screen kept for a whole strip. With the camera and the crop both still, a foot
 // planted on the earth stays on the same pixels from frame to frame while the body passes over it: Victor judges
 // whether the movement could be so in life ("would not be possible irl"), which the top-down view can't show.
-import * as THREE from 'three';
+import { Vec3 } from './sceneApi.ts';
 import { screenArea, type Clip } from './lab';
 import { G } from '../../../src/state';
 import { groundHeight } from '../../../src/world/ground';
@@ -29,20 +29,20 @@ const DEPTH = 1.5;
 
 /** Where the camera stands and the point on the path it looks at. */
 export interface SideView {
-  pos: THREE.Vector3;
-  look: THREE.Vector3;
+  pos: Vec3;
+  look: Vec3;
 }
 
-const _normal = new THREE.Vector3();
+const _normal = new Vec3();
 
 /** The camera's place `distance` m to either side of `on` across the way `way`, at a man's eye, with a clear line to
  *  it (to `body` m short of it: the boss's own body stands there, and a rooted one is an obstacle), off the props and
  *  inside the wall: the side and distance nearest what's asked that is, slid `ahead` m along the way (looking back
  *  across it, to keep a prop by the path out of the shot). Throws where none is, saying why each was
  *  refused. */
-export function sideView(on: THREE.Vector3, way: THREE.Vector3, distance: number, body: number,
+export function sideView(on: Vec3, way: Vec3, distance: number, body: number,
   ahead = 0): SideView {
-  const across = new THREE.Vector3(way.z, 0, -way.x).normalize();
+  const across = new Vec3(way.z, 0, -way.x).normalize();
   const refused: string[] = [];
   for (const share of TRIED) {
     for (const side of [1, -1]) {
@@ -57,7 +57,7 @@ export function sideView(on: THREE.Vector3, way: THREE.Vector3, distance: number
         refused.push(`${at} past the wall`);
       } else {
         pos.y = groundHeight(pos.x, pos.z) + EYE;
-        const look = new THREE.Vector3(on.x, groundHeight(on.x, on.z) + LOOK_UP, on.z);
+        const look = new Vec3(on.x, groundHeight(on.x, on.z) + LOOK_UP, on.z);
         return { pos, look };
       }
     }
@@ -114,15 +114,15 @@ export function endSideView(): void {
 
 /** The crop kept for a strip: a box round the path from `from` `span` m along `way`, `reach` m before and after it,
  *  `DEPTH` m across and `high` m up, as the camera held at the side sees it (read once the camera has drawn a frame from there). */
-export function sideClip(from: THREE.Vector3, way: THREE.Vector3, span: number, reach: number, high: number): Clip {
-  const across = new THREE.Vector3(way.z, 0, -way.x).normalize();
-  const points: THREE.Vector3[] = [];
+export function sideClip(from: Vec3, way: Vec3, span: number, reach: number, high: number): Clip {
+  const across = new Vec3(way.z, 0, -way.x).normalize();
+  const points: Vec3[] = [];
   for (const along of [-reach, span + reach]) {
     // (only its middle's depth across: padded towards the camera as far as along, the box filled the screen)
     for (const off of [-DEPTH, DEPTH]) {
       const at = from.clone().addScaledVector(way, along).addScaledVector(across, off);
       const floor = groundHeight(at.x, at.z);
-      for (const y of [floor, floor + high]) points.push(new THREE.Vector3(at.x, y, at.z));
+      for (const y of [floor, floor + high]) points.push(new Vec3(at.x, y, at.z));
     }
   }
   return screenArea(points);

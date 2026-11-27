@@ -20,7 +20,7 @@
 // `rootPictures` (asked for alone): her fight's moments, a sheet for the eye. `--canary` plants a fault in each part:
 // her second phase's share moved, a vine that reaches no one, pods that never hatch, a great pod hatching the small
 // pod's brood, a heart that never opens.
-import * as THREE from 'three';
+import { Geometry, Mesh, Node, Vec3 } from './sceneApi.ts';
 import type { Lab, Pictured, ViewName } from './lab';
 import type { Enemy } from '../../../src/entities/enemy';
 import { G } from '../../../src/state';
@@ -44,7 +44,7 @@ const FPS = 60;
 const secondsOf = (frames: number): number => frames / FPS;
 
 /** where she grows: the arena's middle */
-const MIDDLE = new THREE.Vector3(0, 0, 0);
+const MIDDLE = new Vec3(0, 0, 0);
 /** the most frames she takes to rise, a vine to reach the hero, a pod to land and rise, an attack to land */
 const RISE_FRAMES = 200;
 const VINE_FRAMES = 8 * FPS;
@@ -84,7 +84,7 @@ export async function standClear(lab: Lab, options: BossOptions): Promise<void> 
   await standIn(lab, options.fixture, 'forest');
   for (let way = 0; way < Math.PI * 2; way += STAND_STEP) {
     const x = Math.sin(way) * STAND_OFF, z = Math.cos(way) * STAND_OFF;
-    const at = new THREE.Vector3(x, 0, z);
+    const at = new Vec3(x, 0, z);
     if (inObstacle(at, 1) || !lineClear(x, z, 0, 0, 0.6)) continue;
     await lab.setup({ ...options.fixture, at: [x, z], facing: Math.atan2(-x, -z) });
     return;
@@ -190,9 +190,9 @@ interface VineCase {
   cut: boolean;
   frames: number;
   /** where she stood as the vine held him, as it let him go, and at the end */
-  herAtHeld: THREE.Vector3 | null;
-  herAtFree: THREE.Vector3 | null;
-  herAtEnd: THREE.Vector3 | null;
+  herAtHeld: Vec3 | null;
+  herAtFree: Vec3 | null;
+  herAtEnd: Vec3 | null;
 }
 
 /** One vine sent at the hero standing still; `shoot` him shooting into it once it holds him. */
@@ -203,7 +203,7 @@ async function vineAt(lab: Lab, options: BossOptions, bow: BoundSkill | null): P
   const result: VineCase = {
     heldFrom: -1, heldTo: -1, loosedAt: -1, cut: false, frames: 0, herAtHeld: null, herAtFree: null, herAtEnd: null,
   };
-  let aim: THREE.Vector3 | null = null, pressFrom = -1;
+  let aim: Vec3 | null = null, pressFrom = -1;
   nextIs(boss, 'vines');
   const press = bow ? Math.round(holdFor(bow.def) * FPS) : 0;
   await lab.step(VINE_FRAMES, (f) => {
@@ -396,7 +396,7 @@ async function popped(lab: Lab, options: BossOptions, lines: string[], problems:
   const hero = G.player;
   const attack = hero.skillAt('mouse0')!.def;
   const melee = !attack.draw && !attack.speed;
-  const ahead = new THREE.Vector3(Math.sin(hero.facing), 0, Math.cos(hero.facing));
+  const ahead = new Vec3(Math.sin(hero.facing), 0, Math.cos(hero.facing));
   const pod = lab.spawnFoe(kind, hero.pos.clone().addScaledVector(ahead, melee ? POP_MELEE : POP_SHOT).setY(0));
   await lab.until(() => pod.spawning <= 0, RISE_FRAMES, 'the pod never rose');
   const before = alive(want.brood);
@@ -441,10 +441,10 @@ const FLANK = 1.25;
 const HEART_LINE = 'Her heart opens';
 
 /** Points on her in her own frame (`ahead` along her facing, `across` it, `up` over her feet), in the world. */
-function onHer(boss: Enemy, ahead: number, across: number, up: number): THREE.Vector3 {
+function onHer(boss: Enemy, ahead: number, across: number, up: number): Vec3 {
   const sin = Math.sin(boss.facing), cos = Math.cos(boss.facing);
   const x = boss.pos.x + sin * ahead + cos * across, z = boss.pos.z + cos * ahead - sin * across;
-  return new THREE.Vector3(x, boss.obj.position.y + up, z);
+  return new Vec3(x, boss.obj.position.y + up, z);
 }
 
 /** What became of her heart's opening: when it opened, its window, the banner's line, whether she attacked through
@@ -641,10 +641,10 @@ export async function rootCompiles(lab: Lab, options: BossOptions): Promise<numb
     fx('podBurst', h.x - 6, h.z + 5, 1);
     fx('spores', boss.id, h.x - 5, h.z, 0.5, 0, 3, 0);
     fx('bossWeak', boss.id, 2);
-    lab.spawnFoe('seedpod', new THREE.Vector3(h.x - 4, 0, h.z + 3));
-    lab.spawnFoe('bigpod', new THREE.Vector3(h.x - 7, 0, h.z + 2));
-    lab.spawnFoe('mossback', new THREE.Vector3(h.x - 6, 0, h.z + 6));
-    lab.spawnFoe('thornling', new THREE.Vector3(h.x - 5, 0, h.z + 4));
+    lab.spawnFoe('seedpod', new Vec3(h.x - 4, 0, h.z + 3));
+    lab.spawnFoe('bigpod', new Vec3(h.x - 7, 0, h.z + 2));
+    lab.spawnFoe('mossback', new Vec3(h.x - 6, 0, h.z + 6));
+    lab.spawnFoe('thornling', new Vec3(h.x - 5, 0, h.z + 4));
     G.arena.setShade(1, true);
     // (her root cage round the hero, its roots raised and closed, and her great root rising and falling on it)
     fx('cageWarn', boss.id, h.x, h.z, 0.3);
@@ -705,11 +705,11 @@ export function rootTtkLines(dps: number): string[] {
 const ROOT_TRIANGLES = 45_000;
 
 /** The triangles a model draws, by its meshes' geometries (each drawn once). */
-export function trianglesOf(root: THREE.Object3D): number {
-  const seen = new Set<THREE.BufferGeometry>();
+export function trianglesOf(root: Node): number {
+  const seen = new Set<Geometry>();
   let count = 0;
   root.traverse((object) => {
-    const mesh = object as THREE.Mesh;
+    const mesh = object as Mesh;
     // (a pool kept under a model but not its body, her root cage's: counted apart, `pooledTriangles`)
     if (!mesh.isMesh || seen.has(mesh.geometry) || mesh.userData.pooled) return;
     seen.add(mesh.geometry);
@@ -721,10 +721,10 @@ export function trianglesOf(root: THREE.Object3D): number {
 
 /** The triangles of the pools a model keeps but its body isn't (her root cage's roots and great root), as drawn: each
  *  mesh's own, however many share a geometry (they're shown at once). */
-export function pooledTriangles(root: THREE.Object3D): number {
+export function pooledTriangles(root: Node): number {
   let count = 0;
   root.traverse((object) => {
-    const mesh = object as THREE.Mesh;
+    const mesh = object as Mesh;
     if (!mesh.isMesh || !mesh.userData.pooled) return;
     const geometry = mesh.geometry;
     count += (geometry.index ? geometry.index.count : geometry.attributes.position.count) / 3;

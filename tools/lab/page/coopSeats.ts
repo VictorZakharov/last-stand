@@ -1,7 +1,7 @@
 // `lab coop --scenarios seats`' side on each page (node/coopSeats.mjs): a seat a partner sits on can't be used (from
 // the owner: "need to check if another player is already sitting, if yes, then cannot use an object", "it should work
 // in coop ofc (in village)"). The guest sits on a log round the village's campfire; the host, by it, points at it.
-import * as THREE from 'three';
+import { Ray, Vec3 } from './sceneApi.ts';
 import { G } from '../../../src/state';
 import { SIT } from '../../../src/entities/sitting';
 import { seatTopAt, type Seat } from '../../../src/world/seats';
@@ -27,7 +27,7 @@ export function coopStandBySeat(_lab: Lab, { index }: { index: number }): void {
   const { at, facing } = startOff(seatOf(index));
   G.player.walkTo = null;
   G.player.sitting.clear();
-  G.player.place(new THREE.Vector3(at[0], groundHeight(at[0], at[1]), at[1]), facing);
+  G.player.place(new Vec3(at[0], groundHeight(at[0], at[1]), at[1]), facing);
   faceCamera(facing);
   settleCamera(G.player.pos);
 }
@@ -61,8 +61,8 @@ export function coopPointAtSeat(_lab: Lab, { index, canary = false }: { index: n
   if (canary) for (const p of G.players) if (!p.local) p.remote.sit.w = p.remote.sit.before = 0;
   const seat = seatOf(index);
   const x = (seat.ax + seat.bx) / 2, z = (seat.az + seat.bz) / 2;
-  const from = new THREE.Vector3(x, seatTopAt(seat, x, z) + RAY_OVER, z);
-  const ray = new THREE.Ray(from, new THREE.Vector3(0, -1, 0));
+  const from = new Vec3(x, seatTopAt(seat, x, z) + RAY_OVER, z);
+  const ray = new Ray(from, new Vec3(0, -1, 0));
   const sitting = G.player.sitting;
   sitting.point(G.player, ray, STEP, true);
   const lit = sitting.pointed;

@@ -46,9 +46,9 @@ export class Spherical {
     return this;
   }
 
-  /** the point `v` */
-  setFromVector3(v: Vec3): this {
-    return this.setFromCartesianCoords(v.x, v.y, v.z);
+  /** the point `vector` */
+  setFromVector3(vector: Vec3): this {
+    return this.setFromCartesianCoords(vector.x, vector.y, vector.z);
   }
 
   /** the point `(x, y, z)` (both angles 0 at the origin) */

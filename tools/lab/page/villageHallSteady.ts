@@ -4,7 +4,9 @@
 // "actually all walls do": its inner walls stand on the lamp list's shelter's edge, and read on them each pixel's side
 // flipped, the walls between the torches' light and the street lamps'). `canary` reads each surface's side on it again,
 // as it was, and the walls must flicker again.
-import * as THREE from 'three';
+import {
+  Box3, Hit, InstancedMesh, Mat4, Mesh, Raycaster, shapes, SkinnedMesh, UnlitMaterial, Vec3,
+} from './sceneApi.ts';
 import type { Lab } from './lab';
 import { G } from '../../../src/state';
 import { holdHour } from '../../../src/game/clock';
@@ -73,10 +75,10 @@ function jumpedAsTheViewMoves(lab: Lab): { share: number; box: string } {
 
 /** A sheet in the hall's floor's own plane, of another colour and turned so its pixels can't agree with the floor's: a
  *  surface left in that plane, as the terrace's paving was. */
-function coplanarSheet(): THREE.Mesh {
-  const sheet = new THREE.Mesh(
-    new THREE.PlaneGeometry(SHEET, SHEET).rotateX(-Math.PI / 2),
-    new THREE.MeshBasicMaterial({ color: 0xff00ff }),
+function coplanarSheet(): Mesh {
+  const sheet = new Mesh(
+    shapes.plane(SHEET, SHEET).rotateX(-Math.PI / 2),
+    new UnlitMaterial({ color: 0xff00ff }),
   );
   sheet.position.set(TERRACE.x, TERRACE.high + 0.005, HALL.door - SHEET / 2);
   G.scene.add(sheet);
@@ -84,11 +86,11 @@ function coplanarSheet(): THREE.Mesh {
 }
 
 /** Every mesh drawn in the scene but what moves on its bones or stands in many places, whose faces a ray can't read. */
-function stillMeshes(): THREE.Mesh[] {
-  const meshes: THREE.Mesh[] = [];
+function stillMeshes(): Mesh[] {
+  const meshes: Mesh[] = [];
   G.scene.traverseVisible((object) => {
-    const mesh = object as THREE.Mesh;
-    const manyPlaces = (mesh as THREE.SkinnedMesh).isSkinnedMesh || (mesh as THREE.InstancedMesh).isInstancedMesh;
+    const mesh = object as Mesh;
+    const manyPlaces = (mesh as SkinnedMesh).isSkinnedMesh || (mesh as InstancedMesh).isInstancedMesh;
     if (mesh.isMesh && !manyPlaces) meshes.push(mesh);
   });
   // (cut into chunks for the rays: sent at the merged meshes whole, 27 thousand of them took 55 s)
@@ -97,13 +99,13 @@ function stillMeshes(): THREE.Mesh[] {
 
 /** The places over the hall's floor, from its door to its dais, with a second surface in the top one's plane. */
 function placesInOnePlane(): string[] {
-  const down = new THREE.Vector3(0, -1, 0);
+  const down = new Vec3(0, -1, 0);
   const meshes = stillMeshes();
   const places: string[] = [];
   for (let z = HALL.door - FLOOR_STEP / 2; z > HALL.daisZ; z -= FLOOR_STEP) {
     for (let x = TERRACE.x - HALL.inHalf + FLOOR_STEP / 2; x < TERRACE.x + HALL.inHalf; x += FLOOR_STEP) {
-      const from = new THREE.Vector3(x, TERRACE.high + OVER_FLOOR, z);
-      const hits = new THREE.Raycaster(from, down, 0, OVER_FLOOR + 1).intersectObjects(meshes, false);
+      const from = new Vec3(x, TERRACE.high + OVER_FLOOR, z);
+      const hits = new Raycaster(from, down, 0, OVER_FLOOR + 1).intersectObjects(meshes, false);
       const floor = hits.findIndex((hit) => Math.abs(hit.point.y - TERRACE.high) < 0.1);
       const next = floor < 0 ? undefined : hits[floor + 1];
       if (next && hits[floor].distance + SAME_PLANE > next.distance) places.push(`${x.toFixed(1)},${z.toFixed(1)}`);
@@ -142,7 +144,7 @@ const HALL_TOP = 11;
 const PLACES_SAID = 14;
 
 /** A ray at the hall: from where, which way. */
-type HallRay = [THREE.Vector3, THREE.Vector3];
+type HallRay = [Vec3, Vec3];
 
 /** A building's box to send rays at: its least and most x and z, its floor and its top, and bands thinner than a
  *  step. */
@@ -188,46 +190,46 @@ function raysAt(building: Building): HallRay[] {
   const rays: HallRay[] = [];
   for (let x = west + 0.013; x < east; x += SIDE_STEP) {
     for (let z = back + 0.017; z < front; z += SIDE_STEP) {
-      rays.push([new THREE.Vector3(x, top + RAY_OFF, z), new THREE.Vector3(0, -1, 0)]);
+      rays.push([new Vec3(x, top + RAY_OFF, z), new Vec3(0, -1, 0)]);
     }
     for (let y = floor + 0.011; y < top; y += SIDE_STEP) {
-      rays.push([new THREE.Vector3(x, y, front + RAY_OFF), new THREE.Vector3(0, 0, -1)]);
-      rays.push([new THREE.Vector3(x, y, back - RAY_OFF), new THREE.Vector3(0, 0, 1)]);
+      rays.push([new Vec3(x, y, front + RAY_OFF), new Vec3(0, 0, -1)]);
+      rays.push([new Vec3(x, y, back - RAY_OFF), new Vec3(0, 0, 1)]);
     }
     for (const up of bands) {
-      rays.push([new THREE.Vector3(x, floor + up, front + RAY_OFF), new THREE.Vector3(0, 0, -1)]);
-      rays.push([new THREE.Vector3(x, floor + up, back - RAY_OFF), new THREE.Vector3(0, 0, 1)]);
+      rays.push([new Vec3(x, floor + up, front + RAY_OFF), new Vec3(0, 0, -1)]);
+      rays.push([new Vec3(x, floor + up, back - RAY_OFF), new Vec3(0, 0, 1)]);
     }
   }
   for (let z = back + 0.017; z < front; z += SIDE_STEP) {
     for (let y = floor + 0.011; y < top; y += SIDE_STEP) {
-      rays.push([new THREE.Vector3(west - RAY_OFF, y, z), new THREE.Vector3(1, 0, 0)]);
-      rays.push([new THREE.Vector3(east + RAY_OFF, y, z), new THREE.Vector3(-1, 0, 0)]);
+      rays.push([new Vec3(west - RAY_OFF, y, z), new Vec3(1, 0, 0)]);
+      rays.push([new Vec3(east + RAY_OFF, y, z), new Vec3(-1, 0, 0)]);
     }
   }
   return rays;
 }
 
 /** Which way a face a ray met looks, in the world. */
-function worldFacing(hit: THREE.Intersection): THREE.Vector3 {
+function worldFacing(hit: Hit): Vec3 {
   if (!hit.face) throw new Error('lab: village: a ray met no face');
   return hit.face.normal.clone().transformDirection(hit.object.matrixWorld);
 }
 
 /** A face's triangle's sides (m): what it's part of, as a merged mesh has no other name for it. */
-function faceSize(hit: THREE.Intersection): string {
+function faceSize(hit: Hit): string {
   const { face } = hit;
-  const position = (hit.object as THREE.Mesh).geometry.getAttribute('position');
+  const position = (hit.object as Mesh).geometry.getAttribute('position');
   if (!face || !position) throw new Error('lab: village: a ray met no face');
-  const corners = [face.a, face.b, face.c].map((corner) => new THREE.Vector3().fromBufferAttribute(position, corner));
+  const corners = [face.a, face.b, face.c].map((corner) => new Vec3().fromBufferAttribute(position, corner));
   const sides = corners.map((corner, i) => corner.distanceTo(corners[(i + 1) % 3])).sort((a, b) => a - b);
   return `${sides[0].toFixed(2)}x${sides[1].toFixed(2)}`;
 }
 
 /** Whether a ray goes on, to the eye, past a face it met: a roof or a wall the hall thins is seen through from
  *  above. */
-function seenPast(hit: THREE.Intersection): boolean {
-  const { material } = hit.object as THREE.Mesh;
+function seenPast(hit: Hit): boolean {
+  const { material } = hit.object as Mesh;
   return !Array.isArray(material) && seenThroughFromAbove(material);
 }
 
@@ -235,8 +237,8 @@ function seenPast(hit: THREE.Intersection): boolean {
  *  only at its first face, the ceiling's top and the portico's beam's, in one plane under the roof's ghost, went
  *  unseen,
  *  from play, "this surface still flickers". */
-function firstInOnePlane(ray: HallRay, meshes: THREE.Mesh[]): { plane: string; at: THREE.Vector3 } | null {
-  const hits = new THREE.Raycaster(ray[0], ray[1], 0, RAY_OFF * 3).intersectObjects(meshes, false);
+function firstInOnePlane(ray: HallRay, meshes: Mesh[]): { plane: string; at: Vec3 } | null {
+  const hits = new Raycaster(ray[0], ray[1], 0, RAY_OFF * 3).intersectObjects(meshes, false);
   for (let at = 0; at + 1 < hits.length; at++) {
     const first = hits[at];
     const next = hits[at + 1];
@@ -253,9 +255,9 @@ function firstInOnePlane(ray: HallRay, meshes: THREE.Mesh[]): { plane: string; a
 
 /** Whether rays a hair to each side meet two faces in one plane as well: one that lands on the seam between two stones
  *  or on a triangle's diagonal meets both, with nothing to fight, and the rays beside it meet one. */
-function stillTwoBeside(ray: HallRay, meshes: THREE.Mesh[]): boolean {
-  const across = Math.abs(ray[1].y) > 0.5 ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 1, 0);
-  const along = new THREE.Vector3().crossVectors(ray[1], across);
+function stillTwoBeside(ray: HallRay, meshes: Mesh[]): boolean {
+  const across = Math.abs(ray[1].y) > 0.5 ? new Vec3(1, 0, 0) : new Vec3(0, 1, 0);
+  const along = new Vec3().crossVectors(ray[1], across);
   for (const [a, b] of [[1, 1], [1, -1], [-1, 1], [-1, -1]]) {
     const from = ray[0].clone().addScaledVector(across, a * BESIDE).addScaledVector(along, b * BESIDE);
     if (!firstInOnePlane([from, ray[1]], meshes)) return false;
@@ -264,26 +266,26 @@ function stillTwoBeside(ray: HallRay, meshes: THREE.Mesh[]): boolean {
 }
 
 /** The planes `places` lie in, each with how many and the box they fill. */
-function planesSaid(places: { plane: string; at: THREE.Vector3 }[]): string {
-  const planes = new Map<string, { count: number; box: THREE.Box3 }>();
+function planesSaid(places: { plane: string; at: Vec3 }[]): string {
+  const planes = new Map<string, { count: number; box: Box3 }>();
   for (const { plane, at } of places) {
-    const read = planes.get(plane) ?? { count: 0, box: new THREE.Box3() };
+    const read = planes.get(plane) ?? { count: 0, box: new Box3() };
     read.count++;
     read.box.expandByPoint(at);
     planes.set(plane, read);
   }
-  const edge = (at: THREE.Vector3): string => `${at.x.toFixed(1)},${at.y.toFixed(1)},${at.z.toFixed(1)}`;
+  const edge = (at: Vec3): string => `${at.x.toFixed(1)},${at.y.toFixed(1)},${at.z.toFixed(1)}`;
   return [...planes].sort((a, b) => b[1].count - a[1].count).slice(0, PLACES_SAID)
     .map(([plane, read]) => `${plane} ${read.count}x ${edge(read.box.min)}..${edge(read.box.max)}`).join('; ');
 }
 
 /** A sheet in the plane of the portico's beam's face. */
-function beamFaceSheet(): THREE.Mesh {
-  const ray = new THREE.Raycaster(new THREE.Vector3(TERRACE.x, TERRACE.high + 0.72 + 5.2 + 0.2, HALL.door + 8),
-    new THREE.Vector3(0, 0, -1));
+function beamFaceSheet(): Mesh {
+  const ray = new Raycaster(new Vec3(TERRACE.x, TERRACE.high + 0.72 + 5.2 + 0.2, HALL.door + 8),
+    new Vec3(0, 0, -1));
   const face = ray.intersectObjects(stillMeshes(), false)[0];
   if (!face) throw new Error('lab: village: no beam before the hall');
-  const sheet = new THREE.Mesh(new THREE.PlaneGeometry(4, 2), new THREE.MeshBasicMaterial({ color: 0xff00ff }));
+  const sheet = new Mesh(shapes.plane(4, 2), new UnlitMaterial({ color: 0xff00ff }));
   sheet.position.set(face.point.x, face.point.y, face.point.z - 0.0002);
   G.scene.add(sheet);
   return sheet;
@@ -300,7 +302,7 @@ export async function hallFacesSteady(lab: Lab, canary: boolean): Promise<Lights
     G.scene.updateMatrixWorld(true);
     const meshes = stillMeshes();
     const rays = buildings().flatMap(raysAt);
-    const places: { plane: string; at: THREE.Vector3 }[] = [];
+    const places: { plane: string; at: Vec3 }[] = [];
     for (const ray of rays) {
       const place = firstInOnePlane(ray, meshes);
       if (place && stillTwoBeside(ray, meshes)) places.push(place);
@@ -324,14 +326,14 @@ const SHEET_UNDER = 0.0002;
 
 /** The places on the hall's windows' sills with a second surface in the top one's plane. */
 function sillsInOnePlane(): string[] {
-  const down = new THREE.Vector3(0, -1, 0);
+  const down = new Vec3(0, -1, 0);
   const meshes = stillMeshes();
   const places: string[] = [];
   for (const sill of hallSills()) {
     for (const across of SILL_ACROSS) {
       for (const along of SILL_ALONG) {
-        const from = new THREE.Vector3(sill.x + across * sill.deep, sill.y + OVER_SILL, sill.z + along * sill.wide);
-        const hits = new THREE.Raycaster(from, down, 0, OVER_SILL * 2).intersectObjects(meshes, false);
+        const from = new Vec3(sill.x + across * sill.deep, sill.y + OVER_SILL, sill.z + along * sill.wide);
+        const hits = new Raycaster(from, down, 0, OVER_SILL * 2).intersectObjects(meshes, false);
         if (!hits.length) throw new Error(`lab: village: no sill under ${from.x.toFixed(1)}, ${from.z.toFixed(1)}`);
         const next = hits[1];
         if (next && hits[0].distance + SAME_PLANE > next.distance) {
@@ -349,13 +351,13 @@ function sillsInOnePlane(): string[] {
 export async function hallSillsSteady(lab: Lab, canary: boolean): Promise<LightsChecked> {
   await viewBy(lab, viewMode());
   const [sill] = hallSills();
-  let sheet: THREE.Mesh | null = null;
+  let sheet: Mesh | null = null;
   if (canary) {
-    sheet = new THREE.Mesh(
-      new THREE.PlaneGeometry(SILL_SHEET, SILL_SHEET).rotateX(-Math.PI / 2),
-      new THREE.MeshBasicMaterial({ color: 0xff00ff }),
+    sheet = new Mesh(
+      shapes.plane(SILL_SHEET, SILL_SHEET).rotateX(-Math.PI / 2),
+      new UnlitMaterial({ color: 0xff00ff }),
     );
-    const top = new THREE.Raycaster(new THREE.Vector3(sill.x, sill.y + OVER_SILL, sill.z), new THREE.Vector3(0, -1, 0));
+    const top = new Raycaster(new Vec3(sill.x, sill.y + OVER_SILL, sill.z), new Vec3(0, -1, 0));
     const met = top.intersectObjects(stillMeshes(), false)[0];
     sheet.position.set(sill.x + SILL_ACROSS[1] * sill.deep, met.point.y - SHEET_UNDER, sill.z);
     G.scene.add(sheet);
@@ -377,7 +379,7 @@ export async function hallWallsSteady(lab: Lab, canary: boolean): Promise<Lights
   const kept = viewMode();
   holdHour(0);
   try {
-    const at = new THREE.Vector3(TERRACE.x, 0, HALL.door - IN_FROM);
+    const at = new Vec3(TERRACE.x, 0, HALL.door - IN_FROM);
     at.y = groundHeight(at.x, at.z);
     await viewBy(lab, 'third');
     G.player.walkTo = null;
@@ -413,8 +415,8 @@ const LINE_SETTLE = 240;
 const MOST_LINE_JUMP = 0.02;
 
 /** The hero stood just in or out of the door's line (`inside`), the camera kept where it is. */
-function standAtLine(inside: boolean, camera: THREE.Matrix4): void {
-  const at = new THREE.Vector3(TERRACE.x, 0, HALL.door + (inside ? -ACROSS_LINE : ACROSS_LINE));
+function standAtLine(inside: boolean, camera: Mat4): void {
+  const at = new Vec3(TERRACE.x, 0, HALL.door + (inside ? -ACROSS_LINE : ACROSS_LINE));
   at.y = groundHeight(at.x, at.z);
   G.player.walkTo = null;
   G.player.place(at, Math.PI);
@@ -422,7 +424,7 @@ function standAtLine(inside: boolean, camera: THREE.Matrix4): void {
 }
 
 /** The camera put back where `camera` had it: what moves the frame is then the door's line alone. */
-function holdCamera(camera: THREE.Matrix4): void {
+function holdCamera(camera: Mat4): void {
   camera.decompose(G.camera.position, G.camera.quaternion, G.camera.scale);
   G.camera.updateMatrixWorld(true);
   // (the fog told too: it places each pixel by the camera, and left at the game's, it read the frame 0.3 m off)
@@ -494,7 +496,7 @@ export async function doorLineSteady(lab: Lab, canary: boolean): Promise<LightsC
   holdDoorLineAtOnce(canary);
   try {
     await viewBy(lab, 'top');
-    const camera = new THREE.Matrix4();
+    const camera = new Mat4();
     standAtLine(false, camera.copy(G.camera.matrixWorld));
     faceCamera(Math.PI);
     await lab.step(LINE_SETTLE);

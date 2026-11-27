@@ -10,8 +10,8 @@
 // none. Its pieces stay where they hang, on a layer no camera draws (`CROWD_LAYER`), for what reads them (an arrow
 // lodged in one, the aim's hulls, the outline). `--tune bodyAsOne.on=0` draws each piece on its own again.
 import {
-  AttachedBindMode, Attribute, Bone, DetachedBindMode, Frustum, Geometry, Mat3, Mat4, Material, Mesh, Node, Skeleton,
-  SkinnedMesh, Sphere,
+  AttachedBindMode, Attribute, Bone, DetachedBindMode, Geometry, Mat3, Mat4, Material, Mesh, Node, Skeleton,
+  SkinnedMesh,
 } from '../../engine/api/index.ts';
 import { G } from '../../state';
 import { CROWD_LAYER } from '../../core/layers';
@@ -71,16 +71,13 @@ const drawn = new Map<CrowdBody, Drawn>();
  *  arrow's lodging) walk its meshes */
 let holder: Node | null = null;
 const IDENTITY = new Mat4();
-/** how far past the camera's view a body is still drawn, m: for its shadow, which falls into the view from off it */
+/** how far past the camera's view a body is still drawn, m (the engine culls it by its reach and this): for its
+ *  shadow, which falls into the view from off it */
 const SHADOW_MARGIN = 8;
 /** a body's reach past its bind pose's, for a limb flung out in a blow or a fall */
 const REACH_SLACK = 1.5;
-const frustum = new Frustum();
-const viewed = new Mat4();
-const lastViewed = new Mat4();
-const sphere = new Sphere();
-const _m = new Mat4();
-const _n = new Mat3();
+const scratchPlace = new Mat4();
+const scratchNormalMatrix = new Mat3();
 
 /** The group the bodies' meshes hang under, added to the scene the first time it's asked for. */
 function holderOf(): Node {
@@ -109,39 +106,6 @@ function madeAside<T>(make: () => T): T {
   } finally {
     Math.random = random;
   }
-}
-
-/** The camera's view as a frustum, made again only when the camera has moved. */
-function cameraFrustum(): Frustum {
-  const camera = G.camera;
-  viewed.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
-  if (!viewed.equals(lastViewed)) {
-    lastViewed.copy(viewed);
-    frustum.setFromProjectionMatrix(viewed);
-  }
-  return frustum;
-}
-
-/**
- * Whether a body of `kind` at `root` is near enough the camera's view to be drawn: the engine culls no skinned mesh,
- * and a body drawn as one is skinned, where its pieces were culled each on its own (drawn off the view, wave 36's
- * foes were 40% more triangles). Its sphere is padded by its shadow's reach, which the engine's sun view had culled.
- */
-function nearView(kind: Kind, root: Node): boolean {
-  // (read off its matrix as the frame placed it: \`getWorldPosition\` made the body's chain of matrices again for each
-  // of its meshes, every frame)
-  sphere.center.setFromMatrixPosition(root.matrixWorld);
-  sphere.radius = kind.reach * root.matrixWorld.getMaxScaleOnAxis() + REACH_SLACK + SHADOW_MARGIN;
-  return cameraFrustum().intersectsSphere(sphere);
-}
-
-/** Whether `root` is shown in the scene: it and everything over it visible, up to the scene. */
-function shownInScene(root: Node): boolean {
-  for (let at: Node | null = root; at; at = at.parent) {
-    if (!at.visible) return false;
-    if (at === G.scene) return true;
-  }
-  return false;
 }
 
 /** The kind of `model` (its pieces `pieces`) merged: its joints, and each slot's geometry. Null where its skinned
@@ -213,10 +177,10 @@ function merged(list: Part[], rootInv: Mat4, colours: boolean): Geometry {
   list.forEach(({ mesh, joint }, n) => {
     const geometry = flat[n];
     const skin = joint < 0 ? mesh as SkinnedMesh : null;
-    const place = skin ? _m.copy(skin.bindMatrix) : _m.multiplyMatrices(rootInv, mesh.matrixWorld);
-    _n.getNormalMatrix(place);
+    const place = skin ? scratchPlace.copy(skin.bindMatrix) : scratchPlace.multiplyMatrices(rootInv, mesh.matrixWorld);
+    scratchNormalMatrix.getNormalMatrix(place);
     placeAll(geometry.attributes.position, place, position, at);
-    turnAll(geometry.attributes.normal, _n, normal, at);
+    turnAll(geometry.attributes.normal, scratchNormalMatrix, normal, at);
     const uvs = geometry.attributes.uv;
     for (let i = 0; i < geometry.attributes.position.count; i++, at++) {
       if (uvs) {
@@ -267,8 +231,9 @@ function slotMesh(kind: Kind, slot: number, body: CrowdBody, pieces: Mesh[], ske
   mesh.layers.mask = piece.layers.mask;
   // (casting as its pieces do now: the quality's level sets theirs, `core/quality.ts`, and at Very low no foe casts)
   Object.defineProperty(mesh, 'castShadow', { get: () => piece.castShadow && body.castsShadow, set: () => undefined });
-  const shown = (): boolean => shownInScene(model.root) && nearView(kind, model.root);
-  Object.defineProperty(mesh, 'visible', { get: shown, set: () => undefined });
+  // (drawn on its body's root's node, shown as it is and culled there by the body's reach: `engine/draws.ts`)
+  mesh.userData.drawnOn = model.root;
+  mesh.userData.reach = kind.reach + REACH_SLACK + SHADOW_MARGIN;
   return mesh;
 }
 

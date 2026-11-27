@@ -6,7 +6,7 @@
 // flickering, pls lower". Its canary lights the crystal's colour as main lit it. `--lobby`: the hero as he stands in
 // the lobby instead, the run's camera on him ("staff still flickers at its brightest peak", the tip of it), its
 // canary the gem's glow three times over for a second.
-import * as THREE from 'three';
+import { LitMaterial, Maths, Mesh, Node, PerspectiveCamera, Vec3 } from './sceneApi.ts';
 import { G } from '../../../src/state';
 import * as hall from '../../../src/game/hall';
 import type { Lab, Pictured, Report, Tile } from './lab';
@@ -84,17 +84,17 @@ export function glowOf(canvas: Canvas, frame: number): FrameGlow {
 
 /** The canvas's box `across` m wide round `point` as the game's camera sees it (drawing buffer pixels, from its
  *  bottom left), kept inside the canvas. */
-export function boxRound(point: THREE.Vector3, across: number): CanvasBox {
-  const camera = G.camera as THREE.PerspectiveCamera;
+export function boxRound(point: Vec3, across: number): CanvasBox {
+  const camera = G.camera as PerspectiveCamera;
   const { width, height } = canvasSize();
   const distance = point.distanceTo(camera.position);
-  const perMetre = height / (2 * distance * Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2));
+  const perMetre = height / (2 * distance * Math.tan(Maths.degToRad(camera.fov) / 2));
   const side = Math.min(width, height, Math.max(8, Math.round(across * perMetre)));
   const ndc = point.clone().project(camera);
   const middleX = (ndc.x + 1) / 2 * width;
   const middleY = (ndc.y + 1) / 2 * height;
-  const left = THREE.MathUtils.clamp(Math.round(middleX - side / 2), 0, width - side);
-  const bottom = THREE.MathUtils.clamp(Math.round(middleY - side / 2), 0, height - side);
+  const left = Maths.clamp(Math.round(middleX - side / 2), 0, width - side);
+  const bottom = Maths.clamp(Math.round(middleY - side / 2), 0, height - side);
   return { left, bottom, width: side, height: side };
 }
 
@@ -121,12 +121,12 @@ export function tileOf(view: string, canvas: Canvas): Tile {
 
 /** The gems under `tip` that glow (a physical material with a glow of its own, not a glow alone as the crystal's
  *  rings are): the staff's crystal. */
-export function glowingGemsUnder(tip: THREE.Object3D): THREE.MeshPhysicalMaterial[] {
-  const found = new Set<THREE.MeshPhysicalMaterial>();
+export function glowingGemsUnder(tip: Node): LitMaterial[] {
+  const found = new Set<LitMaterial>();
   tip.traverse((object) => {
-    const material = (object as THREE.Mesh).material as THREE.MeshPhysicalMaterial | undefined;
+    const material = (object as Mesh).material as LitMaterial | undefined;
     const glows = !!material?.emissive && material.emissive.getHex() !== 0 && material.emissiveIntensity > 0;
-    if (glows && material!.isMeshPhysicalMaterial) found.add(material!);
+    if (glows && material!.isLitMaterial) found.add(material!);
   });
   return [...found];
 }
@@ -140,7 +140,7 @@ const MAINS_POLISH = { roughness: 0.05, clearcoat: 1, clearcoatRoughness: 0, spe
 
 /** Each of `gems` lit as main lit the crystal: its colour its glow's hue, its brightest channel full (main's crystal
  *  was 0xff4fd8 both ways), and polished as main's; returns a way to put them back. */
-export function lightAsMain(gems: THREE.MeshPhysicalMaterial[]): () => void {
+export function lightAsMain(gems: LitMaterial[]): () => void {
   const kept = gems.map((gem) => ({
     colour: gem.color.clone(),
     roughness: gem.roughness,
@@ -189,7 +189,7 @@ interface Pictures {
 interface Read {
   id: string;
   model: Model;
-  tip: THREE.Object3D;
+  tip: Node;
   /** whether his showcase has begun (the lobby's: from the start) */
   shown: () => boolean;
 }
@@ -212,7 +212,7 @@ async function hallHero(lab: Lab): Promise<Read | null> {
 }
 
 /** Each of `gems` glowing `times` over its own (the lobby's canary), set after the hero's animation set it. */
-function brighten(gems: THREE.MeshPhysicalMaterial[], times: number): void {
+function brighten(gems: LitMaterial[], times: number): void {
   for (const gem of gems) gem.emissiveIntensity *= times;
 }
 
@@ -232,8 +232,8 @@ export async function hallGlow(lab: Lab, options: HallGlowOptions): Promise<Repo
   let leastSoFar = Infinity;
   let flareSoFar = -1;
   let shownAt = -1;
-  const point = new THREE.Vector3();
-  const pictured = (view: string, at: THREE.Vector3): Tile => tileOf(view, drawFrame(lab, boxRound(at, PICTURED_BOX)));
+  const point = new Vec3();
+  const pictured = (view: string, at: Vec3): Tile => tileOf(view, drawFrame(lab, boxRound(at, PICTURED_BOX)));
   try {
     await lab.step(FRAMES, undefined, () => {
       if (shownAt < 0 && hero.shown()) shownAt = frame;

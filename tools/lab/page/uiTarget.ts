@@ -3,7 +3,7 @@
 // the game shows it: the engine's frame's words and box where the tree has it, the page's `#target` where it hasn't
 // (main's, for --ab), and pictured round where it stands, under the wave's badge. The canary aims the mouse away from
 // every foe, and the frame must be found not shown.
-import * as THREE from 'three';
+import { Vec3 } from './sceneApi.ts';
 import { G } from '../../../src/state';
 import { uiScales } from '../../../src/ui/scale';
 import type { Enemy } from '../../../src/entities/enemy';
@@ -61,8 +61,8 @@ export function onFoe(): Frame {
   if (!aimed) return {};
   const hero = G.player.pos;
   aimed.pos.set(hero.x + BESIDE, aimed.pos.y, hero.z);
-  if (away) return { aim: new THREE.Vector3(hero.x - AWAY, 0, hero.z - AWAY) };
-  return { aim: new THREE.Vector3(aimed.pos.x, 0, aimed.pos.z) };
+  if (away) return { aim: new Vec3(hero.x - AWAY, 0, hero.z - AWAY) };
+  return { aim: new Vec3(aimed.pos.x, 0, aimed.pos.z) };
 }
 
 /** whether the canary aims away from every foe */

@@ -4,7 +4,7 @@
 // than a run takes him is a jump (the wall threw him: kept off each stretch of its line alone, a body past one's end
 // in a gap was put back on its inner side, metres in a frame); wherever he stops, he walks back in to the middle,
 // and one that can't is stuck. `--canary` plants a jump and a stuck stop: both must be caught.
-import * as THREE from 'three';
+import { Vec3 } from './sceneApi.ts';
 import type { Lab, Report } from './lab';
 import { BIOME_IDS, type BiomeId } from '../../../src/data/biomes';
 import { G } from '../../../src/state';
@@ -98,7 +98,7 @@ async function putAt(lab: Lab, angle: number): Promise<void> {
   // (a tree from before the wall was drawn (#290) has no `wall`: its ring stood at the face)
   const wall = G.arena.wall as typeof G.arena.wall | undefined;
   const out = (wall?.reachAt(Math.cos(angle), Math.sin(angle)) ?? WALL_R) - START_IN;
-  G.player.place(new THREE.Vector3(Math.cos(angle) * out, 0, Math.sin(angle) * out), 0);
+  G.player.place(new Vec3(Math.cos(angle) * out, 0, Math.sin(angle) * out), 0);
   G.player.vel.set(0, 0, 0);
   await lab.step(SETTLE_FRAMES, () => ({ stick: [0, 0] }));
 }

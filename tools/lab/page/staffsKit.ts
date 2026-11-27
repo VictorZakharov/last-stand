@@ -1,6 +1,6 @@
 // What `staffs`' parts share (page/staffs.ts, page/staffsThread.ts): a part's findings, a point before the hero and
 // his skill as his gear has it.
-import * as THREE from 'three';
+import { Vec3 } from './sceneApi.ts';
 import type { Lab, Pictured } from './lab';
 import type { SkillDef } from '../../../src/types';
 
@@ -15,9 +15,9 @@ export interface Found {
 export const emptyFound = (): Found => ({ lines: [], problems: [], moments: [] });
 
 /** The point `metres` ahead of the hero and `right` to his right. */
-export function ahead(lab: Lab, metres: number, right = 0): THREE.Vector3 {
+export function ahead(lab: Lab, metres: number, right = 0): Vec3 {
   const { pos, facing } = lab.player;
-  return new THREE.Vector3(
+  return new Vec3(
     pos.x + Math.sin(facing) * metres - Math.cos(facing) * right,
     0,
     pos.z + Math.cos(facing) * metres + Math.sin(facing) * right,

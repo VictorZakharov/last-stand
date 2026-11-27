@@ -4,17 +4,15 @@
 // stays on its wrist and turns so the handle runs across the palm, the weapon seated in it (`seat`), whatever angle
 // it is held at, and wraps its fingers round the handle's actual radius (`hold`).
 import {
-  Attribute, Bone, Color, Euler, Geometry, InterleavedBufferAttribute, LitMaterial, Mat4, Material, Maths,
-  mergeGeometries, Mesh, MeshDepthMaterial, Node, Quat, RGBADepthPacking, Skeleton, SkinnedMesh, Vec3,
+  Attribute, Bone, Color, Euler, Geometry, LitMaterial, Mat4, Material, Maths,
+  mergeGeometries, Mesh, Node, Quat, Skeleton, SkinnedMesh, Vec3,
 } from '../../engine/api/index.ts';
 import * as shapes from '../../engine/api/shapes/index.ts';
 import { joint } from './rig';
 import { onBones, posedSkin, type FistFinger } from './fistBones';
 import { dualQuaternionSkinned } from './dualQuaternion';
 import { triplanar } from './triplanar';
-import { handNodes } from './handNodes';
 import { sameLooks, type KitLooks } from '../../core/materials';
-import type { OwnLooks } from '../../core/shaderPorts';
 import { setHandsCoarse, slimOf, sculptHand, unpackHand, type HandGeometries, type PackedHand } from './handShape';
 import { clamp } from '../../util';
 import { HAND_BUILDS, PLAIN, type HandBuild } from './build';
@@ -115,16 +113,12 @@ function digitOn(vis: Node, s: number, spec: DigitSpec, build: HandBuild): Digit
   return { j, len, r: spec.width * build.digits * slimOf(spec === THUMB) * DEPTH };
 }
 
-/** A copy of `material` of its own, for a skinned mesh (one shared with rigid meshes makes three rebuild its
- *  program's parameters at every switch between them; models/shapes.ts `Sculpt.build`), its maps read triplanar
- *  (the sculpt has no texture places) and skinned by dual quaternions (models/dualQuaternion.ts: the thumb's half
- *  turn round a handle folded the web). */
+/** A copy of `material` of its own, for a skinned mesh (its looks its original's, `sameLooks`), its maps read
+ *  triplanar (the sculpt has no texture places) and skinned by dual quaternions (models/dualQuaternion.ts: the
+ *  thumb's half turn round a handle folded the web). */
 function ownCopy(material: Material): Material {
   const copy = material.clone();
-  copy.onBeforeCompile = material.onBeforeCompile;
-  copy.customProgramCacheKey = material.customProgramCacheKey;
   sameLooks(copy, material);
-  (copy as unknown as OwnLooks).webgpuLooks = handNodes(GRAIN_TILE);
   return dualQuaternionSkinned(triplanar(copy, GRAIN_TILE));
 }
 
@@ -132,22 +126,24 @@ function ownCopy(material: Material): Material {
  *  (`uRim`) on the hand's own copies of its materials, the same program as every hand's, a uniform of their own (the
  *  mage's arcana in his free hand: motes drifting off it read as a stray particle effect, not a hand that glows). Call
  *  before the hand is first drawn. `body`, if given, is the glow over the whole of it, its emissive (seen face on, the
- *  outline alone lit almost nothing: a plain hand). */
-export function glowOutline(h: Hand, rim: Color, body?: Color): void {
+ *  outline alone lit almost nothing: a plain hand). The rim is read off the looks each frame (`rim` itself); the
+ *  emissive is a colour of the material's own, so call the function returned after each change to `body`. */
+export function glowOutline(h: Hand, rim: Color, body?: Color): () => void {
+  const lit: LitMaterial[] = [];
   // (not the nails: thin and turned every way, each glowed nearly whole, five hot dots like lamps at the fingertips)
   for (const mesh of [h.skin, h.bareSkin, h.glove]) {
     if (!mesh) continue;
     const material = mesh.material as LitMaterial;
-    if (body) material.emissive = body;
-    // (on WebGPU the kit's rim is read off its looks, these copies' own: core/shaderPorts.ts `kitNodes`)
+    lit.push(material);
+    // (the kit's rim is read off its looks, these copies' own: engine/looks/kit.ts)
     const { kitLooks } = material as LitMaterial & { kitLooks?: KitLooks };
     if (kitLooks) (material as unknown as { kitLooks: KitLooks }).kitLooks = { ...kitLooks, rim: { value: rim } };
-    const before = material.onBeforeCompile;
-    material.onBeforeCompile = (shader, renderer) => {
-      before.call(material, shader, renderer);
-      shader.uniforms.uRim = { value: rim };
-    };
   }
+  const shine = (): void => {
+    if (body) for (const material of lit) material.emissive.copy(body);
+  };
+  shine();
+  return shine;
 }
 
 /** how deep the bare skin's wrinkles read (its normal map's scale: at 0.6, beside the smooth forearm it's on, from
@@ -167,10 +163,6 @@ function wrinkled(material: LitMaterial): void {
 /** a map's tile across the hand (m): the glove's leather grain at about the size it had on the old palm */
 const GRAIN_TILE = 0.12;
 
-/** the hands' shadows, skinned as they are (a depth material of their own, as models/shapes.ts gives its skinned
- *  meshes one) */
-const HAND_DEPTH = dualQuaternionSkinned(new MeshDepthMaterial({ depthPacking: RGBADepthPacking }));
-
 /** A geometry of its own over `shared`'s buffers: its attributes may be swapped without `shared`'s changing. Kept
  *  from a model's dispose as `shared` is: disposed, it would take the buffers they share off the GPU. */
 function ownShell(shared: Geometry): Geometry {
@@ -186,14 +178,12 @@ function ownShell(shared: Geometry): Geometry {
 function skinnedOn(vis: Node, geometry: Geometry, material: Material,
   skeleton: Skeleton, shadow: boolean): SkinnedMesh {
   const mesh = new SkinnedMesh(geometry, ownCopy(material));
-  // (its sphere the sculpt's: three would pose every vertex for it at its first draw)
+  // (its sphere the sculpt's, which the aim's rays meet first: posed, every vertex would be)
   if (!geometry.boundingSphere) geometry.computeBoundingSphere();
-  mesh.boundingSphere = geometry.boundingSphere!.clone();
   mesh.castShadow = shadow;
   mesh.receiveShadow = true;
   // (its bounds are the pose it was sculpted in)
   mesh.frustumCulled = false;
-  mesh.customDepthMaterial = HAND_DEPTH;
   // (its bones blended and its maps read as it alone is: a merge of the hero's parts would skin it as the rest)
   mesh.userData.drawsAlone = true;
   vis.add(mesh);
@@ -929,9 +919,8 @@ function shadeShut(h: Hand, on: boolean): void {
   geometry.setAttribute('normal', shape.normal);
 }
 
-type AnyAttribute = Attribute | InterleavedBufferAttribute;
 /** a skin's points and normals as its sculpt made them */
-type OpenShape = { position: AnyAttribute; normal: AnyAttribute };
+type OpenShape = { position: Attribute; normal: Attribute };
 /** a shut fist's skin: its colours, and its points and normals laid on its bones (none: a skin other hands share) */
 type ShutSkin = { colour: Attribute; shape?: { position: Attribute; normal: Attribute } };
 
@@ -1165,7 +1154,6 @@ function fistCore(h: Hand, pose: Quat[][] | null): void {
   if (!fills) {
     webs.castShadow = false;
     webs.frustumCulled = false;
-    webs.boundingSphere = made.webs.boundingSphere!.clone();
     webs.userData.drawsAlone = true;
     h.vis.add(webs);
     webs.bind(skin.skeleton, skin.bindMatrix);

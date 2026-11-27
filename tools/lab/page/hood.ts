@@ -16,7 +16,7 @@
 // - how its capelet lies on him (`hoodLie.ts`): how far it stands off his front, his shoulders and his back, and how
 //   deep his body comes through the hood above it;
 // - what its cloth costs a frame as he stands and walks (`HoodCloth.update`, by the browser's own clock).
-import * as THREE from 'three';
+import { Box3, Camera, Mat4, Maths, Mesh, Node, PerspectiveCamera, Vec2, Vec3, Vec3Tuple, World } from './sceneApi.ts';
 import type { Lab, Fixture, Report, Pictured, Tile } from './lab';
 import { cameraOn, shoot, studio, type Shot } from './studio';
 import { toGroup } from '../../../src/entities/models/head';
@@ -58,7 +58,7 @@ type ViewName = 'front' | 'left' | 'back';
 
 /** The sides the hood is read from: the camera's way from him (he faces +z, his left +x). His left: the reference's
  *  profile faces the picture's left, as he does seen from there. */
-const VIEWS: { name: ViewName; from: THREE.Vector3Tuple }[] = [
+const VIEWS: { name: ViewName; from: Vec3Tuple }[] = [
   { name: 'front', from: [0, 0, 1] },
   { name: 'left', from: [1, 0, 0] },
   { name: 'back', from: [0, 0, -1] },
@@ -166,7 +166,7 @@ interface Outline {
 /** The hood's cloth: its outside's mesh and its grid (`HoodCloth`'s `userData.grid`: its columns and rows, and how far
  *  down it each row is, 0 to 1), and the row its capelet begins on if it says. */
 interface HoodMesh {
-  mesh: THREE.Mesh;
+  mesh: Mesh;
   across: number;
   down: number;
   rows: number[];
@@ -309,7 +309,7 @@ interface ReferenceRead {
 /** The reference's outline from its marks. */
 async function referenceOutline(reference: HoodReference): Promise<ReferenceRead> {
   const image = await pixelsOf(reference.url);
-  const eyes = new THREE.Vector2(reference.eyes[0] * image.width, reference.eyes[1] * image.height);
+  const eyes = new Vec2(reference.eyes[0] * image.width, reference.eyes[1] * image.height);
   const unit = (reference.chin[1] - reference.eyes[1]) * image.height;
   const figure = figureOf(image);
   const marks = { eyes, unit };
@@ -317,8 +317,8 @@ async function referenceOutline(reference: HoodReference): Promise<ReferenceRead
 }
 
 /** The head's group (where the face's anatomy is placed, `toGroup`) and its face. */
-function headOf(lab: Lab): { group: THREE.Object3D; face: THREE.Mesh } {
-  const face = lab.model.root.getObjectByName('face') as THREE.Mesh | undefined;
+function headOf(lab: Lab): { group: Node; face: Mesh } {
+  const face = lab.model.root.getObjectByName('face') as Mesh | undefined;
   if (!face?.parent) throw new Error('lab: hood: the hero has no face');
   return { group: face.parent, face };
 }
@@ -327,7 +327,7 @@ function headOf(lab: Lab): { group: THREE.Object3D; face: THREE.Mesh } {
 function hoodOf(lab: Lab): HoodMesh {
   let found: HoodMesh | undefined;
   lab.model.root.traverse((object) => {
-    const mesh = object as THREE.Mesh;
+    const mesh = object as Mesh;
     if (mesh.isMesh && mesh.geometry.name === 'hood' && mesh.visible) {
       const grid = mesh.geometry.userData.grid as { across: number; down: number; rows: number[]; capelet?: number };
       found = { mesh, across: grid.across, down: grid.down, rows: grid.rows, capelet: grid.capelet };
@@ -338,19 +338,19 @@ function hoodOf(lab: Lab): HoodMesh {
 }
 
 /** The hood's points in the head group's space (m). */
-function hoodPoints(hood: HoodMesh, group: THREE.Object3D): THREE.Vector3[] {
-  const toHead = new THREE.Matrix4().copy(group.matrixWorld).invert().multiply(hood.mesh.matrixWorld);
+function hoodPoints(hood: HoodMesh, group: Node): Vec3[] {
+  const toHead = new Mat4().copy(group.matrixWorld).invert().multiply(hood.mesh.matrixWorld);
   const at = hood.mesh.geometry.attributes.position;
-  const points: THREE.Vector3[] = [];
-  for (let k = 0; k < at.count; k++) points.push(new THREE.Vector3().fromBufferAttribute(at, k).applyMatrix4(toHead));
+  const points: Vec3[] = [];
+  for (let k = 0; k < at.count; k++) points.push(new Vec3().fromBufferAttribute(at, k).applyMatrix4(toHead));
   return points;
 }
 
 /** The face's skin points (the head group's space, m). */
-function skinPoints(face: THREE.Mesh): THREE.Vector3[] {
+function skinPoints(face: Mesh): Vec3[] {
   const at = face.geometry.attributes.position;
-  const points: THREE.Vector3[] = [];
-  for (let k = 0; k < at.count; k++) points.push(new THREE.Vector3().fromBufferAttribute(at, k));
+  const points: Vec3[] = [];
+  for (let k = 0; k < at.count; k++) points.push(new Vec3().fromBufferAttribute(at, k));
   return points;
 }
 
@@ -363,17 +363,17 @@ function sizesOf(lab: Lab): Record<Size, number> {
   const brow = toGroup(0, EYE.y + 15, 0).y;
   const cheek = toGroup(0, EYE.y - 25, 0).y;
   const chin = toGroup(0, 0, 0).y;
-  const near = (y: number, band: number) => (p: THREE.Vector3) => Math.abs(p.y - y) < band;
+  const near = (y: number, band: number) => (p: Vec3) => Math.abs(p.y - y) < band;
   // (the rim: the face's edge on each side, the fine grid's first and last columns, above the chin)
-  const rim: THREE.Vector3[] = [];
+  const rim: Vec3[] = [];
   for (let row = 0; row < hood.down; row++) {
     for (const column of [0, hood.across - 1]) {
       const p = cloth[row * hood.across + column];
       if (p.y > chin) rim.push(p);
     }
   }
-  const most = (points: THREE.Vector3[], of: (p: THREE.Vector3) => number) => Math.max(...points.map(of));
-  const least = (points: THREE.Vector3[], of: (p: THREE.Vector3) => number) => Math.min(...points.map(of));
+  const most = (points: Vec3[], of: (p: Vec3) => number) => Math.max(...points.map(of));
+  const least = (points: Vec3[], of: (p: Vec3) => number) => Math.min(...points.map(of));
   const browSkin = skin.filter((p) => near(brow, 0.008)(p) && Math.abs(p.x) < 0.02);
   const cheekSkin = skin.filter(near(cheek, 0.008));
   const cheekWide = most(cheekSkin, (p) => Math.abs(p.x));
@@ -409,7 +409,7 @@ function headLine(lab: Lab): string {
   const skin = skinPoints(headOf(lab).face);
   const eyes = toGroup(0, EYE.y, EYE.z);
   const unit = toGroup(0, EYE.y, 0).y - toGroup(0, 0, 0).y;
-  const up = (p: THREE.Vector3) => (p.y - eyes.y) / unit;
+  const up = (p: Vec3) => (p.y - eyes.y) / unit;
   const at = (level: number) => skin.filter((p) => Math.abs(up(p) - level) < HEAD_BAND);
   const scalp = Math.max(...skin.map(up));
   const brow = Math.max(...at(BROW_UP).filter((p) => Math.abs(p.x) < BROW_ACROSS).map((p) => p.z));
@@ -438,7 +438,7 @@ function sizeLines(sizes: Record<Size, number>, given: HoodOptions['sizes'], pro
 }
 
 /** Where the face is in a studio picture of ours (px of the tile `shoot` reads, down from its top). */
-function ourMarks(lab: Lab, camera: THREE.Camera, tile: { width: number; height: number }): FaceMarks {
+function ourMarks(lab: Lab, camera: Camera, tile: { width: number; height: number }): FaceMarks {
   const { group } = headOf(lab);
   const project = onTile(camera, tile);
   const eyes = project(toGroup(0, EYE.y, EYE.z).applyMatrix4(group.matrixWorld));
@@ -448,18 +448,18 @@ function ourMarks(lab: Lab, camera: THREE.Camera, tile: { width: number; height:
 
 /** Our figure from `camera`: every mesh of his drawn flat white on black, the staff in his hand hidden (it stands up
  *  through the outline), read back as the tile `shoot` reads. */
-async function ourFigure(lab: Lab, scene: THREE.Scene, camera: THREE.PerspectiveCamera): Promise<Mask> {
+async function ourFigure(lab: Lab, scene: World, camera: PerspectiveCamera): Promise<Mask> {
   return await maskOf(lab, scene, camera, () => true, heldThings(lab));
 }
 
 /** The rim's two edges (world space), each from the top of the face down: the drawn grid's first and last columns. */
-function rimEdges(lab: Lab): THREE.Vector3[][] {
+function rimEdges(lab: Lab): Vec3[][] {
   const hood = hoodOf(lab);
   const at = hood.mesh.geometry.attributes.position;
   const edge = (column: number) => {
-    const points: THREE.Vector3[] = [];
+    const points: Vec3[] = [];
     for (let row = 0; row < hood.down; row++) {
-      const point = new THREE.Vector3().fromBufferAttribute(at, row * hood.across + column);
+      const point = new Vec3().fromBufferAttribute(at, row * hood.across + column);
       points.push(point.applyMatrix4(hood.mesh.matrixWorld));
     }
     return points;
@@ -468,7 +468,7 @@ function rimEdges(lab: Lab): THREE.Vector3[][] {
 }
 
 /** Our opening from `camera` as drawn in `scene` (the model in it). */
-async function ourOpeningFrom(lab: Lab, scene: THREE.Scene, camera: THREE.PerspectiveCamera, view: OpeningView):
+async function ourOpeningFrom(lab: Lab, scene: World, camera: PerspectiveCamera, view: OpeningView):
   Promise<Opening> {
   const skin = await maskOf(lab, scene, camera, isSkinMesh, heldThings(lab));
   return ourOpening(rimEdges(lab), camera, skin, ourMarks(lab, camera, skin), view);
@@ -487,8 +487,8 @@ async function openingNow(lab: Lab, view: OpeningView): Promise<Opening> {
 }
 
 /** What he holds in his hands (the staff, a book): each of a hand joint's children but the hand drawn on it. */
-function heldThings(lab: Lab): THREE.Object3D[] {
-  const held: THREE.Object3D[] = [];
+function heldThings(lab: Lab): Node[] {
+  const held: Node[] = [];
   for (const hand of [lab.joints.handR, lab.joints.handL]) {
     for (const child of hand.children) {
       let drawnHand = false;
@@ -560,7 +560,7 @@ async function imageOf(url: string): Promise<HTMLImageElement> {
 }
 
 /** The hero's model taken into `scene` as he stands; `back` puts it back. */
-function intoStudio(lab: Lab, scene: THREE.Scene): () => void {
+function intoStudio(lab: Lab, scene: World): () => void {
   const root = lab.model.root;
   const parent = root.parent;
   scene.add(root);
@@ -572,11 +572,11 @@ function intoStudio(lab: Lab, scene: THREE.Scene): () => void {
 }
 
 /** The camera on his head and shoulders from `from`. */
-function cameraFrom(lab: Lab, from: THREE.Vector3Tuple): THREE.PerspectiveCamera {
-  const head = lab.joints.head.getWorldPosition(new THREE.Vector3());
-  const box = new THREE.Box3(
-    new THREE.Vector3(head.x - FRAME.across, head.y - FRAME.below, head.z - FRAME.across),
-    new THREE.Vector3(head.x + FRAME.across, head.y + FRAME.above, head.z + FRAME.across),
+function cameraFrom(lab: Lab, from: Vec3Tuple): PerspectiveCamera {
+  const head = lab.joints.head.getWorldPosition(new Vec3());
+  const box = new Box3(
+    new Vec3(head.x - FRAME.across, head.y - FRAME.below, head.z - FRAME.across),
+    new Vec3(head.x + FRAME.across, head.y + FRAME.above, head.z + FRAME.across),
   );
   return cameraOn(box, from, undefined, LENS);
 }
@@ -761,7 +761,7 @@ interface Sway {
   moved: number;
   kink: { standing: Kink; walking: Kink };
   cost: CallTimes;
-  seam: THREE.Vector3[];
+  seam: Vec3[];
 }
 
 /** How far the seam strays from straight at the most (cm) and at which drawn row (its share down the hood). */
@@ -780,20 +780,20 @@ const CANARY_LEAST_KINK = 0.6;
 
 /** The seam down the back from the top, its points in the hat's space (the drawn grid's middle column: an even count
  *  of spaces across puts one on it). */
-function seamOf(hood: HoodMesh): THREE.Vector3[] {
+function seamOf(hood: HoodMesh): Vec3[] {
   const middle = (hood.across - 1) / 2;
   if (!Number.isInteger(middle)) throw new Error('lab: hood: no column of its drawn grid runs down the seam');
   const at = hood.mesh.geometry.attributes.position;
-  const points: THREE.Vector3[] = [];
+  const points: Vec3[] = [];
   for (let row = 0; row < hood.down; row++) {
-    points.push(new THREE.Vector3().fromBufferAttribute(at, row * hood.across + middle));
+    points.push(new Vec3().fromBufferAttribute(at, row * hood.across + middle));
   }
   return points;
 }
 
 /** How far the seam strays aside (across, x) from straight at the most: each point against the line through the points
  *  `SEAM_SPAN` rows either side, at its share of the way along them (m, the hat's space). */
-function seamKink(seam: THREE.Vector3[], rows: number[]): { most: number; down: number } {
+function seamKink(seam: Vec3[], rows: number[]): { most: number; down: number } {
   let most = 0;
   let down = 0;
   for (let k = SEAM_SPAN; k + SEAM_SPAN < seam.length; k++) {
@@ -801,7 +801,7 @@ function seamKink(seam: THREE.Vector3[], rows: number[]): { most: number; down: 
     const along = Math.hypot(seam[k].y - before.y, seam[k].z - before.z);
     const rest = Math.hypot(after.y - seam[k].y, after.z - seam[k].z);
     const t = along + rest > 0 ? along / (along + rest) : 0.5;
-    const aside = Math.abs(seam[k].x - THREE.MathUtils.lerp(before.x, after.x, t));
+    const aside = Math.abs(seam[k].x - Maths.lerp(before.x, after.x, t));
     if (aside > most) {
       most = aside;
       down = rows[k];
@@ -820,10 +820,10 @@ async function sway(lab: Lab, walking: () => void): Promise<Sway> {
   const at = hood.mesh.geometry.attributes.position;
   // (its rows down to half its length: they're drawn finer where its creases are)
   const topHalf = hood.rows.filter((v) => v <= 0.5).length * hood.across;
-  const standing: THREE.Vector3[] = [];
+  const standing: Vec3[] = [];
   const start = lab.player.pos.clone();
   const timing = timeCalls(HoodCloth.prototype, 'update');
-  const scale = hood.mesh.getWorldScale(new THREE.Vector3()).x;
+  const scale = hood.mesh.getWorldScale(new Vec3()).x;
   const kink = { standing: { most: 0, down: 0 }, walking: { most: 0, down: 0 } };
   const readKink = (into: Kink) => {
     const now = seamKink(seamOf(hood), hood.rows);
@@ -833,12 +833,12 @@ async function sway(lab: Lab, walking: () => void): Promise<Sway> {
   };
   let most = 0;
   let cost: CallTimes;
-  let seam: THREE.Vector3[] = [];
+  let seam: Vec3[] = [];
   try {
     await lab.step(STAND_FRAMES, undefined, () => readKink(kink.standing));
-    for (let k = 0; k < topHalf; k++) standing.push(new THREE.Vector3().fromBufferAttribute(at, k));
+    for (let k = 0; k < topHalf; k++) standing.push(new Vec3().fromBufferAttribute(at, k));
     seam = seamOf(hood);
-    const point = new THREE.Vector3();
+    const point = new Vec3();
     let frame = 0;
     await lab.step(WALK_FRAMES, () => ({ keys: ['w'] }), () => {
       for (let k = 0; k < topHalf; k++) most = Math.max(most, point.fromBufferAttribute(at, k).distanceTo(standing[k]));
@@ -864,7 +864,7 @@ function kinkLines(sway: Sway, hood: HoodMesh, canary: boolean, problems: string
     problems.push(`hood: its seam strays ${kink.most.toFixed(2)} cm from straight ${how}`);
   }
   if (!canary) return lines;
-  const scale = hood.mesh.getWorldScale(new THREE.Vector3()).x;
+  const scale = hood.mesh.getWorldScale(new Vec3()).x;
   const planted = sway.seam.map((point) => point.clone());
   const k = Math.round(planted.length / 2);
   planted[k].x += CANARY_KINK / 100 / scale;
@@ -897,14 +897,14 @@ function capeletLie(lab: Lab, options: HoodOptions, problems: string[]): string[
 }
 
 /** The hood's meshes (its outside, its lining, its piping). */
-function hoodParts(lab: Lab): THREE.Object3D[] {
+function hoodParts(lab: Lab): Node[] {
   const hood = hoodOf(lab);
-  const meshes = hood.mesh.parent!.children.filter((child) => (child as THREE.Mesh).isMesh && child.userData.hoodPart);
+  const meshes = hood.mesh.parent!.children.filter((child) => (child as Mesh).isMesh && child.userData.hoodPart);
   return meshes.length ? meshes : [hood.mesh];
 }
 
 /** The hood's meshes changed by `change` for a canary and `undo` back; returns the undo. */
-function planted(lab: Lab, change: (part: THREE.Object3D) => void, undo: (part: THREE.Object3D) => void): () => void {
+function planted(lab: Lab, change: (part: Node) => void, undo: (part: Node) => void): () => void {
   const parts = hoodParts(lab);
   for (const part of parts) {
     change(part);
@@ -953,7 +953,7 @@ async function narrowCanary(lab: Lab, sizes: Record<Size, number>, read: ViewsRe
  *  the face shown ahead of it less there, less of the face shown in all, and it further ahead of his body below the
  *  chin. */
 async function forwardCanary(lab: Lab, read: ViewsRead, problems: string[]): Promise<string | null> {
-  const step = CANARY_FORWARD / 100 / hoodParts(lab)[0].parent!.getWorldScale(new THREE.Vector3()).z;
+  const step = CANARY_FORWARD / 100 / hoodParts(lab)[0].parent!.getWorldScale(new Vec3()).z;
   const undo = planted(lab, (part) => (part.position.z += step), (part) => (part.position.z -= step));
   try {
     const before = read.openings.left;
@@ -981,8 +981,8 @@ async function forwardCanary(lab: Lab, read: ViewsRead, problems: string[]): Pro
 function dented(lab: Lab, cm: number): () => void {
   const eyes = toGroup(0, EYE.y, EYE.z);
   const unit = eyes.y - toGroup(0, 0, 0).y;
-  const parts = hoodParts(lab) as THREE.Mesh[];
-  const step = cm / 100 / parts[0].parent!.getWorldScale(new THREE.Vector3()).z;
+  const parts = hoodParts(lab) as Mesh[];
+  const step = cm / 100 / parts[0].parent!.getWorldScale(new Vec3()).z;
   const saved = parts.map((part) => (part.geometry.attributes.position.array as Float32Array).slice());
   for (const part of parts) {
     const position = part.geometry.attributes.position;

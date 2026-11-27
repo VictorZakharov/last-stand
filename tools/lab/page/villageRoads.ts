@@ -3,7 +3,7 @@
 // left the edge bare (from play, the yard's road at its gate: "lets fix curb near training area", its last 1.6 m
 // turning 60 degrees). `canary` adds that road as it was, which must be found.
 import { ROADS, YARD, yardToWorld, type Spot } from '../../../src/data/village';
-import * as THREE from 'three';
+import { Vec3 } from './sceneApi.ts';
 import { curbGeometry } from '../../../src/world/village';
 import { windingLine } from '../../../src/world/villagePlan';
 import type { LightsChecked } from './villageLights';
@@ -61,8 +61,8 @@ const TOP_FROM = 0.05;
  *  one-sided). `flipped`: read each as wound the other way. */
 function curbTops(flipped: boolean): { tops: number; down: number } {
   const position = curbGeometry().getAttribute('position');
-  const [a, b, c] = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()];
-  const normal = new THREE.Vector3();
+  const [a, b, c] = [new Vec3(), new Vec3(), new Vec3()];
+  const normal = new Vec3();
   let tops = 0;
   let down = 0;
   for (let at = 0; at + 2 < position.count; at += 3) {

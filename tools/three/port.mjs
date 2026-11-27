@@ -6,8 +6,10 @@
 //
 //   node tools/three/port.mjs <file or folder>...   ports them in place, and says how many of each it changed
 //   node tools/three/port.mjs --check <...>          says what it would change, and changes nothing
+//   node tools/three/port.mjs --into <module> <...>  a file importing 'three' itself imports the API's names, `shapes`
+//                                                    among them, from that one module (the lab's: its sceneApi.ts)
 import { readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join, relative } from 'node:path';
 
 /** three's classes and types by the API's names for them; the rest keep their names */
 const RENAMED = {
@@ -134,11 +136,11 @@ function namesItself(source, name) {
   return new RegExp(`(?<![\\w.])${name}\\b`).test(codeOf(source));
 }
 
-/** The import of `names` from the API's index at `path`, wrapped to the line's length. */
-function importOf(names, path, typeOnly) {
+/** The import of `names` from the module `from`, wrapped to the line's length. */
+function importOf(names, from, typeOnly) {
   const keyword = typeOnly ? 'import type' : 'import';
   const sorted = [...names].sort((a, b) => a.localeCompare(b));
-  const line = `${keyword} { ${sorted.join(', ')} } from '${path}api/index.ts';`;
+  const line = `${keyword} { ${sorted.join(', ')} } from '${from}';`;
   if (line.length <= MOST_LINE) return line;
   const rows = [];
   let row = ' ';
@@ -150,12 +152,21 @@ function importOf(names, path, typeOnly) {
     row += ` ${name},`;
   }
   rows.push(row.trimEnd());
-  return `${keyword} {\n${rows.join('\n')}\n} from '${path}api/index.ts';`;
+  return `${keyword} {\n${rows.join('\n')}\n} from '${from}';`;
 }
 
-/** A file's source ported, and what was changed in it, counted by kind. */
-function port(source) {
-  const importLine = /import (type )?\* as THREE from (['"])((?:\.\.?\/)+(?:[\w/]+\/)?)three(?:\.ts)?\2;\n?/;
+/** The import specifier of `module` from `file`, as a relative path with its own `./` or `../`. */
+function specifierOf(file, module) {
+  const path = relative(dirname(file), module).split('\\').join('/');
+  return path.startsWith('.') ? path : `./${path}`;
+}
+
+/** A file's source ported, and what was changed in it, counted by kind; `into` the module its names come from where
+ *  it imported 'three' itself (the lab's), else the API's index beside the game's `three.ts` it imported. */
+function port(source, into) {
+  const importLine = into
+    ? /import (type )?\* as THREE from (['"])()three\2;\n?/
+    : /import (type )?\* as THREE from (['"])((?:\.\.?\/)+(?:[\w/]+\/)?)three(?:\.ts)?\2;\n?/;
   const found = source.match(importLine);
   const rewrite = new Rewrite(source);
   const used = new Set();
@@ -192,8 +203,10 @@ function port(source) {
   if (found) {
     const [, typeOnly, , path] = found;
     const lines = [];
-    if (used.size) lines.push(importOf(used, path, !!typeOnly));
-    if (shaped) lines.push(`import * as ${SHAPES} from '${path}api/shapes/index.ts';`);
+    // (from the one module, `shapes` one of its names; or from the API's index and its shapes' beside it)
+    if (into && shaped) used.add(SHAPES);
+    if (used.size) lines.push(importOf(used, into ?? `${path}api/index.ts`, !!typeOnly && !shaped));
+    if (shaped && !into) lines.push(`import * as ${SHAPES} from '${path}api/shapes/index.ts';`);
     rewrite.text = rewrite.text.replace(importLine, lines.length ? `${lines.join('\n')}\n` : '');
     rewrite.counts.import = 1;
   }
@@ -211,14 +224,15 @@ function filesAt(path) {
   return files.filter((file) => /\.ts$/.test(file));
 }
 
-/** The files at `paths` ported (or only counted, `check`), and what changed said. */
-function main(paths, check) {
+/** The files at `paths` ported (or only counted, `check`), their names from `into` where it's given, and what
+ *  changed said. */
+function main(paths, check, into) {
   const totals = {};
   let changed = 0;
   for (const file of paths.flatMap(filesAt)) {
     const source = readFileSync(file, 'utf8');
     if (!/\bTHREE\b|three\//.test(source)) continue;
-    const { text, counts, clashes } = port(source);
+    const { text, counts, clashes } = port(source, into && specifierOf(file, into));
     for (const name of clashes) console.log(`${file}: names ${name} itself: give it another name`);
     if (text === source) continue;
     changed++;
@@ -229,5 +243,13 @@ function main(paths, check) {
   for (const [kind, count] of Object.entries(totals)) console.log(`  ${kind}: ${count}`);
 }
 
-const args = process.argv.slice(2);
-main(args.filter((arg) => arg !== '--check'), args.includes('--check'));
+/** The command line's paths, `--check` and `--into <module>`. */
+function readArgs(args) {
+  const at = args.indexOf('--into');
+  const into = at < 0 ? undefined : args[at + 1];
+  const paths = args.filter((arg, index) => arg !== '--check' && index !== at && index !== at + 1);
+  return { paths, check: args.includes('--check'), into };
+}
+
+const { paths, check, into } = readArgs(process.argv.slice(2));
+main(paths, check, into);

@@ -4,7 +4,7 @@
 // the basin's floor, their points under the water, none in the ground under that floor. Skills are cast in the yard
 // alone, so the hero is held armed here (`armedEverywhere`). `canary` has the fountain draw nothing an arrow meets,
 // which must be found.
-import * as THREE from 'three';
+import { Vec3 } from './sceneApi.ts';
 import type { Lab, Pictured } from './lab';
 import { G } from '../../../src/state';
 import { armedEverywhere } from '../../../src/game/village';
@@ -50,7 +50,7 @@ const SHOTS: Shot[] = [
 /** He placed at (x, z), facing the fountain, settled. */
 async function standAt(lab: Lab, [x, z]: [number, number]): Promise<void> {
   G.player.walkTo = null;
-  G.player.place(new THREE.Vector3(x, groundHeight(x, z), z), Math.atan2(-x, -z));
+  G.player.place(new Vec3(x, groundHeight(x, z), z), Math.atan2(-x, -z));
   await lab.step(SETTLE);
 }
 
@@ -58,7 +58,7 @@ async function standAt(lab: Lab, [x, z]: [number, number]): Promise<void> {
 async function shoot(lab: Lab, shot: Shot): Promise<{ furthest: number; arrows: number }> {
   clearSpent();
   await standAt(lab, shot.stand);
-  const aim = new THREE.Vector3(...shot.aim);
+  const aim = new Vec3(...shot.aim);
   await lab.step(DRAWN, () => ({ m0: true, aim }));
   await lab.step(FLIES, () => ({ aim }));
   const spent = spentPoints();
@@ -70,7 +70,7 @@ async function shoot(lab: Lab, shot: Shot): Promise<{ furthest: number; arrows: 
 async function rain(lab: Lab): Promise<{ onFloor: number; underFloor: number; outOfWater: number; all: number }> {
   clearSpent();
   await standAt(lab, RAIN_STAND);
-  const aim = new THREE.Vector3(0, 0, 0);
+  const aim = new Vec3(0, 0, 0);
   await lab.step(RAINS, () => pressing('2', aim, true));
   await lab.step(RAIN_LANDS, () => ({ aim }));
   const spent = spentPoints();

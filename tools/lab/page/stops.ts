@@ -6,7 +6,7 @@
 // foot put out ahead and drawn back (a waste of motion), a step back against the way it went, the feet's travel once
 // still, a foot standing on another level than the body's once still (and how long, until it stepped onto it), the
 // frames both feet were up, and how long the feet took to settle.
-import * as THREE from 'three';
+import { Vec2, Vec3 } from './sceneApi.ts';
 import type { Lab } from './lab';
 import type { LegIK } from '../../../src/entities/models/ik';
 import { ARENA } from '../../../src/data/balance';
@@ -143,8 +143,8 @@ interface StopStep {
   foot: number;
   left: number;
   landed: number;
-  from: THREE.Vector3;
-  to: THREE.Vector3;
+  from: Vec3;
+  to: Vec3;
   level: number;
   bodyLevel: number;
   /** the level it stood on before it left (NaN: in the air as the keys were let go) */
@@ -156,9 +156,9 @@ interface StopResult {
   run: StopRun;
   /** the body's speed as it was let go (m/s), the way it went, where it was then and where it came to rest */
   speed: number;
-  way: THREE.Vector2;
-  letGoAt: THREE.Vector3;
-  restedAt: THREE.Vector3;
+  way: Vec2;
+  letGoAt: Vec3;
+  restedAt: Vec3;
   /** the frame the body was still from, and the last landing (-1: none) */
   stillFrom: number;
   settledAt: number;
@@ -182,12 +182,12 @@ interface StopResult {
  *  lean (rad). */
 interface StopFrame {
   speed: number;
-  body: THREE.Vector3;
-  hips: THREE.Vector3;
-  ankles: THREE.Vector3[];
+  body: Vec3;
+  hips: Vec3;
+  ankles: Vec3[];
   feet: string;
   /** each foot in the air: where its landing is aimed and how far through its stride it is (none planted) */
-  aims: ({ at: THREE.Vector3; through: number } | null)[];
+  aims: ({ at: Vec3; through: number } | null)[];
   lean: number;
 }
 
@@ -206,13 +206,13 @@ type LegFoot = LegIK['feet'][number];
 /** Where a foot in the air is aimed to land and how far through its stride it is, as the leg IK has it (none
  *  planted, or where an older IK doesn't say). */
 function aimOf(foot: LegFoot): StopFrame['aims'][number] {
-  const aimed = foot as unknown as { B?: THREE.Vector3; t?: number };
+  const aimed = foot as unknown as { B?: Vec3; t?: number };
   if (foot.state === 'plant' || !aimed.B) return null;
   return { at: aimed.B.clone(), through: aimed.t ?? NaN };
 }
 
 /** How far ahead along `way` a point is (m). */
-function alongWay(point: THREE.Vector3, way: THREE.Vector2): number {
+function alongWay(point: Vec3, way: Vec2): number {
   return point.x * way.x + point.z * way.y;
 }
 
@@ -221,10 +221,10 @@ class StopWatch {
   private frame = 0;
   private wasDown: boolean[];
   private leftAt = [-1, -1];
-  private leftFrom = [new THREE.Vector3(), new THREE.Vector3()];
+  private leftFrom = [new Vec3(), new Vec3()];
   private leftLevel = [NaN, NaN];
   private levelWas: number[];
-  private anklesWere: THREE.Vector3[];
+  private anklesWere: Vec3[];
   private furthest = [-Infinity, -Infinity];
   private landed = false;
   /** the frames both feet have been up running */
@@ -234,7 +234,7 @@ class StopWatch {
   constructor(private lab: Lab, private legs: LegIK, run: StopRun) {
     const velocity = lab.player.vel;
     const speed = Math.hypot(velocity.x, velocity.z);
-    const way = speed > 1e-3 ? new THREE.Vector2(velocity.x / speed, velocity.z / speed) : new THREE.Vector2(0, 1);
+    const way = speed > 1e-3 ? new Vec2(velocity.x / speed, velocity.z / speed) : new Vec2(0, 1);
     this.wasDown = legs.feet.map((foot) => foot.state === 'plant');
     this.levelWas = legs.feet.map((foot) => foot.P.y);
     this.anklesWere = this.ankles();
@@ -243,7 +243,7 @@ class StopWatch {
       speed,
       way,
       letGoAt: lab.player.pos.clone(),
-      restedAt: new THREE.Vector3(),
+      restedAt: new Vec3(),
       stillFrom: -1,
       settledAt: -1,
       steps: [],
@@ -257,9 +257,9 @@ class StopWatch {
     };
   }
 
-  private ankles(): THREE.Vector3[] {
+  private ankles(): Vec3[] {
     const joints = [this.lab.joints.ankleL, this.lab.joints.ankleR];
-    return joints.map((ankle) => ankle.getWorldPosition(new THREE.Vector3()));
+    return joints.map((ankle) => ankle.getWorldPosition(new Vec3()));
   }
 
   /** This frame of the stop. */
@@ -294,13 +294,13 @@ class StopWatch {
   }
 
   /** Keeps this frame for `--trace`. */
-  private traceFrame(ankles: THREE.Vector3[]): void {
+  private traceFrame(ankles: Vec3[]): void {
     const velocity = this.lab.player.vel;
     const feet = this.legs.feet;
     this.result.frames.push({
       speed: Math.hypot(velocity.x, velocity.z),
       body: this.lab.player.pos.clone(),
-      hips: this.lab.joints.hips.getWorldPosition(new THREE.Vector3()),
+      hips: this.lab.joints.hips.getWorldPosition(new Vec3()),
       ankles,
       feet: feet.map((foot, side) => `${SIDES[side]}${foot.state === 'plant' ? '_' : '^'}`).join(''),
       aims: feet.map((foot) => aimOf(foot)),
@@ -309,7 +309,7 @@ class StopWatch {
   }
 
   /** One foot this frame: how far ahead it has been, its travel and level once the body is still, and its steps. */
-  private followFoot(frame: number, foot: LegFoot, side: number, ankles: THREE.Vector3[]): void {
+  private followFoot(frame: number, foot: LegFoot, side: number, ankles: Vec3[]): void {
     const result = this.result;
     const down = foot.state === 'plant';
     const body = this.lab.player.pos;
@@ -358,7 +358,7 @@ async function runStop(lab: Lab, run: StopRun): Promise<StopResult> {
   await lab.setup({ at: run.start, facing, nocked: Boolean(lab.player.cls.quiver), fresh: true });
   const legs = lab.model.root.userData.legs as LegIK | undefined;
   if (!legs) throw new Error(`lab: stops: the ${lab.player.cls.id} has no leg IK`);
-  const aim = run.aim ? new THREE.Vector3(run.aim[0], 0, run.aim[1]) : undefined;
+  const aim = run.aim ? new Vec3(run.aim[0], 0, run.aim[1]) : undefined;
   await lab.step(run.frames, () => ({ keys: run.keys, m0: drawnRunning, aim }));
   const watch = new StopWatch(lab, legs, run);
   await lab.step(AFTER_FRAMES, () => ({ m0: Boolean(run.aim), aim }), () => watch.observe());
@@ -391,7 +391,7 @@ function feetDrawnBack(result: StopResult): number[] {
 }
 
 /** Where a stop's body came to rest by the dais: how far inside its edge (m; under 0 on the step or past it). */
-function insideEdge(at: THREE.Vector3): number {
+function insideEdge(at: Vec3): number {
   return ARENA.daisHalf - Math.max(Math.abs(at.x), Math.abs(at.z));
 }
 
@@ -405,7 +405,7 @@ function describeStop(result: StopResult, seconds: number, trace: boolean): stri
   const settled = result.settledAt < 0 ? 'no landing' : `the last landing at ${result.settledAt}`;
   const head = `    ${run.name} frames at ${result.speed.toFixed(1)} m/s: rested at`
     + ` ${rest.x.toFixed(2)}, ${rest.z.toFixed(2)}${by}; ${still}, ${settled}`;
-  const fromRest = (point: THREE.Vector3) => cm(alongWay(point, result.way) - alongWay(rest, result.way));
+  const fromRest = (point: Vec3) => cm(alongWay(point, result.way) - alongWay(rest, result.way));
   const lines = [head, `      let go ${fromRest(result.letGoAt)} cm along the way from where it rested`];
   for (const step of result.steps) {
     const along = (step.to.x - step.from.x) * result.way.x + (step.to.z - step.from.z) * result.way.y;
@@ -436,7 +436,7 @@ function describeStop(result: StopResult, seconds: number, trace: boolean): stri
 }
 
 /** A frame of a stop for `--trace`, along the way from where the body rested (cm). */
-function traceLine(frame: StopFrame, at: number, fromRest: (point: THREE.Vector3) => string): string {
+function traceLine(frame: StopFrame, at: number, fromRest: (point: Vec3) => string): string {
   const ankles = frame.ankles.map((ankle, side) => {
     const aim = frame.aims[side];
     const aimed = aim ? ` (to ${fromRest(aim.at).padStart(4)} at ${aim.through.toFixed(2)})` : ''.padEnd(17);

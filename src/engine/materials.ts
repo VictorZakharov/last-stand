@@ -38,12 +38,11 @@ export type AnyMaterial = Material & Partial<{
   color: Color; map: Texture | null; roughness: number; metalness: number; emissive: Color;
   emissiveIntensity: number; emissiveMap: Texture | null; normalMap: Texture | null;
   normalScale: Vec2; roughnessMap: Texture | null; metalnessMap: Texture | null;
-  isMeshBasicMaterial: boolean; isMeshBasicNodeMaterial: boolean; isShaderMaterial: boolean;
-  isMeshPhongMaterial: boolean; alphaMap: Texture | null;
+  isLitMaterial: boolean; isUnlitMaterial: boolean; isLookMaterial: boolean; alphaMap: Texture | null;
   flatShading: boolean; bumpMap: Texture | null; bumpScale: number;
   clearcoat: number; clearcoatRoughness: number;
   sheen: number; sheenColor: Color; sheenRoughness: number; sheenColorMap: Texture | null;
-  positionNode: unknown; colorNode: unknown; fragmentNode: unknown; vertexNode: unknown; seeThrough: unknown;
+  seeThrough: unknown;
 }>;
 
 /** the name the engine's module of the looks joined is known by (a breakdown's rows: perf/gpuParts.ts) */
@@ -94,14 +93,8 @@ export class Materials {
   private describe(material: AnyMaterial, look?: RustLook): number {
     // (a shader material is drawn by its look alone: unlit, white under whatever its look writes)
     if (!look && (!material.color || material.isLookMaterial)) return -1;
-    // (moved or cut by three's nodes: grass grown from a texture, a flame's own fragment)
-    // (placed by its nodes: the village's blades, grown from their cells. A position node alone is the wind's sway,
-    // which the engine leaves out: the Thornwood's grass stands still. One with a look of its own for the engine
-    // is drawn by that)
-    const placedByNodes = (material.positionNode && material.colorNode) || material.fragmentNode || material.vertexNode;
-    if (!look && placedByNodes) return -1;
     const p = this.scratchParams, maps = this.scratchMaps, held = this.maps;
-    const unlit = !!(material.isUnlitMaterial || material.isMeshBasicNodeMaterial || material.isLookMaterial);
+    const unlit = !!(material.isUnlitMaterial || material.isLookMaterial);
     const map = material.map ?? null;
     const tint = material.color ?? WHITE;
     p[0] = tint.r; p[1] = tint.g; p[2] = tint.b; p[3] = material.opacity;

@@ -73,21 +73,21 @@ export class Euler {
   }
 
   /**
-   * The angles of `m`'s upper 3 by 3 (a rotation, unscaled) in `order`. Follows three.js 0.187.0's
+   * The angles of `matrix`'s upper 3 by 3 (a rotation, unscaled) in `order`. Follows three.js 0.187.0's
    * `Euler.setFromRotationMatrix` (its middle turn by asin, the other two by atan2, one of them 0 when locked).
    * `update` false leaves the callback uncalled.
    */
-  setFromRotationMatrix(m: Mat4, order: EulerOrder = this.order, update = true): this {
-    const e = m.elements;
-    const m11 = e[0];
-    const m12 = e[4];
-    const m13 = e[8];
-    const m21 = e[1];
-    const m22 = e[5];
-    const m23 = e[9];
-    const m31 = e[2];
-    const m32 = e[6];
-    const m33 = e[10];
+  setFromRotationMatrix(matrix: Mat4, order: EulerOrder = this.order, update = true): this {
+    const elements = matrix.elements;
+    const m11 = elements[0];
+    const m12 = elements[4];
+    const m13 = elements[8];
+    const m21 = elements[1];
+    const m22 = elements[5];
+    const m23 = elements[9];
+    const m31 = elements[2];
+    const m32 = elements[6];
+    const m33 = elements[10];
     if (order === 'XYZ') {
       const free = Math.abs(m13) < LOCKED;
       const y = Math.asin(clamp(m13, -1, 1));
@@ -123,9 +123,9 @@ export class Euler {
     return this;
   }
 
-  /** the angles of `q`'s turn in `order`; `update` false leaves the callback uncalled */
-  setFromQuaternion(q: Quat, order: EulerOrder = this.order, update = true): this {
-    rotation.makeRotationFromQuaternion(q);
+  /** the angles of `quaternion`'s turn in `order`; `update` false leaves the callback uncalled */
+  setFromQuaternion(quaternion: Quat, order: EulerOrder = this.order, update = true): this {
+    rotation.makeRotationFromQuaternion(quaternion);
     return this.setFromRotationMatrix(rotation, order, update);
   }
 

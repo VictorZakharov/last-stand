@@ -7,7 +7,7 @@
 // every digit shown on its line (`digits.ts`). On two screens (`--screens`), a UI laid out as a share of the screen
 // shows the same lines and the same pictures on both, whatever the screens' pixel ratios: a 4K screen at 300% as at
 // 100%.
-import * as THREE from 'three';
+import { Vec3 } from './sceneApi.ts';
 import { boxOf, kitDrawsItself, seenOf } from './lab';
 import type { Frame, Lab, Pictured, Report } from './lab';
 import { NUMBER_COLORS } from '../../../src/data/balance';
@@ -98,7 +98,7 @@ async function pictureState(lab: Lab, state: UiState, held: Frame): Promise<{ li
 /** A hurt foe ahead of the hero, risen and standing, and damage numbers over it, a few frames on. */
 async function showLabels(lab: Lab): Promise<void> {
   const hero = lab.player.pos;
-  const at = new THREE.Vector3(hero.x, 0, hero.z + FOE_AHEAD);
+  const at = new Vec3(hero.x, 0, hero.z + FOE_AHEAD);
   const foe = lab.spawnFoe('husk', at);
   await lab.until(() => !foe.spawning, 300, 'the foe never rose');
   foe.life = foe.maxLife * FOE_LIFE;

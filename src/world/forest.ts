@@ -3,7 +3,7 @@
 // standing stones, glowcap mushroom clusters and two bonfires. Stumps, logs and boulders break up the floor.
 import {
   AdditiveBlending, Attribute, Box3, CatmullRom3, Color, DoubleSide, floats, Geometry, InstancedMesh,
-  InterleavedBufferAttribute, LitMaterial, Mat4, Material, Maths, mergeGeometries, Mesh, Node, PointLight, Quat,
+  LitMaterial, Mat4, Material, Maths, mergeGeometries, Mesh, Node, PointLight, Quat,
   Raycaster, UnlitMaterial, Vec2, Vec3,
 } from '../engine/api/index.ts';
 import * as shapes from '../engine/api/shapes/index.ts';
@@ -24,8 +24,6 @@ import { bend, rag, taperTube } from '../entities/models/shapes';
 import { PropSet, instanceLook, meshLook, groupLook } from './destructible';
 import { buildFire, emberMat, type FireLog, type FireSpec } from './fire';
 import { reliefContext } from '../core/parallax';
-import { tsl, stillNodes } from '../core/webgpu';
-import { grassWindNode, mossColorNode } from './forestNodes';
 import { rustLook } from '../engine/custom';
 import { grassWindLook, mossLook } from '../engine/looks/forest';
 import { valueNoise3 } from '../core/patterns';
@@ -94,22 +92,15 @@ function clearOfFires(x: number, z: number, reach: number): [number, number] {
 
 /**
  * Wind in the grass: each blade's points swayed by the square of their height (a blade bends from its root), the tufts
- * along a wave that crosses the clearing, on the game's clock (an updater keeps the time).
+ * along a wave that crosses the clearing, on the engine's clock (its look: engine/looks/forest.ts).
  */
-function windInGrass(m: LitMaterial, updaters: Updater[]): LitMaterial {
-  // (in the render's group: the grass stands still, and a still material's refresh sends nothing of the object's)
-  const clock = tsl.uniform(0).setGroup(tsl.renderGroup);
-  updaters.push((_dt, t) => { clock.value = t; });
-  m.positionNode = grassWindNode(clock, { rate: SWAY_RATE, reach: SWAY });
-  rustLook(m, grassWindLook({ rate: SWAY_RATE, reach: SWAY }));
-  stillNodes.add(m);
-  return m;
+function windInGrass(m: LitMaterial): LitMaterial {
+  return rustLook(m, grassWindLook({ rate: SWAY_RATE, reach: SWAY }));
 }
 
 /** Large moss patches tinted over the floor in world space (a texture this big would tile visibly). The pebbles and
  *  leaves stand up out of the soil (core/parallax.ts). */
 function mossyGround<M extends Material>(m: M): M {
-  (m as M & { colorNode: unknown }).colorNode = mossColorNode();
   rustLook(m, mossLook(FLOOR_RELIEF));
   reliefContext(m as unknown as LitMaterial, FLOOR_RELIEF);
   return m;
@@ -159,7 +150,7 @@ export const buildForest: BiomeBuilder = (scene) => {
   // (a hollow log's inside and its ends: bare wood gone grey and dark, its grain along the log, both sides drawn as
   // an end's wood is wound either way; in the bark's maps the hollow read as bark inside out)
   const heartwood = new LitMaterial({ ...pbrMaterialMaps(wood(), [4, 9], 1.4), color: 0x8a7a68, roughness: 0.95, side: DoubleSide });
-  const grassMat = windInGrass(new LitMaterial({ vertexColors: true, roughness: 0.85, side: DoubleSide }), updaters);
+  const grassMat = windInGrass(new LitMaterial({ vertexColors: true, roughness: 0.85, side: DoubleSide }));
   const capMat = new LitMaterial({ color: 0x0c2a24, emissive: 0x2affc8, emissiveIntensity: 0.75, roughness: 0.5 });
   const stemMat = new LitMaterial({ color: 0xb8b09a, roughness: 0.8 });
   const glyphMat = new LitMaterial({ color: 0x000000, emissive: 0x6aff7a, emissiveIntensity: 1.4 });
@@ -324,7 +315,10 @@ export const buildForest: BiomeBuilder = (scene) => {
     barks[k].name = `trees' bark: ${TREE_KINDS[k].preset}`;
     leaves[k].name = `trees' leaves: ${TREE_KINDS[k].preset}`;
     // (what an arrow over the thicket meets: each tree's trunk, its limbs let go)
-    for (let i = 0; i < used[k]; i++) wall.addGeometry(kinds[k].trunk, barks[k].getMatrixAt(i, _mx), false, 'beyond');
+    for (let i = 0; i < used[k]; i++) {
+      barks[k].getMatrixAt(i, _mx);
+      wall.addGeometry(kinds[k].trunk, _mx, false, 'beyond');
+    }
     const bark = cullInCells(barks[k], eachInstance), crown = cullInCells(leaves[k], eachInstance);
     scene.add(...asTree(...bark, ...crown));
     simpleTree(kinds[k], bark, crown);
@@ -738,7 +732,7 @@ function raggedMoss(g: Geometry, rng: () => number): Geometry {
  *  in `inner`), the grain's rings round it (u across the wood, v round it, in the heartwood's tiles). */
 function logEnd(bark: Geometry, inner: Geometry, outer: number, hollow: number): Geometry {
   const b = bark.attributes.position, h = inner.attributes.position, sides = 16, positions: number[] = [], uvs: number[] = [];
-  const corner = (p: Attribute | InterleavedBufferAttribute, i: number, across: number, k: number) => {
+  const corner = (p: Attribute, i: number, across: number, k: number) => {
     positions.push(p.getX(i), p.getY(i), p.getZ(i));
     uvs.push(across * 0.06, (k / sides) * 0.3);
   };

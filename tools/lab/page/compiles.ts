@@ -14,7 +14,7 @@
 // (Under three this counted three's programs, and the point lights each pass lit with, a program compiled for each
 // count: the engine lights by a pool of uniforms, its pipelines alike whatever the lights.)
 import { askForHeroes } from './uiHeroes';
-import * as THREE from 'three';
+import { AdditiveBlending, BackSide, Mesh, shapes, UnlitMaterial, Vec3 } from './sceneApi.ts';
 import type { Lab, Report } from './lab';
 import type { BiomeId } from '../../../src/data/biomes';
 import type { ViewMode } from '../../../src/core/renderer';
@@ -189,8 +189,8 @@ async function throwsDrawn(lab: Lab, biome: BiomeId, { view, gear, weapon }: Fig
   const hero = G.player.pos;
   // (towards the arena's middle, side by side: out the other way they stood beyond the wall, and rose inside it 6 m
   // from him, too near to throw)
-  const inward = new THREE.Vector3(-hero.x, 0, -hero.z).normalize();
-  const aside = new THREE.Vector3(-inward.z, 0, inward.x);
+  const inward = new Vec3(-hero.x, 0, -hero.z).normalize();
+  const aside = new Vec3(-inward.z, 0, inward.x);
   const throwers = THROWERS.map((kind, i) => {
     const at = hero.clone().addScaledVector(inward, THROWN_FROM).addScaledVector(aside, i ? 2 : -2);
     return { kind, foe: lab.spawnFoe(kind, at), acts: new Set<string>() };
@@ -217,14 +217,14 @@ async function throwsDrawn(lab: Lab, biome: BiomeId, { view, gear, weapon }: Fig
 /** The canary: a box before the hero drawn added to what's behind it, its back faces alone, writing its depth (a
  *  blending, side and depth no other material has together), a problem unless it asks the engine for a pipeline. */
 async function canaryRound(lab: Lab): Promise<Report> {
-  const material = new THREE.MeshBasicMaterial({
+  const material = new UnlitMaterial({
     color: 0xff00ff,
-    blending: THREE.AdditiveBlending,
-    side: THREE.BackSide,
+    blending: AdditiveBlending,
+    side: BackSide,
     depthWrite: true,
   });
-  const box = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 0.5), material);
-  const way = new THREE.Vector3(Math.sin(G.player.facing), 0, Math.cos(G.player.facing));
+  const box = new Mesh(shapes.box(0.5, 0.5, 0.5), material);
+  const way = new Vec3(Math.sin(G.player.facing), 0, Math.cos(G.player.facing));
   box.position.copy(G.player.pos).addScaledVector(way, 2).setY(0.5);
   G.scene.add(box);
   const since = compilesFromNow();

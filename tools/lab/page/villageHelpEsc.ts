@@ -2,7 +2,7 @@
 // from how to play should be possible with escape, it should not reopen another escape menu"). The game asked for the
 // lock back with Esc still down, and the browser lets a lock go for an Esc as it's let go; the page plays that here, as
 // the lab's lock is the page's own. `canary` asks for the lock with Esc down, as it was: the pause menu must open.
-import * as THREE from 'three';
+import { Vec3 } from './sceneApi.ts';
 import type { Lab } from './lab';
 import { G } from '../../../src/state';
 import { holdLockOffByEsc, pointerLocked } from '../../../src/core/input';
@@ -28,7 +28,7 @@ async function escapeFromHelp(lab: Lab): Promise<{ opened: boolean; closed: bool
   const stand = villageObject('notice')?.stand;
   if (!stand) throw new Error('lab: village: no notice board to stand by');
   G.player.walkTo = null;
-  G.player.place(new THREE.Vector3(stand[0], groundHeight(stand[0], stand[1]), stand[1]), 0);
+  G.player.place(new Vec3(stand[0], groundHeight(stand[0], stand[1]), stand[1]), 0);
   await viewBy(lab, 'third');
   lab.pointerLock(true);
   // (a key the game doesn't use, the gesture the lock is taken on)
