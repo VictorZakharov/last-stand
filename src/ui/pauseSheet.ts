@@ -30,7 +30,7 @@ function titleWidth(): number {
 }
 
 /** The diamond rule (`@mixin diamond-rule`): a line fading in from the left to a small gem, and out to the right. */
-function diamondRule(_element: Element, w: number, h: number): Painted {
+export function diamondRule(_element: Element, w: number, h: number): Painted {
   const colour = accent();
   return {
     key: `${w}x${h} ${colour}`,

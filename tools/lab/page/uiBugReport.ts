@@ -233,7 +233,9 @@ function reachable(element: HTMLElement | null, name: string, state: State): str
     return [`${state}: ${name} lies past the window's edge`];
   }
   const hit = elementUnder(box.left + box.width / 2, box.top + box.height / 2);
-  if (!hit || !(hit === element || element.contains(hit) || hit.contains(element))) return [`${state}: something lies over ${name}`];
+  if (!hit || !(hit === element || element.contains(hit) || hit.contains(element))) {
+    return [`${state}: ${hit ? nameOf(hit) : 'nothing found'} lies over ${name}`];
+  }
   return [];
 }
 
@@ -263,8 +265,10 @@ function coveredForm(state: State): string[] {
 
 /** An element as a report names it: the id nearest it, or its tag. */
 function nameOf(element: Element): string {
+  if (element.id) return `#${element.id}`;
+  const classes = [...element.classList].map((name) => `.${name}`).join('');
   const named = element.closest('[id]');
-  return named ? `#${named.id}` : element.tagName.toLowerCase();
+  return `${element.tagName.toLowerCase()}${classes}${named ? ` in #${named.id}` : ''}`;
 }
 
 /** The form's box against the window, and its controls each found. */

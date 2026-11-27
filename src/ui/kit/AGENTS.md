@@ -123,6 +123,34 @@ The rules across the game are the [root AGENTS.md](../../../AGENTS.md).
   press on the panel focuses it at its end (`Pressable.press`, which a click of an input wouldn't), and each frame
   the panel shows its value (a password's as dots, its placeholder dimmed while it's empty) and a caret where the
   input's is while it has the focus, its words at its left half way down it.
+- **A sheet's tree follows its page only when told** (`sheetDirty.ts`): a mutation in it (or of any screen's own
+  element), the window, the scales, the accent, the focus, an input, a load, the hover; and the frames after one that
+  sent the engine anything, till one sends nothing. Ticks and sliders follow every frame. Followed every frame, the
+  pause menu cost 6.2 ms of the main thread here standing still; now every state is 0.1 to 0.2 ms
+  (`npm run lab -- ui --cost`, its canary a 3 ms tick). A measure that changes the page then reads the kit steps two
+  or three frames first.
+- **A text not seen gives its atlas slot back** (`Panel.refreshTree`, `Label.release`): holding every text's slot,
+  shown or not, the atlas was full after the bug report opened twice (the engine's fault banner).
+- **A flex box is a column unless a rule says `direction`**: CSS's row's `align-items: flex-start` (its top) is
+  `justify: 'start'` here. Written as `alignItems`, a modal typed into on a phone stood against the window's left edge.
+- **A lifted box is hit before everything else of its screen** (`lift`, `SheetTree.elementAt`): drawn over the whole
+  screen, it was tried among its siblings alone, and a later column's box under it took its press (the bug report's
+  picture's tick on a phone).
+- **The page's elements left on it lie over every screen the kit draws** (the village's crest): hide them while a kit
+  screen or modal shows (`_base.scss`), as main's page covered them; the ghosts and the stick take no pointer there.
+- **A wrapped text asks for no width** (above), so in a wrapping row beside boxes it lets them squeeze: keep it whole
+  where CSS sizes it to its words (the save slots' state, Privacy), or give the row its items' drawn widths
+  (`rowOf` in `cloudSheet.ts`: taffy sizes a wrapping row narrower than its items on one line).
+- **An empty field lays out no line**: give it the height its words' line would (`#sd-input`), or it's a strip.
+- **Runs**: a `<br>` ends its line (a word of no width, `block`); `anywhere` breaks a long word after its dots and
+  signs too (CSS's `overflow-wrap: anywhere`: an email address). `b` isn't bold of itself: its rule says so.
+- **A picture of the page's SVG takes its opacity from the page's style** (`svgArt`): a rule's own opacity on top
+  squares it (the save slots' gear placeholders were near unseen).
+- **A mark can be a bar** (`Mark.bar`: a side's border of another colour, `border-left: 3px solid var(--cc)`), and a
+  screen can have a scale of its own (`uiScales.panes`: the save slots' `--z`, the lobby's times 0.8 on an upright
+  tablet). A panel's width in its own px is `rect().w / uiScales[panel.scaled]` (`savesGrid.ts`).
+- **The lab's node side clicks where the kit draws** (`clickDrawn`, `middleDrawn` in `node/cloudDevice.mjs`):
+  Playwright's own click waits on a page element the kit keeps out of sight (`.kit-mirror` takes no pointer).
 - **Check a panel against main's page with `npm run lab -- ui --states <state> --ab`**: its box's lines and its
   pictures beside main's (`ui --states target`: the frame's box 384x52 at 113 on both, its name and line read off
   the engine's frame where the tree has it, off `#target` on main's).

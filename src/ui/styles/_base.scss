@@ -84,5 +84,8 @@ html, body { touch-action: manipulation; -webkit-tap-highlight-color: transparen
 // pause menu lay over it on main; the stick's see-through area too, under it by its z-index there)
 body:has(.modal.kit-mirror:not(.hidden)) :is(.kit-ghost, #touch),
 body:has(.modal.kit-mirror:not(.hidden)) :is(.kit-ghost, #touch) * { pointer-events: none !important; }
+// (the village's crest stays on the page, so over the engine's canvas: none while a screen or a modal the kit draws
+// shows, which on main lay over it; the save slots showed WARDENHOLLOW across their title)
+body:has(:is(#saves, .modal).kit-mirror:not(.hidden)) .menu-crest { visibility: hidden; }
 
 /* #loading is styled inline in index.html so it paints before this stylesheet and the bundle load */

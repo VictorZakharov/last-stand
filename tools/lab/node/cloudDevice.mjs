@@ -39,17 +39,44 @@ export const KEYBOARD_SCREEN = { name: '844x175-keyboard', width: 844, height: 1
 
 /**
  * Whether the field `selector` names lies whole above `keyboardTop` (css px from the window's top; the visual
- * viewport's bottom when none is given), and has the focus. Run in the page: it uses nothing of this module's.
+ * viewport's bottom when none is given) where it's drawn, and has the focus. Run in the page: it uses nothing of
+ * this module's.
  */
-function fieldInView([selector, keyboardTop]) {
+async function fieldInView([selector, keyboardTop]) {
+  const cloud = await import('/tools/lab/page/cloud.ts');
+  const box = await cloud.cloudBox({ selector });
   const field = document.querySelector(selector);
-  const box = field.getBoundingClientRect();
   const seen = window.visualViewport;
   const top = seen ? seen.offsetTop : 0;
   const bottom = keyboardTop ?? top + (seen ? seen.height : innerHeight);
   const whole = box.top >= top - 0.5 && box.bottom <= bottom + 0.5 && box.height > 0;
   const where = `${Math.round(box.top)}-${Math.round(box.bottom)} px, the keyboard from ${Math.round(bottom)}`;
   return { whole, focused: document.activeElement === field, box: where };
+}
+
+/** The middle of the element `selector` names (the first whose words are `text`, if given) where it's drawn
+ *  (page/cloud.ts `cloudBox`), css px. */
+export async function middleDrawn(page, selector, text) {
+  const box = await page.evaluate(async (wanted) => {
+    const cloud = await import('/tools/lab/page/cloud.ts');
+    return cloud.cloudBox(wanted);
+  }, { selector, text });
+  return { x: box.left + box.width / 2, y: box.top + box.height / 2 };
+}
+
+/** A mouse's click on the element `selector` names (the first whose words are `text`, if given) where it's drawn,
+ *  then the UI kit's frames for what it changed (page/cloud.ts `cloudFrames`). */
+export async function clickDrawn(page, selector, text) {
+  const middle = await middleDrawn(page, selector, text);
+  await page.mouse.click(middle.x, middle.y);
+  await page.evaluate(async () => (await import('/tools/lab/page/cloud.ts')).cloudFrames()).catch(leftThePage);
+}
+
+/** A page left by the click it was given (Google's redirect, a page closed) has no frames to run: anything else
+ *  is thrown again. */
+function leftThePage(error) {
+  if (/context was destroyed|Target .*closed|navigat/i.test(String(error?.message))) return;
+  throw error;
 }
 
 /** The promise's value, resolved after `ms`. */
@@ -106,9 +133,10 @@ export class Device {
     return this.call('cloudSlots');
   }
 
-  /** Clicks the element `selector` names, as the mouse would. */
-  async click(selector) {
-    await this.page.locator(selector).first().click({ timeout: WAIT_MS });
+  /** Clicks the element `selector` names (the first whose words are `text`, if given) where it's drawn, as the
+   *  mouse would, and gives the UI kit its frames to draw what that changed. */
+  async click(selector, text) {
+    await clickDrawn(this.page, selector, text);
   }
 
   /** Waits until `test` holds of the cloud's state; throws, saying what it waited for and what it saw, if it never
@@ -174,7 +202,7 @@ export class Device {
       if (screen.touch) await this.leaveTouch();
     }
     await this.devtools.send('Emulation.clearDeviceMetricsOverride');
-    await pause(SETTLE_MS);
+    await this.settle();
     return { lines, problems };
   }
 
@@ -189,25 +217,22 @@ export class Device {
     const phone = SCREENS.find((screen) => screen.touch);
     await this.showOn(phone);
     await this.tapOn(selector);
-    await pause(SETTLE_MS);
+    await this.settle();
     const over = await this.typingSeen(folder, `${label}-keyboard-over`, selector, KEYBOARD_SCREEN.height);
     const { width, height, ratio } = KEYBOARD_SCREEN;
     const metrics = { width, height, deviceScaleFactor: ratio, mobile: false };
     await this.devtools.send('Emulation.setDeviceMetricsOverride', metrics);
-    await pause(SETTLE_MS);
+    await this.settle();
     const shrunk = await this.typingSeen(folder, `${label}-keyboard-shrinks`, selector, null);
     await this.leaveTouch();
     await this.devtools.send('Emulation.clearDeviceMetricsOverride');
-    await pause(SETTLE_MS);
+    await this.settle();
     return { lines: [...over.lines, ...shrunk.lines], problems: [...over.problems, ...shrunk.problems] };
   }
 
   /** A finger's tap at the middle of the element `selector` names. */
   async tapOn(selector) {
-    const middle = await this.page.evaluate((selector) => {
-      const box = document.querySelector(selector).getBoundingClientRect();
-      return { x: box.left + box.width / 2, y: box.top + box.height / 2 };
-    }, selector);
+    const middle = await middleDrawn(this.page, selector);
     const point = { x: middle.x, y: middle.y, id: 0 };
     await this.devtools.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [point] });
     await this.devtools.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
@@ -229,16 +254,12 @@ export class Device {
   async showOn(screen) {
     const metrics = { width: screen.width, height: screen.height, deviceScaleFactor: screen.ratio, mobile: false };
     await this.devtools.send('Emulation.setDeviceMetricsOverride', metrics);
-    await pause(SETTLE_MS);
+    await this.settle();
     if (!screen.touch) return;
     await this.devtools.send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 5 });
-    const at = await this.page.evaluate(() => {
-      const dialog = document.getElementById('cloud-dialog');
-      const open = dialog && !dialog.classList.contains('hidden');
-      const title = document.querySelector(open ? '#cloud-dialog .sm-title' : '#saves .sv-title');
-      const box = title.getBoundingClientRect();
-      return { x: box.left + box.width / 2, y: box.top + box.height / 2 };
-    });
+    const dialogOpen = await this.page.evaluate(() =>
+      !document.getElementById('cloud-dialog')?.classList.contains('hidden'));
+    const at = await middleDrawn(this.page, dialogOpen ? '#cloud-dialog .sm-title' : '#saves .sv-title');
     // an open Account menu closes on a press outside it (and a tap on its padding was moved onto a button by the
     // browser's touch adjustment): opened again after the tap, as the player's tap on Account opens it
     const menuOpen = await this.page.evaluate(() => document.querySelector('#saves .sc-more[open]') !== null);
@@ -246,7 +267,14 @@ export class Device {
     await this.devtools.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [point] });
     await this.devtools.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
     if (menuOpen) await this.page.evaluate(() => { document.querySelector('#saves .sc-more').open = true; });
+    await this.settle();
+  }
+
+  /** A resize given its time to be laid out, then the UI kit its frames to draw it (the save slots are the engine's:
+   *  read before, a 1024 px screen's boxes were the 1920 one's, reaching 600 px past its edge). */
+  async settle() {
     await pause(SETTLE_MS);
+    await this.page.evaluate(async () => (await import('/tools/lab/page/cloud.ts')).cloudFrames());
   }
 
   /** Touch mode left as a mouse moving takes the page out of it (src/ui/touch.ts). */

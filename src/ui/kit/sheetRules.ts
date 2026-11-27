@@ -25,6 +25,9 @@ export interface Painted {
 export interface Mark {
   inset: PanelStyle['inset'];
   dot?: { side: number; fill: string };
+  /** a bar down the box, this wide, in its element's colour (a side's border of another colour: `border-left: 3px
+   *  solid var(--cc)`, a save's hero in his class's accent) */
+  bar?: { width: number; fill: (element: Element) => string };
   says?: string;
   text?: SheetText;
 }

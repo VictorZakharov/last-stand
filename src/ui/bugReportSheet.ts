@@ -6,7 +6,7 @@
 import { HELP_TEXT } from './helpTextSheet';
 import { NARROW } from './pauseSheet';
 import { SHORT, TOUCH } from './controlsSheet';
-import { finger } from './modalSheet';
+import { finger, typedAbove } from './modalSheet';
 import { DANGER, FRAME, HIGHLIGHT, INK, INK_DIM, WELL, WELL_LIT, alpha } from './kit/theme';
 import { accent } from './diagFrame';
 import { shownBox } from './kit/press';
@@ -113,7 +113,10 @@ export const BUG_REPORT: Sheet = [
     text: { size: 13, line: 1.25, color: INK_DIM } },
   // the picture taken as the form opened, and whether it goes along
   { at: '.br-shot, .br-done-shot', flex: true, box: { direction: 'row', alignItems: 'center', gap: 10 } },
-  { at: '.br-shot', when: SHORT, box: shotPlaced },
+  // (drawn over the column after it, as CSS paints a box placed absolutely over the boxes laid out after it: drawn in
+  // the tree's order, what's more lay over the picture's tick and took its press; its column, the first, starts where
+  // the columns do, so placed against it as against them)
+  { at: '.br-shot', when: SHORT, lift: true, box: shotPlaced },
   { at: '.br-more #br-expected', when: SHORT, box: roomForShot },
   { at: '.br-shot-frame', flex: true, box: () => (SHORT()
     ? { width: 100, height: 57, shrink: 0, border: 1 } : { width: 150, height: 86, shrink: 0, border: 1 }),
@@ -169,15 +172,5 @@ export const BUG_REPORT: Sheet = [
   { at: '.br-done-shot-actions .btn', box: { padding: [6, 12] }, text: { size: 14, underline: false } },
   { at: '.br-done .br-actions', box: { alignSelf: 'stretch', justify: 'center' } },
   // typed into on a phone: the form at the top of what the keyboard leaves (ui/aboveKeyboard.ts)
-  { at: '#bug-report.typing', box: (element) => {
-    const style = (element as HTMLElement).style;
-    const seen = parseFloat(style.getPropertyValue('--seen')) || innerHeight / 2;
-    const top = parseFloat(style.getPropertyValue('--seen-top')) || 0;
-    const k = uiScales.ui;
-    return { alignItems: 'start', inset: [top / k, 0, 'auto', 0], height: seen / k, padding: [6 / k, 0, 0, 0] };
-  } },
-  { at: '#bug-report.typing .modal-box', box: () => {
-    const seen = parseFloat(document.getElementById('bug-report')!.style.getPropertyValue('--seen')) || innerHeight / 2;
-    return { maxHeight: (seen - 12) / uiScales.ui };
-  } },
+  ...typedAbove('bug-report'),
 ];

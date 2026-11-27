@@ -5,6 +5,7 @@
 // window (src/ui/AGENTS.md: nothing past its edges, nothing over another). The node side drives the screens
 // (tools/lab/node/cloud.mjs).
 import { Vec3 } from './sceneApi.ts';
+import { boxOf, seenOf } from './lab';
 import { CLASS_IDS } from '../../../src/data/classes/index';
 import { villageObject } from '../../../src/game/village';
 import { groundHeight } from '../../../src/world/ground';
@@ -122,15 +123,53 @@ const SETTLE_FRAMES = 60;
  * asks for them, so waiting for every need to be warm would wait for ever where nothing does. Returns the frames run.
  */
 export async function cloudWarmUp(): Promise<number> {
-  const clock = (window as unknown as { __labClock: ParkedClock }).__labClock;
   for (let frame = 0; frame < WARM_FRAMES; frame++) {
     if (frame >= SETTLE_FRAMES && !isReadying()) return frame;
-    clock.t += clock.frame;
-    for (const callback of clock.queue.splice(0)) callback(clock.t);
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await parkedFrame();
   }
   throw new Error(`lab: cloud: "${readyingLabel()}" still waited after ${WARM_FRAMES} frames`);
 }
+
+/** One of the game's parked frames run, and the page's own tasks let in after it. */
+async function parkedFrame(): Promise<void> {
+  const clock = (window as unknown as { __labClock: ParkedClock }).__labClock;
+  clock.t += clock.frame;
+  for (const callback of clock.queue.splice(0)) callback(clock.t);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+}
+
+/** the frames the UI kit is given to draw what changed before its boxes are read (src/ui/kit: two or three) */
+const KIT_FRAMES = 3;
+
+/** `count` of the game's parked frames run: what a click changed drawn by the UI kit. */
+export async function cloudFrames(count = KIT_FRAMES): Promise<void> {
+  for (let frame = 0; frame < count; frame++) await parkedFrame();
+}
+
+/** What `cloudBox` is asked for: the first element `selector` names, or the first of them whose words are `text`. */
+export interface Wanted { selector: string; text?: string }
+
+/** A box as plain numbers, css px (a DOMRect doesn't cross to Node). */
+export interface PlainBox { left: number; top: number; right: number; bottom: number; width: number; height: number }
+
+/**
+ * The box of the element `wanted` names where it's drawn, after the UI kit's frames: the save slots and their
+ * dialogs are the engine's (src/ui/savesSheet.ts, cloudSheet.ts), their page elements out of sight, so the node side
+ * clicks and taps there. Throws if it shows nothing.
+ */
+export async function cloudBox(wanted: Wanted): Promise<PlainBox> {
+  await cloudFrames();
+  const element = [...document.querySelectorAll(wanted.selector)]
+    .find((each) => wanted.text === undefined || each.textContent?.trim() === wanted.text);
+  if (!element) throw new Error(`lab: cloud: nothing on the page is ${describeWanted(wanted)}`);
+  const box = boxOf(element);
+  if (box.width < 1 || box.height < 1) throw new Error(`lab: cloud: ${describeWanted(wanted)} isn't drawn`);
+  return { left: box.left, top: box.top, right: box.right, bottom: box.bottom, width: box.width, height: box.height };
+}
+
+/** `wanted` in a report's words. */
+const describeWanted = (wanted: Wanted): string =>
+  (wanted.text === undefined ? wanted.selector : `${wanted.selector} "${wanted.text}"`);
 
 /** Whether the lobby's fight loading bar says it readies something pressed (a slot's hero waiting for his programs). */
 export const cloudReadying = (): string => (isReadying() ? readyingLabel() : '');
@@ -203,11 +242,11 @@ export async function cloudMakeCode(): Promise<string> {
 /** the parts of the screen a box of the bar or the dialog may not lie over, beside its own siblings */
 const BAR_NEIGHBOURS = ['#saves .sv-back', '#saves .sv-title', '#saves .sv-panes'];
 
-/** A shown element's box, or null if it shows nothing. */
-function boxOf(element: Element): DOMRect | null {
-  const box = element.getBoundingClientRect();
+/** A shown element's box where it's drawn (the engine draws the save slots: `boxOf`), or null if it shows nothing. */
+function shownBoxOf(element: Element): DOMRect | null {
+  const box = boxOf(element);
   if (box.width < 1 || box.height < 1) return null;
-  if (getComputedStyle(element).visibility === 'hidden') return null;
+  if (!seenOf(element)) return null;
   return box;
 }
 
@@ -229,7 +268,7 @@ function nameOf(element: Element): string {
 /** Each of `elements` within the window and over none of the others: the problems found. */
 function fitOf(where: string, elements: Element[]): string[] {
   const problems: string[] = [];
-  const shown = elements.map((element) => ({ element, box: boxOf(element) }))
+  const shown = elements.map((element) => ({ element, box: shownBoxOf(element) }))
     .filter((entry): entry is { element: Element; box: DOMRect } => entry.box !== null);
   for (const { element, box } of shown) {
     const past = pastWindow(box);
@@ -245,7 +284,9 @@ function fitOf(where: string, elements: Element[]): string[] {
 }
 
 /** The bar and, if open, the dialog held to the window: each part within it and over no other. */
-export function cloudFit(): { lines: string[]; problems: string[] } {
+export async function cloudFit(): Promise<{ lines: string[]; problems: string[] }> {
+  // (the kit's frames first: the bar is written again as the sync's state changes, and its new boxes are drawn then)
+  await cloudFrames();
   const bar = document.querySelector('#saves .sv-cloud')!;
   const row = [...bar.querySelectorAll('.sc-row > *')];
   const neighbours = BAR_NEIGHBOURS.flatMap((selector) => [...document.querySelectorAll(selector)]);
@@ -271,7 +312,7 @@ export function cloudFit(): { lines: string[]; problems: string[] } {
 
 /** A box as a share of the window: where it starts and how large it is, in %. */
 function boxText(element: Element): string {
-  const box = element.getBoundingClientRect();
+  const box = boxOf(element);
   const share = (value: number, of: number): string => `${Math.round((value / of) * 100)}%`;
   return `at ${share(box.left, innerWidth)},${share(box.top, innerHeight)} `
     + `${share(box.width, innerWidth)}x${share(box.height, innerHeight)}`;

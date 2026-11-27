@@ -5,7 +5,9 @@ const REF_W = 1500, REF_H = 780;
 
 /** The scales as last fitted (css px per px of the reference layout): `ui` the lobby's and the modals', `hud` the run's
  *  HUD's and the world's labels', `touch` the touch controls' (sized for a finger, so in css px). */
-export const uiScales = { ui: 1, hud: 1, touch: 1 };
+/** the scales: the lobby's and the modals' (`ui`), the run's HUD's, the touch controls', and the save slots' panes
+ *  (`panes`: the lobby's, times 0.8 on an upright tablet, whose three panes the lobby's one-panel scale overfilled) */
+export const uiScales = { ui: 1, hud: 1, touch: 1, panes: 1 };
 
 const round = (v: number): number => Math.round(v * 1000) / 1000;
 
@@ -21,6 +23,7 @@ function apply() {
   uiScales.ui = round(s);
   // the in-run HUD spreads across the screen's width, so an upright tablet keeps the fitted scale
   uiScales.hud = round(upright ? fit : s);
+  uiScales.panes = round(upright ? s * 0.8 : s);
   // touch controls size with the screen's short side (a phone held sideways is ~390 px)
   uiScales.touch = round(Math.min(1.2, Math.max(0.72, Math.min(w, h) / 480)));
   const root = document.documentElement.style;

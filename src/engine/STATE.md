@@ -580,6 +580,18 @@ the SCSS. In the order they're taken: the kit's own pieces first, then what show
 - [ ] Seen failing on main too: `lab ui --states target` run after the lobby's states (the frame not shown);
   `glow --canary`'s two loops (the glow check reads the page's CSS loops, which the lobby's port stopped: to read
   the kit's).
-- [ ] The save slots, hero selection's panels, Play together and its rooms, How to play, the village's map.
+- [x] The save slots (`ui/savesSheet.ts`, its grids `savesGrid.ts`; the cloud's bar and its two dialogs
+  `ui/cloudSheet.ts`): `lab ui --states saves,savesHeroes,cloudIdentity --ab` at 1920x1080, 844x390@3 and 820x1180@2,
+  the panes, the heroes' cards and the bar as main's (the identity 368x87 px against 369x83; the phone's to the pixel
+  but for the body's fade where its scroll cuts it, not drawn, nor the slots' glide as the cloud moves them);
+  `savesHeroes` (new: slots 2 and 3 with played heroes, given back after) and `saveDelete` (new: its field drawn with
+  the focus, DELETE arming the button, its canary KEEP typed). `lab cloud` and `cloud --google` pass, their clicks
+  where the kit draws each control (`clickDrawn` in `node/cloudDevice.mjs`), the kit given its frames after each
+  resize. Fixed on the way: the village's crest, left on the page, showed WARDENHOLLOW across the screen's title (hid
+  under a kit screen or modal now); a modal typed into on a phone stood against the window's left edge (the kit's
+  box is a column: its top is `justify`), the bug report's too; a box lifted over the screen took no press where it
+  lay over a later column (the bug report's picture's tick on a phone: the hit test tries lifted boxes first over the
+  whole tree); a `<br>` broke no line; an email address reached past its pane (`anywhere`).
+- [ ] Hero selection's panels, Play together and its rooms, How to play, the village's map.
 - [ ] The guide's pages, the talk, the trade, the merchant, the drink.
 - [ ] The loading screen (styled before any script runs: the last, if at all).

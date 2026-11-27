@@ -57,8 +57,8 @@ export function markNode(node: Node, marks: Gathered['marks']): void {
   marks.forEach((mark, at) => {
     const panel = node.marks[at];
     const side = mark.dot?.side;
-    panel.style({ inset: mark.inset, width: side, height: side });
-    panel.look({ fill: mark.dot?.fill, radius: side ? side / 2 : undefined });
+    panel.style({ inset: mark.inset, width: side ?? mark.bar?.width, height: side });
+    panel.look({ fill: mark.dot?.fill ?? mark.bar?.fill(node.element), radius: side ? side / 2 : undefined });
     panel.say(mark.says ?? '', { ...BODY, ...mark.text });
   });
 }

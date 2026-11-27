@@ -92,6 +92,19 @@ export class SheetTree implements Forwarded {
       }
       return inside && node.hits ? node.element : null;
     };
+    // (a lifted node is drawn over the whole screen, so over its parent's later siblings too: tried first, the last
+    // drawn first; tried among its own siblings alone, the bug report's picture lifted over the column after its own
+    // lost its tick's press to what lay under it)
+    const lifted: Node[] = [];
+    const gather = (node: Node): void => {
+      if (node.anchor) lifted.push(node);
+      for (const kid of node.kids) gather(kid);
+    };
+    gather(this.root);
+    for (let at = lifted.length - 1; at >= 0; at--) {
+      const found = under(lifted[at]);
+      if (found) return found;
+    }
     return under(this.root);
   }
 

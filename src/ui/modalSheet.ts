@@ -43,6 +43,25 @@ export const MODAL: Sheet = [
   { at: '.dc-buttons .btn', when: TOUCH, box: () => ({ minHeight: finger(32) }) },
 ];
 
+/** A modal typed into on a phone, at the top of what the keyboard leaves (`ui/aboveKeyboard.ts` sets its `.typing`,
+ *  `--seen` and `--seen-top`): its box held to that height. */
+export function typedAbove(id: string): Sheet {
+  const seen = (element: Element | null, name: string, fallback: number): number =>
+    parseFloat((element as HTMLElement | null)?.style.getPropertyValue(name) ?? '') || fallback;
+  return [
+    { at: `#${id}.typing`, box: (element) => {
+      const k = uiScales.ui;
+      const height = seen(element, '--seen', innerHeight / 2);
+      const top = seen(element, '--seen-top', 0);
+      // (the backdrop is a column, as the kit lays a box out: its top is `justify`; `alignItems: 'start'`, CSS's
+      // `align-items: flex-start` on its row, stood the box against the window's left edge)
+      return { justify: 'start', inset: [top / k, 0, 'auto', 0], height: height / k, padding: [6 / k, 0, 0, 0] };
+    } },
+    { at: `#${id}.typing .modal-box`, box: () =>
+      ({ maxHeight: (seen(document.getElementById(id), '--seen', innerHeight / 2) - 12) / uiScales.ui }) },
+  ];
+}
+
 /** The modal `id` drawn by the engine from now on by `sheet` (the modals' rules first), its page element out of sight;
  *  its tree, or none where the page hasn't it. */
 export function drawModal(id: string, sheet: Sheet): SheetTree | null {

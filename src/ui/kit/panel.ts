@@ -19,7 +19,7 @@ import {
 } from '../../engine/ui';
 
 /** The UI's scale a panel is drawn at. */
-export type Scaled = 'hud' | 'ui' | 'touch';
+export type Scaled = 'hud' | 'ui' | 'touch' | 'panes';
 
 /** A line of text a panel shows: what it says and how, and how far its line's box reaches past the face's own each
  *  side (px: negative where its line height is shorter, as CSS's half-leading); or a picture (no style), `text` the

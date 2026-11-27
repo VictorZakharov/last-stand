@@ -1,10 +1,11 @@
 // The dialogs drawn by the engine (ui/kit's sheet; #973): Install (opened over the pause menu, `pwa.ts`), rule for
-// rule from `styles/_modals.scss`, and the bug report's form (`bugReportSheet.ts`). Each is a modal
+// rule from `styles/_modals.scss`, the bug report's form (`bugReportSheet.ts`) and the save slots' two (`cloudSheet.ts`). Each is a modal
 // (`modalSheet.ts`): its page element out of sight, written and listened to by its module as before. Made after the
 // pause menu's, so drawn over it in the modals' layer. Sizes are px of the lobby's scale.
 import { drawModal } from './modalSheet';
 import { HELP_TEXT, PARAGRAPH } from './helpTextSheet';
 import { BUG_REPORT } from './bugReportSheet';
+import { CLOUD_DIALOG, SAVE_DELETE } from './cloudSheet';
 import type { Sheet } from './kit/sheet';
 
 /** Install: the steps to add the game to the home screen, and Got it. */
@@ -21,5 +22,7 @@ const INSTALL: Sheet = [
 export function drawDialogs(): void {
   drawModal('install', INSTALL);
   drawModal('bug-report', BUG_REPORT);
+  drawModal('save-delete', SAVE_DELETE);
+  drawModal('cloud-dialog', CLOUD_DIALOG);
 }
 

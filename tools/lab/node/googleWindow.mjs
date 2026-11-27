@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { Device, SCREENS } from './cloudDevice.mjs';
+import { Device, SCREENS, clickDrawn } from './cloudDevice.mjs';
 import { OUT } from './paths.mjs';
 
 /** Fullscreen state and requests are played by the fixture; no native fullscreen or keyboard lock is taken. */
@@ -112,12 +112,12 @@ export async function runGoogleWindow(side, { canary = false, pictures = true } 
     await page.evaluate(() => { window.__googleBootMarker = {}; });
     // (in the village the Save slot button is on the chronicle's card)
     await page.evaluate(async () => (await import('/tools/lab/page/cloud.ts')).cloudAtChronicle());
-    await page.locator('#btn-saves').click();
+    await clickDrawn(page, '#btn-saves');
     await page.evaluate(installFullScreenSpy);
     await page.evaluate(() => { document.querySelector('.sc-google').hidden = false; });
     const popupPromise = context.waitForEvent('page');
     phase = 'opening Google window';
-    await page.locator('.sc-google').click();
+    await clickDrawn(page, '.sc-google');
     const popup = await popupPromise;
     await popup.waitForURL('**/privacy.html');
     const left = await page.evaluate(() => window.__googleFullscreen);
@@ -141,7 +141,7 @@ export async function runGoogleWindow(side, { canary = false, pictures = true } 
       window.__googleFocusRequests = 0;
       window.focus = () => { window.__googleFocusRequests++; };
     });
-    await page.locator('#cloud-dialog button').filter({ hasText: /^Show Google window$/ }).click();
+    await clickDrawn(page, '#cloud-dialog button', 'Show Google window');
     assert.equal(await popup.evaluate(() => window.__googleFocusRequests), 1);
     lines.push('Show Google window: requests foreground during sign-in without starting another attempt');
     const callback = new URL(begins.at(-1).returnPath, originalUrl);
@@ -153,7 +153,7 @@ export async function runGoogleWindow(side, { canary = false, pictures = true } 
       await popup.goto(callback.href + '#cloud-google=invalid');
       await page.waitForTimeout(400);
       assert.equal(finishes.length, 0, 'malformed return must not be redeemed');
-      await page.locator('#cloud-dialog button').filter({ hasText: /^Cancel$/ }).click();
+      await clickDrawn(page, '#cloud-dialog button', 'Cancel');
       lines.push('canary: invalid landing code rejected');
       return { text: lines.join('\n'), problems: [] };
     }
@@ -218,10 +218,10 @@ export async function runGoogleWindow(side, { canary = false, pictures = true } 
     });
     const cancelPopupPromise = context.waitForEvent('page');
     phase = 'checking cancellation';
-    await page.locator('.sc-google').click();
+    await clickDrawn(page, '.sc-google');
     const cancelPopup = await cancelPopupPromise;
     await cancelPopup.waitForURL('**/privacy.html');
-    await page.locator('#cloud-dialog button').filter({ hasText: /^Cancel$/ }).click();
+    await clickDrawn(page, '#cloud-dialog button', 'Cancel');
     await page.waitForFunction(() => document.querySelector('#cloud-dialog').classList.contains('hidden'),
       null, { polling: 100 });
     assert.equal(finishes.length, 2);
@@ -231,7 +231,7 @@ export async function runGoogleWindow(side, { canary = false, pictures = true } 
 
     phase = 'closing the native popup';
     const closePopupPromise = context.waitForEvent('page');
-    await page.locator('.sc-google').click();
+    await clickDrawn(page, '.sc-google');
     const closePopup = await closePopupPromise;
     await closePopup.waitForURL('**/privacy.html');
     await page.evaluate(() => { window.__googleFullscreen.refuse = true; });
@@ -248,7 +248,7 @@ export async function runGoogleWindow(side, { canary = false, pictures = true } 
 
     phase = 'Google cancellation';
     const declinePopupPromise = context.waitForEvent('page');
-    await page.locator('.sc-google').click();
+    await clickDrawn(page, '.sc-google');
     const declinePopup = await declinePopupPromise;
     await declinePopup.waitForURL('**/privacy.html');
     const declineCallback = new URL(begins.at(-1).returnPath, originalUrl);
@@ -268,7 +268,7 @@ export async function runGoogleWindow(side, { canary = false, pictures = true } 
     });
     const requestsBefore = await page.evaluate(() => window.__googleFullscreen.requests);
     const windowedPopupPromise = context.waitForEvent('page');
-    await page.locator('.sc-google').click();
+    await clickDrawn(page, '.sc-google');
     const windowedPopup = await windowedPopupPromise;
     await windowedPopup.waitForURL('**/privacy.html');
     await windowedPopup.close();
@@ -282,7 +282,7 @@ export async function runGoogleWindow(side, { canary = false, pictures = true } 
     phase = 'closing before the address request answers';
     holdBegin = true;
     const waitingPopupPromise = context.waitForEvent('page');
-    await page.locator('.sc-google').click();
+    await clickDrawn(page, '.sc-google');
     const waitingPopup = await waitingPopupPromise;
     for (let tries = 0; tries < 30 && !heldBegin; tries++) await page.waitForTimeout(50);
     assert.ok(heldBegin, 'the address request must actually be pending');
@@ -299,7 +299,7 @@ export async function runGoogleWindow(side, { canary = false, pictures = true } 
     phase = 'a refused Google sign-in';
     await page.evaluate(() => document.documentElement.requestFullscreen());
     const refusedPopupPromise = context.waitForEvent('page');
-    await page.locator('.sc-google').click();
+    await clickDrawn(page, '.sc-google');
     const refusedPopup = await refusedPopupPromise;
     await refusedPopup.waitForURL('**/privacy.html');
     const refusedCallback = new URL(begins.at(-1).returnPath, originalUrl);
@@ -309,17 +309,17 @@ export async function runGoogleWindow(side, { canary = false, pictures = true } 
     await page.waitForFunction(() => document.querySelector('#cloud-dialog .cd-body')?.textContent
       .includes("Google didn't confirm"), null, { polling: 100 });
     assert.equal(await page.evaluate(() => window.__googleFullscreen.full), true);
-    await page.locator('#cloud-dialog button').filter({ hasText: /^OK$/ }).click();
+    await clickDrawn(page, '#cloud-dialog button', 'OK');
     lines.push('Refused sign-in: readable error in the game, prior fullscreen restored');
 
     phase = 'an address request failure';
     failBegin = true;
-    await page.locator('.sc-google').click();
+    await clickDrawn(page, '.sc-google');
     await page.waitForFunction(() => document.querySelector('#cloud-dialog .cd-body')?.textContent
       .includes('Sign-in temporarily unavailable'), null, { polling: 100 });
     assert.equal(await page.evaluate(() => window.__googleFullscreen.full), true);
     assert.equal(context.pages().filter((candidate) => candidate !== page).length, 0);
-    await page.locator('#cloud-dialog button').filter({ hasText: /^OK$/ }).click();
+    await clickDrawn(page, '#cloud-dialog button', 'OK');
     failBegin = false;
     lines.push('Network/service failure: popup closed, prior fullscreen restored, retry remains available');
 
@@ -339,7 +339,7 @@ export async function runGoogleWindow(side, { canary = false, pictures = true } 
     };
     await page.route('**/privacy.html', redirectRoute);
     const redirectNavigation = page.waitForURL('**/privacy.html');
-    await page.locator('.sc-google').click();
+    await clickDrawn(page, '.sc-google');
     await redirectNavigation;
     assert.equal(begins.at(-1).returnPath, new URL(originalUrl).pathname + new URL(originalUrl).search);
     assert.equal(await page.evaluate(() => sessionStorage.getItem('last-stand.cloud.google-nonce')),

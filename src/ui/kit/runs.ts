@@ -10,7 +10,13 @@ export interface RunStyle extends TextStyle {
   whole?: boolean;
   /** the line broken after it (CSS's block or a flex column's item: a rail button's icon over its word) */
   block?: boolean;
+  /** a long word broken after its dots and signs too (CSS's `overflow-wrap: anywhere`: an email address, which
+   *  otherwise reached past its box) */
+  anywhere?: boolean;
 }
+
+/** what a `<br>` says: a character of no width, so its run's line can end after it */
+const LINE_BREAK = '​';
 
 /** a word standing for a run's line break */
 const BREAK = '\n';
@@ -28,6 +34,9 @@ export function runsOf(element: Element, base: RunStyle, styleOf: StyleOf): Run[
     for (const child of node.childNodes) {
       if (child.nodeType === Node.TEXT_NODE) {
         runs.push({ text: child.textContent ?? '', style });
+      } else if (child instanceof Element && child.tagName === 'BR') {
+        // (a line break: a word of no width that ends its line)
+        runs.push({ text: LINE_BREAK, style: { ...style, block: true } });
       } else if (child instanceof Element) {
         const own = styleOf(child, style);
         if (own) walk(child, own);
@@ -55,7 +64,8 @@ function collapsed(runs: Run[]): Run[] {
 /** The words of `runs`, each with the space after it, in its run's style (a run kept whole, one piece). */
 function wordsOf(runs: Run[]): Run[] {
   return runs.flatMap((run) => {
-    const words = (run.style.whole ? [run] : run.text.split(/(?<= )/))
+    const breaks = run.style.anywhere ? /(?<=[ .@_-])/ : /(?<= )/;
+    const words = (run.style.whole ? [run] : run.text.split(breaks))
       .map((piece) => (typeof piece === 'string' ? { text: piece, style: run.style } : piece));
     return run.style.block ? [...words, { text: BREAK, style: run.style }] : words;
   });

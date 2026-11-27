@@ -39,7 +39,7 @@ export class Label {
   painted = 0;
   paintedFonts = -1;
   /** the UI's scale it's drawn at: the HUD's, or the lobby's for what only the lobby shows (ui/scale.ts) */
-  sizedBy: 'hud' | 'ui' | 'touch' = 'hud';
+  sizedBy: 'hud' | 'ui' | 'touch' | 'panes' = 'hud';
   /** where its anchor shows this frame (css px), and whether it shows at all */
   x = 0;
   y = 0;

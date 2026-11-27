@@ -13,7 +13,7 @@ import type { Painted, Sheet } from './kit/sheet';
 const NOTHING = (): void => undefined;
 
 /** A slot's face as the skill bar paints it, at `w` by `h` px of the art. */
-function slotFace(element: Element, w: number, h: number): Painted {
+export function slotFace(element: Element, w: number, h: number): Painted {
   const face = faceOf(element as HTMLElement);
   const image = face.art ? artLoaded(face.art, NOTHING) : null;
   return {
