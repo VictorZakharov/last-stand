@@ -2,6 +2,7 @@
 // rule from `styles/_modals.scss`, How to play (`helpSheet.ts`), the bug report's form (`bugReportSheet.ts`) and the save slots' two (`cloudSheet.ts`). Each is a modal
 // (`modalSheet.ts`): its page element out of sight, written and listened to by its module as before. Made after the
 // pause menu's, so drawn over it in the modals' layer. Sizes are px of the lobby's scale.
+import { TALK } from './screens/talk/talkSheet';
 import { drawModal } from './modalSheet';
 import { HELP_TEXT, PARAGRAPH } from './helpTextSheet';
 import { BUG_REPORT } from './bugReportSheet';
@@ -26,5 +27,6 @@ export function drawDialogs(): void {
   drawModal('bug-report', BUG_REPORT);
   drawModal('save-delete', SAVE_DELETE);
   drawModal('cloud-dialog', CLOUD_DIALOG);
+  drawModal('talk', TALK);
 }
 

@@ -10,7 +10,8 @@
 // middle. And the frame's cost with the card up, against without it (the browser's own clock). `--canary` shows every
 // line at once and pushes Leave off the window's foot, each of which must be found.
 import { Vec3 } from './sceneApi.ts';
-import { realWait, type Lab, type PagePoint, type Pictured, type Report } from './lab';
+import { plantLayout } from './kitPlant';
+import { boxOf, elementUnder, realWait, type Lab, type PagePoint, type Pictured, type Report } from './lab';
 import { SCHOLAR_DESK } from '../../../src/data/houses/library';
 import { G } from '../../../src/state';
 import { villageObject } from '../../../src/game/village';
@@ -53,7 +54,12 @@ const card = (): HTMLElement => document.querySelector<HTMLElement>('#talk .tk-b
 const replyButtons = (): HTMLButtonElement[] => [...document.querySelectorAll<HTMLButtonElement>('#talk .tk-reply')];
 const lineCount = (): number => document.querySelectorAll('#talk .tk-says p').length;
 const saysText = (): string => document.querySelector('#talk .tk-says')?.textContent ?? '';
-const middle = (e: Element): PagePoint => { const r = e.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; };
+/** `e`'s middle where it's drawn, the kit given its frames first where it draws it (a reply just offered). */
+async function drawnMiddle(lab: Lab, e: Element): Promise<PagePoint> {
+  if (e.closest('.kit-mirror')) await lab.step(3);
+  return middle(e);
+}
+const middle = (e: Element): PagePoint => { const r = boxOf(e); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; };
 
 /** A node's lines followed frame by frame as they show, till the replies are offered. */
 async function followReveal(lab: Lab, s: Scholar): Promise<Revealed> {
@@ -99,14 +105,14 @@ function layoutProblems(state: string): string[] {
   const problems: string[] = [];
   const within = (r: DOMRect) => r.left >= -1 && r.top >= -1 && r.right <= innerWidth + 1 && r.bottom <= innerHeight + 1;
   const at = (r: DOMRect) => `${r.left.toFixed(0)},${r.top.toFixed(0)} to ${r.right.toFixed(0)},${r.bottom.toFixed(0)}`;
-  const box = card().getBoundingClientRect();
+  const box = boxOf(card());
   if (!within(box)) problems.push(`talk (${state}): the card leaves the window: ${at(box)}`);
   for (const b of replyButtons()) {
-    const r = b.getBoundingClientRect();
+    const r = boxOf(b);
     const name = b.querySelector('.tx')?.textContent ?? '';
     if (!within(r)) problems.push(`talk (${state}): the reply "${name}" leaves the window: ${at(r)}`);
     const { x, y } = middle(b);
-    if (within(r) && document.elementFromPoint(x, y)?.closest('.tk-reply') !== b) problems.push(`talk (${state}): the reply "${name}" isn't the element at its middle`);
+    if (within(r) && elementUnder(x, y)?.closest('.tk-reply') !== b) problems.push(`talk (${state}): the reply "${name}" isn't the element at its middle`);
   }
   return problems;
 }
@@ -152,8 +158,7 @@ export async function talk(lab: Lab, options: TalkOptions): Promise<Report> {
   const read = { ...READ };
   // (the canary: every line at once, and Leave pushed off the window's foot)
   if (options.canary) Object.assign(READ, { pause: 0, letter: 0, least: 0, most: 0 });
-  const plant = document.createElement('style');
-  plant.textContent = '#talk .tk-reply.leave { position: relative; top: 100vh; }';
+  let unplant: (() => Promise<void>) | null = null;
   try {
     await viewAs(lab, 'third');
     const door = villageObject('libraryDoor')!;
@@ -193,7 +198,8 @@ export async function talk(lab: Lab, options: TalkOptions): Promise<Report> {
     lines.push(`his portrait: made ${waited} frames after he was stood by, ${pictured ? 'shown' : 'not shown'} in the oval, `
       + `${photo.width}x${photo.height} px`);
     if (!pictured || !photo.width) problems.push('talk: his portrait isn\'t shown in the oval at a first meeting');
-    if (options.canary) document.head.append(plant);
+    const leaveReply = document.querySelector<HTMLElement>('#talk .tk-reply.leave');
+    if (options.canary && leaveReply) unplant = await plantLayout(lab, leaveReply, { down: innerHeight });
     if (replyButtons().some((b) => b.querySelector('.tx')?.textContent === 'What do you make of me?')) {
       problems.push('talk: "What do you make of me?" offered to a hero who has never fought');
     }
@@ -202,7 +208,8 @@ export async function talk(lab: Lab, options: TalkOptions): Promise<Report> {
     moments.push(lab.picture('talk-hollis-looks-up', ['back', 'right'], ['talked to: looked up from his book at the hero'], { at: faceOf(), distance: 0.9 }));
     if (options.canary) {
       problems.push(...layoutProblems('canary'));
-      plant.remove();
+      await unplant?.();
+      unplant = null;
     }
 
     // --- himself: by the number's key; then the arrows and Enter ---
@@ -221,17 +228,17 @@ export async function talk(lab: Lab, options: TalkOptions): Promise<Report> {
     if (talkNode() !== 'stay') problems.push(`talk: Enter on "${focused}" went to "${talkNode()}", not "stay"`);
     // (a click on his lines, once the first shows, shows the rest)
     await lab.until(() => lineCount() > 0, 60, 'his first line never showed');
-    await lab.click(middle(document.querySelector('#talk .tk-says')!));
+    await lab.clickOn(document.querySelector('#talk .tk-says')!);
     if (!talkAnswerable()) problems.push('talk: a click on his lines left lines unshown');
     lines.push(`asked "Tell me about yourself." by 1, then "${focused}" by the arrow and Enter, his lines shown by Enter and by a click`);
 
     // --- the rumour: by the mouse; what lies behind the door, by its key ---
     const more = replyNamed('Something else...', problems);
-    if (more) await lab.click(middle(more));
+    if (more) await lab.clickOn(more);
     if (talkNode() !== 'more') problems.push(`talk: "Something else..." clicked went to "${talkNode()}"`);
     lines.push(`  ${revealLine(await followReveal(lab, s))}`);
     const strange = replyNamed('Heard anything strange lately?', problems);
-    if (strange) await lab.click(middle(strange));
+    if (strange) await lab.clickOn(strange);
     const rumour = await followReveal(lab, s);
     lines.push(`  ${revealLine(rumour)}`);
     problems.push(...revealProblems(rumour), ...layoutProblems('the rumour'));
@@ -242,7 +249,7 @@ export async function talk(lab: Lab, options: TalkOptions): Promise<Report> {
     if (talkNode() !== 'behind' || !/page torn out/.test(saysText())) problems.push(`talk: what lies behind the door said "${saysText().slice(0, 80)}"`);
     const leave = replyButtons().at(-1);
     if (!leave?.classList.contains('leave')) problems.push('talk: the last reply is no Leave');
-    if (leave) await lab.click(middle(leave));
+    if (leave) await lab.clickOn(leave);
     await lab.step(5);
     if (talkOpen()) problems.push('talk: Leave clicked left the talk open');
     if (scholarTalk.talking) problems.push('talk: Leave clicked left him talked to');
@@ -271,13 +278,13 @@ export async function talk(lab: Lab, options: TalkOptions): Promise<Report> {
     if (asked && !asked.classList.contains('asked')) problems.push('talk: the rumour, asked before, isn\'t marked asked');
     const me = replyNamed('What do you make of me?', problems);
     moments.push(await lab.screen('talk-visit-after', ['a visit after: greeted again, the rumour marked asked, his take on the hero offered']));
-    if (asked) await lab.tap(middle(asked));
+    if (asked) await lab.tap(await drawnMiddle(lab, asked));
     await lab.step(2);
     if (talkNode() !== 'rumour') problems.push(`talk: the rumour tapped went to "${talkNode()}"`);
     await followReveal(lab, s);
     if (!/The door again/.test(saysText())) problems.push(`talk: the rumour asked again wasn't answered otherwise: "${saysText().slice(0, 60)}"`);
     const again = replyNamed('Something else...', problems);
-    if (again) await lab.tap(middle(again));
+    if (again) await lab.tap(await drawnMiddle(lab, again));
     await lab.step(2);
     await followReveal(lab, s);
     if (me) {
@@ -356,7 +363,7 @@ export async function talk(lab: Lab, options: TalkOptions): Promise<Report> {
     return { text: lines.join('\n'), problems, moments };
   } finally {
     Object.assign(READ, read);
-    plant.remove();
+    await unplant?.();
   }
 }
 

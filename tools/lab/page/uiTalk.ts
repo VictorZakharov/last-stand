@@ -5,7 +5,8 @@
 // window's height, which must be found.
 import { closeTalk, openTalk, talkAnswerable } from '../../../src/ui/screens/talk/talk';
 import { portrait, portraitMade } from '../../../src/ui/guide/portraits';
-import { realWait } from './lab';
+import { boxOf, elementUnder, realWait } from './lab';
+import { plantLayout } from './kitPlant';
 import { G } from '../../../src/state';
 import { goTo } from '../../../src/game/village';
 import type { Lab } from './lab';
@@ -53,7 +54,7 @@ export async function openTalkState(lab: Lab, touch: boolean): Promise<void> {
   // (the rest of his lines shown as a player would: on touch, a tap on the first; else Enter)
   await lab.until(() => document.querySelectorAll('#talk .tk-says p').length > 0, SHOWN_FRAMES, 'his first line never showed');
   if (touch) {
-    const r = document.querySelector('#talk .tk-says')!.getBoundingClientRect();
+    const r = boxOf(document.querySelector('#talk .tk-says')!);
     await lab.tap({ x: r.left + r.width / 2, y: r.top + r.height / 2 });
   } else await lab.step(1, () => ({ keys: ['enter'] }));
   await lab.until(talkAnswerable, SHOWN_FRAMES, 'the talk\'s lines never all showed');
@@ -64,36 +65,36 @@ export async function openTalkState(lab: Lab, touch: boolean): Promise<void> {
 export function closeTalkState(): void { closeTalk(); }
 
 /** The card, its portrait and every reply checked; with the canary, again with the card twice the window's height. */
-export function talkShown(state: string, canary: boolean): TouchFound {
+export async function talkShown(state: string, canary: boolean, lab: Lab): Promise<TouchFound> {
   const found = laidOut(state, state === 'talkTouch');
   if (!canary) return found;
   const box = document.querySelector<HTMLElement>('#talk .tk-box')!;
-  Object.assign(box.style, { height: `${innerHeight * 2}px`, maxHeight: 'none' });
+  const putBack = await plantLayout(lab, box, { height: innerHeight * 2 });
   const planted = laidOut(state, false);
-  Object.assign(box.style, { height: '', maxHeight: '' });
+  await putBack();
   return { lines: found.lines, problems: [...found.problems, ...planted.problems] };
 }
 
 function laidOut(state: string, touch: boolean): TouchFound {
   const problems: string[] = [];
   const within = (r: DOMRect) => r.width > 0 && r.left >= -1 && r.top >= -1 && r.right <= innerWidth + 1 && r.bottom <= innerHeight + 1;
-  const box = document.querySelector('#talk .tk-box')!.getBoundingClientRect();
+  const box = boxOf(document.querySelector('#talk .tk-box')!);
   if (!within(box)) problems.push(`${state}: ${TALK_CANARY.name} (${box.left.toFixed(0)},${box.top.toFixed(0)} to ${box.right.toFixed(0)},${box.bottom.toFixed(0)})`);
   const photo = document.querySelector<HTMLCanvasElement>('#talk .tk-photo')!;
   if (!document.querySelector('#talk .tk-portrait')!.classList.contains('pictured') || !photo.width) {
     problems.push(`${state}: his portrait's picture isn't shown`);
   }
   for (const what of ['.tk-portrait', '.tk-name']) {
-    const r = document.querySelector(`#talk ${what}`)!.getBoundingClientRect();
+    const r = boxOf(document.querySelector(`#talk ${what}`)!);
     if (!within(r)) problems.push(`${state}: his ${what === '.tk-name' ? 'name' : 'portrait'} isn't shown within the window`);
   }
   const replies = [...document.querySelectorAll<HTMLElement>('#talk .tk-reply')];
   let shortest = Infinity;
   for (const b of replies) {
-    const r = b.getBoundingClientRect(), name = b.querySelector('.tx')?.textContent ?? '';
+    const r = boxOf(b), name = b.querySelector('.tx')?.textContent ?? '';
     shortest = Math.min(shortest, r.height);
     if (!within(r)) problems.push(`${state}: the reply "${name}" leaves the window`);
-    else if (document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2)?.closest('.tk-reply') !== b) {
+    else if (elementUnder(r.left + r.width / 2, r.top + r.height / 2)?.closest('.tk-reply') !== b) {
       problems.push(`${state}: the reply "${name}" isn't the element at its middle`);
     }
     if (touch && r.height < FINGER_PX) problems.push(`${state}: the reply "${name}" is ${r.height.toFixed(0)} css px tall (a finger's ${FINGER_PX})`);

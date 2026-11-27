@@ -597,5 +597,8 @@ the SCSS. In the order they're taken: the kit's own pieces first, then what show
   callouts show their skills' pictures (the pause menu's too), the rules' bold words bold.
 - [x] Hero selection's panels (`heroesSheet.ts`; the choice on the hero stays on the page).
 - [ ] Play together and its rooms, the village's map.
-- [ ] The guide's pages, the talk, the trade, the merchant, the drink.
+- [x] The talk with the village's folk (`screens/talk/talkSheet.ts`, the face in its oval `folkFaceSheet.ts`, which
+  the merchant's will take): `lab ui --states talk,talkTouch --ab` at 1920x1080 and 844x390@3, the card within a px
+  of main's, each reply a finger's height on touch; `lab talk` and both canaries pass.
+- [ ] The guide's pages, the trade, the merchant, the drink.
 - [ ] The loading screen (styled before any script runs: the last, if at all).

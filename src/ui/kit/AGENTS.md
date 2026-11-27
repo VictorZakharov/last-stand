@@ -164,6 +164,12 @@ The rules across the game are the [root AGENTS.md](../../../AGENTS.md).
 - **Marks can be the rule's to work out** (`marks: (element) => [...]`: a cold hero's bar, filled to his share) and a
   bar a height (a tab's line along its top, the panel's corner brackets in the hero's colour); a painted picture can
   be painted small and stretched (`Painted.size`: the hero selection's shade over the whole screen, 1/8 its size).
+- **A canary planted on an element the kit draws goes through the kit** (`tools/lab/page/kitPlant.ts`, `plantLayout`):
+  the kit reads no inline style and no stylesheet of the lab's, so the talk's card made twice the window's height and
+  its Leave stood off the window went unseen; it lays the plant on the panel drawn for the element (`drawnFor`).
+- **A list scrolled to its end by the page is held there by the kit** (`scrollToEnd` in `drawn.ts`): the page's
+  `scrollTop` reached the panel a frame before its new lines were laid out, and the talk's newest line stood below
+  its edge.
 - **Check a panel against main's page with `npm run lab -- ui --states <state> --ab`**: its box's lines and its
   pictures beside main's (`ui --states target`: the frame's box 384x52 at 113 on both, its name and line read off
   the engine's frame where the tree has it, off `#target` on main's).

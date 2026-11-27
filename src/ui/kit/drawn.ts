@@ -2,6 +2,7 @@
 // under a point, on a screen the kit draws in the page's place. Each answers as the page's own would where the kit
 // draws nothing there.
 import { drawnFor } from './press';
+import { onFrame } from './panel';
 import { elementAt } from './forward';
 import { scrollRoom, scrollTo } from './scroll';
 export { picturesLoaded } from './svgArt';
@@ -40,4 +41,19 @@ export function elementUnder(x: number, y: number): Element | null {
   const canvas = engineCanvas();
   const overKit = !!page && !!canvas && page !== canvas && !page.contains(canvas);
   return overKit ? page : elementAt(x, y) ?? page;
+}
+
+/** how many frames a list's end is held in view after its words change: the kit lays it out a frame or two later */
+const END_FRAMES = 4;
+
+/** `element`'s scrolling list scrolled to its end, where the kit draws it (the page's `scrollTop = scrollHeight`,
+ *  which the kit's panel never hears: the talk's lines as he says more), held there as it's laid out again. */
+export function scrollToEnd(element: Element): void {
+  const panel = element.closest('.kit-mirror') ? drawnFor(element) : null;
+  if (!panel) return;
+  let left = END_FRAMES;
+  const stop = onFrame(() => {
+    scrollTo(panel, scrollRoom(panel));
+    if (--left <= 0) stop();
+  });
 }

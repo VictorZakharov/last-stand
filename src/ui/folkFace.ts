@@ -11,6 +11,9 @@ import type { FolkId } from './guide/folkPortraits';
 /** how long a picture that came back empty waits before it's tried again (s, the game's): each try builds his model */
 const RETRY = 1.5;
 
+/** how many pictures have been drawn into faces (each face's `data-shown`: the kit paints it again as it changes) */
+let drawn = 0;
+
 /** every face on a card, open or not */
 const faces = new Set<FolkFace>();
 
@@ -44,6 +47,7 @@ export class FolkFace {
       }
       // (a canvas already drawn: copied in, nothing to decode)
       drawPortrait(this.photo, pic);
+      this.oval.dataset.shown = String(++drawn);
       this.oval.classList.remove('waiting');
       this.oval.classList.add('pictured');
       this.waiting = false;
