@@ -28,50 +28,115 @@ function saw(watched: Watched, field: string): void {
 class WatchedVec2 extends Vec2 implements Watched {
   declare log?: string[];
   declare kept: [number, number];
-  get x(): number { return this.kept[0]; }
-  set x(value: number) { (this.kept ??= [0, 0])[0] = value; saw(this, 'x'); }
-  get y(): number { return this.kept[1]; }
-  set y(value: number) { (this.kept ??= [0, 0])[1] = value; saw(this, 'y'); }
+  get x(): number {
+    return this.kept[0];
+  }
+  set x(value: number) {
+    (this.kept ??= [0, 0])[0] = value;
+    saw(this, 'x');
+  }
+  get y(): number {
+    return this.kept[1];
+  }
+  set y(value: number) {
+    (this.kept ??= [0, 0])[1] = value;
+    saw(this, 'y');
+  }
 }
 
 /** a `Vec3` whose `x`, `y` and `z` are accessors */
 class WatchedVec3 extends Vec3 implements Watched {
   declare log?: string[];
   declare kept: [number, number, number];
-  get x(): number { return this.kept[0]; }
-  set x(value: number) { (this.kept ??= [0, 0, 0])[0] = value; saw(this, 'x'); }
-  get y(): number { return this.kept[1]; }
-  set y(value: number) { (this.kept ??= [0, 0, 0])[1] = value; saw(this, 'y'); }
-  get z(): number { return this.kept[2]; }
-  set z(value: number) { (this.kept ??= [0, 0, 0])[2] = value; saw(this, 'z'); }
+  get x(): number {
+    return this.kept[0];
+  }
+  set x(value: number) {
+    (this.kept ??= [0, 0, 0])[0] = value;
+    saw(this, 'x');
+  }
+  get y(): number {
+    return this.kept[1];
+  }
+  set y(value: number) {
+    (this.kept ??= [0, 0, 0])[1] = value;
+    saw(this, 'y');
+  }
+  get z(): number {
+    return this.kept[2];
+  }
+  set z(value: number) {
+    (this.kept ??= [0, 0, 0])[2] = value;
+    saw(this, 'z');
+  }
 }
 
 /** a `Vec4` whose `x`, `y`, `z` and `w` are accessors */
 class WatchedVec4 extends Vec4 implements Watched {
   declare log?: string[];
   declare kept: [number, number, number, number];
-  get x(): number { return this.kept[0]; }
-  set x(value: number) { (this.kept ??= [0, 0, 0, 0])[0] = value; saw(this, 'x'); }
-  get y(): number { return this.kept[1]; }
-  set y(value: number) { (this.kept ??= [0, 0, 0, 0])[1] = value; saw(this, 'y'); }
-  get z(): number { return this.kept[2]; }
-  set z(value: number) { (this.kept ??= [0, 0, 0, 0])[2] = value; saw(this, 'z'); }
-  get w(): number { return this.kept[3]; }
-  set w(value: number) { (this.kept ??= [0, 0, 0, 0])[3] = value; saw(this, 'w'); }
+  get x(): number {
+    return this.kept[0];
+  }
+  set x(value: number) {
+    (this.kept ??= [0, 0, 0, 0])[0] = value;
+    saw(this, 'x');
+  }
+  get y(): number {
+    return this.kept[1];
+  }
+  set y(value: number) {
+    (this.kept ??= [0, 0, 0, 0])[1] = value;
+    saw(this, 'y');
+  }
+  get z(): number {
+    return this.kept[2];
+  }
+  set z(value: number) {
+    (this.kept ??= [0, 0, 0, 0])[2] = value;
+    saw(this, 'z');
+  }
+  get w(): number {
+    return this.kept[3];
+  }
+  set w(value: number) {
+    (this.kept ??= [0, 0, 0, 0])[3] = value;
+    saw(this, 'w');
+  }
 }
 
 /** a `Quat` whose `x`, `y`, `z` and `w` are accessors */
 class WatchedQuat extends Quat implements Watched {
   declare log?: string[];
   declare kept: [number, number, number, number];
-  get x(): number { return this.kept[0]; }
-  set x(value: number) { (this.kept ??= [0, 0, 0, 1])[0] = value; saw(this, 'x'); }
-  get y(): number { return this.kept[1]; }
-  set y(value: number) { (this.kept ??= [0, 0, 0, 1])[1] = value; saw(this, 'y'); }
-  get z(): number { return this.kept[2]; }
-  set z(value: number) { (this.kept ??= [0, 0, 0, 1])[2] = value; saw(this, 'z'); }
-  get w(): number { return this.kept[3]; }
-  set w(value: number) { (this.kept ??= [0, 0, 0, 1])[3] = value; saw(this, 'w'); }
+  get x(): number {
+    return this.kept[0];
+  }
+  set x(value: number) {
+    (this.kept ??= [0, 0, 0, 1])[0] = value;
+    saw(this, 'x');
+  }
+  get y(): number {
+    return this.kept[1];
+  }
+  set y(value: number) {
+    (this.kept ??= [0, 0, 0, 1])[1] = value;
+    saw(this, 'y');
+  }
+  get z(): number {
+    return this.kept[2];
+  }
+  set z(value: number) {
+    (this.kept ??= [0, 0, 0, 1])[2] = value;
+    saw(this, 'z');
+  }
+  get w(): number {
+    return this.kept[3];
+  }
+  set w(value: number) {
+    (this.kept ??= [0, 0, 0, 1])[3] = value;
+    saw(this, 'w');
+  }
 }
 
 /** an `Euler` whose `x`, `y`, `z` and `order` are accessors */
@@ -79,26 +144,61 @@ class WatchedEuler extends Euler implements Watched {
   declare log?: string[];
   declare kept: [number, number, number];
   declare keptOrder: EulerOrder;
-  get x(): number { return this.kept[0]; }
-  set x(value: number) { (this.kept ??= [0, 0, 0])[0] = value; saw(this, 'x'); }
-  get y(): number { return this.kept[1]; }
-  set y(value: number) { (this.kept ??= [0, 0, 0])[1] = value; saw(this, 'y'); }
-  get z(): number { return this.kept[2]; }
-  set z(value: number) { (this.kept ??= [0, 0, 0])[2] = value; saw(this, 'z'); }
-  get order(): EulerOrder { return this.keptOrder; }
-  set order(value: EulerOrder) { this.keptOrder = value; saw(this, 'order'); }
+  get x(): number {
+    return this.kept[0];
+  }
+  set x(value: number) {
+    (this.kept ??= [0, 0, 0])[0] = value;
+    saw(this, 'x');
+  }
+  get y(): number {
+    return this.kept[1];
+  }
+  set y(value: number) {
+    (this.kept ??= [0, 0, 0])[1] = value;
+    saw(this, 'y');
+  }
+  get z(): number {
+    return this.kept[2];
+  }
+  set z(value: number) {
+    (this.kept ??= [0, 0, 0])[2] = value;
+    saw(this, 'z');
+  }
+  get order(): EulerOrder {
+    return this.keptOrder;
+  }
+  set order(value: EulerOrder) {
+    this.keptOrder = value;
+    saw(this, 'order');
+  }
 }
 
 /** a `Color` whose `r`, `g` and `b` are accessors */
 class WatchedColor extends Color implements Watched {
   declare log?: string[];
   declare kept: [number, number, number];
-  get r(): number { return this.kept[0]; }
-  set r(value: number) { (this.kept ??= [0, 0, 0])[0] = value; saw(this, 'r'); }
-  get g(): number { return this.kept[1]; }
-  set g(value: number) { (this.kept ??= [0, 0, 0])[1] = value; saw(this, 'g'); }
-  get b(): number { return this.kept[2]; }
-  set b(value: number) { (this.kept ??= [0, 0, 0])[2] = value; saw(this, 'b'); }
+  get r(): number {
+    return this.kept[0];
+  }
+  set r(value: number) {
+    (this.kept ??= [0, 0, 0])[0] = value;
+    saw(this, 'r');
+  }
+  get g(): number {
+    return this.kept[1];
+  }
+  set g(value: number) {
+    (this.kept ??= [0, 0, 0])[1] = value;
+    saw(this, 'g');
+  }
+  get b(): number {
+    return this.kept[2];
+  }
+  set b(value: number) {
+    (this.kept ??= [0, 0, 0])[2] = value;
+    saw(this, 'b');
+  }
 }
 
 /** a value whose fields are accessors, its log started */
@@ -207,6 +307,14 @@ test('a watched Color sees every write of its methods', () => {
     fromArray: (u) => u.fromArray([0.25, 0.5, 0.75]),
   });
   assertNear(color.toArray(), [0.25, 0.5, 0.75]);
+});
+
+test('the check catches a write past the accessors (its canary)', () => {
+  const v = new WatchedVec3(1, 2, 3);
+  const pastAccessors = (u: WatchedVec3): void => {
+    Object.defineProperty(u, 'x', { value: 5, writable: true, enumerable: true, configurable: true });
+  };
+  assert.throws(() => assertWatched(v, XYZ, { pastAccessors }), /past its accessor/);
 });
 
 test('Quat and Euler call their change callback after a method writes, not on a field\'s write', () => {
