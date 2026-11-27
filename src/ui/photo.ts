@@ -6,7 +6,7 @@
 // frame as the post chain drew it, at the canvas's own pixels, as a PNG download. Solo the game stands frozen meanwhile
 // (as the pause menu holds it); in co-op it can't, and the world moves on, the hero standing idle. Its own code, none
 // of the developer mode's (`src/dev` never ships).
-import * as THREE from '../engine/three.ts';
+import { Light, Maths, Node, PerspectiveCamera, Vec3 } from '../engine/api/index.ts';
 import { G } from '../state';
 import { ARENA } from '../data/balance';
 import { HOUSES } from '../data/houses';
@@ -64,7 +64,7 @@ const NEAR = 0.05;
 
 /** the camera: what it turns round, its turn and its pitch over the horizon (rad), how far out, its lens and roll */
 interface PhotoCamera {
-  target: THREE.Vector3;
+  target: Vec3;
   yaw: number;
   pitch: number;
   distance: number;
@@ -78,13 +78,13 @@ interface Kept {
   hour: number | null;
   sight: number;
   camera: PhotoCamera;
-  home: THREE.Vector3;
+  home: Vec3;
 }
 
 const state = {
   on: false,
   look: { ...NEUTRAL_LOOK } as PhotoLook,
-  camera: { target: new THREE.Vector3(), yaw: 0, pitch: 0, distance: 5, fov: 50, roll: 0 } as PhotoCamera,
+  camera: { target: new Vec3(), yaw: 0, pitch: 0, distance: 5, fov: 50, roll: 0 } as PhotoCamera,
   hideHero: false,
   letterbox: false,
   panelHidden: false,
@@ -95,16 +95,16 @@ const state = {
   kept: null as Kept | null,
 };
 /** each of the hero's hidden meshes' own layers, put back as he shows again */
-const heroLayers = new Map<THREE.Object3D, number>();
+const heroLayers = new Map<Node, number>();
 /** the pointers down on the pad: where each was last (css px), and the button it pressed */
 const pointers = new Map<number, { x: number; y: number; button: number }>();
 /** a camera far off, for showing the hero's body whole as photo mode opens (`viewArms` hides it near his head); made
  *  as it first opens, not as the game loads: every three.js object made draws a random number for its id, and one made
  *  as the modules loaded moved what the hero's idle drew after it (`lab light --ab`, his outline a hair apart) */
-let far: THREE.PerspectiveCamera | null = null;
-function farCamera(): THREE.PerspectiveCamera {
+let far: PerspectiveCamera | null = null;
+function farCamera(): PerspectiveCamera {
   if (!far) {
-    far = new THREE.PerspectiveCamera();
+    far = new PerspectiveCamera();
     far.position.set(1e4, 1e4, 1e4);
   }
   return far;
@@ -113,7 +113,7 @@ let hooks: PhotoHooks;
 let savedTimer = 0;
 
 const $ = <T extends HTMLElement = HTMLElement>(selector: string): T => document.querySelector<T>(selector)!;
-const _dir = new THREE.Vector3(), _right = new THREE.Vector3(), _up = new THREE.Vector3(), _move = new THREE.Vector3();
+const _dir = new Vec3(), _right = new Vec3(), _up = new Vec3(), _move = new Vec3();
 
 export const photoOn = (): boolean => state.on;
 /** The camera as it stands, to set by hand (tools/lab's `photo` poses its example shots by it). */
@@ -138,27 +138,27 @@ const hourOff = (): string | null => (hourSettable() ? null
 
 /** `p` kept within the house's room he stands in (the room stands at the origin), `out` m beyond its walls, `up` m
  *  over its ceiling, or within it (`out` negative); nothing done outside a room. */
-function keepInRoom(p: THREE.Vector3, out: number, up: number): void {
+function keepInRoom(p: Vec3, out: number, up: number): void {
   const room = G.arena.room;
   if (!room) return;
   const [hx, hz] = HOUSES[room].half;
-  p.x = THREE.MathUtils.clamp(p.x, -hx - out, hx + out);
-  p.z = THREE.MathUtils.clamp(p.z, -hz - out, hz + out);
+  p.x = Maths.clamp(p.x, -hx - out, hx + out);
+  p.z = Maths.clamp(p.z, -hz - out, hz + out);
   p.y = Math.min(p.y, HOUSES[room].high + up);
 }
 
 /** The hero's chest, where the camera turns round at first. */
-function heroChest(out: THREE.Vector3): THREE.Vector3 {
+function heroChest(out: Vec3): Vec3 {
   const p = G.player;
   return out.set(p.pos.x, p.obj.position.y + p.model.height * 0.6, p.pos.z);
 }
 
 /** The camera as the game's stands: turning round the hero's chest from where it is. */
 function cameraFromGame(): PhotoCamera {
-  const target = heroChest(new THREE.Vector3());
+  const target = heroChest(new Vec3());
   const offset = _dir.copy(G.camera.position).sub(target);
-  const distance = THREE.MathUtils.clamp(offset.length(), DISTANCE.least, DISTANCE.most);
-  const pitch = THREE.MathUtils.clamp(Math.asin(offset.y / Math.max(offset.length(), 1e-4)), -PITCH_MOST, PITCH_MOST);
+  const distance = Maths.clamp(offset.length(), DISTANCE.least, DISTANCE.most);
+  const pitch = Maths.clamp(Math.asin(offset.y / Math.max(offset.length(), 1e-4)), -PITCH_MOST, PITCH_MOST);
   return { target, yaw: Math.atan2(offset.x, offset.z), pitch, distance, fov: G.camera.fov, roll: 0 };
 }
 
@@ -243,7 +243,7 @@ function showHero(show: boolean): void {
     return;
   }
   G.player.obj.traverse((object) => {
-    if ((object as THREE.Light).isLight || heroLayers.has(object)) return;
+    if ((object as Light).isLight || heroLayers.has(object)) return;
     heroLayers.set(object, object.layers.mask);
     object.layers.set(HIDDEN_LAYER);
   });
@@ -260,13 +260,13 @@ function relightHour(dt: number): void {
 // --- the camera -----------------------------------------------------------------------------------------------------
 
 /** The camera's way out from what it turns round, a unit vector. */
-function outward(camera: PhotoCamera, out: THREE.Vector3): THREE.Vector3 {
+function outward(camera: PhotoCamera, out: Vec3): Vec3 {
   const level = Math.cos(camera.pitch);
   return out.set(level * Math.sin(camera.yaw), Math.sin(camera.pitch), level * Math.cos(camera.yaw));
 }
 
 /** What it turns round kept within reach of where the hero stood, inside a battleground's wall, over the ground. */
-function keepTarget(target: THREE.Vector3): void {
+function keepTarget(target: Vec3): void {
   const home = state.kept?.home ?? G.player.pos;
   const dx = target.x - home.x, dz = target.z - home.z;
   const away = Math.hypot(dx, dz);
@@ -278,7 +278,7 @@ function keepTarget(target: THREE.Vector3): void {
     if (edge > ARENA_EDGE) target.set((target.x / edge) * ARENA_EDGE, target.y, (target.z / edge) * ARENA_EDGE);
   }
   const ground = G.arena.groundHeight(target.x, target.z);
-  target.y = THREE.MathUtils.clamp(target.y, ground + OVER_GROUND, ground + TARGET_HIGHEST);
+  target.y = Maths.clamp(target.y, ground + OVER_GROUND, ground + TARGET_HIGHEST);
   keepInRoom(target, -ROOM_INSET, -ROOM_INSET);
 }
 
@@ -290,7 +290,7 @@ function flyByKeys(dt: number): void {
   const rise = (isDown('e') ? 1 : 0) - (isDown('q') ? 1 : 0);
   const roll = (isDown('c') ? 1 : 0) - (isDown('z') ? 1 : 0);
   if (roll) {
-    camera.roll = THREE.MathUtils.clamp(camera.roll + roll * ROLL_SPEED * dt, -ROLL_MOST, ROLL_MOST);
+    camera.roll = Maths.clamp(camera.roll + roll * ROLL_SPEED * dt, -ROLL_MOST, ROLL_MOST);
     syncSlider('roll');
   }
   if (!forward && !side && !rise) return;
@@ -318,7 +318,7 @@ function placeCamera(): void {
   keepInRoom(cam.position, ROOM_OUT, ROOM_OUT);
   cam.up.set(0, 1, 0);
   cam.lookAt(camera.target);
-  cam.rotateZ(THREE.MathUtils.degToRad(camera.roll));
+  cam.rotateZ(Maths.degToRad(camera.roll));
   if (cam.fov !== camera.fov || cam.near !== NEAR) {
     cam.fov = camera.fov;
     cam.near = NEAR;
@@ -390,13 +390,13 @@ function onPointerUp(event: PointerEvent): void {
 function turn(dx: number, dy: number): void {
   const camera = state.camera;
   camera.yaw -= dx * TURN_PER_PX;
-  camera.pitch = THREE.MathUtils.clamp(camera.pitch + dy * TURN_PER_PX, -PITCH_MOST, PITCH_MOST);
+  camera.pitch = Maths.clamp(camera.pitch + dy * TURN_PER_PX, -PITCH_MOST, PITCH_MOST);
 }
 
 /** What it looks at moved across the view by a drag of `dx`, `dy` css px, as far as the view there is wide. */
 function pan(dx: number, dy: number): void {
   const camera = state.camera;
-  const metresPerPx = (2 * camera.distance * Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2)) / innerHeight;
+  const metresPerPx = (2 * camera.distance * Math.tan(Maths.degToRad(camera.fov) / 2)) / innerHeight;
   G.camera.updateMatrixWorld();
   _right.setFromMatrixColumn(G.camera.matrixWorld, 0);
   _up.setFromMatrixColumn(G.camera.matrixWorld, 1);
@@ -418,7 +418,7 @@ function pinch(id: number, x: number, y: number): void {
 /** The camera brought nearer (under 1) or further (over 1). */
 function zoomBy(share: number): void {
   const camera = state.camera;
-  camera.distance = THREE.MathUtils.clamp(camera.distance * share, DISTANCE.least, DISTANCE.most);
+  camera.distance = Maths.clamp(camera.distance * share, DISTANCE.least, DISTANCE.most);
 }
 
 function onWheel(event: WheelEvent): void {
@@ -426,7 +426,7 @@ function onWheel(event: WheelEvent): void {
   event.stopPropagation();
   const notches = Math.sign(event.deltaY);
   if (event.shiftKey) {
-    state.camera.fov = THREE.MathUtils.clamp(state.camera.fov + notches * WHEEL_FOV, FOV.least, FOV.most);
+    state.camera.fov = Maths.clamp(state.camera.fov + notches * WHEEL_FOV, FOV.least, FOV.most);
     syncSlider('fov');
   } else zoomBy(WHEEL_STEP ** notches);
 }

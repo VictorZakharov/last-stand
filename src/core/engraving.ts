@@ -2,7 +2,7 @@
 // (knotwork filigree on a breastplate, medallions, knee cops) and embroidered cloth panels. Each is a
 // height field drawn with strokes; albedo, normal and roughness maps are derived from it, so an
 // engraved band catches the light like the real thing. Made once, shared by every hero.
-import * as THREE from '../engine/three.ts';
+import { Attribute, CanvasTexture, Geometry, NoColorSpace, SRGBColorSpace } from '../engine/api/index.ts';
 import { albedoPixels, ctx2d, readCtx2d, steel } from './textures';
 import { deriveMaps, steelTint, type BasePixels, type DerivedPixels, type Tint } from './engravingMaps';
 import { clamp, mulberry } from '../util';
@@ -34,14 +34,14 @@ const rectOf = ([x, y, w, h]: readonly number[], size: number): UVRect =>
 export const steelRegion = (r: SteelRegion): UVRect => rectOf(REGIONS[r], ATLAS);
 
 /** Set a geometry's uvs from its positions: `f` maps a position to 0..1 within `rect`. */
-export function projectUV(geo: THREE.BufferGeometry, rect: UVRect, f: (x: number, y: number, z: number) => [number, number]): THREE.BufferGeometry {
+export function projectUV(geo: Geometry, rect: UVRect, f: (x: number, y: number, z: number) => [number, number]): Geometry {
   const p = geo.attributes.position, uv = new Float32Array(p.count * 2);
   for (let i = 0; i < p.count; i++) {
     const [a, b] = f(p.getX(i), p.getY(i), p.getZ(i));
     uv[i * 2] = rect.u0 + clamp(a, 0, 1) * (rect.u1 - rect.u0);
     uv[i * 2 + 1] = rect.v0 + clamp(b, 0, 1) * (rect.v1 - rect.v0);
   }
-  geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+  geo.setAttribute('uv', new Attribute(uv, 2));
   return geo;
 }
 
@@ -148,8 +148,8 @@ function mapsOf(pixels: DerivedPixels, w: number, h: number) {
     c.width = w;
     c.height = h;
     ctx2d(c).putImageData(new ImageData(data as Uint8ClampedArray<ArrayBuffer>, w, h), 0, 0);
-    const t = new THREE.CanvasTexture(c);
-    t.colorSpace = srgb ? THREE.SRGBColorSpace : THREE.NoColorSpace;
+    const t = new CanvasTexture(c);
+    t.colorSpace = srgb ? SRGBColorSpace : NoColorSpace;
     t.anisotropy = 8;
     return t;
   };

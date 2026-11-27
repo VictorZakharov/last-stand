@@ -3,7 +3,9 @@
 // its atlas (core/lamps.ts `lampShadowAt`). Asked for where the game asks three for its atlas (world/lampAtlas.ts
 // `bakeLampShadows`), and drawn a lamp a frame at the head of the frames after, so no frame waits on all of them.
 // From play, of the lamps shining through every wall and post: "and lights have no shadows".
-import * as THREE from './three.ts';
+import {
+  InstancedMesh, Mat4, Mesh, Node, PerspectiveCamera, PointLight, SkinnedMesh, Sphere, Vec3,
+} from './api/index.ts';
 import { lampList, LAMPS_MOST } from '../core/lamps';
 import type { Core } from './core';
 import { GLOBALS, projectionOf, TUNE } from './globals';
@@ -12,13 +14,13 @@ import { GLOBALS, projectionOf, TUNE } from './globals';
 const LAMP_NEAR = 0.3;
 /** the faces of the cube round a lamp, in the maps' order: the way each looks and its up (world/lampAtlas.ts `FACES`,
  *  the lit shader's `lamp_reaches`) */
-const FACES: { axis: THREE.Vector3; up: THREE.Vector3 }[] = [
-  { axis: new THREE.Vector3(1, 0, 0), up: new THREE.Vector3(0, 1, 0) },
-  { axis: new THREE.Vector3(-1, 0, 0), up: new THREE.Vector3(0, 1, 0) },
-  { axis: new THREE.Vector3(0, 1, 0), up: new THREE.Vector3(0, 0, 1) },
-  { axis: new THREE.Vector3(0, -1, 0), up: new THREE.Vector3(0, 0, 1) },
-  { axis: new THREE.Vector3(0, 0, 1), up: new THREE.Vector3(0, 1, 0) },
-  { axis: new THREE.Vector3(0, 0, -1), up: new THREE.Vector3(0, 1, 0) },
+const FACES: { axis: Vec3; up: Vec3 }[] = [
+  { axis: new Vec3(1, 0, 0), up: new Vec3(0, 1, 0) },
+  { axis: new Vec3(-1, 0, 0), up: new Vec3(0, 1, 0) },
+  { axis: new Vec3(0, 1, 0), up: new Vec3(0, 0, 1) },
+  { axis: new Vec3(0, -1, 0), up: new Vec3(0, 0, 1) },
+  { axis: new Vec3(0, 0, 1), up: new Vec3(0, 1, 0) },
+  { axis: new Vec3(0, 0, -1), up: new Vec3(0, 1, 0) },
 ];
 
 /** the lamps whose shadows of what moves are drawn each frame (Bulwark's `LAMP_MOVERS`), their maps after the still
@@ -29,18 +31,18 @@ const MOVER_LAMPS = 2;
  *  (world/props.ts `staticShadow`) */
 const OWN_LIGHTS = 4;
 
-const at = new THREE.Vector3(), ahead = new THREE.Vector3(), centre = new THREE.Vector3();
-const projection = new THREE.Matrix4(), faceView = new THREE.Matrix4();
-const sphere = new THREE.Sphere();
+const at = new Vec3(), ahead = new Vec3(), centre = new Vec3();
+const projection = new Mat4(), faceView = new Mat4();
+const sphere = new Sphere();
 
 export class LampShadows {
   /** what casts into the lamps' shadows: the game's own choice (world/lampAtlas.ts `casts`) */
-  private casters: THREE.Mesh[] = [];
+  private casters: Mesh[] = [];
   /** the lamps whose faces are still to draw, in turn */
   private waiting: number[] = [];
   /** the lamps whose faces are drawn: their lights read them */
   private drawn = new Set<number>();
-  private camera = new THREE.PerspectiveCamera(90, 1, LAMP_NEAR, 1);
+  private camera = new PerspectiveCamera(90, 1, LAMP_NEAR, 1);
   /** how far a lamp reaches in the frame's own loop, which reads its faces that far (`lightCache.ts`; set by the
    *  bridge) */
   reachOf: (lamp: number, reach: number) => number = (_lamp, reach) => reach;
@@ -48,11 +50,11 @@ export class LampShadows {
   private asked = 0;
   /** the place's own casting lights, each whether its faces are drawn, what casts into them, and those still to
    *  draw */
-  private own: { light: THREE.PointLight; drawn: boolean }[] = [];
-  private ownCasters: THREE.Mesh[] = [];
+  private own: { light: PointLight; drawn: boolean }[] = [];
+  private ownCasters: Mesh[] = [];
   private ownWaiting: number[] = [];
   /** how far one of them reaches in the frame's loop, which reads its faces that far (set by the bridge) */
-  ownReachOf: (light: THREE.PointLight) => number = (light) => light.distance;
+  ownReachOf: (light: PointLight) => number = (light) => light.distance;
 
   /** the faces drawn this frame: of what stands still, and of the movers' holding one (the frame's stats) */
   readonly facesNow = { still: 0, movers: 0 };
@@ -61,7 +63,7 @@ export class LampShadows {
 
   /** The first `lamps` lamps' shadows asked for, of `casters` as they stand (their world matrices made). A lamp
    *  drawn before keeps its maps in use until it's drawn again. */
-  ask(casters: THREE.Mesh[], lamps: number): void {
+  ask(casters: Mesh[], lamps: number): void {
     this.casters = casters;
     this.asked = Math.min(lamps, LAMPS_MOST);
     this.waiting = Array.from({ length: this.asked }, (_, lamp) => lamp);
@@ -70,7 +72,7 @@ export class LampShadows {
   /** The place's own casting `lights` (the first `OWN_LIGHTS` of them) asked for, of `casters` as they stand: asked
    *  again whenever what stands still changes (a prop broken, another place shown). One drawn before keeps its
    *  maps in use until it's drawn again. */
-  askOwn(lights: THREE.PointLight[], casters: THREE.Mesh[]): void {
+  askOwn(lights: PointLight[], casters: Mesh[]): void {
     const kept = this.own;
     this.own = lights.slice(0, OWN_LIGHTS).map((light, at) => ({ light, drawn: kept[at]?.light === light && kept[at].drawn }));
     this.ownCasters = casters;
@@ -85,7 +87,7 @@ export class LampShadows {
    * the `OWN_LIGHTS` nearest `eye`; asked again when the place, those lights or its props' state (`rev`) change.
    * (The game draws three's from a hook of three's render, which the engine never runs.)
    */
-  keepOwn(place: THREE.Object3D | undefined, lights: readonly THREE.PointLight[], rev: number, eye: THREE.Vector3): void {
+  keepOwn(place: Node | undefined, lights: readonly PointLight[], rev: number, eye: Vec3): void {
     const casting = place ? lights.filter((light) => light.castShadow && light.intensity > 0) : [];
     if (casting.length > OWN_LIGHTS) {
       const off = new Map(casting.map((light) => [light, light.getWorldPosition(centre).distanceToSquared(eye)]));
@@ -101,7 +103,7 @@ export class LampShadows {
   }
 
   /** One of the place's own lights' place among the maps, or -1 while it has none drawn. */
-  ownSlot(light: THREE.PointLight): number {
+  ownSlot(light: PointLight): number {
     const at = this.own.findIndex((own) => own.light === light && own.drawn);
     return at < 0 ? -1 : LAMPS_MOST + MOVER_LAMPS + at;
   }
@@ -125,7 +127,7 @@ export class LampShadows {
    * maps hold what stands still and are drawn once: a hero by a lamp cast no shadow from it (from play: "no shadows
    * from lights.... only shadow from moon"). `record` writes a mesh's record as a frame's walk would.
    */
-  moved(record: (mesh: THREE.Mesh) => void, movers: readonly THREE.Object3D[]): void {
+  moved(record: (mesh: Mesh) => void, movers: readonly Node[]): void {
     this.taking.length = 0;
     const by: { lamp: number; off: number }[] = [];
     for (let lamp = 0; lamp < this.asked && movers.length; lamp++) {
@@ -149,7 +151,7 @@ export class LampShadows {
       for (const mover of movers) {
         // (what casts the sun's shadow, by the bridge's own rule: a piece the quality cuts from casting casts none here)
         mover.traverseVisible((part) => {
-          const mesh = part as THREE.Mesh;
+          const mesh = part as Mesh;
           if (mesh.isMesh && (mesh.castShadow || (TUNE.castAll > 0 && mesh.receiveShadow))) record(mesh);
         });
       }
@@ -197,7 +199,7 @@ export class LampShadows {
    * walk would (the frame's own records are written after, over these). The casters in the lamp's reach are written
    * once for its six faces; each face's view goes where the sun's does in the globals, which the frame writes again.
    */
-  step(record: (mesh: THREE.Mesh) => void): void {
+  step(record: (mesh: Mesh) => void): void {
     const lamp = this.waiting.shift();
     if (lamp === undefined) {
       // (then one of the place's own lights, by the same six faces)
@@ -221,7 +223,7 @@ export class LampShadows {
   }
 
   /** The six faces round `at` drawn of `casters` within `reach` of it, into the maps' place `slot`. */
-  private faces(record: (mesh: THREE.Mesh) => void, casters: THREE.Mesh[], reach: number, slot: number): void {
+  private faces(record: (mesh: Mesh) => void, casters: Mesh[], reach: number, slot: number): void {
     const core = this.core;
     core.count = core.boneFloats = 0;
     for (const mesh of casters) {
@@ -249,12 +251,12 @@ export class LampShadows {
 }
 
 /** What stands still under `shown` and casts a shadow: its shown meshes that cast one, none moved by its bones. */
-export function stillCasters(shown: THREE.Object3D): THREE.Mesh[] {
-  const casters: THREE.Mesh[] = [];
+export function stillCasters(shown: Node): Mesh[] {
+  const casters: Mesh[] = [];
   shown.updateMatrixWorld(true);
   shown.traverseVisible((part) => {
-    const mesh = part as THREE.Mesh;
-    if (mesh.isMesh && mesh.castShadow && !(mesh as unknown as THREE.SkinnedMesh).isSkinnedMesh) casters.push(mesh);
+    const mesh = part as Mesh;
+    if (mesh.isMesh && mesh.castShadow && !(mesh as unknown as SkinnedMesh).isSkinnedMesh) casters.push(mesh);
   });
   return casters;
 }
@@ -268,7 +270,7 @@ const MOVER_ROUND = 2.5;
 
 /** Whether a mover whose feet are `off` from a lamp may fall in the face of its cube that looks along `axis`: ahead
  *  of the lamp that way, and no further to a side than ahead, by its round. */
-function fallsIn(off: THREE.Vector3, axis: THREE.Vector3): boolean {
+function fallsIn(off: Vec3, axis: Vec3): boolean {
   const along = off.dot(axis);
   if (along < -MOVER_ROUND) return false;
   const aside = Math.sqrt(Math.max(off.lengthSq() - along * along, 0));
@@ -278,8 +280,8 @@ function fallsIn(off: THREE.Vector3, axis: THREE.Vector3): boolean {
 
 /** Whether `mesh` may stand within `reach` of the lamp at `at`: by its geometry's sphere where it stands; a mesh of
  *  instances (the posts, the trunks) is left to the engine, which culls each. */
-function inReach(mesh: THREE.Mesh, reach: number): boolean {
-  if ((mesh as unknown as THREE.InstancedMesh).isInstancedMesh) return true;
+function inReach(mesh: Mesh, reach: number): boolean {
+  if ((mesh as unknown as InstancedMesh).isInstancedMesh) return true;
   const geometry = mesh.geometry;
   if (!geometry.boundingSphere) geometry.computeBoundingSphere();
   sphere.copy(geometry.boundingSphere!).applyMatrix4(mesh.matrixWorld);

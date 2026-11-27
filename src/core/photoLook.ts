@@ -2,7 +2,7 @@
 // each a uniform of the post chain the boot compiled (the grade's `uPhoto` branch in core/renderer.ts, bloom's strength),
 // so nothing compiles as a slider moves ("Settings switch live", the root's rules). With photo mode off the grade
 // passes its branch by (`uPhoto` 0) and every value is the game's own again.
-import * as THREE from '../engine/three.ts';
+import { Mat3 } from '../engine/api/index.ts';
 import { BLOOM_STRENGTH, gradeUniforms, setBloomStrength } from './renderer';
 
 /** the colour filters, by name */
@@ -74,8 +74,8 @@ export function applyPhotoLook(look: Readonly<PhotoLook>, on: boolean): void {
   u.uContrast.value = look.contrast;
   u.uSaturation.value = look.saturation;
   const filter = FILTERS[look.filter];
-  (u.uFilterLo.value as THREE.Matrix3).set(...filter.lo);
-  (u.uFilterHi.value as THREE.Matrix3).set(...filter.hi);
+  (u.uFilterLo.value as Mat3).set(...filter.lo);
+  (u.uFilterHi.value as Mat3).set(...filter.hi);
   u.uFilterMix.value = look.filter === 'none' ? 0 : look.filterStrength;
   u.uBlur.value = look.blur;
   u.uFocusY.value = look.focus;

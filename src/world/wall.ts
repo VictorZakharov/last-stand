@@ -7,7 +7,10 @@
 // floor is read once, with rays out from the middle at a body's heights: the nearest surface along each slice, a
 // line round the ring a body's circle is kept off.
 import { thinsByBlending } from '../core/seeThrough';
-import * as THREE from '../engine/three.ts';
+import {
+  BackSide, Box3, DoubleSide, Geometry, Hit, InstancedMesh, Mat3, Mat4, Material, Mesh, Node, NormalBlending, Raycaster,
+  Sphere, UnlitMaterial, Vec3,
+} from '../engine/api/index.ts';
 import { TAU } from '../util';
 import { faceAt, pastWall } from './edge';
 import { WALL_R } from './props';
@@ -36,15 +39,15 @@ export type WallUse = 'wall' | 'beyond' | 'foliage';
 /** What a flight met: where, the face's normal there (turned to the flight), the share of the step it went before it
  *  met it, and whether it's stone (an arrow glances off) or not (it goes in). */
 export interface WallHit {
-  point: THREE.Vector3;
-  normal: THREE.Vector3;
+  point: Vec3;
+  normal: Vec3;
   t: number;
   stone: boolean;
   /** the name of the mesh it met (`FENCE`: a fence) */
   name: string;
 }
 
-export const wallHit = (): WallHit => ({ point: new THREE.Vector3(), normal: new THREE.Vector3(), t: 0, stone: false, name: '' });
+export const wallHit = (): WallHit => ({ point: new Vec3(), normal: new Vec3(), t: 0, stone: false, name: '' });
 
 /** The name of a fence's meshes (the village's palisade): hiding the hero, it opens its own hole alone, not the
  *  houses' beside it (`core/heroHidden.ts`). */
@@ -57,20 +60,20 @@ export const STANDS_FREE = 'standsFree';
 /** A part of the wall: its geometry where it stands, the sphere round it there, what it's made of and what it is;
  *  met by its convex hull's planes (`hull`, in its own frame: `inverse` takes the world there), else its triangles. */
 interface Part {
-  geometry: THREE.BufferGeometry;
-  matrix: THREE.Matrix4;
-  sphere: THREE.Sphere;
+  geometry: Geometry;
+  matrix: Mat4;
+  sphere: Sphere;
   /** the box round it where it stands, the world's axes (what a ray enters first: `entersAt`) */
-  box: THREE.Box3;
+  box: Box3;
   stone: boolean;
   use: WallUse;
   /** the mesh it came from (what bounds the floor, as `boundAt` says it) */
   name: string;
   hull?: Float32Array;
-  inverse?: THREE.Matrix4;
+  inverse?: Mat4;
   /** a hulled part's outline on the floor, which a body is kept off (`outline.ts`), and its hull's geometry */
   outline?: Outline | null;
-  hullGeometry?: THREE.BufferGeometry;
+  hullGeometry?: Geometry;
   /** the last cast that looked at it (each part once a cast) */
   seen: number;
 }
@@ -78,18 +81,18 @@ interface Part {
 /** A surface a ray met: how far along it, where, its face's normal there (in the world), and the part it's on. */
 interface Met {
   distance: number;
-  point: THREE.Vector3;
-  normal: THREE.Vector3;
+  point: Vec3;
+  normal: Vec3;
   part: Part;
 }
 
-const _m = new THREE.Matrix4(), _v = new THREE.Vector3(), _d = new THREE.Vector3(), _c = new THREE.Vector3();
-const ray = new THREE.Raycaster();
-const hits: THREE.Intersection[] = [];
+const _m = new Mat4(), _v = new Vec3(), _d = new Vec3(), _c = new Vec3();
+const ray = new Raycaster();
+const hits: Hit[] = [];
 /** the nearest surface a cast has met so far (`nearest`) */
-const met: Met = { distance: 0, point: new THREE.Vector3(), normal: new THREE.Vector3(), part: null! };
-const _from = new THREE.Vector3(), _along = new THREE.Vector3(), _normal = new THREE.Matrix3();
-const _enters = new THREE.Vector3();
+const met: Met = { distance: 0, point: new Vec3(), normal: new Vec3(), part: null! };
+const _from = new Vec3(), _along = new Vec3(), _normal = new Mat3();
+const _enters = new Vec3();
 /** how much nearer a part's box is taken to be entered than worked out (m): a surface on the box's face is met no
  *  nearer than the box, and rounding mustn't put it a hair past a surface met on another part at that distance */
 const ENTERS_SLACK = 1e-6;
@@ -99,7 +102,7 @@ const _stretch = { ax: 0, az: 0, dx: 0, dz: 0, nx: 0, nz: 0, cx: 0, cz: 0 };
 /** the parts a ray enters the spheres of, and how far along it (`nearest`) */
 const near: { part: Part; enters: number }[] = [];
 /** a mesh each part is cast against as (its geometry and matrix put on it) */
-const proxy = new THREE.Mesh(undefined, new THREE.MeshBasicMaterial({ side: THREE.DoubleSide }));
+const proxy = new Mesh(undefined, new UnlitMaterial({ side: DoubleSide }));
 
 const binOf = (angle: number): number => {
   const k = Math.floor((((angle % TAU) + TAU) % TAU) / TAU * BINS);
@@ -108,11 +111,11 @@ const binOf = (angle: number): number => {
 const angleOf = (bin: number): number => ((bin + 0.5) / BINS) * TAU;
 
 /** Whether a material draws a surface: opaque (cut out only for foliage, its leaf cards), seen from outside. */
-function drawsSurface(material: THREE.Material | THREE.Material[], use: WallUse): boolean {
+function drawsSurface(material: Material | Material[], use: WallUse): boolean {
   const m = Array.isArray(material) ? material[0] : material;
   // (what thins by blending stands as solid as ever: taken for glass, from play, "can walk through buildings too")
   const thinned = thinsByBlending(m);
-  if (m.side === THREE.BackSide || (!thinned && (m.transparent || m.blending !== THREE.NormalBlending))) return false;
+  if (m.side === BackSide || (!thinned && (m.transparent || m.blending !== NormalBlending))) return false;
   return use === 'foliage' || m.alphaTest === 0;
 }
 
@@ -145,7 +148,7 @@ export class Wall {
   constructor(private readonly biome: PlaceId) {}
 
   /** `geometry` placed by `matrix` (in the arena's frame) as a part of the wall (met by `hull`'s planes if given). */
-  addGeometry(geometry: THREE.BufferGeometry, matrix: THREE.Matrix4, stone: boolean, use: WallUse = 'wall',
+  addGeometry(geometry: Geometry, matrix: Mat4, stone: boolean, use: WallUse = 'wall',
     hull?: Float32Array, name = ''): void {
     if (!geometry.boundingSphere) geometry.computeBoundingSphere();
     if (!geometry.boundingBox) geometry.computeBoundingBox();
@@ -162,14 +165,14 @@ export class Wall {
    * it's made of, in its frame (a bush's lumps: one hull round all three spanned the hollows between them, and an
    * arrow stood in the air 0.3 m over the leaves).
    */
-  add(object: THREE.Object3D, stone: boolean, use: WallUse = 'wall', hulled: boolean | THREE.BufferGeometry[] = false): void {
+  add(object: Node, stone: boolean, use: WallUse = 'wall', hulled: boolean | Geometry[] = false): void {
     object.updateWorldMatrix(true, true);
     object.traverse((o) => {
-      const mesh = o as THREE.Mesh;
+      const mesh = o as Mesh;
       if (!mesh.isMesh || !drawsSurface(mesh.material, use)) return;
-      const instanced = mesh as THREE.InstancedMesh;
+      const instanced = mesh as InstancedMesh;
       const hulls = Array.isArray(hulled) ? hulled.map(hullOf) : hulled ? [hullOf(mesh.geometry)] : undefined;
-      const place = (matrix: THREE.Matrix4) => {
+      const place = (matrix: Mat4) => {
         if (!hulls) this.addGeometry(mesh.geometry, matrix, stone, use, undefined, mesh.name);
         else for (const hull of hulls) this.addGeometry(hull.geometry, matrix, stone, use, hull.planes, mesh.name);
       };
@@ -338,7 +341,7 @@ export class Wall {
   /** Each part a blow meets (not foliage) whose sphere reaches over the box from (`x0`, `z0`) to (`x1`, `z1`) seen
    *  from above, its geometry and where it stands. */
   solidsOver(x0: number, z0: number, x1: number, z1: number,
-    visit: (geometry: THREE.BufferGeometry, matrix: THREE.Matrix4) => void): void {
+    visit: (geometry: Geometry, matrix: Mat4) => void): void {
     for (const part of this.parts) {
       if (part.use === 'foliage') continue;
       const { center, radius } = part.sphere;
@@ -472,7 +475,7 @@ export class Wall {
   }
 
   /** The first surface of the wall or beyond it the step from `a` to `b` meets, into `hit`; false if none. */
-  cast(a: THREE.Vector3, b: THREE.Vector3, hit: WallHit): boolean {
+  cast(a: Vec3, b: Vec3, hit: WallHit): boolean {
     if (Math.max(Math.hypot(a.x, a.z), Math.hypot(b.x, b.z)) < this.inner) return false;
     const length = _d.subVectors(b, a).length();
     if (length < 1e-6) return false;
@@ -490,7 +493,7 @@ export class Wall {
   }
 
   /** The parts in the slices the step from `a` to `b` crosses (all of them for a step across the middle). */
-  private partsAlong(a: THREE.Vector3, b: THREE.Vector3): Part[] {
+  private partsAlong(a: Vec3, b: Vec3): Part[] {
     const from = Math.atan2(a.z, a.x), to = Math.atan2(b.z, b.x);
     const turn = Math.atan2(Math.sin(to - from), Math.cos(to - from));
     if (Math.abs(turn) > 0.5) return this.parts;

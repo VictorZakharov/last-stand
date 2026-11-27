@@ -7,7 +7,7 @@
 // A prop raised in the fight (the ranger's Hedgeward: `raiseProp`) is one like any other, worn by the same hits; and
 // every breakable prop is worn by the foes' blows that land on it (`hurtPropsNear`), and broken outright by a big foe
 // walking into it (`trampleProps`: from the owner, "Big enemies should break it by simply walking over it").
-import * as THREE from '../engine/three.ts';
+import { Hit, InstancedMesh, Mat4, Mesh, Node, PointLight, Points, Raycaster, Vec3 } from '../engine/api/index.ts';
 import type { Obstacle } from '../types';
 import type { Updater } from './props';
 import { simulates, hurtsProps } from '../net/role';
@@ -36,9 +36,9 @@ export interface Prop {
   hide(): void;
   show(): void;
   /** what it draws, met by a ray (an arrow finds where it goes in: the circles are only rough) */
-  raycast(ray: THREE.Raycaster, hits: THREE.Intersection[]): void;
+  raycast(ray: Raycaster, hits: Hit[]): void;
   /** each mesh it draws, its world matrix up to date (its top's shape, `propTopAt`) */
-  surfaces(visit: (mesh: THREE.Mesh) => void): void;
+  surfaces(visit: (mesh: Mesh) => void): void;
   chipT: number;
   /** game time of the last damage, and its health bar while it shows */
   hurtT: number;
@@ -79,47 +79,47 @@ export class PropSet {
   }
 }
 
-const _p = new THREE.Vector3();
+const _p = new Vec3();
 /** how a prop is hidden, shown and met by a ray */
 export type PropLook = {
-  hide(): void; show(): void; raycast(ray: THREE.Raycaster, hits: THREE.Intersection[]): void;
-  surfaces(visit: (mesh: THREE.Mesh) => void): void;
+  hide(): void; show(): void; raycast(ray: Raycaster, hits: Hit[]): void;
+  surfaces(visit: (mesh: Mesh) => void): void;
 };
 /** the meshes' surfaces a ray meets (not a glow's points) */
-const castAll = (objs: THREE.Object3D[]) => (ray: THREE.Raycaster, hits: THREE.Intersection[]): void => {
-  for (const o of objs) o.traverse((c) => { if ((c as THREE.Mesh).isMesh && c.visible) (c as THREE.Mesh).raycast(ray, hits); });
+const castAll = (objs: Node[]) => (ray: Raycaster, hits: Hit[]): void => {
+  for (const o of objs) o.traverse((c) => { if ((c as Mesh).isMesh && c.visible) (c as Mesh).raycast(ray, hits); });
 };
 /** each of the meshes shown (not a glow's points), its world matrix up to date */
-const surfacesOf = (objs: THREE.Object3D[]) => (visit: (mesh: THREE.Mesh) => void): void => {
+const surfacesOf = (objs: Node[]) => (visit: (mesh: Mesh) => void): void => {
   for (const o of objs) {
     o.updateWorldMatrix(true, true);
-    o.traverse((c) => { if ((c as THREE.Mesh).isMesh && c.visible) visit(c as THREE.Mesh); });
+    o.traverse((c) => { if ((c as Mesh).isMesh && c.visible) visit(c as Mesh); });
   }
 };
 /** hide / show for one instance of an InstancedMesh (call once the instance is placed) */
-export function instanceLook(mesh: THREE.InstancedMesh, i: number): PropLook {
-  const m = new THREE.Matrix4();
+export function instanceLook(mesh: InstancedMesh, i: number): PropLook {
+  const m = new Mat4();
   mesh.getMatrixAt(i, m);
-  const gone = new THREE.Matrix4().makeScale(1e-4, 1e-4, 1e-4).setPosition(_p.setFromMatrixPosition(m));
-  const set = (to: THREE.Matrix4): void => { mesh.setMatrixAt(i, to); mesh.instanceMatrix.needsUpdate = true; };
+  const gone = new Mat4().makeScale(1e-4, 1e-4, 1e-4).setPosition(_p.setFromMatrixPosition(m));
+  const set = (to: Mat4): void => { mesh.setMatrixAt(i, to); mesh.instanceMatrix.needsUpdate = true; };
   // (a ray against this instance alone: its geometry where the instance stands)
-  const one = new THREE.Mesh(mesh.geometry, mesh.material);
+  const one = new Mesh(mesh.geometry, mesh.material);
   one.matrixAutoUpdate = false;
-  const placed = (): THREE.Mesh => {
+  const placed = (): Mesh => {
     mesh.updateWorldMatrix(true, false);
     one.matrixWorld.multiplyMatrices(mesh.matrixWorld, m);
     return one;
   };
-  const raycast = (ray: THREE.Raycaster, hits: THREE.Intersection[]): void => placed().raycast(ray, hits);
+  const raycast = (ray: Raycaster, hits: Hit[]): void => placed().raycast(ray, hits);
   return { hide: () => set(gone), show: () => set(m), raycast, surfaces: (visit) => visit(placed()) };
 }
 /** hide / show for plain meshes (they're kept out of the shadow bake, so they cast for themselves) */
-export function meshLook(...meshes: THREE.Object3D[]): PropLook {
+export function meshLook(...meshes: Node[]): PropLook {
   for (const m of meshes) m.userData.noBake = true;
   return { hide: () => meshes.forEach((m) => { m.visible = false; }), show: () => meshes.forEach((m) => { m.visible = true; }), raycast: castAll(meshes), surfaces: surfacesOf(meshes) };
 }
 
-const centre = (p: Prop, out: THREE.Vector3): THREE.Vector3 => {
+const centre = (p: Prop, out: Vec3): Vec3 => {
   out.set(0, 0, 0);
   for (const o of p.parts) out.x += o.x, out.z += o.z;
   return out.multiplyScalar(1 / Math.max(1, p.parts.length)).setY(Math.min(1, Math.max(...p.parts.map((o) => o.h)) * 0.5));
@@ -218,7 +218,7 @@ function showBar(p: Prop): void {
       if (p.broken || age > BAR_SHOWN + BAR_FADE) { hideBar(p); return null; }
       bar.alpha = age <= BAR_SHOWN ? 1 : 1 - (age - BAR_SHOWN) / BAR_FADE;
       // over its top, but no higher than a man: a pillar's own top is off the frame when close to it
-      return centre(p, new THREE.Vector3()).setY(Math.min(2.2, Math.max(...p.parts.map((o) => o.h)) + 0.3));
+      return centre(p, new Vec3()).setY(Math.min(2.2, Math.max(...p.parts.map((o) => o.h)) + 0.3));
     }, true);
   }
   p.bar.show(gaugeArt(p.life / p.max));
@@ -228,19 +228,19 @@ function hideBar(p: Prop): void { removeLabel(p.bar); p.bar = null; }
 /** hide / show for everything a builder put in `group` (built into it instead of the scene): its meshes go
  *  (and stay out of the shadow bake), its animation stops (the `updaters` it added since `from`), and its
  *  lights go dark but stay in the scene, since a different light count would recompile every shader */
-export function groupLook(group: THREE.Object3D, updaters: Updater[], from: number): PropLook {
-  const lights: [THREE.PointLight, number][] = [], shown: THREE.Object3D[] = [];
+export function groupLook(group: Node, updaters: Updater[], from: number): PropLook {
+  const lights: [PointLight, number][] = [], shown: Node[] = [];
   group.traverse((o) => {
-    if ((o as THREE.PointLight).isPointLight) lights.push([o as THREE.PointLight, (o as THREE.PointLight).intensity]);
-    else if ((o as THREE.Mesh).isMesh || (o as THREE.Points).isPoints) { shown.push(o); o.userData.noBake = true; }
+    if ((o as PointLight).isPointLight) lights.push([o as PointLight, (o as PointLight).intensity]);
+    else if ((o as Mesh).isMesh || (o as Points).isPoints) { shown.push(o); o.userData.noBake = true; }
   });
   let gone = false;
   for (let i = from; i < updaters.length; i++) { const u = updaters[i]; updaters[i] = (dt, t) => { if (!gone) u(dt, t); }; }
   return {
     hide() { gone = true; for (const o of shown) o.visible = false; for (const [l] of lights) l.intensity = 0; },
     show() { gone = false; for (const o of shown) o.visible = true; for (const [l, v] of lights) l.intensity = v; },
-    raycast: castAll(shown.filter((o) => (o as THREE.Mesh).isMesh)),
-    surfaces: surfacesOf(shown.filter((o) => (o as THREE.Mesh).isMesh)),
+    raycast: castAll(shown.filter((o) => (o as Mesh).isMesh)),
+    surfaces: surfacesOf(shown.filter((o) => (o as Mesh).isMesh)),
   };
 }
 

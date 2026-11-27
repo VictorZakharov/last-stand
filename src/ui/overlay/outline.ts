@@ -5,7 +5,9 @@
 // meshes and the box on the screen it's drawn within; the engine's pipelines for it are made as it starts, so nothing
 // is compiled for it at load or in play. (Drawn by three on a canvas of its own laid over the engine's, it needed
 // that canvas and three's renderer; three's mask kept a cut-out's alpha test, the engine's draws it whole.)
-import * as THREE from '../../engine/three.ts';
+import {
+  Box3, Color, InstancedMesh, LinearSRGBColorSpace, Mat4, Material, Mesh, Node, NormalBlending, Vec3,
+} from '../../engine/api/index.ts';
 import { G } from '../../state';
 import { uiScales } from '../scale';
 import { placeUnplaced } from '../../entities/models/bodyAsOne';
@@ -20,25 +22,25 @@ const BOX_MARGIN = 4;
 
 /** What an outline goes round: an object and every mesh under it, or one instance of an instanced mesh. */
 export interface OutlineTarget {
-  root: THREE.Object3D;
+  root: Node;
   instance?: number;
 }
 
 /** An object outlined whole, or a target. */
-type Outlinable = THREE.Object3D | OutlineTarget;
+type Outlinable = Node | OutlineTarget;
 
 /** What's outlined: its targets, what they were given as (kept as they are while it's given again), the colour (as
  *  the screen shows it), and how strongly (0 to 1). */
 interface Outlined {
   targets: OutlineTarget[];
   given: Outlinable | readonly Outlinable[];
-  color: THREE.Color;
+  color: Color;
   strength: number;
 }
 let current: Outlined | null = null;
 
 const targetOf = (what: Outlinable): OutlineTarget =>
-  ((what as THREE.Object3D).isObject3D ? { root: what as THREE.Object3D } : what as OutlineTarget);
+  ((what as Node).isNode ? { root: what as Node } : what as OutlineTarget);
 
 /** `what`'s solid meshes outlined in `color` at `strength` (0 to 1), from now until it's changed; null: nothing.
  *  Given the same object or list each frame, nothing is made again. */
@@ -50,27 +52,27 @@ export function outline(what: Outlinable | readonly Outlinable[] | null, color =
   }
   if (current?.given !== what) {
     const targets = many ? (what as readonly Outlinable[]).map(targetOf) : [targetOf(what as Outlinable)];
-    current = { targets, given: what, color: new THREE.Color(), strength };
+    current = { targets, given: what, color: new Color(), strength };
   }
-  current.color.setHex(color, THREE.LinearSRGBColorSpace);
+  current.color.setHex(color, LinearSRGBColorSpace);
   current.strength = Math.min(1, strength);
 }
 
 /** What's outlined now, its colour (as a hex) and how strongly, if anything (tools/lab measures it). */
-export function outlinedLook(): { root: THREE.Object3D; color: number; strength: number } | null {
+export function outlinedLook(): { root: Node; color: number; strength: number } | null {
   if (!current) return null;
   const root = current.targets[0].root;
-  return { root, color: current.color.getHex(THREE.LinearSRGBColorSpace), strength: current.strength };
+  return { root, color: current.color.getHex(LinearSRGBColorSpace), strength: current.strength };
 }
 
 /** Whether `material` draws a solid surface (not a glow, a shadow under it or anything else blended over it). */
-function solid(material: THREE.Material): boolean {
-  return material.visible && !material.transparent && material.blending === THREE.NormalBlending;
+function solid(material: Material): boolean {
+  return material.visible && !material.transparent && material.blending === NormalBlending;
 }
 
 /** Whether every one of `object`'s parents up to the scene is shown. */
-function shownUp(object: THREE.Object3D): boolean {
-  for (let at: THREE.Object3D | null = object; at; at = at.parent) if (!at.visible) return false;
+function shownUp(object: Node): boolean {
+  for (let at: Node | null = object; at; at = at.parent) if (!at.visible) return false;
   return true;
 }
 
@@ -80,12 +82,12 @@ function meshesOf(targets: readonly OutlineTarget[]): OutlinedMesh[] {
   const meshes: OutlinedMesh[] = [];
   for (const target of targets) {
     if (target.instance !== undefined) {
-      meshes.push({ mesh: target.root as THREE.Mesh, instance: target.instance });
+      meshes.push({ mesh: target.root as Mesh, instance: target.instance });
       continue;
     }
     if (!shownUp(target.root)) continue;
     target.root.traverseVisible((object) => {
-      const mesh = object as THREE.Mesh;
+      const mesh = object as Mesh;
       if (!mesh.isMesh) return;
       const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
       if (materials.some(solid)) meshes.push({ mesh });
@@ -94,20 +96,20 @@ function meshesOf(targets: readonly OutlineTarget[]): OutlinedMesh[] {
   return meshes;
 }
 
-const box = new THREE.Box3();
-const each = new THREE.Box3();
-const corner = new THREE.Vector3();
-const instanceMatrix = new THREE.Matrix4();
+const box = new Box3();
+const each = new Box3();
+const corner = new Vec3();
+const instanceMatrix = new Mat4();
 
 /** `targets`' box in the world, into `box`. */
-function boxOf(targets: readonly OutlineTarget[]): THREE.Box3 {
+function boxOf(targets: readonly OutlineTarget[]): Box3 {
   box.makeEmpty();
   for (const target of targets) {
     if (target.instance === undefined) {
       box.union(each.setFromObject(target.root));
       continue;
     }
-    const mesh = target.root as THREE.InstancedMesh;
+    const mesh = target.root as InstancedMesh;
     if (!mesh.geometry.boundingBox) mesh.geometry.computeBoundingBox();
     mesh.getMatrixAt(target.instance, instanceMatrix);
     box.union(each.copy(mesh.geometry.boundingBox!).applyMatrix4(instanceMatrix).applyMatrix4(mesh.matrixWorld));
@@ -185,6 +187,6 @@ export async function warmOutline(_roots: readonly Outlinable[],
   _options: { edge?: boolean; pause?: () => Promise<void>; sliceMs?: number } = {}): Promise<void> {}
 
 /** The outline's compiles for `roots`: none, as `warmOutline` says; no materials to wait for. */
-export function compileOutline(_roots: readonly Outlinable[], _options: { edge?: boolean } = {}): Set<THREE.Material> {
+export function compileOutline(_roots: readonly Outlinable[], _options: { edge?: boolean } = {}): Set<Material> {
   return new Set();
 }

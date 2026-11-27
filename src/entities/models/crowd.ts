@@ -6,7 +6,10 @@
 // of a float texture the shaders read by `gl_InstanceID`. The bodies keep their own meshes on a layer the camera
 // doesn't draw (`CROWD_LAYER`), for what reads them: an arrow lodges in them, the outline draws them.
 // `?crowd=0` draws each body on its own again, for A/B.
-import * as THREE from '../../engine/three.ts';
+import {
+  Attribute, Box3, DataTexture, FloatType, InstancedGeometry, InterleavedBufferAttribute, LitMaterial, Mat3, Mat4,
+  Material, Mesh, NearestFilter, Node, RGBAFormat, SkinnedMesh, Sphere, Vec3,
+} from '../../engine/api/index.ts';
 import { G } from '../../state';
 import { QUALITY } from '../../data/quality';
 import { qualityLevel } from '../../core/quality';
@@ -37,7 +40,7 @@ const LOOKS = 2;
 /** One kind's crowd: its pieces merged per material (`slots`), its bodies, and their rows. */
 interface Kind {
   /** the joints' inverse bind matrices: its skeleton's bones, then the joints its rigid pieces hang on */
-  inverses: THREE.Matrix4[];
+  inverses: Mat4[];
   /** of a body's pieces, the one hung on each rigid joint, and the one whose material each slot draws */
   jointFrom: number[];
   slotFrom: number[];
@@ -48,8 +51,8 @@ interface Kind {
   row: number;
   rows: number;
   data: Float32Array;
-  uniforms: { uCrowd: { value: THREE.DataTexture }; uCrowdJoints: { value: number } };
-  slots: THREE.Mesh<THREE.InstancedBufferGeometry, THREE.Material>[];
+  uniforms: { uCrowd: { value: DataTexture }; uCrowdJoints: { value: number } };
+  slots: Mesh<InstancedGeometry, Material>[];
   /** how far a body's pieces reach from its root at its root's scale of 1 (its slots' spheres round it) */
   reach: number;
 }
@@ -58,29 +61,29 @@ interface Kind {
 interface Seat {
   body: CrowdBody;
   kind: Kind;
-  joints: THREE.Object3D[];
-  glows: THREE.MeshStandardMaterial[];
+  joints: Node[];
+  glows: LitMaterial[];
 }
 
 const kinds = new Map<string, Kind>();
 const seats = new Map<CrowdBody, Seat>();
 /** the smallest piece that casts a shadow at the quality (`QUALITY.minCasterRadius`, core/quality.ts) */
 const minCaster = { value: 0 };
-const _box = new THREE.Box3(), _sphere = new THREE.Sphere();
-const _m = new THREE.Matrix4(), _s = new THREE.Vector3(), _v = new THREE.Vector3(), _n = new THREE.Matrix3();
+const _box = new Box3(), _sphere = new Sphere();
+const _m = new Mat4(), _s = new Vec3(), _v = new Vec3(), _n = new Mat3();
 
 /** The kit material `material` is, or is a copy of (a skinned piece's: models/shapes.ts), or null. */
-export function baseOf(model: Model, material: THREE.Material): THREE.MeshStandardMaterial | null {
-  const mats = model.kit.mats as THREE.MeshStandardMaterial[];
-  if (mats.includes(material as THREE.MeshStandardMaterial)) return material as THREE.MeshStandardMaterial;
+export function baseOf(model: Model, material: Material): LitMaterial | null {
+  const mats = model.kit.mats as LitMaterial[];
+  if (mats.includes(material as LitMaterial)) return material as LitMaterial;
   return mats.find((m) => m.onBeforeCompile === material.onBeforeCompile) ?? null;
 }
 
 /** The pieces of `model` its kind shares (`Sculpt`'s), in a solid material of its kit: what the crowd draws. */
-export function piecesOf(model: Model): THREE.Mesh[] {
-  const out: THREE.Mesh[] = [];
+export function piecesOf(model: Model): Mesh[] {
+  const out: Mesh[] = [];
   model.root.traverse((o) => {
-    const m = o as THREE.Mesh;
+    const m = o as Mesh;
     if (!m.isMesh || !m.geometry.userData.shared || Array.isArray(m.material)) return;
     if (m.material.transparent || !baseOf(model, m.material)) return;
     out.push(m);
@@ -89,39 +92,39 @@ export function piecesOf(model: Model): THREE.Mesh[] {
 }
 
 /** An object's largest scale in the world, as core/quality.ts judges a piece's shadow by. */
-export function maxScale(o: THREE.Object3D): number {
+export function maxScale(o: Node): number {
   o.getWorldScale(_s);
   return Math.max(_s.x, _s.y, _s.z);
 }
 
 /** Whether a piece casts a shadow by the model's own choice (core/quality.ts keeps it in `userData.casts`). */
-export const castsOf = (m: THREE.Mesh): boolean => (m.userData.casts as boolean | undefined) ?? m.castShadow;
+export const castsOf = (m: Mesh): boolean => (m.userData.casts as boolean | undefined) ?? m.castShadow;
 
 /** A piece in its slot: the mesh, and the joint it hangs on (-1: skinned on the skeleton's bones). */
-type Part = { mesh: THREE.Mesh; joint: number };
+type Part = { mesh: Mesh; joint: number };
 
 /** The kind of `model` (its pieces `pieces`) set up: its joints, and its slots' merged geometry and materials. */
-function kindOf(model: Model, pieces: THREE.Mesh[]): Kind | null {
+function kindOf(model: Model, pieces: Mesh[]): Kind | null {
   model.root.updateMatrixWorld(true);
   const rootInv = model.root.matrixWorld.clone().invert();
-  const skinned = pieces.filter((p) => (p as THREE.SkinnedMesh).isSkinnedMesh) as THREE.SkinnedMesh[];
+  const skinned = pieces.filter((p) => (p as SkinnedMesh).isSkinnedMesh) as SkinnedMesh[];
   const skeleton = skinned[0]?.skeleton;
   if (skinned.some((p) => p.skeleton !== skeleton)) return null;
   const inverses = skeleton ? skeleton.boneInverses.map((m) => m.clone()) : [];
   const jointFrom: number[] = [], slotFrom: number[] = [], parts: Part[][] = [];
-  const jointOf = new Map<THREE.Object3D, number>(), slotOf = new Map<THREE.Material, number>();
+  const jointOf = new Map<Node, number>(), slotOf = new Map<Material, number>();
   pieces.forEach((mesh, k) => {
-    const base = baseOf(model, mesh.material as THREE.Material)!;
+    const base = baseOf(model, mesh.material as Material)!;
     let slot = slotOf.get(base);
     if (slot === undefined) { slotOf.set(base, slot = slotFrom.push(k) - 1); parts.push([]); }
     let joint = -1;
-    if (!(mesh as THREE.SkinnedMesh).isSkinnedMesh) {
+    if (!(mesh as SkinnedMesh).isSkinnedMesh) {
       const parent = mesh.parent!;
       joint = jointOf.get(parent) ?? -1;
       if (joint < 0) {
         jointOf.set(parent, joint = inverses.length);
         jointFrom.push(k);
-        inverses.push(new THREE.Matrix4().multiplyMatrices(rootInv, parent.matrixWorld).invert());
+        inverses.push(new Mat4().multiplyMatrices(rootInv, parent.matrixWorld).invert());
       }
     }
     parts[slot].push({ mesh, joint });
@@ -134,10 +137,10 @@ function kindOf(model: Model, pieces: THREE.Mesh[]): Kind | null {
   };
   const rootScale = maxScale(model.root);
   parts.forEach((list, slot) => {
-    const base = baseOf(model, pieces[slotFrom[slot]].material as THREE.Material)!;
+    const base = baseOf(model, pieces[slotFrom[slot]].material as Material)!;
     const geometry = merged(list, rootInv, rootScale, base.vertexColors);
     const material = crowdNodeMaterial(base, { texture, joints: inverses.length, looks: LOOKS, minCaster, eyeClear: EYE_CLEAR }, slot);
-    const mesh = new THREE.Mesh(geometry, material);
+    const mesh = new Mesh(geometry, material);
     mesh.castShadow = list.some((p) => castsOf(p.mesh));
     // (drawn over the kept shadows, as the heroes are: `world/moonShadow.ts`)
     mesh.layers.enable(HERO_SHADOW_LAYER);
@@ -157,9 +160,9 @@ function kindOf(model: Model, pieces: THREE.Mesh[]): Kind | null {
 }
 
 /** A float texture of `rows` rows `width` texels wide, over `data`. */
-function rowsTexture(data: Float32Array, width: number, rows: number): THREE.DataTexture {
-  const texture = new THREE.DataTexture(data, width, rows, THREE.RGBAFormat, THREE.FloatType);
-  texture.minFilter = texture.magFilter = THREE.NearestFilter;
+function rowsTexture(data: Float32Array, width: number, rows: number): DataTexture {
+  const texture = new DataTexture(data, width, rows, RGBAFormat, FloatType);
+  texture.minFilter = texture.magFilter = NearestFilter;
   texture.generateMipmaps = false;
   texture.needsUpdate = true;
   return texture;
@@ -170,7 +173,7 @@ function rowsTexture(data: Float32Array, width: number, rows: number): THREE.Dat
  * skinned whole to its joint, a skinned piece kept on its bones; each vertex's `crowdCaster` the piece's size as its
  * shadow is judged by (its bounding radius at its scale over the root's), 0 where it casts none.
  */
-function merged(list: Part[], rootInv: THREE.Matrix4, rootScale: number, colors: boolean): THREE.InstancedBufferGeometry {
+function merged(list: Part[], rootInv: Mat4, rootScale: number, colors: boolean): InstancedGeometry {
   const flat = list.map(({ mesh }) => (mesh.geometry.index ? mesh.geometry.toNonIndexed() : mesh.geometry));
   const count = flat.reduce((n, g) => n + g.attributes.position.count, 0);
   const colorSize = colors ? flat[0].attributes.color.itemSize : 0;
@@ -180,7 +183,7 @@ function merged(list: Part[], rootInv: THREE.Matrix4, rootScale: number, colors:
   let at = 0;
   list.forEach(({ mesh, joint }, n) => {
     const g = flat[n], p = g.attributes.position, nm = g.attributes.normal, t = g.attributes.uv;
-    const skin = joint < 0 ? mesh as THREE.SkinnedMesh : null;
+    const skin = joint < 0 ? mesh as SkinnedMesh : null;
     const place = skin ? _m.copy(skin.bindMatrix) : _m.multiplyMatrices(rootInv, mesh.matrixWorld);
     _n.getNormalMatrix(place);
     if (!g.boundingSphere) g.computeBoundingSphere();
@@ -198,14 +201,14 @@ function merged(list: Part[], rootInv: THREE.Matrix4, rootScale: number, colors:
     }
     if (g !== mesh.geometry) g.dispose();
   });
-  const out = new THREE.InstancedBufferGeometry();
-  out.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-  out.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
-  out.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
-  if (colorSize) out.setAttribute('color', new THREE.BufferAttribute(color, colorSize));
-  out.setAttribute('crowdIndex', new THREE.BufferAttribute(index, 2));
-  out.setAttribute('crowdWeight', new THREE.BufferAttribute(weight, 2));
-  out.setAttribute('crowdCaster', new THREE.BufferAttribute(caster, 1));
+  const out = new InstancedGeometry();
+  out.setAttribute('position', new Attribute(pos, 3));
+  out.setAttribute('normal', new Attribute(nor, 3));
+  out.setAttribute('uv', new Attribute(uv, 2));
+  if (colorSize) out.setAttribute('color', new Attribute(color, colorSize));
+  out.setAttribute('crowdIndex', new Attribute(index, 2));
+  out.setAttribute('crowdWeight', new Attribute(weight, 2));
+  out.setAttribute('crowdCaster', new Attribute(caster, 1));
   out.instanceCount = 0;
   return out;
 }
@@ -214,7 +217,7 @@ function merged(list: Part[], rootInv: THREE.Matrix4, rootScale: number, colors:
  * Every point of `from` placed by `m` into `to` from vertex `at`, as `Vector3.applyMatrix4` places each, read off the
  * array: read and written a vector at a time, the crowd's merge took 0.36 s of a boot's warm-up.
  */
-export function placeAll(from: THREE.BufferAttribute | THREE.InterleavedBufferAttribute, m: THREE.Matrix4,
+export function placeAll(from: Attribute | InterleavedBufferAttribute, m: Mat4,
   to: Float32Array, at: number): void {
   const e = m.elements;
   for (let i = 0, o = at * 3; i < from.count; i++, o += 3) {
@@ -227,7 +230,7 @@ export function placeAll(from: THREE.BufferAttribute | THREE.InterleavedBufferAt
 }
 
 /** Every normal of `from` turned by `m` into `to` from vertex `at` and made a unit long, as `Vector3`'s would be. */
-export function turnAll(from: THREE.BufferAttribute | THREE.InterleavedBufferAttribute, m: THREE.Matrix3,
+export function turnAll(from: Attribute | InterleavedBufferAttribute, m: Mat3,
   to: Float32Array, at: number): void {
   const e = m.elements;
   for (let i = 0, o = at * 3; i < from.count; i++, o += 3) {
@@ -267,9 +270,9 @@ export function joinCrowd(body: CrowdBody): boolean {
     console.warn(`crowd: a ${name} with ${pieces.length} pieces, its kind's ${kind.pieces}: drawn on its own`);
     return false;
   }
-  const bones = (pieces.find((p) => (p as THREE.SkinnedMesh).isSkinnedMesh) as THREE.SkinnedMesh | undefined)?.skeleton.bones ?? [];
+  const bones = (pieces.find((p) => (p as SkinnedMesh).isSkinnedMesh) as SkinnedMesh | undefined)?.skeleton.bones ?? [];
   const joints = [...bones, ...kind.jointFrom.map((k) => pieces[k].parent!)];
-  const glows = kind.slotFrom.map((k) => baseOf(body.model, pieces[k].material as THREE.Material)!);
+  const glows = kind.slotFrom.map((k) => baseOf(body.model, pieces[k].material as Material)!);
   for (const p of pieces) p.layers.set(CROWD_LAYER);
   const seat: Seat = { body, kind, joints, glows };
   kind.seats.push(seat);
@@ -279,7 +282,7 @@ export function joinCrowd(body: CrowdBody): boolean {
 
 /** The meshes `model`'s kind's crowd is drawn with (none before a body of its kind has joined it): what a warm-up of
  *  the kind compiles (game/warmup.ts). */
-export function crowdSlots(model: Model): THREE.Object3D[] {
+export function crowdSlots(model: Model): Node[] {
   return kinds.get(model.root.userData.crowdKind as string)?.slots ?? [];
 }
 
@@ -341,7 +344,7 @@ function writeRows(): void {
 }
 
 /** the slots refreshed in full this frame, their texture made anew (`grow`) */
-const grown: THREE.Mesh[] = [];
+const grown: Mesh[] = [];
 
 /** A body's row, from float `at`: its joints' matrices, then its looks. */
 function writeRow(kind: Kind, seat: Seat, at: number): void {

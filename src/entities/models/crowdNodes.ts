@@ -2,13 +2,13 @@
 // texture by its instance, and the kit's looks (core/materials.ts: dissolve and its edge, frost, char, hit flash)
 // from its row, its glows dimmed near the camera and its rim as the kit has them, dissolved as a screen door at the
 // camera, as TSL nodes; and its shadow, skinned the same, its pieces too small for the quality's shadows cut.
-import * as THREE from '../../engine/three.ts';
+import { DataTexture, LitMaterial, Material } from '../../engine/api/index.ts';
 import { NEAR_GLOW, type KitLooks } from '../../core/materials';
 import { gpu, stillNodes, tsl } from '../../core/webgpu';
 
 /** What a slot's material reads of its kind: its rows, how many joints a row holds, the texels of looks after them. */
 export interface Rows {
-  texture: THREE.DataTexture;
+  texture: DataTexture;
   joints: number;
   looks: number;
   /** the smallest piece that casts a shadow (the quality's), and how near a body's dissolved at the camera */
@@ -41,7 +41,7 @@ function fxNoise(x: N): N {
 let minCasterNode: N = null;
 
 /** A copy of `base` as a node material, skinned from `rows`, its looks and glow the body's own (`slot`'s, from its row). */
-export function crowdNodeMaterial(base: THREE.MeshStandardMaterial, rows: Rows, slot: number): THREE.Material {
+export function crowdNodeMaterial(base: LitMaterial, rows: Rows, slot: number): Material {
   const {
     Fn, If, Discard, attribute, textureLoad, ivec2, int, instanceIndex, mat4, vec3, vec4, positionLocal, normalLocal,
     positionGeometry, materialColor, materialOpacity, materialEmissive, varying, mix, smoothstep, uniform, clamp, pow,
@@ -49,8 +49,8 @@ export function crowdNodeMaterial(base: THREE.MeshStandardMaterial, rows: Rows, 
   } = tsl as any;
   const source = base.clone();
   source.emissiveIntensity = 1;
-  const Node = (base as THREE.MeshPhysicalMaterial).isMeshPhysicalMaterial ? gpu.MeshPhysicalNodeMaterial : gpu.MeshStandardNodeMaterial;
-  const m = new Node() as unknown as Record<string, unknown> & THREE.Material;
+  const Node = (base as LitMaterial).isLitMaterial ? gpu.MeshPhysicalNodeMaterial : gpu.MeshStandardNodeMaterial;
+  const m = new Node() as unknown as Record<string, unknown> & Material;
   // (as three's own conversion copies a material over: NodeLibrary.fromMaterial)
   for (const key in source) m[key] = (source as unknown as Record<string, unknown>)[key];
   m.onBeforeCompile = () => {};

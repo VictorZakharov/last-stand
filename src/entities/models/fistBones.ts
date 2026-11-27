@@ -14,7 +14,9 @@
 // The skin's points are kept as the open hand is bound, so a point moved in the fist is taken back through its own
 // bones' blend: the shut fist has points and normals of its own (`hands.ts` `shadeShut`), swapped in as it shuts,
 // with the same bones, weights and program.
-import * as THREE from '../../engine/three.ts';
+import {
+  Attribute, Geometry, InterleavedBufferAttribute, Mat4, Quat, SkinnedMesh, Vec3,
+} from '../../engine/api/index.ts';
 import { tunable } from '../../core/tuning';
 
 /** a skin as its bones pose it, in a frame of its own: each point, its normal, and the turn and move that took it */
@@ -25,24 +27,24 @@ export interface PosedSkin {
   moves: Float32Array;
 }
 
-const _turn = new THREE.Quaternion(), _pivot = new THREE.Quaternion(), _move = new THREE.Vector3();
-const _scale = new THREE.Vector3(), _p = new THREE.Vector3(), _n = new THREE.Vector3(), _q = new THREE.Quaternion();
+const _turn = new Quat(), _pivot = new Quat(), _move = new Vec3();
+const _scale = new Vec3(), _p = new Vec3(), _n = new Vec3(), _q = new Quat();
 
 /**
  * `mesh`'s skin (`geometry`: its own, or one bound as it is) as its bones pose it now, blended as it's drawn (`dualQuaternion.ts`: each point's bones as turns
  * and moves, on the first one's side), `placed` each bone's place in the frame it's read in (`hands.ts` `placeIn`).
  */
-export function posedSkin(mesh: THREE.SkinnedMesh, geometry: THREE.BufferGeometry, placed: readonly THREE.Matrix4[],
+export function posedSkin(mesh: SkinnedMesh, geometry: Geometry, placed: readonly Mat4[],
 ): PosedSkin {
   const position = geometry.attributes.position, normal = geometry.attributes.normal;
   const index = geometry.attributes.skinIndex, share = geometry.attributes.skinWeight, count = position.count;
   // each bone's turn and move of a point as it's bound
   const bones = placed.map((place, n) => {
     const whole = place.clone().multiply(mesh.skeleton.boneInverses[n]).multiply(mesh.bindMatrix);
-    const turn = new THREE.Quaternion(), move = new THREE.Vector3();
+    const turn = new Quat(), move = new Vec3();
     whole.decompose(move, turn, _scale);
     // (the move as the dual part: half the move times the turn)
-    const dual = new THREE.Quaternion(move.x, move.y, move.z, 0).multiply(turn);
+    const dual = new Quat(move.x, move.y, move.z, 0).multiply(turn);
     return { turn, dual: [dual.x / 2, dual.y / 2, dual.z / 2, dual.w / 2] };
   });
   const posed: PosedSkin = {
@@ -84,7 +86,7 @@ export function posedSkin(mesh: THREE.SkinnedMesh, geometry: THREE.BufferGeometr
  *  its bones' numbers in the skin's skeleton (its knuckle's first), and how far its root has dropped towards the
  *  palm about the wrist's end of its metacarpal (`drop`, rad) */
 export interface FistFinger {
-  joints: readonly THREE.Vector3[];
+  joints: readonly Vec3[];
   r: number;
   bones: readonly number[];
   drop: number;
@@ -158,7 +160,7 @@ function offLine(x: number, y: number, ax: number, ay: number, bx: number, by: n
 function relief(at: Float32Array, out: Float32Array, fingers: readonly FistFinger[], wristY: number,
   shapes: (i: number, finger: number) => boolean, bends: (i: number, finger: number) => boolean): void {
   const { heads, head, valley, between, tendon, cord, gathers, mid, corner } = FIST_RELIEF;
-  const way = new THREE.Vector3(...FIST_RELIEF.out).normalize();
+  const way = new Vec3(...FIST_RELIEF.out).normalize();
   const tops = fingers.map((finger) => finger.joints[0].clone().addScaledVector(way, finger.r));
   const corners = fingers.map((finger) => {
     const [knuckle, middle, last] = finger.joints;
@@ -383,8 +385,8 @@ function straightBack(at: Float32Array, posed: PosedSkin, palmOf: (i: number) =>
 }
 
 /** the bone a point of the skin keeps to most */
-function mainBone(index: THREE.BufferAttribute | THREE.InterleavedBufferAttribute,
-  share: THREE.BufferAttribute | THREE.InterleavedBufferAttribute, i: number): number {
+function mainBone(index: Attribute | InterleavedBufferAttribute,
+  share: Attribute | InterleavedBufferAttribute, i: number): number {
   let most = 0;
   for (let k = 1; k < 4; k++) if (share.getComponent(i, k) > share.getComponent(i, most)) most = k;
   return index.getComponent(i, most);
@@ -395,8 +397,8 @@ function mainBone(index: THREE.BufferAttribute | THREE.InterleavedBufferAttribut
  * palm dropped with its outer knuckles (`drop`), its back laid straight, smoothed where those moved it, and the
  * fist's relief added; each point then taken back through its own blend.
  */
-export function onBones(mesh: THREE.SkinnedMesh, posed: PosedSkin, fingers: readonly FistFinger[], palm: number,
-  drop: FistDrop): { position: THREE.BufferAttribute; normal: THREE.BufferAttribute; closed: Float32Array } {
+export function onBones(mesh: SkinnedMesh, posed: PosedSkin, fingers: readonly FistFinger[], palm: number,
+  drop: FistDrop): { position: Attribute; normal: Attribute; closed: Float32Array } {
   const geometry = mesh.geometry, count = geometry.attributes.position.count;
   const index = geometry.attributes.skinIndex, share = geometry.attributes.skinWeight;
   const at = posed.at.slice();
@@ -430,7 +432,7 @@ export function onBones(mesh: THREE.SkinnedMesh, posed: PosedSkin, fingers: read
     position.set([_p.x, _p.y, _p.z], i * 3);
     normal.set([_n.x, _n.y, _n.z], i * 3);
   }
-  return { position: new THREE.BufferAttribute(position, 3), normal: new THREE.BufferAttribute(normal, 3), closed };
+  return { position: new Attribute(position, 3), normal: new Attribute(normal, 3), closed };
 }
 
 /** how far a point of a shut fist's skin must have been moved to be smoothed with its neighbours (m), how many times
@@ -443,7 +445,7 @@ const FIST_SMOOTH = tunable('fistSmooth', { moved: 0.0003, passes: 4, share: 0.5
  * left in small lumps where the raise met the sculpt's own knuckles (from play, of the straightened fist: "just need
  * to clean up the geometry a little"). The relief goes on after it: smooth of itself, and smoothed, it was lost.
  */
-function smoothed(at: Float32Array, was: Float32Array, index: THREE.BufferAttribute | null): void {
+function smoothed(at: Float32Array, was: Float32Array, index: Attribute | null): void {
   if (!index) return;
   const count = at.length / 3, joined: number[][] = Array.from({ length: count }, () => []);
   for (let n = 0; n + 2 < index.count; n += 3) {
@@ -470,9 +472,9 @@ function smoothed(at: Float32Array, was: Float32Array, index: THREE.BufferAttrib
 }
 
 /** each point's normal from the faces round it (`index` the faces' corners; `was` kept where a point has none) */
-function normalsOf(at: Float32Array, index: THREE.BufferAttribute | null, was: Float32Array): Float32Array {
+function normalsOf(at: Float32Array, index: Attribute | null, was: Float32Array): Float32Array {
   const out = new Float32Array(at.length), corners = index ? index.count : at.length / 3;
-  const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3();
+  const a = new Vec3(), b = new Vec3(), c = new Vec3();
   for (let n = 0; n + 2 < corners; n += 3) {
     const ia = index ? index.getX(n) : n, ib = index ? index.getX(n + 1) : n + 1, ic = index ? index.getX(n + 2) : n + 2;
     a.fromArray(at, ia * 3); b.fromArray(at, ib * 3); c.fromArray(at, ic * 3);

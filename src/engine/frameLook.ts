@@ -2,7 +2,7 @@
 // `Pass.edges`): photo mode's exposure, contrast, saturation, colour filter, focus and bloom (core/photoLook.ts), and
 // the blood round the screen's edges as the hero's Health runs low (core/bloodEdges.ts, core/lowLife.ts). Without it
 // a photo was the frame as played whatever its look, and low health only drained the colour.
-import type * as THREE from './three.ts';
+import type { Mat3, Texture } from './api/index.ts';
 import type { Core } from './core';
 import type { Grade } from './globals';
 import type { Maps } from './maps';
@@ -14,13 +14,13 @@ const AT = { look: 0, focus: 4, filterLo: 8, filterHi: 20, edges: 32 };
 export class FrameLook {
   private readonly numbers = new Float32Array(FLOATS);
   /** the edges' map as last handed over, and its version then */
-  private edges: THREE.Texture | null = null;
+  private edges: Texture | null = null;
   private edgesVersion = -1;
 
   constructor(private readonly core: Core, private readonly maps: Maps) {}
 
   /** A matrix's three columns, each in four floats, as the engine's grade reads them. */
-  private columns(matrix: THREE.Matrix3, at: number): void {
+  private columns(matrix: Mat3, at: number): void {
     const e = matrix.elements;
     for (let column = 0; column < 3; column++) {
       for (let row = 0; row < 3; row++) this.numbers[at + column * 4 + row] = e[column * 3 + row];

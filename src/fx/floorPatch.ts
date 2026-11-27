@@ -3,14 +3,14 @@
 // Laid in one plane at its middle's height, it went under the dais where it crossed the step and stood in the air off
 // it; laid by the ground's height at each of its points, a triangle across a step sloped from one level to the other,
 // and the parts of it under the dais's top left jagged notches along its edge.
-import * as THREE from '../engine/three.ts';
+import { Attribute, Geometry } from '../engine/api/index.ts';
 import { GROUND_EDGES, GROUND_LEVELS } from '../world/ground';
 
 /** each patch's triangles as made, flat round its middle: the x and z of their corners */
-const FLAT = new WeakMap<THREE.BufferGeometry, Float32Array>();
+const FLAT = new WeakMap<Geometry, Float32Array>();
 
 /** A ring `inner`..`outer` from its middle (a disc for `inner` 0), `rings` x `segs` points, flat on y = 0 until laid. */
-export function floorPatch(inner: number, outer: number, rings: number, segs: number): THREE.BufferGeometry {
+export function floorPatch(inner: number, outer: number, rings: number, segs: number): Geometry {
   const at = (r: number, k: number) => { const a = k / segs * Math.PI * 2, d = inner + (outer - inner) * r / rings; return [Math.cos(a) * d, Math.sin(a) * d]; };
   const flat: number[] = [];
   for (let r = 0; r < rings; r++) for (let k = 0; k < segs; k++) {
@@ -18,17 +18,17 @@ export function floorPatch(inner: number, outer: number, rings: number, segs: nu
     if (inner > 0 || r > 0) flat.push(...a, ...b, ...c);
     flat.push(...c, ...b, ...d);
   }
-  const g = new THREE.BufferGeometry(), corners = flat.length / 2;
+  const g = new Geometry(), corners = flat.length / 2;
   // (room for the pieces a cut adds and the steps' faces; grown if a placement needs more)
   const pos = new Float32Array(corners * 3 * 2);
   for (let i = 0; i < corners; i++) { pos[i * 3] = flat[i * 2]; pos[i * 3 + 2] = flat[i * 2 + 1]; }
-  g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setDrawRange(0, corners);
+  g.setAttribute('position', new Attribute(pos, 3)); g.setDrawRange(0, corners);
   FLAT.set(g, new Float32Array(flat));
   return g;
 }
 
 /** Whether `g` is a mark on the floor (`floorPatch`): the lab finds the marks laid by it. */
-export const isFloorPatch = (g: THREE.BufferGeometry): boolean => FLAT.has(g);
+export const isFloorPatch = (g: Geometry): boolean => FLAT.has(g);
 
 /** The floor's level at (x, z) with every edge `out` m further out: a mark laid `out` over the floor reaches that far
  *  past an edge, so its face down the step stands clear of the step's own. */
@@ -85,7 +85,7 @@ function emit(poly: number[], cuts: number[], x: number, z: number, lift: number
 
 /** A patch's points onto the ground under them: its mesh at (x, 0, z), unturned, scaled `scale` across (not up), `lift`
  *  above the ground, each piece on one level and down the face of each step it crosses. */
-export function lay(g: THREE.BufferGeometry, x: number, z: number, lift: number, scale = 1): void {
+export function lay(g: Geometry, x: number, z: number, lift: number, scale = 1): void {
   const flat = FLAT.get(g)!, cuts = GROUND_EDGES.map((e) => e + lift);
   _out.length = 0;
   const pieces: number[][] = [], next: number[][] = [];
@@ -101,8 +101,8 @@ export function lay(g: THREE.BufferGeometry, x: number, z: number, lift: number,
     }
     for (const piece of pieces) emit(piece, cuts, x, z, lift, scale);
   }
-  let p = g.attributes.position as THREE.BufferAttribute;
-  if (p.array.length < _out.length) { p = new THREE.BufferAttribute(new Float32Array(Math.ceil(_out.length / 2) * 3), 3); g.setAttribute('position', p); }
+  let p = g.attributes.position as Attribute;
+  if (p.array.length < _out.length) { p = new Attribute(new Float32Array(Math.ceil(_out.length / 2) * 3), 3); g.setAttribute('position', p); }
   (p.array as Float32Array).set(_out);
   p.clearUpdateRanges(); p.addUpdateRange(0, _out.length);
   p.needsUpdate = true;

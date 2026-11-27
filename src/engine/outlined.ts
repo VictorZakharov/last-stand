@@ -2,7 +2,7 @@
 // the engine (Bulwark's gpu/outline.rs): each frame the named meshes' records are written again beside the frame's
 // own, flagged `OUTLINED`, so the engine draws them into the outline's mask alone, whatever stands before them, and
 // the mask's edge over its finished frame. The page drew it with three's renderer on a canvas laid over the engine's.
-import * as THREE from './three.ts';
+import { Color, InstancedMesh, Mat4, Mesh } from './api/index.ts';
 import { RECORD, type Core } from './core';
 import { engineCanvas } from './index';
 
@@ -17,7 +17,7 @@ const MATRIX_AT = 8;
 
 /** One thing outlined: a mesh, or one instance of an instanced mesh. */
 export interface OutlinedMesh {
-  mesh: THREE.Mesh;
+  mesh: Mesh;
   instance?: number;
 }
 
@@ -26,7 +26,7 @@ export interface OutlinedMesh {
  *  which the page places by; the box from its top left). */
 export interface OutlineAsked {
   meshes: OutlinedMesh[];
-  color: THREE.Color;
+  color: Color;
   strength: number;
   line: number;
   glow: number;
@@ -41,17 +41,17 @@ export function outlineForEngine(next: OutlineAsked | null): void {
   asked = next;
 }
 
-const instanceMatrix = new THREE.Matrix4();
-const placed = new THREE.Matrix4();
+const instanceMatrix = new Mat4();
+const placed = new Mat4();
 
 /** `mesh`'s records written by `add`, then made the outline's: flagged for its mask alone, and an instance's its own,
  *  out of its set. */
-function writeOne(core: Core, add: (mesh: THREE.Mesh) => void, each: OutlinedMesh): void {
+function writeOne(core: Core, add: (mesh: Mesh) => void, each: OutlinedMesh): void {
   const from = core.count;
   add(each.mesh);
   const records = core.records;
   if (each.instance !== undefined) {
-    (each.mesh as THREE.InstancedMesh).getMatrixAt(each.instance, instanceMatrix);
+    (each.mesh as InstancedMesh).getMatrixAt(each.instance, instanceMatrix);
     placed.multiplyMatrices(each.mesh.matrixWorld, instanceMatrix);
   }
   for (let record = from; record < core.count; record++) {
@@ -67,7 +67,7 @@ function writeOne(core: Core, add: (mesh: THREE.Mesh) => void, each: OutlinedMes
  * The outlined meshes' records written beside the frame's (`add`: the bridge's, which writes a mesh's records and
  * its bones), and the engine told the outline's look, sized to its canvas; or told there's none.
  */
-export function writeOutlined(core: Core, add: (mesh: THREE.Mesh) => void): void {
+export function writeOutlined(core: Core, add: (mesh: Mesh) => void): void {
   const canvas = engineCanvas();
   if (!asked || !canvas || !asked.meshes.length || asked.strength <= 0) {
     core.engine.no_outline();

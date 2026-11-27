@@ -1,7 +1,7 @@
 // Cinderburst: the fire staff's spell (#402). A slow, heavy orb of fire that bursts where it strikes: the foe it
 // meets takes it whole, those round it a share easing down to the blast's edge, and each may be set alight
 // (combat/burn.ts). Cast a third as often as an arcane staff's bolt.
-import * as THREE from '../../engine/three.ts';
+import { Vec3 } from '../../engine/api/index.ts';
 import { G } from '../../state';
 import { spawnProjectile } from '../projectiles';
 import { hitEnemy } from '../damage';
@@ -20,7 +20,7 @@ import type { Player } from '../../entities/player';
 type Def = Needs<'damage' | 'speed' | 'range' | 'radius' | 'edge' | 'color' | 'trailEnd' | 'burn'>;
 
 /** The orb bursts at `at`: `struck` (the foe it met, if any) takes it whole, the rest by how far out they stand. */
-function burstAt(player: Player, def: Def, at: THREE.Vector3, struck: Enemy | null, way: { x: number; z: number }): void {
+function burstAt(player: Player, def: Def, at: Vec3, struck: Enemy | null, way: { x: number; z: number }): void {
   // (its look: the flash, the ball of flame, the rings, the embers and the fire it leaves, fx/cinder.ts)
   cinderBlast(at, def.radius, def.color, def.trailEnd);
   flash({ color: def.color, intensity: 9, distance: 6, life: 0.3, pos: { x: at.x, y: at.y + 0.5, z: at.z } });
@@ -54,10 +54,10 @@ const skill: InstantSkill = {
     const def = rawDef as Def;
     const origin = player.castPoint.clone();
     const angle = player.shotHeading(origin, target);
-    const dir = new THREE.Vector3(Math.sin(angle), 0, Math.cos(angle));
+    const dir = new Vec3(Math.sin(angle), 0, Math.cos(angle));
     const orb = cinderOrb(def.color, def.trailEnd);
     let done = false;
-    const end = (at: THREE.Vector3, struck: Enemy | null, vel: THREE.Vector3): void => {
+    const end = (at: Vec3, struck: Enemy | null, vel: Vec3): void => {
       if (done) return;
       done = true;
       orb.dispose();

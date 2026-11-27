@@ -14,7 +14,7 @@
 // hips and the trunk turning, the rear heel lifting, the weight onto the front foot. Through the eyes the same: the
 // fist comes from the bottom corner of the view, across to just under the crosshair, its shoulder sent in after it
 // and the other fist drawn back down, so the view sees a whole arm thrown, not a hand poked out.
-import * as THREE from '../../engine/three.ts';
+import { Quat, Vec3 } from '../../engine/api/index.ts';
 import { reachArm, ramp, type Joints } from './rig';
 import { curve, type Keys } from './motion';
 import { fromEyes, fromScreen } from '../viewModel';
@@ -63,7 +63,7 @@ const GUARD_EYES = tunable('fistsEyes', {
  *  view and the fist stopped short, low and near at the view's foot, its fingers seen from above as an open hand) */
 const PUNCH_AT = [0, -0.04, 1.2];
 /** the elbows' way in the chest's frame: down and a little out in the guard */
-const POLE_L = new THREE.Vector3(0.15, -1, -0.1), POLE_R = new THREE.Vector3(-0.15, -1, -0.1);
+const POLE_L = new Vec3(0.15, -1, -0.1), POLE_R = new Vec3(-0.15, -1, -0.1);
 /** through the eyes: down and out, so the forearm rises from the frame's bottom corner (camera space, for each side) */
 
 /**
@@ -155,7 +155,7 @@ const COIL = tunable('punchCoil', { jab: 0.9, cross: 0.75, upright: 0.7, look: 0
 const BACK = tunable('punchBack', { body: [0.03, -0.22, 0.02], elbow: 1, line: [0, 1, 0], guard: [0.06, -0.005] });
 
 /** Where a chambered fist is (the body's frame), into `out`: off its own shoulder as it stands now (`BACK.body`). */
-function chamberAt(j: Joints, lead: boolean, out: THREE.Vector3): THREE.Vector3 {
+function chamberAt(j: Joints, lead: boolean, out: Vec3): Vec3 {
   const [aside, down, ahead] = BACK.body;
   j.body.worldToLocal((lead ? j.shoulderL : j.shoulderR).getWorldPosition(out));
   out.x += (lead ? 1 : -1) * aside; out.y += down; out.z += ahead;
@@ -177,7 +177,7 @@ const FREE_IN = [0.13, 0.02];
  * The wrist's joint is left alone: turned at the joint, the bare wrist's skin
  * was wrung flat into a ribbon standing off the arm.
  */
-export const fistLine = { L: new THREE.Vector3(), R: new THREE.Vector3() };
+export const fistLine = { L: new Vec3(), R: new Vec3() };
 /** the knuckles' line in the guard and in a punch, each hand's (in the body's frame): the way from the little
  *  finger's knuckle to the index's, as a handle runs up out of a fist (`hold`), so the left hand's punch is the
  *  right's mirrored (the same line for both turned the left palm up, its fingers curled at the eyes as a claw) */
@@ -191,20 +191,20 @@ const LINE = tunable('fistLines', { guard: [-0.9, 0, -0.35], punch: [1, 0, 0] })
 /** a knuckle line for the hand on that side: mirrored across his middle for the left */
 const sided = (line: readonly number[], left: boolean): number[] => (left ? [-line[0], line[1], line[2]] : [...line]);
 
-const _mid = new THREE.Vector3(), _at = new THREE.Vector3(), _sh = new THREE.Vector3(), _far = new THREE.Vector3();
-const _cam = new THREE.Vector3(), _pole = new THREE.Vector3(), _near = new THREE.Vector3();
-const _from = new THREE.Vector3();
-const _sq = new THREE.Quaternion(), _eq = new THREE.Quaternion();
+const _mid = new Vec3(), _at = new Vec3(), _sh = new Vec3(), _far = new Vec3();
+const _cam = new Vec3(), _pole = new Vec3(), _near = new Vec3();
+const _from = new Vec3();
+const _sq = new Quat(), _eq = new Quat();
 
 /** The point between the shoulders in the body's frame, the trunk posed as it is. */
-function between(j: Joints, out: THREE.Vector3): THREE.Vector3 {
+function between(j: Joints, out: Vec3): Vec3 {
   j.root.updateMatrixWorld(true);
   j.shoulderL.getWorldPosition(out).add(j.shoulderR.getWorldPosition(_sh)).multiplyScalar(0.5);
   return j.body.worldToLocal(out);
 }
 
 /** Where a point of the eyes' view (camera space) is in the body's frame. */
-function seen(j: Joints, cam: THREE.Vector3, out: THREE.Vector3): THREE.Vector3 {
+function seen(j: Joints, cam: Vec3, out: Vec3): Vec3 {
   j.root.updateMatrixWorld(true);
   return j.body.worldToLocal(fromEyes(j.root, j.neck, cam, out));
 }
@@ -220,12 +220,12 @@ export function fistsLens(world: boolean): void {
 }
 /** A place on the arms' screen (as `fromScreen`'s, across and up to their frame's edges, and metres ahead) in the
  *  body's frame. */
-const onScreen = (j: Joints, on: readonly number[], out: THREE.Vector3): THREE.Vector3 =>
+const onScreen = (j: Joints, on: readonly number[], out: Vec3): Vec3 =>
   seen(j, fromScreen([on[0] * ARMS_LENS, on[1] * ARMS_LENS, on[2]], _cam), out);
 
 /** An arm reaching `at` (the body's frame) by `w` of the way from the pose's own, its elbow towards its pole (through
  *  the eyes down and out from the arms' shoulders under the view). */
-function place(j: Joints, left: boolean, at: THREE.Vector3, w: number, eyes = false, flare = 0, back = 0): void {
+function place(j: Joints, left: boolean, at: Vec3, w: number, eyes = false, flare = 0, back = 0): void {
   if (w <= 0) return;
   const shoulder = left ? j.shoulderL : j.shoulderR, elbow = left ? j.elbowL : j.elbowR;
   _sq.copy(shoulder.quaternion); _eq.copy(elbow.quaternion);
@@ -243,16 +243,16 @@ function place(j: Joints, left: boolean, at: THREE.Vector3, w: number, eyes = fa
 }
 
 /** `mid` moved by `off` (to his left, up, ahead). */
-const from = (mid: THREE.Vector3, off: readonly number[], out: THREE.Vector3): THREE.Vector3 => out.set(mid.x + off[0], mid.y + off[1], mid.z + off[2]);
+const from = (mid: Vec3, off: readonly number[], out: Vec3): Vec3 => out.set(mid.x + off[0], mid.y + off[1], mid.z + off[2]);
 
 /** Each knuckle line `w` of the way to `to`. */
-function lineTo(line: THREE.Vector3, to: readonly number[], w: number): void {
+function lineTo(line: Vec3, to: readonly number[], w: number): void {
   line.set(lerp(line.x, to[0], w), lerp(line.y, to[1], w), lerp(line.z, to[2], w));
 }
 
 /** Where a fist is in the guard, into `out` (the body's frame): third person by the shoulders, through the eyes by its
  *  place on the screen (`easy`: out of a fight, held lower), with the breath's and the bob's lift (m). */
-function guardAt(j: Joints, left: boolean, eyes: boolean, easy: number, lift: number, out: THREE.Vector3): THREE.Vector3 {
+function guardAt(j: Joints, left: boolean, eyes: boolean, easy: number, lift: number, out: Vec3): Vec3 {
   if (eyes) {
     const on = left ? GUARD_EYES.lead : GUARD_EYES.rear;
     return onScreen(j, [on[0], on[1] + EASY_EYES * easy + lift * 2, on[2]], out);
@@ -282,7 +282,7 @@ export function fistGuard(j: Joints, w: number, t: number, eyes: boolean, shield
 
 /** Where a punch lands, into `out` (the body's frame): straight out along the middle line from the shoulder, a little
  *  short of the arm's length; through the eyes just under the crosshair. */
-function punchAt(j: Joints, left: boolean, eyes: boolean, out: THREE.Vector3): THREE.Vector3 {
+function punchAt(j: Joints, left: boolean, eyes: boolean, out: Vec3): Vec3 {
   const shoulder = left ? j.shoulderL : j.shoulderR, seenAs = left ? PUNCH_EYES.jab : PUNCH_EYES.cross;
   const reach = (j.P.upperL + j.P.foreL) * (eyes ? seenAs.reach : FIST.reach);
   // (the middle line first: `between` works in `_sh` too, and read before it the punch was measured from the other
@@ -301,11 +301,11 @@ function punchAt(j: Joints, left: boolean, eyes: boolean, out: THREE.Vector3): T
  * point: the hand's length back from it along the forearm as the arm reaches it (`shoulder` in the body's frame,
  * `reach` the furthest the wrist goes from it), found by reaching once and reading the forearm.
  */
-function strikeWrist(j: Joints, left: boolean, shoulder: THREE.Vector3, reach: number, out: THREE.Vector3): THREE.Vector3 {
+function strikeWrist(j: Joints, left: boolean, shoulder: Vec3, reach: number, out: Vec3): Vec3 {
   // (each aimed a little past the middle: as read off the screen (the lab's live session, the knuckles a hand's
   // length on along the forearm) each landed 0.03 of the view short of it on its own side)
   const at = onScreen(j, [STRIKE.at[0] + (left ? STRIKE.past : -STRIKE.past), STRIKE.at[1], STRIKE.ahead], _strike);
-  const back = (to: THREE.Vector3): THREE.Vector3 => {
+  const back = (to: Vec3): Vec3 => {
     out.copy(at).addScaledVector(to, -STRIKE.hand);
     _reach.subVectors(out, shoulder);
     if (_reach.length() > reach) out.copy(shoulder).add(_reach.setLength(reach));
@@ -325,12 +325,12 @@ function strikeWrist(j: Joints, left: boolean, shoulder: THREE.Vector3, reach: n
   // (`back` works in `_reach`: the way kept apart)
   return back(_trial.copy(_way));
 }
-const _strike = new THREE.Vector3(), _way = new THREE.Vector3(), _reach = new THREE.Vector3(), _trial = new THREE.Vector3();
-const _keepS = new THREE.Quaternion(), _keepE = new THREE.Quaternion();
+const _strike = new Vec3(), _way = new Vec3(), _reach = new Vec3(), _trial = new Vec3();
+const _keepS = new Quat(), _keepE = new Quat();
 
 /** The point of the line from `near` to `far` that lies `reach` from `shoulder`, the further one, into `out`; false
  *  where the line passes beyond the reach. */
-function onReach(near: THREE.Vector3, far: THREE.Vector3, shoulder: THREE.Vector3, reach: number, out: THREE.Vector3): boolean {
+function onReach(near: Vec3, far: Vec3, shoulder: Vec3, reach: number, out: Vec3): boolean {
   const way = _cam.subVectors(far, near).normalize(), back = _at.subVectors(near, shoulder);
   const b = back.dot(way), c = back.lengthSq() - reach * reach, d = b * b - c;
   if (d < 0) return false;

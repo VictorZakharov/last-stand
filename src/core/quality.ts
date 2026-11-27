@@ -12,7 +12,7 @@
 // screen's own pixels: what's cut is other work,
 // never the resolution (from play, "I want to run the game at full phone res, if we need
 // to cut, we need to cut something else, not resolution").
-import * as THREE from '../engine/three.ts';
+import { Mesh, Node, Vec3 } from '../engine/api/index.ts';
 import { G } from '../state';
 import { QUALITY, QUALITY_ORDER, AUTO_QUALITY, type QualityLevel, type QualityPreset, type QualitySetting } from '../data/quality';
 import { setBloomShare, setRenderQuality, setResolutionShare, setShadowInTurns } from './renderer';
@@ -404,13 +404,13 @@ function apply(l: QualityLevel, most = Infinity): void {
   settle = AUTO_QUALITY.settle;
 }
 
-const _s = new THREE.Vector3();
+const _s = new Vec3();
 /** Small character parts barely show in the shadow map, but each caster is a shadow draw call. */
-export function applyShadowDetail(root: THREE.Object3D): void {
+export function applyShadowDetail(root: Node): void {
   const min = QUALITY[level].minCasterRadius;
   root.updateMatrixWorld(true);
   root.traverse((o) => {
-    const m = o as THREE.Mesh;
+    const m = o as Mesh;
     if (!m.isMesh || !(m.userData.casts ??= m.castShadow)) return;   // remember the model's own choice
     if (!m.geometry.boundingSphere) m.geometry.computeBoundingSphere();
     m.getWorldScale(_s);

@@ -6,7 +6,7 @@
 // Thornwood's tufts, the crypt's weeds, the village's meadow (`asGrass`). Only what's drawn changes: a tree taken out
 // still stands where it stood for bodies, arrows and the foes' paths, and a young tree's dark patch on the floor
 // (`contactShadows`) stays to say where.
-import * as THREE from '../engine/three.ts';
+import { Mesh, Node } from '../engine/api/index.ts';
 import { G } from '../state';
 import { HIDDEN_LAYER } from '../core/layers';
 import { materialsOf } from '../perf/sceneParts';
@@ -17,12 +17,12 @@ export type Mark = 'tree' | 'leaves' | 'grass';
 /** the marks taken out now */
 const hidden = new Set<Mark>();
 /** each object taken out, and the layers it had: given back as the last mark on it is put back */
-const layersBefore = new Map<THREE.Object3D, number>();
+const layersBefore = new Map<Node, number>();
 
 /** Whether `object` bears `mark` (leaves by their material: a tree's leaf cards are merged and culled anew). */
-function bears(object: THREE.Object3D, mark: Mark): boolean {
+function bears(object: Node, mark: Mark): boolean {
   if (mark !== 'leaves') return Boolean(object.userData[mark]);
-  const mesh = object as THREE.Mesh;
+  const mesh = object as Mesh;
   return Boolean(mesh.isMesh) && materialsOf(mesh).some((material) => material.userData.leaves);
 }
 

@@ -1,7 +1,7 @@
 // The skies on WebGPU (core/webgpu.ts): props.ts's night and day domes as WGSL functions (`wgslFn`), written line
 // for line from their GLSL, each a node material's whole output as `gl_FragColor` was, set on the far plane as the
 // GLSL set `gl_Position.z` to its `w` (drawn after everything opaque, the depth test skips every covered pixel).
-import * as THREE from '../engine/three.ts';
+import { BackSide, Material, Uniform } from '../engine/api/index.ts';
 import { gpu, tsl } from '../core/webgpu';
 import { rustLook } from '../engine/custom';
 import { daySkyLook, nightSkyLook, villageSkyLook } from '../engine/looks/sky';
@@ -11,12 +11,12 @@ import { daySkyLook, nightSkyLook, villageSkyLook } from '../engine/looks/sky';
 type N = any;
 
 /** a dome's `ShaderMaterial`'s uniforms, read by name as each frame draws */
-type Uniforms = Record<string, THREE.IUniform>;
+type Uniforms = Record<string, Uniform>;
 
 /** A dome's material: `colour` (its direction from the dome's middle in, a colour out), on the far plane. */
-function domeMaterial(colour: (direction: N) => N): THREE.Material {
+function domeMaterial(colour: (direction: N) => N): Material {
   const { cameraProjectionMatrix, modelViewMatrix, positionGeometry, vec4 } = tsl as any;
-  const material = new gpu.MeshBasicNodeMaterial({ side: THREE.BackSide, depthWrite: false, fog: false });
+  const material = new gpu.MeshBasicNodeMaterial({ side: BackSide, depthWrite: false, fog: false });
   const clip = cameraProjectionMatrix.mul(modelViewMatrix).mul(vec4(positionGeometry, 1));
   material.vertexNode = vec4(clip.xy, clip.w, clip.w);
   material.fragmentNode = colour(positionGeometry);
@@ -25,7 +25,7 @@ function domeMaterial(colour: (direction: N) => N): THREE.Material {
 
 /** The night sky (`buildSky`, its `uFog`, `uMoon` and `uZenith`): the fog's colour at the horizon, a faint glow above
  *  it, the zenith overhead, a moon and a sprinkle of stars. */
-export function nightSkyMaterial(uniforms: Uniforms): THREE.Material {
+export function nightSkyMaterial(uniforms: Uniforms): Material {
   const { reference, wgslFn } = tsl as any;
   // (no sin(): its precision loss on big cell coordinates lines the stars up in rings round the zenith)
   const hash = wgslFn(`fn skyStarHash(start: vec3f) -> f32 {
@@ -62,7 +62,7 @@ export function nightSkyMaterial(uniforms: Uniforms): THREE.Material {
 
 /** The day sky (`buildDaySky`, its `uHorizon`, `uZenith`, `uSun` and `uTime`): the horizon rising into the zenith, a
  *  sun with a warm glow round it, and slow soft clouds. */
-export function daySkyMaterial(uniforms: Uniforms): THREE.Material {
+export function daySkyMaterial(uniforms: Uniforms): Material {
   const { reference, wgslFn } = tsl as any;
   const hash = wgslFn(`fn skyHash(p: vec2f) -> f32 {
     return fract(sin(dot(p, vec2f(127.1, 311.7))) * 43758.5453);
@@ -99,7 +99,7 @@ export function daySkyMaterial(uniforms: Uniforms): THREE.Material {
 
 /** The village's sky (`buildDaySky` in `village.ts`, its `uHorizon`, `uZenith`, `uSun`, `uDay` and `uTime`): the sun's
  *  glow and disc by day, the moon's by night, stars fading in as the day goes, clouds lit by the day and grey by night. */
-export function villageSkyMaterial(uniforms: Uniforms): THREE.Material {
+export function villageSkyMaterial(uniforms: Uniforms): Material {
   const { reference, wgslFn } = tsl as any;
   const hash = wgslFn(`fn villageSkyHash(p: vec2f) -> f32 {
     return fract(sin(dot(p, vec2f(127.1, 311.7))) * 43758.5453);

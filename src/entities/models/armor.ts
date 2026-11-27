@@ -1,9 +1,11 @@
 // Geometry for the heroes' gear: solid plates bent to any surface (with rolled edges), straps that
 // wrap round the body, fur tufts, studs, medallions, gloved fingers, and a skirt of cloth or mail that
 // swings with the legs. Static pieces go through `Sculpt` (entities/models/shapes.ts) to merge per joint.
-import * as THREE from '../../engine/three.ts';
+import {
+  Attribute, CatmullRom3, DynamicDrawUsage, floats, Geometry, Material, mergeGeometries, Node, Quat, Vec2, Vec3,
+} from '../../engine/api/index.ts';
+import * as shapes from '../../engine/api/shapes/index.ts';
 import { freshLocal, freshPass, freshWorld } from './freshWorld';
-import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { taperTube, twist } from './shapes';
 import { part, joint } from './rig';
 import { built } from './steps';
@@ -42,16 +44,16 @@ export const CLOTH_REST = {
 
 /** texture tile (m): uvs count metres / TILE, so every piece has the same texel density */
 export const TILE = 0.3;
-const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _c = new THREE.Vector3();
+const _a = new Vec3(), _b = new Vec3(), _c = new Vec3();
 
-const clean = (g: THREE.BufferGeometry): THREE.BufferGeometry => {
+const clean = (g: Geometry): Geometry => {
   const n = g.index ? g.toNonIndexed() : g;
   if (n !== g) g.dispose();
   for (const k of Object.keys(n.attributes)) if (k !== 'position' && k !== 'normal' && k !== 'uv') n.deleteAttribute(k);
   return n;
 };
 /** merge pieces into one non-indexed geometry (position, normal, uv) */
-export function merge(parts: THREE.BufferGeometry[]): THREE.BufferGeometry {
+export function merge(parts: Geometry[]): Geometry {
   const list = parts.map(clean);
   const g = mergeGeometries(list)!;
   for (const x of list) x.dispose();
@@ -62,18 +64,18 @@ export function merge(parts: THREE.BufferGeometry[]): THREE.BufferGeometry {
 export { taperTube, twist };
 
 /** scale a geometry's uvs */
-export function scaleUV<G extends THREE.BufferGeometry>(g: G, su: number, sv: number): G {
+export function scaleUV<G extends Geometry>(g: G, su: number, sv: number): G {
   const uv = g.attributes.uv;
   for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * su, uv.getY(i) * sv);
   return g;
 }
 
 /** A surface point for u, v in 0..1 (u across, v up). */
-export type SurfaceFn = (u: number, v: number, out: THREE.Vector3) => THREE.Vector3;
+export type SurfaceFn = (u: number, v: number, out: Vec3) => Vec3;
 
-function grid(fn: SurfaceFn, nu: number, nv: number): THREE.Vector3[][] {
-  const P: THREE.Vector3[][] = [];
-  for (let j = 0; j <= nv; j++) { const row: THREE.Vector3[] = []; for (let i = 0; i <= nu; i++) row.push(fn(i / nu, j / nv, new THREE.Vector3())); P.push(row); }
+function grid(fn: SurfaceFn, nu: number, nv: number): Vec3[][] {
+  const P: Vec3[][] = [];
+  for (let j = 0; j <= nv; j++) { const row: Vec3[] = []; for (let i = 0; i <= nu; i++) row.push(fn(i / nu, j / nv, new Vec3())); P.push(row); }
   return P;
 }
 
@@ -81,7 +83,7 @@ function grid(fn: SurfaceFn, nu: number, nv: number): THREE.Vector3[][] {
  * A plate following `fn`, `thick` deep (a solid with its edges closed), smooth-shaded. Its uvs run in
  * metres / TILE along u and v, unless `uv` gives them per grid point.
  */
-export function plate(fn: SurfaceFn, nu: number, nv: number, thick: number, uv?: (u: number, v: number) => [number, number] | null, inside = new THREE.Vector3()): THREE.BufferGeometry {
+export function plate(fn: SurfaceFn, nu: number, nv: number, thick: number, uv?: (u: number, v: number) => [number, number] | null, inside = new Vec3()): Geometry {
   nu = below(nu); nv = below(nv);
   const P = grid(fn, nu, nv);
   // arc length along the middle row and column, for the uvs
@@ -95,9 +97,9 @@ export function plate(fn: SurfaceFn, nu: number, nv: number, thick: number, uv?:
   }
   const w = nu + 1;
   for (let j = 0; j < nv; j++) for (let i = 0; i < nu; i++) { const a = j * w + i; idx.push(a, a + 1, a + w, a + 1, a + w + 1, a + w); }
-  const outer = new THREE.BufferGeometry();
-  outer.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-  outer.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+  const outer = new Geometry();
+  outer.setAttribute('position', floats(pos, 3));
+  outer.setAttribute('uv', floats(uvs, 2));
   outer.setIndex(idx);
   outer.computeVertexNormals();
   let facing = 0;
@@ -130,9 +132,9 @@ export function plate(fn: SurfaceFn, nu: number, nv: number, thick: number, uv?:
   const bottom = [...Array(w).keys()], top = bottom.map((i) => nv * w + i).reverse();
   const right = [...Array(nv + 1).keys()].map((j) => j * w + nu), left = right.map((x) => x - nu).reverse();
   edge(bottom); edge(right); edge(top); edge(left);
-  const r = new THREE.BufferGeometry();
-  r.setAttribute('position', new THREE.Float32BufferAttribute(rim, 3));
-  r.setAttribute('uv', new THREE.Float32BufferAttribute(rimUV, 2));
+  const r = new Geometry();
+  r.setAttribute('position', floats(rim, 3));
+  r.setAttribute('uv', floats(rimUV, 2));
   r.computeVertexNormals();
   // the rim's winding depends on which way the surface faces: turn it round if it faces inwards
   const rn = r.attributes.normal, rp = r.attributes.position;
@@ -148,29 +150,29 @@ export function plate(fn: SurfaceFn, nu: number, nv: number, thick: number, uv?:
 }
 
 /** A round tube along one edge of a surface (a rolled rim): 'v0' the bottom, 'v1' the top, 'u0' / 'u1' the sides. */
-export function edgeTube(fn: SurfaceFn, edge: 'u0' | 'u1' | 'v0' | 'v1', r: number, n = 16, inset = 0): THREE.BufferGeometry {
+export function edgeTube(fn: SurfaceFn, edge: 'u0' | 'u1' | 'v0' | 'v1', r: number, n = 16, inset = 0): Geometry {
   n = below(n);
-  const pts: THREE.Vector3[] = [];
+  const pts: Vec3[] = [];
   for (let k = 0; k <= n; k++) {
     const t = k / n;
-    pts.push(edge[0] === 'u' ? fn(edge === 'u0' ? inset : 1 - inset, t, new THREE.Vector3()) : fn(t, edge === 'v0' ? inset : 1 - inset, new THREE.Vector3()));
+    pts.push(edge[0] === 'u' ? fn(edge === 'u0' ? inset : 1 - inset, t, new Vec3()) : fn(t, edge === 'v0' ? inset : 1 - inset, new Vec3()));
   }
   return scaleUV(taperTube(pts, () => r, n * 2, 6), 1, 4);
 }
 
 /** outward from the vertical axis through the origin: straps round a torso or a limb */
-export const RADIAL = (p: THREE.Vector3, out: THREE.Vector3): THREE.Vector3 => out.set(p.x, 0, p.z).normalize();
+export const RADIAL = (p: Vec3, out: Vec3): Vec3 => out.set(p.x, 0, p.z).normalize();
 
 /**
  * A flat strap `w` wide and `t` thick along a curve through `pts`, lying flat against the body (its face
  * turned to `outward(p)`); `closed` makes it a loop (a belt).
  */
-export function strap(pts: THREE.Vector3[], w: number, t: number, closed = false, outward = RADIAL, n = 0): THREE.BufferGeometry {
-  const curve = new THREE.CatmullRomCurve3(pts, closed);
+export function strap(pts: Vec3[], w: number, t: number, closed = false, outward = RADIAL, n = 0): Geometry {
+  const curve = new CatmullRom3(pts, closed);
   const segs = below(n || Math.max(4, Math.ceil(curve.getLength() / 0.02)));
   const pos: number[] = [], uv: number[] = [];
-  const S: THREE.Vector3[][] = [], L = curve.getLength() / TILE;
-  const T = new THREE.Vector3(), O = new THREE.Vector3(), X = new THREE.Vector3(), p = new THREE.Vector3();
+  const S: Vec3[][] = [], L = curve.getLength() / TILE;
+  const T = new Vec3(), O = new Vec3(), X = new Vec3(), p = new Vec3();
   for (let k = 0; k <= segs; k++) {
     const s = k / segs;
     curve.getPointAt(s, p); curve.getTangentAt(s, T);
@@ -191,18 +193,18 @@ export function strap(pts: THREE.Vector3[], w: number, t: number, closed = false
       uv.push(0, v0, wid, v0, 0, v1, 0, v1, wid, v0, wid, v1);
     }
   }
-  const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-  g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  const g = new Geometry();
+  g.setAttribute('position', floats(pos, 3));
+  g.setAttribute('uv', floats(uv, 2));
   g.computeVertexNormals();
   return g;
 }
 
 /** a loop of strap round an ellipse (rx by rz) at height y: a belt, a band round a limb */
-export function belt(rx: number, rz: number, y: number, w: number, t: number, tilt = 0, n = 24): THREE.BufferGeometry {
+export function belt(rx: number, rz: number, y: number, w: number, t: number, tilt = 0, n = 24): Geometry {
   // (its band's segments are fewer below Low's detail: `strap`'s)
-  const pts: THREE.Vector3[] = [];
-  for (let k = 0; k < n; k++) { const a = (k / n) * Math.PI * 2; pts.push(new THREE.Vector3(Math.sin(a) * rx, y + Math.cos(a) * tilt, Math.cos(a) * rz)); }
+  const pts: Vec3[] = [];
+  for (let k = 0; k < n; k++) { const a = (k / n) * Math.PI * 2; pts.push(new Vec3(Math.sin(a) * rx, y + Math.cos(a) * tilt, Math.cos(a) * rz)); }
   return strap(pts, w, t, true, RADIAL, n * 3);
 }
 
@@ -210,56 +212,56 @@ export function belt(rx: number, rz: number, y: number, w: number, t: number, ti
  *  on the cloth; one merged geometry. None below Low's detail (a piece of no triangles, which `Sculpt` leaves out):
  *  a millimetre's thread is never seen from the game's cameras, and the seams were the most of a hero's triangles
  *  there, the ranger's 11,900 and the mage's 9,800 at Very low */
-export function stitches(pts: THREE.Vector3[], len = 0.0045, gap = 0.003, r = 0.0011, closed = false): THREE.BufferGeometry {
+export function stitches(pts: Vec3[], len = 0.0045, gap = 0.003, r = 0.0011, closed = false): Geometry {
   if (!finest()) return nothing();
-  const c = new THREE.CatmullRomCurve3(pts, closed), L = c.getLength(), n = Math.max(1, Math.floor(L / (len + gap))), parts: THREE.BufferGeometry[] = [];
-  const up = new THREE.Vector3(0, 1, 0), q = new THREE.Quaternion(), t = new THREE.Vector3();
+  const c = new CatmullRom3(pts, closed), L = c.getLength(), n = Math.max(1, Math.floor(L / (len + gap))), parts: Geometry[] = [];
+  const up = new Vec3(0, 1, 0), q = new Quat(), t = new Vec3();
   for (let i = 0; i < n; i++) {
     const u = (i + 0.5) / n, p = c.getPointAt(u); c.getTangentAt(u, t);
     q.setFromUnitVectors(up, t);
-    parts.push(new THREE.CylinderGeometry(r, r, len, 4, 1).applyQuaternion(q).translate(p.x, p.y, p.z));
+    parts.push(shapes.cylinder(r, r, len, 4, 1).applyQuaternion(q).translate(p.x, p.y, p.z));
   }
   return merge(parts);
 }
 
 /** A piece of no triangles, with the attributes a piece has (`Sculpt` leaves it out). */
-function nothing(): THREE.BufferGeometry {
-  const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.Float32BufferAttribute([], 3));
-  g.setAttribute('normal', new THREE.Float32BufferAttribute([], 3));
-  g.setAttribute('uv', new THREE.Float32BufferAttribute([], 2));
+function nothing(): Geometry {
+  const g = new Geometry();
+  g.setAttribute('position', floats([], 3));
+  g.setAttribute('normal', floats([], 3));
+  g.setAttribute('uv', floats([], 2));
   return g;
 }
 
 /** A buckle: a flat rectangular frame with a pin, facing +Z. */
-export function buckle(w: number, h: number, t = 0.006): THREE.BufferGeometry {
-  const bar = t * 1.2, parts: THREE.BufferGeometry[] = [];
+export function buckle(w: number, h: number, t = 0.006): Geometry {
+  const bar = t * 1.2, parts: Geometry[] = [];
   for (const s of [1, -1]) {
-    parts.push(new THREE.BoxGeometry(w, bar, t).translate(0, s * (h - bar) / 2, 0));
-    parts.push(new THREE.BoxGeometry(bar, h, t).translate(s * (w - bar) / 2, 0, 0));
+    parts.push(shapes.box(w, bar, t).translate(0, s * (h - bar) / 2, 0));
+    parts.push(shapes.box(bar, h, t).translate(s * (w - bar) / 2, 0, 0));
   }
-  parts.push(new THREE.BoxGeometry(w * 0.55, bar * 0.6, t).translate(0, 0, t * 0.6));
+  parts.push(shapes.box(w * 0.55, bar * 0.6, t).translate(0, 0, t * 0.6));
   return merge(parts);
 }
 
 /** A stud: a small dome facing +Z. */
-export const stud = (r: number): THREE.BufferGeometry => new THREE.SphereGeometry(r, below(8), below(4), 0, Math.PI * 2, 0, Math.PI / 2).rotateX(Math.PI / 2);
+export const stud = (r: number): Geometry => shapes.sphere(r, below(8), below(4), 0, Math.PI * 2, 0, Math.PI / 2).rotateX(Math.PI / 2);
 
 /** A medallion facing +Z: a raised rim round a slightly domed face, `t` thick. */
-export function disc(r: number, t: number, segs = 32): THREE.BufferGeometry {
+export function disc(r: number, t: number, segs = 32): Geometry {
   const prof: [number, number][] = [[0.001, -t * 0.5], [r, -t * 0.5], [r, t * 0.35], [r * 0.93, t * 0.5], [r * 0.86, t * 0.3], [r * 0.6, t * 0.45], [0.001, t * 0.6]];
-  return new THREE.LatheGeometry(prof.map(([a, b]) => new THREE.Vector2(a, b)), below(segs)).rotateX(Math.PI / 2);
+  return shapes.lathe(prof.map(([a, b]) => new Vec2(a, b)), below(segs)).rotateX(Math.PI / 2);
 }
 
 /** A cut gem facing +Z: a low crown over a pointed pavilion. */
-export const gem = (r: number): THREE.BufferGeometry =>
-  new THREE.LatheGeometry([[0.001, -r * 0.8], [r, 0], [r * 0.6, r * 0.45], [0.001, r * 0.5]].map(([a, b]) => new THREE.Vector2(a, b)), 8).rotateX(Math.PI / 2);
+export const gem = (r: number): Geometry =>
+  shapes.lathe([[0.001, -r * 0.8], [r, 0], [r * 0.6, r * 0.45], [0.001, r * 0.5]].map(([a, b]) => new Vec2(a, b)), 8).rotateX(Math.PI / 2);
 
 /**
  * Fur: `n` tufts, each rooted where `at(i)` puts it and growing along its direction, drooping under
  * their own weight; `len` and `rad` are the tufts' size, varied by `rng`.
  */
-export function furTufts(rng: () => number, n: number, at: (i: number, out: { p: THREE.Vector3; d: THREE.Vector3 }) => void, len: number, rad: number): THREE.BufferGeometry {
+export function furTufts(rng: () => number, n: number, at: (i: number, out: { p: Vec3; d: Vec3 }) => void, len: number, rad: number): Geometry {
   return built(furTuftsSteps(rng, n, at, len, rad));
 }
 
@@ -268,10 +270,10 @@ const FUR_STEP = 70;
 
 /** `furTufts` a piece at a time (models/steps.ts): the same tufts from the same draws, `FUR_STEP` a piece. */
 export function* furTuftsSteps(
-  rng: () => number, n: number, at: (i: number, out: { p: THREE.Vector3; d: THREE.Vector3 }) => void, len: number,
+  rng: () => number, n: number, at: (i: number, out: { p: Vec3; d: Vec3 }) => void, len: number,
   rad: number,
-): Generator<void, THREE.BufferGeometry, undefined> {
-  const parts: THREE.BufferGeometry[] = [], o = { p: new THREE.Vector3(), d: new THREE.Vector3() };
+): Generator<void, Geometry, undefined> {
+  const parts: Geometry[] = [], o = { p: new Vec3(), d: new Vec3() };
   // fewer, fuller tufts at lower detail
   const m = lod(n, 4), k = Math.sqrt(n / m);
   for (let i = 0; i < m; i++) {
@@ -288,7 +290,7 @@ export function* furTuftsSteps(
 
 // --- fingers -----------------------------------------------------------------------------------
 
-export interface Finger { base: THREE.Group; mid: THREE.Group }
+export interface Finger { base: Node; mid: Node }
 export interface Hand { f: Finger[]; thumb: Finger; s: number }
 
 /**
@@ -296,9 +298,9 @@ export interface Hand { f: Finger[]; thumb: Finger; s: number }
  * with +x, and the thumb sits on the inner side (`s` +1 the left hand, -1 the right). `mat` covers the
  * first knuckle, `tipMat` the second (bare fingertips out of a fingerless glove); `k` scales the hand.
  */
-export function fingers(hand: THREE.Group, s: number, mat: THREE.Material, tipMat = mat, k = 1): Hand {
-  const seg = (parent: THREE.Group, len: number, r: number, m: THREE.Material) => {
-    part(new THREE.CapsuleGeometry(r, len - 2 * r, 3, 6), m, parent, 0, -len / 2, 0).castShadow = false;
+export function fingers(hand: Node, s: number, mat: Material, tipMat = mat, k = 1): Hand {
+  const seg = (parent: Node, len: number, r: number, m: Material) => {
+    part(shapes.capsule(r, len - 2 * r, 3, 6), m, parent, 0, -len / 2, 0).castShadow = false;
   };
   const f = ([[-0.026, 0.034, 0.027], [-0.009, 0.037, 0.03], [0.008, 0.034, 0.027], [0.024, 0.028, 0.022]] as const).map(([x, l1, l2]) => {
     const base = joint(hand, s * x * k, -0.098 * k, -0.004 * k);
@@ -353,9 +355,9 @@ export interface SkirtOpts {
 
 /** A limb a skirt keeps clear of, in the skirt's own space: from `a` (radius `ra`) to `b` (radius `rb`), the cloth's gap
  *  included. */
-export interface SkirtBody { a: THREE.Vector3; b: THREE.Vector3; ra: number; rb: number }
+export interface SkirtBody { a: Vec3; b: Vec3; ra: number; rb: number }
 /** a point in a joint's own frame */
-export type JointPoint = [THREE.Object3D, THREE.Vector3];
+export type JointPoint = [Node, Vec3];
 /** A model's limbs as a skirt's bodies (`list`): capsules between points on its joints, put into the skirt's space after the
  *  pose (`place`, the joints' world matrices up to date) */
 export class SkirtLimbs {
@@ -363,11 +365,11 @@ export class SkirtLimbs {
   private ends: [JointPoint, JointPoint][] = [];
   /** a capsule from `a` (radius `ra`) to `b` (`rb`); the body is returned, so its radii can change */
   add(a: JointPoint, b: JointPoint, ra: number, rb = ra): SkirtBody {
-    const s = { a: new THREE.Vector3(), b: new THREE.Vector3(), ra, rb };
+    const s = { a: new Vec3(), b: new Vec3(), ra, rb };
     this.list.push(s); this.ends.push([a, b]);
     return s;
   }
-  place(space: THREE.Object3D): void {
+  place(space: Node): void {
     // (each joint's world matrix made once, the skirt's space inverted once: `freshWorld.ts`)
     freshPass();
     const local = freshLocal(space);
@@ -385,7 +387,7 @@ export class SkirtLimbs {
  *  z (`side`: +1 the left arm) by the deepest's depth over its distance from the shoulder, a few times over. Pressed in between
  *  the hand and the thigh, the drape had no room to hold the skirt in behind the hand. `weight` eases it out (sat, a hand
  *  rests on its thigh: swung out off it, it hung beside the knee). */
-export function armOffThigh(space: THREE.Object3D, shoulder: THREE.Object3D, side: number, thigh: SkirtBody, cloth: number, pts: [JointPoint, number][], weight = 1): void {
+export function armOffThigh(space: Node, shoulder: Node, side: number, thigh: SkirtBody, cloth: number, pts: [JointPoint, number][], weight = 1): void {
   if (weight <= 0) return;
   _sab.subVectors(thigh.b, thigh.a);
   const L2 = Math.max(1e-9, _sab.lengthSq());
@@ -419,7 +421,7 @@ export function armOffThigh(space: THREE.Object3D, shoulder: THREE.Object3D, sid
 const smoothstep = (e0: number, e1: number, x: number) => { const t = Math.min(1, Math.max(0, (x - e0) / (e1 - e0))); return t * t * (3 - 2 * t); };
 
 export class Skirt {
-  readonly geo = new THREE.BufferGeometry();
+  readonly geo = new Geometry();
   private rest: Float32Array;
   private ang: Float32Array;
   private theta: Float32Array;
@@ -467,8 +469,8 @@ export class Skirt {
     for (let n = 0; n < open.length; n++) this.rest[n * 3] -= open[n];
     // (the lab's handle on it: tools/lab coat)
     this.geo.name = 'skirt';
-    this.geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3).setUsage(THREE.DynamicDrawUsage));
-    this.geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+    this.geo.setAttribute('position', floats(pos, 3).setUsage(DynamicDrawUsage));
+    this.geo.setAttribute('uv', floats(uv, 2));
     this.geo.setIndex(idx);
     if (trim) { const n = body * radial * 6; this.geo.addGroup(0, n, 0); this.geo.addGroup(n, idx.length - n, 1); }
     this.geo.computeVertexNormals();
@@ -485,12 +487,12 @@ export class Skirt {
   update(fL: number, fR: number, move: number, t: number, dt: number, legs?: SkirtBody[], hands?: SkirtBody[], settle = 0,
     tuck = 0): void {
     const o = this.o, depth = o.depth ?? 0.85, push = o.push ?? 0.8, flare = o.flare ?? 1;
-    const p = this.geo.attributes.position as THREE.BufferAttribute, R = this.rest;
+    const p = this.geo.attributes.position as Attribute, R = this.rest;
     if (this.rests(fL, fR, move, dt, legs, hands)) {
       this.glideOn(dt);
       return;
     }
-    const n = this.geo.attributes.normal as THREE.BufferAttribute;
+    const n = this.geo.attributes.normal as Attribute;
     // (where it's shown now, glided from if this lay is the rest's: copied before it's laid afresh)
     const glides = this.timed && settle === 0;
     // (its buffers made once and kept: four arrays made a lay were 30 a second to collect)
@@ -547,8 +549,8 @@ export class Skirt {
     const glide = this.glide;
     if (!glide?.on) return;
     glide.done = Math.min(1, glide.done + dt / CLOTH_REST.every);
-    const p = this.geo.attributes.position as THREE.BufferAttribute;
-    const n = this.geo.attributes.normal as THREE.BufferAttribute;
+    const p = this.geo.attributes.position as Attribute;
+    const n = this.geo.attributes.normal as Attribute;
     const P = p.array as Float32Array, N = n.array as Float32Array, k = glide.done;
     for (let i = 0; i < P.length; i++) {
       P[i] = glide.from[i] + (glide.to[i] - glide.from[i]) * k;
@@ -568,7 +570,7 @@ export class Skirt {
       && Math.abs(fL - laid.fL) < CLOTH_REST.swing && Math.abs(fR - laid.fR) < CLOTH_REST.swing;
     if (laid.ends.length !== count) laid.ends = new Float32Array(count);
     const ends = laid.ends, most = CLOTH_REST.moved;
-    const far = (end: THREE.Vector3, k: number): boolean =>
+    const far = (end: Vec3, k: number): boolean =>
       Math.abs(end.x - ends[k]) > most || Math.abs(end.y - ends[k + 1]) > most || Math.abs(end.z - ends[k + 2]) > most;
     const nl = legs?.length ?? 0, nh = hands?.length ?? 0;
     for (let q = 0; still && q < nl + nh; q++) {
@@ -600,7 +602,7 @@ export class Skirt {
    *  point between his knees round one or the other as they moved a millimetre, and his robe jumped up to 17 cm a frame,
    *  a few times a second ("on log cloth is jerking"); walking it follows at once. */
   private ease(settle: number, h: number): void {
-    const P = (this.geo.attributes.position as THREE.BufferAttribute).array as Float32Array;
+    const P = (this.geo.attributes.position as Attribute).array as Float32Array;
     const was = this.drawn ??= Float32Array.from(P);
     // (only as he comes to rest: eased all the way down, his rising thigh passed the cloth lagging behind it, 8 to 9 cm)
     const k = 1 - settle ** SETTLE_IN * Math.exp(-h / SETTLE);
@@ -613,7 +615,7 @@ export class Skirt {
    *  straight down from a man sat on the ground piled up in a ring round his hips, a sack wider than his shoulders.
    *  Call after `update`. */
   keepAbove(y: number): void {
-    const p = this.geo.attributes.position as THREE.BufferAttribute, P = p.array as Float32Array, C = this.cols;
+    const p = this.geo.attributes.position as Attribute, P = p.array as Float32Array, C = this.cols;
     const rows = P.length / 3 / C;
     const hung = (this.hung ??= new Float32Array(P.length));
     hung.set(P);
@@ -662,8 +664,8 @@ export class Skirt {
   /** Point `p` (in the mesh's own space) put outside the cloth as it lies now, `gap` further out: out from the skirt's middle,
    *  where it is between the waist and the hem. Whether it moved. (A sleeve hanging beside it: kept off an ellipse the size of
    *  the hips, it hung into the cloth draped out over the thighs.) */
-  pushOut(p: THREE.Vector3, gap: number): boolean {
-    const P = (this.geo.attributes.position as THREE.BufferAttribute).array as Float32Array, C = this.cols, R = P.length / 3 / C, depth = this.o.depth ?? 0.85;
+  pushOut(p: Vec3, gap: number): boolean {
+    const P = (this.geo.attributes.position as Attribute).array as Float32Array, C = this.cols, R = P.length / 3 / C, depth = this.o.depth ?? 0.85;
     if (p.y >= P[1]) return false;
     const u = ((Math.atan2(p.x, p.z / depth) / (Math.PI * 2) + 1) % 1) * (C - 1), i0 = Math.min(C - 2, Math.floor(u)), f = u - i0;
     let r = 0;
@@ -707,7 +709,7 @@ export class Skirt {
   private drape(legs: SkirtBody[], hands: SkirtBody[]): void {
     const calls = rustCalls();
     if (!calls) return;
-    const P = (this.geo.attributes.position as THREE.BufferAttribute).array as Float32Array, C = this.cols, n = P.length / 3, R = this.rest;
+    const P = (this.geo.attributes.position as Attribute).array as Float32Array, C = this.cols, n = P.length / 3, R = this.rest;
     if (!this.lens) {
       const down = new Float32Array(n), round = new Float32Array(n), d = (a: number, b: number) => Math.hypot(R[a * 3] - R[b * 3], R[a * 3 + 1] - R[b * 3 + 1], R[a * 3 + 2] - R[b * 3 + 2]);
       for (let j = C; j < n; j++) down[j] = d(j, j - C);
@@ -723,9 +725,9 @@ export class Skirt {
 /** A geometry's vertex normals as three's `computeVertexNormals` makes them, to the bit (each triangle's area-weighted
  *  normal added to its corners', then each normalized), but over the flat arrays: three's goes through vectors read and
  *  written a vertex at a time, 0.1 ms a frame for the ranger's coat. Indexed geometry; anything else goes to three's. */
-export function vertexNormals(geo: THREE.BufferGeometry): void {
-  const position = geo.attributes.position as THREE.BufferAttribute, index = geo.index;
-  let normal = geo.attributes.normal as THREE.BufferAttribute | undefined;
+export function vertexNormals(geo: Geometry): void {
+  const position = geo.attributes.position as Attribute, index = geo.index;
+  let normal = geo.attributes.normal as Attribute | undefined;
   if (!index || !normal || normal.count !== position.count || normal.normalized || !(normal.array instanceof Float32Array) || position.normalized) { geo.computeVertexNormals(); return; }
   const P = position.array, N = normal.array, I = index.array;
   N.fill(0);
@@ -746,7 +748,7 @@ export function vertexNormals(geo: THREE.BufferGeometry): void {
   normal.needsUpdate = true;
 }
 
-const _sp = new THREE.Vector3(), _sq = new THREE.Vector3(), _sab = new THREE.Vector3(), _sn = new THREE.Vector3();
+const _sp = new Vec3(), _sq = new Vec3(), _sab = new Vec3(), _sn = new Vec3();
 /** the drape's passes a frame (and one more ending off the limbs): each puts the cloth out of the limbs and holds its
  *  lengths, the last the lines between points too; most of a hero's update a frame (four, the mage's 0.94 ms) */
 const DRAPE = tunable('drape', { passes: 3 });

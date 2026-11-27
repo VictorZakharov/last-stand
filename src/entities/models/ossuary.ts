@@ -16,14 +16,15 @@
 //
 // Every bone is built pointing down -y from its joint (a thigh from the hip, a shin from the knee) for the left side
 // of the body (+x), its inner side towards -x: the right side is its mirror image (`Sculpt.pair`).
-import * as THREE from '../../engine/three.ts';
+import { Attribute, Box3, Euler, floats, Geometry, Mat4, Quat, Vec3, Vec3Tuple } from '../../engine/api/index.ts';
+import * as shapes from '../../engine/api/shapes/index.ts';
 import { clamp } from '../../util';
 import { ellipsoid, fieldOf, IDENTITY, type Part, type Shape } from './sdf';
 import { netGeometry, skullParts, SKULL_BOX } from '../../world/skull';
 import { taperTube } from './shapes';
 
-type V3 = THREE.Vector3Tuple;
-const V = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
+type V3 = Vec3Tuple;
+const V = (x: number, y: number, z: number) => new Vec3(x, y, z);
 
 // --- shapes ---------------------------------------------------------------------------------------------------
 
@@ -67,7 +68,7 @@ export function readyOssuary(): Promise<void> {
 
 /** A net (indexed: its points, normals and hollows' shading) with fewer triangles, its surface within `error` (m)
  *  of its own, its vertices those it kept (none moved); as it was where the simplifier hasn't loaded. */
-export function fewer(g: THREE.BufferGeometry, error: number): THREE.BufferGeometry {
+export function fewer(g: Geometry, error: number): Geometry {
   if (!simplifier || !g.getIndex()) return g;
   const positions = g.getAttribute('position').array as Float32Array;
   const index = new Uint32Array(g.getIndex()!.array);
@@ -76,7 +77,7 @@ export function fewer(g: THREE.BufferGeometry, error: number): THREE.BufferGeome
   const remap = new Int32Array(positions.length / 3).fill(-1);
   let count = 0;
   for (const v of kept) if (remap[v] < 0) remap[v] = count++;
-  const out = new THREE.BufferGeometry();
+  const out = new Geometry();
   for (const name of ['position', 'normal', 'color']) {
     const attribute = g.getAttribute(name);
     if (!attribute) continue;
@@ -85,9 +86,9 @@ export function fewer(g: THREE.BufferGeometry, error: number): THREE.BufferGeome
     remap.forEach((at, v) => {
       if (at >= 0) to.set(from.subarray(v * 3, v * 3 + 3), at * 3);
     });
-    out.setAttribute(name, new THREE.BufferAttribute(to, 3));
+    out.setAttribute(name, new Attribute(to, 3));
   }
-  out.setIndex(new THREE.BufferAttribute(Uint32Array.from(kept, (v) => remap[v]), 1));
+  out.setIndex(new Attribute(Uint32Array.from(kept, (v) => remap[v]), 1));
   out.computeBoundingSphere();
   g.dispose();
   return out;
@@ -105,19 +106,19 @@ class Parts {
   }
   /** `shape` (made round its own origin) set at `at`, turned by `turn` */
   turned(shape: Shape, at: V3, turn: V3, blend: number, cut = false): this {
-    const placed = new THREE.Matrix4().compose(V(...at), new THREE.Quaternion().setFromEuler(new THREE.Euler(...turn)), V(1, 1, 1));
+    const placed = new Mat4().compose(V(...at), new Quat().setFromEuler(new Euler(...turn)), V(1, 1, 1));
     this.list.push({ shape, frame: new Float64Array(placed.invert().elements), blend, cut, bones: [] });
     return this;
   }
   /** the surface meshed on a grid of `cell` within `box` */
   /** the parts meshed on `cell` and simplified within `error` (m: `FEWER_ERROR` of a cell by default) */
-  mesh(box: THREE.Box3, cell: number, error = cell * FEWER_ERROR): THREE.BufferGeometry {
+  mesh(box: Box3, cell: number, error = cell * FEWER_ERROR): Geometry {
     return fewer(netGeometry(fieldOf(this.list), box, cell, cell * 0.75), error);
   }
 }
 
-const box = (x0: number, y0: number, z0: number, x1: number, y1: number, z1: number): THREE.Box3 =>
-  new THREE.Box3(V(x0, y0, z0), V(x1, y1, z1));
+const box = (x0: number, y0: number, z0: number, x1: number, y1: number, z1: number): Box3 =>
+  new Box3(V(x0, y0, z0), V(x1, y1, z1));
 
 // --- the skull and its jaw ----------------------------------------------------------------------------------
 
@@ -128,7 +129,7 @@ export const JAW_HINGE: V3 = [0, 0.032, -0.02];
 export const SKULL_EYE: V3 = [0.027, 0.066, 0.078];
 
 /** The crypt's skull (no jaw), a man's in size, facing +z, its teeth's foot at y 0: meshed on `cell`. */
-export function skull(cell: number, error = cell * FEWER_ERROR): THREE.BufferGeometry {
+export function skull(cell: number, error = cell * FEWER_ERROR): Geometry {
   return fewer(netGeometry(fieldOf(skullParts()), SKULL_BOX, cell, cell * 0.75), error);
 }
 
@@ -140,7 +141,7 @@ export type SkullLook = 'heavy' | 'long';
 export const THIRD_EYE: V3 = [0, 0.104, 0.074];
 
 /** A twin's skull, meshed on `cell`, in the crypt's skull's space. */
-export function twinSkull(cell: number, look: SkullLook): THREE.BufferGeometry {
+export function twinSkull(cell: number, look: SkullLook): Geometry {
   const parts = new Parts();
   parts.list.push(...skullParts());
   if (look === 'heavy') {
@@ -160,7 +161,7 @@ export function twinSkull(cell: number, look: SkullLook): THREE.BufferGeometry {
 
 /** The jaw that fits the crypt's skull, shut, in the skull's own space: its body round the chin, under a row of teeth,
  *  rising at its angles to the condyles it's hinged on (`JAW_HINGE`) and the coronoids before them. */
-export function jaw(cell: number, error = cell * FEWER_ERROR): THREE.BufferGeometry {
+export function jaw(cell: number, error = cell * FEWER_ERROR): Geometry {
   const parts = new Parts();
   // the body, a curve of ellipsoids each turned along it: tall, thin, round the chin from angle to angle
   for (let i = 0; i <= 8; i++) {
@@ -189,7 +190,7 @@ export function jaw(cell: number, error = cell * FEWER_ERROR): THREE.BufferGeome
 
 /** A thighbone `len` long from the hip (its ball at the joint) to the knee, its shaft `r` thick, slanting in to the
  *  knee from its trochanter: the ball on its neck, the great trochanter outside, two condyles at its foot. */
-export function femur(len: number, r: number): THREE.BufferGeometry {
+export function femur(len: number, r: number): Geometry {
   const parts = new Parts()
     .join(ellipsoid(0, 0, 0, 1.7 * r, 1.7 * r, 1.7 * r), r * 0.3)
     .join(capsule([0.4 * r, -0.4 * r, 0], [2.0 * r, -2.2 * r, 0], 0.95 * r, 1.05 * r), r * 0.5)
@@ -206,7 +207,7 @@ export function femur(len: number, r: number): THREE.BufferGeometry {
 /** A shinbone and its fibula, `len` long from the knee down to the ankle: the tibia's plateau of two condyles, its
  *  tuberosity in front, a shaft narrowing to the ankle and its inner malleolus; the fibula thin beside it, behind and
  *  outside, its own knob at the ankle. */
-export function tibia(len: number, r: number): THREE.BufferGeometry {
+export function tibia(len: number, r: number): Geometry {
   const parts = new Parts();
   for (const s of [-1, 1]) parts.join(ellipsoid(s * 0.95 * r, -0.65 * r, -0.1 * r, 1.15 * r, 0.65 * r, 1.35 * r), r * 0.4);
   parts.join(ellipsoid(0, -1.9 * r, 0.85 * r, 0.6 * r, 1.0 * r, 0.5 * r), r * 0.5)
@@ -223,7 +224,7 @@ export function tibia(len: number, r: number): THREE.BufferGeometry {
 
 /** An upper arm bone `len` long from the shoulder (its head at the joint) to the elbow: the head turned in and back,
  *  its tubercle before it, a shaft, and at its foot the elbow's spread with its spool, a hollow behind for the ulna. */
-export function humerus(len: number, r: number): THREE.BufferGeometry {
+export function humerus(len: number, r: number): Geometry {
   const parts = new Parts()
     .join(ellipsoid(-0.35 * r, 0.2 * r, -0.35 * r, 1.75 * r, 1.75 * r, 1.75 * r), r * 0.3)
     .join(ellipsoid(0.9 * r, -0.5 * r, 0.7 * r, 0.9 * r, 1.1 * r, 0.9 * r), r * 0.5)
@@ -236,7 +237,7 @@ export function humerus(len: number, r: number): THREE.BufferGeometry {
 
 /** The two forearm bones `len` long from the elbow to the wrist: the ulna with its hook up behind the elbow, thinning
  *  to the wrist on the inside; the radius from its round head outside, thickening to the wrist on the thumb's side. */
-export function forearm(len: number, r: number): THREE.BufferGeometry {
+export function forearm(len: number, r: number): Geometry {
   const parts = new Parts()
     .join(ellipsoid(-0.45 * r, 0.6 * r, -0.85 * r, 0.9 * r, 1.2 * r, 0.9 * r), r * 0.4)
     .join(capsule([-0.45 * r, 0, -0.5 * r], [-0.65 * r, -len + 0.7 * r, -0.15 * r], 0.95 * r, 0.5 * r), r * 0.5)
@@ -252,7 +253,7 @@ export function forearm(len: number, r: number): THREE.BufferGeometry {
 /** A pelvis whose sockets are `hip` m either side of its middle, at its origin (the hips' height): two wings flared
  *  forward and out over the sacrum, the crests along their tops, the sockets cut into their sides, and the rings below
  *  (pubis before, ischium under) left open between their bars. */
-export function pelvis(hip: number): THREE.BufferGeometry {
+export function pelvis(hip: number): Geometry {
   const h = hip;
   const parts = new Parts();
   for (const s of [-1, 1]) {
@@ -276,7 +277,7 @@ export function pelvis(hip: number): THREE.BufferGeometry {
 
 /** A shoulder blade `size` m tall, flat on the back with its outer edge at its origin: its triangle of bone, its thick
  *  outer border, the spine across it out to the acromion, and the shallow socket at its outer corner. */
-export function scapula(size: number): THREE.BufferGeometry {
+export function scapula(size: number): Geometry {
   const k = size;
   const top: V3 = [-0.55 * k, 0, 0], low: V3 = [-0.42 * k, -0.95 * k, 0.02 * k], outer: V3 = [0, -0.05 * k, 0.06 * k];
   const parts = new Parts()
@@ -295,7 +296,7 @@ export function scapula(size: number): THREE.BufferGeometry {
 }
 
 /** A breastbone `len` m long, down from its origin: the handle at its top, its body in three pieces, the point under. */
-export function sternum(len: number): THREE.BufferGeometry {
+export function sternum(len: number): Geometry {
   const a = len / 7;
   const parts = new Parts()
     .join(ellipsoid(0, -0.6 * a, 0, 1.9 * a, 1.2 * a, 0.45 * a), 0.3 * a)
@@ -309,18 +310,18 @@ export function sternum(len: number): THREE.BufferGeometry {
 // --- tubes with colours: ribs, vertebrae, fingers ---------------------------------------------------------------
 
 /** `g` given vertex colours of `shade` where it has none, so it merges with the sculpted bones (one material). */
-export function toned(g: THREE.BufferGeometry, shade = 1): THREE.BufferGeometry {
+export function toned(g: Geometry, shade = 1): Geometry {
   if (g.attributes.color || !g.attributes.position) return g;
   const colours = new Float32Array(g.attributes.position.count * 3).fill(shade);
-  g.setAttribute('color', new THREE.BufferAttribute(colours, 3));
+  g.setAttribute('color', new Attribute(colours, 3));
   return g;
 }
 
 /** A vertebra round its body's middle at the origin, `r` m its body's radius: its body, the spine sticking back and
  *  down from its arch, and a process out to either side; its ribs (if any) meet those. */
-export function vertebra(r: number, h: number): THREE.BufferGeometry[] {
+export function vertebra(r: number, h: number): Geometry[] {
   return [
-    toned(new THREE.CylinderGeometry(r, r * 1.05, h, 9, 1)),
+    toned(shapes.cylinder(r, r * 1.05, h, 9, 1)),
     toned(taperTube([V(0, 0, -r * 0.9), V(0, -h * 0.35, -r * 1.9), V(0, -h * 0.9, -r * 2.6)], (t) => r * (0.32 - t * 0.16), 3, 5), 0.85),
     toned(taperTube([V(-r * 0.4, h * 0.1, -r * 1.0), V(-r * 1.2, h * 0.2, -r * 1.3), V(-r * 1.9, h * 0.15, -r * 1.25)], (t) => r * (0.28 - t * 0.1), 3, 5), 0.9),
     toned(taperTube([V(r * 0.4, h * 0.1, -r * 1.0), V(r * 1.2, h * 0.2, -r * 1.3), V(r * 1.9, h * 0.15, -r * 1.25)], (t) => r * (0.28 - t * 0.1), 3, 5), 0.9),
@@ -329,12 +330,12 @@ export function vertebra(r: number, h: number): THREE.BufferGeometry[] {
 
 /** A finger's bones from its knuckle at the origin: a metacarpal's end already placed, then `lengths` (m) of
  *  phalanges each bent by `curl` (rad) towards +z from the last, set off along `dir`; a knob at each joint. */
-export function finger(dir: THREE.Vector3, lengths: number[], curl: number, r: number): THREE.BufferGeometry[] {
-  const out: THREE.BufferGeometry[] = [];
+export function finger(dir: Vec3, lengths: number[], curl: number, r: number): Geometry[] {
+  const out: Geometry[] = [];
   const at = V(0, 0, 0), way = dir.clone().normalize(), axis = V(1, 0, 0);
   let thick = r;
   for (const length of lengths) {
-    out.push(toned(new THREE.SphereGeometry(thick * 1.15, 5, 3).translate(at.x, at.y, at.z), 0.82));
+    out.push(toned(shapes.sphere(thick * 1.15, 5, 3).translate(at.x, at.y, at.z), 0.82));
     way.applyAxisAngle(axis, -curl);
     const end = at.clone().addScaledVector(way, length);
     const mid = at.clone().lerp(end, 0.5);
@@ -348,14 +349,14 @@ export function finger(dir: THREE.Vector3, lengths: number[], curl: number, r: n
 
 /** `g`'s mirror image across x = 0 (non-indexed, every attribute carried with its corner, its faces kept facing out):
  *  shapes.ts's `mirrorX` leaves the vertex colours where they were, out of step with their corners. */
-export function mirrored(g: THREE.BufferGeometry): THREE.BufferGeometry {
+export function mirrored(g: Geometry): Geometry {
   const out = g.index ? g.toNonIndexed() : g.clone();
   const p = out.attributes.position, n = out.attributes.normal;
   for (let i = 0; i < p.count; i++) {
     p.setX(i, -p.getX(i));
     if (n) n.setX(i, -n.getX(i));
   }
-  for (const attribute of Object.values(out.attributes) as THREE.BufferAttribute[]) {
+  for (const attribute of Object.values(out.attributes) as Attribute[]) {
     for (let i = 0; i + 2 < attribute.count; i += 3) {
       for (let c = 0; c < attribute.itemSize; c++) {
         const second = attribute.getComponent(i + 1, c);
@@ -373,7 +374,7 @@ export function mirrored(g: THREE.BufferGeometry): THREE.BufferGeometry {
 export function drape(o: {
   r: number; at: number; width: number; h: number; tear: number; flare: number; seed: number;
   cols?: number; rows?: number; folds?: number; depth?: number;
-}): THREE.BufferGeometry {
+}): Geometry {
   const cols = o.cols ?? 18, rows = o.rows ?? 8, folds = o.folds ?? cols / 2.5, depth = o.depth ?? 0.06;
   let state = o.seed * 9301 + 49297;
   const rnd = (): number => {
@@ -402,9 +403,9 @@ export function drape(o: {
       index.push(a, a + 1, b, b, a + 1, b + 1);
     }
   }
-  const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-  g.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+  const g = new Geometry();
+  g.setAttribute('position', floats(positions, 3));
+  g.setAttribute('uv', floats(uvs, 2));
   g.setIndex(index);
   g.computeVertexNormals();
   return g;

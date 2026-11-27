@@ -1,5 +1,5 @@
 // Contract for skill behaviors. Class data (SkillDef) references an impl by name.
-import type * as THREE from '../../engine/three.ts';
+import type { Node, Vec3 } from '../../engine/api/index.ts';
 import type { Player } from '../../entities/player';
 import type { ActionState, CastAnim, DamageType, DerivedStats, SkillDef } from '../../types';
 
@@ -30,26 +30,26 @@ interface SkillBase {
    *  lets skills be cast. Any other skill's dash cast in one that does rides on it (Twin Fangs' lunge in a charge) */
   dashes?: boolean;
   /** Meshes using the skill's own materials, compiled at load so the first cast doesn't hitch. */
-  warm?(): THREE.Object3D[];
+  warm?(): Node[];
 }
 
 /** Fires once when the cast completes. */
 export interface InstantSkill extends SkillBase {
   channel?: false;
   /** `power`: how far a drawn shot (`SkillDef.draw`) was drawn when it was loosed (0..1, 1 for any other cast) */
-  cast(player: Player, def: SkillDef, target: THREE.Vector3, power: number): void;
+  cast(player: Player, def: SkillDef, target: Vec3, power: number): void;
   /** every frame of the cast before it lands; k: 0..1 of the cast time (a drawn shot: how far it is drawn) */
   charging?(player: Player, def: SkillDef, k: number, dt: number): void;
   /** a shot's angle above level (rad) at `power` for `target`, which the pose aims the arrow along */
-  pitch?(player: Player, def: SkillDef, power: number, target: THREE.Vector3): number;
+  pitch?(player: Player, def: SkillDef, power: number, target: Vec3): number;
   /** whether there is anything to cast it at (a mark needs a foe): if not, the press does nothing and costs nothing */
-  canCast?(player: Player, def: SkillDef, target: THREE.Vector3): boolean;
+  canCast?(player: Player, def: SkillDef, target: Vec3): boolean;
   /** `SkillDef.aimed`: every frame its key is held, where it would land for `target`, shown on its own player's screen
    *  alone (`null`: let go or given up, shown no more) */
-  aim?(player: Player, def: SkillDef, target: THREE.Vector3 | null, dt: number): void;
+  aim?(player: Player, def: SkillDef, target: Vec3 | null, dt: number): void;
   /** `SkillDef.aimed`: where it's cast for `target` as its key is let go, the point every game is given (Quarry
    *  Mark's: the middle of the foe its preview outlined, so each game marks that one); the aim itself if not given */
-  settle?(player: Player, def: SkillDef, target: THREE.Vector3): THREE.Vector3;
+  settle?(player: Player, def: SkillDef, target: Vec3): Vec3;
   /** fills in the pose's action each frame of its cast (which form of the move it is: Savage Fists' hammer, Wrath's
    *  hook, slam or quake, `ActionState.form`) */
   pose?(player: Player, def: SkillDef, action: ActionState): void;

@@ -3,7 +3,7 @@
 // and moss and the earth round the small dead trees' feet (`dampGround`), and the world past the wall darkened in the
 // top-down view (`dimOutside`); the cobbles' relief is core/parallax.ts's `reliefContext`. The dimming comes after the
 // fog here, before it in the GLSL.
-import type * as THREE from '../engine/three.ts';
+import type { LitMaterial, Texture, Vec3 } from '../engine/api/index.ts';
 import { tsl } from '../core/webgpu';
 
 // (untyped: TSL's types don't follow its conversions across these calls yet)
@@ -24,19 +24,19 @@ export function outsideOutputNode(amount: { value: number }, { from, to, most }:
 /** What `dampGround` lays over the cobbles: its baked damp map and its tile (m), the earth's spots (x, z, reach) and
  *  look, and the soil's maps. */
 export interface Damp {
-  map: THREE.Texture;
+  map: Texture;
   span: number;
-  earth: THREE.Vector3[];
+  earth: Vec3[];
   ragged: number;
   stones: number;
   washed: readonly number[];
   tile: number;
-  soil: { map: THREE.Texture; normalMap: THREE.Texture; roughnessMap: THREE.Texture };
+  soil: { map: Texture; normalMap: Texture; roughnessMap: Texture };
 }
 
 /** The cobbles' colour, roughness and normal with the damp, the moss by the wall and the earth round the trees laid
  *  over them, as `dampGround` lays them (one set of nodes, shared by them all). */
-export function dampNodes(cobbles: THREE.MeshStandardMaterial, damp: Damp): { color: N; roughness: N; normal: N } {
+export function dampNodes(cobbles: LitMaterial, damp: Damp): { color: N; roughness: N; normal: N } {
   const {
     Fn, Loop, cameraViewMatrix, clamp, float, materialColor, materialNormal, materialRoughness, max, min, mix,
     positionWorld, smoothstep, texture, uniformArray, uv, vec2, vec3, vec4,

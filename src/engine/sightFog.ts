@@ -2,7 +2,7 @@
 // his sight, the rays cast round him while any of it is on, and the roofs' map when it changes. The engine fogs each
 // surface by its own place as it's lit (Bulwark's gpu/sight.rs), where the game's own pass reads the scene's depth
 // back: no pass of its own, and what's blended is fogged by where it is, not by what's behind it.
-import type * as THREE from './three.ts';
+import type { DataTexture } from './api/index.ts';
 import { SIGHT } from '../core/sight';
 import type { Core } from './core';
 import { TUNE } from './globals';
@@ -29,13 +29,13 @@ export class SightFog {
     n[12] = SIGHT.uSightDoorOn.value; n[13] = few ? 1 : 0;
     // (a face turned to him read this far off itself: on it, the wall he stands against greyed along its length)
     n[14] = TUNE.sightOffFace;
-    const roofs = SIGHT.tSightRoofs.value as THREE.DataTexture;
+    const roofs = SIGHT.tSightRoofs.value as DataTexture;
     if (on > 0 && roofs.version !== this.roofs) {
       this.roofs = roofs.version;
       this.core.engine.set_sight_roofs(roofs.image.data as Uint8Array, roofs.image.width);
       this.core.freshViews();
     }
-    const rays = (SIGHT.tSight.value as THREE.DataTexture).image.data as Uint16Array;
+    const rays = (SIGHT.tSight.value as DataTexture).image.data as Uint16Array;
     this.core.engine.set_sight(n, on > 0 ? rays : this.none);
   }
 }

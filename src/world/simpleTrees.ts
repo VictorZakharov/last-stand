@@ -5,8 +5,8 @@
 // materials (a lump's faces lie on the middle of the leaves' picture, where it's all leaves), so a quality switches it
 // live by a swap of geometry, no program made, and the tree stands where it stood: its trunk, which a body and an arrow
 // meet, is the grown one's.
-import * as THREE from '../engine/three.ts';
-import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { Attribute, Geometry, mergeGeometries, Mesh, Quat, Vec3 } from '../engine/api/index.ts';
+import * as shapes from '../engine/api/shapes/index.ts';
 import { mulberry, TAU } from '../util';
 import type { TreeKind } from './ezTrees';
 import { lumpy } from './props';
@@ -37,7 +37,7 @@ function spread(count: number, n: number): number[] {
  * kept are the grown bark's, so the trunk stands as it was. Left as grown where the rings don't add up to its vertices
  * (an ez-tree laid out otherwise).
  */
-export function simpleBark(kind: TreeKind): THREE.BufferGeometry {
+export function simpleBark(kind: TreeKind): Geometry {
   const { bark, branches } = kind;
   if (branches.reduce((n, b) => n + b.rings * b.round, 0) !== bark.attributes.position.count) return bark;
   const kept: number[] = [], index: number[] = [];
@@ -58,11 +58,11 @@ export function simpleBark(kind: TreeKind): THREE.BufferGeometry {
       }
     }
   }
-  const geo = new THREE.BufferGeometry();
+  const geo = new Geometry();
   for (const [name, attribute] of Object.entries(bark.attributes)) {
     const size = attribute.itemSize, from = attribute.array as Float32Array, to = new Float32Array(kept.length * size);
     kept.forEach((v, at) => to.set(from.subarray(v * size, v * size + size), at * size));
-    geo.setAttribute(name, new THREE.BufferAttribute(to, size));
+    geo.setAttribute(name, new Attribute(to, size));
   }
   geo.setIndex(index);
   geo.computeBoundingSphere();
@@ -74,16 +74,16 @@ export function simpleBark(kind: TreeKind): THREE.BufferGeometry {
 const CARD_CORNERS = 4;
 
 /** a crown's lump: its middle, and how far it reaches across and up */
-interface Lump { at: THREE.Vector3; across: number; up: number }
+interface Lump { at: Vec3; across: number; up: number }
 
 /** The lumps a kind's leaf cards stand in: the cards' middles sorted into a few heaps (k-means, begun from the cards
  *  furthest apart, so the same each time), each heap a lump as wide and as tall as its cards spread. */
-function lumpsOf(leaves: THREE.BufferGeometry): Lump[] {
+function lumpsOf(leaves: Geometry): Lump[] {
   const p = leaves.attributes.position, cards = Math.floor(p.count / CARD_CORNERS);
-  const middles: THREE.Vector3[] = [], corner = new THREE.Vector3();
+  const middles: Vec3[] = [], corner = new Vec3();
   let reach = 0;
   for (let c = 0; c < cards; c++) {
-    const middle = new THREE.Vector3();
+    const middle = new Vec3();
     for (let k = 0; k < CARD_CORNERS; k++) middle.add(corner.fromBufferAttribute(p, c * CARD_CORNERS + k));
     middle.divideScalar(CARD_CORNERS);
     reach += corner.fromBufferAttribute(p, c * CARD_CORNERS).distanceTo(middle) / cards;
@@ -91,7 +91,7 @@ function lumpsOf(leaves: THREE.BufferGeometry): Lump[] {
   }
   if (!cards) return [];
   const heaps = [middles[0].clone()];
-  const nearest = (m: THREE.Vector3): number => heaps.reduce((best, h, i) => (m.distanceToSquared(h) < m.distanceToSquared(heaps[best]) ? i : best), 0);
+  const nearest = (m: Vec3): number => heaps.reduce((best, h, i) => (m.distanceToSquared(h) < m.distanceToSquared(heaps[best]) ? i : best), 0);
   while (heaps.length < Math.min(CROWN.lumps, cards)) {
     let furthest = middles[0], most = -1;
     for (const m of middles) {
@@ -105,7 +105,7 @@ function lumpsOf(leaves: THREE.BufferGeometry): Lump[] {
     of = middles.map(nearest);
     heaps.forEach((heap, h) => {
       const mine = middles.filter((_, i) => of[i] === h);
-      if (mine.length) heap.set(0, 0, 0).add(mine.reduce((sum, m) => sum.add(m), new THREE.Vector3())).divideScalar(mine.length);
+      if (mine.length) heap.set(0, 0, 0).add(mine.reduce((sum, m) => sum.add(m), new Vec3())).divideScalar(mine.length);
     });
   }
   const lumps: Lump[] = [];
@@ -125,22 +125,22 @@ function lumpsOf(leaves: THREE.BufferGeometry): Lump[] {
  * point out from its lump, tipped up, so a lump is lit as one soft mass (as `canopyGeo`'s in foliage.ts); each face of
  * a ball takes a patch of its own from the middle of the leaves' picture. The grown leaves where it has none.
  */
-export function simpleCrown(kind: TreeKind, seed: number): THREE.BufferGeometry {
+export function simpleCrown(kind: TreeKind, seed: number): Geometry {
   const lumps = lumpsOf(kind.leaves);
   if (!lumps.length) return kind.leaves;
   const rng = mulberry(seed);
-  const parts: THREE.BufferGeometry[] = [];
-  const n = new THREE.Vector3(), a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3();
-  const soft = (g: THREE.BufferGeometry, { at, across }: Lump): void => {
+  const parts: Geometry[] = [];
+  const n = new Vec3(), a = new Vec3(), b = new Vec3(), c = new Vec3();
+  const soft = (g: Geometry, { at, across }: Lump): void => {
     const p = g.attributes.position, normal = g.attributes.normal;
     for (let k = 0; k < p.count; k++) {
       n.set(p.getX(k) - at.x, (p.getY(k) - at.y) * 1.3 + across * 0.3, p.getZ(k) - at.z).normalize();
       normal.setXYZ(k, n.x, n.y, n.z);
     }
   };
-  const turn = new THREE.Quaternion(), roll = new THREE.Quaternion(), ahead = new THREE.Vector3(0, 0, 1);
+  const turn = new Quat(), roll = new Quat(), ahead = new Vec3(0, 0, 1);
   lumps.forEach((lump, l) => {
-    const ball = lumpy(new THREE.IcosahedronGeometry(1, CROWN.detail), CROWN.lumpy, seed * 13 + l * 7)
+    const ball = lumpy(shapes.icosahedron(1, CROWN.detail), CROWN.lumpy, seed * 13 + l * 7)
       .scale(lump.across, lump.up, lump.across).translate(lump.at.x, lump.at.y, lump.at.z);
     // each face a patch of the picture's middle, turned and moved its own way
     const p = ball.attributes.position, uv = ball.attributes.uv;
@@ -160,9 +160,9 @@ export function simpleCrown(kind: TreeKind, seed: number): THREE.BufferGeometry 
     parts.push(ball);
     for (let i = 0; i < CROWN.cards; i++) {
       // all round, a little more on top, where the light and the camera are
-      const out = new THREE.Vector3(rng() * 2 - 1, rng() * 2 - 0.7, rng() * 2 - 1).normalize();
+      const out = new Vec3(rng() * 2 - 1, rng() * 2 - 0.7, rng() * 2 - 1).normalize();
       const size = lump.across * CROWN.card * (0.85 + rng() * 0.3);
-      const card = new THREE.PlaneGeometry(size, size);
+      const card = shapes.plane(size, size);
       turn.setFromUnitVectors(ahead, out);
       roll.setFromAxisAngle(out, rng() * TAU);
       card.applyQuaternion(turn.premultiply(roll));
@@ -179,7 +179,7 @@ export function simpleCrown(kind: TreeKind, seed: number): THREE.BufferGeometry 
 }
 
 /** a set of meshes drawing one geometry (a mesh and its shadow caster: `cullInCells`), its own and its simple one */
-interface Swap { meshes: THREE.Mesh[]; full: THREE.BufferGeometry; make: () => THREE.BufferGeometry; simple?: THREE.BufferGeometry }
+interface Swap { meshes: Mesh[]; full: Geometry; make: () => Geometry; simple?: Geometry }
 const swaps: Swap[] = [];
 let simple = false;
 
@@ -190,21 +190,21 @@ function put(swap: Swap): void {
 
 /** Every shape `mesh` is drawn in at some level: its grown one and its simple one, or its own alone if it isn't a
  *  tree's (the meadow's grass is held under both, meadowSolids.ts: a simple trunk stands a little off the grown one). */
-export function shapesOf(mesh: THREE.Mesh): THREE.BufferGeometry[] {
+export function shapesOf(mesh: Mesh): Geometry[] {
   const swap = swaps.find((s) => s.meshes.includes(mesh));
   return swap ? [swap.full, swap.simple ??= swap.make()] : [mesh.geometry];
 }
 
 /** each kind's simple bark and crown, made the first time a level asks for them (the forest's kinds are the village's) */
-const barks = new WeakMap<TreeKind, THREE.BufferGeometry>();
-const crowns = new WeakMap<TreeKind, THREE.BufferGeometry>();
+const barks = new WeakMap<TreeKind, Geometry>();
+const crowns = new WeakMap<TreeKind, Geometry>();
 
 /**
  * A kind's trees as drawn, `bark` and `leaves` (each a mesh and what casts its shadow, all of one geometry: a list of
  * its own for each geometry the kind's leaves are drawn in), drawn as the simple tree where the level asks for it.
  */
-export function simpleTree(kind: TreeKind, bark: THREE.Mesh[], ...leaves: THREE.Mesh[][]): void {
-  const add = (meshes: THREE.Mesh[], make: () => THREE.BufferGeometry): void => {
+export function simpleTree(kind: TreeKind, bark: Mesh[], ...leaves: Mesh[][]): void {
+  const add = (meshes: Mesh[], make: () => Geometry): void => {
     if (!meshes.length) return;
     const swap: Swap = { meshes, full: meshes[0].geometry, make };
     swaps.push(swap);

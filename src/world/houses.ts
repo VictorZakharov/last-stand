@@ -1,15 +1,15 @@
 // The houses' rooms, each built by its file in world/houses/ (its `build`, of the rooms' kit in world/rooms.ts; its
 // cottage, size and what's used in it are its file in data/houses/): a new house is a file in each folder, and touches
 // no list. Built once at boot, each into a group of its own, hidden till shown (`Arena.showRoom`).
-import * as THREE from '../engine/three.ts';
+import { Node } from '../engine/api/index.ts';
 import { ROOM_IDS, type RoomId } from '../data/houses';
 import type { Room } from './rooms';
 
 /** each house's room's builder, by its file's name (its `RoomId`) */
-const BUILDERS = import.meta.glob<(group: THREE.Group) => Room>('./houses/*.ts', { eager: true, import: 'build' });
+const BUILDERS = import.meta.glob<(group: Node) => Room>('./houses/*.ts', { eager: true, import: 'build' });
 
 /** The builder of house `id`'s room. */
-function builderOf(id: RoomId): (group: THREE.Group) => Room {
+function builderOf(id: RoomId): (group: Node) => Room {
   const build = BUILDERS[`./houses/${id}.ts`];
   if (!build) throw new Error(`No room for house "${id}": world/houses/${id}.ts exports its \`build\``);
   return build;
@@ -21,7 +21,7 @@ export async function buildRooms(pause: () => Promise<void>): Promise<Record<Roo
   for (const id of ROOM_IDS) {
     // (a room a task: built at once, the four were one task of 1.4 s in a boot with the CPU 4 times slower)
     await pause();
-    const group = new THREE.Group();
+    const group = new Node();
     group.name = `room ${id}`;
     rooms[id] = builderOf(id)(group);
   }

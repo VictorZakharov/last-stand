@@ -4,7 +4,7 @@
 // material by its `kitLooks`, and shared by what it holds, so a kind's bodies still batch; a painted face's hair in
 // another colour, a worn item's glow in its rarity's colour, the hood's shade, the fur's sway
 // (entities/models/furSway.ts), and a hand's maps read triplanar (entities/models/triplanar.ts). A held blade's highlights through the eyes are held to a most (`kit.u.uShine`).
-import type * as THREE from '../three.ts';
+import type { LitMaterial, Material, Vec3 } from '../api/index.ts';
 import { NEAR_GLOW, itemGlowUniforms, type KitLooks } from '../../core/materials';
 import { rustLook, rustShader, type RustLook, type RustShader } from '../custom';
 
@@ -14,7 +14,7 @@ const NUMBERS = 32;
 const AT = { shade: 16, aura: 20, hairTinted: 23, hair: 24, fur: 27, lag: 28, triplanar: 31, auraClock: 32, furTime: 33, shape: 36,
   loop: 40 };
 /** the fur's sway on a material (entities/models/furSway.ts): its lag and its clock */
-interface Fur { lag: { value: THREE.Vector3 }; time: { value: number } }
+interface Fur { lag: { value: Vec3 }; time: { value: number } }
 
 const KIT: RustShader = rustShader({
   name: 'kit',
@@ -158,7 +158,7 @@ fn surface_hook(s: ptr<function, Surface>, in: VertexOut) -> bool {
 `,
 });
 
-function kitLook(kit: KitLooks, material: THREE.MeshStandardMaterial): RustLook {
+function kitLook(kit: KitLooks, material: LitMaterial): RustLook {
   // (what the material showed by when it was last described: the kit's numbers, and what the game changes on a
   // foe's material itself)
   const was = new Float64Array(35).fill(NaN);
@@ -225,10 +225,10 @@ function kitLook(kit: KitLooks, material: THREE.MeshStandardMaterial): RustLook 
 }
 
 /** A kit material's look, made the first time it's asked for; none for a material that isn't a kit's. */
-export function kitLookOf(material: THREE.Material): RustLook | undefined {
+export function kitLookOf(material: Material): RustLook | undefined {
   const kit = (material as { kitLooks?: KitLooks }).kitLooks;
   if (!kit) return undefined;
-  const look = kitLook(kit, material as THREE.MeshStandardMaterial);
+  const look = kitLook(kit, material as LitMaterial);
   rustLook(material, look);
   return look;
 }

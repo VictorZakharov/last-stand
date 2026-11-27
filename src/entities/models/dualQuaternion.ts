@@ -3,7 +3,7 @@
 // them twists: the thumb, a half turn round its length as it closes over a handle, folded its glove into a fin across
 // the web and creased the thenar. Blended as dual quaternions, a vertex halfway goes halfway round. Its four bones'
 // matrices are made one in `skinbase_vertex`, and three's own chunks then apply it as they would any.
-import * as THREE from '../../engine/three.ts';
+import { Material } from '../../engine/api/index.ts';
 
 const FUNCTIONS = /* glsl */ `
 #ifdef USE_SKINNING
@@ -86,7 +86,7 @@ const BLENDED = /* glsl */ `
 /** `material` skinned by dual quaternions (after what its own `onBeforeCompile` does); it's returned. (Its program's
  *  key is read before the hook goes on: three's own key is the hook's source, the same for every material hooked
  *  here, so materials patched in different ways before would have shared one program.) */
-export function dualQuaternionSkinned<T extends THREE.Material>(material: T): T {
+export function dualQuaternionSkinned<T extends Material>(material: T): T {
   const own = material.onBeforeCompile;
   const key = `${material.customProgramCacheKey()}-dqs`;
   material.onBeforeCompile = (shader, renderer) => {
@@ -101,7 +101,7 @@ export function dualQuaternionSkinned<T extends THREE.Material>(material: T): T 
 }
 
 /** the materials hooked here */
-const HOOKED = new WeakSet<THREE.Material>();
+const HOOKED = new WeakSet<Material>();
 
 /** Whether `material` is skinned by dual quaternions (the lab draws a mesh's parts in flat colours skinned as it is). */
-export const isDualQuaternionSkinned = (material: THREE.Material) => HOOKED.has(material);
+export const isDualQuaternionSkinned = (material: Material) => HOOKED.has(material);

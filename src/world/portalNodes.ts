@@ -2,7 +2,7 @@
 // the light it spills over the floor, as WGSL functions (`wgslFn`) written line for line from the GLSL, each a node
 // material's whole output as `gl_FragColor` was, the membrane fading as the gate round it dissolves
 // (`seeThroughFade`, core/shaderPorts.ts `seeKept`).
-import * as THREE from '../engine/three.ts';
+import { AdditiveBlending, Color, DoubleSide, Material } from '../engine/api/index.ts';
 import { gpu, tsl } from '../core/webgpu';
 import { seeKept, seeUniforms } from '../core/shaderPorts';
 import { rustLook } from '../engine/custom';
@@ -18,9 +18,9 @@ export interface PortalUniforms {
   uTime: { value: number };
   uPower: { value: number };
   uArch: { value: number };
-  uA: { value: THREE.Color };
-  uB: { value: THREE.Color };
-  uCore: { value: THREE.Color };
+  uA: { value: Color };
+  uB: { value: Color };
+  uCore: { value: Color };
 }
 
 /** the GLSL's `h`, `n` and `fbm`, made once */
@@ -68,7 +68,7 @@ function uniformNodes(uniforms: PortalUniforms): Record<string, N> {
 
 /** The membrane: a vortex twisting round a dark heart and a bright core, sparks swept round it, a crackling rim
  *  round a rounded rectangle (or straight sides under a round top), alpha-blended over what's behind the gate. */
-export function membraneMaterial(uniforms: PortalUniforms): THREE.Material {
+export function membraneMaterial(uniforms: PortalUniforms): Material {
   const { wgslFn, uv } = tsl as any;
   const { hash, value, fbm } = portalNoise();
   const membrane = wgslFn(`fn portalMembrane(uv: vec2f, time: f32, power: f32, arch: f32, a: vec3f, b: vec3f,
@@ -105,7 +105,7 @@ export function membraneMaterial(uniforms: PortalUniforms): THREE.Material {
     c = c * inside + mix(b, core, 0.55) * rim;
     return vec4f(c * power * 2.3, clamp(inside * 0.94 + rim, 0.0, 1.0));
   }`, [hash, value, fbm]);
-  const material = new gpu.MeshBasicNodeMaterial({ transparent: true, depthWrite: false, side: THREE.DoubleSide });
+  const material = new gpu.MeshBasicNodeMaterial({ transparent: true, depthWrite: false, side: DoubleSide });
   const shown = membrane({ uv: uv(), ...uniformNodes(uniforms) });
   // (seeThroughFade's uniforms, bound before the membrane's material was made: props.ts)
   const see = uniforms as unknown as Record<string, { value: unknown }>;
@@ -115,7 +115,7 @@ export function membraneMaterial(uniforms: PortalUniforms): THREE.Material {
 }
 
 /** The light the portal spills across the floor in front of the gate, added. */
-export function spillMaterial(uniforms: PortalUniforms): THREE.Material {
+export function spillMaterial(uniforms: PortalUniforms): Material {
   const { wgslFn, uv } = tsl as any;
   const { hash, value } = portalNoise();
   const spill = wgslFn(`fn portalSpill(uv: vec2f, time: f32, power: f32, b: vec3f, core: vec3f) -> vec4f {
@@ -124,7 +124,7 @@ export function spillMaterial(uniforms: PortalUniforms): THREE.Material {
     return vec4f(mix(b, core, 0.3) * g * power * 0.55, 1.0);
   }`, [hash, value]);
   const { time, power, b, core } = uniformNodes(uniforms);
-  const material = new gpu.MeshBasicNodeMaterial({ transparent: true, depthWrite: false, blending: THREE.AdditiveBlending });
+  const material = new gpu.MeshBasicNodeMaterial({ transparent: true, depthWrite: false, blending: AdditiveBlending });
   material.fragmentNode = spill({ uv: uv(), time, power, b, core });
   rustLook(material, spillLook(uniforms));
   return material;

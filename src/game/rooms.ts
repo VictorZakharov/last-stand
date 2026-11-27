@@ -2,7 +2,7 @@
 // the village's stead (`Arena.showRoom`), and its door inside back out before the cottage's door; the walls the camera
 // stands outside of left out every frame (`Room.cutAway`); the house of records' boards and trophies written from the
 // save slot's heroes' records as he comes in. A run or the hall of heroes taking the lobby from under him takes him out.
-import * as THREE from '../engine/three.ts';
+import { Vec3 } from '../engine/api/index.ts';
 import { G } from '../state';
 import { HOUSES, insideOf, outsideOf, ROOM_IDS, TROPHIES, type RoomId } from '../data/houses';
 import { BIOMES, BIOME_IDS, bossesOf, rungBoss } from '../data/biomes';
@@ -52,7 +52,7 @@ export const ROOM_ZOOM = { least: 0.24, most: 0.36 };
 function placeHero(at: { x: number; z: number; facing: number }): void {
   const p = G.player;
   p.walkTo = null;
-  p.place(new THREE.Vector3(at.x, groundHeight(at.x, at.z), at.z), at.facing);
+  p.place(new Vec3(at.x, groundHeight(at.x, at.z), at.z), at.facing);
   faceCamera(at.facing);
   // (there at once: gliding from the other place, the camera swept through the room's walls)
   settleCamera(p.pos);
@@ -231,7 +231,7 @@ function showFoes(on: boolean): void {
   }
 }
 
-const _eye = new THREE.Vector3();
+const _eye = new Vec3();
 /** The room's frame: the walls the camera stands outside of left out; out of it if the lobby's gone from under him. */
 export function updateRooms(): void {
   const id = roomHere();

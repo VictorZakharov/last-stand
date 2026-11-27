@@ -1,8 +1,11 @@
 // Items on the lobby floor. Gear thrown out of the stash lands here instead of vanishing, so it can be
 // picked up again (click its name) or, in co-op, by a partner. Whatever is left there is lost when a run
 // starts. In co-op every game shows every drop, and the host says who got one first (net/session).
-import * as THREE from '../engine/three.ts';
-import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import {
+  Color, DynamicDrawUsage, Euler, Geometry, InstancedMesh, Mat4, mergeGeometries, Node, Plane, Quat, Raycaster,
+  UnlitMaterial, Vec2, Vec3,
+} from '../engine/api/index.ts';
+import * as shapes from '../engine/api/shapes/index.ts';
 import { G } from '../state';
 import { additive } from '../core/materials';
 import { radialDecal } from '../core/textures';
@@ -88,8 +91,8 @@ const PARTS: Part[] = ['shard', 'glow', 'beam'];
  * of its own, each drop cost 8 draw calls (additive and double-sided, each piece was drawn twice), and 120 drops
  * added 10 to 14 ms to a frame; their light adds up in any order, so one pass a piece draws the same picture.
  */
-let looks: { geo: Record<Part, THREE.BufferGeometry>; mat: Record<Part, THREE.MeshBasicMaterial> } | null = null;
-let meshes: Record<Part, THREE.InstancedMesh> | null = null;
+let looks: { geo: Record<Part, Geometry>; mat: Record<Part, UnlitMaterial> } | null = null;
+let meshes: Record<Part, InstancedMesh> | null = null;
 /** the drops' colours are written again (one came or went) */
 let recolour = false;
 
@@ -104,10 +107,10 @@ export function setGroundNet(n: GroundNet | null): void { net = n; }
 // the pieces' shapes and materials (white, all additive: the effects' own shader programs, coloured per drop)
 function looksFor() {
   if (looks) return looks;
-  const card = new THREE.PlaneGeometry(1, 1);
+  const card = shapes.plane(1, 1);
   const geo = {
-    shard: new THREE.OctahedronGeometry(0.09, 0).scale(1, 1.8, 1),
-    glow: new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2),
+    shard: shapes.octahedron(0.09, 0).scale(1, 1.8, 1),
+    glow: shapes.plane(1, 1).rotateX(-Math.PI / 2),
     beam: mergeGeometries([card, card.clone().rotateY(Math.PI / 2)])!,
   };
   const soft = radialDecal('rgba(255,255,255,1)', 'rgba(255,255,255,0)', false);
@@ -119,18 +122,18 @@ function looksFor() {
 }
 
 /** A piece's instanced mesh with room for `room` drops, each coloured on its own. */
-function instanced(part: Part, room: number): THREE.InstancedMesh {
+function instanced(part: Part, room: number): InstancedMesh {
   const { geo, mat } = looksFor();
-  const mesh = new THREE.InstancedMesh(geo[part], mat[part], room);
-  mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-  mesh.setColorAt(0, new THREE.Color());
+  const mesh = new InstancedMesh(geo[part], mat[part], room);
+  mesh.instanceMatrix.setUsage(DynamicDrawUsage);
+  mesh.setColorAt(0, new Color());
   // (the drops move every frame: drawn whatever the view rather than bounded afresh each time)
   mesh.frustumCulled = false;
   return mesh;
 }
 
 /** The pieces' meshes, with room for `count` drops (made afresh, twice as roomy, when they run out of it). */
-function meshesFor(count: number): Record<Part, THREE.InstancedMesh> {
+function meshesFor(count: number): Record<Part, InstancedMesh> {
   if (meshes && count <= meshes.shard.instanceMatrix.count) return meshes;
   let room = meshes?.shard.instanceMatrix.count ?? ROOM;
   while (room < count) room *= 2;
@@ -146,7 +149,7 @@ function meshesFor(count: number): Record<Part, THREE.InstancedMesh> {
 }
 
 /** Sample meshes for the load-time shader warm-up. */
-export function groundSamples(): THREE.Object3D[] {
+export function groundSamples(): Node[] {
   return PARTS.map((part) => instanced(part, 1));
 }
 
@@ -177,7 +180,7 @@ export function throwItem(item: Item, at?: { x: number; z: number }): void {
   emit('itemThrown', item);
 }
 
-const ray = new THREE.Raycaster(), floorPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), ndc = new THREE.Vector2(), hit = new THREE.Vector3();
+const ray = new Raycaster(), floorPlane = new Plane(new Vec3(0, 1, 0), 0), ndc = new Vec2(), hit = new Vec3();
 /** The floor under a point of the screen (client px), or null when it points above the horizon. */
 export function floorAt(cx: number, cy: number): { x: number; z: number } | null {
   ndc.set((cx / window.innerWidth) * 2 - 1, -(cy / window.innerHeight) * 2 + 1);
@@ -336,19 +339,19 @@ export const groundDrops = (): GroundDrop[] => [...drops.values()].map((d) => ({
 /** Whatever is left on the floor is lost (a run starts, or a guest leaves the host's lobby). */
 export function clearGround(): void { for (const id of [...drops.keys()]) removeDrop(id); }
 
-const at = new THREE.Vector3(), turn = new THREE.Quaternion(), spin = new THREE.Euler(), size = new THREE.Vector3();
-const placed = new THREE.Matrix4(), unturned = new THREE.Quaternion();
+const at = new Vec3(), turn = new Quat(), spin = new Euler(), size = new Vec3();
+const placed = new Mat4(), unturned = new Quat();
 /** a piece not shown yet: drawn as nothing */
-const NONE = new THREE.Matrix4().makeScale(0, 0, 0);
-const tint = new THREE.Color();
+const NONE = new Mat4().makeScale(0, 0, 0);
+const tint = new Color();
 
 /** Puts drop `i`'s piece where it is now (`turn` as `spin`, or not turned without it). */
-function place(mesh: THREE.InstancedMesh, i: number, sx: number, sy: number, sz: number, by?: THREE.Euler): void {
+function place(mesh: InstancedMesh, i: number, sx: number, sy: number, sz: number, by?: Euler): void {
   mesh.setMatrixAt(i, placed.compose(at, by ? turn.setFromEuler(by) : unturned, size.set(sx, sy, sz)));
 }
 
 /** Drop `i`'s pieces: tossed through the air, then lying with its light growing over it. */
-function pose(d: Drop, i: number, m: Record<Part, THREE.InstancedMesh>): void {
+function pose(d: Drop, i: number, m: Record<Part, InstancedMesh>): void {
   const t = d.t, y0 = groundHeight(d.x, d.z);
   if (t < TOSS) {
     // an arc from the thrower's hand to the floor, the shard tumbling

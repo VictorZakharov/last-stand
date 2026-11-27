@@ -1,6 +1,6 @@
 // The arena's wall as a shape (the crypt's octagon, the Thornwood's ring of thicket) with its four gates, for what flies
 // into it.
-import * as THREE from '../engine/three.ts';
+import { Vec3 } from '../engine/api/index.ts';
 import { WALL_R, GATE_W } from './props';
 import { wallShape, type PlaceId } from '../data/biomes';
 
@@ -12,7 +12,7 @@ const FREE_REACH = 48;
  * How far (x, z) is past the wall's inner face (m; below 0 inside), the face's normal into the arena there (`normal`),
  * and whether the point is in a gate's opening (the way out, where nothing meets the wall).
  */
-export function pastWall(biome: PlaceId, x: number, z: number, normal: THREE.Vector3): { by: number; gate: boolean } {
+export function pastWall(biome: PlaceId, x: number, z: number, normal: Vec3): { by: number; gate: boolean } {
   let by: number, a: number;
   if (wallShape(biome) === 'free') {
     // (no face but what's built: never past it, and no gates)

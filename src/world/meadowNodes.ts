@@ -3,7 +3,7 @@
 // instance's cell (`bladeNodes`), and the ground's sward under them (`swardColorNode`). A ring's uniforms are set once
 // a render (`renderGroup`, as `onBeforeRender` sets them just before its first draw): the grass stands still to three,
 // and a still material's refresh sends nothing of the object's.
-import type * as THREE from '../engine/three.ts';
+import type { DataTexture, LitMaterial, Texture, Vec2, Vec4 } from '../engine/api/index.ts';
 import { stillNodes, tsl } from '../core/webgpu';
 import { SOLID_RANGE } from './meadowSolids';
 
@@ -13,23 +13,23 @@ type N = any;
 
 /** A ring's uniforms as `meadow.ts` sets them. */
 export interface BladeUniforms {
-  uOrigin: { value: THREE.Vector2 };
+  uOrigin: { value: Vec2 };
   uCell: { value: number };
   uWider: { value: number };
   uCombed: { value: number };
   uS: { value: number };
-  uTiles: { value: THREE.Vector2[] };
+  uTiles: { value: Vec2[] };
   /** the tiles drawn, a pair of floats each (WebGL's map; the Rust engine's list) */
-  uTileMap: { value: THREE.DataTexture };
-  uFocus: { value: THREE.Vector2 };
-  uEye: { value: THREE.Vector2 };
-  uBand: { value: THREE.Vector4 };
+  uTileMap: { value: DataTexture };
+  uFocus: { value: Vec2 };
+  uEye: { value: Vec2 };
+  uBand: { value: Vec4 };
   uByStrand: { value: number };
   uStrandsBy: { value: number };
   uTime: { value: number };
-  uMeadow: { value: THREE.Texture };
+  uMeadow: { value: Texture };
   uMeadowHalf: { value: number };
-  uSolid: { value: THREE.Texture };
+  uSolid: { value: Texture };
   uRoom: { value: number };
 }
 
@@ -80,7 +80,7 @@ function bladeFns(): NonNullable<typeof fns> {
 }
 
 /** The mask's grass at `xz` (0 to 1), its edges made ragged. */
-function meadowAtNode(mask: THREE.Texture, half: number, xz: N): N {
+function meadowAtNode(mask: Texture, half: number, xz: N): N {
   const { clamp, texture, vec2, abs } = tsl as any;
   const { maskNoise } = bladeFns();
   const noise = (p: N): N => maskNoise({ p });
@@ -118,7 +118,7 @@ function strandOf(vBlade: N, vStrands: N, vGrowing: N, { grows, strandCut, stran
 
 /** `m`, a ring's material, drawn as its blades: placed from each instance's cell (`VERTEX_BLADE`), coloured as grass
  *  (`FRAGMENT_COLOUR`), its normal the blade's from either side; `combed`, each far sheet cut into strands. */
-export function bladeNodes(m: THREE.MeshStandardMaterial, u: BladeUniforms, combed: boolean, numbers: BladeNumbers): void {
+export function bladeNodes(m: LitMaterial, u: BladeUniforms, combed: boolean, numbers: BladeNumbers): void {
   const {
     Fn, abs, attribute, cameraPosition, cameraViewMatrix, clamp, cos, dot, float, floor, fract, instanceIndex, length, mix,
     normalize, pow, renderGroup, select, sign, sin, smoothstep, step, texture, uniform, uniformArray, varyingProperty,
@@ -246,7 +246,7 @@ export function bladeNodes(m: THREE.MeshStandardMaterial, u: BladeUniforms, comb
 }
 
 /** The ground's colour under the meadow: a sward's dark green where the mask has grass, in broad patches. */
-export function swardColorNode(mask: THREE.Texture, half: number): N {
+export function swardColorNode(mask: Texture, half: number): N {
   const { Fn, materialColor, mix, positionWorld, smoothstep, vec3, vec4 } = tsl as any;
   const { noise } = bladeFns();
   return Fn(() => {

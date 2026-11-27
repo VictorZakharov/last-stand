@@ -3,7 +3,7 @@
 // glances, how far and how long each is held are drawn from a seeded random stream of his own, so the lab sees the
 // same glances every run and no hero glances in a loop. Cosmetic: a co-op partner's copy glances on its own clock, and
 // nothing of it is sent. Applied by `LookAt` (ik.ts) on top of the pose, when nothing else is looked at.
-import * as THREE from '../../engine/three.ts';
+import { Node, Quat } from '../../engine/api/index.ts';
 import type { Joints } from './rig';
 import { mulberry } from '../../util';
 
@@ -43,7 +43,7 @@ function spring(s: Spring, target: number, rate: number, dt: number): void {
 }
 
 const between = (r: () => number, [a, b]: number[]): number => a + (b - a) * r();
-const _before = new THREE.Quaternion(), _after = new THREE.Quaternion();
+const _before = new Quat(), _after = new Quat();
 
 /** a string to a seed (FNV-1a) */
 const seedOf = (name: string): number => {
@@ -68,7 +68,7 @@ export class Glance {
   private readonly turnTo: Spring = { x: 0, v: 0 };
   private readonly tipTo: Spring = { x: 0, v: 0 };
   private readonly gaze: Spring = { x: 0, v: 0 };
-  private readonly eyes: THREE.Object3D[] = [];
+  private readonly eyes: Node[] = [];
   /** idle last frame: a glance's wait starts afresh once he stands idle again */
   private wasIdle = false;
 

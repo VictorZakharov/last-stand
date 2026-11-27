@@ -7,7 +7,11 @@
 // each line and down the page, now and then he turns a page, strokes his beard, pushes his spectacles up or leans in to
 // look closer; he breathes all the while. A hero coming near is glanced up at, and while he's talked to he looks up and
 // holds the hero's eye, his reading slowed nearly to a stop.
-import * as THREE from '../../engine/three.ts';
+import {
+  Attribute, BackSide, CanvasTexture, CatmullRom3, DoubleSide, floats, FrontSide, Geometry, LitMaterial, Mat4, Material,
+  Maths, Mesh, Node, Quat, RepeatWrapping, SRGBColorSpace, Vec2, Vec3,
+} from '../../engine/api/index.ts';
+import * as shapes from '../../engine/api/shapes/index.ts';
 import { createKit } from '../../core/materials';
 import { cloth as clothMaps, felt as feltMaps, leather as leatherMaps, wool as woolMaps, pbrMaterialMaps } from '../../core/textures';
 import { buildHumanoid, reachArm, resetPose, walkCycle, type Joints } from './rig';
@@ -56,7 +60,7 @@ export const scholarPlant = { noSeatBlend: false, cowlLoose: false };
  *  quickly they go (per s). Fitted, they only bunch: fallen back 6 cm and tipped 17 degrees as the wide bells did, a
  *  raised forearm came out of the side of its sleeve, from play: "the arm/hand is outside of sleeve" */
 const SLEEVE_FALL = { most: 0.02, tip: 0.09, from: 0, over: 0.25, ease: 6 };
-const FOLLOW = { up: 14, settle: 0.8, most: THREE.MathUtils.degToRad(450), speeds: THREE.MathUtils.degToRad(15000) };
+const FOLLOW = { up: 14, settle: 0.8, most: Maths.degToRad(450), speeds: Maths.degToRad(15000) };
 /** how long a hand is drawn into a hold begun or changed, from where his pose's follow has it (s: from a pinch to flat fingers his thumb turns near half round, and over half a second it turned 10 degrees a frame) */
 const HOLD_IN = 0.9;
 /** how far up and back toward him a sat hand arcs on its way from the table to his chair's seat and back (m) */
@@ -65,7 +69,7 @@ const HOLD_IN = 0.9;
 const SIT_WAY = { across: 0.6, down: 0.55, lift: 0.05 };
 /** how far a held finger's joint may turn in a frame of 60 a second (rad: within a man's joint's 450 degrees a second,
  *  and its turning changed no faster than his can change) */
-const HOLD_TURN = THREE.MathUtils.degToRad(5);
+const HOLD_TURN = Maths.degToRad(5);
 /** how far forward he bends on his feet (rad: his spine, his chest): bent 15 degrees, he slouched, from play */
 const STOOP = { spine: 0.05, chest: 0.03 };
 /** how low a hand's aim is (m over his feet) before he bends to it, and how much lower he's bent all the way */
@@ -74,20 +78,20 @@ const BEND = { from: 1.08, over: 0.7 };
 /** The open book he reads, in his frame (x across him, +z ahead, up from the floor): the spine's foot in the gutter at
  *  its middle, its shape (models/book.ts), and the page he turns's material. */
 export interface ScholarBook {
-  spine: THREE.Vector3; shape: BookShape;
+  spine: Vec3; shape: BookShape;
   /** the table's top in his frame: across (x), from his side of it to its far side (z), and its height */
   table: { x0: number; x1: number; z0: number; z1: number; top: number };
   /** the book's two halves' blocks of pages (each in its own frame: x from the spine to its outer edge, `blockGeometry`),
    *  his right's first, and their printed pages: the page he turns is the right's top page, laid over them (the lab
    *  reads it against them) */
-  blocks: THREE.Mesh[];
-  prints: THREE.Mesh[];
+  blocks: Mesh[];
+  prints: Mesh[];
   /** the height of its printed pages at their outer edges (m, his frame): his hands rest on them */
   printTop: number;
 }
 
 /** A hand's aim while he stands: where it goes (world), the way its palm faces and its fingers point (world). */
-export interface HandAim { at: THREE.Vector3; palm: THREE.Vector3; fingers: THREE.Vector3 }
+export interface HandAim { at: Vec3; palm: Vec3; fingers: Vec3 }
 
 /**
  * What he's doing, set each frame by his rounds (world/scholarRounds.ts): how far he's sat at his table (1: reading
@@ -98,7 +102,7 @@ export interface HandAim { at: THREE.Vector3; palm: THREE.Vector3; fingers: THRE
 export interface ScholarAct {
   sit: number;
   walk: number;
-  look: THREE.Vector3 | null;
+  look: Vec3 | null;
   handL: HandAim | null;
   handR: HandAim | null;
   reachL: number;
@@ -119,22 +123,22 @@ export interface Pinch { board: number; thick: number; end: number }
 
 export interface Scholar {
   /** his root: stand it on the chair's seat, facing the table (+z) */
-  root: THREE.Group;
+  root: Node;
   /** what he's doing (his rounds set it; sat at his table by default) */
   readonly act: ScholarAct;
   /** his pose for the frame: `hero` where the local hero is (world space) or null, `talking` while he's talked to,
    *  `said` how many lines he's said (each new one a nod, as he's looking up) */
-  update(dt: number, hero: THREE.Vector3 | null, talking: boolean, said?: number): void;
+  update(dt: number, hero: Vec3 | null, talking: boolean, said?: number): void;
   /** how far into his loop he is (s), for the lab's pictures at set points of it */
   loopAt: number;
   /** his meshes (the lab reads them: his sleeves against the table, his triangles) */
-  readonly parts: THREE.Mesh[];
+  readonly parts: Mesh[];
   /** the table he reads at, in his frame (`ScholarBook.table`) */
   readonly table: ScholarBook['table'];
   /** the book he reads (its page blocks), the page he turns (shown only while it's turned) and his hands (the lab
    *  reads the page against the blocks and his fingertips against what they rest on) */
   readonly book: ScholarBook;
-  readonly page: THREE.Mesh;
+  readonly page: Mesh;
   readonly hands: Hand[];
   /** how far his right hand has the page he turns in hand now (0 to 1) */
   readonly holding: number;
@@ -143,7 +147,7 @@ export interface Scholar {
   readonly calm: boolean;
 }
 
-const V = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
+const V = (x: number, y: number, z: number) => new Vec3(x, y, z);
 
 /** how far over the print the page he turns lies at rest (m): it's the top page, so where it lies it hides the print */
 const PAGE_LIFT = 0.0012;
@@ -159,7 +163,7 @@ const along = (t: number, a: number, b: number): number => clamp((t - a) / (b - 
 /** A surface of rows of points (each row the same count, its first and last points the same for a closed one): its
  *  faces wound out when each row runs the way the right hand's fingers curl round the rows' direction (bottom to
  *  top). uv: across each row by its length and down the rows by theirs (m), times `rep`. */
-function rowsSurface(rows: THREE.Vector3[][], rep = 1): THREE.BufferGeometry {
+function rowsSurface(rows: Vec3[][], rep = 1): Geometry {
   const n = rows[0].length, pos: number[] = [], uv: number[] = [], idx: number[] = [];
   const down = new Array<number>(n).fill(0);
   rows.forEach((row, j) => {
@@ -175,9 +179,9 @@ function rowsSurface(rows: THREE.Vector3[][], rep = 1): THREE.BufferGeometry {
     const a = j * n + i, b = a + 1, c = a + n, d = c + 1;
     idx.push(a, b, c, b, d, c);
   }
-  const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-  g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  const g = new Geometry();
+  g.setAttribute('position', floats(pos, 3));
+  g.setAttribute('uv', floats(uv, 2));
   g.setIndex(idx);
   g.computeVertexNormals();
   return g;
@@ -190,12 +194,12 @@ function oval(a: number, w: number, d: number, p = 2.4): [number, number] {
 }
 
 /** A tube round a curve through `pts` (a cord, a rope), `r` thick. */
-const cord = (pts: THREE.Vector3[], r: number, closed = false, segs = 48) =>
-  new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts, closed), segs, r, 6, closed);
+const cord = (pts: Vec3[], r: number, closed = false, segs = 48) =>
+  shapes.tube(new CatmullRom3(pts, closed), segs, r, 6, closed);
 
 /** how a sleeve hangs: the way down from its arm as he rests (in its joint's frame, across the arm), how far it drops
  *  that way along the arm (m), and how far below the arm its cloth may come before it lies flat (m: on the table) */
-interface Hang { down: THREE.Vector3; droop: (y: number) => number; floor: (y: number) => number }
+interface Hang { down: Vec3; droop: (y: number) => number; floor: (y: number) => number }
 /** a sleeve that hangs round its arm as it's cut, dropped nowhere */
 const HANG_FREE: Hang = { down: V(0, 0, -1), droop: () => 0, floor: () => Infinity };
 /** the sides of a lathe's segments, round */
@@ -242,10 +246,10 @@ const FORE_SLEEVE: [number, number][] = [[0.07, -0.25], [0.066, -0.235], [0.058,
 /** A sleeve's piece on a joint (hanging along -y): a lathe through `profile` ([radius, y], bottom to top), folds round
  *  it, dropped by `hang` and laid flat where it would go further down than its floor (a wide bell on a forearm laid on
  *  the table lies along it, spread out at its sides: hung free, it went through the table). Its opening's ring too. */
-function sleeve(profile: [number, number][], hang: Hang, folds: number, seed: number, shape?: ArmShape): { geo: THREE.BufferGeometry; rim: THREE.Vector3[] } {
+function sleeve(profile: [number, number][], hang: Hang, folds: number, seed: number, shape?: ArmShape): { geo: Geometry; rim: Vec3[] } {
   const rng = mulberry(seed), ph = rng() * 6;
-  const g = new THREE.LatheGeometry(profile.map(([r, y]) => new THREE.Vector2(r, y)), SLEEVE_SIDES);
-  const p = g.attributes.position, side = new THREE.Vector3().crossVectors(V(0, 1, 0), hang.down);
+  const g = shapes.lathe(profile.map(([r, y]) => new Vec2(r, y)), SLEEVE_SIDES);
+  const p = g.attributes.position, side = new Vec3().crossVectors(V(0, 1, 0), hang.down);
   for (let i = 0; i < p.count; i++) {
     const x = p.getX(i), y = p.getY(i), z = p.getZ(i), a = Math.atan2(x, z), r = Math.hypot(x, z);
     const fold = (1 + folds * Math.sin(a * 5 + ph + y * 9) * clamp(-y / 0.25, 0.25, 1)) * (shape ? shape(y, r > 1e-6 ? x / r : 0, r > 1e-6 ? z / r : 0) : 1);
@@ -258,8 +262,8 @@ function sleeve(profile: [number, number][], hang: Hang, folds: number, seed: nu
   }
   g.computeVertexNormals();
   // (the profile's first point is its opening's, a lathe's columns a segment each)
-  const rim: THREE.Vector3[] = [];
-  for (let k = 0; k < SLEEVE_SIDES; k++) rim.push(new THREE.Vector3().fromBufferAttribute(p, k * profile.length));
+  const rim: Vec3[] = [];
+  for (let k = 0; k < SLEEVE_SIDES; k++) rim.push(new Vec3().fromBufferAttribute(p, k * profile.length));
   return { geo: g, rim };
 }
 
@@ -287,15 +291,15 @@ export function* scholarSteps(book: ScholarBook): Generator<void, Scholar, undef
   };
   // (his habit's brown wool; two-sided where its inside shows: the skirt's hem, the sleeves' bells)
   const habit = kit.rim({ color: 0x5a4030, roughness: 1, ...tex(woolMaps(), 1.3) }, 0x6a5040, 0.3);
-  const habitD = kit.rim({ color: 0x5a4030, roughness: 1, ...tex(woolMaps(), 1.3), side: THREE.DoubleSide }, 0x6a5040, 0.3);
-    const lining = kit.rim({ color: 0x2a1c12, roughness: 1, ...tex(clothMaps(), 0.8), side: THREE.DoubleSide }, 0x2a1c12, 0.1);
+  const habitD = kit.rim({ color: 0x5a4030, roughness: 1, ...tex(woolMaps(), 1.3), side: DoubleSide }, 0x6a5040, 0.3);
+    const lining = kit.rim({ color: 0x2a1c12, roughness: 1, ...tex(clothMaps(), 0.8), side: DoubleSide }, 0x2a1c12, 0.1);
   const rope = kit.std({ color: 0xb8a074, roughness: 0.95, ...tex(clothMaps(), 1.6) });
   const capFelt = kit.rim({ color: 0x4a1612, roughness: 1, ...tex(feltMaps(), 0.8) }, 0x6a2a20, 0.3);
   const shoe = kit.std({ color: 0x2a1a10, roughness: 0.7, ...tex(leatherMaps(), 1) });
   const brass = kit.std({ color: 0xc8a050, metalness: 0.9, roughness: 0.35 });
   // (his tabard: oxblood wool woven with a gold border and the library's sign; the wool's relief under it)
   const woven = pbrMaterialMaps(woolMaps(), 1, 1);
-  const tabard = kit.rim({ map: tabardMap(), normalMap: woven.normalMap, normalScale: woven.normalScale, roughness: 1, side: THREE.DoubleSide }, 0x7a3a2a, 0.3);
+  const tabard = kit.rim({ map: tabardMap(), normalMap: woven.normalMap, normalScale: woven.normalScale, roughness: 1, side: DoubleSide }, 0x7a3a2a, 0.3);
   const trim = kit.rim({ color: 0xa8803a, roughness: 0.6, metalness: 0.35, ...tex(clothMaps(), 1.4) }, 0xc89a4a, 0.3);
   // (his undershirt's linen, its sleeves to his wrists inside the habit's bells)
   const linen = kit.rim({ color: 0xc8b898, roughness: 1, ...tex(clothMaps(), 1.2) }, 0xd8c8a8, 0.25);
@@ -305,7 +309,7 @@ export function* scholarSteps(book: ScholarBook): Generator<void, Scholar, undef
   const j: Joints = buildHumanoid({ skin: habit });
   stripRig(j.root);
   // (each joint named, as a measure names what moved: `lab scholar`)
-  for (const [name, o] of Object.entries(j)) if (o instanceof THREE.Object3D && !o.name) o.name = `scholar ${name}`;
+  for (const [name, o] of Object.entries(j)) if (o instanceof Node && !o.name) o.name = `scholar ${name}`;
   const P = j.P;
   /** the hips' height over the floor, sat (the seat's top 0.46 and the seat bones under the joint) */
   const HIPS = 0.54;
@@ -326,11 +330,11 @@ export function* scholarSteps(book: ScholarBook): Generator<void, Scholar, undef
   buildNeck(j.neck, kit, 'mage', P.neckL, j.head);
   // (the locks over the crown hidden under the cap; the shell under them and the crop's tufts white with age)
   if (head.hair[1]) head.hair[1].visible = false;
-  (head.hair[0]?.material as THREE.MeshStandardMaterial | undefined)?.color.setRGB(0.3, 0.29, 0.28);
-  const cards = (head.crop?.material ?? (head.hair[1]?.material)) as THREE.MeshStandardMaterial;
+  (head.hair[0]?.material as LitMaterial | undefined)?.color.setRGB(0.3, 0.29, 0.28);
+  const cards = (head.crop?.material ?? (head.hair[1]?.material)) as LitMaterial;
   cards.color.setRGB(1.25, 1.22, 1.18);
   // (his face paler and greyer than the mage's ruddy one)
-  (head.face.material as THREE.MeshStandardMaterial).color.setRGB(0.96, 0.9, 0.86);
+  (head.face.material as LitMaterial).color.setRGB(0.96, 0.9, 0.86);
   const white = cards.clone();
   white.color.setRGB(1.3, 1.27, 1.22);
   white.roughness = 0.85;
@@ -350,9 +354,9 @@ export function* scholarSteps(book: ScholarBook): Generator<void, Scholar, undef
   yield;
 
   // --- the habit ---
-  const parts: THREE.Mesh[] = [];
-  const add = (geo: THREE.BufferGeometry, mat: THREE.Material, on: THREE.Object3D, name: string, cast = true) => {
-    const m = new THREE.Mesh(geo, mat);
+  const parts: Mesh[] = [];
+  const add = (geo: Geometry, mat: Material, on: Node, name: string, cast = true) => {
+    const m = new Mesh(geo, mat);
     m.name = `scholar ${name}`;
     m.castShadow = cast; m.receiveShadow = true;
     on.add(m);
@@ -375,7 +379,7 @@ export function* scholarSteps(book: ScholarBook): Generator<void, Scholar, undef
   // --- the page he turns: the top page of the half on his right (-x), from the spine to its edge and along the whole
   // depth, shaped as the book is (models/book.ts); hidden but while it's turned, the print under it the same page ---
   const shape = book.shape, D = shape.depth, SEG = 28;
-  const pageGeo = new THREE.PlaneGeometry(1, D, SEG, 1).rotateX(-Math.PI / 2);
+  const pageGeo = shapes.plane(1, D, SEG, 1).rotateX(-Math.PI / 2);
   // (its front the right half's print, laid as it is on the right half; its back the left half's, as it is laid on the
   // left: so it lifts off the right page as that page, and lands on the left as the page there, nothing changing as it
   // shows and hides. Its own writing, laid the other way up, changed the page as it lifted and as it landed)
@@ -386,25 +390,25 @@ export function* scholarSteps(book: ScholarBook): Generator<void, Scholar, undef
     backUV[i * 2] = 1 - t; backUV[i * 2 + 1] = v;
   }
   const backGeo = pageGeo.clone();
-  backGeo.setAttribute('uv', new THREE.BufferAttribute(backUV, 2));
+  backGeo.setAttribute('uv', new Attribute(backUV, 2));
   // (the back shares the front's positions and normals, which are laid each frame)
   backGeo.setAttribute('position', pageGeo.attributes.position);
   backGeo.setAttribute('normal', pageGeo.attributes.normal);
   // (each column's place across, 0 at the spine to 1 at the edge; its uv as the right print's)
   const across = Float32Array.from({ length: pageGeo.attributes.position.count }, (_, i) => pageGeo.attributes.position.getX(i) + 0.5);
   const depthAt = Float32Array.from({ length: pageGeo.attributes.position.count }, (_, i) => pageGeo.attributes.position.getZ(i));
-  const pivot = new THREE.Group();
+  const pivot = new Node();
   pivot.position.copy(book.spine);
   j.root.add(pivot);
-  const front = (book.prints[0].material as THREE.MeshStandardMaterial).clone();
-  front.side = THREE.FrontSide;
-  const backMat = (book.prints[1].material as THREE.MeshStandardMaterial).clone();
-  backMat.side = THREE.BackSide;
+  const front = (book.prints[0].material as LitMaterial).clone();
+  front.side = FrontSide;
+  const backMat = (book.prints[1].material as LitMaterial).clone();
+  backMat.side = BackSide;
   const page = add(pageGeo, front, pivot, 'page', false);
   const pageBack = add(backGeo, backMat, page, 'page back', false);
   void pageBack;
   page.visible = false;
-  const at2 = new THREE.Vector2();
+  const at2 = new Vec2();
   /** the page laid at `k` of its turn (0 lying on his right half, 1 on his left), each point turned round the spine
    *  from its place on the right to its place on the left (`turnedPage`: never through either half) */
   const layPage = (k: number) => {
@@ -419,7 +423,7 @@ export function* scholarSteps(book: ScholarBook): Generator<void, Scholar, undef
   };
   /** the page's outer edge at `k` of its turn, `z` along it (his frame), and the way along the page from it towards the
    *  spine and the way its face looks (up at rest), for the hand that holds it */
-  const edgeAt = (k: number, z: number, out: THREE.Vector3, inward: THREE.Vector3, face: THREE.Vector3) => {
+  const edgeAt = (k: number, z: number, out: Vec3, inward: Vec3, face: Vec3) => {
     turnedPage(shape, k, 1, PAGE_LIFT, at2);
     out.set(-at2.x, at2.y, z).add(pivot.position);
     const ex = -at2.x, ey = at2.y;
@@ -437,31 +441,31 @@ export function* scholarSteps(book: ScholarBook): Generator<void, Scholar, undef
   /** the lines he'd said at the last frame, and how far into his nod to the last he is (s; past `NOD.time`: none) */
   let saidBefore = 0, nodding = Infinity;
   const lookYaw = { v: 0 }, lookPitch = { v: 0 };
-  const hero = new THREE.Vector3(), headAt = new THREE.Vector3(), tmp = new THREE.Vector3();
-  const tL = new THREE.Vector3(), tR = new THREE.Vector3(), poleL = new THREE.Vector3(), poleR = new THREE.Vector3();
+  const hero = new Vec3(), headAt = new Vec3(), tmp = new Vec3();
+  const tL = new Vec3(), tR = new Vec3(), poleL = new Vec3(), poleR = new Vec3();
   /** the page's edge he holds, the way along the page from it to the spine, and the way its face looks */
-  const edge = new THREE.Vector3(), inward = new THREE.Vector3(), face = new THREE.Vector3();
+  const edge = new Vec3(), inward = new Vec3(), face = new Vec3();
   /** where each elbow rests on the table (his frame) */
-  const restL = new THREE.Vector3(), restR = new THREE.Vector3();
-  const qa = new THREE.Quaternion(), qb = new THREE.Quaternion(), qp = new THREE.Quaternion(), basis = new THREE.Matrix4();
-  const fx = new THREE.Vector3(), fy = new THREE.Vector3(), fz = new THREE.Vector3();
+  const restL = new Vec3(), restR = new Vec3();
+  const qa = new Quat(), qb = new Quat(), qp = new Quat(), basis = new Mat4();
+  const fx = new Vec3(), fy = new Vec3(), fz = new Vec3();
   /** a hand's turn in his frame: its fingers along `fingers`, its palm facing `palm` */
-  const handTurn = (fingers: THREE.Vector3, palm: THREE.Vector3, out: THREE.Quaternion) => {
+  const handTurn = (fingers: Vec3, palm: Vec3, out: Quat) => {
     fy.copy(fingers).normalize().negate();
     fz.copy(palm).negate().addScaledVector(fy, -palm.clone().negate().dot(fy)).normalize();
     fx.crossVectors(fy, fz);
     return out.setFromRotationMatrix(basis.makeBasis(fx, fy, fz));
   };
   /** a point on his head (mm in its face's frame) in his frame */
-  const onHead = (x: number, y: number, z: number, out: THREE.Vector3) =>
+  const onHead = (x: number, y: number, z: number, out: Vec3) =>
     j.root.worldToLocal(head.group.localToWorld(toGroup(x, y, z, out)));
   /** a hand set to `turn` (his frame) at the end of its posed arm */
-  const setHand = (hand: THREE.Object3D, turn: THREE.Quaternion) => {
+  const setHand = (hand: Node, turn: Quat) => {
     hand.parent!.getWorldQuaternion(qp);
     j.root.getWorldQuaternion(qa);
     hand.quaternion.copy(qp.invert().multiply(qa).multiply(turn));
   };
-  const chestLocal = (v: THREE.Vector3) => j.chest.worldToLocal(j.root.localToWorld(v));
+  const chestLocal = (v: Vec3) => j.chest.worldToLocal(j.root.localToWorld(v));
 
   const act: ScholarAct = { sit: 1, walk: 0, look: null, handL: null, handR: null, reachL: 0, reachR: 0, grip: 0 };
   /** his habit (its sleeves too, once dressed) as it sits at `sit` 1 and hangs at 0, between them the one morphed
@@ -471,7 +475,7 @@ export function* scholarSteps(book: ScholarBook): Generator<void, Scholar, undef
     for (const m of morphed) m(up);
   };
 
-  function update(dt: number, heroAt: THREE.Vector3 | null, talking: boolean, said = 0): void {
+  function update(dt: number, heroAt: Vec3 | null, talking: boolean, said = 0): void {
     if (act.sit < 1) {
       standing(dt, heroAt, talking, said);
       follow(dt, scholarPlant.noSeatBlend ? 0 : FOLLOW.up, 0, scholarPlant.noSeatBlend ? Infinity : FOLLOW.most);
@@ -501,9 +505,9 @@ export function* scholarSteps(book: ScholarBook): Generator<void, Scholar, undef
   let satFor = 0;
   /** his bells (each with its lining and its cuff's cord) on each forearm, and how far each has fallen back: found
    *  as he's first posed dressed (his sleeves are made after his pose is) */
-  let bellsOn: { elbow: THREE.Object3D; meshes: THREE.Mesh[]; fallen: number }[] | null = null;
-  const forearm = new THREE.Vector3(), down = new THREE.Vector3(), wristWay = new THREE.Vector3(), tipped = new THREE.Vector3();
-  const sleeveInv = new THREE.Matrix4(), hangs = new THREE.Quaternion();
+  let bellsOn: { elbow: Node; meshes: Mesh[]; fallen: number }[] | null = null;
+  const forearm = new Vec3(), down = new Vec3(), wristWay = new Vec3(), tipped = new Vec3();
+  const sleeveInv = new Mat4(), hangs = new Quat();
   /** His wide sleeves fallen back down his forearms as he raises them (toward his elbows, eased): rigid round his
    *  wrists, a bell's rim and its gold cord stood through the open book he held up to read, a tube across its pages,
    *  from play ("fingers go through the book"). */
@@ -531,17 +535,17 @@ export function* scholarSteps(book: ScholarBook): Generator<void, Scholar, undef
   }
 
   // --- his pose followed: each joint (his fingers' too) turned a share of the way to where this frame set it ---
-  const followed: THREE.Object3D[] = [];
-  for (const o of Object.values(j)) if (o instanceof THREE.Object3D && o !== j.root && !followed.includes(o)) followed.push(o);
-  for (const hand of [j.handL, j.handR]) hand.traverse((o) => { if (!(o as THREE.Mesh).isMesh && !followed.includes(o)) followed.push(o); });
+  const followed: Node[] = [];
+  for (const o of Object.values(j)) if (o instanceof Node && o !== j.root && !followed.includes(o)) followed.push(o);
+  for (const hand of [j.handL, j.handR]) hand.traverse((o) => { if (!(o as Mesh).isMesh && !followed.includes(o)) followed.push(o); });
   for (const e of eyes) if (!followed.includes(e)) followed.push(e);
-  const was = new Map<THREE.Object3D, THREE.Quaternion>(), bodyWas = new THREE.Vector3(), followTo = new THREE.Quaternion();
+  const was = new Map<Node, Quat>(), bodyWas = new Vec3(), followTo = new Quat();
   let following = false;
   /** the pose this frame set, reached a share of the way from the last frame's (`rate` 1/s), and `then` of the rest
    *  (1: at once; let go of over a while, as stopped at once his hand caught up 24 degrees in a frame): no jump where
    *  one beat of his rounds hands on to the next */
   /** each followed joint's turning (rad/s, about an axis in its parent's frame), and what reads it */
-  const spins = new Map<THREE.Object3D, THREE.Vector3>(), turnBy = new THREE.Quaternion(), wantSpin = new THREE.Vector3(), axis = new THREE.Vector3();
+  const spins = new Map<Node, Vec3>(), turnBy = new Quat(), wantSpin = new Vec3(), axis = new Vec3();
   function follow(dt: number, rate: number, then = 0, most = Infinity): void {
     // (`rate` 0: at once, as a harness's planted jump has it)
     const k = following && dt > 0 && rate > 0 ? 1 - Math.exp(-rate * dt) * (1 - then) : 1;
@@ -549,7 +553,7 @@ export function* scholarSteps(book: ScholarBook): Generator<void, Scholar, undef
     for (const o of followed) {
       let q = was.get(o), spin = spins.get(o);
       if (!q) was.set(o, q = o.quaternion.clone());
-      if (!spin) spins.set(o, spin = new THREE.Vector3());
+      if (!spin) spins.set(o, spin = new Vec3());
       // (a share of the way there)
       followTo.copy(q).slerp(o.quaternion, k);
       if (!held) { q.copy(followTo); spin.set(0, 0, 0); o.quaternion.copy(q); continue; }
@@ -574,14 +578,14 @@ export function* scholarSteps(book: ScholarBook): Generator<void, Scholar, undef
   /** each hand's joints below the wrist (its fingers' and thumb's), and how far into its hold each hand is drawn (0 to
    *  1 over `HOLD_IN`, from where it's begun or changed: a pinch, a board) */
   const fingersOf = [j.handL, j.handR].map((hand) => {
-    const joints: THREE.Object3D[] = [];
+    const joints: Node[] = [];
     hand.traverse((o) => { if (o !== hand && followed.includes(o)) joints.push(o); });
     return joints;
   });
   const holdIn = [{ kind: '', w: 0 }, { kind: '', w: 0 }];
   /** each held joint as last drawn (its hold's turn a frame is capped from it) */
-  const heldWas = new Map<THREE.Object3D, THREE.Quaternion>();
-  const heldTurn = new THREE.Quaternion();
+  const heldWas = new Map<Node, Quat>();
+  const heldTurn = new Quat();
   /**
    * His fingers and thumb on what they hold solved again on his arms as drawn, after his pose is followed (his arm a few
    * frames behind its pose as the open book rose, fingers laid on the board from the pose went 11 to 16 mm into its
@@ -638,7 +642,7 @@ export function* scholarSteps(book: ScholarBook): Generator<void, Scholar, undef
 
   /** where his look and his glances at the hero are: the hero's place in his frame, and whether he's near */
   let wasClose = false;
-  const glanceAt = (dt: number, heroAt: THREE.Vector3 | null, talking: boolean): void => {
+  const glanceAt = (dt: number, heroAt: Vec3 | null, talking: boolean): void => {
     let heroNear = false, heroClose = false;
     if (heroAt) {
       j.root.updateWorldMatrix(true, false);
@@ -665,14 +669,14 @@ export function* scholarSteps(book: ScholarBook): Generator<void, Scholar, undef
   };
 
   let walkPhase = 0, grip = 0;
-  const handAt = new THREE.Vector3(), lookAt = new THREE.Vector3(), hang = new THREE.Vector3();
-  const aimFingers = new THREE.Vector3(), aimPalm = new THREE.Vector3();
+  const handAt = new Vec3(), lookAt = new Vec3(), hang = new Vec3();
+  const aimFingers = new Vec3(), aimPalm = new Vec3();
   /**
    * On his feet: getting up from his table or sitting down at it (`act.sit` between), standing, or walking (`act.walk`);
    * an old man's stoop, his head to what he looks at (or up to the hero, as at his table), each hand hanging at his side
    * or gone to its aim, his fingers closing on what he holds.
    */
-  function standing(dt: number, heroAt: THREE.Vector3 | null, talking: boolean, said: number): void {
+  function standing(dt: number, heroAt: Vec3 | null, talking: boolean, said: number): void {
     clock += dt;
     if (said !== saidBefore && talking) nodding = 0;
     saidBefore = said;
@@ -780,7 +784,7 @@ export function* scholarSteps(book: ScholarBook): Generator<void, Scholar, undef
       if (aim) {
         // (its own vectors: `handTurn` works in fx, fy and fz, and given two of them it wrote over the palm as it read
         // it, a sheared turn that pulled his fingers out into strands)
-        const inv = new THREE.Quaternion().copy(j.root.getWorldQuaternion(qb)).invert();
+        const inv = new Quat().copy(j.root.getWorldQuaternion(qb)).invert();
         handTurn(aimFingers.copy(aim.fingers).applyQuaternion(inv), aimPalm.copy(aim.palm).applyQuaternion(inv), qb);
         // (by way of a hand held out, palm down and fingers ahead: from hanging at his side straight to a grip on a shelf
         // is near a half turn, and the shortest way round it changed from frame to frame, 30 degrees at once)
@@ -800,7 +804,7 @@ export function* scholarSteps(book: ScholarBook): Generator<void, Scholar, undef
     // these different poses": his arms went from the table to his knees in a frame)
     const fromSeat = scholarPlant.noSeatBlend ? 0 : smooth(clamp((sit - SEAT_BLEND) / (1 - SEAT_BLEND), 0, 1));
     if (fromSeat > 0) {
-      for (const o of followed) (standPose.get(o) ?? standPose.set(o, new THREE.Quaternion()).get(o)!).copy(o.quaternion);
+      for (const o of followed) (standPose.get(o) ?? standPose.set(o, new Quat()).get(o)!).copy(o.quaternion);
       const stoodBody = j.body.position.clone();
       seatedPose(heroAt, talking, said);
       for (const o of followed) o.quaternion.slerp(standPose.get(o)!, 1 - fromSeat);
@@ -809,16 +813,16 @@ export function* scholarSteps(book: ScholarBook): Generator<void, Scholar, undef
     }
   }
   /** each joint's turn as `standing` posed it, while it's blended with his sat pose */
-  const standPose = new Map<THREE.Object3D, THREE.Quaternion>();
+  const standPose = new Map<Node, Quat>();
   /** his pose sat at his table at his loop's point now (its clock not moved on) */
-  const seatedPose = (heroAt: THREE.Vector3 | null, talking: boolean, said: number): void => {
+  const seatedPose = (heroAt: Vec3 | null, talking: boolean, said: number): void => {
     legs();
     j.body.position.set(0, HIPS - P.hipY, 0);
     for (const o of [j.hips, j.spine, j.chest, j.body]) o.rotation.set(0, 0, 0);
     seated(0, heroAt, talking, said);
   };
 
-  function seated(dt: number, heroAt: THREE.Vector3 | null, talking: boolean, said = 0): void {
+  function seated(dt: number, heroAt: Vec3 | null, talking: boolean, said = 0): void {
     clock += dt;
     // (a line said, a nod: only as he's looking up, never mid-glance away)
     if (said !== saidBefore && talking) nodding = 0;
@@ -904,14 +908,14 @@ export function* scholarSteps(book: ScholarBook): Generator<void, Scholar, undef
     tL.y += breath * 0.002; tR.y += breath * 0.002;
     // the left: to stroke his beard, or push his spectacles up
     const stroke = 0.5 - 0.5 * Math.cos(along(t, BEATS.beard[0] + 1.2, BEATS.beard[1] - 1.2) * Math.PI * 4);
-    const chin = onHead(4, lerp(-8, -52, stroke), lerp(106, 112, stroke), new THREE.Vector3());
+    const chin = onHead(4, lerp(-8, -52, stroke), lerp(106, 112, stroke), new Vec3());
     chin.x += 0.03; chin.z += 0.02; chin.y -= 0.05;
     // (going up and coming down it arcs clear of the page, and turns back flat before it lands: brought straight
     // down still turned to the face, its fingertips dug 3 cm into the book)
     const lift = 0.06 * Math.sin(Math.PI * Math.max(beard, specs));
     tL.lerp(chin, beard);
     const nudge = Math.sin(along(t, BEATS.specs[0] + 0.9, BEATS.specs[1] - 0.9) * Math.PI);
-    const bridge = onHead(10, 96 + nudge * 8, 150, new THREE.Vector3());
+    const bridge = onHead(10, 96 + nudge * 8, 150, new Vec3());
     bridge.y -= 0.12; bridge.x += 0.02; bridge.z += 0.03;
     tL.lerp(bridge, specs);
     tL.y += lift;
@@ -1002,12 +1006,12 @@ export function* scholarSteps(book: ScholarBook): Generator<void, Scholar, undef
   }
   /** a sat hand's way `h` of the way from where it reads (`at`, moved) to `to` (his root's frame): across first, its
    *  height after (`SIT_WAY`), lifted a little off what it leaves */
-  const sitWay = (at: THREE.Vector3, to: THREE.Vector3, h: number) => {
+  const sitWay = (at: Vec3, to: Vec3, h: number) => {
     const across = smooth(clamp(h / SIT_WAY.across, 0, 1)), down = smooth(clamp((h - SIT_WAY.down) / (1 - SIT_WAY.down), 0, 1));
     at.set(lerp(at.x, to.x, across), lerp(at.y, to.y, down) + SIT_WAY.lift * Math.sin(Math.PI * h), lerp(at.z, to.z, across));
   };
   /** a hand's turn for its aim (world) as he sits: its fingers' and palm's ways in his root's frame */
-  const sitTurn = (aim: HandAim, out: THREE.Quaternion) => {
+  const sitTurn = (aim: HandAim, out: Quat) => {
     const toRoot = j.root.matrixWorld.clone().invert();
     handTurn(aim.fingers.clone().transformDirection(toRoot), aim.palm.clone().transformDirection(toRoot), out);
   };
@@ -1019,8 +1023,8 @@ export function* scholarSteps(book: ScholarBook): Generator<void, Scholar, undef
   loop = 5;
   update(0, null, false);
   yield;
-  const downFrom = (elbow: THREE.Object3D) => {
-    const d = V(0, -1, 0).applyQuaternion(elbow.getWorldQuaternion(new THREE.Quaternion()).invert());
+  const downFrom = (elbow: Node) => {
+    const d = V(0, -1, 0).applyQuaternion(elbow.getWorldQuaternion(new Quat()).invert());
     d.y = 0;
     return d.lengthSq() > 1e-4 ? d.normalize() : V(0, 0, -1);
   };
@@ -1071,24 +1075,24 @@ export function* scholarSteps(book: ScholarBook): Generator<void, Scholar, undef
 }
 
 interface BodyMats {
-  habit: THREE.Material; habitD: THREE.Material; lining: THREE.Material; rope: THREE.Material;
-  shoe: THREE.Material; tabard: THREE.Material; trim: THREE.Material; brass: THREE.Material; linen: THREE.Material;
+  habit: Material; habitD: Material; lining: Material; rope: Material;
+  shoe: Material; tabard: Material; trim: Material; brass: Material; linen: Material;
 }
-type Add = (g: THREE.BufferGeometry, m: THREE.Material, on: THREE.Object3D, name: string, cast?: boolean) => THREE.Mesh;
+type Add = (g: Geometry, m: Material, on: Node, name: string, cast?: boolean) => Mesh;
 
 /** A strip's surface (`rowsSurface`'s winding) with uvs of its own: across each row 0 to 1, down the rows `v0` to `v1`
  *  (a share of one texture several strips take their parts of). */
-function strip(rows: THREE.Vector3[][], v0: number, v1: number): THREE.BufferGeometry {
+function strip(rows: Vec3[][], v0: number, v1: number): Geometry {
   const g = rowsSurface(rows), uv = g.attributes.uv, n = rows[0].length;
   for (let j = 0; j < rows.length; j++) for (let i = 0; i < n; i++) uv.setXY(j * n + i, i / (n - 1), lerp(v0, v1, j / (rows.length - 1)));
   return g;
 }
 
 /** A small key: its bow a ring, its shaft, its bit, hanging down from (0, 0, 0). */
-function keyGeometry(len: number): THREE.BufferGeometry {
-  const bow = new THREE.TorusGeometry(0.008, 0.0022, 5, 12).translate(0, -0.008, 0);
-  const shaft = new THREE.CylinderGeometry(0.0022, 0.0022, len, 6).translate(0, -0.016 - len / 2, 0);
-  const bit = new THREE.BoxGeometry(0.008, 0.01, 0.0025).translate(0.005, -0.016 - len + 0.006, 0);
+function keyGeometry(len: number): Geometry {
+  const bow = shapes.torus(0.008, 0.0022, 5, 12).translate(0, -0.008, 0);
+  const shaft = shapes.cylinder(0.0022, 0.0022, len, 6).translate(0, -0.016 - len / 2, 0);
+  const bit = shapes.box(0.008, 0.01, 0.0025).translate(0.005, -0.016 - len + 0.006, 0);
   return mergeAll([bow, shaft, bit]);
 }
 
@@ -1115,7 +1119,7 @@ function backAt(rows: readonly [number, number, number, number][], y: number, fo
  *  off it (his neck 6.6 cm round at its foot, 5.4 at its top, its joint 25 cm up his chest). */
 /** A point of the cowl `t` of the way up it, `a` round it (0 its front): lower in front, where it falls open over the
  *  chest; set back as his neck is; a fold's ripple round it. */
-function cowlPoint(t: number, a: number): THREE.Vector3 {
+function cowlPoint(t: number, a: number): Vec3 {
   const [w, d, y] = cowlAt(t), [x, z] = oval(a, w, d, lerp(2.4, 2, t));
   const front = Math.max(0, Math.cos(a)) ** 2, ripple = 1 + 0.03 * Math.sin(a * 6 + 0.8) * Math.sin(Math.PI * t);
   return V(x * ripple, y - COWL.dip * front * smooth(t), z * ripple + lerp(0, COWL.back, smooth(t)));
@@ -1136,12 +1140,12 @@ function cowlAt(t: number): [number, number, number] {
 /** His cowl's top following his neck: each point from where it hangs on his chest towards where his neck carries it,
  *  by how far up the cowl it is (`COWL.follows` and up), as his neck bows and turns. Rigid on his chest, his neck came out
  *  of it as he bowed over his book. Returns what does it, a frame. */
-function followNeck(j: Joints, cowl: THREE.Mesh): () => void {
-  const p = cowl.geometry.attributes.position as THREE.BufferAttribute, base = Float32Array.from(p.array as ArrayLike<number>);
+function followNeck(j: Joints, cowl: Mesh): () => void {
+  const p = cowl.geometry.attributes.position as Attribute, base = Float32Array.from(p.array as ArrayLike<number>);
   const top = Math.max(...Array.from({ length: p.count }, (_, v) => base[v * 3 + 1])), foot = Math.min(...Array.from({ length: p.count }, (_, v) => base[v * 3 + 1]));
   const share = Float32Array.from({ length: p.count }, (_, v) => smooth(clamp(((base[v * 3 + 1] - foot) / (top - foot) - COWL.follows) / (1 - COWL.follows), 0, 1)));
   j.neck.updateMatrix();
-  const rest = j.neck.matrix.clone().invert(), move = new THREE.Matrix4(), at = new THREE.Vector3(), carried = new THREE.Vector3();
+  const rest = j.neck.matrix.clone().invert(), move = new Mat4(), at = new Vec3(), carried = new Vec3();
   cowl.frustumCulled = false;
   return () => {
     j.neck.updateMatrix();
@@ -1165,7 +1169,7 @@ function* dressBody(j: Joints, add: Add, M: BodyMats): Generator<void, void, und
   const N = 40;
   /** the body's section at a height: across, deep, how deep its folds */
   const ring = (y: number, w: number, d: number, fold: number, seed: number, p = 2.4) => {
-    const row: THREE.Vector3[] = [];
+    const row: Vec3[] = [];
     for (let i = 0; i <= N; i++) {
       const a = (i / N) * Math.PI * 2;
       const [x, z] = oval(a, w, d, p);
@@ -1192,13 +1196,13 @@ function* dressBody(j: Joints, add: Add, M: BodyMats): Generator<void, void, und
   yield;
   // --- the rope belt round the waist, knotted at his left, its ends hanging down his side ---
   {
-    const y = 0.11, pts: THREE.Vector3[] = [];
+    const y = 0.11, pts: Vec3[] = [];
     for (let i = 0; i < 24; i++) {
       const a = (i / 24) * Math.PI * 2, [x, z] = oval(a, 0.176, 0.134, 2.4);
       pts.push(V(x, y + 0.004 * Math.sin(a * 3), z));
     }
     add(cord(pts, 0.009, true, 64), M.rope, j.spine, 'belt');
-    const knot = new THREE.Mesh(new THREE.TorusKnotGeometry(0.014, 0.008, 40, 6, 2, 3), M.rope);
+    const knot = new Mesh(shapes.torusKnot(0.014, 0.008, 40, 6, 2, 3), M.rope);
     knot.position.set(0.13, y, 0.12);
     knot.name = 'scholar knot';
     j.spine.add(knot);
@@ -1206,7 +1210,7 @@ function* dressBody(j: Joints, add: Add, M: BodyMats): Generator<void, void, und
       const end = [V(0.135 + dx, y - 0.01, 0.125), V(0.17 + dx, y - 0.08, 0.15), V(0.205 + dx, y - 0.18, 0.15), V(0.215 + dx, y - len, 0.14)];
       add(cord(end, 0.008, false, 20), M.rope, j.spine, 'rope end');
       // (a tassel at its end)
-      const tassel = new THREE.Mesh(new THREE.ConeGeometry(0.016, 0.06, 8, 1, true), M.rope);
+      const tassel = new Mesh(shapes.cone(0.016, 0.06, 8, 1, true), M.rope);
       tassel.position.copy(end[3]).add(V(0, -0.025, 0));
       j.spine.add(tassel);
     }
@@ -1216,10 +1220,10 @@ function* dressBody(j: Joints, add: Add, M: BodyMats): Generator<void, void, und
   // on his neck (its top follows it: `followNeck`), its bag lying on his back. A ring of cord standing off his neck with a
   // trim ring round it, his neck and back showed down inside it, from play: "the Librarian's hoodie is broken" ---
   {
-    const collar: THREE.Vector3[][] = [];
+    const collar: Vec3[][] = [];
     for (let k = 0; k <= COWL.rows; k++) {
       const t = k / COWL.rows;
-      const row: THREE.Vector3[] = [];
+      const row: Vec3[] = [];
       for (let i = 0; i <= COWL.round; i++) row.push(cowlPoint(t, (i / COWL.round) * Math.PI * 2));
       collar.push(row);
     }
@@ -1228,14 +1232,14 @@ function* dressBody(j: Joints, add: Add, M: BodyMats): Generator<void, void, und
     // its edges on him all round, on the cowl at its top and on his back at its sides and point. A half tube hung off
     // his back, it stood off his neck and shoulders and showed into it from the side, from play: "Hoodie still does
     // not connect. Connect it properly")
-    const rows: THREE.Vector3[][] = [];
+    const rows: Vec3[][] = [];
     const top = cowlAt(HOOD.from);
     for (let k = 0; k <= HOOD.rows; k++) {
       const s = k / HOOD.rows, y = lerp(top[2], HOOD.to, s);
       // (the surface it lies on at this height: the cowl's at its foot, the chest's below it)
       const [w, d] = y >= top[2] - 1e-6 ? [top[0], top[1]] : backAt(chestRows, y, top);
       const half = lerp(HOOD.wide, HOOD.point, s ** 0.7), deep = HOOD.deep * Math.sin(Math.PI * s) ** 0.8;
-      const row: THREE.Vector3[] = [];
+      const row: Vec3[] = [];
       for (let i = 0; i <= HOOD.round; i++) {
         const u = i / HOOD.round, a = Math.PI + lerp(-half, half, u), [x, z] = oval(a, w, d);
         // (out from the surface, most down its middle, none at its edges; a hair off it, the cloth's own thickness)
@@ -1250,9 +1254,9 @@ function* dressBody(j: Joints, add: Add, M: BodyMats): Generator<void, void, und
   yield;
   // --- the skirt: from round the hips over the thighs to the knees, and down from them to the floor ---
   {
-    const path = new THREE.CatmullRomCurve3([V(0, 0.02, -0.08), V(0, 0.04, 0.12), V(0, 0.03, 0.36), V(0, -0.02, 0.5),
+    const path = new CatmullRom3([V(0, 0.02, -0.08), V(0, 0.04, 0.12), V(0, 0.03, 0.36), V(0, -0.02, 0.5),
       V(0, -0.14, 0.56), V(0, -0.34, 0.58), V(0, -0.52, 0.6)]);
-    const K = 30, rows: THREE.Vector3[][] = [], T = new THREE.Vector3(), X = V(1, 0, 0), Nn = new THREE.Vector3(), C = new THREE.Vector3();
+    const K = 30, rows: Vec3[][] = [], T = new Vec3(), X = V(1, 0, 0), Nn = new Vec3(), C = new Vec3();
     /** the skirt at `s` along its path and `th` round it, `lift` off it, its folds by `folded` */
     const at = (s: number, th: number, lift = 0, folded = 1) => {
       path.getPointAt(s, C); path.getTangentAt(s, T);
@@ -1269,7 +1273,7 @@ function* dressBody(j: Joints, add: Add, M: BodyMats): Generator<void, void, und
       return p;
     };
     for (let k = 0; k <= K; k++) {
-      const row: THREE.Vector3[] = [];
+      const row: Vec3[] = [];
       for (let i = 0; i <= N; i++) row.push(at(k / K, (i / N) * Math.PI * 2));
       rows.push(row);
     }
@@ -1278,9 +1282,9 @@ function* dressBody(j: Joints, add: Add, M: BodyMats): Generator<void, void, und
     add(cord(rows[K].slice(0, N), 0.006, true, 120), M.trim, j.hips, 'trim hem');
     // the tabard's lap: from under the belt over his knees and a hand down his shins, laid on the skirt's top, its
     // folds half the skirt's (over them, not into them)
-    const lap: THREE.Vector3[][] = [];
+    const lap: Vec3[][] = [];
     for (let k = 0; k <= 16; k++) {
-      const s = lerp(0.15, 0.6, k / 16), half = lerp(0.1, 0.12, k / 16), row: THREE.Vector3[] = [];
+      const s = lerp(0.15, 0.6, k / 16), half = lerp(0.1, 0.12, k / 16), row: Vec3[] = [];
       for (let i = 0; i <= 8; i++) {
         const x = lerp(half, -half, i / 8), a = lerp(0.225, 0.3, smooth(clamp((s - 0.42) / 0.58, 0, 1)));
         row.push(at(s, Math.acos(clamp(x / (a + 0.01), -1, 1)), 0.009, 0.5));
@@ -1292,12 +1296,12 @@ function* dressBody(j: Joints, add: Add, M: BodyMats): Generator<void, void, und
   yield;
   // --- the tabard's front: from under the cowl down his chest to the belt ---
   {
-    const rows: THREE.Vector3[][] = [];
+    const rows: Vec3[][] = [];
     for (let k = 0; k <= 12; k++) {
       const y = lerp(-0.125, 0.27, k / 12), at = chestRows.findIndex((r) => r[0] >= y);
       const hi = chestRows[Math.max(0, at)], lo = chestRows[Math.max(0, at - 1)];
       const t = hi === lo ? 0 : (y - lo[0]) / (hi[0] - lo[0]), w = lerp(lo[1], hi[1], t), d = lerp(lo[2], hi[2], t);
-      const half = Math.min(lerp(0.105, 0.085, k / 12), w * 0.9), row: THREE.Vector3[] = [];
+      const half = Math.min(lerp(0.105, 0.085, k / 12), w * 0.9), row: Vec3[] = [];
       for (let i = 0; i <= 8; i++) {
         const x = lerp(-half, half, i / 8), a = Math.asin(clamp(x / (w + 0.012), -1, 1)), [, z] = oval(a, w, d);
         row.push(V(x, y, z * (1 + Math.abs(lo[3]) * 1.2) + 0.008));
@@ -1309,28 +1313,28 @@ function* dressBody(j: Joints, add: Add, M: BodyMats): Generator<void, void, und
   yield;
   // --- his keys on a ring at his left hip, under the knot; a leather pouch on his right ---
   {
-    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.024, 0.0025, 6, 24), M.brass);
+    const ring = new Mesh(shapes.torus(0.024, 0.0025, 6, 24), M.brass);
     ring.position.set(0.15, 0.05, 0.12);
     ring.rotation.set(0.2, -0.6, 0.1);
     ring.name = 'scholar keys';
     j.spine.add(ring);
     [0.055, 0.045, 0.065].forEach((len, k) => {
-      const key = new THREE.Mesh(keyGeometry(len), M.brass);
+      const key = new Mesh(keyGeometry(len), M.brass);
       const a = -1.2 - k * 0.45;
       key.position.set(Math.cos(a) * 0.024, Math.sin(a) * 0.024, 0);
       key.rotation.z = (k - 1) * 0.35;
       key.castShadow = false;
       ring.add(key);
     });
-    const pouch = new THREE.LatheGeometry([[0, -0.07], [0.04, -0.065], [0.05, -0.04], [0.048, -0.005], [0.036, 0.01], [0.03, 0.012], [0, 0.012]]
-      .map(([r, y]) => new THREE.Vector2(r, y)), 14).scale(1, 1, 0.55);
+    const pouch = shapes.lathe([[0, -0.07], [0.04, -0.065], [0.05, -0.04], [0.048, -0.005], [0.036, 0.01], [0.03, 0.012], [0, 0.012]]
+      .map(([r, y]) => new Vec2(r, y)), 14).scale(1, 1, 0.55);
     const bag = add(pouch, M.shoe, j.spine, 'pouch');
     bag.position.set(-0.15, 0.09, -0.07);
     bag.rotation.set(0.15, 2.0, 0);
-    const flap = add(new THREE.BoxGeometry(0.075, 0.035, 0.008), M.shoe, bag, 'pouch flap');
+    const flap = add(shapes.box(0.075, 0.035, 0.008), M.shoe, bag, 'pouch flap');
     flap.position.set(0, -0.005, 0.03);
     flap.rotation.x = 0.15;
-    const stud = new THREE.Mesh(new THREE.SphereGeometry(0.005, 8, 6), M.brass);
+    const stud = new Mesh(shapes.sphere(0.005, 8, 6), M.brass);
     stud.position.set(0, -0.018, 0.036);
     bag.add(stud);
   }
@@ -1339,37 +1343,37 @@ function* dressBody(j: Joints, add: Add, M: BodyMats): Generator<void, void, und
   // keeper of books carries one; and a string of wooden reading beads at his left with a brass medallion of the
   // library's sign. From play: "we can improve more on his outfit" ---
   {
-    const book = new THREE.Group();
+    const book = new Node();
     book.name = 'scholar girdle book';
     book.position.set(-0.19, 0.0, 0.03);
     book.rotation.set(0.05, -1.35, 0.06);
     j.spine.add(book);
     const W = 0.075, H = 0.1, T = 0.026;
     for (const sd of [-1, 1]) {
-      const board = add(new THREE.BoxGeometry(W, H, 0.005), M.shoe, book, 'girdle book board');
+      const board = add(shapes.box(W, H, 0.005), M.shoe, book, 'girdle book board');
       board.position.set(0, 0, sd * (T / 2 - 0.0025));
     }
-    const pages = add(new THREE.BoxGeometry(W - 0.008, H - 0.008, T - 0.01), M.linen, book, 'girdle book pages');
+    const pages = add(shapes.box(W - 0.008, H - 0.008, T - 0.01), M.linen, book, 'girdle book pages');
     pages.position.set(0.004, 0, 0);
-    const back = add(new THREE.CylinderGeometry(T / 2, T / 2, H, 10, 1, false, Math.PI, Math.PI), M.shoe, book, 'girdle book spine');
+    const back = add(shapes.cylinder(T / 2, T / 2, H, 10, 1, false, Math.PI, Math.PI), M.shoe, book, 'girdle book spine');
     back.position.set(-W / 2, 0, 0);
     // (its cover's tail, gathered into a knot and tucked under his belt)
     add(cord([V(-0.03, H / 2, 0), V(-0.035, H / 2 + 0.04, 0.004), V(-0.025, H / 2 + 0.085, 0.01), V(-0.015, H / 2 + 0.11, 0.012)], 0.007, false, 16), M.shoe, book, 'girdle book tail');
-    const knot = add(new THREE.SphereGeometry(0.012, 10, 8).scale(1, 0.8, 0.9), M.shoe, book, 'girdle book knot');
+    const knot = add(shapes.sphere(0.012, 10, 8).scale(1, 0.8, 0.9), M.shoe, book, 'girdle book knot');
     knot.position.set(-0.015, H / 2 + 0.11, 0.012);
     for (const y of [-0.03, 0.03]) {
-      const clasp = add(new THREE.BoxGeometry(0.012, 0.008, T + 0.004), M.brass, book, 'girdle book clasp', false);
+      const clasp = add(shapes.box(0.012, 0.008, T + 0.004), M.brass, book, 'girdle book clasp', false);
       clasp.position.set(W / 2 - 0.004, y, 0);
     }
     // (the beads, one strand a mesh: a loop down from his belt, a brass medallion at its foot)
-    const beads: THREE.BufferGeometry[] = [];
-    const loop = new THREE.CatmullRomCurve3([V(0.12, 0.1, 0.12), V(0.15, 0.02, 0.135), V(0.165, -0.06, 0.13), V(0.175, -0.1, 0.11), V(0.18, -0.06, 0.085), V(0.17, 0.02, 0.08), V(0.155, 0.1, 0.095)]);
+    const beads: Geometry[] = [];
+    const loop = new CatmullRom3([V(0.12, 0.1, 0.12), V(0.15, 0.02, 0.135), V(0.165, -0.06, 0.13), V(0.175, -0.1, 0.11), V(0.18, -0.06, 0.085), V(0.17, 0.02, 0.08), V(0.155, 0.1, 0.095)]);
     for (let b = 0; b <= 26; b++) {
       const p = loop.getPointAt(b / 26);
-      beads.push(new THREE.SphereGeometry(b % 9 === 0 ? 0.0075 : 0.0055, 8, 6).translate(p.x, p.y, p.z));
+      beads.push(shapes.sphere(b % 9 === 0 ? 0.0075 : 0.0055, 8, 6).translate(p.x, p.y, p.z));
     }
     add(mergeAll(beads), M.shoe, j.spine, 'beads');
-    const medal = add(new THREE.CylinderGeometry(0.014, 0.014, 0.003, 18).rotateX(Math.PI / 2), M.brass, j.spine, 'beads medallion', false);
+    const medal = add(shapes.cylinder(0.014, 0.014, 0.003, 18).rotateX(Math.PI / 2), M.brass, j.spine, 'beads medallion', false);
     medal.position.set(0.178, -0.125, 0.11);
     medal.rotation.y = 0.5;
   }
@@ -1385,7 +1389,7 @@ function* dressBody(j: Joints, add: Add, M: BodyMats): Generator<void, void, und
 /** His sleeves: over the upper arms, and the bells from his elbows, wide, lined dark, a gold cord round each opening: each dropped the way down is
  *  from its forearm as he rests (`downL`, `downR`, in each elbow's frame), and laid flat 3.5 cm under it at the wrist,
  *  more towards the elbow: on the table, where they hung free through it. */
-function dressBells(j: Joints, add: Add, M: BodyMats, upper: { L: THREE.Vector3; R: THREE.Vector3 }, fore: { L: THREE.Vector3; R: THREE.Vector3 },
+function dressBells(j: Joints, add: Add, M: BodyMats, upper: { L: Vec3; R: Vec3 }, fore: { L: Vec3; R: Vec3 },
   onTable = true): void {
   const bell = FORE_SLEEVE;
   // (the upper sleeves too: laid flat 6 cm under the arm at the elbow, where it rests on the table, free above it)
@@ -1424,8 +1428,8 @@ function dressBells(j: Joints, add: Add, M: BodyMats, upper: { L: THREE.Vector3;
  *  and flat underneath where it stands on its sole, the sole's edge (its welt) a little wider than the upper; its heel
  *  rounded and high at the back, the instep high, falling to a low rounded toe box. A ball flattened underneath, it
  *  showed under his hem as a black pebble, from play: "his little pebble black toes are like spheres". */
-function shoeGeometry(): THREE.BufferGeometry {
-  const K = 22, R = 18, rows: THREE.Vector3[][] = [], SOLE = -0.011, WELT = -0.005;
+function shoeGeometry(): Geometry {
+  const K = 22, R = 18, rows: Vec3[][] = [], SOLE = -0.011, WELT = -0.005;
   for (let k = 0; k <= K; k++) {
     const t = k / K, z = lerp(-0.105, 0.12, t);
     // (its width: the heel's, widening to the ball of the foot, rounded off at the toe and at the heel)
@@ -1434,7 +1438,7 @@ function shoeGeometry(): THREE.BufferGeometry {
     const w = 0.044 * (0.74 + 0.26 * Math.sin(Math.PI * 0.5 * Math.min(1, t / 0.66))) * toe * heel;
     // (its top: high at the heel's back and the instep, down to the toe box)
     const h = (t < 0.34 ? lerp(0.05, 0.062, smooth(t / 0.34)) : lerp(0.062, 0.026, smooth(clamp((t - 0.34) / 0.5, 0, 1)))) * toe * heel;
-    const row: THREE.Vector3[] = [];
+    const row: Vec3[] = [];
     for (let i = 0; i <= R; i++) {
       const a = (i / R) * Math.PI * 2, c = Math.cos(a), s = Math.sin(a);
       // (round over its top; under it flat, the welt's edge out past the upper)
@@ -1449,12 +1453,12 @@ function shoeGeometry(): THREE.BufferGeometry {
 /** His robe, its hem's cord and his tabard pushed out by his legs as he walks (each mesh's points out from the robe's
  *  middle as far as a leg comes, near it): hung stiff from his hips, his knees and feet came through it, from play.
  *  Returns what does it, a frame. */
-function followLegs(j: Joints, meshes: THREE.Mesh[]): () => void {
+function followLegs(j: Joints, meshes: Mesh[]): () => void {
   // (each mesh's points as they hang: each's way out from the robe's middle, its distance and its height, made once; and
   // whether any was pushed out last frame. Its light's normals made again but for the hem's thin cord)
   const sets = meshes.map((m) => {
     m.frustumCulled = false;
-    const p = m.geometry.attributes.position as THREE.BufferAttribute, base = Float32Array.from(p.array as ArrayLike<number>);
+    const p = m.geometry.attributes.position as Attribute, base = Float32Array.from(p.array as ArrayLike<number>);
     const count = base.length / 3, ux = new Float32Array(count), uz = new Float32Array(count), r = new Float32Array(count);
     for (let v = 0; v < count; v++) {
       const x = base[v * 3], z = base[v * 3 + 2] - 0.01, d = Math.hypot(x, z);
@@ -1464,19 +1468,19 @@ function followLegs(j: Joints, meshes: THREE.Mesh[]): () => void {
   });
   const CLEAR = 0.065, WIDE = 0.2, FULL = 0.09, TALL = 0.22;
   const legs = [[j.thighL, j.kneeL, j.ankleL], [j.thighR, j.kneeR, j.ankleR]] as const;
-  const toe = new THREE.Vector3(0, -0.06, 0.17), a = new THREE.Vector3(), b = new THREE.Vector3();
+  const toe = new Vec3(0, -0.06, 0.17), a = new Vec3(), b = new Vec3();
   /** the shoe's outline (its ankle's frame): its toe, the balls of its sides, its heel, its instep and its top round
    *  the ankle */
   const SHOE = [V(0, -0.055, 0.172), V(0.046, -0.06, 0.09), V(-0.046, -0.06, 0.09), V(0, -0.06, -0.035), V(0, -0.03, 0.08),
     V(0, -0.012, 0.05), V(0, -0.02, -0.04), V(0.04, -0.03, 0.02), V(-0.04, -0.03, 0.02)];
-  const pts: THREE.Vector3[] = Array.from({ length: 24 + SHOE.length * 2 }, () => new THREE.Vector3());
+  const pts: Vec3[] = Array.from({ length: 24 + SHOE.length * 2 }, () => new Vec3());
   return () => {
     j.root.updateMatrixWorld(true);
     // (each leg as points down it, in the hips' frame: hip to knee, knee to ankle, ankle to toe)
     let n = 0;
     for (const [thigh, knee, ankle] of legs) {
-      const chain = [thigh.getWorldPosition(new THREE.Vector3()), knee.getWorldPosition(new THREE.Vector3()),
-        ankle.getWorldPosition(new THREE.Vector3()), ankle.localToWorld(toe.clone())].map((v) => j.hips.worldToLocal(v));
+      const chain = [thigh.getWorldPosition(new Vec3()), knee.getWorldPosition(new Vec3()),
+        ankle.getWorldPosition(new Vec3()), ankle.localToWorld(toe.clone())].map((v) => j.hips.worldToLocal(v));
       for (let c = 0; c < 3; c++) for (let t = 0; t < 4; t++) {
         a.copy(chain[c]); b.copy(chain[c + 1]);
         pts[n++].copy(a).lerp(b, (t + (c === 2 ? 1 : 0.5)) / 4);
@@ -1517,8 +1521,8 @@ function followLegs(j: Joints, meshes: THREE.Mesh[]): () => void {
 
 /** His robe as it hangs while he's up, on his hips: round them and flaring to the floor, folds falling down it; a gold
  *  cord on its hem, and his tabard down its front from the belt to his knees. Returns its meshes (shown while he's up). */
-function dressRobe(j: Joints, add: Add, M: BodyMats): THREE.Mesh[] {
-  const N = 40, K = 30, drop = j.P.hipY - 0.012, rows: THREE.Vector3[][] = [];
+function dressRobe(j: Joints, add: Add, M: BodyMats): Mesh[] {
+  const N = 40, K = 30, drop = j.P.hipY - 0.012, rows: Vec3[][] = [];
   /** the robe at `s` down it (0 its top at the hips, 1 its hem) and `th` round it, `lift` off it */
   const at = (s: number, th: number, lift = 0) => {
     const y = lerp(0.04, -drop, s), fl = smooth(s);
@@ -1528,16 +1532,16 @@ function dressRobe(j: Joints, add: Add, M: BodyMats): THREE.Mesh[] {
     return V((a + fold + lift) * Math.sin(th), y, (b + fold + lift) * Math.cos(th) + 0.01);
   };
   for (let k = 0; k <= K; k++) {
-    const row: THREE.Vector3[] = [];
+    const row: Vec3[] = [];
     for (let i = 0; i <= N; i++) row.push(at(k / K, ROBE_FROM_SKIRT(i / N)));
     rows.push(row);
   }
   const robe = add(rowsSurface(rows, 1.2), M.habitD, j.hips, 'robe');
   const hem = add(cord(rows[K].slice(0, N), 0.006, true, 120), M.trim, j.hips, 'robe hem', false);
   // (the tabard down its front, from under the belt to the knees, a hair off it)
-  const front: THREE.Vector3[][] = [];
+  const front: Vec3[][] = [];
   for (let k = 0; k <= 16; k++) {
-    const sd = lerp(0.02, 0.55, k / 16), half = lerp(0.1, 0.12, k / 16), row: THREE.Vector3[] = [];
+    const sd = lerp(0.02, 0.55, k / 16), half = lerp(0.1, 0.12, k / 16), row: Vec3[] = [];
     for (let i = 0; i <= 8; i++) {
       const x = lerp(half, -half, i / 8), a = lerp(0.2, 0.31, smooth(sd));
       row.push(at(sd, Math.asin(clamp(x / (a + 0.01), -1, 1)), 0.009));
@@ -1560,13 +1564,13 @@ const ROBE_FROM_SKIRT = (u: number) => Math.PI / 2 - u * Math.PI * 2;
  *  what blends it, `up` of the way (0 as it sits, 1 as it hangs), its points and normals set again only where `up` or
  *  the standing shape changed. Blended on the CPU, as the renderer's morphs aren't: they're packed once, as first
  *  drawn, and his legs' push never reached them (and a mesh drawn before its morph kept being drawn without it). */
-function morphInto(seated: THREE.Mesh, standing: THREE.Mesh): (up: number) => void {
+function morphInto(seated: Mesh, standing: Mesh): (up: number) => void {
   const from = seated.geometry, to = standing.geometry;
   if (from.attributes.position.count !== to.attributes.position.count || from.index?.count !== to.index?.count) {
     throw new Error(`scholar: ${seated.name} and ${standing.name} aren't made alike, so neither blends into the other`);
   }
-  const pos = from.attributes.position as THREE.BufferAttribute, nor = from.attributes.normal as THREE.BufferAttribute;
-  const toPos = to.attributes.position as THREE.BufferAttribute, toNor = to.attributes.normal as THREE.BufferAttribute;
+  const pos = from.attributes.position as Attribute, nor = from.attributes.normal as Attribute;
+  const toPos = to.attributes.position as Attribute, toNor = to.attributes.normal as Attribute;
   const sat = Float32Array.from(pos.array as ArrayLike<number>), satN = Float32Array.from(nor.array as ArrayLike<number>);
   // (its bounds those of the one shape: drawn as the other, it was culled where it showed)
   seated.frustumCulled = false;
@@ -1588,11 +1592,11 @@ function morphInto(seated: THREE.Mesh, standing: THREE.Mesh): (up: number) => vo
   };
 }
 
-let tabardTex: THREE.CanvasTexture | null = null;
+let tabardTex: CanvasTexture | null = null;
 /** His tabard's weave: oxblood wool, a gold border down both edges with a thin line inside it, a row of small
  *  lozenges down its middle; on the chest an open book under a lamp, on the lap a key: the library's keeper. v runs
  *  from the chest's top (1 at the canvas's top) down to the lap's end (0). */
-function tabardMap(): THREE.CanvasTexture {
+function tabardMap(): CanvasTexture {
   if (tabardTex) return tabardTex;
   const W = 128, H = 640, cv = document.createElement('canvas');
   cv.width = W; cv.height = H;
@@ -1629,8 +1633,8 @@ function tabardMap(): THREE.CanvasTexture {
   c.fillRect(cx - 3.5, 468, 7, 90);
   c.fillRect(cx, 530, 22, 9); c.fillRect(cx, 546, 16, 9);
   c.fillStyle = '#5a1a1c'; c.beginPath(); c.arc(cx, 452, 6, 0, Math.PI * 2); c.fill();
-  const t = new THREE.CanvasTexture(cv);
-  t.colorSpace = THREE.SRGBColorSpace;
+  const t = new CanvasTexture(cv);
+  t.colorSpace = SRGBColorSpace;
   t.anisotropy = 4;
   tabardTex = t;
   return t;
@@ -1638,7 +1642,7 @@ function tabardMap(): THREE.CanvasTexture {
 
 /** His head dressed: the skullcap over his crown, his brows, his moustache and long beard (cards in `white`, the beard's
  *  body under them), and his spectacles. All in the head's group, by its face's frame (mm). */
-function* dressHead(head: Head, white: THREE.Material, capFelt: THREE.Material, brass: THREE.Material, glass: THREE.Material): Generator<void, void, undefined> {
+function* dressHead(head: Head, white: Material, capFelt: Material, brass: Material, glass: Material): Generator<void, void, undefined> {
   const G = head.group, rng = mulberry(41);
   /** a point on the skin (mm) towards (az, el), `lift` mm off it */
   const skin = (az: number, el: number, lift = 0) => {
@@ -1663,10 +1667,10 @@ function* dressHead(head: Head, white: THREE.Material, capFelt: THREE.Material, 
     }
     return p;
   };
-  const toG = (p: THREE.Vector3) => toGroup(p.x, p.y, p.z);
+  const toG = (p: Vec3) => toGroup(p.x, p.y, p.z);
   /** his beard hangs as his head is when he reads (bent down to the page): below the chin it leans forward, so as he
    *  reads it falls straight, and as he looks up it juts a little, as a beard does */
-  const bend = (p: THREE.Vector3) => {
+  const bend = (p: Vec3) => {
     const a = -0.42 * smooth(clamp(-p.y / 45, 0, 1)), py = p.y, pz = p.z - 40;
     return V(p.x, py * Math.cos(a) - pz * Math.sin(a), py * Math.sin(a) + pz * Math.cos(a) + 40);
   };
@@ -1705,32 +1709,32 @@ function* dressHead(head: Head, white: THREE.Material, capFelt: THREE.Material, 
     return V(Math.sin(th) * (s.a * lobe + lift), y, s.z + Math.cos(th) * (s.b * lobe * front + lift));
   };
   // (its close layer over the face, from its top down past the chin, each row his right to his left)
-  const faceRows: THREE.Vector3[][] = [];
+  const faceRows: Vec3[][] = [];
   for (let y = 104; y >= CHIN - 4; y -= 5) {
-    const row: THREE.Vector3[] = [];
+    const row: Vec3[] = [];
     for (let i = 0; i <= 44; i++) { const az = lerp(-AZ, AZ, i / 44); row.push(toG(faceAt(az, y, 0))); }
     faceRows.push(row);
     yield;
   }
   // (the mass, ring by ring from inside the jaw down to its point: each ring closed, round from behind)
-  const rings: THREE.Vector3[][] = [];
+  const rings: Vec3[][] = [];
   for (let y = 8; y >= TIP; y -= 4) {
-    const ring: THREE.Vector3[] = [];
+    const ring: Vec3[] = [];
     for (let i = 0; i <= 40; i++) ring.push(toG(bend(massAt(-Math.PI + (i / 40) * Math.PI * 2, y, 0))));
     rings.push(ring);
     yield;
   }
   const strands = beardMap();
-  const bodyMat = new THREE.MeshStandardMaterial({ color: 0xc8c4bc, map: strands, roughness: 0.9, side: THREE.DoubleSide });
+  const bodyMat = new LitMaterial({ color: 0xc8c4bc, map: strands, roughness: 0.9, side: DoubleSide });
   for (const [geo, name] of [[rowsSurface(faceRows.reverse(), 40), 'scholar beard'], [rowsSurface(rings, 40), 'scholar beard mass']] as const) {
-    const m = new THREE.Mesh(geo, bodyMat);
+    const m = new Mesh(geo, bodyMat);
     m.name = name;
     m.castShadow = true;
     G.add(m);
     yield;
   }
 
-  const out: THREE.BufferGeometry[] = [];
+  const out: Geometry[] = [];
   /** a point of the beard (mm) at u (his right -1 to his left 1) and height y, `lift` out from it: on the face's
    *  layer above the chin, on the mass below, the one eased into the other across the jaw's line */
   const beardAt = (u: number, y: number, lift: number) => {
@@ -1740,7 +1744,7 @@ function* dressHead(head: Head, white: THREE.Material, capFelt: THREE.Material, 
     if (!onFace) return onMass;
     // (eased from the one to the other, and kept as far out as the further of them: eased alone, a lock dipped under
     // the face's layer across the jaw and showed as a dark slit round the chin)
-    const axisZ = section(y).z - 12, out = (p: THREE.Vector3) => Math.hypot(p.x, p.z - axisZ);
+    const axisZ = section(y).z - 12, out = (p: Vec3) => Math.hypot(p.x, p.z - axisZ);
     const p = onFace.clone().lerp(onMass, smooth(clamp((12 - y) / 20, 0, 1))), r = Math.max(out(onFace), out(onMass));
     const now = out(p);
     if (now > 1e-6) { p.x *= r / now; p.z = axisZ + (p.z - axisZ) * (r / now); }
@@ -1751,7 +1755,7 @@ function* dressHead(head: Head, white: THREE.Material, capFelt: THREE.Material, 
    *  a long lock's top faced up and showed its back, the cool rim light on it a blue-grey fleck round the chin. */
   const outFromBeard = (ys: number[]) => {
     const axis = ys.map((y) => toG(bend(V(0, y, y > CHIN ? 10 : section(y).z - 12))));
-    return (t: number, O: THREE.Vector3, p: THREE.Vector3) => {
+    return (t: number, O: Vec3, p: Vec3) => {
       const f = t * (axis.length - 1), k = Math.min(axis.length - 2, Math.floor(f));
       O.subVectors(p, axis[k].clone().lerp(axis[k + 1], f - k)).normalize();
     };
@@ -1770,7 +1774,7 @@ function* dressHead(head: Head, white: THREE.Material, capFelt: THREE.Material, 
       const clump = (Math.round(((u0 + 1) / 2) * (CLUMPS - 1)) / (CLUMPS - 1)) * 2 - 1;
       const rim = clamp((Math.abs(u0) - 0.78) / 0.17, 0, 1);
       if (layer > 0 && rng() < rim * 1.4) continue;
-      const lift = (1.2 + layer * 2.2 + rng() * 1.6) * (1 - 0.6 * rim), pts: THREE.Vector3[] = [], ys: number[] = [];
+      const lift = (1.2 + layer * 2.2 + rng() * 1.6) * (1 - 0.6 * rim), pts: Vec3[] = [], ys: number[] = [];
       for (let k = 0; k <= 6; k++) {
         const s = k / 6, y = lerp(y0, yEnd, s);
         ys.push(y);
@@ -1792,7 +1796,7 @@ function* dressHead(head: Head, white: THREE.Material, capFelt: THREE.Material, 
   // (its underside and the sides of its back, as seen from below: locks from under the jaw down its back to the point)
   for (let c = 0; c < 90; c++) {
     const side = rng() < 0.5 ? -1 : 1, th = side * lerp(1.35, 2.9, rng()), y0 = lerp(CHIN, CHIN - 30, rng());
-    const yEnd = lerp(-60, TIP + 4, rng()), pts: THREE.Vector3[] = [], ys: number[] = [], lift = 1 + rng() * 2;
+    const yEnd = lerp(-60, TIP + 4, rng()), pts: Vec3[] = [], ys: number[] = [], lift = 1 + rng() * 2;
     for (let k = 0; k <= 5; k++) {
       const s = k / 5, y = lerp(y0, yEnd, s);
       ys.push(y);
@@ -1806,7 +1810,7 @@ function* dressHead(head: Head, white: THREE.Material, capFelt: THREE.Material, 
   // --- the moustache: from under the nose out over the corners of the mouth, its ends down into the beard (under its
   // close layer: they ran past it and showed below it as a dark tuft) ---
   for (let c = 0; c < 70; c++) {
-    const side = c % 2 ? 1 : -1, x0 = side * (1 + rng() * 22), y0 = 55 + rng() * 6, pts: THREE.Vector3[] = [];
+    const side = c % 2 ? 1 : -1, x0 = side * (1 + rng() * 22), y0 = 55 + rng() * 6, pts: Vec3[] = [];
     const xEnd = side * (26 + rng() * 7), yEnd = 30 - rng() * 8;
     for (let k = 0; k <= 4; k++) {
       const s = k / 4, x = lerp(x0, xEnd, smooth(s * 0.8 + 0.2 * s)), y = lerp(y0, yEnd, s * s);
@@ -1842,7 +1846,7 @@ function* dressHead(head: Head, white: THREE.Material, capFelt: THREE.Material, 
     for (const side of [-1, 1]) {
       const az0 = side * a, low = hairLow(az0) - 2;
       for (let y0 = capEdge(az0) + 4; y0 > low + 6; y0 -= 13) {
-        const yEnd = Math.max(y0 - 24, low - 4), pts: THREE.Vector3[] = [];
+        const yEnd = Math.max(y0 - 24, low - 4), pts: Vec3[] = [];
         for (let k = 0; k <= 3; k++) {
           const t = k / 3, y = lerp(y0, yEnd, t), az = az0 + side * 0.03 * t + (rng() - 0.5) * 0.02;
           pts.push(toG(skin(az, elAt(az, y), 0.7 + 0.4 * Math.sin(Math.PI * t))));
@@ -1865,7 +1869,7 @@ function* dressHead(head: Head, white: THREE.Material, capFelt: THREE.Material, 
       const len = (16 + rng() * 22) * (0.55 + 0.45 * near) * (1 + 0.15 * layer);
       const yEnd = Math.max(y0 - len, low - 10 * rng());
       if (y0 - yEnd < 8) continue;
-      const lift = 1.2 + layer * 1.7 + rng() * 1.2, pts: THREE.Vector3[] = [];
+      const lift = 1.2 + layer * 1.7 + rng() * 1.2, pts: Vec3[] = [];
       for (let k = 0; k <= 4; k++) {
         const s = k / 4, y = lerp(y0, yEnd, s), az = az0 + side * 0.06 * s;
         pts.push(toG(skin(az, elAt(az, y), lift + 1.4 * Math.sin(Math.PI * s) + 1.2 * s)));
@@ -1879,7 +1883,7 @@ function* dressHead(head: Head, white: THREE.Material, capFelt: THREE.Material, 
   // (the sideburns: before each ear, down from the temple into the beard's top)
   for (let c = 0; c < 70; c++) {
     const side = c % 2 ? 1 : -1, az0 = side * lerp(1.08, 1.3, rng()), y0 = lerp(170, 120, rng()), yEnd = lerp(98, 84, rng());
-    const lift = 1.2 + rng() * 2.2, pts: THREE.Vector3[] = [];
+    const lift = 1.2 + rng() * 2.2, pts: Vec3[] = [];
     for (let k = 0; k <= 4; k++) {
       const s = k / 4, y = lerp(y0, yEnd, s), az = az0 - side * 0.05 * s;
       pts.push(toG(skin(az, elAt(az, y), lift + 1.2 * Math.sin(Math.PI * s))));
@@ -1891,7 +1895,7 @@ function* dressHead(head: Head, white: THREE.Material, capFelt: THREE.Material, 
   }
   // --- the brows: bushy, white, a few long hairs curling out ---
   for (let c = 0; c < 44; c++) {
-    const side = c % 2 ? 1 : -1, x0 = side * (12 + rng() * 38), y0 = 134 + rng() * 6 + (Math.abs(x0) - 30) * -0.05, pts: THREE.Vector3[] = [];
+    const side = c % 2 ? 1 : -1, x0 = side * (12 + rng() * 38), y0 = 134 + rng() * 6 + (Math.abs(x0) - 30) * -0.05, pts: Vec3[] = [];
     const len = 9 + rng() * (rng() < 0.15 ? 16 : 7);
     for (let k = 0; k <= 3; k++) {
       const s = k / 3;
@@ -1903,19 +1907,19 @@ function* dressHead(head: Head, white: THREE.Material, capFelt: THREE.Material, 
     yield;
   }
   const locksGeo = mergeAll(out);
-  const lockMesh = new THREE.Mesh(locksGeo, white);
+  const lockMesh = new Mesh(locksGeo, white);
   lockMesh.name = 'scholar beard locks';
   lockMesh.castShadow = true;
   G.add(lockMesh);
 
   // --- the skullcap: a felt cap over the crown, its rim rolled ---
   {
-    const rowsCap: THREE.Vector3[][] = [], n = 40;
+    const rowsCap: Vec3[][] = [], n = 40;
     // (low over the forehead: higher, it bared the top of the mage's painted hairline, his face's paint under it)
     const edge = (az: number) => lerp(184, 192, (1 - Math.cos(az)) / 2) + 4 * Math.sin(az) ** 2;
     const edgeEl = Array.from({ length: n + 1 }, (_, i) => { const az = -Math.PI + (i / n) * Math.PI * 2; return elAt(az, edge(az)); });
     for (let k = 0; k <= 10; k++) {
-      const row: THREE.Vector3[] = [];
+      const row: Vec3[] = [];
       for (let i = 0; i <= n; i++) {
         const az = -Math.PI + (i / n) * Math.PI * 2, el = lerp(edgeEl[i], Math.PI / 2, (k / 10) ** 0.9);
         row.push(toG(skin(az, el, 9.5 + 1.5 * (k / 10))));
@@ -1924,39 +1928,39 @@ function* dressHead(head: Head, white: THREE.Material, capFelt: THREE.Material, 
       yield;
     }
     // (each row runs round from behind through his right, the front and his left, bottom to top: as `rowsSurface` winds out)
-    G.add(Object.assign(new THREE.Mesh(rowsSurface(rowsCap, 20), capFelt), { name: 'scholar cap', castShadow: true }));
-    const rim: THREE.Vector3[] = [];
+    G.add(Object.assign(new Mesh(rowsSurface(rowsCap, 20), capFelt), { name: 'scholar cap', castShadow: true }));
+    const rim: Vec3[] = [];
     for (let i = 0; i < n; i++) { const az = -Math.PI + (i / n) * Math.PI * 2; rim.push(toG(skin(az, edgeEl[i], 10))); }
-    G.add(Object.assign(new THREE.Mesh(cord(rim, 3.2 * HEAD_MM, true, 80), capFelt), { name: 'scholar cap rim' }));
+    G.add(Object.assign(new Mesh(cord(rim, 3.2 * HEAD_MM, true, 80), capFelt), { name: 'scholar cap rim' }));
   }
 
   // --- the spectacles: round brass rims low on his nose, a bridge, the arms back to his ears ---
   {
-    const R = 14, y = 110, z = 98, rimGeo = new THREE.TorusGeometry(R * HEAD_MM, 0.9 * HEAD_MM, 6, 28);
+    const R = 14, y = 110, z = 98, rimGeo = shapes.torus(R * HEAD_MM, 0.9 * HEAD_MM, 6, 28);
     for (const s of [1, -1]) {
       const at = toGroup(s * 31, y, z);
-      const rimMesh = new THREE.Mesh(rimGeo, brass);
+      const rimMesh = new Mesh(rimGeo, brass);
       rimMesh.position.copy(at);
       rimMesh.rotation.y = s * 0.1;
       rimMesh.name = 'scholar spectacles';
       G.add(rimMesh);
-      const lens = new THREE.Mesh(new THREE.CircleGeometry(R * HEAD_MM, 24), glass);
+      const lens = new Mesh(shapes.circle(R * HEAD_MM, 24), glass);
       lens.position.copy(at); lens.rotation.y = s * 0.1;
       lens.castShadow = false;
       lens.name = 'scholar lens';
       G.add(lens);
       // (the arm from the rim's outer edge back over the ear)
       const arm = [V(s * 45, y + 1, z - 4), V(s * 60, y + 4, 60), V(s * 66, y + 4, 20), V(s * 64, y - 8, 2)].map(toG);
-      G.add(Object.assign(new THREE.Mesh(cord(arm, 0.8 * HEAD_MM, false, 16), brass), { name: 'scholar spectacles arm' }));
+      G.add(Object.assign(new Mesh(cord(arm, 0.8 * HEAD_MM, false, 16), brass), { name: 'scholar spectacles arm' }));
       yield;
     }
     const bridge = [V(-17, y + 2, z), V(-6, y + 7, z + 6), V(6, y + 7, z + 6), V(17, y + 2, z)].map(toG);
-    G.add(Object.assign(new THREE.Mesh(cord(bridge, 0.9 * HEAD_MM, false, 12), brass), { name: 'scholar spectacles bridge' }));
+    G.add(Object.assign(new Mesh(cord(bridge, 0.9 * HEAD_MM, false, 12), brass), { name: 'scholar spectacles bridge' }));
   }
 }
 
 /** Geometries merged into one (their positions, normals, uvs and colours). */
-export function mergeAll(geos: THREE.BufferGeometry[]): THREE.BufferGeometry {
+export function mergeAll(geos: Geometry[]): Geometry {
   const pos: number[] = [], nor: number[] = [], uv: number[] = [], col: number[] = [], idx: number[] = [];
   let base = 0;
   for (const g of geos) {
@@ -1970,18 +1974,18 @@ export function mergeAll(geos: THREE.BufferGeometry[]): THREE.BufferGeometry {
     base += p.count;
     g.dispose();
   }
-  const out = new THREE.BufferGeometry();
-  out.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-  out.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
-  out.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
-  out.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  const out = new Geometry();
+  out.setAttribute('position', floats(pos, 3));
+  out.setAttribute('normal', floats(nor, 3));
+  out.setAttribute('uv', floats(uv, 2));
+  out.setAttribute('color', floats(col, 3));
   out.setIndex(idx);
   return out;
 }
 
-let beardTex: THREE.CanvasTexture | null = null;
+let beardTex: CanvasTexture | null = null;
 /** The beard's body: white hair running down it, streaked grey (its uvs run down it, about 40 to a metre). */
-function beardMap(): THREE.CanvasTexture {
+function beardMap(): CanvasTexture {
   if (beardTex) return beardTex;
   const W = 128, H = 256, cv = document.createElement('canvas');
   cv.width = W; cv.height = H;
@@ -2000,9 +2004,9 @@ function beardMap(): THREE.CanvasTexture {
     }
     c.stroke();
   }
-  const t = new THREE.CanvasTexture(cv);
-  t.colorSpace = THREE.SRGBColorSpace;
-  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  const t = new CanvasTexture(cv);
+  t.colorSpace = SRGBColorSpace;
+  t.wrapS = t.wrapT = RepeatWrapping;
   t.anisotropy = 4;
   beardTex = t;
   return t;

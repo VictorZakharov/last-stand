@@ -1,7 +1,7 @@
 // A hand's looks on WebGPU (core/webgpu.ts), where the GLSL patches of models/dualQuaternion.ts and models/triplanar.ts
 // are WebGL's alone: its bones blended as dual quaternions, and its maps read flat along each axis of the space it was
 // sculpted in. Given the node material three converts its copy to (`OwnLooks` in core/shaderPorts.ts).
-import * as THREE from '../../engine/three.ts';
+import { LitMaterial } from '../../engine/api/index.ts';
 import { tsl } from '../../core/webgpu';
 
 // (untyped: TSL's types don't follow its conversions across these calls yet)
@@ -131,7 +131,7 @@ function triplanarNodes(node: N, tile: number): void {
   const planes = [place.zy, place.xz, place.xy];
   const each = (read: (along: N) => N): N =>
     read(planes[0]).mul(shares.x).add(read(planes[1]).mul(shares.y)).add(read(planes[2]).mul(shares.z));
-  const { map, normalMap, normalScale, roughnessMap } = node as THREE.MeshStandardMaterial;
+  const { map, normalMap, normalScale, roughnessMap } = node as LitMaterial;
   if (map) {
     const shown = each((along) => texture(map, along));
     node.colorNode = vec4(vec4(node.colorNode).rgb.mul(shown.rgb), vec4(node.colorNode).a.mul(shown.a));

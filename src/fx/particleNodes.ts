@@ -1,24 +1,26 @@
 // The particle pools on WebGPU (core/webgpu.ts), which draws points a pixel wide: each particle an instanced quad
 // (three's sprite path of `PointsNodeMaterial`), sized, faded and dimmed as particles.ts's GLSL does it.
-import * as THREE from '../engine/three.ts';
+import {
+  AdditiveBlending, Blending, Color, floats, InstancedAttribute, InstancedGeometry, Material, Mesh,
+} from '../engine/api/index.ts';
 import { NEAR_GLOW } from '../core/materials';
 import { gpu, tsl } from '../core/webgpu';
 
 /** A pool's mesh on WebGPU and its scale (particles.ts's `uScale`: a size in metres to pixels at 1 m). */
-export interface ParticleQuads { mesh: THREE.Mesh<THREE.InstancedBufferGeometry, THREE.Material>; scale: { value: number } }
+export interface ParticleQuads { mesh: Mesh<InstancedGeometry, Material>; scale: { value: number } }
 
 /** A quad a particle over `centers`, `colors` and `sizes` (instanced attributes), blended by `blending`. */
 /** The dazed stars on WebGPU (fx/dazed.ts's points as instanced quads), and what each frame sets: how many, and the
  *  scale their sizes are drawn at. */
 export interface StarQuads {
-  mesh: THREE.Mesh;
-  geo: THREE.InstancedBufferGeometry;
+  mesh: Mesh;
+  geo: InstancedGeometry;
   scale: { value: number };
 }
 
 /** The stars at `centers`, `sizes` across and `alphas` seen, in `fill` with a `rim`: dazed.ts's shaders as nodes. */
-export function starQuads([centers, sizes, alphas]: THREE.InstancedBufferAttribute[], fill: THREE.Color,
-  rim: THREE.Color): StarQuads {
+export function starQuads([centers, sizes, alphas]: InstancedAttribute[], fill: Color,
+  rim: Color): StarQuads {
   // (untyped: TSL's types don't follow these conversions yet)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { attribute, uniform, varying, uv, positionView, screenDPR, smoothstep, wgslFn } = tsl as any;
@@ -55,22 +57,22 @@ export function starQuads([centers, sizes, alphas]: THREE.InstancedBufferAttribu
   // (gone near the lens, as every particle)
   const seen = varying(attribute('aAlpha', 'float').mul(smoothstep(0.5, 3.5, depth)));
   node.colorNode = star({ uv: uv(), alpha: seen, fill: uniform(fill), rim: uniform(rim) });
-  return { mesh: new THREE.Mesh(geo, material as unknown as THREE.Material), geo, scale };
+  return { mesh: new Mesh(geo, material as unknown as Material), geo, scale };
 }
 
 /** A quad a particle, its instances none until a frame sets them (three's Infinity is a draw WebGPU refuses). */
-function quadGeometry(): THREE.InstancedBufferGeometry {
-  const geo = new THREE.InstancedBufferGeometry();
-  geo.setAttribute('position', new THREE.Float32BufferAttribute([-0.5, -0.5, 0, 0.5, -0.5, 0, -0.5, 0.5, 0, 0.5, 0.5, 0], 3));
-  geo.setAttribute('uv', new THREE.Float32BufferAttribute([0, 0, 1, 0, 0, 1, 1, 1], 2));
+function quadGeometry(): InstancedGeometry {
+  const geo = new InstancedGeometry();
+  geo.setAttribute('position', floats([-0.5, -0.5, 0, 0.5, -0.5, 0, -0.5, 0.5, 0, 0.5, 0.5, 0], 3));
+  geo.setAttribute('uv', floats([0, 0, 1, 0, 0, 1, 1, 1], 2));
   geo.setIndex([0, 1, 2, 2, 1, 3]);
   geo.instanceCount = 0;
   return geo;
 }
 
 export function particleQuads(
-  centers: THREE.InstancedBufferAttribute, colors: THREE.InstancedBufferAttribute, sizes: THREE.InstancedBufferAttribute,
-  blending: THREE.Blending, soft: number,
+  centers: InstancedAttribute, colors: InstancedAttribute, sizes: InstancedAttribute,
+  blending: Blending, soft: number,
 ): ParticleQuads {
   // (untyped: TSL's types don't follow these conversions yet)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -90,7 +92,7 @@ export function particleQuads(
   const color = attribute('aColor', 'vec4');
   // fade out near the lens (particles.ts), and an additive pool's glow dims with distance (`nearGlow`)
   const near = varying(smoothstep(0.5, 3.5, depth));
-  const glow = blending === THREE.AdditiveBlending
+  const glow = blending === AdditiveBlending
     ? varying(clamp(pow(depth.div(NEAR_GLOW.ref), NEAR_GLOW.pow), NEAR_GLOW.min, 1)) : 1;
   const c = varying(color);
   node.colorNode = Fn(() => {
@@ -98,6 +100,6 @@ export function particleQuads(
     If(d.greaterThan(1), () => { Discard(); });
     return vec4(c.rgb.mul(glow), c.a.mul(near).mul(pow(d.oneMinus(), soft)));
   })();
-  const mesh = new THREE.Mesh(geo, material as unknown as THREE.Material);
+  const mesh = new Mesh(geo, material as unknown as Material);
   return { mesh, scale };
 }

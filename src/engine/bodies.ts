@@ -2,7 +2,7 @@
 // are records drawn on its root's node, skinned by the engine from its joints' nodes (the mirror's, `mirror.ts`:
 // its foe handed over whole) and culled by its sphere there. Written a record and its bones a frame, a wave 36's 34
 // foes were half the page's work a frame with their placing (`lab perf --wave 36 --profile`).
-import * as THREE from './three.ts';
+import { Mat4, Mesh, Node, SkinnedMesh } from './api/index.ts';
 import type { Core } from './core';
 import { RECORD } from './core';
 import { tunable } from '../core/tuning';
@@ -15,11 +15,11 @@ import type { RecordsOf } from './mirrorMeshes';
 /** whether the scene's moving parts are the engine's nodes (1) or written a record and a bone a frame (0) */
 export const BODY_NODES = tunable('bodyNodes', { on: 1 });
 
-const IDENTITY = new Float32Array(new THREE.Matrix4().elements);
+const IDENTITY = new Float32Array(new Mat4().elements);
 
 /** A slot mesh's records drawn on its body's root: their ids, and what they were written under. */
 interface Slot {
-  mesh: THREE.SkinnedMesh;
+  mesh: SkinnedMesh;
   drawn: number[];
   materialId: number;
   casts: boolean;
@@ -28,7 +28,7 @@ interface Slot {
 /** A body taken: the objects it holds as nodes (its joints, then its root), its skin, its root's node and its
  *  slots. */
 interface Taken {
-  held: THREE.Object3D[];
+  held: Node[];
   skin: number;
   rootNode: number;
   slots: Slot[];
@@ -120,7 +120,7 @@ export class Bodies {
   }
 
   /** Each mesh drawn on the nodes with records in the engine, its body shown (a harness's: what was handed over). */
-  eachDrawn(visit: (mesh: THREE.Mesh) => void): void {
+  eachDrawn(visit: (mesh: Mesh) => void): void {
     for (const taken of this.taken.values()) {
       if (!this.mirror.seen(taken.held[taken.held.length - 1])) continue;
       for (const slot of taken.slots) if (slot.drawn.length) visit(slot.mesh);

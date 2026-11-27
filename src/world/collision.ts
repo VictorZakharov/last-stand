@@ -1,5 +1,5 @@
 // Circle-vs-world collision: static obstacles and the arena's wall as it's drawn (`world/wall.ts`).
-import * as THREE from '../engine/three.ts';
+import { Geometry, Mat4, Vec3 } from '../engine/api/index.ts';
 import { G } from '../state';
 import { groundHeight } from './ground';
 import { state as props, type Prop } from './destructible';
@@ -142,7 +142,7 @@ function buildTops(p: Prop): TopGrid {
 }
 
 /** Each triangle of `geometry`, placed by `matrix`, laid over `grid` (`layTriangle`). */
-function layGeometry(grid: TopGrid, geometry: THREE.BufferGeometry, matrix: THREE.Matrix4): void {
+function layGeometry(grid: TopGrid, geometry: Geometry, matrix: Mat4): void {
   const position = geometry.getAttribute('position');
   if (!position) return;
   const index = geometry.getIndex();
@@ -154,10 +154,10 @@ function layGeometry(grid: TopGrid, geometry: THREE.BufferGeometry, matrix: THRE
     layTriangle(grid, _corners[0], _corners[1], _corners[2]);
   }
 }
-const _corners = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()];
+const _corners = [new Vec3(), new Vec3(), new Vec3()];
 
 /** One triangle laid over `grid`: its height at each cell's middle it covers seen from above, and its corners'. */
-function layTriangle(grid: TopGrid, a: THREE.Vector3, b: THREE.Vector3, c: THREE.Vector3): void {
+function layTriangle(grid: TopGrid, a: Vec3, b: Vec3, c: Vec3): void {
   // (one wholly off the grid: a wall tile is crossed by a part's few triangles of thousands)
   const right = grid.x0 + grid.nx * TOP_CELL, far = grid.z0 + grid.nz * TOP_CELL;
   if (Math.max(a.x, b.x, c.x) < grid.x0 || Math.min(a.x, b.x, c.x) >= right) return;

@@ -2,7 +2,7 @@
 // plain materials (three copies them onto the node material it makes of each): the moss tinted over the floor in
 // world space, and the grass's tufts swaying in the wind; and foliage.ts's shafts of light as a node material of their
 // own. The floor's relief is core/parallax.ts's `reliefContext`.
-import * as THREE from '../engine/three.ts';
+import { AdditiveBlending, Color, DoubleSide, Material } from '../engine/api/index.ts';
 import { gpu, tsl } from '../core/webgpu';
 import { rustLook } from '../engine/custom';
 import { shaftsLook } from '../engine/looks/forest';
@@ -62,7 +62,7 @@ export function grassWindNode(time: N, { rate, reach }: Sway): N {
 
 /** The shafts of light (`lightShafts` in foliage.ts): brightest along their axis as seen from the camera, faded in
  *  below the canopy and out at the ground, slow motes of dust drifting through, added. `time` is a `{ value }`. */
-export function shaftsMaterial(time: { value: number }, color: THREE.Color): THREE.Material {
+export function shaftsMaterial(time: { value: number }, color: Color): Material {
   const { abs, dot, normalView, positionView, pow, reference, smoothstep, uv, vec2, vec4 } = tsl as any;
   const clock = reference('value', 'float', time);
   const facing = abs(dot(normalView.normalize(), positionView.negate().normalize()));
@@ -70,7 +70,7 @@ export function shaftsMaterial(time: { value: number }, color: THREE.Color): THR
   const dust = mossNoise(vec2(uv().x.mul(6), uv().y.mul(14).sub(clock.mul(0.15)))).mul(0.35).add(0.65);
   const shine = pow(facing, 4).mul(along).mul(dust);
   const material = new gpu.MeshBasicNodeMaterial({
-    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, fog: false,
+    transparent: true, depthWrite: false, blending: AdditiveBlending, side: DoubleSide, fog: false,
   });
   material.fragmentNode = vec4(reference('value', 'color', { value: color }).mul(shine), 1);
   rustLook(material, shaftsLook(time, color));

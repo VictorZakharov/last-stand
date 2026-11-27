@@ -2,7 +2,8 @@
 // underneath, a gaunt pale face with hollow eyes and mouth tendrils; layered robes threaded with glowing
 // mycelium, shelf fungi growing over the shoulders and back, long knotted fingers, spore sacs on the belt,
 // and a gnarled staff whose roots cage a glowing spore pod (the cast origin).
-import * as THREE from '../../engine/three.ts';
+import { DoubleSide, Geometry, Mesh, Vec3 } from '../../engine/api/index.ts';
+import * as shapes from '../../engine/api/shapes/index.ts';
 import { createKit } from '../../core/materials';
 import { bark, grunge, pbrMaterialMaps, veins } from '../../core/textures';
 import { buildHumanoid, joint, resetPose, walkCycle, idle, deathFall, ramp } from './rig';
@@ -12,14 +13,14 @@ import type { AnimState, Model } from '../../types';
 import { particles, col } from '../../fx/particles';
 import { mulberry } from '../../util';
 
-const V = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
+const V = (x: number, y: number, z: number) => new Vec3(x, y, z);
 const CAP_R = 0.34, CAP_H = 0.22;
 /** height of the cap's dome at radius `r` */
 const domeY = (r: number) => CAP_H - Math.pow(r / CAP_R, 2.2) * (CAP_H - 0.03);
 
 /** the cap: a dome whose rim waves and curls under */
-function capGeo(): THREE.BufferGeometry {
-  if (skipping()) return new THREE.BufferGeometry();
+function capGeo(): Geometry {
+  if (skipping()) return new Geometry();
   const prof: [number, number][] = [[CAP_R * 0.86, -0.005], [CAP_R, 0.02]];
   for (let i = 9; i >= 0; i--) { const rr = (i / 10) * CAP_R * 0.97; prof.push([rr, domeY(rr)]); }
   const g = lathe(prof, 40), p = g.attributes.position;
@@ -36,10 +37,10 @@ export function buildSporecaller(): Model {
   const g = pbrMaterialMaps(grunge(), 2, 1);
   const b = pbrMaterialMaps(bark(), 1, 1.2);
   const flesh = kit.rim({ color: 0xb8ac8a, roughness: 0.7, map: g.map, normalMap: g.normalMap, emissive: 0x9cff3a, emissiveMap: veins(51, 4), emissiveIntensity: 0.3 }, 0xc8ffa0, 0.25);
-  const robe = kit.rim({ color: 0x3a2e20, roughness: 0.95, map: g.map, normalMap: g.normalMap, side: THREE.DoubleSide }, 0x7a8a50, 0.3);
-  const robe2 = kit.std({ color: 0x1e1a12, roughness: 0.95, normalMap: g.normalMap, side: THREE.DoubleSide, emissive: 0x9cff3a, emissiveMap: veins(57, 5), emissiveIntensity: 0.5 });
+  const robe = kit.rim({ color: 0x3a2e20, roughness: 0.95, map: g.map, normalMap: g.normalMap, side: DoubleSide }, 0x7a8a50, 0.3);
+  const robe2 = kit.std({ color: 0x1e1a12, roughness: 0.95, normalMap: g.normalMap, side: DoubleSide, emissive: 0x9cff3a, emissiveMap: veins(57, 5), emissiveIntensity: 0.5 });
   const cap = kit.rim({ color: 0x6a2a3a, roughness: 0.5, map: g.map, normalMap: g.normalMap, emissive: 0x3a1020, emissiveIntensity: 0.4 }, 0xff80a0, 0.25);
-  const gills = kit.std({ color: 0xd8cfa8, roughness: 0.9, side: THREE.DoubleSide });
+  const gills = kit.std({ color: 0xd8cfa8, roughness: 0.9, side: DoubleSide });
   const shelf = kit.rim({ color: 0x8a6a40, roughness: 0.7, map: g.map }, 0xd0b080, 0.25);
   const wood = kit.std({ color: 0x6a5440, roughness: 0.9, map: b.map, normalMap: b.normalMap });
   const dark = kit.std({ color: 0x050805, roughness: 1 });
@@ -59,21 +60,21 @@ export function buildSporecaller(): Model {
 
   // --- legs: hidden under the robes but for bare knotted feet
   S.skinPair(limb(P.shinL + 0.036, 0.04, 0.035), flesh, j.kneeL, j.ankleL, j.kneeR, j.ankleR, P.shinL - 0.048, P.shinL);
-  S.pair(organic(new THREE.SphereGeometry(1, 10, 8), 0.1, 5, 1), flesh, j.ankleL, j.ankleR, [0, -0.02, 0.04], [0, 0, 0], [0.04, 0.025, 0.08]);
+  S.pair(organic(shapes.sphere(1, 10, 8), 0.1, 5, 1), flesh, j.ankleL, j.ankleR, [0, -0.02, 0.04], [0, 0, 0], [0.04, 0.025, 0.08]);
 
   // --- robes: two torn layers from the waist, the inner one threaded with glowing mycelium; a rope belt with spore sacs
   const skirt = joint(j.hips, 0, 0.06, 0);
   S.add(tatteredSkirt(0.17, 0.33, 0.74, 12, 22), robe, skirt);
   S.add(tatteredSkirt(0.15, 0.26, 0.8, 13, 18), robe2, skirt, [0, 0, 0], [0, 0.5, 0]);
-  S.add(new THREE.TorusGeometry(0.165, 0.018, 6, 24).rotateX(Math.PI / 2), wood, j.hips, [0, 0.08, 0]);
+  S.add(shapes.torus(0.165, 0.018, 6, 24).rotateX(Math.PI / 2), wood, j.hips, [0, 0.08, 0]);
   for (const [a, s] of [[0.5, 0.04], [-0.7, 0.034], [2.6, 0.03]] as const) {
     S.add(taperTube([V(0, 0, 0), V(0, -0.05, 0.01)], () => 0.005, 4, 4), wood, j.hips, [Math.sin(a) * 0.17, 0.08, Math.cos(a) * 0.17]);
-    S.add(organic(new THREE.SphereGeometry(1, 12, 10), 0.12, 6, 20 + a), pod, j.hips, [Math.sin(a) * 0.175, 0.0, Math.cos(a) * 0.175], [0, 0, 0], [s, s * 1.3, s]);
+    S.add(organic(shapes.sphere(1, 12, 10), 0.12, 6, 20 + a), pod, j.hips, [Math.sin(a) * 0.175, 0.0, Math.cos(a) * 0.175], [0, 0, 0], [s, s * 1.3, s]);
   }
 
   // --- torso: hunched under a mantle; shelf fungi climb the shoulders and the back
-  S.add(organic(new THREE.SphereGeometry(1, 14, 10), 0.06, 4, 2), robe, j.spine, [0, 0.12, 0], [0, 0, 0], [0.15, 0.17, 0.12]);
-  S.add(organic(new THREE.SphereGeometry(1, 18, 12), 0.06, 4, 3), robe, j.chest, [0, 0.08, -0.01], [0, 0, 0], [0.18, 0.2, 0.14]);
+  S.add(organic(shapes.sphere(1, 14, 10), 0.06, 4, 2), robe, j.spine, [0, 0.12, 0], [0, 0, 0], [0.15, 0.17, 0.12]);
+  S.add(organic(shapes.sphere(1, 18, 12), 0.06, 4, 3), robe, j.chest, [0, 0.08, -0.01], [0, 0, 0], [0.18, 0.2, 0.14]);
   S.add(tatteredSkirt(0.1, 0.3, 0.34, 14, 22), robe2, j.chest, [0, 0.3, -0.01], [0, 0, 0], [1, 1, 0.85]);
   for (let i = 0; i < 5; i++) {
     const s = 0.07 - i * 0.008, side = i % 2 ? -1 : 1;
@@ -85,9 +86,9 @@ export function buildSporecaller(): Model {
 
   // --- head: a gaunt pale face under the cap: hollow eyes, tendrils for a mouth
   S.add(limb(0.14, 0.035, 0.045), flesh, j.neck, [0, 0.12, 0], [Math.PI, 0, 0]);
-  S.add(organic(new THREE.SphereGeometry(1, 16, 12), 0.06, 5, 4), flesh, j.head, [0, 0.03, 0.01], [0, 0, 0], [0.075, 0.1, 0.075]);
-  S.pair(new THREE.SphereGeometry(1, 10, 8), dark, j.head, null, [0.03, 0.05, 0.066], [0, 0, 0], [0.024, 0.02, 0.012]);
-  S.pair(new THREE.SphereGeometry(1, 10, 8), eye, j.head, null, [0.03, 0.05, 0.072], [0, 0, 0], [0.012, 0.01, 0.006]);
+  S.add(organic(shapes.sphere(1, 16, 12), 0.06, 5, 4), flesh, j.head, [0, 0.03, 0.01], [0, 0, 0], [0.075, 0.1, 0.075]);
+  S.pair(shapes.sphere(1, 10, 8), dark, j.head, null, [0.03, 0.05, 0.066], [0, 0, 0], [0.024, 0.02, 0.012]);
+  S.pair(shapes.sphere(1, 10, 8), eye, j.head, null, [0.03, 0.05, 0.072], [0, 0, 0], [0.012, 0.01, 0.006]);
   for (let i = 0; i < 6; i++) {
     const x = (i - 2.5) * 0.014, len = 0.08 + r() * 0.06;
     S.add(taperTube([V(0, 0, 0), V(x * 0.3, -len * 0.4, 0.015), V(x * 0.6, -len * 0.8, 0.0), V(x, -len, 0.02)], (t) => 0.007 * (1 - t * 0.8), 8, 4), flesh, j.head, [x, -0.02, 0.06]);
@@ -98,19 +99,19 @@ export function buildSporecaller(): Model {
   S.add(lathe([[CAP_R * 0.88, 0.0], [0.05, 0.03]], 40), gills, capJ);
   for (let i = 0; i < 44; i++) {
     const a = (i / 44) * Math.PI * 2;
-    S.add(new THREE.PlaneGeometry(CAP_R * 0.8, 0.028).translate(CAP_R * 0.47, -0.012, 0), gills, capJ, [0, 0.02, 0], [0, -a, 0]);
+    S.add(shapes.plane(CAP_R * 0.8, 0.028).translate(CAP_R * 0.47, -0.012, 0), gills, capJ, [0, 0.02, 0], [0, -a, 0]);
   }
   for (let i = 0; i < 16; i++) {
     const a = i * 2.4 + r(), rr = CAP_R * (0.15 + 0.75 * Math.sqrt((i + 0.5) / 16)), s = 0.018 + r() * 0.02, tilt = rr / CAP_R * 1.1;
-    S.add(organic(new THREE.SphereGeometry(1, 8, 6), 0.15, 4, i), spots, capJ, [Math.cos(a) * rr, domeY(rr) + 0.004, Math.sin(a) * rr], [Math.sin(a) * tilt, 0, -Math.cos(a) * tilt], [s, s * 0.4, s]);
+    S.add(organic(shapes.sphere(1, 8, 6), 0.15, 4, i), spots, capJ, [Math.cos(a) * rr, domeY(rr) + 0.004, Math.sin(a) * rr], [Math.sin(a) * tilt, 0, -Math.cos(a) * tilt], [s, s * 0.4, s]);
   }
   S.add(tatteredSkirt(0.05, 0.12, 0.14, 15, 16), gills, capJ, [0, 0.0, 0]);
 
   // --- arms: bell sleeves, pale knotted hands with long fingers
-  S.pair(organic(new THREE.SphereGeometry(1, 12, 8), 0.05, 5, 5), robe, j.shoulderL, j.shoulderR, [0, 0, 0], [0, 0, 0], [0.07, 0.065, 0.07]);
+  S.pair(organic(shapes.sphere(1, 12, 8), 0.05, 5, 5), robe, j.shoulderL, j.shoulderR, [0, 0, 0], [0, 0, 0], [0.07, 0.065, 0.07]);
   S.skinPair(limb(P.upperL + 0.05, 0.055, 0.05, 0.1), robe, j.shoulderL, j.elbowL, j.shoulderR, j.elbowR, P.upperL - 0.066, P.upperL);
   S.pair(lathe([[0.001, -P.foreL - 0.04], [0.09, -P.foreL - 0.02], [0.08, -P.foreL + 0.05], [0.052, -0.05], [0.05, 0.02], [0.001, 0.03]], 16), robe, j.elbowL, j.elbowR);
-  S.pair(organic(new THREE.SphereGeometry(1, 10, 8), 0.08, 5, 6), flesh, j.handL, j.handR, [0, -0.03, 0.005], [0, 0, 0], [0.035, 0.045, 0.02]);
+  S.pair(organic(shapes.sphere(1, 10, 8), 0.08, 5, 6), flesh, j.handL, j.handR, [0, -0.03, 0.005], [0, 0, 0], [0.035, 0.045, 0.02]);
   for (let f = 0; f < 3; f++) {
     S.pair(taperTube([V(0, 0, 0), V(0, -0.05, 0.012), V(0, -0.09, 0.03), V(0, -0.11, 0.055)], (t) => 0.009 * (1 - t * 0.6), 10, 5),
       flesh, j.handL, j.handR, [(f - 1) * 0.018, -0.06, 0.005]);
@@ -125,14 +126,14 @@ export function buildSporecaller(): Model {
   }
   for (let i = 0; i < 3; i++) S.add(shelfGeo(0.045 - i * 0.008), shelf, staff, [Math.cos(i * 2.2) * 0.03, 0.3 + i * 0.13, Math.sin(i * 2.2) * 0.03], [0, -i * 2.2, 0]);
   const tip = joint(staff, 0, 1.12, 0);
-  const podMesh = new THREE.Mesh(new THREE.IcosahedronGeometry(0.07, 3).scale(1, 1.25, 1), pod);
+  const podMesh = new Mesh(shapes.icosahedron(0.07, 3).scale(1, 1.25, 1), pod);
   podMesh.castShadow = false;
   tip.add(podMesh);
   S.build();
 
   const root = j.root;
   let acc = 0;
-  const wp = new THREE.Vector3();
+  const wp = new Vec3();
 
   const legs = new LegIK(j);
   function animate(st: AnimState): void {

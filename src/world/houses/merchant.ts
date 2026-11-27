@@ -7,7 +7,10 @@
 // round the walls and its two showpieces are merchantWares.ts; its counter and display tops an oiled wood apart from the
 // floor's planks (`oiledWood`). As every
 // room: 10 point lights, two casting (the hearth and the chandelier).
-import * as THREE from '../../engine/three.ts';
+import {
+  Color, DoubleSide, Geometry, Line3Curve, LitMaterial, Material, Mesh, Node, Outline, Quat, Vec2, Vec3,
+} from '../../engine/api/index.ts';
+import * as shapes from '../../engine/api/shapes/index.ts';
 import { HOUSES, type RoomId } from '../../data/houses';
 import {
   BODY, CANDLE, CROSS_UNDER, DISPLAY, LANTERN, barrel, begin, box, candle, chandelier, drum, finish, framed, hearth, lantern, onWall, rug,
@@ -28,23 +31,23 @@ const STOCK_GAP = 0.4;
 /** The counter's and the display table's tops: oiled, planed oak, a dark stain with a sheen, its grain finer and laid
  *  along the boards, against the floor's worn, matt, paler planks (from play: "different texture for table vs floor"):
  *  the oak's maps and program, another colour, repeat and finish. */
-const oiledWood = (): THREE.MeshStandardMaterial =>
-  new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(wood(), [2.4, 1], 0.45), color: 0x4a2612, roughness: 0.32, envMapIntensity: 1.3 });
+const oiledWood = (): LitMaterial =>
+  new LitMaterial({ ...pbrMaterialMaps(wood(), [2.4, 1], 0.45), color: 0x4a2612, roughness: 0.32, envMapIntensity: 1.3 });
 
 /** bright steel for what's for sale (the rooms' iron is dark, for brackets and hoops) */
-const steelMat = (): THREE.MeshStandardMaterial => new THREE.MeshStandardMaterial({ color: 0xb8bcc4, metalness: 0.85, roughness: 0.35 });
+const steelMat = (): LitMaterial => new LitMaterial({ color: 0xb8bcc4, metalness: 0.85, roughness: 0.35 });
 
 /** A sword standing on its point at (x, z) in `g`, leaning back `lean`: blade, guard, grip and pommel. */
-function sword(g: THREE.Object3D, M: Mats, steel: THREE.Material, x: number, y: number, z: number, lean: number, long = 0.8): void {
-  const s = new THREE.Group();
+function sword(g: Node, M: Mats, steel: Material, x: number, y: number, z: number, lean: number, long = 0.8): void {
+  const s = new Node();
   s.position.set(x, y, z);
   s.rotation.x = -lean;
   g.add(s);
-  const blade = new THREE.Mesh(new THREE.BoxGeometry(0.045, long, 0.008), steel);
+  const blade = new Mesh(shapes.box(0.045, long, 0.008), steel);
   blade.position.y = long / 2;
   blade.castShadow = true;
   s.add(blade);
-  const tip = new THREE.Mesh(new THREE.ConeGeometry(0.023, 0.06, 4).rotateY(Math.PI / 4), steel);
+  const tip = new Mesh(shapes.cone(0.023, 0.06, 4).rotateY(Math.PI / 4), steel);
   tip.scale.z = 0.25;
   tip.position.y = -0.03;
   tip.rotation.z = Math.PI;
@@ -55,15 +58,15 @@ function sword(g: THREE.Object3D, M: Mats, steel: THREE.Material, x: number, y: 
 }
 
 /** An axe standing on its haft's foot at (x, z), leaning back: the haft and a bearded head. */
-function axe(g: THREE.Object3D, M: Mats, steel: THREE.Material, x: number, y: number, z: number, lean: number): void {
-  const a = new THREE.Group();
+function axe(g: Node, M: Mats, steel: Material, x: number, y: number, z: number, lean: number): void {
+  const a = new Node();
   a.position.set(x, y, z);
   a.rotation.x = -lean;
   g.add(a);
   drum(a, 0.02, 0.024, 0.95, 0, 0, 0, M.oak, 8);
-  const head = new THREE.Shape();
+  const head = new Outline();
   head.moveTo(0, -0.05); head.lineTo(0.14, -0.13); head.quadraticCurveTo(0.21, 0, 0.14, 0.11); head.lineTo(0, 0.05);
-  const blade = new THREE.Mesh(new THREE.ExtrudeGeometry(head, { depth: 0.015, bevelEnabled: false }).rotateY(Math.PI / 2), steel);
+  const blade = new Mesh(shapes.extrude(head, { depth: 0.015, bevelEnabled: false }).rotateY(Math.PI / 2), steel);
   blade.position.set(0, 0.84, 0.01);
   blade.castShadow = true;
   a.add(blade);
@@ -71,7 +74,7 @@ function axe(g: THREE.Object3D, M: Mats, steel: THREE.Material, x: number, y: nu
 
 /** The weapon rack against a wall (its frame, facing +z) at x: a frame of two rails and a foot board with notches,
  *  four swords, two axes and a spear standing in it. */
-function weaponRack(frame: THREE.Object3D, M: Mats, steel: THREE.Material, x: number): void {
+function weaponRack(frame: Node, M: Mats, steel: Material, x: number): void {
   const W = 1.9;
   box(frame, W, 0.08, 0.36, x, 0, 0.2, M.timber);
   for (const sx of [-1, 1]) box(frame, 0.08, 1.4, 0.08, x + sx * (W / 2 - 0.04), 0, 0.33, M.timber);
@@ -79,52 +82,52 @@ function weaponRack(frame: THREE.Object3D, M: Mats, steel: THREE.Material, x: nu
   const lean = 0.12;
   [-0.7, -0.45, -0.2, 0.05].forEach((dx, i) => sword(frame, M, steel, x + dx, 0.09, 0.26, lean, 0.75 + (i % 2) * 0.12));
   for (const dx of [0.35, 0.6]) axe(frame, M, steel, x + dx, 0.09, 0.26, lean);
-  const spear = new THREE.Group();
+  const spear = new Node();
   spear.position.set(x + 0.82, 0.09, 0.26);
   spear.rotation.x = -lean;
   frame.add(spear);
   drum(spear, 0.018, 0.02, 1.9, 0, 0, 0, M.oak, 8);
-  const point = new THREE.Mesh(new THREE.ConeGeometry(0.035, 0.22, 4), steel);
+  const point = new Mesh(shapes.cone(0.035, 0.22, 4), steel);
   point.position.y = 2.0;
   spear.add(point);
 }
 
 /** A round shield hung on a wall (its frame) at (x, y): painted boards, an iron rim and a brass boss. */
-function roundShield(frame: THREE.Object3D, M: Mats, x: number, y: number, paint: number, r = 0.32): void {
-  const face = new THREE.Mesh(new THREE.CylinderGeometry(r, r, 0.04, 28).rotateX(Math.PI / 2),
-    new THREE.MeshStandardMaterial({ color: paint, roughness: 0.75 }));
+function roundShield(frame: Node, M: Mats, x: number, y: number, paint: number, r = 0.32): void {
+  const face = new Mesh(shapes.cylinder(r, r, 0.04, 28).rotateX(Math.PI / 2),
+    new LitMaterial({ color: paint, roughness: 0.75 }));
   face.position.set(x, y, 0.04);
   face.castShadow = true;
   frame.add(face);
-  const rim = new THREE.Mesh(new THREE.TorusGeometry(r, 0.016, 6, 28), M.iron);
+  const rim = new Mesh(shapes.torus(r, 0.016, 6, 28), M.iron);
   rim.position.set(x, y, 0.06);
   frame.add(rim);
-  const boss = new THREE.Mesh(new THREE.SphereGeometry(0.07, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2).rotateX(Math.PI / 2), M.brass);
+  const boss = new Mesh(shapes.sphere(0.07, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2).rotateX(Math.PI / 2), M.brass);
   boss.position.set(x, y, 0.06);
   frame.add(boss);
 }
 
 /** An armour stand at (x, z), turned `turn`: a post on a foot, a cuirass of steel on its shoulders, a helm on top. */
-function armourStand(g: THREE.Object3D, M: Mats, steel: THREE.Material, x: number, z: number, turn: number): void {
-  const a = new THREE.Group();
+function armourStand(g: Node, M: Mats, steel: Material, x: number, z: number, turn: number): void {
+  const a = new Node();
   a.position.set(x, 0, z);
   a.rotation.y = turn;
   g.add(a);
   box(a, 0.5, 0.05, 0.5, 0, 0, 0, M.timber);
   drum(a, 0.03, 0.035, 1.3, 0, 0.05, 0, M.timber, 8);
   box(a, 0.5, 0.05, 0.05, 0, 1.25, 0, M.timber);
-  const cuirass = new THREE.Mesh(new THREE.LatheGeometry([[0.16, 0], [0.2, 0.08], [0.22, 0.3], [0.21, 0.45], [0.12, 0.52], [0.06, 0.54]]
-    .map(([r, y]) => new THREE.Vector2(r, y)), 18), steel);
+  const cuirass = new Mesh(shapes.lathe([[0.16, 0], [0.2, 0.08], [0.22, 0.3], [0.21, 0.45], [0.12, 0.52], [0.06, 0.54]]
+    .map(([r, y]) => new Vec2(r, y)), 18), steel);
   cuirass.scale.z = 0.7;
   cuirass.position.y = 0.78;
   cuirass.castShadow = true;
   a.add(cuirass);
   for (const sx of [-1, 1]) {
-    const pauldron = new THREE.Mesh(new THREE.SphereGeometry(0.1, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2), steel);
+    const pauldron = new Mesh(shapes.sphere(0.1, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2), steel);
     pauldron.position.set(sx * 0.22, 1.24, 0);
     a.add(pauldron);
   }
-  const helm = new THREE.Mesh(new THREE.SphereGeometry(0.13, 16, 12, 0, Math.PI * 2, 0, Math.PI * 0.6), steel);
+  const helm = new Mesh(shapes.sphere(0.13, 16, 12, 0, Math.PI * 2, 0, Math.PI * 0.6), steel);
   helm.position.y = 1.42;
   helm.castShadow = true;
   a.add(helm);
@@ -135,115 +138,115 @@ function armourStand(g: THREE.Object3D, M: Mats, steel: THREE.Material, x: numbe
  *  beam with ball finials at its ends over a pivot ring, its pointer against a plate, and at each end a dished pan hung
  *  on three cords from a hook, the near one (+x) a little higher with a few coins in it. Returns where a coin lies on
  *  the near pan's floor. (A post, a bar and two sphere caps on sticks read as very plain: from play.) */
-function scale(g: THREE.Object3D, M: Mats, x: number, y: number, z: number): THREE.Vector3 {
+function scale(g: Node, M: Mats, x: number, y: number, z: number): Vec3 {
   drum(g, 0.1, 0.11, 0.02, x, y, z, M.brass, 18);
   drum(g, 0.072, 0.09, 0.025, x, y + 0.02, z, M.brass, 18);
   drum(g, 0.03, 0.045, 0.02, x, y + 0.045, z, M.brass, 12);
   for (let k = 0; k < 4; k++) {
     const a = (k / 4) * Math.PI * 2 + Math.PI / 4;
-    const foot = new THREE.Mesh(new THREE.SphereGeometry(0.012, 8, 6), M.brass);
+    const foot = new Mesh(shapes.sphere(0.012, 8, 6), M.brass);
     foot.position.set(x + Math.cos(a) * 0.095, y + 0.004, z + Math.sin(a) * 0.095);
     g.add(foot);
   }
   drum(g, 0.011, 0.013, 0.3, x, y + 0.065, z, M.brass, 8);
   for (const ry of [0.13, 0.25]) {
-    const band = new THREE.Mesh(new THREE.TorusGeometry(0.014, 0.004, 6, 14).rotateX(Math.PI / 2), M.brass);
+    const band = new Mesh(shapes.torus(0.014, 0.004, 6, 14).rotateX(Math.PI / 2), M.brass);
     band.position.set(x, y + ry, z);
     g.add(band);
   }
   const beamY = y + 0.35, tilt = 0.06;
-  const beam = new THREE.Group();
+  const beam = new Node();
   beam.position.set(x, beamY, z);
   beam.rotation.z = tilt;
   g.add(beam);
   box(beam, 0.46, 0.014, 0.012, 0, -0.007, 0, M.brass);
   box(beam, 0.16, 0.022, 0.008, 0, -0.011, 0, M.brass);
   for (const sx of [-1, 1]) {
-    const ball = new THREE.Mesh(new THREE.SphereGeometry(0.01, 10, 8), M.brass);
+    const ball = new Mesh(shapes.sphere(0.01, 10, 8), M.brass);
     ball.position.set(sx * 0.235, 0, 0);
     beam.add(ball);
   }
-  const pivot = new THREE.Mesh(new THREE.TorusGeometry(0.02, 0.004, 6, 16), M.brass);
+  const pivot = new Mesh(shapes.torus(0.02, 0.004, 6, 16), M.brass);
   pivot.position.set(x, beamY, z + 0.008);
   g.add(pivot);
-  const finial = new THREE.Mesh(new THREE.ConeGeometry(0.01, 0.035, 8), M.brass);
+  const finial = new Mesh(shapes.cone(0.01, 0.035, 8), M.brass);
   finial.position.set(x, beamY + 0.04, z);
   g.add(finial);
   // (its pointer up from the beam's middle, against a plate on the post)
   box(g, 0.005, 0.11, 0.004, x, beamY, z + 0.014, M.brass).rotation.z = tilt;
   box(g, 0.07, 0.06, 0.004, x, beamY + 0.01, z + 0.008, M.brass);
   // (each pan a shallow dish, its rim rolled, hung on three cords from a hook at the beam's end)
-  const pans = new THREE.MeshStandardMaterial({ color: 0xd0a850, metalness: 0.85, roughness: 0.35, side: THREE.DoubleSide });
-  const dish = new THREE.LatheGeometry([[0, 0], [0.045, 0.002], [0.062, 0.012], [0.069, 0.022]]
-    .map(([r, yy]) => new THREE.Vector2(r, yy)), 24);
-  let nearFloor = new THREE.Vector3();
+  const pans = new LitMaterial({ color: 0xd0a850, metalness: 0.85, roughness: 0.35, side: DoubleSide });
+  const dish = shapes.lathe([[0, 0], [0.045, 0.002], [0.062, 0.012], [0.069, 0.022]]
+    .map(([r, yy]) => new Vec2(r, yy)), 24);
+  let nearFloor = new Vec3();
   for (const [sx, drop] of [[-1, 0.2], [1, 0.17]] as const) {
-    const end = new THREE.Vector3(x + sx * 0.235 * Math.cos(tilt), beamY + sx * 0.235 * Math.sin(tilt), z);
-    const hook = new THREE.Mesh(new THREE.TorusGeometry(0.007, 0.0018, 5, 10), M.brass);
-    hook.position.copy(end).add(new THREE.Vector3(0, -0.012, 0));
+    const end = new Vec3(x + sx * 0.235 * Math.cos(tilt), beamY + sx * 0.235 * Math.sin(tilt), z);
+    const hook = new Mesh(shapes.torus(0.007, 0.0018, 5, 10), M.brass);
+    hook.position.copy(end).add(new Vec3(0, -0.012, 0));
     g.add(hook);
-    const floor = new THREE.Vector3(end.x, end.y - drop, z);
-    const pan = new THREE.Mesh(dish, pans);
+    const floor = new Vec3(end.x, end.y - drop, z);
+    const pan = new Mesh(dish, pans);
     pan.position.copy(floor);
     pan.castShadow = true;
     g.add(pan);
-    const rim = new THREE.Mesh(new THREE.TorusGeometry(0.069, 0.0025, 5, 28).rotateX(Math.PI / 2), M.brass);
-    rim.position.copy(floor).add(new THREE.Vector3(0, 0.022, 0));
+    const rim = new Mesh(shapes.torus(0.069, 0.0025, 5, 28).rotateX(Math.PI / 2), M.brass);
+    rim.position.copy(floor).add(new Vec3(0, 0.022, 0));
     g.add(rim);
     for (let k = 0; k < 3; k++) {
       const a = (k / 3) * Math.PI * 2 + Math.PI / 6;
-      const from = hook.position.clone().add(new THREE.Vector3(0, -0.006, 0));
-      const to = floor.clone().add(new THREE.Vector3(Math.cos(a) * 0.066, 0.022, Math.sin(a) * 0.066));
-      const cordMesh = new THREE.Mesh(new THREE.TubeGeometry(new THREE.LineCurve3(from, to), 1, 0.0013, 4, false), M.brass);
+      const from = hook.position.clone().add(new Vec3(0, -0.006, 0));
+      const to = floor.clone().add(new Vec3(Math.cos(a) * 0.066, 0.022, Math.sin(a) * 0.066));
+      const cordMesh = new Mesh(shapes.tube(new Line3Curve(from, to), 1, 0.0013, 4, false), M.brass);
       g.add(cordMesh);
     }
     if (sx > 0) nearFloor = floor;
   }
   // (a few struck coins on the near pan's floor, the one he weighs among them)
   for (let k = 0; k < 4; k++) {
-    const c = new THREE.Mesh(coinGeometry(), M.brass);
+    const c = new Mesh(coinGeometry(), M.brass);
     c.position.set(nearFloor.x + Math.sin(k * 2.1) * 0.014, nearFloor.y + 0.003 + k * 0.0031, nearFloor.z + Math.cos(k * 2.1) * 0.014);
     c.rotation.set(Math.sin(k) * 0.08, k, Math.cos(k) * 0.08);
     g.add(c);
   }
-  return nearFloor.clone().add(new THREE.Vector3(0, 0.003 + 4 * 0.0031, 0));
+  return nearFloor.clone().add(new Vec3(0, 0.003 + 4 * 0.0031, 0));
 }
 
 /** A jar of the shelves' (its foot at its origin, 0.19 tall). */
-const jarGeo = (): THREE.LatheGeometry => new THREE.LatheGeometry([[0, 0], [0.05, 0], [0.065, 0.06], [0.05, 0.14], [0.03, 0.16], [0.035, 0.19], [0, 0.19]]
-  .map(([r, yy]) => new THREE.Vector2(r, yy)), 12);
+const jarGeo = (): Geometry => shapes.lathe([[0, 0], [0.05, 0], [0.065, 0.06], [0.05, 0.14], [0.03, 0.16], [0.035, 0.19], [0, 0.19]]
+  .map(([r, yy]) => new Vec2(r, yy)), 12);
 
 /** A cut gem `r` across its girdle (its table up): a brilliant's crown of facets over a deeper pavilion to a point,
  *  each facet its own face. (Plain octahedra read as flat-shaded dice, from play.) */
-function gemGeometry(r: number): THREE.BufferGeometry {
-  const g = new THREE.LatheGeometry([[0, -r * 0.86], [r, -0.02 * r], [r, 0.02 * r], [r * 0.62, r * 0.36], [0, r * 0.36]]
-    .map(([x, y]) => new THREE.Vector2(x, y)), 8);
+function gemGeometry(r: number): Geometry {
+  const g = shapes.lathe([[0, -r * 0.86], [r, -0.02 * r], [r, 0.02 * r], [r * 0.62, r * 0.36], [0, r * 0.36]]
+    .map(([x, y]) => new Vec2(x, y)), 8);
   return g.toNonIndexed();
 }
 
 /** a gem's stone: its colour deep in it, a glint off its facets, a little of its own glow so it reads in the shadow */
-function gemMaterial(colour: number): THREE.MeshStandardMaterial {
-  const deep = new THREE.Color(colour);
-  return new THREE.MeshStandardMaterial({
+function gemMaterial(colour: number): LitMaterial {
+  const deep = new Color(colour);
+  return new LitMaterial({
     color: deep, roughness: 0.04, metalness: 0.25, flatShading: true,
     emissive: deep.clone().multiplyScalar(0.28), envMapIntensity: 2.2,
   });
 }
 
 /** A jar's paper label round its belly and its stopper, on `jar` (its foot at its origin). */
-function dressJar(jar: THREE.Object3D, M: Mats): void {
-  const label = new THREE.Mesh(new THREE.CylinderGeometry(0.0655, 0.066, 0.045, 14, 1, true), M.paper);
+function dressJar(jar: Node, M: Mats): void {
+  const label = new Mesh(shapes.cylinder(0.0655, 0.066, 0.045, 14, 1, true), M.paper);
   label.position.y = 0.085;
   jar.add(label);
-  const stopper = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.027, 0.024, 10), M.oak);
+  const stopper = new Mesh(shapes.cylinder(0.03, 0.027, 0.024, 10), M.oak);
   stopper.position.y = 0.198;
   jar.add(stopper);
 }
 
 /** A crate of slats on four corner posts at (x, y, z), `w` by `h` by `d`, turned `turn`: three slats a side with gaps
  *  between them, its lid of boards. */
-function crate(g: THREE.Object3D, M: Mats, x: number, y: number, z: number, w: number, h: number, d: number, turn: number): THREE.Group {
-  const c = new THREE.Group();
+function crate(g: Node, M: Mats, x: number, y: number, z: number, w: number, h: number, d: number, turn: number): Node {
+  const c = new Node();
   c.position.set(x, y, z);
   c.rotation.y = turn;
   g.add(c);
@@ -263,8 +266,8 @@ function crate(g: THREE.Object3D, M: Mats, x: number, y: number, z: number, w: n
 
 /** The ledger: an open book at (x, y, z) turned `turn`, `size` across, its pages written in his hand (dates, wares
  *  in and out, what was given for them, ruled off). Returns the middle of the page on his left, where he writes. */
-function ledgerBook(g: THREE.Object3D, M: Mats, x: number, y: number, z: number, turn: number, size: number): THREE.Vector3 {
-  const b = new THREE.Group();
+function ledgerBook(g: Node, M: Mats, x: number, y: number, z: number, turn: number, size: number): Vec3 {
+  const b = new Node();
   b.position.set(x, y, z);
   b.rotation.y = turn;
   g.add(b);
@@ -277,7 +280,7 @@ function ledgerBook(g: THREE.Object3D, M: Mats, x: number, y: number, z: number,
     ['shield, oak', 'two commons'], ['axe, bearded', 'a magic'],
   ];
   for (const sx of [1, -1]) {
-    const half = new THREE.Mesh(block, M.paper);
+    const half = new Mesh(block, M.paper);
     half.position.y = COVER;
     half.rotation.y = sx > 0 ? 0 : Math.PI;
     half.castShadow = half.receiveShadow = true;
@@ -308,13 +311,13 @@ function ledgerBook(g: THREE.Object3D, M: Mats, x: number, y: number, z: number,
   }
   // (the page on his left: the book is turned to read from behind the counter, so it's the book's -x half)
   b.updateMatrixWorld(true);
-  return new THREE.Vector3(-shape.half / 2, COVER + pageHeight(shape, 0.5) + shape.printed, 0)
-    .applyAxisAngle(new THREE.Vector3(0, 1, 0), turn).add(b.position);
+  return new Vec3(-shape.half / 2, COVER + pageHeight(shape, 0.5) + shape.printed, 0)
+    .applyAxisAngle(new Vec3(0, 1, 0), turn).add(b.position);
 }
 
 /** A shelf of wares on a wall (its frame) at (x, y): jars, bottles and little boxes along it, `gap` left bare at its
  *  left end (where Odo stocks it). */
-function waresShelf(frame: THREE.Object3D, M: Mats, x: number, y: number, w: number, seed: number, gap = 0): void {
+function waresShelf(frame: Node, M: Mats, x: number, y: number, w: number, seed: number, gap = 0): void {
   box(frame, w, 0.04, 0.3, x, y, 0.15, M.oak);
   for (const sx of [-1, 1]) box(frame, 0.04, 0.18, 0.24, x + sx * (w / 2 - 0.1), y - 0.18, 0.12, M.timber);
   const tints = [0x6a2a14, 0x2a5a3a, 0x8a6a2a, 0x3a3a6a, 0xb87a4a];
@@ -323,15 +326,15 @@ function waresShelf(frame: THREE.Object3D, M: Mats, x: number, y: number, w: num
     const kind = k % 3, tint = tints[k % tints.length];
     k = (k * 7 + 3) % 97;
     if (kind === 0) {
-      const jar = new THREE.Mesh(jarGeo(), new THREE.MeshStandardMaterial({ color: tint, roughness: 0.6 }));
+      const jar = new Mesh(jarGeo(), new LitMaterial({ color: tint, roughness: 0.6 }));
       jar.position.set(at + 0.06, y + 0.04, 0.15);
       jar.castShadow = true;
       dressJar(jar, M);
       frame.add(jar);
       at += 0.16;
     } else if (kind === 1) {
-      const bottle = new THREE.Mesh(new THREE.LatheGeometry([[0, 0], [0.035, 0], [0.04, 0.12], [0.014, 0.18], [0.012, 0.23], [0, 0.23]]
-        .map(([r, yy]) => new THREE.Vector2(r, yy)), 10), new THREE.MeshStandardMaterial({ color: tint, roughness: 0.15, metalness: 0.2 }));
+      const bottle = new Mesh(shapes.lathe([[0, 0], [0.035, 0], [0.04, 0.12], [0.014, 0.18], [0.012, 0.23], [0, 0.23]]
+        .map(([r, yy]) => new Vec2(r, yy)), 10), new LitMaterial({ color: tint, roughness: 0.15, metalness: 0.2 }));
       bottle.position.set(at + 0.04, y + 0.04, 0.15);
       frame.add(bottle);
       at += 0.11;
@@ -343,7 +346,7 @@ function waresShelf(frame: THREE.Object3D, M: Mats, x: number, y: number, w: num
 }
 
 /** The shop's sign over the shelves behind the counter. */
-function shopSign(frame: THREE.Object3D, M: Mats, y: number): void {
+function shopSign(frame: Node, M: Mats, y: number): void {
   const sign = writing(M, 768, 192, 2.2, 0.55);
   sign.write((cx, w, h) => {
     const wood = cx.createLinearGradient(0, 0, 0, h);
@@ -362,8 +365,8 @@ function shopSign(frame: THREE.Object3D, M: Mats, y: number): void {
 
 /** A thing Odo handles (entities/models/odoLife.ts): `obj` lying at `pos` turned `turn` in the shop's frame, held in
  *  his hand as `grip` has it, set down on the counter turned `laid`. */
-function thing(g: THREE.Object3D, obj: THREE.Object3D, pos: THREE.Vector3, turn: THREE.Quaternion, grip: Thing['grip'],
-  laid = new THREE.Quaternion(), curl = 0.85): Thing {
+function thing(g: Node, obj: Node, pos: Vec3, turn: Quat, grip: Thing['grip'],
+  laid = new Quat(), curl = 0.85): Thing {
   obj.position.copy(pos);
   obj.quaternion.copy(turn);
   g.add(obj);
@@ -372,21 +375,21 @@ function thing(g: THREE.Object3D, obj: THREE.Object3D, pos: THREE.Vector3, turn:
   return { obj, home: { pos: pos.clone(), turn: turn.clone() }, at: { pos: pos.clone(), turn: turn.clone() }, grip, laid, curl, held: null };
 }
 
-const V3 = (x: number, y: number, z: number): THREE.Vector3 => new THREE.Vector3(x, y, z);
+const V3 = (x: number, y: number, z: number): Vec3 => new Vec3(x, y, z);
 /** a turn about the vertical, and one laying a thing's length (+y) along his left (+x) */
-const yawQ = (a: number): THREE.Quaternion => new THREE.Quaternion().setFromAxisAngle(V3(0, 1, 0), a);
-const LAID = new THREE.Quaternion().setFromAxisAngle(V3(0, 0, 1), -Math.PI / 2);
+const yawQ = (a: number): Quat => new Quat().setFromAxisAngle(V3(0, 1, 0), a);
+const LAID = new Quat().setFromAxisAngle(V3(0, 0, 1), -Math.PI / 2);
 
 /** A feather duster: a turned handle (its foot at its origin, along +y), a fan of brown feathers round its top. */
-function duster(M: Mats): THREE.Group {
-  const d = new THREE.Group();
+function duster(M: Mats): Node {
+  const d = new Node();
   drum(d, 0.011, 0.013, 0.3, 0, 0, 0, M.oak, 8).castShadow = false;
-  const plume = new THREE.MeshStandardMaterial({ color: 0xa8845e, roughness: 0.95, side: THREE.DoubleSide });
+  const plume = new LitMaterial({ color: 0xa8845e, roughness: 0.95, side: DoubleSide });
   for (let k = 0; k < 9; k++) {
     const a = (k / 9) * Math.PI * 2, tilt = 0.18 + (k % 3) * 0.06;
-    const shape = new THREE.Shape();
+    const shape = new Outline();
     shape.moveTo(0, 0); shape.quadraticCurveTo(0.03, 0.09, 0.006, 0.22); shape.lineTo(-0.006, 0.22); shape.quadraticCurveTo(-0.03, 0.09, 0, 0);
-    const f = new THREE.Mesh(new THREE.ShapeGeometry(shape, 6), plume);
+    const f = new Mesh(shapes.flat(shape, 6), plume);
     f.position.set(0, 0.27, 0);
     f.rotation.set(0, a, 0);
     f.rotateX(tilt);
@@ -396,15 +399,15 @@ function duster(M: Mats): THREE.Group {
 }
 
 /** A dagger (its pommel at its origin, the blade along +y, its flat facing ±x): pommel, wrapped grip, guard, blade. */
-function dagger(M: Mats, steel: THREE.Material): THREE.Group {
-  const d = new THREE.Group();
+function dagger(M: Mats, steel: Material): Node {
+  const d = new Node();
   drum(d, 0.013, 0.013, 0.02, 0, -0.01, 0, M.brass, 10);
   drum(d, 0.011, 0.011, 0.09, 0, 0.01, 0, M.leather, 8);
   box(d, 0.016, 0.014, 0.085, 0, 0.1, 0, M.brass);
-  const blade = new THREE.Mesh(new THREE.BoxGeometry(0.005, 0.17, 0.03), steel);
+  const blade = new Mesh(shapes.box(0.005, 0.17, 0.03), steel);
   blade.position.y = 0.199;
   d.add(blade);
-  const tip = new THREE.Mesh(new THREE.ConeGeometry(0.015, 0.05, 4).rotateY(Math.PI / 4), steel);
+  const tip = new Mesh(shapes.cone(0.015, 0.05, 4).rotateY(Math.PI / 4), steel);
   tip.scale.x = 0.25;
   tip.position.y = 0.309;
   d.add(tip);
@@ -419,18 +422,18 @@ function dagger(M: Mats, steel: THREE.Material): THREE.Group {
  * the candle in a brass holder, run with drips of wax. All of it still: a few dozen meshes, none moving, on materials
  * the room already has (and the glass's and the velvet's, warmed with the room).
  */
-function displayTable(g: THREE.Group, M: Mats, steel: THREE.Material, tx: number, tz: number): void {
-  const t = new THREE.Group();
+function displayTable(g: Node, M: Mats, steel: Material, tx: number, tz: number): void {
+  const t = new Node();
   t.position.set(tx, 0, tz);
   g.add(t);
   const W = 1.0, D = 0.6, TOP = 0.74;
   // --- the table: turned legs, an apron with a moulding under the top, stretchers low between the legs ---
-  const leg = new THREE.LatheGeometry([[0, 0], [0.026, 0], [0.03, 0.02], [0.022, 0.06], [0.026, 0.14], [0.036, 0.24],
+  const leg = shapes.lathe([[0, 0], [0.026, 0], [0.03, 0.02], [0.022, 0.06], [0.026, 0.14], [0.036, 0.24],
     [0.024, 0.34], [0.02, 0.45], [0.03, 0.52], [0.022, 0.56], [0.03, 0.6], [0.03, TOP - 0.1], [0.032, TOP - 0.1], [0, TOP - 0.1]]
-    .map(([r, y]) => new THREE.Vector2(r, y)), 12);
+    .map(([r, y]) => new Vec2(r, y)), 12);
   for (const sx of [-1, 1]) {
     for (const sz of [-1, 1]) {
-      const m = new THREE.Mesh(leg, M.timber);
+      const m = new Mesh(leg, M.timber);
       m.position.set(sx * (W / 2 - 0.08), 0, sz * (D / 2 - 0.08));
       m.castShadow = true;
       t.add(m);
@@ -448,11 +451,11 @@ function displayTable(g: THREE.Group, M: Mats, steel: THREE.Material, tx: number
   }
   box(t, 0.03, 0.03, D - 0.16, 0, 0.12, 0, M.timber);
   // (the top: a slab with its edge rounded and worn, a darker band under it)
-  const edge = new THREE.Shape();
+  const edge = new Outline();
   edge.moveTo(-W / 2, -D / 2); edge.lineTo(W / 2, -D / 2); edge.lineTo(W / 2, D / 2); edge.lineTo(-W / 2, D / 2); edge.lineTo(-W / 2, -D / 2);
-  const slab = new THREE.ExtrudeGeometry(edge, { depth: 0.035, bevelEnabled: true, bevelThickness: 0.01, bevelSize: 0.012,
+  const slab = shapes.extrude(edge, { depth: 0.035, bevelEnabled: true, bevelThickness: 0.01, bevelSize: 0.012,
     bevelSegments: 3, curveSegments: 1 }).rotateX(-Math.PI / 2);
-  const topMesh = new THREE.Mesh(slab, oiledWood());
+  const topMesh = new Mesh(slab, oiledWood());
   topMesh.position.y = TOP + 0.01;
   topMesh.castShadow = topMesh.receiveShadow = true;
   t.add(topMesh);
@@ -515,23 +518,23 @@ function displayTable(g: THREE.Group, M: Mats, steel: THREE.Material, tx: number
     drum(t, 0.05, 0.06, 0.03, hx, at, 0.02, M.oak, 12);
     drum(t, 0.018, 0.02, 0.12, hx, at + 0.03, 0.02, M.oak, 8);
     // (a carved wooden head the helm sits on: under it the bowl's inside showed pale)
-    const head = new THREE.Mesh(new THREE.SphereGeometry(0.088, 14, 10).scale(0.95, 1.1, 1), M.oak);
+    const head = new Mesh(shapes.sphere(0.088, 14, 10).scale(0.95, 1.1, 1), M.oak);
     head.position.set(hx, at + 0.15, 0.02);
     t.add(head);
     // (forged steel, dull and hammered: its facets catch the light. Smooth and bright, it read as a chrome dome)
-    const forged = new THREE.MeshStandardMaterial({ color: 0x7c8088, metalness: 0.7, roughness: 0.55, flatShading: true });
-    const bowl = new THREE.Mesh(new THREE.SphereGeometry(0.11, 14, 8, 0, Math.PI * 2, 0, Math.PI * 0.55), forged);
+    const forged = new LitMaterial({ color: 0x7c8088, metalness: 0.7, roughness: 0.55, flatShading: true });
+    const bowl = new Mesh(shapes.sphere(0.11, 14, 8, 0, Math.PI * 2, 0, Math.PI * 0.55), forged);
     bowl.scale.set(1, 1.15, 1.1);
     bowl.position.set(hx, at + 0.16, 0.02);
     bowl.castShadow = true;
     t.add(bowl);
-    const rim = new THREE.Mesh(new THREE.TorusGeometry(0.112, 0.008, 6, 28).rotateX(Math.PI / 2), M.brass);
+    const rim = new Mesh(shapes.torus(0.112, 0.008, 6, 28).rotateX(Math.PI / 2), M.brass);
     rim.scale.set(1, 1, 1.1);
     rim.position.set(hx, at + 0.17, 0.02);
     t.add(rim);
     for (let k = 0; k < 10; k++) {
       const a = (k / 10) * Math.PI * 2;
-      const rivet = new THREE.Mesh(new THREE.SphereGeometry(0.005, 6, 4), M.brass);
+      const rivet = new Mesh(shapes.sphere(0.005, 6, 4), M.brass);
       rivet.position.set(hx + Math.sin(a) * 0.116, at + 0.172, 0.02 + Math.cos(a) * 0.127);
       t.add(rivet);
     }
@@ -547,54 +550,54 @@ function displayTable(g: THREE.Group, M: Mats, steel: THREE.Material, tx: number
   {
     const cx0 = -0.02, cz0 = -0.1;
     drum(t, 0.07, 0.075, 0.016, cx0, ON, cz0, M.oak, 18);
-    const cushion = new THREE.Mesh(new THREE.SphereGeometry(0.045, 14, 8).scale(1, 0.35, 1), velvet(0x1e2a5a));
+    const cushion = new Mesh(shapes.sphere(0.045, 14, 8).scale(1, 0.35, 1), velvet(0x1e2a5a));
     cushion.position.set(cx0, ON + 0.026, cz0);
     t.add(cushion);
-    const amulet = new THREE.Mesh(gemGeometry(0.02), gemMaterial(0x3f9fff));
+    const amulet = new Mesh(gemGeometry(0.02), gemMaterial(0x3f9fff));
     amulet.position.set(cx0, ON + 0.05, cz0);
     amulet.rotation.set(-1.1, 0, 0);
     t.add(amulet);
-    const mount = new THREE.Mesh(new THREE.TorusGeometry(0.021, 0.0028, 6, 20), M.brass);
+    const mount = new Mesh(shapes.torus(0.021, 0.0028, 6, 20), M.brass);
     mount.position.copy(amulet.position);
     mount.rotation.x = -1.1 + Math.PI / 2;
     t.add(mount);
-    const chain = new THREE.Mesh(new THREE.TorusGeometry(0.03, 0.0012, 4, 24).rotateX(Math.PI / 2), M.brass);
+    const chain = new Mesh(shapes.torus(0.03, 0.0012, 4, 24).rotateX(Math.PI / 2), M.brass);
     chain.position.set(cx0, ON + 0.04, cz0 - 0.01);
     t.add(chain);
-    const glass = new THREE.MeshStandardMaterial({ color: 0xdfe8f0, roughness: 0.04, metalness: 0.1, transparent: true,
+    const glass = new LitMaterial({ color: 0xdfe8f0, roughness: 0.04, metalness: 0.1, transparent: true,
       opacity: 0.22, depthWrite: false, envMapIntensity: 2 });
-    const dome = new THREE.Mesh(new THREE.LatheGeometry([[0.066, 0], [0.066, 0.08], [0.06, 0.12], [0.04, 0.15], [0.014, 0.162],
-      [0.012, 0.175], [0.018, 0.185], [0, 0.19]].map(([r, y]) => new THREE.Vector2(r, y)), 28), glass);
+    const dome = new Mesh(shapes.lathe([[0.066, 0], [0.066, 0.08], [0.06, 0.12], [0.04, 0.15], [0.014, 0.162],
+      [0.012, 0.175], [0.018, 0.185], [0, 0.19]].map(([r, y]) => new Vec2(r, y)), 28), glass);
     dome.position.set(cx0, ON + 0.016, cz0);
     t.add(dome);
   }
   // --- rings: each a gold band with a setting of four claws and its stone ---
   const stones = [0xb070ff, 0x46de5c, 0xe8443a];
   stones.forEach((colour, i) => {
-    const r = new THREE.Group();
+    const r = new Node();
     r.position.set(0.12 + i * 0.07, ON + 0.004, 0.12);
     r.rotation.set(0.1, i * 0.7, 0);
     t.add(r);
-    const band = new THREE.Mesh(new THREE.TorusGeometry(0.016, 0.0035, 8, 20), M.brass);
+    const band = new Mesh(shapes.torus(0.016, 0.0035, 8, 20), M.brass);
     band.position.y = 0.016;
     r.add(band);
-    const seat = new THREE.Mesh(new THREE.CylinderGeometry(0.007, 0.004, 0.006, 8), M.brass);
+    const seat = new Mesh(shapes.cylinder(0.007, 0.004, 0.006, 8), M.brass);
     seat.position.y = 0.035;
     r.add(seat);
-    const stone = new THREE.Mesh(gemGeometry(0.007), gemMaterial(colour));
+    const stone = new Mesh(gemGeometry(0.007), gemMaterial(colour));
     stone.position.y = 0.04;
     r.add(stone);
   });
   // --- a velvet tray of cut gems ---
   {
-    const tray = new THREE.Group();
+    const tray = new Node();
     tray.position.set(0.3, ON, -0.12);
     tray.rotation.y = -0.15;
     t.add(tray);
     box(tray, 0.2, 0.02, 0.13, 0, 0, 0, M.oak);
     box(tray, 0.184, 0.004, 0.114, 0, 0.02, 0, velvet(0x14301e));
     [0xb070ff, 0x3f9fff, 0x46de5c, 0xf2da55, 0xe8443a, 0xffffff].forEach((colour, i) => {
-      const gem = new THREE.Mesh(gemGeometry(0.011), gemMaterial(colour));
+      const gem = new Mesh(gemGeometry(0.011), gemMaterial(colour));
       gem.position.set(-0.06 + (i % 3) * 0.06, 0.03, -0.025 + Math.floor(i / 3) * 0.05);
       gem.rotation.set(0.2 * i, i, 0.1);
       tray.add(gem);
@@ -602,7 +605,7 @@ function displayTable(g: THREE.Group, M: Mats, steel: THREE.Material, tx: number
   }
   // --- a few struck coins: a little stack and two laid by it ---
   for (let k = 0; k < 5; k++) {
-    const c = new THREE.Mesh(coinGeometry(), M.brass);
+    const c = new Mesh(coinGeometry(), M.brass);
     const stacked = k < 3;
     c.position.set(stacked ? 0.36 : 0.32 + k * 0.03, ON + 0.0016 + (stacked ? k * 0.0031 : 0), stacked ? 0.13 : 0.18);
     c.rotation.y = k * 1.3;
@@ -620,7 +623,7 @@ function displayTable(g: THREE.Group, M: Mats, steel: THREE.Material, tx: number
     tag.mesh.rotation.set(-Math.PI / 2 + 0.25, 0, 0.3);
     tag.mesh.position.set(x, ON + 0.006, z);
     t.add(tag.mesh);
-    const string = new THREE.Mesh(new THREE.CylinderGeometry(0.0008, 0.0008, 0.05, 4), M.leather);
+    const string = new Mesh(shapes.cylinder(0.0008, 0.0008, 0.05, 4), M.leather);
     string.rotation.set(Math.PI / 2, 0, 0.6);
     string.position.set(x - 0.03, ON + 0.002, z - 0.012);
     t.add(string);
@@ -630,29 +633,29 @@ function displayTable(g: THREE.Group, M: Mats, steel: THREE.Material, tx: number
     const cxc = 0.38, czc = -0.2;
     drum(t, 0.045, 0.05, 0.008, cxc, ON, czc, M.brass, 16);
     drum(t, 0.03, 0.026, 0.02, cxc, ON + 0.008, czc, M.brass, 12);
-    const loop = new THREE.Mesh(new THREE.TorusGeometry(0.016, 0.003, 5, 12), M.brass);
+    const loop = new Mesh(shapes.torus(0.016, 0.003, 5, 12), M.brass);
     loop.position.set(cxc + 0.055, ON + 0.012, czc);
     t.add(loop);
     candle(t, M, cxc, ON + 0.028, czc, 0.12, CANDLE);
     for (let k = 0; k < 5; k++) {
       const a = k * 1.3;
-      const drip = new THREE.Mesh(new THREE.CapsuleGeometry(0.004, 0.02 + (k % 3) * 0.012, 3, 6), M.wax);
+      const drip = new Mesh(shapes.capsule(0.004, 0.02 + (k % 3) * 0.012, 3, 6), M.wax);
       drip.position.set(cxc + Math.cos(a) * 0.022, ON + 0.028 + 0.1 - k * 0.012, czc + Math.sin(a) * 0.022);
       t.add(drip);
     }
-    const pool = new THREE.Mesh(new THREE.SphereGeometry(0.032, 12, 6, 0, Math.PI * 2, 0, Math.PI / 2).scale(1, 0.25, 1), M.wax);
+    const pool = new Mesh(shapes.sphere(0.032, 12, 6, 0, Math.PI * 2, 0, Math.PI / 2).scale(1, 0.25, 1), M.wax);
     pool.position.set(cxc, ON + 0.028, czc);
     t.add(pool);
   }
 }
 
 /** a velvet: soft and matt, its colour deep */
-function velvet(colour: number): THREE.MeshStandardMaterial {
-  return new THREE.MeshStandardMaterial({ color: colour, roughness: 1, metalness: 0 });
+function velvet(colour: number): LitMaterial {
+  return new LitMaterial({ color: colour, roughness: 1, metalness: 0 });
 }
 
 /** The shop: built into `group`. */
-export function build(group: THREE.Group): Room {
+export function build(group: Node): Room {
   const id: RoomId = 'merchant', b: Build = begin(id, group, 1618), { g, M } = b;
   const [hx, hz] = HOUSES[id].half, high = HOUSES[id].high;
   const steel = steelMat();
@@ -684,11 +687,11 @@ export function build(group: THREE.Group): Room {
   const ledgerPage = ledgerBook(g, M, ox + 0.3, 1.06, cz - 0.2, Math.PI - 0.15, 0.4);
   drum(g, 0.06, 0.07, 0.02, 1.5, 1.06, cz - 0.1, M.brass, 10);
   candle(g, M, 1.5, 1.08, cz - 0.1, 0.18, CANDLE);
-  const bowl = new THREE.Mesh(new THREE.SphereGeometry(0.1, 14, 6, 0, Math.PI * 2, Math.PI * 0.55, Math.PI * 0.45), M.oak);
+  const bowl = new Mesh(shapes.sphere(0.1, 14, 6, 0, Math.PI * 2, Math.PI * 0.55, Math.PI * 0.45), M.oak);
   bowl.position.set(-0.3, 1.13, cz);
   g.add(bowl);
   [0xb070ff, 0x3f9fff, 0x46de5c, 0xf2da55].forEach((c, i) => {
-    const gem = new THREE.Mesh(gemGeometry(0.018), gemMaterial(c));
+    const gem = new Mesh(gemGeometry(0.018), gemMaterial(c));
     gem.position.set(-0.3 + (i - 1.5) * 0.034, 1.085 + (i % 2) * 0.006, cz + (i % 2) * 0.03 - 0.012);
     gem.rotation.set(0.5 + i * 0.4, i * 1.3, 0.3 - i * 0.2);
     g.add(gem);
@@ -703,18 +706,18 @@ export function build(group: THREE.Group): Room {
   // (a jar held round its belly from the side, his left hand's palm against it and his fingers round its front: its
   // foot 0.16 under his wrist. Held from above by its neck, his wrist rode high before his shoulder and his forearm
   // crossed his chest, from the lab)
-  const jarGrip = gripOf(V3(0, -0.3, 1), V3(-1, 0, 0.1), V3(-0.05, -0.16, 0.075), new THREE.Quaternion());
+  const jarGrip = gripOf(V3(0, -0.3, 1), V3(-1, 0, 0.1), V3(-0.05, -0.16, 0.075), new Quat());
   const jars = ([[-2.62, -0.08], [-2.44, -0.2], [-2.36, -0.02]] as const).map(([x, dz], i) => {
-    const mesh = new THREE.Mesh(jarGeo(), new THREE.MeshStandardMaterial({ color: [0x2a5a3a, 0x8a6a2a, 0x6a2a14][i], roughness: 0.6 }));
+    const mesh = new Mesh(jarGeo(), new LitMaterial({ color: [0x2a5a3a, 0x8a6a2a, 0x6a2a14][i], roughness: 0.6 }));
     mesh.castShadow = true;
     dressJar(mesh, M);
-    return thing(g, mesh, V3(x, 0.8, kz + dz), new THREE.Quaternion(), jarGrip);
+    return thing(g, mesh, V3(x, 0.8, kz + dz), new Quat(), jarGrip);
   });
   // (the shelf's bare places, on the lowest shelf's left end over the crate's side of the counter)
   const slots = [0, 1].map((n) => V3(-1.25 - 1.7 / 2 + 0.18 + n * 0.16, 1.19, -hz + 0.15));
   // (a duster held as a hand is shaken, its thumb up the handle: its foot 0.1 under his fist)
-  drum(g, 0.05, 0.042, 0.12, 1.95, top, near + 0.18, new THREE.MeshStandardMaterial({ color: 0x5a3220, roughness: 0.85 }), 12);
-  const dusterGrip = gripOf(V3(0, -0.1, 1), V3(1, 0, 0), V3(0.03, -0.1, 0.05), new THREE.Quaternion());
+  drum(g, 0.05, 0.042, 0.12, 1.95, top, near + 0.18, new LitMaterial({ color: 0x5a3220, roughness: 0.85 }), 12);
+  const dusterGrip = gripOf(V3(0, -0.1, 1), V3(1, 0, 0), V3(0.03, -0.1, 0.05), new Quat());
   const theDuster = thing(g, duster(M), V3(1.95, top + 0.03, near + 0.18), yawQ(0.4), dusterGrip, LAID, 1.3);
   // (a dagger held in his fist, palm down, the blade out from his thumb along his left)
   const daggerGrip = gripOf(V3(0, -0.2, 1), V3(0, -1, 0), V3(-0.055, -0.035, 0.05), LAID);
@@ -738,8 +741,8 @@ export function build(group: THREE.Group): Room {
   // (Odo, stood once the heroes' heads and hands are made; told who is in his shop, each a customer: the hero, and any
   // partner shown in it)
   let odo: Odo | undefined;
-  const customers: THREE.Vector3[] = [], spots = [V3(0, 0, 0), V3(0, 0, 0), V3(0, 0, 0), V3(0, 0, 0)];
-  const odoAt = new THREE.Vector3(), dust = new THREE.Vector3();
+  const customers: Vec3[] = [], spots = [V3(0, 0, 0), V3(0, 0, 0), V3(0, 0, 0), V3(0, 0, 0)];
+  const odoAt = new Vec3(), dust = new Vec3();
   b.updaters.push((dt, t) => {
     if (!odo) return;
     customers.length = 0;
@@ -768,7 +771,7 @@ export function build(group: THREE.Group): Room {
   for (const z of [-0.9, 0, 0.9]) b.obstacles.push({ x: -hx + 0.3, z, r: 0.35, h: 1.4 });
   lantern(west, M, -(hz - 0.5), 2.3, 0, 0, 1);
   // --- the east wall: the hearth, shields over by the back, the armour stand ---
-  hearth(g, M, new THREE.Vector3(hx, 0, 1.1), -Math.PI / 2, high, b.updaters, b.obstacles);
+  hearth(g, M, new Vec3(hx, 0, 1.1), -Math.PI / 2, high, b.updaters, b.obstacles);
   const east = onWall(g, id, 'east');
   roundShield(east, M, -1.1, 1.9, 0x6a1e16);
   roundShield(east, M, -1.95, 1.75, 0x23304e, 0.28);

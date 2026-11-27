@@ -2,7 +2,7 @@
 // fountain.ts as TSL nodes, written line for line. What's a plain property of the material is set on it (three copies
 // it onto the node material it makes, and the GPU-driven drawing takes it from there too); what reaches into three's
 // lighting model is a look of the converted material (`webgpuLooks`, core/shaderPorts.ts).
-import type * as THREE from '../engine/three.ts';
+import type { LitMaterial, Texture } from '../engine/api/index.ts';
 import { tsl } from '../core/webgpu';
 
 // (untyped: TSL's types don't follow its conversions across these calls yet)
@@ -33,7 +33,7 @@ function paveNoiseOf(p: N): N {
 
 /** `m`, a paving's, as `unrepeated` shades it: every map read twice at two offsets a slow noise over the world picks,
  *  blended over a narrow band, and broad patches of shade and stain over it. */
-export function unrepeatedNodes(m: THREE.MeshStandardMaterial): void {
+export function unrepeatedNodes(m: LitMaterial): void {
   const {
     color, dFdx, dFdy, float, floor, fract, mix, normalMap, positionWorld, sin, smoothstep, texture, uniform, uv, vec2, vec4,
   } = tsl as any;
@@ -44,7 +44,7 @@ export function unrepeatedNodes(m: THREE.MeshStandardMaterial): void {
   const a = shiftOf(k);
   const b = shiftOf(k.add(1));
   const between = smoothstep(0.35, 0.65, fract(pick));
-  const read = (map: THREE.Texture): N => {
+  const read = (map: Texture): N => {
     const at = uv().mul(vec2(map.repeat.x, map.repeat.y));
     const dx = dFdx(at);
     const dy = dFdy(at);
@@ -123,7 +123,7 @@ export function waterLooks(converted: N, sky: { value: number }, lit: WaterLit):
 
 /** The water's normal bent by rings out from its middle, two slow swells and fine wavelets crossing three ways, on
  *  `time`, and its opacity by how it faces the eye, set on `m`. */
-export function waterNodes(m: THREE.MeshStandardMaterial, time: { value: number }): void {
+export function waterNodes(m: LitMaterial, time: { value: number }): void {
   const {
     Fn, cameraViewMatrix, clamp, cos, dot, exp, length, mix, modelWorldMatrix, normalViewGeometry, normalize,
     positionViewDirection, positionWorld, pow, sin, vec2, vec4,
@@ -150,7 +150,7 @@ export function waterNodes(m: THREE.MeshStandardMaterial, time: { value: number 
 
 /** The basin's floor's light: the web of bright lines the water above focuses, drifting on `time`, by how much of the
  *  sky's light there is (`light`), set on `m` as its glow. */
-export function causticNodes(m: THREE.MeshStandardMaterial, time: { value: number }, light: { value: number }): void {
+export function causticNodes(m: LitMaterial, time: { value: number }, light: { value: number }): void {
   const { Fn, abs, cos, float, materialColor, positionGeometry, pow, sin, varying, vec2 } = tsl as any;
   const clock = onceARender(time);
   const lit = onceARender(light);

@@ -1,6 +1,7 @@
 // Enemy entity: movement, status effects, actions, damage, death.
 // Decision-making lives in enemyAI; visuals come from models/.
-import * as THREE from '../engine/three.ts';
+import { Frustum, Mat4, Material, Mesh, Node, SkinnedMesh, Sphere, UnlitMaterial, Vec3 } from '../engine/api/index.ts';
+import * as shapes from '../engine/api/shapes/index.ts';
 import { gaitRate, legLength, type LegIK } from './models/ik';
 import { G } from '../state';
 import { ENEMIES, HERO, SCALING, type EnemyId } from '../data/enemies';
@@ -35,9 +36,9 @@ import { CARRY } from '../data/balance';
 import type { DamageType, EnemyDef, Model, XZ } from '../types';
 import type { Player } from './player';
 
-const _lookFrom = new THREE.Vector3(), _lookAt = new THREE.Vector3();
+const _lookFrom = new Vec3(), _lookAt = new Vec3();
 // the view's frustum, taken once a frame: an enemy out of it skips the leg IK
-const _frustum = new THREE.Frustum(), _pm = new THREE.Matrix4(), _sph = new THREE.Sphere();
+const _frustum = new Frustum(), _pm = new Mat4(), _sph = new Sphere();
 let _frustumAt = -1;
 /** The view's frustum taken again at its next use, as a run starts (its stamp is the game's clock: `forgetFields`). */
 export function forgetFrustum(): void { _frustumAt = -1; }
@@ -58,10 +59,10 @@ import { bossFrame, bossLook, checkPhase, shareHit, telegraphShare, weakLooks } 
 /** a co-op guest's copy's own evade and the host's word of it, coming back, come within this (s) */
 const OWN_EVADE_ECHO = 1.5;
 
-const auraGeo = new THREE.RingGeometry(0.7, 1, 48).rotateX(-Math.PI / 2);
+const auraGeo = shapes.ring(0.7, 1, 48).rotateX(-Math.PI / 2);
 /** an encounter's bosses' aura: a soft halo on a flat quad (fx/effects.ts `haloMap`), no ring's hard edges; and the
  *  middle of the ring's band, where the halo's peak is put */
-const haloGeo = new THREE.PlaneGeometry(2, 2).rotateX(-Math.PI / 2);
+const haloGeo = shapes.plane(2, 2).rotateX(-Math.PI / 2);
 const AURA_BAND = 0.85;
 
 /** how long a spawned foe takes to rise out of the floor (s), invulnerable and still */
@@ -101,7 +102,7 @@ export interface EnemyOpts {
   hero?: boolean;
   /** harmless projection, including a developer-spawned foe outside a training run */
   training?: boolean;
-  pos: THREE.Vector3;
+  pos: Vec3;
   /** co-op: extra life for a party (host), or the host's own numbers for a guest's copy */
   lifeMult?: number;
   id?: number;
@@ -143,11 +144,11 @@ export class Enemy {
   readonly mass: number;
   readonly score: number;
 
-  readonly pos: THREE.Vector3;
-  readonly vel = new THREE.Vector3();
-  readonly knock = new THREE.Vector3();
+  readonly pos: Vec3;
+  readonly vel = new Vec3();
+  readonly knock = new Vec3();
   /** desired velocity, set by the AI each frame */
-  readonly desired = new THREE.Vector3();
+  readonly desired = new Vec3();
   facing: number;
   targetFacing: number;
   alive = true;
@@ -241,9 +242,9 @@ export class Enemy {
   /** how high over its feet what's shown over its head goes (m): over its crown (a boss's stands 1.8 times its
    *  height, and a mark over its height was inside it, hidden by its body) */
   get overHead(): number { return Math.max(this.height, this.reach.crown); }
-  readonly obj = new THREE.Group();
-  aura: THREE.Mesh | null = null;
-  auraMat: THREE.MeshBasicMaterial | null = null;
+  readonly obj = new Node();
+  aura: Mesh | null = null;
+  auraMat: UnlitMaterial | null = null;
   auraColor: number | null = null;
   bar: Label | null = null;
   /** the fill the bar was last painted with (`barStep`) */
@@ -304,7 +305,7 @@ export class Enemy {
       // the ring's hard edges read as geometry: from Victor on #684, "Too much geometry in effects")
       const halo = this.guard || !!def.bossKit?.ward;
       if (halo) this.auraMat.map = haloMap();
-      this.aura = new THREE.Mesh(halo ? haloGeo : auraGeo, this.auraMat);
+      this.aura = new Mesh(halo ? haloGeo : auraGeo, this.auraMat);
       this.aura.userData.reach = halo ? AURA_BAND / HALO_AT : 1;
       this.aura.scale.setScalar(this.radius * (this.guard ? 1.25 : 1.6) * this.aura.userData.reach);
       this.aura.position.y = 0.05;
@@ -777,7 +778,7 @@ export class Enemy {
     removeLabel(this.bar);
     this.bar = null;
     const c = this.auraColor ?? 0x7dffd0;
-    const center = new THREE.Vector3(this.pos.x, this.height * 0.5, this.pos.z);
+    const center = new Vec3(this.pos.x, this.height * 0.5, this.pos.z);
     burst(center, { count: this.boss ? 120 : 26, color: c, speed: this.boss ? 9 : 5, up: 3, life: 0.9, size: 0.3 });
     smokePuff(this.pos, { count: this.boss ? 20 : 5, size: this.radius * 1.5, sizeEnd: this.radius * 3 });
     if (this.boss) flash({ color: this.def.accent ?? 0xb070ff, intensity: 80, distance: 20, life: 1.2, pos: center });
@@ -805,8 +806,8 @@ export class Enemy {
     G.scene.remove(this.obj);
     // model geometry is built per enemy; free it (the aura ring is shared)
     // shared geometry (models/shapes.ts Sculpt) belongs to every enemy of the kind
-    this.obj.traverse((o) => { const g = (o as THREE.Mesh).geometry; if (g && g !== auraGeo && g !== haloGeo && !g.userData.shared) g.dispose(); });
-    this.obj.traverse((o) => { const m = o as THREE.SkinnedMesh; if (m.isSkinnedMesh) { m.skeleton.dispose(); (m.material as THREE.Material).dispose(); } });   // (skinned meshes own a copy of their material)
+    this.obj.traverse((o) => { const g = (o as Mesh).geometry; if (g && g !== auraGeo && g !== haloGeo && !g.userData.shared) g.dispose(); });
+    this.obj.traverse((o) => { const m = o as SkinnedMesh; if (m.isSkinnedMesh) { m.skeleton.dispose(); (m.material as Material).dispose(); } });   // (skinned meshes own a copy of their material)
     this.model.dispose();
     this.auraMat?.dispose();
   }

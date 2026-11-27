@@ -2,7 +2,7 @@
 // through at a body's heights, a convex polygon a body is kept off. Read as a line out from the middle instead, each
 // rock or bush poking in from the thicket hid the floor beside and behind it (the ray from the middle met its front),
 // and the hero walking along the thicket met a square face there, in the open: stopped 19 to 23 times a lap round it.
-import * as THREE from '../engine/three.ts';
+import { Geometry, Mat4 } from '../engine/api/index.ts';
 
 /** A convex outline on the floor: its corners (x, z each) anticlockwise seen from above (from +x toward +z), and its
  *  sides' normals out of it. */
@@ -16,7 +16,7 @@ export interface Outline {
  * corners in the band of heights and its edges' crossings of each, their convex hull on the floor; null if it doesn't
  * reach into the band (a body walks under it).
  */
-export function outlineOf(hull: THREE.BufferGeometry, matrix: THREE.Matrix4, heights: number[]): Outline | null {
+export function outlineOf(hull: Geometry, matrix: Mat4, heights: number[]): Outline | null {
   const position = hull.attributes.position;
   const world = placed(position.array as Float32Array, matrix);
   const low = Math.min(...heights), high = Math.max(...heights);
@@ -32,7 +32,7 @@ export function outlineOf(hull: THREE.BufferGeometry, matrix: THREE.Matrix4, hei
 }
 
 /** `corners` (x, y, z each) placed by `matrix`. (A vector a corner, the forest's 1554 outlines took 104 ms.) */
-function placed(corners: Float32Array, matrix: THREE.Matrix4): Float32Array {
+function placed(corners: Float32Array, matrix: Mat4): Float32Array {
   const e = matrix.elements;
   const world = new Float32Array(corners.length);
   for (let i = 0; i < corners.length; i += 3) {

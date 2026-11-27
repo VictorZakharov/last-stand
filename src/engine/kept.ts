@@ -6,7 +6,9 @@
 // can't be kept is walked each frame as before (`rest`): a light, a mesh moved by bones or placed by its look, a
 // set of instances. What nothing tells (a mesh given another material, a child added) is found by an audit that
 // writes a few meshes' records again each frame and compares: counted (`stale`), and put right.
-import * as THREE from './three.ts';
+import {
+  Camera, InstancedGeometry, InstancedMesh, Light, Line, Mesh, Node, Points, SkinnedMesh, Sprite,
+} from './api/index.ts';
 import { RECORD, type Core } from './core';
 import { lookOf } from './custom';
 import { TUNE, type Grade } from './globals';
@@ -25,7 +27,7 @@ const RESTLESS = 24, RESTLESS_FRAMES = 120;
 /** A kept mesh: its run of records in the engine (none while it's hidden and was never shown), and those records
  *  as they were written. */
 interface Entry {
-  mesh: THREE.Mesh;
+  mesh: Mesh;
   root: Root;
   first: number;
   count: number;
@@ -47,9 +49,9 @@ interface MaterialState { stamp: number; entries: Set<Entry> }
 /** A part of the world that stands still: its kept meshes, what of it is walked each frame, and whether the
  *  engine shows it. */
 interface Root {
-  object: THREE.Object3D;
+  object: Node;
   entries: Entry[];
-  rest: THREE.Object3D[];
+  rest: Node[];
   materials: Map<AnyMaterial, MaterialState>;
   shown: boolean;
   seen: number;
@@ -63,23 +65,23 @@ interface Root {
 }
 
 /** Whether `object` and all over it up to `root` (not `root` itself: the walk's) are shown. */
-function shownUnder(object: THREE.Object3D, root: THREE.Object3D): boolean {
-  for (let at: THREE.Object3D | null = object; at && at !== root; at = at.parent) {
+function shownUnder(object: Node, root: Node): boolean {
+  for (let at: Node | null = object; at && at !== root; at = at.parent) {
     if (!at.visible) return false;
   }
   return true;
 }
 
 export class Kept {
-  private roots = new Map<THREE.Object3D, Root>();
-  private entries = new WeakMap<THREE.Object3D, Entry>();
+  private roots = new Map<Node, Root>();
+  private entries = new WeakMap<Node, Entry>();
   /** the part each watched object is under */
-  private owner = new WeakMap<THREE.Object3D, Root>();
+  private owner = new WeakMap<Node, Root>();
   /** objects shown or hidden since the last frame */
-  private flipped: THREE.Object3D[] = [];
+  private flipped: Node[] = [];
   /** what every record was written under: the camera's layers, the level's casters, the switches a record reads */
   private signature = '';
-  private camera: THREE.Camera | null = null;
+  private camera: Camera | null = null;
   /** where the audit is: the part, and the mesh within it */
   private auditRoot = 0;
   private auditEntry = 0;
@@ -95,8 +97,8 @@ export class Kept {
    * @param visit an object taken as the walk takes one (`Bridge.visit`)
    */
   constructor(private core: Core, private materials: Materials, private seeKinds: SeeKinds,
-    private add: (mesh: THREE.Mesh) => void,
-    private visit: (object: THREE.Object3D) => void) {}
+    private add: (mesh: Mesh) => void,
+    private visit: (object: Node) => void) {}
 
   /** Everything kept let go: the next walk keeps it again. */
   forget(): void {
@@ -106,7 +108,7 @@ export class Kept {
   }
 
   /** A frame begun: its camera, and everything let go if what the records were written under has changed. */
-  begin(camera: THREE.Camera, grade: Grade): void {
+  begin(camera: Camera, grade: Grade): void {
     this.camera = camera;
     const signature = `${camera.layers.mask}|${grade.casterLeast ?? 0}|${TUNE.castAll}|${TUNE.lowRes}`;
     if (signature !== this.signature || !TUNE.kept || this.off) {
@@ -117,7 +119,7 @@ export class Kept {
 
   /** Whether the walk leaves `object` and all under it to what's kept: a part that stands still, built the first
    *  time it's met; what of it can't be kept is taken here as the walk would take it. */
-  takes(object: THREE.Object3D): boolean {
+  takes(object: Node): boolean {
     if (!object.userData.standsStill || this.off || !TUNE.kept) return false;
     const root = this.roots.get(object) ?? this.build(object);
     root.seen = this.core.frame;
@@ -128,9 +130,9 @@ export class Kept {
   }
 
   /** Whether a mesh's records can be written once: nothing of it is made each frame. */
-  private keepable(mesh: THREE.Mesh): boolean {
-    if ((mesh as THREE.SkinnedMesh).isSkinnedMesh || (mesh as unknown as THREE.InstancedMesh).isInstancedMesh) return false;
-    if ((mesh.geometry as THREE.InstancedBufferGeometry).isInstancedBufferGeometry) return false;
+  private keepable(mesh: Mesh): boolean {
+    if ((mesh as SkinnedMesh).isSkinnedMesh || (mesh as unknown as InstancedMesh).isInstancedMesh) return false;
+    if ((mesh.geometry as InstancedGeometry).isInstancedGeometry) return false;
     if (mesh.userData.particles || mesh.name === 'dazed stars') return false;
     if (!this.camera || !mesh.layers.test(this.camera.layers)) return false;
     const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
@@ -142,7 +144,7 @@ export class Kept {
   }
 
   /** `object`'s `visible` watched from now on: a change is settled at the next frame's end. */
-  private watch(object: THREE.Object3D, root: Root): void {
+  private watch(object: Node, root: Root): void {
     const watched = this.owner.has(object);
     this.owner.set(object, root);
     if (watched) return;
@@ -160,7 +162,7 @@ export class Kept {
     });
   }
 
-  private build(object: THREE.Object3D): Root {
+  private build(object: Node): Root {
     const root: Root = {
       object, entries: [], rest: [], materials: new Map(), shown: true, seen: this.core.frame, size: 0,
       records: 0, solid: 0, casters: 0, summed: false,
@@ -169,7 +171,7 @@ export class Kept {
     object.traverse((part) => {
       root.size++;
       if (part !== object) this.watch(part, root);
-      const mesh = part as THREE.Mesh;
+      const mesh = part as Mesh;
       if (mesh.isMesh && this.keepable(mesh)) {
         const entry: Entry = {
           mesh, root, first: 0, count: 0, floats: null, hidden: false, materials: [], solid: 0, casters: 0,
@@ -178,8 +180,8 @@ export class Kept {
         root.entries.push(entry);
         this.entries.set(mesh, entry);
         this.settle(entry);
-      } else if (mesh.isMesh || (part as THREE.Light).isLight || (part as THREE.Points).isPoints
-        || (part as THREE.Line).isLine || (part as THREE.Sprite).isSprite) {
+      } else if (mesh.isMesh || (part as Light).isLight || (part as Points).isPoints
+        || (part as Line).isLine || (part as Sprite).isSprite) {
         root.rest.push(part);
       }
     });
@@ -208,7 +210,7 @@ export class Kept {
 
   /** A mesh's records written as the walk would write them, and taken back out of the frame's: the records, and
    *  how many of them are drawn solid and cast from fewer triangles. */
-  private written(mesh: THREE.Mesh): { floats: Float32Array; solid: number; casters: number } {
+  private written(mesh: Mesh): { floats: Float32Array; solid: number; casters: number } {
     const core = this.core, stats = core.stats;
     const from = core.count, solid = stats.solid, casters = stats.casters;
     this.add(mesh);
@@ -385,7 +387,7 @@ export class Kept {
   }
 
   /** A harness's: each kept mesh the engine draws now. */
-  eachDrawn(each: (mesh: THREE.Mesh) => void): void {
+  eachDrawn(each: (mesh: Mesh) => void): void {
     for (const root of this.roots.values()) {
       if (!root.shown) continue;
       for (const entry of root.entries) {

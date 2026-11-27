@@ -6,7 +6,7 @@
 // forest's pass from 3.8 ms to 6.5); what it reads of a light it passes over is one packed value, tested before
 // the light itself is read: 13% of the scene pass, in the crypt and the forest. A uniform's values, made anew at
 // each render for its camera, so nothing compiles. WebGL only: WebGPU's lights are its nodes'.
-import * as THREE from '../engine/three.ts';
+import { Camera, PointLight, ShaderChunk, ShaderLib, Vec3, World } from '../engine/api/index.ts';
 
 /** Whether a light out of reach is passed over on its packed bounds (`?lightBounds=0`: on three's own values, as
  *  before; read at every render, so a measure times the frame both ways). */
@@ -36,26 +36,26 @@ export const BOUNDS_TEST = [
 /** The bounds declared in three's lit shaders and given to its lit materials; false where three's shaders have
  *  changed (said: the loop is then left as it was). */
 export function declarePointBounds(): boolean {
-  const chunk = THREE.ShaderChunk.lights_pars_begin;
+  const chunk = ShaderChunk.lights_pars_begin;
   const at = chunk.indexOf(POINT_LIGHTS_DECLARED);
   if (at < 0) {
     console.error('declarePointBounds: three\'s lights_pars_begin has changed: the point lights are read as before');
     return false;
   }
   const after = at + POINT_LIGHTS_DECLARED.length;
-  THREE.ShaderChunk.lights_pars_begin = `${chunk.slice(0, after)}\n\tuniform vec4 pointBounds[ ${MOST} ];`
+  ShaderChunk.lights_pars_begin = `${chunk.slice(0, after)}\n\tuniform vec4 pointBounds[ ${MOST} ];`
     + chunk.slice(after);
-  for (const lib of LIT_LIBS) THREE.ShaderLib[lib].uniforms.pointBounds = POINT_BOUNDS;
+  for (const lib of LIT_LIBS) ShaderLib[lib].uniforms.pointBounds = POINT_BOUNDS;
   return true;
 }
 
 /** `scene`'s point lights shown, in the order three gives them to its shaders: those casting first, the rest as
  *  the scene holds them. */
-function pointLightsOf(scene: THREE.Scene): THREE.PointLight[] {
-  const casting: THREE.PointLight[] = [];
-  const others: THREE.PointLight[] = [];
+function pointLightsOf(scene: World): PointLight[] {
+  const casting: PointLight[] = [];
+  const others: PointLight[] = [];
   scene.traverseVisible((object) => {
-    const light = object as THREE.PointLight;
+    const light = object as PointLight;
     if (!light.isPointLight) return;
     if (light.castShadow) casting.push(light);
     else others.push(light);
@@ -64,17 +64,17 @@ function pointLightsOf(scene: THREE.Scene): THREE.PointLight[] {
 }
 
 /** The square of how far `light` lights: 0 where it lights nothing, everywhere where it has no `distance`. */
-function reachSquared(light: THREE.PointLight): number {
+function reachSquared(light: PointLight): number {
   const dark = light.intensity === 0 || (light.color.r === 0 && light.color.g === 0 && light.color.b === 0);
   if (dark) return 0;
   return light.distance > 0 ? light.distance * light.distance : EVERYWHERE;
 }
 
-const _place = new THREE.Vector3();
+const _place = new Vec3();
 let warned = false;
 
 /** The bounds packed for `scene` as `camera` sees it now. */
-export function packPointBounds(scene: THREE.Scene, camera: THREE.Camera): void {
+export function packPointBounds(scene: World, camera: Camera): void {
   const lights = pointLightsOf(scene);
   if (lights.length > MOST && !warned) {
     warned = true;
@@ -89,7 +89,7 @@ export function packPointBounds(scene: THREE.Scene, camera: THREE.Camera): void 
 }
 
 /** The bounds kept as `scene` is drawn: packed before each of its renders, for its camera. */
-export function packWhileDrawn(scene: THREE.Scene): void {
+export function packWhileDrawn(scene: World): void {
   const before = scene.onBeforeRender;
   scene.onBeforeRender = (...args) => {
     before.apply(scene, args);

@@ -3,7 +3,8 @@
 // of a head with a heavy brow, knot-hole eyes, a hollow maw and a beard of moss and hanging roots; branch
 // antlers and shoulders in leaf, shelf fungi on its flank, hands of root fingers. The Thornheart carries
 // a glowing heart in a cage of roots, a crown of branches in glowing blossom and a ring of orbiting thorns.
-import * as THREE from '../../engine/three.ts';
+import { DoubleSide, Geometry, LitMaterial, Mesh, Node, Vec2, Vec3 } from '../../engine/api/index.ts';
+import * as shapes from '../../engine/api/shapes/index.ts';
 import { createKit } from '../../core/materials';
 import { bark, grunge, pbrMaterialMaps, veins } from '../../core/textures';
 import { buildHumanoid, joint, resetPose, walkCycle, idle, deathFall, ramp } from './rig';
@@ -18,7 +19,7 @@ const VARIANTS: Record<Variant, { skin: number; sap: number; leaf: number; heart
   barkhulk: { skin: 0xc0a07e, sap: 0x8cff30, leaf: 0x3e6a24, heart: null, scale: 1.45, glow: 1 },
   thornheart: { skin: 0x9a846a, sap: 0x6aff50, leaf: 0x2a5a2e, heart: 0xb8ff4a, scale: 2.35, glow: 0.3 },
 };
-const V = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
+const V = (x: number, y: number, z: number) => new Vec3(x, y, z);
 
 export function buildTreant(variant: Variant = 'barkhulk'): Model {
   const C = VARIANTS[variant];
@@ -26,14 +27,14 @@ export function buildTreant(variant: Variant = 'barkhulk'): Model {
   const b = pbrMaterialMaps(bark(), 1, 1.8);
   const g = pbrMaterialMaps(grunge(), 2, 1);
   const skin = kit.rim({
-    color: C.skin, roughness: 0.9, map: b.map, normalMap: b.normalMap, normalScale: new THREE.Vector2(1.8, 1.8),
+    color: C.skin, roughness: 0.9, map: b.map, normalMap: b.normalMap, normalScale: new Vec2(1.8, 1.8),
     emissive: C.sap, emissiveMap: veins(variant === 'barkhulk' ? 71 : 73, 3), emissiveIntensity: 0.2 + 0.15 * C.glow,
   }, 0x90b070, 0.4);
-  const wood = kit.rim({ color: 0x8a6e52, roughness: 0.85, map: b.map, normalMap: b.normalMap, normalScale: new THREE.Vector2(1.5, 1.5) }, 0x80a060, 0.2);
-  const moss = kit.rim({ color: 0x33561a, roughness: 1, map: g.map, normalMap: g.normalMap, normalScale: new THREE.Vector2(3, 3) }, 0x6a9a3a, 0.15);
-  const mossDark = kit.std({ color: 0x24401a, roughness: 1, normalMap: g.normalMap, side: THREE.DoubleSide });
-  const leafMat = kit.rim({ color: C.leaf, roughness: 0.65, side: THREE.DoubleSide }, 0x80c050, 0.25);
-  const leafOld = kit.std({ color: 0x6a6424, roughness: 0.7, side: THREE.DoubleSide });
+  const wood = kit.rim({ color: 0x8a6e52, roughness: 0.85, map: b.map, normalMap: b.normalMap, normalScale: new Vec2(1.5, 1.5) }, 0x80a060, 0.2);
+  const moss = kit.rim({ color: 0x33561a, roughness: 1, map: g.map, normalMap: g.normalMap, normalScale: new Vec2(3, 3) }, 0x6a9a3a, 0.15);
+  const mossDark = kit.std({ color: 0x24401a, roughness: 1, normalMap: g.normalMap, side: DoubleSide });
+  const leafMat = kit.rim({ color: C.leaf, roughness: 0.65, side: DoubleSide }, 0x80c050, 0.25);
+  const leafOld = kit.std({ color: 0x6a6424, roughness: 0.7, side: DoubleSide });
   const shroom = kit.std({ color: 0x0a221c, emissive: 0x2affc8, emissiveIntensity: 1.2, roughness: 0.6 });
   const dark = kit.std({ color: 0x040302, roughness: 1 });
   const sap = kit.glow(C.sap, 2.2 * C.glow);
@@ -50,28 +51,28 @@ export function buildTreant(variant: Variant = 'barkhulk'): Model {
   const r = mulberry(variant === 'barkhulk' ? 5 : 11);
   const lim = (len: number, r0: number, r1: number, b = 0, at = 0.35) => organic(limb(len, r0, r1, b, at, 14), r0 * 0.16, 8, len * 30);
   // small burls need less detail
-  const burl = (sx: number, sy: number, sz: number, seed: number, amp = 0.16, f = 1.8) => organic(new THREE.IcosahedronGeometry(1, Math.max(sx, sy, sz) > 0.12 ? 2 : 1), amp, f, seed).scale(sx, sy, sz);
+  const burl = (sx: number, sy: number, sz: number, seed: number, amp = 0.16, f = 1.8) => organic(shapes.icosahedron(1, Math.max(sx, sy, sz) > 0.12 ? 2 : 1), amp, f, seed).scale(sx, sy, sz);
   const shelfGeo = (rad: number) => lathe([[0.001, 0.02 * rad], [0.9 * rad, 0], [rad, 0.04 * rad], [0.6 * rad, 0.26 * rad], [0.001, 0.3 * rad]], 12);
   // a limb with roots winding round it
   // a limb piece runs on past its joint and follows the next joint there (the roots too), so the limb bends smoothly
-  const rooted = (len: number, r0: number, r1: number, pl: THREE.Object3D, pr: THREE.Object3D, nl: THREE.Object3D, nr: THREE.Object3D, b = 0.3, at = 0.35, n = 2) => {
+  const rooted = (len: number, r0: number, r1: number, pl: Node, pr: Node, nl: Node, nr: Node, b = 0.3, at = 0.35, n = 2) => {
     const ext = r0 * 0.9, band = r0 * 1.2;
     S.skinPair(lim(len + ext, r0, r1, b, at), skin, pl, nl, pr, nr, len - band, len);
     for (let k = 0; k < n; k++) S.skinPair(twist(len * 0.95 + ext, (r0 + r1) * 0.5, r0 * 0.22, 0.6, k * 2.4 + len), wood, pl, nl, pr, nr, len - band, len);
   };
   // leaves in a spray round a twig end
-  const spray = (parent: THREE.Object3D, at: THREE.Vector3, n: number, size: number) => {
+  const spray = (parent: Node, at: Vec3, n: number, size: number) => {
     for (let i = 0; i < n; i++) S.add(leaf(size * (0.8 + r() * 0.4), size * 0.5), i % 4 === 3 ? leafOld : leafMat, parent, [at.x, at.y, at.z], [-0.4 - r() * 1.4, r() * Math.PI * 2, (r() - 0.5) * 0.8]);
   };
   // a branch tree from `from` along `dir`, leaves at every twig end
-  const bough = (parent: THREE.Object3D, from: THREE.Vector3, dir: THREE.Vector3, len: number, rad: number, depth: number, leaves = 4, size = 0.1) => {
-    const out: THREE.BufferGeometry[] = [], tips: THREE.Vector3[] = [];
+  const bough = (parent: Node, from: Vec3, dir: Vec3, len: number, rad: number, depth: number, leaves = 4, size = 0.1) => {
+    const out: Geometry[] = [], tips: Vec3[] = [];
     branches(r, from, dir, len, rad, depth, out, tips, 0.55);
     for (const geo of out) S.add(geo, wood, parent);
     for (const tp of tips) spray(parent, tp, leaves, size);
     return tips;
   };
-  const beard = (parent: THREE.Object3D, pos: [number, number, number], n: number, w: number, len: number, seed: number, yaw = 0) => {
+  const beard = (parent: Node, pos: [number, number, number], n: number, w: number, len: number, seed: number, yaw = 0) => {
     for (let i = 0; i < n; i++) S.add(bend(rag(w, len * (0.7 + r() * 0.6), seed + i, 3), -0.15), mossDark, parent, [pos[0] + (i - (n - 1) / 2) * w * 0.7, pos[1], pos[2]], [0, yaw + (r() - 0.5) * 0.5, 0]);
   };
 
@@ -88,7 +89,7 @@ export function buildTreant(variant: Variant = 'barkhulk'): Model {
   // --- body: a gnarled trunk; moss round the waist with a fringe hanging; the chest split over glowing sap
   S.add(burl(0.28, 0.15, 0.22, 5), skin, j.hips, [0, 0.03, 0]);
   S.add(lathe([[0.26, 0], [0.24, 0.12], [0.26, 0.26], [0.3, 0.36]], 16), skin, j.spine, [0, -0.02, 0], [0, 0, 0], [1, 1, 0.82]);
-  S.add(organic(new THREE.TorusGeometry(0.26, 0.07, 8, 20).rotateX(Math.PI / 2), 0.04, 6, 6), moss, j.spine, [0, 0.02, 0], [0, 0, 0], [1, 1, 0.85]);
+  S.add(organic(shapes.torus(0.26, 0.07, 8, 20).rotateX(Math.PI / 2), 0.04, 6, 6), moss, j.spine, [0, 0.02, 0], [0, 0, 0], [1, 1, 0.85]);
   for (let i = 0; i < 7; i++) {
     const a = -Math.PI * 0.8 + i * (Math.PI * 1.6 / 6);
     S.add(bend(rag(0.1, 0.18 + r() * 0.14, 30 + i, 3), -0.1), mossDark, j.spine, [Math.sin(a) * 0.29, 0.0, Math.cos(a) * 0.24], [0, a, 0]);
@@ -100,8 +101,8 @@ export function buildTreant(variant: Variant = 'barkhulk'): Model {
     S.add(taperTube([V(x, -0.1, 0.2), V(x * 1.2, 0.08, 0.26 - Math.abs(x) * 0.2), V(x * 1.1, 0.26, 0.22 - Math.abs(x) * 0.2), V(x * 0.9, 0.38, 0.1)], (t) => 0.032 * (1 - t * 0.4), 14, 6), wood, j.chest);
   }
   if (!C.heart) {
-    S.add(new THREE.SphereGeometry(1, 12, 10), dark, j.chest, [0.02, 0.18, 0.24], [0, 0, 0.15], [0.05, 0.13, 0.04]);
-    S.add(new THREE.SphereGeometry(1, 12, 10), sap, j.chest, [0.02, 0.18, 0.245], [0, 0, 0.15], [0.025, 0.1, 0.035]);
+    S.add(shapes.sphere(1, 12, 10), dark, j.chest, [0.02, 0.18, 0.24], [0, 0, 0.15], [0.05, 0.13, 0.04]);
+    S.add(shapes.sphere(1, 12, 10), sap, j.chest, [0.02, 0.18, 0.245], [0, 0, 0.15], [0.025, 0.1, 0.035]);
   }
   // shelf fungus on the flank, moss and a sapling on the back
   for (let i = 0; i < 4; i++) S.add(shelfGeo(0.07 - i * 0.012), shroom, j.chest, [-0.36 + i * 0.02, 0.28 - i * 0.07, -0.05 + i * 0.03], [0, 0, -0.1]);
@@ -111,10 +112,10 @@ export function buildTreant(variant: Variant = 'barkhulk'): Model {
   // --- head: a burl with a heavy brow, knot-hole eyes, a hollow maw, a beard of moss and hanging roots
   S.add(burl(0.16, 0.16, 0.15, 10, 0.14), skin, j.head, [0, 0.08, 0.04]);
   S.add(burl(0.16, 0.045, 0.07, 11, 0.16, 3), wood, j.head, [0, 0.145, 0.16], [0.35, 0, 0]);
-  S.pair(new THREE.SphereGeometry(1, 10, 8), dark, j.head, null, [0.062, 0.1, 0.19], [0, 0, 0], [0.04, 0.03, 0.025]);
-  S.pair(new THREE.SphereGeometry(1, 10, 8), eye, j.head, null, [0.062, 0.1, 0.205], [0, 0, 0], [0.02, 0.015, 0.012]);
-  S.add(new THREE.SphereGeometry(1, 12, 10), dark, j.head, [0, 0.01, 0.18], [0, 0, 0], [0.07, 0.045, 0.035]);
-  S.add(new THREE.SphereGeometry(1, 12, 10), sap, j.head, [0, 0.005, 0.18], [0, 0, 0], [0.045, 0.02, 0.03]);
+  S.pair(shapes.sphere(1, 10, 8), dark, j.head, null, [0.062, 0.1, 0.19], [0, 0, 0], [0.04, 0.03, 0.025]);
+  S.pair(shapes.sphere(1, 10, 8), eye, j.head, null, [0.062, 0.1, 0.205], [0, 0, 0], [0.02, 0.015, 0.012]);
+  S.add(shapes.sphere(1, 12, 10), dark, j.head, [0, 0.01, 0.18], [0, 0, 0], [0.07, 0.045, 0.035]);
+  S.add(shapes.sphere(1, 12, 10), sap, j.head, [0, 0.005, 0.18], [0, 0, 0], [0.045, 0.02, 0.03]);
   beard(j.head, [0, -0.04, 0.14], 4, 0.07, 0.3, 40);
   for (let i = 0; i < 5; i++) {
     const x = (i - 2) * 0.05, len = 0.2 + r() * 0.15;
@@ -137,17 +138,17 @@ export function buildTreant(variant: Variant = 'barkhulk'): Model {
   S.pair(taperTube([V(0, 0, 0), V(0.05, -0.05, 0.05), V(0.06, -0.1, 0.1)], (t) => 0.028 * (1 - t * 0.75), 8, 6), wood, j.handL, j.handR, [0.1, -0.08, 0.04]);
 
   // --- the Thornheart: a heart in a cage of roots, a crown of branches in glowing blossom, a ring of thorns
-  const orbiters: THREE.Group[] = [];
-  let orbitRing: THREE.Group | null = null;
-  let heart: THREE.Mesh | null = null;
-  let heartMat: THREE.MeshStandardMaterial | null = null;
+  const orbiters: Node[] = [];
+  let orbitRing: Node | null = null;
+  let heart: Mesh | null = null;
+  let heartMat: LitMaterial | null = null;
   if (C.heart) {
     const hm = heartMat = kit.glow(C.heart, 3.5 * C.glow);
-    heart = new THREE.Mesh(new THREE.IcosahedronGeometry(0.1, 2), hm);
+    heart = new Mesh(shapes.icosahedron(0.1, 2), hm);
     heart.castShadow = false;
     heart.position.set(0, 0.2, 0.3);
     j.chest.add(heart);
-    S.add(new THREE.SphereGeometry(1, 14, 10), dark, j.chest, [0, 0.2, 0.24], [0, 0, 0], [0.14, 0.16, 0.08]);
+    S.add(shapes.sphere(1, 14, 10), dark, j.chest, [0, 0.2, 0.24], [0, 0, 0], [0.14, 0.16, 0.08]);
     for (let i = 0; i < 6; i++) {
       const a = (i / 6) * Math.PI * 2, c = Math.cos(a), s = Math.sin(a);
       S.add(taperTube([V(c * 0.15, s * 0.17, -0.04), V(c * 0.14, s * 0.15, 0.06), V(c * 0.07, s * 0.08, 0.13), V(c * 0.01, s * 0.01, 0.15)], (t) => 0.024 * (1 - t * 0.6), 10, 6), wood, j.chest, [0, 0.2, 0.3]);
@@ -157,7 +158,7 @@ export function buildTreant(variant: Variant = 'barkhulk'): Model {
     for (let i = 0; i < 5; i++) {
       const a = (i / 4 - 0.5) * 2.2;
       const tips = bough(j.head, V(Math.sin(a) * 0.1, 0.2, -0.02), V(Math.sin(a) * 0.7, 1, -0.25), 0.3, 0.035, 1, 2, 0.08);
-      for (const tp of tips) S.add(organic(new THREE.IcosahedronGeometry(1, 1), 0.2, 6, i), blossom, j.head, [tp.x, tp.y, tp.z], [0, 0, 0], 0.035);
+      for (const tp of tips) S.add(organic(shapes.icosahedron(1, 1), 0.2, 6, i), blossom, j.head, [tp.x, tp.y, tp.z], [0, 0, 0], 0.035);
     }
     const thorn = kit.glow(C.heart, 2.2 * C.glow);
     S.glow(thorn);

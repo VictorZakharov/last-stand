@@ -3,13 +3,13 @@
 // column, which the wall's casts never meet, and the near plane at 0.5 m cut away all of it facing the camera but its
 // two edges: in the hall of heroes a column between the camera and him was a thin pale sliver from top to bottom of the
 // screen, its ghost cut away with it (#948, `lab village --only columnsNotCut`).
-import * as THREE from '../engine/three.ts';
+import { Box3, Ray, Vec3 } from '../engine/api/index.ts';
 
 /** each place's posts, by its name (`G.arena.place`) */
-const posts = new Map<string, readonly THREE.Box3[]>();
+const posts = new Map<string, readonly Box3[]>();
 
 /** `place`'s posts the near plane keeps off: each a box round all of one, its foot to its top. */
-export function keepNearOff(place: string, boxes: readonly THREE.Box3[]): void {
+export function keepNearOff(place: string, boxes: readonly Box3[]): void {
   posts.set(place, boxes);
 }
 
@@ -18,7 +18,7 @@ export function keepNearOff(place: string, boxes: readonly THREE.Box3[]): void {
  * is drawn round (its half width): the near plane comes no nearer than a hand (`BOOM_NEAR` in core/renderer.ts), and
  * a camera a few centimetres off a column still cut it.
  */
-export function keepOffPosts(place: string | undefined, camera: THREE.Vector3, room: number): void {
+export function keepOffPosts(place: string | undefined, camera: Vec3, room: number): void {
   const boxes = place === undefined ? undefined : posts.get(place);
   for (const box of boxes ?? []) {
     if (camera.y < box.min.y || camera.y > box.max.y) continue;
@@ -35,15 +35,15 @@ export function keepOffPosts(place: string | undefined, camera: THREE.Vector3, r
   }
 }
 
-const _way = new THREE.Vector3();
-const _hit = new THREE.Vector3();
-const _ray = new THREE.Ray();
+const _way = new Vec3();
+const _hit = new Vec3();
+const _ray = new Ray();
 
 /**
  * The share of the way from `from` to `to` before it enters one of `place`'s posts, 1 where it enters none: 0 from
  * inside one.
  */
-export function postsReach(place: string | undefined, from: THREE.Vector3, to: THREE.Vector3): number {
+export function postsReach(place: string | undefined, from: Vec3, to: Vec3): number {
   const boxes = place === undefined ? undefined : posts.get(place);
   if (!boxes?.length) return 1;
   const length = _way.subVectors(to, from).length();

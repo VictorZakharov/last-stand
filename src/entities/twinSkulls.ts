@@ -24,7 +24,8 @@
 //   hurting a hero inside it a little every `poison.every` s: a tick to walk out of, not a burst.
 // Played through enemyAI's `fx` (`beltSkull`), so every co-op game flies the same skull and keeps the same belt counts,
 // each judging its own hero alone.
-import * as THREE from '../engine/three.ts';
+import { CanvasTexture, Geometry, Mesh, Node, SRGBColorSpace, Texture, Vec3 } from '../engine/api/index.ts';
+import * as shapes from '../engine/api/shapes/index.ts';
 import { G } from '../state';
 import { TWINS } from '../data/foes/twins';
 import { hurtPlayer } from '../combat/damage';
@@ -79,8 +80,8 @@ export interface SkullThrown {
   to: { x: number; z: number };
   /** its glow on the floor where it lands (placed there), and the skull itself: in flight, then lying where it landed
    *  (`userData.lying`) until its effect is done */
-  ring: THREE.Object3D;
-  skull: THREE.Object3D;
+  ring: Node;
+  skull: Node;
   /** where and when it came down; the bomb's blast; the cloud's end */
   landed?: { x: number; z: number; t: number };
   blast?: { t: number };
@@ -135,11 +136,11 @@ export function beltThrow(e: Enemy, dist: number): boolean {
   return true;
 }
 
-const _hand = new THREE.Vector3();
+const _hand = new Vec3();
 /** Where `e` lets go of a belt skull: its throwing hand as posed, or by its side where the hand can't be read (a NaN
  *  there would fly a skull from nowhere, and draw black boxes through the bloom). */
-function handOf(e: Enemy): THREE.Vector3 {
-  const hand = e.model.root.userData.throwHand as THREE.Object3D | undefined;
+function handOf(e: Enemy): Vec3 {
+  const hand = e.model.root.userData.throwHand as Node | undefined;
   if (hand) {
     hand.getWorldPosition(_hand);
     if (Number.isFinite(_hand.x) && Number.isFinite(_hand.y) && Number.isFinite(_hand.z)) return _hand;
@@ -149,8 +150,8 @@ function handOf(e: Enemy): THREE.Vector3 {
 }
 
 /** The first of `o` and its parents whose own place, turn or size isn't finite, said (a dev build's report). */
-function badJoint(o: THREE.Object3D): string {
-  for (let at: THREE.Object3D | null = o; at; at = at.parent) {
+function badJoint(o: Node): string {
+  for (let at: Node | null = o; at; at = at.parent) {
     const own = [...at.position.toArray(), ...at.quaternion.toArray(), ...at.scale.toArray()];
     if (own.some((x) => !Number.isFinite(x))) return `${at.name || at.type} ${own.map((x) => x.toFixed(2)).join(',')}`;
   }
@@ -194,12 +195,12 @@ export function skullThrown(id: number, kind: number, ox: number, oy: number, oz
 
 /** the glows' pictures: one fading from its middle, one even to near its rim and gone at it (a reach to step out of
  *  with no line drawn round it: from Kenneth, "no hard edges on rings please") */
-let softMap: THREE.Texture | null = null;
-let edgeMap: THREE.Texture | null = null;
-let plane: THREE.BufferGeometry | null = null;
+let softMap: Texture | null = null;
+let edgeMap: Texture | null = null;
+let plane: Geometry | null = null;
 
 /** A radial glow's picture: white at its middle, held to `even` of its radius, gone at its rim. */
-function radialMap(even: number): THREE.Texture {
+function radialMap(even: number): Texture {
   const size = 128;
   const c = document.createElement('canvas');
   c.width = c.height = size;
@@ -210,23 +211,23 @@ function radialMap(even: number): THREE.Texture {
   grad.addColorStop(1, 'rgba(255,255,255,0)');
   g.fillStyle = grad;
   g.fillRect(0, 0, size, size);
-  const t = new THREE.CanvasTexture(c);
-  t.colorSpace = THREE.SRGBColorSpace;
+  const t = new CanvasTexture(c);
+  t.colorSpace = SRGBColorSpace;
   return t;
 }
 
 /** A soft glow on the floor: its mesh (a flat square of added light, `nearGlow` as every effect's, the ground flash's
  *  kind: no pipeline of its own), set by `glow(radius, strength)` each frame, and put away. */
-interface SoftDisc { mesh: THREE.Mesh; glow(radius: number, strength: number): void; away(): void }
+interface SoftDisc { mesh: Mesh; glow(radius: number, strength: number): void; away(): void }
 
 /** A soft glow of `what`'s colour at (x, z) on the floor, `radius` m, of the fading picture or the even one. */
 function softDisc(what: SkullKind, at: { x: number; z: number }, radius: number, look: 'soft' | 'edge'): SoftDisc {
   softMap ??= radialMap(0.05);
   edgeMap ??= radialMap(0.72);
-  plane ??= new THREE.PlaneGeometry(2, 2).rotateX(-Math.PI / 2);
+  plane ??= shapes.plane(2, 2).rotateX(-Math.PI / 2);
   const mat = additive(SKULL_LIGHT[what], 1.4, 0);
   mat.map = look === 'soft' ? softMap : edgeMap;
-  const mesh = new THREE.Mesh(plane, mat);
+  const mesh = new Mesh(plane, mat);
   mesh.name = `belt skull's glow`;
   mesh.position.set(at.x, groundHeight(at.x, at.z) + 0.05, at.z);
   mesh.scale.setScalar(radius);
@@ -256,7 +257,7 @@ const placeHash = (x: number, z: number): number => {
 const lyingY = (x: number, z: number): number => groundHeight(x, z) + skullRest();
 
 /** The skull laid where it landed: on the floor's height, turned and tipped as a thrown thing comes to rest. */
-function layDown(skull: THREE.Object3D, x: number, z: number): void {
+function layDown(skull: Node, x: number, z: number): void {
   const k = placeHash(x, z);
   skull.position.set(x, lyingY(x, z), z);
   skull.rotation.set(-0.25 + k * 0.3, k * Math.PI * 2, (k - 0.5) * 0.7);
@@ -265,7 +266,7 @@ function layDown(skull: THREE.Object3D, x: number, z: number): void {
 
 /** The skull on its ballistic arc to where it lands, tumbling as it flies, a faint trail of its colour, its glow on the
  *  floor there swelling in; `landed` called as it lands. */
-function flyArc(thrown: SkullThrown, skull: THREE.Object3D, mark: SoftDisc, ox: number, oy: number, oz: number,
+function flyArc(thrown: SkullThrown, skull: Node, mark: SoftDisc, ox: number, oy: number, oz: number,
   flight: number, landed: () => void): void {
   const { x: tx, z: tz } = thrown.to;
   const ty = lyingY(tx, tz);
@@ -344,7 +345,7 @@ function bombLies(thrown: SkullThrown, foe: Enemy | null, damage: number, mark: 
  *  and stunned (`stunBy`). */
 function bombBursts(thrown: SkullThrown, foe: Enemy | null, damage: number): void {
   const { x, z } = thrown.landed!, b = TWINS.bomb, light = SKULL_LIGHT.bomb;
-  const at = new THREE.Vector3(x, groundHeight(x, z), z);
+  const at = new Vec3(x, groundHeight(x, z), z);
   thrown.blast = { t: G.time };
   thrown.gone = G.time;
   G.scene.remove(thrown.skull);
@@ -361,7 +362,7 @@ function bombBursts(thrown: SkullThrown, foe: Enemy | null, damage: number): voi
     dispose: () => swell.away(),
   });
   groundFlash(at, { color: light, intensity: 1.4, radius: b.radius, life: 0.45 });
-  burst(new THREE.Vector3(x, at.y + 0.5, z), { count: 14, color: light, speed: 6, up: 3, life: 0.6, size: 0.5 });
+  burst(new Vec3(x, at.y + 0.5, z), { count: 14, color: light, speed: 6, up: 3, life: 0.6, size: 0.5 });
   smokePuff(at, { count: 6, color: 0x2a1a10, alpha: 0.45, size: 1.4, sizeEnd: 3.4, speed: 1.4, life: 1.2 });
   debris(at, { count: 5, color: 0xcfc3a3, speed: 6, size: 0.3 });
   flash({ color: light, intensity: 40, distance: b.radius * 4, life: 0.35, pos: { x, y: at.y + 1.2, z } });
@@ -405,7 +406,7 @@ export const BOMB_HOLD = { passes: true };
 const GAS_FROM: [number, number, number][] = [[-0.027, -0.024, 0.11], [0.027, -0.024, 0.11], [0, -0.075, 0.12]];
 /** how long the skull takes to crumble and sink as its cloud ends (s), and how far it sinks (m) */
 const SINKS = { over: 1, by: 0.3 };
-const _gas = new THREE.Vector3();
+const _gas = new Vec3();
 
 /** Reliquary's poison: a cloud where it landed for `poison.life` s, the skull lying in its middle breathing its gas out
  *  of its eyes and jaw, the cloud's reach a soft glow even to near its rim, denser near the skull; hurting this game's
@@ -414,7 +415,7 @@ function poisonCloud(thrown: SkullThrown, foe: Enemy | null, damage: number, mar
   const { x, z } = thrown.landed!, P = TWINS.poison, light = SKULL_LIGHT.poison, skull = thrown.skull;
   const y = groundHeight(x, z);
   const dense = softDisc('poison', { x, z }, P.radius * 0.55, 'soft');
-  burst(new THREE.Vector3(x, y + 0.5, z), { count: 16, color: light, speed: 3.5, up: 2, life: 0.6, size: 0.35 });
+  burst(new Vec3(x, y + 0.5, z), { count: 16, color: light, speed: 3.5, up: 2, life: 0.6, size: 0.35 });
   twinSounds.poison();
   const by = { foe, attack: 'poison' as const };
   const lyingAt = skull.position.y;
@@ -460,7 +461,7 @@ function poisonCloud(thrown: SkullThrown, foe: Enemy | null, damage: number, mar
 }
 
 /** Gas let out of the poison skull's eyes and jaw, as it lies. */
-function gasFrom(skull: THREE.Object3D, light: number, fade: number): void {
+function gasFrom(skull: Node, light: number, fade: number): void {
   if (Math.random() > 0.6) return;
   const [ex, ey, ez] = GAS_FROM[Math.floor(Math.random() * GAS_FROM.length)];
   skull.localToWorld(_gas.set(ex, ey, ez));

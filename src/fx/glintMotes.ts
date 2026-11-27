@@ -6,7 +6,8 @@
 // and never more than a share of the view's height: the world's particles fade within 3.5 m of the camera
 // (fx/particles.ts), so through the eyes, the arrowhead under a metre off, nothing of them showed. Nothing gathers at
 // the head itself: a star of light there read as a bright spark, and was too bright in every view.
-import * as THREE from '../engine/three.ts';
+import { AdditiveBlending, Color, LookMaterial, Mesh, Node } from '../engine/api/index.ts';
+import * as shapes from '../engine/api/shapes/index.ts';
 import { addEffect } from './effects';
 import { portShader } from '../core/shaderPorts';
 import { effectLook, num, rgb, effectShader } from '../engine/effects';
@@ -29,15 +30,15 @@ const RISE = 10, FALL = 7;
  *  so it's the same on the screen */
 const LIFT = 0.2;
 
-const quad = new THREE.PlaneGeometry(2, 2);
+const quad = shapes.plane(2, 2);
 quad.userData.shared = true;
 
-function motesMaterial(): THREE.ShaderMaterial {
-  return effectLook(portShader(new THREE.ShaderMaterial({
+function motesMaterial(): LookMaterial {
+  return effectLook(portShader(new LookMaterial({
     uniforms: {
-      uStrength: { value: 0 }, uTime: { value: 0 }, uColor: { value: new THREE.Color(COLOR) },
+      uStrength: { value: 0 }, uTime: { value: 0 }, uColor: { value: new Color(COLOR) },
     },
-    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+    transparent: true, depthWrite: false, blending: AdditiveBlending,
     vertexShader: /* glsl */`
       varying vec2 vAt; varying float vDot;
       void main(){
@@ -203,13 +204,13 @@ fn surface_hook(s: ptr<function, Surface>, in: VertexOut) -> bool {
 `;
 
 /** One of each of its materials, for the warm-up (core/shaders.ts). */
-export function warmGlintMotes(): THREE.Mesh[] {
-  return [new THREE.Mesh(quad, motesMaterial())];
+export function warmGlintMotes(): Mesh[] {
+  return [new Mesh(quad, motesMaterial())];
 }
 
 /** A hero's motes: shown while asked for each frame, eased out once they aren't. */
 class Motes {
-  readonly mesh = new THREE.Mesh(quad, motesMaterial());
+  readonly mesh = new Mesh(quad, motesMaterial());
   strength = 0;
   private wanted = false;
   private time = 0;
@@ -222,7 +223,7 @@ class Motes {
   }
 
   /** Shown this frame on `on` (the arrowhead). */
-  want(on: THREE.Object3D): void {
+  want(on: Node): void {
     if (this.mesh.parent !== on) on.add(this.mesh);
     this.wanted = true;
   }

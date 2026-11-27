@@ -4,7 +4,7 @@
 // before; Q and E (or a middle drag, in every view, or two fingers twisted) turn it round him; F lets it fly free
 // (WASD, or the move stick) and back. The bar over the HUD (`ui/coop.ts`) shows who is watched and has a button for
 // each but the turns, for touch.
-import * as THREE from '../engine/three.ts';
+import { Vec3 } from '../engine/api/index.ts';
 import { G } from '../state';
 import { ARENA, CAMERA } from '../data/balance';
 import { input, isDown, wasPressed } from '../core/input';
@@ -19,13 +19,13 @@ const EYE = 1.7;
 /** Where the camera looks while watching: the hero followed (none: flying free) and his place. */
 export interface Watch {
   player: Player | null;
-  pos: THREE.Vector3;
+  pos: Vec3;
   height: number;
 }
 
 let watched: Player | null = null;
 let free = false;
-const freeAt = new THREE.Vector3();
+const freeAt = new Vec3();
 
 /** Out of the run and watching it: the local player out while it goes on. */
 export const spectating = (): boolean => G.mode === 'run' && !!G.run && !G.player.inRun;

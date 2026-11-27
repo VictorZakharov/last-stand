@@ -2,7 +2,7 @@
 // materials' modules, which the game's materials are still made of, and the places' point lights the engine is
 // handed. three's renderer is gone: the engine (src/engine) draws the frame on the page's canvas (core/screen.ts).
 // What the renderer's hooks here measured is docs/agents/webgpu.md's history.
-import * as THREE from '../engine/three.ts';
+import { Material, Node, PointLight, World } from '../engine/api/index.ts';
 import { PIPELINES, engineWorkDone } from '../engine/pipelinesAside';
 
 /** how long a warm-up's slice of work runs before it yields a frame (ms, `compileSlice`): while nothing is played
@@ -26,20 +26,20 @@ export async function loadNodeModules(): Promise<void> {
 
 /** the materials whose nodes hold nothing an object's draw must refresh (three's renderer read it; kept for what
  *  marks them, till the materials leave three) */
-export const stillNodes = new WeakSet<THREE.Material>();
+export const stillNodes = new WeakSet<Material>();
 
 /** the objects refreshed in full whatever they are (three's renderer read it; kept for what marks them) */
-export const refreshedInFull = new WeakSet<THREE.Object3D>();
+export const refreshedInFull = new WeakSet<Node>();
 
 /** `group`'s point lights, those casting shadows first (as the rig has them: `rigPointLights`). */
-function pointLightsIn(group: THREE.Object3D): THREE.PointLight[] {
-  const lights: THREE.PointLight[] = [];
-  group.traverse((o) => { if ((o as THREE.PointLight).isPointLight) lights.push(o as THREE.PointLight); });
+function pointLightsIn(group: Node): PointLight[] {
+  const lights: PointLight[] = [];
+  group.traverse((o) => { if ((o as PointLight).isPointLight) lights.push(o as PointLight); });
   return [...lights.filter((l) => l.castShadow), ...lights.filter((l) => !l.castShadow)];
 }
 
 /** `light`'s place, colour, reach and shadow given to `rigged`, and a shadow it was to draw again handed on. */
-function mirror(light: THREE.PointLight, rigged: THREE.PointLight): void {
+function mirror(light: PointLight, rigged: PointLight): void {
   light.getWorldPosition(rigged.position);
   rigged.color.copy(light.color);
   rigged.intensity = light.intensity;
@@ -62,12 +62,12 @@ function mirror(light: THREE.PointLight, rigged: THREE.PointLight): void {
  * runs no hook and is handed the shown place's own (`shownPointLights`). Each place has as many as the rig, as many
  * casting (`arena.ts` checks): the casters take its first slots.
  */
-export function rigPointLights(scene: THREE.Scene, groups: THREE.Object3D[]): void {
+export function rigPointLights(scene: World, groups: Node[]): void {
   const lightsOf = rigPlaces.lightsOf;
   for (const group of groups) rigMorePointLights(group);
   groups = rigPlaces.groups;
   const most = Math.max(...[...lightsOf.values()].map((lights) => lights.length));
-  const rig = Array.from({ length: most }, () => new THREE.PointLight(0xffffff, 0));
+  const rig = Array.from({ length: most }, () => new PointLight(0xffffff, 0));
   for (const rigged of rig) rigged.userData.rigged = true;
   [...lightsOf.values()][0].forEach((light, i) => {
     rig[i].castShadow = light.castShadow;
@@ -92,22 +92,22 @@ export function rigPointLights(scene: THREE.Scene, groups: THREE.Object3D[]): vo
  * as the last hook left them: a house's candles, hearth and chandelier lit nothing (`lab rust --village --room
  * library`: "0 point lights").
  */
-export function shownPointLights(): readonly THREE.PointLight[] {
+export function shownPointLights(): readonly PointLight[] {
   const shown = rigPlaces.groups.find((group) => group.visible);
   return (shown && rigPlaces.lightsOf.get(shown)) || NO_LIGHTS;
 }
-const NO_LIGHTS: readonly THREE.PointLight[] = [];
+const NO_LIGHTS: readonly PointLight[] = [];
 
 /** The place shown now, of those the rig copies its lights from (the Rust engine draws its lights' shadows of
  *  what stands still in it: engine/lampShadows.ts). */
-export const shownPlace = (): THREE.Object3D | undefined => rigPlaces.groups.find((group) => group.visible);
+export const shownPlace = (): Node | undefined => rigPlaces.groups.find((group) => group.visible);
 
 /** the places the rig copies its lights from, each with its point lights (`rigPointLights`, `rigMorePointLights`) */
-const rigPlaces = { groups: [] as THREE.Object3D[], lightsOf: new Map<THREE.Object3D, THREE.PointLight[]>() };
+const rigPlaces = { groups: [] as Node[], lightsOf: new Map<Node, PointLight[]>() };
 
 /** A place built after the rig was made (a fight's biome, built at the run's start: world/arena.ts) copied by it too:
  *  it has as many lights as every place, so the rig's lit pipelines take it as they are. */
-export function rigMorePointLights(group: THREE.Object3D): void {
+export function rigMorePointLights(group: Node): void {
   const lights = pointLightsIn(group);
   rigPlaces.lightsOf.set(group, lights);
   rigPlaces.groups.push(group);

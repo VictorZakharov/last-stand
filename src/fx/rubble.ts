@@ -4,7 +4,9 @@
 // topples onto its broad face (nothing rests on its end), stays a few seconds and shrinks away. One instanced mesh
 // per shape variant, from fixed pools (the oldest piece is reused when one runs out). Every material is a standard
 // one, so the few programs are all warmed in `warmup.ts`.
-import * as THREE from '../engine/three.ts';
+import {
+  Color, Euler, InstancedMesh, LitMaterial, LitParameters, Mat4, Material, Quat, Vec3,
+} from '../engine/api/index.ts';
 import { G } from '../state';
 import { groundHeight } from '../world/ground';
 import { rand } from '../util';
@@ -28,10 +30,10 @@ const LIFE = 6, SHRINK = 1.3;
 const GRAVITY = 15, BOUNCE = 0.35, HALF = Math.PI / 2;
 
 interface Chunk { shape: Shape; pool: string; x: number; y: number; z: number; vx: number; vy: number; vz: number; rx: number; ry: number; rz: number; wx: number; wy: number; wz: number; sx: number; sy: number; sz: number; t: number; life: number; rest: boolean; tx: number; tz: number }
-interface Pool { mesh: THREE.InstancedMesh; chunks: Chunk[]; next: number; max: number }
+interface Pool { mesh: InstancedMesh; chunks: Chunk[]; next: number; max: number }
 const pools: Record<string, Pool> = {};
-let coalMat: THREE.MeshStandardMaterial | null = null;
-const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _e = new THREE.Euler(0, 0, 0, 'YXZ'), _p = new THREE.Vector3(), _s = new THREE.Vector3(), _c = new THREE.Color();
+let coalMat: LitMaterial | null = null;
+const _m = new Mat4(), _q = new Quat(), _e = new Euler(0, 0, 0, 'YXZ'), _p = new Vec3(), _s = new Vec3(), _c = new Color();
 
 /** One kind of piece in a recipe: its shape, its share of a prop's pieces, its size along each axis (a splinter's
  * grain runs along z, a tube's y) and its colour (`null`: the prop's own) */
@@ -78,12 +80,12 @@ export const BREAKS: Partial<Record<RubbleKind, { count: number; size: number; s
 
 export function initRubble(): void {
   const wood = woodAtlas(), shroom = mushroomAtlas();
-  const std = (o: THREE.MeshStandardMaterialParameters) => new THREE.MeshStandardMaterial({ roughness: 0.95, metalness: 0.05, ...o });
+  const std = (o: LitParameters) => new LitMaterial({ roughness: 0.95, metalness: 0.05, ...o });
   const stoneMat = std({ flatShading: true, vertexColors: true, bumpMap: rockBump(), bumpScale: 1.5 });
   coalMat = std({ flatShading: true, emissive: 0xffffff, emissiveIntensity: 2.2, emissiveMap: coalTexture() });
   const woodMat = std({ map: textureFromCanvas(wood.albedo), bumpMap: textureFromCanvas(wood.height, false), bumpScale: 2, roughness: 0.85, metalness: 0 });
   const shroomMat = std({ map: textureFromCanvas(shroom.albedo), bumpMap: textureFromCanvas(shroom.height, false), bumpScale: 2, emissive: 0xffffff, emissiveMap: textureFromCanvas(shroom.glow), emissiveIntensity: 1.1, roughness: 0.6, metalness: 0 });
-  const mats: Record<Shape, THREE.Material> = { stone: stoneMat, coal: coalMat, shell: shroomMat, stem: shroomMat, stub: woodMat, splinter: woodMat, chip: woodMat, bark: woodMat };
+  const mats: Record<Shape, Material> = { stone: stoneMat, coal: coalMat, shell: shroomMat, stem: shroomMat, stub: woodMat, splinter: woodMat, chip: woodMat, bark: woodMat };
   for (const shape of Object.keys(POOL) as Shape[]) {
     const { max, variants } = POOL[shape];
     for (let v = 0; v < variants; v++) {
@@ -93,7 +95,7 @@ export function initRubble(): void {
         : shape === 'stem' ? tornTubeGeometry(seed, STEM_COLS)
         : shape === 'stub' ? tornTubeGeometry(seed, STUB_COLS)
         : flakeGeometry(shape, seed);
-      const mesh = new THREE.InstancedMesh(geo, mats[shape], max);
+      const mesh = new InstancedMesh(geo, mats[shape], max);
       mesh.name = `rubble: ${shape} ${v + 1}`;
       // the colour attribute exists from the start (adding it later would change the shader)
       for (let i = 0; i < max; i++) mesh.setColorAt(i, _c.set(0x808080));

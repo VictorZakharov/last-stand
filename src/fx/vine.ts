@@ -6,7 +6,9 @@
 // quality, one program), the sap in its grooves its only glow.
 // Every vertex knows how far along its piece it is (`aAlong`): a piece is grown to `grow` metres (`uGrow`), each part
 // swelling from nothing as the growth passes it, and withers back (`uWither`).
-import * as THREE from '../engine/three.ts';
+import {
+  Attribute, Color, DoubleSide, floats, Geometry, LookMaterial, Maths, Mesh, Vec3,
+} from '../engine/api/index.ts';
 import { portShader, type Port, type Tsl } from '../core/shaderPorts';
 import { effectLook, num, rgb, effectShader } from '../engine/effects';
 import { groundHeight } from '../world/ground';
@@ -177,7 +179,7 @@ fn surface_hook(s: ptr<function, Surface>, in: VertexOut) -> bool {
 
 /** One piece of vine: its mesh, grown to `grow` metres and withered by `wither` (0 to 1) each frame. */
 export interface Vine {
-  mesh: THREE.Mesh;
+  mesh: Mesh;
   grow: number;
   wither: number;
   /** its length grown in full (m) */
@@ -201,7 +203,7 @@ class Parts {
   }
 
   /** A vertex at `at` (its growth's place), out by `fan` (the head splays it) and `off` (it swells to it). */
-  vertex(at: THREE.Vector3, fan: THREE.Vector3, off: THREE.Vector3, normal: THREE.Vector3, along: number,
+  vertex(at: Vec3, fan: Vec3, off: Vec3, normal: Vec3, along: number,
     kind: number): void {
     this.pos.push(at.x, at.y, at.z);
     this.fan.push(fan.x, fan.y, fan.z);
@@ -211,14 +213,14 @@ class Parts {
     this.kind.push(kind);
   }
 
-  geometry(): THREE.BufferGeometry {
-    const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.Float32BufferAttribute(this.pos, 3));
-    geo.setAttribute('normal', new THREE.Float32BufferAttribute(this.normal, 3));
-    geo.setAttribute('aOff', new THREE.Float32BufferAttribute(this.off, 3));
-    geo.setAttribute('aFan', new THREE.Float32BufferAttribute(this.fan, 3));
-    geo.setAttribute('aAlong', new THREE.Float32BufferAttribute(this.along, 1));
-    geo.setAttribute('aKind', new THREE.Float32BufferAttribute(this.kind, 1));
+  geometry(): Geometry {
+    const geo = new Geometry();
+    geo.setAttribute('position', floats(this.pos, 3));
+    geo.setAttribute('normal', floats(this.normal, 3));
+    geo.setAttribute('aOff', floats(this.off, 3));
+    geo.setAttribute('aFan', floats(this.fan, 3));
+    geo.setAttribute('aAlong', floats(this.along, 1));
+    geo.setAttribute('aKind', floats(this.kind, 1));
     this.packed(geo);
     geo.setIndex(this.index);
     geo.computeBoundingSphere();
@@ -228,10 +230,10 @@ class Parts {
   }
 
   /** The vine's own attributes again in `geo`'s uv and colour, where the Rust engine's hooks read them (`PACK`). */
-  private packed(geo: THREE.BufferGeometry): void {
+  private packed(geo: Geometry): void {
     const count = this.count, uv = new Float32Array(count * 2), colour = new Float32Array(count * 4);
     const step = (v: number): number => {
-      const share = THREE.MathUtils.clamp(v / (2 * PACK.reach) + 0.5, 0, 1);
+      const share = Maths.clamp(v / (2 * PACK.reach) + 0.5, 0, 1);
       return Math.round(share * PACK.steps);
     };
     for (let i = 0; i < count; i++) {
@@ -240,18 +242,18 @@ class Parts {
       colour.set([this.fan[i * 3], this.fan[i * 3 + 1], this.fan[i * 3 + 2]], i * 4);
       colour[i * 4 + 3] = this.along[i] + PACK.kind * this.kind[i];
     }
-    geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
-    geo.setAttribute('color', new THREE.BufferAttribute(colour, 4));
+    geo.setAttribute('uv', new Attribute(uv, 2));
+    geo.setAttribute('color', new Attribute(colour, 4));
   }
 }
 
 /** A strand's place `along` m along its piece: where its growth is (`at`) and how far out of it it winds (`fan`). */
-type Strand = (along: number, at: THREE.Vector3, fan: THREE.Vector3) => void;
+type Strand = (along: number, at: Vec3, fan: Vec3) => void;
 
-const _a = new THREE.Vector3(), _f = new THREE.Vector3(), _a2 = new THREE.Vector3(), _f2 = new THREE.Vector3();
-const _t = new THREE.Vector3(), _n = new THREE.Vector3(), _b = new THREE.Vector3(), _o = new THREE.Vector3();
-const _p = new THREE.Vector3(), UP = new THREE.Vector3(0, 1, 0), SIDE = new THREE.Vector3(1, 0, 0);
-const ZERO = new THREE.Vector3();
+const _a = new Vec3(), _f = new Vec3(), _a2 = new Vec3(), _f2 = new Vec3();
+const _t = new Vec3(), _n = new Vec3(), _b = new Vec3(), _o = new Vec3();
+const _p = new Vec3(), UP = new Vec3(0, 1, 0), SIDE = new Vec3(1, 0, 0);
+const ZERO = new Vec3();
 
 /** A tube round `strand` from `from` to `to` m along it, `radius` thick there, into `parts`; its growth placed `lag` m
  *  further along than the strand. */
@@ -284,7 +286,7 @@ function tube(parts: Parts, strand: Strand, from: number, to: number, radius: (u
 
 /** A leaf on `strand` at `u` m, pointing `out` (a unit way, tipped up a little): an oval drawn to a point, raised
  *  along its rib. */
-function leaf(parts: Parts, strand: Strand, u: number, out: THREE.Vector3): void {
+function leaf(parts: Parts, strand: Strand, u: number, out: Vec3): void {
   strand(u, _a, _f);
   const across = _b.crossVectors(out, UP).normalize();
   const normal = _n.crossVectors(across, out).normalize();
@@ -301,13 +303,13 @@ function leaf(parts: Parts, strand: Strand, u: number, out: THREE.Vector3): void
 }
 
 /** A material of the vine's for `bark` and `sap`, its head rearing by `rise` (0: none) and weaving along `side`. */
-function material(bark: number, sap: number, rise: number, side: THREE.Vector3) {
+function material(bark: number, sap: number, rise: number, side: Vec3) {
   const uniforms = {
     uGrow: { value: 0 }, uWither: { value: 0 }, uTime: { value: 0 }, uRise: { value: rise }, uHead: { value: 1 },
-    uSide: { value: side.clone() }, uBark: { value: new THREE.Color(bark) }, uSap: { value: new THREE.Color(sap) },
+    uSide: { value: side.clone() }, uBark: { value: new Color(bark) }, uSap: { value: new Color(sap) },
   };
   const mat = effectLook(
-    portShader(new THREE.ShaderMaterial({ uniforms, vertexShader: VERT, fragmentShader: FRAG, side: THREE.DoubleSide }),
+    portShader(new LookMaterial({ uniforms, vertexShader: VERT, fragmentShader: FRAG, side: DoubleSide }),
       vinePort),
     'vine', VINE_HOOKS, {
       numbers(u, out) {
@@ -323,7 +325,7 @@ function material(bark: number, sap: number, rise: number, side: THREE.Vector3) 
 
 function vineOf(parts: Parts, length: number, look: ReturnType<typeof material>, name: string): Vine {
   const geo = parts.geometry();
-  const mesh = new THREE.Mesh(geo, look.mat);
+  const mesh = new Mesh(geo, look.mat);
   mesh.name = name;
   // (the head rears, splays and glows while the piece grows, and settles once it's grown)
   let growing = -Infinity;
@@ -350,9 +352,9 @@ function vineOf(parts: Parts, length: number, look: ReturnType<typeof material>,
  *  tendrils off it. In world space. */
 export function groundVine(x: number, z: number, dx: number, dz: number, length: number, bark: number,
   sap: number): Vine {
-  const side = new THREE.Vector3(-dz, 0, dx), ahead = new THREE.Vector3(dx, 0, dz);
+  const side = new Vec3(-dz, 0, dx), ahead = new Vec3(dx, 0, dz);
   const wander = (u: number): number => Math.sin(u * 1.3) * 0.12 + Math.sin(u * 3.1 + 1) * 0.05;
-  const middle = (u: number, out: THREE.Vector3): THREE.Vector3 => {
+  const middle = (u: number, out: Vec3): Vec3 => {
     const px = x + dx * u - dz * wander(u), pz = z + dz * u + dx * wander(u);
     return out.set(px, groundHeight(px, pz) + BRAID.base, pz);
   };
@@ -379,9 +381,9 @@ export function groundVine(x: number, z: number, dx: number, dz: number, length:
 
 /** A tendril curling off the vine at `u` m to one side (`sign`), as a strand of its own: its growth runs from 0 at
  *  the vine out to its curled end, a spiral drawn in tighter as it goes and lifting off the floor. */
-function curlOff(middle: (u: number, out: THREE.Vector3) => THREE.Vector3, side: THREE.Vector3, ahead: THREE.Vector3,
+function curlOff(middle: (u: number, out: Vec3) => Vec3, side: Vec3, ahead: Vec3,
   u: number, sign: number): Strand {
-  const base = middle(u, new THREE.Vector3());
+  const base = middle(u, new Vec3());
   const reach = 0.24;
   const centre = base.clone().addScaledVector(side, sign * reach);
   return (s, at, fan) => {
@@ -421,7 +423,7 @@ export function coils(high: number, bark: number, sap: number): Vine {
 }
 
 /** A short vine, for the warm-up to compile its program. */
-export function vineSamples(): THREE.Mesh[] {
+export function vineSamples(): Mesh[] {
   const vine = groundVine(0, 0, 1, 0, 2, 0x2a3a18, 0x9cff3a);
   vine.grow = 2;
   vine.update(0);

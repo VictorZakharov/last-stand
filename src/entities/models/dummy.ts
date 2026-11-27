@@ -1,7 +1,9 @@
 // Training dummy: a straw-stuffed burlap sack on a wooden post, with a glowing
 // target rune. It wobbles on a spring when hit (lobby target practice).
-import * as THREE from '../../engine/three.ts';
-import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import {
+  Attribute, Geometry, Material, mergeGeometries, Mesh, Node, Quat, Vec2, Vec3,
+} from '../../engine/api/index.ts';
+import * as shapes from '../../engine/api/shapes/index.ts';
 import { createKit } from '../../core/materials';
 import { DUMMY_SACK_BOTTOM } from '../../data/foes/dummy';
 import { ashlar, burlap, pbrMaterialMaps, wood } from '../../core/textures';
@@ -17,10 +19,10 @@ const STRAW_SEED = 4417;
 /** the straw's two geometries (spilling out of the sack and the sleeves, and out of the head), made once and shared by
  *  every dummy (`userData.shared`): made for each, the lobby's dummies held Back out of the hero selection screen up
  *  20 to 26 ms */
-let straws: { loose: THREE.BufferGeometry; head: THREE.BufferGeometry } | null = null;
+let straws: { loose: Geometry; head: Geometry } | null = null;
 
 /** The straw's geometries, made the first time they're asked for. */
-function strawOnce(): { loose: THREE.BufferGeometry; head: THREE.BufferGeometry } {
+function strawOnce(): { loose: Geometry; head: Geometry } {
   if (straws) return straws;
   const rng = mulberry(STRAW_SEED);
   const loose = [strawBundle(rng, 160, 0.17, [0.08, 0.2], 0.3).rotateX(Math.PI).translate(0, 0.74, 0)];
@@ -38,20 +40,20 @@ function strawOnce(): { loose: THREE.BufferGeometry; head: THREE.BufferGeometry 
  * read as spikes (#287).
  */
 function strawBundle(rng: () => number, count: number, radius: number, length: [number, number],
-  splay: number): THREE.BufferGeometry {
-  const straws: THREE.BufferGeometry[] = [];
-  const up = new THREE.Vector3(0, 1, 0), along = new THREE.Vector3(), turn = new THREE.Quaternion();
+  splay: number): Geometry {
+  const straws: Geometry[] = [];
+  const up = new Vec3(0, 1, 0), along = new Vec3(), turn = new Quat();
   for (let i = 0; i < count; i++) {
     const a = rng() * Math.PI * 2, out = Math.sqrt(rng());
     const len = length[0] + (length[1] - length[0]) * rng();
     const lean = splay * out + (rng() - 0.5) * 0.15;
     along.set(Math.cos(a) * Math.sin(lean), Math.cos(lean), Math.sin(a) * Math.sin(lean));
     turn.setFromUnitVectors(up, along.normalize());
-    const straw = new THREE.CylinderGeometry(0.002, 0.005, len, 3, 1).translate(0, len / 2, 0)
+    const straw = shapes.cylinder(0.002, 0.005, len, 3, 1).translate(0, len / 2, 0)
       .applyQuaternion(turn).translate(Math.cos(a) * radius * out, 0, Math.sin(a) * radius * out);
     const shade = 0.6 + 0.45 * rng();
     const colour = new Float32Array(straw.attributes.position.count * 3).fill(shade);
-    straw.setAttribute('color', new THREE.BufferAttribute(colour, 3));
+    straw.setAttribute('color', new Attribute(colour, 3));
     straws.push(straw);
   }
   return mergeGeometries(straws);
@@ -62,12 +64,12 @@ function strawBundle(rng: () => number, count: number, radius: number, length: [
  * space: a dummy was 23 meshes and 12 shadow casters, three of them a third of the lobby's draws (on WebGPU each
  * draw is about 20 µs of the frame's JS), and they move only as their joints do.
  */
-function mergeAlike(joint: THREE.Object3D): void {
-  const alike = new Map<string, THREE.Mesh[]>();
+function mergeAlike(joint: Node): void {
+  const alike = new Map<string, Mesh[]>();
   for (const child of joint.children) {
-    const mesh = child as THREE.Mesh;
+    const mesh = child as Mesh;
     if (!mesh.isMesh || mesh.geometry.userData.shared) continue;
-    const key = `${(mesh.material as THREE.Material).uuid} ${mesh.castShadow}`;
+    const key = `${(mesh.material as Material).uuid} ${mesh.castShadow}`;
     alike.set(key, [...alike.get(key) ?? [], mesh]);
   }
   for (const meshes of alike.values()) {
@@ -78,7 +80,7 @@ function mergeAlike(joint: THREE.Object3D): void {
     });
     const merged = mergeGeometries(placed);
     if (!merged) continue;
-    const one = part(merged, meshes[0].material as THREE.Material, joint);
+    const one = part(merged, meshes[0].material as Material, joint);
     one.castShadow = meshes[0].castShadow;
     for (const mesh of meshes) {
       joint.remove(mesh);
@@ -88,17 +90,17 @@ function mergeAlike(joint: THREE.Object3D): void {
 }
 
 /** the geometries of the first dummy built, in the order its meshes are met (`shareGeometries`) */
-let sharedGeometries: THREE.BufferGeometry[] | null = null;
+let sharedGeometries: Geometry[] | null = null;
 
 /**
  * Every dummy's meshes given the first one's geometries, marked as shared, so all of them are drawn in a crowd as the
  * foes are: each material's parts of all the dummies one instanced draw (models/crowd.ts), where they were 29 of the
  * lobby's scene draws a frame and 21 of its shadow's, at about 20 us of JS a draw on WebGPU.
  */
-function shareGeometries(root: THREE.Object3D): void {
-  const meshes: THREE.Mesh[] = [];
+function shareGeometries(root: Node): void {
+  const meshes: Mesh[] = [];
   root.traverse((o) => {
-    if ((o as THREE.Mesh).isMesh) meshes.push(o as THREE.Mesh);
+    if ((o as Mesh).isMesh) meshes.push(o as Mesh);
   });
   const first = sharedGeometries === null;
   sharedGeometries ??= meshes.map((mesh) => mesh.geometry);
@@ -124,41 +126,41 @@ export function buildDummy(): Model {
   const paint = kit.std({ color: 0x1a1210, roughness: 0.9 });
   const rune = kit.glow(0xf0c860, 2.2);
 
-  const root = new THREE.Group();
+  const root = new Node();
   // plinth (stays put while the rest wobbles)
-  part(new THREE.CylinderGeometry(0.46, 0.52, 0.16, 20), stone, root, 0, 0.08, 0);
-  part(new THREE.TorusGeometry(0.2, 0.025, 6, 18).rotateX(Math.PI / 2), iron, root, 0, 0.17, 0);
+  part(shapes.cylinder(0.46, 0.52, 0.16, 20), stone, root, 0, 0.08, 0);
+  part(shapes.torus(0.2, 0.025, 6, 18).rotateX(Math.PI / 2), iron, root, 0, 0.17, 0);
 
   const sway = joint(root, 0, 0.16, 0);
-  part(new THREE.CylinderGeometry(0.06, 0.075, 1.9, 10), woodMat, sway, 0, 0.95, 0);
+  part(shapes.cylinder(0.06, 0.075, 1.9, 10), woodMat, sway, 0, 0.95, 0);
 
   // body: a bulging sack, tied at both ends
   const profile = [
     [0.05, 0], [0.2, 0.02], [0.28, 0.12], [0.31, 0.3], [0.3, 0.48], [0.25, 0.62], [0.14, 0.7], [0.06, 0.72],
-  ].map(([x, y]) => new THREE.Vector2(x, y));
-  part(new THREE.LatheGeometry(profile, 20), sack, sway, 0, DUMMY_SACK_BOTTOM - sway.position.y, 0);
-  for (const y of [0.76, 1.3]) part(new THREE.TorusGeometry(y < 1 ? 0.23 : 0.21, 0.018, 6, 20).rotateX(Math.PI / 2), rope, sway, 0, y, 0);
+  ].map(([x, y]) => new Vec2(x, y));
+  part(shapes.lathe(profile, 20), sack, sway, 0, DUMMY_SACK_BOTTOM - sway.position.y, 0);
+  for (const y of [0.76, 1.3]) part(shapes.torus(y < 1 ? 0.23 : 0.21, 0.018, 6, 20).rotateX(Math.PI / 2), rope, sway, 0, y, 0);
   // straw spilling out below the sack, and out of the sleeves' tied ends
   const spilt = strawOnce();
 
   // arms: a crossbar through two sleeves, each gathered and tied at its end with the straw bursting out
-  part(new THREE.CylinderGeometry(0.04, 0.04, 1.3, 8).rotateZ(Math.PI / 2), woodMat, sway, 0, 1.22, 0);
+  part(shapes.cylinder(0.04, 0.04, 1.3, 8).rotateZ(Math.PI / 2), woodMat, sway, 0, 1.22, 0);
   const sleeve = [[0.06, 0], [0.078, 0.03], [0.09, 0.12], [0.086, 0.2], [0.062, 0.25], [0.045, 0.27], [0.04, 0.28]]
-    .map(([r, y]) => new THREE.Vector2(r, y));
+    .map(([r, y]) => new Vec2(r, y));
   for (const s of [1, -1]) {
-    part(new THREE.LatheGeometry(sleeve, 12).rotateZ(-s * Math.PI / 2), sack, sway, s * 0.42, 1.22, 0);
-    part(new THREE.TorusGeometry(0.072, 0.012, 5, 12).rotateY(Math.PI / 2), rope, sway, s * 0.45, 1.22, 0);
-    part(new THREE.TorusGeometry(0.05, 0.012, 5, 12).rotateY(Math.PI / 2), rope, sway, s * 0.68, 1.22, 0);
+    part(shapes.lathe(sleeve, 12).rotateZ(-s * Math.PI / 2), sack, sway, s * 0.42, 1.22, 0);
+    part(shapes.torus(0.072, 0.012, 5, 12).rotateY(Math.PI / 2), rope, sway, s * 0.45, 1.22, 0);
+    part(shapes.torus(0.05, 0.012, 5, 12).rotateY(Math.PI / 2), rope, sway, s * 0.68, 1.22, 0);
   }
   part(spilt.loose, straw, sway).castShadow = false;
 
   // head: a tied sack with painted eyes
   const head = joint(sway, 0, 1.66, 0);
-  part(new THREE.SphereGeometry(0.19, 16, 12).scale(1, 1.08, 0.95), sack, head, 0, 0, 0);
-  part(new THREE.TorusGeometry(0.1, 0.02, 6, 16).rotateX(Math.PI / 2), rope, head, 0, -0.17, 0);
+  part(shapes.sphere(0.19, 16, 12).scale(1, 1.08, 0.95), sack, head, 0, 0, 0);
+  part(shapes.torus(0.1, 0.02, 6, 16).rotateX(Math.PI / 2), rope, head, 0, -0.17, 0);
   for (const s of [1, -1]) {
     for (const r of [0.7, -0.7]) {
-      const bar = part(new THREE.BoxGeometry(0.075, 0.016, 0.01), paint, head, s * 0.07, 0.03, 0.175);
+      const bar = part(shapes.box(0.075, 0.016, 0.01), paint, head, s * 0.07, 0.03, 0.175);
       bar.rotation.set(0, s * 0.3, r);
       bar.castShadow = false;
     }
@@ -169,9 +171,9 @@ export function buildDummy(): Model {
   const target = joint(sway, 0, 1.03, 0.3);
   target.rotation.x = -0.12;
   for (const [r0, r1] of [[0.13, 0.15], [0.07, 0.085]]) {
-    part(new THREE.RingGeometry(r0, r1, 32), rune, target).castShadow = false;
+    part(shapes.ring(r0, r1, 32), rune, target).castShadow = false;
   }
-  part(new THREE.CircleGeometry(0.025, 16), rune, target).castShadow = false;
+  part(shapes.circle(0.025, 16), rune, target).castShadow = false;
 
   for (const joint of [root, sway, head, target]) mergeAlike(joint);
 

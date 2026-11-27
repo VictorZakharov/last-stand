@@ -1,5 +1,4 @@
 // Glacial Nova: freezing burst around the caster.
-import * as THREE from '../../engine/three.ts';
 import { G } from '../../state';
 import { hitEnemy } from '../damage';
 import { hurtPropsIn, PROP_DAMAGE } from '../../world/destructible';

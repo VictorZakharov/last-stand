@@ -3,7 +3,7 @@
 // frame costs (the scene's draws and programs, its parts taken out live with the performance overlay showing the
 // difference, each part's milliseconds timed by Profile this spot from where the camera is). Its own page pieces,
 // made here, so a production build's page has none of them.
-import * as THREE from '../engine/three.ts';
+import { Vec3 } from '../engine/api/index.ts';
 import { loadFoe } from '../entities/bosses';
 import { G } from '../state';
 import { input } from '../core/input';
@@ -263,7 +263,7 @@ function spawn(n: number): void {
   const at = freeCamOn() ? lookedAt() : G.player.pos;
   for (let i = 0; i < n; i++) {
     const a = Math.random() * Math.PI * 2, r = 9 + Math.random() * 5;
-    const pos = new THREE.Vector3(at.x + Math.sin(a) * r, 0, at.z + Math.cos(a) * r);
+    const pos = new Vec3(at.x + Math.sin(a) * r, 0, at.z + Math.cos(a) * r);
     const out = Math.hypot(pos.x, pos.z), most = ARENA.radius * 0.92;
     if (out > most) pos.multiplyScalar(most / out);
     void loadFoe(type).then(() => spawnEnemy(type, pos, { wave: G.run?.wave ?? 1, hero, training }));
@@ -271,8 +271,8 @@ function spawn(n: number): void {
 }
 
 /** Where the free camera looks on the floor (or a little ahead of it, looking up). */
-function lookedAt(): THREE.Vector3 {
-  const cam = G.camera, dir = new THREE.Vector3(0, 0, -1).applyQuaternion(cam.quaternion);
+function lookedAt(): Vec3 {
+  const cam = G.camera, dir = new Vec3(0, 0, -1).applyQuaternion(cam.quaternion);
   const t = dir.y < -0.05 ? -cam.position.y / dir.y : 12;
   return cam.position.clone().addScaledVector(dir, Math.min(t, 40)).setY(0);
 }

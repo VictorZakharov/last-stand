@@ -5,7 +5,7 @@
 // (269.5, 183.3), and a value is one gather of its four corners, eased between them as before.
 // Its pattern repeats every 256 cells (42 m at the sward's finest, 6.1 a metre), and its corners are a GPU's own
 // rounding of the same formula no longer: the same on every device.
-import * as THREE from '../three.ts';
+import { DataTexture, RepeatWrapping, RGBAFormat } from '../api/index.ts';
 
 /** cells a side of the table, which the noise repeats after */
 const SIDE = 256;
@@ -15,10 +15,10 @@ const hashOf = (x: number, y: number, a: number, b: number): number => {
   return s - Math.floor(s);
 };
 
-let table: THREE.DataTexture | null = null;
+let table: DataTexture | null = null;
 
 /** The table (64 thousand cells, 256 KB as bytes on the GPU), made the first time it's asked for. */
-export function noiseTable(): THREE.DataTexture {
+export function noiseTable(): DataTexture {
   if (table) return table;
   const data = new Uint8Array(SIDE * SIDE * 4);
   for (let y = 0; y < SIDE; y++) {
@@ -29,8 +29,8 @@ export function noiseTable(): THREE.DataTexture {
       data[at + 3] = 255;
     }
   }
-  table = new THREE.DataTexture(data, SIDE, SIDE, THREE.RGBAFormat);
-  table.wrapS = table.wrapT = THREE.RepeatWrapping;
+  table = new DataTexture(data, SIDE, SIDE, RGBAFormat);
+  table.wrapS = table.wrapT = RepeatWrapping;
   table.needsUpdate = true;
   return table;
 }

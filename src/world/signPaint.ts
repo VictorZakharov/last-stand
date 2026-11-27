@@ -4,7 +4,7 @@
 // bloom lets it stay readable. From Viktor, of the first ones (dark boards, thin gilt letters): "signs need better
 // visibility at the distance... maybe bolder text, different wood grain", and of the houses' after the arms were
 // painted so: "labels on houses should be high contrast as well".
-import * as THREE from '../engine/three.ts';
+import { LitMaterial, Material } from '../engine/api/index.ts';
 import { mulberry } from '../util';
 import { tsl } from '../core/webgpu';
 import type { OwnLooks } from '../core/shaderPorts';
@@ -86,9 +86,9 @@ export const boardBand = (h: number): number => Math.max(3, h * 0.07);
 
 /** `m` painted flat: none of the planks' relief or roughness maps it was copied with, so the light lies even over the
  *  paint (the planks' grooves, at its picture's scale, rippled the light across the letters). */
-export function flatFace<M extends THREE.Material>(m: M): M {
-  const standard = m as unknown as THREE.MeshStandardMaterial;
-  if (standard.isMeshStandardMaterial) {
+export function flatFace<M extends Material>(m: M): M {
+  const standard = m as unknown as LitMaterial;
+  if (standard.isLitMaterial) {
     standard.normalMap = null;
     standard.bumpMap = null;
     standard.roughnessMap = null;
@@ -99,7 +99,7 @@ export function flatFace<M extends THREE.Material>(m: M): M {
 
 /** `m` lit no brighter than `FACE_MOST`: what it gives back scaled down to that luminance where it would be more (its
  *  hue kept), on WebGL by a line after its output (its program's key told), on WebGPU by its output node. */
-export function underBloom<M extends THREE.Material>(m: M): M {
+export function underBloom<M extends Material>(m: M): M {
   // (for a renderer with no hook of three's: the Rust engine holds its light to it, engine/materials.ts)
   m.userData.litMost = FACE_MOST;
   const prev = m.onBeforeCompile, key = m.customProgramCacheKey();
@@ -119,4 +119,4 @@ export function underBloom<M extends THREE.Material>(m: M): M {
 }
 
 /** A painted face: `m` flat and held under the bloom. */
-export const paintedFace = <M extends THREE.Material>(m: M): M => underBloom(flatFace(m));
+export const paintedFace = <M extends Material>(m: M): M => underBloom(flatFace(m));

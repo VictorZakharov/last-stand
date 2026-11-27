@@ -1,6 +1,6 @@
 // The game's kinds of see-through as the engine holds them (`SeeKind` in its common.wgsl): what's dissolved where it
 // hides the hero, each kind's numbers written to the frame's globals as the game has them (core/seeThrough.ts).
-import * as THREE from './three.ts';
+import { Material, NormalBlending, Vec4 } from './api/index.ts';
 import { BLEND_GONE, SIGHT_CONE, coverRuleNow, type SeeThrough } from '../core/seeThrough';
 import { SIGHT, nearDoorAt, seesInAt, seesIntoRoom } from '../core/sight';
 import { HALL, TERRACE } from '../data/village';
@@ -30,7 +30,7 @@ const DOOR_FROM_INSIDE = 0.35;
 export const SEE_FLAGS = { solid: 16, thinned: 64, oneLayer: 256, cover: 512, underLayers: 1024, gone: 1 << 20 } as const;
 
 /** A material as the kinds read it: three's, with the game's see-through on it. */
-type Seen = THREE.Material & { seeThrough?: unknown };
+type Seen = Material & { seeThrough?: unknown };
 
 /** a kind's `k.w` at or under this thins whole wherever it stands (`see_fade`: under -100) */
 const GONE_REACH = -100;
@@ -161,7 +161,7 @@ export class SeeKinds {
 
   /** How far he stands by the door between `jambs` (x, z, x, z) seeing through it: before it, seeing in
    *  (`seesInAt`), or `inside` its room (0 to 1), seeing out (`nearDoorAt`). */
-  private seesIn(jambs: THREE.Vector4, inside: number, room: readonly [number, number, number, number]): number {
+  private seesIn(jambs: Vec4, inside: number, room: readonly [number, number, number, number]): number {
     const x = (jambs.x + jambs.z) / 2;
     // (not by his rays while he stands in the room itself: there it opens by the lesser share)
     const before = inside > 0 ? seesInAt(x, jambs.y) : seesInAt(x, jambs.y, room);
@@ -231,7 +231,7 @@ export class SeeKinds {
   flagsOf(material: Seen): number {
     const see = material.seeThrough as SeeThrough | undefined;
     if (!see) return 0;
-    const whole = material.depthWrite && material.opacity >= 1 && material.blending === THREE.NormalBlending;
+    const whole = material.depthWrite && material.opacity >= 1 && material.blending === NormalBlending;
     // (a cover left as a smooth ghost: blended by the share the rule leaves, whatever its material says of its own
     // blending; the nearest of a house's layers alone drawn, a column a layer of its own under them: the nearest
     // alone drawn, a roof over it left none of it)
@@ -243,7 +243,7 @@ export class SeeKinds {
     // (a cover is never blended: drawn with what's opaque and writing its depth, its pixels over ground he sees
     // dropped, whatever its material says of its depth: the hall's roof writes none, and blended whole its three
     // layers were 2.1 ms of a 5.1 ms frame)
-    if (this.cover(see) && material.opacity >= 1 && material.blending === THREE.NormalBlending) {
+    if (this.cover(see) && material.opacity >= 1 && material.blending === NormalBlending) {
       return material.transparent ? SEE_FLAGS.cover : 0;
     }
     const solid = TUNE.solidSee > 0 && material.transparent && whole && this.solid(see);

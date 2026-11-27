@@ -3,7 +3,7 @@
 // squarely the surface faces each. Read where it lay as it was sculpted (its vertices' own places, before skinning),
 // the grain stays on the skin as it bends. (Read flat along the one axis each vertex faced most, the glove's leather
 // broke into streaks down the hand's sides wherever the axis changed.)
-import * as THREE from '../../engine/three.ts';
+import { Material } from '../../engine/api/index.ts';
 
 /** how sharply the planes give way to one another (higher: a narrower blend where the surface turns between them) */
 const SHARPNESS = 4;
@@ -88,7 +88,7 @@ const NORMAL = /* glsl */ `
 /** `material`'s maps read triplanar, a tile each `tile` (m) of the space its surface was sculpted in, after what its
  *  own `onBeforeCompile` does; it's returned. (Its program's key is read before the hook goes on, as
  *  models/dualQuaternion.ts says why.) */
-export function triplanar<T extends THREE.Material>(material: T, tile: number): T {
+export function triplanar<T extends Material>(material: T, tile: number): T {
   const own = material.onBeforeCompile;
   const key = `${material.customProgramCacheKey()}-triplanar${tile}`;
   // (for a renderer with no hook of three's: the Rust engine's kit look reads it, engine/looks/kit.ts)

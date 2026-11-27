@@ -44,7 +44,7 @@
 // (She moves only so: a lure never draws her, `EnemyDef.ignoresLures`.)
 // Every attack goes through enemyAI's `fx`, so each co-op game plays it from the same numbers and judges its own hero
 // alone (`hurtPlayer` on the local player, `Player.root` on his own game).
-import * as THREE from '../engine/three.ts';
+import { Node, Quat, Vec3 } from '../engine/api/index.ts';
 import { G } from '../state';
 import { emit } from '../events';
 import type { EnemyId } from '../data/enemies';
@@ -401,7 +401,7 @@ export function creeperPiece(id: number, x: number, z: number, angle: number, le
 }
 
 /** Vine `c` cut where an arrow met it: every piece withers, and this game's hero it holds is let go. */
-function cutCreeper(c: Creeper, at: THREE.Vector3): void {
+function cutCreeper(c: Creeper, at: Vec3): void {
   if (c.cut >= 0) return;
   c.cut = G.time;
   for (const p of c.pieces) liftVine(p.lying);
@@ -425,7 +425,7 @@ function tend(id: number, c: Creeper): void {
       if (head && head.vine.grow < head.length && c.cut < 0 && dust > 0.06) {
         dust = 0;
         const x = head.ox + head.dx * head.vine.grow, z = head.oz + head.dz * head.vine.grow;
-        smokePuff(new THREE.Vector3(x, groundHeight(x, z), z), { count: 1, color: 0x2a2418, size: 0.45, sizeEnd: 1.1, speed: 0.6, life: 0.5 });
+        smokePuff(new Vec3(x, groundHeight(x, z), z), { count: 1, color: 0x2a2418, size: 0.45, sizeEnd: 1.1, speed: 0.6, life: 0.5 });
       }
       if (c.cut < 0) for (const p of G.players) touch(c, p);
       // (the last piece grown, it lies `lies` s, longer while it holds someone, then withers; cut, at once)
@@ -486,11 +486,11 @@ function flingPod(e: Enemy, great = false): void {
 }
 
 /** A spot `near`..`far` m from her, inside the wall, clear of props and `clear` m from every hero, or null. */
-function podSpot(e: Enemy): THREE.Vector3 | null {
+function podSpot(e: Enemy): Vec3 | null {
   const s = R.seeds;
   for (let i = 0; i < 14; i++) {
     const a = Math.random() * Math.PI * 2, r = rand(s.near, s.far);
-    const at = new THREE.Vector3(e.pos.x + Math.sin(a) * r, 0, e.pos.z + Math.cos(a) * r);
+    const at = new Vec3(e.pos.x + Math.sin(a) * r, 0, e.pos.z + Math.cos(a) * r);
     if (Math.hypot(at.x, at.z) > ARENA.radius - 2 || inObstacle(at, 0.6)) continue;
     if (heroes().some((p) => Math.hypot(p.pos.x - at.x, p.pos.z - at.z) < s.clear)) continue;
     return at;
@@ -512,7 +512,7 @@ export function seedPodAI(e: Enemy, dt: number): void {
   const kind = (great ? g.hatches : BROOD) as EnemyId, count = great ? g.brood : R.seeds.brood;
   for (let i = 0; i < count; i++) {
     const a = Math.random() * Math.PI * 2, out = count > 1 ? 0.9 : 0;
-    const at = new THREE.Vector3(e.pos.x + Math.sin(a) * out, 0, e.pos.z + Math.cos(a) * out);
+    const at = new Vec3(e.pos.x + Math.sin(a) * out, 0, e.pos.z + Math.cos(a) * out);
     spawnEnemy(kind, at, { wave: G.run?.wave ?? 1, lifeMult: partyScale(G.run?.party ?? 1).life, training: e.training });
   }
   e.die();
@@ -526,7 +526,7 @@ export function seedFlung(ox: number, oz: number, tx: number, tz: number, flight
   const colour = great ? GREAT_GLOW : SAP, size = great ? 1.8 : 1;
   telegraph({ x: tx, z: tz }, 0.8 * size, flight, colour);
   sfx.swing();
-  const at = new THREE.Vector3();
+  const at = new Vec3();
   let t = 0, trail = 0;
   addEffect({
     update(dt) {
@@ -550,7 +550,7 @@ export function seedFlung(ox: number, oz: number, tx: number, tz: number, flight
 /** A pod burst into its brood at (x, z) (`podBurst` fx; `great` 1: a great pod's, more and amber): sap and husk. */
 export function podBurst(x: number, z: number, great = 0): void {
   const size = great ? 1.8 : 1;
-  const at = new THREE.Vector3(x, groundHeight(x, z) + 0.6 * size, z);
+  const at = new Vec3(x, groundHeight(x, z) + 0.6 * size, z);
   burst(at, { count: Math.round(26 * size), color: great ? GREAT_GLOW : SAP, speed: 4.5 * size, up: 2, life: 0.6, size: 0.22 });
   debris(at, { count: Math.round(10 * size), color: 0x6a5a2a, speed: 4 * size });
   rootSounds.pod();
@@ -574,7 +574,7 @@ export function thornsAt(id: number, x: number, z: number, radius: number, last:
       if (time >= next) {
         next += t.tick;
         const p = G.player, d = Math.hypot(p.pos.x - x, p.pos.z - z);
-        if (p.active && d < radius + p.radius * 0.5) hurtPlayer(p, damage * t.hurt, 'physical', new THREE.Vector3(x, 0, z), { foe, attack: 'thorns' });
+        if (p.active && d < radius + p.radius * 0.5) hurtPlayer(p, damage * t.hurt, 'physical', new Vec3(x, 0, z), { foe, attack: 'thorns' });
       }
       return time < last;
     },
@@ -594,7 +594,7 @@ export function cracksAt(x: number, z: number, warn: number): void {
       if (t >= next) {
         next += 0.22;
         const a = Math.random() * Math.PI * 2, rr = Math.random() * r;
-        const at = new THREE.Vector3(x + Math.sin(a) * rr, groundHeight(x, z), z + Math.cos(a) * rr);
+        const at = new Vec3(x + Math.sin(a) * rr, groundHeight(x, z), z + Math.cos(a) * rr);
         debris(at, { count: 3, speed: 1.6, size: 0.1, life: 0.6 });
         smokePuff(at, { count: 1, color: 0x2a2418, alpha: 0.35, size: 0.5, sizeEnd: 1.2, speed: 0.4, life: 0.7 });
       }
@@ -606,7 +606,7 @@ export function cracksAt(x: number, z: number, warn: number): void {
 /** Roots bursting from the earth at (x, z), `radius` m round (`erupt` fx): spikes, earth flying, one soft light, and
  *  this game's hero hurt `hurt` of `damage` if he's in it. */
 export function eruptAt(id: number, x: number, z: number, radius: number, damage: number): void {
-  const foe = foeOf(id), pos = new THREE.Vector3(x, groundHeight(x, z), z);
+  const foe = foeOf(id), pos = new Vec3(x, groundHeight(x, z), z);
   iceSpikes({ x, z }, radius, 26, 0, { look: 'thorn', life: 1.4, height: 1.7 });
   shockwave(pos, { color: AMBER, intensity: 1.6, from: 0.4, to: radius * 1.2, life: 0.45 });
   debris(pos, { count: 22, speed: 6 });
@@ -648,7 +648,7 @@ export function branchTorn(id: number, hands: number): void {
   const foe = foeOf(id);
   rootSounds.snap();
   if (!foe) return;
-  const at = releaseFrom(foe, new THREE.Vector3());
+  const at = releaseFrom(foe, new Vec3());
   debris(at, { count: 5 * hands, color: 0x4a3a22, speed: 2.5, size: 0.1, life: 0.6 });
 }
 
@@ -663,9 +663,9 @@ export function branchAt(id: number, ox: number, oy: number, oz: number, tx: num
   damage: number, hurt: number, splash: number, stay: number): void {
   const B = R.branch, foe = foeOf(id);
   const ty = groundHeight(tx, tz);
-  const vel = new THREE.Vector3((tx - ox) / flight, (ty - oy + 0.5 * BRANCH.fall * flight * flight) / flight, (tz - oz) / flight);
-  const flat = new THREE.Vector3(vel.x, 0, vel.z).normalize();
-  const across = new THREE.Vector3(flat.z, 0, -flat.x);
+  const vel = new Vec3((tx - ox) / flight, (ty - oy + 0.5 * BRANCH.fall * flight * flight) / flight, (tz - oz) / flight);
+  const flat = new Vec3(vel.x, 0, vel.z).normalize();
+  const across = new Vec3(flat.z, 0, -flat.x);
   // (one of her model's own branches, the oldest taken where all are out: its look warmed with hers)
   const mesh = takeBranch(foe);
   const ring = telegraph({ x: tx, z: tz }, splash, flight, BRANCH.ring);
@@ -673,17 +673,17 @@ export function branchAt(id: number, ox: number, oy: number, oz: number, tx: num
   BRANCHES.push(kept);
   if (BRANCHES.length > 24) BRANCHES.shift();
   if (mesh) mesh.owner = kept;
-  const from = new THREE.Vector3(foe?.pos.x ?? ox, oy, foe?.pos.z ?? oz);
+  const from = new Vec3(foe?.pos.x ?? ox, oy, foe?.pos.z ?? oz);
   // (`pos` its middle on its arc, then where it came down: `shown` where it's drawn, sunk into the earth)
-  const pos = new THREE.Vector3(ox, oy, oz), shown = new THREE.Vector3(), v = new THREE.Vector3(), dir = new THREE.Vector3();
-  const lying = new THREE.Quaternion().setFromUnitVectors(UP, flat), q = new THREE.Quaternion();
+  const pos = new Vec3(ox, oy, oz), shown = new Vec3(), v = new Vec3(), dir = new Vec3();
+  const lying = new Quat().setFromUnitVectors(UP, flat), q = new Quat();
   // (spun end over end about its across, coming down tip first along its way as it lands)
-  const world = new THREE.Quaternion(), butt = new THREE.Vector3();
-  const pose = (along: THREE.Vector3, spin: number): void => {
+  const world = new Quat(), butt = new Vec3();
+  const pose = (along: Vec3, spin: number): void => {
     q.setFromUnitVectors(flat, dir.copy(along).normalize());
     world.copy(q).multiply(_spin.setFromAxisAngle(across, spin)).multiply(lying);
   };
-  const place = (middle: THREE.Vector3): void => {
+  const place = (middle: Vec3): void => {
     butt.copy(middle).sub(_off.set(0, BRANCH_LENGTH / 2, 0).applyQuaternion(world));
     if (mesh && mesh.owner === kept) setWorld(mesh.joint, butt, world);
   };
@@ -737,14 +737,14 @@ export function branchAt(id: number, ox: number, oy: number, oz: number, tx: num
 }
 
 /** One of her model's thrown branches, and the throw that has it now. */
-interface PoolBranch { joint: THREE.Object3D; owner: ThrownBranch | null; since: number }
+interface PoolBranch { joint: Node; owner: ThrownBranch | null; since: number }
 /** each model's thrown branches as the throws hold them */
-const POOLS = new WeakMap<THREE.Object3D, PoolBranch[]>();
+const POOLS = new WeakMap<Node, PoolBranch[]>();
 
 /** A thrown branch of her model's for a throw (a free one, else the oldest out), or null with no model. */
 function takeBranch(foe: Enemy | null): PoolBranch | null {
   const root = foe?.model.root;
-  const joints = root?.userData.thrown as THREE.Object3D[] | undefined;
+  const joints = root?.userData.thrown as Node[] | undefined;
   if (!root || !joints?.length) return null;
   let pool = POOLS.get(root);
   if (!pool) {
@@ -757,7 +757,7 @@ function takeBranch(foe: Enemy | null): PoolBranch | null {
 }
 
 /** Joint `j` (under her model's root) put at `at` turned `turn` in the world, at full size. */
-function setWorld(j: THREE.Object3D, at: THREE.Vector3, turn: THREE.Quaternion): void {
+function setWorld(j: Node, at: Vec3, turn: Quat): void {
   const root = j.parent!;
   root.updateWorldMatrix(true, false);
   j.position.copy(root.worldToLocal(_local.copy(at)));
@@ -765,12 +765,12 @@ function setWorld(j: THREE.Object3D, at: THREE.Vector3, turn: THREE.Quaternion):
   j.quaternion.copy(_rootTurn.invert().multiply(turn));
   j.scale.setScalar(1);
 }
-const _local = new THREE.Vector3(), _rootTurn = new THREE.Quaternion();
-const UP = new THREE.Vector3(0, 1, 0);
-const _spin = new THREE.Quaternion(), _off = new THREE.Vector3();
+const _local = new Vec3(), _rootTurn = new Quat();
+const UP = new Vec3(0, 1, 0);
+const _spin = new Quat(), _off = new Vec3();
 
 /** A prop a branch at `at` has flown into (its circle, under its top), or null. */
-function propAt(at: THREE.Vector3): boolean {
+function propAt(at: Vec3): boolean {
   for (const o of G.arena.obstacles) {
     if (Math.hypot(at.x - o.x, at.z - o.z) < o.r && at.y - groundHeight(o.x, o.z) < o.h) return true;
   }
@@ -779,9 +779,9 @@ function propAt(at: THREE.Vector3): boolean {
 
 /** A branch come down at `at`: earth (or bark) thrown up, a soft ring, its thud; out in the open, this game's hero
  *  hurt `damage` within `splash` m (from `from`, her side: a shield raised towards her takes it). */
-function landed(at: THREE.Vector3, inProp: boolean, from: THREE.Vector3, damage: number, splash: number,
+function landed(at: Vec3, inProp: boolean, from: Vec3, damage: number, splash: number,
   kept: ThrownBranch, foe: Enemy | null): void {
-  const floor = new THREE.Vector3(at.x, groundHeight(at.x, at.z), at.z);
+  const floor = new Vec3(at.x, groundHeight(at.x, at.z), at.z);
   debris(inProp ? at : floor, { count: inProp ? 6 : 10, color: inProp ? 0x4a3a22 : undefined, speed: 3 });
   rootSounds.stake();
   if (inProp) return;
@@ -825,13 +825,13 @@ const cloudsOf = new WeakMap<Enemy, number[]>();
 export function sporesAt(id: number, x: number, z: number, vx: number, vz: number, life: number, damage: number): void {
   const s = R.spores, foe = foeOf(id);
   let ends = life;
-  const where = (t: number, out: THREE.Vector3): boolean => {
+  const where = (t: number, out: Vec3): boolean => {
     out.set(x + vx * t, 0, z + vz * t);
     if (Math.hypot(out.x, out.z) > ARENA.radius + 1 || (foe && !foe.alive)) ends = Math.min(ends, t + 1);
     return t < ends;
   };
   driftGlow(where, s.radius, life, { color: 0x8adf40, intensity: 0.55 });
-  const at = new THREE.Vector3();
+  const at = new Vec3();
   let t = 0, next = 0.5, puff = 0;
   addEffect({
     update(dt) {
@@ -842,7 +842,7 @@ export function sporesAt(id: number, x: number, z: number, vx: number, vz: numbe
         puff = 0;
         const a = Math.random() * Math.PI * 2, rr = Math.sqrt(Math.random()) * s.radius * 0.85;
         const px = at.x + Math.sin(a) * rr, pz = at.z + Math.cos(a) * rr;
-        smokePuff(new THREE.Vector3(px, groundHeight(px, pz) + 0.2, pz), { count: 1, color: 0x7aa838, alpha: 0.28, size: 1.1, sizeEnd: 2.6, speed: 0.25, rise: 0.5, life: 1.8 });
+        smokePuff(new Vec3(px, groundHeight(px, pz) + 0.2, pz), { count: 1, color: 0x7aa838, alpha: 0.28, size: 1.1, sizeEnd: 2.6, speed: 0.25, rise: 0.5, life: 1.8 });
       }
       if (t >= next) {
         next += s.tick;
@@ -873,7 +873,7 @@ bossHooks('rootmother', {
       rootSounds.groan(1.6);
       addShake(0.5);
       shockwave(e.pos, { color: AMBER, intensity: 1.4, from: 1, to: 9, life: 1 });
-      debris(new THREE.Vector3(e.pos.x, 3, e.pos.z), { count: 30, color: 0x4a3a22, speed: 6 });
+      debris(new Vec3(e.pos.x, 3, e.pos.z), { count: 30, color: 0x4a3a22, speed: 6 });
       return;
     }
     if (phase < 1) return;
@@ -885,7 +885,7 @@ bossHooks('rootmother', {
     shockwave(e.pos, { color: SAP, intensity: 1.6, from: 1, to: 10, life: 1.1 });
     for (let i = 0; i < 24; i++) {
       const a = Math.random() * Math.PI * 2, r = rand(2, ARENA.radius - 2);
-      burst(new THREE.Vector3(Math.sin(a) * r, rand(6, 10), Math.cos(a) * r), { count: 3, color: 0x3a6a26, intensity: 0.6, speed: 0.6, up: -1, life: 2.4, size: 0.18, sizeEnd: 0.12, gravity: 1.5, drag: 1.5 });
+      burst(new Vec3(Math.sin(a) * r, rand(6, 10), Math.cos(a) * r), { count: 3, color: 0x3a6a26, intensity: 0.6, speed: 0.6, up: -1, life: 2.4, size: 0.18, sizeEnd: 0.12, gravity: 1.5, drag: 1.5 });
     }
   },
 });

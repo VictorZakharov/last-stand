@@ -3,7 +3,8 @@
 // strapped boots. Carries the equipped weapon and shield, and wears only the armour
 // equipped: without a chest item the quilted gambeson, trousers and boots under it, without a hands item
 // bare hands below the gambeson's sleeves. Fully procedural.
-import * as THREE from '../../engine/three.ts';
+import { Box3, Euler, Geometry, Mat4, Maths, Mesh, Node, Quat, Vec2, Vec3 } from '../../engine/api/index.ts';
+import * as shapes from '../../engine/api/shapes/index.ts';
 import { createKit } from '../../core/materials';
 import { leather as leatherMaps, mail as mailMaps, cloth as clothMaps, steel as steelMaps, fur as furMaps, wood as woodMaps, pbrMaterialMaps } from '../../core/textures';
 import { engravedSteel, projectUV, steelRegion } from '../../core/engraving';
@@ -129,7 +130,7 @@ const SIT_HANDS = tunable('warriorSit', { roll: [0, 0], rise: 0.005, slant: 0.1,
 const _sitTurn: RestTurn = { roll: [0, 0], bend: [0, 0], along: [0, 0], over: [0, 0], armIn: [0, 0], arc: [0, 0], out: [0, 0], low: [0, 0] };
 const _lifted: number[] = [], _resting: number[] = [];
 
-const ZERO = new THREE.Vector3(), _v = new THREE.Vector3();
+const ZERO = new Vec3(), _v = new Vec3();
 /** the actions that strike with the weapons (Rending Cleave, Power Strike, Thunder Crescent, Steel Tempest, Twin Fangs):
  *  their weapons leave a trail as they swing (`swung`); Bull Rush strikes with the body */
 const STRIKES = new Set(['swing', 'chop', 'smite', 'spin', 'flurry']);
@@ -139,7 +140,7 @@ const TROUSERS: TrouserCut = {
   top: 0.13, waistW: 0.132, waistD: 0.108, hipW: 0.204, front: 0.106, seat: 0.138, crotch: -0.115,
   thigh: 0.108, knee: 0.075, calf: 0.071, ankle: 0.045, tuck: 0.1, folds: 0.004,
 };
-interface Weapon { group: THREE.Group; len: number; off: number | null; /** the grip's radius, for the fingers */ r: number; /** its striking part along the grip, from and to (m: a blade from its lower third to its point, a head's ends), which a swing's trail follows */ edge: readonly [number, number]; /** worn on the belt: the point along it that sits in the frog, and whether it hangs blade down (a sword, from its guard) or head up (an axe or mace, its haft through the ring) */ hang?: { at: number; down: boolean } }
+interface Weapon { group: Node; len: number; off: number | null; /** the grip's radius, for the fingers */ r: number; /** its striking part along the grip, from and to (m: a blade from its lower third to its point, a head's ends), which a swing's trail follows */ edge: readonly [number, number]; /** worn on the belt: the point along it that sits in the frog, and whether it hangs blade down (a sword, from its guard) or head up (an axe or mace, its haft through the ring) */ hang?: { at: number; down: boolean } }
 /** the grip turns the weapon's +Y forward and a little up out of the bent arm */
 const GRIP = Math.PI / 2 + 0.7;
 /** straightens the weapon along the arm, for swings that trace the damage arc */
@@ -161,8 +162,8 @@ const RUN_LEVEL = 0.7;
  *  right of the chest, the weapon up past the right shoulder, tipped back and out, the right elbow down and out, the
  *  left hand on the lower grip below; the arms carried by the trunk's turn, not pumping. Held upright before the face
  *  in the right hand, as at a walk, the left let go of its grip out of reach and hung at the side */
-const RUN_TWO_AT = new THREE.Vector3(-0.07, 0.14, 0.3), RUN_TWO_DIR = new THREE.Vector3(-0.15, 1, -0.28);
-const RUN_TWO_POLE = new THREE.Vector3(-1, -1, -0.2);
+const RUN_TWO_AT = new Vec3(-0.07, 0.14, 0.3), RUN_TWO_DIR = new Vec3(-0.15, 1, -0.28);
+const RUN_TWO_POLE = new Vec3(-1, -1, -0.2);
 /** a two-hander carried on the shoulder out of a fight, in the chest's own frame (rig units), as a person carries a
  *  heavy one: the upper arm hanging by the side, the forearm level ahead and rising a little, the weapon laid back
  *  from the fist up over the front of the shoulder, the wrist straight (the blade leaves a straight fist 130 degrees
@@ -172,12 +173,12 @@ const RUN_TWO_POLE = new THREE.Vector3(-1, -1, -0.2);
  *  fought for `SHOULDER_AFTER` s, lifted onto it over `SHOULDER_LIFT` s, eased in and out (damped towards it, the lift
  *  set off at full speed: the axe's tip from still to 11 cm a frame); any move but a drink takes it off at once, the
  *  move's own fade bringing it down */
-const SHOULDER_AT = new THREE.Vector3(-0.22, 0.14, 0.3), SHOULDER_DIR = new THREE.Vector3(0.06, 0.62, -0.78).normalize();
-const SHOULDER_POLE = new THREE.Vector3(-0.2, -1, -0.3), SHOULDER_AFTER = 2, SHOULDER_LIFT = 0.6;
+const SHOULDER_AT = new Vec3(-0.22, 0.14, 0.3), SHOULDER_DIR = new Vec3(0.06, 0.62, -0.78).normalize();
+const SHOULDER_POLE = new Vec3(-0.2, -1, -0.3), SHOULDER_AFTER = 2, SHOULDER_LIFT = 0.6;
 /** a move begun from the shoulder carry fades in over this long (s) */
 const OFF_SHOULDER = 0.3;
-const _backQ = new THREE.Quaternion(), _backDir = new THREE.Vector3(), _backFlat = new THREE.Vector3();
-const _backPole = new THREE.Vector3();
+const _backQ = new Quat(), _backDir = new Vec3(), _backFlat = new Vec3();
+const _backPole = new Vec3();
 /** Through the eyes (tuned live in a dev build, `--tune warriorEyes.shoulder=...`): the right arm's shoulder in the
  *  view (camera space, m: x right, y up, -z ahead; the left's mirrors it), low beside the camera, as a game's
  *  first-person arms come up from the screen's bottom corners; where a two-hander's right elbow points (`pole`, the
@@ -227,32 +228,32 @@ const BARE_CUFF = -0.204;
 /** how far (rad) a fist's forearm is turned about its length to the fist's knuckles through the eyes: a forearm turns
  *  its hand over about 170 degrees from palm up to palm down (`rollForearm`) */
 const FOREARM_ROLL = 1.4;
-const _er = new THREE.Vector3(), _ed = new THREE.Vector3(), _ef = new THREE.Vector3(), _tf = new THREE.Vector3();
-const _rf = new THREE.Vector3(), _lf = new THREE.Vector3();
+const _er = new Vec3(), _ed = new Vec3(), _ef = new Vec3(), _tf = new Vec3();
+const _rf = new Vec3(), _lf = new Vec3();
 /** the way a move through the eyes turns each one-hander's flat (the right's, the left's), and where a swing puts each
  *  elbow (the view's, from the shoulder: viewSwing.ts `swingAt`) */
-const _mr = new THREE.Vector3(), _ml = new THREE.Vector3(), _pr = new THREE.Vector3(), _pl = new THREE.Vector3();
+const _mr = new Vec3(), _ml = new Vec3(), _pr = new Vec3(), _pl = new Vec3();
 /** and a two-hander's guard's elbow (`TWO_REST`) */
-const _pe = new THREE.Vector3();
-const _bones: ArmBones = { upper: 0, fore: 0, hand: 0, strike: 0 }, _ti = new THREE.Matrix4();
+const _pe = new Vec3();
+const _bones: ArmBones = { upper: 0, fore: 0, hand: 0, strike: 0 }, _ti = new Mat4();
 /** where along a weapon its blow lands, a share of its length from the grip (a blade's centre of percussion, its tip's
  *  third): what a swing through the eyes lands on the aim */
 const STRIKES_AT = 0.75;
 /** each one's elbow as a reach's pole (`swingPole`), and the arm's joints as placed before a fit (`fitInView`) */
-const _qr = new THREE.Vector3(), _ql = new THREE.Vector3(), _sr = new THREE.Vector3(), _sl = new THREE.Vector3();
+const _qr = new Vec3(), _ql = new Vec3(), _sr = new Vec3(), _sl = new Vec3();
 /** where the chest turns under the eyes: the spine, between the shoulders (in the view, as far down and ahead as the
  *  shoulder `s` is) */
-const _sp = new THREE.Vector3();
+const _sp = new Vec3();
 /** a two-hander's own right shoulder under a swing its hands place (`ViewSwing.holds`) */
-const _so = new THREE.Vector3();
-const spineUnder = (s: THREE.Vector3, out: THREE.Vector3): THREE.Vector3 => out.set(0, s.y, s.z);
+const _so = new Vec3();
+const spineUnder = (s: Vec3, out: Vec3): Vec3 => out.set(0, s.y, s.z);
 /** an ease in and out over 0..1 */
 const smooth = (x: number): number => x * x * (3 - 2 * x);
-const _fitQ = [new THREE.Quaternion(), new THREE.Quaternion(), new THREE.Quaternion()];
+const _fitQ = [new Quat(), new Quat(), new Quat()];
 /** `to` turned over, if `w` strikes with either of its sides (a sword's two edges, a maul's two faces), onto the side
  *  of `from` it faces: a move's flat taken from a rest's goes the short way round, never through the handle's line
  *  (an axe's bit has one side, and keeps it) */
-function sameSide(w: Weapon, from: THREE.Vector3, to: THREE.Vector3): THREE.Vector3 {
+function sameSide(w: Weapon, from: Vec3, to: Vec3): Vec3 {
   if (STRIKES_WITH[w.group.name] !== 'bit' && from.dot(to) < 0) to.negate();
   return to;
 }
@@ -262,7 +263,7 @@ function sameSide(w: Weapon, from: THREE.Vector3, to: THREE.Vector3): THREE.Vect
  *  it was twice as wide) or a hafted weapon's (`oneOn`, `oneDir`: the fist below the frame, the haft in over its bottom
  *  edge, the head at the right, as its axe; `oneFlat`, its head broadside, the bit towards the middle, as that one's:
  *  left to the fist's own turn, the axe's head was seen edge on, the haft alone) */
-function oneRest(w: Weapon, on: THREE.Vector3, way: THREE.Vector3, flat: THREE.Vector3): number {
+function oneRest(w: Weapon, on: Vec3, way: Vec3, flat: Vec3): number {
   const blade = !!w.hang?.down;
   fromScreen(blade ? EYES.bladeOn : EYES.oneOn, on);
   way.fromArray(blade ? EYES.bladeDir : EYES.oneDir).normalize();
@@ -271,49 +272,49 @@ function oneRest(w: Weapon, on: THREE.Vector3, way: THREE.Vector3, flat: THREE.V
 }
 /** A one-hander's hold through Steel Tempest's spin, as `oneRest` (its place, way and flat in the view as the body
  *  faces ahead: carried round from there). */
-function spinRest(_w: Weapon, on: THREE.Vector3, way: THREE.Vector3, flat: THREE.Vector3): number {
+function spinRest(_w: Weapon, on: Vec3, way: Vec3, flat: Vec3): number {
   fromScreen(EYES.spinOn, on);
   way.fromArray(EYES.spinDir).normalize();
   flat.fromArray(EYES.spinFlat).normalize();
   return 1;
 }
-const _fw = [0, 1, 2, 3, 4, 5].map(() => new THREE.Vector3()), _fwq = new THREE.Quaternion();
+const _fw = [0, 1, 2, 3, 4, 5].map(() => new Vec3()), _fwq = new Quat();
 /** a held swing's fit blended back to the arm as posed (`fitHeld`): the elbows, the target, the hand joint's turns */
-const _hb = [0, 1, 2].map(() => new THREE.Vector3()), _hbq = [new THREE.Quaternion(), new THREE.Quaternion()];
+const _hb = [0, 1, 2].map(() => new Vec3()), _hbq = [new Quat(), new Quat()];
 /** how long the left hand takes to come onto the lower grip as a two-hander comes off the shoulder (s): in 0.15 s,
  *  reaching for a haft already on its way up to Power Strike's raise, it went 28 cm in a frame */
 const TAKE_HOLD = 0.35;
 /** the way a shouldered weapon's flat faces, in the chest's frame: sideways, as a straight fist holds it, palm in and
  *  thumb up (left to the turn the weapon was in before, the wrist stopped at its range with the blade upright) */
-const SHOULDER_FLAT = new THREE.Vector3(1, 0, 0);
+const SHOULDER_FLAT = new Vec3(1, 0, 0);
 /** a weapon's flat, in its grip's frame: every weapon is built with its blade's width along its own x, and mounted a
  *  quarter turn about the grip (`MOUNT`), so its flat lies along the palm */
-const FLAT_IN_GRIP = new THREE.Vector3(1, 0, 0);
-const _hp = new THREE.Vector3(), _hd = new THREE.Vector3();
+const FLAT_IN_GRIP = new Vec3(1, 0, 0);
+const _hp = new Vec3(), _hd = new Vec3();
 /** a punching arm's goal as posed (`punchArm`) */
-const _pkW = new THREE.Vector3(), _pkQ = new THREE.Quaternion(), _pkE = new THREE.Vector3(), _pkS = new THREE.Vector3();
-const _grip = new THREE.Vector3(), _pole = new THREE.Vector3(1, -0.7, -0.6), _pw = new THREE.Vector3(), _fq = new THREE.Quaternion(), _cq = new THREE.Quaternion(), _eq = new THREE.Quaternion(), _wq = new THREE.Quaternion(), _vl = new THREE.Quaternion(), _vr = new THREE.Quaternion();
-const _letW = new THREE.Vector3(), _letQ = new THREE.Quaternion(), _letP = new THREE.Vector3(), _letS = new THREE.Vector3();
-const _gw = new THREE.Vector3(), _dw = new THREE.Vector3(), _cur = new THREE.Vector3(), _hq = new THREE.Quaternion(), _pq = new THREE.Quaternion(), _sq = new THREE.Quaternion();
+const _pkW = new Vec3(), _pkQ = new Quat(), _pkE = new Vec3(), _pkS = new Vec3();
+const _grip = new Vec3(), _pole = new Vec3(1, -0.7, -0.6), _pw = new Vec3(), _fq = new Quat(), _cq = new Quat(), _eq = new Quat(), _wq = new Quat(), _vl = new Quat(), _vr = new Quat();
+const _letW = new Vec3(), _letQ = new Quat(), _letP = new Vec3(), _letS = new Vec3();
+const _gw = new Vec3(), _dw = new Vec3(), _cur = new Vec3(), _hq = new Quat(), _pq = new Quat(), _sq = new Quat();
 /** the legs' own blend over the pose this frame (left, right), see `legs.update` */
 const _legW: [number, number] = [1, 1];
-const Y_AXIS = new THREE.Vector3(0, 1, 0);
-const IDENT = new THREE.Quaternion(), _up = new THREE.Vector3();
-const _ra = new THREE.Vector3(), _rd = new THREE.Vector3(), _la = new THREE.Vector3(), _ld = new THREE.Vector3();
-const _gs1 = new THREE.Vector3(), _gs2 = new THREE.Vector3(), _gs3 = new THREE.Vector3(), _gsq = new THREE.Quaternion();
+const Y_AXIS = new Vec3(0, 1, 0);
+const IDENT = new Quat(), _up = new Vec3();
+const _ra = new Vec3(), _rd = new Vec3(), _la = new Vec3(), _ld = new Vec3();
+const _gs1 = new Vec3(), _gs2 = new Vec3(), _gs3 = new Vec3(), _gsq = new Quat();
 /** a weapon's points that can be its lowest, in its group's frame: each corner of its surface once */
-const LOW_POINTS = new WeakMap<Weapon, THREE.Vector3[]>();
+const LOW_POINTS = new WeakMap<Weapon, Vec3[]>();
 
 /** `w`'s points that can be its lowest (worked out the first time they're needed) */
-function lowPoints(w: Weapon): THREE.Vector3[] {
+function lowPoints(w: Weapon): Vec3[] {
   let points = LOW_POINTS.get(w);
   if (points) return points;
   points = [];
-  const seen = new Set<string>(), into = new THREE.Matrix4(), p = new THREE.Vector3();
+  const seen = new Set<string>(), into = new Mat4(), p = new Vec3();
   w.group.updateWorldMatrix(true, true);
   const from = w.group.matrixWorld.clone().invert();
   w.group.traverse((o) => {
-    const mesh = o as THREE.Mesh;
+    const mesh = o as Mesh;
     if (!mesh.isMesh) return;
     into.multiplyMatrices(from, mesh.matrixWorld);
     const at = mesh.geometry.attributes.position;
@@ -329,14 +330,14 @@ function lowPoints(w: Weapon): THREE.Vector3[] {
   LOW_POINTS.set(w, points);
   return points;
 }
-const _hw1 = new THREE.Vector3(), _hw2 = new THREE.Vector3(), _hw3 = new THREE.Vector3(), _hw4 = new THREE.Vector3();
+const _hw1 = new Vec3(), _hw2 = new Vec3(), _hw3 = new Vec3(), _hw4 = new Vec3();
 /** `rollFlat`'s: the flat as it is and as it's wanted, across the weapon, their cross, and the roll between them */
-const _fn = new THREE.Vector3(), _ft = new THREE.Vector3(), _fc = new THREE.Vector3(), _fr = new THREE.Quaternion();
-const SHIELD_SIDE = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, Math.PI / 2, 0));
-const SHIELD_FRONT = new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.PI / 2, 0, 0));
-const SIDE_POS = new THREE.Vector3(0.07, -0.02, 0), FRONT_POS = new THREE.Vector3(0, -0.1, 0);
-const HALF_ROUND = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), Math.PI);
-const V = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
+const _fn = new Vec3(), _ft = new Vec3(), _fc = new Vec3(), _fr = new Quat();
+const SHIELD_SIDE = new Quat().setFromEuler(new Euler(0, Math.PI / 2, 0));
+const SHIELD_FRONT = new Quat().setFromEuler(new Euler(Math.PI / 2, 0, 0));
+const SIDE_POS = new Vec3(0.07, -0.02, 0), FRONT_POS = new Vec3(0, -0.1, 0);
+const HALF_ROUND = new Quat().setFromAxisAngle(new Vec3(0, 0, 1), Math.PI);
+const V = (x: number, y: number, z: number) => new Vec3(x, y, z);
 const sm = (a: number, b: number, x: number): number => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
 
 // --- the basic swing (third person), keyed over the cast. The tip goes round in units of half the arc
@@ -355,8 +356,8 @@ const FIST_IN = 0.06;
 const WALK_FIST = 0.45, WALK_DROOP = 0.3;
 /** an empty hand hanging: how far it's turned on its forearm from the rig's rest, the palm in to the thigh (rad) */
 const IDLE_PALM = tunable('idlePalm', { turn: 1.5 });
-const PALM_AXIS = new THREE.Vector3(0, 1, 0);
-const _hangUp = new THREE.Vector3(), _hangRow = new THREE.Vector3();
+const PALM_AXIS = new Vec3(0, 1, 0);
+const _hangUp = new Vec3(), _hangRow = new Vec3();
 /** and how much further the elbows bend as he moves (rad: to about 45 degrees, the owner's "bend elbows a tiny bit
  *  more, like 45 degress"; hanging at 20 to 30 they read as stiff) */
 const WALK_BEND = 0.35;
@@ -398,10 +399,10 @@ const BACK_DIP = [0.6, 1.4] as const;
  *  strike's own light, glinted where its hand had swept down and the ground had glowed: three flashes in a second
  *  there (lab `cast powerStrike --gear dual --views first`) */
 const POWER_RISE = 0.5;
-const _dipAxis = new THREE.Vector3();
+const _dipAxis = new Vec3();
 /** A one-handed rest (`at`, the weapon's way `dir`, its flat `flat`) for a hand going back to it with `fading` of
  *  its last place still held: aimed below it by that much, the weapon turned down with its flat (`BACK_DIP`). */
-function dipUnder(at: THREE.Vector3, dir: THREE.Vector3, flat: THREE.Vector3, fading: number): void {
+function dipUnder(at: Vec3, dir: Vec3, flat: Vec3, fading: number): void {
   at.y -= BACK_DIP[0] * fading;
   _dipAxis.set(dir.z, 0, -dir.x);
   if (_dipAxis.lengthSq() < 1e-6) return;
@@ -471,7 +472,7 @@ const SW_ROLL = Math.PI / 2, SW_BACK = 0.75, FANG_ROLL = -0.8;
  *  trunk's turn sweeps it wide. (Keyed by the right arm's turns, the arm swung 90 degrees each way: the lower grip
  *  went out of the left arm's reach and back through the chest, and the left hand let go of it on every swing.) */
 const SW2_ROUND = 0.75, SW2_OUT = 0.47, SW2_IN = 0.32, SW2_LOW = -0.12, SW2_HIGH = 0.15, SW2_LEAD = 2, SW2_LEVEL = 0.5, SW2_RISE = 0.9;
-const SW2_POLE = new THREE.Vector3(-0.5, -1, -0.2);
+const SW2_POLE = new Vec3(-0.5, -1, -0.2);
 /** the edge leads through the cut, and past it the wrists roll back over (the swing's turn, `SW_TIP`, rad: easing off
  *  from the first to none at the second). Led with the edge to the end of the follow-through, the forearm was asked to
  *  turn near the far side of its range, stopped at whichever end was nearer, and turned the hand over in a frame,
@@ -482,8 +483,8 @@ const SW2_EDGE = [0.9, 1.3];
  *  out ahead and to his right, rising a little (a fist holds it near square to the forearm: see SW2_*), its edge
  *  leading the turn (he turns to his left: palm up, as a forehand's). (Spun in the right hand alone, the arms flung
  *  out to either side, the left hand let go of it.) */
-const SPIN2_AT = new THREE.Vector3(-0.15, -0.2, 0.42), SPIN2_DIR = new THREE.Vector3(-0.5, 0.3, 0.8).normalize();
-const SPIN2_FLAT = new THREE.Vector3(0, 1, 0);
+const SPIN2_AT = new Vec3(-0.15, -0.2, 0.42), SPIN2_DIR = new Vec3(-0.5, 0.3, 0.8).normalize();
+const SPIN2_FLAT = new Vec3(0, 1, 0);
 const SW_TILT: Keys = [[0, 0.08], [0.45, 0.12], [0.7, -0.02], [1, -0.1]];
 
 // --- Power Strike (third person), keyed over its 1.5s cast, the blow at 0.9 (the skill's fireAt): a step in
@@ -538,7 +539,7 @@ const GROUND = tunable('warriorGround', { ahead: 0.6, side: -0.08, high: 0.7, ya
  *  degrees): a fist gives 30 toward the little finger, and asked for the rest the forearm turned to its stop too,
  *  the elbow thrown out ("one handed weird elbow bent too"); the floor stop brings the blade down the rest */
 const ONE_LAND_WRIST = 0.45;
-const SM_POLE = new THREE.Vector3();
+const SM_POLE = new Vec3();
 /** a blow's head swung down its arc (`landing`) in steps of this (rad), to straight down at the lowest, and the step
  *  it meets something in halved this many times */
 const ARC_STEP = 0.05, ARC_LOWEST = -Math.PI / 2 + 0.02, ARC_HALVINGS = 5;
@@ -572,7 +573,7 @@ const EDGE_ON = tunable('warriorEdge', { k: 1 });
  *  tip strayed 39 to 49 cm off a straight line from above on its way down (`lab range`'s path), 11 to 12 now; with
  *  no raise across the left hand let go of it overhead, and at 0.2 the shoulder went past its range as it charged. */
 const PS_ACROSS = 0.18;
-const _land = new THREE.Vector2();
+const _land = new Vec2();
 /** the overhead blows through the eyes: the weapon raised by `lift` of the cast, coming down from `from` to `to` (as
  *  their keys in models/warriorEyes.ts, landing where the skill fires), and how much it trembles as it's held up
  *  (Power Strike's charge) */
@@ -609,8 +610,8 @@ function armShape(t: number, phi: number): number {
  *  under the armpit or down the arm. Both pieces are moved by the same rule, so the seam between them stays sewn. (At
  *  the tunic's own depth, 10 cm where his sleeve is 15 across, the top of each shoulder was a thin ridge with a groove
  *  under it where it met the arm: "shoulder is too thin in parts".) */
-const SHOULDER_DEPTH = 0.3, _dn = new THREE.Vector3();
-function deepen(g: THREE.BufferGeometry, dx = 0, dy = 0, dz = 0): THREE.BufferGeometry {
+const SHOULDER_DEPTH = 0.3, _dn = new Vec3();
+function deepen(g: Geometry, dx = 0, dy = 0, dz = 0): Geometry {
   const q = g.attributes.position, n = g.attributes.normal;
   for (let i = 0; i < q.count; i++) {
     const x = q.getX(i) + dx, y = q.getY(i) + dy, z = q.getZ(i) + dz;
@@ -628,7 +629,7 @@ const sleeveR = (h: number, phi: number): number => lerp(SLEEVE.r0, SLEEVE.r1, h
 /** the pauldrons' size against the shoulder */
 const PAULDRON = 0.7;
 const bpTop = (a: number) => 0.235 - 0.03 * Math.cos(a) ** 2;
-function bpPoint(a: number, y: number, out: THREE.Vector3, lift = 0): THREE.Vector3 {
+function bpPoint(a: number, y: number, out: Vec3, lift = 0): Vec3 {
   const x = Math.sin(a) * (bpRx(y) + lift);
   const G = (dx: number, dy: number, s: number) => Math.exp(-(dx * dx + dy * dy) / (s * s));
   const pec = 0.012 * G(Math.abs(x) - 0.075, y - 0.12, 0.07) + 0.007 * Math.exp(-((x / 0.025) ** 2)) * sm(-0.07, 0.05, y);
@@ -637,9 +638,9 @@ function bpPoint(a: number, y: number, out: THREE.Vector3, lift = 0): THREE.Vect
 const breast: SurfaceFn = (u, v, out) => { const a = (u - 0.5) * 2 * BP_A; return bpPoint(a, lerp(-0.07, bpTop(a), v), out); };
 const back: SurfaceFn = (u, v, out) => { const a = Math.PI + (u - 0.5) * 2 * 1.45; return bpPoint(a, lerp(-0.05, 0.21, v), out); };
 /** a point on the breastplate's front at x, y, `lift` above it */
-function onPlate(x: number, y: number, lift = 0.004): THREE.Vector3 {
+function onPlate(x: number, y: number, lift = 0.004): Vec3 {
   const a = Math.asin(clamp(x / bpRx(y), -1, 1));
-  return bpPoint(a, y, new THREE.Vector3(), lift);
+  return bpPoint(a, y, new Vec3(), lift);
 }
 
 export const buildWarrior = (): Model => built(warriorSteps());
@@ -651,7 +652,7 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
   const rng = mulberry(11);
   const tex = (maps: ReturnType<typeof steelMaps>, rep: number, ns = 1) => { const m = pbrMaterialMaps(maps, rep, ns); return { map: m.map, normalMap: m.normalMap, roughnessMap: m.roughnessMap, normalScale: m.normalScale }; };
   const E = engravedSteel();
-  const engraved = kit.std({ color: 0xc4c8cf, metalness: 0.92, roughness: 1, map: E.map, normalMap: E.normalMap, roughnessMap: E.roughnessMap, normalScale: new THREE.Vector2(1.4, 1.4) });
+  const engraved = kit.std({ color: 0xc4c8cf, metalness: 0.92, roughness: 1, map: E.map, normalMap: E.normalMap, roughnessMap: E.roughnessMap, normalScale: new Vec2(1.4, 1.4) });
   const plateM = kit.std({ color: 0xa9adb5, metalness: 0.92, roughness: 1, ...tex(steelMaps(), 1, 0.8) });
   yield;
   // blades: a thin blade turned away from the lights only mirrors its surroundings, and the dark ground
@@ -670,7 +671,7 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
   const dye = new Dye('blue').cloth(cloth);
   // Independent materials: tint the cuirass without colouring the lower body, fittings or weapons.
   const cuirass = kit.std({ color: 0xc4c8cf, metalness: 0.92, roughness: 1, map: E.map, normalMap: E.normalMap,
-    roughnessMap: E.roughnessMap, normalScale: new THREE.Vector2(1.4, 1.4) });
+    roughnessMap: E.roughnessMap, normalScale: new Vec2(1.4, 1.4) });
   const cuirassBack = kit.std({ color: 0xa9adb5, metalness: 0.92, roughness: 1, ...tex(steelMaps(), 1, 0.8) });
   dye.tint(cuirass, cuirassBack);
   // Dye the torso wrap underneath its belts; the belts and legs keep their original leather.
@@ -728,11 +729,11 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
   S.add(belt(0.173, 0.153, 0.246, 0.032, 0.012), leather, j.spine);
   yield;
   // rivets along each band
-  const studs: THREE.BufferGeometry[] = [];
-  const studAt = (p: THREE.Vector3, n: THREE.Vector3, r: number) => {
-    const g = stud(r), m = new THREE.Matrix4().lookAt(ZERO, n, V(0, 1, 0));
+  const studs: Geometry[] = [];
+  const studAt = (p: Vec3, n: Vec3, r: number) => {
+    const g = stud(r), m = new Mat4().lookAt(ZERO, n, V(0, 1, 0));
     // lookAt aims -Z at n: turn it round so the dome (+Z) faces out
-    g.applyMatrix4(new THREE.Matrix4().makeRotationY(Math.PI)).applyMatrix4(m).translate(p.x, p.y, p.z);
+    g.applyMatrix4(new Mat4().makeRotationY(Math.PI)).applyMatrix4(m).translate(p.x, p.y, p.z);
     studs.push(g);
   };
   for (const [y, g] of [[0.19, 0.006], [0.125, 0]] as const) for (let k = 0; k < 14; k++) {
@@ -750,7 +751,7 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
   A.add(edgeTube(breast, 'v1', 0.008, 28), plateM, j.chest);
   A.add(edgeTube(back, 'v1', 0.008, 20), plateM, j.chest);
   for (let k = 0; k <= 16; k++) {
-    const a = (k / 16 - 0.5) * 2 * BP_A * 0.96, p = bpPoint(a, -0.05, new THREE.Vector3(), 0.008);
+    const a = (k / 16 - 0.5) * 2 * BP_A * 0.96, p = bpPoint(a, -0.05, new Vec3(), 0.008);
     studAt(p, V(Math.sin(a), 0, Math.cos(a)), 0.006);
     yield;
   }
@@ -761,7 +762,7 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
   yield;
   // crossed straps over the chest, each with a buckle; they run on over the shoulders
   for (const s of [1, -1]) {
-    const pts: THREE.Vector3[] = [V(s * 0.1, 0.27, -0.1), V(s * 0.115, 0.29, -0.02), V(s * 0.105, 0.25, 0.09)];
+    const pts: Vec3[] = [V(s * 0.1, 0.27, -0.1), V(s * 0.115, 0.29, -0.02), V(s * 0.105, 0.25, 0.09)];
     for (let k = 0; k <= 6; k++) { const t = k / 6; pts.push(onPlate(lerp(s * 0.1, -s * 0.16, t), lerp(0.2, -0.04, t), 0.004)); }
     A.add(strap(pts, 0.04, 0.007), leather, j.chest);
     const mid = onPlate(s * -0.01, 0.1, 0.012);
@@ -794,14 +795,14 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
   // across than deep, with a rolled edge (round, it stood 17 mm off the sides of his neck, its edge cut flat: a hard line
   // round the neck over the fur)
   const COLLAR = { top: 0.075, foot: 0.09, high: 0.06, across: 0.93, rim: 0.006 };
-  const collarAt = (g: THREE.BufferGeometry, y0: number) => {
+  const collarAt = (g: Geometry, y0: number) => {
     const p = g.attributes.position;
     for (let i = 0; i < p.count; i++) p.setX(i, p.getX(i) * lerp(1, COLLAR.across, sm(-COLLAR.high / 2, COLLAR.high / 2, p.getY(i) + y0)));
     g.computeVertexNormals();
     return g;
   };
-  S.add(collarAt(new THREE.CylinderGeometry(COLLAR.top, COLLAR.foot, COLLAR.high, 24, 3, true), 0), cloth, j.chest, [0, 0.27, -NECKLINE_BACK]);
-  S.add(collarAt(new THREE.TorusGeometry(COLLAR.top, COLLAR.rim, 6, 24).rotateX(Math.PI / 2), COLLAR.high / 2), cloth, j.chest, [0, 0.27 + COLLAR.high / 2, -NECKLINE_BACK]);
+  S.add(collarAt(shapes.cylinder(COLLAR.top, COLLAR.foot, COLLAR.high, 24, 3, true), 0), cloth, j.chest, [0, 0.27, -NECKLINE_BACK]);
+  S.add(collarAt(shapes.torus(COLLAR.top, COLLAR.rim, 6, 24).rotateX(Math.PI / 2), COLLAR.high / 2), cloth, j.chest, [0, 0.27 + COLLAR.high / 2, -NECKLINE_BACK]);
 
   yield;
   // --- pauldrons: three steel lames over each shoulder with a rolled rim, an engraved medallion on the
@@ -841,7 +842,7 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
     H.add(furTufts(rng, 40, (i, o) => { const a = (i / 40) * Math.PI * 2; o.p.set(Math.sin(a) * 0.06, -0.035, Math.cos(a) * 0.06); o.d.set(Math.sin(a), 0.6, Math.cos(a)); }, 0.035, 0.009), furM, el);
     H.add(scaleUV(lathe([[0.052, -0.26], [0.06, -0.2], [0.066, -0.1], [0.07, -0.05], [0.068, -0.035]], 16), 2, 1), leather, el);
     // its top closed under the elbow's fur (through the eyes, with the fur hidden, it would show open)
-    H.add(new THREE.CircleGeometry(0.069, 16).rotateX(-Math.PI / 2), leather, el, [0, -0.037, 0]);
+    H.add(shapes.circle(0.069, 16).rotateX(-Math.PI / 2), leather, el, [0, -0.037, 0]);
     const vb: SurfaceFn = (u, v, out) => { const a = (u - 0.5) * 1.8, y = lerp(-0.24, -0.06, v), r = 0.066 + 0.01 * sm(-0.24, -0.08, y) + 0.004; return out.set(s * Math.cos(a) * r, y, Math.sin(a) * r); };
     H.add(plate(vb, 10, 8, 0.005), plateM, el);
     for (const y of [-0.09, -0.2]) H.add(belt(0.072, 0.072, y, 0.018, 0.006, 0, 14), leatherDark, el);
@@ -897,7 +898,7 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
     const foot = [V(0, -0.028, -0.05), V(0, -0.03, 0.04), V(0, -0.037, 0.14), V(0, -0.046, 0.21)];
     S.add(scaleUV(taperTube(foot, (t) => 0.05 - 0.02 * t * t, 12, 12), 1, 2), leather, an, [0, 0, 0], [0, 0, 0], [1.12, 0.82, 1]);
     S.add(taperTube(foot.map((p) => V(0, 0, p.z)), (t) => 0.056 - 0.02 * t * t, 12, 12), leatherDark, an, [0, -0.064, 0], [0, 0, 0], [1.15, 0.2, 1.04]);
-    S.add(new THREE.SphereGeometry(0.047, 14, 8, 0, Math.PI * 2, 0, Math.PI / 2), plateM, an, [0, -0.042, 0.165], [0.5, 0, 0], [1.1, 0.9, 1.3]);
+    S.add(shapes.sphere(0.047, 14, 8, 0, Math.PI * 2, 0, Math.PI / 2), plateM, an, [0, -0.042, 0.165], [0.5, 0, 0], [1.1, 0.9, 1.3]);
     yield;
   }
 
@@ -910,14 +911,14 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
   yield;
   // a second belt slung lower across the hips, and a pouch on it
   S.add(strap(Array.from({ length: 18 }, (_, k) => { const a = (k / 18) * Math.PI * 2; return V(Math.sin(a) * 0.2, 0.02 - 0.05 * Math.sin(a + 0.8) - 0.02 * Math.cos(a), Math.cos(a) * 0.17); }), 0.04, 0.01, true), leather, j.hips);
-  S.add(new THREE.BoxGeometry(0.08, 0.1, 0.045), leatherDark, j.hips, [-0.18, -0.05, 0.08], [0, -0.8, 0]);
-  S.add(new THREE.BoxGeometry(0.086, 0.04, 0.05), leather, j.hips, [-0.18, -0.005, 0.08], [0, -0.8, 0]);
+  S.add(shapes.box(0.08, 0.1, 0.045), leatherDark, j.hips, [-0.18, -0.05, 0.08], [0, -0.8, 0]);
+  S.add(shapes.box(0.086, 0.04, 0.05), leather, j.hips, [-0.18, -0.005, 0.08], [0, -0.8, 0]);
   yield;
   // (its top gathered under the waist belt, against the leather there: hung below the belt and wider than it, the ring between
   // the two was open, and the trousers' tops showed through it at the sides, standing too; the hips' flare is the drape's; seven
   // rows, as the hand on the shield's grip lay between two of six)
   const skirt = new Skirt({ r0: 0.145, r1: 0.25, len: 0.39, depth: 0.8, folds: 7, foldAmp: 0.03, flare: 0.7, rows: 7 });
-  const skirtMesh = new THREE.Mesh(skirt.geo, mail);
+  const skirtMesh = new Mesh(skirt.geo, mail);
   skirtMesh.position.y = 0.07; skirtMesh.castShadow = skirtMesh.receiveShadow = true;
   j.hips.add(skirtMesh);
   yield;
@@ -925,22 +926,22 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
   // fur cuffs stand 11 cm off the shin, over the knee cops) from inside, the hands and the forearms' lower halves (a bracer's
   // plate or the sleeve) from outside, with the cloth's gap. Swung by the thighs alone, the mail was narrower than the
   // trousers at its sides and they came through it in every frame, standing too.
-  const legBodies = new SkirtLimbs(), handBodies = new SkirtLimbs(), GAP = 0.018, HAND_GAP = 0.012, O = () => new THREE.Vector3();
+  const legBodies = new SkirtLimbs(), handBodies = new SkirtLimbs(), GAP = 0.018, HAND_GAP = 0.012, O = () => new Vec3();
   for (const [th, kn, an] of [[j.thighL, j.kneeL, j.ankleL], [j.thighR, j.kneeR, j.ankleR]] as const) {
     legBodies.add([th, O()], [kn, O()], 0.122 + GAP, 0.09 + GAP);
     legBodies.add([kn, O()], [an, O()], 0.115 + GAP, 0.065 + GAP);
     yield;
   }
   // (and the seat between the thighs' tops: the mail hangs clear of it behind)
-  legBodies.add([j.hips, new THREE.Vector3(0.06, -0.06, -0.03)], [j.hips, new THREE.Vector3(-0.06, -0.06, -0.03)], 0.108 + GAP);
+  legBodies.add([j.hips, new Vec3(0.06, -0.06, -0.03)], [j.hips, new Vec3(-0.06, -0.06, -0.03)], 0.108 + GAP);
   const capsL = handCapsules(handL);
   for (const [a, b, r] of [...capsL, ...handCapsules(handR)]) handBodies.add(a, b, r + HAND_GAP);
   const cuffR = () => (gloved ? [0.075, 0.055] : [0.058, 0.053]);
-  const fores = ([[j.elbowL, j.handL], [j.elbowR, j.handR]] as const).map(([el, hd]) => handBodies.add([el, new THREE.Vector3(0, -0.5 * j.P.foreL, 0)], [hd, O()], 0));
+  const fores = ([[j.elbowL, j.handL], [j.elbowR, j.handR]] as const).map(([el, hd]) => handBodies.add([el, new Vec3(0, -0.5 * j.P.foreL, 0)], [hd, O()], 0));
   yield;
   // (a left hand with no weapon in it, empty or on the shield's grip, swung out just enough to rest on the mail rather than in it:
   // armOffThigh)
-  const freePts = [...capsL.flatMap(([a, b, r]) => [[a, r], [b, r]] as [JointPoint, number][]), [[j.elbowL, new THREE.Vector3(0, -0.5 * j.P.foreL, 0)], 0], [[j.handL, O()], 0]] as [JointPoint, number][];
+  const freePts = [...capsL.flatMap(([a, b, r]) => [[a, r], [b, r]] as [JointPoint, number][]), [[j.elbowL, new Vec3(0, -0.5 * j.P.foreL, 0)], 0], [[j.handL, O()], 0]] as [JointPoint, number][];
   const placeBodies = (free: number) => {
     const [ra, rb] = cuffR();
     for (const f of fores) { f.ra = ra + HAND_GAP; f.rb = rb + HAND_GAP; }
@@ -948,7 +949,7 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
     if (free) { freePts[freePts.length - 2][1] = ra; freePts[freePts.length - 1][1] = rb; armOffThigh(skirtMesh, j.shoulderL, 1, legBodies.list[0], HAND_GAP, freePts, free); }
     handBodies.place(skirtMesh);
   };
-  const tassets: { g: THREE.Group; s: number }[] = [];
+  const tassets: { g: Node; s: number }[] = [];
   for (const s of [1, -1]) {
     for (const [k, off] of [[0, 0.55], [1, 1.05]] as const) {
       const g = joint(j.hips, s * Math.sin(off) * 0.2, 0.05, Math.cos(off) * 0.172);
@@ -957,7 +958,7 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
       const ta = new Sculpt();
       ta.add(plate(tf, 6, 8, 0.008, undefined, V(0, -0.15, -0.1)), leather, g);
       ta.add(edgeTube(tf, 'v0', 0.004, 8, 0.02), leatherDark, g);
-      for (let q = 0; q < 4; q++) { const p = tf(0.2 + q * 0.2, 0.85, new THREE.Vector3()); ta.add(stud(0.006), plateM, g, [p.x, p.y, p.z + 0.008]); }
+      for (let q = 0; q < 4; q++) { const p = tf(0.2 + q * 0.2, 0.85, new Vec3()); ta.add(stud(0.006), plateM, g, [p.x, p.y, p.z + 0.008]); }
       ta.build();
       tassets.push({ g, s });
     }
@@ -972,24 +973,24 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
   const head = yield* headSteps(j.head, kit, look.who, look);
   yield;
   // (a point just before the lips, for the flask)
-  const mouth = new THREE.Object3D(); mouth.name = 'mouth'; head.group.add(mouth); toGroup(0, 50, 112, mouth.position);
+  const mouth = new Node(); mouth.name = 'mouth'; head.group.add(mouth); toGroup(0, 50, 112, mouth.position);
   buildNeck(j.neck, kit, look.who, j.P.neckL, j.head);
   yield;
   // (worn only with a head item equipped: bareheaded, the hair shows; setGear)
-  const helm = new THREE.Group(); helm.name = 'helm'; head.group.add(helm); helm.visible = false;
+  const helm = new Node(); helm.name = 'helm'; head.group.add(helm); helm.visible = false;
   {
     const h = new Sculpt(), C = toGroup(0, 128, -12), M = HEAD_MM;
     /** the shell towards `a` round the head (0 the face) and `el` up it, padded over the scalp, with a
      *  low crest along the middle; `lift` mm further out */
-    const shell = (a: number, el: number, lift = 0, out = new THREE.Vector3()) => {
+    const shell = (a: number, el: number, lift = 0, out = new Vec3()) => {
       const x = Math.sin(a) * Math.cos(el), y = Math.sin(el);
       return head.surface(a, el, 12 + lift + 4.5 * Math.exp(-((x / 0.12) ** 2)) * sm(0.1, 0.8, y), out);
     };
     const wrap = (a: number) => Math.atan2(Math.sin(a), Math.cos(a));
     // the rim: just above the brows, over the ears at the sides, down to the nape behind
     const rimEl = (a: number) => Math.asin(lerp(0.36, -0.35, sm(0.5, 2.7, Math.abs(wrap(a)))));
-    const out = (p: THREE.Vector3, o: THREE.Vector3) => o.subVectors(p, C).normalize();
-    const dome = new THREE.SphereGeometry(1, lod(56, 28), lod(20, 10)), dp = dome.attributes.position, duv = dome.attributes.uv;
+    const out = (p: Vec3, o: Vec3) => o.subVectors(p, C).normalize();
+    const dome = shapes.sphere(1, lod(56, 28), lod(20, 10)), dp = dome.attributes.position, duv = dome.attributes.uv;
     for (let i = 0; i < dp.count; i++) {
       // round from the back (the sphere's seam) the same way the sphere winds, from the rim to the top
       const a = wrap(duv.getX(i) * Math.PI * 2 + Math.PI);
@@ -1012,7 +1013,7 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
     for (let k = 0; k < 20; k++) { const a = (k / 20) * Math.PI * 2 - Math.PI, e = rimEl(a) + 0.13; studAt(shell(a, e, 3.5), out(shell(a, e), V(0, 0, 0)), 0.0036); }
     yield;
     const top = shell(0, Math.PI / 2, 3);
-    h.add(new THREE.SphereGeometry(0.009, 12, 6, 0, Math.PI * 2, 0, Math.PI / 2), plateM, helm, top.toArray(), [0, 0, 0], [1, 0.7, 1]);
+    h.add(shapes.sphere(0.009, 12, 6, 0, Math.PI * 2, 0, Math.PI / 2), plateM, helm, top.toArray(), [0, 0, 0], [1, 0.7, 1]);
     // the nasal: a ridged bar from the brow band down the bridge of the nose, clear of it, narrowing to
     // a rounded end
     const nTop = shell(0, rimEl(0) + 0.22, 4.5), nTopY = nTop.y / M;
@@ -1022,7 +1023,7 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
       return toGroup(x, y, z + 2.5 * (1 - c * c) - x * x * 0.04, o);
     };
     h.add(plate(nasal, 6, 12, 0.003, undefined, C), plateM, helm);
-    studAt(nasal(0.5, 0.88, new THREE.Vector3()).add(V(0, 0, 0.002)), V(0, 0, 1), 0.0035);
+    studAt(nasal(0.5, 0.88, new Vec3()).add(V(0, 0, 0.002)), V(0, 0, 1), 0.0035);
     // cheek guards over the ears, their lower edge tucked in over the beard, their front edge clear of
     // the face
     for (const s of [1, -1]) {
@@ -1033,7 +1034,7 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
       h.add(plate(guard, lod(12, 6), lod(12, 6), 0.005, undefined, C), plateM, helm);
       h.add(edgeTube(guard, 'v0', 0.0035, 16), plateM, helm);
       h.add(edgeTube(guard, 'u0', 0.0035, 12), plateM, helm);
-      for (const [u, v] of [[0.3, 0.82], [0.7, 0.82], [0.45, 0.25]]) { const p = guard(u, v, new THREE.Vector3()); studAt(p.addScaledVector(out(p, _v), 0.004), out(p, V(0, 0, 0)), 0.0035); }
+      for (const [u, v] of [[0.3, 0.82], [0.7, 0.82], [0.45, 0.25]]) { const p = guard(u, v, new Vec3()); studAt(p.addScaledVector(out(p, _v), 0.004), out(p, V(0, 0, 0)), 0.0035); }
     }
     // mail hanging from under the rim behind the cheek guards, over the nape
     const aventail: SurfaceFn = (u, v, o) => {
@@ -1052,8 +1053,8 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
   const grip = joint(j.handR, 0, -0.06, 0.01);
   grip.rotation.x = GRIP;
   const weapons = new Map<string, Weapon>();
-  const add = (name: string, len: number, off: number | null, r: number, strikes: Weapon['edge'], build: (w: Sculpt, g: THREE.Group) => void, hang?: Weapon['hang']) => {
-    const g = new THREE.Group();
+  const add = (name: string, len: number, off: number | null, r: number, strikes: Weapon['edge'], build: (w: Sculpt, g: Node) => void, hang?: Weapon['hang']) => {
+    const g = new Node();
     g.name = name;
     grip.add(g);
     const w = new Sculpt(`warrior-${name}`);
@@ -1157,11 +1158,11 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
     const { map: _woodColour, ...grain } = tex(woodMaps(), 1, 1.5);
     const paint = kit.std({ color: 0x2c3a58, roughness: 1, ...grain });
     dye.cloth(paint);
-    w.add(scaleUV(new THREE.CylinderGeometry(0.33, 0.33, 0.03, 36), 2, 2), wood, shield, [0, 0, 0], [Math.PI / 2, 0, 0]);
-    w.add(scaleUV(new THREE.CylinderGeometry(0.315, 0.315, 0.006, 36), 2, 2), paint, shield, [0, 0, 0.016], [Math.PI / 2, 0, 0]);
+    w.add(scaleUV(shapes.cylinder(0.33, 0.33, 0.03, 36), 2, 2), wood, shield, [0, 0, 0], [Math.PI / 2, 0, 0]);
+    w.add(scaleUV(shapes.cylinder(0.315, 0.315, 0.006, 36), 2, 2), paint, shield, [0, 0, 0.016], [Math.PI / 2, 0, 0]);
     // plank seams
-    for (const x of [-0.2, -0.1, 0, 0.1, 0.2]) { const h = 2 * Math.sqrt(0.315 ** 2 - x * x); w.add(new THREE.BoxGeometry(0.004, h, 0.004), leatherDark, shield, [x + 0.05, 0, 0.019]); }
-    w.add(new THREE.TorusGeometry(0.325, 0.02, 8, 40), plateM, shield, [0, 0, 0.01]);
+    for (const x of [-0.2, -0.1, 0, 0.1, 0.2]) { const h = 2 * Math.sqrt(0.315 ** 2 - x * x); w.add(shapes.box(0.004, h, 0.004), leatherDark, shield, [x + 0.05, 0, 0.019]); }
+    w.add(shapes.torus(0.325, 0.02, 8, 40), plateM, shield, [0, 0, 0.01]);
     for (let i = 0; i < 16; i++) { const a = (i / 16) * Math.PI * 2; w.add(stud(0.01), plateM, shield, [Math.cos(a) * 0.29, Math.sin(a) * 0.29, 0.018]); }
     w.add(lathe([[0.1, 0], [0.098, 0.015], [0.08, 0.035], [0.05, 0.055], [0.001, 0.065]], 20), plateM, shield, [0, 0, 0.015], [Math.PI / 2, 0, 0]);
     w.build();
@@ -1169,7 +1170,7 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
     const bars = new Sculpt();
     for (let i = 0; i < 4; i++) {
       const a = i * Math.PI / 2 + Math.PI / 4;
-      bars.add(new THREE.BoxGeometry(0.035, 0.18, 0.008), darkSteel, shield, [Math.cos(a) * 0.2, Math.sin(a) * 0.2, 0.021], [0, 0, a - Math.PI / 2]);
+      bars.add(shapes.box(0.035, 0.18, 0.008), darkSteel, shield, [Math.cos(a) * 0.2, Math.sin(a) * 0.2, 0.021], [0, 0, a - Math.PI / 2]);
       bars.add(stud(0.008), plateM, shield, [Math.cos(a) * 0.14, Math.sin(a) * 0.14, 0.025]);
       bars.add(stud(0.008), plateM, shield, [Math.cos(a) * 0.26, Math.sin(a) * 0.26, 0.025]);
     }
@@ -1187,7 +1188,7 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
   // two-hander's by its right)
   const eyesR = new ViewFade(), eyesL = new ViewFade();
   const clothes = S.build(), gloves = H.build(), sleeves = B.build(), plates = A.build();
-  const harness: THREE.Object3D[] = [...plates, skirtMesh, ...tassets.map((t) => t.g)];
+  const harness: Node[] = [...plates, skirtMesh, ...tassets.map((t) => t.g)];
   const furs = [...clothes, ...plates, ...gloves].filter((m) => m.material === furM).map((m) => { m.userData.fur = true; return new FurSway(m, furM); });
   const elbowFur = [j.elbowL, j.elbowR].flatMap((e) => e.children.filter((c) => c.userData.fur));
   yield;
@@ -1240,8 +1241,8 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
   /** through the eyes, the trunk's turn a two-hander's last cut left (rad), faded out as its place is: let go of in a
    *  frame, the shoulders and the whole swing they carry jumped back under the eyes */
   let twoTurnHeld = 0;
-  const keyedArm = { hand: 'right' as 'right' | 'left', shoulder: new THREE.Vector3(), elbow: new THREE.Vector3(), grip: new THREE.Vector3(), dir: new THREE.Vector3(), flat: new THREE.Vector3(), weight: 0, armShare: 1 };
-  const keyArm = (hand: 'right' | 'left', shoulder: THREE.Vector3, elbow: THREE.Vector3, grip: THREE.Vector3, dir: THREE.Vector3, flat: THREE.Vector3, weight: number, armShare = 1): void => {
+  const keyedArm = { hand: 'right' as 'right' | 'left', shoulder: new Vec3(), elbow: new Vec3(), grip: new Vec3(), dir: new Vec3(), flat: new Vec3(), weight: 0, armShare: 1 };
+  const keyArm = (hand: 'right' | 'left', shoulder: Vec3, elbow: Vec3, grip: Vec3, dir: Vec3, flat: Vec3, weight: number, armShare = 1): void => {
     keyedArm.hand = hand;
     keyedArm.weight = weight;
     keyedArm.armShare = armShare;
@@ -1267,9 +1268,9 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
    *  grip, the weapon's turn (its way and its flat's) and the elbow as drawn last frame, where the way back left from,
    *  and where the pose holds them now. Each model's own: shared by every warrior, the hall of heroes' copy went back
    *  to its guard from where the lobby's hidden hero had drawn his weapon, and the axe's tip jumped 2.2 m in a frame */
-  const DRAWN_AT = new THREE.Vector3(), DRAWN_TURN = new THREE.Quaternion(), DRAWN_POLE = new THREE.Vector3(0, -1, 0);
-  const BACK_AT = new THREE.Vector3(), BACK_TURN = new THREE.Quaternion(), BACK_POLE = new THREE.Vector3();
-  const GUARD_AT = new THREE.Vector3(), GUARD_TURN = new THREE.Quaternion(), GUARD_POLE = new THREE.Vector3();
+  const DRAWN_AT = new Vec3(), DRAWN_TURN = new Quat(), DRAWN_POLE = new Vec3(0, -1, 0);
+  const BACK_AT = new Vec3(), BACK_TURN = new Quat(), BACK_POLE = new Vec3();
+  const GUARD_AT = new Vec3(), GUARD_TURN = new Quat(), GUARD_POLE = new Vec3();
   /** the foe a blow comes down on, kept through its end (`strikeOn`): each model's own too */
   const _strikeOn: Struck = { x: 0, z: 0, r: 0, top: 0 };
   /** the share of a two-hander's Power Strike its blow stopped at on something high (1: none, `STUCK_LIFT`) */
@@ -1330,7 +1331,7 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
    *  nothing, it should hit the floor"). Aimed at the floor 0.8 of its length ahead, on a plinth in the hall of
    *  heroes it was aimed at the stage below and came down on the plinth at his feet, and the floor's stop turned
    *  the arm 9 cm into his thigh and 16 into his belly to put it right. */
-  function landing(x: number, z: number, fx: number, fz: number, len: number, y: number): THREE.Vector2 {
+  function landing(x: number, z: number, fx: number, fz: number, len: number, y: number): Vec2 {
     let over = 0;
     let under = ARC_LOWEST;
     if (headUnder(x, z, fx, fz, len, y, under)) {
@@ -1476,7 +1477,7 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
   /** The least turn about the level line through the shoulder `sh` across the way (`wx`, `wz`) that leaves every
    *  point of the weapon ahead of the shoulder at or over the floor under it (rad, up; less than 0, down until
    *  the first touches), or none if no point of it can reach the floor. */
-  function floorTurn(sh: THREE.Vector3, wx: number, wz: number): number | null {
+  function floorTurn(sh: Vec3, wx: number, wz: number): number | null {
     held!.group.updateWorldMatrix(true, false);
     let turn: number | null = null;
     for (const p of lowPoints(held!)) {
@@ -1495,7 +1496,7 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
 
   /** The least turn up (rad) about the level line through the shoulder `sh` across the way (`wx`, `wz`) that leaves
    *  the weapon clear of what's under it (`clearAfter`), up to `most` (the floor's own turn up, `floorTurn`). */
-  function leastLift(sh: THREE.Vector3, wx: number, wz: number, most: number): number {
+  function leastLift(sh: Vec3, wx: number, wz: number, most: number): number {
     let into = 0;
     for (let lift = LIFT_STEP; lift < most; lift += LIFT_STEP) {
       if (!clearAfter(sh, wx, wz, lift)) {
@@ -1516,7 +1517,7 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
   /** Whether every point of the weapon ahead of the shoulder `sh` would be at or over the floor turned `turn` (rad,
    *  up) about the level line through it across the way (`wx`, `wz`), as `groundStop` turns it: each round the
    *  shoulder in the upright plane along that way, its offset across it kept. */
-  function clearAfter(sh: THREE.Vector3, wx: number, wz: number, turn: number): boolean {
+  function clearAfter(sh: Vec3, wx: number, wz: number, turn: number): boolean {
     const cos = Math.cos(turn), sin = Math.sin(turn);
     for (const p of lowPoints(held!)) {
       _gs3.copy(p).applyMatrix4(held!.group.matrixWorld);
@@ -1554,19 +1555,19 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
   let regrip = 0;
   /** a two-handed move placed by the weapon this frame, in the chest's frame: its grip, its way, its flat's and how far
    *  it takes the arm (`holdInChest`, after the whole body is posed) */
-  const twoHold = { at: new THREE.Vector3(), dir: new THREE.Vector3(), flat: new THREE.Vector3(), pole: SW2_POLE, k: 0, flatK: 0 };
+  const twoHold = { at: new Vec3(), dir: new Vec3(), flat: new Vec3(), pole: SW2_POLE, k: 0, flatK: 0 };
   /** how surely the left hand holds a two-hander's lower grip: it lets go of one no turn of the hand keeps the arm within its ranges for */
   let twoGood = 1;
   // (his left arm faded over `LEFT_SWITCH` s from as it was drawn, as he sits or stands, when how it's placed changes:
   // its own pose fitted, eased towards a two-hander's lower grip, or on it. Solved each its own way, its elbow went 13 to
   // 25 cm in the frame it changed)
-  const leftShown = [new THREE.Quaternion(), new THREE.Quaternion(), new THREE.Quaternion()];
-  const leftFrom = [new THREE.Quaternion(), new THREE.Quaternion(), new THREE.Quaternion()];
+  const leftShown = [new Quat(), new Quat(), new Quat()];
+  const leftFrom = [new Quat(), new Quat(), new Quat()];
   // (and each joint's turn over the frame before, carried on through the fade: faded from the arm frozen as drawn, his
   // hand stopped dead for a frame, 8 cm a frame to none)
-  const leftWas = [new THREE.Quaternion(), new THREE.Quaternion(), new THREE.Quaternion()];
-  const leftTurn = [new THREE.Quaternion(), new THREE.Quaternion(), new THREE.Quaternion()];
-  const _turnNow = new THREE.Quaternion();
+  const leftWas = [new Quat(), new Quat(), new Quat()];
+  const leftTurn = [new Quat(), new Quat(), new Quat()];
+  const _turnNow = new Quat();
   let leftModeWas = -1, leftFadeW = 0;
   /** the lower grip as the left hand held it this frame (`Model.lowerGrip`) */
   const grasp: LowerGrip = { held: false, free: false, short: 0, past: 0, into: 0 };
@@ -1582,24 +1583,24 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
   // and the blade raked back along the outside of the thigh, flat to it; an axe or mace by its haft, head up.
   const frog = joint(j.hips, 0.212, -0.012, 0.03); frog.name = 'frog';
   const hangDown = joint(frog), hangUp = joint(frog);
-  const basis = (o: THREE.Object3D, y: THREE.Vector3) => {
-    const z = V(1, 0, 0).addScaledVector(y, -y.x).normalize(), x = new THREE.Vector3().crossVectors(y, z);
-    o.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(x, y, z));
+  const basis = (o: Node, y: Vec3) => {
+    const z = V(1, 0, 0).addScaledVector(y, -y.x).normalize(), x = new Vec3().crossVectors(y, z);
+    o.quaternion.setFromRotationMatrix(new Mat4().makeBasis(x, y, z));
   };
   basis(hangDown, V(0.16, -0.72, -0.68).normalize()); basis(hangUp, V(0.06, 0.97, 0.22).normalize());
-  const tab = new THREE.Mesh(new THREE.BoxGeometry(0.014, 0.07, 0.034), leather); tab.position.set(0.004, 0.012, 0); frog.add(tab);
-  const ring = (o: THREE.Object3D, r: number, sx: number) => { const m = new THREE.Mesh(new THREE.TorusGeometry(r, 0.007, 6, 14), leatherDark); m.rotation.x = Math.PI / 2; m.scale.set(sx, 1, 1); m.position.y = -0.01; o.add(m); return m; };
+  const tab = new Mesh(shapes.box(0.014, 0.07, 0.034), leather); tab.position.set(0.004, 0.012, 0); frog.add(tab);
+  const ring = (o: Node, r: number, sx: number) => { const m = new Mesh(shapes.torus(r, 0.007, 6, 14), leatherDark); m.rotation.x = Math.PI / 2; m.scale.set(sx, 1, 1); m.position.y = -0.01; o.add(m); return m; };
   const rings = [ring(hangDown, 0.034, 1.5), ring(hangUp, 0.03, 1)];
   for (const m of [tab, ...rings]) m.castShadow = false;
   frog.visible = false;
   let sheathed = false;
-  const _s1 = new THREE.Vector3(), _s2 = new THREE.Vector3(), _s3 = new THREE.Vector3(), _s4 = new THREE.Vector3(), _s5 = new THREE.Vector3(), _sm = new THREE.Matrix4(), _shq = new THREE.Quaternion();
+  const _s1 = new Vec3(), _s2 = new Vec3(), _s3 = new Vec3(), _s4 = new Vec3(), _s5 = new Vec3(), _sm = new Mat4(), _shq = new Quat();
   /** seat every weapon in its fist the way a real one is held, through the eyes too (left as the poses there were
    *  keyed before, a blade's edge lay in the palm: turned narrow to the eyes at rest, the fist showed its palm and
    *  its fingers splayed past the hilt) */
   function mountAll(): void { for (const w of [...weapons.values(), ...offWeapons.values()]) w.group.rotation.y = w === offHeld && sheathed ? 0 : MOUNT; }
   /** turn a hand by `ang` about the length of the weapon in its grip */
-  const edgeOn = (hand: THREE.Object3D, g: THREE.Object3D, ang: number): void => {
+  const edgeOn = (hand: Node, g: Node, ang: number): void => {
     _hd.set(0, 1, 0).applyQuaternion(g.quaternion);
     hand.quaternion.multiply(_hq.setFromAxisAngle(_hd, ang));
   };
@@ -1608,7 +1609,7 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
   /** Through the eyes, a weapon held where it's seen: the arm reaches so its grip sits at `at` in the view
    *  (camera space) and the wrist turns the weapon onto `dir` (the least turn from the forearm, so the fist
    *  keeps its roll). `k` blends it in over the pose so far; `soft` eases its reach into its end (`reachArm`). */
-  function holdInView(arm: typeof ARM_R, at: THREE.Vector3, dir: THREE.Vector3, pole: THREE.Vector3, k: number, flat?: THREE.Vector3, flatK = 0, soft = 0): void {
+  function holdInView(arm: typeof ARM_R, at: Vec3, dir: Vec3, pole: Vec3, k: number, flat?: Vec3, flatK = 0, soft = 0): void {
     const { shoulder, elbow, hand, grip: g } = arm;
     root.updateMatrixWorld(true);
     fromEyes(root, j.neck, at, _gw).lerp(g.getWorldPosition(_cur), 1 - k);
@@ -1628,10 +1629,10 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
     }
   }
 
-  const _dv = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()];
+  const _dv = [new Vec3(), new Vec3(), new Vec3()];
   /** Where the weapon in grip `g` is drawn in the view (its grip's place, its way and its flat, as `holdInView` takes
    *  them), told to `fade` for its next cut to fade from. */
-  function drawnInView(fade: ViewFade, g: THREE.Object3D): void {
+  function drawnInView(fade: ViewFade, g: Node): void {
     root.updateMatrixWorld(true);
     intoEyes(root, j.neck, g.getWorldPosition(_cur), _dv[0]);
     dirIntoEyes(root, _cur.set(0, 1, 0).transformDirection(g.matrixWorld), _dv[1]);
@@ -1639,7 +1640,7 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
     fade.shown(_dv[0], _dv[1], _dv[2]);
   }
 
-  const _fwd = new THREE.Vector3(), _ax = new THREE.Vector3(), _pv = new THREE.Vector3();
+  const _fwd = new Vec3(), _ax = new Vec3(), _pv = new Vec3();
   /** How far the body is turned about its own up (rad, as drawn: the pose's fade turns it back the short way). Steel
    *  Tempest's spin alone turns it. */
   function turnOfBody(): number {
@@ -1648,7 +1649,7 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
   }
   /** Places in the view (`points`: a grip's, a shoulder's) and ways there (`ways`: a weapon's, its flat, an elbow's),
    *  in place, turned `angle` round the body's own up through it, as the body turned by that carries them. */
-  function carryRound(angle: number, points: THREE.Vector3[], ways: THREE.Vector3[]): void {
+  function carryRound(angle: number, points: Vec3[], ways: Vec3[]): void {
     root.updateMatrixWorld(true);
     dirIntoEyes(root, _ax.set(0, 1, 0).transformDirection(root.matrixWorld), _ax).normalize();
     intoEyes(root, j.neck, j.body.getWorldPosition(_pv), _pv);
@@ -1669,7 +1670,7 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
   /** how far a two-hander's upper grip is up the handle from its lower one (m, the view's) */
   /** Through the eyes, a shoulder moved `w` of the way from where `armsFromBelow` put it to `eyes` (the view's: a
    *  swing's, `swingShoulder`). */
-  function shoulderTo(shoulder: THREE.Object3D, eyes: THREE.Vector3, w: number): void {
+  function shoulderTo(shoulder: Node, eyes: Vec3, w: number): void {
     root.updateMatrixWorld(true);
     shoulder.position.lerp(j.chest.worldToLocal(fromEyes(root, j.neck, eyes, _hw2)), w);
     shouldersMoved = true;
@@ -1677,7 +1678,7 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
 
   /** A swing's elbow (`swingAt`'s, the view's way from the shoulder) as a reach's pole in the chest's frame, `w` of
    *  the way from `rest`'s, into `out`. */
-  function swingPole(eyes: THREE.Vector3, rest: THREE.Vector3, w: number, out: THREE.Vector3): THREE.Vector3 {
+  function swingPole(eyes: Vec3, rest: Vec3, w: number, out: Vec3): Vec3 {
     root.updateMatrixWorld(true);
     dirFromEyes(root, eyes, out).transformDirection(_ti.copy(j.chest.matrixWorld).invert());
     return out.lerp(rest, 1 - w);
@@ -1693,7 +1694,7 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
    *  off (fitted, the fist rolled the edge off the way it moved, the blade stood still against the keys, and the fist
    *  jumped 60 degrees round its handle in a frame; fitted or not by turns, as a swing began and ended, the elbow
    *  jumped 35 cm and the blade 60 degrees in a frame). Returns the slant the fist holds its handle at. */
-  function fitInView(left: boolean, g: THREE.Object3D, vis: THREE.Quaternion, slant?: number, hold = 0): number {
+  function fitInView(left: boolean, g: Node, vis: Quat, slant?: number, hold = 0): number {
     const hd = left ? j.handL : j.handR, el = left ? j.elbowL : j.elbowR, sh = left ? j.shoulderL : j.shoulderR;
     if (hold >= 1) return 0;
     root.updateMatrixWorld(true);
@@ -1719,7 +1720,7 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
    *  tucked low before the chest, the forearm turned 34 degrees past its range palm down, and 24 with the elbow fitted
    *  and the fist at the swing's slant; fitted as `fitInView` fits, rolled on its handle, the blade was drawn 21 to 31
    *  degrees off its keys) */
-  function fitHeld(vis: THREE.Quaternion, w: number): number {
+  function fitHeld(vis: Quat, w: number): number {
     const hd = j.handR, el = j.elbowR, sh = j.shoulderR;
     root.updateMatrixWorld(true);
     const wrist = hd.getWorldPosition(_fw[0]), hand = hd.getWorldQuaternion(_fwq).multiply(vis);
@@ -1751,14 +1752,14 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
    *  `gripTurn`) lies on the forearm within a gripping wrist's range (anatomy.ts `GRIPPED_FLEXION`), the weapon turning
    *  with it. A move's place blended into another's bent it past: out of one cut into the next the fist flexed 96
    *  degrees, and out of the rest into a cut it went 15 past to the thumb's side. */
-  function wristInGrip(left: boolean, vis: THREE.Quaternion): void {
+  function wristInGrip(left: boolean, vis: Quat): void {
     const hd = left ? j.handL : j.handR;
     _wg[0].copy(hd.quaternion).multiply(vis);
     if (clampWrist(_wg[0], left, _wg[1], GRIPPED_FLEXION) === 0) return;
     hd.quaternion.copy(_wg[1]).multiply(_wg[2].copy(vis).invert());
     hd.updateMatrixWorld(true);
   }
-  const _wg = [new THREE.Quaternion(), new THREE.Quaternion(), new THREE.Quaternion()];
+  const _wg = [new Quat(), new Quat(), new Quat()];
 
   /** Through the eyes with both hands bare: the arms on his own shoulders at the world's lens, as the ranger's. */
   let bareEyes = false;
@@ -1769,7 +1770,7 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
    * looking broken with a seam at it (from play, "does this look proper to you ?"). Within `FOREARM_ROLL` of where the
    * arm's reach left it.
    */
-  function rollForearm(h: Hand, elbow: THREE.Object3D, hand: THREE.Object3D, line: THREE.Vector3): void {
+  function rollForearm(h: Hand, elbow: Node, hand: Node, line: Vec3): void {
     if (line.lengthSq() === 0) return;
     root.updateMatrixWorld(true);
     const along = _rollV[0].setFromMatrixColumn(hand.matrixWorld, 1).normalize();
@@ -1784,7 +1785,7 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
     elbow.parent!.getWorldQuaternion(_rollQ[1]).invert();
     elbow.quaternion.copy(_rollQ[1].multiply(_rollQ[2].setFromAxisAngle(along, by)).multiply(_rollQ[0]));
   }
-  const _rollV = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()];
+  const _rollV = [new Vec3(), new Vec3(), new Vec3(), new Vec3()];
 
   /**
    * A fist's knuckle line (`line`, in the world, from the little finger's knuckle to the index's: the thumb is at its
@@ -1793,7 +1794,7 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
    * either up, or parallel to the ground (or in between)". A level line asked of a fist held over its elbow, its
    * forearm sloping in across the body (a punch on its way back), squared to that forearm with its thumb end down.
    */
-  function thumbNotDown(line: THREE.Vector3, hand: THREE.Object3D, least = THUMB_UP): THREE.Vector3 {
+  function thumbNotDown(line: Vec3, hand: Node, least = THUMB_UP): Vec3 {
     // (about the forearm's own length, the elbow joint's: `closeFist` turns the hand about that alone, and squared to
     // the wrist joint's, which the arm's fit turns, the thumb end still came out up to 23 degrees down)
     const forearm = hand.parent ?? hand;
@@ -1816,11 +1817,11 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
     const flat = Math.sqrt(1 - least * least) * (across < 0 ? -1 : 1);
     return line.copy(level).multiplyScalar(flat).addScaledVector(rise, least);
   }
-  const _thumbV = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()];
+  const _thumbV = [new Vec3(), new Vec3(), new Vec3()];
   /** how far up from level a fist's thumb end is kept at the least (the sine of its angle up the forearm's slope:
    *  about 12 degrees), and through the eyes, where the view's placing of the arms takes 10 degrees of it back */
   const THUMB_UP = 0.22, THUMB_UP_EYES = 0.42;
-  const _rollQ = [new THREE.Quaternion(), new THREE.Quaternion(), new THREE.Quaternion()];
+  const _rollQ = [new Quat(), new Quat(), new Quat()];
 
   /** The shoulders' own places on the chest, and whether the eyes have moved them (`armsFromBelow`). */
   const shoulderRest = [j.shoulderR.position.clone(), j.shoulderL.position.clone()];
@@ -1866,18 +1867,18 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
   /** by a fire, of the lift by when his arm is placed by the weapon's path alone, the carry's joints eased off */
   const FLOOR_JOINTS_BY = 0.3;
   const _rightArm = [j.shoulderR, j.elbowR, j.handR];
-  const _lapX = new THREE.Vector3(), _lapY = new THREE.Vector3(), _lapZ = new THREE.Vector3();
-  const _lapWorld = new THREE.Matrix4(), _lapHand = new THREE.Matrix4();
-  const _lapQ = new THREE.Quaternion(), _lapNow = new THREE.Quaternion();
-  const _lapWas = new THREE.Quaternion(), _lapRoot = new THREE.Quaternion(), _lapVia = new THREE.Quaternion();
-  const _lapFore = new THREE.Vector3(), _lapDown = new THREE.Vector3();
-  const _lapFloor = new THREE.Vector3(0, -1, 0);
+  const _lapX = new Vec3(), _lapY = new Vec3(), _lapZ = new Vec3();
+  const _lapWorld = new Mat4(), _lapHand = new Mat4();
+  const _lapQ = new Quat(), _lapNow = new Quat();
+  const _lapWas = new Quat(), _lapRoot = new Quat(), _lapVia = new Quat();
+  const _lapFore = new Vec3(), _lapDown = new Vec3();
+  const _lapFloor = new Vec3(0, -1, 0);
   /** how each hand's turned in his frame as he began to sit (the left's, the right's), once taken */
-  const _lapStood = [new THREE.Quaternion(), new THREE.Quaternion()], _lapTaken = [false, false];
+  const _lapStood = [new Quat(), new Quat()], _lapTaken = [false, false];
   /** A hand keeping its one-hander as he sits: its weapon turned by `w` to lie along `way` (the root's frame: out to
    *  his left, up, ahead), across his lap, and the back of the hand on from the forearm, as a man rests a weapon
    *  across his thighs. Said in those terms, as the arm's reach alone stood an axe up before his face. */
-  function holdAcrossLap(left: boolean, handle: THREE.Object3D, way: readonly number[], w: number, from: number, st: NonNullable<AnimState["sit"]>, down = 0, edge?: readonly number[]): void {
+  function holdAcrossLap(left: boolean, handle: Node, way: readonly number[], w: number, from: number, st: NonNullable<AnimState["sit"]>, down = 0, edge?: readonly number[]): void {
     const hand = left ? j.handL : j.handR, elbow = left ? j.elbowL : j.elbowR;
     root.updateMatrixWorld(true);
     const fore = hand.getWorldPosition(_lapFore).sub(elbow.getWorldPosition(_lapZ));
@@ -1886,7 +1887,7 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
     const fingers = _s2.set(0, -1, 0);
     fingers.addScaledVector(inHand, -fingers.dot(inHand)).normalize();
     _lapHand.makeBasis(inHand, fingers, _s3.crossVectors(inHand, fingers)).invert();
-    const turnAlong = (to: readonly number[], out: THREE.Quaternion, downBy = 0): void => {
+    const turnAlong = (to: readonly number[], out: Quat, downBy = 0): void => {
       const along = _lapX.set(to[0], to[1], to[2]).transformDirection(root.matrixWorld);
       // (the way the hand's length lies, which is the way an axe's edge faces: off the forearm towards the floor by
       // `downBy`. Along a forearm held level by a fire, the axe lay flat with its edge ahead)
@@ -1933,35 +1934,35 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
     /** how far his hand has turned round on the handle, from the fist that lowered it to the one that holds it upright:
      *  the weapon's head under his little finger, not past his thumb */
     turned: 0,
-    standAt: new THREE.Vector3(),
-    standQ: new THREE.Quaternion(),
+    standAt: new Vec3(),
+    standQ: new Quat(),
     /** the weapon as it came down in his fist, slanted as his wrist lets it, and upright on its far end as he'll leave it */
-    loweredAt: new THREE.Vector3(),
-    loweredQ: new THREE.Quaternion(),
-    uprightQ: new THREE.Quaternion(),
-    endFrom: new THREE.Vector3(),
-    endTo: new THREE.Vector3(),
+    loweredAt: new Vec3(),
+    loweredQ: new Quat(),
+    uprightQ: new Quat(),
+    endFrom: new Vec3(),
+    endTo: new Vec3(),
     /** his hand as it held the sword going in, and as it holds it stood, turned round on the handle (world) */
-    handFrom: new THREE.Quaternion(),
-    handTo: new THREE.Quaternion(),
+    handFrom: new Quat(),
+    handTo: new Quat(),
     /** the grip's turn in his hand as it went into the ground, which it's given back as it leaves it */
-    gripWas: new THREE.Quaternion(),
+    gripWas: new Quat(),
     /** the weapon's way now, in his frame, as his hand takes it */
-    wayNow: new THREE.Vector3(),
-    from: [new THREE.Quaternion(), new THREE.Quaternion(), new THREE.Quaternion()],
-    fromAt: new THREE.Vector3(),
+    wayNow: new Vec3(),
+    from: [new Quat(), new Quat(), new Quat()],
+    fromAt: new Vec3(),
     fromSlant: 0,
     /** whether `from` was kept standing still at least once */
     fromStill: false,
     /** the path it comes down, in his frame: taken in both hands before him, then lowered till its far end is on the ground */
-    frontAt: new THREE.Vector3(),
-    frontWay: new THREE.Vector3(),
+    frontAt: new Vec3(),
+    frontWay: new Vec3(),
     frontSlant: 0,
-    lowAt: new THREE.Vector3(),
-    lowWay: new THREE.Vector3(),
+    lowAt: new Vec3(),
+    lowWay: new Vec3(),
     lowSlant: 0,
     /** the flat's way along the path (the palm's side, as his hand holds it) */
-    flatFrom: new THREE.Vector3(),
+    flatFrom: new Vec3(),
     /** how far his hands come out from him as it passes level */
     pathOut: 0,
     /** of the way down by which it's out at the rest's side and ahead (0: at the path's own pace) */
@@ -1976,20 +1977,20 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
     /** taking it up keyed (`PICK`), from it laid until he's up */
     keyedUp: false,
     /** by a fire, the sit's own turn in the world, which its path is in whichever way he turns as he takes it up */
-    sitQ: new THREE.Quaternion(),
+    sitQ: new Quat(),
     /** by a fire, the path's first key laying it down, kept as the one taking it up stands in for it */
-    layAt: new THREE.Vector3(),
-    layWay: new THREE.Vector3(),
+    layAt: new Vec3(),
+    layWay: new Vec3(),
     /** by a fire, the path's low key laying it down (`floorLowHand`, `floorLowOut`): getting up, it's where it lies */
-    layLowAt: new THREE.Vector3(),
-    layLowWay: new THREE.Vector3(),
+    layLowAt: new Vec3(),
+    layLowWay: new Vec3(),
     /** by a fire, whether he's getting up from it, his body rising */
     rising: false,
     /** by a fire, taking it up: where he stands to (world, on the floor), the way he faces then (rad), the weapon's way
      *  along the floor and how far its handle runs behind his fist where he fights with it (m) (`pickStance`) */
-    pickAt: new THREE.Vector3(),
+    pickAt: new Vec3(),
     pickYaw: 0,
-    pickAlong: new THREE.Vector3(),
+    pickAlong: new Vec3(),
     pickBehind: 0,
     /** by a fire, how far the weapon was slid forward through his fist last frame (m), to be taken off before the path
      *  places it again (`floorPickSlide`) */
@@ -1999,73 +2000,73 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
     afterWas: 0,
     /** by a fire, the grip's place and the weapon's way on his shoulder this frame, in his frame: it's lifted off from there
      *  along a path of its own (`weaponOnPath`'s `lifted`) */
-    carryAt: new THREE.Vector3(),
-    carryWay: new THREE.Vector3(),
+    carryAt: new Vec3(),
+    carryWay: new Vec3(),
     /** a maul or a greataxe stood head up on a seat this frame, its grip placed under his fist (`buttDown`) */
     upright: false,
     /** where it's stood head up between his feet and its way there, in his frame, before it's leant out to his right */
-    uprightAt: new THREE.Vector3(),
-    uprightWay: new THREE.Vector3(),
+    uprightAt: new Vec3(),
+    uprightWay: new Vec3(),
     /** his hands' stage sat last frame, and whether it's setting the weapon down (else taking it up) */
     handsWas: 0,
     settingDown: true,
     /** where it lies by a fire, in his frame */
-    restGrip: new THREE.Vector3(),
-    restWay: new THREE.Vector3(),
+    restGrip: new Vec3(),
+    restWay: new Vec3(),
     /** by a fire, let go of: where it lies (world), and the grip's place and turn in his hand as he let it go */
     laid: false,
-    laidAt: new THREE.Vector3(),
-    laidQ: new THREE.Quaternion(),
-    laidGrip: new THREE.Quaternion(),
-    laidGripAt: new THREE.Vector3(),
+    laidAt: new Vec3(),
+    laidQ: new Quat(),
+    laidGrip: new Quat(),
+    laidGripAt: new Vec3(),
     /** the arm as it holds what it's laid, by a fire: eased from it to his knee */
-    holding: [new THREE.Quaternion(), new THREE.Quaternion(), new THREE.Quaternion()],
+    holding: [new Quat(), new Quat(), new Quat()],
   };
-  const _allJoints = Object.values(j).filter((o): o is THREE.Object3D => o instanceof THREE.Object3D);
-  const _jointsWere = _allJoints.map((o) => ({ at: new THREE.Vector3(), q: new THREE.Quaternion() }));
-  const _standTurn = new THREE.Quaternion(), _gripHome = new THREE.Vector3(), _seatWas = new THREE.Vector3();
-  const _noTurn = new THREE.Quaternion(), _restRight: number[] = [1];
-  const _pathAt = new THREE.Vector3(), _pathWay = new THREE.Vector3(), _pathFlat = new THREE.Vector3(), _pathTurn = new THREE.Quaternion();
-  const _liftTurn = new THREE.Quaternion();
-  const _sitFrame = new THREE.Matrix4(), _sitFrameInverse = new THREE.Matrix4();
-  const _frameAt = new THREE.Vector3(), _frameScale = new THREE.Vector3(), _frameQ = new THREE.Quaternion();
+  const _allJoints = Object.values(j).filter((o): o is Node => o instanceof Node);
+  const _jointsWere = _allJoints.map((o) => ({ at: new Vec3(), q: new Quat() }));
+  const _standTurn = new Quat(), _gripHome = new Vec3(), _seatWas = new Vec3();
+  const _noTurn = new Quat(), _restRight: number[] = [1];
+  const _pathAt = new Vec3(), _pathWay = new Vec3(), _pathFlat = new Vec3(), _pathTurn = new Quat();
+  const _liftTurn = new Quat();
+  const _sitFrame = new Mat4(), _sitFrameInverse = new Mat4();
+  const _frameAt = new Vec3(), _frameScale = new Vec3(), _frameQ = new Quat();
   /** by a fire, how far the weapon is slid forward through his fist this frame (m), his fist by its butt to take it up */
   let pickSlide = 0;
   /** by a fire, this frame is the keyed pick-up's (`PICK`), and how far into it (0 to 1) */
   let pickKeyed = false;
   let pickK = 0;
-  const _pickOwn = [new THREE.Quaternion(), new THREE.Quaternion(), new THREE.Quaternion()];
-  const _pickFrom = [new THREE.Quaternion(), new THREE.Quaternion(), new THREE.Quaternion()];
-  const _pickReach = [new THREE.Quaternion(), new THREE.Quaternion(), new THREE.Quaternion()];
-  const _pickButt = new THREE.Vector3(), _pickWay = new THREE.Vector3(), _pickQ = new THREE.Quaternion();
-  const _carryButt = new THREE.Vector3(), _carryQ = new THREE.Quaternion(), _pickFist = new THREE.Vector3();
-  const _pickPole = new THREE.Vector3(), _pickUp = new THREE.Vector3(0, 1, 0), _pickFeet = new THREE.Vector3();
-  const _pickHeld = new THREE.Vector3(), _pickSeatedAt = new THREE.Vector3(), _pickSeatedQ = new THREE.Quaternion();
+  const _pickOwn = [new Quat(), new Quat(), new Quat()];
+  const _pickFrom = [new Quat(), new Quat(), new Quat()];
+  const _pickReach = [new Quat(), new Quat(), new Quat()];
+  const _pickButt = new Vec3(), _pickWay = new Vec3(), _pickQ = new Quat();
+  const _carryButt = new Vec3(), _carryQ = new Quat(), _pickFist = new Vec3();
+  const _pickPole = new Vec3(), _pickUp = new Vec3(0, 1, 0), _pickFeet = new Vec3();
+  const _pickHeld = new Vec3(), _pickSeatedAt = new Vec3(), _pickSeatedQ = new Quat();
   /** how far the weapon is still eased from where the keyed pick-up left it in the world (1 to 0, over `PICK_OFF` s) */
   let pickOff = 0;
   /** his right arm as the standing pose has it this frame, its shoulder's place, and the slant its fit last took */
-  const _standArm = [new THREE.Quaternion(), new THREE.Quaternion(), new THREE.Quaternion()];
-  const _standAt = new THREE.Vector3();
+  const _standArm = [new Quat(), new Quat(), new Quat()];
+  const _standAt = new Vec3();
   let _carrySlant = 0;
   /** by a fire, taking it up: his right hand sliding along it, and how far that hand is still open, off it */
   let pickSliding = false;
   let pickOpen = 0;
   const PICK_OFF = 0.3;
-  const _pickLastAt = new THREE.Vector3(), _pickLastQ = new THREE.Quaternion();
-  const _slideWay = new THREE.Vector3(), _slideScale = new THREE.Vector3();
+  const _pickLastAt = new Vec3(), _pickLastQ = new Quat();
+  const _slideWay = new Vec3(), _slideScale = new Vec3();
   const _behind = new WeakMap<Weapon, number>();
-  const _behindInverse = new THREE.Matrix4(), _behindBox = new THREE.Box3();
-  const _stanceFacing = new THREE.Vector3(), _stanceLeft = new THREE.Vector3(), _stanceFloor = new THREE.Vector3();
+  const _behindInverse = new Mat4(), _behindBox = new Box3();
+  const _stanceFacing = new Vec3(), _stanceLeft = new Vec3(), _stanceFloor = new Vec3();
   const _floorTurn: SitTurn = { angle: 0, inTo: 0, backFrom: 0, backTo: 0, yaw: 0, at: [0, 0] };
   // (taking it up by a fire his hands' stage is a real body's pick-up long: CMU's clip 69_70 squats and rises in about
   // 1.8 s, and there's a step before and the shoulder after. In 2.6 s its head swung up off the floor at 15 m/s, from
   // review "a snap, not a lift")
   const _floorHands: SitHands = { ...TWO_FLOOR_HANDS, before: 3.6, turn: _floorTurn };
-  const _lean = new THREE.Vector3(), _leanWay = new THREE.Vector3();
-  const _inverseRoot = new THREE.Matrix4();
-  const _pathEnd = new THREE.Vector3(), _pathEnd2 = new THREE.Vector3(), _pathPole = new THREE.Vector3();
-  const _fistWas = new THREE.Quaternion(), _fistNow = new THREE.Quaternion(), _rootTurn = new THREE.Quaternion();
-  const _portHand = new THREE.Vector3(), _besideAt = new THREE.Vector3(), _besidePole = new THREE.Vector3();
+  const _lean = new Vec3(), _leanWay = new Vec3();
+  const _inverseRoot = new Mat4();
+  const _pathEnd = new Vec3(), _pathEnd2 = new Vec3(), _pathPole = new Vec3();
+  const _fistWas = new Quat(), _fistNow = new Quat(), _rootTurn = new Quat();
+  const _portHand = new Vec3(), _besideAt = new Vec3(), _besidePole = new Vec3();
   /** What a two-hander's own shape asks of its rest: how far its far end's line stands over the floor by a fire and when
    *  stood (a sword's point goes into the ground), how far out it lies by a fire, and how far his fist slides down the
    *  handle as he sits (a sword's stops at the guard: past it, he held the blade), how far ahead of him it stands, where its handle ends, how far it slants across his palm stood there, and how far out to his side it's lowered. */
@@ -2135,7 +2136,7 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
     _behindInverse.copy(grip.matrixWorld).invert();
     let most = 0;
     weapon.group.traverse((object) => {
-      const mesh = object as THREE.Mesh;
+      const mesh = object as Mesh;
       if (!mesh.isMesh || !mesh.geometry) return;
       mesh.geometry.computeBoundingBox();
       _behindBox.copy(mesh.geometry.boundingBox!).applyMatrix4(mesh.matrixWorld).applyMatrix4(_behindInverse);
@@ -2179,7 +2180,7 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
     return pickAt('stepped', 1 - before);
   }
   /** A place given in his frame (m: to his right, up, ahead of his feet) in the world, into `out`. */
-  function inHisFrame(out: THREE.Vector3, right: number, up: number, ahead: number): THREE.Vector3 {
+  function inHisFrame(out: Vec3, right: number, up: number, ahead: number): Vec3 {
     root.updateMatrixWorld(true);
     const facing = root.getWorldDirection(_stanceFacing).setY(0).normalize();
     const left = _stanceLeft.set(facing.z, 0, -facing.x);
@@ -2188,7 +2189,7 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
       .addScaledVector(facing, ahead * scale);
   }
   /** A way given in his frame (to his left, up, ahead) in the world, into `out`. */
-  function wayInHisFrame(out: THREE.Vector3, left: number, up: number, ahead: number): THREE.Vector3 {
+  function wayInHisFrame(out: Vec3, left: number, up: number, ahead: number): Vec3 {
     const facing = root.getWorldDirection(_stanceFacing).setY(0).normalize();
     const leftWay = _stanceLeft.set(facing.z, 0, -facing.x);
     return out.set(0, 0, 0).addScaledVector(leftWay, left).addScaledVector(_pickUp, up).addScaledVector(facing, ahead)
@@ -2283,7 +2284,7 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
     grip.updateMatrixWorld(true);
   }
   /** Where a weapon lying let go of is to be held, `pickSlide` back along it from where it lies (its fist by its butt). */
-  function laidHeldAt(out: THREE.Vector3): THREE.Vector3 {
+  function laidHeldAt(out: Vec3): Vec3 {
     _slideWay.set(0, 1, 0).applyQuaternion(twoSit.laidQ);
     return out.copy(twoSit.laidAt).addScaledVector(_slideWay, -pickSlide);
   }
@@ -2426,12 +2427,12 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
     loosen(handR, SIT_HANDS.regripOpen * Math.min(1, 2 * Math.sin(Math.PI * round)));
   }
   /** The way a grip's weapon runs from the fist to its far end, in the world. */
-  function along2(g: THREE.Object3D): THREE.Vector3 {
+  function along2(g: Node): Vec3 {
     return _hd.set(0, 1, 0).transformDirection(g.matrixWorld);
   }
   /** The frame the weapon's path is in: his own, and by a fire his own place with the sit's turn, so the path stays put
    *  as he turns to take it up (`twoSit.pickingUp`). */
-  function pathFrame(): THREE.Matrix4 {
+  function pathFrame(): Mat4 {
     root.updateMatrixWorld(true);
     if (!twoSit.turnsEvenly) return _sitFrame.copy(root.matrixWorld);
     root.matrixWorld.decompose(_frameAt, _frameQ, _frameScale);
@@ -2477,7 +2478,7 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
       _pathAt.x = lerp(twoSit.lowAt.x, twoSit.restGrip.x, smooth(ramp(laid, 0, SIT_HANDS.besideBy)));
       _pathAt.z = lerp(twoSit.lowAt.z, twoSit.restGrip.z, smooth(ramp(laid, SIT_HANDS.besideFrom, 1)));
       _pathAt.y = lerp(twoSit.lowAt.y, twoSit.restGrip.y, smooth(ramp(laid, 0, SIT_HANDS.handDownBy)));
-      const falls = THREE.MathUtils.clamp((_pathAt.y - _pathEnd.y) / weapon.len, -1, 1), level = Math.sqrt(1 - falls * falls);
+      const falls = Maths.clamp((_pathAt.y - _pathEnd.y) / weapon.len, -1, 1), level = Math.sqrt(1 - falls * falls);
       _pathWay.subVectors(_pathEnd, _pathAt).setY(0).normalize().multiplyScalar(level).setY(-falls);
     }
     // (off his shoulder by the weapon's own place and way, its head out past his shoulder to his right: with his arm's joints
@@ -2540,7 +2541,7 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
     // past its range)
     const lowY = toFloor ? SIT_HANDS.floorLowY : floorRest(weapon)[7];
     const [lowX, lowZ] = toFloor ? SIT_HANDS.floorLowHand : SIT_HANDS.lowHand;
-    const falls = THREE.MathUtils.clamp((lowY - over) / weapon.len, 0, 1), level = Math.sqrt(1 - falls * falls);
+    const falls = Maths.clamp((lowY - over) / weapon.len, 0, 1), level = Math.sqrt(1 - falls * falls);
     // (a maul's and an axe's haft runs further behind the fist than a sword's grip: held as near, its end went 11 cm into
     // his chest as he began to lay it)
     const longHaft = toFloor && floorRest(weapon) !== SIT_HANDS.swordRest ? SIT_HANDS.floorHaftAhead : 0;
@@ -2557,7 +2558,7 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
       twoSit.afterWas = sit.after;
     }
     else {
-      const outBy = THREE.MathUtils.clamp((SIT_HANDS.lowEndX - lowX) / (weapon.len * level), -1, 1);
+      const outBy = Maths.clamp((SIT_HANDS.lowEndX - lowX) / (weapon.len * level), -1, 1);
       twoSit.lowWay.set(outBy * level, -falls, Math.sqrt(1 - outBy * outBy) * level);
     }
     // (lying on the floor beside him: its far end's height and his hand's are what its own shape lies on)
@@ -2639,7 +2640,7 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
     grip.updateMatrixWorld(true);
     twoSit.upright = true;
   }
-  function weaponNow(at: THREE.Vector3, turn: THREE.Quaternion, pole: THREE.Vector3): void {
+  function weaponNow(at: Vec3, turn: Quat, pole: Vec3): void {
     root.updateMatrixWorld(true);
     j.chest.worldToLocal(grip.getWorldPosition(at));
     turn.copy(j.chest.getWorldQuaternion(_backQ).invert()).multiply(grip.getWorldQuaternion(_pq));
@@ -2661,7 +2662,7 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
    *  and back 9 cm through the left thigh.) */
   function backToGuard(e: number): void {
     _hw1.copy(GUARD_AT).lerp(BACK_AT, e);
-    _hw1.y = THREE.MathUtils.lerp(GUARD_AT.y, BACK_AT.y, e * e);
+    _hw1.y = Maths.lerp(GUARD_AT.y, BACK_AT.y, e * e);
     // (coming into the guard as the fade does: by the weight to a power, `e^0.4`, the weapon came into the guard at
     // full speed and stopped there in a frame in the hall of heroes, its tip 15 cm a frame to none)
     _backQ.copy(GUARD_TURN).slerp(BACK_TURN, 1 - Math.pow(1 - e, BACK_EASE.late));
@@ -2674,7 +2675,7 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
   /** The weapon arm placed by a point and a way in the chest's own frame, by `k` from the pose's own: the grip at `at`,
    *  the weapon along `dir` (its flat facing `flat`, if given, `flatK` of the way), the arm reaching by IK with its
    *  elbow towards `pole` (third person's `holdInView`). */
-  function holdInChest(arm: typeof ARM_R, at: THREE.Vector3, dir: THREE.Vector3, pole: THREE.Vector3, k: number, flat?: THREE.Vector3, flatK = k): void {
+  function holdInChest(arm: typeof ARM_R, at: Vec3, dir: Vec3, pole: Vec3, k: number, flat?: Vec3, flatK = k): void {
     root.updateMatrixWorld(true);
     const flatW = flat && _hw3.copy(flat).transformDirection(j.chest.matrixWorld);
     holdInWorld(arm, j.chest.localToWorld(_hw1.copy(at)), _hw2.copy(dir).transformDirection(j.chest.matrixWorld), pole, k, flatW, flatK);
@@ -2682,7 +2683,7 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
 
   /** `holdInChest` with the grip's place, the weapon's way and its flat's in the world (the elbow's `pole` in the
    *  chest's frame). */
-  function holdInWorld(arm: typeof ARM_R, at: THREE.Vector3, dir: THREE.Vector3, pole: THREE.Vector3, k: number, flat?: THREE.Vector3, flatK = k): void {
+  function holdInWorld(arm: typeof ARM_R, at: Vec3, dir: Vec3, pole: Vec3, k: number, flat?: Vec3, flatK = k): void {
     const { shoulder, elbow, hand, grip: g } = arm;
     root.updateMatrixWorld(true);
     _gw.copy(at).lerp(g.getWorldPosition(_cur), 1 - k);
@@ -2702,7 +2703,7 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
   /** The hand's world turn `q` rolled about the weapon's way (`_dw`) by `k` of the way until its flat faces `flat`:
    *  that side of it, the palm's (either side, the least roll turned the palm out, past the forearm's turn). The
    *  grip's turn in the hand is its own, so the flat follows `q`. */
-  function rollFlat(q: THREE.Quaternion, g: THREE.Object3D, flat: THREE.Vector3, k: number): void {
+  function rollFlat(q: Quat, g: Node, flat: Vec3, k: number): void {
     // (the flat as `q` would have it: the grip's turn in the hand, then `q`)
     _fn.copy(FLAT_IN_GRIP).applyQuaternion(g.quaternion).applyQuaternion(q);
     _fn.addScaledVector(_dw, -_fn.dot(_dw)).normalize();
@@ -2973,7 +2974,7 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
       j.body.position.y += -0.14 * brace; j.body.position.z += -0.07 * brace; j.hips.rotation.y += -0.25 * brace;
       if (brace > 0.3) feet = BRACE_FEET;
       j.body.rotation.x += 0.32 * run; j.body.position.y += (-0.08 + 0.06 * Math.abs(cc)) * run;
-      const lerpX = (o: THREE.Object3D, v: number) => { o.rotation.x = lerp(o.rotation.x, v, run); };
+      const lerpX = (o: Node, v: number) => { o.rotation.x = lerp(o.rotation.x, v, run); };
       lerpX(j.thighL, -0.35 - 0.85 * sc); lerpX(j.thighR, -0.35 + 0.85 * sc);
       lerpX(j.kneeL, 0.35 + 1.2 * Math.max(0, cc)); lerpX(j.kneeR, 0.35 + 1.2 * Math.max(0, -cc));
       lerpX(j.ankleL, 0.25 * sc); lerpX(j.ankleR, -0.25 * sc);
@@ -3066,7 +3067,7 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
           turnWithTrunk(theta, _sp, _la, _ld, _ml, _pl);
           _sl.sub(_sp).applyAxisAngle(Y_AXIS, theta).add(_sp);
           keyArm('left', _sl, _pl, _la, _ld, _ml, fw);
-          wL = fw; flatL = 1; edgeL = fw; swingSlantL = -THREE.MathUtils.degToRad(DUAL_CUT.slant);
+          wL = fw; flatL = 1; edgeL = fw; swingSlantL = -Maths.degToRad(DUAL_CUT.slant);
         } else {
           const twoFore = inRow && !outing ? TWO_FORE_ROW : TWO_FORE_CUT;
           const outs = TWO_OUTS.get(twoRestOf(held?.group.name ?? ''))!;
@@ -3093,7 +3094,7 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
             _sr.copy(_so);
           }
           keyArm('right', _sr, _pr, _ra, _rd, _mr, fw, 1 - byHands);
-          wR = fw; flatR = 1; edgeR = fw; swingSlantR = THREE.MathUtils.degToRad(cut.slant);
+          wR = fw; flatR = 1; edgeR = fw; swingSlantR = Maths.degToRad(cut.slant);
         }
         // the leg opposite the swinging arm steps in
         (left ? j.thighR : j.thighL).rotation.x += -0.3 * w; (left ? j.kneeL : j.kneeR).rotation.x += 0.3 * w;
@@ -3112,7 +3113,7 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
           j.thighR.rotation.x += 0.35 * w; j.kneeR.rotation.x += 0.5 * w;
           j.body.position.y += -0.12 * w;
         }
-        const cut = (arm: THREE.Euler, elbow: THREE.Object3D, hand: THREE.Object3D, s: number, from: number, to: number): void => {
+        const cut = (arm: Euler, elbow: Node, hand: Node, s: number, from: number, to: number): void => {
           const up = ramp(k, from - 0.15, from), down = ramp(k, from, to), aw = up * (1 - ramp(k, to + 0.05, to + 0.25));
           arm.x = lerp(arm.x, lerp(-2.4, -0.7, down), aw);
           arm.y = s * lerp(0.5, -0.7, down) * aw;
@@ -3153,12 +3154,12 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
           const back = smooth(ramp(k, rightEnd, rightEnd + FANG_EYES.back));
           swingAt(DUAL_CUT, right, armBones(held), _ra, _rd, _mr, _pr); swingShoulder(DUAL_CUT, _sr);
           wR = smooth(ramp(right, 0, FANG_EYES.in)) * (1 - back); flatR = 1; edgeR = wR;
-          swingSlantR = THREE.MathUtils.degToRad(DUAL_CUT.slant);
+          swingSlantR = Maths.degToRad(DUAL_CUT.slant);
           if (k > rightEnd) dipR = wR;
           if (offHeld) {
             swingAt(DUAL_CUT, left, armBones(offHeld), _la, _ld, _ml, _pl, true); swingShoulder(DUAL_CUT, _sl, true);
             wL = smooth(ramp(left, 0, FANG_EYES.in)); flatL = 1; edgeL = wL;
-            swingSlantL = -THREE.MathUtils.degToRad(DUAL_CUT.slant);
+            swingSlantL = -Maths.degToRad(DUAL_CUT.slant);
           }
           // (the arm the lab holds to its keys: the one cutting)
           if (k < fang.between) keyArm('right', _sr, _pr, _ra, _rd, _mr, wR);
@@ -3259,7 +3260,7 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
           swingAt(power.blow, k, armBones(held), _ra, _rd, _mr, _pr); swingShoulderAt(power.blow, k, _sr);
           _ra.x += shake * 0.5; _ra.y += shake;
           keyArm('right', _sr, _pr, _ra, _rd, _mr, w);
-          wR = w; flatR = 1; edgeR = w; swingSlantR = THREE.MathUtils.degToRad(power.blow.slant);
+          wR = w; flatR = 1; edgeR = w; swingSlantR = Maths.degToRad(power.blow.slant);
           chopBack = power.back;
         } else if (held) {
           // (one-handed, swung as a cut is, `ONE_POWER`: its flat the plane's, so its edge leads; two weapons both rise
@@ -3267,11 +3268,11 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
           swingAt(ONE_POWER, k, armBones(held), _ra, _rd, _mr, _pr); swingShoulder(ONE_POWER, _sr);
           _ra.x += shake * 0.5; _ra.y += shake;
           keyArm('right', _sr, _pr, _ra, _rd, _mr, w);
-          wR = w; flatR = 1; edgeR = w; swingSlantR = THREE.MathUtils.degToRad(ONE_POWER.slant);
+          wR = w; flatR = 1; edgeR = w; swingSlantR = Maths.degToRad(ONE_POWER.slant);
           if (offHeld) {
             swingAt(ONE_POWER, k, armBones(offHeld), _la, _ld, _ml, _pl, true); swingShoulder(ONE_POWER, _sl, true);
             _la.x -= shake * 0.5; _la.y += shake;
-            wL = w; flatL = 1; edgeL = w; swingSlantL = -THREE.MathUtils.degToRad(ONE_POWER.slant);
+            wL = w; flatL = 1; edgeL = w; swingSlantL = -Maths.degToRad(ONE_POWER.slant);
           }
         }
         j.body.position.y += -0.16 * blow * w;
@@ -3658,7 +3659,7 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
         if (chopBack) {
           swingAt(chopBack, 1 - u, armBones(held), _ra, _rd, _mr, _pr); swingShoulderAt(chopBack, 1 - u, _sr);
           keyArm('right', _sr, _pr, _ra, _rd, _mr, 1);
-          wR = 1; flatR = 1; edgeR = 1; swingSlantR = THREE.MathUtils.degToRad(chopBack.slant);
+          wR = 1; flatR = 1; edgeR = 1; swingSlantR = Maths.degToRad(chopBack.slant);
         }
       } else if (held) {
         // (held where its swing ended, `ONE_POWER`, and back to rest from there under the frame, `dipUnder`: blended
@@ -3688,7 +3689,7 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
       swingAt(rest, smooth(restK), armBones(held), _er, _ed, _ef, _pe);
       if (wR === 0) {
         keyArm('right', swingShoulderAt(rest, smooth(restK), _sr), _pe, _er, _ed, _ef, 1);
-        swingSlantR = THREE.MathUtils.degToRad(rest.slant);
+        swingSlantR = Maths.degToRad(rest.slant);
       }
       _ra.lerpVectors(_er, _ra, wR); _rd.lerpVectors(_ed, _rd.normalize(), wR); _pr.lerpVectors(_pe, _pr, wR);
       turnTowards(_ef, _mr, wR, _mr);
@@ -3818,7 +3819,7 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
     /** whether a punch has sent this side's shoulder forward of its rest */
     const shoulderForward = (left: boolean): boolean => {
       const sh = left ? j.shoulderL : j.shoulderR;
-      return sh.position.z > (sh.userData.rest as THREE.Vector3).z + 1e-5;
+      return sh.position.z > (sh.userData.rest as Vec3).z + 1e-5;
     };
     /** the punching arm solved for its fist as posed, from its shoulder where the punch put it */
     const punchArm = (left: boolean, solids: typeof body): void => {
@@ -4200,7 +4201,7 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
     // it was first held, it lay the way the last drink left it, 70 degrees off, for that frame)
     flaskOut = damp(flaskOut, flaskWant, 16, dt); flask.visible = flaskOut > 0.02; flask.scale.setScalar(Math.max(0.02, flaskOut));
     // fists round whatever they hold; an empty hand hangs loosely curled
-    const along = (g: THREE.Object3D) => _hd.set(0, 1, 0).transformDirection(g.matrixWorld);
+    const along = (g: Node) => _hd.set(0, 1, 0).transformDirection(g.matrixWorld);
     // The pose sets the knuckle line. `closeFist` keeps it square to the forearm even on a slanted grip line.
     // (an empty hand hanging at his side is turned on its forearm so its palm lies along his thigh, as a man's hangs:
     // the rig's rest has the palms to his back, the forearms turned fully over, from play: "in idle pose, can you turn
@@ -4214,13 +4215,13 @@ export function* warriorSteps(look: HeadSpec = headFor('warrior')): ModelSteps {
     // (a hanging fist's knuckle row, in the world: square to its forearm and to his side-to-side, so the palm is to his
     // thigh however the forearm swings: ahead with the arm hanging, up with it raised ahead at a run. Along his way
     // alone, it lay along a forearm swung forward, and the fist turned any way)
-    const hangLine = (hand: THREE.Object3D): THREE.Vector3 => {
+    const hangLine = (hand: Node): Vec3 => {
       const forearm = hand.parent ?? hand;
       _hangUp.setFromMatrixColumn(forearm.matrixWorld, 1);
       _hangRow.setFromMatrixColumn(j.body.matrixWorld, 0).cross(_hangUp);
       return _hangRow.lengthSq() > 1e-6 ? _hangRow.normalize() : _hangRow.set(0, 0, 1).transformDirection(j.body.matrixWorld);
     };
-    const knuckles = (g: THREE.Object3D, line: THREE.Vector3, hand: THREE.Object3D) =>
+    const knuckles = (g: Node, line: Vec3, hand: Node) =>
       // (and with his guard down and no move on, a fist's line eased to that hanging one, `hang`: the guard's own line
       // is set whatever its weight, and at a run his loose fists kept it, turned across with the palms to his back)
       line.lengthSq() > 0 ? thumbNotDown(_hd.copy(line).transformDirection(j.body.matrixWorld).lerp(hangLine(hand), hang).normalize(), hand, fp ? THUMB_UP_EYES : THUMB_UP)

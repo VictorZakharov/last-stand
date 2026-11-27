@@ -18,7 +18,7 @@
 //   bombs bursting after a fuse and throwing a hero back, Reliquary's poison lying as a cloud; at half the one left
 //   standing takes its brother's belt.
 // Their warned hits never land together (`claimBeat`).
-import * as THREE from '../engine/three.ts';
+import { Vec3 } from '../engine/api/index.ts';
 import { G } from '../state';
 import { TWINS } from '../data/foes/twins';
 import { DAMAGE_TYPES, hurtPlayer } from '../combat/damage';
@@ -185,7 +185,7 @@ export function chargeRan(id: number, ox: number, oz: number, tx: number, tz: nu
       const p = grounded();
       if (hit || !p || Math.hypot(p.pos.x - x, p.pos.z - z) > T.charge.width / 2 + p.radius + 0.4) return;
       hit = true;
-      hurtPlayer(p, damage, 'physical', new THREE.Vector3(x, 0, z), { foe: foeOf(id), attack: 'charge' });
+      hurtPlayer(p, damage, 'physical', new Vec3(x, 0, z), { foe: foeOf(id), attack: 'charge' });
       burst(p.pos, { count: 14, color: EMBER, speed: 5, life: 0.4, size: 0.25 });
       addShake(0.35);
     });
@@ -207,9 +207,9 @@ export function skullsLoosed(id: number, ox: number, oz: number, tx: number, tz:
     const len = Math.abs(swing) > 1e-3 ? (d * swing) / Math.sin(swing) : d;
     const turn = (2 * swing * v.speed) / len;
     let heading = base + swing;
-    const dir = new THREE.Vector3(Math.sin(heading), 0, Math.cos(heading));
+    const dir = new Vec3(Math.sin(heading), 0, Math.cos(heading));
     spawnProjectile({
-      pos: new THREE.Vector3(ox + dir.x * 1.2, SKULL_Y, oz + dir.z * 1.2), dir, speed: v.speed, radius: v.radius, life: len / v.speed + 0.8,
+      pos: new Vec3(ox + dir.x * 1.2, SKULL_Y, oz + dir.z * 1.2), dir, speed: v.speed, radius: v.radius, life: len / v.speed + 0.8,
       hostile: true, color: COLD, size: v.radius * 0.8, intensity: 3.2, glow: 2,
       trail: { color: COLD, colorEnd: 0x10283a, intensity: 1.1, size: v.radius * 1.6, rate: 50, life: 0.45 },
       // (turned on its arc until it has turned its whole, then straight on)
@@ -237,14 +237,14 @@ export function chainSnapped(id: number, ax: number, az: number, bx: number, bz:
     const k = Math.max(0, Math.min(1, ((p.pos.x - ax) * lx + (p.pos.z - az) * lz) / len2));
     const cx = ax + lx * k, cz = az + lz * k;
     if (Math.hypot(p.pos.x - cx, p.pos.z - cz) < T.chain.reach + p.radius) {
-      hurtPlayer(p, damage, 'physical', new THREE.Vector3(cx, 0, cz), { foe: foeOf(id), attack: 'chain' });
+      hurtPlayer(p, damage, 'physical', new Vec3(cx, 0, cz), { foe: foeOf(id), attack: 'chain' });
       burst(p.pos, { count: 12, color: CHAIN_LIGHT, speed: 5, life: 0.4, size: 0.25 });
     }
   }
   const len = Math.sqrt(len2), n = Math.ceil(len / 1.2);
   for (let i = 0; i <= n; i++) {
     const x = ax + (lx * i) / n, z = az + (lz * i) / n;
-    burst(new THREE.Vector3(x, 1.6, z), { count: 3, color: CHAIN_LIGHT, speed: 2.5, life: 0.45, size: 0.2 });
+    burst(new Vec3(x, 1.6, z), { count: 3, color: CHAIN_LIGHT, speed: 2.5, life: 0.45, size: 0.2 });
   }
   groundFlash({ x: (ax + bx) / 2, z: (az + bz) / 2 }, { color: CHAIN_LIGHT, intensity: 1, radius: len * 0.4, life: 0.4 });
   flash({ color: CHAIN_LIGHT, intensity: 10, distance: len, life: 0.45, pos: { x: (ax + bx) / 2, y: 1.8, z: (az + bz) / 2 } });
@@ -262,7 +262,7 @@ export function mendDone(id: number, slabId: number): void {
   const s = foeOf(slabId), r = foeOf(id);
   if (!s) return;
   shockwave(s.pos, { color: COLD, intensity: 1.4, from: 0.5, to: s.radius * 2.4, life: 0.6 });
-  burst(new THREE.Vector3(s.pos.x, 2.5, s.pos.z), { count: 24, color: COLD, speed: 3, up: 3, life: 0.8, size: 0.25 });
+  burst(new Vec3(s.pos.x, 2.5, s.pos.z), { count: 24, color: COLD, speed: 3, up: 3, life: 0.8, size: 0.25 });
   if (r) flash({ color: COLD, intensity: 8, distance: 8, life: 0.5, pos: { x: s.pos.x, y: 2, z: s.pos.z } });
 }
 
@@ -280,12 +280,12 @@ export function twinFell(id: number): void {
 
 // --- each frame, and their phases (entities/bossKit.ts) -------------------------------------------
 
-const _a = new THREE.Vector3(), _b = new THREE.Vector3();
+const _a = new Vec3(), _b = new Vec3();
 
 /** Each frame on every game, from Slab: the chain laid between them on his model (gone with either), and where
  *  simulated, its snap past its reach. */
 function slabFrame(e: Enemy): void {
-  const r = partnerOf(e), lay = e.model.root.userData.layChain as ((to: THREE.Vector3 | null, taut: number) => void) | undefined;
+  const r = partnerOf(e), lay = e.model.root.userData.layChain as ((to: Vec3 | null, taut: number) => void) | undefined;
   // (the chain gone with him: his frame isn't run once he's fallen)
   if (!e.brain.chainLetGo) { e.brain.chainLetGo = 1; e.onDeath.push(() => lay?.(null, 0)); }
   if (!r || e.spawning > 0 || r.spawning > 0) { lay?.(null, 0); return; }

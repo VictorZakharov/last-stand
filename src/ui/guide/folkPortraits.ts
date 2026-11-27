@@ -5,7 +5,10 @@
 // looked off at the one he talked to; "Also add this for the other character npc's in the game ... Real picture of
 // their face, looking at camera"). One of the folk is pictured with an entry in `FOLK`: how his model is built, its
 // head and eyes, how it's posed looking at a place, and the room behind him.
-import * as THREE from '../../engine/three.ts';
+import {
+  CanvasTexture, DirectionalLight, HemisphereLight, Mat4, Mesh, Node, PerspectiveCamera, Quat, SRGBColorSpace, Vec3,
+  World,
+} from '../../engine/api/index.ts';
 import { scholarBook, scholarSteps } from '../../entities/models/scholar';
 import { odoShop, odoSteps } from '../../entities/models/merchant';
 import { keeperSteps, KEEPER_MADE } from '../../entities/models/keeper';
@@ -17,10 +20,10 @@ export type FolkId = 'scholar' | 'odo' | 'bertram';
 /** One of the folk, built for his picture: his root, his head's joint and his eyes, and his pose for a step of `dt`
  *  looking at `at` (his root's parent's frame: the picture's scene). */
 export interface Sitter {
-  root: THREE.Object3D;
-  head: THREE.Object3D;
-  eyes: readonly THREE.Object3D[];
-  look(dt: number, at: THREE.Vector3): void;
+  root: Node;
+  head: Node;
+  eyes: readonly Node[];
+  look(dt: number, at: Vec3): void;
 }
 
 /** How each is pictured: his model built a slice at a time (null where it can't be yet: the room he's built from never
@@ -67,7 +70,7 @@ export const FOLK: Record<FolkId, Folk> = {
       return (function* () {
         const b = yield* keeperSteps();
         b.placed();
-        const look = (dt: number, at: THREE.Vector3) => {
+        const look = (dt: number, at: Vec3) => {
           b.pose(Math.max(dt, 1e-3), { speed: 0, bend: 0, crouch: 0, look: at, left: null, right: null });
           b.joints.neck.rotation.x += KEEPER_PORTRAIT.neck.pitch;
           b.joints.head.rotation.x += KEEPER_PORTRAIT.head.pitch;
@@ -87,35 +90,35 @@ export const isFolk = (id: string): id is FolkId => id in FOLK;
  *  higher than that it stands (m), how long he's
  *  posed for his look to settle (s, in steps), and where the key light is from the camera (m: right, up, ahead of it:
  *  high, so his glasses throw it down and away from the lens). */
-export const FOLK_SHOT = { distance: 0.95, fov: 30, below: 0.035, above: 0.06, settle: 2, step: 0.05, key: new THREE.Vector3(0.9, 1.6, -0.2) };
+export const FOLK_SHOT = { distance: 0.95, fov: 30, below: 0.035, above: 0.06, settle: 2, step: 0.05, key: new Vec3(0.9, 1.6, -0.2) };
 
 /** `name`'s joint in `root` (a joint, not a mesh: a mesh may share its joint's name). */
-function joint(root: THREE.Object3D, name: string): THREE.Object3D {
-  let found: THREE.Object3D | undefined;
-  root.traverse((o) => { if (!found && o.name === name && !(o as THREE.Mesh).isMesh) found = o; });
+function joint(root: Node, name: string): Node {
+  let found: Node | undefined;
+  root.traverse((o) => { if (!found && o.name === name && !(o as Mesh).isMesh) found = o; });
   if (!found) throw new Error(`no ${name} to picture`);
   return found;
 }
 
 /** His eyes (the head's eye meshes: models/head.ts names them). */
-function eyesOf(root: THREE.Object3D): THREE.Object3D[] {
-  const eyes: THREE.Object3D[] = [];
+function eyesOf(root: Node): Node[] {
+  const eyes: Node[] = [];
   root.traverse((o) => { if (o.name === 'eye') eyes.push(o); });
   return eyes;
 }
 
 /** `sitter` in a scene of his own, posed looking at the camera, and the camera: in front of him (the way his root
  *  faces), level with his face, and his head then turned square to it and his eyes set straight in his head. */
-export function folkStaged(sitter: Sitter, backdrop: Backdrop): { root: THREE.Object3D; scene: THREE.Scene; camera: THREE.PerspectiveCamera } {
-  const scene = new THREE.Scene();
+export function folkStaged(sitter: Sitter, backdrop: Backdrop): { root: Node; scene: World; camera: PerspectiveCamera } {
+  const scene = new World();
   scene.background = backdropTexture(backdrop);
   scene.add(sitter.root);
-  const camera = new THREE.PerspectiveCamera(FOLK_SHOT.fov, 1, 0.05, 20);
+  const camera = new PerspectiveCamera(FOLK_SHOT.fov, 1, 0.05, 20);
   const place = () => {
     sitter.root.updateMatrixWorld(true);
-    const eyes = sitter.eyes.reduce((sum, e) => sum.add(e.getWorldPosition(new THREE.Vector3())), new THREE.Vector3()).divideScalar(sitter.eyes.length);
-    const ahead = new THREE.Vector3(0, 0, 1).transformDirection(sitter.root.matrixWorld).setY(0).normalize();
-    const aim = sitter.head.getWorldPosition(new THREE.Vector3()).setY(eyes.y - FOLK_SHOT.below);
+    const eyes = sitter.eyes.reduce((sum, e) => sum.add(e.getWorldPosition(new Vec3())), new Vec3()).divideScalar(sitter.eyes.length);
+    const ahead = new Vec3(0, 0, 1).transformDirection(sitter.root.matrixWorld).setY(0).normalize();
+    const aim = sitter.head.getWorldPosition(new Vec3()).setY(eyes.y - FOLK_SHOT.below);
     camera.position.copy(aim).addScaledVector(ahead, FOLK_SHOT.distance).setY(aim.y + FOLK_SHOT.above);
     camera.lookAt(aim);
   };
@@ -125,12 +128,12 @@ export function folkStaged(sitter: Sitter, backdrop: Backdrop): { root: THREE.Ob
   place();
   squareTo(sitter, camera.position);
   sitter.root.updateMatrixWorld(true);
-  scene.add(new THREE.HemisphereLight(0xffd8b0, 0x1a1008, 0.55));
-  const key = new THREE.DirectionalLight(0xffc890, 2.8);
+  scene.add(new HemisphereLight(0xffd8b0, 0x1a1008, 0.55));
+  const key = new DirectionalLight(0xffc890, 2.8);
   key.position.copy(FOLK_SHOT.key).applyQuaternion(camera.quaternion).add(camera.position);
-  key.target.position.copy(camera.position).add(new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion));
+  key.target.position.copy(camera.position).add(new Vec3(0, 0, -1).applyQuaternion(camera.quaternion));
   scene.add(key, key.target);
-  const rim = new THREE.DirectionalLight(0x9fb8ff, 1.4);
+  const rim = new DirectionalLight(0x9fb8ff, 1.4);
   rim.position.copy(camera.position).negate().setY(2.2);
   scene.add(rim);
   return { root: sitter.root, scene, camera };
@@ -138,13 +141,13 @@ export function folkStaged(sitter: Sitter, backdrop: Backdrop): { root: THREE.Ob
 
 /** His head turned to face `at` square (its +z on it, its up as near the world's as it goes) and his eyes on it:
  *  whatever his model's own look reaches, he looks into the camera. */
-export function squareTo(sitter: Sitter, at: THREE.Vector3): void {
+export function squareTo(sitter: Sitter, at: Vec3): void {
   const head = sitter.head;
   head.updateWorldMatrix(true, false);
-  const from = head.getWorldPosition(new THREE.Vector3());
+  const from = head.getWorldPosition(new Vec3());
   // (its +z from its place to `at`, as an object's lookAt has it)
-  const want = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().lookAt(at, from, new THREE.Vector3(0, 1, 0)));
-  const parent = head.parent!.getWorldQuaternion(new THREE.Quaternion());
+  const want = new Quat().setFromRotationMatrix(new Mat4().lookAt(at, from, new Vec3(0, 1, 0)));
+  const parent = head.parent!.getWorldQuaternion(new Quat());
   head.quaternion.copy(parent.invert().multiply(want));
   head.updateWorldMatrix(false, true);
   // (each eye's own +z on it: they sit in the face's frame, turned from the head's joint)
@@ -152,7 +155,7 @@ export function squareTo(sitter: Sitter, at: THREE.Vector3): void {
 }
 
 /** The room behind him, dim: a warm glow up to his left, its shelves' rows dark across it. */
-function backdropTexture(b: Backdrop): THREE.CanvasTexture {
+function backdropTexture(b: Backdrop): CanvasTexture {
   const c = document.createElement('canvas');
   c.width = c.height = 128;
   const g = c.getContext('2d')!;
@@ -171,7 +174,7 @@ function backdropTexture(b: Backdrop): THREE.CanvasTexture {
       g.fillRect(x, y - 22 + ((x * 3) % 5), 3 + ((x * 5) % 3), 22 - ((x * 3) % 5));
     }
   }
-  const t = new THREE.CanvasTexture(c);
-  t.colorSpace = THREE.SRGBColorSpace;
+  const t = new CanvasTexture(c);
+  t.colorSpace = SRGBColorSpace;
   return t;
 }

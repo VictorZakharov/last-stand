@@ -4,12 +4,14 @@
 // frame: 32 of the forest lobby's 93 shadow draws, about 11 µs of the frame's JS a draw on WebGPU. A prop that breaks
 // or comes back has its stretches of the casters put away or back (`refresh`, by the props' revision); props built
 // again or moved make the casters again.
-import * as THREE from '../engine/three.ts';
+import {
+  Attribute, Box3, Geometry, InstancedMesh, Mat4, Material, Mesh, Node, Side, SkinnedMesh, Sphere, UnlitMaterial,
+} from '../engine/api/index.ts';
 import { inShadowsOnly, outOfShadowsOnly } from './culling';
 
 /** a stretch of one caster: a piece of a breakable mesh (a material's group of it), its vertices from `start` */
 interface Stretch {
-  caster: THREE.Mesh;
+  caster: Mesh;
   start: number;
   /** its vertices where its mesh stands, put back as it's shown again */
   positions: Float32Array;
@@ -17,9 +19,9 @@ interface Stretch {
 
 /** a breakable mesh within the casters: what it was made from, and its stretches */
 interface Held {
-  mesh: THREE.Mesh;
-  geometry: THREE.BufferGeometry;
-  placed: THREE.Matrix4;
+  mesh: Mesh;
+  geometry: Geometry;
+  placed: Mat4;
   stretches: Stretch[];
   shown: boolean;
 }
@@ -32,42 +34,42 @@ export interface BreakableShadows {
 
 /** a piece of a mesh to cast: its material's sides, and its vertices where it stands */
 export interface Piece {
-  side: THREE.Side;
-  shadowSide: THREE.Side | null;
+  side: Side;
+  shadowSide: Side | null;
   positions: Float32Array;
 }
 
 /** Whether `mesh` can cast within the casters: a breakable's plain mesh casting a solid shadow (an instanced one
  *  hides an instance, a skinned one moves, an alpha-tested or custom-depth one casts a shape of its own). */
-function castsWithin(mesh: THREE.Mesh): boolean {
+function castsWithin(mesh: Mesh): boolean {
   if (!mesh.isMesh || !mesh.userData.noBake) return false;
   if (!mesh.castShadow && !mesh.userData.castsWithin) return false;
-  if ((mesh as THREE.InstancedMesh).isInstancedMesh || (mesh as THREE.SkinnedMesh).isSkinnedMesh) return false;
+  if ((mesh as InstancedMesh).isInstancedMesh || (mesh as SkinnedMesh).isSkinnedMesh) return false;
   const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
   return materials.every((material) => material.alphaTest === 0) && !mesh.customDepthMaterial;
 }
 
 /** Whether `object` is shown within `group`: it and every parent up to the group. */
-function shownIn(object: THREE.Object3D, group: THREE.Object3D): boolean {
-  for (let at: THREE.Object3D | null = object; at && at !== group; at = at.parent) {
+function shownIn(object: Node, group: Node): boolean {
+  for (let at: Node | null = object; at && at !== group; at = at.parent) {
     if (!at.visible) return false;
   }
   return true;
 }
 
 /** The breakable meshes of `group` that cast within the casters, their world matrices up to date. */
-function castersIn(group: THREE.Group): THREE.Mesh[] {
+function castersIn(group: Node): Mesh[] {
   group.updateMatrixWorld(true);
-  const found: THREE.Mesh[] = [];
+  const found: Mesh[] = [];
   group.traverse((object) => {
-    if (castsWithin(object as THREE.Mesh)) found.push(object as THREE.Mesh);
+    if (castsWithin(object as Mesh)) found.push(object as Mesh);
   });
   return found;
 }
 
 /** `mesh`'s pieces: each material's group of it (or the whole), unindexed, where it stands in the world. */
-export function piecesOf(mesh: THREE.Mesh): Piece[] {
-  const positions = new THREE.BufferGeometry().setAttribute('position', mesh.geometry.getAttribute('position'));
+export function piecesOf(mesh: Mesh): Piece[] {
+  const positions = new Geometry().setAttribute('position', mesh.geometry.getAttribute('position'));
   positions.setIndex(mesh.geometry.getIndex());
   const placed = (positions.index ? positions.toNonIndexed() : positions.clone()).applyMatrix4(mesh.matrixWorld);
   const all = placed.getAttribute('position').array as Float32Array;
@@ -85,9 +87,9 @@ export function piecesOf(mesh: THREE.Mesh): Piece[] {
 }
 
 /** The box round `meshes` where they stand, from each one's own box. */
-function boxRound(meshes: THREE.Mesh[]): THREE.Box3 {
-  const box = new THREE.Box3();
-  const one = new THREE.Box3();
+function boxRound(meshes: Mesh[]): Box3 {
+  const box = new Box3();
+  const one = new Box3();
   for (const mesh of meshes) {
     if (!mesh.geometry.boundingBox) mesh.geometry.computeBoundingBox();
     box.union(one.copy(mesh.geometry.boundingBox!).applyMatrix4(mesh.matrixWorld));
@@ -96,15 +98,15 @@ function boxRound(meshes: THREE.Mesh[]): THREE.Box3 {
 }
 
 /** Whether `held` still hold `casters` as they stand: the same meshes, geometries and places. */
-function stillHeld(held: Held[], casters: THREE.Mesh[]): boolean {
+function stillHeld(held: Held[], casters: Mesh[]): boolean {
   if (held.length !== casters.length) return false;
   return held.every((one, i) => one.mesh === casters[i] && one.geometry === casters[i].geometry
     && one.placed.equals(casters[i].matrixWorld));
 }
 
 /** `pieces` sorted by the way their faces cast (`side`, `shadowSide`): what each caster of them draws. */
-export function bySide(pieces: Piece[]): { side: THREE.Side; shadowSide: THREE.Side | null; pieces: Piece[] }[] {
-  const sides = new Map<string, { side: THREE.Side; shadowSide: THREE.Side | null; pieces: Piece[] }>();
+export function bySide(pieces: Piece[]): { side: Side; shadowSide: Side | null; pieces: Piece[] }[] {
+  const sides = new Map<string, { side: Side; shadowSide: Side | null; pieces: Piece[] }>();
   for (const piece of pieces) {
     const key = `${piece.side} ${piece.shadowSide}`;
     if (!sides.has(key)) sides.set(key, { side: piece.side, shadowSide: piece.shadowSide, pieces: [] });
@@ -114,15 +116,15 @@ export function bySide(pieces: Piece[]): { side: THREE.Side; shadowSide: THREE.S
 }
 
 /** What a caster of pieces of `side` draws with: depth alone, its faces cast as theirs. */
-export function casterMaterial(side: THREE.Side, shadowSide: THREE.Side | null): THREE.MeshBasicMaterial {
-  const material = new THREE.MeshBasicMaterial({ colorWrite: false, depthWrite: false, side });
+export function casterMaterial(side: Side, shadowSide: Side | null): UnlitMaterial {
+  const material = new UnlitMaterial({ colorWrite: false, depthWrite: false, side });
   material.shadowSide = shadowSide;
   return material;
 }
 
 /** The breakable props' shadows of `group` (a biome's) cast as one mesh a side, made as it's built. */
-export function castBreakablesAsOne(group: THREE.Group): BreakableShadows {
-  let casters: THREE.Mesh[] = [];
+export function castBreakablesAsOne(group: Node): BreakableShadows {
+  let casters: Mesh[] = [];
   let held: Held[] = [];
 
   const letGo = (): void => {
@@ -130,24 +132,24 @@ export function castBreakablesAsOne(group: THREE.Group): BreakableShadows {
       group.remove(caster);
       outOfShadowsOnly(caster);
       caster.geometry.dispose();
-      (caster.material as THREE.Material).dispose();
+      (caster.material as Material).dispose();
     }
     casters = [];
     held = [];
   };
 
-  const make = (meshes: THREE.Mesh[]): void => {
+  const make = (meshes: Mesh[]): void => {
     letGo();
     const piecesByMesh = meshes.map(piecesOf);
     const where = new Map<Piece, Stretch>();
     // (every caster's sphere round all the meshes' boxes: computed from its vertices, the forest's were 13 ms of the
     // frame a run began in, its props rolled)
-    const sphere = boxRound(meshes).getBoundingSphere(new THREE.Sphere());
+    const sphere = boxRound(meshes).getBoundingSphere(new Sphere());
     for (const { side, shadowSide, pieces } of bySide(piecesByMesh.flat())) {
       const length = pieces.reduce((sum, piece) => sum + piece.positions.length, 0);
       const values = new Float32Array(length);
-      const geometry = new THREE.BufferGeometry().setAttribute('position', new THREE.BufferAttribute(values, 3));
-      const caster = new THREE.Mesh(geometry, casterMaterial(side, shadowSide));
+      const geometry = new Geometry().setAttribute('position', new Attribute(values, 3));
+      const caster = new Mesh(geometry, casterMaterial(side, shadowSide));
       let at = 0;
       for (const piece of pieces) {
         values.set(piece.positions, at);
@@ -178,7 +180,7 @@ export function castBreakablesAsOne(group: THREE.Group): BreakableShadows {
       if (shown === one.shown) continue;
       one.shown = shown;
       for (const stretch of one.stretches) {
-        const position = stretch.caster.geometry.getAttribute('position') as THREE.BufferAttribute;
+        const position = stretch.caster.geometry.getAttribute('position') as Attribute;
         const values = position.array as Float32Array;
         if (shown) values.set(stretch.positions, stretch.start);
         else values.fill(0, stretch.start, stretch.start + stretch.positions.length);

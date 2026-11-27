@@ -51,7 +51,7 @@
 // enemyAI's `fx`: the host decides the charge and what it meets (a partner's raised shield as the host's copy of him
 // shows it), and each game judges its own hero against the fire, the gore, the stamp, the toss and the embers
 // (`hurtPlayer`).
-import * as THREE from '../engine/three.ts';
+import { Mesh, Node, Quat, Vec3 } from '../engine/api/index.ts';
 import { G } from '../state';
 import { STAG } from '../data/foes/stag';
 import { BLOCK } from '../data/balance';
@@ -91,7 +91,7 @@ const STUCK = 0.6, STUCK_FOR = 0.4;
 const angleOff = (a: number, b: number): number => Math.abs(Math.atan2(Math.sin(a - b), Math.cos(a - b)));
 const foeOf = (id: number): Enemy | null => G.enemies.find((e) => e.id === id) ?? null;
 const heroes = (): Player[] => G.players.filter((p) => p.active);
-const _n = new THREE.Vector3();
+const _n = new Vec3();
 
 // --- its decisions, where the fight is simulated ---------------------------------------------------------
 
@@ -204,7 +204,7 @@ function lunge(e: Enemy): void {
 
 /** Where hero `p` will be as a charge locked now reaches him: on along his way, turning as he turns (`watchTurn`), by
  *  `lead` of the time it takes (its lane's lock and its run to him; found twice, the run's to where he'll be). */
-function ledTo(e: Enemy, p: Player): THREE.Vector3 {
+function ledTo(e: Enemy, p: Player): Vec3 {
   const speed = Math.hypot(p.vel.x, p.vel.z), way = Math.atan2(p.vel.x, p.vel.z), turn = e.brain.heroTurn ?? 0;
   _led.set(p.pos.x, 0, p.pos.z);
   for (let i = 0; i < 2; i++) {
@@ -220,7 +220,7 @@ function ledTo(e: Enemy, p: Player): THREE.Vector3 {
   }
   return _led;
 }
-const _led = new THREE.Vector3();
+const _led = new Vec3();
 
 /** A hero up close: kicked where he stands behind it; turned onto him first where he's beside it (at `close.turn`);
  *  the toss every third attack where he stands before it and near enough, the stamp where he's under it, else the
@@ -483,7 +483,7 @@ export function chargeLane(id: number, x: number, z: number, angle: number, leng
       if (t >= stamp) {
         stamp += 0.42;
         const hx = foe.pos.x + Math.sin(foe.facing) * foe.radius * 0.7, hz = foe.pos.z + Math.cos(foe.facing) * foe.radius * 0.7;
-        const at = new THREE.Vector3(hx, groundHeight(hx, hz), hz);
+        const at = new Vec3(hx, groundHeight(hx, hz), hz);
         debris(at, { count: 5, speed: 2.5, size: 0.14, life: 0.7 });
         smokePuff(at, { count: 2, color: 0x2a2018, alpha: 0.4, size: 0.7, sizeEnd: 1.8, speed: 0.8, life: 0.9 });
         burst(at.setY(at.y + 0.2), { count: 6, color: 0xffa040, speed: 2.5, up: 2.5, life: 0.5, size: 0.14 });
@@ -547,7 +547,7 @@ function watchFires(): void {
         const f = FIRES.find((x) => offFire(x, p.pos.x, p.pos.z) < S.fire.reach + p.radius * 0.5);
         if (f) {
           burnt = G.time;
-          hurtPlayer(p, f.damage * S.fire.hurt, 'fire', new THREE.Vector3(p.pos.x, 0, p.pos.z), { foe: foeOf(f.id), attack: 'fire' });
+          hurtPlayer(p, f.damage * S.fire.hurt, 'fire', new Vec3(p.pos.x, 0, p.pos.z), { foe: foeOf(f.id), attack: 'fire' });
         }
       }
       if (FIRES.length) return true;
@@ -563,7 +563,7 @@ function watchFires(): void {
 export function goreAt(id: number, slot: number, damage: number, dx: number, dz: number): void {
   const foe = foeOf(id), p = G.players.find((q) => q.slot === slot);
   if (!p) return;
-  burst(new THREE.Vector3(p.pos.x, 1.2, p.pos.z), { count: 18, color: 0xff7a30, speed: 5, life: 0.45, size: 0.22 });
+  burst(new Vec3(p.pos.x, 1.2, p.pos.z), { count: 18, color: 0xff7a30, speed: 5, life: 0.45, size: 0.22 });
   debris(p.pos, { count: 8, speed: 4 });
   sfx.slam();
   if (!p.local || !p.active) return;
@@ -582,7 +582,7 @@ export function stagCrashed(id: number, x: number, z: number, how: number, slot:
     foe.dazed = Math.max(foe.dazed, stun);
     if (!foe.net) foe.cancelAction();
   }
-  const at = new THREE.Vector3(x, groundHeight(x, z) + 1.2, z);
+  const at = new Vec3(x, groundHeight(x, z) + 1.2, z);
   debris(at, { count: 26, speed: 7, size: 0.22 });
   burst(at, { count: 40, color: 0xffa040, colorEnd: 0xff3010, speed: 7, up: 4, life: 0.9, size: 0.24 });
   smokePuff(at, { count: 10, color: 0x1a1410, alpha: 0.5, size: 1.4, sizeEnd: 3.6, speed: 2.4, life: 1.6 });
@@ -613,7 +613,7 @@ const keepBlow = (b: CloseBlow): void => {
 };
 
 /** How near point `at` comes to hero `p`'s body (m): a capsule his radius round from his feet to his head. */
-function offBody(p: Player, at: THREE.Vector3): number {
+function offBody(p: Player, at: Vec3): number {
   const floor = groundHeight(p.pos.x, p.pos.z) + (p.lift ?? 0), top = floor + p.model.height;
   const y = Math.max(floor, Math.min(top, at.y));
   return Math.max(0, Math.hypot(at.x - p.pos.x, at.z - p.pos.z, at.y - y) - p.radius);
@@ -625,12 +625,12 @@ function offBody(p: Player, at: THREE.Vector3): number {
 export function antlerGoreAt(id: number, damage: number): void {
   const foe = foeOf(id), w = S.gore;
   if (!foe) return;
-  const tips = foe.model.root.userData.antlerTips as THREE.Object3D[] | undefined;
+  const tips = foe.model.root.userData.antlerTips as Node[] | undefined;
   const blow: CloseBlow = { what: 'gore', t: G.time, nearest: Infinity, struck: false };
   keepBlow(blow);
   sfx.swing();
   addShake(0.25);
-  const at = new THREE.Vector3();
+  const at = new Vec3();
   let t = 0, sparked = false;
   addEffect({
     update(dt) {
@@ -664,16 +664,16 @@ export function antlerGoreAt(id: number, damage: number): void {
 export function stampAt(id: number, damage: number, what: 'stamp' | 'strike' = 'stamp'): void {
   const foe = foeOf(id), w = what === 'strike' ? S.strike : S.stamp;
   if (!foe) return;
-  const hooves = foe.model.root.userData.foreHooves as THREE.Object3D[] | undefined;
+  const hooves = foe.model.root.userData.foreHooves as Node[] | undefined;
   const blow: CloseBlow = { what, t: G.time, nearest: Infinity, struck: false };
   keepBlow(blow);
   sfx.slam();
   addShake(0.4);
   const p = G.player;
-  const at = new THREE.Vector3();
+  const at = new Vec3();
   for (const hoof of hooves ?? []) {
     hoof.getWorldPosition(at);
-    const floor = new THREE.Vector3(at.x, groundHeight(at.x, at.z), at.z);
+    const floor = new Vec3(at.x, groundHeight(at.x, at.z), at.z);
     debris(floor, { count: 12, speed: 5, size: 0.18 });
     smokePuff(floor, { count: 3, color: 0x2a2018, alpha: 0.45, size: 0.9, sizeEnd: 2.4, speed: 1.6, life: 0.9 });
     shockwave(floor, { color: EMBER, intensity: 1.1, from: 0.2, to: w.radius, life: 0.35 });
@@ -689,13 +689,13 @@ export function stampAt(id: number, damage: number, what: 'stamp' | 'strike' = '
 
 /** A hero on its antlers or thrown off them: the stag, where he was scooped from and where he lands, how long since,
  *  how high he was held and its damage. */
-export interface Tossed { foe: Enemy | null; from: THREE.Vector3; to: THREE.Vector3; t: number; up: number; damage: number }
+export interface Tossed { foe: Enemy | null; from: Vec3; to: Vec3; t: number; up: number; damage: number }
 /** this game's hero tossed now, if he is (his own game alone moves him: a partner's copy is placed by his reports) */
 export let tossed: Tossed | null = null;
 /** where its antlers hold a hero where its model isn't there to say (m over the floor, and before it past its
  *  radius), and how far under its tines his feet hang (m) */
 const HELD = { up: 4.4, ahead: 0.7, under: 1.1 };
-const _tines = new THREE.Vector3();
+const _tines = new Vec3();
 
 /** Its antlers flung up from (x, z) facing `facing` (`antlerToss` fx): earth and sparks thrown up before it; this game's hero,
  *  if he's before it within its reach and not saved (a step aside, a dash, his shield raised towards it), scooped up
@@ -703,7 +703,7 @@ const _tines = new THREE.Vector3();
 export function tossAt(id: number, x: number, z: number, facing: number, damage: number): void {
   const foe = foeOf(id), w = S.toss, radius = foe?.radius ?? 2, reach = radius + w.reach;
   const dx = Math.sin(facing), dz = Math.cos(facing);
-  const front = new THREE.Vector3(x + dx * reach * 0.6, 0, z + dz * reach * 0.6);
+  const front = new Vec3(x + dx * reach * 0.6, 0, z + dz * reach * 0.6);
   front.y = groundHeight(front.x, front.z) + 0.3;
   debris(front, { count: 14, speed: 5, size: 0.18 });
   smokePuff(front, { count: 4, color: 0x2a2018, alpha: 0.4, size: 0.9, sizeEnd: 2.4, speed: 1.4, life: 1 });
@@ -721,12 +721,12 @@ export function tossAt(id: number, x: number, z: number, facing: number, damage:
     return;
   }
   if (!p.seize(w.hold + w.fly)) return;
-  const held = new THREE.Vector3(x + dx * (radius + HELD.ahead), 0, z + dz * (radius + HELD.ahead));
+  const held = new Vec3(x + dx * (radius + HELD.ahead), 0, z + dz * (radius + HELD.ahead));
   const me: Tossed = { foe, from: p.pos.clone(), to: landing(held, dx, dz, p.radius), t: 0, up: HELD.up, damage };
   tossed = me;
   sfx.slam();
   addShake(0.45);
-  burst(new THREE.Vector3(p.pos.x, 1.4, p.pos.z), { count: 16, color: 0xff7a30, speed: 4, life: 0.45, size: 0.2 });
+  burst(new Vec3(p.pos.x, 1.4, p.pos.z), { count: 16, color: 0xff7a30, speed: 4, life: 0.45, size: 0.2 });
   addEffect({
     update(dt) { return tossed === me && flyOn(me, held, dt); },
     dispose() { if (tossed === me) letGo(); },
@@ -735,7 +735,7 @@ export function tossAt(id: number, x: number, z: number, facing: number, damage:
 
 /** Where a hero thrown from `from` along (dx, dz) lands: `far` m on, short of the wall (he can't be thrown out of the
  *  arena) and of the first prop in the way (never through a tree or onto a rock), and clear of the props. */
-function landing(from: THREE.Vector3, dx: number, dz: number, radius: number): THREE.Vector3 {
+function landing(from: Vec3, dx: number, dz: number, radius: number): Vec3 {
   const at = from.clone();
   for (let r = 0.5; r <= S.toss.far; r += 0.5) {
     const x = from.x + dx * r, z = from.z + dz * r;
@@ -754,7 +754,7 @@ function landing(from: THREE.Vector3, dx: number, dz: number, radius: number): T
 
 /** A tossed hero carried on by `dt`: up onto its antlers (`hold` s), then thrown in a high arc to where he lands, hurt
  *  as he lands. False once he has. */
-function flyOn(s: Tossed, held: THREE.Vector3, dt: number): boolean {
+function flyOn(s: Tossed, held: Vec3, dt: number): boolean {
   const p = G.player, w = S.toss;
   s.t += dt;
   if (!p.active) { letGo(); return false; }
@@ -762,7 +762,7 @@ function flyOn(s: Tossed, held: THREE.Vector3, dt: number): boolean {
   p.knock.set(0, 0, 0);
   if (s.t < w.hold) {
     // (carried up on its tines as its head comes up: where its model holds them, else where they'd be)
-    const tines = s.foe?.alive ? s.foe.model.root.userData.tines as THREE.Object3D | undefined : undefined;
+    const tines = s.foe?.alive ? s.foe.model.root.userData.tines as Node | undefined : undefined;
     if (tines) {
       tines.getWorldPosition(_tines);
       held.set(_tines.x, 0, _tines.z);
@@ -780,7 +780,7 @@ function flyOn(s: Tossed, held: THREE.Vector3, dt: number): boolean {
   p.flying = f < 1;
   if (f < 1) return true;
   // (landed: hurt hard, dust and a thud)
-  hurtPlayer(p, s.damage * w.hurt, 'physical', new THREE.Vector3(p.pos.x, 0, p.pos.z), { foe: s.foe, attack: 'toss' });
+  hurtPlayer(p, s.damage * w.hurt, 'physical', new Vec3(p.pos.x, 0, p.pos.z), { foe: s.foe, attack: 'toss' });
   smokePuff({ x: p.pos.x, y: 0, z: p.pos.z }, { count: 10, color: 0x2a2620, alpha: 0.45, size: 0.7, sizeEnd: 2.2, life: 0.9, speed: 2 });
   debris(p.pos, { count: 10, speed: 4 });
   addShake(0.55);
@@ -806,7 +806,7 @@ export function emberAt(id: number, x: number, z: number, fall: number, damage: 
   const ring = telegraph({ x, z }, m.radius, fall, EMBER);
   const foe = foeOf(id);
   foe?.onDeath.push(() => ring.cancel());
-  const at = new THREE.Vector3(), drift = rand(-1.5, 1.5);
+  const at = new Vec3(), drift = rand(-1.5, 1.5);
   let t = 0, trail = 0;
   addEffect({
     update(dt) {
@@ -826,7 +826,7 @@ export function emberAt(id: number, x: number, z: number, fall: number, damage: 
       sfx.thud();
       const p = G.player;
       if (p.active && Math.hypot(p.pos.x - x, p.pos.z - z) < m.radius + p.radius) {
-        hurtPlayer(p, damage * m.hurt, 'fire', new THREE.Vector3(x, 0, z), { foe, attack: 'embers' });
+        hurtPlayer(p, damage * m.hurt, 'fire', new Vec3(x, 0, z), { foe, attack: 'embers' });
       }
       return false;
     },
@@ -838,15 +838,15 @@ export function emberAt(id: number, x: number, z: number, fall: number, damage: 
 export function kickAt(id: number, damage: number): void {
   const foe = foeOf(id), w = S.kick;
   if (!foe) return;
-  const hooves = foe.model.root.userData.hindHooves as THREE.Object3D[] | undefined;
+  const hooves = foe.model.root.userData.hindHooves as Node[] | undefined;
   const blow: CloseBlow = { what: 'kick', t: G.time, nearest: Infinity, struck: false };
   keepBlow(blow);
   sfx.slam();
   addShake(0.35);
-  const p = G.player, at = new THREE.Vector3();
+  const p = G.player, at = new Vec3();
   for (const hoof of hooves ?? []) {
     hoof.getWorldPosition(at);
-    debris(new THREE.Vector3(at.x, groundHeight(at.x, at.z), at.z), { count: 10, speed: 5, size: 0.16 });
+    debris(new Vec3(at.x, groundHeight(at.x, at.z), at.z), { count: 10, speed: 5, size: 0.16 });
     burst(at, { count: 8, color: 0xffa040, colorEnd: 0xff3010, speed: 3, up: 1.5, life: 0.4, size: 0.16 });
     if (p.active && !p.airborne) blow.nearest = Math.min(blow.nearest, offBody(p, at));
   }
@@ -886,12 +886,12 @@ export const BREATHS: Breathed[] = [];
  *  (`woodFire` fx). One pooled light at its muzzle while it breathes, held steady. */
 export function breathAt(id: number, x: number, z: number, from: number, to: number, damage: number): void {
   const foe = foeOf(id), w = S.breath, mid = (from + to) / 2;
-  const mouth = foe?.model.root.userData.mouth as THREE.Object3D | undefined;
+  const mouth = foe?.model.root.userData.mouth as Node | undefined;
   const turned = foe?.model.root.userData.breath as { turn: number } | undefined;
   const judged: Breathed = { t: G.time, over: false, struck: false, blocked: false };
   BREATHS.push(judged);
   if (BREATHS.length > 8) BREATHS.shift();
-  const lit = new Set<number>(), at = new THREE.Vector3();
+  const lit = new Set<number>(), at = new Vec3();
   const light = flashFree({ color: BREATH.color, intensity: 14, distance: 10, life: 0.4, hold: w.time,
     follow: () => (mouth ? mouth.getWorldPosition(at) : at.set(x, 3, z)) });
   sfx.rush();
@@ -920,8 +920,8 @@ export function breathAt(id: number, x: number, z: number, from: number, to: num
 }
 
 /** A frame of its breath's flames: streaming out of its muzzle along `angle`, spreading as they go, smoke over them. */
-function stream(mouth: THREE.Object3D | undefined, angle: number, x: number, z: number): void {
-  const from = mouth ? mouth.getWorldPosition(new THREE.Vector3()) : new THREE.Vector3(x, 3, z);
+function stream(mouth: Node | undefined, angle: number, x: number, z: number): void {
+  const from = mouth ? mouth.getWorldPosition(new Vec3()) : new Vec3(x, 3, z);
   const dx = Math.sin(angle), dz = Math.cos(angle);
   for (let i = 0; i < 8; i++) {
     const spread = (Math.random() - 0.5) * S.breath.cone * 2, speed = 13 + Math.random() * 8;
@@ -935,7 +935,7 @@ function stream(mouth: THREE.Object3D | undefined, angle: number, x: number, z: 
   }
   if (Math.random() < 0.3) {
     const k = 4 + Math.random() * 6;
-    smokePuff(new THREE.Vector3(x + dx * k, 1.5, z + dz * k), { count: 1, color: 0x231c18, alpha: 0.35, size: 1, sizeEnd: 3, speed: 0.5, rise: 1.6, life: 1.4 });
+    smokePuff(new Vec3(x + dx * k, 1.5, z + dz * k), { count: 1, color: 0x231c18, alpha: 0.35, size: 1, sizeEnd: 3, speed: 0.5, rise: 1.6, life: 1.4 });
   }
 }
 
@@ -954,7 +954,7 @@ function burnHero(foe: Enemy, judged: Breathed, x: number, z: number, angle: num
     return;
   }
   judged.struck = true;
-  hurtPlayer(p, damage * w.hurt, 'fire', new THREE.Vector3(x, 0, z), { foe, attack: 'breath' });
+  hurtPlayer(p, damage * w.hurt, 'fire', new Vec3(x, 0, z), { foe, attack: 'breath' });
 }
 
 /** Where simulated: the wood its breath's cone along `angle` from (x, z) touches set alight, once a breath each. */
@@ -1021,7 +1021,7 @@ export function woodFireAt(id: number, x: number, z: number, damage: number): vo
       if (p.active && !p.airborne && G.time - woodBurnt >= w.tick
         && prop.parts.some((c) => Math.hypot(p.pos.x - c.x, p.pos.z - c.z) < c.r + w.near + p.radius)) {
         woodBurnt = G.time;
-        hurtPlayer(p, damage * w.hurt, 'fire', new THREE.Vector3(p.pos.x, 0, p.pos.z), { foe, attack: 'burning' });
+        hurtPlayer(p, damage * w.hurt, 'fire', new Vec3(p.pos.x, 0, p.pos.z), { foe, attack: 'burning' });
       }
       return true;
     },
@@ -1031,7 +1031,7 @@ export function woodFireAt(id: number, x: number, z: number, damage: number): vo
 
 /** A stake of its shed antlers standing in the floor on this game: the prop it is, its joint in the stag's model, where
  *  it stands and until when. */
-export interface Stake { prop: Prop; joint: THREE.Object3D; x: number; z: number; until: number; out(): void }
+export interface Stake { prop: Prop; joint: Node; x: number; z: number; until: number; out(): void }
 /** the stakes standing on this game */
 export const STAKES_STANDING: Stake[] = [];
 let touched = -Infinity;
@@ -1043,7 +1043,7 @@ export function shedAt(id: number, x: number, z: number, damage: number, ...spot
   const foe = foeOf(id), w = S.shed;
   const shed = foe?.model.root.userData.shed as { done: boolean } | undefined;
   if (shed) shed.done = true;
-  const at = new THREE.Vector3(x, groundHeight(x, z), z);
+  const at = new Vec3(x, groundHeight(x, z), z);
   debris(at, { count: 28, speed: 7, size: 0.22 });
   burst(at.clone().setY(at.y + 0.5), { count: 40, color: 0xffa040, colorEnd: 0xff3010, speed: 7, up: 5, life: 0.9, size: 0.24 });
   smokePuff(at, { count: 8, color: 0x1a1410, alpha: 0.5, size: 1.2, sizeEnd: 3.4, speed: 2, life: 1.5 });
@@ -1057,17 +1057,17 @@ export function shedAt(id: number, x: number, z: number, damage: number, ...spot
     const rx = p.pos.x - x, rz = p.pos.z - z, d = Math.max(0.1, Math.hypot(rx, rz));
     p.knock.set((rx / d) * w.knock, 0, (rz / d) * w.knock);
   }
-  const joints = foe?.model.root.userData.stakes as THREE.Object3D[] | undefined;
+  const joints = foe?.model.root.userData.stakes as Node[] | undefined;
   for (let i = 0; i + 1 < spots.length; i += 2) {
     const joint = joints?.[i / 2];
     if (foe && joint) throwStake(foe, joint, x, z, spots[i], spots[i + 1], damage);
   }
 }
 
-const _stakeTurn = new THREE.Quaternion(), _rootTurn = new THREE.Quaternion(), _local = new THREE.Vector3();
+const _stakeTurn = new Quat(), _rootTurn = new Quat(), _local = new Vec3();
 
 /** Joint `j` of the stag's model placed in the world: its butt at `at`, turned `turn`, at full size. */
-function placeJoint(j: THREE.Object3D, at: THREE.Vector3, turn: THREE.Quaternion): void {
+function placeJoint(j: Node, at: Vec3, turn: Quat): void {
   const root = j.parent!;
   root.updateWorldMatrix(true, false);
   j.position.copy(root.worldToLocal(_local.copy(at)));
@@ -1078,16 +1078,16 @@ function placeJoint(j: THREE.Object3D, at: THREE.Vector3, turn: THREE.Quaternion
 
 /** A stake thrown from (x, z) to (tx, tz) over `shed.flight` s, end over end, then stuck in the floor leaning a little
  *  (a prop raised in the fight from then till its life is out or it breaks), its flames burning a hero who touches it. */
-function throwStake(foe: Enemy, joint: THREE.Object3D, x: number, z: number, tx: number, tz: number, damage: number): void {
-  const w = S.shed, from = new THREE.Vector3(x, groundHeight(x, z) + 2.5, z);
-  const to = new THREE.Vector3(tx, groundHeight(tx, tz) - 0.4, tz);
-  const lean = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(rand(-1, 1), 0, rand(-1, 1)).normalize(), rand(0.08, 0.22));
-  const spin = new THREE.Vector3(tz - z, 0, -(tx - x)).normalize(), at = new THREE.Vector3();
+function throwStake(foe: Enemy, joint: Node, x: number, z: number, tx: number, tz: number, damage: number): void {
+  const w = S.shed, from = new Vec3(x, groundHeight(x, z) + 2.5, z);
+  const to = new Vec3(tx, groundHeight(tx, tz) - 0.4, tz);
+  const lean = new Quat().setFromAxisAngle(new Vec3(rand(-1, 1), 0, rand(-1, 1)).normalize(), rand(0.08, 0.22));
+  const spin = new Vec3(tz - z, 0, -(tx - x)).normalize(), at = new Vec3();
   let t = 0, stake: Stake | null = null, flame = 0;
   const stick = (): void => {
     const parts = [{ x: tx, z: tz, r: w.stake, h: w.high }];
-    const meshes: THREE.Object3D[] = [];
-    joint.traverse((o) => { if ((o as THREE.Mesh).isMesh) meshes.push(o); });
+    const meshes: Node[] = [];
+    joint.traverse((o) => { if ((o as Mesh).isMesh) meshes.push(o); });
     const look = meshLook(...meshes);
     let ended = false;
     const end = (): void => {
@@ -1124,13 +1124,13 @@ function throwStake(foe: Enemy, joint: THREE.Object3D, x: number, z: number, tx:
       flame -= dt;
       if (flame <= 0) {
         flame = 0.12;
-        const top = new THREE.Vector3(0, STAKE_LENGTH, 0).applyQuaternion(lean).add(to);
+        const top = new Vec3(0, STAKE_LENGTH, 0).applyQuaternion(lean).add(to);
         burst(top, { count: 2, color: 0xffa040, colorEnd: 0xff3010, speed: 0.4, up: 1.6, life: 0.6, size: 0.18, gravity: -1.5 });
       }
       const p = G.player;
       if (p.active && !p.airborne && G.time - touched >= w.tick && Math.hypot(p.pos.x - tx, p.pos.z - tz) < w.stake + w.touch + p.radius) {
         touched = G.time;
-        hurtPlayer(p, damage * w.hurtTouch, 'fire', new THREE.Vector3(tx, 0, tz), { foe, attack: 'burning' });
+        hurtPlayer(p, damage * w.hurtTouch, 'fire', new Vec3(tx, 0, tz), { foe, attack: 'burning' });
       }
       return true;
     },
@@ -1170,7 +1170,7 @@ bossHooks('stag', {
     shockwave(e.pos, { color: EMBER, intensity: 1.8, from: 1, to: 11, life: 1.1 });
     for (let i = 0; i < 16; i++) {
       const a = (i / 16) * Math.PI * 2;
-      burst(new THREE.Vector3(e.pos.x + Math.sin(a) * 2.5, 2.5, e.pos.z + Math.cos(a) * 2.5),
+      burst(new Vec3(e.pos.x + Math.sin(a) * 2.5, 2.5, e.pos.z + Math.cos(a) * 2.5),
         { count: 4, color: 0xffa040, colorEnd: 0xff3010, speed: 4, up: 4, life: 1.1, size: 0.24 });
     }
     flash({ color: EMBER, intensity: 12, distance: 14, life: 1.2, pos: { x: e.pos.x, y: 4, z: e.pos.z } });
@@ -1186,7 +1186,7 @@ bossHooks('stag', {
     const z = e.pos.z + Math.cos(e.facing) * ANTLERS.ahead + rand(-0.7, 0.7);
     // (its antlers shed: off the stubs on its brow, lower)
     const shed = (e.model.root.userData.shed as { done: boolean } | undefined)?.done ? SHED_LOWER : 0;
-    const at = new THREE.Vector3(x, e.obj.position.y + (ANTLERS.y - shed) * (running ? 0.85 : 1) + rand(0, 0.6), z);
+    const at = new Vec3(x, e.obj.position.y + (ANTLERS.y - shed) * (running ? 0.85 : 1) + rand(0, 0.6), z);
     smokePuff(at, { count: 1, color: 0x231c18, alpha: 0.35, size: 0.7, sizeEnd: 2.6, speed: 0.3, rise: 1.4, life: running ? 1.2 : 2.2 });
     if (Math.random() < 0.6) burst(at, { count: 1, color: 0xffa040, colorEnd: 0xff3010, speed: 0.6, up: 1.4, life: 0.9, size: 0.12, sizeEnd: 0.03, gravity: -0.5 });
   },

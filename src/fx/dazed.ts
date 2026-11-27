@@ -1,7 +1,9 @@
 // A dazed foe's stars: three small stars floating round over its head, fading as it comes to. Plain stars, drawn as
 // they are and not as lights: four glows each leaving a trail made a bright ring over every dazed foe (a crowd dazed
 // at once was a field of them). Drawn each frame from where they are then, one draw for every dazed foe.
-import * as THREE from '../engine/three.ts';
+import {
+  Color, DynamicDrawUsage, Geometry, InstancedAttribute, LookMaterial, Node, Points, Sphere, Vec3, World,
+} from '../engine/api/index.ts';
 import { G } from '../state';
 import { pointScale } from '../core/renderer';
 import { starQuads, type StarQuads } from './particleNodes';
@@ -55,22 +57,22 @@ const MOST = STARS * 160;
 const pos = new Float32Array(MOST * 3), size = new Float32Array(MOST), alpha = new Float32Array(MOST);
 // (an instance's, a quad each: WebGPU draws points a pixel wide)
 const attrs = [
-  new THREE.InstancedBufferAttribute(pos, 3).setUsage(THREE.DynamicDrawUsage),
-  new THREE.InstancedBufferAttribute(size, 1).setUsage(THREE.DynamicDrawUsage),
-  new THREE.InstancedBufferAttribute(alpha, 1).setUsage(THREE.DynamicDrawUsage),
+  new InstancedAttribute(pos, 3).setUsage(DynamicDrawUsage),
+  new InstancedAttribute(size, 1).setUsage(DynamicDrawUsage),
+  new InstancedAttribute(alpha, 1).setUsage(DynamicDrawUsage),
 ];
-const geo = new THREE.BufferGeometry();
+const geo = new Geometry();
 geo.setAttribute('position', attrs[0]);
 geo.setAttribute('aSize', attrs[1]);
 geo.setAttribute('aAlpha', attrs[2]);
-geo.boundingSphere = new THREE.Sphere(new THREE.Vector3(), 1e4);
-const mat = new THREE.ShaderMaterial({
+geo.boundingSphere = new Sphere(new Vec3(), 1e4);
+const mat = new LookMaterial({
   vertexShader: VERT, fragmentShader: FRAG,
-  uniforms: { uScale: { value: 400 }, uFill: { value: new THREE.Color(0xffe27a) }, uRim: { value: new THREE.Color(0xc07818) } },
+  uniforms: { uScale: { value: 400 }, uFill: { value: new Color(0xffe27a) }, uRim: { value: new Color(0xc07818) } },
   transparent: true, depthWrite: false,
 });
 let quads: StarQuads | null = null;
-let points: THREE.Object3D = new THREE.Points(geo, mat);
+let points: Node = new Points(geo, mat);
 
 /** the stars' mesh made once the renderer is loaded (its quads are nodes) */
 function madeForRenderer(): void {
@@ -98,7 +100,7 @@ export function dazedStars(x: number, y: number, z: number, t: number, left: num
 
 /** The stars as this frame draws them (each its place, size and how much of it is seen) and their colour: for a
  *  renderer that draws them itself (the Rust engine's sprites, `engine/bridge.ts`). */
-export function dazedDrawn(): { pos: Float32Array; size: Float32Array; alpha: Float32Array; count: number; fill: THREE.Color } {
+export function dazedDrawn(): { pos: Float32Array; size: Float32Array; alpha: Float32Array; count: number; fill: Color } {
   const drawn = geo.drawRange.count;
   return { pos, size, alpha, count: Number.isFinite(drawn) ? drawn : 0, fill: mat.uniforms.uFill.value };
 }
@@ -106,7 +108,7 @@ export function dazedDrawn(): { pos: Float32Array; size: Float32Array; alpha: Fl
 /** The dazed foes' stars, drawn among the particles (`fx/particles.ts`): put in the scene, drawn as each frame set
  *  them, and none. */
 export const dazedField = {
-  init(scene: THREE.Scene): void {
+  init(scene: World): void {
     madeForRenderer();
     scene.add(points);
   },

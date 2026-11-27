@@ -7,7 +7,7 @@
 // draw again. A body's sway at rest under a step stays out of its shadow until it moves: a step of a centimetre, and
 // the ranger's bow, quiver and head took the maps drawn again on 92 to 100% of the frames he stood (`lab village
 // --only shadowsOnMove`: 3 cm, 2 to 8%). A quality switch, live.
-import * as THREE from '../engine/three.ts';
+import { Camera, Mat4, Material, Mesh, Node, SkinnedMesh } from '../engine/api/index.ts';
 import { G } from '../state';
 import { skipAfterShadows, stillChangesKeptMaps } from './culling';
 import { shadowMovers } from './props';
@@ -32,7 +32,7 @@ const counted = { drawn: 0, skipped: 0 };
 const ARM = 0.15;
 
 /** `matrix`'s place, and a point `ARM` along its up (its turn), onto `into`. */
-function placeOf(matrix: THREE.Matrix4, into: number[]): void {
+function placeOf(matrix: Mat4, into: number[]): void {
   const m = matrix.elements;
   for (let axis = 0; axis < 3; axis++) into.push(m[12 + axis], m[12 + axis] + m[4 + axis] * ARM);
 }
@@ -40,15 +40,15 @@ function placeOf(matrix: THREE.Matrix4, into: number[]): void {
 /** Where each part drawn under `object` stands in the world, as the frame's matrices have it (a skinned part by its
  *  skeleton's bones: the rig's joints are plain objects, not three's bones), in steps, onto `into`; and how many of its
  *  parts show (gear put on or taken off, read as a place a step and more away). */
-function placesOf(object: THREE.Object3D, into: number[]): void {
+function placesOf(object: Node, into: number[]): void {
   let shown = 0;
   object.traverse((part) => {
     if (!part.visible) return;
     shown++;
-    const skinned = part as THREE.SkinnedMesh;
+    const skinned = part as SkinnedMesh;
     if (skinned.isSkinnedMesh) {
       for (const bone of skinned.skeleton.bones) placeOf(bone.matrixWorld, into);
-    } else if ((part as THREE.Mesh).isMesh) {
+    } else if ((part as Mesh).isMesh) {
       placeOf(part.matrixWorld, into);
     }
   });
@@ -70,7 +70,7 @@ const within = (a: number[], b: number[]): boolean =>
   a.length === b.length && a.every((value, i) => Math.abs(value - b[i]) < STEP);
 
 /** Whether the frame's own draw may leave the maps as they stand: nothing moved since it last drew them. */
-function leavesThem(camera: THREE.Camera, still: boolean): boolean {
+function leavesThem(camera: Camera, still: boolean): boolean {
   if (still) {
     // (a face of a cube not yet whole changes nothing a frame reads: owed for it, his shadow was drawn again in
     // each of a hand-over's twelve frames)
@@ -111,16 +111,16 @@ export function resetShadowsCount(): void {
 }
 
 /** each drawn part's place as `markMovers` read it, for the lab to tell what moved */
-const marked = new Map<THREE.Object3D, number[]>();
+const marked = new Map<Node, number[]>();
 
 /** Every drawn part over the kept maps, each with its place (a skinned one by its bones'). */
-function eachPart(take: (part: THREE.Object3D, places: number[]) => void): void {
+function eachPart(take: (part: Node, places: number[]) => void): void {
   const roots = [...G.players.map((player) => player.obj), ...G.enemies.map((enemy) => enemy.obj), ...shadowMovers()];
   for (const root of roots) {
     root.traverse((part) => {
-      if (!part.visible || !(part as THREE.Mesh).isMesh) return;
+      if (!part.visible || !(part as Mesh).isMesh) return;
       const places: number[] = [];
-      const skinned = part as THREE.SkinnedMesh;
+      const skinned = part as SkinnedMesh;
       if (skinned.isSkinnedMesh) for (const bone of skinned.skeleton.bones) placeOf(bone.matrixWorld, places);
       else placeOf(part.matrixWorld, places);
       take(part, places);
@@ -146,17 +146,17 @@ export function moversMarkedMoved(): string[] {
 }
 
 /** The nearest name over `part`, for the lab. */
-function namedAbove(part: THREE.Object3D): string {
+function namedAbove(part: Node): string {
   for (let up = part.parent; up; up = up.parent) if (up.name) return up.name;
   return '?';
 }
 
 /** `part`'s material's name or type, for the lab. */
-function materialName(part: THREE.Object3D): string {
-  const material = (part as THREE.Mesh).material as THREE.Material | undefined;
+function materialName(part: Node): string {
+  const material = (part as Mesh).material as Material | undefined;
   return material ? material.name || material.type : 'no material';
 }
 
 /** Whether `part` casts, for the lab. */
-const castsOf = (part: THREE.Object3D): string => (part.castShadow ? ', casting' : ', casting nothing')
-  + `, ${(part as THREE.Mesh).geometry?.attributes.position?.count ?? 0} points`;
+const castsOf = (part: Node): string => (part.castShadow ? ', casting' : ', casting nothing')
+  + `, ${(part as Mesh).geometry?.attributes.position?.count ?? 0} points`;

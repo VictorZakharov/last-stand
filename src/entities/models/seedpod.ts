@@ -6,7 +6,8 @@
 // Her great pod (`buildGreatPod`, from Kenneth: "stronger mobs come from larger cacoons"): the same husk built 1.8
 // times as large in six segments, a glowing vein raised down the middle of each, its glow amber where the small pod's
 // is green: from the top-down camera its size, its veins and its colour tell it apart at a glance.
-import * as THREE from '../../engine/three.ts';
+import { DoubleSide, Geometry, Node, Vec2, Vec3 } from '../../engine/api/index.ts';
+import * as shapes from '../../engine/api/shapes/index.ts';
 import { createKit } from '../../core/materials';
 import { grunge, pbrMaterialMaps } from '../../core/textures';
 import { joint } from './rig';
@@ -14,9 +15,9 @@ import { Sculpt, leaf, organic, skipping, taperTube } from './shapes';
 import { mulberry } from '../../util';
 import type { AnimState, Model } from '../../types';
 
-const V = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
-const NONE = new THREE.BufferGeometry();
-const made = (f: () => THREE.BufferGeometry): THREE.BufferGeometry => (skipping() ? NONE : f());
+const V = (x: number, y: number, z: number) => new Vec3(x, y, z);
+const NONE = new Geometry();
+const made = (f: () => Geometry): Geometry => (skipping() ? NONE : f());
 
 /** the husk's profile bottom to top ([radius, height], m): a teardrop on a short neck into the floor */
 const HUSK: [number, number][] = [[0.12, 0], [0.3, 0.12], [0.42, 0.34], [0.44, 0.52], [0.36, 0.74], [0.2, 0.92], [0.05, 1.02], [0.01, 1.05]];
@@ -38,28 +39,28 @@ export const buildGreatPod = (): Model => buildPod(GREAT);
 function buildPod(look: PodLook): Model {
   const kit = createKit(look.glow);
   const g = pbrMaterialMaps(grunge(), 2, 1);
-  const husk = kit.rim({ color: 0x7a6a30, roughness: 0.7, map: g.map, normalMap: g.normalMap, normalScale: new THREE.Vector2(1.5, 1.5) }, look.rim, 0.35);
-  const leafMat = kit.rim({ color: 0x3a6a26, roughness: 0.65, side: THREE.DoubleSide }, 0x80c050, 0.25);
+  const husk = kit.rim({ color: 0x7a6a30, roughness: 0.7, map: g.map, normalMap: g.normalMap, normalScale: new Vec2(1.5, 1.5) }, look.rim, 0.35);
+  const leafMat = kit.rim({ color: 0x3a6a26, roughness: 0.65, side: DoubleSide }, 0x80c050, 0.25);
   const sap = kit.glow(look.glow, 1.2);
 
-  const root = new THREE.Group();
-  const body = new THREE.Group();
+  const root = new Node();
+  const body = new Node();
   root.add(body);
   body.scale.setScalar(look.size);
   const S = new Sculpt(look.kind).glow(sap).glow(leafMat);
   const r = mulberry(61);
   const n = look.parts, wedge = (Math.PI * 2) / n;
   // the glowing heart showing through the splits, a little inside the husk
-  S.add(made(() => organic(new THREE.SphereGeometry(1, 14, 10), 0.08, 3, 2)), sap, body, [0, 0.5, 0], [0, 0, 0], [0.34, 0.42, 0.34]);
+  S.add(made(() => organic(shapes.sphere(1, 14, 10), 0.08, 3, 2)), sap, body, [0, 0.5, 0], [0, 0, 0], [0.34, 0.42, 0.34]);
   // four quarters of husk, each a wedge of the lathe on a joint at its foot (its middle along the joint's +z, so it
   // opens outward about its own x), a narrow split between each and the next where the glow shows
-  const quarters: THREE.Group[] = [];
-  const profile = HUSK.map(([rr, y]) => new THREE.Vector2(rr, y - 0.08));
+  const quarters: Node[] = [];
+  const profile = HUSK.map(([rr, y]) => new Vec2(rr, y - 0.08));
   for (let i = 0; i < n; i++) {
     const q = joint(body, 0, 0.08, 0);
     q.rotation.order = 'YXZ';
     q.rotation.y = (i / n) * Math.PI * 2;
-    S.add(made(() => organic(new THREE.LatheGeometry(profile, 6, -wedge / 2 + SPLIT, wedge - SPLIT * 2), 0.02, 5, i)), husk, q);
+    S.add(made(() => organic(shapes.lathe(profile, 6, -wedge / 2 + SPLIT, wedge - SPLIT * 2), 0.02, 5, i)), husk, q);
     // its rib, raised along one of its edges
     const a = wedge / 2 - SPLIT * 1.5;
     const pts = HUSK.slice(1, -1).map(([rr, y]) => V(Math.sin(a) * (rr - 0.015), y - 0.08, Math.cos(a) * (rr - 0.015)));

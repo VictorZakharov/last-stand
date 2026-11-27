@@ -21,7 +21,7 @@
 //   fight's owner rolls, warned by a ring of grave light first; each an ordinary breakable prop (world/risenGraves.ts),
 //   so they block paths and shots, at most `graves.most` standing, sinking back as it falls (`graveStoneAt`).
 // Its warned hits and the guards' tolls never land together (`claimBeat`).
-import * as THREE from '../engine/three.ts';
+import { Vec3 } from '../engine/api/index.ts';
 import { G } from '../state';
 import { CANTOR } from '../data/foes/cantor';
 import { hurtPlayer } from '../combat/damage';
@@ -324,7 +324,7 @@ const SINGERS_OUT = 0.9;
 function hurtOutside(foe: Enemy | null, x: number, z: number, radius: number): void {
   const p = G.player;
   if (!foe || !p.active || Math.hypot(p.pos.x - x, p.pos.z - z) <= radius) return;
-  hurtPlayer(p, foe.damage * C.choir.hurt, 'vitality', new THREE.Vector3(p.pos.x, 0, p.pos.z), { foe, attack: 'choir' });
+  hurtPlayer(p, foe.damage * C.choir.hurt, 'vitality', new Vec3(p.pos.x, 0, p.pos.z), { foe, attack: 'choir' });
 }
 
 /** Its ribs opened after a cast, its bell-heart bared, once its guards have fallen. */
@@ -345,10 +345,10 @@ function handsAt(id: number, x: number, z: number, radius: number, hurt: number,
   const foe = G.enemies.find((e) => e.id === id) ?? null;
   const p = G.player;
   if (p.active && !p.airborne && Math.hypot(p.pos.x - x, p.pos.z - z) < radius + p.radius) {
-    hurtPlayer(p, damage * hurt, 'vitality', new THREE.Vector3(x, 0, z), { foe, attack: 'hands' });
+    hurtPlayer(p, damage * hurt, 'vitality', new Vec3(x, 0, z), { foe, attack: 'hands' });
   }
   rubble(x, z, { count: 5, color: BONE, kind: 'stone', radius: radius * 0.7, height: 1.4, size: 0.22, speed: 3.5, life: 1.6 });
-  burst(new THREE.Vector3(x, 0.4, z), { count: 18, color: GRAVE_LIGHT, speed: 3.2, life: 0.7, size: 0.3 });
+  burst(new Vec3(x, 0.4, z), { count: 18, color: GRAVE_LIGHT, speed: 3.2, life: 0.7, size: 0.3 });
   glowRing({ x, z }, { color: GRAVE_LIGHT, intensity: 1.6, from: 0.3, to: radius * 1.25, life: 0.5 });
   groundFlash({ x, z }, { color: GRAVE_LIGHT, intensity: 1.2, radius: radius * 1.4, life: 0.5 });
   smokePuff({ x, y: 0, z }, { count: 5, color: 0x2a2a22, alpha: 0.35, size: 0.8, sizeEnd: 2, speed: 1.6, life: 0.9 });

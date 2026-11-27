@@ -3,16 +3,16 @@
 // leather bends rather than dents, and what's sewn onto it (a pocket, its stitching) carried with the points nearest
 // it. Hung rigid on the hips, the apron's skirt had his thighs through it as he bent and walked (from play: "it goes
 // through his legs when he bends and walks"), where the library's Hollis has his robe pushed by his legs.
-import * as THREE from '../../engine/three.ts';
+import { Attribute, Mesh, Node, Vec3 } from '../../engine/api/index.ts';
 
 /** A leg's part as a capsule: a joint to the next, and how thick round it the cloth keeps (m). */
-export interface LegPart { from: THREE.Object3D; to: THREE.Object3D; r: number }
+export interface LegPart { from: Node; to: Node; r: number }
 
 /** How many times the push is spread over each point's neighbours, and how much of a neighbour's it takes each time. */
 const SPREAD = { passes: 6, share: 0.7 };
 
 /** One mesh carried by the cloth: each of its points moved as the mean of its nearest cloth points' moves. */
-interface Rider { mesh: THREE.Mesh; rest: Float32Array; near: Int32Array; weight: Float32Array }
+interface Rider { mesh: Mesh; rest: Float32Array; near: Int32Array; weight: Float32Array }
 
 /** How many cloth points carry each point of a sewn-on piece. */
 const RIDE = 4;
@@ -22,23 +22,23 @@ export class LegCloth {
   private readonly moved: Float32Array;
   private readonly spread: Float32Array;
   private readonly riders: Rider[] = [];
-  private readonly a = new THREE.Vector3();
-  private readonly b = new THREE.Vector3();
-  private readonly p = new THREE.Vector3();
-  private readonly c = new THREE.Vector3();
+  private readonly a = new Vec3();
+  private readonly b = new Vec3();
+  private readonly p = new Vec3();
+  private readonly c = new Vec3();
 
   /** `cloth` a grid of `rows` by `cols` points (merchant.ts `rowsSurface`'s order), on `hips` */
-  constructor(private readonly cloth: THREE.Mesh, private readonly cols: number, private readonly hips: THREE.Object3D,
+  constructor(private readonly cloth: Mesh, private readonly cols: number, private readonly hips: Node,
     private readonly legs: readonly LegPart[]) {
-    const pos = cloth.geometry.attributes.position as THREE.BufferAttribute;
+    const pos = cloth.geometry.attributes.position as Attribute;
     this.rest = Float32Array.from(pos.array as Float32Array);
     this.moved = new Float32Array(this.rest.length);
     this.spread = new Float32Array(this.rest.length);
   }
 
   /** `mesh` (on the same joint) carried by the cloth from now: each point by the cloth points nearest it as built */
-  carry(mesh: THREE.Mesh): void {
-    const rest = Float32Array.from((mesh.geometry.attributes.position as THREE.BufferAttribute).array as Float32Array);
+  carry(mesh: Mesh): void {
+    const rest = Float32Array.from((mesh.geometry.attributes.position as Attribute).array as Float32Array);
     const n = rest.length / 3, near = new Int32Array(n * RIDE), weight = new Float32Array(n * RIDE);
     const points = this.rest.length / 3;
     for (let i = 0; i < n; i++) {
@@ -122,8 +122,8 @@ export class LegCloth {
 const NEIGHBOURS: readonly [number, number][] = [[-1, 0], [1, 0], [0, -1], [0, 1]];
 
 /** `mesh`'s points set to `rest` moved by `moved`, its normals made again */
-function write(mesh: THREE.Mesh, rest: Float32Array, moved: Float32Array): void {
-  const pos = mesh.geometry.attributes.position as THREE.BufferAttribute, arr = pos.array as Float32Array;
+function write(mesh: Mesh, rest: Float32Array, moved: Float32Array): void {
+  const pos = mesh.geometry.attributes.position as Attribute, arr = pos.array as Float32Array;
   for (let i = 0; i < arr.length; i++) arr[i] = rest[i] + moved[i];
   pos.needsUpdate = true;
   mesh.geometry.computeVertexNormals();
@@ -131,7 +131,7 @@ function write(mesh: THREE.Mesh, rest: Float32Array, moved: Float32Array): void 
 }
 
 /** the point of the segment a to b nearest `p`, into `out` */
-function nearestOnSegment(p: THREE.Vector3, a: THREE.Vector3, b: THREE.Vector3, out: THREE.Vector3): THREE.Vector3 {
+function nearestOnSegment(p: Vec3, a: Vec3, b: Vec3, out: Vec3): Vec3 {
   const abx = b.x - a.x, aby = b.y - a.y, abz = b.z - a.z, len2 = abx * abx + aby * aby + abz * abz;
   const t = len2 < 1e-12 ? 0 : Math.max(0, Math.min(1, ((p.x - a.x) * abx + (p.y - a.y) * aby + (p.z - a.z) * abz) / len2));
   return out.set(a.x + abx * t, a.y + aby * t, a.z + abz * t);

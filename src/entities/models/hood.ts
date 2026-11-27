@@ -6,7 +6,9 @@
 // verlet, distance constraints, the body as elliptical capsules on its joints. (Shaped once on the head, a hood turned
 // with it through the shoulders, and laid close it read as a helmet; cut flat and settled by its weight, it drifted from
 // where it was laid in ways no tuning converged on, a bell over the shoulders and a cone over the head.)
-import * as THREE from '../../engine/three.ts';
+import {
+  Attribute, CatmullRom3, DynamicDrawUsage, Geometry, Mat4, Material, Mesh, Node, Vec3,
+} from '../../engine/api/index.ts';
 
 /** `?cloth=0` holds the hood at its cut shape, as the sleeves are */
 const CLOTH = typeof location === 'undefined' || !/[?&]cloth=0/.test(location.search);
@@ -20,25 +22,25 @@ const HELD = 0.25;
 /** what's held at least this firmly is damped critically, its spring settling without ringing (damped as the free cloth,
  *  the hood held at 0.25-0.3 rang every 0.2 s at idle: `lab coat --rates`) */
 const DAMPED = 0.1;
-const _p = new THREE.Vector3(), _a = new THREE.Vector3(), _b = new THREE.Vector3(), _n = new THREE.Vector3(), _inv = new THREE.Matrix4();
-const _m = new THREE.Matrix4(), _c = new THREE.Vector3();
+const _p = new Vec3(), _a = new Vec3(), _b = new Vec3(), _n = new Vec3(), _inv = new Mat4();
+const _m = new Mat4(), _c = new Vec3();
 
 /** a body part the cloth lies outside of: a vertical capsule on `joint` from `y0` down to `y1` in its space, elliptical
  *  with radii `rx` and `rz`, its ends `ry` high (their radii's mean by default; an ellipsoid: `y0 = y1`) */
-export interface HoodCapsule { joint: THREE.Object3D; y0: number; y1: number; rx: number; rz: number; ry?: number; x?: number; z?: number }
+export interface HoodCapsule { joint: Node; y0: number; y1: number; rx: number; rz: number; ry?: number; x?: number; z?: number }
 /** a body part of its own shape: `out` puts a point (`joint`'s space) out of it, `clear` past its surface, if it's in */
-export interface HoodShape { joint: THREE.Object3D; out: (p: THREE.Vector3, clear: number) => boolean }
+export interface HoodShape { joint: Node; out: (p: Vec3, clear: number) => boolean }
 export type HoodBody = HoodCapsule | HoodShape;
 
 export interface HoodOptions {
   /** the head: the hood's cut is in its space, and its meshes its children */
-  joint: THREE.Object3D;
+  joint: Node;
   /** where the cloth at (u, v) is laid as it's worn, in the head's space as the rig stands at rest (u across from one
    *  side of the face round the back to the other, v down from the top seam to the hem) */
-  shape: (u: number, v: number, out: THREE.Vector3) => THREE.Vector3;
+  shape: (u: number, v: number, out: Vec3) => Vec3;
   /** the body the cloth below the head lies on, and the share of the particle at (u, v)'s rest it carries (the rest of
    *  it the head's): its rest in the body's space is where `shape` lays it as the rig stands at rest */
-  body?: { joint: THREE.Object3D; share: (u: number, v: number) => number };
+  body?: { joint: Node; share: (u: number, v: number) => number };
   /** the light reaching the lining at (u, v), 1 where it's open to the world and less deep inside (its vertex colours:
    *  the lining's material takes them) */
   shade?: (u: number, v: number) => number;
@@ -48,8 +50,8 @@ export interface HoodOptions {
   nu: number; nv: number;
   /** how hard a particle at (u, v) is held to its rest each step: 1 rides it wholly, a few hundredths hang free */
   hold: (u: number, v: number) => number;
-  outer: THREE.Material;
-  lining: THREE.Material;
+  outer: Material;
+  lining: Material;
   /** how far in the lining lies from the outside (m), along the outside's smooth normal, which points out of the sheet.
    *  (Straight towards the head, on the capelet across the shoulders it ran along the cloth and came through; along the
    *  normal turned towards the head's middle, just below the nape it turned out, and showed through the gathers) */
@@ -63,8 +65,8 @@ export interface HoodOptions {
    *  down its middle seam too, from the face's edge over the top and down the back to the hem, two cords `apart` (m)
    *  where it's given */
   piping?: {
-    material: THREE.Material; radius: number; from: number; seam?: boolean; apart?: number;
-    roll?: { material: THREE.Material; radius: number };
+    material: Material; radius: number; from: number; seam?: boolean; apart?: number;
+    roll?: { material: Material; radius: number };
   };
   /** where it's drawn: its columns at u across and its rows at v down (0 to 1, in order: finer than its particles, and
    *  finer still where its creases are, `spaced`), and its creases there: how far out along its normal the cloth at
@@ -79,7 +81,7 @@ const SIDES = 6;
 const FOLDED = 1e-12;
 
 export class HoodCloth {
-  readonly meshes: THREE.Mesh[] = [];
+  readonly meshes: Mesh[] = [];
   private readonly n: number;
   private readonly W: number;
   private readonly rest: Float32Array;
@@ -103,8 +105,8 @@ export class HoodCloth {
    *  length down to it, and a little (with soft constraints alone it stretched down the back and the chest) */
   private readonly anchor: Int32Array;
   private readonly tether: Float32Array;
-  private readonly outer: THREE.BufferGeometry;
-  private readonly inner: THREE.BufferGeometry;
+  private readonly outer: Geometry;
+  private readonly inner: Geometry;
   /** the drawn surface's columns and rows (`drawn`) and where each falls among the particles, its points (the head's
    *  space: its outside's positions) and normals (its outside's, and its lining's), the creases laid on them, and the
    *  rows interpolated across on the way */
@@ -120,14 +122,14 @@ export class HoodCloth {
    *  its roll's; and the seam's, one tube a cord */
   private readonly path: number[] = [];
   private readonly inward: number[] = [];
-  private readonly pipe?: THREE.BufferGeometry;
-  private readonly rollPipe?: THREE.BufferGeometry;
+  private readonly pipe?: Geometry;
+  private readonly rollPipe?: Geometry;
   private readonly seamPath: number[] = [];
-  private readonly seamPipes: THREE.BufferGeometry[] = [];
-  private readonly bodyInv: THREE.Matrix4[] = [];
+  private readonly seamPipes: Geometry[] = [];
+  private readonly bodyInv: Mat4[] = [];
   private acc = 0;
   private needsReset = true;
-  private readonly last = new THREE.Vector3();
+  private readonly last = new Vec3();
 
   constructor(private readonly o: HoodOptions) {
     const { nu, nv } = o, W = nu + 1;
@@ -170,14 +172,14 @@ export class HoodCloth {
     this.outer.name = 'hood';   // (what the lab's `coat` and `hood` follow)
     this.outer.userData.grid = { across: FU, down: FV, rows: down, capelet: o.capelet === undefined ? undefined : nearest(down, o.capelet) };
     // (the surface written straight into its outside's arrays, and the lining's normals the same: one array written, one sent)
-    this.fine = (this.outer.attributes.position as THREE.BufferAttribute).array as Float32Array;
-    this.smooth = (this.outer.attributes.normal as THREE.BufferAttribute).array as Float32Array;
+    this.fine = (this.outer.attributes.position as Attribute).array as Float32Array;
+    this.smooth = (this.outer.attributes.normal as Attribute).array as Float32Array;
     this.inner = this.grid(3);
     this.inner.setAttribute('normal', this.outer.attributes.normal);
     if (o.shade) {
       const colour = new Float32Array(FU * FV * 3);
       for (let r = 0; r < FV; r++) for (let c = 0; c < FU; c++) colour.fill(o.shade(across[c], down[r]), (r * FU + c) * 3, (r * FU + c) * 3 + 3);
-      this.inner.setAttribute('color', new THREE.BufferAttribute(colour, 3));
+      this.inner.setAttribute('color', new Attribute(colour, 3));
     }
     this.add(this.outer, o.outer, true);
     this.add(this.inner, o.lining, false);
@@ -255,21 +257,21 @@ export class HoodCloth {
   }
 
   /** the drawn surface's mesh (`uvScale` across, for the lining's finer weave) */
-  private grid(uvScale: number): THREE.BufferGeometry {
-    const g = new THREE.BufferGeometry(), FU = this.FU, FV = this.FV, count = FU * FV, idx: number[] = [], uv = new Float32Array(count * 2);
+  private grid(uvScale: number): Geometry {
+    const g = new Geometry(), FU = this.FU, FV = this.FV, count = FU * FV, idx: number[] = [], uv = new Float32Array(count * 2);
     const { across, down } = this.o.drawn;
     for (let r = 0; r < FV; r++) for (let c = 0; c < FU; c++) uv.set([across[c] * 4 * uvScale, down[r] * 2], (r * FU + c) * 2);
     for (let r = 0; r + 1 < FV; r++) for (let c = 0; c + 1 < FU; c++) { const a = r * FU + c; idx.push(a, a + FU, a + 1, a + 1, a + FU, a + FU + 1); }
-    g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(count * 3), 3).setUsage(THREE.DynamicDrawUsage));
-    g.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(count * 3), 3).setUsage(THREE.DynamicDrawUsage));
-    g.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+    g.setAttribute('position', new Attribute(new Float32Array(count * 3), 3).setUsage(DynamicDrawUsage));
+    g.setAttribute('normal', new Attribute(new Float32Array(count * 3), 3).setUsage(DynamicDrawUsage));
+    g.setAttribute('uv', new Attribute(uv, 2));
     g.setIndex(idx);
     g.computeBoundingSphere();
     return g;
   }
 
-  private add(g: THREE.BufferGeometry, m: THREE.Material, shadow: boolean): void {
-    const mesh = new THREE.Mesh(g, m);
+  private add(g: Geometry, m: Material, shadow: boolean): void {
+    const mesh = new Mesh(g, m);
     mesh.castShadow = shadow; mesh.receiveShadow = true;
     mesh.userData.hoodPart = true;
     mesh.frustumCulled = false;   // it moves off its bind bounds
@@ -344,7 +346,7 @@ export class HoodCloth {
       }
     }
     const bodies = this.o.bodies;
-    for (let b = 0; b < bodies.length; b++) (this.bodyInv[b] ??= new THREE.Matrix4()).copy(bodies[b].joint.matrixWorld).invert();
+    for (let b = 0; b < bodies.length; b++) (this.bodyInv[b] ??= new Mat4()).copy(bodies[b].joint.matrixWorld).invert();
     const P = this.pairs;
     for (let it = 0; it < iterations; it++) {
       for (let k = 0; k < this.len.length; k++) {
@@ -424,7 +426,7 @@ export class HoodCloth {
     // (the creases out along the smooth surface's normals, the lining `thick` in along them, then the normals again over
     // the creased surface: in along the creased ones, in the gathers' tight valleys a wall's lining crossed the facing
     // wall's outside and showed through it)
-    const S = this.smooth, pi = this.inner.attributes.position as THREE.BufferAttribute, I = pi.array as Float32Array;
+    const S = this.smooth, pi = this.inner.attributes.position as Attribute, I = pi.array as Float32Array;
     const t = this.o.thick;
     normals(F, FU, FV, S);
     for (let i = 0; i < FU * FV; i++) {
@@ -449,8 +451,8 @@ export class HoodCloth {
   /** a tube `g` of radius `rad` along its `path` on the drawn surface, its sides turned by the surface's normal there:
    *  its middle `out` (m) across the surface from the path, past the cloth's edge, away from `inward`'s points (the
    *  path's neighbours a step into the cloth; without them, across one way), and `under` in under its outside */
-  private writePipe(g: THREE.BufferGeometry, path: number[], rad: number, out: number, under: number, inward?: number[]): void {
-    const pos = g.attributes.position as THREE.BufferAttribute, nor = g.attributes.normal as THREE.BufferAttribute;
+  private writePipe(g: Geometry, path: number[], rad: number, out: number, under: number, inward?: number[]): void {
+    const pos = g.attributes.position as Attribute, nor = g.attributes.normal as Attribute;
     const L = this.fine, N = this.smooth, n = path.length;
     for (let k = 0; k < n; k++) {
       const i = path[k], prev = path[Math.max(0, k - 1)], next = path[Math.min(n - 1, k + 1)];
@@ -486,13 +488,13 @@ export class HoodCloth {
 
 /** `count + 1` points evenly along a centripetal Catmull-Rom through `pts`, its ends shaped by the points beyond them
  *  (`pre` before the first, `post` after the last: a mirror's, for a row that runs on into its mirror at a seam) */
-export function evenly(pts: THREE.Vector3[], pre: THREE.Vector3, post: THREE.Vector3, count: number): THREE.Vector3[] {
-  const curve = new THREE.CatmullRomCurve3([pre, ...pts, post], false, 'centripetal'), m = pts.length + 1;
-  const dense: THREE.Vector3[] = [], run = [0];
+export function evenly(pts: Vec3[], pre: Vec3, post: Vec3, count: number): Vec3[] {
+  const curve = new CatmullRom3([pre, ...pts, post], false, 'centripetal'), m = pts.length + 1;
+  const dense: Vec3[] = [], run = [0];
   // (between the first and the last of `pts` alone: `pre` and `post` only shape its ends)
   for (let k = 0; k <= EVEN_SAMPLES; k++) dense.push(curve.getPoint((1 + (k / EVEN_SAMPLES) * (m - 2)) / m));
   for (let k = 1; k < dense.length; k++) run.push(run[k - 1] + dense[k].distanceTo(dense[k - 1]));
-  const out: THREE.Vector3[] = [];
+  const out: Vec3[] = [];
   for (let i = 0, k = 0; i <= count; i++) {
     const want = (i / count) * run[run.length - 1];
     while (k < run.length - 2 && run[k + 1] < want) k++;
@@ -505,7 +507,7 @@ const EVEN_SAMPLES = 256;
 
 /** where body `B` is (world space, into `at`) and how far round it it reaches, squared: 0 for one of its own shape (tried
  *  everywhere) */
-function reachOf(B: HoodBody, at: THREE.Vector3): number {
+function reachOf(B: HoodBody, at: Vec3): number {
   if ('out' in B) return 0;
   const M = B.joint.matrixWorld, r = (B.y0 - B.y1) / 2 + Math.max(B.rx, B.rz, B.ry ?? 0);
   at.set(B.x ?? 0, (B.y0 + B.y1) / 2, B.z ?? 0).applyMatrix4(M);
@@ -515,7 +517,7 @@ function reachOf(B: HoodBody, at: THREE.Vector3): number {
 
 /** `p` (world space) put out of body `B` (`inv`: its joint's world matrix inverted) by `clear` past its surface, along
  *  the way out from its axis; whether it was in */
-function outOf(B: HoodBody, p: THREE.Vector3, inv: THREE.Matrix4, clear: number): boolean {
+function outOf(B: HoodBody, p: Vec3, inv: Mat4, clear: number): boolean {
   _a.copy(p).applyMatrix4(inv);
   if ('out' in B) {
     if (!B.out(_a, clear)) return false;
@@ -533,15 +535,15 @@ function outOf(B: HoodBody, p: THREE.Vector3, inv: THREE.Matrix4, clear: number)
 
 /** a tube of `n` points along a path with `SIDES` sides (placeholder positions, filled by `writePipe`), its faces out
  *  (wound the other way, the far wall was drawn, lit from behind: the piping read thin and grey) */
-function tube(n: number): THREE.BufferGeometry {
-  const g = new THREE.BufferGeometry(), idx: number[] = [], W = SIDES + 1;
-  g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(n * W * 3), 3).setUsage(THREE.DynamicDrawUsage));
-  g.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(n * W * 3), 3).setUsage(THREE.DynamicDrawUsage));
+function tube(n: number): Geometry {
+  const g = new Geometry(), idx: number[] = [], W = SIDES + 1;
+  g.setAttribute('position', new Attribute(new Float32Array(n * W * 3), 3).setUsage(DynamicDrawUsage));
+  g.setAttribute('normal', new Attribute(new Float32Array(n * W * 3), 3).setUsage(DynamicDrawUsage));
   // (its texture's coordinates along it and round it, at about a cloth's scale: a step of the drawn surface a centimetre
   // or so, a whole map 60 cm; all at naught, a roll of wool took its one texel, a pale pink trim)
   const uv = new Float32Array(n * W * 2);
   for (let k = 0; k < n; k++) for (let s = 0; s < W; s++) uv.set([k * 0.015, (s / SIDES) * 0.05], (k * W + s) * 2);
-  g.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+  g.setAttribute('uv', new Attribute(uv, 2));
   for (let k = 0; k + 1 < n; k++) for (let s = 0; s < SIDES; s++) {
     const a = k * W + s, b = a + W;
     idx.push(a, a + 1, b, a + 1, b + 1, b);

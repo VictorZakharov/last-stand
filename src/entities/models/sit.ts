@@ -2,7 +2,7 @@
 // his feet left on the floor where he stood to sit if they reach it, else hanging from the knees, swinging a little; the
 // trunk leant forward over the way down and up, as a body sits and stands, and upright with a slouch once sat. By a
 // fire he sits on the floor, knees up and apart, his pelvis rolled back and his hands on his knees.
-import * as THREE from '../../engine/three.ts';
+import { Node, Quat, Vec3 } from '../../engine/api/index.ts';
 import type { SitState } from '../../types';
 import { reachArm, type Joints } from './rig';
 import { clampWrist } from './anatomy';
@@ -143,11 +143,11 @@ function legAngles(P: Joints['P'], s: SitState, side: number, t: number, k: numb
 
 const clamp1 = (v: number) => Math.max(-1, Math.min(1, v));
 
-const _foot = new THREE.Vector3(), _up = new THREE.Vector3(), _on = new THREE.Vector3(), _now = new THREE.Vector3();
-const _pole = new THREE.Vector3(), _q = new THREE.Quaternion(), _bone = new THREE.Quaternion();
-const _shoulderWas = new THREE.Quaternion(), _elbowWas = new THREE.Quaternion();
+const _foot = new Vec3(), _up = new Vec3(), _on = new Vec3(), _now = new Vec3();
+const _pole = new Vec3(), _q = new Quat(), _bone = new Quat();
+const _shoulderWas = new Quat(), _elbowWas = new Quat();
 /** a side's arm as the pose before the rest had it (a drink's: its shoulder, elbow and hand), for a hand left free */
-const _freeArm = [new THREE.Quaternion(), new THREE.Quaternion(), new THREE.Quaternion()];
+const _freeArm = [new Quat(), new Quat(), new Quat()];
 /** no hand left free */
 const NONE_FREE: readonly number[] = [0, 0];
 /** whether a hand a drink takes up sat is let go of its thigh (`restHands`' `free`): off, `lab tavern --canary`'s plant */
@@ -254,7 +254,7 @@ function leftFree(j: Joints, side: number, freed: number): void {
 }
 
 /** The floor's height under `object` in its own space, a centimetre up (for cloth kept over it: `Skirt.keepAbove`). */
-export function floorUnder(object: THREE.Object3D): number {
+export function floorUnder(object: Node): number {
   object.updateWorldMatrix(true, false);
   object.getWorldPosition(_foot);
   _foot.y = groundHeight(_foot.x, _foot.z) + 0.01;
@@ -267,7 +267,7 @@ export function floorUnder(object: THREE.Object3D): number {
  * further than `most` along itself: a maul stood head up on the butt of its haft beside a seated hero (as
  * `footOutOfFloor`, whose staff went 18 to 78 cm past the floor slid by the world's rise). Says it's stood on the floor.
  */
-export function footToFloor(held: THREE.Object3D, foot: number, k: number, most: number): void {
+export function footToFloor(held: Node, foot: number, k: number, most: number): void {
   held.updateWorldMatrix(true, false);
   held.localToWorld(_foot.set(0, foot, 0));
   const over = _foot.y - groundHeight(_foot.x, _foot.z);
@@ -285,7 +285,7 @@ export function footToFloor(held: THREE.Object3D, foot: number, k: number, most:
  * sat low, his hand comes down with him, and the mage's staff stood where he held it went 40 cm into the floor. Call
  * once the hand holds it, before closing the fingers.
  */
-export function footOutOfFloor(held: THREE.Object3D, foot: number): void {
+export function footOutOfFloor(held: Node, foot: number): void {
   held.updateWorldMatrix(true, false);
   held.localToWorld(_foot.set(0, foot, 0));
   const under = groundHeight(_foot.x, _foot.z) - _foot.y;

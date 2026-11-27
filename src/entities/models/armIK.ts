@@ -5,7 +5,7 @@
 // their ends, and the hand (and what it holds) turns only as far as they let it. A hand round a handle may also turn
 // about it (`roll`), its wrist going round with it. A two-bone solve whose pole alone chose the elbow put it wherever
 // the pole said: behind the back, up past the head, the wrist bent double round a handle.
-import * as THREE from '../../engine/three.ts';
+import { Line3, Mat4, Maths, Node, Quat, Vec3 } from '../../engine/api/index.ts';
 import type { Joints } from './rig';
 import { GIRDLE, GRIPPED_FLEXION, ROM_ON, capsuleDepth, clampWrist, girdlePlace, shoulderExcess, type BodyShape, type Solid } from './anatomy';
 
@@ -13,22 +13,22 @@ const N = 24, REFINE = 7, ROLLS = 5;
 
 export interface ArmGoal {
   /** where the wrist goes (world) */
-  wrist: THREE.Vector3;
+  wrist: Vec3;
   /** the hand's turn wanted (world): the turned hand's if `vis` is given, else the hand joint's; none keeps the hand's turn on the forearm */
-  hand?: THREE.Quaternion;
+  hand?: Quat;
   /** the turned hand's turn on the hand joint (`Hand.vis`): the wrist's range is the visible hand's */
-  vis?: THREE.Quaternion;
+  vis?: Quat;
   /** where the elbow would rather point (world, a direction from the shoulder): a preference within the ranges */
-  pole?: THREE.Vector3;
+  pole?: Vec3;
   /** degrees of the ranges' excess the pole is worth, from where it points to the far side of the circle (default 8) */
   keep?: number;
   /** the body, so the arm keeps out of the head and the trunk */
   body?: BodyShape;
   /** a hand round a handle along `axis` (world, through `at`) may turn about it up to `range` (rad) either way: the wrist and the hand turn round it together */
-  roll?: { axis: THREE.Vector3; range: number; at: THREE.Vector3 };
+  roll?: { axis: Vec3; range: number; at: Vec3 };
   /** where the shoulder is (its parent's frame), instead of its place on the body (the rig's `userData.rest`): through the
    *  eyes, the arms' shoulders under the camera */
-  shoulder?: THREE.Vector3;
+  shoulder?: Vec3;
   /** the shoulder girdle may move the shoulder (anatomy.ts `GIRDLE`) when no elbow keeps the arm within its ranges with it at rest */
   girdle?: boolean;
   /** the girdle set to this raise and forward turn (degrees) whatever the arm needs, as an archer's back draws the shoulder
@@ -51,7 +51,7 @@ export interface ArmGoal {
   slantOnHandle?: boolean;
   /** the hand's turn on the forearm eased from `rest` (the hand joint's own turn) to the one `hand` asks for, by `w`, for
    *  whichever elbow is tried: a hand coming onto a grip from riding its forearm */
-  ease?: { rest: THREE.Quaternion; w: number };
+  ease?: { rest: Quat; w: number };
   /** the farthest the elbow may move from where it was last solved (the rig's units): further, it goes that far round its
    *  circle towards where it would be, so a change of side is a swing, not a jump */
   maxMove?: number;
@@ -94,21 +94,21 @@ export interface ArmResult {
   slant: number;
 }
 
-const _S = new THREE.Vector3(), _W = new THREE.Vector3(), _n = new THREE.Vector3(), _u1 = new THREE.Vector3(), _u2 = new THREE.Vector3(), _E = new THREE.Vector3();
-const _b = new THREE.Vector3(), _f = new THREE.Vector3(), _x = new THREE.Vector3(), _y = new THREE.Vector3(), _z = new THREE.Vector3(), _rad = new THREE.Vector3();
-const _pq = new THREE.Quaternion(), _pqi = new THREE.Quaternion(), _H = new THREE.Quaternion(), _Qu = new THREE.Quaternion(), _Qf = new THREE.Quaternion(), _rel = new THREE.Quaternion(), _cl = new THREE.Quaternion(), _hx = new THREE.Quaternion();
-const _m = new THREE.Matrix4(), _wa = new THREE.Vector3(), _wb = new THREE.Vector3(), _pl = new THREE.Vector3(), _ww = new THREE.Vector3(), _hw = new THREE.Quaternion(), _rq = new THREE.Quaternion(), _off = new THREE.Vector3();
-const X = new THREE.Vector3(1, 0, 0);
+const _S = new Vec3(), _W = new Vec3(), _n = new Vec3(), _u1 = new Vec3(), _u2 = new Vec3(), _E = new Vec3();
+const _b = new Vec3(), _f = new Vec3(), _x = new Vec3(), _y = new Vec3(), _z = new Vec3(), _rad = new Vec3();
+const _pq = new Quat(), _pqi = new Quat(), _H = new Quat(), _Qu = new Quat(), _Qf = new Quat(), _rel = new Quat(), _cl = new Quat(), _hx = new Quat();
+const _m = new Mat4(), _wa = new Vec3(), _wb = new Vec3(), _pl = new Vec3(), _ww = new Vec3(), _hw = new Quat(), _rq = new Quat(), _off = new Vec3();
+const X = new Vec3(1, 0, 0);
 /** where each arm's elbow was last solved (its shoulder's parent's frame), and its girdle */
-const last = new WeakMap<THREE.Object3D, THREE.Vector3>(), lastG = new WeakMap<THREE.Object3D, [number, number]>(), lastS = new WeakMap<THREE.Object3D, number>();
+const last = new WeakMap<Node, Vec3>(), lastG = new WeakMap<Node, [number, number]>(), lastS = new WeakMap<Node, number>();
 /** and its turn about a handle (`glide` only) */
-const lastR = new WeakMap<THREE.Object3D, number>();
+const lastR = new WeakMap<Node, number>();
 /** and how far its elbow swung round its circle in its last solve (`maxJerk` only; its shoulder's parent's frame) */
-const lastMove = new WeakMap<THREE.Object3D, THREE.Vector3>();
-const _mv = new THREE.Vector3(), _e0 = new THREE.Vector3();
-const _wy = new THREE.Vector3();
-const _legLines = [new THREE.Line3(), new THREE.Line3()], _noLegLines: THREE.Line3[] = [];
-const _legPoint = new THREE.Vector3(), _legNear = new THREE.Vector3();
+const lastMove = new WeakMap<Node, Vec3>();
+const _mv = new Vec3(), _e0 = new Vec3();
+const _wy = new Vec3();
+const _legLines = [new Line3(), new Line3()], _noLegLines: Line3[] = [];
+const _legPoint = new Vec3(), _legNear = new Vec3();
 /** how far past the best's ranges (degrees) an elbow held back by `maxMove` may go before it gives way */
 const REACH_SLACK = 2;
 /** and one swinging within `maxJerk`: for the few frames its swing takes (at 2 degrees it gave way at once, and the
@@ -116,9 +116,9 @@ const REACH_SLACK = 2;
 const SWING_SLACK = 12;
 /** where the least of a parabola through three evenly spaced costs lies, in steps from the middle one (-0.5..0.5) */
 const vertex = (lo: number, mid: number, hi: number): number => { const c = lo - 2 * mid + hi; return c > 1e-9 ? Math.max(-0.5, Math.min(0.5, (lo - hi) / (2 * c))) : 0; };
-const Z = new THREE.Vector3(0, 0, 1), _sz = new THREE.Quaternion(), _sa = new THREE.Vector3(), _seg = new THREE.Vector3(), _cp = new THREE.Vector3(), _ez = new THREE.Quaternion();
+const Z = new Vec3(0, 0, 1), _sz = new Quat(), _sa = new Vec3(), _seg = new Vec3(), _cp = new Vec3(), _ez = new Quat();
 /** the hand's turn on the forearm `rel` eased from `g.ease.rest` as asked */
-const eased = (g: ArmGoal, rel: THREE.Quaternion): THREE.Quaternion => (g.ease ? rel.copy(_ez.copy(g.ease.rest).slerp(rel, g.ease.w)) : rel);
+const eased = (g: ArmGoal, rel: Quat): Quat => (g.ease ? rel.copy(_ez.copy(g.ease.rest).slerp(rel, g.ease.w)) : rel);
 /** the girdle's raises and forward turns tried (degrees) */
 const G_ELEV = [GIRDLE.elevation[0], 0, 12, 24, GIRDLE.elevation[1]], G_PRO = [GIRDLE.protraction[0], -12, 0, 12, GIRDLE.protraction[1]];
 /** how near its rest the girdle counts as there (degrees: 0.03 mm at the shoulder) */
@@ -127,16 +127,16 @@ const G_PLACES = G_ELEV.flatMap((e) => G_PRO.map((pr): [number, number] => [e, p
 
 /** What an arm's solves remember from frame to frame (its elbow in its shoulder's parent's frame, girdle, slant on a
  *  handle and turn about it), for `recall` to set back. */
-export interface ArmMemory { elbow?: THREE.Vector3; girdle?: [number, number]; slant?: number; roll?: number }
+export interface ArmMemory { elbow?: Vec3; girdle?: [number, number]; slant?: number; roll?: number }
 /** What the arm `sh` (its shoulder) remembers now. */
-export function remembered(sh: THREE.Object3D): ArmMemory {
+export function remembered(sh: Node): ArmMemory {
   const girdle = lastG.get(sh);
   return { elbow: last.get(sh)?.clone(), girdle: girdle && [girdle[0], girdle[1]], slant: lastS.get(sh), roll: lastR.get(sh) };
 }
 /** The arm `sh` remembering `memory` again, as if its last solve had left it (a hold taken up again after another
  *  solve has held the arm meanwhile, from where it was as it was let go). */
-export function recall(sh: THREE.Object3D, memory: ArmMemory): void {
-  const pairs: [WeakMap<THREE.Object3D, unknown>, unknown][] = [[last, memory.elbow?.clone()], [lastG, memory.girdle && [...memory.girdle]], [lastS, memory.slant], [lastR, memory.roll]];
+export function recall(sh: Node, memory: ArmMemory): void {
+  const pairs: [WeakMap<Node, unknown>, unknown][] = [[last, memory.elbow?.clone()], [lastG, memory.girdle && [...memory.girdle]], [lastS, memory.slant], [lastR, memory.roll]];
   for (const [map, value] of pairs) {
     if (value === undefined) map.delete(sh);
     else map.set(sh, value);
@@ -150,7 +150,7 @@ export function solveArm(j: Joints, left: boolean, g: ArmGoal): ArmResult {
   par.updateWorldMatrix(true, false);
   par.getWorldQuaternion(_pq); _pqi.copy(_pq).invert();
   const L1 = j.P.upperL, L2 = j.P.foreL;
-  const rest = g.shoulder ?? (sh.userData.rest as THREE.Vector3 | undefined) ?? sh.position;
+  const rest = g.shoulder ?? (sh.userData.rest as Vec3 | undefined) ?? sh.position;
   _S.copy(rest);
   const keep = g.keep ?? 8, prev = last.get(sh);
   // (sat on the floor, the thighs too: the knees up, the elbow hung beside the thigh and the forearm went up through
@@ -169,7 +169,7 @@ export function solveArm(j: Joints, left: boolean, g: ArmGoal): ArmResult {
   }
   const legLines = capsules ? _legLines : _noLegLines, legScale = j.root.scale.x;
   // (each solid's frame, once for the whole search)
-  const invs = solids?.map((s) => { s.at.updateWorldMatrix(true, false); return new THREE.Matrix4().copy(s.at.matrixWorld).invert(); }), head = solids ? solids.findIndex((s) => s.name === 'head') : -1;
+  const invs = solids?.map((s) => { s.at.updateWorldMatrix(true, false); return new Mat4().copy(s.at.matrixWorld).invert(); }), head = solids ? solids.findIndex((s) => s.name === 'head') : -1;
   // (and a sphere round each, world: a limb clear of it needs no closer look)
   const balls = solids?.map((s) => { const k = s.at.matrixWorld.getMaxScaleOnAxis(); return { c: s.c.clone().applyMatrix4(s.at.matrixWorld), r: Math.max(s.r.x, s.r.y, s.r.z) * k, k }; });
   // the pole, in the shoulder's parent's frame (or the elbow as posed)
@@ -178,7 +178,7 @@ export function solveArm(j: Joints, left: boolean, g: ArmGoal): ArmResult {
   // the turn about a handle: the wrist's offset from the handle's axis at no turn
   if (g.roll) _off.copy(g.wrist).sub(g.roll.at);
   // (`gNow`: the girdle's forward turn being tried: drawn back, the arm reaches further behind)
-  let a = 0, r = 0, want: THREE.Quaternion | null = null, depthAt = 0, bad = 0, gNow = 0;
+  let a = 0, r = 0, want: Quat | null = null, depthAt = 0, bad = 0, gNow = 0;
 
   /** the circle the elbow is on, for the hand turned `roll` about the handle and slanted `slant` on it */
   const setup = (roll: number, slant = 0) => {
@@ -194,7 +194,7 @@ export function solveArm(j: Joints, left: boolean, g: ArmGoal): ArmResult {
     // everything in the shoulder's parent's frame (the rig's units)
     _W.copy(_ww); par.worldToLocal(_W);
     _n.copy(_W).sub(_S);
-    const d = THREE.MathUtils.clamp(_n.length(), Math.abs(L1 - L2) + 1e-4, L1 + L2 - 1e-4);
+    const d = Maths.clamp(_n.length(), Math.abs(L1 - L2) + 1e-4, L1 + L2 - 1e-4);
     _n.normalize();
     a = (L1 * L1 - L2 * L2 + d * d) / (2 * d); r = Math.sqrt(Math.max(0, L1 * L1 - a * a));
     _W.copy(_S).addScaledVector(_n, d);
@@ -207,10 +207,10 @@ export function solveArm(j: Joints, left: boolean, g: ArmGoal): ArmResult {
   };
 
   /** whether a limb from `p` to `q` (world) of radius `rl` comes within solid `i`'s sphere */
-  const near = (p: THREE.Vector3, q: THREE.Vector3, rl: number, i: number): boolean => {
+  const near = (p: Vec3, q: Vec3, rl: number, i: number): boolean => {
     const b = balls![i];
     _seg.copy(q).sub(p);
-    const t = THREE.MathUtils.clamp(_cp.copy(b.c).sub(p).dot(_seg) / Math.max(1e-9, _seg.lengthSq()), 0, 1);
+    const t = Maths.clamp(_cp.copy(b.c).sub(p).dot(_seg) / Math.max(1e-9, _seg.lengthSq()), 0, 1);
     return _cp.copy(p).addScaledVector(_seg, t).distanceTo(b.c) < b.r + rl * b.k;
   };
   /** the arm with its elbow at `phi` round the circle: its upper arm's turn into _Qu, the forearm's into _Qf, the elbow at _E; its cost */
@@ -224,7 +224,7 @@ export function solveArm(j: Joints, left: boolean, g: ArmGoal): ArmResult {
     if (_z.lengthSq() < 1e-8) _z.copy(_rad).negate();
     _z.normalize(); _x.crossVectors(_y, _z);
     _Qu.setFromRotationMatrix(_m.makeBasis(_x, _y, _z));
-    const flex = Math.acos(THREE.MathUtils.clamp(_b.dot(_f), -1, 1));
+    const flex = Math.acos(Maths.clamp(_b.dot(_f), -1, 1));
     _Qf.copy(_Qu).multiply(_hx.setFromAxisAngle(X, -flex));
     let cost = ROM_ON ? (g.shoulderW ?? 3) * shoulderExcess(_Qu, left, gNow) : 0;
     bad = 0;
@@ -402,7 +402,7 @@ export function solveArm(j: Joints, left: boolean, g: ArmGoal): ArmResult {
       best = phiP + d * lo;
       at(best, true);
     }
-    if (jerk) (was ?? lastMove.set(sh, new THREE.Vector3()).get(sh)!).copy(_E).sub(_e0);
+    if (jerk) (was ?? lastMove.set(sh, new Vec3()).get(sh)!).copy(_E).sub(_e0);
   }
   if (!g.maxJerk || !g.maxMove || !prev) lastMove.delete(sh);
   // (not asked for, the girdle is at rest, and eases from there when it is again: kept as it last was, the shoulder jumped back to it)
@@ -411,12 +411,12 @@ export function solveArm(j: Joints, left: boolean, g: ArmGoal): ArmResult {
     else if (pg) pg.splice(0, 2, 0, 0);
     if (g.slant) lastS.set(sh, slant);
     if (g.glide !== undefined) lastR.set(sh, roll);
-    (prev ?? last.set(sh, new THREE.Vector3()).get(sh)!).copy(_E);
+    (prev ?? last.set(sh, new Vec3()).get(sh)!).copy(_E);
   }
   sh.position.copy(_S);
   // the joints: the upper arm on its parent, the elbow a hinge, the hand within the forearm's turn and the wrist's bend
   sh.quaternion.copy(_Qu);
-  const flex = Math.acos(THREE.MathUtils.clamp(_b.dot(_f), -1, 1));
+  const flex = Math.acos(Maths.clamp(_b.dot(_f), -1, 1));
   el.quaternion.setFromAxisAngle(X, -flex);
   let excess = ROM_ON ? shoulderExcess(_Qu, left, gP) : 0;
   const vis = g.vis;
@@ -438,11 +438,11 @@ export function solveArm(j: Joints, left: boolean, g: ArmGoal): ArmResult {
  * world matrices through their parents, so needs no update of the whole model first.)
  * `inside`: how far short of its ends (degrees) the wrist is kept.
  */
-export function fitArm(j: Joints, left: boolean, vis?: THREE.Quaternion, body?: BodyShape, slant?: number | [number, number], inside?: number): ArmResult {
+export function fitArm(j: Joints, left: boolean, vis?: Quat, body?: BodyShape, slant?: number | [number, number], inside?: number): ArmResult {
   const sh = left ? j.shoulderL : j.shoulderR, el = left ? j.elbowL : j.elbowR, hd = left ? j.handL : j.handR;
-  const wrist = hd.getWorldPosition(new THREE.Vector3());
-  const hand = hd.getWorldQuaternion(new THREE.Quaternion());
+  const wrist = hd.getWorldPosition(new Vec3());
+  const hand = hd.getWorldQuaternion(new Quat());
   if (vis) hand.multiply(vis);
-  const pole = el.getWorldPosition(new THREE.Vector3()).sub(sh.getWorldPosition(new THREE.Vector3()));
+  const pole = el.getWorldPosition(new Vec3()).sub(sh.getWorldPosition(new Vec3()));
   return solveArm(j, left, { wrist, hand, vis, pole, body, slant, flexion: vis ? GRIPPED_FLEXION : undefined, inside });
 }

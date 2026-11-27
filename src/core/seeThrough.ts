@@ -1,7 +1,10 @@
 // Screen-door dissolve of world geometry between the camera and the character it follows, so
 // nothing hides the player. Only the main pass: shadow maps render with their own depth
 // material, so shadows stay whole.
-import * as THREE from '../engine/three.ts';
+import {
+  AddEquation, Attribute, CustomBlending, InstancedMesh, LookMaterial, Mat4, Material, Mesh, Node, OneFactor,
+  OneMinusSrcAlphaFactor, Side, SrcAlphaFactor, Texture, Uniform, UnlitMaterial, Vec2, Vec3, Vec4, ZeroFactor,
+} from '../engine/api/index.ts';
 import { HALL, TERRACE } from '../data/village';
 import { DOOR_ROW, DOOR_SOFT, HIS_ROW, SIGHT, SIGHT_LOOK } from './sight';
 import { onWholeView, wholeView } from './wholeView';
@@ -12,7 +15,7 @@ import { tunable } from './tuning';
 const FLOOR_CLEAR = 0.12;
 
 /** the followed character (chest height), set by the camera every frame */
-const focus = { value: new THREE.Vector3() };
+const focus = { value: new Vec3() };
 
 /**
  * How a class of material dissolves: x..y the radius round the camera-to-player line where the
@@ -20,7 +23,7 @@ const focus = { value: new THREE.Vector3() };
  * the player it stops. `minY`: nothing lower dissolves (the floor under a prop stays).
  */
 interface Kind {
-  k: { value: THREE.Vector4 };
+  k: { value: Vec4 };
   minY: { value: number };
   across: { value: number };
   whole: { value: number };
@@ -63,7 +66,7 @@ interface Kind {
   sightOn?: { value: number };
   /** how far round the line to him what thins whole reaches: from x it comes back, whole by y (m at his depth); all of it
    *  if not given */
-  reach?: { value: THREE.Vector2 };
+  reach?: { value: Vec2 };
   /** of a cover with a `reach`: how high it stands over its floor (m). Where it stands between the camera and him
    *  all of it is a ghost, foot to top, by that height */
   high?: number;
@@ -72,14 +75,14 @@ interface Kind {
   stays?: boolean;
   /** the room it thins for (least x, least z, most x, most z): only what has it just past it along the view thins whole;
    *  everywhere if not given */
-  room?: { value: THREE.Vector4 };
+  room?: { value: Vec4 };
   /** the door's two jambs (x, z, x, z), for the cone he sees through it to open in it; none if not given */
-  door?: { value: THREE.Vector4 };
+  door?: { value: Vec4 };
   /** how far that cone is open (a share of what's in it dropped) */
   doorOn?: { value: number };
 }
 /** what thins whole reaching all of it */
-const ALL_OF_IT = { value: new THREE.Vector2(1e5, 1e6) };
+const ALL_OF_IT = { value: new Vec2(1e5, 1e6) };
 /** how far the hall's walls aside of him and behind thin where they hide the floor he sees (`hallSightCone`): not at
  *  all with him in the hall, where they stand whole or thin each as a whole (`wallHidesNearHim`), from play "here we
  *  should not try to make transparent the side which doesn't help see the hero" */
@@ -97,7 +100,7 @@ export const PLACED_BY_MIDDLE = 1e4;
 export const MIDDLE_ATTRIBUTE = 'seeAt';
 
 /** Whether what's drawn in `material` thins by its own middle, read from `MIDDLE_ATTRIBUTE` (a kind with a reach). */
-export function thinsByMiddle(material: THREE.Material | THREE.Material[]): boolean {
+export function thinsByMiddle(material: Material | Material[]): boolean {
   if (Array.isArray(material)) return false;
   const see = (material as { seeThrough?: SeeThrough }).seeThrough;
   return see?.reach !== undefined;
@@ -105,20 +108,20 @@ export function thinsByMiddle(material: THREE.Material | THREE.Material[]): bool
 
 /** `mesh` given its place in the world as every vertex's middle (`MIDDLE_ATTRIBUTE`), on a copy of its geometry of
  *  its own (a geometry is shared by every column). */
-export function keepMiddle(mesh: THREE.Mesh): void {
-  const at = new THREE.Vector3().setFromMatrixPosition(mesh.matrixWorld);
+export function keepMiddle(mesh: Mesh): void {
+  const at = new Vec3().setFromMatrixPosition(mesh.matrixWorld);
   const geometry = mesh.geometry.clone();
   const count = geometry.attributes.position.count;
   const middles = new Float32Array(count * 3);
   for (let i = 0; i < count; i++) at.toArray(middles, i * 3);
-  geometry.setAttribute(MIDDLE_ATTRIBUTE, new THREE.BufferAttribute(middles, 3));
+  geometry.setAttribute(MIDDLE_ATTRIBUTE, new Attribute(middles, 3));
   mesh.geometry = geometry;
 }
 
 /** the most columns whose share of the floor they hide is kept (`columnsSeen`): the hall's 8 and its portico's 4 */
 const COLUMNS_MOST = 16;
 /** each column's middle on the floor (x, z) and how far he sees the floor it hides (0 to 1), eased by the game */
-const COLUMNS_SEEN = { value: Array.from({ length: COLUMNS_MOST }, () => new THREE.Vector3(1e6, 1e6, 0)) };
+const COLUMNS_SEEN = { value: Array.from({ length: COLUMNS_MOST }, () => new Vec3(1e6, 1e6, 0)) };
 
 /**
  * How far he sees the floor each column hides, as the game has eased it (`columnsFade` in game/village.ts): read off
@@ -151,28 +154,28 @@ function vertexMiddle(kind: keyof typeof kinds): { declared: string; set: string
   };
 }
 /** no room to thin for */
-const ANYWHERE = { value: new THREE.Vector4(-1e5, -1e5, 1e5, 1e5) };
+const ANYWHERE = { value: new Vec4(-1e5, -1e5, 1e5, 1e5) };
 /** the hall's room, for what thins whole of its walls */
-const HALL_ROOM = { value: new THREE.Vector4(-1e5, -1e5, 1e5, 1e5) };
+const HALL_ROOM = { value: new Vec4(-1e5, -1e5, 1e5, 1e5) };
 /** the hall's door's jambs, and how far the middle bay over it thins when looking in from outside (`seeOverDoor`) */
-const HALL_DOOR = { value: new THREE.Vector4() };
+const HALL_DOOR = { value: new Vec4() };
 const HALL_DOOR_ON = { value: 0 };
 /** no door to see through */
-const NO_DOOR = { value: new THREE.Vector4() };
+const NO_DOOR = { value: new Vec4() };
 const DOOR_SHUT = { value: 0 };
 /** the props' hole, which what fades whole has too */
-const PROP_K = { value: new THREE.Vector4(1.0, 1.8, 0, 0.25) }, PROP_ACROSS_NOW = { value: 1 };
+const PROP_K = { value: new Vec4(1.0, 1.8, 0, 0.25) }, PROP_ACROSS_NOW = { value: 1 };
 /** nothing under this height dissolves in a prop: the floor he stands on (`updateSeeThrough`) and what lies lower */
 const PROP_MIN_Y = { value: FLOOR_CLEAR };
 /** the hole in what's built (`built`), and in the hall's walls and roof, which stays his own size: wide, it opened the
  *  hall's side wall onto the grass */
-const BUILT_K = { value: new THREE.Vector4(1.0, 1.8, 0, 0.25) };
+const BUILT_K = { value: new Vec4(1.0, 1.8, 0, 0.25) };
 /** a fence's hole (`fence`: the village's palisade), opened wide by the fence hiding him alone, as what's built is by a
  *  house: one hole for both, the palisade hiding him at the village's edge opened the houses' too, and the cottage beside
  *  him went to its footing (from play, "at border of map, the house behind player suddenly disappeared") */
-const FENCE_K = { value: new THREE.Vector4(1.0, 1.8, 0, 0.25) };
+const FENCE_K = { value: new Vec4(1.0, 1.8, 0, 0.25) };
 // (reaching past him, its w far under 0: a wall thins as one, or not at all, `hallInside` in game/village.ts)
-const HALL_K = { value: new THREE.Vector4(1.0, 1.8, 0, -1000) };
+const HALL_K = { value: new Vec4(1.0, 1.8, 0, -1000) };
 /** a hall column's: no hole of its own, as the hall's walls have none: each thins whole. On top of that, a wall's hole cut
  *  a round bite out of the door's jambs and the lintel as he stood in the doorway, and a column's left it clear below and
  *  solid above, a smoke gradient (from play, "still looks broken to me"; a review) */
@@ -180,12 +183,12 @@ const HALL_K = { value: new THREE.Vector4(1.0, 1.8, 0, -1000) };
 const COLUMN_HIGH = 6;
 /** how far the hall's front wall thins whole: its door's leaves' too, a kind of their own */
 const FRONT_WHOLE = { value: 0 };
-const COLUMN_K = { value: new THREE.Vector4(1.0, 1.8, 0, 0.25) };
+const COLUMN_K = { value: new Vec4(1.0, 1.8, 0, 0.25) };
 /** the share of the floor he sees the hall's columns thin by (`HALL_SIGHT`; their pale surfaces further, `PALE`) */
 const COLUMN_SIGHT = 1.45;
 /** the roofs' hole: reaching past him (its w far under 0), so a ghost of a roof is one all over, whichever side of him
  *  the camera looks at it from */
-const ROOF_K = { value: new THREE.Vector4(1.0, 1.8, 0, -1000) };
+const ROOF_K = { value: new Vec4(1.0, 1.8, 0, -1000) };
 /** how far every roof thins from above, whatever it hides (a share of its pixels; from play, "we should make roof
  *  semi-transparent in this case too, even if hero is not directly under it") */
 export const ROOF_GHOST_ABOVE = 0.25;
@@ -216,7 +219,7 @@ const HALL_PORCH = [TERRACE.x - TERRACE.half, HALL.door, TERRACE.x + TERRACE.hal
 
 const kinds = {
   /** canopies: a wide hole in every view, since the tree line can hide the player top-down */
-  foliage: { k: { value: new THREE.Vector4(2.5, 5, 0.9, 1) }, minY: { value: -1e9 }, across: { value: 1 }, whole: { value: 0 }, ramp: WALL_RAMP },
+  foliage: { k: { value: new Vec4(2.5, 5, 0.9, 1) }, minY: { value: -1e9 }, across: { value: 1 }, whole: { value: 0 }, ramp: WALL_RAMP },
   /** what stands free: a hole round the line to the player, and all of it a ghost while it hides him, in every view but
    *  through the eyes */
   prop: { k: PROP_K, minY: PROP_MIN_Y, across: PROP_ACROSS_NOW, whole: { value: 0 }, ramp: { value: GHOST_RAMP } },
@@ -265,7 +268,7 @@ const kinds = {
   // (those near the line to him: a column well aside of it hides nothing of him, and all gone, the portico stood on plinths)
   hallColumn: { k: COLUMN_K, minY: PROP_MIN_Y, across: PROP_ACROSS_NOW, whole: { value: 0 }, ramp: { value: 0.4 }, blended: true, cover: true, floor: TERRACE.high, floorBoxes: HALL_FLOORS,
     pale: true, sight: true, sightShare: COLUMN_SIGHT, sightOn: HALL_SIGHT_COLUMNS,
-    reach: { value: new THREE.Vector2(0.8, 1.6) }, room: HALL_ROOM, door: HALL_DOOR, high: COLUMN_HIGH },
+    reach: { value: new Vec2(0.8, 1.6) }, room: HALL_ROOM, door: HALL_DOOR, high: COLUMN_HIGH },
 } satisfies Record<string, Kind>;
 
 /** how far the hall's walls thin where they hide the floor he sees (a share of their pixels, `hallSightCone`): from
@@ -402,7 +405,7 @@ const thinsAsColumn = (kind: keyof typeof kinds): boolean => (kinds[kind] as Kin
 export const OVER_SHAFT = 'overShaft';
 
 /** Whether `material` is a column's capital's (`OVER_SHAFT`). */
-export const overShaft = (material: THREE.Material): boolean => material.userData[OVER_SHAFT] === true;
+export const overShaft = (material: Material): boolean => material.userData[OVER_SHAFT] === true;
 
 /** A hall column standing inside the room (`userData`): drawn before walls that thin before it, and solid to the
  *  fog's alpha read so unseen columns behind a thinned front wall take the room's full fog instead of painting bright
@@ -410,14 +413,14 @@ export const overShaft = (material: THREE.Material): boolean => material.userDat
 export const IN_HALL_COLUMN = 'inHallColumn';
 
 /** Whether `material` belongs to an interior hall column (`IN_HALL_COLUMN`). */
-export const inHallColumn = (material: THREE.Material): boolean => material.userData[IN_HALL_COLUMN] === true;
+export const inHallColumn = (material: Material): boolean => material.userData[IN_HALL_COLUMN] === true;
 
 /** A column shaft (`userData`): counted in `countGhosts` while capitals, bases, and iron bands over it are left out so
  *  they don't double-count the column over itself. */
 export const COLUMN_SHAFT = 'columnShaft';
 
 /** Whether `material` is a column shaft (`COLUMN_SHAFT`). */
-export const columnShaft = (material: THREE.Material): boolean => material.userData[COLUMN_SHAFT] === true;
+export const columnShaft = (material: Material): boolean => material.userData[COLUMN_SHAFT] === true;
 
 /** how much less of itself a pale surface keeps as it thins by blending (`Kind.pale`): of what's thinned, a share by
  *  its albedo's luminance from `from` to `to`. A pale stucco shaft's ghost over him at the dark granite's share washed
@@ -437,8 +440,8 @@ export const BLEND_GONE = 0.02;
 /** the count of thinned ghosts that blend lying over each pixel of the scene (`core/ghostLayers.ts`), a step of
  *  1 / `GHOSTS_MOST` each, and a pixel's size in it: none bound, the count is none and nothing changes */
 export const GHOST_COUNT = {
-  tGhostLayers: { value: null as THREE.Texture | null },
-  uGhostTexel: { value: new THREE.Vector2(1, 1) },
+  tGhostLayers: { value: null as Texture | null },
+  uGhostTexel: { value: new Vec2(1, 1) },
 };
 /** the most ghosts one pixel of the count holds */
 export const GHOSTS_MOST = 16;
@@ -539,7 +542,7 @@ float seeFade() { return seeFadeAt(vSeeWp); }`;
 const HALL_FLOOR_CUT = { value: 0 };
 const PORTICO_DEPTH_HELD = { value: 0 };
 
-function bindUniforms(uniforms: Record<string, THREE.IUniform>, kind: keyof typeof kinds): void {
+function bindUniforms(uniforms: Record<string, Uniform>, kind: keyof typeof kinds): void {
   const u = kinds[kind];
   uniforms.uSeeFocus = focus;
   uniforms.uSeeK = u.k;
@@ -558,21 +561,21 @@ function bindUniforms(uniforms: Record<string, THREE.IUniform>, kind: keyof type
 /** What a material dissolves by, as WebGPU reads it off the material (`SeeThrough`, core/shaderPorts.ts `seeMask`):
  *  the followed character, and its kind's hole and floor. */
 export interface SeeThrough {
-  focus: { value: THREE.Vector3 };
-  k: { value: THREE.Vector4 };
+  focus: { value: Vec3 };
+  k: { value: Vec4 };
   minY: { value: number };
   across: { value: number };
   whole: { value: number };
   ramp: { value: number };
-  reach?: { value: THREE.Vector2 };
+  reach?: { value: Vec2 };
   /** of a cover with a `reach`: how high it stands over its floor (m). Where it stands between the camera and him
    *  all of it is a ghost, foot to top, by that height */
   high?: number;
   /** of a cover with `walls`: never gone whole. Where its wall would be (he stands in its room, or before its door
    *  seeing in), all of it is the rule's ghost instead: what keeps him out of where it stands, a door's leaves */
   stays?: boolean;
-  room?: { value: THREE.Vector4 };
-  door?: { value: THREE.Vector4 };
+  room?: { value: Vec4 };
+  door?: { value: Vec4 };
   doorOn?: { value: number };
   blended?: boolean;
   cover?: boolean;
@@ -599,7 +602,7 @@ const kindOfSeen = new Map<SeeThrough, keyof typeof kinds>();
 
 /** `m`'s dissolve given it for WebGPU (`seeThrough`, a property of its own: not copied to a clone, as its
  *  `onBeforeCompile` isn't). */
-function markSeeThrough(m: THREE.Material, kind: keyof typeof kinds): void {
+function markSeeThrough(m: Material, kind: keyof typeof kinds): void {
   Object.defineProperty(m, 'seeThrough', { value: seeValue(kind), configurable: true });
 }
 
@@ -616,13 +619,13 @@ export function seeValue(kind: keyof typeof kinds): SeeThrough {
 
 /** The hole that keeps the hero in sight as it stands now, for a renderer of our own (src/engine): the point
  *  nothing may hide, the props' hole (`Kind.k`) and the height nothing lower dissolves at. */
-export const holeNow = (): { focus: THREE.Vector3; k: THREE.Vector4; minY: number } =>
+export const holeNow = (): { focus: Vec3; k: Vec4; minY: number } =>
   ({ focus: focus.value, k: PROP_K.value, minY: PROP_MIN_Y.value });
 
 /** Dissolve `m` where it stands between the camera and the player. Keeps any patch the material already has. A roof and
  *  what the hall thins whole blend (from play, "Yes, real blending": a pattern of dots over a roof reads as a screen door,
  *  and the fog, reading the depth, stippled it too), with their depth kept, for the fog to read them as what they are. */
-export function seeThrough<M extends THREE.Material>(m: M, kind: keyof typeof kinds): M {
+export function seeThrough<M extends Material>(m: M, kind: keyof typeof kinds): M {
   markSeeThrough(m, kind);
   const blended = (kinds[kind] as Kind).blended === true;
   const pale = blended && (kinds[kind] as Kind).pale === true;
@@ -669,7 +672,7 @@ export function seeThrough<M extends THREE.Material>(m: M, kind: keyof typeof ki
 }
 
 /** The sight's uniforms on `shader` (`sightConeGlsl`), and how thinned `kind` still counts as whole. */
-function bindSight(shader: { uniforms: Record<string, THREE.IUniform> }, kind: keyof typeof kinds): void {
+function bindSight(shader: { uniforms: Record<string, Uniform> }, kind: keyof typeof kinds): void {
   shader.uniforms.uSeeSight = (kinds[kind] as Kind).sightOn ?? HALL_SIGHT;
   shader.uniforms.tSight = SIGHT.tSight;
   shader.uniforms.uSightFrom = SIGHT.uSightFrom;
@@ -682,7 +685,7 @@ function bindSight(shader: { uniforms: Record<string, THREE.IUniform> }, kind: k
 /** `shader` thinned where it hides the floor he sees too (`sightConeGlsl`). Its depth is let go while that's on, and
  *  written by its depth's own draw where it's still whole (`fadeWhole`, `wholeDepthMaterial`): a fragment can't let its
  *  own go, and written as the farthest it failed its own depth test, all of it gone where it hid the floor. */
-function seeBySight(shader: { fragmentShader: string; uniforms: Record<string, THREE.IUniform> },
+function seeBySight(shader: { fragmentShader: string; uniforms: Record<string, Uniform> },
   kind: keyof typeof kinds): void {
   bindSight(shader, kind);
   shader.fragmentShader = shader.fragmentShader
@@ -700,7 +703,7 @@ const LAYERS_SHARE_GLSL = `float seeLayers = floor(texture2D(tGhostLayers, gl_Fr
         if (seeLayers > 1.5) seeLeft = 1.0 - pow(max(1.0 - seeLeft, 0.0), 1.0 / seeLayers);`;
 
 /** A dissolve's pattern of dropped pixels in `shader` made a blend; `pale`, a pale surface keeping less (`PALE`). */
-function thinByBlending(shader: { fragmentShader: string; uniforms: Record<string, THREE.IUniform> },
+function thinByBlending(shader: { fragmentShader: string; uniforms: Record<string, Uniform> },
   pale: boolean): void {
   const paleLess = pale
     ? `seeLeft *= 1.0 - (1.0 - seeLeft) * ${PALE.most.toFixed(2)} * max(uSeePaleAll,
@@ -722,38 +725,38 @@ function thinByBlending(shader: { fragmentShader: string; uniforms: Record<strin
 }
 
 /** Whether `material` thins by blending: drawn blended, it's as solid as what's opaque, to a body or a shot. */
-export const thinsByBlending = (material: THREE.Material): boolean =>
+export const thinsByBlending = (material: Material): boolean =>
   (material as { seeThrough?: SeeThrough }).seeThrough?.blended === true;
 
 /** Whether `material` is seen through from above whatever it hides: a roof, or the hall's walls. A cottage's walls and the
  *  palisade blend too, but only open round him while they hide him. */
-export const seenThroughFromAbove = (material: THREE.Material): boolean => {
+export const seenThroughFromAbove = (material: Material): boolean => {
   const k = (material as { seeThrough?: SeeThrough }).seeThrough?.k;
   return k === ROOF_K || k === HALL_K;
 };
 
 /** What three sorts a list's blended things by. */
 interface Sorted {
-  groupOrder: number; renderOrder: number; z: number; id: number; material: THREE.Material; object: THREE.Object3D;
+  groupOrder: number; renderOrder: number; z: number; id: number; material: Material; object: Node;
 }
 
 /** the middle of what each blended thing draws, in the world: what's built stands still, and is merged, so its own place
  *  says nothing of where it's drawn */
-const middles = new WeakMap<THREE.Object3D, THREE.Vector3>();
+const middles = new WeakMap<Node, Vec3>();
 
 /** The middle of what `object` draws. */
-function middleOf(object: THREE.Object3D): THREE.Vector3 {
+function middleOf(object: Node): Vec3 {
   let middle = middles.get(object);
   if (middle) return middle;
-  const geometry = (object as THREE.Mesh).geometry;
+  const geometry = (object as Mesh).geometry;
   if (geometry && !geometry.boundingSphere) geometry.computeBoundingSphere();
-  middle = (geometry?.boundingSphere?.center.clone() ?? new THREE.Vector3()).applyMatrix4(object.matrixWorld);
+  middle = (geometry?.boundingSphere?.center.clone() ?? new Vec3()).applyMatrix4(object.matrixWorld);
   middles.set(object, middle);
   return middle;
 }
 
 /** middle of the hall's interior colonnade, for comparing wall distance against the columns inside */
-const HALL_MIDDLE = new THREE.Vector3(
+const HALL_MIDDLE = new Vec3(
   TERRACE.x,
   TERRACE.high + HALL.wallHigh * 0.5,
   (HALL.columnZ[0] + HALL.columnZ[HALL.columnZ.length - 1]) * 0.5,
@@ -778,7 +781,7 @@ export function holdRoomColumnsOverWalls(held: boolean): void {
 /** Which comes first of what thins by blending: the depth of what's left whole, then while all solid the legacy
  *  walls/columns/roofs turns; while anything thins, interior columns draw before a thinned wall nearer the eye so
  *  the wall blends over them rather than letting unseen columns paint bright over the front wall and jambs. */
-function drawnInTurn(material: THREE.Material, object: THREE.Object3D, nearFirst: boolean): number {
+function drawnInTurn(material: Material, object: Node, nearFirst: boolean): number {
   const see = (material as { seeThrough?: SeeThrough }).seeThrough;
   if (nearFirst) {
     if (see?.wholeOnly) return see.k === COLUMN_K && !columnsUnderWalls ? 1.5 : 0;
@@ -811,11 +814,11 @@ function drawnInTurn(material: THREE.Material, object: THREE.Object3D, nearFirst
 export function hideHallColumns(hidden: boolean): void {
   for (const material of thinningWhole.get('hallColumn') ?? []) material.visible = !hidden;
   // (their depth with them: a portico's column keeps all of it, and left, its depth stood where none was drawn)
-  for (const twin of wholeDepths.get('hallColumn') ?? []) (twin.material as THREE.Material).visible = !hidden;
+  for (const twin of wholeDepths.get('hallColumn') ?? []) (twin.material as Material).visible = !hidden;
 }
 
 /** The hall's room told to what thins whole of its walls, and its door's jambs (x, z, x, z). */
-export function hallRoomIs(room: THREE.Vector4, door: THREE.Vector4): void {
+export function hallRoomIs(room: Vec4, door: Vec4): void {
   HALL_ROOM.value.copy(room);
   HALL_DOOR.value.copy(door);
 }
@@ -854,13 +857,13 @@ function blendedOrder(a: Sorted, b: Sorted): number {
 
 /** How far `object` stands from the eye, squared, for the order of what blends: a ring's by its nearest part ahead, any
  *  other's by its middle. */
-const awayFromEye = (object: THREE.Object3D): number =>
+const awayFromEye = (object: Node): number =>
   nearestAhead.get(object) ?? middleOf(object).distanceToSquared(sortEye.value);
 
 /** what's ordered by its part nearest the eye (`sortByNearest`): each one's parts' places in the world */
-const ringParts = new Map<THREE.Object3D, THREE.Vector3[]>();
+const ringParts = new Map<Node, Vec3[]>();
 /** each such one's distance this frame, squared (`sortBlendedFrom`) */
-const nearestAhead = new Map<THREE.Object3D, number>();
+const nearestAhead = new Map<Node, number>();
 /** whether a harness has the rings ordered by their middles, as they were */
 let ringsByMiddle = false;
 
@@ -870,13 +873,13 @@ let ringsByMiddle = false;
  * its ghost in its hole wrote depth they then failed, their walls and roofs gone to their footings (from play, "where
  * did the house go?"; `lab village --only housesPastFence`).
  */
-export function sortByNearest(mesh: THREE.InstancedMesh): void {
-  const parts: THREE.Vector3[] = [];
-  const matrix = new THREE.Matrix4();
+export function sortByNearest(mesh: InstancedMesh): void {
+  const parts: Vec3[] = [];
+  const matrix = new Mat4();
   mesh.updateMatrixWorld(true);
   for (let i = 0; i < mesh.count; i++) {
     mesh.getMatrixAt(i, matrix);
-    parts.push(new THREE.Vector3().setFromMatrixPosition(matrix.premultiply(mesh.matrixWorld)));
+    parts.push(new Vec3().setFromMatrixPosition(matrix.premultiply(mesh.matrixWorld)));
   }
   ringParts.set(mesh, parts);
 }
@@ -887,7 +890,7 @@ export function holdRingsByMiddle(held: boolean): void {
 }
 
 /** Each ring's part nearest the eye ahead of it (`toward`, the way it looks), squared, kept for this frame's order. */
-function measureRings(toward: THREE.Vector3): void {
+function measureRings(toward: Vec3): void {
   nearestAhead.clear();
   if (ringsByMiddle) return;
   for (const [ring, parts] of ringParts) {
@@ -899,14 +902,14 @@ function measureRings(toward: THREE.Vector3): void {
     if (nearest < Infinity) nearestAhead.set(ring, nearest);
   }
 }
-const _toPart = new THREE.Vector3();
+const _toPart = new Vec3();
 
 /** Whether `material` draws for what blends' order: what thins by blending, or the depth of what's left whole of it. */
-const drawsWithTheBlended = (material: THREE.Material): boolean =>
+const drawsWithTheBlended = (material: Material): boolean =>
   thinsByBlending(material) || (material as { seeThrough?: SeeThrough }).seeThrough?.wholeOnly === true;
 
 /** where the camera stands, for what thins by blending to be ordered by */
-const sortEye = { value: new THREE.Vector3() };
+const sortEye = { value: new Vec3() };
 
 /** whether nothing that thins by blending may thin this frame: each is as solid as what's opaque, drawn whole */
 let solidNow = false;
@@ -935,7 +938,7 @@ const allBlendedSolid = (): boolean =>
  *  of it thinning (over the shoulder, in the hall or on the square), it's drawn near to far, as what's opaque is, so
  *  what a nearer wall or column covers is never lit (back to front, the hall's walls lit the floor and walls behind
  *  each column and each other: what's see-through or cut out, 21 ms of the 4080's 34 ms scene pass there). */
-export function sortBlendedFrom(eye: THREE.Vector3, toward: THREE.Vector3): void {
+export function sortBlendedFrom(eye: Vec3, toward: Vec3): void {
   sortEye.value.copy(eye);
   measureRings(toward);
   solidNow = allBlendedSolid();
@@ -968,24 +971,24 @@ export function blendedBuiltFirst(a: Sorted, b: Sorted): number {
  *  which the fog alone lies over (`seenColour`'s `under`). With its depth kept, the fog read a roof's whole pixel as the
  *  roof, and the grass and walls seen through it stood bright over what he can't see (from play, "fog of war bugs"); and
  *  fogged by what's under it, a roof would be the fog's colour whole, as a house's inside is always hidden from him. */
-function tellsItsShare(m: THREE.Material): void {
-  m.blending = THREE.CustomBlending;
-  m.blendEquation = THREE.AddEquation;
-  m.blendSrc = THREE.SrcAlphaFactor;
-  m.blendDst = THREE.OneMinusSrcAlphaFactor;
-  m.blendSrcAlpha = THREE.ZeroFactor;
-  m.blendDstAlpha = THREE.OneMinusSrcAlphaFactor;
+function tellsItsShare(m: Material): void {
+  m.blending = CustomBlending;
+  m.blendEquation = AddEquation;
+  m.blendSrc = SrcAlphaFactor;
+  m.blendDst = OneMinusSrcAlphaFactor;
+  m.blendSrcAlpha = ZeroFactor;
+  m.blendDstAlpha = OneMinusSrcAlphaFactor;
 }
 
 /** the blended materials of what thins whole, by kind, their depth let go as they thin */
-const thinningWhole = new Map<string, THREE.Material[]>();
+const thinningWhole = new Map<string, Material[]>();
 /** thinned past this share, what thins whole leaves the depth to what's behind it: the fog reads the frame's depth, and
  *  the room behind a ghost of the hall's front wall lay under the fog of the wall's own place, whole */
 const DEPTH_LET_GO = 0.3;
 
 /** the meshes that write the depth of what's left whole, by kind, each shown only while its kind's depth is let go; the
  *  first of a kind always, for its program to be warmed with the rest */
-const wholeDepths = new Map<FadesWhole, THREE.Mesh[]>();
+const wholeDepths = new Map<FadesWhole, Mesh[]>();
 /** how little thinned counts as left whole: a wall all but solid that gave up its depth let what's behind it draw over
  *  it, the hall's columns standing on the front wall as if painted there (from play, "still looks broken to me"). At half
  *  thinned, the fog read a wall where the ground past it showed through: `--only sightBlacksOut` */
@@ -1007,9 +1010,9 @@ export function columnsKeepAllDepth(all: boolean): void {
 }
 
 /** A material for the depth alone of what's left whole of `kind`. */
-function wholeDepthMaterial(kind: FadesWhole, side: THREE.Side): THREE.Material {
+function wholeDepthMaterial(kind: FadesWhole, side: Side): Material {
   // (a hair behind what it follows, whose own draw must pass the depth test over it)
-  const material = new THREE.MeshBasicMaterial({
+  const material = new UnlitMaterial({
     colorWrite: false, transparent: true, depthWrite: true, side, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 2,
   });
   const column = kind === 'hallColumn';
@@ -1051,13 +1054,13 @@ function wholeDepthMaterial(kind: FadesWhole, side: THREE.Side): THREE.Material 
  * "here we dont need to see through the wall, because I'm in front of the wall"), and what's behind it drew over it.
  * Depth is written fragment by fragment only by a draw of its own. They stand still, as what they follow does.
  */
-export function depthOfWhatStaysWhole(root: THREE.Object3D): void {
-  const made = new Map<string, THREE.Material>();
-  const twins: { mesh: THREE.Mesh; kind: FadesWhole; of: THREE.Mesh }[] = [];
+export function depthOfWhatStaysWhole(root: Node): void {
+  const made = new Map<string, Material>();
+  const twins: { mesh: Mesh; kind: FadesWhole; of: Mesh }[] = [];
   root.traverse((object) => {
-    const mesh = object as THREE.Mesh;
-    if (!mesh.isMesh || (mesh as THREE.InstancedMesh).isInstancedMesh || Array.isArray(mesh.material)) return;
-    const kind = ([...HALL_WALL_KINDS, 'hallColumn'] as const).find((name) => thinningWhole.get(name)?.includes(mesh.material as THREE.Material));
+    const mesh = object as Mesh;
+    if (!mesh.isMesh || (mesh as InstancedMesh).isInstancedMesh || Array.isArray(mesh.material)) return;
+    const kind = ([...HALL_WALL_KINDS, 'hallColumn'] as const).find((name) => thinningWhole.get(name)?.includes(mesh.material as Material));
     if (!kind) return;
     const inside = inHallColumn(mesh.material);
     const key = `${kind}|${mesh.material.side}|${inside ? 'in' : ''}`;
@@ -1067,7 +1070,7 @@ export function depthOfWhatStaysWhole(root: THREE.Object3D): void {
       if (inside) material.userData[IN_HALL_COLUMN] = true;
       made.set(key, material);
     }
-    const twin = new THREE.Mesh(mesh.geometry, material);
+    const twin = new Mesh(mesh.geometry, material);
     mesh.updateWorldMatrix(true, false);
     twin.matrix.copy(mesh.matrixWorld);
     twin.matrixWorld.copy(mesh.matrixWorld);
@@ -1089,19 +1092,19 @@ export function depthOfWhatStaysWhole(root: THREE.Object3D): void {
 
 /** A material counting the ghosts of `kind` that blend, one a fragment thinned: drawn into the count alone
  *  (`core/ghostLayers.ts`), unlit, adding up, with no depth, as each is thinned in `seeThrough`. */
-function ghostCountMaterial(kind: keyof typeof kinds, side: THREE.Side): THREE.ShaderMaterial {
+function ghostCountMaterial(kind: keyof typeof kinds, side: Side): LookMaterial {
   const middle = vertexMiddle(kind);
   const sight = (kinds[kind] as Kind).sight === true;
   const fade = sight ? 'max(seeFade(), seeSightCone())' : 'seeFade()';
-  const material = new THREE.ShaderMaterial({
+  const material = new LookMaterial({
     side,
     transparent: true,
     depthTest: false,
     depthWrite: false,
-    blending: THREE.CustomBlending,
-    blendEquation: THREE.AddEquation,
-    blendSrc: THREE.OneFactor,
-    blendDst: THREE.OneFactor,
+    blending: CustomBlending,
+    blendEquation: AddEquation,
+    blendSrc: OneFactor,
+    blendDst: OneFactor,
     uniforms: {},
     vertexShader: `varying vec3 vSeeWp;
       varying vec3 vSeeAt;${middle.declared}
@@ -1128,7 +1131,7 @@ function ghostCountMaterial(kind: keyof typeof kinds, side: THREE.Side): THREE.S
 }
 
 /** the twins the count is drawn with, each under the mesh it counts, and the layer they're on */
-const ghostTwins: THREE.Mesh[] = [];
+const ghostTwins: Mesh[] = [];
 
 /** the kinds a twin counts */
 const kindsCounted = new Set<keyof typeof kinds>();
@@ -1154,11 +1157,11 @@ export function ghostsCounted(): boolean {
  * other camera draws. A culled instanced mesh's twin shares its instances and draws as many. They stand still, as what
  * they follow does.
  */
-export function countGhosts(root: THREE.Object3D, layer: number): void {
-  const made = new Map<string, THREE.ShaderMaterial>();
-  const twins: { twin: THREE.Mesh; of: THREE.Mesh }[] = [];
+export function countGhosts(root: Node, layer: number): void {
+  const made = new Map<string, LookMaterial>();
+  const twins: { twin: Mesh; of: Mesh }[] = [];
   root.traverse((object) => {
-    const mesh = object as THREE.Mesh;
+    const mesh = object as Mesh;
     if (!mesh.isMesh || Array.isArray(mesh.material)) return;
     const value = (mesh.material as { seeThrough?: SeeThrough }).seeThrough;
     const kind = value && value.blended === true ? kindOfSeen.get(value) : undefined;
@@ -1179,11 +1182,11 @@ export function countGhosts(root: THREE.Object3D, layer: number): void {
 
 /** A twin of `mesh` drawn with `material`, where it stands: an instanced one's sharing its instances and their
  *  count. */
-function ghostTwin(mesh: THREE.Mesh, material: THREE.Material): THREE.Mesh {
-  const instanced = mesh as THREE.InstancedMesh;
-  let twin: THREE.Mesh;
+function ghostTwin(mesh: Mesh, material: Material): Mesh {
+  const instanced = mesh as InstancedMesh;
+  let twin: Mesh;
   if (instanced.isInstancedMesh) {
-    const copy = new THREE.InstancedMesh(mesh.geometry, material, instanced.count);
+    const copy = new InstancedMesh(mesh.geometry, material, instanced.count);
     copy.instanceMatrix = instanced.instanceMatrix;
     copy.onBeforeRender = () => {
       copy.count = instanced.count;
@@ -1191,7 +1194,7 @@ function ghostTwin(mesh: THREE.Mesh, material: THREE.Material): THREE.Mesh {
     copy.frustumCulled = false;
     twin = copy;
   } else {
-    twin = new THREE.Mesh(mesh.geometry, material);
+    twin = new Mesh(mesh.geometry, material);
   }
   // (under what it follows, hidden with it, where it stands: its own matrix none)
   twin.matrixAutoUpdate = false;
@@ -1254,7 +1257,7 @@ export const doorFadeShare = (): number => HALL_DOOR_ON.value;
  * it to fade where it hides the player, for a glow or a veil to fade out by rather than dither (a screen door in a
  * glow reads as noise). Its vertex shader's world position is the mesh's own, before any displacement.
  */
-export function seeThroughFade<M extends THREE.ShaderMaterial>(m: M, kind: keyof typeof kinds): M {
+export function seeThroughFade<M extends LookMaterial>(m: M, kind: keyof typeof kinds): M {
   bindUniforms(m.uniforms, kind);
   const main = /void\s+main\s*\(\s*\)\s*\{/;
   m.vertexShader = `varying vec3 vSeeWp;\nvarying vec3 vSeeAt;\n${m.vertexShader.replace(main, (head) => `${head}

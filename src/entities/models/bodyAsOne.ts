@@ -9,7 +9,10 @@
 // each body draws with its own materials, so both reach it); a mesh hidden or a material swapped on one foe shows on
 // none. Its pieces stay where they hang, on a layer no camera draws (`CROWD_LAYER`), for what reads them (an arrow
 // lodged in one, the aim's hulls, the outline). `--tune bodyAsOne.on=0` draws each piece on its own again.
-import * as THREE from '../../engine/three.ts';
+import {
+  AttachedBindMode, Attribute, Bone, DetachedBindMode, Frustum, Geometry, Mat3, Mat4, Material, Mesh, Node, Skeleton,
+  SkinnedMesh, Sphere,
+} from '../../engine/api/index.ts';
 import { G } from '../../state';
 import { CROWD_LAYER } from '../../core/layers';
 import { tunable } from '../../core/tuning';
@@ -25,11 +28,11 @@ export const BODY_AS_ONE = tunable('bodyAsOne', { on: 1, unplaced: 1 });
 /** One kind's merge: its joints' inverse bind matrices, of a body's pieces the one hung on each rigid joint and
  *  the one whose material and casting each slot takes, how many pieces a body has, each slot's geometry. */
 interface Kind {
-  inverses: THREE.Matrix4[];
+  inverses: Mat4[];
   jointFrom: number[];
   slotFrom: number[];
   pieces: number;
-  geometries: THREE.BufferGeometry[];
+  geometries: Geometry[];
   /** of a body's pieces, those each slot merged, in the order it laid them */
   members: number[][];
   /** how far from its root a body of the kind reaches at its root's scale of 1, in its bind pose */
@@ -38,10 +41,10 @@ interface Kind {
 
 /** A body drawn as one: its meshes, a slot each, and the skeleton they share. */
 interface Drawn {
-  meshes: THREE.SkinnedMesh[];
-  skeleton: THREE.Skeleton;
+  meshes: SkinnedMesh[];
+  skeleton: Skeleton;
   /** its pieces left unplaced from frame to frame, none if they're placed */
-  unplaced: THREE.Mesh[];
+  unplaced: Mesh[];
   /** how far from its root it reaches, at its root's scale of 1 (its kind's, a limb flung out and its shadow) */
   reach: number;
 }
@@ -49,14 +52,14 @@ interface Drawn {
 /** A body drawn as one as the engine's nodes take it (`engine/bodies.ts`): its meshes, its joints (the skeleton's
  *  bones, in its order) and how far from its root it reaches. */
 export interface AsOne {
-  readonly meshes: readonly THREE.SkinnedMesh[];
-  skeleton: THREE.Skeleton;
+  readonly meshes: readonly SkinnedMesh[];
+  skeleton: Skeleton;
   reach: number;
 }
 
 /** A piece in its slot: the mesh, and the joint it hangs on (-1: skinned on the skeleton's bones). */
 interface Part {
-  mesh: THREE.Mesh;
+  mesh: Mesh;
   joint: number;
   /** its place among the body's pieces */
   k: number;
@@ -66,23 +69,23 @@ const kinds = new Map<string, Kind>();
 const drawn = new Map<CrowdBody, Drawn>();
 /** what the bodies' meshes hang under: the scene, never a body's own root, whose readers (the aim's hulls, an
  *  arrow's lodging) walk its meshes */
-let holder: THREE.Group | null = null;
-const IDENTITY = new THREE.Matrix4();
+let holder: Node | null = null;
+const IDENTITY = new Mat4();
 /** how far past the camera's view a body is still drawn, m: for its shadow, which falls into the view from off it */
 const SHADOW_MARGIN = 8;
 /** a body's reach past its bind pose's, for a limb flung out in a blow or a fall */
 const REACH_SLACK = 1.5;
-const frustum = new THREE.Frustum();
-const viewed = new THREE.Matrix4();
-const lastViewed = new THREE.Matrix4();
-const sphere = new THREE.Sphere();
-const _m = new THREE.Matrix4();
-const _n = new THREE.Matrix3();
+const frustum = new Frustum();
+const viewed = new Mat4();
+const lastViewed = new Mat4();
+const sphere = new Sphere();
+const _m = new Mat4();
+const _n = new Mat3();
 
 /** The group the bodies' meshes hang under, added to the scene the first time it's asked for. */
-function holderOf(): THREE.Group {
+function holderOf(): Node {
   if (!holder) {
-    holder = madeAside(() => new THREE.Group());
+    holder = madeAside(() => new Node());
     holder.name = 'bodies as one';
     holder.matrixAutoUpdate = false;
     G.scene.add(holder);
@@ -109,7 +112,7 @@ function madeAside<T>(make: () => T): T {
 }
 
 /** The camera's view as a frustum, made again only when the camera has moved. */
-function cameraFrustum(): THREE.Frustum {
+function cameraFrustum(): Frustum {
   const camera = G.camera;
   viewed.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
   if (!viewed.equals(lastViewed)) {
@@ -124,7 +127,7 @@ function cameraFrustum(): THREE.Frustum {
  * and a body drawn as one is skinned, where its pieces were culled each on its own (drawn off the view, wave 36's
  * foes were 40% more triangles). Its sphere is padded by its shadow's reach, which the engine's sun view had culled.
  */
-function nearView(kind: Kind, root: THREE.Object3D): boolean {
+function nearView(kind: Kind, root: Node): boolean {
   // (read off its matrix as the frame placed it: \`getWorldPosition\` made the body's chain of matrices again for each
   // of its meshes, every frame)
   sphere.center.setFromMatrixPosition(root.matrixWorld);
@@ -133,8 +136,8 @@ function nearView(kind: Kind, root: THREE.Object3D): boolean {
 }
 
 /** Whether `root` is shown in the scene: it and everything over it visible, up to the scene. */
-function shownInScene(root: THREE.Object3D): boolean {
-  for (let at: THREE.Object3D | null = root; at; at = at.parent) {
+function shownInScene(root: Node): boolean {
+  for (let at: Node | null = root; at; at = at.parent) {
     if (!at.visible) return false;
     if (at === G.scene) return true;
   }
@@ -143,22 +146,22 @@ function shownInScene(root: THREE.Object3D): boolean {
 
 /** The kind of `model` (its pieces `pieces`) merged: its joints, and each slot's geometry. Null where its skinned
  *  pieces don't share one skeleton. */
-function kindOf(model: Model, pieces: THREE.Mesh[]): Kind | null {
+function kindOf(model: Model, pieces: Mesh[]): Kind | null {
   model.root.updateMatrixWorld(true);
   const rootInv = model.root.matrixWorld.clone().invert();
-  const skinned = pieces.filter((piece) => (piece as THREE.SkinnedMesh).isSkinnedMesh) as THREE.SkinnedMesh[];
+  const skinned = pieces.filter((piece) => (piece as SkinnedMesh).isSkinnedMesh) as SkinnedMesh[];
   const skeleton = skinned[0]?.skeleton;
   if (skinned.some((piece) => piece.skeleton !== skeleton)) return null;
   const inverses = skeleton ? skeleton.boneInverses.map((inverse) => inverse.clone()) : [];
   const jointFrom: number[] = [];
   const slotFrom: number[] = [];
   const parts: Part[][] = [];
-  const jointOf = new Map<THREE.Object3D, number>();
+  const jointOf = new Map<Node, number>();
   // (a slot a material and whether its pieces cast: a piece under 7 cm casts none, and merged with those that do,
   // the foes' shadows were drawn from half again the triangles)
   const slotOf = new Map<string, number>();
   pieces.forEach((mesh, k) => {
-    const base = baseOf(model, mesh.material as THREE.Material)!;
+    const base = baseOf(model, mesh.material as Material)!;
     const key = `${base.uuid}|${castsOf(mesh)}`;
     let slot = slotOf.get(key);
     if (slot === undefined) {
@@ -167,20 +170,20 @@ function kindOf(model: Model, pieces: THREE.Mesh[]): Kind | null {
       parts.push([]);
     }
     let joint = -1;
-    if (!(mesh as THREE.SkinnedMesh).isSkinnedMesh) {
+    if (!(mesh as SkinnedMesh).isSkinnedMesh) {
       const parent = mesh.parent!;
       joint = jointOf.get(parent) ?? -1;
       if (joint < 0) {
         joint = inverses.length;
         jointOf.set(parent, joint);
         jointFrom.push(k);
-        inverses.push(new THREE.Matrix4().multiplyMatrices(rootInv, parent.matrixWorld).invert());
+        inverses.push(new Mat4().multiplyMatrices(rootInv, parent.matrixWorld).invert());
       }
     }
     parts[slot].push({ mesh, joint, k });
   });
   const geometries = parts.map((list, slot) => {
-    const base = baseOf(model, pieces[slotFrom[slot]].material as THREE.Material)!;
+    const base = baseOf(model, pieces[slotFrom[slot]].material as Material)!;
     return merged(list, rootInv, base.vertexColors);
   });
   const reach = Math.max(...geometries.map((geometry) => {
@@ -196,7 +199,7 @@ function kindOf(model: Model, pieces: THREE.Mesh[]): Kind | null {
  * piece put where it hangs at rest and skinned whole to its joint, a skinned piece kept on its bones. Four joints a
  * vertex, as the engine takes them. Shared by every body of the kind, never disposed (`userData.shared`).
  */
-function merged(list: Part[], rootInv: THREE.Matrix4, colours: boolean): THREE.BufferGeometry {
+function merged(list: Part[], rootInv: Mat4, colours: boolean): Geometry {
   const flat = list.map(({ mesh }) => (mesh.geometry.index ? mesh.geometry.toNonIndexed() : mesh.geometry));
   const count = flat.reduce((sum, geometry) => sum + geometry.attributes.position.count, 0);
   const colourSize = colours ? flat[0].attributes.color.itemSize : 0;
@@ -209,7 +212,7 @@ function merged(list: Part[], rootInv: THREE.Matrix4, colours: boolean): THREE.B
   let at = 0;
   list.forEach(({ mesh, joint }, n) => {
     const geometry = flat[n];
-    const skin = joint < 0 ? mesh as THREE.SkinnedMesh : null;
+    const skin = joint < 0 ? mesh as SkinnedMesh : null;
     const place = skin ? _m.copy(skin.bindMatrix) : _m.multiplyMatrices(rootInv, mesh.matrixWorld);
     _n.getNormalMatrix(place);
     placeAll(geometry.attributes.position, place, position, at);
@@ -228,24 +231,24 @@ function merged(list: Part[], rootInv: THREE.Matrix4, colours: boolean): THREE.B
     }
     if (geometry !== mesh.geometry) geometry.dispose();
   });
-  const out = new THREE.BufferGeometry();
-  out.setAttribute('position', new THREE.BufferAttribute(position, 3));
-  out.setAttribute('normal', new THREE.BufferAttribute(normal, 3));
-  out.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
-  if (colourSize) out.setAttribute('color', new THREE.BufferAttribute(colour, colourSize));
-  out.setAttribute('skinIndex', new THREE.BufferAttribute(skinIndex, 4));
-  out.setAttribute('skinWeight', new THREE.BufferAttribute(skinWeight, 4));
+  const out = new Geometry();
+  out.setAttribute('position', new Attribute(position, 3));
+  out.setAttribute('normal', new Attribute(normal, 3));
+  out.setAttribute('uv', new Attribute(uv, 2));
+  if (colourSize) out.setAttribute('color', new Attribute(colour, colourSize));
+  out.setAttribute('skinIndex', new Attribute(skinIndex, 4));
+  out.setAttribute('skinWeight', new Attribute(skinWeight, 4));
   out.computeBoundingSphere();
   out.userData.shared = true;
   return out;
 }
 
 /** `body`'s slot `slot` as a skinned mesh on `skeleton`, in its own material, shown and casting as its body is. */
-function slotMesh(kind: Kind, slot: number, body: CrowdBody, pieces: THREE.Mesh[], skeleton: THREE.Skeleton,
-  ): THREE.SkinnedMesh {
+function slotMesh(kind: Kind, slot: number, body: CrowdBody, pieces: Mesh[], skeleton: Skeleton,
+  ): SkinnedMesh {
   const model = body.model;
   const piece = pieces[kind.slotFrom[slot]];
-  const mesh = new THREE.SkinnedMesh(kind.geometries[slot], baseOf(model, piece.material as THREE.Material)!);
+  const mesh = new SkinnedMesh(kind.geometries[slot], baseOf(model, piece.material as Material)!);
   mesh.name = `${model.root.userData.crowdKind as string} as one`;
   // (whose body it draws, for what counts a body's meshes: `tools/lab/page/bodyRecords.ts`)
   mesh.userData.bodyOf = model.root;
@@ -254,7 +257,7 @@ function slotMesh(kind: Kind, slot: number, body: CrowdBody, pieces: THREE.Mesh[
   mesh.matrixWorldAutoUpdate = false;
   // (bound detached and its matrix never remade: attached, three inverted its identity every frame, 306 a frame
   // at wave 36)
-  mesh.bindMode = THREE.DetachedBindMode;
+  mesh.bindMode = DetachedBindMode;
   mesh.bind(skeleton, IDENTITY);
   mesh.updateMatrixWorld = () => undefined;
   mesh.frustumCulled = false;
@@ -287,11 +290,11 @@ export function drawAsOne(body: CrowdBody): boolean {
     kinds.set(name, kind);
   }
   if (pieces.length !== kind.pieces) return false;
-  const skinned = pieces.find((piece) => (piece as THREE.SkinnedMesh).isSkinnedMesh) as THREE.SkinnedMesh | undefined;
+  const skinned = pieces.find((piece) => (piece as SkinnedMesh).isSkinnedMesh) as SkinnedMesh | undefined;
   const bones = skinned?.skeleton.bones ?? [];
-  const joints = [...bones, ...kind.jointFrom.map((k) => pieces[k].parent!)] as THREE.Bone[];
+  const joints = [...bones, ...kind.jointFrom.map((k) => pieces[k].parent!)] as Bone[];
   const { skeleton, meshes } = madeAside(() => {
-    const made = new THREE.Skeleton(joints, kind.inverses.map((inverse) => inverse.clone()));
+    const made = new Skeleton(joints, kind.inverses.map((inverse) => inverse.clone()));
     return { skeleton: made, meshes: kind.slotFrom.map((_, slot) => slotMesh(kind, slot, body, pieces, made)) };
   });
   for (const piece of pieces) piece.layers.set(CROWD_LAYER);
@@ -310,12 +313,12 @@ export function drawAsOne(body: CrowdBody): boolean {
  * (`updateMatrixWorld(true)`) still has them: with the flags off, the lab's head aim read every foe's skull where it
  * stood as it joined, and a husk's head shot struck its body.
  */
-function leaveUnplaced(piece: THREE.Mesh): void {
+function leaveUnplaced(piece: Mesh): void {
   piece.userData.unplaced = true;
 }
 
 /** `piece` placed by the frame again, as its body leaves being drawn as one. */
-function placedAgain(piece: THREE.Mesh): void {
+function placedAgain(piece: Mesh): void {
   delete piece.userData.unplaced;
   piece.matrixWorldNeedsUpdate = true;
 }
@@ -324,13 +327,13 @@ function placedAgain(piece: THREE.Mesh): void {
  * Every unplaced piece under `root` put where its joint holds it now (its joint as last placed): what reads a foe's
  * pieces asks for this first (an arrow's ray, the aim's, the outline). A skinned piece's bind is kept attached.
  */
-export function placeUnplaced(root: THREE.Object3D): void {
+export function placeUnplaced(root: Node): void {
   root.traverse((object) => {
     if (!object.userData.unplaced || !object.parent) return;
     if (object.matrixAutoUpdate) object.updateMatrix();
     object.matrixWorld.multiplyMatrices(object.parent.matrixWorld, object.matrix);
-    const skinned = object as THREE.SkinnedMesh;
-    if (skinned.isSkinnedMesh && skinned.bindMode === THREE.AttachedBindMode) {
+    const skinned = object as SkinnedMesh;
+    if (skinned.isSkinnedMesh && skinned.bindMode === AttachedBindMode) {
       skinned.bindMatrixInverse.copy(skinned.matrixWorld).invert();
     }
   });
@@ -338,10 +341,10 @@ export function placeUnplaced(root: THREE.Object3D): void {
 
 /** The pieces of `model` a body drawn as one merges: a pooled piece is placed by its own matrix, not its joint's,
  *  and is drawn on its own (`rootCage.ts`). */
-const mergedPieces = (model: Model): THREE.Mesh[] => piecesOf(model).filter((piece) => !piece.userData.pooled);
+const mergedPieces = (model: Model): Mesh[] => piecesOf(model).filter((piece) => !piece.userData.pooled);
 
 /** The pieces each of `body`'s meshes merged, in the order it laid them (none drawn as one): a harness's. */
-export function slotPieces(body: CrowdBody): THREE.Mesh[][] {
+export function slotPieces(body: CrowdBody): Mesh[][] {
   const kind = kinds.get(body.model.root.userData.crowdKind as string);
   if (!kind || !drawn.has(body)) return [];
   const pieces = mergedPieces(body.model);
@@ -354,13 +357,13 @@ export function eachAsOne(visit: (body: CrowdBody, one: AsOne) => void): void {
 }
 
 /** What the bodies' meshes hang under, if any hang yet: the engine's nodes draw them, and hide it from its walk. */
-export const holderAsOne = (): THREE.Group | null => holder;
+export const holderAsOne = (): Node | null => holder;
 
 /** Whether `body` is drawn as one. */
 export const drawnAsOne = (body: CrowdBody): boolean => drawn.has(body);
 
 /** The meshes `body` is drawn as, none when it's drawn piece by piece: what a harness counts as the body's. */
-export const meshesAsOne = (body: CrowdBody): readonly THREE.Mesh[] => drawn.get(body)?.meshes ?? [];
+export const meshesAsOne = (body: CrowdBody): readonly Mesh[] => drawn.get(body)?.meshes ?? [];
 
 /** `body` no longer drawn as one: its meshes out of the scene and its skeleton let go (the geometry is its kind's). */
 export function leaveAsOne(body: CrowdBody): void {

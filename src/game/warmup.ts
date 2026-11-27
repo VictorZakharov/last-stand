@@ -13,7 +13,7 @@ import { painted } from '../world/arena';
 import { AHEAD } from '../engine/pipelinesAside';
 import { isLazyFoe, loadFoe } from '../entities/bosses';
 import { lampsLetGo } from './village';
-import * as THREE from '../engine/three.ts';
+import { Mesh, Node, Vec3 } from '../engine/api/index.ts';
 import { G } from '../state';
 import { behindTheLobby, warmUp, type Swap, type WarmedUp } from '../core/shaders';
 import { sceneTarget } from '../core/renderer';
@@ -51,7 +51,7 @@ import {
 import type { Model } from '../types';
 
 /** far outside the arena, past what the lobby's camera sees: where the fight's warm-up stands what it builds */
-const AWAY = new THREE.Vector3(4000, 0, 4000);
+const AWAY = new Vec3(4000, 0, 4000);
 /** of the fight's warm-up at once (its progress), the share done once its foes and heroes are built */
 const BUILT = 0.3;
 /**
@@ -104,12 +104,12 @@ function rememberWarmed(): void {
 
 /** `model`'s hero with all it can wear shown at once (a model hides what isn't worn, and a hidden mesh draws
  *  nothing), at `at`. */
-function heroAllWorn(model: string, at?: THREE.Vector3): Model {
+function heroAllWorn(model: string, at?: Vec3): Model {
   return built(heroAllWornSteps(model, at));
 }
 
 /** `heroAllWorn` a piece at a time (models/steps.ts). */
-function* heroAllWornSteps(model: string, at?: THREE.Vector3): Generator<void, Model, undefined> {
+function* heroAllWornSteps(model: string, at?: Vec3): Generator<void, Model, undefined> {
   const m = yield* modelSteps(model);
   m.root.traverse((o) => { o.visible = true; });
   m.root.name = `warm-up: ${model}, all worn`;   // names show up in the perf report
@@ -125,7 +125,7 @@ const otherBiomes = (): BiomeId[] => BIOME_IDS.filter((id) => G.arena.biomeBuilt
  *  heroes may stand in the village's place by then (a part built, then compiled and drawn frames later behind the
  *  lobby), and hidden in the village's stead, the room stayed lit beside what was drawn: as many lights again. The
  *  arena's own (`shownGroup`), never worked out again here. */
-const shownNow = (): THREE.Object3D => G.arena.shownGroup();
+const shownNow = (): Node => G.arena.shownGroup();
 
 /**
  * The lobby's village compiled as soon as it's built, the hero's lights in (built next, he takes them on: a program is
@@ -149,7 +149,7 @@ export async function compileTheBiome(villageFirst = true): Promise<void> {
 let sceneAheadOn = true;
 
 /** the meshes `sceneAhead` has handed over: the boot calls it as the scene grows, and each call walks it all */
-const handedAhead = new WeakSet<THREE.Object3D>();
+const handedAhead = new WeakSet<Node>();
 
 /** how long `sceneAhead` hands the scene over before it lets the page go (ms) */
 const AHEAD_SLICE_MS = 12;
@@ -167,13 +167,13 @@ const AHEAD_SLICE_MS = 12;
 export async function sceneAhead(): Promise<void> {
   if (!AHEAD.prepare || !sceneAheadOn) return;
   const handed = handedAhead;
-  const stack: THREE.Object3D[] = [G.scene];
+  const stack: Node[] = [G.scene];
   let from = performance.now();
   while (stack.length) {
     const object = stack.pop()!;
     if (!object.visible) continue;
     // (a mesh with all under it at once, as `prepare` walks it; one handed over by a call before is passed by)
-    if (!(object as THREE.Mesh).isMesh) stack.push(...object.children);
+    if (!(object as Mesh).isMesh) stack.push(...object.children);
     else if (!handed.has(object)) {
       handed.add(object);
       AHEAD.prepare([object]);
@@ -185,7 +185,7 @@ export async function sceneAhead(): Promise<void> {
 }
 
 /** `objects` named `name` where they have none of their own: what uses a program, as `lab programs` lists them. */
-function named<T extends THREE.Object3D>(name: string, objects: T[]): T[] {
+function named<T extends Node>(name: string, objects: T[]): T[] {
   for (const o of objects) o.name ||= name;
   return objects;
 }
@@ -198,7 +198,7 @@ function spawned(name: string, spawn: () => unknown): void {
 }
 
 /** The samples of the skills `model`'s classes cast (each skill once), named for what uses them. */
-function skillSamples(model: string): THREE.Object3D[] {
+function skillSamples(model: string): Node[] {
   const classes = Object.values(CLASSES).filter((c) => c.model === model);
   const impls = new Set(classes.flatMap((c) => c.skills.map((s) => s.impl)));
   return [...impls].flatMap((impl) => named(`skill: ${impl}`, SKILL_IMPLS[impl]?.warm?.() ?? []));
@@ -206,7 +206,7 @@ function skillSamples(model: string): THREE.Object3D[] {
 
 /** what the lobby's warm-up draws besides its hero with all he can wear: made and compiled with the hero
  *  (`compileTheLobby`) */
-let lobbyExtras: THREE.Object3D[] = [];
+let lobbyExtras: Node[] = [];
 
 /**
  * What the lobby can do made (every effect, loot and its hero's skills: another class's are warmed with its hero, as
@@ -216,18 +216,18 @@ let lobbyExtras: THREE.Object3D[] = [];
  * the lobby's warm-up, compiled after it, had its links begin 0.6 s after it asked.
  */
 export async function compileTheLobby(): Promise<void> {
-  const at = new THREE.Vector3(), p = { x: 0, z: 0 };
+  const at = new Vec3(), p = { x: 0, z: 0 };
   const effects: [string, () => unknown][] = [
     ['shockwave', () => shockwave(p)], ['ground flash', () => groundFlash(p)], ['scorch', () => decal(p)],
     ['frost', () => decal(p, { type: 'frost' })], ['telegraph', () => telegraph(p, 2, 1)],
-    ['lightning', () => lightning(at, new THREE.Vector3(1, 1, 1))], ['ice spikes', () => iceSpikes(p, 2)],
+    ['lightning', () => lightning(at, new Vec3(1, 1, 1))], ['ice spikes', () => iceSpikes(p, 2)],
     ['glyph', () => glyphMarker(p)], ['light pillar', () => lightPillar(p)], ['crack', () => crackDecal(p)],
     ['crystals', () => crystalBurst(p)],
   ];
   for (const [name, spawn] of effects) spawned(`effect: ${name}`, spawn);
   for (const kind of ['stone', 'wood', 'shroom', 'ember'] as const) rubble(0, 0, { count: 24, color: 0x808080, kind, radius: 0.1, height: 0.1, size: 0.2, speed: 1 });
   // (the other heroes' skills are theirs to warm, the foes' shots the fight's)
-  const extra: THREE.Object3D[] = [
+  const extra: Node[] = [
     ...named('cores', coreSamples()), ...named('drops', groundSamples()), ...named('swing trail', swingTrailSamples()),
     ...skillSamples(G.player.cls.model), ...named('ping', pingSamples()),
   ];
@@ -257,8 +257,8 @@ let fightAhead: Promise<void> | null = null;
 
 /** the lobby's dummies' bodies, which its warm-up outlines, and every place's seats, outlined as E would sit on
  *  them */
-const dummies = (): THREE.Object3D[] => G.enemies.map((e) => e.obj);
-const outlined = (): (THREE.Object3D | OutlineTarget)[] => [...dummies(), ...G.arena.allSeats().flatMap((s) => s.outline)];
+const dummies = (): Node[] => G.enemies.map((e) => e.obj);
+const outlined = (): (Node | OutlineTarget)[] => [...dummies(), ...G.arena.allSeats().flatMap((s) => s.outline)];
 
 /** A step of a warm-up told before it's taken: its name, and how far along the loading screen's bar it stands. */
 export type WarmStep = (label: string, progress: number) => Promise<void>;
@@ -322,11 +322,11 @@ interface Part {
  *  of the lobby's biome for the draw, what's outlined, what's brought in just before the draw (`show`) and taken
  *  out again (`hide`), and its pieces let go (`done`). */
 interface Built {
-  compile: THREE.Object3D[];
-  objects: THREE.Object3D[];
-  drawn: THREE.Object3D[];
+  compile: Node[];
+  objects: Node[];
+  drawn: Node[];
   swap?: Swap;
-  outlined: THREE.Object3D[];
+  outlined: Node[];
   show?(): void;
   hide?(): void;
   done(): void;

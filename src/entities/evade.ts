@@ -3,7 +3,7 @@
 // the attack's hits (its hero's own, net/role `dealsDamage`), and only for an attack from a hero in front of it: a
 // partner shooting it from behind isn't seen. The host's foe evades there and every guest is told (the `evade` fx);
 // a guest's copy evades on its own game at once, as its screen shows the shot, and the host is told with its hits.
-import * as THREE from '../engine/three.ts';
+import { Vec3 } from '../engine/api/index.ts';
 import { G } from '../state';
 import { dealsDamage } from '../net/role';
 import { tellHost } from '../combat/damage';
@@ -40,7 +40,7 @@ const TRIES = 20;
 /** a shot is seen coming once it's this long off (s): time to duck under it */
 export const SEEN_AHEAD = 0.25;
 
-const _from = new THREE.Vector3();
+const _from = new Vec3();
 
 /**
  * Whether `e` gets out of `threat`, an attack of `by`'s coming at it: it does it at once (ducked, or blinked away clear

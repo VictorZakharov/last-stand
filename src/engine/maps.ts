@@ -1,6 +1,6 @@
 // The game's maps handed to the engine: a picture of the page's copied on the GPU, bytes for what can't be (a data
 // texture, a frame written down as a tape), and a base map joined to its alpha map on the page.
-import * as THREE from './three.ts';
+import { CompressedTexture, CubeTexture, DataTexture, RGBAFormat, SRGBColorSpace, Texture } from './api/index.ts';
 import type { Core } from './core';
 import { TUNE } from './globals';
 
@@ -11,15 +11,15 @@ interface TextureEntry { id: number; version: number; width: number }
  *  its first draw, and draws nothing before every map has come). The engine meets a map as its material is first
  *  described, which a loaded PC put before the map came: the village's ground stayed the blank's, white (from
  *  play, "village loaded with white ground"). A picture whose width has changed is handed over again. */
-const widthOf = (texture: THREE.Texture): number => (texture.image as { width?: number } | null)?.width ?? 0;
+const widthOf = (texture: Texture): number => (texture.image as { width?: number } | null)?.width ?? 0;
 
 /** A number that moves when `texture` would be handed over again (`Maps.textureId`): its version and its
  *  picture's width; 0 for none. */
-export const mapStamp = (texture: THREE.Texture | null | undefined): number =>
+export const mapStamp = (texture: Texture | null | undefined): number =>
   (texture ? (texture.version + 1) * 8191 + widthOf(texture) : 0);
 
 export class Maps {
-  private textures = new WeakMap<THREE.Texture, TextureEntry>();
+  private textures = new WeakMap<Texture, TextureEntry>();
   private cutOuts = new Map<string, number>();
   private canvas2d: CanvasRenderingContext2D | null = null;
 
@@ -32,19 +32,19 @@ export class Maps {
   }
 
   /** A map's RGBA bytes, row 0 where v is 0, no larger than `MAX_MAP` a side. */
-  private pixelsOf(texture: THREE.Texture): { width: number; height: number; data: Uint8Array } | null {
+  private pixelsOf(texture: Texture): { width: number; height: number; data: Uint8Array } | null {
     const image = texture.image as {
       data?: ArrayBufferView | null; width?: number; height?: number;
     } & CanvasImageSource | null;
     if (!image) return null;
-    if ((texture as THREE.DataTexture).isDataTexture) {
+    if ((texture as DataTexture).isDataTexture) {
       const { data, width = 0, height = 0 } = image;
       if (!(data instanceof Uint8Array || data instanceof Uint8ClampedArray)) return null;
-      if (texture.format !== THREE.RGBAFormat || data.length !== width * height * 4) return null;
+      if (texture.format !== RGBAFormat || data.length !== width * height * 4) return null;
       const bytes = data instanceof Uint8Array ? data : new Uint8Array(data.buffer, data.byteOffset, data.length);
       return { width, height, data: bytes };
     }
-    if ((texture as THREE.CompressedTexture).isCompressedTexture || (texture as THREE.CubeTexture).isCubeTexture) return null;
+    if ((texture as CompressedTexture).isCompressedTexture || (texture as CubeTexture).isCubeTexture) return null;
     const sized = image as { naturalWidth?: number; naturalHeight?: number; videoWidth?: number; videoHeight?: number };
     const fullWidth = sized.naturalWidth || sized.videoWidth || image.width || 0;
     const fullHeight = sized.naturalHeight || sized.videoHeight || image.height || 0;
@@ -71,13 +71,13 @@ export class Maps {
   }
 
   /** A map's id in the engine, handed over the first time it's met and again when its version moves on; 0: none. */
-  textureId(texture: THREE.Texture | null | undefined): number {
+  textureId(texture: Texture | null | undefined): number {
     if (!texture) return 0;
     const core = this.core, entry = this.textures.get(texture);
     const width = widthOf(texture);
     if (entry && entry.version === texture.version && (entry.width === width || !TUNE.mapsBySize)) return entry.id;
     if (entry?.id) { core.engine.drop_texture(entry.id); core.held.textures--; }
-    const srgb = texture.colorSpace === THREE.SRGBColorSpace;
+    const srgb = texture.colorSpace === SRGBColorSpace;
     // (a picture of the page's is copied on the GPU, the engine making its smaller levels there: read back to bytes
     // through a canvas, a house's maps were 9 s of the page's time as it was first walked into, 20 s in play. A
     // frame written down as a tape needs the bytes)
@@ -95,7 +95,7 @@ export class Maps {
   }
 
   /** A base map with an alpha map's green as its alpha (three reads the two apart; the engine has one base map). */
-  cutOutId(map: THREE.Texture | null, alpha: THREE.Texture): number {
+  cutOutId(map: Texture | null, alpha: Texture): number {
     const core = this.core;
     const key = `${map?.id ?? 0}:${map?.version ?? 0}:${alpha.id}:${alpha.version}`;
     const kept = this.cutOuts.get(key);
@@ -106,7 +106,7 @@ export class Maps {
     const base = map ? this.pixelsOf(map) : null;
     if (base && base.width === cut.width && base.height === cut.height) data.set(base.data);
     for (let i = 0; i < data.length; i += 4) data[i + 3] = cut.data[i + 1];
-    const id = core.engine.add_texture(cut.width, cut.height, data, map?.colorSpace === THREE.SRGBColorSpace);
+    const id = core.engine.add_texture(cut.width, cut.height, data, map?.colorSpace === SRGBColorSpace);
     this.cutOuts.set(key, id);
     core.held.textures++;
     core.freshViews();
@@ -116,10 +116,10 @@ export class Maps {
 
 /** Whether a map's image is a picture the GPU copies by itself: a canvas, a bitmap, an image (not bytes, nor a
  *  compressed or a cube map). */
-function pictured(texture: THREE.Texture): boolean {
+function pictured(texture: Texture): boolean {
   const image = texture.image as unknown;
-  if ((texture as THREE.DataTexture).isDataTexture || (texture as THREE.CompressedTexture).isCompressedTexture) return false;
-  if ((texture as THREE.CubeTexture).isCubeTexture) return false;
+  if ((texture as DataTexture).isDataTexture || (texture as CompressedTexture).isCompressedTexture) return false;
+  if ((texture as CubeTexture).isCubeTexture) return false;
   if (image instanceof HTMLCanvasElement || (typeof OffscreenCanvas !== 'undefined' && image instanceof OffscreenCanvas)) {
     // (a canvas nothing has drawn on yet has no context, and the GPU's copy of one is an error the engine's wgpu
     // doesn't survive: every call after it threw, the game stopped. Asking for its context gives it one; null is a

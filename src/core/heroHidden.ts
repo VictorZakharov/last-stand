@@ -2,7 +2,7 @@
 // a few lines from the camera to points of his body, read against what's built and the circles of what stands free.
 // Thinned all the time it took apart whatever he stood beside; with a hole his own size alone he showed by himself
 // behind a wall ("character and context around character needs to be visible even if the character is behind props").
-import * as THREE from '../engine/three.ts';
+import { Vec3 } from '../engine/api/index.ts';
 import { G } from '../state';
 import { FENCE, STANDS_FREE, wallHit } from '../world/wall';
 import { clamp, damp } from '../util';
@@ -30,7 +30,7 @@ const walled = new Uint8Array(POINTS);
 const fenced = new Uint8Array(POINTS);
 /** the same lines, read against what stands free alone: its circles and the wall's free meshes (the notice board) */
 const propped = new Uint8Array(POINTS);
-const _point = new THREE.Vector3();
+const _point = new Vec3();
 const _hit = wallHit();
 let next = 0;
 let opening = 0;
@@ -70,7 +70,7 @@ const wantedBy = (lines: Uint8Array): number => clamp(lines.reduce((sum, one) =>
 const towards = (now: number, wanted: number, dt: number): number => damp(now, wanted, wanted > now ? OPENS : CLOSES, dt);
 
 /** Whether the line from `camera` to `point` crosses a circle of what stands free, under its top. */
-function crossesObstacle(camera: THREE.Vector3, point: THREE.Vector3): boolean {
+function crossesObstacle(camera: Vec3, point: Vec3): boolean {
   const dx = point.x - camera.x;
   const dz = point.z - camera.z;
   const long2 = dx * dx + dz * dz;
@@ -90,7 +90,7 @@ function crossesObstacle(camera: THREE.Vector3, point: THREE.Vector3): boolean {
 }
 
 /** The hole's opening this frame (0: his own size, 1: wide), the camera at `camera`, him at (x, z) over `floor`. */
-export function holeOpening(camera: THREE.Vector3, x: number, floor: number, z: number, height: number, props: number,
+export function holeOpening(camera: Vec3, x: number, floor: number, z: number, height: number, props: number,
   dt: number): number {
   if (!G.arena?.wall || props <= 0) {
     wallOpening = 0;

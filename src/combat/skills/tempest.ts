@@ -3,7 +3,7 @@
 // that ring, and dust kicked up where it strikes; let go, the whirl runs down and fades rather than vanishing. All of
 // it is lit steadily (nothing pulses with the strikes): the trails overlap round the circle, so a patch of the screen
 // the whirl turns past keeps about the same light.
-import * as THREE from '../../engine/three.ts';
+import { Node } from '../../engine/api/index.ts';
 import { G } from '../../state';
 import { hitEnemy } from '../damage';
 import { sfx } from '../../core/audio';
@@ -22,7 +22,7 @@ type Arc = ReturnType<typeof slashMesh>;
 
 interface TempestState {
   /** the blade trails (scaled to the blade's reach) and the floor's ring (to the skill's), both turned with the body */
-  group: THREE.Group; ring: THREE.Group; arcs: Arc[]; tick: number; t: number;
+  group: Node; ring: Node; arcs: Arc[]; tick: number; t: number;
   /** its sound's stop: the spin winding down */
   quiet: (() => void) | undefined;
   /** how far round the hero has turned (rad), and the heading the body was posed at last (its facing and that turn) */
@@ -87,7 +87,7 @@ const skill: ChannelSkill<TempestState> = {
   // (every trail and the ring are one program, the blade arcs' own)
   warm: () => [arcOf(BLADES[0]).mesh],
   start(player, rawDef) {
-    const group = new THREE.Group(), ring = new THREE.Group();
+    const group = new Node(), ring = new Node();
     group.name = 'Steel Tempest: blades'; ring.name = 'Steel Tempest: ring';
     const arcs: Arc[] = [];
     BLADES.forEach((b, i) => {

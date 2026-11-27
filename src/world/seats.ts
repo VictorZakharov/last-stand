@@ -1,7 +1,7 @@
 // What a hero idle long enough sits on (`entities/sitting.ts`): a fallen log or column along its length, a stone of
 // a seat's height at its rim, the floor round a fire, facing it. Each biome lists its own (`Biome.seats`); a broken
 // prop is no seat.
-import * as THREE from '../engine/three.ts';
+import { Hit, Node, Ray, Raycaster, Vec3 } from '../engine/api/index.ts';
 import type { Obstacle } from '../types';
 import type { OutlineTarget } from '../ui/overlay/outline';
 import { G } from '../state';
@@ -14,7 +14,7 @@ export interface Seat {
   ax: number; az: number; bx: number; bz: number;
   sit: number;
   circles: Obstacle[];
-  meshes: THREE.Object3D[];
+  meshes: Node[];
   /** what's outlined as the cursor points at it, and what the cursor's ray meets of it (`seatPointed`) */
   outline: OutlineTarget[];
   ground?: boolean;
@@ -49,31 +49,31 @@ export const SEAT = {
   body: { legs: 0.6, feet: 0.15, back: 0.35 },
 };
 
-const _ray = new THREE.Raycaster(), _from = new THREE.Vector3(), _down = new THREE.Vector3(0, -1, 0);
-const _hits: THREE.Intersection[] = [];
+const _ray = new Raycaster(), _from = new Vec3(), _down = new Vec3(0, -1, 0);
+const _hits: Hit[] = [];
 
 /** A log's or a column's seat: along its middle `half` either way of (`x`, `z`) on its axis turned `yaw`. */
 export function lengthSeat(x: number, z: number, yaw: number, half: number, sit: number, circles: Obstacle[],
-  meshes: THREE.Object3D[], outline: OutlineTarget[] = meshes.map((root) => ({ root }))): Seat {
+  meshes: Node[], outline: OutlineTarget[] = meshes.map((root) => ({ root }))): Seat {
   const ux = Math.cos(yaw) * half, uz = -Math.sin(yaw) * half;
   return { ax: x - ux, az: z - uz, bx: x + ux, bz: z + uz, sit, circles, meshes, outline };
 }
 
 /** A stone's seat: its rim `sit` from its middle. */
-export function stoneSeat(o: Obstacle, sit: number, meshes: THREE.Object3D[], outline: OutlineTarget[]): Seat {
+export function stoneSeat(o: Obstacle, sit: number, meshes: Node[], outline: OutlineTarget[]): Seat {
   return { ax: o.x, az: o.z, bx: o.x, bz: o.z, sit, circles: [o], meshes, outline };
 }
 
 /** A stool's seat: its top's middle, `r` round, its circle its own (a room's stools are walked past as they stand,
  *  none among its obstacles). */
-export function stoolSeat(x: number, z: number, r: number, meshes: THREE.Object3D[], outline: OutlineTarget[]): Seat {
+export function stoolSeat(x: number, z: number, r: number, meshes: Node[], outline: OutlineTarget[]): Seat {
   const o: Obstacle = { x, z, r, h: 0.5 };
   return { ax: x, az: z, bx: x, bz: z, sit: 0.03, circles: [o], meshes, outline };
 }
 
 /** A chair's seat: sat on facing `yaw` alone, its hips `sit` ahead of its circle's middle, a hero coming `near` its
  *  circle to sit. */
-export function chairSeat(o: Obstacle, yaw: number, sit: number, near: number, meshes: THREE.Object3D[],
+export function chairSeat(o: Obstacle, yaw: number, sit: number, near: number, meshes: Node[],
   outline: OutlineTarget[]): Seat {
   const faces = { x: Math.sin(yaw), z: Math.cos(yaw) };
   return { ax: o.x, az: o.z, bx: o.x, bz: o.z, sit, circles: [o], meshes, outline, near, faces };
@@ -89,12 +89,12 @@ export function fireSeat(o: Obstacle, outline: OutlineTarget[]): Seat {
 /** A seat the cursor points at: where its ray met it. */
 export interface Pointed { seat: Seat; x: number; y: number; z: number }
 
-const _pointer = new THREE.Raycaster(), _met: THREE.Intersection[] = [];
+const _pointer = new Raycaster(), _met: Hit[] = [];
 const pointedNow: Pointed = { seat: null as unknown as Seat, x: 0, y: 0, z: 0 };
 
 /** The seat of `seats` that `ray` (the cursor's) meets first, where it meets it within `reach` (m) of `from`, or none.
  *  Read again by the next call. */
-export function seatPointed(ray: THREE.Ray, seats: readonly Seat[], from: THREE.Vector3, reach: number): Pointed | null {
+export function seatPointed(ray: Ray, seats: readonly Seat[], from: Vec3, reach: number): Pointed | null {
   _pointer.ray.copy(ray);
   let nearest = Infinity;
   for (const seat of seats) {
@@ -119,7 +119,7 @@ export function seatPointed(ray: THREE.Ray, seats: readonly Seat[], from: THREE.
 
 /** Where on `seat` a hero coming from `from` sits for a point of it (`x`, `z`: where the cursor met it): there along
  *  it, on his side of it (or the other, his own taken). */
-export function seatSpotAt(seat: Seat, x: number, z: number, from: THREE.Vector3, radius: number): SeatSpot | null {
+export function seatSpotAt(seat: Seat, x: number, z: number, from: Vec3, radius: number): SeatSpot | null {
   const { cx, cz } = nearestOn(seat, x, z);
   const dx = from.x - cx, dz = from.z - cz, d = Math.hypot(dx, dz) || 1;
   const near = 0.01 / d;

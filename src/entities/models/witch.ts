@@ -1,7 +1,8 @@
 // Rift Witch: a legless floating caster. Layered tattered robes end in a torn hem that trails void
 // wisps; a deep hood hides everything but a horned bone mask with burning eyes; a ragged mantle of
 // bone charms; bell sleeves and long clawed fingers cradling a void orb bound by turning rune rings.
-import * as THREE from '../../engine/three.ts';
+import { DoubleSide, Mesh, Node, Vec2, Vec3 } from '../../engine/api/index.ts';
+import * as shapes from '../../engine/api/shapes/index.ts';
 import { createKit } from '../../core/materials';
 import { grunge, pbrMaterialMaps, veins } from '../../core/textures';
 import { buildHumanoid, joint, resetPose, idle, ramp } from './rig';
@@ -9,15 +10,15 @@ import { Sculpt, bend, horn, lathe, limb, organic, rag, stripRig, taperTube, tat
 import type { AnimState, Model } from '../../types';
 import { particles, col } from '../../fx/particles';
 
-const V = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
+const V = (x: number, y: number, z: number) => new Vec3(x, y, z);
 
 export function buildWitch(): Model {
   const kit = createKit(0xd070ff);
   const g = pbrMaterialMaps(grunge(), 2, 1);
-  const robe = kit.rim({ color: 0x3a1640, roughness: 0.85, map: g.map, normalMap: g.normalMap, side: THREE.DoubleSide }, 0x9050c0, 0.4);
-  const robe2 = kit.std({ color: 0x1a0a1e, roughness: 0.95, normalMap: g.normalMap, side: THREE.DoubleSide, emissive: 0xa040ff, emissiveMap: veins(31, 4), emissiveIntensity: 0.6 });
+  const robe = kit.rim({ color: 0x3a1640, roughness: 0.85, map: g.map, normalMap: g.normalMap, side: DoubleSide }, 0x9050c0, 0.4);
+  const robe2 = kit.std({ color: 0x1a0a1e, roughness: 0.95, normalMap: g.normalMap, side: DoubleSide, emissive: 0xa040ff, emissiveMap: veins(31, 4), emissiveIntensity: 0.6 });
   const skin = kit.rim({ color: 0x8a8298, roughness: 0.6 }, 0xa080d0, 0.3);
-  const bone = kit.std({ color: 0xd8ccb0, roughness: 0.5, normalMap: g.normalMap, normalScale: new THREE.Vector2(0.5, 0.5) });
+  const bone = kit.std({ color: 0xd8ccb0, roughness: 0.5, normalMap: g.normalMap, normalScale: new Vec2(0.5, 0.5) });
   const dark = kit.std({ color: 0x030205, roughness: 1 });
   const face = kit.glow(0xe060ff, 6);
   const orbMat = kit.glow(0xc050ff, 4);
@@ -34,15 +35,15 @@ export function buildWitch(): Model {
   const skirt = joint(j.hips, 0, 0.08, 0);
   S.add(tatteredSkirt(0.16, 0.3, 1.0, 3, 20), robe, skirt);
   S.add(tatteredSkirt(0.14, 0.2, 1.2, 8, 16), robe2, skirt, [0, 0, 0], [0, 0.4, 0]);
-  S.add(new THREE.TorusGeometry(0.16, 0.022, 6, 24).rotateX(Math.PI / 2), robe2, j.hips, [0, 0.1, 0]);
+  S.add(shapes.torus(0.16, 0.022, 6, 24).rotateX(Math.PI / 2), robe2, j.hips, [0, 0.1, 0]);
   // bone charms hanging off the sash
   for (let i = 0; i < 5; i++) {
     const a = -0.9 + i * 0.45;
     S.add(taperTube([V(0, 0, 0), V(0, -0.08, 0.01)], () => 0.004, 4, 4), bone, j.hips, [Math.sin(a) * 0.16, 0.08, Math.cos(a) * 0.15]);
-    S.add(new THREE.OctahedronGeometry(0.02, 0), bone, j.hips, [Math.sin(a) * 0.16, 0.0, Math.cos(a) * 0.155], [0, a, 0], [0.8, 1.6, 0.5]);
+    S.add(shapes.octahedron(0.02, 0), bone, j.hips, [Math.sin(a) * 0.16, 0.0, Math.cos(a) * 0.155], [0, a, 0], [0.8, 1.6, 0.5]);
   }
   // trailing ribbons behind, each on its own joint
-  const ribbons: THREE.Group[] = [];
+  const ribbons: Node[] = [];
   for (const [x, len, seed] of [[0.07, 0.9, 1], [-0.06, 1.05, 2], [0, 0.75, 3]] as const) {
     const rj = joint(j.hips, x, 0.05, -0.14);
     S.add(bend(rag(0.08, len, seed, 2), 0.2), robe2, rj);
@@ -50,14 +51,14 @@ export function buildWitch(): Model {
   }
 
   // --- torso, a ragged mantle over the shoulders, bone necklace and shoulder spurs
-  S.add(organic(new THREE.SphereGeometry(1, 14, 10), 0.06, 4, 1), robe, j.spine, [0, 0.12, 0], [0, 0, 0], [0.12, 0.17, 0.09]);
-  S.add(organic(new THREE.SphereGeometry(1, 18, 12), 0.05, 4, 2), robe, j.chest, [0, 0.06, 0], [0, 0, 0], [0.16, 0.18, 0.11]);
+  S.add(organic(shapes.sphere(1, 14, 10), 0.06, 4, 1), robe, j.spine, [0, 0.12, 0], [0, 0, 0], [0.12, 0.17, 0.09]);
+  S.add(organic(shapes.sphere(1, 18, 12), 0.05, 4, 2), robe, j.chest, [0, 0.06, 0], [0, 0, 0], [0.16, 0.18, 0.11]);
   S.add(tatteredSkirt(0.1, 0.3, 0.36, 5, 20), robe2, j.chest, [0, 0.3, -0.01], [0, 0, 0], [1, 1, 0.85]);
   for (let i = 0; i < 9; i++) {
     const a = -1.3 + i * 0.325;
     S.add(horn(0.07, 0.012, 0.6, V(1, 0, 0), V(0, -1, 0.3)), bone, j.chest, [Math.sin(a) * 0.15, 0.26 - Math.cos(a) * 0.02, Math.cos(a) * 0.115], [0, a, 0]);
   }
-  S.add(new THREE.TorusGeometry(0.14, 0.006, 4, 24, Math.PI * 1.3).rotateX(Math.PI / 2).rotateY(-Math.PI * 0.15 + Math.PI / 2 + Math.PI), bone, j.chest, [0, 0.27, 0.0]);
+  S.add(shapes.torus(0.14, 0.006, 4, 24, Math.PI * 1.3).rotateX(Math.PI / 2).rotateY(-Math.PI * 0.15 + Math.PI / 2 + Math.PI), bone, j.chest, [0, 0.27, 0.0]);
   S.pair(horn(0.24, 0.028, -0.8, V(0, 0, 1), V(0.5, 1, -0.2), 5), bone, j.shoulderL, j.shoulderR, [0.02, 0.06, -0.02]);
   S.pair(horn(0.15, 0.02, -0.7, V(0, 0, 1), V(0.8, 0.7, -0.4)), bone, j.shoulderL, j.shoulderR, [0.05, 0.04, -0.05]);
 
@@ -68,19 +69,19 @@ export function buildWitch(): Model {
   if (hp) for (let i = 0; i < hp.count; i++) { const y = hp.getY(i), z = hp.getZ(i); hp.setZ(i, z - y * y * 1.6); if (z > 0.06 && y < 0.24) hp.setZ(i, 0.06 + (z - 0.06) * 0.25); }
   if (hp) hood.computeVertexNormals();
   S.add(organic(hood, 0.006, 20, 3), robe, j.head, [0, 0.02, -0.02]);
-  S.add(new THREE.SphereGeometry(0.1, 14, 10), dark, j.head, [0, 0.1, 0.0]);
-  S.add(organic(new THREE.SphereGeometry(1, 16, 12, 0, Math.PI * 2, 0, Math.PI * 0.62), 0.04, 8, 4), bone, j.head, [0, 0.11, 0.04], [Math.PI / 2 - 0.2, 0, 0], [0.075, 0.09, 0.075]);
-  S.pair(new THREE.SphereGeometry(0.02, 10, 8), dark, j.head, null, [0.03, 0.115, 0.108], [0, 0, 0], [1.2, 0.7, 0.6]);
-  S.pair(new THREE.SphereGeometry(0.011, 8, 6), face, j.head, null, [0.03, 0.114, 0.115], [0, 0, -0.3], [1.5, 0.8, 1]);
-  S.add(new THREE.BoxGeometry(0.004, 0.05, 0.004), dark, j.head, [0, 0.07, 0.12], [0.2, 0, 0]);
+  S.add(shapes.sphere(0.1, 14, 10), dark, j.head, [0, 0.1, 0.0]);
+  S.add(organic(shapes.sphere(1, 16, 12, 0, Math.PI * 2, 0, Math.PI * 0.62), 0.04, 8, 4), bone, j.head, [0, 0.11, 0.04], [Math.PI / 2 - 0.2, 0, 0], [0.075, 0.09, 0.075]);
+  S.pair(shapes.sphere(0.02, 10, 8), dark, j.head, null, [0.03, 0.115, 0.108], [0, 0, 0], [1.2, 0.7, 0.6]);
+  S.pair(shapes.sphere(0.011, 8, 6), face, j.head, null, [0.03, 0.114, 0.115], [0, 0, -0.3], [1.5, 0.8, 1]);
+  S.add(shapes.box(0.004, 0.05, 0.004), dark, j.head, [0, 0.07, 0.12], [0.2, 0, 0]);
   S.pair(horn(0.26, 0.018, 1.1, V(1, 0, 0.2), V(0.35, 1, 0.15), 4), bone, j.head, null, [0.05, 0.16, 0.07]);
   S.pair(horn(0.1, 0.01, 0.9, V(1, 0, 0), V(0.8, 0.6, 0)), bone, j.head, null, [0.1, 0.24, 0.04]);
 
   // --- arms: bell sleeves, grey skin, long clawed fingers
-  S.pair(organic(new THREE.SphereGeometry(1, 12, 8), 0.05, 5, 6), robe, j.shoulderL, j.shoulderR, [0, 0, 0], [0, 0, 0], [0.065, 0.06, 0.065]);
+  S.pair(organic(shapes.sphere(1, 12, 8), 0.05, 5, 6), robe, j.shoulderL, j.shoulderR, [0, 0, 0], [0, 0, 0], [0.065, 0.06, 0.065]);
   S.skinPair(limb(P.upperL + 0.045, 0.05, 0.045, 0.1), robe, j.shoulderL, j.elbowL, j.shoulderR, j.elbowR, P.upperL - 0.06, P.upperL);
   S.pair(lathe([[0.001, -P.foreL - 0.04], [0.085, -P.foreL - 0.02], [0.075, -P.foreL + 0.05], [0.048, -0.05], [0.045, 0.02], [0.001, 0.03]], 16), robe, j.elbowL, j.elbowR);
-  S.pair(organic(new THREE.SphereGeometry(1, 10, 8), 0.06, 5, 7), skin, j.handL, j.handR, [0, -0.03, 0.005], [0, 0, 0], [0.035, 0.045, 0.018]);
+  S.pair(organic(shapes.sphere(1, 10, 8), 0.06, 5, 7), skin, j.handL, j.handR, [0, -0.03, 0.005], [0, 0, 0], [0.035, 0.045, 0.018]);
   for (let f = 0; f < 4; f++) {
     const len = f === 0 || f === 3 ? 0.1 : 0.12;
     S.pair(taperTube([V(0, 0, 0), V(0, -len * 0.5, 0.015), V(0, -len, 0.04), V(0, -len * 1.15, 0.07)], (t) => 0.008 * (1 - t * 0.8), 10, 5),
@@ -89,20 +90,20 @@ export function buildWitch(): Model {
 
   // --- the orb between the hands: a dark glass shell over a burning core, two rune rings turning
   const orbJ = joint(j.chest, 0, 0.0, 0.38);
-  const orbCore = new THREE.Mesh(new THREE.SphereGeometry(0.08, 16, 12), orbMat);
+  const orbCore = new Mesh(shapes.sphere(0.08, 16, 12), orbMat);
   orbCore.castShadow = false;
   orbJ.add(orbCore);
-  S.add(new THREE.SphereGeometry(0.1, 20, 16), shell, orbJ);
+  S.add(shapes.sphere(0.1, 20, 16), shell, orbJ);
   S.glow(shell);
   const ringA = joint(orbJ), ringB = joint(orbJ);
-  S.add(new THREE.TorusGeometry(0.15, 0.005, 4, 40), orbMat, ringA);
-  for (let i = 0; i < 6; i++) S.add(new THREE.OctahedronGeometry(0.012, 0), orbMat, ringA, [Math.cos(i) * 0.15, Math.sin(i) * 0.15, 0]);
-  S.add(new THREE.TorusGeometry(0.19, 0.004, 4, 44), hem, ringB);
+  S.add(shapes.torus(0.15, 0.005, 4, 40), orbMat, ringA);
+  for (let i = 0; i < 6; i++) S.add(shapes.octahedron(0.012, 0), orbMat, ringA, [Math.cos(i) * 0.15, Math.sin(i) * 0.15, 0]);
+  S.add(shapes.torus(0.19, 0.004, 4, 44), hem, ringB);
   S.build();
 
   const root = j.root;
   let acc = 0;
-  const wp = new THREE.Vector3();
+  const wp = new Vec3();
 
   function animate(st: AnimState): void {
     const { t, dt } = st;

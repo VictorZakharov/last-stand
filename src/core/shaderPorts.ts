@@ -4,7 +4,7 @@
 // material stays the one the game holds and drives: the port reads its uniforms by reference (`uniformsOf`), and the
 // draw takes its blending, sides and depth from it as they are. On WebGL nothing changes.
 import { HALL, TERRACE } from '../data/village';
-import * as THREE from '../engine/three.ts';
+import { Color, LookMaterial, Mat4, Material, Texture, Vec2, Vec3, Vec4 } from '../engine/api/index.ts';
 import { NEAR_GLOW, itemGlowUniforms, type KitLooks } from './materials';
 import {
   BLEND_GONE, HOLE_UNDER, MIDDLE_ATTRIBUTE, PALE, PLACED_BY_MIDDLE, SIGHT_CONE, overShaft, type SeeThrough,
@@ -23,11 +23,11 @@ export type Tsl = Record<string, N>;
 export interface Port { fragment: N; vertex?: N; position?: N }
 
 /** Each material's port, as its effect gave it, and the node material made from it */
-const ports = new WeakMap<THREE.Material, (t: Tsl, u: Record<string, N>) => Port>();
-const made = new WeakMap<THREE.Material, THREE.Material>();
+const ports = new WeakMap<Material, (t: Tsl, u: Record<string, N>) => Port>();
+const made = new WeakMap<Material, Material>();
 
 /** `material` drawn on WebGPU as `port` has it (given the node language and its uniforms as nodes). */
-export function portShader<T extends THREE.ShaderMaterial>(material: T, port: (t: Tsl, u: Record<string, N>) => Port): T {
+export function portShader<T extends LookMaterial>(material: T, port: (t: Tsl, u: Record<string, N>) => Port): T {
   ports.set(material, port);
   return material;
 }
@@ -69,12 +69,12 @@ export function wgslNoise(): Record<'hash2' | 'noise2' | 'hash3' | 'noise3' | 'f
 /** The node type of a uniform's value, as `reference` takes it */
 function typeOf(value: unknown): string {
   if (typeof value === 'number') return 'float';
-  if (value instanceof THREE.Color) return 'color';
-  if (value instanceof THREE.Vector2) return 'vec2';
-  if (value instanceof THREE.Vector3) return 'vec3';
-  if (value instanceof THREE.Vector4) return 'vec4';
-  if (value instanceof THREE.Matrix4) return 'mat4';
-  if (value instanceof THREE.Texture) return 'texture';
+  if (value instanceof Color) return 'color';
+  if (value instanceof Vec2) return 'vec2';
+  if (value instanceof Vec3) return 'vec3';
+  if (value instanceof Vec4) return 'vec4';
+  if (value instanceof Mat4) return 'mat4';
+  if (value instanceof Texture) return 'texture';
   throw new Error(`shaderPorts: no node type for the uniform ${String(value)}`);
 }
 
@@ -82,7 +82,7 @@ function typeOf(value: unknown): string {
  *  texture not yet given, null: its port reads it itself). Read off this material's own uniforms, every material of
  *  a kind drew with the first's: three builds them once, by their shape (Maelstrom's walls drew with the warm-up's,
  *  faded out). */
-export function uniformsOf(material: THREE.ShaderMaterial): Record<string, N> {
+export function uniformsOf(material: LookMaterial): Record<string, N> {
   const nodes: Record<string, N> = {};
   for (const [name, uniform] of Object.entries(material.uniforms)) {
     if (uniform.value === null) continue;
@@ -100,7 +100,7 @@ function nearGlowed(colour: N): N {
 }
 
 /** The node material three draws `material` with, made once from its port */
-function madeFrom(material: THREE.ShaderMaterial, port: (t: Tsl, u: Record<string, N>) => Port): THREE.Material {
+function madeFrom(material: LookMaterial, port: (t: Tsl, u: Record<string, N>) => Port): Material {
   const { fragment, vertex, position } = port(tsl as unknown as Tsl, uniformsOf(material));
   const node = new gpu.MeshBasicNodeMaterial() as N;
   // (its uniforms are read off the material three draws: this one where it asks the build's)
@@ -113,11 +113,11 @@ function madeFrom(material: THREE.ShaderMaterial, port: (t: Tsl, u: Record<strin
 }
 
 /** what thins whole reaching all of it, for a kind that gives no reach */
-const ALL_THE_WAY = new THREE.Vector2(1e5, 1e6);
+const ALL_THE_WAY = new Vec2(1e5, 1e6);
 /** no room to thin for, for a kind that gives none */
-const EVERYWHERE = new THREE.Vector4(-1e5, -1e5, 1e5, 1e5);
+const EVERYWHERE = new Vec4(-1e5, -1e5, 1e5, 1e5);
 /** no door to see through, for a kind that gives none */
-const NO_DOOR = new THREE.Vector4();
+const NO_DOOR = new Vec4();
 
 /** A kind's see-through values as nodes. */
 export interface SeeNodes { focus: N; k: N; minY: N; across: N; whole: N; ramp: N; reach: N; room: N; door: N; doorOn: N }
@@ -253,8 +253,8 @@ function seeSightCone(world: N, see: SeeThrough): N {
   const { atan, cameraPosition, dot, length, max, min, renderGroup, select, smoothstep, texture, uniform, vec2, wgslFn } = tsl as any;
   sightNodes ??= {
     on: uniform(0).setGroup(renderGroup).onRenderUpdate(() => SIGHT_CONE.on.value),
-    from: uniform(new THREE.Vector2()).setGroup(renderGroup).onRenderUpdate(() => SIGHT.uSightFrom.value),
-    door: uniform(new THREE.Vector4()).setGroup(renderGroup).onRenderUpdate(() => SIGHT.uSightDoor.value),
+    from: uniform(new Vec2()).setGroup(renderGroup).onRenderUpdate(() => SIGHT.uSightFrom.value),
+    door: uniform(new Vec4()).setGroup(renderGroup).onRenderUpdate(() => SIGHT.uSightDoor.value),
     doorOn: uniform(0).setGroup(renderGroup).onRenderUpdate(() => SIGHT.uSightDoorOn.value),
   };
   const nodes = seeOfKind(see);
@@ -344,15 +344,15 @@ function seeOfKind(of: SeeThrough): SeeNodes {
   // (in the render's group: a still prop's refresh sends only what's shared, and in the object's these stayed at the
   // warm-up's, nothing dissolved)
   const nodes = {
-    focus: uniform(new THREE.Vector3()).setGroup(renderGroup).onRenderUpdate(() => of.focus.value),
-    k: uniform(new THREE.Vector4()).setGroup(renderGroup).onRenderUpdate(() => of.k.value),
+    focus: uniform(new Vec3()).setGroup(renderGroup).onRenderUpdate(() => of.focus.value),
+    k: uniform(new Vec4()).setGroup(renderGroup).onRenderUpdate(() => of.k.value),
     minY: uniform(0).setGroup(renderGroup).onRenderUpdate(() => of.minY.value),
     across: uniform(1).setGroup(renderGroup).onRenderUpdate(() => of.across.value),
     whole: uniform(0).setGroup(renderGroup).onRenderUpdate(() => of.whole.value),
     ramp: uniform(0).setGroup(renderGroup).onRenderUpdate(() => of.ramp.value),
-    reach: uniform(new THREE.Vector2()).setGroup(renderGroup).onRenderUpdate(() => of.reach?.value ?? ALL_THE_WAY),
-    room: uniform(new THREE.Vector4()).setGroup(renderGroup).onRenderUpdate(() => of.room?.value ?? EVERYWHERE),
-    door: uniform(new THREE.Vector4()).setGroup(renderGroup).onRenderUpdate(() => of.door?.value ?? NO_DOOR),
+    reach: uniform(new Vec2()).setGroup(renderGroup).onRenderUpdate(() => of.reach?.value ?? ALL_THE_WAY),
+    room: uniform(new Vec4()).setGroup(renderGroup).onRenderUpdate(() => of.room?.value ?? EVERYWHERE),
+    door: uniform(new Vec4()).setGroup(renderGroup).onRenderUpdate(() => of.door?.value ?? NO_DOOR),
     doorOn: uniform(0).setGroup(renderGroup).onRenderUpdate(() => of.doorOn?.value ?? 0),
   };
   seeKinds.set(of, nodes);
@@ -477,8 +477,8 @@ function itemAuraNodes(): { shape: N; loop: N; clock: N } {
   const read = (value: () => unknown, start: unknown): N =>
     uniform(start).setGroup(renderGroup).onRenderUpdate(value);
   auraNodes ??= {
-    shape: read(() => itemGlowUniforms.shape.value, new THREE.Vector4()),
-    loop: read(() => itemGlowUniforms.loop.value, new THREE.Vector4()),
+    shape: read(() => itemGlowUniforms.shape.value, new Vec4()),
+    loop: read(() => itemGlowUniforms.loop.value, new Vec4()),
     clock: read(() => itemGlowUniforms.clock.value, 0),
   };
   return auraNodes;
@@ -535,7 +535,7 @@ function shineCapped(node: N, shine: N): void {
  *  node material it built from it, and finding none, refreshes a mesh that stays still only as its own properties
  *  change: a port's or a look's uniforms stayed as they first drew (the outline's strength at the warm-up's 0). The
  *  node is an own, enumerable property, as three looks for one. */
-function refreshedEachDraw(material: THREE.Material): void {
+function refreshedEachDraw(material: Material): void {
   if (!Object.prototype.hasOwnProperty.call(material, 'refreshNode')) {
     (material as N).refreshNode = (tsl as any).float(0);
   }

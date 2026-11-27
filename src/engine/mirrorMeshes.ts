@@ -4,7 +4,10 @@
 // it casts, its range, a see-through's kind, the frame's grade). What's made each frame (a light, a set of instances,
 // a look run before its draw or listing its own rows, the particles, a mesh off the camera's layers: his arms
 // through his eyes) is left to the bridge's walk as before (`rest`), placed by its node.
-import * as THREE from './three.ts';
+import {
+  AttachedBindMode, Camera, InstancedGeometry, InstancedMesh, Light, Line, Mat4, Mesh, Node, Points, Skeleton,
+  SkinnedMesh, Sprite,
+} from './api/index.ts';
 import { RECORD, type Core } from './core';
 import { lookOf } from './custom';
 import { TUNE } from './globals';
@@ -14,7 +17,7 @@ import type { SeeKinds } from './seeKinds';
 import type { Mirror, MirrorWatcher } from './mirror';
 import { NONE } from './mirror';
 
-const IDENTITY = new Float32Array(new THREE.Matrix4().elements);
+const IDENTITY = new Float32Array(new Mat4().elements);
 
 /** The records a mesh is drawn by as the bridge writes them (`Bridge.recordsOf`), and how many of them are
  *  see-through drawn solid and how many cast from fewer triangles (counted in the frame's stats as it's drawn). */
@@ -23,11 +26,11 @@ export interface Recorded {
   solid: number;
   casters: number;
 }
-export type RecordsOf = (mesh: THREE.Mesh) => Recorded;
+export type RecordsOf = (mesh: Mesh) => Recorded;
 
 /** A mesh drawn on its node: its records' ids in the engine, its skin, and what they were written under. */
 interface Entry {
-  mesh: THREE.Mesh;
+  mesh: Mesh;
   node: number;
   drawn: number[];
   skin: number;
@@ -40,15 +43,15 @@ interface Entry {
 
 /** Whether `mesh` is drawn by no view at all: on no layer the camera or his arms' view draws, nor casting unseen (a
  *  foe's pieces drawn as one, on the crowd's layer). */
-function drawnByNone(mesh: THREE.Mesh, camera: THREE.Camera, arms: THREE.Camera | null): boolean {
+function drawnByNone(mesh: Mesh, camera: Camera, arms: Camera | null): boolean {
   if (mesh.layers.test(camera.layers) || (arms && mesh.layers.test(arms.layers))) return false;
   return !(mesh.userData.castsUnseen && mesh.castShadow);
 }
 
 /** Whether `mesh`'s records are made each frame (the walk's), not kept on its node. */
-function madeEachFrame(mesh: THREE.Mesh, camera: THREE.Camera): boolean {
-  if ((mesh as unknown as THREE.InstancedMesh).isInstancedMesh) return true;
-  if ((mesh.geometry as THREE.InstancedBufferGeometry).isInstancedBufferGeometry) return true;
+function madeEachFrame(mesh: Mesh, camera: Camera): boolean {
+  if ((mesh as unknown as InstancedMesh).isInstancedMesh) return true;
+  if ((mesh.geometry as InstancedGeometry).isInstancedGeometry) return true;
   if (mesh.userData.particles || mesh.name === 'dazed stars') return true;
   if (!mesh.layers.test(camera.layers)) return true;
   const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
@@ -59,11 +62,11 @@ function madeEachFrame(mesh: THREE.Mesh, camera: THREE.Camera): boolean {
 }
 
 export class MirrorMeshes implements MirrorWatcher {
-  private entries = new Map<THREE.Mesh, Entry>();
+  private entries = new Map<Mesh, Entry>();
   /** what's handed over but made each frame: the walk visits these, where they're shown */
-  private others = new Set<THREE.Object3D>();
+  private others = new Set<Node>();
   /** the skins by skeleton and bind, made once */
-  private skins = new Map<THREE.Skeleton, Map<string, number>>();
+  private skins = new Map<Skeleton, Map<string, number>>();
   private mirror: Mirror | null = null;
   private under: number[] = [];
 
@@ -74,13 +77,13 @@ export class MirrorMeshes implements MirrorWatcher {
   watch(mirror: Mirror): void { this.mirror = mirror; }
 
   /** What's handed over that the walk visits each frame (lights, what's made each frame), as its objects. */
-  get rest(): ReadonlySet<THREE.Object3D> { return this.others; }
+  get rest(): ReadonlySet<Node> { return this.others; }
 
-  added(object: THREE.Object3D, node: number): void {
-    const mesh = object as THREE.Mesh;
+  added(object: Node, node: number): void {
+    const mesh = object as Mesh;
     if (!mesh.isMesh) {
-      if ((object as THREE.Light).isLight || (object as THREE.Points).isPoints || (object as THREE.Line).isLine
-        || (object as THREE.Sprite).isSprite) {
+      if ((object as Light).isLight || (object as Points).isPoints || (object as Line).isLine
+        || (object as Sprite).isSprite) {
         this.others.add(object);
       }
       return;
@@ -88,12 +91,12 @@ export class MirrorMeshes implements MirrorWatcher {
     this.entries.set(mesh, { mesh, node, drawn: [], skin: NONE, under: [], solid: 0, casters: 0 });
   }
 
-  removed(object: THREE.Object3D): void {
+  removed(object: Node): void {
     this.others.delete(object);
-    const entry = this.entries.get(object as THREE.Mesh);
+    const entry = this.entries.get(object as Mesh);
     if (!entry) return;
     this.dropRecords(entry);
-    this.entries.delete(object as THREE.Mesh);
+    this.entries.delete(object as Mesh);
   }
 
   /**
@@ -101,7 +104,7 @@ export class MirrorMeshes implements MirrorWatcher {
    * walk; its records' counts added to the frame's. After the nodes are placed (their matrices read back), in the
    * frame, with `camera` its view.
    */
-  keep(camera: THREE.Camera, arms: THREE.Camera | null, recordsOf: RecordsOf): void {
+  keep(camera: Camera, arms: Camera | null, recordsOf: RecordsOf): void {
     const stats = this.core.stats;
     for (const entry of this.entries.values()) {
       const mesh = entry.mesh;
@@ -127,7 +130,7 @@ export class MirrorMeshes implements MirrorWatcher {
 
   /** What `mesh`'s records are written under now: its materials' and geometry's ids (each sent again if they
    *  moved), whether it casts, its range, its see-through's kinds, the grade's switches a record reads. */
-  private underOf(mesh: THREE.Mesh): number[] {
+  private underOf(mesh: Mesh): number[] {
     const under = this.under;
     under.length = 0;
     const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
@@ -148,10 +151,10 @@ export class MirrorMeshes implements MirrorWatcher {
     this.dropRecords(entry);
     entry.under = under.slice();
     const { records, solid, casters } = recordsOf(entry.mesh);
-    const skinned = entry.mesh as THREE.SkinnedMesh;
+    const skinned = entry.mesh as SkinnedMesh;
     const skin = skinned.isSkinnedMesh && skinned.skeleton ? this.skinOf(skinned) : NONE;
     // (a skinned mesh's matrix: its node's after its bind's inverse, or none where it's bound where it stands)
-    const attached = skin !== NONE && skinned.bindMode === THREE.AttachedBindMode;
+    const attached = skin !== NONE && skinned.bindMode === AttachedBindMode;
     const offset = skin !== NONE && !attached ? new Float32Array(skinned.bindMatrixInverse.elements) : IDENTITY;
     entry.skin = skin;
     entry.solid = solid;
@@ -173,7 +176,7 @@ export class MirrorMeshes implements MirrorWatcher {
 
   /** The engine's skin for `mesh`'s skeleton and bind: its joints the bones' nodes, each bone's inverse bind with the
    *  mesh's bind after it (as the bridge wrote its bones). */
-  private skinOf(mesh: THREE.SkinnedMesh): number {
+  private skinOf(mesh: SkinnedMesh): number {
     const skeleton = mesh.skeleton;
     const key = mesh.bindMatrix.elements.join(',');
     let binds = this.skins.get(skeleton);
@@ -182,7 +185,7 @@ export class MirrorMeshes implements MirrorWatcher {
     const mirror = this.mirror!;
     const joints = skeleton.bones.map((bone) => mirror.nodeOf(bone) ?? mirror.hold(bone));
     const inverses = new Float32Array(skeleton.bones.length * 16);
-    const folded = new THREE.Matrix4();
+    const folded = new Mat4();
     skeleton.boneInverses.forEach((inverse, at) => {
       inverses.set(folded.multiplyMatrices(inverse, mesh.bindMatrix).elements, at * 16);
     });
@@ -193,7 +196,7 @@ export class MirrorMeshes implements MirrorWatcher {
   }
 
   /** Each mesh drawn on the nodes, its records in the engine and it shown (a harness's: what was handed over). */
-  eachDrawn(visit: (mesh: THREE.Mesh) => void): void {
+  eachDrawn(visit: (mesh: Mesh) => void): void {
     for (const entry of this.entries.values()) {
       if (entry.drawn.length && this.mirror!.seen(entry.mesh)) visit(entry.mesh);
     }

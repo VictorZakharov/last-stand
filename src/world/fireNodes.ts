@@ -4,7 +4,9 @@
 // early. The flames fade as the prop under them dissolves (`seeThroughFade`, core/shaderPorts.ts `seeFade`, as one by their middle's). The bed's
 // and the logs' char and embers (`emberMat`) are its look's functions as WGSL, set on the lit material three converts
 // it to (`emberNodes`).
-import * as THREE from '../engine/three.ts';
+import {
+  CustomBlending, Material, OneFactor, OneMinusSrcAlphaFactor, Vec2, Vec3, Vec4, VolumeTexture,
+} from '../engine/api/index.ts';
 import { gpu, tsl } from '../core/webgpu';
 import { seeFade, seeUniforms, type SeeNodes } from '../core/shaderPorts';
 import { rustLook } from '../engine/custom';
@@ -18,17 +20,17 @@ type N = any;
 
 /** The flames' uniforms as fire.ts keeps them (each `{ value }`, read as each frame draws). */
 export interface FlameUniforms {
-  uFlames: { value: THREE.Data3DTexture };
-  uCentre: { value: THREE.Vector3 };
-  uBox: { value: THREE.Vector3 };
+  uFlames: { value: VolumeTexture };
+  uCentre: { value: Vec3 };
+  uBox: { value: Vec3 };
   uRadius: { value: number };
   uHeight: { value: number };
   uPuff: { value: number };
   uGlow: { value: number };
   uFrame: { value: number };
-  uTurn: { value: THREE.Vector2 };
-  uBowl: { value: THREE.Vector2[] };
-  uLogs: { value: THREE.Vector4[] };
+  uTurn: { value: Vec2 };
+  uBowl: { value: Vec2[] };
+  uLogs: { value: Vec4[] };
   uStepShare: { value: number };
   uLite: { value: number };
 }
@@ -56,7 +58,7 @@ export interface FlameShape {
  *  out it glows and how hot. */
 export interface EmberLooks {
   time: { value: number };
-  centre: { value: THREE.Vector3 };
+  centre: { value: Vec3 };
   radius: { value: number };
   heat: { value: number };
 }
@@ -423,13 +425,13 @@ function marchFor(shape: FlameShape): N {
 /** A bowl's part (0 its foot, 1 its belly, 2 its rim) as a node, read as each frame draws: fire.ts swaps the list. */
 function bowlPart(uniforms: FlameUniforms, part: number): N {
   const { uniform } = tsl as any;
-  return uniform(new THREE.Vector2()).onRenderUpdate(() => uniforms.uBowl.value[part]);
+  return uniform(new Vec2()).onRenderUpdate(() => uniforms.uBowl.value[part]);
 }
 
 /** A log's end (`end` of fire.ts's `uLogs`) as a node, read as each frame draws. */
 function logEnd(uniforms: FlameUniforms, end: number): N {
   const { uniform } = tsl as any;
-  return uniform(new THREE.Vector4()).onRenderUpdate(() => uniforms.uLogs.value[end]);
+  return uniform(new Vec4()).onRenderUpdate(() => uniforms.uLogs.value[end]);
 }
 
 /** Where a ray from the camera through this pixel first meets a log in the fire (from its bed's middle), far off with
@@ -454,13 +456,13 @@ function evenFade(see: SeeNodes, read: (name: keyof FlameUniforms, type: string)
 }
 
 /** The flames' material: their light gathered along each ray through their box, added. */
-export function flameMaterial(uniforms: FlameUniforms, shape: FlameShape): THREE.Material {
+export function flameMaterial(uniforms: FlameUniforms, shape: FlameShape): Material {
   const { cameraPosition, positionWorld, reference, sampler, screenCoordinate, texture3D } = tsl as any;
   const read = (name: keyof FlameUniforms, type: string): N => reference('value', type, uniforms[name]);
   const noise = texture3D(uniforms.uFlames.value);
   const material = new gpu.MeshBasicNodeMaterial({
-    transparent: true, depthWrite: false, blending: THREE.CustomBlending,
-    blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcAlphaFactor,
+    transparent: true, depthWrite: false, blending: CustomBlending,
+    blendSrc: OneFactor, blendDst: OneMinusSrcAlphaFactor,
   });
   const light = marchFor(shape)({
     world: positionWorld, eyeWorld: cameraPosition, centre: read('uCentre', 'vec3'), pixel: screenCoordinate.xy,

@@ -2,8 +2,11 @@
 // its length, so as the nock goes back the tips come back and in, each limb bending along its working part and not in
 // its stiff recurved tip. Loosed, the limbs spring forward past rest and ring out. The bow's own frame: the grip's pivot at
 // the origin, +y up its limbs, +z its back (towards the target), +x the archer's left; metres at the model's scale.
-import * as THREE from '../../engine/three.ts';
-import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import {
+  Attribute, CatmullRom3, Color, DynamicDrawUsage, floats, Geometry, Material, Maths, mergeGeometries, Mesh, Node,
+  Outline, Vec2, Vec3,
+} from '../../engine/api/index.ts';
+import * as shapes from '../../engine/api/shapes/index.ts';
 import { taperTube, twist, scaleUV } from './armor';
 import { clamp } from '../../util';
 
@@ -16,7 +19,7 @@ const LEAN = 0.25, CURVE = 1.6, RECURVE = -5;
 /** the arrow's rest above the grip's pivot, on the riser's shelf (the string's nocking point is level with it) */
 export const REST_Y = 0.045;
 /** the fist's middle on the grip (the bow's frame), below the shelf, and the grip's radius */
-export const GRIP = new THREE.Vector3(0, -0.0185, 0.003), GRIP_R = 0.022;
+export const GRIP = new Vec3(0, -0.0185, 0.003), GRIP_R = 0.022;
 /** a fan's arrows lie side by side in the window, all on its face, `FAN_PITCH` apart up the bow from the rest (m: their
  *  heads' sockets just apart), nocked as far apart along a stretch of string the fingers hold straight, so they lie
  *  parallel and fan out only in flight (fanned out from one nock across the flat bow's top, each lay on what it crossed,
@@ -45,15 +48,15 @@ const riserR = (y: number): number => {
   const k = RISER_R.findIndex(([ky]) => ky >= y);
   if (k <= 0) return RISER_R[k < 0 ? RISER_R.length - 1 : 0][1];
   const [y0, r0] = RISER_R[k - 1], [y1, r1] = RISER_R[k];
-  return r0 + (r1 - r0) * THREE.MathUtils.smoothstep(y, y0, y1);
+  return r0 + (r1 - r0) * Maths.smoothstep(y, y0, y1);
 };
 
 /** The riser: a tube along `pts`, its rings `n` evenly along it and more at the shelf and round the window's top, each
  *  level with its seam on the bow's back (+z), cut past the middle at the window (each point there no further left than
  *  the window's face), closed at both ends. (Square to the curve, which leans to the right above the grip, the rings
  *  tilted and the shelf's edge stood 4 mm up into the arrow) */
-function riserGeometry(pts: THREE.Vector3[], n: number, radial: number): THREE.BufferGeometry {
-  const curve = new THREE.CatmullRomCurve3(pts);
+function riserGeometry(pts: Vec3[], n: number, radial: number): Geometry {
+  const curve = new CatmullRom3(pts);
   const tAt = (y: number): number => { let lo = 0, hi = 1; for (let i = 0; i < 40; i++) { const m = (lo + hi) / 2; if (curve.getPointAt(m).y < y) lo = m; else hi = m; } return (lo + hi) / 2; };
   const ts = Array.from({ length: n + 1 }, (_, i) => i / n);
   ts.push(tAt(SHELF - WINDOW.bevel), tAt(SHELF));
@@ -64,7 +67,7 @@ function riserGeometry(pts: THREE.Vector3[], n: number, radial: number): THREE.B
   const limit = (y: number): number => (y < SHELF - WINDOW.bevel / 2 ? -Infinity : y <= WINDOW.top ? WINDOW.x
     : y >= WINDOW.top + WINDOW.round ? -Infinity : WINDOW.x - WINDOW.round * (1 - Math.sqrt(1 - ((y - WINDOW.top) / WINDOW.round) ** 2)));
   const pos: number[] = [], uv: number[] = [], idx: number[] = [];
-  const c = new THREE.Vector3(), T = new THREE.Vector3(), B = new THREE.Vector3();
+  const c = new Vec3(), T = new Vec3(), B = new Vec3();
   rings.forEach((t) => {
     curve.getPointAt(t, c);
     const r = riserR(c.y), lim = limit(c.y);
@@ -86,13 +89,13 @@ function riserGeometry(pts: THREE.Vector3[], n: number, radial: number): THREE.B
     pos.push(c.x + T.x * r, c.y + T.y * r, c.z + T.z * r); uv.push(1, end * 5);
     for (let k = 0; k < radial; k++) { const a = ring + k; if (end) idx.push(a, a + 1, tip); else idx.push(a, tip, a + 1); }
   });
-  const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-  g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  const g = new Geometry();
+  g.setAttribute('position', floats(pos, 3));
+  g.setAttribute('uv', floats(uv, 2));
   g.setIndex(idx);
   g.computeVertexNormals();
   // (the seam's two copies of each point shaded alike)
-  const N = g.attributes.normal as THREE.BufferAttribute;
+  const N = g.attributes.normal as Attribute;
   for (let i = 0; i < rings.length; i++) {
     const a = i * R, b = a + radial;
     B.set(N.getX(a) + N.getX(b), N.getY(a) + N.getY(b), N.getZ(a) + N.getZ(b)).normalize();
@@ -126,13 +129,13 @@ function limbLine(bend: number, out: Float64Array): Float64Array {
 }
 
 /** `g` (made non-indexed) painted one colour, scaled by `shade` (of its local position) if given */
-function paint(g: THREE.BufferGeometry, c: number, shade?: (p: THREE.Vector3) => number): THREE.BufferGeometry {
-  const out = g.index ? g.toNonIndexed() : g, col = new THREE.Color(c), n = out.attributes.position.count, a = new Float32Array(n * 3), p = new THREE.Vector3();
+function paint(g: Geometry, c: number, shade?: (p: Vec3) => number): Geometry {
+  const out = g.index ? g.toNonIndexed() : g, col = new Color(c), n = out.attributes.position.count, a = new Float32Array(n * 3), p = new Vec3();
   for (let i = 0; i < n; i++) {
     const k = shade ? shade(p.fromBufferAttribute(out.attributes.position, i)) : 1;
     a[i * 3] = col.r * k; a[i * 3 + 1] = col.g * k; a[i * 3 + 2] = col.b * k;
   }
-  out.setAttribute('color', new THREE.BufferAttribute(a, 3));
+  out.setAttribute('color', new Attribute(a, 3));
   for (const k of Object.keys(out.attributes)) if (k !== 'position' && k !== 'color') out.deleteAttribute(k);
   return out;
 }
@@ -143,10 +146,10 @@ const COL = { shaft: 0xb48a55, steel: 0xb9c1c8, edge: 0xe4e9ed, ridge: 0x7d868e,
 const HEAD_BACK = 0.108, REAR = 0.142;
 /** a leaf-shaped broadhead along +z, its point at z 0: diamond in section, its edges honed bright and its ridge dark; then
  *  the steel socket it's set on, and the thread binding that on behind */
-function headParts(): THREE.BufferGeometry[] {
+function headParts(): Geometry[] {
   const L = 0.07, rows = 10, pos: number[] = [], col: number[] = [];
-  const e = new THREE.Color(COL.edge), r = new THREE.Color(COL.ridge);
-  const ring = (i: number): [number, number, number, THREE.Color][] => {
+  const e = new Color(COL.edge), r = new Color(COL.ridge);
+  const ring = (i: number): [number, number, number, Color][] => {
     const t = i / rows, w = 0.0135 * Math.sin(Math.PI * Math.min(1, t * 1.15) ** 0.85) + (i === 0 ? 0.0045 : 0), d = 0.0022 * (1 - t) + 0.0004, z = -L + t * L;
     return [[w, 0, z, e], [0, d, z, r], [-w, 0, z, e], [0, -d, z, r]];
   };
@@ -157,36 +160,36 @@ function headParts(): THREE.BufferGeometry[] {
       for (const v of [A[q], B[q], A[q1], B[q], B[q1], A[q1]]) { pos.push(v[0], v[1], v[2]); col.push(v[3].r, v[3].g, v[3].b); }
     }
   }
-  const blade = new THREE.BufferGeometry();
-  blade.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-  blade.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  const blade = new Geometry();
+  blade.setAttribute('position', floats(pos, 3));
+  blade.setAttribute('color', floats(col, 3));
   return [blade,
-    paint(new THREE.CylinderGeometry(0.0058, 0.0066, 0.03, 8).rotateX(Math.PI / 2).translate(0, 0, -L - 0.012), COL.steel),
-    paint(new THREE.CylinderGeometry(SHAFT + 0.0011, SHAFT + 0.0011, 0.012, 8).rotateX(Math.PI / 2).translate(0, 0, -HEAD_BACK + 0.006), COL.wrap)];
+    paint(shapes.cylinder(0.0058, 0.0066, 0.03, 8).rotateX(Math.PI / 2).translate(0, 0, -L - 0.012), COL.steel),
+    paint(shapes.cylinder(SHAFT + 0.0011, SHAFT + 0.0011, 0.012, 8).rotateX(Math.PI / 2).translate(0, 0, -HEAD_BACK + 0.006), COL.wrap)];
 }
 /** the arrow's back end along +z from its nock (z 0): a horn nock with its slot for the string, three feathers cut to a
  *  shield's shape (the cock feather red, out from the bow: +x; darker towards the shaft), and the thread binding them on */
-function rearParts(): THREE.BufferGeometry[] {
-  const parts = [paint(new THREE.CylinderGeometry(0.0062, 0.0056, 0.016, 8).rotateX(Math.PI / 2).translate(0, 0, 0.008), COL.nock)];
-  for (const x of [-0.0031, 0.0031]) parts.push(paint(new THREE.BoxGeometry(0.0016, 0.0062, 0.0055).translate(x, 0, -0.0022), COL.nock));
-  for (const z of [0.022, REAR - 0.007]) parts.push(paint(new THREE.CylinderGeometry(SHAFT + 0.0011, SHAFT + 0.0011, 0.01, 8).rotateX(Math.PI / 2).translate(0, 0, z), COL.wrap));
+function rearParts(): Geometry[] {
+  const parts = [paint(shapes.cylinder(0.0062, 0.0056, 0.016, 8).rotateX(Math.PI / 2).translate(0, 0, 0.008), COL.nock)];
+  for (const x of [-0.0031, 0.0031]) parts.push(paint(shapes.box(0.0016, 0.0062, 0.0055).translate(x, 0, -0.0022), COL.nock));
+  for (const z of [0.022, REAR - 0.007]) parts.push(paint(shapes.cylinder(SHAFT + 0.0011, SHAFT + 0.0011, 0.01, 8).rotateX(Math.PI / 2).translate(0, 0, z), COL.wrap));
   // (the feather's outline along the shaft (z) and out from it (h): low at its front, full along most of it, square at its back)
   const outline = [[0.027, 0], [0.13, 0], [0.13, 0.011], [0.124, 0.0178], [0.106, 0.019], [0.082, 0.0176], [0.062, 0.0145], [0.046, 0.0095], [0.034, 0.0045]];
-  const shape = new THREE.Shape(outline.map(([z, h]) => new THREE.Vector2(z, h)));
+  const shape = new Outline(outline.map(([z, h]) => new Vec2(z, h)));
   for (let i = 0; i < 3; i++) {
-    const f = new THREE.ShapeGeometry(shape), P = f.attributes.position;
+    const f = shapes.flat(shape), P = f.attributes.position;
     for (let k = 0; k < P.count; k++) P.setXYZ(k, 0, SHAFT + P.getY(k), P.getX(k));
     parts.push(paint(f, i ? COL.hen : COL.cock, (q) => 0.62 + 0.38 * Math.min(1, (q.y - SHAFT) / 0.016)).rotateZ(-Math.PI / 2 + i * Math.PI * 2 / 3));
   }
   return parts;
 }
 /** the shaft along +z, a unit long from z 0 */
-const shaftPart = (): THREE.BufferGeometry => paint(new THREE.CylinderGeometry(SHAFT, SHAFT, 1, 8, 1, true).rotateX(Math.PI / 2).translate(0, 0, 0.5), COL.shaft);
+const shaftPart = (): Geometry => paint(shapes.cylinder(SHAFT, SHAFT, 1, 8, 1, true).rotateX(Math.PI / 2).translate(0, 0, 0.5), COL.shaft);
 
 /** An arrow along +z, centred on its middle: a wooden shaft, a steel broadhead on its socket, three feathers and a horn
  *  nock, each bound on with thread, in vertex colours (its material double-sided, for the feathers). */
-let arrowGeo: THREE.BufferGeometry | null = null;
-export function arrowGeometry(): THREE.BufferGeometry {
+let arrowGeo: Geometry | null = null;
+export function arrowGeometry(): Geometry {
   if (arrowGeo) return arrowGeo;
   const h = ARROW / 2;
   arrowGeo = mergeGeometries([
@@ -201,16 +204,16 @@ export function arrowGeometry(): THREE.BufferGeometry {
 /** An arrow along +z as `arrowGeometry` has it, in 18 triangles for one seen from a few metres off (a spent arrow standing
  *  in the ground: a thousand of the whole one were half a million triangles): a four-sided shaft, the head as two crossed
  *  leaves, the three feathers as flat vanes, in its colours. */
-let liteGeo: THREE.BufferGeometry | null = null;
-export function arrowLite(): THREE.BufferGeometry {
+let liteGeo: Geometry | null = null;
+export function arrowLite(): Geometry {
   if (liteGeo) return liteGeo;
-  const h = ARROW / 2, L = 0.07, parts: THREE.BufferGeometry[] = [];
+  const h = ARROW / 2, L = 0.07, parts: Geometry[] = [];
   const tri = (pts: number[][], c: number) => {
-    const g = new THREE.BufferGeometry();
-    g.setAttribute('position', new THREE.Float32BufferAttribute(pts.flat(), 3));
+    const g = new Geometry();
+    g.setAttribute('position', floats(pts.flat(), 3));
     return paint(g, c);
   };
-  parts.push(paint(new THREE.CylinderGeometry(SHAFT, SHAFT, ARROW - REAR * 0.2 - L, 4, 1, true).rotateX(Math.PI / 2).rotateZ(Math.PI / 4).translate(0, 0, -L / 2 + REAR * 0.1), COL.shaft));
+  parts.push(paint(shapes.cylinder(SHAFT, SHAFT, ARROW - REAR * 0.2 - L, 4, 1, true).rotateX(Math.PI / 2).rotateZ(Math.PI / 4).translate(0, 0, -L / 2 + REAR * 0.1), COL.shaft));
   // (the head: a leaf across and one up, its point at the front)
   for (const [ax, ay] of [[1, 0], [0, 1]]) {
     const w = (k: number) => [0.0135 * ax * k, 0.0135 * ay * k];
@@ -229,66 +232,66 @@ export function arrowLite(): THREE.BufferGeometry {
 
 /** An arrow in pieces from its nock (z 0) forward along +z, for one drawn out of a quiver a part at a time: the nock and
  *  feathers (`rear`, 14 cm), the shaft a unit long (scaled to what's out), and the head (`head`, its point at z 0). */
-export function arrowPieces(): { rear: THREE.BufferGeometry; shaft: THREE.BufferGeometry; head: THREE.BufferGeometry } {
+export function arrowPieces(): { rear: Geometry; shaft: Geometry; head: Geometry } {
   const rear = mergeGeometries(rearParts())!, head = mergeGeometries(headParts())!, shaft = shaftPart();
   for (const g of [rear, head, shaft]) g.computeVertexNormals();
   return { rear, shaft, head };
 }
 
 export interface BowMaterials {
-  riser: THREE.Material; grip: THREE.Material; string: THREE.Material; arrow: THREE.Material;
+  riser: Material; grip: Material; string: Material; arrow: Material;
   /** the limbs (vertex-coloured: pale sapwood on the back, heartwood on the belly), their horn tips, the brass fittings,
    *  the dark serving and bindings, and the wool silencers on the string */
-  limb: THREE.Material; horn: THREE.Material; brass: THREE.Material; serving: THREE.Material; yarn: THREE.Material;
+  limb: Material; horn: Material; brass: Material; serving: Material; yarn: Material;
   /** the gilt vine down the limbs' bellies (less of a mirror than the brass: in the belly's shade, brass showed the dark) */
-  inlay: THREE.Material;
+  inlay: Material;
 }
 
 /** the limbs' wood (sRGB) on the back and on the belly, and the bow wood maps' mean albedo (linear) they're tinted against */
-const SAPWOOD = new THREE.Color(0xbd9160), HEARTWOOD = new THREE.Color(0x9c5a34), WOOD_MEAN = [0.53, 0.53, 0.53];
+const SAPWOOD = new Color(0xbd9160), HEARTWOOD = new Color(0x9c5a34), WOOD_MEAN = [0.53, 0.53, 0.53];
 /** each geometry non-indexed with a position, normal and uv (made up if it has none), merged */
-function merged(list: THREE.BufferGeometry[]): THREE.BufferGeometry {
+function merged(list: Geometry[]): Geometry {
   const clean = list.map((g) => {
     const o = g.index ? g.toNonIndexed() : g;
     if (!o.attributes.normal) o.computeVertexNormals();
-    if (!o.attributes.uv) o.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(o.attributes.position.count * 2), 2));
+    if (!o.attributes.uv) o.setAttribute('uv', new Attribute(new Float32Array(o.attributes.position.count * 2), 2));
     for (const k of Object.keys(o.attributes)) if (!['position', 'normal', 'uv'].includes(k)) o.deleteAttribute(k);
     return o;
   });
   return mergeGeometries(clean)!;
 }
 
-const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _up = new THREE.Vector3(0, 1, 0);
+const _a = new Vec3(), _b = new Vec3(), _up = new Vec3(0, 1, 0);
 
 export class Bow {
   /** the bow's frame (see the file header): place it on the hand */
-  readonly group = new THREE.Group();
+  readonly group = new Node();
   /** the string's rest from the grip's pivot (its brace height) and its length */
   readonly brace: number;
   private readonly stringLen: number;
   /** the string's nocking point as last set (the middle of what the fingers hold), and the limbs' tips (the bow's frame) */
-  readonly nock = new THREE.Vector3();
-  readonly tipU = new THREE.Vector3();
-  readonly tipL = new THREE.Vector3();
+  readonly nock = new Vec3();
+  readonly tipU = new Vec3();
+  readonly tipL = new Vec3();
   /** points along the lower limb's middle as last set, from its root to its tip (the bow's frame): what the coat's skirt
    *  lies behind */
-  readonly lowerLimb = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()];
+  readonly lowerLimb = [new Vec3(), new Vec3(), new Vec3()];
   /** the limbs' added bend as last set (rad/m) */
   bend = 0;
   private readonly line = new Float64Array(SEG * 2 + 2);
-  private readonly limbGeo: THREE.BufferGeometry;
-  private readonly strings: THREE.Mesh[];
+  private readonly limbGeo: Geometry;
+  private readonly strings: Mesh[];
   /** the serving on each half from the held stretch, and on that stretch */
-  private readonly servings: THREE.Mesh[];
-  private readonly held: THREE.Mesh;
-  private readonly bead: THREE.Mesh;
+  private readonly servings: Mesh[];
+  private readonly held: Mesh;
+  private readonly bead: Mesh;
   /** the horn tips on the limbs, and the silencers on the string's halves */
-  private readonly caps: THREE.Mesh[];
+  private readonly caps: Mesh[];
   /** the vine's geometry, shared by both limbs (each a child of its limb, the lower mirrored with it) */
-  private readonly vineGeo: THREE.BufferGeometry;
-  private readonly silencers: THREE.Mesh[];
+  private readonly vineGeo: Geometry;
+  private readonly silencers: Mesh[];
   /** the nocked arrows (one, or a fan) */
-  readonly arrows: THREE.Mesh[] = [];
+  readonly arrows: Mesh[] = [];
   /** half the string the draw fingers hold straight (m: `fanHold`), its middle the nocking point, a fan's arrows nocked side
    *  by side along it; the line through the rest is that much higher up the bow (`restY`). Set before `set` */
   hold = 0;
@@ -301,13 +304,13 @@ export class Bow {
     this.stringLen = 2 * Math.hypot(this.line[SEG * 2], 0);
     // the riser: the grip in the hand, the shelf the arrow lies on, the window cut past the middle (the arrow passes at x 0,
     // beside it; the riser bends away to the left above the grip, so there's wood left beside the window) and the pockets
-    const riser = [new THREE.Vector3(0, -RISER - 0.01, POCKET_Z), new THREE.Vector3(0, -0.14, 0.022), new THREE.Vector3(0, -0.05, 0.004), new THREE.Vector3(0, 0.025, 0),
-      new THREE.Vector3(0.011, 0.075, 0.007), new THREE.Vector3(0.012, 0.15, 0.018), new THREE.Vector3(0, RISER + 0.01, POCKET_Z)];
-    const add = (geo: THREE.BufferGeometry, mat: THREE.Material, shadow = true, name = '') => { const mesh = new THREE.Mesh(geo, mat); mesh.castShadow = shadow; mesh.name = name; g.add(mesh); return mesh; };
+    const riser = [new Vec3(0, -RISER - 0.01, POCKET_Z), new Vec3(0, -0.14, 0.022), new Vec3(0, -0.05, 0.004), new Vec3(0, 0.025, 0),
+      new Vec3(0.011, 0.075, 0.007), new Vec3(0.012, 0.15, 0.018), new Vec3(0, RISER + 0.01, POCKET_Z)];
+    const add = (geo: Geometry, mat: Material, shadow = true, name = '') => { const mesh = new Mesh(geo, mat); mesh.castShadow = shadow; mesh.name = name; g.add(mesh); return mesh; };
     add(riserGeometry(riser, 72, 16), m.riser, true, 'riser');
     // where the riser runs at a height: its centre, its radius there and its lean
-    const curve = new THREE.CatmullRomCurve3(riser);
-    const at = (y: number): { p: THREE.Vector3; r: number; lean: number } => {
+    const curve = new CatmullRom3(riser);
+    const at = (y: number): { p: Vec3; r: number; lean: number } => {
       let lo = 0, hi = 1;
       for (let i = 0; i < 30; i++) { const mid = (lo + hi) / 2; if (curve.getPointAt(mid).y < y) lo = mid; else hi = mid; }
       const t = (lo + hi) / 2, d = curve.getTangentAt(t);
@@ -318,29 +321,29 @@ export class Bow {
     const GRIP_L = 0.1, GRIP_Y = GRIP.y;
     const sh = at(SHELF - 0.002), pad = sh.r + 0.0008;
     add(merged([
-      scaleUV(new THREE.CylinderGeometry(0.0222, 0.0222, GRIP_L, 16), 2, 2).translate(0, GRIP_Y, GRIP.z),
+      scaleUV(shapes.cylinder(0.0222, 0.0222, GRIP_L, 16), 2, 2).translate(0, GRIP_Y, GRIP.z),
       twist(GRIP_L * 0.94, 0.0226, 0.0021, 7).translate(0, GRIP_Y + GRIP_L * 0.47, GRIP.z),
-      new THREE.CylinderGeometry(pad, pad, 0.0036, 18).translate(sh.p.x, SHELF - 0.0002 - 0.0018, sh.p.z),
-      new THREE.BoxGeometry(0.0008, 0.017, 0.022).translate(WINDOW.x - 0.0004, SHELF + 0.0085, at(SHELF + 0.0085).p.z),
+      shapes.cylinder(pad, pad, 0.0036, 18).translate(sh.p.x, SHELF - 0.0002 - 0.0018, sh.p.z),
+      shapes.box(0.0008, 0.017, 0.022).translate(WINDOW.x - 0.0004, SHELF + 0.0085, at(SHELF + 0.0085).p.z),
     ]), m.grip, true, 'grip');
     // brass: collars at the grip's ends, rings out towards the limbs, and a leaf inlaid on the riser's face to the archer
     // (-z, which is all he sees of it through his own eyes); dark sinew bound round the riser inside each ring
-    const brass: THREE.BufferGeometry[] = [], sinew: THREE.BufferGeometry[] = [];
-    for (const y of [GRIP_Y - GRIP_L / 2 - 0.003, GRIP_Y + GRIP_L / 2 + 0.003]) brass.push(new THREE.CylinderGeometry(0.0236, 0.0236, 0.006, 18).translate(0, y, GRIP.z));
+    const brass: Geometry[] = [], sinew: Geometry[] = [];
+    for (const y of [GRIP_Y - GRIP_L / 2 - 0.003, GRIP_Y + GRIP_L / 2 + 0.003]) brass.push(shapes.cylinder(0.0236, 0.0236, 0.006, 18).translate(0, y, GRIP.z));
     for (const y of [-0.19, 0.19]) {
       const c = at(y), c2 = at(y - Math.sign(y) * 0.016);
-      brass.push(new THREE.CylinderGeometry(c.r + 0.0016, c.r + 0.0016, 0.007, 18).rotateX(c.lean).translate(c.p.x, c.p.y, c.p.z));
+      brass.push(shapes.cylinder(c.r + 0.0016, c.r + 0.0016, 0.007, 18).rotateX(c.lean).translate(c.p.x, c.p.y, c.p.z));
       sinew.push(twist(0.024, c2.r + 0.0006, 0.0014, 9).rotateX(c2.lean).translate(c2.p.x, c2.p.y + 0.012, c2.p.z));
     }
     {
       // (above the window)
-      const c = at(0.145), leaf = new THREE.Shape();
+      const c = at(0.145), leaf = new Outline();
       leaf.moveTo(0, -0.019); leaf.quadraticCurveTo(0.0085, -0.002, 0, 0.021); leaf.quadraticCurveTo(-0.0085, -0.002, 0, -0.019);
-      const lg = new THREE.ExtrudeGeometry(leaf, { depth: 0.0009, bevelEnabled: true, bevelThickness: 0.0003, bevelSize: 0.0004, bevelSegments: 1, curveSegments: 10 });
+      const lg = shapes.extrude(leaf, { depth: 0.0009, bevelEnabled: true, bevelThickness: 0.0003, bevelSize: 0.0004, bevelSegments: 1, curveSegments: 10 });
       // (standing out of the riser's face, laid round it, with a raised midrib down it; turned half round to face -z,
       // as it's the same either side: mirrored, its faces pointed in, #289)
       lg.scale(0.8, 0.8, 1).rotateY(Math.PI);
-      const rib = new THREE.BoxGeometry(0.001, 0.027, 0.0011).translate(0, 0.0008, -0.0012);
+      const rib = shapes.box(0.001, 0.027, 0.0011).translate(0, 0.0008, -0.0012);
       for (const piece of [lg, rib]) {
         const P = piece.attributes.position;
         // (each point moved onto the riser's round face below it, a fraction of a millimetre proud of it)
@@ -356,43 +359,43 @@ export class Bow {
       const a = i * RING + k, b = i * RING + (k + 1) % RING;
       idx.push(a, a + RING, b, b, a + RING, b + RING);
     }
-    this.limbGeo = new THREE.BufferGeometry();
-    this.limbGeo.setAttribute('position', new THREE.BufferAttribute(pos, 3).setUsage(THREE.DynamicDrawUsage));
+    this.limbGeo = new Geometry();
+    this.limbGeo.setAttribute('position', new Attribute(pos, 3).setUsage(DynamicDrawUsage));
     // (the grain along the limb; its back pale sapwood and its belly heartwood, as a stave is cut from the trunk: with no uvs
     // the maps showed one texel, and the weathered wood's brown under a dark tint was black)
-    const uv = new Float32Array(n * 2), col = new Float32Array(n * 3), lin = new THREE.Color();
+    const uv = new Float32Array(n * 2), col = new Float32Array(n * 3), lin = new Color();
     for (let i = 0; i <= SEG + 1; i++) for (let k = 0; k < RING; k++) {
       const o = i * RING + k, sa = Math.sin((k / RING) * Math.PI * 2);
       uv[o * 2] = k / RING; uv[o * 2 + 1] = Math.min(i, SEG) / SEG * 3;
-      lin.copy(HEARTWOOD).lerp(SAPWOOD, THREE.MathUtils.smoothstep(sa, -0.55, 0.05)).convertSRGBToLinear();
+      lin.copy(HEARTWOOD).lerp(SAPWOOD, Maths.smoothstep(sa, -0.55, 0.05)).convertSRGBToLinear();
       col[o * 3] = lin.r / WOOD_MEAN[0]; col[o * 3 + 1] = lin.g / WOOD_MEAN[1]; col[o * 3 + 2] = lin.b / WOOD_MEAN[2];
     }
-    this.limbGeo.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
-    this.limbGeo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    this.limbGeo.setAttribute('uv', new Attribute(uv, 2));
+    this.limbGeo.setAttribute('color', new Attribute(col, 3));
     this.limbGeo.setIndex(idx);
     // the horn tips: a cap over each limb's end with a groove the string's loop sits in, flat as the limb is
-    const cap = new THREE.LatheGeometry([[0.0109, -0.026], [0.0113, -0.005], [0.0101, 0], [0.0083, 0.0035], [0.0097, 0.0085], [0.009, 0.019], [0.0066, 0.029], [0.0026, 0.0355], [0.0001, 0.0365]].map(([x, y]) => new THREE.Vector2(x, y)), 14).scale(1, 1, 0.6);
+    const cap = shapes.lathe([[0.0109, -0.026], [0.0113, -0.005], [0.0101, 0], [0.0083, 0.0035], [0.0097, 0.0085], [0.009, 0.019], [0.0066, 0.029], [0.0026, 0.0355], [0.0001, 0.0365]].map(([x, y]) => new Vec2(x, y)), 14).scale(1, 1, 0.6);
     const limbs = [add(this.limbGeo, m.limb, true, 'limb'), add(this.limbGeo, m.limb, true, 'limb')];
     limbs[1].scale.y = -1;
-    this.caps = limbs.map((l) => { const c = new THREE.Mesh(cap, m.horn); c.castShadow = false; c.name = 'horn'; l.add(c); return c; });
+    this.caps = limbs.map((l) => { const c = new Mesh(cap, m.horn); c.castShadow = false; c.name = 'horn'; l.add(c); return c; });
     // the vine: the stem a ribbon of quads along the limb, then a leaf (a diamond) at each turn
     const leaves = VINE.turns * 2, nv = (VINE.n + 1) * 2 + leaves * 4, vIdx: number[] = [];
     for (let i = 0; i < VINE.n; i++) { const a = i * 2; vIdx.push(a, a + 2, a + 1, a + 1, a + 2, a + 3); }
     for (let k = 0; k < leaves; k++) { const a = (VINE.n + 1) * 2 + k * 4; vIdx.push(a, a + 2, a + 1, a, a + 3, a + 2); }
-    this.vineGeo = new THREE.BufferGeometry();
-    this.vineGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(nv * 3), 3).setUsage(THREE.DynamicDrawUsage));
-    this.vineGeo.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(nv * 3), 3).setUsage(THREE.DynamicDrawUsage));
+    this.vineGeo = new Geometry();
+    this.vineGeo.setAttribute('position', new Attribute(new Float32Array(nv * 3), 3).setUsage(DynamicDrawUsage));
+    this.vineGeo.setAttribute('normal', new Attribute(new Float32Array(nv * 3), 3).setUsage(DynamicDrawUsage));
     this.vineGeo.setIndex(vIdx);
-    for (const l of limbs) { const v = new THREE.Mesh(this.vineGeo, m.inlay); v.castShadow = false; v.name = 'vine'; l.add(v); }
-    this.strings = [0, 1].map(() => add(new THREE.CylinderGeometry(0.0022, 0.0022, 1, 5, 1).translate(0, 0.5, 0), m.string, true, 'string'));
+    for (const l of limbs) { const v = new Mesh(this.vineGeo, m.inlay); v.castShadow = false; v.name = 'vine'; l.add(v); }
+    this.strings = [0, 1].map(() => add(shapes.cylinder(0.0022, 0.0022, 1, 5, 1).translate(0, 0.5, 0), m.string, true, 'string'));
     for (const s of this.strings) s.castShadow = false;
     // the serving round the string where it's nocked, dark, from the stretch the fingers hold (`hold`) up and down each half,
     // with a brass bead above the nock; and a tuft of wool on each half
-    const serve = new THREE.CylinderGeometry(0.0031, 0.0031, SERVE, 8).translate(0, SERVE / 2, 0);
+    const serve = shapes.cylinder(0.0031, 0.0031, SERVE, 8).translate(0, SERVE / 2, 0);
     this.servings = [0, 1].map(() => add(serve, m.serving, false, 'serving'));
-    this.held = add(new THREE.CylinderGeometry(0.0031, 0.0031, 1, 8, 1, true).translate(0, 0.5, 0), m.serving, false, 'serving');
-    this.bead = add(new THREE.SphereGeometry(0.0042, 10, 8), m.brass, false, 'bead');
-    const tuft = merged([0, 1, 2, 3].map((i) => new THREE.IcosahedronGeometry(0.0085 - i * 0.0009, 1).scale(1, 1.5, 1).translate(Math.sin(i * 2.1) * 0.004, (i - 1.5) * 0.007, Math.cos(i * 2.1) * 0.004)));
+    this.held = add(shapes.cylinder(0.0031, 0.0031, 1, 8, 1, true).translate(0, 0.5, 0), m.serving, false, 'serving');
+    this.bead = add(shapes.sphere(0.0042, 10, 8), m.brass, false, 'bead');
+    const tuft = merged([0, 1, 2, 3].map((i) => shapes.icosahedron(0.0085 - i * 0.0009, 1).scale(1, 1.5, 1).translate(Math.sin(i * 2.1) * 0.004, (i - 1.5) * 0.007, Math.cos(i * 2.1) * 0.004)));
     this.silencers = [0, 1].map(() => add(tuft, m.yarn, false, 'silencer'));
     for (let i = 0; i < 5; i++) { const a = add(arrowGeometry(), m.arrow, true, 'arrow'); a.castShadow = false; a.visible = false; this.arrows.push(a); }
     this.set(0);
@@ -408,9 +411,9 @@ export class Bow {
 
   /** points along a limb's middle as last set, from its root to its tip, every `step` of its segments (the bow's frame; `up`
    *  the top limb): what a probe measures the limbs by (tools/lab carry) */
-  limbLine(up: boolean, step = 2): THREE.Vector3[] {
-    const out: THREE.Vector3[] = [], s = up ? 1 : -1;
-    for (let i = 0; i <= SEG; i = i < SEG ? Math.min(SEG, i + step) : SEG + 1) out.push(new THREE.Vector3(0, s * this.line[i * 2], this.line[i * 2 + 1]));
+  limbLine(up: boolean, step = 2): Vec3[] {
+    const out: Vec3[] = [], s = up ? 1 : -1;
+    for (let i = 0; i <= SEG; i = i < SEG ? Math.min(SEG, i + step) : SEG + 1) out.push(new Vec3(0, s * this.line[i * 2], this.line[i * 2 + 1]));
     return out;
   }
 
@@ -437,7 +440,7 @@ export class Bow {
     const ny = REST_Y + this.hold;
     if (pull <= 1e-4) this.nock.set(0, ny, this.tipU.z + (this.tipL.z - this.tipU.z) * (this.tipU.y - ny) / (this.tipU.y - this.tipL.y));
     // the limb's cross-section: wide and flat, tapering to the tip, closed at its end
-    const pos = this.limbGeo.attributes.position as THREE.BufferAttribute, P = pos.array as Float32Array, L = this.line;
+    const pos = this.limbGeo.attributes.position as Attribute, P = pos.array as Float32Array, L = this.line;
     for (let i = 0; i <= SEG + 1; i++) {
       const c = Math.min(i, SEG), s = c / SEG, y = L[c * 2], z = L[c * 2 + 1];
       const j0 = Math.max(0, c - 1), j1 = Math.min(SEG, c + 1), ty = L[j1 * 2] - L[j0 * 2], tz = L[j1 * 2 + 1] - L[j0 * 2 + 1], tl = Math.hypot(ty, tz);
@@ -473,7 +476,7 @@ export class Bow {
   /** the vine laid on the limb as it's bent now: each point on the belly's middle at its height along the limb (the
    *  cross-section is flat there), a hair proud of it, facing out of the belly */
   private layVine(): void {
-    const L = this.line, P = this.vineGeo.attributes.position as THREE.BufferAttribute, N = this.vineGeo.attributes.normal as THREE.BufferAttribute;
+    const L = this.line, P = this.vineGeo.attributes.position as Attribute, N = this.vineGeo.attributes.normal as Attribute;
     // (the limb's centre line, its tangent and its belly's normal at `f` of its length)
     const along = (f: number, o: { y: number; z: number; ty: number; tz: number; ny: number; nz: number; th: number }) => {
       const c = Math.min(SEG - 1e-6, f * SEG), i = Math.floor(c), t = c - i;
@@ -505,7 +508,7 @@ export class Bow {
   }
 
   /** where the string is `y` up the bow, on the stretch the fingers hold or on a half */
-  private stringAt(y: number, o: THREE.Vector3): THREE.Vector3 {
+  private stringAt(y: number, o: Vec3): Vec3 {
     const n = this.nock, h = this.hold, up = y > n.y + h, tip = up ? this.tipU : this.tipL, ey = n.y + (up ? h : -h);
     if (Math.abs(y - n.y) <= h) return o.set(0, y, n.z);
     return o.set(0, y, n.z + (tip.z - n.z) * (y - ey) / (tip.y - ey));
@@ -525,4 +528,4 @@ export class Bow {
     });
   }
 }
-const FWD = new THREE.Vector3(0, 0, 1);
+const FWD = new Vec3(0, 0, 1);

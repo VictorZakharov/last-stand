@@ -14,7 +14,8 @@
 //
 // Its materials are a kit of its own, made once and never disposed: a skull thrown keeps lying after its thrower has
 // fallen and gone, and its pipelines are made with the Twins' warm-up, as their ropes wear the same skulls.
-import * as THREE from '../../engine/three.ts';
+import { Attribute, Geometry, Material, Mesh, Node, Vec3 } from '../../engine/api/index.ts';
+import * as shapes from '../../engine/api/shapes/index.ts';
 import { createKit } from '../../core/materials';
 import { jaw, readyOssuary, skull, SKULL_EYE, SKULL_NECK } from './ossuary';
 
@@ -27,9 +28,9 @@ export const BELT_K = 2.4;
  *  skull's units: 1 mm, 2.4 at its size: on a grid this fine a share of its cell kept 4.8k triangles) */
 const FINE = { skull: 0.0055, jaw: 0.005, error: 0.001 };
 /** where the skull's middle is in the sculpt's space (m): the group is centred on it */
-const MIDDLE = new THREE.Vector3(SKULL_NECK[0], SKULL_NECK[1] + 0.06, SKULL_NECK[2]);
+const MIDDLE = new Vec3(SKULL_NECK[0], SKULL_NECK[1] + 0.06, SKULL_NECK[2]);
 /** the ring through its crown: its middle in the sculpt's space, its radius and its tube's (m) */
-const RING = { at: new THREE.Vector3(0, 0.166, -0.012), r: 0.014, tube: 0.0034 };
+const RING = { at: new Vec3(0, 0.166, -0.012), r: 0.014, tube: 0.0034 };
 /** each socket's glow: small and deep in the hollow (as large as the socket, a glow filled it, a disc where the
  *  hollow should read: the twins' own eyes), its radius and how far behind the socket's mouth (m) */
 const EYE = { r: 0.0052, back: 0.024 };
@@ -53,20 +54,20 @@ export function readyBeltSkulls(): Promise<void> {
 }
 
 /** A geometry's every vertex shaded `shade` (the kit's materials take their shading from vertex colours). */
-function shaded(g: THREE.BufferGeometry, shade: number): THREE.BufferGeometry {
+function shaded(g: Geometry, shade: number): Geometry {
   const colours = new Float32Array(g.getAttribute('position').count * 3).fill(shade);
-  g.setAttribute('color', new THREE.BufferAttribute(colours, 3));
+  g.setAttribute('color', new Attribute(colours, 3));
   return g;
 }
 
 interface Parts {
-  bone: THREE.Material;
-  iron: THREE.Material;
-  eyes: Record<SkullKind, THREE.Material>;
-  skull: THREE.BufferGeometry;
-  jaw: THREE.BufferGeometry;
-  eye: THREE.BufferGeometry;
-  ring: THREE.BufferGeometry;
+  bone: Material;
+  iron: Material;
+  eyes: Record<SkullKind, Material>;
+  skull: Geometry;
+  jaw: Geometry;
+  eye: Geometry;
+  ring: Geometry;
 }
 let made: Parts | null = null;
 
@@ -76,7 +77,7 @@ function parts(): Parts {
   const kit = createKit(0xc0a070);
   const skullGeo = skull(FINE.skull, FINE.error);
   const jawGeo = jaw(FINE.jaw, FINE.error);
-  const ring = shaded(new THREE.TorusGeometry(RING.r, RING.tube, 6, 14).rotateY(Math.PI / 2)
+  const ring = shaded(shapes.torus(RING.r, RING.tube, 6, 14).rotateY(Math.PI / 2)
     .translate(RING.at.x, RING.at.y, RING.at.z), 1);
   made = {
     // (the twins' bone: shaded by the sculpt's vertex colours, its hollows dark)
@@ -86,7 +87,7 @@ function parts(): Parts {
     eyes: { bomb: kit.glow(SKULL_LIGHT.bomb, 6), poison: kit.glow(SKULL_LIGHT.poison, 6) },
     skull: skullGeo,
     jaw: jawGeo,
-    eye: new THREE.SphereGeometry(EYE.r, 8, 6),
+    eye: shapes.sphere(EYE.r, 8, 6),
     ring,
   };
   // (kept by every twin's dispose, as a sculpt's are: every skull shares them)
@@ -104,7 +105,7 @@ export function skullRest(): number {
 /** The skull's triangles as drawn (its skull, jaw, eyes and ring), for the lab's budget. */
 export function beltSkullTriangles(): number {
   const p = parts();
-  const count = (g: THREE.BufferGeometry): number => (g.getIndex()?.count ?? g.getAttribute('position').count) / 3;
+  const count = (g: Geometry): number => (g.getIndex()?.count ?? g.getAttribute('position').count) / 3;
   return count(p.skull) + count(p.jaw) + 2 * count(p.eye) + count(p.ring);
 }
 
@@ -113,20 +114,20 @@ export function beltSkullTriangles(): number {
  * `BELT_K` times a man's, its sockets lit. Its own group, to place, turn and hide; its geometry and materials shared
  * by every one.
  */
-export function beltSkullMesh(kind: SkullKind): THREE.Group {
+export function beltSkullMesh(kind: SkullKind): Node {
   const p = parts();
-  const g = new THREE.Group();
+  const g = new Node();
   g.name = `belt skull ${kind}`;
-  const head = new THREE.Group();
+  const head = new Node();
   head.position.copy(MIDDLE).negate();
   for (const [geo, mat] of [[p.skull, p.bone], [p.jaw, p.bone], [p.ring, p.iron]] as const) {
-    const mesh = new THREE.Mesh(geo, mat);
+    const mesh = new Mesh(geo, mat);
     mesh.castShadow = geo !== p.ring;
     if (geo === p.jaw) mesh.position.y = BITE;
     head.add(mesh);
   }
   for (const s of [-1, 1]) {
-    const e = new THREE.Mesh(p.eye, p.eyes[kind]);
+    const e = new Mesh(p.eye, p.eyes[kind]);
     e.position.set(s * SKULL_EYE[0], SKULL_EYE[1], SKULL_EYE[2] - EYE.back);
     head.add(e);
   }

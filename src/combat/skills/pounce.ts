@@ -4,7 +4,7 @@
 // lands, and he's free at once for whatever he casts next. (It pinned the foe under four blows after the landing,
 // taken out: from play, "lets change pounce to only jump, this allows stacking it with other attacks naturally", then
 // "lets change pounce strike to attack with both hands from two opposite sides" and "no, pounce does damage".)
-import * as THREE from '../../engine/three.ts';
+import { Vec3 } from '../../engine/api/index.ts';
 import { G } from '../../state';
 import { dazeEnemy, hitEnemy } from '../damage';
 import { gainFrenzy } from '../frenzy';
@@ -69,7 +69,7 @@ export function leapSpeed(player: Player): number {
 }
 
 /** The spring off the ground, seen from outside: the floor kicked out behind him. */
-function springOff(at: THREE.Vector3, dir: THREE.Vector3): void {
+function springOff(at: Vec3, dir: Vec3): void {
   shockwave(at, { color: EARTH, intensity: 1, from: 0.15, to: 1.5, life: 0.25 });
   smokePuff({ x: at.x - dir.x * 0.3, y: 0, z: at.z - dir.z * 0.3 }, { count: 7, color: DUST, alpha: 0.5, size: 0.6, sizeEnd: 1.9, speed: 2.2, life: 0.9 });
   debris({ x: at.x, y: 0, z: at.z }, { count: 8, speed: 4.5 });
@@ -78,7 +78,7 @@ function springOff(at: THREE.Vector3, dir: THREE.Vector3): void {
 
 /** His way through the air at `high` m over the floor: streaks of air torn off him and dust carried up after him, so
  *  the leap reads as an arc from above and over the shoulder (through the eyes the view itself rises and falls). */
-function airTrail(p: THREE.Vector3, dir: THREE.Vector3, high: number, speed: number): void {
+function airTrail(p: Vec3, dir: Vec3, high: number, speed: number): void {
   for (let i = 0; i < 3; i++) {
     const side = rand(-0.35, 0.35), up = high + rand(0.5, 1.5);
     particles.glow.spawn({
@@ -92,7 +92,7 @@ function airTrail(p: THREE.Vector3, dir: THREE.Vector3, high: number, speed: num
 }
 
 /** The landing, his weight coming down from `high` m: the floor cracked under him and thrown out in a ring. */
-function comeDown(at: THREE.Vector3, high: number): void {
+function comeDown(at: Vec3, high: number): void {
   const hard = Math.min(1, 0.4 + high / POUNCE.top * 0.6);
   shockwave(at, { color: EARTH, intensity: 1.6 * hard, from: 0.2, to: 1.6 + 1.4 * hard, life: 0.35 });
   shockwave(at, { color: 0xffffff, intensity: 0.6 * hard, from: 0.15, to: 1 + 0.8 * hard, life: 0.22 });
@@ -104,7 +104,7 @@ function comeDown(at: THREE.Vector3, high: number): void {
 
 /** The foe it would leap onto for the aim at `target`: the one the aim is on, else the nearest the aim's point, within
  *  `range` of him. */
-function quarry(player: Player, def: Def, target: THREE.Vector3): Enemy | null {
+function quarry(player: Player, def: Def, target: Vec3): Enemy | null {
   const within = (e: Enemy) => e.alive && !e.spawning && Math.hypot(e.pos.x - player.pos.x, e.pos.z - player.pos.z) <= def.range + e.radius;
   const on = player.local ? player.aimFoe : null;
   if (on && within(on)) return on;
@@ -119,7 +119,7 @@ function quarry(player: Player, def: Def, target: THREE.Vector3): Enemy | null {
 
 /** The rest of the leap aimed `SHORT` from the foe's body where it is now, along the leap's way, never back: aimed at
  *  where it stood as he sprang, he landed inside a foe that walked at him (an adversarial review). */
-function steer(dash: { vx: number; vz: number; t: number; dur: number }, player: Player, foe: Enemy, dir: THREE.Vector3): void {
+function steer(dash: { vx: number; vz: number; t: number; dur: number }, player: Player, foe: Enemy, dir: Vec3): void {
   const left = dash.dur - dash.t;
   if (left <= 1e-3) return;
   const gap = Math.hypot(foe.pos.x - player.pos.x, foe.pos.z - player.pos.z) - foe.radius - player.radius - SHORT;
@@ -139,7 +139,7 @@ const skill: InstantSkill = {
     if (!foe) return;
     const p = player.pos;
     const dx = foe.pos.x - p.x, dz = foe.pos.z - p.z, d = Math.hypot(dx, dz);
-    const dir = d > 1e-3 ? new THREE.Vector3(dx / d, 0, dz / d) : new THREE.Vector3(Math.sin(player.facing), 0, Math.cos(player.facing));
+    const dir = d > 1e-3 ? new Vec3(dx / d, 0, dz / d) : new Vec3(Math.sin(player.facing), 0, Math.cos(player.facing));
     const go = Math.max(0, d - foe.radius - player.radius - SHORT);
     // (a short leap takes less time than a long one, `least` s at no way at all up to `leap` at its whole reach: every
     // leap took the long one's time, and a hop onto a foe a step off hung in the air, from play: "pounce time should

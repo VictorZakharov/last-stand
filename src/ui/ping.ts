@@ -6,7 +6,7 @@
 // under its foe, and a pin over it with who pinged and how
 // far, held at the screen's edge pointing the way when it's off screen: a label of the overlay, ui/overlay) and on the
 // minimap (drawn with it, hud.ts). The rings' material is the effects' additive one, warmed with them (game/warmup.ts).
-import * as THREE from '../engine/three.ts';
+import { Color, Geometry, Mesh, Node, SRGBColorSpace, UnlitMaterial } from '../engine/api/index.ts';
 import { G } from '../state';
 import { PING } from '../data/balance';
 import { input, isDown, pointerLocked } from '../core/input';
@@ -34,12 +34,12 @@ const still = (): boolean => !!reduceMotion?.matches;
 
 /** a ping's colour where its hero wears none of the room's (solo never pings) */
 const PING_GOLD = '#ffd04a';
-const _c = new THREE.Color();
+const _c = new Color();
 function pingColour(p: Player): string {
   const c = heroColour(p.colour);
   if (!c) return PING_GOLD;
   const [h, s] = c.hsl;
-  return '#' + _c.setHSL(h, Math.min(1, s + 0.2), 0.62, THREE.SRGBColorSpace).getHexString(THREE.SRGBColorSpace);
+  return '#' + _c.setHSL(h, Math.min(1, s + 0.2), 0.62, SRGBColorSpace).getHexString(SRGBColorSpace);
 }
 
 // --- the minimap's points (as hud.ts draws it: its middle the arena's, turned by the camera's yaw)
@@ -197,25 +197,25 @@ const BAND = 0.16;
 const LIFT = 0.05;
 
 /** A ring of radius 1 laid by `lay`, its band `BAND` wide at radius `PING.radius`, every ping's. */
-const ringGeo = (): THREE.BufferGeometry => floorPatch(1 - BAND / PING.radius, 1, 1, 48);
+const ringGeo = (): Geometry => floorPatch(1 - BAND / PING.radius, 1, 1, 48);
 
 /** One of the warm-up's samples (game/warmup.ts): a ping's ring, so its program compiles at load. */
-export function pingSamples(): THREE.Object3D[] {
-  const ring = new THREE.Mesh(ringGeo(), additive(PING_GOLD, 1.4, 0.8));
+export function pingSamples(): Node[] {
+  const ring = new Mesh(ringGeo(), additive(PING_GOLD, 1.4, 0.8));
   ring.name = 'ping ring';
   return [ring];
 }
 
 /** A ring on the floor: its mesh, geometry and material, where it was last laid. */
 class FloorRing {
-  readonly geo: THREE.BufferGeometry;
-  readonly mat: THREE.MeshBasicMaterial;
-  readonly mesh: THREE.Mesh;
+  readonly geo: Geometry;
+  readonly mat: UnlitMaterial;
+  readonly mesh: Mesh;
   private laid = '';
   constructor(colour: string) {
     this.geo = ringGeo();
     this.mat = additive(colour, 1.4, 0);
-    this.mesh = new THREE.Mesh(this.geo, this.mat);
+    this.mesh = new Mesh(this.geo, this.mat);
     this.mesh.frustumCulled = false;
     this.mesh.name = 'ping ring';
     G.scene.add(this.mesh);

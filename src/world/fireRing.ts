@@ -8,8 +8,10 @@
 // finger's gap, as a ring is laid by hand: each at a set angle whatever its size, neighbours ran into each other, one
 // lumpy band ("merged stones", "fused stones"; `lab village --only campfireStonesApart`). One mesh, one draw, its
 // colours a vertex's.
-import * as THREE from '../engine/three.ts';
-import { mergeGeometries, mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
+import {
+  Attribute, Color, Euler, Geometry, Mat4, Material, Maths, mergeGeometries, mergeVertices, Mesh, Quat, Vec3,
+} from '../engine/api/index.ts';
+import * as shapes from '../engine/api/shapes/index.ts';
 import { valueNoise3 } from '../core/patterns';
 import { boxUVs } from './props';
 import { mulberry, TAU } from '../util';
@@ -37,13 +39,13 @@ const EARTH_UP = 0.035;
  * A rounded stone about a unit across: an icosphere pushed in and out by two sizes of solid noise, smooth (its points
  * shared, so it shades round, not faceted), its foot flattened to sit on the ground.
  */
-function stoneShape(seed: number): THREE.BufferGeometry {
-  const sphere = new THREE.IcosahedronGeometry(1, 3);
+function stoneShape(seed: number): Geometry {
+  const sphere = shapes.icosahedron(1, 3);
   sphere.deleteAttribute('normal');
   sphere.deleteAttribute('uv');
   const g = mergeVertices(sphere);
   const p = g.attributes.position;
-  const v = new THREE.Vector3();
+  const v = new Vec3();
   for (let i = 0; i < p.count; i++) {
     v.fromBufferAttribute(p, i);
     const lump = valueNoise3(v.x * 1.3, v.y * 1.3, v.z * 1.3, seed) - 0.5;
@@ -57,28 +59,28 @@ function stoneShape(seed: number): THREE.BufferGeometry {
 }
 
 /** One stone of the ring as it lies: its shape scaled, turned along the ring and placed, in the world's frame. */
-interface Laid { shape: THREE.BufferGeometry; matrix: THREE.Matrix4; colour: THREE.Color }
+interface Laid { shape: Geometry; matrix: Mat4; colour: Color }
 
 /** The stone at place `k` of the ring, laid at angle 0 round a fire at the origin and `grow` times its size. */
-function layStone(k: number, rng: () => number, grow: number, shapes: Map<number, THREE.BufferGeometry>): Laid[] {
+function layStone(k: number, rng: () => number, grow: number, shapes: Map<number, Geometry>): Laid[] {
   const out = RING.radius + (rng() - 0.5) * 2 * RING.wander;
   const size = (SIZE.least + (SIZE.most - SIZE.least) * rng() ** 1.4) * grow;
-  const scale = new THREE.Vector3(
+  const scale = new Vec3(
     size * (LONG.least + (LONG.most - LONG.least) * rng()), size * (HIGH.least + (HIGH.most - HIGH.least) * rng()), size,
   );
   const base = STONE_COLOURS[Math.floor(rng() * STONE_COLOURS.length)];
   const shade = 0.85 + rng() * 0.3;
-  const colour = new THREE.Color(base[0] * shade, base[1] * shade, base[2] * shade);
+  const colour = new Color(base[0] * shade, base[1] * shade, base[2] * shade);
   // (laid along the ring, a little askew, tipped a little, sunk to sit in the earth)
-  const turn = new THREE.Euler((rng() - 0.5) * 0.25, Math.PI / 2 + (rng() - 0.5) * 0.6, (rng() - 0.5) * 0.25);
-  const at = new THREE.Vector3(out, scale.y * 0.3, 0);
-  const matrix = new THREE.Matrix4().compose(at, new THREE.Quaternion().setFromEuler(turn), scale);
+  const turn = new Euler((rng() - 0.5) * 0.25, Math.PI / 2 + (rng() - 0.5) * 0.6, (rng() - 0.5) * 0.25);
+  const at = new Vec3(out, scale.y * 0.3, 0);
+  const matrix = new Mat4().compose(at, new Quat().setFromEuler(turn), scale);
   return [{ shape: shapeOf(shapes, 101 + k * 7), matrix, colour }];
 }
 
 /** A stone's shape, made once for every pass of the ring's fitting (its size is its matrix's): made afresh each pass,
  *  the ring took 40 ms at boot. */
-function shapeOf(shapes: Map<number, THREE.BufferGeometry>, seed: number): THREE.BufferGeometry {
+function shapeOf(shapes: Map<number, Geometry>, seed: number): Geometry {
   let shape = shapes.get(seed);
   if (!shape) shapes.set(seed, shape = stoneShape(seed));
   return shape;
@@ -88,7 +90,7 @@ function shapeOf(shapes: Map<number, THREE.BufferGeometry>, seed: number): THREE
 function reachRound(laid: readonly Laid[]): { from: number; to: number } {
   let from = Infinity;
   let to = -Infinity;
-  const v = new THREE.Vector3();
+  const v = new Vec3();
   for (const { shape, matrix } of laid) {
     const p = shape.attributes.position;
     for (let i = 0; i < p.count; i++) {
@@ -102,7 +104,7 @@ function reachRound(laid: readonly Laid[]): { from: number; to: number } {
 }
 
 /** The ring's stones laid at angle 0, each with how far round it reaches, all `grow` times their size. */
-function stonesAt(grow: number, shapes: Map<number, THREE.BufferGeometry>):
+function stonesAt(grow: number, shapes: Map<number, Geometry>):
   { laid: Laid[]; from: number; to: number }[] {
   const rng = mulberry(4242);
   return Array.from({ length: RING.count }, (_, k) => {
@@ -119,7 +121,7 @@ function stonesAt(grow: number, shapes: Map<number, THREE.BufferGeometry>):
 function layRing(): { laid: Laid[]; angle: number }[] {
   const gaps = Array.from({ length: RING.count }, (_, k) => (GAP.least + GAP.more * mulberry(77 + k)()) / RING.radius);
   const gapsRound = gaps.reduce((sum, gap) => sum + gap, 0);
-  const shapes = new Map<number, THREE.BufferGeometry>();
+  const shapes = new Map<number, Geometry>();
   let grow = 1;
   let stones = stonesAt(grow, shapes);
   // (each stone's reach round is near its size: two rounds of shrinking settle it within a hair)
@@ -140,16 +142,16 @@ function layRing(): { laid: Laid[]; angle: number }[] {
 }
 
 /** A laid stone in the world's frame: smooth normals, box-mapped uvs in metres, its colours soot and earth. */
-function finish(laid: Laid, fire: THREE.Vector3, rng: () => number): THREE.BufferGeometry {
+function finish(laid: Laid, fire: Vec3, rng: () => number): Geometry {
   const g = laid.shape;
   g.applyMatrix4(laid.matrix);
   g.computeVertexNormals();
   const p = g.attributes.position;
   const n = g.attributes.normal;
   const colours = new Float32Array(p.count * 3);
-  const v = new THREE.Vector3();
-  const normal = new THREE.Vector3();
-  const toFire = new THREE.Vector3();
+  const v = new Vec3();
+  const normal = new Vec3();
+  const toFire = new Vec3();
   const salt = Math.floor(rng() * 1000);
   for (let i = 0; i < p.count; i++) {
     v.fromBufferAttribute(p, i);
@@ -157,36 +159,36 @@ function finish(laid: Laid, fire: THREE.Vector3, rng: () => number): THREE.Buffe
     toFire.set(fire.x - v.x, 0, fire.z - v.z).normalize();
     // (soot on the face toward the flames, and over the top on that side; patchy, as smoke leaves it)
     const facing = Math.max(0, normal.dot(toFire));
-    const topToward = Math.max(0, normal.y) * Math.max(0, toFire.dot(new THREE.Vector3(normal.x, 0, normal.z).normalize()) + 0.3);
+    const topToward = Math.max(0, normal.y) * Math.max(0, toFire.dot(new Vec3(normal.x, 0, normal.z).normalize()) + 0.3);
     const patch = valueNoise3(v.x * 9, v.y * 9, v.z * 9, salt);
     const soot = Math.min(1, (facing ** 0.7 + topToward * 0.9) * (0.7 + 0.6 * patch));
-    const earth = 1 - THREE.MathUtils.smoothstep(v.y, 0, EARTH_UP);
+    const earth = 1 - Maths.smoothstep(v.y, 0, EARTH_UP);
     const grain = 0.75 + 0.5 * valueNoise3(v.x * 23, v.y * 23, v.z * 23, salt + 1);
-    const lit = grain * THREE.MathUtils.lerp(1, SOOT, soot * 0.9) * THREE.MathUtils.lerp(1, EARTHED, earth);
+    const lit = grain * Maths.lerp(1, SOOT, soot * 0.9) * Maths.lerp(1, EARTHED, earth);
     colours[i * 3] = laid.colour.r * lit;
     colours[i * 3 + 1] = laid.colour.g * lit;
     colours[i * 3 + 2] = laid.colour.b * lit;
   }
-  g.setAttribute('color', new THREE.BufferAttribute(colours, 3));
+  g.setAttribute('color', new Attribute(colours, 3));
   const flat = g.toNonIndexed();
   g.dispose();
-  flat.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(flat.attributes.position.count * 2), 2));
+  flat.setAttribute('uv', new Attribute(new Float32Array(flat.attributes.position.count * 2), 2));
   boxUVs(flat);
   return flat;
 }
 
 /** The ring of stones round the fire at (x, z), as one mesh in `material` (coloured by its vertices). */
-export function fireRing(x: number, z: number, material: THREE.Material): THREE.Mesh {
+export function fireRing(x: number, z: number, material: Material): Mesh {
   const rng = mulberry(4243);
-  const fire = new THREE.Vector3(x, 0, z);
-  const stones: THREE.BufferGeometry[] = [];
-  const round = new THREE.Matrix4();
+  const fire = new Vec3(x, 0, z);
+  const stones: Geometry[] = [];
+  const round = new Mat4();
   for (const { laid, angle } of layRing()) {
     // (turned round the fire's middle to its place, then moved to the fire: angle 0 lay along +x)
-    round.makeRotationY(-angle).premultiply(new THREE.Matrix4().makeTranslation(x, 0, z));
+    round.makeRotationY(-angle).premultiply(new Mat4().makeTranslation(x, 0, z));
     for (const one of laid) stones.push(finish({ ...one, matrix: one.matrix.clone().premultiply(round) }, fire, rng));
   }
-  const ring = new THREE.Mesh(mergeGeometries(stones), material);
+  const ring = new Mesh(mergeGeometries(stones), material);
   for (const stone of stones) stone.dispose();
   ring.name = 'campfire stones';
   ring.castShadow = ring.receiveShadow = true;

@@ -4,7 +4,7 @@
 // floor's own level, where everything on the floor stands (feet, arrows, marks). The steps a ray takes are a uniform the
 // quality preset sets (none on Low), so switching presets compiles nothing. On WebGPU the same walk is WGSL, and the
 // build's context moves each of the floor's maps to where it meets the ray (`reliefContext`).
-import type * as THREE from '../engine/three.ts';
+import type { LitMaterial, Texture, WebGLProgramParametersWithUniforms } from '../engine/api/index.ts';
 import { tsl } from './webgpu';
 
 // (untyped: TSL's types don't follow its conversions across these calls yet)
@@ -121,11 +121,11 @@ function reliefWalkFn(): N {
  * alike, by their repeat alone) each read where the view ray meets the relief, their gradients the floor's own (in a
  * loop the GPU's are undefined, and the moved uv's jump at each stone's edge). Other textures keep their own uv.
  */
-export function reliefContext(material: THREE.MeshStandardMaterial, relief: FloorRelief): void {
+export function reliefContext(material: LitMaterial, relief: FloorRelief): void {
   const { context, uv, dFdx, dFdy, positionWorld, cameraPosition, reference, vec3, float, texture, sampler } =
     tsl as any;
   const heightsMap = material.roughnessMap!;
-  const maps = new Set<THREE.Texture | null>([material.map, material.normalMap, material.roughnessMap]);
+  const maps = new Set<Texture | null>([material.map, material.normalMap, material.roughnessMap]);
   const repeat = heightsMap.repeat;
   const own = uv();
   const tiled = own.mul(repeat);
@@ -146,7 +146,7 @@ export function reliefContext(material: THREE.MeshStandardMaterial, relief: Floo
  * Gives a floor's standard material (a map, a normal map and a roughness map, tiling alike) its relief: applied in its
  * `onBeforeCompile` after the floor's own edits, its maps are read where the view ray meets the relief.
  */
-export function floorRelief(shader: THREE.WebGLProgramParametersWithUniforms, relief: FloorRelief): void {
+export function floorRelief(shader: WebGLProgramParametersWithUniforms, relief: FloorRelief): void {
   shader.uniforms.uReliefSteps = steps;
   shader.uniforms.uRelief = { value: [relief.depth, relief.perMetre, relief.fade] };
   shader.vertexShader = shader.vertexShader

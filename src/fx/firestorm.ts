@@ -7,7 +7,11 @@
 // from above, a bright spiral round a black eye. Its walls are thin where they face the camera and thicken towards
 // their edges, as a shell of smoke and fire is seen through: with wide ribbons solid up to 0.95 and a grain of fibres
 // across them, it read as painted walls, not a storm.
-import * as THREE from '../engine/three.ts';
+import {
+  AddEquation, BackSide, Color, CustomBlending, DoubleSide, FrontSide, Geometry, LookMaterial, Maths, Mesh, Node,
+  OneFactor, OneMinusSrcAlphaFactor, Side, Vec2, Vec3, World,
+} from '../engine/api/index.ts';
+import * as shapes from '../engine/api/shapes/index.ts';
 import { portShader, wgslNoise, type Tsl } from '../core/shaderPorts';
 import { NEAR_GLOW } from '../core/materials';
 import { effectLook, num, rgb, effectShader } from '../engine/effects';
@@ -32,17 +36,17 @@ const LIP: [number, number][] = [[0.98, 1.035], [0.92, 1.07], [0.83, 1.085], [0.
 const CRACKLES = 2.5, FLOOR_REACH = 0.85;
 
 /** The funnel's profile, a unit tall and a unit wide at its top: a cone that flares, and its lip curling in. */
-function profile(): THREE.Vector2[] {
-  const points: THREE.Vector2[] = [];
+function profile(): Vec2[] {
+  const points: Vec2[] = [];
   for (let i = 0; i <= CONE_POINTS; i++) {
     const s = i / CONE_POINTS;
-    points.push(new THREE.Vector2(FOOT + (1 - FOOT) * s ** FLARE, s));
+    points.push(new Vec2(FOOT + (1 - FOOT) * s ** FLARE, s));
   }
-  for (const [r, y] of LIP) points.push(new THREE.Vector2(r, y));
+  for (const [r, y] of LIP) points.push(new Vec2(r, y));
   return points;
 }
 
-const funnelGeo = new THREE.LatheGeometry(profile(), 64);
+const funnelGeo = shapes.lathe(profile(), 64);
 
 const NOISE = /* glsl */`
   float fsHash(vec3 p){ p = fract(p * 0.3183099 + 0.1); p *= 17.0; return fract(p.x * p.y * p.z * (p.x + p.y + p.z)); }
@@ -59,8 +63,8 @@ const NOISE = /* glsl */`
 // dims with their distance from the camera as nearGlow() dims an effect's (core/materials.ts); the wrapper itself
 // dims a colour without its alpha, which turned the near walls brown.
 const OVER = {
-  blending: THREE.CustomBlending, blendEquation: THREE.AddEquation,
-  blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcAlphaFactor,
+  blending: CustomBlending, blendEquation: AddEquation,
+  blendSrc: OneFactor, blendDst: OneMinusSrcAlphaFactor,
 } as const;
 const NEAR = /* glsl */`
   float fsNear(float depth){
@@ -142,8 +146,8 @@ interface Ribbons {
   seed: number;
 }
 
-function ribbonMaterial(side: THREE.Side): THREE.ShaderMaterial {
-  return effectLook(portShader(new THREE.ShaderMaterial({
+function ribbonMaterial(side: Side): LookMaterial {
+  return effectLook(portShader(new LookMaterial({
     uniforms: {
       uTime: { value: 0 }, uFade: { value: 0 }, uBands: { value: 3 }, uTwist: { value: 1 }, uSpeed: { value: 1 },
       uHeat: { value: 1 }, uSeed: { value: 0 },
@@ -308,10 +312,10 @@ fn surface_hook(s: ptr<function, Surface>, in: VertexOut) -> bool {
 }
 `;
 
-function smokeMaterial(): THREE.ShaderMaterial {
-  return effectLook(portShader(new THREE.ShaderMaterial({
-    uniforms: { uTime: { value: 0 }, uFade: { value: 0 }, uColor: { value: new THREE.Color(SMOKE) } },
-    transparent: true, depthWrite: false, side: THREE.DoubleSide,
+function smokeMaterial(): LookMaterial {
+  return effectLook(portShader(new LookMaterial({
+    uniforms: { uTime: { value: 0 }, uFade: { value: 0 }, uColor: { value: new Color(SMOKE) } },
+    transparent: true, depthWrite: false, side: DoubleSide,
     vertexShader: FUNNEL_VERTEX,
     fragmentShader: /* glsl */`
       varying vec2 vUv; varying float vDepth, vFacing; uniform float uTime, uFade; uniform vec3 uColor;
@@ -382,8 +386,8 @@ fn surface_hook(s: ptr<function, Surface>, in: VertexOut) -> bool {
 }
 `;
 
-function floorMaterial(): THREE.ShaderMaterial {
-  return effectLook(portShader(new THREE.ShaderMaterial({
+function floorMaterial(): LookMaterial {
+  return effectLook(portShader(new LookMaterial({
     uniforms: { uTime: { value: 0 }, uFade: { value: 0 }, uReach: { value: 1 } },
     transparent: true, depthWrite: false, ...OVER,
     vertexShader: /* glsl */`
@@ -470,13 +474,13 @@ fn surface_hook(s: ptr<function, Surface>, in: VertexOut) -> bool {
 `;
 
 /** The meshes of one of each material, for the warm-up (core/shaders.ts: every program compiled at load). */
-export function warmFirestorm(): THREE.Mesh[] {
+export function warmFirestorm(): Mesh[] {
   const floor = floorPatch(0, 1, 2, 8);
   return [
-    new THREE.Mesh(funnelGeo, ribbonMaterial(THREE.BackSide)),
-    new THREE.Mesh(funnelGeo, ribbonMaterial(THREE.FrontSide)),
-    new THREE.Mesh(funnelGeo, smokeMaterial()),
-    new THREE.Mesh(floor, floorMaterial()),
+    new Mesh(funnelGeo, ribbonMaterial(BackSide)),
+    new Mesh(funnelGeo, ribbonMaterial(FrontSide)),
+    new Mesh(funnelGeo, smokeMaterial()),
+    new Mesh(floor, floorMaterial()),
   ];
 }
 
@@ -497,20 +501,20 @@ const SMOKE_LAYER: Layer = { width: 0.58, height: 0.92, spin: 2.2 };
 
 /** A firestorm in the scene: placed, grown and faded by its owner each frame, and disposed when it's over. */
 export class Firestorm {
-  readonly group = new THREE.Group();
+  readonly group = new Node();
   /** its top's radius (m) */
   readonly radius: number;
-  private readonly meshes: { mesh: THREE.Mesh<THREE.BufferGeometry, THREE.ShaderMaterial>; layer: Layer }[] = [];
-  private readonly floorGeo: THREE.BufferGeometry;
-  private readonly floor: THREE.Mesh<THREE.BufferGeometry, THREE.ShaderMaterial>;
+  private readonly meshes: { mesh: Mesh<Geometry, LookMaterial>; layer: Layer }[] = [];
+  private readonly floorGeo: Geometry;
+  private readonly floor: Mesh<Geometry, LookMaterial>;
   private time = 0;
   private crackle = 0;
 
-  constructor(radius: number, scene: THREE.Scene) {
+  constructor(radius: number, scene: World) {
     this.radius = radius;
     // (drawn in this order: the ribbons' far walls, the smoke, the near walls)
-    const order: [Layer, THREE.Side | null][] = [
-      [OUTER, THREE.BackSide], [INNER, THREE.BackSide], [SMOKE_LAYER, null], [INNER, THREE.FrontSide], [OUTER, THREE.FrontSide],
+    const order: [Layer, Side | null][] = [
+      [OUTER, BackSide], [INNER, BackSide], [SMOKE_LAYER, null], [INNER, FrontSide], [OUTER, FrontSide],
     ];
     order.forEach(([layer, side], i) => {
       const material = side === null ? smokeMaterial() : ribbonMaterial(side);
@@ -520,14 +524,14 @@ export class Firestorm {
         u.uBands.value = ribbons.bands; u.uTwist.value = ribbons.twist; u.uSpeed.value = ribbons.speed;
         u.uHeat.value = ribbons.heat; u.uSeed.value = ribbons.seed;
       }
-      const mesh = new THREE.Mesh(funnelGeo, material);
+      const mesh = new Mesh(funnelGeo, material);
       mesh.renderOrder = 1 + i;
       mesh.frustumCulled = false;
       this.group.add(mesh);
       this.meshes.push({ mesh, layer });
     });
     this.floorGeo = floorPatch(0, radius * FLOOR_REACH, 6, 48);
-    this.floor = new THREE.Mesh(this.floorGeo, floorMaterial());
+    this.floor = new Mesh(this.floorGeo, floorMaterial());
     this.floor.material.uniforms.uReach.value = radius * FLOOR_REACH;
     this.floor.frustumCulled = false;
     scene.add(this.group, this.floor);
@@ -535,7 +539,7 @@ export class Firestorm {
 
   /** How far out its surface is `height` m above its foot, grown `grow` of the way (m). */
   surfaceAt(height: number, grow = 1): number {
-    const s = THREE.MathUtils.clamp(height / (this.radius * HEIGHT * grow), 0, 1);
+    const s = Maths.clamp(height / (this.radius * HEIGHT * grow), 0, 1);
     return (FOOT + (1 - FOOT) * s ** FLARE) * this.radius * grow;
   }
 
@@ -646,12 +650,12 @@ export class Firestorm {
   }
 
   /** A point on its surface `h` m up, `a` round (rad), a little outside it. */
-  pointOn(x: number, ground: number, z: number, h: number, a: number, grow = 1): THREE.Vector3 {
+  pointOn(x: number, ground: number, z: number, h: number, a: number, grow = 1): Vec3 {
     const r = this.surfaceAt(h, grow) * 1.04;
-    return new THREE.Vector3(x + Math.cos(a) * r, ground + h, z + Math.sin(a) * r);
+    return new Vec3(x + Math.cos(a) * r, ground + h, z + Math.sin(a) * r);
   }
 
-  dispose(scene: THREE.Scene): void {
+  dispose(scene: World): void {
     scene.remove(this.group, this.floor);
     for (const { mesh } of this.meshes) mesh.material.dispose();
     this.floor.material.dispose();

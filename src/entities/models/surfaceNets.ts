@@ -3,7 +3,7 @@
 // field's gradient; each grid edge the surface crosses has a quad across it, joining the four cells round it. Its
 // normals are the field's own gradient, so it shades smooth at any grid size. Organic shapes (a hand's palm, its
 // knuckles and the webs between its fingers) are sculpted as distance fields and meshed with it.
-import * as THREE from '../../engine/three.ts';
+import { Box3, Maths, Vec3 } from '../../engine/api/index.ts';
 
 /** A signed distance (m): negative inside the shape, positive outside. A field made of parts may give one of only
  *  the parts near a ball (`within`: right in it, its sign and its value near the surface), cheaper to ask. */
@@ -27,15 +27,15 @@ for (let a = 0; a < 8; a++) for (const bit of [1, 2, 4]) if (!(a & bit)) EDGES.p
 const PROJECTIONS = 1;
 
 /** `field`'s gradient at (x, y, z), where it's `d`, into `out`, by differences `h` long. */
-function gradient(field: Field, x: number, y: number, z: number, d: number, h: number, out: THREE.Vector3):
-  THREE.Vector3 {
+function gradient(field: Field, x: number, y: number, z: number, d: number, h: number, out: Vec3):
+  Vec3 {
   return out.set(field(x + h, y, z) - d, field(x, y + h, z) - d, field(x, y, z + h) - d).divideScalar(h);
 }
 
 /** The surface of `field` within `box`, meshed on a grid of `cell` (m). */
-export function surfaceNets(field: Field, box: THREE.Box3, cell: number): Net {
+export function surfaceNets(field: Field, box: Box3, cell: number): Net {
   const min = box.min;
-  const size = box.getSize(new THREE.Vector3());
+  const size = box.getSize(new Vec3());
   const n = [size.x, size.y, size.z].map((extent) => Math.ceil(extent / cell) + 1);
   const [nx, ny, nz] = n;
   const at = (i: number, j: number, k: number) => i + nx * (j + ny * k);
@@ -61,8 +61,8 @@ export function surfaceNets(field: Field, box: THREE.Box3, cell: number): Net {
   const positions: number[] = [];
   const normals: number[] = [];
   const corner = new Float32Array(8);
-  const point = new THREE.Vector3();
-  const slope = new THREE.Vector3();
+  const point = new Vec3();
+  const slope = new Vec3();
   for (let k = 0; k < nz - 1; k++) for (let j = 0; j < ny - 1; j++) for (let i = 0; i < nx - 1; i++) {
     let inside = 0;
     for (let c = 0; c < 8; c++) {
@@ -130,7 +130,7 @@ const REACH = 3;
  * grid whose middle is far from the surface is filled with the field there, whose sign is every point's in it: most of
  * a hand's box is air, and a hand sampled at every point took seconds.
  */
-function sampled(near: (i: number, j: number, k: number) => Field, min: THREE.Vector3, n: number[], cell: number):
+function sampled(near: (i: number, j: number, k: number) => Field, min: Vec3, n: number[], cell: number):
   Float32Array {
   const [nx, ny, nz] = n;
   const values = new Float32Array(nx * ny * nz);
@@ -157,14 +157,14 @@ function sampled(near: (i: number, j: number, k: number) => Field, min: THREE.Ve
 
 /** `point` moved onto `field`'s surface along its gradient (by at most a cell a step), and the surface's normal there
  *  into `normal`. */
-function onto(field: Field, point: THREE.Vector3, cell: number, normal: THREE.Vector3): void {
+function onto(field: Field, point: Vec3, cell: number, normal: Vec3): void {
   const h = cell * 0.05;
   for (let step = 0; step < PROJECTIONS; step++) {
     const d = field(point.x, point.y, point.z);
     gradient(field, point.x, point.y, point.z, d, h, normal);
     const length = normal.lengthSq();
     if (length < 1e-12) break;
-    const move = THREE.MathUtils.clamp(-d / length, -cell / Math.sqrt(length), cell / Math.sqrt(length));
+    const move = Maths.clamp(-d / length, -cell / Math.sqrt(length), cell / Math.sqrt(length));
     point.addScaledVector(normal, move);
   }
   gradient(field, point.x, point.y, point.z, field(point.x, point.y, point.z), h, normal).normalize();

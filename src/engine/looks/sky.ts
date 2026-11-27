@@ -1,9 +1,9 @@
 // The skies under the Rust engine: `world/skyNodes.ts`'s domes for the engine's hooks, their WGSL as it is there.
 // Each is drawn on the far plane, unlit and out of the fog.
-import type * as THREE from '../three.ts';
+import type { Uniform } from '../api/index.ts';
 import { rustShader, type RustLook, type RustShader } from '../custom';
 
-type Uniforms = Record<string, THREE.IUniform>;
+type Uniforms = Record<string, Uniform>;
 
 /** a dome's place handed to its pixels, and the far plane */
 const DOME_VERTEX = /* wgsl */ `
@@ -112,7 +112,7 @@ fn sky_village(direction: vec3f, horizon: vec3f, zenith: vec3f, sun: vec3f, day:
 });
 
 /** A uniform's three numbers (a colour's or a vector's) written at `at`. */
-function three(out: Float32Array, at: number, uniform: THREE.IUniform | undefined): void {
+function three(out: Float32Array, at: number, uniform: Uniform | undefined): void {
   (uniform?.value as { toArray(into: Float32Array, at: number): unknown } | undefined)?.toArray(out, at);
 }
 

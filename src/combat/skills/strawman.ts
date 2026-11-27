@@ -3,7 +3,7 @@
 // for a rain of arrows. It takes their blows without harm, rocking under them, and sinks back into the ground when its
 // time is up (it doesn't burst). Every game shows it; only the one simulating the fight has foes it can lure.
 // The scarecrow itself is entities/models/scarecrow.ts.
-import * as THREE from '../../engine/three.ts';
+import { Color, Geometry, Mesh, UnlitMaterial, Vec3 } from '../../engine/api/index.ts';
 import { G } from '../../state';
 import { addEffect, shockwave } from '../../fx/effects';
 import { debris } from '../../fx/particles';
@@ -28,7 +28,7 @@ const RISE = 0.3, SINK = 0.45, DEPTH = 2;
 let serial = 0;
 
 /** Where it stands for an aim at `target`: at the aim, within reach, out of the props and inside the arena. */
-function standAt(player: { pos: THREE.Vector3 }, def: Def, target: THREE.Vector3): THREE.Vector3 {
+function standAt(player: { pos: Vec3 }, def: Def, target: Vec3): Vec3 {
   const pos = target.clone().sub(player.pos); pos.y = 0;
   if (pos.length() > def.range) pos.setLength(def.range);
   pos.add(player.pos); pos.y = 0;
@@ -39,7 +39,7 @@ function standAt(player: { pos: THREE.Vector3 }, def: Def, target: THREE.Vector3
 }
 
 /** (it faces the one who raised it) */
-const facingFrom = (player: { pos: THREE.Vector3 }, pos: THREE.Vector3): number => Math.atan2(player.pos.x - pos.x, player.pos.z - pos.z);
+const facingFrom = (player: { pos: Vec3 }, pos: Vec3): number => Math.atan2(player.pos.x - pos.x, player.pos.z - pos.z);
 
 /** the preview's glow: the scarecrow's outline where it would stand, and the ring it calls foes from */
 const ghostMat = () => additive(STRAW, 0.7, 0.32);
@@ -57,28 +57,28 @@ const COUNT_Y = 1.1;
  * glows, each with its brightness.
  */
 interface Preview {
-  body: THREE.Mesh; spot: THREE.Mesh; spotG: THREE.BufferGeometry; reach: THREE.Mesh; reachG: THREE.BufferGeometry;
-  glows: [THREE.MeshBasicMaterial, number][]; ready: Readiness;
+  body: Mesh; spot: Mesh; spotG: Geometry; reach: Mesh; reachG: Geometry;
+  glows: [UnlitMaterial, number][]; ready: Readiness;
 }
 let preview: Preview | null = null;
-const _straw = new THREE.Color(STRAW);
+const _straw = new Color(STRAW);
 
 function previewFor(): Preview {
   if (preview) return preview;
   const reachG = reachGeo(), spotG = spotGeo();
   const bodyMat = ghostMat(), reachMat = additive(STRAW, 1, 0.45), spotMat = additive(STRAW, 1.6, 0.8);
-  const body = new THREE.Mesh(scarecrowOutline(), bodyMat), reach = new THREE.Mesh(reachG, reachMat);
-  const spot = new THREE.Mesh(spotG, spotMat);
+  const body = new Mesh(scarecrowOutline(), bodyMat), reach = new Mesh(reachG, reachMat);
+  const spot = new Mesh(spotG, spotMat);
   body.frustumCulled = spot.frustumCulled = reach.frustumCulled = false;
   body.name = 'strawman-preview'; spot.name = 'strawman-preview-spot'; reach.name = 'strawman-preview-reach';
   G.scene.add(body, spot, reach);
-  const glows: [THREE.MeshBasicMaterial, number][] = [[bodyMat, 0.7], [reachMat, 1], [spotMat, 1.6]];
+  const glows: [UnlitMaterial, number][] = [[bodyMat, 0.7], [reachMat, 1], [spotMat, 1.6]];
   preview = { body, spot, spotG, reach, reachG, glows, ready: new Readiness('strawman') };
   return preview;
 }
 
 /** Shows where it would stand for `target` (null: nothing shown). */
-function showStand(player: Player, def: Def, target: THREE.Vector3 | null, dt: number): void {
+function showStand(player: Player, def: Def, target: Vec3 | null, dt: number): void {
   if (!target) {
     if (!preview) return;
     preview.body.visible = preview.spot.visible = preview.reach.visible = false;
@@ -100,7 +100,7 @@ function showStand(player: Player, def: Def, target: THREE.Vector3 | null, dt: n
 }
 
 const skill: InstantSkill = {
-  anim: 'cast', warm: () => [buildScarecrow().root, new THREE.Mesh(scarecrowOutline(), ghostMat()), new THREE.Mesh(reachGeo(), additive(STRAW, 1, 0.45))],
+  anim: 'cast', warm: () => [buildScarecrow().root, new Mesh(scarecrowOutline(), ghostMat()), new Mesh(reachGeo(), additive(STRAW, 1, 0.45))],
   aim: (player, def, target, dt) => showStand(player, def as Def, target, dt),
   cast(player, rawDef, target) {
     const def = rawDef as Def;

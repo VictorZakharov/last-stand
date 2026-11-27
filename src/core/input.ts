@@ -1,6 +1,6 @@
 // Keyboard + mouse state. `pressed` holds keys that went down this frame. Touch controls
 // (ui/touch.ts) feed the same state: a move stick, held skill keys and an aim point.
-import * as THREE from '../engine/three.ts';
+import { Hit, Plane, Ray, Raycaster, Vec2, Vec3 } from '../engine/api/index.ts';
 import { DUMMY_SACK_BOTTOM } from '../data/foes/dummy';
 import { keyDeliveryDelay } from './keyDelivery';
 import { G } from '../state';
@@ -21,7 +21,7 @@ export const input = {
   look: { x: 0, y: 0 },          // mouse movement this frame while the pointer is locked, px
   /** the close views aim at the screen centre (the crosshair), not the cursor */
   centerAim: false,
-  ground: new THREE.Vector3(),   // cursor projected onto the arena floor (y 0, under the dais's top)
+  ground: new Vec3(),   // cursor projected onto the arena floor (y 0, under the dais's top)
   /** the foe whose body the aim is on, the eye's ray met it there (none on the floor or a prop, or aimed by touch) */
   foe: null as Enemy | null,
   /** touch is the active input: the browser's emulated mouse events are ignored */
@@ -31,7 +31,7 @@ export const input = {
   /** skill keys held down on the touch buttons */
   touch: new Set<string>(),
   /** touch aim point on the floor, replacing the cursor while set */
-  aim: null as THREE.Vector3 | null,
+  aim: null as Vec3 | null,
 };
 
 /**
@@ -115,17 +115,17 @@ export function holdLockOffByEsc(on: boolean): void { lockHeldOffByEsc = on; }
 export const pointerWanted = (): boolean => lockWanted;
 export function onPointerLockLost(fn: () => void): void { onLockLost = fn; }
 
-const ray = new THREE.Raycaster();
-const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
-const ndc = new THREE.Vector2();
-const hit = new THREE.Vector3();
+const ray = new Raycaster();
+const plane = new Plane(new Vec3(0, 1, 0), 0);
+const ndc = new Vec2();
+const hit = new Vec3();
 
 /**
  * Where a ray meets the floor as it's seen: the first of its levels, from the top, standing at least that high where the
  * ray crosses it (the dais and its step stand above the floor). Met on the plane under them, the cursor over the dais
  * pointed 35 cm past what it showed: near the feet the hero turned away from it, and zoomed in, round the other way.
  */
-function floorHit(r: THREE.Ray, out: THREE.Vector3): boolean {
+function floorHit(r: Ray, out: Vec3): boolean {
   for (const y of GROUND_LEVELS) {
     plane.constant = -y;
     if (r.intersectPlane(plane, hit) && groundHeight(hit.x, hit.z) >= y) { out.set(hit.x, 0, hit.z); return true; }
@@ -135,7 +135,7 @@ function floorHit(r: THREE.Ray, out: THREE.Vector3): boolean {
 
 /** Where a ray first enters an upright cylinder (round (x, z), radius `r`, from y0 up to y1): the distance along it, 0 if
  *  it starts inside, Infinity if it never does. A cheap test before what the cylinder stands for is met as it's drawn. */
-export function cylinder(r: THREE.Ray, x: number, z: number, rad: number, y0: number, y1: number): number {
+export function cylinder(r: Ray, x: number, z: number, rad: number, y0: number, y1: number): number {
   const o = r.origin, d = r.direction, fx = o.x - x, fz = o.z - z, a = d.x * d.x + d.z * d.z, c = fx * fx + fz * fz - rad * rad;
   // (the stretch of the ray inside the round, then inside the heights)
   let t0 = -Infinity, t1 = Infinity;
@@ -151,7 +151,7 @@ export function cylinder(r: THREE.Ray, x: number, z: number, rad: number, y0: nu
   return t1 < Math.max(t0, 0) ? Infinity : Math.max(t0, 0);
 }
 
-const _best = new THREE.Vector3(), _hits: THREE.Intersection[] = [];
+const _best = new Vec3(), _hits: Hit[] = [];
 /** the crosshair's aim on a body is no nearer the hero than this (m, across the floor): nearer, it goes on along the
  *  crosshair's ray to there. The hero aims from his own place at the point, and the camera stands behind and beside
  *  him: a point on a foe hugging him is beside him, and his aim wheeled 75 degrees to it and back as its paw crossed
@@ -163,7 +163,7 @@ const AIM = tunable('aim', { near: 5 });
  * How far along `r` (from `from` on, `most` at the most) it is `AIM.near` from the hero across the floor: `from`
  * where it's that far already.
  */
-function clearOfHero(r: THREE.Ray, from: number, most: number): number {
+function clearOfHero(r: Ray, from: number, most: number): number {
   const hero = G.player?.pos;
   if (!hero) return from;
   const o = r.origin, d = r.direction, fx = o.x - hero.x, fz = o.z - hero.z;
@@ -179,7 +179,7 @@ const ROUND = 1.3;
 /** how far in from a foe's surface, towards its middle, its point is aimed (m): within any foe's body, deeper than an
  *  arrow's flight strays from the point */
 const AIM_INTO = 0.15;
-const _middle = new THREE.Vector3();
+const _middle = new Vec3();
 
 /**
  * The aim along a ray from the eye: the first thing it meets, as it's drawn, whatever it is: a foe's body, a prop, the
@@ -206,7 +206,7 @@ function aimAlong(far: number, offHero = false): void {
     if (t < best) near.push([t, () => o.prop?.raycast(ray, _hits), null]);
   }
   near.sort((a, b) => a[0] - b[0]);
-  let on: Enemy | null = null, met: THREE.Intersection | null = null;
+  let on: Enemy | null = null, met: Hit | null = null;
   for (const [t, meet, foe] of near) {
     if (t >= best) break;
     ray.far = best; _hits.length = 0;
@@ -343,7 +343,7 @@ export function initInput(canvas: HTMLCanvasElement, keyboardTarget: (target: st
 }
 
 /** The cursor's ray into the world this frame (the crosshair's in the close views), or none on touch. */
-export const cursorRay = (): THREE.Ray | null => (input.touchMode || input.aim ? null : ray.ray);
+export const cursorRay = (): Ray | null => (input.touchMode || input.aim ? null : ray.ray);
 
 export function updateInputRay(): void {
   if (input.aim || input.touchMode) input.foe = null;

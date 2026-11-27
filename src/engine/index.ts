@@ -2,7 +2,7 @@
 // repository VictorZakharov/bulwark), draws the game's frame on the page's one canvas, the world's labels and the
 // outline with it (three's renderer is gone from the game: VictorZakharov/last-stand#973). Where the browser has no
 // WebGPU, or the engine doesn't start, the loading screen says so (no other renderer).
-import type * as THREE from './three.ts';
+import type { Camera, PerspectiveCamera, World } from './api/index.ts';
 import { Bridge, TUNE, type Grade } from './bridge';
 import { perfClock } from '../core/perfClock';
 import { cullForEngine } from '../world/doorways';
@@ -134,7 +134,7 @@ export function rustFrame(width: number, height: number): HTMLCanvasElement | nu
 
 /** The frame's scene drawn by the engine at `width` by `height` pixels. Nothing else draws it: with no engine
  *  (the boot throws where it doesn't start) this throws too. */
-export function drawRust(scene: THREE.Scene, camera: THREE.PerspectiveCamera, time: number, width: number, height: number,
+export function drawRust(scene: World, camera: PerspectiveCamera, time: number, width: number, height: number,
   renderer: LookHost, grade?: Grade): void {
   const bridge = RUST.bridge;
   if (!bridge || !canvas) throw new Error('drawRust: the engine has not started');
@@ -145,7 +145,7 @@ export function drawRust(scene: THREE.Scene, camera: THREE.PerspectiveCamera, ti
   }
   const began = perfClock.now();
   // (what the game hangs on three's render of the scene: the world's culling, the crowds' rows)
-  type Hook = (renderer: LookHost, scene: THREE.Scene, camera: THREE.Camera, target: null) => void;
+  type Hook = (renderer: LookHost, scene: World, camera: Camera, target: null) => void;
   if (RUST.hooks) (scene.onBeforeRender as unknown as Hook)(renderer, scene, camera, null);
   // (of those hooks the doorways' cull alone, which leaves nothing between its two halves: `world/doorways.ts`)
   const shown = !RUST.hooks && TUNE.doorways ? cullForEngine(camera) : null;

@@ -17,7 +17,8 @@
 // opens with the chant (`ActionState.hit`). With its weak-spot window open its ribs swing apart and the bell-heart
 // beats at a pulse a second; its candles flare from its second phase, its halo turns faster in its last. Drawn in its
 // crowd (models/crowd.ts): every change is a joint's place or a glow's strength, nothing hidden.
-import * as THREE from '../../engine/three.ts';
+import { Box3, Color, DoubleSide, Geometry, Mat4, Material, Maths, Node, Vec2, Vec3 } from '../../engine/api/index.ts';
+import * as shapes from '../../engine/api/shapes/index.ts';
 import { createKit } from '../../core/materials';
 import { grunge, pbrMaterialMaps, veins } from '../../core/textures';
 import { joint, ramp } from './rig';
@@ -29,10 +30,10 @@ import { capsule, finger, forearm, jaw as sculptedJaw, JAW_HINGE, mirrored, skul
 import { mulberry } from '../../util';
 import type { AnimState, Model } from '../../types';
 
-const V = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
-const NONE = new THREE.BufferGeometry();
+const V = (x: number, y: number, z: number) => new Vec3(x, y, z);
+const NONE = new Geometry();
 /** a geometry made only where the kind's pieces aren't replayed (models/shapes.ts) */
-const made = (f: () => THREE.BufferGeometry): THREE.BufferGeometry => (skipping() ? NONE : f());
+const made = (f: () => Geometry): Geometry => (skipping() ? NONE : f());
 
 /** its measures (m): the hem's height, the waist's, the heart's, the shoulders', the skull's; the arm's two bones */
 const HEM_Y = 0.55, WAIST_Y = 3.0, HEART_Y = 3.95, SHOULDER_Y = 4.75, SKULL_Y = 5.35, UPPER = 1.35, FORE = 1.3;
@@ -52,7 +53,7 @@ type Profile = readonly (readonly [number, number])[];
 function rAt(profile: Profile, y: number): number {
   for (let i = 1; i < profile.length; i++) {
     const [r0, y0] = profile[i - 1], [r1, y1] = profile[i];
-    if (y <= y1) return r0 + (r1 - r0) * THREE.MathUtils.clamp((y - y0) / (y1 - y0), 0, 1);
+    if (y <= y1) return r0 + (r1 - r0) * Maths.clamp((y - y0) / (y1 - y0), 0, 1);
   }
   return profile[profile.length - 1][0];
 }
@@ -60,7 +61,7 @@ function rAt(profile: Profile, y: number): number {
 /** The vestments' folds: a share of the radius by the angle round it and the height, deepest at the hem. Every piece
  *  of cloth and what's sewn on it takes the same, so a band lies in the robe's folds and never floats off them. */
 function folds(phi: number, y: number): number {
-  const k = THREE.MathUtils.clamp((WAIST_Y + 0.2 - y) / 2.4, 0.25, 1);
+  const k = Maths.clamp((WAIST_Y + 0.2 - y) / 2.4, 0.25, 1);
   return 1 + k * (0.09 * Math.sin(phi * 11 + 1.6 * Math.sin(phi * 3)) + 0.035 * Math.sin(phi * 23 + 0.8));
 }
 
@@ -68,9 +69,9 @@ function folds(phi: number, y: number): number {
  *  foot torn into tongues hanging down to `tear` m, its columns moved round by `shift` (an opening's edges). */
 function cloth(profile: Profile, segs: number, o: {
   phi0?: number; len?: number; tear?: number; seed?: number; shift?: (phi: number, y: number) => number;
-} = {}): THREE.BufferGeometry {
+} = {}): Geometry {
   const phi0 = o.phi0 ?? 0, len = o.len ?? Math.PI * 2, n = profile.length;
-  const g = new THREE.LatheGeometry(profile.map(([r, y]) => new THREE.Vector2(Math.max(1e-4, r), y)), segs, phi0, len);
+  const g = shapes.lathe(profile.map(([r, y]) => new Vec2(Math.max(1e-4, r), y)), segs, phi0, len);
   const p = g.attributes.position, rnd = mulberry(o.seed ?? 1);
   const cuts = Array.from({ length: segs + 1 }, () => rnd());
   if (len >= Math.PI * 2 - 1e-6) cuts[segs] = cuts[0];
@@ -98,7 +99,7 @@ function rows(from: number, to: number, step: number, r: (y: number) => number):
 
 /** The Cantor's own skull: the crypt's (world/skull.ts) with a heavier brow, deeper sockets, sharp cheekbones over
  *  hollow cheeks and a crack across its crown, meshed on `cell` in the crypt's skull's space (m, a man's). */
-function cantorSkull(cell: number): THREE.BufferGeometry {
+function cantorSkull(cell: number): Geometry {
   const parts: Part[] = skullParts();
   const join = (shape: Shape, blend: number) => parts.push({ shape, frame: IDENTITY, blend, bones: [] });
   const cut = (shape: Shape, blend: number) => parts.push({ shape, frame: IDENTITY, blend, cut: true, bones: [] });
@@ -110,11 +111,11 @@ function cantorSkull(cell: number): THREE.BufferGeometry {
   }
   cut(capsule([-0.03, 0.17, -0.03], [-0.012, 0.15, 0.04], 0.004, 0.004), 0.002);
   cut(capsule([-0.012, 0.15, 0.04], [-0.02, 0.112, 0.07], 0.004, 0.0035), 0.002);
-  return netGeometry(fieldOf(parts), new THREE.Box3(V(-0.095, -0.012, -0.13), V(0.095, 0.19, 0.135)), cell, cell * 0.75);
+  return netGeometry(fieldOf(parts), new Box3(V(-0.095, -0.012, -0.13), V(0.095, 0.19, 0.135)), cell, cell * 0.75);
 }
 
 /** `g` (made in a man's skull's space) moved so `origin` is at 0 and scaled `k`. */
-const fromSkull = (g: THREE.BufferGeometry, origin: P3, k: number): THREE.BufferGeometry =>
+const fromSkull = (g: Geometry, origin: P3, k: number): Geometry =>
   g.translate(-origin[0], -origin[1], -origin[2]).scale(k, k, k);
 
 /** a point of a man's skull's space as its skull joint has it */
@@ -122,7 +123,7 @@ const onSkull = (x: number, y: number, z: number): P3 =>
   [(x - SKULL_NECK[0]) * SKULL_K, (y - SKULL_NECK[1]) * SKULL_K, (z - SKULL_NECK[2]) * SKULL_K];
 
 /** A piece built for its left side (+x) added to `parent` for side `s`: mirrored for the right (models/ossuary.ts). */
-function sided(S: Sculpt, g: () => THREE.BufferGeometry, mat: THREE.Material, parent: THREE.Object3D, s: number): void {
+function sided(S: Sculpt, g: () => Geometry, mat: Material, parent: Node, s: number): void {
   S.add(made(() => {
     const geo = g();
     const out = geo.index ? geo.toNonIndexed() : geo.clone();
@@ -139,24 +140,24 @@ export function buildCantor(): Model {
   // faint in their cracks: one material for all of them, as the Twins'
   const bone = kit.std({
     color: 0xd8ccae, roughness: 0.78, map: g.map, roughnessMap: g.roughnessMap, normalMap: g.normalMap, vertexColors: true,
-    normalScale: new THREE.Vector2(1.0, 1.0), emissive: new THREE.Color(GRAVE), emissiveMap: veins(41, 5), emissiveIntensity: 0.15,
+    normalScale: new Vec2(1.0, 1.0), emissive: new Color(GRAVE), emissiveMap: veins(41, 5), emissiveIntensity: 0.15,
   });
   const darkBone = kit.std({ color: 0x8a7e66, roughness: 0.85, map: g.map, normalMap: g.normalMap });
   // its vestments: the under-robe a worn umber, the robe black-violet with a grave-green rim of light along its folds
   // (in the crypt's night a black robe read as a hole in the floor), the mantle an ashen grey-green over both, so each
   // layer reads against the next
   const under = kit.rim({
-    color: 0x5e4a38, roughness: 0.92, map: g.map, normalMap: g.normalMap, normalScale: new THREE.Vector2(1.6, 1.6), side: THREE.DoubleSide,
+    color: 0x5e4a38, roughness: 0.92, map: g.map, normalMap: g.normalMap, normalScale: new Vec2(1.6, 1.6), side: DoubleSide,
   }, 0x6a9a7e, 0.45);
   const robe = kit.rim({
-    color: 0x2e2636, roughness: 0.92, map: g.map, normalMap: g.normalMap, normalScale: new THREE.Vector2(1.8, 1.8), side: THREE.DoubleSide,
+    color: 0x2e2636, roughness: 0.92, map: g.map, normalMap: g.normalMap, normalScale: new Vec2(1.8, 1.8), side: DoubleSide,
   }, 0x3f8a6e, 0.5);
   const mantle = kit.rim({
-    color: 0x4e544a, roughness: 0.9, map: g.map, normalMap: g.normalMap, normalScale: new THREE.Vector2(2, 2), side: THREE.DoubleSide,
+    color: 0x4e544a, roughness: 0.9, map: g.map, normalMap: g.normalMap, normalScale: new Vec2(2, 2), side: DoubleSide,
   }, 0x6aa88a, 0.35);
   const bronze = kit.std({
     color: 0x9a6a2a, metalness: 0.55, roughness: 0.45, map: g.map, normalMap: g.normalMap,
-    emissive: new THREE.Color(GRAVE), emissiveMap: veins(29, 6), emissiveIntensity: 0.6,
+    emissive: new Color(GRAVE), emissiveMap: veins(29, 6), emissiveIntensity: 0.6,
   });
   const iron = kit.std({ color: 0x3a3836, metalness: 0.8, roughness: 0.6, normalMap: g.normalMap });
   const wax = kit.std({ color: 0xd8ceb0, roughness: 0.6 });
@@ -167,7 +168,7 @@ export function buildCantor(): Model {
   const flame = kit.glow(0xc8ffd0, 4);
   const lantern = kit.glow(0xa8ffd0, 5);
 
-  const root = new THREE.Group();
+  const root = new Node();
   const S = new Sculpt('cantor').glow(heartGlow).glow(chestGlow).glow(eye).glow(flame).glow(lantern);
   const r = mulberry(53);
   const body = joint(root, 0, 0, 0);
@@ -191,7 +192,7 @@ export function buildCantor(): Model {
   const opening = (side: number) => (phi: number, y: number): number => {
     // (the front's edges: drawn apart over the chest, the bone and the bell seen between them)
     const edge = side < 0 ? phi - FRONT : (Math.PI * 2 - FRONT) - phi;
-    const chest = THREE.MathUtils.smoothstep(y, WAIST_Y - 0.3, WAIST_Y + 0.5) * (1 - THREE.MathUtils.smoothstep(y, SHOULDER_Y - 0.3, SHOULDER_Y + 0.1));
+    const chest = Maths.smoothstep(y, WAIST_Y - 0.3, WAIST_Y + 0.5) * (1 - Maths.smoothstep(y, SHOULDER_Y - 0.3, SHOULDER_Y + 0.1));
     let shift = -side * CHEST_OPEN * chest * Math.max(0, 1 - edge / (Math.PI * 0.3));
     // (the rip down its back: wider at its middle, bitten at every row)
     if (y > RIP[0] && y < RIP[1]) {
@@ -208,13 +209,13 @@ export function buildCantor(): Model {
   S.add(made(() => organic(cloth(mantleProfile, 40, { phi0: Math.PI * 0.2, len: Math.PI * 1.6, tear: 0.35, seed: 21 }), 0.05, 3, 21)), mantle, body);
   // its hood thrown back: a cowl gathered round the back of the neck, and the hood hanging from it down the mantle to a
   // point (drawn up behind the skull, a hood read from behind as a lump where its head should be)
-  S.add(made(() => organic(new THREE.TorusGeometry(0.4, 0.15, 10, 22, Math.PI * 1.2).rotateX(-Math.PI / 2).rotateY(-Math.PI * 0.1), 0.05, 5, 8)),
+  S.add(made(() => organic(shapes.torus(0.4, 0.15, 10, 22, Math.PI * 1.2).rotateX(-Math.PI / 2).rotateY(-Math.PI * 0.1), 0.05, 5, 8)),
     mantle, body, [0, SHOULDER_Y + 0.2, -0.08], [0, 0, 0], [1, 0.8, 1]);
   S.add(made(() => organic(lathe([[0.02, -1.0], [0.2, -0.7], [0.36, -0.35], [0.42, -0.1], [0.38, 0.02]], 18), 0.05, 4, 9)),
     mantle, body, [0, SHOULDER_Y + 0.12, -0.72], [0.22, 0, 0], [1, 1, 0.38]);
   // its rope belt round the under-robe's waist, the cord's two ends hanging from its knot
   const beltR = rAt(underProfile, WAIST_Y - 0.05) * 1.1;
-  S.add(made(() => organic(new THREE.TorusGeometry(beltR, 0.07, 8, 32).rotateX(Math.PI / 2), 0.02, 9, 4)), darkBone, body, [0, WAIST_Y - 0.05, 0]);
+  S.add(made(() => organic(shapes.torus(beltR, 0.07, 8, 32).rotateX(Math.PI / 2), 0.02, 9, 4)), darkBone, body, [0, WAIST_Y - 0.05, 0]);
   for (const x of [-0.18, 0.1]) {
     S.add(made(() => taperTube([V(x, WAIST_Y - 0.1, beltR), V(x + 0.03, WAIST_Y - 0.6, beltR + 0.12), V(x, WAIST_Y - 1.15, beltR + 0.28)],
       (t) => 0.045 * (1 - t * 0.3), 10, 5)), darkBone, body);
@@ -235,7 +236,7 @@ export function buildCantor(): Model {
   // each side's ribs on a joint at the spine, swinging open from the back like a door (`ribs`): each from its
   // vertebra back and out, round the side and down to the front, then cartilage on to the breastbone (the lower ribs'
   // to the cartilage above)
-  const ribs: THREE.Group[] = [];
+  const ribs: Node[] = [];
   const WIDE = [0.38, 0.5, 0.58, 0.63, 0.66, 0.67, 0.66, 0.62, 0.56, 0.48];
   for (const s of [1, -1]) {
     const side = joint(body, s * 0.06, 0, -0.34);
@@ -261,9 +262,9 @@ export function buildCantor(): Model {
   // the bell-heart: a small bronze bell hung in the ribcage, its light inside it (`heart`)
   const heart = joint(body, 0, HEART_Y + 0.25, 0.02);
   S.add(made(() => organic(lathe([[0.3, -0.5], [0.32, -0.47], [0.24, -0.38], [0.19, -0.25], [0.18, -0.1], [0.14, -0.03], [0.06, 0], [0.01, 0.01]], 24), 0.01, 4, 31)), bronze, heart);
-  S.add(made(() => new THREE.SphereGeometry(0.19, 12, 10)), heartGlow, heart, [0, -0.38, 0]);
-  S.add(made(() => new THREE.SphereGeometry(1, 14, 10)), chestGlow, body, [0, HEART_Y + 0.1, -0.08], [0, 0, 0], [0.24, 0.34, 0.12]);
-  S.add(made(() => new THREE.TorusGeometry(0.06, 0.02, 5, 10)), iron, heart, [0, 0.04, 0], [0, Math.PI / 2, 0]);
+  S.add(made(() => shapes.sphere(0.19, 12, 10)), heartGlow, heart, [0, -0.38, 0]);
+  S.add(made(() => shapes.sphere(1, 14, 10)), chestGlow, body, [0, HEART_Y + 0.1, -0.08], [0, 0, 0], [0.24, 0.34, 0.12]);
+  S.add(made(() => shapes.torus(0.06, 0.02, 5, 10)), iron, heart, [0, 0.04, 0], [0, Math.PI / 2, 0]);
 
   // --- its skull, its hood, its crown of spikes and candles, its halo of skulls --------------------------------
   const neck = joint(body, 0, SHOULDER_Y + 0.1, -0.12);
@@ -274,13 +275,13 @@ export function buildCantor(): Model {
   S.add(made(() => fromSkull(cantorSkull(0.0062), SKULL_NECK, SKULL_K)), bone, skull);
   // its eyes: the grave light deep in each socket
   // (small and deep: a socket's dark round it, the light a point in it; filling the socket it read as two lamps)
-  for (const s of [-1, 1]) S.add(made(() => new THREE.SphereGeometry(0.022, 10, 8)), eye, skull, onSkull(s * SKULL_EYE[0], SKULL_EYE[1] - 0.002, SKULL_EYE[2] - 0.022));
+  for (const s of [-1, 1]) S.add(made(() => shapes.sphere(0.022, 10, 8)), eye, skull, onSkull(s * SKULL_EYE[0], SKULL_EYE[1] - 0.002, SKULL_EYE[2] - 0.022));
   // the jaw on its hinges, hanging open, falling further with the chant (`jaw`)
   const jaw = joint(skull, ...onSkull(...JAW_HINGE));
   S.add(made(() => fromSkull(sculptedJaw(0.0065), JAW_HINGE, SKULL_K)), bone, jaw);
   // the crown on its brow: a band of bone, spikes rising from it, five candles among them, each a flame
   const crownY = onSkull(0, 0.137, 0)[1], crownZ = onSkull(0, 0, -0.01)[2], crownX = 0.17, crownZr = 0.23;
-  S.add(made(() => organic(new THREE.TorusGeometry(1, 0.17, 6, 28).rotateX(Math.PI / 2), 0.03, 8, 45)), darkBone, skull, [0, crownY, crownZ], [0, 0, 0], [crownX + 0.02, 0.2, crownZr + 0.02]);
+  S.add(made(() => organic(shapes.torus(1, 0.17, 6, 28).rotateX(Math.PI / 2), 0.03, 8, 45)), darkBone, skull, [0, crownY, crownZ], [0, 0, 0], [crownX + 0.02, 0.2, crownZr + 0.02]);
   for (let i = 0; i < 12; i++) {
     const a = (i / 12) * Math.PI * 2, h = i % 2 ? 0.26 : 0.42 + r() * 0.12;
     S.add(made(() => taperTube([V(0, 0, 0), V(Math.sin(a) * 0.05, h * 0.6, Math.cos(a) * 0.05), V(Math.sin(a) * 0.12, h, Math.cos(a) * 0.12)], (t) => 0.032 * (1 - t), 6, 5)),
@@ -289,35 +290,35 @@ export function buildCantor(): Model {
   for (let i = 0; i < 5; i++) {
     const a = ((i - 2) / 5) * Math.PI * 1.3, h = 0.16 + r() * 0.12;
     const at: P3 = [Math.sin(a) * (crownX + 0.03), crownY + 0.02, crownZ + Math.cos(a) * (crownZr + 0.03)];
-    S.add(made(() => organic(new THREE.CylinderGeometry(0.035, 0.04, h, 8).translate(0, h / 2, 0), 0.008, 12, 46 + i)), wax, skull, at);
-    S.add(made(() => new THREE.SphereGeometry(1, 8, 6)), flame, skull, [at[0], at[1] + h + 0.05, at[2]], [0, 0, 0], [0.025, 0.06, 0.025]);
+    S.add(made(() => organic(shapes.cylinder(0.035, 0.04, h, 8).translate(0, h / 2, 0), 0.008, 12, 46 + i)), wax, skull, at);
+    S.add(made(() => shapes.sphere(1, 8, 6)), flame, skull, [at[0], at[1] + h + 0.05, at[2]], [0, 0, 0], [0.025, 0.06, 0.025]);
   }
   // the halo behind it: a ring of bone and iron, nine small skulls on it looking out, turning (`halo`)
   const halo = joint(neck, 0, SKULL_Y - SHOULDER_Y + 0.15, -0.6);
-  S.add(made(() => organic(new THREE.TorusGeometry(1.15, 0.035, 6, 64), 0.01, 10, 50)), iron, halo);
-  S.add(made(() => organic(new THREE.TorusGeometry(1.0, 0.025, 6, 64), 0.01, 10, 51)), darkBone, halo);
-  let haloSkull: THREE.BufferGeometry | null = null;
+  S.add(made(() => organic(shapes.torus(1.15, 0.035, 6, 64), 0.01, 10, 50)), iron, halo);
+  S.add(made(() => organic(shapes.torus(1.0, 0.025, 6, 64), 0.01, 10, 51)), darkBone, halo);
+  let haloSkull: Geometry | null = null;
   for (let i = 0; i < 9; i++) {
     const a = (i / 9) * Math.PI * 2, x = Math.sin(a) * 1.15, y = Math.cos(a) * 1.15;
     // (each looking ahead, its crown out from the ring: looking out round it, those at its sides showed only a profile,
     // grey eggs from the front)
     const up = V(Math.sin(a), Math.cos(a), 0), face = V(0, 0, 1), across = up.clone().cross(face);
-    const m = new THREE.Matrix4().makeBasis(across, up, face).multiply(new THREE.Matrix4().makeScale(HALO_K, HALO_K, HALO_K))
-      .multiply(new THREE.Matrix4().makeTranslation(0, -0.08, -0.005));
+    const m = new Mat4().makeBasis(across, up, face).multiply(new Mat4().makeScale(HALO_K, HALO_K, HALO_K))
+      .multiply(new Mat4().makeTranslation(0, -0.08, -0.005));
     S.add(made(() => (haloSkull ??= cryptSkull(0.02)).clone().applyMatrix4(m)), bone, halo, [x, y, 0]);
     for (const s of [-1, 1]) {
       const e = V(s * SKULL_EYE[0], SKULL_EYE[1], SKULL_EYE[2] - 0.01).applyMatrix4(m);
-      S.add(made(() => new THREE.SphereGeometry(0.022, 6, 5)), eye, halo, [x + e.x, y + e.y, e.z]);
+      S.add(made(() => shapes.sphere(0.022, 6, 5)), eye, halo, [x + e.x, y + e.y, e.z]);
     }
     // (spokes from each skull in towards the inner ring)
     S.add(made(() => taperTube([V(x * 0.93, y * 0.93, 0), V(x * 0.87, y * 0.87, 0)], () => 0.02, 2, 4)), darkBone, halo);
   }
 
   // --- its arms: bony forearms and hands out of long torn sleeves, the right on its crozier, the left a claw ----
-  const shoulder: THREE.Group[] = [], elbow: THREE.Group[] = [], hand: THREE.Group[] = [];
+  const shoulder: Node[] = [], elbow: Node[] = [], hand: Node[] = [];
   for (const s of [1, -1]) {
     const sh = joint(body, s * 0.64, SHOULDER_Y, -0.02);
-    S.add(made(() => organic(new THREE.SphereGeometry(0.12, 10, 8), 0.04, 6, 70)), darkBone, sh);
+    S.add(made(() => organic(shapes.sphere(0.12, 10, 8), 0.04, 6, 70)), darkBone, sh);
     S.add(made(() => organic(limb(UPPER, 0.07, 0.055, 0.1, 0.3, 10), 0.01, 10, 71)), darkBone, sh);
     // the sleeve: a long wide bell of cloth from the shoulder to past the elbow, in folds, its foot torn into tongues,
     // rags hanging from it
@@ -347,9 +348,9 @@ export function buildCantor(): Model {
   }
   // the crozier in the right hand: a shaft of bound bone, its crook a curl of vertebrae, a bell-lantern hung from it
   const crozier = joint(hand[0], 0, -0.3, 0.12);
-  S.add(made(() => organic(new THREE.CylinderGeometry(0.05, 0.06, 6.2, 10).translate(0, 0.9, 0), 0.008, 14, 80)), darkBone, crozier);
-  for (let i = 0; i < 7; i++) S.add(made(() => new THREE.TorusGeometry(0.065, 0.018, 5, 12).rotateX(Math.PI / 2)), iron, crozier, [0, -1.4 + i * 0.75, 0]);
-  const crook: THREE.Vector3[] = [];
+  S.add(made(() => organic(shapes.cylinder(0.05, 0.06, 6.2, 10).translate(0, 0.9, 0), 0.008, 14, 80)), darkBone, crozier);
+  for (let i = 0; i < 7; i++) S.add(made(() => shapes.torus(0.065, 0.018, 5, 12).rotateX(Math.PI / 2)), iron, crozier, [0, -1.4 + i * 0.75, 0]);
+  const crook: Vec3[] = [];
   for (let i = 0; i <= 12; i++) {
     const a = (i / 12) * Math.PI * 1.45;
     crook.push(V(Math.sin(a) * 0.42, 4.0 + (1 - Math.cos(a)) * 0.42 + i * 0.008, 0));
@@ -358,14 +359,14 @@ export function buildCantor(): Model {
   S.add(made(() => toned(taperTube(crook, (t) => 0.07 * (1 - t * 0.5), 26, 7))), bone, crozier);
   // (knobs of vertebrae along the crook's back)
   for (let i = 2; i < crook.length; i += 2) {
-    S.add(made(() => toned(organic(new THREE.SphereGeometry(0.06, 8, 6), 0.1, 5, 81 + i), 0.85)), bone, crozier, [crook[i].x * 1.08, crook[i].y + 0.02, 0]);
+    S.add(made(() => toned(organic(shapes.sphere(0.06, 8, 6), 0.1, 5, 81 + i), 0.85)), bone, crozier, [crook[i].x * 1.08, crook[i].y + 0.02, 0]);
   }
   const lamp = joint(crozier, crook[crook.length - 1].x, crook[crook.length - 1].y - 0.05, 0);
-  for (let i = 0; i < 3; i++) S.add(made(() => new THREE.TorusGeometry(0.035, 0.012, 4, 8)), iron, lamp, [0, -0.05 - i * 0.08, 0], [0, i % 2 ? Math.PI / 2 : 0, 0]);
+  for (let i = 0; i < 3; i++) S.add(made(() => shapes.torus(0.035, 0.012, 4, 8)), iron, lamp, [0, -0.05 - i * 0.08, 0], [0, i % 2 ? Math.PI / 2 : 0, 0]);
   S.add(made(() => organic(lathe([[0.17, -0.55], [0.18, -0.52], [0.13, -0.44], [0.11, -0.34], [0.09, -0.28], [0.03, -0.25], [0.005, -0.24]], 18), 0.01, 4, 90)), bronze, lamp);
-  S.add(made(() => new THREE.SphereGeometry(0.09, 10, 8)), lantern, lamp, [0, -0.45, 0]);
+  S.add(made(() => shapes.sphere(0.09, 10, 8)), lantern, lamp, [0, -0.45, 0]);
   S.build();
-  (haloSkull as THREE.BufferGeometry | null)?.dispose();
+  (haloSkull as Geometry | null)?.dispose();
   // (where its skull is, for the lab's close pictures of it: `lab boss --parts cantorLook`)
   root.userData.skull = skull;
 

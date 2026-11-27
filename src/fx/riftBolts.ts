@@ -5,7 +5,8 @@
 //   smoke and falling embers; it bursts into flame, debris and a scorch mark.
 // The orbs are blended over the scene (they read as things, not glare); the tail and halo are added
 // light and dim near the camera like every effect glow.
-import * as THREE from '../engine/three.ts';
+import { AdditiveBlending, Color, DoubleSide, LookMaterial, Material, Mesh, Vec3 } from '../engine/api/index.ts';
+import * as shapes from '../engine/api/shapes/index.ts';
 import { G } from '../state';
 import { nearGlow } from '../core/materials';
 import { portShader, wgslNoise, type Port, type Tsl } from '../core/shaderPorts';
@@ -24,19 +25,19 @@ const NOISE = /* glsl */`
 const VERT = /* glsl */`varying vec3 vP; varying vec3 vN; varying vec3 vV;
   void main(){ vP = position; vec4 mv = modelViewMatrix * vec4(position, 1.0); vN = normalize(normalMatrix * normal); vV = normalize(-mv.xyz); gl_Position = projectionMatrix * mv; }`;
 
-const sphere = new THREE.SphereGeometry(1, 24, 16);
+const sphere = shapes.sphere(1, 24, 16);
 // the tail: a cone from the orb (its wide end, at the origin) back along -Z
-const tailGeo = new THREE.ConeGeometry(1, 1, 16, 6, true).translate(0, 0.5, 0).rotateX(-Math.PI / 2);
-const rock = new THREE.IcosahedronGeometry(1, 1);
+const tailGeo = shapes.cone(1, 1, 16, 6, true).translate(0, 0.5, 0).rotateX(-Math.PI / 2);
+const rock = shapes.icosahedron(1, 1);
 
 type Look = 'void' | 'magma';
-const mats = new Map<string, THREE.Material>();
-function mat(kind: 'orb' | 'halo' | 'tail', look: Look, color: number): THREE.Material {
+const mats = new Map<string, Material>();
+function mat(kind: 'orb' | 'halo' | 'tail', look: Look, color: number): Material {
   const key = `${kind}:${look}:${color}`;
   let m = mats.get(key);
   if (m) return m;
-  const uniforms = { uColor: { value: new THREE.Color(color) }, uTime: time };
-  if (kind === 'orb' && look === 'void') m = new THREE.ShaderMaterial({
+  const uniforms = { uColor: { value: new Color(color) }, uTime: time };
+  if (kind === 'orb' && look === 'void') m = new LookMaterial({
     uniforms, vertexShader: VERT, transparent: true, depthWrite: false,
     fragmentShader: /* glsl */`uniform vec3 uColor; uniform float uTime; varying vec3 vP; varying vec3 vN; varying vec3 vV; ${NOISE}
       void main(){
@@ -49,7 +50,7 @@ function mat(kind: 'orb' | 'halo' | 'tail', look: Look, color: number): THREE.Ma
         gl_FragColor = vec4(c, 0.92);
       }`,
   });
-  else if (kind === 'orb') m = new THREE.ShaderMaterial({
+  else if (kind === 'orb') m = new LookMaterial({
     uniforms, vertexShader: VERT, transparent: true, depthWrite: true,
     fragmentShader: /* glsl */`uniform vec3 uColor; uniform float uTime; varying vec3 vP; varying vec3 vN; varying vec3 vV; ${NOISE}
       void main(){
@@ -63,15 +64,15 @@ function mat(kind: 'orb' | 'halo' | 'tail', look: Look, color: number): THREE.Ma
         gl_FragColor = vec4(mix(rock, lava, crack) + uColor * pow(1.0 - f, 3.0) * 0.8, 1.0);
       }`,
   });
-  else if (kind === 'halo') m = nearGlow(new THREE.ShaderMaterial({
-    uniforms, vertexShader: VERT, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false,
+  else if (kind === 'halo') m = nearGlow(new LookMaterial({
+    uniforms, vertexShader: VERT, transparent: true, blending: AdditiveBlending, depthWrite: false,
     fragmentShader: /* glsl */`uniform vec3 uColor; varying vec3 vN; varying vec3 vV;
       // a glow round the orb's edge: nothing over the orb itself (inside ~f 0.8), fading outwards
       void main(){ float f = max(dot(normalize(vN), normalize(vV)), 0.0);
         gl_FragColor = vec4(uColor * pow(f, 2.0) * (1.0 - smoothstep(0.7, 0.86, f)) * 1.2, 1.0); }`,
   }));
-  else m = nearGlow(new THREE.ShaderMaterial({
-    uniforms, vertexShader: VERT, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide,
+  else m = nearGlow(new LookMaterial({
+    uniforms, vertexShader: VERT, transparent: true, blending: AdditiveBlending, depthWrite: false, side: DoubleSide,
     fragmentShader: /* glsl */`uniform vec3 uColor; uniform float uTime; varying vec3 vP; varying vec3 vN; varying vec3 vV; ${NOISE}
       void main(){
         // streaks flowing back along the tail (z from 0 at the orb to -1), fading out behind
@@ -83,7 +84,7 @@ function mat(kind: 'orb' | 'halo' | 'tail', look: Look, color: number): THREE.Ma
       }`,
   }));
   const name = kind === 'orb' ? `rift-${look}` : `rift-${kind}`;
-  effectLook(portShader(m as THREE.ShaderMaterial, (t, u) => riftPort(t, u, kind, look)), name, RIFT_HOOKS[name], {
+  effectLook(portShader(m as LookMaterial, (t, u) => riftPort(t, u, kind, look)), name, RIFT_HOOKS[name], {
     numbers(u, out) {
       rgb(u, 'uColor', out, 0);
       out[3] = num(u, 'uTime');
@@ -203,24 +204,24 @@ fn surface_hook(s: ptr<function, Surface>, in: VertexOut) -> bool {
 };
 
 /** The bolt's mesh, radius `size`: the orb, a soft halo round it and (void) a tail behind. */
-export function riftBolt(look: Look, color: number, size: number): THREE.Mesh {
-  const mesh = new THREE.Mesh(look === 'magma' ? rock : sphere, mat('orb', look, color));
+export function riftBolt(look: Look, color: number, size: number): Mesh {
+  const mesh = new Mesh(look === 'magma' ? rock : sphere, mat('orb', look, color));
   mesh.scale.setScalar(size);
-  const halo = new THREE.Mesh(sphere, mat('halo', look, color));
+  const halo = new Mesh(sphere, mat('halo', look, color));
   halo.scale.setScalar(look === 'magma' ? 1.9 : 1.7);
   mesh.add(halo);
   if (look === 'void') {
-    const tail = new THREE.Mesh(tailGeo, mat('tail', look, color));
+    const tail = new Mesh(tailGeo, mat('tail', look, color));
     tail.scale.set(0.95, 0.95, 7);
     mesh.add(tail);
   }
   return mesh;
 }
 
-const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _up = new THREE.Vector3(0, 1, 0);
+const _a = new Vec3(), _b = new Vec3(), _up = new Vec3(0, 1, 0);
 
 /** Each frame of the flight: point along the path, spin, and shed the trail. */
-export function riftBoltTick(look: Look, mesh: THREE.Mesh, pos: THREE.Vector3, vel: THREE.Vector3, color: number, trail: number, dt: number, acc: { t: number; a: number }): void {
+export function riftBoltTick(look: Look, mesh: Mesh, pos: Vec3, vel: Vec3, color: number, trail: number, dt: number, acc: { t: number; a: number }): void {
   time.value = G.time;
   const r = mesh.scale.x;
   if (r <= 0) return;
@@ -267,19 +268,19 @@ export function riftBoltTick(look: Look, mesh: THREE.Mesh, pos: THREE.Vector3, v
 }
 
 /** The shot leaving the caster: a flash and a ring of sparks at the orb or hand. */
-export function riftBoltLaunch(look: Look, pos: THREE.Vector3, color: number, size: number): void {
+export function riftBoltLaunch(look: Look, pos: Vec3, color: number, size: number): void {
   burst(pos, { count: 14, color: look === 'void' ? color : 0xffa040, colorEnd: color, speed: 3.5, up: 0.5, life: 0.3, size: size * 0.8, gravity: 0 });
   flashFree({ color, intensity: 8, distance: 5, life: 0.2, pos: { x: pos.x, y: pos.y, z: pos.z } });
 }
 
 /** A bolt that ran into a wall or out of range: it just breaks up. */
-export function riftBoltFizzle(look: Look, pos: THREE.Vector3, color: number, trail: number, size: number): void {
+export function riftBoltFizzle(look: Look, pos: Vec3, color: number, trail: number, size: number): void {
   burst(pos, { count: 10, color: look === 'void' ? color : 0xffa040, colorEnd: color, speed: 3, up: 1, life: 0.35, size: size * 0.7, gravity: 4 });
   smokePuff(pos, { count: 3, color: trail, alpha: 0.4, size: 0.4, sizeEnd: 1.2, life: 0.7, rise: 0.4 });
 }
 
 /** The impact: the void bolt collapses in on itself and snaps out; the magma bolt bursts in fire. */
-export function riftBoltImpact(look: Look, pos: THREE.Vector3, color: number, trail: number, size: number): void {
+export function riftBoltImpact(look: Look, pos: Vec3, color: number, trail: number, size: number): void {
   const ground = { x: pos.x, z: pos.z };
   if (look === 'void') {
     for (let i = 0; i < 18; i++) {
@@ -303,7 +304,7 @@ export function riftBoltImpact(look: Look, pos: THREE.Vector3, color: number, tr
 }
 
 /** Samples for the load-time warm-up (every material kind; the colour is a uniform). */
-export const riftBoltSamples = (): THREE.Mesh[] => [riftBolt('void', 0xc050ff, 0.3), riftBolt('magma', 0xff6a2a, 0.3)];
+export const riftBoltSamples = (): Mesh[] => [riftBolt('void', 0xc050ff, 0.3), riftBolt('magma', 0xff6a2a, 0.3)];
 
 // (its effects' shaders listed for the engine as this module loads: joined with the other effects')
 for (const [name, hooks] of Object.entries(RIFT_HOOKS)) effectShader(name, hooks);

@@ -11,7 +11,8 @@
 // while it bears the stag, and the leg's joints are solved to reach it (`stepLegs`; `lab boss --parts stagStride`). Through its weak-spot window it has crashed: it reels, its head hung
 // and shaking. Killed, its legs fold and it sinks, its embers going out.
 // Drawn in its crowd (models/crowd.ts): every change is a joint's place or a glow's strength, nothing hidden.
-import * as THREE from '../../engine/three.ts';
+import { Geometry, Material, Node, Quat, RepeatWrapping, Vec2, Vec3 } from '../../engine/api/index.ts';
+import * as shapes from '../../engine/api/shapes/index.ts';
 import { createKit } from '../../core/materials';
 import { bark, grunge, pbrMaterialMaps, veins } from '../../core/textures';
 import { joint, ramp } from './rig';
@@ -21,10 +22,10 @@ import { Sculpt, branches, leaf, limb, organic, skipping, taperTube } from './sh
 import { mulberry } from '../../util';
 import type { AnimState, Model } from '../../types';
 
-const V = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
-const NONE = new THREE.BufferGeometry();
+const V = (x: number, y: number, z: number) => new Vec3(x, y, z);
+const NONE = new Geometry();
 /** a geometry made only where the kind's pieces aren't replayed (models/shapes.ts) */
-const made = (f: () => THREE.BufferGeometry): THREE.BufferGeometry => (skipping() ? NONE : f());
+const made = (f: () => Geometry): Geometry => (skipping() ? NONE : f());
 
 /** its back's height over the floor at rest (m: its body's joint): its hooves on the floor, each pair's two long
  *  bones reaching 0.92 of their length from hip to cannon, alike, room to reach a stance's ends before and behind it.
@@ -80,7 +81,7 @@ const PLACED_MOVE = 2.5;
 /** how far under the floor its body must be for its feet to sink with it (m): rising out of the earth as it comes it
  *  is, not a frame or two behind a step up onto the dais (0.35 m), which sank every planted foot */
 const RISING = 0.4;
-const _w = new THREE.Vector3(), _l = new THREE.Vector3(), _f = new THREE.Vector3();
+const _w = new Vec3(), _l = new Vec3(), _f = new Vec3();
 
 /** How far along its way a hoof is `s` of the way through its step: still as it lifts and as it sets down. */
 function along(s: number): number {
@@ -92,7 +93,7 @@ function along(s: number): number {
  *  from, its step's share done (-1 planted) and whether that step is a stand's (timed) or a stride's (by the ground),
  *  and the height it set off at. */
 interface Hoof {
-  at: THREE.Vector3 | null; from: THREE.Vector3; step: number; timed: boolean; up: number; now: THREE.Vector3;
+  at: Vec3 | null; from: Vec3; step: number; timed: boolean; up: number; now: Vec3;
   /** a timed step's time (s), and the share of its turn in the stride a stride's swing began at */
   takes: number;
   began: number;
@@ -127,19 +128,19 @@ const PAWING = 1;
 const BARREL = { x: 0.8, y: 0.92, z: 2.0, y0: 0.1 };
 
 /** A point on its barrel's surface `along` m from its middle, `a` round from its top (to its left), `off` m out. */
-function onBarrel(along: number, a: number, off = 0): THREE.Vector3 {
+function onBarrel(along: number, a: number, off = 0): Vec3 {
   const k = Math.sqrt(Math.max(0.05, 1 - (along / BARREL.z) ** 2));
   return V(Math.sin(a) * (BARREL.x * k + off), BARREL.y0 + Math.cos(a) * (BARREL.y * k + off), along);
 }
 
 /** A stake of its shed antlers on joint `j`, its butt at the joint, along +y: a charred beam broken off at its foot,
  *  two tines off it, a flame at each tip. */
-function stakeOn(S: Sculpt, made: (f: () => THREE.BufferGeometry) => THREE.BufferGeometry, char: THREE.Material,
-  flame: THREE.Material, core: THREE.Material, j: THREE.Object3D, i: number): void {
+function stakeOn(S: Sculpt, made: (f: () => Geometry) => Geometry, char: Material,
+  flame: Material, core: Material, j: Node, i: number): void {
   const L = STAKE_LENGTH, lean = i % 2 ? 1 : -1;
   S.add(made(() => taperTube([V(0, 0, 0), V(0.05 * lean, L * 0.4, 0.03), V(-0.04 * lean, L * 0.75, 0), V(0.02, L, 0.02)],
     (t) => 0.13 * (1 - t * 0.75), 8, 6)), char, j);
-  const tops: THREE.Vector3[] = [V(0.02, L, 0.02)];
+  const tops: Vec3[] = [V(0.02, L, 0.02)];
   for (const [y, side] of [[0.5, 1], [0.72, -1]] as const) {
     const from = V(0, L * y, 0), to = from.clone().add(V(side * 0.42, 0.55, 0.05));
     S.add(made(() => taperTube([from, from.clone().add(V(side * 0.22, 0.25, 0.04)), to], (t) => 0.05 * (1 - t * 0.8), 6, 4)),
@@ -147,8 +148,8 @@ function stakeOn(S: Sculpt, made: (f: () => THREE.BufferGeometry) => THREE.Buffe
     tops.push(to);
   }
   for (const top of tops) {
-    S.add(made(() => new THREE.ConeGeometry(0.05, 0.3, 6).translate(0, 0.14, 0)), flame, j, [top.x, top.y, top.z]);
-    S.add(made(() => new THREE.SphereGeometry(0.05, 6, 5)), core, j, [top.x, top.y + 0.02, top.z]);
+    S.add(made(() => shapes.cone(0.05, 0.3, 6).translate(0, 0.14, 0)), flame, j, [top.x, top.y, top.z]);
+    S.add(made(() => shapes.sphere(0.05, 6, 5)), core, j, [top.x, top.y + 0.02, top.z]);
   }
 }
 
@@ -160,15 +161,15 @@ export function buildStag(): Model {
   // (fissures branching through the char, a few at a time: a crack map's even cells read as a turtle's shell at its
   // size and as scales at a third of it)
   const fine = veins(73, 14).clone();
-  fine.wrapS = fine.wrapT = THREE.RepeatWrapping;
+  fine.wrapS = fine.wrapT = RepeatWrapping;
   fine.repeat.set(2, 1.5);
   // its hide: wood burnt to char, split into plates, the embers under it glowing through every crack
   const char = kit.rim({
-    color: 0x2a211b, roughness: 0.96, map: b.map, normalMap: b.normalMap, normalScale: new THREE.Vector2(2.4, 2.4),
+    color: 0x2a211b, roughness: 0.96, map: b.map, normalMap: b.normalMap, normalScale: new Vec2(2.4, 2.4),
     emissive: 0xff5a14, emissiveMap: fine, emissiveIntensity: 1.2,
   }, 0x8a5a3a, 0.2);
   // the ash on it: grey and dry, its mane's splinters, the ridge of its back, the char flaking off its haunches
-  const ash = kit.rim({ color: 0x4e4740, roughness: 1, map: g.map, normalMap: g.normalMap, normalScale: new THREE.Vector2(2, 2) }, 0xa09080, 0.2);
+  const ash = kit.rim({ color: 0x4e4740, roughness: 1, map: g.map, normalMap: g.normalMap, normalScale: new Vec2(2, 2) }, 0xa09080, 0.2);
   // its hooves and its muzzle: burnt black through
   const coal = kit.std({ color: 0x0c0a09, roughness: 0.9, map: g.map });
   // its eyes and nostrils, coals; its antlers' flames; the cracks that run deepest, burning bright
@@ -177,7 +178,7 @@ export function buildStag(): Model {
   const core = kit.glow(0xffd890, 3);
   const crack = kit.glow(0xff6a20, 1.2);
 
-  const root = new THREE.Group();
+  const root = new Node();
   const S = new Sculpt('stag').glow(eye).glow(flame).glow(core).glow(crack);
   const r = mulberry(61);
 
@@ -185,18 +186,18 @@ export function buildStag(): Model {
   const body = joint(root, 0, BODY_Y, 0);
   body.name = 'stag-trunk';
   // (barrel, chest and haunches: three swells of char, the chest deep, the belly drawn up between)
-  S.add(made(() => organic(new THREE.SphereGeometry(1, 28, 18), 0.06, 3, 1)), char, body, [0, BARREL.y0, 0], [0, 0, 0], [BARREL.x, BARREL.y, BARREL.z]);
+  S.add(made(() => organic(shapes.sphere(1, 28, 18), 0.06, 3, 1)), char, body, [0, BARREL.y0, 0], [0, 0, 0], [BARREL.x, BARREL.y, BARREL.z]);
   // (the chest deep and forward, the shoulders over it; the haunches round and high; the belly drawn up between)
-  S.add(made(() => organic(new THREE.SphereGeometry(1, 24, 16), 0.07, 3, 2)), char, body, [0, 0.02, 1.32], [0.3, 0, 0], [0.84, 1.12, 0.95]);
-  S.add(made(() => organic(new THREE.SphereGeometry(1, 20, 14), 0.08, 3, 4)), char, body, [0, 0.55, 1.15], [0.2, 0, 0], [0.72, 0.6, 0.8]);
-  S.add(made(() => organic(new THREE.SphereGeometry(1, 24, 16), 0.07, 3, 3)), char, body, [0, 0.18, -1.38], [-0.15, 0, 0], [0.86, 0.98, 0.92]);
+  S.add(made(() => organic(shapes.sphere(1, 24, 16), 0.07, 3, 2)), char, body, [0, 0.02, 1.32], [0.3, 0, 0], [0.84, 1.12, 0.95]);
+  S.add(made(() => organic(shapes.sphere(1, 20, 14), 0.08, 3, 4)), char, body, [0, 0.55, 1.15], [0.2, 0, 0], [0.72, 0.6, 0.8]);
+  S.add(made(() => organic(shapes.sphere(1, 24, 16), 0.07, 3, 3)), char, body, [0, 0.18, -1.38], [-0.15, 0, 0], [0.86, 0.98, 0.92]);
   // (plates of char lifting off the hide along its flanks and back, laid on it, the embers glowing under their edges)
   for (let i = 0; i < 20; i++) {
     const along = -1.7 + r() * 3.4, a = (r() < 0.5 ? 1 : -1) * (0.5 + r() * 1.1), size = 0.3 + r() * 0.2, turn = (r() - 0.5) * 0.8;
     const at = onBarrel(along, a, 0.01);
-    S.add(made(() => organic(new THREE.SphereGeometry(1, 8, 6), 0.2, 3, 10 + i)), char, body, [at.x, at.y, at.z],
+    S.add(made(() => organic(shapes.sphere(1, 8, 6), 0.2, 3, 10 + i)), char, body, [at.x, at.y, at.z],
       [turn, 0, -a], [size, 0.06, size * 1.3]);
-    S.add(made(() => new THREE.SphereGeometry(1, 8, 4)), crack, body, [at.x, at.y, at.z], [turn, 0, -a], [size * 0.85, 0.035, size * 1.1]);
+    S.add(made(() => shapes.sphere(1, 8, 4)), crack, body, [at.x, at.y, at.z], [turn, 0, -a], [size * 0.85, 0.035, size * 1.1]);
   }
   // (a ridge of charred splinters down its spine, ragged, leaning back, a few gone grey with ash)
   for (let i = 0; i < 16; i++) {
@@ -213,11 +214,11 @@ export function buildStag(): Model {
 
   // --- its legs ----------------------------------------------------------------------------------------------
   /** each leg's joints, top down, and its hoof's joint */
-  const legs: THREE.Group[][] = [];
-  const hooves: THREE.Group[] = [];
+  const legs: Node[][] = [];
+  const hooves: Node[] = [];
   for (const leg of LEGS) {
     const def = leg.hind ? HIND : FORE;
-    const chain: THREE.Group[] = [joint(body, ...leg.at)];
+    const chain: Node[] = [joint(body, ...leg.at)];
     // (swung out about its body's long axis first, then about its own across: `stepLegs` turns it out for a turn)
     chain[0].rotation.order = 'ZXY';
     for (let k = 1; k < 3; k++) chain.push(joint(chain[k - 1], 0, -def.bones[k - 1], 0));
@@ -226,14 +227,14 @@ export function buildStag(): Model {
       // (the thigh and the shoulder swell into the body, its muscle burnt hard)
       S.add(made(() => organic(limb(len, r0, r1, k === 0 ? 0.35 : 0.12, 0.3, 12), 0.04, 4, 30 + k)), char, chain[k]);
       // (a knot of char at each joint)
-      if (k > 0) S.add(made(() => organic(new THREE.SphereGeometry(r0 * 1.15, 10, 8), 0.08, 4, 40 + k)), char, chain[k]);
+      if (k > 0) S.add(made(() => organic(shapes.sphere(r0 * 1.15, 10, 8), 0.08, 4, 40 + k)), char, chain[k]);
     });
     // its hoof: cloven, burnt black, a coal's glow in the cleft
     const hoof = joint(chain[2], 0, -def.bones[2], 0);
     for (const s of [-1, 1]) {
-      S.add(made(() => new THREE.CylinderGeometry(0.07, 0.12, 0.26, 8)), coal, hoof, [s * 0.065, -0.08, 0.05], [0.2, 0, 0], [1, 1, 1.25]);
+      S.add(made(() => shapes.cylinder(0.07, 0.12, 0.26, 8)), coal, hoof, [s * 0.065, -0.08, 0.05], [0.2, 0, 0], [1, 1, 1.25]);
     }
-    S.add(made(() => new THREE.SphereGeometry(0.035, 6, 5)), crack, hoof, [0, -0.12, 0.13]);
+    S.add(made(() => shapes.sphere(0.035, 6, 5)), crack, hoof, [0, -0.12, 0.13]);
     legs.push(chain);
     hooves.push(hoof);
   }
@@ -255,15 +256,15 @@ export function buildStag(): Model {
   }
   const head = joint(neck, NECK_TOP.x, NECK_TOP.y, NECK_TOP.z);
   // its skull, long and narrow, the muzzle tapering to a burnt-black nose
-  S.add(made(() => organic(new THREE.SphereGeometry(1, 20, 14), 0.05, 4, 60)), char, head, [0, 0.08, 0.15], [0.2, 0, 0], [0.42, 0.42, 0.6]);
+  S.add(made(() => organic(shapes.sphere(1, 20, 14), 0.05, 4, 60)), char, head, [0, 0.08, 0.15], [0.2, 0, 0], [0.42, 0.42, 0.6]);
   S.add(made(() => organic(taperTube([V(0, 0.05, 0.35), V(0, -0.08, 0.8), V(0, -0.2, 1.15)], (t) => 0.3 - t * 0.13, 10, 12), 0.04, 5, 61)), char, head);
-  S.add(made(() => organic(new THREE.SphereGeometry(1, 12, 10), 0.05, 4, 62)), coal, head, [0, -0.2, 1.14], [0.3, 0, 0], [0.16, 0.12, 0.13]);
+  S.add(made(() => organic(shapes.sphere(1, 12, 10), 0.05, 4, 62)), coal, head, [0, -0.2, 1.14], [0.3, 0, 0], [0.16, 0.12, 0.13]);
   for (const s of [-1, 1]) {
     // (its eyes: coals deep under a heavy brow)
-    S.add(made(() => organic(new THREE.SphereGeometry(1, 10, 8), 0.1, 4, 63 + s)), char, head, [s * 0.27, 0.27, 0.36], [0, s * 0.3, 0], [0.13, 0.07, 0.15]);
-    S.add(made(() => new THREE.SphereGeometry(0.075, 10, 8)), eye, head, [s * 0.3, 0.17, 0.4]);
+    S.add(made(() => organic(shapes.sphere(1, 10, 8), 0.1, 4, 63 + s)), char, head, [s * 0.27, 0.27, 0.36], [0, s * 0.3, 0], [0.13, 0.07, 0.15]);
+    S.add(made(() => shapes.sphere(0.075, 10, 8)), eye, head, [s * 0.3, 0.17, 0.4]);
     // (nostrils, burnt black and deep)
-    S.add(made(() => new THREE.SphereGeometry(0.03, 6, 5)), coal, head, [s * 0.06, -0.19, 1.25], [0, 0, 0], [1, 0.7, 0.6]);
+    S.add(made(() => shapes.sphere(0.03, 6, 5)), coal, head, [s * 0.06, -0.19, 1.25], [0, 0, 0], [1, 0.7, 0.6]);
     // (its ears, laid back, ragged at the edge)
     S.add(made(() => leaf(0.48, 0.18, 0.5, 0.2, 5)), char, head, [s * 0.32, 0.4, -0.05], [-0.6, s * 0.9, s * 1.2]);
   }
@@ -276,9 +277,9 @@ export function buildStag(): Model {
   for (const s_ of [1, -1]) {
     S.add(made(() => organic(taperTube([V(0, 0, 0), V(0, 0.16, 0.02)], (t) => 0.1 - t * 0.03, 8, 3), 0.04, 3, 70 + s_)), char,
       head, [s_ * 0.21, 0.42, 0.1]);
-    S.add(made(() => new THREE.SphereGeometry(0.07, 8, 6)), crack, head, [s_ * 0.21, 0.58, 0.12], [0, 0, 0], [1, 0.35, 1]);
+    S.add(made(() => shapes.sphere(0.07, 8, 6)), crack, head, [s_ * 0.21, 0.58, 0.12], [0, 0, 0], [1, 0.35, 1]);
   }
-  const out: THREE.BufferGeometry[] = [], tips: THREE.Vector3[] = [];
+  const out: Geometry[] = [], tips: Vec3[] = [];
   // (grown every build, a replay too: they draw their random numbers as they grow, and every draw after must match)
   for (const s of [1, -1]) {
     // (the brow tine, low and forward over its face, then the beam sweeping up, out and back)
@@ -290,13 +291,13 @@ export function buildStag(): Model {
   for (const tip of tips) {
     for (let f = 0; f < 3; f++) {
       const lean = [r() * 0.8 - 0.4, 0, r() * 0.8 - 0.4] as [number, number, number], tall = 0.16 + r() * 0.14;
-      S.add(made(() => new THREE.ConeGeometry(0.032, tall, 6).translate(0, tall * 0.45, 0)), flame, antlers, [tip.x, tip.y, tip.z], lean);
+      S.add(made(() => shapes.cone(0.032, tall, 6).translate(0, tall * 0.45, 0)), flame, antlers, [tip.x, tip.y, tip.z], lean);
     }
-    S.add(made(() => new THREE.SphereGeometry(0.04, 6, 5)), core, antlers, [tip.x, tip.y + 0.02, tip.z]);
+    S.add(made(() => shapes.sphere(0.04, 6, 5)), core, antlers, [tip.x, tip.y + 0.02, tip.z]);
   }
   // the stakes its shed antlers break into, kept at no size under its root till the shed places each in the world
   // (entities/stag.ts `shedAt`): warmed with it, no mesh of their own made in the fight
-  const stakes: THREE.Object3D[] = [];
+  const stakes: Node[] = [];
   for (let i = 0; i < STAKES; i++) {
     const j = joint(root, 0, 0, 0);
     stakeOn(S, made, char, flame, core, j, i);
@@ -310,7 +311,7 @@ export function buildStag(): Model {
   root.userData.shed = shed;
   // (its tines' tips, where a gore is judged as drawn: entities/stag.ts `antlerGoreAt`)
   root.userData.antlerTips = tips.map((tip) => {
-    const at = new THREE.Object3D();
+    const at = new Node();
     at.position.copy(tip);
     head.add(at);
     return at;
@@ -319,7 +320,7 @@ export function buildStag(): Model {
   root.userData.foreHooves = LEGS.flatMap((l, i) => (l.hind ? [] : [hooves[i]]));
   root.userData.hindHooves = LEGS.flatMap((l, i) => (l.hind ? [hooves[i]] : []));
   // (its muzzle, where its breath leaves it: entities/stag.ts `breathAt`)
-  const mouth = new THREE.Object3D();
+  const mouth = new Node();
   mouth.position.set(0, -0.2, 1.3);
   head.add(mouth);
   root.userData.mouth = mouth;
@@ -328,7 +329,7 @@ export function buildStag(): Model {
   const breathing = { turn: 0 };
   root.userData.breath = breathing;
   // (where a hero it tosses rides, between its antlers over its brow: entities/stag.ts carries him there)
-  const tines = new THREE.Object3D();
+  const tines = new Node();
   tines.position.set(0, 0.95, 0.35);
   head.add(tines);
   root.userData.tines = tines;
@@ -346,10 +347,10 @@ export function buildStag(): Model {
   // its strides: the share of a stride covered at each gait (each its own count, so neither jumps as it changes gait),
   // where it stood last frame, which way it goes, and each hoof
   const covered = { walk: 0, gallop: 0 };
-  let last: THREE.Vector3 | null = null;
-  const way = new THREE.Vector3(0, 0, 1);
+  let last: Vec3 | null = null;
+  const way = new Vec3(0, 0, 1);
   const hoofs: Hoof[] = LEGS.map(() => ({
-    at: null, from: new THREE.Vector3(), step: -1, timed: false, up: 0, now: new THREE.Vector3(), takes: STAND_STEP,
+    at: null, from: new Vec3(), step: -1, timed: false, up: 0, now: new Vec3(), takes: STAND_STEP,
     began: 0,
   }));
   /** each hoof's joint at rest in its root's frame (its legs at their rest angles, its sole on the floor) */
@@ -589,7 +590,7 @@ export function buildStag(): Model {
   /** `at` set down on the floor under it, its hoof's joint its sole's height over it (relative to the floor under
    *  the stag, so a studio's floor is its own; under the floor as it rises out of the earth); the highest floor
    *  under its footprint (by the floor under its middle alone, a hoof by the dais's step stood 9 cm into the riser) */
-  const onFloor = (at: THREE.Vector3, under: THREE.Vector3): THREE.Vector3 => {
+  const onFloor = (at: Vec3, under: Vec3): Vec3 => {
     const floor = groundUnder(at.x, at.z, HOOF_FOOT);
     at.y = floor + HOOF_SOLE + Math.min(0, under.y - groundHeight(under.x, under.z) + RISING);
     return at;
@@ -605,7 +606,7 @@ export function buildStag(): Model {
   function stepLegs(dt: number, bodyX: number, bodyZ: number, paw: number): number[][] {
     root.updateWorldMatrix(true, false);
     body.updateWorldMatrix(false, false);
-    const here = root.getWorldPosition(new THREE.Vector3());
+    const here = root.getWorldPosition(new Vec3());
     let moved = last ? Math.hypot(here.x - last.x, here.z - last.z) : 0;
     // (placed afresh: its hooves set down under it again)
     if (!last || moved > PLACED_MOVE) {
@@ -613,7 +614,7 @@ export function buildStag(): Model {
       for (const h of hoofs) { h.at = null; h.step = -1; }
     }
     if (moved > 1e-5 && last) way.set(here.x - last.x, 0, here.z - last.z).normalize();
-    last = (last ?? new THREE.Vector3()).copy(here);
+    last = (last ?? new Vec3()).copy(here);
     covered.walk += moved / STRIDES.walk.stride;
     covered.gallop += moved / STRIDES.gallop.stride;
     const gait = galloping > 0.5 ? STRIDES.gallop : STRIDES.walk;
@@ -657,7 +658,7 @@ export function buildStag(): Model {
       const others = hoofs.filter((other, j) => other !== h && down(other, j)).length;
       const waits = h.step < 0 && (share > LATE_SWING || (galloping <= 0.5 && others < 2));
       const swinging = !standing && u >= gait.duty && !waits;
-      let foot: THREE.Vector3;
+      let foot: Vec3;
       if (!h.at) {
         h.at = rest.clone();
         foot = rest.clone();
@@ -754,7 +755,7 @@ export function buildStag(): Model {
    * hip and knee from the two bones' reach to the cannon's top, the knee bent the deer's way (the fore's back, the
    * hind's stifle forward). Out of reach, the leg is stretched straight towards it.
    */
-  function reach(i: number, foot: THREE.Vector3, bodyX: number, bodyZ: number, tuck: number): number[] {
+  function reach(i: number, foot: Vec3, bodyX: number, bodyZ: number, tuck: number): number[] {
     const l = LEGS[i], def = l.hind ? HIND : FORE;
     const [b0, b1, b2] = def.bones;
     const p = body.worldToLocal(_l.copy(foot)).sub(_w.set(l.at[0], l.at[1], l.at[2]));
@@ -779,7 +780,7 @@ export function buildStag(): Model {
 
   /** Leg `i`'s cannon set upright against its hip's swing out (`out`): turned back from the knee's pitch, out of the
    *  swing, and to its own pitch `c`, all in the body's frame. */
-  const _qa = new THREE.Quaternion(), _qb = new THREE.Quaternion(), _qc = new THREE.Quaternion();
+  const _qa = new Quat(), _qb = new Quat(), _qc = new Quat();
   const X = V(1, 0, 0), ZAXIS = V(0, 0, 1);
   function uprightCannon(i: number, knee: number, out: number, c: number, roll: number): void {
     _qa.setFromAxisAngle(X, -knee);
@@ -790,7 +791,7 @@ export function buildStag(): Model {
 
   const stride_ = root.userData.stride as { carried: boolean };
   /** for the lab: the steps each leg took because its planted hoof was out of its reach */
-  const walk_ = { stretched: LEGS.map(() => 0), targets: LEGS.map(() => new THREE.Vector3()) };
+  const walk_ = { stretched: LEGS.map(() => 0), targets: LEGS.map(() => new Vec3()) };
   root.userData.stride.stretched = walk_.stretched;
   /** for the lab: where each hoof's joint was aimed this frame, in the world */
   root.userData.stride.targets = walk_.targets;

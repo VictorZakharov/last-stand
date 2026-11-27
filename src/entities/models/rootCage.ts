@@ -3,11 +3,11 @@
 // till a cage places them in the world each frame. So they're warmed with her at her wave and nothing is made in the
 // fight. A cage's root rises out of the earth along +y and arches over towards -x (the cage's middle, as placed); the
 // great root stands along +y from its foot, to be laid over onto the cage.
-import * as THREE from '../../engine/three.ts';
+import { Geometry, Material, Mesh, Node, Quat, Vec3 } from '../../engine/api/index.ts';
 import { ROOTMOTHER } from '../../data/foes/rootmother';
 import { organic, taperTube } from './shapes';
 
-const V = (x: number, y: number, z: number): THREE.Vector3 => new THREE.Vector3(x, y, z);
+const V = (x: number, y: number, z: number): Vec3 => new Vec3(x, y, z);
 const C = ROOTMOTHER.cage;
 /** the scale a pooled part is kept at while it's not shown (never 0: a zero scale's inverse is NaN, black lines) */
 export const CAGE_NO_SIZE = 1e-4;
@@ -16,8 +16,8 @@ export const GREAT_LENGTH = C.rise + C.radius * 2 + 0.8;
 
 /** A cage's root: from its foot thick in the earth, up and out a little, then arched over to its tip near the cage's
  *  top middle, gnarled, a rootlet or two off it. Made once. */
-let rootGeo: THREE.BufferGeometry | null = null;
-function cageRootGeo(): THREE.BufferGeometry {
+let rootGeo: Geometry | null = null;
+function cageRootGeo(): Geometry {
   if (rootGeo) return rootGeo;
   const r = C.radius, h = C.rootH;
   const path = [V(0, -0.3, 0), V(0.08, h * 0.35, 0.03), V(-r * 0.15, h * 0.8, -0.04), V(-r * 0.6, h * 1.02, 0.02),
@@ -29,8 +29,8 @@ function cageRootGeo(): THREE.BufferGeometry {
 }
 
 /** The great root: a thick trunk of a root, gnarled, tapering to a blunt end. Made once. */
-let greatGeo: THREE.BufferGeometry | null = null;
-function greatRootGeo(): THREE.BufferGeometry {
+let greatGeo: Geometry | null = null;
+function greatRootGeo(): Geometry {
   if (greatGeo) return greatGeo;
   const L = GREAT_LENGTH;
   const path = [V(0, -0.4, 0), V(0.12, L * 0.3, 0.05), V(-0.08, L * 0.62, -0.04), V(0.05, L, 0.02)];
@@ -40,12 +40,12 @@ function greatRootGeo(): THREE.BufferGeometry {
 }
 
 /** Her cage's pool: `ROOTMOTHER.cage.roots` roots and the great root, each a mesh under `root` in `wood`, at no size. */
-export interface CagePool { roots: THREE.Mesh[]; great: THREE.Mesh }
+export interface CagePool { roots: Mesh[]; great: Mesh }
 
 /** The pool hung under her model's `root`, in her bark (`wood`, her own material: no look of its own). */
-export function hangCagePool(root: THREE.Object3D, wood: THREE.Material): CagePool {
+export function hangCagePool(root: Node, wood: Material): CagePool {
   const roots = Array.from({ length: C.roots }, (_, i) => {
-    const m = new THREE.Mesh(cageRootGeo(), wood);
+    const m = new Mesh(cageRootGeo(), wood);
     m.name = `cage root ${i}`;
     m.castShadow = true;
     m.scale.setScalar(CAGE_NO_SIZE);
@@ -56,7 +56,7 @@ export function hangCagePool(root: THREE.Object3D, wood: THREE.Material): CagePo
     root.add(m);
     return m;
   });
-  const great = new THREE.Mesh(greatRootGeo(), wood);
+  const great = new Mesh(greatRootGeo(), wood);
   great.name = 'great root';
   great.castShadow = true;
   great.scale.setScalar(CAGE_NO_SIZE);
@@ -66,10 +66,10 @@ export function hangCagePool(root: THREE.Object3D, wood: THREE.Material): CagePo
   return { roots, great };
 }
 
-const _local = new THREE.Vector3(), _rootTurn = new THREE.Quaternion();
+const _local = new Vec3(), _rootTurn = new Quat();
 
 /** Pooled part `m` placed in the world: at `at`, turned `turn`, scaled `scale` (its parent her root, which moves). */
-export function placePooled(m: THREE.Object3D, at: THREE.Vector3, turn: THREE.Quaternion, scale: number): void {
+export function placePooled(m: Node, at: Vec3, turn: Quat, scale: number): void {
   const root = m.parent!;
   root.updateWorldMatrix(true, false);
   m.position.copy(root.worldToLocal(_local.copy(at)));
@@ -82,6 +82,6 @@ export function placePooled(m: THREE.Object3D, at: THREE.Vector3, turn: THREE.Qu
 }
 
 /** Pooled part `m` put away again (at no size, where it was). */
-export function putAway(m: THREE.Object3D): void {
+export function putAway(m: Node): void {
   m.scale.setScalar(CAGE_NO_SIZE);
 }

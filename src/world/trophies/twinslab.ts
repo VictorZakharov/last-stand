@@ -3,7 +3,8 @@
 // a distance field meshed with surface nets, its hollows darkened in its vertex colours, as the Twins' own are made
 // from), Slab's broad with an ember in its sockets, Reliquary's drawn long with a cold light and the third eye in its
 // brow; the links are the Twins' chain's (entities/models/twins.ts). Nothing of the Twins' own chunk is loaded for it.
-import * as THREE from '../../engine/three.ts';
+import { Color, LitMaterial, Node, Vec3 } from '../../engine/api/index.ts';
+import * as shapes from '../../engine/api/shapes/index.ts';
 import { skullGeometry } from '../skull';
 import { organic } from '../../entities/models/shapes';
 import type { TrophyDef } from '../../data/houses';
@@ -26,30 +27,30 @@ const THIRD_EYE: [number, number, number] = [0, 0.14, 0.104];
 
 /** The chain's path: from behind Slab's skull round the front of both at their cheeks' height, then a tail hanging
  *  over the cushion's front edge (`t` from 0 to 1). */
-function chainAt(t: number): THREE.Vector3 {
+function chainAt(t: number): Vec3 {
   if (t < 0.78) {
     const a = Math.PI * (-0.12 + (t / 0.78) * 1.24);
-    return new THREE.Vector3(-Math.cos(a) * 0.235, CUSHION_TOP + 0.05 - Math.sin(a) * 0.02, Math.sin(a) * 0.13);
+    return new Vec3(-Math.cos(a) * 0.235, CUSHION_TOP + 0.05 - Math.sin(a) * 0.02, Math.sin(a) * 0.13);
   }
   const s = (t - 0.78) / 0.22;
-  return new THREE.Vector3(0.235 - s * 0.03, CUSHION_TOP + 0.03 - s * s * 0.08, 0.02 + s * 0.15);
+  return new Vec3(0.235 - s * 0.03, CUSHION_TOP + 0.03 - s * s * 0.08, 0.02 + s * 0.15);
 }
 
 /** The Twins' skulls on their cushion, bound by their chain. */
-export const model: TrophyModel = (g: THREE.Group, def: TrophyDef, M: Mats) => {
+export const model: TrophyModel = (g: Node, def: TrophyDef, M: Mats) => {
   // (a bone a shade darker than the pair's colour: in the room's firelight it burned to a peach)
-  const bone = new THREE.MeshStandardMaterial({ color: new THREE.Color(def.colour).multiplyScalar(0.78), roughness: 0.8,
+  const bone = new LitMaterial({ color: new Color(def.colour).multiplyScalar(0.78), roughness: 0.8,
     vertexColors: true });
-  const link = new THREE.MeshStandardMaterial({ color: def.colour, roughness: 0.7 });
-  const lit = new THREE.MeshStandardMaterial({ color: def.colour, roughness: 0.6, emissive: def.trim, emissiveIntensity: 0.6 });
-  const velvet = new THREE.MeshStandardMaterial({ color: 0x4a0e16, roughness: 0.95 });
+  const link = new LitMaterial({ color: def.colour, roughness: 0.7 });
+  const lit = new LitMaterial({ color: def.colour, roughness: 0.6, emissive: def.trim, emissiveIntensity: 0.6 });
+  const velvet = new LitMaterial({ color: 0x4a0e16, roughness: 0.95 });
   // (the cushion: a soft block of velvet, a brass tassel at each corner)
-  const cushion = new THREE.BoxGeometry(0.48, CUSHION_TOP, 0.3, 8, 2, 6).translate(0, CUSHION_TOP / 2, 0);
+  const cushion = shapes.box(0.48, CUSHION_TOP, 0.3, 8, 2, 6).translate(0, CUSHION_TOP / 2, 0);
   part(g, organic(cushion, 0.006, 14, 7), velvet);
   for (const sx of [-1, 1]) {
     for (const sz of [-1, 1]) {
-      part(g, new THREE.SphereGeometry(0.013, 8, 6), M.brass, [sx * 0.235, CUSHION_TOP * 0.6, sz * 0.145]);
-      part(g, new THREE.ConeGeometry(0.01, 0.04, 6), M.brass, [sx * 0.24, CUSHION_TOP * 0.6 - 0.025, sz * 0.15], [Math.PI, 0, 0]);
+      part(g, shapes.sphere(0.013, 8, 6), M.brass, [sx * 0.235, CUSHION_TOP * 0.6, sz * 0.145]);
+      part(g, shapes.cone(0.01, 0.04, 6), M.brass, [sx * 0.24, CUSHION_TOP * 0.6 - 0.025, sz * 0.15], [Math.PI, 0, 0]);
     }
   }
   // (the skulls, sunk a little into the cushion: Slab's broad, Reliquary's long, each turned in to the other)
@@ -59,7 +60,7 @@ export const model: TrophyModel = (g: THREE.Group, def: TrophyDef, M: Mats) => {
     { x: APART, turn: -TURN, scale: [SKULL * 0.96, SKULL * 1.02, SKULL * 1.12], eyes: 0x8fe8ff, third: true },
   ];
   for (const twin of twins) {
-    const skull = new THREE.Group();
+    const skull = new Node();
     skull.position.set(twin.x, CUSHION_TOP - 0.01, -0.01);
     skull.rotation.y = twin.turn;
     skull.scale.set(...twin.scale);
@@ -67,19 +68,19 @@ export const model: TrophyModel = (g: THREE.Group, def: TrophyDef, M: Mats) => {
     part(skull, geo, bone);
     const ember = glowOf(twin.eyes, 0.9);
     for (const sx of [-1, 1]) {
-      part(skull, new THREE.SphereGeometry(0.011, 8, 6), ember, [sx * EYE[0], EYE[1], EYE[2]]).castShadow = false;
+      part(skull, shapes.sphere(0.011, 8, 6), ember, [sx * EYE[0], EYE[1], EYE[2]]).castShadow = false;
     }
-    if (twin.third) part(skull, new THREE.OctahedronGeometry(0.009), glowOf(def.trim, 1.2), THIRD_EYE).castShadow = false;
+    if (twin.third) part(skull, shapes.octahedron(0.009), glowOf(def.trim, 1.2), THIRD_EYE).castShadow = false;
   }
   // (the chain of bone: links turned a quarter to each other along its path, every fifth still lit gold)
   const links = Math.floor(1 / (STEP / 0.75));
-  const ring = new THREE.TorusGeometry(LINK, LINK * 0.34, 6, 12).scale(1, 1.45, 1);
+  const ring = shapes.torus(LINK, LINK * 0.34, 6, 12).scale(1, 1.45, 1);
   for (let i = 0; i <= links; i++) {
     const t = i / links;
     const at = chainAt(t);
     const ahead = chainAt(Math.min(1, t + 0.01)).sub(chainAt(Math.max(0, t - 0.01))).normalize();
     const mesh = part(g, ring, i % 5 === 2 ? lit : link, [at.x, at.y, at.z]);
-    mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), ahead);
+    mesh.quaternion.setFromUnitVectors(new Vec3(0, 1, 0), ahead);
     mesh.rotateY(i % 2 ? Math.PI / 2 : 0);
     mesh.castShadow = false;
   }

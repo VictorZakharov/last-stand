@@ -2,19 +2,22 @@
 // profiles, organic noise displacement, ragged cloth, and `Sculpt`, which merges the static pieces
 // of each joint per material into one mesh, so a detailed creature stays a few draw calls. A creature
 // is built once per kind: later ones replay the merged geometry (see Sculpt), so spawning stays cheap.
-import * as THREE from '../../engine/three.ts';
+import {
+  Attribute, Bone, CatmullRom3, Euler, floats, Geometry, LitMaterial, Mat4, Material, Maths, mergeGeometries,
+  mergeVertices, Mesh, MeshDepthMaterial, Node, Quat, Raycaster, RGBADepthPacking, Skeleton, SkinnedMesh, Vec2, Vec3,
+} from '../../engine/api/index.ts';
+import * as shapes from '../../engine/api/shapes/index.ts';
 import { sameLooks } from '../../core/materials';
-import { mergeGeometries, mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 import { mulberry } from '../../util';
 import { forearmAt, wristOf, type ArmBuild } from './build';
 
 /** while a Sculpt replays cached geometry, the builders return this stand-in instead of doing work */
-const NONE = new THREE.BufferGeometry();
+const NONE = new Geometry();
 let replaying = false;
 /** true while a creature's geometry comes from the cache: skip building any geometry by hand */
 export const skipping = (): boolean => replaying;
 
-const _v = new THREE.Vector3(), _n = new THREE.Vector3(), _b = new THREE.Vector3(), _t = new THREE.Vector3();
+const _v = new Vec3(), _n = new Vec3(), _b = new Vec3(), _t = new Vec3();
 
 /**
  * A tube along `pts` (a Catmull-Rom curve through them) whose radius follows `radius(t)`, t 0..1 from
@@ -22,9 +25,9 @@ const _v = new THREE.Vector3(), _n = new THREE.Vector3(), _b = new THREE.Vector3
  * (They pointed in, which a double-sided material hides, as three turns a back face's normal to the camera: one
  * sided, the forest's roots showed their inside, lit from below, black. #289)
  */
-export function taperTube(pts: THREE.Vector3[], radius: (t: number) => number, segs = 12, radial = 7): THREE.BufferGeometry {
+export function taperTube(pts: Vec3[], radius: (t: number) => number, segs = 12, radial = 7): Geometry {
   if (replaying) return NONE;
-  const curve = new THREE.CatmullRomCurve3(pts);
+  const curve = new CatmullRom3(pts);
   // (its arc lengths over 8 steps a segment: by three's 200 a fur tuft of 3 segments took 200 points of the curve to
   // place 4 rings, half of a hero's fur; the rings move under 0.2 mm)
   curve.arcLengthDivisions = Math.max(segs * 8, 32);
@@ -49,25 +52,25 @@ export function taperTube(pts: THREE.Vector3[], radius: (t: number) => number, s
   const tip = pos.length / 3;
   pos.push(_v.x + _t.x * radius(1) * 0.8, _v.y + _t.y * radius(1) * 0.8, _v.z + _t.z * radius(1) * 0.8); uv.push(0.5, 1);
   for (let k = 0; k < radial; k++) { const a = segs * (radial + 1) + k; idx.push(a, a + 1, tip); }
-  const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-  g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  const g = new Geometry();
+  g.setAttribute('position', floats(pos, 3));
+  g.setAttribute('uv', floats(uv, 2));
   g.setIndex(idx);
   g.computeVertexNormals();
   return g;
 }
 
 /** A horn: out along `dir`, curling by `curl` radians about `axis`, with growth rings. */
-export function horn(len: number, base: number, curl: number, axis = new THREE.Vector3(1, 0, 0), dir = new THREE.Vector3(0, 1, 0), rings = 0): THREE.BufferGeometry {
+export function horn(len: number, base: number, curl: number, axis = new Vec3(1, 0, 0), dir = new Vec3(0, 1, 0), rings = 0): Geometry {
   if (replaying) return NONE;
-  const pts: THREE.Vector3[] = [], p = new THREE.Vector3(), d = dir.clone().normalize(), step = len / 6;
+  const pts: Vec3[] = [], p = new Vec3(), d = dir.clone().normalize(), step = len / 6;
   for (let i = 0; i <= 6; i++) { pts.push(p.clone()); p.addScaledVector(d, step); d.applyAxisAngle(axis, curl / 6); }
   return taperTube(pts, (t) => base * (1 - t * 0.92) * (rings ? 1 + 0.1 * Math.max(0, Math.sin(t * rings * Math.PI * 2)) * (1 - t) : 1), rings ? 16 : 10, 7);
 }
 
 /** A lathed solid from a profile of [radius, y] pairs, bottom to top: its faces point out (top to bottom, in). */
-export const lathe = (profile: [number, number][], segs = 16): THREE.BufferGeometry => replaying ? NONE :
-  new THREE.LatheGeometry(profile.map(([r, y]) => new THREE.Vector2(Math.max(1e-4, r), y)), segs);
+export const lathe = (profile: [number, number][], segs = 16): Geometry => replaying ? NONE :
+  shapes.lathe(profile.map(([r, y]) => new Vec2(Math.max(1e-4, r), y)), segs);
 
 /** how far out from the forearm's axis a ray looking for the skin under a wrap starts (m) */
 const RAY_OUT = 0.12;
@@ -89,15 +92,15 @@ const FOREARM_GAP = 0.0015;
 const EDGE_GAP = 0;
 /** where across a wrap's strip its section's points lie (0 one edge, 1 the other): each laid on the skin under it */
 const ACROSS = [0, 0.53, 1];
-const _ray = new THREE.Raycaster(), _rayFrom = new THREE.Vector3(), _rayAxis = new THREE.Vector3();
-const _rayWay = new THREE.Vector3(), _rayHit = new THREE.Vector3();
+const _ray = new Raycaster(), _rayFrom = new Vec3(), _rayAxis = new Vec3();
+const _rayWay = new Vec3(), _rayHit = new Vec3();
 
 /**
  * How far out the skin is under a point of a wrap, as a share of the point's own distance from the forearm's axis
  * (1 where no skin is under it). `axis` and `at` are in `elbow`'s frame. A ray from outside in along the point's way
  * out from the axis, its innermost hit: under the thumb's web the palm, not the thumb over it.
  */
-function skinShare(elbow: THREE.Object3D, axis: THREE.Vector3, at: THREE.Vector3, skin: readonly THREE.Object3D[]):
+function skinShare(elbow: Node, axis: Vec3, at: Vec3, skin: readonly Node[]):
   number {
   const reach = at.distanceTo(axis);
   if (!skin.length || reach < 1e-4) return 1;
@@ -106,20 +109,20 @@ function skinShare(elbow: THREE.Object3D, axis: THREE.Vector3, at: THREE.Vector3
   _rayWay.subVectors(_rayAxis, _rayFrom);
   _ray.set(_rayFrom, _rayWay.normalize());
   _ray.far = _rayFrom.distanceTo(_rayAxis);
-  const hits = _ray.intersectObjects(skin as THREE.Object3D[], false);
+  const hits = _ray.intersectObjects(skin as Node[], false);
   if (!hits.length) return 1;
   return elbow.worldToLocal(_rayHit.copy(hits[hits.length - 1].point)).distanceTo(axis) / reach;
 }
 
 /** a skin as one pose draws it, for rays level in a forearm's frame: what a ray at height `y` there can meet */
 interface StillSkin {
-  slab(y: number): readonly THREE.Object3D[];
+  slab(y: number): readonly Node[];
   dispose(): void;
 }
 
 /** how thick a slab of a still skin is (m, up the forearm): a ray meets only its own slab's triangles */
 const STILL_SLAB = 0.004;
-const _still = new THREE.Vector3();
+const _still = new Vec3();
 
 /**
  * `skin` as it's drawn now, for the rays a wrap's lay casts at it, which run level in `elbow`'s frame: a skinned
@@ -128,8 +131,8 @@ const _still = new THREE.Vector3();
  * skinned mesh, each ray posed every vertex again; at one plain mesh of it all, each still met every triangle, and
  * the two wrists' thousand rays were 1.2 s of a boot's task. A mesh that isn't skinned is met whole, as it was.
  */
-function stillSkin(skin: THREE.Object3D, elbow: THREE.Object3D): StillSkin {
-  if (!(skin instanceof THREE.SkinnedMesh)) return { slab: () => [skin], dispose: () => {} };
+function stillSkin(skin: Node, elbow: Node): StillSkin {
+  if (!(skin instanceof SkinnedMesh)) return { slab: () => [skin], dispose: () => {} };
   const from = skin.geometry.attributes.position, count = from.count;
   const at = new Float32Array(count * 3), heights = new Float32Array(count);
   for (let i = 0; i < count; i++) {
@@ -151,19 +154,19 @@ function stillSkin(skin: THREE.Object3D, elbow: THREE.Object3D): StillSkin {
       slabs.set(slab, held);
     }
   }
-  const points = new THREE.BufferAttribute(at, 3);
-  const meshes = new Map<number, THREE.Mesh>();
-  const none: readonly THREE.Object3D[] = [];
+  const points = new Attribute(at, 3);
+  const meshes = new Map<number, Mesh>();
+  const none: readonly Node[] = [];
   return {
     slab(y) {
       const slab = Math.floor(y / STILL_SLAB), held = slabs.get(slab);
       if (!held) return none;
       let mesh = meshes.get(slab);
       if (!mesh) {
-        const geometry = new THREE.BufferGeometry();
+        const geometry = new Geometry();
         geometry.setAttribute('position', points);
-        geometry.setIndex(new THREE.BufferAttribute(new Uint32Array(held), 1));
-        mesh = new THREE.Mesh(geometry, skin.material);
+        geometry.setIndex(new Attribute(new Uint32Array(held), 1));
+        mesh = new Mesh(geometry, skin.material);
         meshes.set(slab, mesh);
       }
       return [mesh];
@@ -175,7 +178,7 @@ function stillSkin(skin: THREE.Object3D, elbow: THREE.Object3D): StillSkin {
 }
 
 /** the skin a wrap is laid over: its meshes, or what gives the meshes drawn in the hand's pose as it's posed */
-type SkinShown = readonly THREE.Object3D[] | (() => readonly THREE.Object3D[]);
+type SkinShown = readonly Node[] | (() => readonly Node[]);
 
 /** how a wrap takes up its hand's turn (m up the forearm from the wrist): from `from`, the wrist's bend by `bend` and
  *  the forearm's roll by `roll`, through `bones` joints between the elbow's and the hand's */
@@ -192,8 +195,8 @@ const wrapShares = new Map<string, number[][]>();
  * furthest out of them has it: laid over the hand at rest alone, the clenched fist's knuckles and back came through the
  * strip and buried it.
  */
-export function fighterWrap(sculpt: Sculpt, leather: THREE.Material, elbow: THREE.Object3D,
-  palm: THREE.Object3D, towardThumb: number, arm: ArmBuild, skinShown: SkinShown = [],
+export function fighterWrap(sculpt: Sculpt, leather: Material, elbow: Node,
+  palm: Node, towardThumb: number, arm: ArmBuild, skinShown: SkinShown = [],
   poses: readonly (() => void)[] = []): () => void {
   // (a fighter's hand draws another skin in its fist than open: the wrap is laid over the one each pose draws)
   const skinNow = () => (typeof skinShown === 'function' ? skinShown() : skinShown);
@@ -223,7 +226,7 @@ export function fighterWrap(sculpt: Sculpt, leather: THREE.Material, elbow: THRE
   // Separate normals on the 1.8 mm exposed edge. Rounded rings looked like a bracer even when stepped.
   const section = [[0, 0.0010], [0, 0.0028], [0, 0.0028], [0.53, 0.0018], [1, 0.0010]];
   const positions: number[] = [], uvs: number[] = [], weights: number[] = [], indices: number[] = [];
-  const smooth = THREE.MathUtils.smoothstep;
+  const smooth = Maths.smoothstep;
   const flatOval = (x: number) => Math.sign(x) * Math.pow(Math.abs(x), 0.72);
   // (over the forearm its build's section (`build.ts`: from the hand's own wrist out to the belly), the wrap
   // `WRAP_GAP` over it all round: from play, "and wrist/arm thickness, its a warrior dude", "we need parametric
@@ -243,13 +246,13 @@ export function fighterWrap(sculpt: Sculpt, leather: THREE.Material, elbow: THRE
   // (each row's share of its oval the skin lies at, its middle's, with the rows above the hand eased back to 1)
   // (by the hand's size and side, the same for every build of it: by its mesh's own id, every build cast its rays
   // again, 5 to 7 ms of a hero's build, `lab behind`)
-  const key = skin.map((m) => (m as THREE.Mesh).geometry?.attributes.position?.count).join() + '/' + towardThumb +
+  const key = skin.map((m) => (m as Mesh).geometry?.attributes.position?.count).join() + '/' + towardThumb +
     '/' + palm.scale.x.toFixed(3);
   let shares = wrapShares.get(key);
   if (!shares) {
     palm.updateWorldMatrix(true, true);
     elbow.updateWorldMatrix(true, false);
-    const axis = new THREE.Vector3(), at = new THREE.Vector3();
+    const axis = new Vec3(), at = new Vec3();
     // (each of a row's edges and its middle on the skin under it, eased back to its oval above the hand, never under
     // the skin: eased in under it, a bump of the wrist came through the strip as a hole. A row laid at the most any of
     // them needed stood an edge off the skin where it dipped under it, and the wrist was seen through under the strip's
@@ -260,7 +263,7 @@ export function fighterWrap(sculpt: Sculpt, leather: THREE.Material, elbow: THRE
       axis.set(wrist.position.x, y + wrist.position.y, wrist.position.z);
       at.set(towardThumb * x * rx, y, z * rz).add(wrist.position);
       const reach = at.distanceTo(axis), out = skinShare(elbow, axis, at, under.flatMap((still) => still.slab(axis.y)));
-      return out === 1 ? null : THREE.MathUtils.clamp(out + gap / reach, 0.6, 1.4);
+      return out === 1 ? null : Maths.clamp(out + gap / reach, 0.6, 1.4);
     };
     // (the skin as each pose draws it, posed once and kept for every ray of the lay, `stillSkin`. Cast at the skinned
     // meshes themselves, each ray had three pose every vertex of the hand by its bones, and each of a row's six points
@@ -296,7 +299,7 @@ export function fighterWrap(sculpt: Sculpt, leather: THREE.Material, elbow: THRE
       // skin rose between it and the edges through the strip)
       return found.map((s, k) => {
         const on = ACROSS[k] === 0 || ACROSS[k] === 1 ? s ?? most : most;
-        return Math.max(on, THREE.MathUtils.lerp(on, 1, smooth(ys[k], SKIN_FROM, SKIN_TO)));
+        return Math.max(on, Maths.lerp(on, 1, smooth(ys[k], SKIN_FROM, SKIN_TO)));
       });
     });
     if (skin.length) wrapShares.set(key, shares);
@@ -331,10 +334,10 @@ export function fighterWrap(sculpt: Sculpt, leather: THREE.Material, elbow: THRE
       face(a + right, b + left, b + right);
     }
   }
-  const geometry = new THREE.BufferGeometry();
-  geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-  geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
-  geometry.setAttribute('skinK', new THREE.Float32BufferAttribute(weights, 1));
+  const geometry = new Geometry();
+  geometry.setAttribute('position', floats(positions, 3));
+  geometry.setAttribute('uv', floats(uvs, 2));
+  geometry.setAttribute('skinK', floats(weights, 1));
   geometry.setIndex(indices);
   geometry.computeVertexNormals();
   // Take up the turn in small steps around the wrist. Blending straight across the wrist pinched the strip flat.
@@ -343,7 +346,7 @@ export function fighterWrap(sculpt: Sculpt, leather: THREE.Material, elbow: THRE
   // 5 cm of the wrist, a fist turned a quarter round on its forearm, the guard's palm to his own face, wrung the
   // strip there: a fist seen broadside on a wrist seen edge on, from play, "also the wrist")
   const twists = Array.from({ length: WRAP_TURN.bones }, () => {
-    const bone = new THREE.Group();
+    const bone = new Node();
     bone.position.copy(wrist.position);
     elbow.add(bone);
     return bone;
@@ -360,8 +363,8 @@ export function fighterWrap(sculpt: Sculpt, leather: THREE.Material, elbow: THRE
     return 1 - smooth((low + high) / 2, WRAP_TURN.from, WRAP_TURN.bend);
   });
   sculpt.skinChain(geometry, leather, elbow, [elbow, ...twists, palm]);
-  const turn = new THREE.Quaternion(), rest = new THREE.Quaternion();
-  const roll = new THREE.Quaternion(), bend = new THREE.Quaternion(), part = new THREE.Quaternion();
+  const turn = new Quat(), rest = new Quat();
+  const roll = new Quat(), bend = new Quat(), part = new Quat();
   return () => {
     turn.multiplyQuaternions(wrist.quaternion, palm.quaternion);
     // (the turn's roll about the forearm's length, its y, and the bend that's left of it)
@@ -376,7 +379,7 @@ export function fighterWrap(sculpt: Sculpt, leather: THREE.Material, elbow: THRE
 }
 
 /** Push every vertex along its normal by smooth 3D noise: turns primitives into flesh, rock or bark. */
-export function organic(src: THREE.BufferGeometry, amp: number, freq: number, seed = 1): THREE.BufferGeometry {
+export function organic(src: Geometry, amp: number, freq: number, seed = 1): Geometry {
   if (replaying) return NONE;
   const n = noise3(seed);
   // faceted geometry (polyhedra) has a vertex per face: weld it first, or the faces would drift apart
@@ -387,7 +390,7 @@ export function organic(src: THREE.BufferGeometry, amp: number, freq: number, se
     // a cylindrical projection stands in for the per-face uvs
     const p = g.attributes.position, uv = new Float32Array(p.count * 2);
     for (let i = 0; i < p.count; i++) { uv[i * 2] = Math.atan2(p.getZ(i), p.getX(i)) / Math.PI + 1; uv[i * 2 + 1] = p.getY(i); }
-    g.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+    g.setAttribute('uv', new Attribute(uv, 2));
   }
   if (!g.attributes.normal) g.computeVertexNormals();
   const p = g.attributes.position, nr = g.attributes.normal;
@@ -402,7 +405,7 @@ export function organic(src: THREE.BufferGeometry, amp: number, freq: number, se
 }
 
 /** Bend a geometry: x offset grows with y (lean), for drooping cloth or curved blades. */
-export function bend<G extends THREE.BufferGeometry>(g: G, k: number, axis: 'x' | 'z' = 'z'): G {
+export function bend<G extends Geometry>(g: G, k: number, axis: 'x' | 'z' = 'z'): G {
   if (replaying) return g;
   const p = g.attributes.position;
   for (let i = 0; i < p.count; i++) { const y = p.getY(i); axis === 'z' ? p.setZ(i, p.getZ(i) + k * y * y) : p.setX(i, p.getX(i) + k * y * y); }
@@ -411,9 +414,9 @@ export function bend<G extends THREE.BufferGeometry>(g: G, k: number, axis: 'x' 
 }
 
 /** A hanging ragged strip of cloth, top edge at y = 0: uneven torn hem, a little crumple. */
-export function rag(w: number, h: number, seed = 1, tears = 3): THREE.BufferGeometry {
+export function rag(w: number, h: number, seed = 1, tears = 3): Geometry {
   if (replaying) return NONE;
-  const r = mulberry(seed), g = new THREE.PlaneGeometry(w, h, 4, 6).translate(0, -h / 2, 0), p = g.attributes.position;
+  const r = mulberry(seed), g = shapes.plane(w, h, 4, 6).translate(0, -h / 2, 0), p = g.attributes.position;
   const cuts = Array.from({ length: 5 }, () => r());
   for (let i = 0; i < p.count; i++) {
     const x = p.getX(i), y = p.getY(i), u = (x / w + 0.5), k = -y / h;
@@ -426,9 +429,9 @@ export function rag(w: number, h: number, seed = 1, tears = 3): THREE.BufferGeom
 }
 
 /** An open robe cone (top radius r0 at y = 0, bottom r1 at -h) with folds and a torn, uneven hem. */
-export function tatteredSkirt(r0: number, r1: number, h: number, seed: number, radial = 28): THREE.BufferGeometry {
+export function tatteredSkirt(r0: number, r1: number, h: number, seed: number, radial = 28): Geometry {
   if (replaying) return NONE;
-  const r = mulberry(seed), geo = new THREE.CylinderGeometry(r0, r1, h, radial, 8, true).translate(0, -h / 2, 0);
+  const r = mulberry(seed), geo = shapes.cylinder(r0, r1, h, radial, 8, true).translate(0, -h / 2, 0);
   const cuts = Array.from({ length: radial + 1 }, () => r());
   const p = geo.attributes.position;
   for (let i = 0; i < p.count; i++) {
@@ -446,7 +449,7 @@ export function tatteredSkirt(r0: number, r1: number, h: number, seed: number, r
  * A leaf blade growing along +Y from its stalk at the origin, facing +Z: `len` long, `w` wide, its halves
  * folded up along the midrib by `fold` and the blade curling back (-Z) by `curl`. Draw it double-sided.
  */
-export function leaf(len: number, w: number, fold = 0.35, curl = 0.3, segs = 6): THREE.BufferGeometry {
+export function leaf(len: number, w: number, fold = 0.35, curl = 0.3, segs = 6): Geometry {
   if (replaying) return NONE;
   const pos: number[] = [], uv: number[] = [], idx: number[] = [];
   for (let i = 0; i <= segs; i++) {
@@ -457,18 +460,18 @@ export function leaf(len: number, w: number, fold = 0.35, curl = 0.3, segs = 6):
     const a = i * 3 + k, b = a + 3;
     idx.push(a, a + 1, b, a + 1, b + 1, b);
   }
-  const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-  g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  const g = new Geometry();
+  g.setAttribute('position', floats(pos, 3));
+  g.setAttribute('uv', floats(uv, 2));
   g.setIndex(idx);
   g.computeVertexNormals();
   return g;
 }
 
 /** A fern frond along +Y: an arching stem with paired leaflets shrinking to the tip; arches towards +Z. */
-export function frond(len: number, pairs = 7, arch = 0.5, seed = 1): THREE.BufferGeometry {
+export function frond(len: number, pairs = 7, arch = 0.5, seed = 1): Geometry {
   if (replaying) return NONE;
-  const r = mulberry(seed), parts: THREE.BufferGeometry[] = [];
+  const r = mulberry(seed), parts: Geometry[] = [];
   const at = (t: number) => V3(0, len * t, arch * len * t * t);
   parts.push(taperTube([at(0), at(0.33), at(0.66), at(1)], (t) => len * 0.02 * (1 - t * 0.8), 8, 4));
   for (let i = 1; i <= pairs; i++) {
@@ -485,9 +488,9 @@ export function frond(len: number, pairs = 7, arch = 0.5, seed = 1): THREE.Buffe
 }
 
 /** A strand winding round the Y axis from y = 0 down to -len: a vine or root wrapping a limb or trunk. */
-export function twist(len: number, rad: number, thick: number, turns: number, phase = 0): THREE.BufferGeometry {
+export function twist(len: number, rad: number, thick: number, turns: number, phase = 0): Geometry {
   if (replaying) return NONE;
-  const pts: THREE.Vector3[] = [];
+  const pts: Vec3[] = [];
   for (let i = 0; i <= 8; i++) { const t = i / 8, a = phase + t * turns * Math.PI * 2; pts.push(V3(Math.cos(a) * rad, -len * t, Math.sin(a) * rad)); }
   return taperTube(pts, (t) => thick * (1 - t * 0.5), 12, 4);
 }
@@ -496,8 +499,8 @@ export function twist(len: number, rad: number, thick: number, turns: number, ph
  * A branching limb: a bent tube from `from` along `dir`, forking `depth` more times. Pushes each tube into
  * `out` and every twig end into `tips` (for leaves or blossoms). Seeded: the same rng gives the same tree.
  */
-export function branches(rng: () => number, from: THREE.Vector3, dir: THREE.Vector3, len: number, rad: number, depth: number,
-  out: THREE.BufferGeometry[], tips: THREE.Vector3[], spread = 0.6, radial = 6): void {
+export function branches(rng: () => number, from: Vec3, dir: Vec3, len: number, rad: number, depth: number,
+  out: Geometry[], tips: Vec3[], spread = 0.6, radial = 6): void {
   const d = dir.clone().normalize(), pts = [from.clone()], p = from.clone();
   for (let i = 1; i <= 3; i++) {
     d.x += (rng() - 0.5) * 0.35; d.z += (rng() - 0.5) * 0.35; d.normalize();
@@ -513,7 +516,7 @@ export function branches(rng: () => number, from: THREE.Vector3, dir: THREE.Vect
   }
 }
 
-const V3 = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
+const V3 = (x: number, y: number, z: number) => new Vec3(x, y, z);
 
 /** Smooth 3D value noise in [0, 1]. */
 export function noise3(seed: number): (x: number, y: number, z: number) => number {
@@ -532,7 +535,7 @@ export function noise3(seed: number): (x: number, y: number, z: number) => numbe
 }
 
 /** Mirror a non-indexed geometry across x = 0, keeping its triangles facing out. */
-export function mirrorX<G extends THREE.BufferGeometry>(g: G): G {
+export function mirrorX<G extends Geometry>(g: G): G {
   const p = g.attributes.position, n = g.attributes.normal, uv = g.attributes.uv;
   for (let i = 0; i < p.count; i++) { p.setX(i, -p.getX(i)); if (n) n.setX(i, -n.getX(i)); }
   for (let i = 0; i + 2 < p.count; i += 3) for (const a of [p, n, uv]) {
@@ -546,7 +549,7 @@ export function mirrorX<G extends THREE.BufferGeometry>(g: G): G {
  * A limb hanging down from its joint: length `len`, radius r0 at the joint to r1 at the far end,
  * a muscle `bulge` (fraction of the radius) centred at `at`, rounded ends. Lathed about -Y.
  */
-export function limb(len: number, r0: number, r1: number, bulge = 0, at = 0.35, segs = 12): THREE.BufferGeometry {
+export function limb(len: number, r0: number, r1: number, bulge = 0, at = 0.35, segs = 12): Geometry {
   if (replaying) return NONE;
   const prof: [number, number][] = [];
   const r = (t: number) => (r0 + (r1 - r0) * t) * (1 + bulge * Math.exp(-(((t - at) / 0.28) ** 2)));
@@ -557,21 +560,21 @@ export function limb(len: number, r0: number, r1: number, bulge = 0, at = 0.35, 
 }
 
 /** Remove the rig's stand-in primitives (a creature sculpts its own body on the joints). */
-export function stripRig(root: THREE.Object3D): void {
-  const meshes: THREE.Mesh[] = [];
-  root.traverse((o) => { if ((o as THREE.Mesh).isMesh) meshes.push(o as THREE.Mesh); });
+export function stripRig(root: Node): void {
+  const meshes: Mesh[] = [];
+  root.traverse((o) => { if ((o as Mesh).isMesh) meshes.push(o as Mesh); });
   for (const m of meshes) { m.removeFromParent(); m.geometry.dispose(); }
 }
 
-const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _e = new THREE.Euler(), _s = new THREE.Vector3();
+const _m = new Mat4(), _q = new Quat(), _e = new Euler(), _s = new Vec3();
 
 /** merged geometry per creature kind, shared by every creature of that kind (never disposed) */
-const CACHE = new Map<string, THREE.BufferGeometry[]>();
+const CACHE = new Map<string, Geometry[]>();
 /** Skin weights across joints (prototype, issue #85): `?skin=0` puts every spanning piece back on its one joint */
 export const SKINNING = typeof location === 'undefined' || !/[?&]skin=0/.test(location.search);
 /** The shadow pass draws every caster with one shared depth material, so a skinned caster among rigid ones made
  *  three rebuild that material's program parameters at each switch; skinned meshes get a depth material of their own */
-export const SKIN_DEPTH = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking });
+export const SKIN_DEPTH = new MeshDepthMaterial({ depthPacking: RGBADepthPacking });
 /** pieces smaller than this (bounding radius, m) cast no shadow: chain links, claws, charms */
 const SHADOW_MIN = 0.07;
 
@@ -583,11 +586,11 @@ const SHADOW_MIN = 0.07;
  * The build must be deterministic (seeded randomness only) for that to hold.
  */
 export class Sculpt {
-  private groups = new Map<THREE.Object3D, Map<THREE.Material, THREE.BufferGeometry[]>>();
-  private skins = new Map<THREE.Object3D, Map<THREE.Material, THREE.BufferGeometry[]>>();
-  private bones: THREE.Object3D[] = [];
-  private noShadow = new Set<THREE.Material>();
-  private cached: THREE.BufferGeometry[] | undefined;
+  private groups = new Map<Node, Map<Material, Geometry[]>>();
+  private skins = new Map<Node, Map<Material, Geometry[]>>();
+  private bones: Node[] = [];
+  private noShadow = new Set<Material>();
+  private cached: Geometry[] | undefined;
 
   constructor(private kind?: string) {
     this.cached = kind ? CACHE.get(kind) : undefined;
@@ -595,7 +598,7 @@ export class Sculpt {
   }
 
   /** add `geo` under `parent` at a position, Euler rotation (XYZ) and scale (number = uniform) */
-  add(geo: THREE.BufferGeometry, mat: THREE.Material, parent: THREE.Object3D,
+  add(geo: Geometry, mat: Material, parent: Node,
     pos: [number, number, number] = [0, 0, 0], rot: [number, number, number] = [0, 0, 0], scale: number | [number, number, number] = 1): this {
     if (this.cached) { this.push(parent, mat, NONE); return this; }
     const sc = typeof scale === 'number' ? _s.setScalar(scale) : _s.set(...scale);
@@ -603,10 +606,10 @@ export class Sculpt {
     const g = (geo.index ? geo.toNonIndexed() : geo.clone()).applyMatrix4(_m);
     if (geo.index) geo.dispose();
     // (a piece may give its own blend, b's share at each vertex: a `skinK` attribute)
-    const own = g.attributes.skinK as THREE.BufferAttribute | undefined;
+    const own = g.attributes.skinK as Attribute | undefined;
     // (vertex colours kept for a material that uses them: they merge only with pieces of that material, which carry them too)
-    for (const k of Object.keys(g.attributes)) if (k !== 'position' && k !== 'normal' && k !== 'uv' && (k !== 'color' || !(mat as THREE.MeshStandardMaterial).vertexColors)) g.deleteAttribute(k);
-    if (!g.attributes.uv) g.setAttribute('uv', new THREE.Float32BufferAttribute(new Float32Array(g.attributes.position.count * 2), 2));
+    for (const k of Object.keys(g.attributes)) if (k !== 'position' && k !== 'normal' && k !== 'uv' && (k !== 'color' || !(mat as LitMaterial).vertexColors)) g.deleteAttribute(k);
+    if (!g.attributes.uv) g.setAttribute('uv', floats(new Float32Array(g.attributes.position.count * 2), 2));
     this.push(parent, mat, g);
     return this;
   }
@@ -617,7 +620,7 @@ export class Sculpt {
    * `a`), blended between, so the surface bends with the joint instead of leaving a gap. `geo` is in `a`'s
    * space, placed like `add`. `b` must be a direct child of `a`. Without skinning it is a rigid piece of `a`.
    */
-  skin(geo: THREE.BufferGeometry, mat: THREE.Material, a: THREE.Object3D, b: THREE.Object3D, from: number, to: number,
+  skin(geo: Geometry, mat: Material, a: Node, b: Node, from: number, to: number,
     pos: [number, number, number] = [0, 0, 0], rot: [number, number, number] = [0, 0, 0], scale: number | [number, number, number] = 1): this {
     if (!SKINNING) return this.add(geo, mat, a, pos, rot, scale);
     const ia = this.bone(a), ib = this.bone(b);
@@ -631,10 +634,10 @@ export class Sculpt {
     const g = (geo.index ? geo.toNonIndexed() : geo.clone()).applyMatrix4(_m);
     if (geo.index) geo.dispose();
     // (a piece may give its own blend, b's share at each vertex: a `skinK` attribute)
-    const own = g.attributes.skinK as THREE.BufferAttribute | undefined;
+    const own = g.attributes.skinK as Attribute | undefined;
     // (vertex colours kept for a material that uses them: they merge only with pieces of that material, which carry them too)
-    for (const k of Object.keys(g.attributes)) if (k !== 'position' && k !== 'normal' && k !== 'uv' && (k !== 'color' || !(mat as THREE.MeshStandardMaterial).vertexColors)) g.deleteAttribute(k);
-    if (!g.attributes.uv) g.setAttribute('uv', new THREE.Float32BufferAttribute(new Float32Array(g.attributes.position.count * 2), 2));
+    for (const k of Object.keys(g.attributes)) if (k !== 'position' && k !== 'normal' && k !== 'uv' && (k !== 'color' || !(mat as LitMaterial).vertexColors)) g.deleteAttribute(k);
+    if (!g.attributes.uv) g.setAttribute('uv', floats(new Float32Array(g.attributes.position.count * 2), 2));
     // (the bones' indices as floats: Uint16 ones read by a float attribute are a format D3D11 converts, and ANGLE
     // compiled a vertex shader for it at each skinned program's first draw, on the GPU process's main thread)
     const axis = b.position.clone().normalize(), p = g.attributes.position, idx = new Float32Array(p.count * 4), w = new Float32Array(p.count * 4);
@@ -642,8 +645,8 @@ export class Sculpt {
       const t = Math.min(1, Math.max(0, (_v.fromBufferAttribute(p, i).dot(axis) - from) / (to - from))), k = own ? own.getX(i) : t * t * (3 - 2 * t);
       idx[i * 4] = ia; idx[i * 4 + 1] = ib; w[i * 4] = 1 - k; w[i * 4 + 1] = k;
     }
-    g.setAttribute('skinIndex', new THREE.Float32BufferAttribute(idx, 4));
-    g.setAttribute('skinWeight', new THREE.Float32BufferAttribute(w, 4));
+    g.setAttribute('skinIndex', floats(idx, 4));
+    g.setAttribute('skinWeight', floats(w, 4));
     if (space !== a) {   // into the root's space, as the joints stand now (at rest)
       a.updateWorldMatrix(true, false);
       g.applyMatrix4(_m.copy(space.matrixWorld).invert().multiply(a.matrixWorld));
@@ -657,7 +660,7 @@ export class Sculpt {
    * neighbours a linear blend. (Blended straight from the chest to an arm raised over the head, the cloth halfway took a
    * chord between the two and folded in on the joint.) `geo` is in `a`'s space; without skinning it is a rigid piece of `a`.
    */
-  skinChain(geo: THREE.BufferGeometry, mat: THREE.Material, a: THREE.Object3D, chain: THREE.Object3D[]): this {
+  skinChain(geo: Geometry, mat: Material, a: Node, chain: Node[]): this {
     if (!SKINNING) { geo.deleteAttribute('skinK'); return this.add(geo, mat, a); }
     const ids = chain.map((b) => this.bone(b));
     let space = a;
@@ -665,17 +668,17 @@ export class Sculpt {
     if (this.cached) { this.pushTo(this.skins, space, mat, NONE); return this; }
     const g = geo.index ? geo.toNonIndexed() : geo.clone();
     if (geo.index) geo.dispose();
-    const own = g.attributes.skinK as THREE.BufferAttribute;
-    for (const k of Object.keys(g.attributes)) if (k !== 'position' && k !== 'normal' && k !== 'uv' && (k !== 'color' || !(mat as THREE.MeshStandardMaterial).vertexColors)) g.deleteAttribute(k);
-    if (!g.attributes.uv) g.setAttribute('uv', new THREE.Float32BufferAttribute(new Float32Array(g.attributes.position.count * 2), 2));
+    const own = g.attributes.skinK as Attribute;
+    for (const k of Object.keys(g.attributes)) if (k !== 'position' && k !== 'normal' && k !== 'uv' && (k !== 'color' || !(mat as LitMaterial).vertexColors)) g.deleteAttribute(k);
+    if (!g.attributes.uv) g.setAttribute('uv', floats(new Float32Array(g.attributes.position.count * 2), 2));
     // (the bones' indices as floats, as `skin`'s)
     const n = ids.length - 1, p = g.attributes.position, idx = new Float32Array(p.count * 4), w = new Float32Array(p.count * 4);
     for (let i = 0; i < p.count; i++) {
       const t = Math.min(1, Math.max(0, own.getX(i))) * n, at = Math.min(n - 1, Math.floor(t)), f = t - at;
       idx[i * 4] = ids[at]; idx[i * 4 + 1] = ids[at + 1]; w[i * 4] = 1 - f; w[i * 4 + 1] = f;
     }
-    g.setAttribute('skinIndex', new THREE.Float32BufferAttribute(idx, 4));
-    g.setAttribute('skinWeight', new THREE.Float32BufferAttribute(w, 4));
+    g.setAttribute('skinIndex', floats(idx, 4));
+    g.setAttribute('skinWeight', floats(w, 4));
     if (space !== a) {
       a.updateWorldMatrix(true, false);
       g.applyMatrix4(_m.copy(space.matrixWorld).invert().multiply(a.matrixWorld));
@@ -684,20 +687,20 @@ export class Sculpt {
     return this;
   }
   /** `skin` on both sides: the piece on the left joints and its mirror image on the right */
-  skinPair(geo: THREE.BufferGeometry, mat: THREE.Material, aL: THREE.Object3D, bL: THREE.Object3D, aR: THREE.Object3D, bR: THREE.Object3D, from: number, to: number,
+  skinPair(geo: Geometry, mat: Material, aL: Node, bL: Node, aR: Node, bR: Node, from: number, to: number,
     pos: [number, number, number] = [0, 0, 0]): this {
     const mirror = this.cached ? geo.clone() : mirrorX(geo.index ? geo.toNonIndexed() : geo.clone());
     this.skin(geo, mat, aL, bL, from, to, pos);
     return this.skin(mirror, mat, aR, bR, from, to, [-pos[0], pos[1], pos[2]]);
   }
-  private bone(o: THREE.Object3D): number {
+  private bone(o: Node): number {
     let i = this.bones.indexOf(o);
     if (i < 0) i = this.bones.push(o) - 1;
     return i;
   }
 
-  private push(parent: THREE.Object3D, mat: THREE.Material, g: THREE.BufferGeometry): void { this.pushTo(this.groups, parent, mat, g); }
-  private pushTo(store: Map<THREE.Object3D, Map<THREE.Material, THREE.BufferGeometry[]>>, parent: THREE.Object3D, mat: THREE.Material, g: THREE.BufferGeometry): void {
+  private push(parent: Node, mat: Material, g: Geometry): void { this.pushTo(this.groups, parent, mat, g); }
+  private pushTo(store: Map<Node, Map<Material, Geometry[]>>, parent: Node, mat: Material, g: Geometry): void {
     // (a piece of no triangles is left out, so a material none of whose pieces has any draws nothing: a hero's
     // stitches below Low's detail, models/armor.ts. Never a replay's stand-in, which holds a cached piece's place)
     if (g !== NONE && !this.cached && !(g.attributes.position?.count > 0)) { g.dispose(); return; }
@@ -709,7 +712,7 @@ export class Sculpt {
   }
 
   /** the piece on the left joint and its mirror image (x → -x) on the right one */
-  pair(geo: THREE.BufferGeometry, mat: THREE.Material, parentL: THREE.Object3D, parentR: THREE.Object3D | null,
+  pair(geo: Geometry, mat: Material, parentL: Node, parentR: Node | null,
     pos: [number, number, number] = [0, 0, 0], rot: [number, number, number] = [0, 0, 0], scale: number | [number, number, number] = 1): this {
     // (a piece of no triangles has no mirror image either: `pushTo` leaves it out)
     if (!this.cached && !(geo.attributes.position?.count > 0)) return this;
@@ -720,11 +723,11 @@ export class Sculpt {
   }
 
   /** pieces in this material cast no shadow (glows, and leaves: small and thin, their shadows add little) */
-  glow(mat: THREE.Material): this { this.noShadow.add(mat); return this; }
+  glow(mat: Material): this { this.noShadow.add(mat); return this; }
 
-  build(): THREE.Mesh[] {
+  build(): Mesh[] {
     replaying = false;
-    const out: THREE.Mesh[] = [], made: THREE.BufferGeometry[] = [];
+    const out: Mesh[] = [], made: Geometry[] = [];
     let i = 0;
     for (const [parent, m] of this.groups) for (const [mat, list] of m) {
       let g = this.cached?.[i++];
@@ -735,7 +738,7 @@ export class Sculpt {
         if (this.kind) g.userData.shared = true;
       }
       made.push(g);
-      const mesh = new THREE.Mesh(g, mat);
+      const mesh = new Mesh(g, mat);
       mesh.castShadow = !this.noShadow.has(mat) && g.boundingSphere!.radius > SHADOW_MIN;
       mesh.receiveShadow = true;
       parent.add(mesh);
@@ -746,7 +749,7 @@ export class Sculpt {
       let top = this.bones[0];
       while (top.parent) top = top.parent;
       top.updateMatrixWorld(true);
-      const skeleton = new THREE.Skeleton(this.bones as unknown as THREE.Bone[]), twins = new Map<THREE.Material, THREE.Material>();
+      const skeleton = new Skeleton(this.bones as unknown as Bone[]), twins = new Map<Material, Material>();
       for (const [parent, m] of this.skins) for (const [mat, list] of m) {
         let g = this.cached?.[i++];
         if (!g) {
@@ -760,7 +763,7 @@ export class Sculpt {
         // parameters on every switch between the two (it was the whole cost of a crowd)
         let sm = twins.get(mat);
         if (!sm) { twins.set(mat, sm = mat.clone()); sm.onBeforeCompile = mat.onBeforeCompile; sm.customProgramCacheKey = mat.customProgramCacheKey; sameLooks(sm, mat); }
-        const mesh = new THREE.SkinnedMesh(g, sm);
+        const mesh = new SkinnedMesh(g, sm);
         // (its sphere the bind pose's: three would pose every vertex for it at its first draw)
         mesh.boundingSphere = g.boundingSphere!.clone();
         mesh.castShadow = !this.noShadow.has(mat) && g.boundingSphere!.radius > SHADOW_MIN;
@@ -776,7 +779,7 @@ export class Sculpt {
     if (this.kind && !this.cached) CACHE.set(this.kind, made);
     // (its kind, on the model's root: every body of the kind is drawn as one crowd, models/crowd.ts)
     if (this.kind && out.length) {
-      let top: THREE.Object3D = out[0];
+      let top: Node = out[0];
       while (top.parent) top = top.parent;
       top.userData.crowdKind = this.kind;
     }

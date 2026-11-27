@@ -13,7 +13,10 @@
 // The village folk are pictured here too, each first as his card asks for it (Brother Hollis's talk, Odo's trade):
 // another of him built on his own model, looking into the camera, head and shoulders in the room behind him
 // (`folkPortraits.ts`; from play, "lets have an actual picture of him, of his actual face", "Have him look straight").
-import * as THREE from '../../engine/three.ts';
+import {
+  ACESFilmicToneMapping, Box3, DirectionalLight, HemisphereLight, Material, Maths, Mesh, Node, PerspectiveCamera,
+  Source, SRGBColorSpace, Texture, Vec3, WebGLRenderer, World,
+} from '../../engine/api/index.ts';
 import { foeLoaded, loadFoe } from '../../entities/bosses';
 import { ENEMIES, type EnemyId } from '../../data/enemies';
 import { CLASSES, CLASS_IDS } from '../../data/classes/index';
@@ -56,7 +59,7 @@ const made = new Map<Who, HTMLCanvasElement>();
 const waiting = new Map<Who, ((pic: HTMLCanvasElement | null) => void)[]>();
 /** the pictures still to make, the first made next */
 let pending: Who[] = [];
-let renderer: THREE.WebGLRenderer | null = null;
+let renderer: WebGLRenderer | null = null;
 /** a picture couldn't be drawn here (no WebGL): every foe shows its glyph */
 let failed = false;
 /** the browser's store read (once) and the rest queued */
@@ -214,12 +217,12 @@ function settle(id: Who, pic: HTMLCanvasElement | null): void {
  *  (waited on out of the queue: the build queued again as it's done). */
 interface Making {
   id: Who;
-  root: THREE.Object3D;
+  root: Node;
   /** its meshes shown, their buffers still to send (a batch a piece: `BUFFERS_A_PIECE`) */
-  meshes: THREE.Mesh[];
-  scene: THREE.Scene;
-  camera: THREE.PerspectiveCamera;
-  textures: THREE.Texture[];
+  meshes: Mesh[];
+  scene: World;
+  camera: PerspectiveCamera;
+  textures: Texture[];
   /** each of its materials' maps and the small copy it's drawn with here */
   swaps: Swap[];
   compiled: boolean;
@@ -327,7 +330,7 @@ function* steps(): Generator<void, void, undefined> {
       try {
         if (portraitPlant.failNext === next) { portraitPlant.failNext = null; throw new Error('a planted failure'); }
         if (!renderer) { renderer = piece('the renderer made', makeRenderer); yield; }
-        let root: THREE.Object3D, scene: THREE.Scene, camera: THREE.PerspectiveCamera;
+        let root: Node, scene: World, camera: PerspectiveCamera;
         if (isFolk(next)) {
           // (built a slice at a time, as his room builds him: whole, Brother Hollis was one task of 0.9 to 2.7 s)
           // (asked for as the hero walks into his room, before the room has built him: waited for, a while)
@@ -395,17 +398,17 @@ function* steps(): Generator<void, void, undefined> {
   piece('the renderer let go', () => { renderer?.dispose(); renderer?.forceContextLoss(); renderer = null; });
 }
 
-function makeRenderer(): THREE.WebGLRenderer {
+function makeRenderer(): WebGLRenderer {
   const canvas = document.createElement('canvas');
   canvas.width = canvas.height = SIZE;
-  const r = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true, preserveDrawingBuffer: true });
+  const r = new WebGLRenderer({ canvas, alpha: true, antialias: true, preserveDrawingBuffer: true });
   r.setPixelRatio(1);
   r.setSize(SIZE, SIZE, false);
   r.setClearColor(0x000000, 0);
   // (no shader's log read back as it's first used: a read waits on the browser's work, other pictures' compiles)
   r.debug.checkShaderErrors = false;
-  r.outputColorSpace = THREE.SRGBColorSpace;
-  r.toneMapping = THREE.ACESFilmicToneMapping;
+  r.outputColorSpace = SRGBColorSpace;
+  r.toneMapping = ACESFilmicToneMapping;
   r.toneMappingExposure = 1.15;
   return r;
 }
@@ -428,15 +431,15 @@ function* modelOf(id: Who): Generator<void, Model, undefined> {
 }
 
 /** A material's map, and the small copy a picture is drawn with in its place. */
-interface Swap { material: THREE.Material; key: string; small: THREE.Texture }
+interface Swap { material: Material; key: string; small: Texture }
 
 /** the most a picture's texture is across (px): the picture is 320 px, its model a part of it */
 const SMALL = 256;
 /** each texture's small copy, made once (the game's textures are shared by every model of a kind) */
-const smallOf = new WeakMap<THREE.Texture, THREE.Texture>();
+const smallOf = new WeakMap<Texture, Texture>();
 
 /** `t` drawn small, or `t` itself where it's small already or not a picture the page can draw (a data texture). */
-function small(t: THREE.Texture): THREE.Texture {
+function small(t: Texture): Texture {
   const have = smallOf.get(t);
   if (have) return have;
   const img = t.image as { width?: number; height?: number } | null;
@@ -451,7 +454,7 @@ function small(t: THREE.Texture): THREE.Texture {
     c.height = Math.max(1, Math.round(img.height * k));
     c.getContext('2d')?.drawImage(img as CanvasImageSource, 0, 0, c.width, c.height);
     made = t.clone();
-    made.source = new THREE.Source(c);
+    made.source = new Source(c);
     made.needsUpdate = true;
   }
   smallOf.set(t, made);
@@ -461,17 +464,17 @@ function small(t: THREE.Texture): THREE.Texture {
 /** Every map of what's shown of `root`, each with its small copy (made here, once for each texture). The game's
  *  textures are canvases as large as 2048 px, shared by its own renderer: the guide's context read each back to send it
  *  (the Voidling's first, 338 ms in one frame), where a picture shows them a few dozen pixels across. */
-function smallTextures(root: THREE.Object3D): Swap[] {
+function smallTextures(root: Node): Swap[] {
   const swaps: Swap[] = [];
-  const seen = new Set<THREE.Material>();
+  const seen = new Set<Material>();
   root.traverseVisible((o) => {
-    const mats = (o as THREE.Mesh).material;
+    const mats = (o as Mesh).material;
     if (!mats) return;
     for (const m of Array.isArray(mats) ? mats : [mats]) {
       if (seen.has(m)) continue;
       seen.add(m);
       for (const [key, v] of Object.entries(m)) {
-        if ((v as THREE.Texture | null)?.isTexture) swaps.push({ material: m, key, small: small(v as THREE.Texture) });
+        if ((v as Texture | null)?.isTexture) swaps.push({ material: m, key, small: small(v as Texture) });
       }
     }
   });
@@ -492,15 +495,15 @@ function withSmall(swaps: Swap[], draw: () => void): void {
 const BUFFERS_A_PIECE = 12000;
 
 /** Every mesh shown of `root`. */
-function meshesOf(root: THREE.Object3D): THREE.Mesh[] {
-  const found: THREE.Mesh[] = [];
-  root.traverseVisible((o) => { if ((o as THREE.Mesh).isMesh) found.push(o as THREE.Mesh); });
+function meshesOf(root: Node): Mesh[] {
+  const found: Mesh[] = [];
+  root.traverseVisible((o) => { if ((o as Mesh).isMesh) found.push(o as Mesh); });
   return found;
 }
 
 /** The next meshes from `left`, up to `BUFFERS_A_PIECE` vertices (one at least). */
-function takeBatch(left: THREE.Mesh[]): THREE.Mesh[] {
-  const batch: THREE.Mesh[] = [];
+function takeBatch(left: Mesh[]): Mesh[] {
+  const batch: Mesh[] = [];
   let vertices = 0;
   while (left.length && (!batch.length || vertices + left[0].geometry.attributes.position.count <= BUFFERS_A_PIECE)) {
     const mesh = left.shift()!;
@@ -512,31 +515,31 @@ function takeBatch(left: THREE.Mesh[]): THREE.Mesh[] {
 
 /** `m`'s scene drawn with only `batch` of its meshes shown, under its small textures, so their buffers are sent; the
  *  rest shown again after. */
-function drawnAlone(r: THREE.WebGLRenderer, m: Making, batch: THREE.Mesh[]): void {
-  const hidden: THREE.Mesh[] = [];
+function drawnAlone(r: WebGLRenderer, m: Making, batch: Mesh[]): void {
+  const hidden: Mesh[] = [];
   const keep = new Set(batch);
-  m.root.traverseVisible((o) => { if ((o as THREE.Mesh).isMesh && !keep.has(o as THREE.Mesh)) hidden.push(o as THREE.Mesh); });
+  m.root.traverseVisible((o) => { if ((o as Mesh).isMesh && !keep.has(o as Mesh)) hidden.push(o as Mesh); });
   for (const mesh of hidden) mesh.visible = false;
   try { withSmall(m.swaps, () => r.render(m.scene, m.camera)); } finally { for (const mesh of hidden) mesh.visible = true; }
 }
 
 /** The lights a portrait is drawn by: a warm key from the front right, a cool rim from behind, a dim fill. */
-function lights(scene: THREE.Scene): void {
-  scene.add(new THREE.HemisphereLight(0xcfd8ff, 0x2a1e14, 1.1));
-  const key = new THREE.DirectionalLight(0xfff0dc, 2.6);
+function lights(scene: World): void {
+  scene.add(new HemisphereLight(0xcfd8ff, 0x2a1e14, 1.1));
+  const key = new DirectionalLight(0xfff0dc, 2.6);
   key.position.set(3, 5, 6);
   scene.add(key);
-  const rim = new THREE.DirectionalLight(0x9fc4ff, 2.2);
+  const rim = new DirectionalLight(0x9fc4ff, 2.2);
   rim.position.set(-4, 3, -5);
   scene.add(rim);
 }
 
 /** The box round what's shown of `root` (a hero's model holds every piece of gear he could wear, hidden). */
-function shownBox(root: THREE.Object3D): THREE.Box3 {
-  const box = new THREE.Box3(), part = new THREE.Box3();
+function shownBox(root: Node): Box3 {
+  const box = new Box3(), part = new Box3();
   root.traverseVisible((o) => {
-    const geo = (o as THREE.Mesh).geometry;
-    if (!(o as THREE.Mesh).isMesh || !geo) return;
+    const geo = (o as Mesh).geometry;
+    if (!(o as Mesh).isMesh || !geo) return;
     if (!geo.boundingBox) geo.computeBoundingBox();
     box.union(part.copy(geo.boundingBox!).applyMatrix4(o.matrixWorld));
   });
@@ -545,18 +548,18 @@ function shownBox(root: THREE.Object3D): THREE.Box3 {
 
 /** The model at rest, a moment into its idle, in a scene of its own, and a camera framing it head to feet from a
  *  little round its front. */
-function staged(model: Model): { scene: THREE.Scene; camera: THREE.PerspectiveCamera } {
+function staged(model: Model): { scene: World; camera: PerspectiveCamera } {
   for (let i = 0; i < 3; i++) model.animate({ t: 0.4 + i * 0.1, dt: 0.1, phase: 0, move: 0, action: null, hit: 0, dead: -1 });
-  const scene = new THREE.Scene();
+  const scene = new World();
   lights(scene);
   scene.add(model.root);
   model.root.updateMatrixWorld(true);
   const box = shownBox(model.root);
-  const size = box.getSize(new THREE.Vector3()), mid = box.getCenter(new THREE.Vector3());
-  const camera = new THREE.PerspectiveCamera(VIEW.fov, 1, 0.05, 200);
+  const size = box.getSize(new Vec3()), mid = box.getCenter(new Vec3());
+  const camera = new PerspectiveCamera(VIEW.fov, 1, 0.05, 200);
   // (far enough that the taller of its height and its width fills the frame, with a margin)
   const fit = Math.max(size.y, Math.hypot(size.x, size.z) * 0.85) * 0.56;
-  const dist = fit / Math.tan(THREE.MathUtils.degToRad(VIEW.fov / 2));
+  const dist = fit / Math.tan(Maths.degToRad(VIEW.fov / 2));
   camera.position.set(
     mid.x + Math.sin(VIEW.round) * Math.cos(VIEW.down) * dist,
     mid.y + Math.sin(VIEW.down) * dist,

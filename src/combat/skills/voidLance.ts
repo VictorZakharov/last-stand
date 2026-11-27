@@ -1,6 +1,9 @@
 // Void Lance: channeled piercing beam. The hand first draws a portal in the air (a spark tracing a
 // circle that opens into turning rune rings); only once it is open does the lance pour out of it.
-import * as THREE from '../../engine/three.ts';
+import {
+  AdditiveBlending, Color, DoubleSide, Geometry, LookMaterial, Mat4, Mesh, Vec2, Vec3,
+} from '../../engine/api/index.ts';
+import * as shapes from '../../engine/api/shapes/index.ts';
 import { nearGlow } from '../../core/materials';
 import { portShader, wgslNoise } from '../../core/shaderPorts';
 import { effectLook, num, rgb, effectShader } from '../../engine/effects';
@@ -25,16 +28,16 @@ type Def = Needs<'damage' | 'length' | 'width'>;
 
 /** Per-channel state: beam and portal meshes, lights and the damage tick timer. */
 interface LanceState {
-  outer: THREE.Mesh; core: THREE.Mesh; portal: THREE.Mesh;
-  outerMat: THREE.ShaderMaterial; coreMat: THREE.ShaderMaterial; portalMat: THREE.ShaderMaterial;
+  outer: Mesh; core: Mesh; portal: Mesh;
+  outerMat: LookMaterial; coreMat: LookMaterial; portalMat: LookMaterial;
   /** a strand of arcana from each fingertip of the free hand to the portal's middle, and their material */
-  strands: THREE.Mesh[]; strandMat: THREE.ShaderMaterial;
+  strands: Mesh[]; strandMat: LookMaterial;
   lightA: LightSlot; lightB: LightSlot;
   tick: number; t: number;
   /** the beam is out (the portal finished opening) */
   firing: boolean;
   /** where the portal and the lance take the hand to be (the fingertips' middle, eased), once it's been read */
-  hand: THREE.Vector3; held: boolean;
+  hand: Vec3; held: boolean;
   /** how far the lance is drawn out (m): it follows the length it's judged to at a pace */
   reach: number;
   stopHum?: () => void;
@@ -69,7 +72,7 @@ function carry(beam: Beam): Field {
   };
 }
 
-const COLOR = new THREE.Color(0x5dffa8);
+const COLOR = new Color(0x5dffa8);
 const TICK = 0.12;
 /** the portal's radius once open (m); it opens from a spark to this, and shrinks a little while the beam pours out */
 const PORTAL_R = 0.72;
@@ -108,25 +111,25 @@ const LANCE: [number, number][] = [
 const beamGeo = lanceGeometry();
 /** a strand of arcana from a fingertip to the portal's middle, 1 long up y: thin at the finger, thicker where
  *  the five meet (from play: "it should channel from fingers maybe, or smth, to give it volume") */
-const strandGeo = new THREE.CylinderGeometry(1, 0.3, 1, 8, 1, true).translate(0, 0.5, 0);
+const strandGeo = shapes.cylinder(1, 0.3, 1, 8, 1, true).translate(0, 0.5, 0);
 /** a strand's radius where the five meet (m) */
 const STRAND_R = 0.022;
 
 /** The lance's shell, 1 long up y and 1 in radius at its widest, its uv's v its share of the length. */
-function lanceGeometry(): THREE.BufferGeometry {
-  const geometry = new THREE.LatheGeometry(LANCE.map(([along, radius]) => new THREE.Vector2(radius, along)), 20);
+function lanceGeometry(): Geometry {
+  const geometry = shapes.lathe(LANCE.map(([along, radius]) => new Vec2(radius, along)), 20);
   const uv = geometry.attributes.uv, position = geometry.attributes.position;
   for (let i = 0; i < uv.count; i++) uv.setY(i, position.getY(i));
   return geometry;
 }
 /** the portal's quad spans -1..1; its rim sits at RIM of that */
-const portalGeo = new THREE.PlaneGeometry(2, 2);
+const portalGeo = shapes.plane(2, 2);
 const RIM = 0.85;
 
-function beamMaterial(core: boolean): THREE.ShaderMaterial {
-  return effectLook(portShader(nearGlow(new THREE.ShaderMaterial({
+function beamMaterial(core: boolean): LookMaterial {
+  return effectLook(portShader(nearGlow(new LookMaterial({
     uniforms: { uTime: { value: 0 }, uLen: { value: 10 }, uColor: { value: COLOR.clone() }, uCore: { value: core ? 1 : 0 }, uFade: { value: 0 } },
-    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
+    transparent: true, depthWrite: false, blending: AdditiveBlending, side: DoubleSide,
     vertexShader: /* glsl */`
       varying vec2 vUv; varying float vFres;
       void main(){
@@ -274,10 +277,10 @@ fn surface_hook(s: ptr<function, Surface>, in: VertexOut) -> bool {
  * (uOpen 0..0.7), then two rune rings turning against each other, spokes and a slow swirl inside
  * fading in (0.4..1). Added light, no depth write.
  */
-function portalMaterial(): THREE.ShaderMaterial {
-  return effectLook(portShader(nearGlow(new THREE.ShaderMaterial({
+function portalMaterial(): LookMaterial {
+  return effectLook(portShader(nearGlow(new LookMaterial({
     uniforms: { uTime: { value: 0 }, uOpen: { value: 0 }, uFade: { value: 1 }, uColor: { value: COLOR.clone() } },
-    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
+    transparent: true, depthWrite: false, blending: AdditiveBlending, side: DoubleSide,
     vertexShader: /* glsl */`varying vec2 vP; void main(){ vP = position.xy; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
     fragmentShader: /* glsl */`
       varying vec2 vP; uniform float uTime, uOpen, uFade; uniform vec3 uColor;
@@ -426,9 +429,9 @@ fn surface_hook(s: ptr<function, Surface>, in: VertexOut) -> bool {
 }
 `;
 
-const _dir = new THREE.Vector3(), _up = new THREE.Vector3(0, 1, 0), _end = new THREE.Vector3(), _c = new THREE.Vector3(), _from = new THREE.Vector3(), _palm = new THREE.Vector3(), _way = new THREE.Vector3(), _toFocus = new THREE.Vector3();
-const _tips = Array.from({ length: 10 }, () => new THREE.Vector3());
-const _u = new THREE.Vector3(), _v = new THREE.Vector3(), _n = new THREE.Vector3(), _m = new THREE.Matrix4();
+const _dir = new Vec3(), _up = new Vec3(0, 1, 0), _end = new Vec3(), _c = new Vec3(), _from = new Vec3(), _palm = new Vec3(), _way = new Vec3(), _toFocus = new Vec3();
+const _tips = Array.from({ length: 10 }, () => new Vec3());
+const _u = new Vec3(), _v = new Vec3(), _n = new Vec3(), _m = new Mat4();
 const easeOutBack = (k: number) => 1 + 2.2 * (k - 1) ** 3 + 1.2 * (k - 1) ** 2;
 
 const skill: ChannelSkill<LanceState> = {
@@ -439,10 +442,10 @@ const skill: ChannelSkill<LanceState> = {
     ...(def.both ? [{ per: 'tick', base: def.both.damage * TICK, rate: 1 / TICK, type: 'arcane' as const, note: 'from both hands, with no staff' }] : []),
   ],
   channel: true,
-  warm: () => [new THREE.Mesh(beamGeo, beamMaterial(false)), new THREE.Mesh(portalGeo, portalMaterial())],
+  warm: () => [new Mesh(beamGeo, beamMaterial(false)), new Mesh(portalGeo, portalMaterial())],
   start(player, rawDef) {
     const outerMat = beamMaterial(false), coreMat = beamMaterial(true), portalMat = portalMaterial();
-    const outer = new THREE.Mesh(beamGeo, outerMat), core = new THREE.Mesh(beamGeo, coreMat), portal = new THREE.Mesh(portalGeo, portalMat);
+    const outer = new Mesh(beamGeo, outerMat), core = new Mesh(beamGeo, coreMat), portal = new Mesh(portalGeo, portalMat);
     outer.frustumCulled = core.frustumCulled = portal.frustumCulled = false;
     // (named for what reads the scene: the lab's `cast` says which of them lit a flash)
     outer.name = 'Void Lance: beam';
@@ -451,7 +454,7 @@ const skill: ChannelSkill<LanceState> = {
     outer.visible = core.visible = false;
     G.scene.add(outer, core, portal);
     const strandMat = beamMaterial(true);
-    const strands = Array.from({ length: 10 }, () => new THREE.Mesh(strandGeo, strandMat));
+    const strands = Array.from({ length: 10 }, () => new Mesh(strandGeo, strandMat));
     for (const strand of strands) {
       strand.frustumCulled = false;
       strand.name = 'Void Lance: strands';
@@ -461,7 +464,7 @@ const skill: ChannelSkill<LanceState> = {
     const opens = rawDef.opening ?? 0;
     const beam: Beam = { on: false, x: 0, y: 0, z: 0, dx: 0, dz: 1, len: 0, w: 0 };
     return {
-      outer, core, portal, outerMat, coreMat, portalMat, strands, strandMat, tick: 0, t: 0, firing: false, reach: 0, hand: new THREE.Vector3(), held: false, beam,
+      outer, core, portal, outerMat, coreMat, portalMat, strands, strandMat, tick: 0, t: 0, firing: false, reach: 0, hand: new Vec3(), held: false, beam,
       stopHum: opens > 0 && !player.quiet ? sfx.lanceCharge(opens) : undefined, calm: addField(carry(beam)), judged: new Set(),
       // a glow at the hand and a pool where it hits, a few metres across: green light washed over a wide
       // circle of ground reads as a haze round the whole cast
@@ -651,7 +654,7 @@ const skill: ChannelSkill<LanceState> = {
           const on = { x: from.x + _dir.x * proj, z: from.z + _dir.z * proj };
           const blow = { dir: { x: _dir.x, z: _dir.z }, lift: 0.15, on };
           hitEnemy(e, (player.bothHands && def.both ? def.both.damage : def.damage) * TICK, { by: player, skill: def, tags: def.tags, type: 'arcane', knock: 0.6, from, blow });
-          burst(new THREE.Vector3(e.pos.x, 1.1, e.pos.z), { count: 4, color: 0x5dffa8, speed: 3, life: 0.3, size: 0.25 });
+          burst(new Vec3(e.pos.x, 1.1, e.pos.z), { count: 4, color: 0x5dffa8, speed: 3, life: 0.3, size: 0.25 });
         }
       }
     }

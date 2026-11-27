@@ -1,7 +1,7 @@
 // A held skill's preview while letting go would cast nothing (on its cooldown, short of energy): turned red, with the
 // seconds of its cooldown counting down in it, and back to the skill's own look as it's ready, so it can be held
 // through the cooldown and let go once it is. Veilstep's first, now every aimed skill's (`SkillDef.aimed`).
-import * as THREE from '../../engine/three.ts';
+import { Color } from '../../engine/api/index.ts';
 import { damp } from '../../util';
 import { anchorLabel, textArt } from '../../ui/floaters';
 import { ORDER, type Label } from '../../ui/overlay/layer';
@@ -33,7 +33,7 @@ export interface At {
 export const readyToGo = (player: Player, def: SkillDef): boolean =>
   player.cooldownLeft(def.impl) <= 0 && (player.sandbox || player.energy >= def.cost);
 
-const red = new THREE.Color(NOT_READY);
+const red = new Color(NOT_READY);
 /** each skill's preview's readiness, by the skill's `impl` (tools/lab reads them) */
 const readinesses = new Map<string, Readiness>();
 
@@ -78,7 +78,7 @@ export class Readiness {
   }
 
   /** `own` turned as far towards red as the preview has, at `bright`, into `out`. */
-  tint(out: THREE.Color, own: THREE.Color, bright: number): THREE.Color {
+  tint(out: Color, own: Color, bright: number): Color {
     return out.copy(own).lerp(red, this.red).multiplyScalar(bright);
   }
 

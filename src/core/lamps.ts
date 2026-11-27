@@ -17,7 +17,7 @@
 // box on the ground is a shelter (the hall of heroes' inside), and each lamp lights either what's inside it or what's
 // outside (its torches lit the terrace through the hall's walls, and the street lamps its room; switched over at its
 // door, the lamps went out as the hero walked in, "lights turn off when I enter the hall").
-import * as THREE from '../engine/three.ts';
+import { Color, DataTexture, HalfFloatType, RedFormat, ShaderChunk, ShaderLib, Vec3 } from '../engine/api/index.ts';
 import { BOUNDS_TEST } from './lightBounds';
 
 /** the most lamps the list holds */
@@ -33,8 +33,8 @@ const SHADOW_OUT = 0.04;
 const SHADOW_BIAS = 0.03;
 /** the map, made at once so every material shares the one texture, its storage made on the GPU with nothing in it
  *  (its picture copied in later, `world/lampAtlas.ts`): a render target's texture three gives a material as none */
-export const lampShadowMap = new THREE.DataTexture(null, SHADOW_TILE * SHADOW_COLUMNS,
-  SHADOW_TILE * Math.ceil(LAMPS_MOST * 6 / SHADOW_COLUMNS), THREE.RedFormat, THREE.HalfFloatType);
+export const lampShadowMap = new DataTexture(null, SHADOW_TILE * SHADOW_COLUMNS,
+  SHADOW_TILE * Math.ceil(LAMPS_MOST * 6 / SHADOW_COLUMNS), RedFormat, HalfFloatType);
 lampShadowMap.source.dataReady = false;
 lampShadowMap.needsUpdate = true;
 // (three clones a material's uniforms from `ShaderLib`'s, a texture with them: a copy would hold none of the map)
@@ -188,25 +188,25 @@ const FALLOFF_SOFT = 'lightDistance * lightDistance + max( decayExponent - 2.0, 
 
 /** The lamps' list given to every lit material three makes and lit in its shaders; once, before any compiles. */
 export function lightTheLamps(): void {
-  const begin = THREE.ShaderChunk.lights_fragment_begin;
+  const begin = ShaderChunk.lights_fragment_begin;
   if (!begin.includes(SPOT_LIGHTS_IF) || !begin.includes('IncidentLight directLight;')) {
     console.error('lightTheLamps: three\'s lit shaders have changed: the lamps light nothing');
     return;
   }
   // (a light's falloff by the square of its distance plus its softness, carried in its decay past 2: a point has none, and
   // a face under a lamp burned white, "blinding light from street light")
-  if (!THREE.ShaderChunk.lights_pars_begin.includes(FALLOFF_BY_POW)) {
+  if (!ShaderChunk.lights_pars_begin.includes(FALLOFF_BY_POW)) {
     console.error('lightTheLamps: three\'s falloff has changed: no light is soft');
     return;
   }
-  THREE.ShaderChunk.lights_pars_begin = THREE.ShaderChunk.lights_pars_begin.replace(FALLOFF_BY_POW, FALLOFF_SOFT) + LAMPS_DECLARED;
+  ShaderChunk.lights_pars_begin = ShaderChunk.lights_pars_begin.replace(FALLOFF_BY_POW, FALLOFF_SOFT) + LAMPS_DECLARED;
   const looped = begin.replace(SPOT_LIGHTS_IF, LAMPS_LIT + SPOT_LIGHTS_IF);
   const packed = looped.includes(pointLoop(true));
   if (!packed && !looped.includes(pointLoop(false))) {
     console.error('lightTheLamps: the point lights\' loop has changed: the lamps light nothing where point lights are');
   }
-  THREE.ShaderChunk.lights_fragment_begin = looped.replace(pointLoop(packed), pointLoopWithLamps(packed));
-  for (const shader of Object.values(THREE.ShaderLib)) {
+  ShaderChunk.lights_fragment_begin = looped.replace(pointLoop(packed), pointLoopWithLamps(packed));
+  for (const shader of Object.values(ShaderLib)) {
     if (!('pointLights' in shader.uniforms)) continue;
     shader.uniforms.lamps = { value: list };
     shader.uniforms.lampShadowMap = { value: lampShadowMap };
@@ -216,7 +216,7 @@ export function lightTheLamps(): void {
 /** A lamp's place: where it burns, how far it reaches (m), and whether it lights the shelter's inside; and for a
  *  renderer that bakes its light (src/engine/lightCache.ts) its colour times its intensity at its fullest, where
  *  every lamp on its side of the shelter dims and brightens with it (the street's by the hour, the hall's torches). */
-export interface LampPlace { at: THREE.Vector3; reach: number; inside: boolean; full?: [number, number, number] }
+export interface LampPlace { at: Vec3; reach: number; inside: boolean; full?: [number, number, number] }
 
 /** whether each lamp lights the shelter's inside, and how far it reaches (m), as placed */
 let insides: boolean[] = [];
@@ -268,7 +268,7 @@ export function placeLamps(shelter: [number, number, number, number], places: re
 
 /** An opening in the shelter's walls the sky lights its inside through (a window): its middle, and the way it faces
  *  into the shelter (1 or -1 along x, 2 or -2 along z). */
-export interface ShelterOpening { at: THREE.Vector3; way: number }
+export interface ShelterOpening { at: Vec3; way: number }
 
 /** the shelter's openings, each half `openingHalf` wide and high (m) */
 let openings: ShelterOpening[] = [];
@@ -291,7 +291,7 @@ export function readShelterOnSurface(on: boolean): void {
 }
 
 /** Lamp `i` (in `placeLamps`' order) lit in `color` at `intensity` (a point light's, in candela); 0 puts it out. */
-export function lightLamp(i: number, color: THREE.Color, intensity: number): void {
+export function lightLamp(i: number, color: Color, intensity: number): void {
   if (i >= insides.length) return;
   const side = intensity > 0 ? (insides[i] ? 1 : -1) : 0;
   // (held out by a harness, the lamp's light is kept for when they're back: the village lights its lamps every frame,

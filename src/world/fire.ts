@@ -7,8 +7,12 @@
 // 1.5 times a second) moves them together. `tools/lab` `fire` measures it.
 import { rustLook } from '../engine/custom';
 import { emberLook } from '../engine/looks/fire';
-import * as THREE from '../engine/three.ts';
-import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import {
+  ClampToEdgeWrapping, ColorRepresentation, CustomBlending, Geometry, LinearFilter, LitMaterial, LookMaterial, Mat4,
+  mergeGeometries, Mesh, Node, OneFactor, OneMinusSrcAlphaFactor, PointLight, RedFormat, Vec2, Vec3, Vec4,
+  VolumeTexture,
+} from '../engine/api/index.ts';
+import * as shapes from '../engine/api/shapes/index.ts';
 import { particles, col } from '../fx/particles';
 import { rand } from '../util';
 import { seeThrough, seeThroughFade } from '../core/seeThrough';
@@ -22,7 +26,7 @@ import { BAKE, decodeFrame, DOMAIN, FLAME_LOOK, FRAME_CELLS, KEPT, KEPT_SIZE, LO
 /** A fire to build: its bed and flames, and the biome's light it flickers. */
 export interface FireSpec {
   /** the middle of its bed (world, m) */
-  at: THREE.Vector3;
+  at: Vec3;
   /** its bed's radius and its flames' height (m) */
   radius: number;
   height: number;
@@ -35,11 +39,11 @@ export interface FireSpec {
    *  hide them, and those in front drawn over them */
   logs?: FireLog[];
   /** the biome's point light over it (one of its six), and its intensity at rest */
-  light: THREE.PointLight;
+  light: PointLight;
   intensity: number;
   /** its smoke: how many puffs a second, and their colour (a coal fire's is thin and dark, wood's paler) */
   smoke: number;
-  smokeColour: THREE.ColorRepresentation;
+  smokeColour: ColorRepresentation;
   /** how many embers a second it gives off */
   embers: number;
   /** its flames' light, a share of a fire's own (1 by default): seen from low and near, as the hall of heroes' camera
@@ -49,8 +53,8 @@ export interface FireSpec {
 
 /** A log in a fire, from end to end, its thickness its radius (m): a cylinder with flat ends. */
 export interface FireLog {
-  from: THREE.Vector3;
-  to: THREE.Vector3;
+  from: Vec3;
+  to: Vec3;
   radius: number;
 }
 
@@ -137,10 +141,10 @@ const NOISE = /* glsl */`
  *  texture's size is all that changes, so no program does), and the wait for it. The loop itself is kept as runs
  *  (`BakedFlames`, about 1 MB), each frame decoded into its slot as the loop comes to it: the loop whole on the GPU was
  *  12.8 MB, and 23 MB before its box was cut to the flames. */
-const flamesVolume = new THREE.Data3DTexture(new Uint8Array(1), 1, 1, 1);
-flamesVolume.format = THREE.RedFormat;
-flamesVolume.minFilter = flamesVolume.magFilter = THREE.LinearFilter;
-flamesVolume.wrapS = flamesVolume.wrapT = flamesVolume.wrapR = THREE.ClampToEdgeWrapping;
+const flamesVolume = new VolumeTexture(new Uint8Array(1), 1, 1, 1);
+flamesVolume.format = RedFormat;
+flamesVolume.minFilter = flamesVolume.magFilter = LinearFilter;
+flamesVolume.wrapS = flamesVolume.wrapT = flamesVolume.wrapR = ClampToEdgeWrapping;
 flamesVolume.unpackAlignment = 1;
 flamesVolume.needsUpdate = true;
 let flamesBaked: Promise<void> = Promise.resolve();
@@ -422,9 +426,9 @@ const FLAME_SHAPE = {
 
 /** `logs` (in a scene's frame, its world matrix `toWorld`) into the flames' `uLogs`, each end from the bed's middle
  *  `centre` (in the world), the rest 0 thick. */
-function knowLogs(known: THREE.Vector4[], logs: FireLog[], toWorld: THREE.Matrix4, centre: THREE.Vector3): void {
+function knowLogs(known: Vec4[], logs: FireLog[], toWorld: Mat4, centre: Vec3): void {
   if (logs.length > LOGS_MOST) throw new Error(`a fire's flames know ${LOGS_MOST} logs at most, not ${logs.length}`);
-  const fromCentre = (end: THREE.Vector3) => end.clone().applyMatrix4(toWorld).sub(centre);
+  const fromCentre = (end: Vec3) => end.clone().applyMatrix4(toWorld).sub(centre);
   logs.forEach((log, i) => {
     known[i * 2].set(...fromCentre(log.from).toArray(), log.radius);
     known[i * 2 + 1].set(...fromCentre(log.to).toArray(), 0);
@@ -432,20 +436,20 @@ function knowLogs(known: THREE.Vector4[], logs: FireLog[], toWorld: THREE.Matrix
 }
 
 /** A fire's flames' box over its bed's middle (m): as far round as their tongues bend, as high as their tallest puff. */
-function flameBox(radius: number, height: number): THREE.Vector3 {
+function flameBox(radius: number, height: number): Vec3 {
   const reach = radius * FLAME_REACH;
-  return new THREE.Vector3(reach, height * FLAME_TOP * (1 + PUFF_SLOW + PUFF_QUICK) * 1.02, reach);
+  return new Vec3(reach, height * FLAME_TOP * (1 + PUFF_SLOW + PUFF_QUICK) * 1.02, reach);
 }
 
 /** A bowl the flames' shader knows as none (its rim under its foot). */
-const noBowl = (): THREE.Vector2[] => [0, 0, -1].map((y) => new THREE.Vector2(y, 0));
+const noBowl = (): Vec2[] => [0, 0, -1].map((y) => new Vec2(y, 0));
 
 /** A fire's flames' material, for its bed's `radius` and its flames' `height` (m), by its seed. */
-function flameMat(radius: number, height: number, seed: number): THREE.ShaderMaterial {
-  const mat = new THREE.ShaderMaterial({
+function flameMat(radius: number, height: number, seed: number): LookMaterial {
+  const mat = new LookMaterial({
     uniforms: {
       uFlames: { value: flamesVolume },
-      uCentre: { value: new THREE.Vector3() },
+      uCentre: { value: new Vec3() },
       uBox: { value: flameBox(radius, height) },
       uRadius: { value: radius },
       uHeight: { value: height * FLAME_TOP },
@@ -453,11 +457,11 @@ function flameMat(radius: number, height: number, seed: number): THREE.ShaderMat
       uGlow: { value: 1 },
       // (each fire its own way round, so no two show the same flames)
       uFrame: { value: 0 },
-      uTurn: { value: new THREE.Vector2(Math.cos(seed * 6.283), Math.sin(seed * 6.283)) },
+      uTurn: { value: new Vec2(Math.cos(seed * 6.283), Math.sin(seed * 6.283)) },
       // (none: its rim under its foot)
       uBowl: { value: noBowl() },
       // (none: each 0 thick)
-      uLogs: { value: Array.from({ length: LOGS_MOST * 2 }, () => new THREE.Vector4()) },
+      uLogs: { value: Array.from({ length: LOGS_MOST * 2 }, () => new Vec4()) },
       // (one for every fire: the quality level's)
       uStepShare: stepShare,
       uLite: lite,
@@ -467,9 +471,9 @@ function flameMat(radius: number, height: number, seed: number): THREE.ShaderMat
     transparent: true,
     depthWrite: false,
     // (its light over what it hides: added, it washed out over anything bright, the daylit forest above all)
-    blending: THREE.CustomBlending,
-    blendSrc: THREE.OneFactor,
-    blendDst: THREE.OneMinusSrcAlphaFactor,
+    blending: CustomBlending,
+    blendSrc: OneFactor,
+    blendDst: OneMinusSrcAlphaFactor,
   });
   // (it fades as the prop under it dissolves, not left burning in the air)
   return seeThroughFade(mat, 'prop');
@@ -533,8 +537,8 @@ const EMBER_COMMON = /* glsl */`
 /** A lit char material glowing through its cracks round `centre` out to `radius` (the bed's, a log's charred end), as
  *  hot as `heat` (1 a log's char, more a bed's): lit by the fire as wood is (unlit, its char and ash read flat as
  *  card), its light its own glow. */
-export function emberMat(centre: THREE.Vector3, radius: number, heat = 1): THREE.MeshStandardMaterial {
-  const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1, metalness: 0 });
+export function emberMat(centre: Vec3, radius: number, heat = 1): LitMaterial {
+  const mat = new LitMaterial({ color: 0xffffff, roughness: 1, metalness: 0 });
   const centreValue = { value: centre.clone() };
   const radiusValue = { value: radius };
   const heatValue = { value: heat };
@@ -570,14 +574,14 @@ export function emberMat(centre: THREE.Vector3, radius: number, heat = 1): THREE
 
 /** A heap of coal lumps over a disc of `radius` (m), highest in its middle, on a dish rising `dish` to its rim; its
  *  base at 0. Laid flat in a brazier's bowl, those away from its middle sank into its sides. */
-function coalsGeo(radius: number, dish: number, rng: () => number): THREE.BufferGeometry {
-  const lumps: THREE.BufferGeometry[] = [];
+function coalsGeo(radius: number, dish: number, rng: () => number): Geometry {
+  const lumps: Geometry[] = [];
   const count = Math.round(30 + radius * 80);
   for (let i = 0; i < count; i++) {
     const out = Math.sqrt(rng()) * radius * 0.92;
     const angle = rng() * Math.PI * 2;
     const size = radius * (0.07 + rng() * 0.08);
-    const lump = new THREE.DodecahedronGeometry(size, 0).toNonIndexed();
+    const lump = shapes.dodecahedron(size, 0).toNonIndexed();
     lump.scale(1 + rng() * 0.5, 0.45 + rng() * 0.25, 1 + rng() * 0.5);
     lump.rotateY(rng() * Math.PI * 2);
     const heap = (1 - out / radius) * radius * 0.28 + (out / radius) ** 2 * dish;
@@ -588,7 +592,7 @@ function coalsGeo(radius: number, dish: number, rng: () => number): THREE.Buffer
 }
 
 /** A small deterministic random stream for a fire's lumps, by its place. */
-function streamAt(at: THREE.Vector3): () => number {
+function streamAt(at: Vec3): () => number {
   let state = Math.floor((at.x * 73.1 + at.z * 19.7) * 1000) >>> 0;
   return () => {
     state = (state * 1664525 + 1013904223) >>> 0;
@@ -597,11 +601,11 @@ function streamAt(at: THREE.Vector3): () => number {
 }
 
 /** Builds the fire `spec` into `scene`: its bed, its flames, and the updater that burns them. */
-export function buildFire(scene: THREE.Object3D, spec: FireSpec, updaters: Updater[]): void {
+export function buildFire(scene: Node, spec: FireSpec, updaters: Updater[]): void {
   const { at, radius, height, light } = spec;
   const rng = streamAt(at);
   const bed = emberMat(at, radius, BED_HEAT);
-  const coals = new THREE.Mesh(coalsGeo(radius, spec.dish, rng), bed);
+  const coals = new Mesh(coalsGeo(radius, spec.dish, rng), bed);
   coals.position.copy(at);
   scene.add(coals);
   const seed = rng();
@@ -612,11 +616,11 @@ export function buildFire(scene: THREE.Object3D, spec: FireSpec, updaters: Updat
   const inWorld = at.clone().applyMatrix4(scene.matrixWorld);
   flames.uniforms.uCentre.value.copy(inWorld);
   flames.uniforms.uGlow.value = spec.glow ?? 1;
-  if (spec.bowl) flames.uniforms.uBowl.value = spec.bowl.map(([y, r]) => new THREE.Vector2(y, r));
+  if (spec.bowl) flames.uniforms.uBowl.value = spec.bowl.map(([y, r]) => new Vec2(y, r));
   knowLogs(flames.uniforms.uLogs.value, spec.logs ?? [], scene.matrixWorld, inWorld);
   const box = flameBox(radius, height);
   const drawnWith = flameMaterial(flames.uniforms as unknown as FlameUniforms, FLAME_SHAPE);
-  const volume = new THREE.Mesh(new THREE.BoxGeometry(box.x * 2, box.y, box.z * 2).translate(0, box.y / 2, 0), drawnWith);
+  const volume = new Mesh(shapes.box(box.x * 2, box.y, box.z * 2).translate(0, box.y / 2, 0), drawnWith);
   volume.userData.noMeshlets = true;
   // (found by the profiler, perf/sceneParts.ts, to time the flames alone)
   volume.userData.fireFlames = true;
@@ -670,7 +674,7 @@ export function buildFire(scene: THREE.Object3D, spec: FireSpec, updaters: Updat
 }
 
 /** An ember thrown up off the bed: a spark that rises, drifts and cools from yellow to red. */
-function spawnEmber(at: THREE.Vector3, radius: number, height: number): void {
+function spawnEmber(at: Vec3, radius: number, height: number): void {
   const out = Math.sqrt(Math.random()) * radius * 0.7;
   const angle = Math.random() * Math.PI * 2;
   particles.glow.spawn({
@@ -691,7 +695,7 @@ function spawnEmber(at: THREE.Vector3, radius: number, height: number): void {
 }
 
 /** A puff of smoke off the flames' tips, rising and spreading as it thins. */
-function spawnSmoke(at: THREE.Vector3, radius: number, height: number, colour: THREE.ColorRepresentation): void {
+function spawnSmoke(at: Vec3, radius: number, height: number, colour: ColorRepresentation): void {
   particles.smoke.spawn({
     x: at.x + rand(-0.25, 0.25) * radius,
     y: at.y + height * rand(0.75, 0.95),

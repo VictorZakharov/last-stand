@@ -3,7 +3,9 @@
 // poses every vertex first (1 to 9 ms a body), this takes microseconds. The aim meets a body's skinned limbs so
 // (fx/stuckArrows.ts `castSolid`, core/input.ts `aimAlong`): met on its rigid meshes alone, the eye's ray over a boss's
 // skinned limbs went on to the floor behind it, and Quarry Mark marked a small foe there.
-import * as THREE from '../../engine/three.ts';
+import {
+  Box3, FrontSide, Geometry, Hit, Mat4, Material, Mesh, Node, NormalBlending, Ray, Raycaster, SkinnedMesh, Vec3,
+} from '../../engine/api/index.ts';
 
 /**
  * A part of a skinned mesh: the triangles of one piece it was merged from that one bone moves the most of their first
@@ -12,19 +14,19 @@ import * as THREE from '../../engine/three.ts';
  * box round the part's box as each of those bones puts it holds the part as it's drawn. (A box a bone in its own space
  * left the skin bent between two bones out, and one round a bone's share of every piece met the gaps between legs.)
  */
-interface Part { mid: THREE.Vector3; half: THREE.Vector3; bones: Uint16Array; tris: Uint32Array }
+interface Part { mid: Vec3; half: Vec3; bones: Uint16Array; tris: Uint32Array }
 /** the parts one bone moves the most of, and the box round them that way (met first: the ray meets a few of them) */
-interface Group { mid: THREE.Vector3; half: THREE.Vector3; bones: Uint16Array; parts: Part[]; /** that bone */ bone: number }
+interface Group { mid: Vec3; half: Vec3; bones: Uint16Array; parts: Part[]; /** that bone */ bone: number }
 
 /** A ray's meeting with a skinned mesh: what three's is, and the joint that moves what it met the most (the bone a
  *  headshot reads, combat/strikes.ts `onHead`). */
-export interface HullHit extends THREE.Intersection { joint: THREE.Object3D }
+export interface HullHit extends Hit { joint: Node }
 
 /** each geometry's parts, by the bone that moves them most: every body of a kind shares its geometry */
-const GROUPS = new WeakMap<THREE.BufferGeometry, Group[]>();
+const GROUPS = new WeakMap<Geometry, Group[]>();
 
 /** Which piece each vertex of `g` is of, by the triangles joining them: the pieces it was merged from. */
-function piecesOf(g: THREE.BufferGeometry): Int32Array {
+function piecesOf(g: Geometry): Int32Array {
   const n = g.attributes.position.count, up = new Int32Array(n), index = g.index;
   for (let i = 0; i < n; i++) up[i] = i;
   const top = (i: number): number => { while (up[i] !== i) i = up[i] = up[up[i]]; return i; };
@@ -37,7 +39,7 @@ function piecesOf(g: THREE.BufferGeometry): Int32Array {
   return up;
 }
 
-function groupsOf(g: THREE.BufferGeometry): Group[] {
+function groupsOf(g: Geometry): Group[] {
   let groups = GROUPS.get(g);
   if (groups) return groups;
   const pos = g.attributes.position, skin = g.attributes.skinIndex, weight = g.attributes.skinWeight, index = g.index, piece = piecesOf(g);
@@ -46,14 +48,14 @@ function groupsOf(g: THREE.BufferGeometry): Group[] {
     for (let k = 1; k < 4; k++) if (weight.getComponent(i, k) > w) { w = weight.getComponent(i, k); bone = skin.getComponent(i, k); }
     return bone;
   };
-  type Making = { box: THREE.Box3; bones: Set<number>; tris: number[] };
-  const made = new Map<number, Map<number, Making>>(), v = new THREE.Vector3();
+  type Making = { box: Box3; bones: Set<number>; tris: number[] };
+  const made = new Map<number, Map<number, Making>>(), v = new Vec3();
   for (let t = 0, count = index ? index.count : pos.count; t + 2 < count; t += 3) {
     const first = index ? index.getX(t) : t, bone = most(first);
     let pieces = made.get(bone);
     if (!pieces) made.set(bone, pieces = new Map());
     let part = pieces.get(piece[first]);
-    if (!part) pieces.set(piece[first], part = { box: new THREE.Box3(), bones: new Set(), tris: [] });
+    if (!part) pieces.set(piece[first], part = { box: new Box3(), bones: new Set(), tris: [] });
     for (let c = 0; c < 3; c++) {
       const i = index ? index.getX(t + c) : t + c;
       part.tris.push(i);
@@ -61,10 +63,10 @@ function groupsOf(g: THREE.BufferGeometry): Group[] {
       for (let k = 0; k < 4; k++) if (weight.getComponent(i, k) > 0) part.bones.add(skin.getComponent(i, k));
     }
   }
-  const middle = (box: THREE.Box3) => box.getCenter(new THREE.Vector3());
-  const halfOf = (box: THREE.Box3) => box.getSize(new THREE.Vector3()).multiplyScalar(0.5);
+  const middle = (box: Box3) => box.getCenter(new Vec3());
+  const halfOf = (box: Box3) => box.getSize(new Vec3()).multiplyScalar(0.5);
   groups = [...made.entries()].map(([bone, pieces]) => {
-    const box = new THREE.Box3(), bones = new Set<number>();
+    const box = new Box3(), bones = new Set<number>();
     const parts = [...pieces.values()].map((part) => {
       box.union(part.box);
       for (const b of part.bones) bones.add(b);
@@ -87,28 +89,28 @@ const SWING = 1.15;
  * first test looks for the body in. (A boss's crown stood 1.8 times its height, which counts its hits.) Its skinned
  * meshes' parts are made too, once a geometry: as the foes are warmed up at load, not as the aim first meets them.
  */
-export function reachOf(root: THREE.Object3D): Reach {
+export function reachOf(root: Node): Reach {
   root.updateWorldMatrix(true, true);
-  const box = new THREE.Box3(), part = new THREE.Box3();
+  const box = new Box3(), part = new Box3();
   let crown = -Infinity;
   root.traverse((o) => {
-    const g = (o as THREE.Mesh).isMesh ? (o as THREE.Mesh).geometry : null;
+    const g = (o as Mesh).isMesh ? (o as Mesh).geometry : null;
     if (!g) return;
-    if ((o as THREE.SkinnedMesh).isSkinnedMesh) groupsOf(g);
+    if ((o as SkinnedMesh).isSkinnedMesh) groupsOf(g);
     if (!g.boundingBox) g.computeBoundingBox();
     box.union(part.copy(g.boundingBox!).applyMatrix4(o.matrixWorld));
-    if (opaque(o as THREE.Mesh)) crown = Math.max(crown, part.max.y);
+    if (opaque(o as Mesh)) crown = Math.max(crown, part.max.y);
   });
   if (box.isEmpty()) return { top: 0, out: 0, crown: 0 };
-  const at = root.parent?.getWorldPosition(new THREE.Vector3()) ?? new THREE.Vector3();
+  const at = root.parent?.getWorldPosition(new Vec3()) ?? new Vec3();
   const x = Math.max(Math.abs(box.min.x - at.x), Math.abs(box.max.x - at.x)), z = Math.max(Math.abs(box.min.z - at.z), Math.abs(box.max.z - at.z));
   return { top: (box.max.y - at.y) * SWING, out: Math.hypot(x, z) * SWING, crown: Math.max(0, crown - at.y) };
 }
 
 /** Whether `mesh` is drawn opaque: not a glow, an aura or a see-through effect. */
-function opaque(mesh: THREE.Mesh): boolean {
-  const m = (Array.isArray(mesh.material) ? mesh.material[0] : mesh.material) as THREE.Material;
-  return m.blending === THREE.NormalBlending && !(m.transparent && m.opacity < 0.9);
+function opaque(mesh: Mesh): boolean {
+  const m = (Array.isArray(mesh.material) ? mesh.material[0] : mesh.material) as Material;
+  return m.blending === NormalBlending && !(m.transparent && m.opacity < 0.9);
 }
 
 /** One test's posing of a mesh: each bone's matrix from where the mesh was built to the world now, and each vertex
@@ -116,16 +118,16 @@ function opaque(mesh: THREE.Mesh): boolean {
 class Posing {
   /** each bone's matrix (kept from test to test: made anew for each, they were most of a test's garbage), and the
    *  test it was last made for */
-  private readonly mats: THREE.Matrix4[] = [];
+  private readonly mats: Mat4[] = [];
   private madeFor = new Uint32Array(0);
   private posed = new Float32Array(0);
   private stamp = new Uint32Array(0);
   private test = 0;
-  private mesh!: THREE.SkinnedMesh;
-  private readonly sum = new THREE.Vector3();
-  private readonly one = new THREE.Vector3();
+  private mesh!: SkinnedMesh;
+  private readonly sum = new Vec3();
+  private readonly one = new Vec3();
 
-  start(mesh: THREE.SkinnedMesh): void {
+  start(mesh: SkinnedMesh): void {
     const n = Math.max(mesh.geometry.attributes.position.count, this.stamp.length), bones = Math.max(mesh.skeleton.bones.length, this.madeFor.length);
     if (n > this.stamp.length || bones > this.madeFor.length) {
       this.posed = new Float32Array(n * 3); this.stamp = new Uint32Array(n); this.madeFor = new Uint32Array(bones); this.test = 0;
@@ -135,8 +137,8 @@ class Posing {
   }
 
   /** bone `b`'s matrix: a vertex it moves alone, from where it was built to where it's drawn */
-  bone(b: number): THREE.Matrix4 {
-    const m = this.mats[b] ??= new THREE.Matrix4();
+  bone(b: number): Mat4 {
+    const m = this.mats[b] ??= new Mat4();
     if (this.madeFor[b] === this.test) return m;
     this.madeFor[b] = this.test;
     // (the skinning's steps: into the bone's space as bound, out by its world now, the binding undone, the mesh's world)
@@ -146,7 +148,7 @@ class Posing {
   }
 
   /** vertex `i` as it's drawn now, into `out` */
-  vertex(i: number, out: THREE.Vector3): THREE.Vector3 {
+  vertex(i: number, out: Vec3): Vec3 {
     const p = this.posed, at = i * 3;
     if (this.stamp[i] === this.test) return out.set(p[at], p[at + 1], p[at + 2]);
     const g = this.mesh.geometry, skin = g.attributes.skinIndex, weight = g.attributes.skinWeight, pos = g.attributes.position;
@@ -167,7 +169,7 @@ const _box = new Float64Array(6);
  * Whether `ray` meets the box round the box (`mid`, `half`) as each of `bones` puts it (`posing`): in plain numbers,
  * as it's done for each part the ray comes near every frame the aim is on a body.
  */
-function meetsPosed(ray: THREE.Ray, mid: THREE.Vector3, half: THREE.Vector3, bones: Uint16Array): boolean {
+function meetsPosed(ray: Ray, mid: Vec3, half: Vec3, bones: Uint16Array): boolean {
   const b = _box;
   b[0] = b[1] = b[2] = Infinity; b[3] = b[4] = b[5] = -Infinity;
   for (const bone of bones) {
@@ -195,11 +197,11 @@ function meetsPosed(ray: THREE.Ray, mid: THREE.Vector3, half: THREE.Vector3, bon
 }
 
 const posing = new Posing();
-const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _c = new THREE.Vector3(), _p = new THREE.Vector3();
+const _a = new Vec3(), _b = new Vec3(), _c = new Vec3(), _p = new Vec3();
 /** Where `by`'s ray first meets `mesh` as it's drawn now (within `by.near` to `by.far`), or null. */
-export function hullHit(mesh: THREE.SkinnedMesh, by: THREE.Raycaster): HullHit | null {
-  const ray = by.ray, mat = (Array.isArray(mesh.material) ? mesh.material[0] : mesh.material) as THREE.Material;
-  const cull = mat.side === THREE.FrontSide;
+export function hullHit(mesh: SkinnedMesh, by: Raycaster): HullHit | null {
+  const ray = by.ray, mat = (Array.isArray(mesh.material) ? mesh.material[0] : mesh.material) as Material;
+  const cull = mat.side === FrontSide;
   let best: HullHit | null = null;
   posing.start(mesh);
   for (const group of groupsOf(mesh.geometry)) {

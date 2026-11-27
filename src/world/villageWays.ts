@@ -3,7 +3,10 @@
 // portal in the crypt's stone arch before the door; the Thornwood's, a path into a grove of the forest's own trees,
 // ferns and mossy rocks, its portal between two great roots. Each is laid out in its own frame: x across its way, z back
 // toward the village (its far end at -z), and bounded by what's built (walls a body is kept off, world/wall.ts).
-import * as THREE from '../engine/three.ts';
+import {
+  Color, DoubleSide, InstancedMesh, LitMaterial, Material, Mesh, Node, Outline, UnlitMaterial,
+} from '../engine/api/index.ts';
+import * as shapes from '../engine/api/shapes/index.ts';
 import { ENTRANCES, GAP_HALF, portalPlace } from '../data/village';
 import type { BiomeId } from '../data/biomes';
 import { ashlar, pbrMaterialMaps, rock } from '../core/textures';
@@ -19,17 +22,17 @@ import type { Wall } from './wall';
 
 /** what the ways are built of: the village's own materials */
 export interface WayMats {
-  flags: THREE.Material; coping: THREE.Material; column: THREE.Material; iron: THREE.Material;
-  glass: THREE.Material;
+  flags: Material; coping: Material; column: Material; iron: Material;
+  glass: Material;
 }
 
 /** the court's walls: their height, thickness, and how far in from the gap's edge they stand */
 const COURT = { high: 1.3, thick: 0.5, inset: 0.3 };
 
 /** A way's frame: a group at its gap, its -z leading out. */
-function frameOf(id: BiomeId): THREE.Group {
+function frameOf(id: BiomeId): Node {
   const { gap, out } = ENTRANCES[id];
-  const g = new THREE.Group();
+  const g = new Node();
   g.position.set(gap[0], 0, gap[1]);
   g.rotation.y = Math.atan2(-out[0], -out[1]);
   g.updateMatrixWorld(true);
@@ -37,9 +40,9 @@ function frameOf(id: BiomeId): THREE.Group {
 }
 
 /** A box in a way's frame, from its foot `y0`, casting and taking shadows. */
-function box(g: THREE.Object3D, w: number, h: number, d: number, x: number, y0: number, z: number, m: THREE.Material,
-  texel = 0.5): THREE.Mesh {
-  const mesh = new THREE.Mesh(boxWithUV(w, h, d, texel), m);
+function box(g: Node, w: number, h: number, d: number, x: number, y0: number, z: number, m: Material,
+  texel = 0.5): Mesh {
+  const mesh = new Mesh(boxWithUV(w, h, d, texel), m);
   mesh.position.set(x, y0 + h / 2, z);
   mesh.castShadow = mesh.receiveShadow = true;
   g.add(mesh);
@@ -47,20 +50,20 @@ function box(g: THREE.Object3D, w: number, h: number, d: number, x: number, y0: 
 }
 
 /** A box in a way's frame between two distances out along it (`out0` to `out1`, m), its middle `x` across. */
-function boxOut(g: THREE.Object3D, w: number, y0: number, h: number, out0: number, out1: number, x: number,
-  m: THREE.Material, texel = 0.5): THREE.Mesh {
+function boxOut(g: Node, w: number, y0: number, h: number, out0: number, out1: number, x: number,
+  m: Material, texel = 0.5): Mesh {
   return box(g, w, h, out1 - out0, x, y0, -(out0 + out1) / 2, m, texel);
 }
 
 /** Walls a body is kept off along `points` (in the frame of `g`), each stretch a slab `high` m tall; drawn in `m`, or
  *  unseen (`m` null: the grove's edge, which its trees and rocks show). */
-function keepOff(g: THREE.Object3D, wall: Wall, points: readonly [number, number][], high: number, thick: number,
-  m: THREE.Material | null): THREE.Mesh[] {
-  const slabs: THREE.Mesh[] = [];
+function keepOff(g: Node, wall: Wall, points: readonly [number, number][], high: number, thick: number,
+  m: Material | null): Mesh[] {
+  const slabs: Mesh[] = [];
   for (let i = 0; i + 1 < points.length; i++) {
     const [x0, z0] = points[i], [x1, z1] = points[i + 1];
     const len = Math.hypot(x1 - x0, z1 - z0);
-    const slab = box(g, thick, high, len + thick, (x0 + x1) / 2, 0, (z0 + z1) / 2, m ?? new THREE.MeshBasicMaterial(), 0.5);
+    const slab = box(g, thick, high, len + thick, (x0 + x1) / 2, 0, (z0 + z1) / 2, m ?? new UnlitMaterial(), 0.5);
     slab.rotation.y = Math.atan2(x1 - x0, z1 - z0);
     if (!m) {
       slab.visible = false;
@@ -75,7 +78,7 @@ function keepOff(g: THREE.Object3D, wall: Wall, points: readonly [number, number
 
 /** An unseen wall across way `id` through its portal, `half` m either side: from play, "for village portals, I
  *  should not be able to walk past them" (round them, and through, he walked on to the court and grove behind). */
-function barPast(g: THREE.Object3D, wall: Wall, id: BiomeId, half: number): void {
+function barPast(g: Node, wall: Wall, id: BiomeId, half: number): void {
   const at = -ENTRANCES[id].portalOut;
   keepOff(g, wall, [[-half, at], [half, at]], 2.2, 0.4, null);
 }
@@ -83,17 +86,17 @@ function barPast(g: THREE.Object3D, wall: Wall, id: BiomeId, half: number): void
 // --- the crypt's way ------------------------------------------------------------------------------------------------
 
 /** The crypt's way: its court, graves, the mausoleum and its door down, the crypt's arch with its portal before it. */
-export function buildCryptWay(scene: THREE.Object3D, wall: Wall, M: WayMats, updaters: Updater[]): Portal {
+export function buildCryptWay(scene: Node, wall: Wall, M: WayMats, updaters: Updater[]): Portal {
   const g = frameOf('crypt');
   const rng = mulberry(313);
   // the crypt's own dark stone, and its roof's darker slabs, both on the village's ashlar's maps and programs
   const maps = pbrMaterialMaps(ashlar(21, 6, 3), 1, 1.2);
-  const stone = seeThrough(new THREE.MeshStandardMaterial({ ...maps, color: 0x77716c }), 'prop');
-  const slate = seeThrough(new THREE.MeshStandardMaterial({ ...maps, color: 0x4a4744 }), 'prop');
-  const dark = new THREE.MeshStandardMaterial({ color: 0x040405, roughness: 1 });
+  const stone = seeThrough(new LitMaterial({ ...maps, color: 0x77716c }), 'prop');
+  const slate = seeThrough(new LitMaterial({ ...maps, color: 0x4a4744 }), 'prop');
+  const dark = new LitMaterial({ color: 0x040405, roughness: 1 });
   const across = GAP_HALF - COURT.inset, court = PODIUM.front;
   // the court: paved, its walls running out from the gap to the mausoleum's podium, iron spikes along their tops
-  const paving = new THREE.Mesh(new THREE.PlaneGeometry(across * 2, court + 1).rotateX(-Math.PI / 2), M.flags);
+  const paving = new Mesh(shapes.plane(across * 2, court + 1).rotateX(-Math.PI / 2), M.flags);
   const uv = paving.geometry.attributes.uv;
   for (let k = 0; k < uv.count; k++) uv.setXY(k, uv.getX(k) * across * 2 / 2.25, uv.getY(k) * (court + 1) / 2.25);
   paving.position.set(0, 0.014, -(court - 1) / 2);
@@ -101,7 +104,7 @@ export function buildCryptWay(scene: THREE.Object3D, wall: Wall, M: WayMats, upd
   g.add(paving);
   for (const s of [-1, 1]) {
     keepOff(g, wall, [[s * across, 0.8], [s * (across + 0.3), -court - 0.2]], COURT.high, COURT.thick, stone);
-    const spikes = new THREE.InstancedMesh(new THREE.ConeGeometry(0.03, 0.55, 4).translate(0, 0.27, 0), M.iron, 16);
+    const spikes = new InstancedMesh(shapes.cone(0.03, 0.55, 4).translate(0, 0.27, 0), M.iron, 16);
     for (let k = 0; k < 16; k++) {
       const t = k / 15, z = 0.6 - t * (court + 0.6);
       setInstance(spikes, k, s * (across + 0.3 * t), COURT.high, z, 0, 0, 0, 1);
@@ -124,11 +127,11 @@ export function buildCryptWay(scene: THREE.Object3D, wall: Wall, M: WayMats, upd
 /** The mausoleum at the court's end: a stair up onto its podium, a porch of four columns under its pediment, a body of
  *  dark stone buttressed down its sides with slit windows between, a pitched roof of stone slabs, and its door, its
  *  iron leaves open, on a stair going down inside into the dark, a torch on its wall. Bodies meet all of it. */
-function buildTomb(g: THREE.Object3D, wall: Wall, M: WayMats, stone: THREE.Material, slate: THREE.Material,
-  dark: THREE.Material): void {
+function buildTomb(g: Node, wall: Wall, M: WayMats, stone: Material, slate: Material,
+  dark: Material): void {
   const { door, back, w, eave, roof, doorHalf, doorHigh, well } = TOMB;
   const P = PODIUM.high, half = w / 2, podiumHalf = half + 0.7;
-  const tomb = new THREE.Group();
+  const tomb = new Node();
   g.add(tomb);
   // the stair up from the court, its steps as wide as the porch's middle columns are apart
   for (let k = 0; k < TOMB.steps; k++) {
@@ -149,7 +152,7 @@ function buildTomb(g: THREE.Object3D, wall: Wall, M: WayMats, stone: THREE.Mater
   // the stair down: from the threshold to the floor at the ground's level, each step darker; the floor on to the dark
   const down = TOMB.steps - 1, tread = 0.62;
   for (let k = 0; k < down; k++) {
-    const shade = new THREE.MeshStandardMaterial({ color: new THREE.Color(0x5a5652).multiplyScalar(0.8 - k * 0.17), roughness: 0.95 });
+    const shade = new LitMaterial({ color: new Color(0x5a5652).multiplyScalar(0.8 - k * 0.17), roughness: 0.95 });
     boxOut(tomb, doorHalf * 2, 0, P - (k + 1) * TOMB.rise, door + k * tread, door + (k + 1) * tread, 0, shade, 0.4);
   }
   boxOut(tomb, doorHalf * 2, 0, 0.02, door + down * tread, door + well, 0, dark);
@@ -161,11 +164,11 @@ function buildTomb(g: THREE.Object3D, wall: Wall, M: WayMats, stone: THREE.Mater
   // a torch on the stair's wall, half way down
   const torchAt = door + 1.7;
   boxOut(tomb, 0.18, P + 1.3, 0.1, torchAt - 0.04, torchAt + 0.04, -doorHalf + 0.09, M.iron, 0.4);
-  const torch = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.03, 0.4, 6), M.iron);
+  const torch = new Mesh(shapes.cylinder(0.035, 0.03, 0.4, 6), M.iron);
   torch.position.set(-doorHalf + 0.16, P + 1.55, -torchAt);
   torch.rotation.z = -0.35;
   tomb.add(torch);
-  const flame = new THREE.Mesh(new THREE.SphereGeometry(0.07, 8, 6).scale(1, 2, 1), M.glass);
+  const flame = new Mesh(shapes.sphere(0.07, 8, 6).scale(1, 2, 1), M.glass);
   flame.position.set(-doorHalf + 0.24, P + 1.86, -torchAt);
   tomb.add(flame);
   // the doorway: jambs proud of the wall, a lintel stone, an epitaph's dark slab over it
@@ -183,7 +186,7 @@ function buildTomb(g: THREE.Object3D, wall: Wall, M: WayMats, stone: THREE.Mater
   // the porch: four columns on the podium under a beam, the door's face behind them
   const colAt = PODIUM.front + 0.5, beam = 0.7;
   for (const x of [-3.6, -1.9, 1.9, 3.6]) {
-    const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.32, eave - beam - P, 14), M.column);
+    const shaft = new Mesh(shapes.cylinder(0.28, 0.32, eave - beam - P, 14), M.column);
     shaft.position.set(x, P + (eave - beam - P) / 2, -colAt);
     shaft.castShadow = shaft.receiveShadow = true;
     tomb.add(shaft);
@@ -199,17 +202,17 @@ function buildTomb(g: THREE.Object3D, wall: Wall, M: WayMats, stone: THREE.Mater
     slab.rotation.z = -s * slope;
   }
   boxOut(tomb, 0.36, eave + roof, 0.3, from, to, 0, M.coping, 0.4);
-  const gable = new THREE.Shape();
+  const gable = new Outline();
   gable.moveTo(-span + 0.15, 0);
   gable.lineTo(span - 0.15, 0);
   gable.lineTo(0, roof - 0.1);
   gable.lineTo(-span + 0.15, 0);
   for (const at of [from + 0.25, to - 0.25]) {
-    const pediment = new THREE.Mesh(new THREE.ExtrudeGeometry(gable, { depth: 0.4, bevelEnabled: false }).translate(0, 0, -0.2), stone);
+    const pediment = new Mesh(shapes.extrude(gable, { depth: 0.4, bevelEnabled: false }).translate(0, 0, -0.2), stone);
     pediment.position.set(0, eave, -at);
     pediment.castShadow = pediment.receiveShadow = true;
     tomb.add(pediment);
-    const finial = new THREE.Mesh(new THREE.ConeGeometry(0.28, 0.9, 4).rotateY(Math.PI / 4), M.coping);
+    const finial = new Mesh(shapes.cone(0.28, 0.9, 4).rotateY(Math.PI / 4), M.coping);
     finial.position.set(0, eave + roof + 0.5, -at);
     finial.castShadow = true;
     tomb.add(finial);
@@ -218,10 +221,10 @@ function buildTomb(g: THREE.Object3D, wall: Wall, M: WayMats, stone: THREE.Mater
   for (const s of [-1, 1]) {
     for (let k = 0; k < 3; k++) {
       const x = s * (doorHalf + 0.55 + k * 0.22), tall = 0.2 + ((k * 7) % 3) * 0.08;
-      const candle = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.045, tall, 8), M.coping);
+      const candle = new Mesh(shapes.cylinder(0.04, 0.045, tall, 8), M.coping);
       candle.position.set(x, P + tall / 2, -(door - 0.5));
       tomb.add(candle);
-      const candleFlame = new THREE.Mesh(new THREE.SphereGeometry(0.028, 8, 6).scale(1, 2.2, 1), M.glass);
+      const candleFlame = new Mesh(shapes.sphere(0.028, 8, 6).scale(1, 2.2, 1), M.glass);
       candleFlame.position.set(x, P + tall + 0.06, -(door - 0.5));
       tomb.add(candleFlame);
     }
@@ -240,14 +243,14 @@ const GROVE_EDGE: readonly [number, number][] = [
 
 /** The Thornwood's way: a grove round a path, its edge kept, rocks, ferns and its root gate with the portal; its trees
  *  are the village's (`groveTrees`). */
-export function buildForestWay(scene: THREE.Object3D, wall: Wall, updaters: Updater[]): Portal {
+export function buildForestWay(scene: Node, wall: Wall, updaters: Updater[]): Portal {
   const g = frameOf('forest');
   const rng = mulberry(717);
   keepOff(g, wall, GROVE_EDGE, 2.2, 0.4, null);
   barPast(g, wall, 'forest', 5.6);
-  const rockMat = seeThrough(new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(rock(17), 1, 1.6), color: 0x8a967a, roughness: 0.95 }), 'prop');
+  const rockMat = seeThrough(new LitMaterial({ ...pbrMaterialMaps(rock(17), 1, 1.6), color: 0x8a967a, roughness: 0.95 }), 'prop');
   // mossy rocks along the edge, half sunk
-  const rocks = new THREE.InstancedMesh(boulderGeo(9, 1), rockMat, 9);
+  const rocks = new InstancedMesh(boulderGeo(9, 1), rockMat, 9);
   for (let k = 0; k < 9; k++) {
     const s = k % 2 ? 1 : -1, z = -0.5 - k * 1.15;
     const size = 0.5 + rng() * 0.6;
@@ -256,8 +259,8 @@ export function buildForestWay(scene: THREE.Object3D, wall: Wall, updaters: Upda
   rocks.castShadow = rocks.receiveShadow = true;
   g.add(rocks);
   // ferns under the trees, either side of the path and round the gate
-  const fernMat = asLeaves(seeThrough(new THREE.MeshStandardMaterial({ map: fernTexture(), alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.8 }), 'prop'));
-  const ferns = new THREE.InstancedMesh(fernClumpGeo(rng), fernMat, 40);
+  const fernMat = asLeaves(seeThrough(new LitMaterial({ map: fernTexture(), alphaTest: 0.5, side: DoubleSide, roughness: 0.8 }), 'prop'));
+  const ferns = new InstancedMesh(fernClumpGeo(rng), fernMat, 40);
   for (let k = 0; k < 40; k++) {
     const s = k % 2 ? 1 : -1, z = 0.4 - rng() * (WAY.forest.out + 1);
     const x = s * (3.4 + rng() * 2.6);

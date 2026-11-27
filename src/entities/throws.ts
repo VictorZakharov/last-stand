@@ -13,7 +13,7 @@
 // Both are played through `fx` (enemyAI.ts), so every co-op game plays them the same from the same numbers, and each
 // judges its own hero alone: hurt where `hurtPlayer` allows, rooted by its own game. A partner's copy is shown held
 // as this game sees the vine reach it.
-import * as THREE from '../engine/three.ts';
+import { Node, Vec3 } from '../engine/api/index.ts';
 import { G } from '../state';
 import { ENEMIES, type EnemyId } from '../data/enemies';
 import { hurtPlayer, type Attacker } from '../combat/damage';
@@ -52,10 +52,10 @@ export interface Thrown {
   /** where it was aimed (lava: where it lands; vine: its line's end) */
   to: { x: number; z: number };
   /** lava: the ring marking its landing (its group placed there), and where it came down */
-  ring?: THREE.Object3D;
+  ring?: Node;
   landed?: { x: number; z: number; t: number };
   /** the chunk's mesh (lava) or the vine's */
-  mesh: THREE.Object3D;
+  mesh: Node;
   /** the players' slots it hurt or held, and when */
   struck: { slot: number; t: number }[];
 }
@@ -76,7 +76,7 @@ export interface LyingVine {
   /** how far it has crept (m) */
   grown(): number;
   /** cut where an arrow met it */
-  cut(at: THREE.Vector3): void;
+  cut(at: Vec3): void;
 }
 const lying = new Set<LyingVine>();
 /** A vine laid on the floor for an arrow to cut, and taken up again (withered, cut, gone). */
@@ -104,7 +104,7 @@ function closestOnFloor(ax: number, az: number, bx: number, bz: number, cx: numb
  * An arrow's step from `from` to `to` meeting a vine low over the floor: the vine cut there (withering at once and
  * letting go of whoever it holds). Returns whether it met one.
  */
-export function cutVineAlong(from: THREE.Vector3, to: THREE.Vector3): boolean {
+export function cutVineAlong(from: Vec3, to: Vec3): boolean {
   for (const v of lying) {
     const length = v.grown();
     if (length <= 0) continue;
@@ -130,7 +130,7 @@ const throwOf = (id: number): { foe: Enemy | null; def: ThrowDef | undefined } =
 };
 
 /** Where enemy `e` lets go of a throw: its throwing hand, or over its shoulder. */
-export function releaseFrom(e: Enemy, out: THREE.Vector3): THREE.Vector3 {
+export function releaseFrom(e: Enemy, out: Vec3): Vec3 {
   const hand = e.model.joints?.handR;
   if (hand) return hand.getWorldPosition(out);
   return out.set(e.pos.x, e.height * 0.9, e.pos.z);
@@ -149,8 +149,8 @@ export function lavaChunk(id: number, kind: EnemyId, ox: number, oy: number, oz:
   if (!def) return;
   const [splash, share] = def.splash ?? [1.8, 0.75];
   const ty = groundHeight(tx, tz);
-  const vel = new THREE.Vector3((tx - ox) / flight, (ty - oy + 0.5 * FALL * flight * flight) / flight, (tz - oz) / flight);
-  const pos = new THREE.Vector3(ox, oy, oz);
+  const vel = new Vec3((tx - ox) / flight, (ty - oy + 0.5 * FALL * flight * flight) / flight, (tz - oz) / flight);
+  const pos = new Vec3(ox, oy, oz);
   const mesh = riftBolt('magma', LAVA.color, LAVA.size);
   mesh.name = 'lava chunk';
   mesh.position.copy(pos);
@@ -166,7 +166,7 @@ export function lavaChunk(id: number, kind: EnemyId, ox: number, oy: number, oz:
       t = Math.min(flight, t + dt);
       pos.set(ox + vel.x * t, oy + vel.y * t - 0.5 * FALL * t * t, oz + vel.z * t);
       mesh.position.copy(pos);
-      const v = new THREE.Vector3(vel.x, vel.y - FALL * t, vel.z);
+      const v = new Vec3(vel.x, vel.y - FALL * t, vel.z);
       riftBoltTick('magma', mesh, pos, v, LAVA.color, LAVA.smoke, dt, acc);
       if (t < flight) return true;
       thrown.landed = { x: pos.x, z: pos.z, t: G.time };
@@ -179,7 +179,7 @@ export function lavaChunk(id: number, kind: EnemyId, ox: number, oy: number, oz:
 }
 
 /** The chunk bursting where it came down: whoever stands in its splash is hurt, each by its own game. */
-function land(pos: THREE.Vector3, splash: number, damage: number, by: Attacker, thrown: Thrown): void {
+function land(pos: Vec3, splash: number, damage: number, by: Attacker, thrown: Thrown): void {
   riftBoltImpact('magma', pos, LAVA.color, LAVA.smoke, LAVA.size);
   shockwave(pos, { color: LAVA.color, intensity: 2.2, from: 0.3, to: splash * 1.1, life: 0.4 });
   debris(pos, { count: 12, speed: splash * 2 });
@@ -194,7 +194,7 @@ function land(pos: THREE.Vector3, splash: number, damage: number, by: Attacker, 
 }
 
 /** The pool a chunk leaves, burning whoever stands in it every `BURN_EVERY` s. */
-function lavaBurns(def: ThrowDef, at: THREE.Vector3, damage: number, by: Attacker, thrown: Thrown): void {
+function lavaBurns(def: ThrowDef, at: Vec3, damage: number, by: Attacker, thrown: Thrown): void {
   const [radius, life, perSecond] = def.pool ?? [1.5, 2.5, 0.3];
   const pos = at.clone();
   pos.y = groundHeight(pos.x, pos.z);
@@ -207,7 +207,7 @@ function lavaBurns(def: ThrowDef, at: THREE.Vector3, damage: number, by: Attacke
       embers += dt;
       if (embers > 0.15) {
         embers = 0;
-        burst(new THREE.Vector3(pos.x + (Math.random() - 0.5) * radius, pos.y + 0.1, pos.z + (Math.random() - 0.5) * radius),
+        burst(new Vec3(pos.x + (Math.random() - 0.5) * radius, pos.y + 0.1, pos.z + (Math.random() - 0.5) * radius),
           { count: 2, color: LAVA.color, speed: 1.2, life: 0.6, size: 0.12 });
       }
       if (t >= next) {
@@ -261,7 +261,7 @@ export function vineAt(kind: EnemyId, ox: number, oz: number, angle: number, len
       if (vine.grow < length && debrisT > 0.05) {
         debrisT = 0;
         const x = ox + dx * vine.grow, z = oz + dz * vine.grow;
-        smokePuff(new THREE.Vector3(x, groundHeight(x, z), z), { count: 1, color: 0x2a2418, size: 0.4, sizeEnd: 1, speed: 0.6, life: 0.5 });
+        smokePuff(new Vec3(x, groundHeight(x, z), z), { count: 1, color: 0x2a2418, size: 0.4, sizeEnd: 1, speed: 0.6, life: 0.5 });
       }
       for (const p of G.players) {
         if (caught.has(p) || !p.active || vine.wither > 0 || cutAt >= 0) continue;
@@ -294,7 +294,7 @@ export function coilRound(p: Player, hold: number, cut: () => boolean): void {
   const until = G.time + hold;
   let t = 0, off = -1;
   sfx.thud();
-  const feet = new THREE.Vector3(p.pos.x, groundHeight(p.pos.x, p.pos.z), p.pos.z);
+  const feet = new Vec3(p.pos.x, groundHeight(p.pos.x, p.pos.z), p.pos.z);
   debris(feet, { count: 10, speed: 2.5 });
   smokePuff(feet, { count: 4, color: 0x2a2418, size: 0.5, sizeEnd: 1.4, speed: 0.8, life: 0.6 });
   addEffect({
@@ -305,7 +305,7 @@ export function coilRound(p: Player, hold: number, cut: () => boolean): void {
       const holding = !cut() && (p.local ? p.rooted : G.time < until && !p.dash && p.active);
       if (!holding && off < 0) {
         off = t;
-        burst(new THREE.Vector3(p.pos.x, c.mesh.position.y + 0.3, p.pos.z), { count: 10, color: VINE.sap, speed: 3, life: 0.4, size: 0.15 });
+        burst(new Vec3(p.pos.x, c.mesh.position.y + 0.3, p.pos.z), { count: 10, color: VINE.sap, speed: 3, life: 0.4, size: 0.15 });
       }
       c.wither = off < 0 ? 0 : Math.min(1, (t - off) / COILS.fall);
       c.update(G.time);

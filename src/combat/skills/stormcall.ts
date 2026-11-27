@@ -2,7 +2,7 @@
 // lightning leaps from the orb to the aim and bursts there. The longer it was held the harder it strikes and the
 // wider it reaches, and a quick tap still looses a spark. The foe at its middle is dazed for `duration` s, those
 // round it for less the further out they stand; elites and bosses aren't dazed.
-import * as THREE from '../../engine/three.ts';
+import { Vec3 } from '../../engine/api/index.ts';
 import { G } from '../../state';
 import { hitEnemy, dazeEnemy } from '../damage';
 import { blastCorpses } from '../../entities/corpse';
@@ -38,7 +38,7 @@ const lerp = (a: number, b: number, k: number): number => a + (b - a) * k;
 export const stormAt = (def: Pick<Def, 'damage' | 'radius' | 'least'>, power: number): { damage: number; radius: number } =>
   ({ damage: def.damage * lerp(def.least, 1, power), radius: def.radius * lerp(def.least, 1, power) });
 
-const _to = new THREE.Vector3(), _at = new THREE.Vector3();
+const _to = new Vec3(), _at = new Vec3();
 
 /** casts whose charge already started (to play its sound once) */
 const charged = new WeakSet<object>();
@@ -103,14 +103,14 @@ const skill: InstantSkill = {
 };
 
 /** The strike landing at `at` as its arc arrives: its burst, and its damage and daze on the foes round it. */
-function land(player: Player, def: Def, power: number, at: THREE.Vector3, strike: THREE.Vector3, middle: Enemy | null): void {
+function land(player: Player, def: Def, power: number, at: Vec3, strike: Vec3, middle: Enemy | null): void {
   const { damage, radius } = stormAt(def, power);
   // a crown of arcs thrown up and out of the strike, the more and the further the fuller the charge: what's seen
   // of it from every view, through the eyes above all
   const crown = Math.round(CROWN.least + (CROWN.most - CROWN.least) * power);
   for (let i = 0; i < crown; i++) {
     const a = (i + rand(0, 1)) / crown * Math.PI * 2, far = (CROWN.reach[0] + (CROWN.reach[1] - CROWN.reach[0]) * power) * rand(0.6, 1);
-    const tip = new THREE.Vector3(strike.x + Math.cos(a) * far * 0.7, strike.y + far * rand(0.5, 1), strike.z + Math.sin(a) * far * 0.7);
+    const tip = new Vec3(strike.x + Math.cos(a) * far * 0.7, strike.y + far * rand(0.5, 1), strike.z + Math.sin(a) * far * 0.7);
     stormArc(strike.clone(), tip, { color: def.color, speed: 22, width: 0.012 + 0.012 * power, linger: 0.3 + 0.4 * power, jag: 0.22, forks: 0, intensity: 2 });
   }
   {
@@ -132,7 +132,7 @@ function land(player: Player, def: Def, power: number, at: THREE.Vector3, strike
       if (d >= radius) continue;
       const x = Math.max(0, d) / radius, k = 1 - (1 - def.edge) * x * x * (3 - 2 * x);
       // (an arc from the middle to each other foe it reaches)
-      if (e !== middle) stormArc(strike.clone(), new THREE.Vector3(e.pos.x, e.height * CHEST, e.pos.z), { color: def.color, speed: 45, width: 0.014, linger: 0.35 + 0.35 * power, jag: 0.22, forks: 0, intensity: 2 });
+      if (e !== middle) stormArc(strike.clone(), new Vec3(e.pos.x, e.height * CHEST, e.pos.z), { color: def.color, speed: 45, width: 0.014, linger: 0.35 + 0.35 * power, jag: 0.22, forks: 0, intensity: 2 });
       hitEnemy(e, damage * k, { by: player, skill: def, tags: def.tags, type: 'lightning', knock: 2 * k * power, from: at, blow: { lift: 0.5, style: 'shock' } });
       // (dazed by how near the middle it stands, an elite or a boss not at all)
       if (e.alive && !e.hero && !e.boss) dazeEnemy(e, def.duration * (1 - x), player);

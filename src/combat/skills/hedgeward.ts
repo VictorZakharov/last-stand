@@ -15,7 +15,8 @@
 // In the village, where the others can't cast to break it, a partner walking into it breaks it (`touchedByPartner`,
 // told to every game: net/wardTouch.ts); its caster's own touch and a fight leave it standing.
 // The wall itself is entities/models/hedgeward.ts.
-import * as THREE from '../../engine/three.ts';
+import { Color, Geometry, Hit, Maths, Mesh, Node, Raycaster, UnlitMaterial, Vec3 } from '../../engine/api/index.ts';
+import * as shapes from '../../engine/api/shapes/index.ts';
 import { G } from '../../state';
 import { on } from '../../events';
 import { addEffect, shockwave } from '../../fx/effects';
@@ -93,13 +94,13 @@ function clearAt(p: Placement, height: number): boolean {
 }
 
 /** Whether a prop he can't see over stands between him and the wall's middle. */
-function propBetween(player: { pos: THREE.Vector3 }, p: Placement): boolean {
+function propBetween(player: { pos: Vec3 }, p: Placement): boolean {
   const dx = p.x - player.pos.x, dz = p.z - player.pos.z;
   return G.arena.obstacles.some((o) => o.h >= IN_THE_WAY && entry(player.pos.x, player.pos.z, dx, dz, o.x, o.z, o.r) >= 0);
 }
 
 /** Whether the wall can rise where it's placed: clear of everything, nothing tall between him and it. */
-export const placeable = (player: { pos: THREE.Vector3 }, def: Def, p: Placement): boolean =>
+export const placeable = (player: { pos: Vec3 }, def: Def, p: Placement): boolean =>
   clearAt(p, def.wall.height) && !propBetween(player, p);
 
 /**
@@ -111,10 +112,10 @@ export const placeable = (player: { pos: THREE.Vector3 }, def: Def, p: Placement
  * outline shows red and letting go casts nothing (from play: "should not be able to cast it that far out... blocked
  * if enemies or props in the way"; it reached 10 m, and was raised somewhere wherever it was aimed).
  */
-export function placeFor(player: { pos: THREE.Vector3; facing: number }, def: Def, target: THREE.Vector3): Placement {
+export function placeFor(player: { pos: Vec3; facing: number }, def: Def, target: Vec3): Placement {
   const dx = target.x - player.pos.x, dz = target.z - player.pos.z, d = Math.hypot(dx, dz);
   const ux = d > 1e-3 ? dx / d : Math.sin(player.facing), uz = d > 1e-3 ? dz / d : Math.cos(player.facing);
-  const yaw = Math.atan2(ux, uz), reach = THREE.MathUtils.clamp(d, NEAREST, def.range);
+  const yaw = Math.atan2(ux, uz), reach = Maths.clamp(d, NEAREST, def.range);
   // (its middle far enough in that its ends are inside too, whichever way it lies: near the edge it slides in)
   const R = G.arena.radius - EDGE_IN - def.wall.width / 2 - HALF - 0.1;
   const at = (k: number): Placement => {
@@ -149,23 +150,23 @@ const END_R = 0.4;
 const COUNT_Y = 1.2;
 
 interface Preview {
-  ghost: THREE.Mesh; ghostGeo: THREE.BufferGeometry; ends: [THREE.Mesh, THREE.Mesh]; endGeos: THREE.BufferGeometry[];
-  glows: [THREE.MeshBasicMaterial, number][]; ready: Readiness; laid: string;
+  ghost: Mesh; ghostGeo: Geometry; ends: [Mesh, Mesh]; endGeos: Geometry[];
+  glows: [UnlitMaterial, number][]; ready: Readiness; laid: string;
 }
 let preview: Preview | null = null;
-const _bramble = new THREE.Color(BRAMBLE);
+const _bramble = new Color(BRAMBLE);
 
 function previewFor(): Preview {
   if (preview) return preview;
   const ghostMaterial = ghostMat(), endMaterial = additive(BRAMBLE, 1.5, 0.8);
   // (a copy of the outline of its own, lifted over a step in place as the aim moves)
-  const ghostGeo = hedgewardOutline().clone(), ghost = new THREE.Mesh(ghostGeo, ghostMaterial);
+  const ghostGeo = hedgewardOutline().clone(), ghost = new Mesh(ghostGeo, ghostMaterial);
   const endGeos = [endGeo(), endGeo()];
-  const ends: [THREE.Mesh, THREE.Mesh] = [new THREE.Mesh(endGeos[0], endMaterial), new THREE.Mesh(endGeos[1], endMaterial)];
+  const ends: [Mesh, Mesh] = [new Mesh(endGeos[0], endMaterial), new Mesh(endGeos[1], endMaterial)];
   ghost.name = 'hedgeward-preview';
   ends.forEach((m, i) => { m.name = `hedgeward-preview-end${i}`; });
   for (const m of [ghost, ...ends]) { m.frustumCulled = false; G.scene.add(m); }
-  const glows: [THREE.MeshBasicMaterial, number][] = [[ghostMaterial, 0.55], [endMaterial, 1.5]];
+  const glows: [UnlitMaterial, number][] = [[ghostMaterial, 0.55], [endMaterial, 1.5]];
   preview = { ghost, ghostGeo, ends, endGeos, glows, ready: new Readiness('hedgeward'), laid: '' };
   return preview;
 }
@@ -182,7 +183,7 @@ function layGhost(p: Preview, at: Placement, lift: (x: number) => number): void 
 }
 
 /** Shows where it would stand for `target` (null: nothing shown). */
-function showPlace(player: Player, def: Def, target: THREE.Vector3 | null, dt: number): void {
+function showPlace(player: Player, def: Def, target: Vec3 | null, dt: number): void {
   if (!target) {
     if (!preview) return;
     preview.ghost.visible = preview.ends[0].visible = preview.ends[1].visible = false;
@@ -208,7 +209,7 @@ function showPlace(player: Player, def: Def, target: THREE.Vector3 | null, dt: n
 /** how deep the wall's solid is, across its line (m, in its own space): its stakes and the weave between them */
 const SOLID_DEPTH = 0.3;
 /** the solid's look: never drawn, only met (`raycastWall`) */
-const SOLID_LOOK = new THREE.MeshBasicMaterial({ visible: false });
+const SOLID_LOOK = new UnlitMaterial({ visible: false });
 /** whether a shot meets the wall as drawn alone, through the gaps in its weave (the lab's canary, `holdWallSolid`) */
 let drawnOnly = false;
 
@@ -224,10 +225,10 @@ export function holdWallSolid(off: boolean): void {
  * dealing nothing (from Victor's review of #647: "Sometimes arrow can fly through without dealing damage, I get it
  * more than half the time").
  */
-function solidOf(root: THREE.Object3D, lifted: number): THREE.Mesh {
+function solidOf(root: Node, lifted: number): Mesh {
   const tall = HEDGE_HEIGHT + lifted;
-  const box = new THREE.BoxGeometry(HEDGE_WIDTH, tall, SOLID_DEPTH).translate(0, tall / 2, 0);
-  const solid = new THREE.Mesh(box, SOLID_LOOK);
+  const box = shapes.box(HEDGE_WIDTH, tall, SOLID_DEPTH).translate(0, tall / 2, 0);
+  const solid = new Mesh(box, SOLID_LOOK);
   solid.name = 'hedgeward-solid';
   solid.visible = false;
   root.add(solid);
@@ -235,9 +236,9 @@ function solidOf(root: THREE.Object3D, lifted: number): THREE.Mesh {
 }
 
 /** What a ray meets of the wall: what's drawn, else its solid, where the ray found a gap in the weave. */
-function raycastWall(root: THREE.Object3D, solid: THREE.Mesh, ray: THREE.Raycaster, hits: THREE.Intersection[]): void {
+function raycastWall(root: Node, solid: Mesh, ray: Raycaster, hits: Hit[]): void {
   const found = hits.length;
-  root.traverse((o) => { if ((o as THREE.Mesh).isMesh && o.visible) (o as THREE.Mesh).raycast(ray, hits); });
+  root.traverse((o) => { if ((o as Mesh).isMesh && o.visible) (o as Mesh).raycast(ray, hits); });
   if (hits.length > found || drawnOnly) return;
   // (its matrix as it stands: a place's hidden parts aren't made each frame, `matricesOfShownOnly`)
   solid.updateWorldMatrix(true, false);
@@ -290,7 +291,7 @@ function raise(player: Player, def: Def, at: Placement): void {
   wall.root.rotation.set(0, at.yaw, 0);
   G.scene.add(wall.root);
   const top = floor + def.wall.height;
-  const middle = new THREE.Vector3((at.ax + at.bx) / 2, floor, (at.az + at.bz) / 2);
+  const middle = new Vec3((at.ax + at.bx) / 2, floor, (at.az + at.bz) / 2);
   let t = 0, endedAt = -1, broke = false, flash = 0, life = def.wall.life;
   // (the prop it is: broken as any prop is, its rubble thrown by `breakProp`, its look then coming apart here; a hit
   // flashes it, as a hit chips a prop)
@@ -301,7 +302,7 @@ function raise(player: Player, def: Def, at: Placement): void {
     raycast: (ray, hits) => raycastWall(wall.root, solid, ray, hits),
     surfaces: (visit) => {
       wall.root.updateWorldMatrix(true, true);
-      wall.root.traverse((o) => { if ((o as THREE.Mesh).isMesh && o.visible) visit(o as THREE.Mesh); });
+      wall.root.traverse((o) => { if ((o as Mesh).isMesh && o.visible) visit(o as Mesh); });
     },
   }, 'sticks', (left) => fx('ward', middle.x, middle.z, left));
   const ward: Ward = { ax: at.ax, az: at.az, bx: at.bx, bz: at.bz, prop };
@@ -367,7 +368,7 @@ const skill: InstantSkill = {
   warm: () => {
     const wall = buildHedgeward();
     wall.kit.u.uDissolve.value = 0.3;
-    return [wall.root, new THREE.Mesh(hedgewardOutline(), ghostMat()), new THREE.Mesh(endGeo(), additive(BRAMBLE, 1.5, 0.8))];
+    return [wall.root, new Mesh(hedgewardOutline(), ghostMat()), new Mesh(endGeo(), additive(BRAMBLE, 1.5, 0.8))];
   },
   aim: (player, def, target, dt) => showPlace(player, def as Def, target, dt),
   // (nothing raised where something's in the way: the press costs nothing. Judged now, or as it was let go where
@@ -382,7 +383,7 @@ const skill: InstantSkill = {
   settle: (player, def, target) => {
     const at = placeFor(player, def as Def, target);
     settled.set(player, { x: at.x, z: at.z, at, ok: placeable(player, def as Def, at) });
-    return new THREE.Vector3(at.x, 0, at.z);
+    return new Vec3(at.x, 0, at.z);
   },
   cast(player, rawDef, target) {
     const def = rawDef as Def;

@@ -9,7 +9,8 @@
 // plain ring shows the spot for one with no preview of its own), or after a tap at the nearest foe; a movement skill
 // (Veilstep) tapped goes the way the move stick points, or the way the hero faces. The mode follows the last input
 // used, so touch laptops work too.
-import * as THREE from '../engine/three.ts';
+import { Mesh, Vec3 } from '../engine/api/index.ts';
+import * as shapes from '../engine/api/shapes/index.ts';
 import { G } from '../state';
 import { input, overPanels } from '../core/input';
 import { cameraYaw, lookBy, viewMode, zoomBy } from '../core/renderer';
@@ -59,10 +60,10 @@ interface Press {
   /** a drag shows where it aims with the plain ring */
   ring: boolean;
   /** the aim the last frame showed, which letting go casts at */
-  shown: THREE.Vector3 | null;
+  shown: Vec3 | null;
 }
 /** a press let go: its aim, kept until the hero takes the cast up, and whether its key is held down meanwhile (a cast on release) */
-interface Released { key: SkillKey; aim: THREE.Vector3; t: number; held: boolean }
+interface Released { key: SkillKey; aim: Vec3; t: number; held: boolean }
 
 let stick: Stick | null = null;
 const presses = new Map<number, Press>();
@@ -73,8 +74,8 @@ let pinch: { d: number; a: number; twist: number } | null = null;
 /** how far two fingers twist before the camera turns with them (rad) */
 const TWIST_START = 0.14;
 let buttons: { key: SkillKey; el: HTMLElement; cd: HTMLElement; cdt: HTMLElement }[] = [];
-let ring: THREE.Mesh;
-const _aim = new THREE.Vector3();
+let ring: Mesh;
+const _aim = new Vec3();
 const listeners: ((touch: boolean) => void)[] = [];
 
 /** Touch mode on/off (a body class that the stylesheet keys off). */
@@ -218,7 +219,7 @@ export function initTouch(v: TouchVillage): void {
   lookByDrag();
   initFullScreen();
 
-  ring = new THREE.Mesh(new THREE.RingGeometry(0.62, 0.8, 40).rotateX(-Math.PI / 2), additive(0xffe0a0, 1.6, 0.9));
+  ring = new Mesh(shapes.ring(0.62, 0.8, 40).rotateX(-Math.PI / 2), additive(0xffe0a0, 1.6, 0.9));
   ring.name = 'touch-aim-ring';
   ring.visible = false;
   ring.renderOrder = 5;
@@ -327,7 +328,7 @@ function lookByDrag(): void {
 }
 
 /** The nearest foe in reach, or a spot a few metres ahead. */
-function autoAim(out: THREE.Vector3): THREE.Vector3 {
+function autoAim(out: Vec3): Vec3 {
   const p = G.player.pos;
   let best = AUTO_RANGE;
   let found = false;
@@ -341,7 +342,7 @@ function autoAim(out: THREE.Vector3): THREE.Vector3 {
 }
 
 /** The way on the ground a way across the screen points (`x` right, `y` down, of unit length), as the move keys map it. */
-function screenWay(x: number, y: number, out: THREE.Vector3): THREE.Vector3 {
+function screenWay(x: number, y: number, out: Vec3): Vec3 {
   const yaw = cameraYaw(), cy = Math.cos(yaw), sy = Math.sin(yaw);
   return out.set(x * cy + y * sy, 0, y * cy - x * sy);
 }
@@ -350,7 +351,7 @@ function screenWay(x: number, y: number, out: THREE.Vector3): THREE.Vector3 {
  * A movement skill's tap (Veilstep): as far as it reaches the way the move stick points, or the way the hero faces
  * with the stick let go. (At the nearest foe, a tapped blink landed the mage among the foes.)
  */
-function moveAim(def: SkillDef, out: THREE.Vector3): THREE.Vector3 {
+function moveAim(def: SkillDef, out: Vec3): Vec3 {
   const pl = G.player, reach = def.range ?? AHEAD, s = input.stick, len = Math.hypot(s.x, s.y);
   if (len) screenWay(s.x / len, s.y / len, out);
   else out.set(Math.sin(pl.facing), 0, Math.cos(pl.facing));
@@ -358,7 +359,7 @@ function moveAim(def: SkillDef, out: THREE.Vector3): THREE.Vector3 {
 }
 
 /** Where a press aims: dragged by hand (screen direction turned into the camera's frame), or as a tap aims its skill. */
-function aimFor(p: Press, out: THREE.Vector3): THREE.Vector3 {
+function aimFor(p: Press, out: Vec3): Vec3 {
   if (!p.dragged) {
     const def = G.player.skillAt(p.key)?.def;
     return def?.tags.includes('movement') ? moveAim(def, out) : autoAim(out);
@@ -439,7 +440,7 @@ export function updateTouch(dt: number): void {
     ?? presses.values().next().value;
   if (press && (!released || !G.player.skillAt(press.key)?.def.block)) {
     input.aim = aimFor(press, _aim);
-    (press.shown ??= new THREE.Vector3()).copy(_aim);
+    (press.shown ??= new Vec3()).copy(_aim);
     if (press.dragged && press.ring) {
       ring.visible = true;
       ring.position.set(_aim.x, groundHeight(_aim.x, _aim.z) + 0.06, _aim.z);

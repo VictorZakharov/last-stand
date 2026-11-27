@@ -1,5 +1,5 @@
 // Power Strike: a second and a half of gathering strength around the weapon, then a crushing overhead blow.
-import * as THREE from '../../engine/three.ts';
+import { Vec3 } from '../../engine/api/index.ts';
 import { addEffect, shockwave, groundFlash, crackDecal, decal } from '../../fx/effects';
 import { particles, col, debris, smokePuff } from '../../fx/particles';
 import { flash } from '../../fx/lights';
@@ -28,7 +28,7 @@ const STOPPED_SIZE = 0.35;
 /** How far ahead along `dir` the blow lands (m): `LANDS`, or short of the first prop or stretch of the arena's wall
  *  in its way, which the weapon comes down on (models/warrior.ts `landHeight`). Landed 2.2 m ahead whatever stood
  *  there, its shockwave and cracks showed on the far side of the wall and inside a pillar. */
-function reachBefore(p: THREE.Vector3, dir: THREE.Vector3): number {
+function reachBefore(p: Vec3, dir: Vec3): number {
   for (let d = STEP; d <= LANDS; d += STEP) {
     const x = p.x + dir.x * d, z = p.z + dir.z * d;
     if (Math.max(propTopAt(x, z), wallTopAt(x, z)) > groundHeight(x, z) + STANDS) return Math.max(STEP, d - STEP);
@@ -52,7 +52,7 @@ const skill: InstantSkill = {
     c?.target.copy(player.aim);
     // motes stream into the weapon (each of two), faster and hotter as the charge builds
     const tips = [player.castPoint], off = player.model.offTip;
-    if (off) tips.push(off.getWorldPosition(new THREE.Vector3()));
+    if (off) tips.push(off.getWorldPosition(new Vec3()));
     const n = Math.random() < dt * (30 + k * 90) * tips.length ? 1 + Math.floor(k * 2) : 0;
     for (let i = 0; i < n; i++) {
       const tip = tips[Math.floor(Math.random() * tips.length)];
@@ -74,10 +74,10 @@ const skill: InstantSkill = {
     const p = player.pos;
     // the way the body (and so the blow) faces
     const facing = player.facing;
-    const dir = new THREE.Vector3(Math.sin(facing), 0, Math.cos(facing));
+    const dir = new Vec3(Math.sin(facing), 0, Math.cos(facing));
     // (the chop's one mark on its way down is the trail its blade leaves, fx/swingTrail.ts)
     const reach = reachBefore(p, dir);
-    const c = new THREE.Vector3(p.x + dir.x * reach, 0, p.z + dir.z * reach);
+    const c = new Vec3(p.x + dir.x * reach, 0, p.z + dir.z * reach);
     // (stopped short on a prop or the wall, the blow's mark is as small as the room before it: full size, its cracks
     // spread round his feet and its ring over the wall and past it)
     const k = reach < LANDS ? STOPPED_SIZE : 1;

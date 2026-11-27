@@ -5,7 +5,7 @@
 // the run at once, and the next wave starts once all who stay chose Continue. A player at 0
 // health goes down until a teammate raises them (or they bleed out); with nobody left standing
 // the run is lost for everyone still in it.
-import * as THREE from '../engine/three.ts';
+import { Vec3 } from '../engine/api/index.ts';
 import { readyNextBoss } from './bossReady';
 import { foeWarm } from './warmup';
 import { G } from '../state';
@@ -296,9 +296,9 @@ const RISE_TRIES = 8;
  * a prop: risen inside one, it was shoved out in a frame as it first moved (by the Thornwood's west gate, out of a
  * log, and pushed out of one of the log's circles a foe can land in the next).
  */
-function riseSpot(portal: Portal, radius: number, boss: boolean): THREE.Vector3 {
-  const side = new THREE.Vector3(-portal.dir.z, 0, portal.dir.x);
-  const pos = new THREE.Vector3();
+function riseSpot(portal: Portal, radius: number, boss: boolean): Vec3 {
+  const side = new Vec3(-portal.dir.z, 0, portal.dir.x);
+  const pos = new Vec3();
   for (let i = 0; i < RISE_TRIES; i++) {
     pos.copy(portal.pos)
       .addScaledVector(portal.dir, rand(0.5, 3.5) + (boss ? 2 : 0))
@@ -317,7 +317,7 @@ const SPAWN_GAP = 0.09;
  * rise, then a straight walk at its wave's pace (each foe's own is a few percent either way, and a prop in the way
  * makes a walk longer).
  */
-function reachIn(def: EnemyDef, pos: THREE.Vector3, w: number): number {
+function reachIn(def: EnemyDef, pos: Vec3, w: number): number {
   const p = nearestPlayer(pos.x, pos.z);
   if (!p) return RISE_TIME;
   const walk = Math.max(0, Math.hypot(p.pos.x - pos.x, p.pos.z - pos.z) - def.range - p.radius);
@@ -379,12 +379,12 @@ function spawnGroup(group: SpawnUnit[]): void {
       portal.pulse();
       // (an encounter's guard rises at its rung's spot for it, where it has one: rising at a gate, it came anywhere; a
       // boss that comes on in the arena's middle grows up out of it: the Rootmother)
-      const pos = u.at ? new THREE.Vector3(u.at[0], 0, u.at[1])
-        : def.bossKit?.comes === 'middle' ? new THREE.Vector3(0, 0, 0)
+      const pos = u.at ? new Vec3(u.at[0], 0, u.at[1])
+        : def.bossKit?.comes === 'middle' ? new Vec3(0, 0, 0)
         : riseSpot(portal, def.radius * (u.hero ? HERO.scale : 1), !!def.boss);
       if (pair) {
         // (the twins abreast, rising together)
-        pos.addScaledVector(new THREE.Vector3(-portal.dir.z, 0, portal.dir.x), (j ? 1 : -1) * 3.5);
+        pos.addScaledVector(new Vec3(-portal.dir.z, 0, portal.dir.x), (j ? 1 : -1) * 3.5);
         resolveWorld(pos, def.radius);
       }
       if (first) reaches.push(j * SPAWN_GAP + reachIn(def, pos, r.wave));

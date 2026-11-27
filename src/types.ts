@@ -1,6 +1,6 @@
 // Shared domain types. Data files (src/data) are typed against these, and the
 // systems consume them, so adding a class / enemy / skill is type-checked.
-import type * as THREE from './engine/three.ts';
+import type { Node } from './engine/api/index.ts';
 import type { createKit } from './core/materials';
 import type { Joints } from './entities/models/rig';
 import type { Dye } from './entities/models/dye';
@@ -621,28 +621,28 @@ export interface Struck { x: number; z: number; r: number; top: number }
 export type MaterialKit = ReturnType<typeof createKit>;
 
 export interface Model {
-  root: THREE.Group;
+  root: Node;
   kit: MaterialKit;
   animate(st: AnimState): void;
   height: number;
   /** cast origin (staff tip / orb) */
-  tip?: THREE.Object3D;
+  tip?: Node;
   /** the weapon's own tip where `tip` isn't on it (a bow's upper limb's: its `tip` is the nocked arrow's middle, where
    *  the shot leaves, which stays where the last arrow left the string until the next is laid on it) */
-  weaponTip?: THREE.Object3D;
+  weaponTip?: Node;
   /** the other hand's weapon tip, while there's a weapon in each (a charge gathers into both) */
-  readonly offTip?: THREE.Object3D | null;
+  readonly offTip?: Node | null;
   /** a two-hander's lower grip, where the other hand holds it (none for any other weapon) */
-  readonly offGrip?: THREE.Object3D | null;
+  readonly offGrip?: Node | null;
   /** offhand focus point */
-  palm?: THREE.Object3D;
+  palm?: Node;
   /** a bow's nocked arrow's head, along the arrow as it lies on the string (a full draw glints there) */
-  arrowHead?: THREE.Object3D;
+  arrowHead?: Node;
   /** skeleton, for humanoid models */
   joints?: Joints;
   /** the joint its head and all on it ride, where it has no `joints` (the training dummy): a hit on what rides it is
    *  a headshot (combat/strikes.ts `onHead`; with `joints`, theirs) */
-  head?: THREE.Object3D;
+  head?: Node;
   /** A horizontal impact in world space for models that physically react to a hit. */
   impact?(x: number, z: number): void;
   /** a hero's hands (models/hands.ts: the lab's `hands` builds one alone from them) */
@@ -712,7 +712,7 @@ export interface KeyedArm {
 
 /** a held weapon's striking part, by two points on its grip: from near a blade's root to its point, or a head's lower
  *  end to its top */
-export interface Blade { from: THREE.Object3D; to: THREE.Object3D }
+export interface Blade { from: Node; to: Node }
 
 export interface XZ { x: number; z: number }
 export interface XYZ { x: number; y: number; z: number }

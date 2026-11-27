@@ -6,7 +6,7 @@
 // a branch (led whole), a pair (where he stands, then led), a fan (its middle led), a line (half led) and her rain
 // (one branch after another, each aimed as it leaves her hand, led whole, half, not at all, whole). Each branch is a
 // `branch` fx every game flies and judges its own hero by (entities/rootmother.ts `branchAt`).
-import * as THREE from '../engine/three.ts';
+import { Vec3 } from '../engine/api/index.ts';
 import { G } from '../state';
 import { ROOTMOTHER } from '../data/foes/rootmother';
 import { ARENA } from '../data/balance';
@@ -94,7 +94,7 @@ function wayOver(p: Player, t: number): { x: number; z: number } {
 
 /** Where a branch from `from` should land to meet hero `p`, led by `share` of his way over its flight and `later` s
  *  more, `lead.most` m at the most, kept `lead.inside` m inside the arena's wall. */
-export function ledAt(p: Player, from: THREE.Vector3, share: number, later = 0): { x: number; z: number } {
+export function ledAt(p: Player, from: Vec3, share: number, later = 0): { x: number; z: number } {
   let x = p.pos.x, z = p.pos.z;
   if (share > 0) {
     // (its flight depends on where it's aimed: twice round is near enough)
@@ -135,7 +135,7 @@ export function aheadOf(p: Player, t: number): { x: number; z: number } {
 }
 
 /** A branch let go from her hand at (tx, tz), landing `late` s after its flight, for hero `p` (its aim kept). */
-function letGo(e: Enemy, name: Throw, p: Player, from: THREE.Vector3, to: { x: number; z: number }, share: number,
+function letGo(e: Enemy, name: Throw, p: Player, from: Vec3, to: { x: number; z: number }, share: number,
   hurt: number, splash: number, stay: number, late = 0, led = to): void {
   const flight = branchFlight(Math.hypot(to.x - from.x, to.z - from.z)) + late;
   const pace = paceOf(p);
@@ -150,7 +150,7 @@ const phaseHurt = (e: Enemy): number => B.phaseHurt[Math.min(2, e.bossPhase)];
 /** Where simulated, as her arm comes over: throw `name`'s branches at hero `p` (all but her rain, `rainOne`). */
 export function hurl(e: Enemy, name: Throw, p: Player): void {
   if (!e.alive || !p.active) return;
-  const from = releaseFrom(e, new THREE.Vector3());
+  const from = releaseFrom(e, new Vec3());
   if (name === 'branch') {
     letGo(e, name, p, from, ledAt(p, from, 1), 1, B.hurt, B.splash, 0);
     return;
@@ -191,7 +191,7 @@ export function rainOne(e: Enemy, i: number, at: () => Player | null): void {
   const p = at();
   if (!e.alive || !p?.active) return;
   fx('branchTorn', e.id, 1);
-  const from = releaseFrom(e, new THREE.Vector3());
+  const from = releaseFrom(e, new Vec3());
   const share = B.rain.aims[i % B.rain.aims.length];
   letGo(e, 'rain', p, from, ledAt(p, from, share), share, B.rain.hurt, B.smallSplash, 0);
 }

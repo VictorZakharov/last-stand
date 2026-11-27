@@ -3,7 +3,11 @@
 // buckled in brass; his shirt's charcoal sleeves pushed up over forearms inked with runes, a grimoire chained at his hip,
 // tall worn boots, and a gnarled staff cradling a floating crystal. The longcoat with its collar, shoulders, harness and
 // skirts is the chest item's, the bracers the hands item's: without them the waistcoat and bare forearms. Fully procedural.
-import * as THREE from '../../engine/three.ts';
+import {
+  Attribute, BackSide, CanvasTexture, CatmullRom3, Color, DoubleSide, LitMaterial, Mat4, Material, Mesh, Node, Quat,
+  SRGBColorSpace, Vec3,
+} from '../../engine/api/index.ts';
+import * as shapes from '../../engine/api/shapes/index.ts';
 import { createKit } from '../../core/materials';
 import { leather as leatherMaps, cloth as clothMaps, steel as steelMaps, wood as woodMaps, wool as woolMaps, oiled, pbrMaterialMaps, ctx2d } from '../../core/textures';
 import { engravedSteel, embroidered, projectUV, steelRegion } from '../../core/engraving';
@@ -33,12 +37,12 @@ import { built, type ModelSteps } from './steps';
 import { tunable } from '../../core/tuning';
 import { groundHeight } from '../../world/ground';
 
-const WHITE = new THREE.Color(0xffffff);
+const WHITE = new Color(0xffffff);
 
-const _hp = new THREE.Vector3(), _hd = new THREE.Vector3(), _fw = new THREE.Vector3(), _vr = new THREE.Quaternion();
+const _hp = new Vec3(), _hd = new Vec3(), _fw = new Vec3(), _vr = new Quat();
 /** a joint's length (its local y) */
-const ALONG = new THREE.Vector3(0, 1, 0);
-const V = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
+const ALONG = new Vec3(0, 1, 0);
+const V = (x: number, y: number, z: number) => new Vec3(x, y, z);
 
 /** the coat's and the waistcoat's share of the arm round each armhole (`ArmBlend`: as the ranger's coat, with nothing over
  *  the shoulder to keep it down) */
@@ -67,11 +71,11 @@ const PANEL_HANGS = 0.15;
 /** how far down he is as his hand lets go of the staff he lays down, as the staff goes to the floor (from, to), and
  *  as the hand goes to his knee. Moving the staff only after 0.3 left it 7.6 cm through his rising thigh. */
 const STAFF_LET_GO = 0.2, STAFF_DOWN = [0, 1], STAFF_HAND = [0, 1];
-const _bookQ = new THREE.Quaternion(), _bookTurn = new THREE.Quaternion(), _bookAxis = new THREE.Vector3();
-const _bookPivot = new THREE.Vector3(), UP = new THREE.Vector3(0, 1, 0);
+const _bookQ = new Quat(), _bookTurn = new Quat(), _bookAxis = new Vec3();
+const _bookPivot = new Vec3(), UP = new Vec3(0, 1, 0);
 /** a point on the coat's front at x, y, `lift` above it: the tunic's (a round body of the coat's own, narrower over the
  *  shoulders with the arms' tubes stood beside it under caps, read as a bottle from behind) */
-function onChest(x: number, y: number, lift: number, out = new THREE.Vector3()): THREE.Vector3 {
+function onChest(x: number, y: number, lift: number, out = new Vec3()): Vec3 {
   return out.copy(tunicFront(x, y, lift));
 }
 
@@ -98,8 +102,8 @@ function diamondColumn(c: CanvasRenderingContext2D, w: number, h: number): void 
  *  small sealed glyphs from it towards the elbow with dots between, a line of glyphs down to the wrist, and a band round
  *  the arm at each end, as the sheet's; on the outer and back faces a column of large glyphs. Made once, shared by every build. (Its first, a few circles and spokes in thick
  *  lines, read as a target drawn in marker) */
-let runes: THREE.CanvasTexture | undefined;
-function forearmRunes(): THREE.CanvasTexture {
+let runes: CanvasTexture | undefined;
+function forearmRunes(): CanvasTexture {
   if (runes) return runes;
   const N = 1024, cv = document.createElement('canvas');
   cv.width = N;
@@ -212,8 +216,8 @@ function forearmRunes(): THREE.CanvasTexture {
     for (const sx of [-1, 1]) line(cx + sx * 34, 128, cx + sx * 34, 908, 3);
     for (let y = 170; y < 900; y += 70) glyphAt(cx, y, 0, 30, 40, 4);
   }
-  runes = new THREE.CanvasTexture(cv);
-  runes.colorSpace = THREE.SRGBColorSpace;
+  runes = new CanvasTexture(cv);
+  runes.colorSpace = SRGBColorSpace;
   runes.anisotropy = 4;
   return runes;
 }
@@ -226,7 +230,7 @@ function forearmRunes(): THREE.CanvasTexture {
 const FREE_HAND = new Set(['cast', 'summon', 'channel', 'slam', 'buff', 'drink']);
 /** his free hand's outline: its green, how far it breathes either way and how fast (rad/s: well under the
  *  1.5 flashes a second a large glow may pulse at), and the share of it glowing over the whole hand */
-const HAND_GLOW = { color: new THREE.Color(0x5dffa8).multiplyScalar(1.8), breathe: 0.3, rate: 2.2, body: 0.1, eyes: 0.35 };
+const HAND_GLOW = { color: new Color(0x5dffa8).multiplyScalar(1.8), breathe: 0.3, rate: 2.2, body: 0.1, eyes: 0.35 };
 const HAND_HANG = Math.PI / 2;
 const TAIL: Record<string, number> = { cast: 0.35, summon: 0.35, slam: 0.4, buff: 0.5 }, TAIL_OUT: Record<string, number> = { cast: 0.45, summon: 0.45, slam: 0.6, buff: 0.5 };
 /** braced for Void Lance, how far the staff is slid up through the fist (rig units), its foot kept on the ground as
@@ -282,10 +286,10 @@ export function* mageSteps(look: HeadSpec = headFor('mage')): ModelSteps {
   yield;
   // the coat's felted wool: oxblood, its weave seen up close as the sheet's
   const coat = kit.rim({ color: 0x681c22, roughness: 1, ...tex(woolMaps(), 1, 1.2) }, 0x7a2a2a, 0.3);
-  const coatD = kit.rim({ color: 0x681c22, roughness: 1, ...tex(woolMaps(), 1, 1.2), side: THREE.DoubleSide }, 0x7a2a2a, 0.3);
+  const coatD = kit.rim({ color: 0x681c22, roughness: 1, ...tex(woolMaps(), 1, 1.2), side: DoubleSide }, 0x7a2a2a, 0.3);
   yield;
   // the waistcoat's and the underskirts' charcoal wool, the shirt's darker red linen, the trousers' charcoal twill
-  const charcoal = kit.rim({ color: 0x2b2a2e, roughness: 1, ...tex(woolMaps(), 1, 1.4), side: THREE.DoubleSide }, 0x3a3a44, 0.25);
+  const charcoal = kit.rim({ color: 0x2b2a2e, roughness: 1, ...tex(woolMaps(), 1, 1.4), side: DoubleSide }, 0x3a3a44, 0.25);
   const shirt = kit.rim({ color: 0x3a1418, roughness: 1, ...tex(clothMaps(), 1, 0.9) }, 0x5a2a2a, 0.25);
   const sleeve = kit.rim({ color: 0x2e2d32, roughness: 1, ...tex(clothMaps(), 1, 1.1) }, 0x3a3a44, 0.25);
   const trousers = kit.rim({ color: 0x24232a, roughness: 1, ...tex(clothMaps(), 1, 1.2) }, 0x34343c, 0.2);
@@ -323,7 +327,7 @@ export function* mageSteps(look: HeadSpec = headFor('mage')): ModelSteps {
   const wood = kit.std({ color: 0x7a5236, roughness: 0.9, ...tex(woodMaps(), 1, 2) });
   yield;
   // the coat's and the hood's dark lining
-  const lining = kit.rim({ color: 0x3a1418, roughness: 1, ...tex(clothMaps(), 1, 0.9), side: THREE.BackSide }, 0x5a2a2a, 0.05);
+  const lining = kit.rim({ color: 0x3a1418, roughness: 1, ...tex(clothMaps(), 1, 0.9), side: BackSide }, 0x5a2a2a, 0.05);
   yield;
   // the staff's crystal and its rings in the colour of the bolts it shoots (Splintering Bolt's `color`, #197)
   const glow = kit.glow(0xff6fe0, 1.5);
@@ -345,7 +349,7 @@ export function* mageSteps(look: HeadSpec = headFor('mage')): ModelSteps {
   const stone = kit.phys({ color: 0x7a0f1a, emissive: 0xff2a3a, emissiveIntensity: 0.5, roughness: 0.08, metalness: 0, clearcoat: 1, flatShading: true });
   yield;
   const panelTex = coatPanels();
-  const panel = kit.rim({ color: 0xffffff, roughness: 1, map: panelTex.map, normalMap: panelTex.normalMap, roughnessMap: panelTex.roughnessMap, side: THREE.DoubleSide }, 0x7a2a2a, 0.3);
+  const panel = kit.rim({ color: 0xffffff, roughness: 1, map: panelTex.map, normalMap: panelTex.normalMap, roughnessMap: panelTex.roughnessMap, side: DoubleSide }, 0x7a2a2a, 0.3);
   yield;
   // the runes inked on his forearms (an alpha-tested layer over the skin)
   // (blended, not cut out: cut at half, a line thinner than a texel of the smaller mip levels was dropped whole, and
@@ -376,7 +380,7 @@ export function* mageSteps(look: HeadSpec = headFor('mage')): ModelSteps {
   // (stood off the tunic round the neckline, up from over the armholes: his neck widens into the shoulders, `neckFlare`, and
   // at the tunic's own height it came through the cloth behind)
   // (a piece at a time: the cut and each side's sleeve set in, 16 ms whole)
-  const cut = function* (into: Sculpt, mat: THREE.Material): Generator<void, void, undefined> {
+  const cut = function* (into: Sculpt, mat: Material): Generator<void, void, undefined> {
     const [L, R] = yield* tunicCutSteps(sets.around, lod(22, 12));
     for (const g of [L, R]) {
       const p = g.attributes.position, n = g.attributes.normal;
@@ -411,7 +415,7 @@ export function* mageSteps(look: HeadSpec = headFor('mage')): ModelSteps {
   // the waistcoat's brass buttons down its middle, and brass piping down the coat's front edges
   for (const y of [0.17, 0.1, 0.03, -0.04]) A.add(stud(0.0075), brass, j.chest, onChest(0, y, 0.006).toArray());
   for (const s of [1, -1]) {
-    const pts: THREE.Vector3[] = [];
+    const pts: Vec3[] = [];
     for (let k = 0; k <= 10; k++) { const y = lerp(0.275, -0.12, k / 10); pts.push(onChest(s * edgeX(y), y, 0.004 + low(y))); }
     // (in the engraved, duller gold: in the bright brass, where it lies up the shoulders' slope it faced the sky and glowed
     // in two rods under the collar)
@@ -448,7 +452,7 @@ export function* mageSteps(look: HeadSpec = headFor('mage')): ModelSteps {
     const top = ARMHOLE.y + ARMHOLE.B;
     A.skinChain(sets.withArm(stitches([0.272, 0.262, top].map((y) => onTunic(sa * Math.PI / 2, y, 0.0016))), sa), shirt, j.chest, sets.chainOf(sa));
     // (the coat's armhole turned under in a rolled edge, over the sleeve's seam)
-    const roll = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(armholeEdge(sa, 48, 0.004), true), lod(64, 32), 0.0055, 6, true);
+    const roll = shapes.tube(new CatmullRom3(armholeEdge(sa, 48, 0.004), true), lod(64, 32), 0.0055, 6, true);
     A.skinChain(sets.withArm(roll, sa), coat, j.chest, sets.chainOf(sa));
     A.skinChain(sets.withArm(stitches(armholeEdge(sa, 48, 0.011), 0.004, 0.0028, 0.0009, true), sa), shirt, j.chest, sets.chainOf(sa));
     yield;
@@ -459,10 +463,10 @@ export function* mageSteps(look: HeadSpec = headFor('mage')): ModelSteps {
   // (its lower half going with the waist, the coat under it there: on the chest alone, the coat's waist turned under it
   // walking and the strap's end stood out of the coat by the hip, a dark shard below the bracer). Each lies flat on the
   // coat (faced along its normal: along a radial from the chest's axis, each stood tilted, an edge 1.9 cm off the coat)
-  const harness = (pts: THREE.Vector3[]) => {
+  const harness = (pts: Vec3[]) => {
     const g = strap(pts, 0.05, 0.008, false, tunicNormal), p = g.attributes.position, k = new Float32Array(p.count);
     for (let i = 0; i < p.count; i++) k[i] = smooth(clamp((0.06 - p.getY(i)) / 0.12, 0, 1));
-    g.setAttribute('skinK', new THREE.BufferAttribute(k, 1));
+    g.setAttribute('skinK', new Attribute(k, 1));
     A.skinChain(g, leather, j.chest, [j.chest, j.spine]);
   };
   for (const s of [1, -1]) {
@@ -504,7 +508,7 @@ export function* mageSteps(look: HeadSpec = headFor('mage')): ModelSteps {
       cuff.computeVertexNormals();
       S.add(scaleUV(cuff, 4, 1), sleeve, el, [0, 0.004, 0]);
       for (const [y, r] of [[-0.026, 0.0615], [0.031, 0.0605]] as const) {
-        S.add(new THREE.TorusGeometry(r, 0.004, lod(6, 4), lod(40, 20)).rotateX(Math.PI / 2), sleeve, el, [0, y, 0]);
+        S.add(shapes.torus(r, 0.004, lod(6, 4), lod(40, 20)).rotateX(Math.PI / 2), sleeve, el, [0, y, 0]);
       }
     }
     yield;
@@ -520,7 +524,7 @@ export function* mageSteps(look: HeadSpec = headFor('mage')): ModelSteps {
     const bracer: [number, number][] = [[0.04, -0.27], [0.045, -0.22], [0.051, -0.15], [0.053, -0.12]];
     H.add(scaleUV(lathe(bracer, 16), 2, 1), leather, el);
     // (its top rolled over, so it ends in an edge rather than a cut)
-    H.add(new THREE.TorusGeometry(0.0535, 0.0035, 5, 18).rotateX(Math.PI / 2), leather, el, [0, -0.122, 0]);
+    H.add(shapes.torus(0.0535, 0.0035, 5, 18).rotateX(Math.PI / 2), leather, el, [0, -0.122, 0]);
     // its straps drawn snug round it where they lie (sized as if it widened towards the wrist, the lower stood off it
     // as a loose ring)
     const bracerAt = (y: number) => {
@@ -541,11 +545,11 @@ export function* mageSteps(look: HeadSpec = headFor('mage')): ModelSteps {
   const handR = buildHand(j.handR, -1, gloveLeather, bareSkin, 1, bareSkin);
   yield;
   // (his arcana: the free hand's outline lit green, breathing slowly: `HAND_GLOW`)
-  const handGlow = new THREE.Color(), handBody = new THREE.Color();
+  const handGlow = new Color(), handBody = new Color();
   glowOutline(handL, handGlow, handBody);
   // (and the other hand's with no staff in it, #402: both hands lit say both are ready for the lance; black, no
   // glow, while it holds the staff)
-  const handGlowR = new THREE.Color(0), handBodyR = new THREE.Color(0);
+  const handGlowR = new Color(0), handBodyR = new Color(0);
   glowOutline(handR, handGlowR, handBodyR);
   const body = bodyShape(j, { L: handL.vis, R: handR.vis });
 
@@ -580,15 +584,15 @@ export function* mageSteps(look: HeadSpec = headFor('mage')): ModelSteps {
   yield;
   // (its buckle a broad brass frame with a prong; the belt's end through it, held by a leather keeper, with its holes)
   S.add(buckle(0.076, 0.07, 0.01), brass, j.spine, [0, 0.02, 0.158]);
-  S.add(new THREE.BoxGeometry(0.042, 0.006, 0.006), brass, j.spine, [-0.012, 0.02, 0.166]);
+  S.add(shapes.box(0.042, 0.006, 0.006), brass, j.spine, [-0.012, 0.02, 0.166]);
   const onWaist = (a: number, out: number, y = 0.02) => V(Math.sin(a) * (0.166 + out), y, Math.cos(a) * (0.143 + out));
   S.add(strap(Array.from({ length: 8 }, (_, k) => onWaist(0.04 + k * 0.08, 0.009)), 0.048, 0.007), beltLeather, j.spine);
   S.add(buckle(0.014, 0.066, 0.008), beltLeather, j.spine, onWaist(0.36, 0.016).toArray(), [0, 0.36, 0]);
-  for (const a of [0.46, 0.52]) S.add(new THREE.CylinderGeometry(0.0035, 0.0035, 0.003, 8).rotateX(Math.PI / 2), sole, j.spine, onWaist(a, 0.0135).toArray(), [0, a, 0]);
+  for (const a of [0.46, 0.52]) S.add(shapes.cylinder(0.0035, 0.0035, 0.003, 8).rotateX(Math.PI / 2), sole, j.spine, onWaist(a, 0.0135).toArray(), [0, a, 0]);
   yield;
   // (the slung belt and the book on it in a group of their own on the hips: sized round the coat, without it they hung
   // in the air off the waistcoat, and the group draws in to it, `SLUNG_IN`)
-  const sling = new THREE.Group();
+  const sling = new Node();
   j.hips.add(sling);
   yield;
   // (drawn tight round the coat: a hand's width off it, it stood out from it as a hoop)
@@ -598,17 +602,17 @@ export function* mageSteps(look: HeadSpec = headFor('mage')): ModelSteps {
   S.add(strap(around(), 0.05, 0.01, true), beltLeather, sling);
   for (const dy of [-0.02, 0.02]) S.add(stitches(around(0.006, dy), 0.005, 0.0035, 0.0011, true), linen, sling);
   S.add(buckle(0.06, 0.062, 0.009), brass, sling, slung(-0.35, 0.008).toArray(), [0, -0.35, -0.24]);
-  const book = new THREE.Group();
+  const book = new Node();
   sling.add(book);
   /** the book's top, where it hangs from (the sling's space), and its turn round the belt and place there (`setGear`) */
-  const bookTop = new THREE.Vector3(), bookBase = new THREE.Vector3();
+  const bookTop = new Vec3(), bookBase = new Vec3();
   let bookTurn = 0;
   /** The staff laid on the floor beside him (`STAFF_LAY`), eased from the fist by `w` (after `seat`): its foot on the
    *  floor, its head tipped up off it (`rise`) and its crystal's rings drawn in round it (`rings`: laid flat, they went
    *  11 cm into the floor). */
-  const _layM = new THREE.Matrix4(), _layP = new THREE.Vector3(), _layQ = new THREE.Quaternion();
-  const _layS = new THREE.Vector3(), _layA = new THREE.Vector3(), _layH = new THREE.Matrix4();
-  const _layY = new THREE.Vector3(), _layZ = new THREE.Vector3();
+  const _layM = new Mat4(), _layP = new Vec3(), _layQ = new Quat();
+  const _layS = new Vec3(), _layA = new Vec3(), _layH = new Mat4();
+  const _layY = new Vec3(), _layZ = new Vec3();
   function layStaff(w: number): void {
     root.updateMatrixWorld(true);
     const k = root.scale.x, [out, ahead] = STAFF_LAY.at, rise = STAFF_LAY.rise;
@@ -655,14 +659,14 @@ export function* mageSteps(look: HeadSpec = headFor('mage')): ModelSteps {
     bookTop.set(seat.x, seat.y - 0.014, seat.z);
     const place = (x: number, y: number, z: number): [number, number, number] =>
       [at[0] + Math.sin(ry) * z + Math.cos(ry) * x, at[1] + y, at[2] + Math.cos(ry) * z - Math.sin(ry) * x];
-    S.add(new THREE.BoxGeometry(W - 0.006, Hh - 0.008, D - 0.012), paper, book, at, [0, ry, 0]);
-    for (const z of [D / 2 - 0.004, -D / 2 + 0.004]) S.add(new THREE.BoxGeometry(W, Hh, 0.008), tome, book, place(0, 0, z), [0, ry, 0]);
-    S.add(new THREE.BoxGeometry(0.01, Hh, D), tome, book, place(-W / 2, 0, 0), [0, ry, 0]);
-    for (const cx of [1, -1]) for (const cy of [1, -1]) S.add(new THREE.BoxGeometry(0.022, 0.022, 0.01), brass, book, place(cx * (W / 2 - 0.009), cy * (Hh / 2 - 0.009), D / 2), [0, ry, 0]);
+    S.add(shapes.box(W - 0.006, Hh - 0.008, D - 0.012), paper, book, at, [0, ry, 0]);
+    for (const z of [D / 2 - 0.004, -D / 2 + 0.004]) S.add(shapes.box(W, Hh, 0.008), tome, book, place(0, 0, z), [0, ry, 0]);
+    S.add(shapes.box(0.01, Hh, D), tome, book, place(-W / 2, 0, 0), [0, ry, 0]);
+    for (const cx of [1, -1]) for (const cy of [1, -1]) S.add(shapes.box(0.022, 0.022, 0.01), brass, book, place(cx * (W / 2 - 0.009), cy * (Hh / 2 - 0.009), D / 2), [0, ry, 0]);
     S.add(disc(0.026, 0.006), goldE, book, place(0, 0, D / 2 + 0.003), [0, ry, 0]);
     S.add(gemGeo(0.012), stone, book, place(0, 0, D / 2 + 0.008), [0, ry, 0]);
-    S.add(new THREE.OctahedronGeometry(0.016, 0), brass, book, place(W / 2 - 0.02, -Hh / 2 - 0.04, D / 2), [0, ry, 0], [0.7, 1.6, 0.7]);
-    S.add(new THREE.CylinderGeometry(0.0015, 0.0015, 0.03, 4), brass, book, place(W / 2 - 0.02, -Hh / 2 - 0.012, D / 2), [0, ry, 0]);
+    S.add(shapes.octahedron(0.016, 0), brass, book, place(W / 2 - 0.02, -Hh / 2 - 0.04, D / 2), [0, ry, 0], [0.7, 1.6, 0.7]);
+    S.add(shapes.cylinder(0.0015, 0.0015, 0.03, 4), brass, book, place(W / 2 - 0.02, -Hh / 2 - 0.012, D / 2), [0, ry, 0]);
     // the chain: a few links turned alternately, from the slung belt just above down to the book's top corner
     const a1 = V(...place(-W / 2 + 0.012, Hh / 2, D / 2));
     const a0 = slung(Math.atan2(a1.x / 0.205, a1.z / 0.19), 0.008);
@@ -670,7 +674,7 @@ export function* mageSteps(look: HeadSpec = headFor('mage')): ModelSteps {
     for (let k = 0; k <= n; k++) {
       const t = k / n, p = a0.clone().lerp(a1, t);
       p.y -= 0.006 * Math.sin(t * Math.PI);
-      const link = new THREE.TorusGeometry(0.009, 0.0024, 5, 10).scale(1, 1.5, 1);
+      const link = shapes.torus(0.009, 0.0024, 5, 10).scale(1, 1.5, 1);
       S.add(link, brass, book, p.toArray(), [0, k % 2 ? Math.PI / 2 : 0, 0.3]);
     }
   }
@@ -693,9 +697,9 @@ export function* mageSteps(look: HeadSpec = headFor('mage')): ModelSteps {
   // measured it against the reference photos: from 20 cm out, wider than the waist, its top stood proud of the body,
   // flared to 31 cm it read as a bell, and its fifteen folds and brass hem as a pleated skirt)
   const over = new Skirt({ r0: 0.162, r1: 0.255, len: 0.68, depth: 0.84, folds: 8, foldAmp: 0.03, rows: 12, trim: 0.03, radial: 72, flare: 0.6, slit: { from: 0.45, gap: 0.05 }, hem: (a) => slit(a, 0.02, 0.06) + 0.03 * (1 - Math.cos(a)) * 0.5 });
-  const skirts: THREE.Mesh[] = [];
+  const skirts: Mesh[] = [];
   for (const [sk, mats] of [[over, [coat, coat]], [over, [lining, lining]]] as const) {
-    const m = new THREE.Mesh(sk.geo, mats.length > 1 ? [...mats] : mats[0]);
+    const m = new Mesh(sk.geo, mats.length > 1 ? [...mats] : mats[0]);
     m.position.y = 0.03; m.castShadow = m.receiveShadow = true;
     j.hips.add(m); skirts.push(m);
     yield;
@@ -703,7 +707,7 @@ export function* mageSteps(look: HeadSpec = headFor('mage')): ModelSteps {
   yield;
   // (without the coat the waistcoat's skirt, short over the hips)
   const short = new Skirt({ r0: 0.19, r1: 0.215, len: 0.14, depth: 0.82, folds: 5, foldAmp: 0.02, rows: 4, hem: (a) => 0.04 * Math.max(0, Math.cos(a)) ** 3 });
-  const tunicSkirt = new THREE.Mesh(short.geo, charcoal);
+  const tunicSkirt = new Mesh(short.geo, charcoal);
   tunicSkirt.position.y = 0.03; tunicSkirt.castShadow = tunicSkirt.receiveShadow = true;
   j.hips.add(tunicSkirt);
   const legs = new LegIK(j);
@@ -720,7 +724,7 @@ export function* mageSteps(look: HeadSpec = headFor('mage')): ModelSteps {
   // the shins over the boots from inside, the hands from outside; the breeches' and the boots' radii (the boot's cuff and its
   // stone stand 10 cm off the shin: sized to the breeches, the shin came through the robe there) and the cloth's gap (with a
   // little over for the flat triangles between its points)
-  const legBodies = new SkirtLimbs(), handBodies = new SkirtLimbs(), GAP = 0.018, O = () => new THREE.Vector3();
+  const legBodies = new SkirtLimbs(), handBodies = new SkirtLimbs(), GAP = 0.018, O = () => new Vec3();
   for (const [th, kn, an] of [[j.thighL, j.kneeL, j.ankleL], [j.thighR, j.kneeR, j.ankleR]] as const) {
     // (the full gap at the hip too: closer, 4 to 14 mm, the thigh came through the coat by the hip walking, a dark shard
     // under the belt; the seat stands in without the skirt's layer)
@@ -734,7 +738,7 @@ export function* mageSteps(look: HeadSpec = headFor('mage')): ModelSteps {
   for (const [a, b, r] of [...segsL, ...handCapsules(handR)]) handBodies.add(a, b, r + HAND_GAP);
   yield;
   // (and the free forearm's lower half, as wide as its bracer's cuff or its sleeve's at the wrist: it hangs by the hip)
-  const fore = handBodies.add([j.elbowL, new THREE.Vector3(0, -0.5 * j.P.foreL, 0)], [j.handL, O()], 0), cuffR = () => (gloved ? 0.074 : 0.05);
+  const fore = handBodies.add([j.elbowL, new Vec3(0, -0.5 * j.P.foreL, 0)], [j.handL, O()], 0), cuffR = () => (gloved ? 0.074 : 0.05);
   yield;
   // (the legs placed first: the free arm is kept off the thigh before the hands are)
   const placeBodies = () => {
@@ -743,14 +747,14 @@ export function* mageSteps(look: HeadSpec = headFor('mage')): ModelSteps {
   };
   yield;
   // (the free arm swung out just enough to keep its hand and its cuff off the thigh and the cloth over it: armOffThigh)
-  const handPts = [...segsL.flatMap(([a, b, r]) => [[a, r], [b, r]] as [JointPoint, number][]), [[j.elbowL, new THREE.Vector3(0, -0.5 * j.P.foreL, 0)], 0], [[j.handL, new THREE.Vector3()], 0]] as [JointPoint, number][];
+  const handPts = [...segsL.flatMap(([a, b, r]) => [[a, r], [b, r]] as [JointPoint, number][]), [[j.elbowL, new Vec3(0, -0.5 * j.P.foreL, 0)], 0], [[j.handL, new Vec3()], 0]] as [JointPoint, number][];
   const clearThigh = (weight: number) => {
     const n = handPts.length;
     handPts[n - 2][1] = cuffR() - 0.012; handPts[n - 1][1] = cuffR();
     armOffThigh(tunicSkirt, j.shoulderL, 1, legBodies.list[0], HAND_GAP + (robed ? 0.015 : 0), handPts, weight);
   };
-  const flaps: { g: THREE.Group; knee: THREE.Group; a: number; len: number; w: number }[] = [];
-  const hang = (a: number, w: number, len: number, mat: THREE.Material, hemPx: number, texH: number, lift: number) => {
+  const flaps: { g: Node; knee: Node; a: number; len: number; w: number }[] = [];
+  const hang = (a: number, w: number, len: number, mat: Material, hemPx: number, texH: number, lift: number) => {
     const g = joint(j.hips, Math.sin(a) * (0.21 + lift), 0.04, Math.cos(a) * (0.175 + lift));
     g.rotation.order = 'YXZ'; g.rotation.y = a;
     // (bending halfway down, where a raised knee lifts the robe under it: the lower half hangs on from there)
@@ -769,7 +773,7 @@ export function* mageSteps(look: HeadSpec = headFor('mage')): ModelSteps {
   // face out; the upper from a hand's breadth down it, as cloth bends over what is just under its top; the lower half
   // from `lowFrom`, its own swing)
   const overRobe = (f: (typeof flaps)[number], swing: number, lowFrom = swing): [number, number] => {
-    const P = (over.geo.attributes.position as THREE.BufferAttribute).array as Float32Array, c = Math.cos(f.a), sn = Math.sin(f.a), hw = f.w / 2 + 0.02, o = f.g.position, h = f.len / 2;
+    const P = (over.geo.attributes.position as Attribute).array as Float32Array, c = Math.cos(f.a), sn = Math.sin(f.a), hw = f.w / 2 + 0.02, o = f.g.position, h = f.len / 2;
     // (only the robe's columns round the panel's own angle: its seam at the front, the first column's angle 0)
     const C = over.cols, span = Math.ceil(((hw / 0.2) / TAU) * (C - 1)) + 1, i0 = Math.round((((f.a / TAU) % 1 + 1) % 1) * (C - 1));
     const fit = (ay: number, az: number, near: number, far: number, from: number): number => {
@@ -792,9 +796,9 @@ export function* mageSteps(look: HeadSpec = headFor('mage')): ModelSteps {
   const head = yield* headSteps(j.head, kit, look.who, look);
   yield;
   // (a point just before the lips, for the flask)
-  const mouth = new THREE.Object3D(); mouth.name = 'mouth'; head.group.add(mouth); toGroup(0, 50, 112, mouth.position);
+  const mouth = new Node(); mouth.name = 'mouth'; head.group.add(mouth); toGroup(0, 50, 112, mouth.position);
   buildNeck(j.neck, kit, look.who, j.P.neckL, j.head);
-  const hat = new THREE.Group(); hat.name = 'hat'; head.group.add(hat); hat.visible = false;
+  const hat = new Node(); hat.name = 'hat'; head.group.add(hat); hat.visible = false;
   let hood: HoodCloth;
   /** how deep the hood's shade on the face (the forehead and the eyes; `Head.shade`) */
   const HOOD_SHADE = 0.78;
@@ -820,7 +824,7 @@ export function* mageSteps(look: HeadSpec = headFor('mage')): ModelSteps {
    *  coat, as `harness` lays them: down his front from each shoulder, crossed behind, and the disc where they cross),
    *  across between them behind, above where they cross (the cloth bridging them: let down onto the coat between them,
    *  it lay in two lobes), over the front of each shoulder, and on the bare coat elsewhere */
-  const capeletLift = (p: THREE.Vector3) => {
+  const capeletLift = (p: Vec3) => {
     let d = Infinity;
     for (const s of [1, -1]) {
       // (in front from the top of the shoulder, where it turns back over it, down to the waist)
@@ -840,7 +844,7 @@ export function* mageSteps(look: HeadSpec = headFor('mage')): ModelSteps {
   // (lined in its own wool, as the reference's: turned back at the rim a finger wide and lit there, a deep red further
   // in. In the shirt's charcoal, opened wide round the face, it read as a grey hole in the studio and a flat black one
   // in the forest; in a dark brownish red, a grey void)
-  const hoodLining = kit.rim({ color: 0x681c22, roughness: 1, ...tex(woolMaps(), 1, 1.2), side: THREE.BackSide, vertexColors: true }, 0x6a2228, 0.05);
+  const hoodLining = kit.rim({ color: 0x681c22, roughness: 1, ...tex(woolMaps(), 1, 1.2), side: BackSide, vertexColors: true }, 0x6a2228, 0.05);
   {
     // as the owner's reference has it (`.tmp/references/hood/chatgpt`): two panels sewn over the top of the head and down
     // the back, the hair hidden under it, close over the head with a soft point over the crown, its rim at the hairline
@@ -852,7 +856,7 @@ export function* mageSteps(look: HeadSpec = headFor('mage')): ModelSteps {
     // hand as offsets over the head it read as a helmet, a superhero's mask, a sack, then a chimney; cut flat as a
     // tailor cuts one and settled by its weight, it drifted from where it was laid as no tuning converged on)
     const nu = lod(28, 16), nv = lod(16, 10), neckRow = Math.round(nv * 0.62), NECK = neckRow / nv, half = nu / 2;
-    const mid = toGroup(0, 40, -25), u01 = (x: number) => clamp(x, 0, 1), V3 = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
+    const mid = toGroup(0, 40, -25), u01 = (x: number) => clamp(x, 0, 1), V3 = (x: number, y: number, z: number) => new Vec3(x, y, z);
     // a place by the face, in its unit `E` (the eye line to the chin) from the eyes: across, up, and ahead of the
     // eyeballs' middles, as `lab hood` reads the reference's outline (the head under it, there: its scalp 1.0 up, its
     // brow 0.33 ahead, its skull's back 1.64 behind, 0.5-0.66 wide either side)
@@ -861,7 +865,7 @@ export function* mageSteps(look: HeadSpec = headFor('mage')): ModelSteps {
     // a place on the coat (the chest's space, as the rig stands at rest) in the head's
     hat.updateWorldMatrix(true, false);
     j.chest.updateWorldMatrix(true, false);
-    const chestToHead = new THREE.Matrix4().copy(hat.matrixWorld).invert().multiply(j.chest.matrixWorld);
+    const chestToHead = new Mat4().copy(hat.matrixWorld).invert().multiply(j.chest.matrixWorld);
     const chestAt = (x: number, y: number, z: number) => V3(x, y, z).applyMatrix4(chestToHead);
     // where it meets the capelet, round the neck on the shoulders' tops (a centimetre or two over the coat): at the
     // collar's sides in front, over the shoulders, standing off the nape behind, where its slack gathers in a roll on
@@ -906,20 +910,20 @@ export function* mageSteps(look: HeadSpec = headFor('mage')): ModelSteps {
     ];
     // each row through its five lines at its share of the way down them, from the rim (or the capelet's front edge) to
     // the seam behind, where it runs on into its mirror (its top seam on into the seam down the back)
-    const reflect = (a: THREE.Vector3, b: THREE.Vector3) => a.clone().multiplyScalar(2).sub(b), LINE = 128;
+    const reflect = (a: Vec3, b: Vec3) => a.clone().multiplyScalar(2).sub(b), LINE = 128;
     // (the rim's top round, its halves meeting level over the brow, as the reference's arch: run on straight past its top,
     // the arch came to a point)
-    const roundTop = (line: THREE.Vector3[]) => V3(-line[1].x, line[1].y, line[1].z);
-    const alongLines = (lines: THREE.Vector3[][], round = -1) => lines.map((line, k) => evenly(line, k === round ? roundTop(line) : reflect(line[0], line[1]), reflect(line[line.length - 1], line[line.length - 2]), LINE));
+    const roundTop = (line: Vec3[]) => V3(-line[1].x, line[1].y, line[1].z);
+    const alongLines = (lines: Vec3[][], round = -1) => lines.map((line, k) => evenly(line, k === round ? roundTop(line) : reflect(line[0], line[1]), reflect(line[line.length - 1], line[line.length - 2]), LINE));
     const hoodAlong = alongLines(hoodLines, 0), capeAlong = alongLines(capeLines);
-    const rows: THREE.Vector3[][] = [];
+    const rows: Vec3[][] = [];
     for (let r = 0; r <= nv; r++) {
       const onHood = r <= neckRow, t = onHood ? r / neckRow : (r - neckRow) / (nv - neckRow);
       const at = (onHood ? hoodAlong : capeAlong).map((line) => line[Math.round(t * LINE)]);
       const post = r === 0 ? reflect(at[4], at[3]) : V3(-at[3].x, at[3].y, at[3].z);
       rows.push(evenly(at, reflect(at[0], at[1]), post, half));
     }
-    const shape = (u: number, v: number, out: THREE.Vector3): THREE.Vector3 => {
+    const shape = (u: number, v: number, out: Vec3): Vec3 => {
       const left = u <= 0.5;
       out.copy(rows[Math.round(v * nv)][Math.round((left ? u : 1 - u) * nu)]);
       if (!left) out.x = -out.x;
@@ -1019,7 +1023,7 @@ export function* mageSteps(look: HeadSpec = headFor('mage')): ModelSteps {
   /** the staff's foot along it from the fist (its ferrule's tip) */
   const STAFF_FOOT = -0.52 - GRIP - 0.13;
   {
-    const w = new Sculpt(), pts: THREE.Vector3[] = [];
+    const w = new Sculpt(), pts: Vec3[] = [];
     // (the haft wandering a little and knotted along its length, its grain twisted round it)
     for (let k = 0; k <= 20; k++) { const y = -0.52 - GRIP + k * 0.088; pts.push(V(Math.sin(k * 0.9) * 0.003, y, Math.cos(k * 1.3) * 0.003)); }
     const knots = (t: number) => 1 + 0.1 * Math.sin(t * 46) + 0.12 * Math.exp(-(((t - 0.33) / 0.02) ** 2)) + 0.14 * Math.exp(-(((t - 0.71) / 0.025) ** 2));
@@ -1042,7 +1046,7 @@ export function* mageSteps(look: HeadSpec = headFor('mage')): ModelSteps {
     // one's tip curling past the other's (the sheet's; three thin curls read as wire)
     w.add(lathe([[0.034, 0], [0.046, 0.02], [0.042, 0.05], [0.03, 0.07]], 16), gold, staff, [0, 1.06 - GRIP, 0]);
     for (const p of [1, -1]) {
-      const prong: THREE.Vector3[] = [];
+      const prong: Vec3[] = [];
       for (let q = 0; q <= 14; q++) {
         const t = q / 14, out = Math.sin(t * Math.PI) ** 0.85 * 0.1 + 0.018 * (1 - t) ** 2;
         prong.push(V(p * out, 1.11 - GRIP + t * 0.42, 0.012 * Math.sin(t * Math.PI) * p));
@@ -1052,10 +1056,10 @@ export function* mageSteps(look: HeadSpec = headFor('mage')): ModelSteps {
     w.build();
   }
   const tip = joint(staff, 0, 1.36 - GRIP, 0);
-  const crystal = part(new THREE.OctahedronGeometry(0.095, 0).scale(0.75, 1.6, 0.75), gem, tip);
+  const crystal = part(shapes.octahedron(0.095, 0).scale(0.75, 1.6, 0.75), gem, tip);
   crystal.castShadow = false;
-  const ringA = part(new THREE.TorusGeometry(0.14, 0.004, 4, 32), glow, tip);
-  const ringB = part(new THREE.TorusGeometry(0.11, 0.004, 4, 32), glow, tip);
+  const ringA = part(shapes.torus(0.14, 0.004, 4, 32), glow, tip);
+  const ringB = part(shapes.torus(0.11, 0.004, 4, 32), glow, tip);
   ringA.castShadow = ringB.castShadow = false;
   // These turn continuously even when the staff is still; the lab compares their mount after a sit.
   crystal.userData.sitAnimated = ringA.userData.sitAnimated = ringB.userData.sitAnimated = true;
@@ -1086,7 +1090,7 @@ export function* mageSteps(look: HeadSpec = headFor('mage')): ModelSteps {
   let openedAt = -1;
   /** the free arm as drawing the portal last left it (its shoulder, elbow and wrist), and whether this channel drew
    *  one: the thrust is eased in from it (`THRUST_TIME`) */
-  const gathered = [new THREE.Quaternion(), new THREE.Quaternion(), new THREE.Quaternion()];
+  const gathered = [new Quat(), new Quat(), new Quat()];
   let wasGathered = false;
   /** how far the staff is slid up through the fist, and how far it's wanted */
   let staffSlide = 0, staffSlideWant = 0;
@@ -1120,7 +1124,7 @@ export function* mageSteps(look: HeadSpec = headFor('mage')): ModelSteps {
   /** the lance cast with no staff: from the right hand this frame (the pose is mirrored), and the hands it was
    *  last cast from (a change of hands eases across) */
   let mirrored = false, lanceHands = '';
-  const _ql = new THREE.Quaternion(), _qr = new THREE.Quaternion();
+  const _ql = new Quat(), _qr = new Quat();
   /** The arms' and hands' poses changed over, each mirrored across his middle (a turn about x kept, about y and z
    *  reversed), and the trunk's and head's turns with them: a cast posed for the left hand made the right's. The
    *  fingers are the hands' own: posed for the hand that casts by `castHand`. */
@@ -1568,7 +1572,7 @@ export function* mageSteps(look: HeadSpec = headFor('mage')): ModelSteps {
     ringB.rotation.set(-t * 1.3, 0, t * 2.1);
     charged = damp(charged, st.charge || 0, 4, dt);
     // (the crystal's own material: it draws a copy of `gem`, the item glow's, and `gem` set, it never pulsed)
-    (crystal.material as THREE.MeshPhysicalMaterial).emissiveIntensity = GEM_GLOW * (1 + charged * 0.6 + Math.sin(t * 6) * 0.08);
+    (crystal.material as LitMaterial).emissiveIntensity = GEM_GLOW * (1 + charged * 0.6 + Math.sin(t * 6) * 0.08);
   }
 
   return {
@@ -1604,7 +1608,7 @@ export function* mageSteps(look: HeadSpec = headFor('mage')): ModelSteps {
       staff.visible = armed = !!gear.weapon;
       const school = SCHOOLS[gear.school ?? 'arcane'].color;
       for (const lit of [crystal, ringA, ringB]) {
-        const m = lit.material as THREE.MeshStandardMaterial;
+        const m = lit.material as LitMaterial;
         m.color.set(school); m.emissive.set(school);
         // (the rings a little paler than the crystal, as they were built)
         if (lit !== crystal) { m.color.lerp(WHITE, 0.14); m.emissive.lerp(WHITE, 0.14); }

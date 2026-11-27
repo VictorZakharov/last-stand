@@ -4,27 +4,28 @@
 // nothing is made in the fight. A mound where she went under (heaved up, then settling) and where she'll rise
 // (bulging through the warning, then torn open by her rising and settling), and the ridge of soil travelling over
 // her way under the floor: each a lump of earth, its foot in the floor, along +z for the ridge.
-import * as THREE from '../../engine/three.ts';
+import { Geometry, Material, Mesh, Node, Quat, Vec3 } from '../../engine/api/index.ts';
+import * as shapes from '../../engine/api/shapes/index.ts';
 import { organic } from './shapes';
 import { CAGE_NO_SIZE } from './rootCage';
 
 /** A lump of heaped earth: a squashed, gnarled sphere, its middle at its foot (it's placed half in the floor). */
-let moundGeo: THREE.BufferGeometry | null = null;
-function earthLump(): THREE.BufferGeometry {
+let moundGeo: Geometry | null = null;
+function earthLump(): Geometry {
   if (moundGeo) return moundGeo;
-  moundGeo = organic(new THREE.SphereGeometry(1, 16, 9), 0.28, 4, 131);
+  moundGeo = organic(shapes.sphere(1, 16, 9), 0.28, 4, 131);
   // (made once and shared by every build of her: a model's dispose keeps it, `disposeGeometries`)
   moundGeo.userData.shared = true;
   return moundGeo;
 }
 
 /** Her burrow's pool: the mound where she sank, the one where she'll rise, and the travelling ridge, each at no size. */
-export interface BurrowPool { sank: THREE.Mesh; rises: THREE.Mesh; ridge: THREE.Mesh }
+export interface BurrowPool { sank: Mesh; rises: Mesh; ridge: Mesh }
 
 /** The pool hung under her model's `root`, in her soil (`soil`, her own material: no look of its own). */
-export function hangBurrowPool(root: THREE.Object3D, soil: THREE.Material): BurrowPool {
-  const lump = (name: string): THREE.Mesh => {
-    const m = new THREE.Mesh(earthLump(), soil);
+export function hangBurrowPool(root: Node, soil: Material): BurrowPool {
+  const lump = (name: string): Mesh => {
+    const m = new Mesh(earthLump(), soil);
     m.name = name;
     m.castShadow = true;
     m.scale.setScalar(CAGE_NO_SIZE);
@@ -37,11 +38,11 @@ export function hangBurrowPool(root: THREE.Object3D, soil: THREE.Material): Burr
   return { sank: lump('burrow mound sank'), rises: lump('burrow mound rises'), ridge: lump('burrow ridge') };
 }
 
-const _local = new THREE.Vector3(), _rootTurn = new THREE.Quaternion();
+const _local = new Vec3(), _rootTurn = new Quat();
 
 /** Pooled lump `m` placed in the world: its middle at `at`, turned `turn`, sized `size` (x, y, z radii in m). Its
  *  parent is her root, which moves and goes under the floor with her. */
-export function placeLump(m: THREE.Object3D, at: THREE.Vector3, turn: THREE.Quaternion, size: THREE.Vector3): void {
+export function placeLump(m: Node, at: Vec3, turn: Quat, size: Vec3): void {
   const root = m.parent!;
   root.updateWorldMatrix(true, false);
   m.position.copy(root.worldToLocal(_local.copy(at)));

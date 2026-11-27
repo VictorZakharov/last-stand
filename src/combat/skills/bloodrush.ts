@@ -2,7 +2,7 @@
 // shoulder first, through a line of foes: each it meets is struck once as he passes, and none is carried (Bull Rush's
 // is a weapon's charge, carrying what it meets). Each foe struck builds a stack of Frenzy, up to `frenzyMost` a dash
 // (combat/frenzy.ts).
-import * as THREE from '../../engine/three.ts';
+import { Vec3 } from '../../engine/api/index.ts';
 import { G } from '../../state';
 import { hitEnemy } from '../damage';
 import { evades } from '../../entities/evade';
@@ -37,7 +37,7 @@ const GORE = { drop: 0x9a0808, mist: 0xa81414 };
  * Blood thrown from `at` along `dir` (flat): `count` drops flung on and up that fall and lie a moment where they land,
  * and a puff of red mist hanging where they left. Blended, so it reads as blood whatever the light, and adds no light.
  */
-function bloodSpray(at: { x: number; y: number; z: number }, dir: THREE.Vector3, count: number): void {
+function bloodSpray(at: { x: number; y: number; z: number }, dir: Vec3, count: number): void {
   for (let i = 0; i < count; i++) {
     const s = rand(2, 6), side = rand(-1.6, 1.6);
     particles.smoke.spawn({
@@ -71,7 +71,7 @@ function rushView(t: number, dur: number, stopped: boolean): void {
 
 /** What rushes at his eyes as he goes from `p` along `dir`: pale streaks of air from ahead, and his own blood torn
  *  off him and thrown on ahead to fall back past the view (blended drops and mist, not light). */
-function rushAtEyes(p: THREE.Vector3, dir: THREE.Vector3): void {
+function rushAtEyes(p: Vec3, dir: Vec3): void {
   for (let i = 0; i < 3; i++) {
     const side = rand(-1.8, 1.8), ahead = rand(3.5, 6.5);
     particles.glow.spawn({
@@ -113,7 +113,7 @@ const skill: InstantSkill = {
   hits: (def) => [{ per: 'foe', base: (def as Def).damage, type: 'physical', note: 'each foe it passes through, once' }],
   cast(player, rawDef, target) {
     const def = rawDef as Def;
-    const dir = new THREE.Vector3(target.x - player.pos.x, 0, target.z - player.pos.z);
+    const dir = new Vec3(target.x - player.pos.x, 0, target.z - player.pos.z);
     if (dir.lengthSq() < 0.01) dir.set(Math.sin(player.facing), 0, Math.cos(player.facing));
     dir.normalize();
     const run = def.range / def.speed, dur = BRACE + run;

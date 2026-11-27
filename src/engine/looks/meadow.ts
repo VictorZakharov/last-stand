@@ -5,7 +5,9 @@
 // what was placed (`vertex_hook`). Placed at every vertex, a blade of nine was placed nine times in every pass
 // that drew it, one dropped as often as one kept: on a phone over the shoulder at Very low the grass was 8.4 ms
 // of a 16.8 ms frame, 1.7 of it its shading (J0RW-1EP5, SSB2-NWEB).
-import * as THREE from '../three.ts';
+import {
+  CanvasTexture, ClampToEdgeWrapping, DataTexture, LinearFilter, NoColorSpace, RGBAFormat, Texture,
+} from '../api/index.ts';
 import type { BladeNumbers, BladeUniforms } from '../../world/meadowNodes';
 import { rustShader, type RustLook, type RustShader } from '../custom';
 import { TUNE } from '../globals';
@@ -14,7 +16,7 @@ import { noiseTable, noiseWgsl } from './noiseTable';
 import { SOLID_RANGE } from '../../world/meadowSolids';
 
 /** each mask with the solids' map in its green, made the first time it's asked for (both are made once, at build) */
-const packed = new WeakMap<THREE.Texture, THREE.DataTexture>();
+const packed = new WeakMap<Texture, DataTexture>();
 
 /**
  * The meadow's softened mask (its red, as the grass reads it) with the lowest solid over each of its texels in its
@@ -22,7 +24,7 @@ const packed = new WeakMap<THREE.Texture, THREE.DataTexture>();
  * lowest, so it holds a blade under anything a finer read would. As big on the GPU as the mask alone (512 x 512, 1 MB),
  * where a map of its own would add one the stages placing a blade can't read.
  */
-function maskWithSolids(mask: THREE.CanvasTexture, solids: THREE.DataTexture): THREE.DataTexture {
+function maskWithSolids(mask: CanvasTexture, solids: DataTexture): DataTexture {
   let made = packed.get(mask);
   if (made) return made;
   const canvas = mask.image as HTMLCanvasElement;
@@ -43,10 +45,10 @@ function maskWithSolids(mask: THREE.CanvasTexture, solids: THREE.DataTexture): T
       bytes[(row * side + col) * 4 + 1] = lowest;
     }
   }
-  made = new THREE.DataTexture(bytes, side, side, THREE.RGBAFormat);
-  made.colorSpace = THREE.NoColorSpace;
-  made.minFilter = made.magFilter = THREE.LinearFilter;
-  made.wrapS = made.wrapT = THREE.ClampToEdgeWrapping;
+  made = new DataTexture(bytes, side, side, RGBAFormat);
+  made.colorSpace = NoColorSpace;
+  made.minFilter = made.magFilter = LinearFilter;
+  made.wrapS = made.wrapT = ClampToEdgeWrapping;
   made.generateMipmaps = false;
   made.needsUpdate = true;
   packed.set(mask, made);
@@ -431,7 +433,7 @@ export function bladeLook(u: BladeUniforms, combed: boolean, numbers: BladeNumbe
     // (the mask with the solids' map in its green: the two maps read where a blade is placed, the compute and
     // vertex stages, are this and the ground's noise table, #849; the look's volume is the pixel stage's alone, and
     // read there it stopped the renderer, "Entry point's stage (Compute) is not in the binding visibility")
-    maps: [maskWithSolids(u.uMeadow.value as THREE.CanvasTexture, u.uSolid.value as THREE.DataTexture), noiseTable()],
+    maps: [maskWithSolids(u.uMeadow.value as CanvasTexture, u.uSolid.value as DataTexture), noiseTable()],
     position: 'bv',
     before: true,
     numbers(out) {
@@ -461,6 +463,6 @@ export function bladeLook(u: BladeUniforms, combed: boolean, numbers: BladeNumbe
 }
 
 /** The ground under the meadow: `mask` in the engine's first extra map. */
-export function swardLook(mask: THREE.Texture, half: number): RustLook {
+export function swardLook(mask: Texture, half: number): RustLook {
   return { shader: SWARD, maps: [mask, noiseTable()], numbers(out) { out[0] = half; } };
 }

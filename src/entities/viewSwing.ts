@@ -2,7 +2,7 @@
 // through the shoulder, the grip, the weapon's way, its flat and the elbow placed in the view from it (`swingAt`); and
 // the other way round, the key that holds a grip and a weapon's way chosen in the view (`swingKeyFor`: a pose decided
 // as a person holds it, then keyed; the lab's `swing`).
-import * as THREE from '../engine/three.ts';
+import { Mat4, Maths, Quat, Vec3 } from '../engine/api/index.ts';
 import { curve, type Keys } from './models/motion';
 import { ROM } from './models/anatomy';
 
@@ -61,11 +61,11 @@ export interface SwingKey { way: number; reach: number; bend: number; drop: numb
 
 /** a swing's plane: its shoulder, and its ways at 0 and 90 degrees, square to each other; the aim; the way the blow
  *  crosses the view */
-const _sp = new THREE.Vector3(), _s0 = new THREE.Vector3(), _s90 = new THREE.Vector3();
-const _aim = new THREE.Vector3(), _across = new THREE.Vector3(), _normal = new THREE.Vector3();
+const _sp = new Vec3(), _s0 = new Vec3(), _s90 = new Vec3();
+const _aim = new Vec3(), _across = new Vec3(), _normal = new Vec3();
 /** a plane's ways as a turn of the view's (`frameOf`), the swing's own, and its own shoulder */
-const _frame = new THREE.Quaternion(), _frameOwn = new THREE.Quaternion(), _spOwn = new THREE.Vector3();
-const _basis = new THREE.Matrix4(), _square = new THREE.Vector3();
+const _frame = new Quat(), _frameOwn = new Quat(), _spOwn = new Vec3();
+const _basis = new Mat4(), _square = new Vec3();
 
 /** the numbers a swing's key has (`ViewSwing`) */
 export const SWING_KEY = 6;
@@ -90,26 +90,26 @@ function keyAt(swing: ViewSwing, k: number, out: SwingKey): SwingKey {
 const _key: SwingKey = { way: 0, reach: 0, bend: 0, drop: 0, roll: 0 };
 
 const DEG = Math.PI / 180;
-const clamp = THREE.MathUtils.clamp;
+const clamp = Maths.clamp;
 /** A wrist's bend in a swing's plane held within its range (degrees, `SwingKey.bend`). */
 const wristBend = (degrees: number) => clamp(degrees, ROM['wrist.radial'][0], ROM['wrist.radial'][1]);
 /** An angle as -180..180 degrees. */
-const wrapped = (degrees: number) => THREE.MathUtils.euclideanModulo(degrees + 180, 360) - 180;
+const wrapped = (degrees: number) => Maths.euclideanModulo(degrees + 180, 360) - 180;
 
 /** The way at `degrees` in a swing's plane (`_s0`, `_s90`), into `out`. */
-const inPlane = (degrees: number, out: THREE.Vector3) =>
+const inPlane = (degrees: number, out: Vec3) =>
   out.copy(_s0).multiplyScalar(Math.cos(degrees * DEG)).addScaledVector(_s90, Math.sin(degrees * DEG));
 
 /** Where `swing` puts its arm's shoulder in the view (its plane's centre), into `out`; mirrored for the other hand. */
-export function swingShoulder(swing: ViewSwing, out: THREE.Vector3, mirror = false): THREE.Vector3 {
+export function swingShoulder(swing: ViewSwing, out: Vec3, mirror = false): Vec3 {
   out.set(swing.plane[0], swing.plane[1], swing.plane[2]);
   if (mirror) out.x = -out.x;
   return out;
 }
-const _shFrom = new THREE.Vector3();
+const _shFrom = new Vec3();
 /** The shoulder `swing` puts at `k`, as `swingShoulder`: moved from its `from` swing's over its `turning`, as its
  *  plane's is (`planeAt`: a way between two holds whose shoulders differ, Steel Tempest's into its spin). */
-export function swingShoulderAt(swing: ViewSwing, k: number, out: THREE.Vector3, mirror = false): THREE.Vector3 {
+export function swingShoulderAt(swing: ViewSwing, k: number, out: Vec3, mirror = false): Vec3 {
   swingShoulder(swing, out, mirror);
   const { from, turning } = swing;
   if (!from || !turning) return out;
@@ -155,13 +155,13 @@ function armOf(bones: ArmBones, reach: number, bend: number, slant: number): Arm
 
 /** The aim a swing's striking part reaches `strikeAt` m from its shoulder at (the crosshair's line, ahead), into
  *  `out` (its near crossing, if the shoulder is so far ahead the line passes within that). */
-function aimFor(strikeAt: number, out: THREE.Vector3): THREE.Vector3 {
+function aimFor(strikeAt: number, out: Vec3): Vec3 {
   const square = _sp.z * _sp.z - _sp.lengthSq() + strikeAt * strikeAt;
   return out.set(0, 0, _sp.z - Math.sqrt(Math.max(0, square)));
 }
 
-const _toGrip = new THREE.Vector3(), _wrist = new THREE.Vector3();
-const _side = new THREE.Vector3(), _q = new THREE.Quaternion();
+const _toGrip = new Vec3(), _wrist = new Vec3();
+const _side = new Vec3(), _q = new Quat();
 
 /** The elbow's and the wrist's ways from the shoulder (`elbow`, `wrist`, in the swing's plane) turned `degrees` about
  *  the line to the grip (`toGrip`), down out of the plane: where the reach and the bend leave it, an elbow can drop as
@@ -169,7 +169,7 @@ const _side = new THREE.Vector3(), _q = new THREE.Quaternion();
  *  wrist takes that up. (In the plane, the elbow could only go the way the blow goes: across the chest on the wind-up,
  *  30 degrees past a shoulder's reach, and behind the body at the cut's end, 48 past.) Dropped by `_dropSide` of it
  *  towards the plane's normal: its side below, or turning between two planes, eased from one's to the other's. */
-function dropElbow(elbow: THREE.Vector3, wrist: THREE.Vector3, toGrip: THREE.Vector3, degrees: number): void {
+function dropElbow(elbow: Vec3, wrist: Vec3, toGrip: Vec3, degrees: number): void {
   if (degrees === 0 || _dropSide === 0) return;
   // (turned about the line to the grip the way that takes the elbow to the normal's side, by the share it drops)
   const towards = _side.crossVectors(toGrip, elbow).dot(_normal) > 0 ? 1 : -1;
@@ -185,7 +185,7 @@ function dropElbow(elbow: THREE.Vector3, wrist: THREE.Vector3, toGrip: THREE.Vec
  *  degrees in a frame, 95 m/s, the forearm at the end of its turn. Turned about the line from the elbow to the grip,
  *  the wrist swung off the forearm by the fist's lean, and the arm drawn was 5 cm off its keys.) */
 function rollForearm(
-  elbow: THREE.Vector3, wrist: THREE.Vector3, degrees: number, dir: THREE.Vector3, flat: THREE.Vector3,
+  elbow: Vec3, wrist: Vec3, degrees: number, dir: Vec3, flat: Vec3,
 ): void {
   if (degrees === 0) return;
   _q.setFromAxisAngle(_side.copy(wrist).sub(elbow).normalize(), degrees * DEG);
@@ -197,7 +197,7 @@ function rollForearm(
  *  no forearm of the arm drawn to roll it about, and its roll is the hands turning the handle over in them, the
  *  weapon's way kept (the wrists rolled over once a blow's speed has died, as a person's do: held as the plane has it
  *  to the end, the right forearm of a two-hander's backhand was turned 19 degrees past its range). */
-function rollHandle(dir: THREE.Vector3, flat: THREE.Vector3, degrees: number): void {
+function rollHandle(dir: Vec3, flat: Vec3, degrees: number): void {
   if (degrees === 0) return;
   flat.applyQuaternion(_q.setFromAxisAngle(_side.copy(dir).normalize(), degrees * DEG));
 }
@@ -224,11 +224,11 @@ function planeOf(swing: ViewSwing, bones: ArmBones): void {
 let _dropSide = 1;
 
 /** The side below the plane set last (`planeOf`) along the z of a frame (`frameOf`): 1 or -1. */
-const sideOn = (frame: THREE.Quaternion): number =>
+const sideOn = (frame: Quat): number =>
   (_square.set(0, 0, 1).applyQuaternion(frame).dot(_normal) * _dropSide > 0 ? 1 : -1);
 
 /** The plane set last (`planeOf`) as the turn that takes the view's x and y to its 0 and 90 degrees, into `out`. */
-function frameOf(out: THREE.Quaternion): THREE.Quaternion {
+function frameOf(out: Quat): Quat {
   _basis.makeBasis(_s0, _s90, _square.crossVectors(_s0, _s90));
   return out.setFromRotationMatrix(_basis);
 }
@@ -255,7 +255,7 @@ function planeAt(swing: ViewSwing, k: number, bones: ArmBones): void {
   _s0.set(1, 0, 0).applyQuaternion(_frame);
   _s90.set(0, 1, 0).applyQuaternion(_frame);
   _normal.set(0, 0, 1).applyQuaternion(_frame);
-  _dropSide = THREE.MathUtils.lerp(fromSide, ownSide, t);
+  _dropSide = Maths.lerp(fromSide, ownSide, t);
 }
 /** Eased in and out (0..1). */
 const smooth = (t: number) => t * t * (3 - 2 * t);
@@ -264,7 +264,7 @@ const smooth = (t: number) => t * t * (3 - 2 * t);
  *  of it, about the weapon's own length instead of the forearm (`rollHandle`). */
 function placeArm(
   key: SwingKey, slant: number, bones: ArmBones,
-  at: THREE.Vector3, dir: THREE.Vector3, flat: THREE.Vector3, elbow: THREE.Vector3, mirror: boolean, held = 0,
+  at: Vec3, dir: Vec3, flat: Vec3, elbow: Vec3, mirror: boolean, held = 0,
 ): void {
   const arm = armOf(bones, key.reach, wristBend(key.bend), slant);
   // (the grip's way: the striking part's, less its way off the grip's)
@@ -296,8 +296,8 @@ function placeArm(
  */
 export function swingAt(
   swing: ViewSwing, k: number, bones: ArmBones,
-  at: THREE.Vector3, dir: THREE.Vector3, flat: THREE.Vector3, elbow: THREE.Vector3, mirror = false,
-  wrist?: THREE.Vector3,
+  at: Vec3, dir: Vec3, flat: Vec3, elbow: Vec3, mirror = false,
+  wrist?: Vec3,
 ): void {
   planeAt(swing, k, bones);
   placeArm(keyAt(swing, k, _key), swing.slant, bones, at, dir, flat, elbow, mirror, swingHeldAt(swing, k));
@@ -314,15 +314,15 @@ export function swingAt(
  * range whatever its elbow did.)
  */
 export function turnWithTrunk(
-  turn: number, spine: THREE.Vector3,
-  at: THREE.Vector3, dir: THREE.Vector3, flat: THREE.Vector3, elbow: THREE.Vector3,
+  turn: number, spine: Vec3,
+  at: Vec3, dir: Vec3, flat: Vec3, elbow: Vec3,
 ): void {
   at.sub(spine).applyAxisAngle(UP, turn).add(spine);
   dir.applyAxisAngle(UP, turn);
   flat.applyAxisAngle(UP, turn);
   elbow.applyAxisAngle(UP, turn);
 }
-const UP = new THREE.Vector3(0, 1, 0);
+const UP = new Vec3(0, 1, 0);
 
 /**
  * How far the trunk turns a cut it drives at share `k` (rad, to its left; `turnWithTrunk`), from `turn`'s five
@@ -336,14 +336,14 @@ export function cutTurnAt(turn: readonly number[], k: number, inRow: boolean, si
   const from = inRow ? rowFrom : restFrom;
   const turning = smooth(clamp((k - from) / (to - from), 0, 1));
   const eased = inRow ? 1 : smooth(clamp(k / from, 0, 1));
-  return side * THREE.MathUtils.lerp(start, across, turning) * eased;
+  return side * Maths.lerp(start, across, turning) * eased;
 }
 
 /** `key` in `swing`'s plane, placed as `swingAt` places one of its own (and the wrist's way from the shoulder, into
  *  `wrist`), mirrored for the other hand. */
 export function swingKeyAt(
   swing: ViewSwing, key: SwingKey, bones: ArmBones,
-  at: THREE.Vector3, dir: THREE.Vector3, flat: THREE.Vector3, elbow: THREE.Vector3, wrist: THREE.Vector3,
+  at: Vec3, dir: Vec3, flat: Vec3, elbow: Vec3, wrist: Vec3,
   mirror = false,
 ): void {
   planeOf(swing, bones);
@@ -360,7 +360,7 @@ export function swingHeldAt(swing: ViewSwing, k: number): number {
   const { from, turning } = swing;
   if (!from || !turning) return own;
   const t = smooth(clamp((k - turning[0]) / (turning[1] - turning[0]), 0, 1));
-  return THREE.MathUtils.lerp(from.holds ? 1 : 0, own, t);
+  return Maths.lerp(from.holds ? 1 : 0, own, t);
 }
 
 /** The key that holds a grip and a weapon's way in a swing's plane (`swingKeyFor`), and what of them it can't: how
@@ -376,14 +376,14 @@ export interface SwingKeyFit {
   most: number;
 }
 
-const _rel = new THREE.Vector3(), _way = new THREE.Vector3();
+const _rel = new Vec3(), _way = new Vec3();
 /** the wrist's bends tried for a weapon's way (degrees: past its range each way, to say how far past one needs) */
 const BENDS_TRIED = 120, BEND_STEP = 0.25;
 
 /** The key of `swing` that puts its grip at `at` and its weapon along `dir` (each in the view, as `swingAt`'s), as
  *  nearly as an arm of `bones` swung in its plane can (`SwingKeyFit`); the other hand's, mirrored (`mirror`). */
 export function swingKeyFor(
-  swing: ViewSwing, bones: ArmBones, at: THREE.Vector3, dir: THREE.Vector3, mirror = false,
+  swing: ViewSwing, bones: ArmBones, at: Vec3, dir: Vec3, mirror = false,
 ): SwingKeyFit {
   planeOf(swing, bones);
   const rel = _rel.copy(at);

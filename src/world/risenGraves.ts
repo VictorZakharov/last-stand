@@ -4,7 +4,7 @@
 // drawn as one instanced mesh of the crypt's own headstone in its own carved stone, made with the crypt
 // (`buildRisenGraves`), so they're the crypt's headstones' draw and nothing compiles in the fight; a stone not standing
 // is shrunk away under the floor.
-import * as THREE from '../engine/three.ts';
+import { Euler, Geometry, InstancedMesh, Mat4, Material, Mesh, Node, Quat, Vec3 } from '../engine/api/index.ts';
 import { CANTOR } from '../data/foes/cantor';
 import { lowerProp, raiseProp, type Prop } from './destructible';
 
@@ -22,18 +22,18 @@ export interface RisenGrave {
 }
 
 /** the pool's mesh, made with the crypt; none where the crypt isn't built (a dev panel's Cantor in the Thornwood) */
-let pool: THREE.InstancedMesh | null = null;
+let pool: InstancedMesh | null = null;
 /** every stone standing, risen or sinking */
 export const risenGraves: RisenGrave[] = [];
 
-const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _e = new THREE.Euler(), _s = new THREE.Vector3();
-const _p = new THREE.Vector3();
+const _m = new Mat4(), _q = new Quat(), _e = new Euler(), _s = new Vec3();
+const _p = new Vec3();
 /** a stone not standing: shrunk to nothing, deep under the floor */
-const GONE = new THREE.Matrix4().makeScale(1e-4, 1e-4, 1e-4).setPosition(0, -20, 0);
+const GONE = new Mat4().makeScale(1e-4, 1e-4, 1e-4).setPosition(0, -20, 0);
 
 /** The pool of stones, made with the crypt from its headstone and its carved stone, every slot shrunk away. */
-export function buildRisenGraves(scene: THREE.Object3D, headstone: THREE.BufferGeometry, stone: THREE.Material): void {
-  const mesh = new THREE.InstancedMesh(headstone, stone, CANTOR.graves.most);
+export function buildRisenGraves(scene: Node, headstone: Geometry, stone: Material): void {
+  const mesh = new InstancedMesh(headstone, stone, CANTOR.graves.most);
   mesh.name = 'risen graves';
   for (let i = 0; i < mesh.count; i++) mesh.setMatrixAt(i, GONE);
   mesh.castShadow = mesh.receiveShadow = true;
@@ -48,7 +48,7 @@ export function buildRisenGraves(scene: THREE.Object3D, headstone: THREE.BufferG
 export const gravesLeft = (): number => (pool ? CANTOR.graves.most - risenGraves.length : 0);
 
 /** Stone `grave`'s matrix as it has risen and sunk, into `out`. */
-function placedAt(grave: RisenGrave, out: THREE.Matrix4): THREE.Matrix4 {
+function placedAt(grave: RisenGrave, out: Mat4): Mat4 {
   const g = CANTOR.graves, k = grave.up, ease = 1 - (1 - k) ** 3;
   // (pushed up out of the floor, overshooting a little and settling; sinking straight back down)
   const y = -g.top * (1 - ease) + Math.sin(k * Math.PI) * 0.06 - g.top * grave.down;
@@ -64,8 +64,8 @@ function show(slot: number, grave: RisenGrave | null): void {
 }
 
 /** A ray against stone `grave` alone, as it stands. */
-function rayOn(grave: RisenGrave): THREE.Mesh {
-  const one = new THREE.Mesh(pool!.geometry, pool!.material);
+function rayOn(grave: RisenGrave): Mesh {
+  const one = new Mesh(pool!.geometry, pool!.material);
   one.matrixAutoUpdate = false;
   one.matrixWorld.copy(placedAt(grave, _m));
   return one;
@@ -142,4 +142,4 @@ export function graveAt(x: number, z: number, near = 0.5): RisenGrave | undefine
 }
 
 /** Whether the crypt's pool is shown in the arena now (the lab's check reads the stones off it). */
-export const gravePool = (): THREE.InstancedMesh | null => pool;
+export const gravePool = (): InstancedMesh | null => pool;

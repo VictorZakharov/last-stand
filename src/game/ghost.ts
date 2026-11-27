@@ -6,7 +6,7 @@
 // the hour turned). Talked to (main.ts `useObject`), it opens the training grounds' card on its battleground. It's no
 // foe: not in `G.enemies`, so nothing aims at it, strikes it or counts it. It's drawn in its kind's crowd while it's
 // shown (`models/crowd.ts`): drawn on its own, a thornling was 46 of the village's draws.
-import * as THREE from '../engine/three.ts';
+import { Node } from '../engine/api/index.ts';
 import { BIOMES, BIOME_IDS, type BiomeId } from '../data/biomes';
 import { ENEMIES, type EnemyId } from '../data/enemies';
 import { GHOST, biomeOfHour } from '../data/village';
@@ -22,7 +22,7 @@ const PROJECTION = { dissolve: 0.28, edge: 0x67edff, edgeShare: 0.18, frost: 0.3
 const HOVER = { high: 0.06, period: 3.2 };
 
 /** A ghost: its battleground, its kind, its model and the group it stands in. */
-export interface Ghost { biome: BiomeId; kind: EnemyId; model: Model; root: THREE.Group; body: CrowdBody }
+export interface Ghost { biome: BiomeId; kind: EnemyId; model: Model; root: Node; body: CrowdBody }
 
 const ghosts = new Map<BiomeId, Ghost>();
 /** whether the lobby's warm-up has compiled both (till then both are drawn) */
@@ -46,7 +46,7 @@ function makeGhost(biome: BiomeId, kind = ghostKind(biome)): Ghost {
   u.uEdge.value.set(PROJECTION.edge).multiplyScalar(PROJECTION.edgeShare);
   u.uFrozen.value = PROJECTION.frost;
   model.root.traverse((o) => { o.castShadow = false; });
-  const root = new THREE.Group();
+  const root = new Node();
   root.name = `ghost: ${kind}`;
   root.add(model.root);
   root.position.set(GHOST.x, groundHeight(GHOST.x, GHOST.z), GHOST.z);
@@ -55,7 +55,7 @@ function makeGhost(biome: BiomeId, kind = ghostKind(biome)): Ghost {
 }
 
 /** The ghosts built and stood by the yard's gate in `village` (once: the lobby's warm-up compiles them with it). */
-export function standGhost(village: THREE.Object3D): void {
+export function standGhost(village: Node): void {
   if (ghosts.size) return;
   for (const biome of BIOME_IDS) {
     const ghost = makeGhost(biome);
@@ -68,7 +68,7 @@ export function standGhost(village: THREE.Object3D): void {
 /** `standGhost` a ghost a task, `pause` awaited before each, as the boot enters the lobby (`spawnDummiesInSteps` in
  *  main.ts): built with the dummies at once, they were one task of 0.9 s in a first visit's boot with the CPU 4 times
  *  slower. Each joins its crowd as it's stood, as `standGhost`'s do at its end. */
-export async function standGhostInSteps(village: THREE.Object3D, pause: () => Promise<void>): Promise<void> {
+export async function standGhostInSteps(village: Node, pause: () => Promise<void>): Promise<void> {
   // (every ghost's kind drawn before the first pause: the frames painted meanwhile draw random numbers of their own, as
   // many as there are frames, and the lab's seeded sequence gave the yard another ghost from one boot to the next)
   const kinds = BIOME_IDS.filter((biome) => !ghosts.has(biome)).map((biome) => [biome, ghostKind(biome)] as const);
@@ -106,8 +106,8 @@ export function updateGhost(t: number, dt: number): void {
 export const ghostShown = (biome: BiomeId = ghostBiome()): Ghost | null => ghosts.get(biome) ?? null;
 
 /** Whether `object` and everything it stands in are shown, up to the scene. */
-function shownInScene(object: THREE.Object3D): boolean {
-  for (let at: THREE.Object3D | null = object; at; at = at.parent) {
+function shownInScene(object: Node): boolean {
+  for (let at: Node | null = object; at; at = at.parent) {
     if (!at.visible) return false;
   }
   return true;

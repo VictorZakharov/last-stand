@@ -3,7 +3,7 @@
 // cost nothing extra to draw. A tuft's weight along its length is its uv's v (0 at the root, 1 at the tip:
 // `furTufts` scales it by three), so roots stay put and tips swing. One material copy per mesh, because a
 // uniform is only uploaded when the material changes, and the meshes each have their own lag.
-import * as THREE from '../../engine/three.ts';
+import { Material, Mesh, Quat, Vec3 } from '../../engine/api/index.ts';
 import { sameLooks } from '../../core/materials';
 import type { OwnLooks } from '../../core/shaderPorts';
 import { tsl } from '../../core/webgpu';
@@ -11,20 +11,20 @@ import { tsl } from '../../core/webgpu';
 /** `?fur=0` keeps the fur still, for A/B comparison */
 const FUR = typeof location === 'undefined' || !/[?&]fur=0/.test(location.search);
 const F = 3.2, ZETA = 0.22, MAX = 0.05, GAIN = 0.9;
-const _w = new THREE.Vector3(), _q = new THREE.Quaternion(), _s = new THREE.Vector3(), _l = new THREE.Vector3();
+const _w = new Vec3(), _q = new Quat(), _s = new Vec3(), _l = new Vec3();
 
 export class FurSway {
-  readonly material: THREE.Material;
-  private readonly lag = { value: new THREE.Vector3() };
+  readonly material: Material;
+  private readonly lag = { value: new Vec3() };
   private readonly time = { value: 0 };
-  private readonly x = new THREE.Vector3();   // the spring's displacement (world), and its speed
-  private readonly v = new THREE.Vector3();
-  private readonly pos = new THREE.Vector3();
-  private readonly vel = new THREE.Vector3();
-  private readonly centre = new THREE.Vector3();
+  private readonly x = new Vec3();   // the spring's displacement (world), and its speed
+  private readonly v = new Vec3();
+  private readonly pos = new Vec3();
+  private readonly vel = new Vec3();
+  private readonly centre = new Vec3();
   private fresh = true;
 
-  constructor(private readonly mesh: THREE.Mesh, base: THREE.Material) {
+  constructor(private readonly mesh: Mesh, base: Material) {
     const m = this.material = base.clone();
     const obc = base.onBeforeCompile, key = base.customProgramCacheKey.bind(base);
     m.onBeforeCompile = (sh, r) => {

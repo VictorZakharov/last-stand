@@ -4,7 +4,11 @@
 // lectern before the back wall between two candle stands (used, it opens the in-game guide); reading desks with candles,
 // open books, scrolls and a quill; a globe; a hearth with an armchair before it; rugs; the front windows lit warm from
 // outside and dust drifting by them. As every room: 10 point lights, two casting (the hearth and the chandelier).
-import * as THREE from '../../engine/three.ts';
+import {
+  Attribute, Box3, Color, DoubleSide, Euler, Geometry, InstancedMesh, LitMaterial, Mat4, Material, mergeGeometries,
+  Mesh, Node, Quat, Vec2, Vec3,
+} from '../../engine/api/index.ts';
+import * as shapes from '../../engine/api/shapes/index.ts';
 import { HOUSES, type RoomId } from '../../data/houses';
 import type { Obstacle } from '../../types';
 import { canvasOf, ctx2d, textureFromCanvas } from '../../core/textures';
@@ -18,7 +22,6 @@ import { HOUSE_OBJECTS } from '../../data/houses';
 import { scholarRounds, type Rounds } from '../scholarRounds';
 import { chairSeat } from '../seats';
 import { joinParts, seatWoods } from '../stool';
-import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import {
   BODY, CANDLE, CROSS_UNDER, DISPLAY, LANTERN, ROOM_LOOK, againstWall, begin, box, candle, chandelier, drum, finish, framed, hearth, inkedPage, lantern, onWall, pageTexture, pageVariant, showPage,
   parchment, rug, stool, table, writing, keepApart, type Build, type Furniture, type Mats, type Room,
@@ -38,7 +41,7 @@ const SPINE_PX = { w: 64, h: 256 };
 const BOOK_COLOURS = [0x7a1e16, 0x2a4a2a, 0x24304e, 0x6a4418, 0x4a1c3a, 0x8a6a2a, 0x3a3030, 0x5a2a10, 0x2a4a4a, 0x8a3a1a];
 
 /** Every book of the room: a matrix and a colour for each of the spine designs (one instanced mesh each). */
-type Shelving = { matrices: THREE.Matrix4[]; colours: THREE.Color[] }[];
+type Shelving = { matrices: Mat4[]; colours: Color[] }[];
 
 /** A spine's canvas: a pale leather the book's colour tints, its bands, ribs, label and title, by its design. */
 function spineCanvas(design: number, seed: number): HTMLCanvasElement {
@@ -85,20 +88,20 @@ function spineCanvas(design: number, seed: number): HTMLCanvasElement {
  *  as two groups for a book of its own; `lying` that one laid flat (its height x, its thickness y). Only the faces that
  *  can show are kept: 42 triangles a book, where a box was 12. */
 const BOOK = { board: 0.12, spine: 0.07, inset: 0.03, round: 4 };
-interface BookParts { cover: THREE.BufferGeometry; pages: THREE.BufferGeometry; whole: THREE.BufferGeometry; lying: THREE.BufferGeometry }
+interface BookParts { cover: Geometry; pages: Geometry; whole: Geometry; lying: Geometry }
 let bookParts: BookParts | null = null;
 function bookModel(): BookParts {
   if (bookParts) return bookParts;
   const { board: B, spine: S, inset: IN, round: R } = BOOK;
   /** a geometry's faces (its groups by index) alone, unindexed */
-  const faces = (g: THREE.BufferGeometry, keep: number[], plain = false) => {
-    const flat = g.toNonIndexed(), out: THREE.BufferGeometry[] = [];
+  const faces = (g: Geometry, keep: number[], plain = false) => {
+    const flat = g.toNonIndexed(), out: Geometry[] = [];
     for (const k of keep) {
       const { start, count } = g.groups[k];
-      const part = new THREE.BufferGeometry();
+      const part = new Geometry();
       for (const name of ['position', 'normal', 'uv'] as const) {
-        const a = flat.attributes[name] as THREE.BufferAttribute;
-        part.setAttribute(name, new THREE.BufferAttribute((a.array as Float32Array).slice(start * a.itemSize, (start + count) * a.itemSize), a.itemSize));
+        const a = flat.attributes[name] as Attribute;
+        part.setAttribute(name, new Attribute((a.array as Float32Array).slice(start * a.itemSize, (start + count) * a.itemSize), a.itemSize));
       }
       if (plain) { const uv = part.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setXY(i, 0.03, 0.5); }
       out.push(part);
@@ -106,32 +109,32 @@ function bookModel(): BookParts {
     return mergeGeometries(out)!;
   };
   // (the boards: both faces, the head, the foot and the fore-edge; the side by the spine is inside it)
-  const boards = [-1, 1].map((sd) => faces(new THREE.BoxGeometry(B, 1, 1 - S).translate(sd * (0.5 - B / 2), 0, -S / 2), [0, 1, 2, 3, 5], true));
+  const boards = [-1, 1].map((sd) => faces(shapes.box(B, 1, 1 - S).translate(sd * (0.5 - B / 2), 0, -S / 2), [0, 1, 2, 3, 5], true));
   // (the spine: half round, the whole height, its two ends capped)
-  const round = new THREE.CylinderGeometry(0.5, 0.5, 1, R, 1, false, -Math.PI / 2, Math.PI).scale(1, 1, S * 2).translate(0, 0, 0.5 - S);
+  const round = shapes.cylinder(0.5, 0.5, 1, R, 1, false, -Math.PI / 2, Math.PI).scale(1, 1, S * 2).translate(0, 0, 0.5 - S);
   const cover = mergeGeometries([faces(round, [0]), faces(round, [1, 2], true), ...boards])!;
   // (the pages: their head, foot and fore-edge, set in from the boards' edges)
-  const pages = faces(new THREE.BoxGeometry(1 - B * 2, 1 - IN * 2, 1 - S - IN).translate(0, 0, (IN - S) / 2), [2, 3, 5]);
+  const pages = faces(shapes.box(1 - B * 2, 1 - IN * 2, 1 - S - IN).translate(0, 0, (IN - S) / 2), [2, 3, 5]);
   const whole = mergeGeometries([cover, pages], true)!;
   bookParts = { cover, pages, whole, lying: whole.clone().rotateZ(Math.PI / 2) };
   return bookParts;
 }
 
 /** each spine design's material, made once: the shelves', his table's books' and the book in his hands' */
-const spineMaterials: THREE.MeshStandardMaterial[] = [];
-const spineMaterial = (design: number) => (spineMaterials[design] ??= new THREE.MeshStandardMaterial({ map: textureFromCanvas(spineCanvas(design, 300 + design)), roughness: 0.75 }));
+const spineMaterials: LitMaterial[] = [];
+const spineMaterial = (design: number) => (spineMaterials[design] ??= new LitMaterial({ map: textureFromCanvas(spineCanvas(design, 300 + design)), roughness: 0.75 }));
 
 /** A wall's books drawn (`bookModel`), into `g`: an instanced mesh of covers for each spine, every book its own matrix
  *  and colour, and one of the wall's every book's pages, uncoloured, each spine's books from its `offset` on. Returns
  *  each spine's covers with their books (none for a spine no book of the wall's has). */
-function shelve(g: THREE.Object3D, shelving: Shelving, paper: THREE.Material): ShelfMesh[] {
+function shelve(g: Node, shelving: Shelving, paper: Material): ShelfMesh[] {
   const { cover, pages: leaves } = bookModel();
   const meshes: ShelfMesh[] = [];
-  const pages = new THREE.InstancedMesh(leaves, paper, shelving.reduce((n, s) => n + s.matrices.length, 0));
+  const pages = new InstancedMesh(leaves, paper, shelving.reduce((n, s) => n + s.matrices.length, 0));
   let at = 0;
   shelving.forEach(({ matrices, colours }, design) => {
     if (!matrices.length) return;
-    const mesh = new THREE.InstancedMesh(cover, spineMaterial(design), matrices.length);
+    const mesh = new InstancedMesh(cover, spineMaterial(design), matrices.length);
     matrices.forEach((m, i) => { mesh.setMatrixAt(i, m); mesh.setColorAt(i, colours[i]); pages.setMatrixAt(at + i, m); });
     meshes.push({ mesh, pages, offset: at, matrices, colours });
     at += matrices.length;
@@ -147,28 +150,28 @@ function shelve(g: THREE.Object3D, shelving: Shelving, paper: THREE.Material): S
 
 /** a spine's books on a wall's shelves: their covers' instanced mesh, the wall's pages' and where theirs begin in it,
  *  and each one's matrix (the room's) and colour */
-interface ShelfMesh { mesh: THREE.InstancedMesh; pages: THREE.InstancedMesh; offset: number; matrices: THREE.Matrix4[]; colours: THREE.Color[] }
+interface ShelfMesh { mesh: InstancedMesh; pages: InstancedMesh; offset: number; matrices: Mat4[]; colours: Color[] }
 
 /** A book put on the room's shelving: in `frame`'s space at `at`, sized `size` (thick, tall, deep), turned by `turn`. */
-function addBook(shelving: Shelving, frame: THREE.Object3D, at: THREE.Vector3, size: THREE.Vector3, turn: THREE.Euler,
+function addBook(shelving: Shelving, frame: Node, at: Vec3, size: Vec3, turn: Euler,
   rng: () => number): void {
   frame.updateMatrix();
-  const local = new THREE.Matrix4().compose(at, new THREE.Quaternion().setFromEuler(turn), size);
+  const local = new Mat4().compose(at, new Quat().setFromEuler(turn), size);
   const design = (rng() * SPINES) | 0;
   shelving[design].matrices.push(local.premultiply(frame.matrix));
-  shelving[design].colours.push(new THREE.Color(BOOK_COLOURS[(rng() * BOOK_COLOURS.length) | 0]).multiplyScalar(0.75 + rng() * 0.45));
+  shelving[design].colours.push(new Color(BOOK_COLOURS[(rng() * BOOK_COLOURS.length) | 0]).multiplyScalar(0.75 + rng() * 0.45));
 }
 
 /** A book lying flat on `shelving` (`frame`'s space), its foot's middle at (x, y, z), `thick` high, `tall` long and `deep`
  *  wide, turned `turn` about the upright. */
-function lieBook(shelving: Shelving, frame: THREE.Object3D, x: number, y: number, z: number, thick: number, tall: number, deep: number,
+function lieBook(shelving: Shelving, frame: Node, x: number, y: number, z: number, thick: number, tall: number, deep: number,
   turn: number, rng: () => number): void {
-  addBook(shelving, frame, new THREE.Vector3(x, y + thick / 2, z), new THREE.Vector3(thick, tall, deep), new THREE.Euler(0, turn, Math.PI / 2), rng);
+  addBook(shelving, frame, new Vec3(x, y + thick / 2, z), new Vec3(thick, tall, deep), new Euler(0, turn, Math.PI / 2), rng);
 }
 
 /** A shelf's books from `from` to `to` along it (the case's frame, its shelf's top at `y`, `space` m clear over it):
  *  rows standing, now and then one leaning on the last, a stack laid flat, a gap, or a jar. */
-function shelfOfBooks(g: THREE.Object3D, M: Mats, shelving: Shelving, frame: THREE.Object3D, from: number, to: number,
+function shelfOfBooks(g: Node, M: Mats, shelving: Shelving, frame: Node, from: number, to: number,
   y: number, space: number, rng: () => number): void {
   let at = from;
   while (at < to - 0.05) {
@@ -180,8 +183,8 @@ function shelfOfBooks(g: THREE.Object3D, M: Mats, shelving: Shelving, frame: THR
       let h = y;
       for (let k = 0; k < n; k++) {
         const thick = 0.035 + rng() * 0.03;
-        addBook(shelving, frame, new THREE.Vector3(at + wide / 2 + (rng() - 0.5) * 0.02, h + thick / 2, 0.16),
-          new THREE.Vector3(thick, wide, 0.2 + rng() * 0.05), new THREE.Euler(0, (rng() - 0.5) * 0.15, Math.PI / 2), rng);
+        addBook(shelving, frame, new Vec3(at + wide / 2 + (rng() - 0.5) * 0.02, h + thick / 2, 0.16),
+          new Vec3(thick, wide, 0.2 + rng() * 0.05), new Euler(0, (rng() - 0.5) * 0.15, Math.PI / 2), rng);
         h += thick;
       }
       at += wide + 0.03;
@@ -190,8 +193,8 @@ function shelfOfBooks(g: THREE.Object3D, M: Mats, shelving: Shelving, frame: THR
     if (roll < 0.1) {
       // (a little clay jar, or nothing)
       if (rng() < 0.5) {
-        const jar = new THREE.Mesh(new THREE.LatheGeometry([[0, 0], [0.04, 0], [0.05, 0.05], [0.04, 0.11], [0.025, 0.13], [0.03, 0.15], [0, 0.15]]
-          .map(([r, yy]) => new THREE.Vector2(r, yy)), 10), M.oak);
+        const jar = new Mesh(shapes.lathe([[0, 0], [0.04, 0], [0.05, 0.05], [0.04, 0.11], [0.025, 0.13], [0.03, 0.15], [0, 0.15]]
+          .map(([r, yy]) => new Vec2(r, yy)), 10), M.oak);
         jar.position.set(at + 0.06, y, 0.18);
         frame.add(jar);
       }
@@ -200,8 +203,8 @@ function shelfOfBooks(g: THREE.Object3D, M: Mats, shelving: Shelving, frame: THR
     }
     const thick = 0.03 + rng() * 0.045, tall = Math.min(space - 0.03, 0.17 + rng() * 0.16), deep = 0.17 + rng() * 0.08;
     const lean = rng() < 0.06 ? (0.18 + rng() * 0.22) : 0;
-    addBook(shelving, frame, new THREE.Vector3(at + thick / 2 + lean * tall * 0.5, y + tall / 2 * Math.cos(lean), deep / 2 + 0.04),
-      new THREE.Vector3(thick, tall, deep), new THREE.Euler(0, 0, -lean), rng);
+    addBook(shelving, frame, new Vec3(at + thick / 2 + lean * tall * 0.5, y + tall / 2 * Math.cos(lean), deep / 2 + 0.04),
+      new Vec3(thick, tall, deep), new Euler(0, 0, -lean), rng);
     at += thick + 0.003 + lean * tall;
   }
   void g;
@@ -209,14 +212,14 @@ function shelfOfBooks(g: THREE.Object3D, M: Mats, shelving: Shelving, frame: THR
 
 /** A tall bookcase against a wall (its frame, facing +z) at x, `w` wide and `high`: a plinth, a carved crown, its
  *  carcass and back, shelves every 36 cm, filled. */
-function bookcase(g: THREE.Object3D, M: Mats, shelving: Shelving, frame: THREE.Object3D, x: number, w: number, high: number,
+function bookcase(g: Node, M: Mats, shelving: Shelving, frame: Node, x: number, w: number, high: number,
   rng: () => number, obstacles: Obstacle[]): void {
   const D = 0.4;
   // (circles along its front, where they stand in the room: a body is kept off the shelves, the wall behind them
   // being the room's own)
   frame.updateMatrix();
   for (let t = -w / 2 + 0.25; t <= w / 2 - 0.25 + 1e-6; t += 0.45) {
-    const at = new THREE.Vector3(x + t, 0, 0.2).applyMatrix4(frame.matrix);
+    const at = new Vec3(x + t, 0, 0.2).applyMatrix4(frame.matrix);
     obstacles.push({ x: at.x, z: at.z, r: CASE_R, h: high });
   }
   box(frame, w + 0.06, 0.12, D + 0.04, x, 0, D / 2, M.timber);
@@ -241,8 +244,8 @@ function bookcase(g: THREE.Object3D, M: Mats, shelving: Shelving, frame: THREE.O
  *  Returns where its foot stands (the room's frame). Its rails' and rungs' boxes are kept on the case's frame's parent
  *  (`userData.ladderParts`: each a box in its own frame, and that frame in the parent's), as the room's merge takes the
  *  meshes away: a harness checks Brother Hollis against them. */
-function ladder(frame: THREE.Object3D, M: Mats, x: number, high: number, out: number, obstacles: Obstacle[]): THREE.Vector3 {
-  const l = new THREE.Group();
+function ladder(frame: Node, M: Mats, x: number, high: number, out: number, obstacles: Obstacle[]): Vec3 {
+  const l = new Node();
   l.name = 'library ladder';
   l.position.set(x, 0, out);
   const lean = Math.atan2(out - 0.42, high);
@@ -251,35 +254,35 @@ function ladder(frame: THREE.Object3D, M: Mats, x: number, high: number, out: nu
   const length = Math.hypot(high, out - 0.42);
   for (const sx of [-1, 1]) box(l, 0.05, length, 0.06, sx * 0.22, 0, 0, M.oak);
   for (let y = 0.3; y < length - 0.1; y += 0.32) box(l, 0.4, 0.035, 0.04, 0, y, 0, M.oak);
-  const rail = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 3.2, 8).rotateZ(Math.PI / 2), M.brass);
+  const rail = new Mesh(shapes.cylinder(0.018, 0.018, 3.2, 8).rotateZ(Math.PI / 2), M.brass);
   rail.position.set(x, high - 0.15, 0.46);
   frame.add(rail);
   frame.updateMatrix();
   l.updateMatrix();
   const parts: LadderPart[] = [];
-  for (const m of l.children as THREE.Mesh[]) {
+  for (const m of l.children as Mesh[]) {
     m.updateMatrix();
     m.geometry.computeBoundingBox();
     parts.push({ matrix: frame.matrix.clone().multiply(l.matrix).multiply(m.matrix), box: m.geometry.boundingBox!.clone() });
   }
   frame.parent!.userData.ladderParts = parts;
   for (let z = 0.5; z <= out + 0.01; z += (out - 0.5) / 3) {
-    const at = new THREE.Vector3(x, 0, z).applyMatrix4(frame.matrix);
+    const at = new Vec3(x, 0, z).applyMatrix4(frame.matrix);
     obstacles.push({ x: at.x, z: at.z, r: LADDER_R, h: high });
   }
-  return new THREE.Vector3(x, 0, out).applyMatrix4(frame.matrix);
+  return new Vec3(x, 0, out).applyMatrix4(frame.matrix);
 }
 /** how wide each of the ladder's footprint's circles is (m: its rails are 0.44 apart) */
 const LADDER_R = 0.3;
 /** a rail or rung of the ladder: its box in its own frame, and that frame in the room's */
-export interface LadderPart { matrix: THREE.Matrix4; box: THREE.Box3 }
+export interface LadderPart { matrix: Mat4; box: Box3 }
 /** how wide each circle along a case's front is (m; a harness tells the cases' from the room's other furniture by it:
  *  his hands reach into a case for its books) */
 export const CASE_R = 0.28;
 
 /** A globe on a turned wooden stand at (x, z): its sphere a map of seas and lands drawn on a canvas, a brass
  *  meridian round it, tilted. */
-function globe(g: THREE.Object3D, M: Mats, x: number, z: number): THREE.Mesh {
+function globe(g: Node, M: Mats, x: number, z: number): Mesh {
   const c = canvasOf(512, 256), cx = ctx2d(c), rng = mulberry(77);
   cx.fillStyle = '#2a4a5a'; cx.fillRect(0, 0, 512, 256);
   for (let k = 0; k < 2200; k++) { cx.fillStyle = `rgba(255,255,255,${rng() * 0.04})`; cx.fillRect(rng() * 512, rng() * 256, 2, 2); }
@@ -294,18 +297,18 @@ function globe(g: THREE.Object3D, M: Mats, x: number, z: number): THREE.Mesh {
   cx.strokeStyle = 'rgba(240,220,170,0.35)'; cx.lineWidth = 1;
   for (let y = 32; y < 256; y += 32) { cx.beginPath(); cx.moveTo(0, y); cx.lineTo(512, y); cx.stroke(); }
   for (let xx = 0; xx < 512; xx += 43) { cx.beginPath(); cx.moveTo(xx, 0); cx.lineTo(xx, 256); cx.stroke(); }
-  const ball = new THREE.Mesh(new THREE.SphereGeometry(0.28, 32, 20), new THREE.MeshStandardMaterial({ map: textureFromCanvas(c), roughness: 0.45 }));
+  const ball = new Mesh(shapes.sphere(0.28, 32, 20), new LitMaterial({ map: textureFromCanvas(c), roughness: 0.45 }));
   ball.position.set(x, 1.05, z);
   ball.rotation.set(0.41, 0.8, 0);
   ball.name = 'library globe';
   ball.castShadow = true;
   g.add(ball);
-  const ring = new THREE.Mesh(new THREE.TorusGeometry(0.31, 0.012, 6, 32), M.brass);
+  const ring = new Mesh(shapes.torus(0.31, 0.012, 6, 32), M.brass);
   ring.position.copy(ball.position);
   ring.rotation.set(0, 0.8, 0.41);
   g.add(ring);
   const profile = [[0, 0], [0.2, 0], [0.2, 0.04], [0.08, 0.08], [0.05, 0.2], [0.07, 0.4], [0.04, 0.6], [0.06, 0.7], [0.05, 0.75], [0, 0.75]];
-  const stand = new THREE.Mesh(new THREE.LatheGeometry(profile.map(([r, y]) => new THREE.Vector2(r, y)), 14), M.oak);
+  const stand = new Mesh(shapes.lathe(profile.map(([r, y]) => new Vec2(r, y)), 14), M.oak);
   stand.position.set(x, 0, z);
   stand.castShadow = true;
   g.add(stand);
@@ -319,24 +322,24 @@ const COVER = 0.012;
 
 /** An open book as built: its two halves' blocks of pages (each in its own frame, x from the spine to its outer edge:
  *  models/book.ts), their printed pages, and its shape. */
-interface OpenBook { blocks: THREE.Mesh[]; prints: THREE.Mesh[]; shape: BookShape }
+interface OpenBook { blocks: Mesh[]; prints: Mesh[]; shape: BookShape }
 
 /** A book lying open at (x, y, z) turned `turn`, `size` across: its cover, and each half a block of pages from its outer
  *  edge to the spine, curving down into the gutter, its printed page over it edge to spine (models/book.ts). (Two
  *  boxes with a print laid on each left a plain strip and a dark gap at the spine, from play.) */
-function openBook(g: THREE.Object3D, M: Mats, x: number, y: number, z: number, turn: number, size: number, seed: number): OpenBook {
-  const b = new THREE.Group();
+function openBook(g: Node, M: Mats, x: number, y: number, z: number, turn: number, size: number, seed: number): OpenBook {
+  const b = new Node();
   b.position.set(x, y, z);
   b.rotation.y = turn;
   g.add(b);
-  const cover = new THREE.MeshStandardMaterial({ color: [0x5a1814, 0x1e3a24, 0x23304e][seed % 3], roughness: 0.6 });
+  const cover = new LitMaterial({ color: [0x5a1814, 0x1e3a24, 0x23304e][seed % 3], roughness: 0.6 });
   // (its parts named: a harness reads his fingers against them)
   box(b, size * 1.02, COVER, size * 0.7, 0, 0, 0, cover).name = 'open book cover';
   const shape = bookShape(size), block = blockGeometry(shape), print = printGeometry(shape);
-  const blocks: THREE.Mesh[] = [], prints: THREE.Mesh[] = [];
+  const blocks: Mesh[] = [], prints: Mesh[] = [];
   for (const sx of [1, -1]) {
     // (the -x half is the +x half turned round the spine: its print's uv turned round with it, so it reads the same way)
-    const half = new THREE.Mesh(block, M.paper);
+    const half = new Mesh(block, M.paper);
     half.name = 'open book half';
     half.position.y = COVER;
     half.rotation.y = sx > 0 ? 0 : Math.PI;
@@ -348,7 +351,7 @@ function openBook(g: THREE.Object3D, M: Mats, x: number, y: number, z: number, t
     if (sx < 0) { const uv = geo.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setXY(i, 1 - uv.getX(i), 1 - uv.getY(i)); }
     const paper = M.paper.clone();
     paper.map = pageTexture(sx < 0, seed);
-    const page = new THREE.Mesh(geo, paper);
+    const page = new Mesh(geo, paper);
     page.receiveShadow = true;
     page.userData.initial = sx < 0;
     half.add(page);
@@ -360,8 +363,8 @@ function openBook(g: THREE.Object3D, M: Mats, x: number, y: number, z: number, t
 
 /** A reading desk at (x, z), turned `turn`: its top, legs and a drawer front; an open book, a stack, a quill in its
  *  inkwell, scrolls, and a candle (its light one of the room's ten); a stool at it. */
-function readingDesk(g: THREE.Group, M: Mats, b: Build, loose: Shelving, x: number, z: number, turn: number, seed: number): void {
-  const d = new THREE.Group();
+function readingDesk(g: Node, M: Mats, b: Build, loose: Shelving, x: number, z: number, turn: number, seed: number): void {
+  const d = new Node();
   d.position.set(x, 0, z);
   d.rotation.y = turn;
   g.add(d);
@@ -373,12 +376,12 @@ function readingDesk(g: THREE.Group, M: Mats, b: Build, loose: Shelving, x: numb
   const rng = mulberry(seed * 7 + 40);
   for (let k = 0; k < 4; k++) lieBook(loose, d, 0.5, 0.78 + k * 0.05, -0.18, 0.05, 0.26 - k * 0.01, 0.19, k % 2 ? 0.2 : -0.1, rng);
   drum(d, 0.03, 0.035, 0.05, 0.35, 0.78, 0.22, M.dark, 10);
-  const quill = new THREE.Mesh(new THREE.ConeGeometry(0.012, 0.24, 6), new THREE.MeshStandardMaterial({ color: 0xf0ece0, roughness: 0.8 }));
+  const quill = new Mesh(shapes.cone(0.012, 0.24, 6), new LitMaterial({ color: 0xf0ece0, roughness: 0.8 }));
   quill.position.set(0.32, 0.92, 0.2);
   quill.rotation.set(0.3, 0, 0.35);
   d.add(quill);
   for (const [dx, r] of [[-0.55, 0.03], [-0.5, 0.035]]) {
-    const scroll = new THREE.Mesh(new THREE.CylinderGeometry(r, r, 0.4, 10).rotateX(Math.PI / 2), M.paper);
+    const scroll = new Mesh(shapes.cylinder(r, r, 0.4, 10).rotateX(Math.PI / 2), M.paper);
     scroll.position.set(dx, 0.78 + r, -0.12 + dx * 0.1);
     scroll.rotation.y = 0.3;
     d.add(scroll);
@@ -389,7 +392,7 @@ function readingDesk(g: THREE.Group, M: Mats, b: Build, loose: Shelving, x: numb
   // (its circles where they stand in the room)
   d.updateMatrix();
   for (const o of temp.obstacles) {
-    const at = new THREE.Vector3(o.x, 0, o.z).applyMatrix4(d.matrix);
+    const at = new Vec3(o.x, 0, o.z).applyMatrix4(d.matrix);
     b.obstacles.push({ x: at.x, z: at.z, r: o.r, h: o.h });
   }
 }
@@ -399,12 +402,12 @@ function readingDesk(g: THREE.Group, M: Mats, b: Build, loose: Shelving, x: numb
 const CHAIR_WIDE = 1.0;
 
 /** An armchair at (x, z) turned `turn`: a deep seat, a high back, rolled arms, all in red cloth on dark legs. */
-function armchair(g: THREE.Group, M: Mats, x: number, z: number, turn: number): Furniture {
-  const a = new THREE.Group();
+function armchair(g: Node, M: Mats, x: number, z: number, turn: number): Furniture {
+  const a = new Node();
   a.position.set(x, 0, z);
   a.rotation.y = turn;
   g.add(a);
-  const cloth = new THREE.MeshStandardMaterial({ color: 0x6a1a14, roughness: 0.9 });
+  const cloth = new LitMaterial({ color: 0x6a1a14, roughness: 0.9 });
   const half = CHAIR_WIDE / 2, arm = half - 0.04;
   for (const sx of [-1, 1]) for (const sz of [-1, 1]) box(a, 0.06, 0.18, 0.06, sx * (half - 0.06), 0, sz * 0.3, M.timber);
   box(a, CHAIR_WIDE, 0.22, 0.72, 0, 0.18, 0, cloth);
@@ -412,7 +415,7 @@ function armchair(g: THREE.Group, M: Mats, x: number, z: number, turn: number): 
   box(a, CHAIR_WIDE, 0.75, 0.16, 0, 0.4, -0.32, cloth);
   for (const sx of [-1, 1]) {
     box(a, 0.14, 0.26, 0.7, sx * arm, 0.4, 0, cloth);
-    const roll = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.7, 12).rotateX(Math.PI / 2), cloth);
+    const roll = new Mesh(shapes.cylinder(0.08, 0.08, 0.7, 12).rotateX(Math.PI / 2), cloth);
     roll.position.set(sx * arm, 0.68, 0);
     roll.castShadow = true;
     a.add(roll);
@@ -427,7 +430,7 @@ const CHAIR_TURN = -Math.PI / 2 - 0.5;
 const CHAIR = { sit: -0.06, near: -0.04 };
 
 /** A cabinet of pigeonholes against a wall (its frame) at x, each holding a rolled scroll or two. */
-function scrollRack(frame: THREE.Object3D, M: Mats, x: number, rng: () => number): void {
+function scrollRack(frame: Node, M: Mats, x: number, rng: () => number): void {
   const W = 1.0, H = 1.2, D = 0.36, cols = 5, rows = 5;
   box(frame, W, H, 0.02, x, 0, 0.01, M.timber);
   for (let c = 0; c <= cols; c++) box(frame, 0.025, H, D, x - W / 2 + (c * W) / cols, 0, D / 2, M.panel);
@@ -437,7 +440,7 @@ function scrollRack(frame: THREE.Object3D, M: Mats, x: number, rng: () => number
       const n = rng() < 0.2 ? 0 : rng() < 0.6 ? 1 : 2;
       for (let k = 0; k < n; k++) {
         const rad = 0.03 + rng() * 0.015;
-        const scroll = new THREE.Mesh(new THREE.CylinderGeometry(rad, rad, D - 0.02, 8).rotateX(Math.PI / 2), M.paper);
+        const scroll = new Mesh(shapes.cylinder(rad, rad, D - 0.02, 8).rotateX(Math.PI / 2), M.paper);
         scroll.position.set(x - W / 2 + ((c + 0.5) * W) / cols + (k - (n - 1) / 2) * 0.07, (r * H) / rows + 0.025 + rad, D / 2 + 0.02);
         frame.add(scroll);
       }
@@ -446,7 +449,7 @@ function scrollRack(frame: THREE.Object3D, M: Mats, x: number, rng: () => number
 }
 
 /** The library's sign over the back wall's alcove: its name in gold on dark boards. */
-function nameBoard(frame: THREE.Object3D, M: Mats, y: number): void {
+function nameBoard(frame: Node, M: Mats, y: number): void {
   const board = writing(M, 768, 160, 2.0, 0.42);
   board.write((cx, w, h) => {
     const wood = cx.createLinearGradient(0, 0, 0, h);
@@ -465,24 +468,24 @@ function nameBoard(frame: THREE.Object3D, M: Mats, y: number): void {
 
 /** The Codex of Wardenhollow: a great book open on a carved lectern on a dais of two steps, brass clasps on its
  *  boards, its pages inked; a tall candle stand either side (each light one of the room's ten). Its circles. */
-function codex(g: THREE.Group, M: Mats, b: Build, x: number, z: number): void {
-  const c = new THREE.Group();
+function codex(g: Node, M: Mats, b: Build, x: number, z: number): void {
+  const c = new Node();
   c.position.set(x, 0, z);
   g.add(c);
   drum(c, 0.85, 0.9, 0.06, 0, 0, 0, M.hearthStone, 24);
   const profile = [[0, 0], [0.22, 0], [0.22, 0.05], [0.12, 0.1], [0.09, 0.3], [0.11, 0.5], [0.08, 0.7], [0.12, 0.85], [0.16, 0.92], [0, 0.92]];
-  const column = new THREE.Mesh(new THREE.LatheGeometry(profile.map(([r, y]) => new THREE.Vector2(r, y)), 16), M.panel);
+  const column = new Mesh(shapes.lathe(profile.map(([r, y]) => new Vec2(r, y)), 16), M.panel);
   column.position.y = 0.06;
   column.castShadow = true;
   c.add(column);
   for (const sx of [-1, 1]) box(c, 0.05, 0.2, 0.3, sx * 0.2, 0.86, 0, M.timber).rotation.z = sx * 0.4;
-  const desk = new THREE.Group();
+  const desk = new Node();
   desk.position.y = 1.05;
   desk.rotation.x = 0.3;
   c.add(desk);
   box(desk, 0.95, 0.04, 0.62, 0, -0.04, 0, M.timber);
   box(desk, 0.95, 0.07, 0.04, 0, -0.04, 0.31, M.panel);
-  const boards = new THREE.MeshStandardMaterial({ color: 0x3a1410, roughness: 0.55 });
+  const boards = new LitMaterial({ color: 0x3a1410, roughness: 0.55 });
   box(desk, 0.86, 0.02, 0.56, 0, 0, 0, boards);
   for (const sx of [-1, 1]) for (const sz of [-1, 1]) box(desk, 0.06, 0.024, 0.06, sx * 0.41, 0.002, sz * 0.26, M.brass).castShadow = false;
   for (const sx of [-1, 1]) {
@@ -495,7 +498,7 @@ function codex(g: THREE.Group, M: Mats, b: Build, x: number, z: number): void {
     page.write((cx, w, h) => inkedPage(cx, w, h, sx < 0, sx < 0 ? 91 : 93));
     desk.add(page.mesh);
   }
-  const ribbon = new THREE.Mesh(new THREE.PlaneGeometry(0.025, 0.28), new THREE.MeshStandardMaterial({ color: 0x9a1a1a, side: THREE.DoubleSide }));
+  const ribbon = new Mesh(shapes.plane(0.025, 0.28), new LitMaterial({ color: 0x9a1a1a, side: DoubleSide }));
   ribbon.position.set(0.02, 0.04, 0.33);
   ribbon.rotation.set(-0.6, 0, 0);
   desk.add(ribbon);
@@ -517,11 +520,11 @@ export const scholarTalk = { talking: false, lines: 0 };
  *  where he sits, the table before it, his book open on it facing him, a candle (its light one of the room's ten, the
  *  reading desk's he took the place of), a stack of books, his inkwell and quill, a scroll. He himself is seated later
  *  (`seat`): his head and hands are the heroes', made in workers as the game loads, after the rooms are built. */
-function scholarDesk(g: THREE.Group, M: Mats, b: Build): {
-  seat: () => Generator<void, Scholar, undefined>; desk: THREE.Group; sat: THREE.Vector3; stack: THREE.Mesh[]; chair: THREE.Group;
+function scholarDesk(g: Node, M: Mats, b: Build): {
+  seat: () => Generator<void, Scholar, undefined>; desk: Node; sat: Vec3; stack: Mesh[]; chair: Node;
 } {
   const { x, z, turn } = SCHOLAR_DESK;
-  const d = new THREE.Group();
+  const d = new Node();
   d.position.set(x, 0, z);
   d.rotation.y = turn;
   g.add(d);
@@ -534,7 +537,7 @@ function scholarDesk(g: THREE.Group, M: Mats, b: Build): {
   // (his chair: a seat, legs, a high back of slats under a carved rail; a group of its own, which he draws out and in
   // as he sits down and gets up, its z how far out from the table it is, from play: "he needs to pull the chair, sit and
   // then fix the chair position")
-  const chair = new THREE.Group();
+  const chair = new Node();
   chair.name = 'scholar chair';
   d.add(chair);
   // (built as a joiner builds one, from play, "they will break on first day of service": its back legs run on up as
@@ -555,25 +558,25 @@ function scholarDesk(g: THREE.Group, M: Mats, b: Build): {
   box(chair, 0.5, 0.08, 0.06, 0, 1.06, -0.23, seatWood).name = 'scholar chair rail';
   // (its parts but its seat one mesh a wood, its frame named as its legs were: `lab scholar` reads their feet)
   const seatMesh = chair.getObjectByName('scholar chair seat')!;
-  joinParts(chair, [seatMesh], new Map<THREE.Material, string>([[frame, 'scholar chair leg'], [seatWood, 'scholar chair rail']]));
+  joinParts(chair, [seatMesh], new Map<Material, string>([[frame, 'scholar chair leg'], [seatWood, 'scholar chair rail']]));
   // (his book, open towards him: turned half round, its first page on his left; out on the table a forearm's length
   // from its edge, where his elbows rest)
   const SIZE = 0.44, BOOK = { y: 0.76, z: 0.62 };
   const book = openBook(d, M, 0, BOOK.y, BOOK.z, Math.PI, SIZE, 5);
   // (beside it, his things: a stack of books, the candle on its dish, the inkwell and quill, a scroll)
   // (the stack he keeps books on and shelves them from: each book's size kept)
-  const stack: THREE.Mesh[] = [];
+  const stack: Mesh[] = [];
   for (let k = 0; k < 4; k++) {
     const w = 0.26 - k * 0.015, cover = spineMaterial((k * 2 + 1) % SPINES).clone();
     cover.color.set(BOOK_COLOURS[(k * 3 + 1) % BOOK_COLOURS.length]).multiplyScalar(0.9);
-    const stacked = new THREE.Mesh(bookModel().lying, [cover, M.paper]);
+    const stacked = new Mesh(bookModel().lying, [cover, M.paper]);
     stacked.scale.set(w, 0.05, 0.19);
     stacked.position.set(0.42, 0.76 + k * 0.05 + 0.025, 0.72);
     stacked.castShadow = stacked.receiveShadow = true;
     d.add(stacked);
     stacked.rotation.y = (k % 2 ? 0.25 : -0.1);
     stacked.name = 'scholar desk books';
-    stacked.userData.size = new THREE.Vector3(w, 0.05, 0.19);
+    stacked.userData.size = new Vec3(w, 0.05, 0.19);
     stack.push(stacked);
   }
   drum(d, 0.05, 0.06, 0.02, -0.4, 0.76, 0.78, M.brass, 10).name = 'scholar desk candle dish';
@@ -582,12 +585,12 @@ function scholarDesk(g: THREE.Group, M: Mats, b: Build): {
   // his book, under where his left forearm rests and his hand goes as he turns a page, the quill stood up through his
   // sleeve, from play: "fix weird spike sticking through his arm")
   drum(d, 0.028, 0.032, 0.045, 0.48, 0.76, 0.9, M.dark, 10).name = 'scholar desk inkwell';
-  const quill = new THREE.Mesh(new THREE.ConeGeometry(0.011, 0.24, 6), new THREE.MeshStandardMaterial({ color: 0xf0ece0, roughness: 0.8 }));
+  const quill = new Mesh(shapes.cone(0.011, 0.24, 6), new LitMaterial({ color: 0xf0ece0, roughness: 0.8 }));
   quill.position.set(0.51, 0.9, 0.94);
   quill.rotation.set(0.35, 0, -0.3);
   quill.name = 'scholar desk quill';
   d.add(quill);
-  const scroll = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.36, 10).rotateZ(Math.PI / 2), M.paper);
+  const scroll = new Mesh(shapes.cylinder(0.03, 0.03, 0.36, 10).rotateZ(Math.PI / 2), M.paper);
   scroll.position.set(-0.12, 0.79, 0.86);
   scroll.rotation.y = 0.2;
   scroll.name = 'scholar desk scroll';
@@ -596,35 +599,35 @@ function scholarDesk(g: THREE.Group, M: Mats, b: Build): {
   d.updateMatrix();
   // (his chair's circle round it tucked in and drawn out, `CHAIR_OUT` in scholarRounds.ts)
   for (const o of [...temp, { x: 0, z: -0.2, r: 0.5, h: 1.2 }]) {
-    const at = new THREE.Vector3(o.x, 0, o.z).applyMatrix4(d.matrix);
+    const at = new Vec3(o.x, 0, o.z).applyMatrix4(d.matrix);
     b.obstacles.push({ x: at.x, z: at.z, r: o.r, h: o.h });
   }
   const seat = function* (): Generator<void, Scholar, undefined> {
     const table = { x0: -TABLE.w / 2, x1: TABLE.w / 2, z0: TABLE.z - TABLE.d / 2 - SAT, z1: TABLE.z + TABLE.d / 2 - SAT, top: TABLE.top };
     // (the page he turns turns about the spine's foot in the gutter, the top page of the half on his right: its blocks
     // in their frames, the book's shape)
-    const shape = book.shape, spine = new THREE.Vector3(0, BOOK.y + COVER + shape.gutter, BOOK.z - SAT);
+    const shape = book.shape, spine = new Vec3(0, BOOK.y + COVER + shape.gutter, BOOK.z - SAT);
     const s = yield* scholarSteps({ spine, shape, table, blocks: book.blocks, prints: book.prints,
       printTop: BOOK.y + COVER + shape.edge + shape.printed });
     s.root.position.set(0, 0, SAT);
     d.add(s.root);
     return s;
   };
-  return { seat, desk: d, sat: new THREE.Vector3(0, 0, SAT), stack, chair };
+  return { seat, desk: d, sat: new Vec3(0, 0, SAT), stack, chair };
 }
 
 /** his dusting cloth: a rag in the paper's material, crumpled */
-function dustingCloth(M: Mats): THREE.Mesh {
-  const rag = new THREE.IcosahedronGeometry(1, 2), rp = rag.attributes.position, rr = mulberry(31);
+function dustingCloth(M: Mats): Mesh {
+  const rag = shapes.icosahedron(1, 2), rp = rag.attributes.position, rr = mulberry(31);
   for (let i = 0; i < rp.count; i++) rp.setXYZ(i, rp.getX(i) * 0.06 * (0.8 + rr() * 0.4), rp.getY(i) * 0.022 * (0.7 + rr() * 0.6), rp.getZ(i) * 0.05 * (0.8 + rr() * 0.4));
   rag.computeVertexNormals();
-  const cloth = new THREE.Mesh(rag, M.paper);
+  const cloth = new Mesh(rag, M.paper);
   cloth.castShadow = true;
   return cloth;
 }
 
 /** The library: built into `group`. */
-export function build(group: THREE.Group): Room {
+export function build(group: Node): Room {
   const id: RoomId = 'library', b = begin(id, group, 2718), { g, M, rng } = b;
   const [hx, hz] = HOUSES[id].half, high = HOUSES[id].high;
   // (its windows lit warm from outside, as an evening's sun)
@@ -669,7 +672,7 @@ export function build(group: THREE.Group): Room {
   scrollRack(west, M, -3.1, rng);
   lantern(west, M, -(hz - 0.45), 2.4, 0, 0, 1, { ...LANTERN, intensity: 8, reach: 8 });
   // --- the east wall: the hearth between two cases, an armchair before it, a lantern by the front ---
-  hearth(g, M, new THREE.Vector3(hx, 0, -0.6), -Math.PI / 2, high, b.updaters, b.obstacles);
+  hearth(g, M, new Vec3(hx, 0, -0.6), -Math.PI / 2, high, b.updaters, b.obstacles);
   const east = onWall(g, id, 'east');
   bookcase(g, M, shelves.east, east, 2.25, 1.7, caseHigh, rng, b.obstacles);
   bookcase(g, M, shelves.east, east, -2.95, 1.6, caseHigh, rng, b.obstacles);
@@ -708,7 +711,7 @@ export function build(group: THREE.Group): Room {
   // (he sets it turning: out of the room's merge)
   keepApart(theGlobe);
   b.obstacles.push({ x: 3.1, z: -2.2, r: 0.35, h: 1.3 });
-  const floor = new THREE.Object3D();
+  const floor = new Node();
   for (const [x, z, n] of [[-1.3, -3.3, 6], [4.6, 3.2, 4], [-4.6, -0.2, 3]] as const) {
     for (let k = 0; k < n; k++) {
       const at = [x + (rng() - 0.5) * 0.04, z + (rng() - 0.5) * 0.04];
@@ -723,7 +726,7 @@ export function build(group: THREE.Group): Room {
   chandelier(g, M, 0.1, high, 1.3, high - CROSS_UNDER);
   // (dust drifting in the warm light by the front windows)
   const shelfMeshes = (['back', 'west', 'east'] as const).flatMap((side) => {
-    const books = new THREE.Group();
+    const books = new Node();
     againstWall(books, side);
     g.add(books);
     return shelve(books, shelves[side], M.paper);
@@ -744,7 +747,7 @@ export function build(group: THREE.Group): Room {
   // (Brother Hollis, seated once the heroes' heads and hands are made: he reads, glances up at a hero come near, and
   // looks up from his book while he's talked to)
   let scholar: Scholar | undefined, rounds: Rounds | undefined;
-  const hero = new THREE.Vector3();
+  const hero = new Vec3();
   b.updaters.push((dt) => {
     if (!scholar || !rounds) return;
     const me = G.player;
@@ -752,15 +755,15 @@ export function build(group: THREE.Group): Room {
   });
   // (a book for his hands, its look a shelf's (its map and colour set to the book he takes), and an open one to read
   // standing: both shown in the room's warm-up, so their programs are made with the room's)
-  const heldMat = (shelfMeshes[0].mesh.material as THREE.MeshStandardMaterial).clone();
-  const held = new THREE.Mesh(bookModel().whole, [heldMat, M.paper]);
+  const heldMat = (shelfMeshes[0].mesh.material as LitMaterial).clone();
+  const held = new Mesh(bookModel().whole, [heldMat, M.paper]);
   held.name = 'library held book';
   held.castShadow = held.receiveShadow = true;
   held.position.set(seat.desk.position.x, 0.9, seat.desk.position.z);
   held.scale.set(0.05, 0.24, 0.17);
   held.visible = false;
   g.add(held);
-  const openHeld = new THREE.Group();
+  const openHeld = new Node();
   openHeld.name = 'library open held book';
   openHeld.position.copy(held.position);
   const opened = openBook(openHeld, M, 0, -0.02, 0, 0, OPEN_HELD, 4);
@@ -768,18 +771,18 @@ export function build(group: THREE.Group): Room {
   const ribbonMat = M.leather.clone();
   ribbonMat.name = 'library ribbon';
   ribbonMat.color.set(0x8a1a14);
-  const ribbon = new THREE.Mesh(new THREE.BoxGeometry(0.007, 0.0012, opened.shape.depth + 0.05), ribbonMat);
+  const ribbon = new Mesh(shapes.box(0.007, 0.0012, opened.shape.depth + 0.05), ribbonMat);
   ribbon.position.set(0.006, -0.02 + COVER + opened.shape.gutter + 0.002, -0.025);
   ribbon.name = 'library open held book ribbon';
   openHeld.add(ribbon);
   // (the book he took, opened: as wide across as twice its depth, as deep as it's tall, its cover its colour)
-  const openCover = (openHeld.children[0] as THREE.Group).children.find((m): m is THREE.Mesh => (m as THREE.Mesh).isMesh)!;
-  (openCover.material as THREE.MeshStandardMaterial) = (openCover.material as THREE.MeshStandardMaterial).clone();
-  const openAs = (size: THREE.Vector3, colour: THREE.Color, n: number) => {
+  const openCover = (openHeld.children[0] as Node).children.find((m): m is Mesh => (m as Mesh).isMesh)!;
+  (openCover.material as LitMaterial) = (openCover.material as LitMaterial).clone();
+  const openAs = (size: Vec3, colour: Color, n: number) => {
     openHeld.scale.set((size.z * 2) / OPEN_HELD, 1, size.y / opened.shape.depth);
-    (openCover.material as THREE.MeshStandardMaterial).color.copy(colour);
+    (openCover.material as LitMaterial).color.copy(colour);
     // (its pages the very book's: its chapter mark and lines by the book, as every time it's opened)
-    for (const print of opened.prints) showPage((print.material as THREE.MeshStandardMaterial).map!, print.userData.initial, pageVariant(n));
+    for (const print of opened.prints) showPage((print.material as LitMaterial).map!, print.userData.initial, pageVariant(n));
   };
   openHeld.visible = false;
   g.add(openHeld);
@@ -788,13 +791,13 @@ export function build(group: THREE.Group): Room {
   keepApart(openHeld);
   // (his dusting cloth, built only while he dusts, `SCHOLAR_DOES`: off, a place of nothing in its stead, as his rounds
   // move it)
-  const cloth = SCHOLAR_DOES.dust ? dustingCloth(M) : new THREE.Object3D();
+  const cloth = SCHOLAR_DOES.dust ? dustingCloth(M) : new Node();
   cloth.name = 'library dusting cloth';
   cloth.visible = false;
   g.add(cloth);
   keepApart(cloth);
   /** a puff of dust off what he wipes: a few grey motes drifting down and out */
-  const puff = (at: THREE.Vector3) => {
+  const puff = (at: Vec3) => {
     const w = g.localToWorld(at.clone());
     for (let k = 0; k < 3; k++) {
       particles.glow.spawn({

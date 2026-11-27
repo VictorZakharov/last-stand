@@ -7,7 +7,10 @@
 // (`materials.ts`), the geometry and bones (`geometry.ts`), the lights (`lights.ts`), the kinds of see-through
 // (`seeKinds.ts`), the particles (`sprites.ts`) and the frame's globals (`globals.ts`). Here: the scene's matrices,
 // the walk, a record a mesh, what's handed over ahead, and a frame drawn or written down.
-import * as THREE from './three.ts';
+import {
+  Camera, InstancedGeometry, InstancedMesh, Light, Line, Mat4, Material, Mesh, Node, PerspectiveCamera, Points,
+  SkinnedMesh, Sprite, WebGLRenderer, World,
+} from './api/index.ts';
 import type { Engine, InitOutput } from './pkg/bulwark';
 import { writeOutlined } from './outlined';
 import type { LookHost } from './index';
@@ -49,26 +52,26 @@ const RAW_INSTANCES = 7;
 /** how far under the scene a hidden object is a place left as it stands (the biomes' roots, the village's) */
 const HIDDEN_PLACES = 2;
 /** three's own update of an object's matrices: a kind with another is left to its own */
-const PLAIN_UPDATE = THREE.Object3D.prototype.updateMatrixWorld;
+const PLAIN_UPDATE = Node.prototype.updateMatrixWorld;
 
 /** Whether `update` is three's own `updateMatrixWorld`, or a harness's wrapper round it that says so (`wraps`: the
  *  lab's count of three's visits, `tools/lab/page/matrixWalks.ts`). Taken for an override, every object in the lab
  *  was placed by three's recursion and none by `placeShown`, so the lab's timings of it were never the players'. */
-function plainUpdate(update: THREE.Object3D['updateMatrixWorld']): boolean {
+function plainUpdate(update: Node['updateMatrixWorld']): boolean {
   return update === PLAIN_UPDATE || (update as { wraps?: unknown }).wraps === PLAIN_UPDATE;
 }
 
-const scratchMatrix = new THREE.Matrix4();
+const scratchMatrix = new Mat4();
 
 /** each still mesh's radius in the world (m), found once: it doesn't move */
-const radii = new WeakMap<THREE.Mesh, number>();
+const radii = new WeakMap<Mesh, number>();
 
 /**
  * How far a still mesh reaches from its middle (m). A level keeps what's smaller than its least caster from
  * casting the sun's shadow (`minCasterRadius`: 9 cm at High, 30 at Very low), and the still things taken for casters
  * (`TUNE.castAll`) cast whatever their size.
  */
-function radiusOf(mesh: THREE.Mesh): number {
+function radiusOf(mesh: Mesh): number {
   let radius = radii.get(mesh);
   if (radius === undefined) {
     if (!mesh.geometry.boundingSphere) mesh.geometry.computeBoundingSphere();
@@ -108,14 +111,14 @@ export class Bridge {
   readonly mirrorMeshes: MirrorMeshes;
   readonly bodies: Bodies;
   /** the roots handed to the mirror this frame */
-  private wanted = new Set<THREE.Object3D>();
-  private stack: THREE.Object3D[] = [];
+  private wanted = new Set<Node>();
+  private stack: Node[] = [];
   /** what's handed over ahead of its first frame (`ahead.ts`) */
   readonly ahead: Ahead;
   private grade: Grade = PLAIN_GRADE;
   private renderer: LookHost | null = null;
-  private scene: THREE.Scene | null = null;
-  private camera: THREE.Camera | null = null;
+  private scene: World | null = null;
+  private camera: Camera | null = null;
 
   constructor(engine: Engine, wasm: InitOutput) {
     const core = this.core = new Core(engine, wasm);
@@ -181,7 +184,7 @@ export class Bridge {
     return tape.blob();
   }
 
-  private record(mesh: THREE.Mesh, geometryId: number, material: AnyMaterial, first: number, count: number, set: number,
+  private record(mesh: Mesh, geometryId: number, material: AnyMaterial, first: number, count: number, set: number,
     bones: number, raw = 0, cast: Cast = 'own'): void {
     const core = this.core;
     if (this.unseenNow && cast === 'own') cast = 'only';
@@ -194,7 +197,7 @@ export class Bridge {
     // (a material that writes no colour is in the frame for its shadow or its depth alone: the game's merged casters)
     // (a body moved by its bones casts only where the game says: a level keeps the heroes and the foes from
     // casting, and taken for the village's still things they cast at every level, 260 thousand triangles a frame)
-    const still = !(mesh as THREE.SkinnedMesh).isSkinnedMesh;
+    const still = !(mesh as SkinnedMesh).isSkinnedMesh;
     const casts = cast !== 'none' && (mesh.castShadow || (TUNE.castAll && mesh.receiveShadow && still
       && radiusOf(mesh) >= (this.grade.casterLeast ?? 0)));
     // (its see-through's: thinned by blending, solid now, one of a thing's layers; and thinned to nothing whole,
@@ -213,8 +216,8 @@ export class Bridge {
     }
     r[at + RAW_INSTANCES] = raw;
     // (a mesh's bones: a look's list rides in their place, its mesh where it stands)
-    if (bones >= 0 && (mesh as THREE.SkinnedMesh).isSkinnedMesh) {
-      const skinned = mesh as THREE.SkinnedMesh;
+    if (bones >= 0 && (mesh as SkinnedMesh).isSkinnedMesh) {
+      const skinned = mesh as SkinnedMesh;
       scratchMatrix.multiplyMatrices(mesh.matrixWorld, skinned.bindMatrixInverse).toArray(r, at + 8);
     } else {
       r.set(mesh.matrixWorld.elements, at + 8);
@@ -224,7 +227,7 @@ export class Bridge {
 
   /** The frame's moving parts handed to the engine's nodes: every hero's and foe's root in the scene, the foes
    *  drawn as one, every node placed and its matrix read back, each mesh's records kept. */
-  private handOver(camera: THREE.Camera): void {
+  private handOver(camera: Camera): void {
     const mirror = this.mirror, wanted = this.wanted;
     wanted.clear();
     if (BODY_NODES.on) {
@@ -233,7 +236,7 @@ export class Bridge {
     }
     for (const root of [...mirror.rootsNow]) if (!wanted.has(root)) mirror.leave(root);
     for (const root of wanted) mirror.take(root);
-    const recordsOf = (mesh: THREE.Mesh): Recorded => this.recordsOf(mesh);
+    const recordsOf = (mesh: Mesh): Recorded => this.recordsOf(mesh);
     this.bodies.sync(recordsOf);
     mirror.place();
     this.mirrorMeshes.keep(camera, this.grade.arms ?? null, recordsOf);
@@ -241,7 +244,7 @@ export class Bridge {
 
   /** The records `mesh` is drawn by this frame, written and taken back out of it: what a body kept as nodes draws
    *  (`bodies.ts`), its bones the engine's. */
-  private recordsOf(mesh: THREE.Mesh): Recorded {
+  private recordsOf(mesh: Mesh): Recorded {
     const core = this.core, stats = core.stats, count = core.count, boneFloats = core.boneFloats;
     const solid = stats.solid, casters = stats.casters;
     this.addMesh(mesh);
@@ -254,25 +257,25 @@ export class Bridge {
     return made;
   }
 
-  private addMesh(mesh: THREE.Mesh): void {
+  private addMesh(mesh: Mesh): void {
     // (the particles' pools are handed over whole: `sprites.ts`)
     if (mesh.userData.particles || mesh.name === 'dazed stars') return;
     const geometry = mesh.geometry;
     const look = Array.isArray(mesh.material) ? undefined : lookOf(mesh.material);
     if (look?.before && this.renderer) {
-      mesh.onBeforeRender(this.renderer as unknown as THREE.WebGLRenderer, this.scene!, this.camera!, geometry, mesh.material as THREE.Material,
-        null as unknown as THREE.Group);
+      mesh.onBeforeRender(this.renderer as unknown as WebGLRenderer, this.scene!, this.camera!, geometry, mesh.material as Material,
+        null as unknown as Node);
     }
     // (a geometry of instances it counts itself: each placed by its material's look, from its index)
-    const counted = geometry as THREE.InstancedBufferGeometry;
-    const raw = counted.isInstancedBufferGeometry ? counted.instanceCount : 0;
-    if (counted.isInstancedBufferGeometry && (!look || !(raw > 0) || raw === Infinity)) {
+    const counted = geometry as InstancedGeometry;
+    const raw = counted.isInstancedGeometry ? counted.instanceCount : 0;
+    if (counted.isInstancedGeometry && (!look || !(raw > 0) || raw === Infinity)) {
       if (!look) this.core.skip('instanced geometry');
       return;
     }
     const geometryId = this.geometries.geometryId(geometry, look?.position);
     if (!geometryId) return;
-    const instanced = mesh as unknown as THREE.InstancedMesh, skinned = mesh as THREE.SkinnedMesh;
+    const instanced = mesh as unknown as InstancedMesh, skinned = mesh as SkinnedMesh;
     if (instanced.isInstancedMesh && instanced.count === 0) return;
     const set = instanced.isInstancedMesh ? this.geometries.setId(instanced) : 0;
     const bones = skinned.isSkinnedMesh && skinned.skeleton ? this.geometries.bonesOf(skinned)
@@ -314,7 +317,7 @@ export class Bridge {
    * the game had placed by his matrices alone stood a pace off his own outline in the hall of heroes (from play:
    * "bugs").
    */
-  private placeShown(object: THREE.Object3D, moved: boolean, depth: number): void {
+  private placeShown(object: Node, moved: boolean, depth: number): void {
     // (a piece of a body drawn as one, unseen: placed only where it's read, `models/bodyAsOne.ts`; a root handed
     // over whole is placed by the engine's nodes, `mirror.ts`)
     if (object.userData.unplaced || mirrored(object)) return;
@@ -355,13 +358,13 @@ export class Bridge {
   private unseenNow = false;
 
   /** `mesh` in the frame for its shadow alone. */
-  private addUnseen(mesh: THREE.Mesh): void {
+  private addUnseen(mesh: Mesh): void {
     this.unseenNow = true;
     this.addMesh(mesh);
     this.unseenNow = false;
   }
   /** The first `lamps` lamps' shadows asked for, of `casters` (`lampShadows.ts`): drawn a lamp a frame. */
-  bakeLamps(casters: THREE.Mesh[], lamps: number): void {
+  bakeLamps(casters: Mesh[], lamps: number): void {
     this.lampShadows.ask(casters, lamps);
     this.lightCache.ask(casters);
   }
@@ -378,17 +381,17 @@ export class Bridge {
   shaderNames(): Map<number, string> { return this.materials.shaderNames(); }
 
   /** A harness's: whether a see-through material is drawn solid this frame, with what's opaque. */
-  drawnSolid(material: THREE.Material): boolean { return (this.seeKinds.flagsOf(material) & SOLID) !== 0; }
+  drawnSolid(material: Material): boolean { return (this.seeKinds.flagsOf(material) & SOLID) !== 0; }
 
   /** A harness's: a material's see-through flags this frame, as its records carry them (`SEE_FLAGS`). */
-  seenFlags(material: THREE.Material): number { return this.seeKinds.flagsOf(material); }
+  seenFlags(material: Material): number { return this.seeKinds.flagsOf(material); }
 
   /** A harness's: how many kinds of see-through the engine holds, and how many of them thin anything this frame (a
    *  hole, a share of the whole, a door open). */
   seeKindsNow(): { held: number; thinning: number } { return this.seeKinds.now(); }
 
   /** A harness's: the meshes handed to the engine since it was set (`lab rustcheck`: every foe of a fight drawn). */
-  watched: Set<THREE.Object3D> | null = null;
+  watched: Set<Node> | null = null;
   /** A harness's: how many point lights the last frame was lit by (a place's own, the effects', the lamps'). */
   pointsNow(): number { return this.lit.points; }
 
@@ -400,33 +403,33 @@ export class Bridge {
   lights(): string { return this.lit.report(); }
 
   /** One object of the scene taken into the frame: a mesh's records, a light, what isn't drawn counted. */
-  private visit(object: THREE.Object3D): void {
+  private visit(object: Node): void {
     const camera = this.camera!, arms = this.grade.arms ?? null;
-    if ((object as THREE.Mesh).isMesh) {
-      if (object.layers.test(camera.layers)) this.addMesh(object as THREE.Mesh);
+    if ((object as Mesh).isMesh) {
+      if (object.layers.test(camera.layers)) this.addMesh(object as Mesh);
       else if (arms && object.layers.test(arms.layers)) {
         // (on the arms' layer alone, seen through his eyes: the game draws them in a pass of their own, with
         // a camera of their own, which the engine's frame has in it. Left out, he held nothing: from play,
         // "no warrior weapon in first person")
         this.armsNow = true;
-        this.addMesh(object as THREE.Mesh);
+        this.addMesh(object as Mesh);
         this.armsNow = false;
         // (and their shadow cast where they are in the world, with his body's)
-        if ((object as THREE.Mesh).castShadow) this.addUnseen(object as THREE.Mesh);
-      } else if (object.userData.castsUnseen && (object as THREE.Mesh).castShadow) {
+        if ((object as Mesh).castShadow) this.addUnseen(object as Mesh);
+      } else if (object.userData.castsUnseen && (object as Mesh).castShadow) {
         // (his body through his eyes, on the layer no camera draws: unseen, its shadow cast as he stands, as a
         // lamp's casts it. Left out, he cast none in the sun or the moon through his eyes, as since #270)
-        this.addUnseen(object as THREE.Mesh);
+        this.addUnseen(object as Mesh);
       }
-    } else if ((object as THREE.Light).isLight) {
+    } else if ((object as Light).isLight) {
       // (the rig's copies of the shown place's lights are three's: the place's own are added after the walk)
-      if (!object.userData.rigged) this.lit.add(object as THREE.Light);
-    } else if ((object as THREE.Points).isPoints || (object as THREE.Line).isLine || (object as THREE.Sprite).isSprite) {
+      if (!object.userData.rigged) this.lit.add(object as Light);
+    } else if ((object as Points).isPoints || (object as Line).isLine || (object as Sprite).isSprite) {
       if (object.layers.test(camera.layers)) this.core.skip(object.type);
     }
   }
 
-  private walk(scene: THREE.Scene): void {
+  private walk(scene: World): void {
     const stack = this.stack;
     stack.length = 0;
     stack.push(scene);
@@ -444,7 +447,7 @@ export class Bridge {
   }
 
   /** A frame of `scene` from `camera`, drawn by the engine. The scene's matrices are made here, as three's render would. */
-  draw(scene: THREE.Scene, camera: THREE.PerspectiveCamera, time: number, renderer: LookHost | null = null,
+  draw(scene: World, camera: PerspectiveCamera, time: number, renderer: LookHost | null = null,
     grade: Grade = PLAIN_GRADE): void {
     const began = perfClock.now();
     const core = this.core, stats = core.stats;
@@ -516,7 +519,7 @@ export class Bridge {
 }
 
 /** Whether `object` hangs in a scene, up from it. */
-function inScene(object: THREE.Object3D): boolean {
-  for (let at: THREE.Object3D | null = object; at; at = at.parent) if ((at as THREE.Scene).isScene) return true;
+function inScene(object: Node): boolean {
+  for (let at: Node | null = object; at; at = at.parent) if ((at as World).isWorld) return true;
   return false;
 }

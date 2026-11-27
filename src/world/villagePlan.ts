@@ -1,7 +1,7 @@
 // The village's plan as geometry (data/village.ts lays it out): the palisade's winding line and its gaps, the roads'
 // lines, the cottages' doors and footpaths, and what stands where, so the builder (world/village.ts), the meadow's
 // mask and the trees all read one plan: grass and trees go wherever nothing's built or trodden.
-import * as THREE from '../engine/three.ts';
+import { CatmullRom3, Vec3 } from '../engine/api/index.ts';
 import {
   CAMPFIRE, COTTAGES, ENTRANCES, GAP_HALF, HALL, NOTICE, PALISADE_LINE, RACK, ROADS, TERRACE, YARD, worldToYard,
   type Cottage, type Spot,
@@ -33,8 +33,8 @@ export const TOMB = {
 export const PODIUM = { front: TOMB.stairFoot + TOMB.steps * TOMB.tread, high: TOMB.steps * TOMB.rise };
 
 /** The palisade's line, a closed curve through its points. */
-export const palisadeCurve = new THREE.CatmullRomCurve3(
-  PALISADE_LINE.map(([x, z]) => new THREE.Vector3(x, 0, z)), true, 'centripetal');
+export const palisadeCurve = new CatmullRom3(
+  PALISADE_LINE.map(([x, z]) => new Vec3(x, 0, z)), true, 'centripetal');
 
 /** The palisade's line as a polygon (`n` points along it). */
 export function palisadePolygon(n = 360): Spot[] {
@@ -72,7 +72,7 @@ export function toPolyline(x: number, z: number, points: readonly Spot[], closed
 
 /** A winding line through `points`, as points every `step` m along it. */
 export function windingLine(points: readonly Spot[], step = 0.4): Spot[] {
-  const curve = new THREE.CatmullRomCurve3(points.map(([x, z]) => new THREE.Vector3(x, 0, z)), false, 'centripetal');
+  const curve = new CatmullRom3(points.map(([x, z]) => new Vec3(x, 0, z)), false, 'centripetal');
   const n = Math.max(2, Math.ceil(curve.getLength() / step));
   return curve.getSpacedPoints(n).map((p) => [p.x, p.z]);
 }

@@ -3,7 +3,9 @@
 // screen space), so it reads from the top-down camera and stays a hairline through the eyes; it fades out near the
 // camera (through the eyes it starts at the bow, under the view) and eases in and out, never flashing. It isn't
 // dimmed with distance (`nearGlow`): a fixed width in pixels never grows to fill the view up close.
-import * as THREE from '../engine/three.ts';
+import {
+  AdditiveBlending, Attribute, Color, DoubleSide, DynamicDrawUsage, Geometry, LookMaterial, Mesh, Node, Vec2, Vec3,
+} from '../engine/api/index.ts';
 import { G } from '../state';
 import { addEffect } from './effects';
 import { sceneRatio, sceneSize } from '../core/renderer';
@@ -14,7 +16,7 @@ import { effectLook, num, rgb, type EffectLook, effectShader } from '../engine/e
 const WIDTH = 2, DOT = 7, GLOW = 1.6, ALPHA = 0.7, EASE_IN = 0.12, EASE_OUT = 0.18;
 /** the line fades in over this range of distance from the camera (m) */
 const NEAR0 = 0.8, NEAR1 = 3;
-const COLOR = new THREE.Color(0xff2414);
+const COLOR = new Color(0xff2414);
 /** at most this many lines (a fan's five), each of this many points */
 export const LASER_LINES = 5, LASER_POINTS = 160;
 
@@ -117,12 +119,12 @@ function dotPort(t: Tsl, u: Tsl) {
 }
 
 const uniforms = {
-  uRes: { value: new THREE.Vector2(1, 1) }, uWidth: { value: WIDTH }, uNear0: { value: NEAR0 }, uNear1: { value: NEAR1 },
+  uRes: { value: new Vec2(1, 1) }, uWidth: { value: WIDTH }, uNear0: { value: NEAR0 }, uNear1: { value: NEAR1 },
   uColor: { value: COLOR.clone().multiplyScalar(GLOW) }, uAlpha: { value: 0 },
 };
 // (the dot shares the line's uniforms but its width)
 const dotUniforms = { ...uniforms, uWidth: { value: DOT } };
-const shaderOpts = { transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide } as const;
+const shaderOpts = { transparent: true, depthWrite: false, blending: AdditiveBlending, side: DoubleSide } as const;
 
 // The line and the dot for the Rust engine (src/engine/effects.ts), the ports' WGSL above. The engine hands a vertex
 // its position, normal, uv and colour alone, so there the line's next point rides as its normal and its side and how
@@ -187,7 +189,7 @@ fn surface_hook(s: ptr<function, Surface>, in: VertexOut) -> bool {
 /** the line's and the dot's numbers alike: the scene's size, the width, the alpha; where the line fades in; the colour */
 const laserLook: EffectLook = {
   numbers(u, out) {
-    const res = u.uRes.value as THREE.Vector2;
+    const res = u.uRes.value as Vec2;
     out[0] = res.x; out[1] = res.y; out[2] = num(u, 'uWidth'); out[3] = num(u, 'uAlpha');
     out[4] = num(u, 'uNear0'); out[5] = num(u, 'uNear1');
     rgb(u, 'uColor', out, 8);
@@ -195,23 +197,23 @@ const laserLook: EffectLook = {
 };
 
 const lineMat = effectLook(
-  portShader(new THREE.ShaderMaterial({ vertexShader: lineVert, fragmentShader: lineFrag, uniforms, ...shaderOpts }), linePort),
+  portShader(new LookMaterial({ vertexShader: lineVert, fragmentShader: lineFrag, uniforms, ...shaderOpts }), linePort),
   'aim-laser-line', LINE_HOOKS, laserLook);
 const dotMat = effectLook(
-  portShader(new THREE.ShaderMaterial({ vertexShader: dotVert, fragmentShader: dotFrag, uniforms: dotUniforms, ...shaderOpts }), dotPort),
+  portShader(new LookMaterial({ vertexShader: dotVert, fragmentShader: dotFrag, uniforms: dotUniforms, ...shaderOpts }), dotPort),
   'aim-laser-dot', DOT_HOOKS, laserLook);
 
-function lineGeometry(): THREE.BufferGeometry {
-  const n = LASER_LINES * LASER_POINTS * 2, g = new THREE.BufferGeometry();
+function lineGeometry(): Geometry {
+  const n = LASER_LINES * LASER_POINTS * 2, g = new Geometry();
   for (const [name, size] of [['position', 3], ['next', 3], ['side', 1], ['along', 1]] as const) {
-    g.setAttribute(name, new THREE.BufferAttribute(new Float32Array(n * size), size).setUsage(THREE.DynamicDrawUsage));
+    g.setAttribute(name, new Attribute(new Float32Array(n * size), size).setUsage(DynamicDrawUsage));
   }
-  const side = g.getAttribute('side') as THREE.BufferAttribute;
+  const side = g.getAttribute('side') as Attribute;
   for (let i = 0; i < n; i++) side.setX(i, i % 2 ? 1 : -1);
   // (the Rust engine's vertex has no attributes of the line's own: its next point as its normal, its side and how far
   // along as its uv, `write`)
   g.setAttribute('normal', g.getAttribute('next'));
-  const uv = new THREE.BufferAttribute(new Float32Array(n * 2), 2).setUsage(THREE.DynamicDrawUsage);
+  const uv = new Attribute(new Float32Array(n * 2), 2).setUsage(DynamicDrawUsage);
   for (let i = 0; i < n; i++) uv.setX(i, side.getX(i));
   g.setAttribute('uv', uv);
   const idx: number[] = [];
@@ -219,34 +221,34 @@ function lineGeometry(): THREE.BufferGeometry {
     const v = (l * LASER_POINTS + i) * 2;
     idx.push(v, v + 1, v + 2, v + 1, v + 3, v + 2);
   }
-  g.setIndex(new THREE.BufferAttribute(new Uint32Array(idx), 1).setUsage(THREE.DynamicDrawUsage));
+  g.setIndex(new Attribute(new Uint32Array(idx), 1).setUsage(DynamicDrawUsage));
   return g;
 }
 
-function dotGeometry(): THREE.BufferGeometry {
-  const g = new THREE.BufferGeometry(), n = LASER_LINES * 4;
-  g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(n * 3), 3).setUsage(THREE.DynamicDrawUsage));
+function dotGeometry(): Geometry {
+  const g = new Geometry(), n = LASER_LINES * 4;
+  g.setAttribute('position', new Attribute(new Float32Array(n * 3), 3).setUsage(DynamicDrawUsage));
   const corner = new Float32Array(n * 2), idx: number[] = [];
   for (let i = 0; i < LASER_LINES; i++) {
     corner.set([-1, -1, 1, -1, 1, 1, -1, 1], i * 8);
     idx.push(i * 4, i * 4 + 1, i * 4 + 2, i * 4, i * 4 + 2, i * 4 + 3);
   }
-  g.setAttribute('corner', new THREE.BufferAttribute(corner, 2));
+  g.setAttribute('corner', new Attribute(corner, 2));
   // (the Rust engine's vertex has no attribute of the dot's own: its corner as its uv)
   g.setAttribute('uv', g.getAttribute('corner'));
   g.setIndex(idx);
   return g;
 }
 
-let line: THREE.Mesh | null = null, dots: THREE.Mesh | null = null;
+let line: Mesh | null = null, dots: Mesh | null = null;
 /** what was asked for this frame: the paths and their ends (an end is null where the path just stops) */
 let shownAt = -1;
-const asked: { pts: THREE.Vector3[]; end: THREE.Vector3 | null }[] = [];
+const asked: { pts: Vec3[]; end: Vec3 | null }[] = [];
 let lines = 0;
 
 /** The aim preview's meshes, for warm-up (their programs compile at load). */
-export function warmLaser(): THREE.Object3D[] {
-  const l = new THREE.Mesh(lineGeometry(), lineMat), d = new THREE.Mesh(dotGeometry(), dotMat);
+export function warmLaser(): Node[] {
+  const l = new Mesh(lineGeometry(), lineMat), d = new Mesh(dotGeometry(), dotMat);
   l.frustumCulled = d.frustumCulled = false;
   return [l, d];
 }
@@ -255,7 +257,7 @@ export function warmLaser(): THREE.Object3D[] {
  * Show the preview this frame along these paths (points from the bow on, at most LASER_POINTS each), each with its
  * end's dot (or none). Call every frame it should show; once a frame passes without a call it eases out.
  */
-export function showLaser(paths: { pts: THREE.Vector3[]; end: THREE.Vector3 | null }[]): void {
+export function showLaser(paths: { pts: Vec3[]; end: Vec3 | null }[]): void {
   if (!line) start();
   shownAt = G.time;
   asked.length = 0;
@@ -264,10 +266,10 @@ export function showLaser(paths: { pts: THREE.Vector3[]; end: THREE.Vector3 | nu
 }
 
 /** The paths shown this frame (none once a frame passes without a call): what `tools/lab`'s `bowprop` reads. */
-export const laserPaths = (): readonly { pts: THREE.Vector3[]; end: THREE.Vector3 | null }[] => (G.time - shownAt < 0.05 ? asked : []);
+export const laserPaths = (): readonly { pts: Vec3[]; end: Vec3 | null }[] => (G.time - shownAt < 0.05 ? asked : []);
 
 function start(): void {
-  [line, dots] = warmLaser() as [THREE.Mesh, THREE.Mesh];
+  [line, dots] = warmLaser() as [Mesh, Mesh];
   line.renderOrder = dots.renderOrder = 5;
   G.scene.add(line, dots);
   uniforms.uAlpha.value = 0;
@@ -292,10 +294,10 @@ function start(): void {
 }
 
 function write(): void {
-  const g = line!.geometry, pos = g.getAttribute('position') as THREE.BufferAttribute, nxt = g.getAttribute('next') as THREE.BufferAttribute;
-  const along = g.getAttribute('along') as THREE.BufferAttribute;
-  const uv = g.getAttribute('uv') as THREE.BufferAttribute | undefined;
-  const dp = dots!.geometry.getAttribute('position') as THREE.BufferAttribute;
+  const g = line!.geometry, pos = g.getAttribute('position') as Attribute, nxt = g.getAttribute('next') as Attribute;
+  const along = g.getAttribute('along') as Attribute;
+  const uv = g.getAttribute('uv') as Attribute | undefined;
+  const dp = dots!.geometry.getAttribute('position') as Attribute;
   lines = asked.length;
   let tris = 0, nd = 0;
   asked.forEach((p, l) => {

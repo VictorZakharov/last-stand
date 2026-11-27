@@ -2,7 +2,8 @@
 // moss and old stones sprouting ferns and glowcaps; moss hangs in beards from its jaw, belly and arms.
 // A broad bony skull with a heavy brow, amber eyes deep in their sockets and upcurled tusks; gorilla
 // arms ending in knuckled fists with hooked claws.
-import * as THREE from '../../engine/three.ts';
+import { DoubleSide, Node, Vec2, Vec3 } from '../../engine/api/index.ts';
+import * as shapes from '../../engine/api/shapes/index.ts';
 import { createKit } from '../../core/materials';
 import { grunge, pbrMaterialMaps } from '../../core/textures';
 import { buildHumanoid, joint, resetPose, walkCycle, idle, deathFall, pulse, ramp } from './rig';
@@ -11,18 +12,18 @@ import { Sculpt, bend, frond, horn, lathe, limb, organic, rag, stripRig, taperTu
 import type { AnimState, Model } from '../../types';
 import { mulberry } from '../../util';
 
-const V = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
+const V = (x: number, y: number, z: number) => new Vec3(x, y, z);
 
 export function buildMossback(): Model {
   const kit = createKit(0x9cff6a);
   const g = pbrMaterialMaps(grunge(), 2, 1);
-  const hide = kit.rim({ color: 0x5e4a38, roughness: 0.8, map: g.map, normalMap: g.normalMap, normalScale: new THREE.Vector2(1.8, 1.8) }, 0x8a9a60, 0.3);
-  const moss = kit.rim({ color: 0x33561a, roughness: 1, map: g.map, normalMap: g.normalMap, normalScale: new THREE.Vector2(3, 3) }, 0x6a9a3a, 0.15);
-  const mossDark = kit.std({ color: 0x2c4a1a, roughness: 1, normalMap: g.normalMap, side: THREE.DoubleSide });
+  const hide = kit.rim({ color: 0x5e4a38, roughness: 0.8, map: g.map, normalMap: g.normalMap, normalScale: new Vec2(1.8, 1.8) }, 0x8a9a60, 0.3);
+  const moss = kit.rim({ color: 0x33561a, roughness: 1, map: g.map, normalMap: g.normalMap, normalScale: new Vec2(3, 3) }, 0x6a9a3a, 0.15);
+  const mossDark = kit.std({ color: 0x2c4a1a, roughness: 1, normalMap: g.normalMap, side: DoubleSide });
   const stone = kit.std({ color: 0x6a6c64, roughness: 0.85, map: g.map, normalMap: g.normalMap, flatShading: true });
-  const bone = kit.std({ color: 0xd8ccae, roughness: 0.45, normalMap: g.normalMap, normalScale: new THREE.Vector2(0.5, 0.5) });
+  const bone = kit.std({ color: 0xd8ccae, roughness: 0.45, normalMap: g.normalMap, normalScale: new Vec2(0.5, 0.5) });
   const claw = kit.std({ color: 0x241a12, roughness: 0.35 });
-  const fern = kit.rim({ color: 0x3f7a2a, roughness: 0.7, side: THREE.DoubleSide }, 0x7ab050, 0.2);
+  const fern = kit.rim({ color: 0x3f7a2a, roughness: 0.7, side: DoubleSide }, 0x7ab050, 0.2);
   const stem = kit.std({ color: 0x8a8270, roughness: 0.8 });
   const shroom = kit.std({ color: 0x0a221c, emissive: 0x2affc8, emissiveIntensity: 1.4, roughness: 0.6 });
   const eye = kit.glow(0xffb040, 7);
@@ -39,9 +40,9 @@ export function buildMossback(): Model {
   const r = mulberry(29);
   const lim = (len: number, r0: number, r1: number, b = 0, at = 0.35) => organic(limb(len, r0, r1, b, at, 14), r0 * 0.12, 10, len * 20);
   // small lumps need less detail
-  const lump = (sx: number, sy: number, sz: number, seed: number, amp = 0.14, f = 1.8) => organic(new THREE.IcosahedronGeometry(1, Math.max(sx, sy, sz) > 0.12 ? 2 : 1), amp, f, seed).scale(sx, sy, sz);
+  const lump = (sx: number, sy: number, sz: number, seed: number, amp = 0.14, f = 1.8) => organic(shapes.icosahedron(1, Math.max(sx, sy, sz) > 0.12 ? 2 : 1), amp, f, seed).scale(sx, sy, sz);
   const cap = (rad: number) => lathe([[0.001, 0.05 * rad], [0.8 * rad, 0], [rad, 0.02], [0.85 * rad, 0.25 * rad], [0.5 * rad, 0.45 * rad], [0.001, 0.5 * rad]], 12);
-  const beard = (parent: THREE.Object3D, pos: [number, number, number], n: number, w: number, len: number, seed: number, yaw = 0) => {
+  const beard = (parent: Node, pos: [number, number, number], n: number, w: number, len: number, seed: number, yaw = 0) => {
     for (let i = 0; i < n; i++) S.add(bend(rag(w, len * (0.7 + r() * 0.6), seed + i, 3), -0.15), mossDark, parent, [pos[0] + (i - (n - 1) / 2) * w * 0.7, pos[1], pos[2]], [0, yaw + (r() - 0.5) * 0.5, 0]);
   };
 
@@ -59,14 +60,14 @@ export function buildMossback(): Model {
   S.add(lump(0.44, 0.3, 0.36, 8, 0.2, 1.5), moss, j.chest, [0, 0.3, -0.12]);
   S.add(lump(0.3, 0.2, 0.26, 9, 0.2, 1.5), moss, j.spine, [0, 0.2, -0.13]);
   const stones: [number, number, number, number][] = [[0.18, 0.5, -0.2, 0.1], [-0.2, 0.46, -0.24, 0.12], [0.02, 0.56, -0.12, 0.09], [-0.08, 0.36, -0.42, 0.11], [0.24, 0.3, -0.34, 0.08]];
-  stones.forEach(([x, y, z, s], i) => S.add(organic(new THREE.DodecahedronGeometry(1, 0), 0.08, 2, 40 + i), stone, j.chest, [x, y, z], [r() * 3, r() * 3, 0], [s, s * 0.8, s]));
+  stones.forEach(([x, y, z, s], i) => S.add(organic(shapes.dodecahedron(1, 0), 0.08, 2, 40 + i), stone, j.chest, [x, y, z], [r() * 3, r() * 3, 0], [s, s * 0.8, s]));
   for (let i = 0; i < 7; i++) {
     const a = (i / 7) * Math.PI * 2 + r() * 0.4;
     S.add(frond(0.36 + r() * 0.16, 6, 0.5, 60 + i), fern, j.chest, [0.03 + Math.sin(a) * 0.05, 0.52, -0.2 + Math.cos(a) * 0.05], [0.7 * Math.cos(a) - 0.3, a, 0.7 * Math.sin(a) * 0.5]);
   }
   for (let i = 0; i < 6; i++) {
     const x = (r() - 0.5) * 0.5, y = 0.12 + r() * 0.3, z = -0.36 - r() * 0.06, s = 0.035 + r() * 0.03;
-    S.add(new THREE.CylinderGeometry(s * 0.25, s * 0.35, s * 1.4, 6).translate(0, s * 0.7, 0), stem, j.chest, [x, y, z], [-0.5, 0, x * 1.5]);
+    S.add(shapes.cylinder(s * 0.25, s * 0.35, s * 1.4, 6).translate(0, s * 0.7, 0), stem, j.chest, [x, y, z], [-0.5, 0, x * 1.5]);
     S.add(cap(s).translate(0, s * 1.35, 0), shroom, j.chest, [x, y, z], [-0.5, 0, x * 1.5]);
   }
   // shelf fungus stepping down one flank
@@ -83,20 +84,20 @@ export function buildMossback(): Model {
   S.add(lump(0.15, 0.12, 0.16, 10, 0.1), hide, j.head, [0, 0.05, 0.06]);
   S.add(lump(0.14, 0.04, 0.07, 11, 0.12, 3), hide, j.head, [0, 0.105, 0.15], [0.35, 0, 0]);
   S.add(lump(0.08, 0.06, 0.08, 12, 0.1), hide, j.head, [0, 0.04, 0.2]);
-  S.pair(new THREE.SphereGeometry(0.016, 8, 6), claw, j.head, null, [0.03, 0.05, 0.27]);
-  S.pair(new THREE.SphereGeometry(1, 10, 8), claw, j.head, null, [0.068, 0.078, 0.17], [0, 0, 0], [0.035, 0.024, 0.025]);
-  S.pair(new THREE.SphereGeometry(1, 10, 8), eye, j.head, null, [0.068, 0.078, 0.187], [0, 0, 0], [0.018, 0.013, 0.01]);
+  S.pair(shapes.sphere(0.016, 8, 6), claw, j.head, null, [0.03, 0.05, 0.27]);
+  S.pair(shapes.sphere(1, 10, 8), claw, j.head, null, [0.068, 0.078, 0.17], [0, 0, 0], [0.035, 0.024, 0.025]);
+  S.pair(shapes.sphere(1, 10, 8), eye, j.head, null, [0.068, 0.078, 0.187], [0, 0, 0], [0.018, 0.013, 0.01]);
   S.add(lump(0.12, 0.05, 0.1, 13, 0.12, 2.5), moss, j.head, [0, 0.15, 0.02]);
   S.pair(horn(0.12, 0.02, 0.8, V(0, 0, 1), V(1, 0.3, -0.4)), bone, j.head, null, [0.12, 0.1, 0.03]);
   const jaw = joint(j.head, 0, 0.0, 0.08);
   S.add(lump(0.13, 0.045, 0.13, 14, 0.1), hide, jaw, [0, -0.04, 0.07]);
   S.pair(horn(0.18, 0.028, 1.5, V(1, 0, 0), V(0.25, 1, 0.35), 4), bone, jaw, null, [0.08, -0.02, 0.15]);
-  for (let i = -2; i <= 2; i++) S.add(new THREE.ConeGeometry(0.009, 0.03, 4), bone, jaw, [i * 0.022, 0.0, 0.18 - Math.abs(i) * 0.012]);
+  for (let i = -2; i <= 2; i++) S.add(shapes.cone(0.009, 0.03, 4), bone, jaw, [i * 0.022, 0.0, 0.18 - Math.abs(i) * 0.012]);
   beard(jaw, [0, -0.07, 0.08], 3, 0.07, 0.2, 90);
 
   // --- arms: gorilla arms, forearms heavier than the upper arm, mossy shoulders, knuckled clawed fists
   S.pair(lump(0.16, 0.13, 0.16, 15, 0.2, 1.5), moss, j.shoulderL, j.shoulderR, [0.02, 0.05, -0.02]);
-  S.pair(organic(new THREE.DodecahedronGeometry(1, 0), 0.08, 2, 16), stone, j.shoulderL, j.shoulderR, [0.06, 0.16, -0.04], [0.4, 0.3, 0], [0.07, 0.06, 0.07]);
+  S.pair(organic(shapes.dodecahedron(1, 0), 0.08, 2, 16), stone, j.shoulderL, j.shoulderR, [0.06, 0.16, -0.04], [0.4, 0.3, 0], [0.07, 0.06, 0.07]);
   S.pair(frond(0.24, 6, 0.5, 17), fern, j.shoulderL, j.shoulderR, [0.02, 0.15, -0.06], [-0.5, 0, -0.5]);
   S.skinPair(lim(P.upperL + 0.09, 0.1, 0.085, 0.3), hide, j.shoulderL, j.elbowL, j.shoulderR, j.elbowR, P.upperL - 0.12, P.upperL);
   S.skinPair(lim(P.foreL + 0.099, 0.11, 0.1, 0.4, 0.3), hide, j.elbowL, j.handL, j.elbowR, j.handR, P.foreL - 0.132, P.foreL);

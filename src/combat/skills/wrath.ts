@@ -3,7 +3,7 @@
 // has as he begins it (`ActionState.form`): under `FRENZY.slam` a single hook into the foe before him; from it both
 // fists brought down together in a slam that strikes everything within `radius` of where they land too; from
 // `FRENZY.quake` the slam cracks the ground and throws the foes round it back. Cast only with a stack or more.
-import * as THREE from '../../engine/three.ts';
+import { Vec3 } from '../../engine/api/index.ts';
 import { G } from '../../state';
 import { hitEnemy } from '../damage';
 import { shockwave, groundFlash, crackDecal, decal } from '../../fx/effects';
@@ -123,8 +123,8 @@ const skill: InstantSkill = {
     const stacks = Math.max(1, spendFrenzy(player));
     // (harder with a leap's speed behind it: cast in a Pounce's air or as it lands)
     const damage = (def.damage + def.perStack * stacks) * (1 + POUNCE.slam * leapSpeed(player));
-    const facing = player.facing, dir = new THREE.Vector3(Math.sin(facing), 0, Math.cos(facing));
-    const p = player.pos, at = new THREE.Vector3(p.x + dir.x * LANDS, 0, p.z + dir.z * LANDS);
+    const facing = player.facing, dir = new Vec3(Math.sin(facing), 0, Math.cos(facing));
+    const p = player.pos, at = new Vec3(p.x + dir.x * LANDS, 0, p.z + dir.z * LANDS);
     const struck = new Set<Enemy>();
     const strike = (e: Enemy, knock: number, lift: number) => {
       if (struck.has(e)) return;

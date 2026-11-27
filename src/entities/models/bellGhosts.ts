@@ -10,8 +10,10 @@
 // added light, as an effect's, in `additive` materials (nearGlow: the shockwave's program, and its instanced twin for
 // the motes, compiled with the boss's warm-up), their own per body, made with the model and let go with it. A ghost
 // is four draws (shroud, halo, face, heart) and every ghost's motes one: a mesh a mote was 30 draws for three ghosts.
-import * as THREE from '../../engine/three.ts';
-import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import {
+  Attribute, Color, Geometry, InstancedMesh, Mat4, mergeGeometries, Mesh, Node, Quat, Vec2, Vec3,
+} from '../../engine/api/index.ts';
+import * as shapes from '../../engine/api/shapes/index.ts';
 import { additive } from '../../core/materials';
 import { mulberry } from '../../util';
 
@@ -21,7 +23,7 @@ export interface GhostCue {
   rush: number;
   burst: number;
   scatter: number;
-  bell: THREE.Vector3;
+  bell: Vec3;
 }
 
 /** how many ghosts there are, and the motes of a tail */
@@ -49,14 +51,14 @@ const LEAN = 0.4, HALO = 1.28, RIPPLE = 3.2;
  * length, swept back behind it (its profile lathed bottom to top, so its faces point out; its back is -z), and its two
  * arms, thin and tapering, reaching out before it and a little down.
  */
-export function shroudGeometry(): THREE.BufferGeometry {
+export function shroudGeometry(): Geometry {
   const r = mulberry(17);
   const profile = [[0.42, -1.05], [0.4, -0.75], [0.35, -0.45], [0.33, -0.15], [0.36, 0.05], [0.3, 0.18], [0.26, 0.3],
     [0.25, 0.42], [0.18, 0.55], [0.01, 0.6]];
-  const robe = new THREE.LatheGeometry(profile.map(([x, y]) => new THREE.Vector2(x, y)), 30);
+  const robe = shapes.lathe(profile.map(([x, y]) => new Vec2(x, y)), 30);
   // (nine tongues round the hem, each its own length, and the lower the robe the further its flight sweeps it back)
   const tongues = Array.from({ length: 9 }, () => 0.15 + r() * 0.3);
-  const at = robe.attributes.position as THREE.BufferAttribute;
+  const at = robe.attributes.position as Attribute;
   for (let i = 0; i < at.count; i++) {
     const x = at.getX(i), y = at.getY(i), z = at.getZ(i);
     const below = Math.max(0, -0.35 - y) / 0.7;
@@ -67,7 +69,7 @@ export function shroudGeometry(): THREE.BufferGeometry {
     at.setXYZ(i, x * (1 + below * 0.15), y - ragged * below * below, z - below ** 1.5 * 0.45);
   }
   const arms = [-1, 1].map((side) => {
-    const arm = new THREE.ConeGeometry(0.075, 0.62, 8, 3, true).rotateX(Math.PI / 2 + 0.5);
+    const arm = shapes.cone(0.075, 0.62, 8, 3, true).rotateX(Math.PI / 2 + 0.5);
     return arm.rotateY(-side * 0.25).translate(side * 0.27, 0.0, 0.3);
   });
   const shroud = mergeGeometries([robe.toNonIndexed(), ...arms.map((arm) => arm.toNonIndexed())])!;
@@ -78,9 +80,9 @@ export function shroudGeometry(): THREE.BufferGeometry {
 }
 
 /** Its face, in the front of its hood: two eyes and a mouth opened in a wail. */
-export function faceGeometry(): THREE.BufferGeometry {
-  const eyes = [-0.085, 0.085].map((x) => new THREE.SphereGeometry(0.04, 8, 6).scale(1, 1.35, 0.6).translate(x, 0.33, 0.22));
-  const mouth = new THREE.TorusGeometry(0.045, 0.015, 6, 12).scale(1, 1.5, 1).translate(0, 0.2, 0.235);
+export function faceGeometry(): Geometry {
+  const eyes = [-0.085, 0.085].map((x) => shapes.sphere(0.04, 8, 6).scale(1, 1.35, 0.6).translate(x, 0.33, 0.22));
+  const mouth = shapes.torus(0.045, 0.015, 6, 12).scale(1, 1.5, 1).translate(0, 0.2, 0.235);
   const face = mergeGeometries([...eyes, mouth].map((g) => g.toNonIndexed()))!;
   for (const g of [...eyes, mouth]) g.dispose();
   return face;
@@ -93,27 +95,27 @@ export interface GhostsSeen {
   readonly most: number;
   /** ghost `i`'s place in the world into `out`, or null where it isn't free to seize anyone (not shown, rushing into
    *  the bell or bursting out of it, scattered) */
-  freeAt(i: number, out: THREE.Vector3): THREE.Vector3 | null;
+  freeAt(i: number, out: Vec3): Vec3 | null;
   /** ghost `i` held at a place in the world (carrying a hero over his head), or let go (null) */
-  hold(i: number, at: THREE.Vector3 | null): void;
+  hold(i: number, at: Vec3 | null): void;
 }
 
 /** A ghost: its body (shroud, halo, face, heart), and its way so far (the model's space, newest first). */
 interface Ghost {
-  body: THREE.Group;
-  halo: THREE.Mesh;
-  heart: THREE.Mesh;
-  way: THREE.Vector3[];
+  body: Node;
+  halo: Mesh;
+  heart: Mesh;
+  way: Vec3[];
   /** where something holds it (the world), or null */
-  held: THREE.Vector3 | null;
+  held: Vec3 | null;
 }
 
 /** The ghosts of one Bell-Warden, hung on `root`: posed each frame by `update`, let go by `dispose`. */
-export function bellGhosts(root: THREE.Object3D) {
+export function bellGhosts(root: Node) {
   const shroud = shroudGeometry();
   const face = faceGeometry();
-  const heartGeo = new THREE.SphereGeometry(0.07, 12, 8);
-  const moteGeo = new THREE.SphereGeometry(0.2, 10, 8);
+  const heartGeo = shapes.sphere(0.07, 12, 8);
+  const moteGeo = shapes.sphere(0.2, 10, 8);
   const shroudMat = additive(PALE, BODY, SHROUD_SEE);
   const haloMat = additive(PALE, BODY, HALO_SEE);
   const heartMat = additive(0xdff0ff, HEART, HEART_SEE);
@@ -121,33 +123,33 @@ export function bellGhosts(root: THREE.Object3D) {
   const moteMat = additive(PALE, BODY, MOTE_SEE);
   // (every ghost's motes one instanced mesh, each mote fading along its tail by its colour: added light, so a darker
   // colour is a fainter mote)
-  const motes = new THREE.InstancedMesh(moteGeo, moteMat, MOST * MOTES);
+  const motes = new InstancedMesh(moteGeo, moteMat, MOST * MOTES);
   motes.name = 'bell ghosts\' tails';
   motes.frustumCulled = false;
-  const _c = new THREE.Color();
+  const _c = new Color();
   for (let i = 0; i < MOST * MOTES; i++) motes.setColorAt(i, _c.setScalar(0));
   root.add(motes);
   const ghosts: Ghost[] = [];
   for (let i = 0; i < MOST; i++) {
-    const body = new THREE.Group();
+    const body = new Node();
     body.name = 'bell ghost';
-    body.add(new THREE.Mesh(shroud, shroudMat));
-    const halo = new THREE.Mesh(shroud, haloMat);
+    body.add(new Mesh(shroud, shroudMat));
+    const halo = new Mesh(shroud, haloMat);
     halo.scale.setScalar(HALO);
-    const heart = new THREE.Mesh(heartGeo, heartMat);
+    const heart = new Mesh(heartGeo, heartMat);
     heart.position.set(0, -0.28, 0.04);
-    body.add(halo, heart, new THREE.Mesh(face, faceMat));
+    body.add(halo, heart, new Mesh(face, faceMat));
     root.add(body);
     ghosts.push({ body, halo, heart, way: [], held: null });
   }
 
-  const _at = new THREE.Vector3(), _dir = new THREE.Vector3(), _m = new THREE.Matrix4(), _s = new THREE.Vector3();
-  const _q = new THREE.Quaternion();
+  const _at = new Vec3(), _dir = new Vec3(), _m = new Mat4(), _s = new Vec3();
+  const _q = new Quat();
   /** the last frame's cue: whether a ghost is free to seize (no toll's rush or burst, not scattered) */
   let free = true;
 
   /** Where ghost `i` drifts at time `t` with no toll or scatter: round the ring, swooping between its heights. */
-  function drifting(i: number, t: number, out: THREE.Vector3): THREE.Vector3 {
+  function drifting(i: number, t: number, out: Vec3): Vec3 {
     const a = t * TURN * (i % 2 ? -1 : 1) + (i * Math.PI * 2) / MOST;
     const r = RING + Math.sin(t * 0.55 + i * 1.7) * RING_SWAY;
     const k = 0.5 + 0.5 * Math.sin(t * SWOOP + i * 2.3);
@@ -183,7 +185,7 @@ export function bellGhosts(root: THREE.Object3D) {
       // (held: where its hold has it, carrying a hero, in the model's space)
       if (g.held) root.worldToLocal(_at.copy(g.held));
       const last = g.way[0];
-      g.way.unshift((g.way.length >= KEPT ? g.way.pop()! : new THREE.Vector3()).copy(_at));
+      g.way.unshift((g.way.length >= KEPT ? g.way.pop()! : new Vec3()).copy(_at));
       // (upright, turned to the way it goes and leaning into it, nosing down as it swoops down, rocking a little)
       if (last && last.distanceToSquared(_at) > 1e-8) {
         _dir.copy(_at).sub(last);
@@ -215,7 +217,7 @@ export function bellGhosts(root: THREE.Object3D) {
     },
     hold(i, at) {
       const g = ghosts[i];
-      if (g) g.held = at ? (g.held ?? new THREE.Vector3()).copy(at) : null;
+      if (g) g.held = at ? (g.held ?? new Vec3()).copy(at) : null;
     },
   };
 

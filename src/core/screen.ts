@@ -2,7 +2,7 @@
 // own canvas (src/engine), which takes the pointer and the keys' focus, sized by the window and the screen's pixel
 // ratio. It answers what the game and the lab ask of the canvas's host (`G.renderer`: its element, its ratio, its
 // size, counts). Nothing draws through it: the engine draws the frame, the world's overlays with it.
-import * as THREE from '../engine/three.ts';
+import { Vec2 } from '../engine/api/index.ts';
 
 /** what the counts a frame ask of the host (`info`): three's renderer kept them; the engine keeps its own
  *  (`RUST.bridge.stats`), so these stand at none */
@@ -54,12 +54,12 @@ export class GameScreen {
   }
 
   /** The frame's size in css px, into `out`. */
-  getSize(out: THREE.Vector2): THREE.Vector2 {
+  getSize(out: Vec2): Vec2 {
     return out.set(this.cssWidth, this.cssHeight);
   }
 
   /** The frame's size in the screen's pixels, into `out`. */
-  getDrawingBufferSize(out: THREE.Vector2): THREE.Vector2 {
+  getDrawingBufferSize(out: Vec2): Vec2 {
     return out.set(Math.floor(this.cssWidth * this.ratio), Math.floor(this.cssHeight * this.ratio));
   }
 

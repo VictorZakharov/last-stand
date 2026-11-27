@@ -1,5 +1,5 @@
 // Rending Cleave: a wide melee sweep in front of the caster that restores energy per hit.
-import * as THREE from '../../engine/three.ts';
+import { ColorRepresentation } from '../../engine/api/index.ts';
 import { G } from '../../state';
 import { hitEnemy } from '../damage';
 import { particles, col } from '../../fx/particles';
@@ -23,7 +23,7 @@ export const heftOf = (player: Player): Heft => (player.weaponStyle === 'twoHand
 const swung = new WeakSet<object>();
 
 /** Sparks where the blade bites. */
-export function sparks(x: number, y: number, z: number, color: THREE.ColorRepresentation, n = 10): void {
+export function sparks(x: number, y: number, z: number, color: ColorRepresentation, n = 10): void {
   for (let i = 0; i < n; i++) {
     const a = Math.random() * Math.PI * 2, s = rand(3, 8);
     particles.glow.spawn({

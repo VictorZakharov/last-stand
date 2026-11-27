@@ -11,8 +11,11 @@ import { rustLook } from '../engine/custom';
 import { causticsLook, fallingLook, waterLook } from '../engine/looks/water';
 import type { OwnLooks } from '../core/shaderPorts';
 import { causticNodes, fallingNodes, waterLooks, waterNodes } from './villageNodes';
-import * as THREE from '../engine/three.ts';
-import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import {
+  Bezier2Curve3, CanvasTexture, DoubleSide, Geometry, LitMaterial, Material, mergeGeometries, Mesh, Node, Outline,
+  RepeatWrapping, Sphere, Texture, Vec2, Vec3,
+} from '../engine/api/index.ts';
+import * as shapes from '../engine/api/shapes/index.ts';
 import { canvasOf, ctx2d } from '../core/textures';
 import { seeThrough } from '../core/seeThrough';
 import { mulberry } from '../util';
@@ -46,7 +49,7 @@ const CORNERS = 8, FIRST_CORNER = Math.PI / CORNERS;
 const STONE_TILE = 0.6;
 
 /** what the fountain is built of: the village's own stone */
-export interface FountainMats { stone: THREE.Material; coping: THREE.Material }
+export interface FountainMats { stone: Material; coping: Material }
 
 /** the falling water's and the foam's glow at full day (the sky's light scattered through them), and the least of
  *  their glow and of the caustics by night (a share of the day's): from play, "I dont think water reflects light
@@ -87,9 +90,9 @@ const GLINT_MOST = 0.8;
 export type FountainLight = (day: number) => void;
 
 /** The fountain at (0, 0) of `scene`, an obstacle round its basin; its water moving by `updaters`. */
-export function buildFountain(scene: THREE.Object3D, M: FountainMats, obstacles: Obstacle[],
+export function buildFountain(scene: Node, M: FountainMats, obstacles: Obstacle[],
   updaters: Updater[]): FountainLight {
-  const g = new THREE.Group();
+  const g = new Node();
   g.name = 'fountain';
   scene.add(g);
   const time = { value: 0 };
@@ -99,11 +102,11 @@ export function buildFountain(scene: THREE.Object3D, M: FountainMats, obstacles:
     [r - rim - 0.05, high - 0.07], [r - rim, high - 0.1], [r - rim, floor]], M.coping, CORNERS, FIRST_CORNER);
   for (let k = 0; k < CORNERS; k++) {
     const a = FIRST_CORNER + k * Math.PI * 2 / CORNERS, out = r + 0.02;
-    const pilaster = new THREE.Mesh(new THREE.BoxGeometry(0.26, high + 0.08, 0.26), M.coping);
+    const pilaster = new Mesh(shapes.box(0.26, high + 0.08, 0.26), M.coping);
     pilaster.position.set(Math.sin(a) * out, (high + 0.08) / 2, Math.cos(a) * out);
     pilaster.rotation.y = a;
     g.add(pilaster);
-    const ball = new THREE.Mesh(new THREE.SphereGeometry(0.11, 12, 8), M.coping);
+    const ball = new Mesh(shapes.sphere(0.11, 12, 8), M.coping);
     ball.position.set(Math.sin(a) * out, high + 0.19, Math.cos(a) * out);
     g.add(ball);
   }
@@ -122,7 +125,7 @@ export function buildFountain(scene: THREE.Object3D, M: FountainMats, obstacles:
   lathe(g, [[0.55, floor], [0.42, 0.22], [0.26, 0.34], [0.22, 0.9], [0.3, 1.0], [0.24, 1.08], [0.2, BOWL.foot]], M.stone, 32);
   for (let k = 0; k < 4; k++) {
     const a = k * Math.PI / 2;
-    const spout = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.07, 0.2, 8).rotateX(Math.PI / 2).translate(0, 0, 0.1), M.coping);
+    const spout = new Mesh(shapes.cylinder(0.05, 0.07, 0.2, 8).rotateX(Math.PI / 2).translate(0, 0, 0.1), M.coping);
     spout.position.set(Math.sin(a) * (SPOUT.at - 0.08), SPOUT.y, Math.cos(a) * (SPOUT.at - 0.08));
     spout.rotation.y = a;
     g.add(spout);
@@ -145,12 +148,12 @@ export function buildFountain(scene: THREE.Object3D, M: FountainMats, obstacles:
     shell(g, BOWL.r + 0.04, BOWL.r + 0.38, water, BOWL.water + 0.06, curtain),
     shell(g, TOP.r + 0.03, TOP.r + 0.2, BOWL.water, TOP.water + 0.04, curtain),
   ];
-  const jet = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.03, 0.4, 8, 1, true), jetMat);
+  const jet = new Mesh(shapes.cylinder(0.015, 0.03, 0.4, 8, 1, true), jetMat);
   jet.position.y = TOP.tip + 0.2;
   g.add(jet);
   // (the arcs first: merged, the jet and they are sorted where the first stood, `asOne`, and the arcs cross the
   // curtain and the foam where the jet stands clear over the top bowl)
-  const streams: THREE.Mesh[] = [];
+  const streams: Mesh[] = [];
   for (let k = 0; k < 4; k++) {
     const stream = arc(k * Math.PI / 2, jetMat);
     g.add(stream);
@@ -158,32 +161,32 @@ export function buildFountain(scene: THREE.Object3D, M: FountainMats, obstacles:
   }
   streams.push(jet);
   // the foam where the curtain strikes the basin, and where each arc lands, turning slowly
-  const foamMat = new THREE.MeshStandardMaterial({
+  const foamMat = new LitMaterial({
     color: 0xeef6f8, emissive: FALLING_GLOW, roughness: 0.3, alphaMap: foamTexture(), transparent: true, opacity: 0.6,
-    depthWrite: false, side: THREE.DoubleSide,
+    depthWrite: false, side: DoubleSide,
   });
   seeThrough(foamMat, 'prop');
-  const foam = new THREE.Mesh(new THREE.RingGeometry(BOWL.r + 0.12, BOWL.r + 0.75, 48, 1).rotateX(-Math.PI / 2), foamMat);
+  const foam = new Mesh(shapes.ring(BOWL.r + 0.12, BOWL.r + 0.75, 48, 1).rotateX(-Math.PI / 2), foamMat);
   foam.position.y = water + 0.006;
   g.add(foam);
-  const splashes: THREE.Mesh[] = [];
+  const splashes: Mesh[] = [];
   for (let k = 0; k < 4; k++) {
     const a = k * Math.PI / 2 + Math.PI / 4;
-    const splash = new THREE.Mesh(new THREE.CircleGeometry(0.28, 20).rotateX(-Math.PI / 2), foamMat);
+    const splash = new Mesh(shapes.circle(0.28, 20).rotateX(-Math.PI / 2), foamMat);
     splash.position.set(Math.sin(a) * SPOUT.lands, water + 0.008, Math.cos(a) * SPOUT.lands);
     g.add(splash);
     splashes.push(splash);
   }
-  const falling = new Set<THREE.Material>([curtain, jetMat, foamMat]);
+  const falling = new Set<Material>([curtain, jetMat, foamMat]);
   g.traverse((o) => {
-    if (o instanceof THREE.Mesh && !falling.has(o.material as THREE.Material) && !o.userData.water) {
+    if (o instanceof Mesh && !falling.has(o.material as Material) && !o.userData.water) {
       o.castShadow = o.receiveShadow = true;
     }
   });
-  const tiers = g.children.filter((o): o is THREE.Mesh => !walls.includes(o) && o instanceof THREE.Mesh
+  const tiers = g.children.filter((o): o is Mesh => !walls.includes(o) && o instanceof Mesh
     && (o.material === M.stone || o.material === M.coping));
   // (its stone drawn as one a material: the basin's wall, the tiers' coping and their stone)
-  const wall = asOne(g, walls as THREE.Mesh[]);
+  const wall = asOne(g, walls as Mesh[]);
   const tiersAsOne = [M.coping, M.stone].map((m) => asOne(g, tiers.filter((o) => o.material === m)));
   // (and what blends and stands still, each in the order three drew it, from the lowest up: the pools, the curtains,
   // the jet and the arcs, 10 draws to 3; the foam and the splashes turn, each its own way, and stay apart)
@@ -223,7 +226,7 @@ const STONE_ATTRIBUTES = ['position', 'normal', 'uv'];
  * 10 of the frame's 33 ms (from play, "ok but I want 60 fps"). `sorted`: they blend, and three sorts what blends by its
  * bounds' middle, so the merge is sorted as its first piece was (`sortedAs`) and drawn in the order of `meshes`.
  */
-function asOne(g: THREE.Group, meshes: THREE.Mesh[], sorted = false): THREE.Mesh {
+function asOne(g: Node, meshes: Mesh[], sorted = false): Mesh {
   const parts = meshes.map((mesh) => {
     mesh.updateMatrix();
     const part = mesh.geometry.index ? mesh.geometry.toNonIndexed() : mesh.geometry.clone();
@@ -234,7 +237,7 @@ function asOne(g: THREE.Group, meshes: THREE.Mesh[], sorted = false): THREE.Mesh
   if (!merged) throw new Error('fountain: its parts wouldn\'t merge');
   if (sorted) sortedAs(merged, parts[0]);
   for (const part of parts) part.dispose();
-  const one = new THREE.Mesh(merged, meshes[0].material);
+  const one = new Mesh(merged, meshes[0].material);
   one.castShadow = meshes[0].castShadow;
   one.receiveShadow = meshes[0].receiveShadow;
   g.add(one);
@@ -250,34 +253,34 @@ function asOne(g: THREE.Group, meshes: THREE.Mesh[], sorted = false): THREE.Mesh
  * bounds' middle, and a merge's own middle lay among all its pieces (the pools' rose to the bowls', and the basin's
  * water was drawn over the curtain falling into it, which vanished at its foot). Culling still meets all of it.
  */
-function sortedAs(merged: THREE.BufferGeometry, first: THREE.BufferGeometry): void {
+function sortedAs(merged: Geometry, first: Geometry): void {
   first.computeBoundingSphere();
   const middle = first.boundingSphere!.center.clone();
   const position = merged.attributes.position;
-  const point = new THREE.Vector3();
+  const point = new Vec3();
   let reach = 0;
   for (let k = 0; k < position.count; k++) reach = Math.max(reach, point.fromBufferAttribute(position, k).distanceTo(middle));
-  merged.boundingSphere = new THREE.Sphere(middle, reach);
+  merged.boundingSphere = new Sphere(middle, reach);
 }
 
 /** A solid turned about y from its profile's points (radius, height), from `start` round. */
-function lathe(g: THREE.Object3D, profile: readonly [number, number][], m: THREE.Material, segments: number,
-  start = 0): THREE.Mesh {
-  const points = profile.map(([x, y]) => new THREE.Vector2(x, y));
-  const geometry = new THREE.LatheGeometry(points, segments, start);
+function lathe(g: Node, profile: readonly [number, number][], m: Material, segments: number,
+  start = 0): Mesh {
+  const points = profile.map(([x, y]) => new Vec2(x, y));
+  const geometry = shapes.lathe(points, segments, start);
   // (its stone laid in metres, round its widest and up its profile: a lathe's own UVs stretch a tile round it whole)
   const round = Math.PI * 2 * Math.max(...profile.map(([x]) => x)) / STONE_TILE;
   const along = [0];
   for (let k = 1; k < points.length; k++) along.push(along[k - 1] + points[k].distanceTo(points[k - 1]) / STONE_TILE);
   const uv = geometry.attributes.uv;
   for (let k = 0; k < uv.count; k++) uv.setXY(k, uv.getX(k) * round, along[k % points.length]);
-  const mesh = new THREE.Mesh(geometry, m);
+  const mesh = new Mesh(geometry, m);
   g.add(mesh);
   return mesh;
 }
 
 /** A turned bowl's rim scalloped: eight lobes round it, pushed out by `lobe` of its radius past `from` m out. */
-function scallop(mesh: THREE.Mesh, from: number): void {
+function scallop(mesh: Mesh, from: number): void {
   const p = mesh.geometry.attributes.position;
   for (let k = 0; k < p.count; k++) {
     const x = p.getX(k), z = p.getZ(k), out = Math.hypot(x, z);
@@ -289,8 +292,8 @@ function scallop(mesh: THREE.Mesh, from: number): void {
 }
 
 /** The basin's octagon inside its rim, `radius` to its corners, as a shape laid flat (its corners the basin's). */
-function octagon(radius: number): THREE.Shape {
-  const s = new THREE.Shape();
+function octagon(radius: number): Outline {
+  const s = new Outline();
   for (let k = 0; k <= CORNERS; k++) {
     const a = FIRST_CORNER + k * Math.PI * 2 / CORNERS;
     if (k === 0) s.moveTo(Math.sin(a) * radius, -Math.cos(a) * radius);
@@ -300,18 +303,18 @@ function octagon(radius: number): THREE.Shape {
 }
 
 /** A circle as a shape laid flat. */
-function circle(radius: number): THREE.Shape {
-  const s = new THREE.Shape();
+function circle(radius: number): Outline {
+  const s = new Outline();
   s.absarc(0, 0, radius, 0, Math.PI * 2, false);
   return s;
 }
 
 /** A flat surface of `shape` at height `y` (water, or the floor under it). */
-function flat(g: THREE.Object3D, shape: THREE.Shape, y: number, m: THREE.Material): THREE.Mesh {
-  const geometry = new THREE.ShapeGeometry(shape, 24).rotateX(-Math.PI / 2);
+function flat(g: Node, shape: Outline, y: number, m: Material): Mesh {
+  const geometry = shapes.flat(shape, 24).rotateX(-Math.PI / 2);
   const uv = geometry.attributes.uv, p = geometry.attributes.position;
   for (let k = 0; k < uv.count; k++) uv.setXY(k, p.getX(k), p.getZ(k));
-  const mesh = new THREE.Mesh(geometry, m);
+  const mesh = new Mesh(geometry, m);
   mesh.position.y = y;
   mesh.receiveShadow = true;
   mesh.userData.water = true;
@@ -320,24 +323,24 @@ function flat(g: THREE.Object3D, shape: THREE.Shape, y: number, m: THREE.Materia
 }
 
 /** A curtain of falling water: an open shell from `top` (its radius `r0`) down to `bottom` (`r1`). */
-function shell(g: THREE.Object3D, r0: number, r1: number, bottom: number, top: number, m: THREE.Material): THREE.Mesh {
-  const mesh = new THREE.Mesh(new THREE.CylinderGeometry(r0, r1, top - bottom, 48, 1, true), m);
+function shell(g: Node, r0: number, r1: number, bottom: number, top: number, m: Material): Mesh {
+  const mesh = new Mesh(shapes.cylinder(r0, r1, top - bottom, 48, 1, true), m);
   mesh.position.y = (top + bottom) / 2;
   g.add(mesh);
   return mesh;
 }
 
 /** A spout's arc of water (the spout facing `a` rad round), out and down into the basin, its streaks along it. */
-function arc(a: number, m: THREE.Material): THREE.Mesh {
-  const dir = (out: number, y: number): THREE.Vector3 => new THREE.Vector3(Math.sin(a) * out, y, Math.cos(a) * out);
+function arc(a: number, m: Material): Mesh {
+  const dir = (out: number, y: number): Vec3 => new Vec3(Math.sin(a) * out, y, Math.cos(a) * out);
   const turned = a + Math.PI / 4;
-  const landing = new THREE.Vector3(Math.sin(turned) * SPOUT.lands, FOUNTAIN.water, Math.cos(turned) * SPOUT.lands);
-  const curve = new THREE.QuadraticBezierCurve3(dir(SPOUT.at + 0.02, SPOUT.y), dir(SPOUT.at + 0.7, SPOUT.y + 0.45), landing);
-  const geometry = new THREE.TubeGeometry(curve, 24, 0.016, 6, false);
+  const landing = new Vec3(Math.sin(turned) * SPOUT.lands, FOUNTAIN.water, Math.cos(turned) * SPOUT.lands);
+  const curve = new Bezier2Curve3(dir(SPOUT.at + 0.02, SPOUT.y), dir(SPOUT.at + 0.7, SPOUT.y + 0.45), landing);
+  const geometry = shapes.tube(curve, 24, 0.016, 6, false);
   // (along the tube as v, so the streaks run down it as they do the curtains)
   const uv = geometry.attributes.uv;
   for (let k = 0; k < uv.count; k++) uv.setXY(k, uv.getY(k), uv.getX(k) * 2);
-  return new THREE.Mesh(geometry, m);
+  return new Mesh(geometry, m);
 }
 
 /**
@@ -345,8 +348,8 @@ function arc(a: number, m: THREE.Material): THREE.Mesh {
  * normal bent by rings running out from the middle (where the water falls) and two slow crossing swells, all on the
  * game's clock (`time`).
  */
-function waterMaterial(time: { value: number }, colour: number): THREE.MeshStandardMaterial {
-  const m = new THREE.MeshStandardMaterial({
+function waterMaterial(time: { value: number }, colour: number): LitMaterial {
+  const m = new LitMaterial({
     color: colour, roughness: 0.1, metalness: 0.1, transparent: true, depthWrite: false,
   });
   rustLook(m, waterLook(time, skyLight, { rough: WATER_LIT_ROUGH, shine: WATER_LIT_SHINE }));
@@ -363,8 +366,8 @@ function waterMaterial(time: { value: number }, colour: number): THREE.MeshStand
  * The basin's floor: pale stone with the light the water above focuses drifting over it, a web of bright lines that
  * shifts as the ripples do (two warped grids of waves, their troughs' meeting lit), on the game's clock.
  */
-function causticFloor(time: { value: number }, sunlit: { value: number }): THREE.MeshStandardMaterial {
-  const m = new THREE.MeshStandardMaterial({ color: 0x8f9a92, roughness: 0.85 });
+function causticFloor(time: { value: number }, sunlit: { value: number }): LitMaterial {
+  const m = new LitMaterial({ color: 0x8f9a92, roughness: 0.85 });
   rustLook(m, causticsLook(time, sunlit));
   causticNodes(m, time, sunlit);
   return seeThrough(m, 'propFoot');
@@ -372,13 +375,13 @@ function causticFloor(time: { value: number }, sunlit: { value: number }): THREE
 
 /** Falling water: white streaks of a picture, see-through between them, scrolled along a shell (`around` times round),
  *  `opacity` at its whitest. */
-function fallingWater(streaks: THREE.Texture, around: number, opacity: number): THREE.MeshStandardMaterial {
+function fallingWater(streaks: Texture, around: number, opacity: number): LitMaterial {
   const map = streaks.clone();
   map.repeat.set(around, 1);
   map.needsUpdate = true;
-  const m = new THREE.MeshStandardMaterial({
+  const m = new LitMaterial({
     color: 0xdfeef2, emissive: FALLING_GLOW, roughness: 0.85, alphaMap: map, transparent: true, opacity, depthWrite: false,
-    side: THREE.DoubleSide,
+    side: DoubleSide,
   });
   rustLook(m, fallingLook(skyLight));
   const sky = skyLight;
@@ -389,7 +392,7 @@ function fallingWater(streaks: THREE.Texture, around: number, opacity: number): 
 
 /** The falling water's streaks: thin threads down a tile, feathered across, each broken into runs that fade in and out
  *  along it, of its own strength; dark (see-through) between them. */
-function streakTexture(): THREE.Texture {
+function streakTexture(): Texture {
   // (at half this, threads two to four texels wide, the curtains read as smeared white over the bowls)
   const width = 256, height = 512;
   const c = canvasOf(width, height), x = ctx2d(c);
@@ -404,14 +407,14 @@ function streakTexture(): THREE.Texture {
       from += long + 20 + rng() * 120;
     }
   }
-  const t = new THREE.CanvasTexture(c);
-  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  const t = new CanvasTexture(c);
+  t.wrapS = t.wrapT = RepeatWrapping;
   return t;
 }
 
 /** The foam's picture, laid flat over the ring round the falling water: soft white flecks, thickest at the ring's inner
  *  edge (the middle of the picture), thinning out. */
-function foamTexture(): THREE.Texture {
+function foamTexture(): Texture {
   const size = 256, c = canvasOf(size), x = ctx2d(c);
   const rng = mulberry(91);
   x.fillStyle = '#000';
@@ -434,7 +437,7 @@ function foamTexture(): THREE.Texture {
     x.fillStyle = fleck;
     x.fillRect(size / 2 + Math.cos(a) * d - r, size / 2 + Math.sin(a) * d - r, r * 2, r * 2);
   }
-  return new THREE.CanvasTexture(c);
+  return new CanvasTexture(c);
 }
 
 /** One run of a thread of water: `wide` px across at `at`, from `from` down `long` px, fading in and out at its ends. */

@@ -1,6 +1,8 @@
 // The game's geometry handed to the engine: a mesh's vertices (written in place where they only moved), an instanced
 // mesh's set of matrices and tints, and a skinned mesh's bones, written into the frame's own memory.
-import * as THREE from './three.ts';
+import {
+  Attribute, Geometry, InstancedMesh, InterleavedBufferAttribute, Mat4, Skeleton, SkinnedMesh,
+} from './api/index.ts';
 import type { Core } from './core';
 
 /** (its attributes as handed over too: a geometry given others in their place, a hero's piece at another detail,
@@ -9,17 +11,17 @@ interface GeometryEntry {
   id: number; version: number; position: unknown; index: unknown; draws: number; indexVersion: number;
 }
 interface SetEntry { id: number; version: number; count: number }
-type Attribute = THREE.BufferAttribute | THREE.InterleavedBufferAttribute;
+type AnyAttribute = Attribute | InterleavedBufferAttribute;
 
-const scratchMatrix = new THREE.Matrix4();
-const IDENTITY = new THREE.Matrix4();
+const scratchMatrix = new Mat4();
+const IDENTITY = new Mat4();
 const EMPTY_FLOATS = new Float32Array(0), EMPTY_SHORTS = new Uint16Array(0), EMPTY_INDICES = new Uint32Array(0);
 
 /** An attribute's values as floats, whatever array holds them (interleaved, normalized bytes...). */
-function floatsOf(attribute: Attribute | undefined): Float32Array {
+function floatsOf(attribute: AnyAttribute | undefined): Float32Array {
   if (!attribute) return EMPTY_FLOATS;
-  const plain = attribute as THREE.BufferAttribute;
-  const interleaved = (attribute as THREE.InterleavedBufferAttribute).isInterleavedBufferAttribute;
+  const plain = attribute as Attribute;
+  const interleaved = (attribute as InterleavedBufferAttribute).isInterleavedBufferAttribute;
   if (!interleaved && plain.array instanceof Float32Array) {
     return plain.array.length === attribute.count * attribute.itemSize ? plain.array
       : plain.array.subarray(0, attribute.count * attribute.itemSize);
@@ -32,9 +34,9 @@ function floatsOf(attribute: Attribute | undefined): Float32Array {
 }
 
 export class Geometries {
-  private geometries = new WeakMap<THREE.BufferGeometry, GeometryEntry>();
-  private sets = new WeakMap<THREE.InstancedMesh, SetEntry>();
-  private skeletonFrames = new WeakMap<THREE.Skeleton, { frame: number; binds: { bind: number[]; at: number }[] }>();
+  private geometries = new WeakMap<Geometry, GeometryEntry>();
+  private sets = new WeakMap<InstancedMesh, SetEntry>();
+  private skeletonFrames = new WeakMap<Skeleton, { frame: number; binds: { bind: number[]; at: number }[] }>();
 
   constructor(private core: Core) {}
 
@@ -45,13 +47,13 @@ export class Geometries {
   }
 
   /** A geometry's mesh in the engine, its vertices placed by the attribute `positions`; 0: it has none. */
-  geometryId(geometry: THREE.BufferGeometry, positions = 'position'): number {
+  geometryId(geometry: Geometry, positions = 'position'): number {
     const core = this.core, attributes = geometry.attributes;
-    const position = attributes[positions] as THREE.BufferAttribute | undefined;
+    const position = attributes[positions] as Attribute | undefined;
     if (!position) return 0;
     const index = geometry.index;
     // (a geometry rewritten in place says so by its attributes' versions)
-    const colorVersion = (attributes.color as THREE.BufferAttribute | undefined)?.version ?? 0;
+    const colorVersion = (attributes.color as Attribute | undefined)?.version ?? 0;
     const version = position.version + (index?.version ?? 0) * 4096 + colorVersion * 16777216;
     const entry = this.geometries.get(geometry);
     const draws = index ? index.count : position.count;
@@ -71,7 +73,7 @@ export class Geometries {
       }
     }
     if (entry?.id) { core.engine.drop_mesh(entry.id); core.held.meshes--; }
-    const skinIndex = attributes.skinIndex as THREE.BufferAttribute | undefined;
+    const skinIndex = attributes.skinIndex as Attribute | undefined;
     const joints = !skinIndex ? EMPTY_SHORTS
       : skinIndex.array instanceof Uint16Array ? skinIndex.array : Uint16Array.from(skinIndex.array);
     const indices = !index ? EMPTY_INDICES : index.array instanceof Uint32Array ? index.array : Uint32Array.from(index.array);
@@ -86,7 +88,7 @@ export class Geometries {
   }
 
   /** An instanced mesh's set of matrices and tints in the engine, sent again as their versions or its count move. */
-  setId(mesh: THREE.InstancedMesh): number {
+  setId(mesh: InstancedMesh): number {
     const core = this.core, matrices = mesh.instanceMatrix, tints = mesh.instanceColor;
     const version = matrices.version + (tints?.version ?? 0) * 65536;
     const entry = this.sets.get(mesh);
@@ -124,7 +126,7 @@ export class Geometries {
    * each hang on a joint of their own, bound where that joint stood: written once for them all by the first's, the
    * ranger's boots drew without their shafts, skinned from the wrong place.)
    */
-  bonesOf(mesh: THREE.SkinnedMesh): number {
+  bonesOf(mesh: SkinnedMesh): number {
     const core = this.core, skeleton = mesh.skeleton;
     let written = this.skeletonFrames.get(skeleton);
     if (!written || written.frame !== core.frame) {

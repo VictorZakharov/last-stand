@@ -1,6 +1,8 @@
 // The game's materials handed to the engine: each described by its numbers, maps and key, look-alikes sharing one
 // engine material so their meshes batch, and a material with a look of its own (`custom.ts`) by its shader's numbers.
-import * as THREE from './three.ts';
+import {
+  AdditiveBlending, BackSide, Color, CustomBlending, DoubleSide, Material, OneFactor, Texture, Vec2, VolumeTexture,
+} from './api/index.ts';
 import { COLUMN_SHAFT, type SeeThrough } from '../core/seeThrough';
 import type { Core } from './core';
 import { lookOf, LOOK_FLOATS, RUST_SHADERS, type RustLook, type RustShader } from './custom';
@@ -16,7 +18,7 @@ import type { SeeKinds } from './seeKinds';
 const CASTS_AS_PLACED = 32;
 /** how many times a material's numbers may move before it stops sharing the engine's materials */
 const SHARED_CHANGES = 8;
-const WHITE = new THREE.Color(1, 1, 1);
+const WHITE = new Color(1, 1, 1);
 
 interface MaterialEntry {
   id: number; params: Float32Array; maps: Uint32Array; key: number; seen: number;
@@ -30,17 +32,17 @@ interface MaterialEntry {
   mapsAt?: number;
 }
 
-export type AnyMaterial = THREE.Material & Partial<{
+export type AnyMaterial = Material & Partial<{
   /** lit on both sides as its front (a hair card's: `bothSidesOut` in entities/models/head.ts) */
   litBothSides: boolean;
-  color: THREE.Color; map: THREE.Texture | null; roughness: number; metalness: number; emissive: THREE.Color;
-  emissiveIntensity: number; emissiveMap: THREE.Texture | null; normalMap: THREE.Texture | null;
-  normalScale: THREE.Vector2; roughnessMap: THREE.Texture | null; metalnessMap: THREE.Texture | null;
+  color: Color; map: Texture | null; roughness: number; metalness: number; emissive: Color;
+  emissiveIntensity: number; emissiveMap: Texture | null; normalMap: Texture | null;
+  normalScale: Vec2; roughnessMap: Texture | null; metalnessMap: Texture | null;
   isMeshBasicMaterial: boolean; isMeshBasicNodeMaterial: boolean; isShaderMaterial: boolean;
-  isMeshPhongMaterial: boolean; alphaMap: THREE.Texture | null;
-  flatShading: boolean; bumpMap: THREE.Texture | null; bumpScale: number;
+  isMeshPhongMaterial: boolean; alphaMap: Texture | null;
+  flatShading: boolean; bumpMap: Texture | null; bumpScale: number;
   clearcoat: number; clearcoatRoughness: number;
-  sheen: number; sheenColor: THREE.Color; sheenRoughness: number; sheenColorMap: THREE.Texture | null;
+  sheen: number; sheenColor: Color; sheenRoughness: number; sheenColorMap: Texture | null;
   positionNode: unknown; colorNode: unknown; fragmentNode: unknown; vertexNode: unknown; seeThrough: unknown;
 }>;
 
@@ -48,14 +50,14 @@ export type AnyMaterial = THREE.Material & Partial<{
 const JOINED_NAME = 'looks joined';
 
 export class Materials {
-  private materials = new WeakMap<THREE.Material, MaterialEntry>();
+  private materials = new WeakMap<Material, MaterialEntry>();
   /** the engine's materials by what they hold: two of the game's that look alike are one there, and their meshes
    *  one draw call (each foe's pieces have materials of their own) */
   private shared = new Map<string, number>();
   /** a shared look's engine material: its numbers past those that tell its materials apart, as last sent */
   private tails = new Map<number, Float32Array>();
   private shaders = new Map<string, number>();
-  private volumes = new WeakMap<THREE.Data3DTexture, { id: number; version: number; cells: number }>();
+  private volumes = new WeakMap<VolumeTexture, { id: number; version: number; cells: number }>();
   private scratchParams = new Float32Array(32);
   private scratchMaps = new Uint32Array(4);
   private scratchLook = new Float32Array(LOOK_FLOATS);
@@ -91,7 +93,7 @@ export class Materials {
   /** A material's numbers, maps and key written to the scratch arrays; false for one the engine can't draw. */
   private describe(material: AnyMaterial, look?: RustLook): number {
     // (a shader material is drawn by its look alone: unlit, white under whatever its look writes)
-    if (!look && (!material.color || material.isShaderMaterial)) return -1;
+    if (!look && (!material.color || material.isLookMaterial)) return -1;
     // (moved or cut by three's nodes: grass grown from a texture, a flame's own fragment)
     // (placed by its nodes: the village's blades, grown from their cells. A position node alone is the wind's sway,
     // which the engine leaves out: the Thornwood's grass stands still. One with a look of its own for the engine
@@ -99,14 +101,14 @@ export class Materials {
     const placedByNodes = (material.positionNode && material.colorNode) || material.fragmentNode || material.vertexNode;
     if (!look && placedByNodes) return -1;
     const p = this.scratchParams, maps = this.scratchMaps, held = this.maps;
-    const unlit = !!(material.isMeshBasicMaterial || material.isMeshBasicNodeMaterial || material.isShaderMaterial);
+    const unlit = !!(material.isUnlitMaterial || material.isMeshBasicNodeMaterial || material.isLookMaterial);
     const map = material.map ?? null;
     const tint = material.color ?? WHITE;
     p[0] = tint.r; p[1] = tint.g; p[2] = tint.b; p[3] = material.opacity;
     const glow = material.emissive, glowBy = material.emissiveIntensity ?? 1;
     p[4] = glow ? glow.r * glowBy : 0; p[5] = glow ? glow.g * glowBy : 0; p[6] = glow ? glow.b * glowBy : 0;
     p[7] = material.alphaTest;
-    p[8] = material.roughness ?? (material.isMeshPhongMaterial ? 0.5 : 1);
+    p[8] = material.roughness ?? (material.isLitMaterial ? 0.5 : 1);
     p[9] = material.metalness ?? 0;
     p[10] = material.normalScale?.x ?? 1;
     // (what the game dissolves where it hides the hero: core/seeThrough.ts marks it)
@@ -127,8 +129,8 @@ export class Materials {
     maps[2] = held.textureId(rough);
     maps[3] = held.textureId(material.emissiveMap);
     // (2: light added or laid over, shown only where the hero sees: no surface for the sight's fog to grey)
-    const light = material.blending === THREE.AdditiveBlending
-      || (material.blending === THREE.CustomBlending && material.blendSrc === THREE.OneFactor);
+    const light = material.blending === AdditiveBlending
+      || (material.blending === CustomBlending && material.blendSrc === OneFactor);
     // (4: lit on both sides as its front, a hair card's: `bothSidesOut` in entities/models/head.ts)
     // (8: skinned by dual quaternions, a hand's: entities/models/dualQuaternion.ts)
     p[16] = (unlit ? 1 : 0) + (light ? 2 : 0) + (material.litBothSides ? 4 : 0)
@@ -141,7 +143,7 @@ export class Materials {
       + (bumped ? 128 : 0)
       // (256: fades by its alpha where its kind is seen through; 512: its colour already multiplied by its alpha)
       + (look?.fades ? 256 : 0)
-      + (material.blending === THREE.CustomBlending && material.blendSrc === THREE.OneFactor ? 512 : 0);
+      + (material.blending === CustomBlending && material.blendSrc === OneFactor ? 512 : 0);
     // (a clear coat and its roughness, how much a height map bumps it; a cloth's sheen and its roughness)
     p[24] = material.clearcoat ?? 0; p[25] = material.clearcoatRoughness ?? 0;
     p[26] = bumped ? material.bumpScale ?? 1 : 0; p[27] = 0;
@@ -156,9 +158,9 @@ export class Materials {
     p[18] = maps[1] ? 1 : 0;
     p[19] = (maps[2] ? 1 : 0) + (alphaAlone && maps[0] ? 2 : 0);
     // (3: its colour already multiplied by its alpha, the flames' light over what they hide)
-    const multiplied = material.blending === THREE.CustomBlending && material.blendSrc === THREE.OneFactor;
-    const blend = multiplied ? 3 : material.blending === THREE.AdditiveBlending ? 2 : material.transparent ? 1 : 0;
-    const side = material.side === THREE.DoubleSide ? 1 : material.side === THREE.BackSide ? 2 : 0;
+    const multiplied = material.blending === CustomBlending && material.blendSrc === OneFactor;
+    const blend = multiplied ? 3 : material.blending === AdditiveBlending ? 2 : material.transparent ? 1 : 0;
+    const side = material.side === DoubleSide ? 1 : material.side === BackSide ? 2 : 0;
     // (what a column wears, its iron band and its capital, writes its depth whatever the game's own thinning
     // says: with none written, the shaft's ghost, drawn after, lay over its own band, from play "why the
     // stripes on columns disappear". Not the shaft: a flame behind it shows through its ghost)
@@ -269,7 +271,7 @@ export class Materials {
   }
 
   /** A volume's id, its cells sent again as its version moves on (a new one made when its size does). */
-  private volumeId(volume: THREE.Data3DTexture | undefined): number {
+  private volumeId(volume: VolumeTexture | undefined): number {
     if (!volume) return 0;
     const core = this.core;
     const { data, width, height, depth } = volume.image as { data: Uint8Array; width: number; height: number; depth: number };

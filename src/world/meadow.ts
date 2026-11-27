@@ -13,7 +13,10 @@ import { rustLook } from '../engine/custom';
 import { bladeLook, swardLook } from '../engine/looks/meadow';
 import { ONE_GRASS, oneBand } from './meadowOne';
 import { bladeNodes, swardColorNode } from './meadowNodes';
-import * as THREE from '../engine/three.ts';
+import {
+  Box3, Camera, CanvasTexture, ClampToEdgeWrapping, DataTexture, DoubleSide, floats, FloatType, Frustum,
+  InstancedGeometry, LinearFilter, LitMaterial, Mat4, Mesh, NoColorSpace, Node, RGFormat, Texture, Vec2, Vec3, Vec4,
+} from '../engine/api/index.ts';
 import { canvasOf, ctx2d, readCtx2d } from '../core/textures';
 import { asGrass, type Updater } from './props';
 import { hiddenByDoorway } from './doorways';
@@ -217,18 +220,18 @@ export class MeadowMask {
   }
 
   /** The mask as a texture, its edges softened (`blur` m): read by the grass and by the ground under it. */
-  texture(blur = 0.25): THREE.CanvasTexture {
+  texture(blur = 0.25): CanvasTexture {
     const soft = canvasOf(this.size), g = ctx2d(soft);
     g.fillStyle = '#000';
     g.fillRect(0, 0, this.size, this.size);
     g.filter = `blur(${(blur * this.perMetre).toFixed(2)}px)`;
     g.drawImage(this.canvas, 0, 0);
-    const t = new THREE.CanvasTexture(soft);
-    t.colorSpace = THREE.NoColorSpace;
+    const t = new CanvasTexture(soft);
+    t.colorSpace = NoColorSpace;
     // (its rows top to bottom as z goes: flipped, as three flips a canvas, the yard read the terrace's clearing)
     t.flipY = false;
-    t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping;
-    t.minFilter = THREE.LinearFilter;
+    t.wrapS = t.wrapT = ClampToEdgeWrapping;
+    t.minFilter = LinearFilter;
     t.generateMipmaps = false;
     return t;
   }
@@ -236,14 +239,14 @@ export class MeadowMask {
 
 /** The mask's uniforms in a shader that reads it (the grass, the ground under it). */
 export interface MaskUniforms {
-  uMeadow: { value: THREE.Texture };
+  uMeadow: { value: Texture };
   uMeadowHalf: { value: number };
 }
 
 /** `blades` blades an instance, a tuft's: (t along it 0..1, side -1..1, which blade) at each point, each a strip as
  *  indexed triangles. */
-function bladeGeometry(segs: number, blades = 1): THREE.InstancedBufferGeometry {
-  const geo = new THREE.InstancedBufferGeometry();
+function bladeGeometry(segs: number, blades = 1): InstancedGeometry {
+  const geo = new InstancedGeometry();
   const bv: number[] = [], index: number[] = [];
   for (let blade = 0; blade < blades; blade++) {
     const first = bv.length / 3;
@@ -255,9 +258,9 @@ function bladeGeometry(segs: number, blades = 1): THREE.InstancedBufferGeometry 
       if (s < segs - 1) index.push(a + 1, a + 3, a + 2);
     }
   }
-  geo.setAttribute('bv', new THREE.Float32BufferAttribute(bv, 3));
+  geo.setAttribute('bv', floats(bv, 3));
   // (three draws as many points as `position` has)
-  geo.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(bv.length), 3));
+  geo.setAttribute('position', floats(new Float32Array(bv.length), 3));
   geo.setIndex(index);
   // (set as each ring is drawn: none until then)
   geo.instanceCount = 0;
@@ -266,12 +269,12 @@ function bladeGeometry(segs: number, blades = 1): THREE.InstancedBufferGeometry 
 
 /** A tuft's card: a quad from the root (t 0) to the top (t 1), two triangles; its blades are cut from it as it's
  *  shaded. */
-function cardGeometry(): THREE.InstancedBufferGeometry {
-  const geo = new THREE.InstancedBufferGeometry();
+function cardGeometry(): InstancedGeometry {
+  const geo = new InstancedGeometry();
   // (three columns: the card is bent along its middle, a V from above, so a tuft has some depth and isn't a flat fan)
   const bv = [0, -1, 0, 0, 0, 0, 0, 1, 0, 1, -1, 0, 1, 0, 0, 1, 1, 0];
-  geo.setAttribute('bv', new THREE.Float32BufferAttribute(bv, 3));
-  geo.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(bv.length), 3));
+  geo.setAttribute('bv', floats(bv, 3));
+  geo.setAttribute('position', floats(new Float32Array(bv.length), 3));
   geo.setIndex([0, 1, 3, 1, 4, 3, 1, 2, 4, 2, 5, 4]);
   geo.instanceCount = 0;
   return geo;
@@ -280,20 +283,20 @@ function cardGeometry(): THREE.InstancedBufferGeometry {
 /** A ring's uniforms, set as it's drawn. */
 interface RingUniforms extends MaskUniforms {
   /** the lowest solid over each cell of the meadow (meadowSolids.ts) */
-  uSolid: { value: THREE.Texture };
+  uSolid: { value: Texture };
   /** the least room a blade needs under a solid (m: `BLADE_ROOM`, every ring's the same; a harness's canary lowers it) */
   uRoom: { value: number };
-  uOrigin: { value: THREE.Vector2 };
+  uOrigin: { value: Vec2 };
   uCell: { value: number };
   uWider: { value: number };
   uCombed: { value: number };
   uS: { value: number };
-  uTiles: { value: THREE.Vector2[] };
+  uTiles: { value: Vec2[] };
   /** the tiles drawn, each its first cell from the grid's origin: a texel a tile (WebGL) */
-  uTileMap: { value: THREE.DataTexture };
-  uFocus: { value: THREE.Vector2 };
-  uEye: { value: THREE.Vector2 };
-  uBand: { value: THREE.Vector4 };
+  uTileMap: { value: DataTexture };
+  uFocus: { value: Vec2 };
+  uEye: { value: Vec2 };
+  uBand: { value: Vec4 };
   uByStrand: { value: number };
   /** a sheet's strands times as many as its width says (a cut ring's at a spread: each strand as wide as High's) */
   uStrandsBy: { value: number };
@@ -304,7 +307,7 @@ interface RingUniforms extends MaskUniforms {
 
 /** Ring `k`'s band: from the ring inside to its own radius, across `share` of each edge between rings of other cells,
  *  and at once between rings of the same cells, whose blades are the same. */
-function bandOf(band: THREE.Vector4, k: number, share: number): void {
+function bandOf(band: Vec4, k: number, share: number): void {
   const ring = RINGS[k], inside = RINGS[k - 1], outside = RINGS[k + 1];
   const from = !inside ? -2 : inside.cell === ring.cell ? inside.radius - AT_ONCE : inside.radius * (1 - share);
   band.set(from, inside ? inside.radius : -1, outside?.cell === ring.cell ? ring.radius - AT_ONCE : ring.radius * (1 - share), ring.radius);
@@ -313,8 +316,8 @@ function bandOf(band: THREE.Vector4, k: number, share: number): void {
 /** every ring's uniforms, as built, and how far a harness has moved their middle off where the view puts it (m) */
 const rings: RingUniforms[] = [];
 /** every ring's meshes, and the geometries of the one from above (a second of fewer segments, when spread) */
-const ringMeshes: THREE.Mesh[] = [];
-const aboveGeometries: Partial<Record<'full' | 'spread' | 'tufts', THREE.InstancedBufferGeometry>> = {};
+const ringMeshes: Mesh[] = [];
+const aboveGeometries: Partial<Record<'full' | 'spread' | 'tufts', InstancedGeometry>> = {};
 /** how far apart the blades stand against the rings' own cells, each as many times wider (a quality's `grassSpread`) */
 let spread = 1;
 
@@ -368,7 +371,7 @@ export function setGrassSpread(by: number): void {
   const above = ringMeshes[RINGS.length];
   if (above) above.geometry = (spread > 1 ? aboveGeometries.spread : aboveGeometries.full)!;
 }
-const focusMoved = new THREE.Vector2();
+const focusMoved = new Vec2();
 
 /** For a harness (tools/lab): the rings' middle moved (x, z) m off where the view puts it, the view as it is: what of
  *  the grass changes as the rings follow the hero, nothing else changed. */
@@ -386,12 +389,12 @@ export function holdEyeFollowsAbove(follows: boolean): void {
 
 /** how far off along the view a blade turns to, from above (m) */
 const EYE_FAR = 10000;
-const _sight = new THREE.Vector3();
+const _sight = new Vec3();
 
 /** What a blade seen edge on turns to, into `out`: the camera, close to; from above, a point as far off as the sun, along
  *  the view: turned to where the camera stands, every blade in the frame moved with its every step, the whole meadow
  *  crawling as he walked (from play, "grass appearing/rerendering when I walk in top down view"). */
-function eyeOf(camera: THREE.Camera, above: boolean, out: THREE.Vector2): void {
+function eyeOf(camera: Camera, above: boolean, out: Vec2): void {
   if (above && !eyeFollowsAbove) {
     camera.getWorldDirection(_sight);
     const flat = Math.hypot(_sight.x, _sight.z) || 1;
@@ -410,9 +413,9 @@ let fromAbove = false;
  *  where the hero stands, the rings' middle in the close views (none: the sight's end on the ground). */
 export function meadowFromAbove(on: boolean, him?: { x: number; z: number }): void {
   fromAbove = on;
-  roundHim = him ? (roundHim ?? new THREE.Vector2()).set(him.x, him.z) : null;
+  roundHim = him ? (roundHim ?? new Vec2()).set(him.x, him.z) : null;
 }
-let roundHim: THREE.Vector2 | null = null;
+let roundHim: Vec2 | null = null;
 
 /** For a harness (tools/lab): the rings drawn as from above or not, whatever the view. Nothing now: the grass is one
  *  for every view (`meadowOne.ts`), the ring from above never drawn in the rings' place. */
@@ -421,7 +424,7 @@ export function holdMeadowFromAbove(_on: boolean | null): void {}
 /** the camera's height over the ground and the level's reach, as a ring was last drawn (the engine's look reads
  *  them: `OneNow`) */
 const oneNow = { high: 0, reach: ONE_GRASS.reach, least: ONE_GRASS.least, tuft: 1, pixel: 0 };
-const _eye3 = new THREE.Vector3();
+const _eye3 = new Vec3();
 /** a reach past any distance: all the grass kept (m) */
 const WHOLE_KEPT = 1e5;
 
@@ -455,8 +458,8 @@ export function meadowHandOver(wide: boolean): void {
 /** A ring's material: the standard one, its points placed as its blades, coloured as grass;
  *  `combed`, its blades cut into strands, a program of its own (a discard in it would hold the depth test back to
  *  after the shading for the first ring's dense blades too, which never cut). */
-function bladeMaterial(u: RingUniforms, combed: boolean, ring: string): THREE.MeshStandardMaterial {
-  const m = new THREE.MeshStandardMaterial({ roughness: 0.85, side: THREE.DoubleSide });
+function bladeMaterial(u: RingUniforms, combed: boolean, ring: string): LitMaterial {
+  const m = new LitMaterial({ roughness: 0.85, side: DoubleSide });
   bladeNodes(m, u, combed, {
     widthInCells: WIDTH_IN_CELLS, grows: BLADE_GROWS, strandCut: STRAND_CUT, strandsRise: STRANDS_RISE,
   });
@@ -545,7 +548,7 @@ export function holdEyeWithinOccluders(held: boolean): void {
 }
 
 /** Whether `box` is wholly hidden from `eye` by one occluder: the lines to its eight corners all pass through it. */
-function hiddenBehind(box: THREE.Box3, eye: THREE.Vector3): boolean {
+function hiddenBehind(box: Box3, eye: Vec3): boolean {
   if (occlusionHeld) return false;
   for (const o of occluders) {
     const ex = (eye.x - o.x) * o.cos - (eye.z - o.z) * o.sin;
@@ -566,12 +569,12 @@ function hiddenBehind(box: THREE.Box3, eye: THREE.Vector3): boolean {
   return false;
 }
 
-const _forward = new THREE.Vector3(), _frustum = new THREE.Frustum(), _viewProj = new THREE.Matrix4();
-const _box = new THREE.Box3();
+const _forward = new Vec3(), _frustum = new Frustum(), _viewProj = new Mat4();
+const _box = new Box3();
 
 /** Where the camera looks on the ground: along its sight onto the floor, at most `FOCUS_MOST` m before it, and from
  *  a sight near level as far as one `FOCUS_STEEP` down would meet it (the camera's height over that). */
-export function focusOf(camera: THREE.Camera, out: THREE.Vector2): THREE.Vector2 {
+export function focusOf(camera: Camera, out: Vec2): Vec2 {
   // (in the close views, the hero: by the sight's end on the ground, the rings went round him with the camera, and
   // the grass changed where they hand over, from play "grass visibly changes when I rotate the camera around the
   // character")
@@ -592,7 +595,7 @@ export function focusOf(camera: THREE.Camera, out: THREE.Vector2): THREE.Vector2
 
 /** Ring `k`'s band on the ground round the camera's foot for the one grass (`oneBand`), the camera's place left
  *  in `_eye3` and what the look reads in `oneNow`. */
-function oneBandNow(camera: THREE.Camera, k: number): { from: number; to: number } {
+function oneBandNow(camera: Camera, k: number): { from: number; to: number } {
   _eye3.setFromMatrixPosition(camera.matrixWorld);
   oneNow.high = Math.max(0, _eye3.y);
   // (a level that spreads the grass keeps all of it less far: the same blades, fewer of them sooner)
@@ -606,8 +609,8 @@ function oneBandNow(camera: THREE.Camera, k: number): { from: number; to: number
 }
 
 /** The meadow's grass over `mask`'s square, swaying on the game's clock (an updater keeps the time). */
-export function buildMeadow(mask: MeadowMask, maskTexture: THREE.Texture, updaters: Updater[], solids: THREE.Texture): THREE.Group {
-  const group = new THREE.Group();
+export function buildMeadow(mask: MeadowMask, maskTexture: Texture, updaters: Updater[], solids: Texture): Node {
+  const group = new Node();
   group.name = 'meadow';
   // (where it grows, for the lab and the village's map)
   group.userData.mask = mask;
@@ -631,17 +634,17 @@ export function buildMeadow(mask: MeadowMask, maskTexture: THREE.Texture, update
   [...RINGS, ABOVE_RING].forEach((ring, k) => {
     const above = ring === ABOVE_RING;
     const u: RingUniforms = {
-      uOrigin: { value: new THREE.Vector2() },
+      uOrigin: { value: new Vec2() },
       uCell: { value: ring.cell * spreadOf(ring) },
       uWider: { value: ring.cell / RINGS[0].cell },
       uCombed: { value: 1 },
       uS: { value: cellsATile(ring) },
-      uTiles: { value: Array.from({ length: TILES * TILES }, () => new THREE.Vector2()) },
-      uTileMap: { value: new THREE.DataTexture(new Float32Array(TILES * TILES * 2), TILES * TILES, 1, THREE.RGFormat, THREE.FloatType) },
-      uFocus: { value: new THREE.Vector2() },
-      uEye: { value: new THREE.Vector2() },
+      uTiles: { value: Array.from({ length: TILES * TILES }, () => new Vec2()) },
+      uTileMap: { value: new DataTexture(new Float32Array(TILES * TILES * 2), TILES * TILES, 1, RGFormat, FloatType) },
+      uFocus: { value: new Vec2() },
+      uEye: { value: new Vec2() },
       // (handed over from the ring inside; the first's inner edge never reached)
-      uBand: { value: new THREE.Vector4() },
+      uBand: { value: new Vec4() },
       uByStrand: { value: 1 },
       uStrandsBy: { value: strandsBy(ring) },
       uTuft: { value: tuftOf() },
@@ -670,8 +673,8 @@ export function buildMeadow(mask: MeadowMask, maskTexture: THREE.Texture, update
     const last = k === RINGS.length - 1;
     /** the last ring's own outer band, kept while a whole view has it reach all the meadow */
     let ownBand: { fades: number; ends: number } | null = null;
-    const meshOf = (geometry: THREE.InstancedBufferGeometry, combed: boolean, tufted: boolean | null): THREE.Mesh => {
-    const mesh = new THREE.Mesh(geometry, bladeMaterial(u, combed, `${k}${combed ? '-combed' : ''}`));
+    const meshOf = (geometry: InstancedGeometry, combed: boolean, tufted: boolean | null): Mesh => {
+    const mesh = new Mesh(geometry, bladeMaterial(u, combed, `${k}${combed ? '-combed' : ''}`));
     mesh.name = `meadow grass ${k + 1}${tufted ? ' tufts' : ''}`;
     asGrass(mesh);
     // (the tiles are its culling: three's sphere would be round no points)
@@ -679,7 +682,7 @@ export function buildMeadow(mask: MeadowMask, maskTexture: THREE.Texture, update
     mesh.receiveShadow = true;
     mesh.onBeforeRender = (renderer, _scene, camera) => {
       viewHigh.value = renderer.getRenderTarget()?.height ?? frameRect().height;
-      const geo = mesh.geometry as THREE.InstancedBufferGeometry;
+      const geo = mesh.geometry as InstancedGeometry;
       // (none listed rather than hidden: a hidden mesh compiles nothing)
       // (from above, near the ground: the first ring's blades in the far ring's tiles; uniforms alone)
       const near = above && spread === 1 && !aboveFarHeld && camera.position.y < ABOVE_NEAR.under;
@@ -806,7 +809,7 @@ export function buildMeadow(mask: MeadowMask, maskTexture: THREE.Texture, update
 
 /** The ground under a meadow: its own colour (bare earth) where the mask has none, a sward's dark green where it has
  *  grass (seen between the blades), in broad patches. */
-export function meadowGround<M extends THREE.MeshStandardMaterial>(m: M, mask: MaskUniforms): M {
+export function meadowGround<M extends LitMaterial>(m: M, mask: MaskUniforms): M {
   (m as M & { colorNode: unknown }).colorNode = swardColorNode(mask.uMeadow.value, mask.uMeadowHalf.value);
   rustLook(m, swardLook(mask.uMeadow.value, mask.uMeadowHalf.value));
   return m;

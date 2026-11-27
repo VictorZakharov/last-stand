@@ -1,7 +1,7 @@
 // A fire's flames under the Rust engine: `world/fireNodes.ts`'s ray march, its WGSL as it is there (`flameWgsl`), in
 // the engine's surface hook; the baked loop is the look's volume. (The flames fade as the prop under
 // them dissolves, and the embers' own look on the bed and the logs.)
-import type * as THREE from '../three.ts';
+import type { VolumeTexture } from '../api/index.ts';
 import { emberWgsl, flameWgsl, type EmberLooks, type FlameShape, type FlameUniforms } from '../../world/fireNodes';
 import type { RustLook, RustShader } from '../custom';
 
@@ -41,7 +41,7 @@ fn surface_hook(s: ptr<function, Surface>, in: VertexOut) -> bool {
 export function flameLook(uniforms: FlameUniforms, shape: FlameShape): RustLook {
   return {
     shader: flameShader(shape),
-    volume: () => uniforms.uFlames.value as THREE.Data3DTexture,
+    volume: () => uniforms.uFlames.value as VolumeTexture,
     numbers(out) {
       uniforms.uCentre.value.toArray(out, 0);
       out[3] = uniforms.uHeight.value * uniforms.uPuff.value;

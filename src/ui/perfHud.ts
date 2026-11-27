@@ -3,7 +3,7 @@
 // kept in a cookie. Its timings run whether it's shown or not, for the always-on recorder (src/perf/recorder.ts),
 // which they hand every frame to.
 import { framesUncapped } from '../core/frameLoop';
-import * as THREE from '../engine/three.ts';
+import { Vec2 } from '../engine/api/index.ts';
 import { RUST } from '../engine';
 import type { FrameStats } from '../engine/bridge';
 import { G } from '../state';
@@ -300,7 +300,7 @@ function graphPath(buckets: (number | null)[], top: number): string {
 function draw(now: number): void {
   const s = computeStats(now);
   const info = renderer.info;
-  const size = renderer.getDrawingBufferSize(new THREE.Vector2());
+  const size = renderer.getDrawingBufferSize(new Vec2());
   const peak = Math.max(60, ...s.buckets.map((v) => v ?? 0));
   const top = Math.ceil(peak / 30) * 30;
   const set = (k: string, v: string) => { el.querySelector(`[data-p="${k}"]`)!.textContent = v; };
@@ -319,7 +319,7 @@ function draw(now: number): void {
   set('geo', String(info.memory.geometries));
   set('tex', String(info.memory.textures));
   // (the scene's resolution: the canvas's own, at the screen's ratio, holds the overlays drawn over it)
-  const scene = sceneSize(new THREE.Vector2());
+  const scene = sceneSize(new Vec2());
   set('res', `${scene.x}×${scene.y} @${sceneRatio().toFixed(2)}`);
   set('quality', `${QUALITY[qualityLevel()].label}${qualitySetting() === 'auto' ? ' (auto)' : ''}`);
   set('ents', `${G.enemies.length} / ${G.projectiles.length} / ${particles.glow.count + particles.smoke.count}`);
@@ -407,14 +407,14 @@ function jsBench(): number {
 function report(): string {
   const s = computeStats(frameNow);
   const info = renderer.info;
-  const size = renderer.getDrawingBufferSize(new THREE.Vector2());
+  const size = renderer.getDrawingBufferSize(new Vec2());
   return [
     `Last Stand performance report (${new Date().toISOString()}, build ${BUILD})`,
     `URL ${location.href}`,
     `FPS now ${fmtFps(s.fps)} | 15s avg ${fmtFps(s.avgFps)} | 1% low ${fmtFps(s.lowFps)}`,
     `Frame p50 ${fmt(s.p50)} ms | p95 ${fmt(s.p95)} ms | CPU ${fmt(s.cpu, 2)} ms | GPU ${gpuReadsTaken > 0 ? fmt(s.gpu, 2) + ' ms' : 'n/a'}`,
     `Draw calls ${frameCalls} | triangles ${frameTris} | pipelines ${PIPELINES.made} (compiled after load ${programsCompiledInGame()}) | geometries ${info.memory.geometries} | textures ${info.memory.textures}`,
-    `Canvas ${size.x}x${size.y} | pixel ratio ${renderer.getPixelRatio()} | scene ${sceneSize(new THREE.Vector2()).toArray().join('x')} at ${sceneRatio()} | devicePixelRatio ${window.devicePixelRatio} | window ${window.innerWidth}x${window.innerHeight}`,
+    `Canvas ${size.x}x${size.y} | pixel ratio ${renderer.getPixelRatio()} | scene ${sceneSize(new Vec2()).toArray().join('x')} at ${sceneRatio()} | devicePixelRatio ${window.devicePixelRatio} | window ${window.innerWidth}x${window.innerHeight}`,
     `Quality ${qualityLevel()} (setting ${qualitySetting()}${budgetNote()}) | MSAA ${sceneSamples()} | shadow map ${QUALITY[qualityLevel()].shadowMap} | label atlas ${Math.round(atlasUse() * 100)}% used | vsync ${framesUncapped() ? 'off' : 'on'}`,
     `Warm: the fight ${isWarm('fight') ? 'yes' : 'no'}, the heroes ${isWarm('heroes') ? 'yes' : 'no'}${isWarming() ? ', warming now' : ''}`,
     `Mode ${G.mode} | biome ${G.arena.biome} | view ${viewMode()} | enemies ${G.enemies.length} | projectiles ${G.projectiles.length} | particles ${particles.glow.count + particles.smoke.count}`,

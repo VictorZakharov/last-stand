@@ -6,16 +6,16 @@
 // reads of them: no walk of what's handed over, no matrix made here, no record written a frame. The bridge's placing
 // and its walk pass a root that's handed over by whole (`mirrored`). What a body drawn as one asks for is held here
 // too (`hold`: its joints, `bodies.ts`).
-import * as THREE from './three.ts';
+import { AttachedBindMode, Camera, Node, Quat, SkinnedMesh, Vec3, World } from './api/index.ts';
 import type { Core } from './core';
 
 /** no node: the engine's `nodes::NONE` */
 export const NONE = 0xffffffff;
 /** a node's numbers: its place, its turn, its size */
 const LOCAL = 10;
-const _p = new THREE.Vector3();
-const _q = new THREE.Quaternion();
-const _s = new THREE.Vector3();
+const _p = new Vec3();
+const _q = new Quat();
+const _s = new Vec3();
 
 /** An object of the scene as a node: its id, who holds it (its root handed over, or a body's joints: counted), and
  *  the node of the object it hung under as last written (`NONE`: the scene). */
@@ -24,36 +24,36 @@ interface Held {
   users: number;
   parent: number;
   /** the object it was held under, whose hold it let go with its own (three clears `parent` before it says so) */
-  over: THREE.Object3D | null;
+  over: Node | null;
 }
 
 /** Whether `object` is placed by the engine's nodes, its matrix read back each frame. */
-export const onNode = (object: THREE.Object3D): boolean => object.userData.node !== undefined;
+export const onNode = (object: Node): boolean => object.userData.node !== undefined;
 
 /** Whether `object` is a root handed over whole: its subtree is the engine's to place and draw. */
-export const mirrored = (object: THREE.Object3D): boolean => object.userData.mirrored === true;
+export const mirrored = (object: Node): boolean => object.userData.mirrored === true;
 
 /** What's told of the objects handed over as they come and go: a mesh to draw on its node, or one let go. */
 export interface MirrorWatcher {
-  added(object: THREE.Object3D, node: number): void;
-  removed(object: THREE.Object3D): void;
+  added(object: Node, node: number): void;
+  removed(object: Node): void;
 }
 
 export class Mirror {
-  private held = new Map<THREE.Object3D, Held>();
+  private held = new Map<Node, Held>();
   /** every node's object by its id, for its numbers written and its matrix read back */
-  private objects: (THREE.Object3D | null)[] = [];
+  private objects: (Node | null)[] = [];
   /** the roots handed over whole */
-  private roots = new Set<THREE.Object3D>();
+  private roots = new Set<Node>();
   private locals = new Float32Array(0);
   private shown = new Uint8Array(0);
   private worlds = new Float32Array(0);
   private matrices = new Float32Array(0);
   /** a handed-over object's children added and taken away, as three tells them */
-  private readonly onAdded = (event: { child: THREE.Object3D | null }): void => {
+  private readonly onAdded = (event: { child: Node | null }): void => {
     if (event.child) this.takeUnder(event.child);
   };
-  private readonly onRemoved = (event: { child: THREE.Object3D | null }): void => {
+  private readonly onRemoved = (event: { child: Node | null }): void => {
     if (event.child) this.leaveUnder(event.child);
   };
 
@@ -65,10 +65,10 @@ export class Mirror {
   }
 
   /** The roots handed over whole. */
-  get rootsNow(): ReadonlySet<THREE.Object3D> { return this.roots; }
+  get rootsNow(): ReadonlySet<Node> { return this.roots; }
 
   /** `root` handed over whole, from now on: it, everything under it, and what's over it up to the scene. */
-  take(root: THREE.Object3D): void {
+  take(root: Node): void {
     if (this.roots.has(root)) return;
     this.roots.add(root);
     root.userData.mirrored = true;
@@ -76,7 +76,7 @@ export class Mirror {
   }
 
   /** `root` no longer handed over: the nodes of what's under it let go, unless something else holds them. */
-  leave(root: THREE.Object3D): void {
+  leave(root: Node): void {
     if (!this.roots.delete(root)) return;
     delete root.userData.mirrored;
     this.leaveUnder(root);
@@ -90,7 +90,7 @@ export class Mirror {
   /** `object` and what's under it held, each watched for its children and told to the watcher; a piece of a body drawn
    *  as one isn't (`userData.unplaced`: drawn by its body, placed where it's read, `models/bodyAsOne.ts`). As
    *  nodes, a wave 36's pieces were 1,300 of them, written and read back each frame for nothing. */
-  private takeUnder(object: THREE.Object3D): void {
+  private takeUnder(object: Node): void {
     object.traverse((each) => {
       if (each.userData.unplaced) return;
       const id = this.hold(each);
@@ -101,7 +101,7 @@ export class Mirror {
   }
 
   /** `object` and what's under it let go. */
-  private leaveUnder(object: THREE.Object3D): void {
+  private leaveUnder(object: Node): void {
     object.traverse((each) => {
       if (!this.held.has(each)) return;
       each.removeEventListener('childadded', this.onAdded as never);
@@ -112,14 +112,14 @@ export class Mirror {
   }
 
   /** `object` held as a node, and everything over it up to the scene: its id. */
-  hold(object: THREE.Object3D): number {
+  hold(object: Node): number {
     const known = this.held.get(object);
     if (known) {
       known.users++;
       return known.id;
     }
     // (its parent held for it, one hold a child)
-    const over = object.parent && !(object.parent as THREE.Scene).isScene ? object.parent : null;
+    const over = object.parent && !(object.parent as World).isWorld ? object.parent : null;
     const parent = over ? this.hold(over) : NONE;
     const id = this.core.engine.add_node(parent);
     this.held.set(object, { id, users: 1, parent, over });
@@ -129,7 +129,7 @@ export class Mirror {
   }
 
   /** One hold of `object` let go; the last lets its node go, and the hold it had on its parent. */
-  release(object: THREE.Object3D): void {
+  release(object: Node): void {
     const held = this.held.get(object);
     if (!held || --held.users > 0) return;
     this.held.delete(object);
@@ -141,7 +141,7 @@ export class Mirror {
   }
 
   /** The node `object` is held as, if it is. */
-  nodeOf(object: THREE.Object3D): number | undefined {
+  nodeOf(object: Node): number | undefined {
     return this.held.get(object)?.id;
   }
 
@@ -206,17 +206,17 @@ export class Mirror {
 
   /** `object`'s node moved under its object's parent where the game moved it (under something not held: hidden till
    *  it's handed over again). */
-  private keepParent(object: THREE.Object3D, id: number): void {
+  private keepParent(object: Node, id: number): void {
     const held = this.held.get(object)!;
     const parent = object.parent;
-    const now = !parent || (parent as THREE.Scene).isScene ? NONE : (parent.userData.node as number | undefined);
+    const now = !parent || (parent as World).isWorld ? NONE : (parent.userData.node as number | undefined);
     if (now === undefined) {
       this.shown[id] = 0;
       return;
     }
     if (now === held.parent) return;
     // (moved under another held object: the hold on the old one goes to the new one)
-    const over = parent && !(parent as THREE.Scene).isScene ? parent : null;
+    const over = parent && !(parent as World).isWorld ? parent : null;
     if (over) this.hold(over);
     if (held.over) this.release(held.over);
     held.over = over;
@@ -239,19 +239,19 @@ export class Mirror {
       }
       object.matrixWorldNeedsUpdate = false;
       // (a mesh bound where it stands, as three keeps it each frame: its bind's inverse is its matrix's)
-      const skinned = object as THREE.SkinnedMesh;
-      if (skinned.isSkinnedMesh && skinned.bindMode === THREE.AttachedBindMode) {
+      const skinned = object as SkinnedMesh;
+      if (skinned.isSkinnedMesh && skinned.bindMode === AttachedBindMode) {
         skinned.bindMatrixInverse.copy(skinned.matrixWorld).invert();
       }
       // (a camera hung on a hero: its view's inverse, as three's own update of it keeps)
-      const camera = object as THREE.Camera;
+      const camera = object as Camera;
       if (camera.isCamera) camera.matrixWorldInverse.copy(camera.matrixWorld).invert();
     }
   }
 
   /** Whether a node's object and all over it are shown. */
-  seen(object: THREE.Object3D): boolean {
-    for (let at: THREE.Object3D | null = object; at && !(at as THREE.Scene).isScene; at = at.parent) {
+  seen(object: Node): boolean {
+    for (let at: Node | null = object; at && !(at as World).isWorld; at = at.parent) {
       if (!at.visible) return false;
     }
     return true;

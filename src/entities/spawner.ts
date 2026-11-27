@@ -4,14 +4,14 @@ import { Enemy, type EnemyOpts } from './enemy';
 import { shockwave } from '../fx/effects';
 import { flash } from '../fx/lights';
 import { sfx } from '../core/audio';
-import type * as THREE from '../engine/three.ts';
+import type { Vec3 } from '../engine/api/index.ts';
 import type { EnemyId } from '../data/enemies';
 
 /** Co-op: where the host reports each new enemy to the guests (set by net/sync). */
 let spawnSink: ((e: Enemy) => void) | null = null;
 export function setSpawnSink(fn: typeof spawnSink): void { spawnSink = fn; }
 
-export function spawnEnemy(type: EnemyId, pos: THREE.Vector3, opts: Omit<EnemyOpts, 'pos'> = {}): Enemy {
+export function spawnEnemy(type: EnemyId, pos: Vec3, opts: Omit<EnemyOpts, 'pos'> = {}): Enemy {
   const e = new Enemy(type, { ...opts, pos });
   G.enemies.push(e);
   shockwave(pos, { color: 0xb050ff, intensity: 2.5, from: 0.2, to: e.radius * 2.5, life: 0.6 });
