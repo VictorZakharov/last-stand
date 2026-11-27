@@ -6,7 +6,7 @@ const STATE: Steps = {
   order: 239,
   open: (lab) => openCard(lab, 'records'),
   close: closeCard,
-  check: (canary) => cardChecked('records', canary),
+  check: (canary, lab) => cardChecked(lab, 'records', canary),
   canary: cardCanary,
 };
 export default STATE;

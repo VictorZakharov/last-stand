@@ -96,6 +96,13 @@ export class Label {
     this.paintedFonts = fontLoads;
   }
 
+  /** Its slot given back while it isn't seen (a panel hidden), painted again into a new one when it next is. */
+  release(): void {
+    if (this.slot) freeSlot(this.slot);
+    this.slot = null;
+    this.painted = 0;
+  }
+
   /** Takes it off the screen for good, its slot given back. */
   remove(): void {
     labels.delete(this);

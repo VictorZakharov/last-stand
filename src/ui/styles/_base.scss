@@ -79,5 +79,10 @@ html, body { touch-action: manipulation; -webkit-tap-highlight-color: transparen
 // (painting nothing by a filter, not its opacity: its own opacity still says whether it shows, as the lab and the
 // game read it, `checkVisibility`; still laid out and taking the pointer)
 .kit-ghost { filter: opacity(0) !important; }
+// (none while a modal the kit draws shows, the pause menu or a dialog: a ghost lies over the engine's canvas, so over
+// every screen the kit draws, and a finger on the pause menu's left half in a run moved the stick, where the page's
+// pause menu lay over it on main; the stick's see-through area too, under it by its z-index there)
+body:has(.modal.kit-mirror:not(.hidden)) :is(.kit-ghost, #touch),
+body:has(.modal.kit-mirror:not(.hidden)) :is(.kit-ghost, #touch) * { pointer-events: none !important; }
 
 /* #loading is styled inline in index.html so it paints before this stylesheet and the bundle load */

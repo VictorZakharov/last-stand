@@ -5,12 +5,17 @@ import { accent } from './diagFrame';
 import { FRAME, FRAME_DARK, INK, INK_DIM, PANEL, WELL, alpha } from './kit/theme';
 import type { Rule, Sheet } from './kit/sheet';
 
+/** A media query's answer now, its query made once (made afresh on each call, as every rule of every node asked it
+ *  every frame, `matchMedia` was a tenth of the pause menu's 6 ms a frame: `lab ui --cost --profile`). */
+export function mediaQuery(query: string): () => boolean {
+  const list = typeof matchMedia === 'function' ? matchMedia(query) : null;
+  return () => !!list?.matches;
+}
 /** CSS's `(max-height: 520px), (orientation: portrait) and (max-width: 1000px)`: a phone held sideways, an upright
  *  tablet (`_responsive.scss`'s first query) */
-export const SHORT_OR_UPRIGHT = (): boolean =>
-  matchMedia('(max-height: 520px), (orientation: portrait) and (max-width: 1000px)').matches;
+export const SHORT_OR_UPRIGHT = mediaQuery('(max-height: 520px), (orientation: portrait) and (max-width: 1000px)');
 /** CSS's `(max-height: 520px)`: a phone held sideways */
-export const SHORT = (): boolean => matchMedia('(max-height: 520px)').matches;
+export const SHORT = mediaQuery('(max-height: 520px)');
 /** the page in touch mode (`body.touch`) */
 export const TOUCH = (): boolean => document.body.classList.contains('touch');
 

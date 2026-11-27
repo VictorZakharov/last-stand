@@ -10,60 +10,26 @@
 // do), an inset ring (`ring`), the ornamented frame's corner brackets (`brackets`), a `:hover` (`hover`), a transition
 // (`ease`, `shift`), a looping animation of the opacity (`pulse`), a `z-index` over later siblings (`lift`). The
 // cascade is the sheet's order: a later rule wins, so a port lists its rules as the SCSS's specificity orders them.
-import { Panel, onFrame, type Scaled } from './panel';
-import { standIn, type PressState } from './press';
+import { KeptText } from './keptText';
+import { decorate, dimmed, drawPicture, isField, markNode, stopFields, type Node } from './sheetNode';
+import { environmentChanged, takeMutations, watchTree } from './sheetDirty';
+import { Panel, kitSent, onFrame, type Scaled } from './panel';
+import { standIn } from './press';
 import { forwards, unforward, type Forwarded } from './forward';
 import { engineCanvas } from '../../engine/index';
 import { RunLine, runsOf, type RunStyle } from './runs';
-import { svgArt } from './svgArt';
-import { INK, alpha } from './theme';
-import { textField, type Field, type FieldInput } from './field';
-import { isSlider, isTicked, slider, tickBox, type Control } from './formControls';
+import { textField, type FieldInput } from './field';
+import { isSlider, isTicked, slider, tickBox } from './formControls';
 import { scrolls } from './scroll';
 import { uiScales } from '../scale';
-import { accent } from '../diagFrame';
 import { BODY, SKIPPED, aroundKey, isText, now, ownKey, whole, type Gathered, type Rule, type Sheet,
   type SheetText } from './sheetRules';
-import { gather, makeBrackets, step, type Moving } from './sheetParts';
+import { gather, step } from './sheetParts';
 import type { PanelStyle } from '../../engine/ui';
 import type { TextStyle } from '../overlay/paint';
 
 export type { Dyn, Painted, Rule, Sheet, SheetText } from './sheetRules';
 
-/** A panel standing for one element of the page's. */
-interface Node {
-  element: Element;
-  panel: Panel;
-  /** where a lifted node stands: a panel over the whole screen placed on its parent's box each frame */
-  anchor: Panel | null;
-  /** the ring, the brackets and a painted picture, made as a rule first asks for them (drawn under what's in it) */
-  ring: Panel | null;
-  brackets: Panel | null;
-  painted: Panel | null;
-  /** its marks over its corners, drawn over what's in it */
-  marks: Panel[];
-  /** its words, where it's a line of text; its picture, where it's an SVG; its field, where it's a text field */
-  line: RunLine | null;
-  field: Field | null;
-  /** its ticked box or slider, where it's one */
-  control: Control | null;
-  /** the words it stands for, where it's a run of words beside boxes in its parent (CSS's anonymous box: a label's
-   *  words after its ticked box), its `element` then the parent's */
-  words: Text | null;
-  picture: Panel | null;
-  kids: Node[];
-  state: PressState;
-  /** whether it takes the pointer, by its rules or what's round it */
-  hits: boolean;
-  /** whether it was made to scroll */
-  scrolling: boolean;
-  /** its opacity and shift in their transition */
-  moving: Moving | null;
-  /** the layout's and the look's fields it was last given, so a field no rule gives now is taken back */
-  given: { box: string[]; look: string[] };
-  /** the rules that matched it, for the key they matched by */
-  matched: { key: string; rules: Rule[] } | null;
-}
 
 /** A screen of the page's drawn by the kit, following its element each frame. */
 export class SheetTree implements Forwarded {
@@ -73,6 +39,13 @@ export class SheetTree implements Forwarded {
   private readonly stop: () => void;
   /** whether a rule reads an inline style (`[style*=...]`): the elements' keys then hold their styles */
   private readonly styled: boolean;
+  /** the rules each inline element in a line matched, for the key it matched by */
+  private readonly inlineMatched = new WeakMap<Element, { key: string; rules: Rule[] }>();
+  /** whether it follows its element this frame (`sheetDirty.ts`: told so as what it reads changes) */
+  private dirty = true;
+  private readonly forget: () => void;
+  /** its nodes with a box ticked or a slider, followed every frame (code sets `checked` and `value` unannounced) */
+  private readonly controlled = new Set<Node>();
 
   /** `element` (kept out of sight) drawn by `sheet` in a panel inside `parent` (none: on the screen), its px those
    *  of `scaled`; `base` the text it starts from. */
@@ -84,8 +57,23 @@ export class SheetTree implements Forwarded {
     // (after the root in its room, so drawn over it)
     this.top = new Panel(room, { position: 'absolute', inset: 0 }, {}, scaled);
     standIn(element, this.root.panel);
-    this.stop = onFrame(() => this.follow(this.root, this.base, aroundKey(element), false, null));
+    this.stop = onFrame(() => this.tick());
+    this.forget = watchTree({ element, again: () => { this.dirty = true; } });
     forwards(this);
+  }
+
+  /** A frame: its element followed where something it reads may have changed, and again the frame after one that
+   *  sent the engine anything (a layout read back, an easing), until one sends nothing; else its controls alone. */
+  private tick(): void {
+    takeMutations();
+    if (!this.dirty && !environmentChanged()) {
+      for (const node of this.controlled) node.control!.follow();
+      return;
+    }
+    this.dirty = false;
+    const before = kitSent();
+    this.follow(this.root, this.base, aroundKey(this.root.element), false, null);
+    if (kitSent() !== before) this.dirty = true;
   }
 
   /** The deepest element taking the pointer drawn under (`x`, `y`) css px (the last drawn of those that meet). */
@@ -111,7 +99,9 @@ export class SheetTree implements Forwarded {
   hovers(over: Element | null, pressed: Element | null): void {
     const show = (node: Node): void => {
       const hovered = !!over && node.element.contains(over);
-      node.state = hovered ? (pressed && node.element.contains(pressed) ? 'down' : 'hover') : 'none';
+      const state = hovered ? (pressed && node.element.contains(pressed) ? 'down' : 'hover') : 'none';
+      if (state !== node.state) this.dirty = true;
+      node.state = state;
       for (const kid of node.kids) show(kid);
     };
     show(this.root);
@@ -130,6 +120,8 @@ export class SheetTree implements Forwarded {
   /** Taken away, the page's element left as it is. */
   remove(): void {
     this.stop();
+    this.forget();
+    this.uncontrol(this.root);
     stopFields(this.root);
     unforward(this);
     this.root.panel.remove();
@@ -141,7 +133,7 @@ export class SheetTree implements Forwarded {
     const words = made instanceof Text ? made : null;
     const element = words ? words.parentElement! : (made as Element);
     const node: Node = { element, panel, anchor: null, ring: null, brackets: null, painted: null, marks: [], line: null,
-      field: null, control: null, words, picture: null, kids: [], state: 'none', hits: false, scrolling: false,
+      field: null, control: null, words, kept: null, picture: null, kids: [], state: 'none', hits: false, scrolling: false,
       moving: null, given: { box: [], look: [] }, matched: null };
     // (each element's box read where it's drawn: the lab's, the tutorial's ring's; a run of words stands for none)
     if (!words) standIn(element, panel);
@@ -195,17 +187,19 @@ export class SheetTree implements Forwarded {
     node.panel.look(whole(style.look, node.given.look));
     node.given = { box: Object.keys(style.box), look: Object.keys(style.look) };
     if (style.box.display === 'none') return;
-    this.decorate(node, style);
-    if (style.picture || element instanceof SVGSVGElement) this.drawPicture(node, style.picture, style.turn);
+    decorate(node, style);
+    if (style.picture || element instanceof SVGSVGElement) drawPicture(node, style.picture, style.turn);
     else if (isField(element)) this.fieldOf(node, element, style.text);
     else if (isTicked(element) || isSlider(element)) {
       node.control ??= isTicked(element) ? tickBox(node.panel, element) : slider(node.panel, element);
+      this.controlled.add(node);
       node.control.follow();
     }
+    else if (element.tagName === 'PRE') this.sayKept(node, style.text);
     else if (isText(element) && !(style.flex && element.children.length)) this.sayText(node, style.text, style.after,
       style.before, style.says);
     else this.followKids(node, style.text, key, node.hits);
-    this.mark(node, style.marks);
+    markNode(node, style.marks);
   }
 
   /** Its text field, made the first time it shows, its words in `text` (its placeholder dimmed) where its rules
@@ -213,22 +207,9 @@ export class SheetTree implements Forwarded {
   private fieldOf(node: Node, input: FieldInput, text: TextStyle & SheetText): void {
     if (node.field) return;
     const placeholder = { ...text, color: dimmed(text.color) };
-    node.field = textField(node.panel, input, text, placeholder);
+    node.field = textField(node.panel, input, text, placeholder, true);
     const justify = text.align === 'center' ? 'center' : text.align === 'end' ? 'end' : 'start';
     node.panel.style({ justify });
-  }
-
-  /** Its marks, made after what's in it so drawn over it, and shown as its rules give them now. */
-  private mark(node: Node, marks: Gathered['marks']): void {
-    while (node.marks.length > marks.length) node.marks.pop()!.remove();
-    while (node.marks.length < marks.length) node.marks.push(new Panel(node.panel, { position: 'absolute' }));
-    marks.forEach((mark, at) => {
-      const panel = node.marks[at];
-      const side = mark.dot?.side;
-      panel.style({ inset: mark.inset, width: side, height: side });
-      panel.look({ fill: mark.dot?.fill, radius: side ? side / 2 : undefined });
-      panel.say(mark.says ?? '', { ...BODY, ...mark.text });
-    });
   }
 
   /** Its opacity and shift stepped in their transition, a pulse laid over: written into its look and its layout. */
@@ -269,27 +250,22 @@ export class SheetTree implements Forwarded {
     node.anchor.style({ inset: [box.y / k, 'auto', 'auto', box.x / k], width: box.w / k, height: box.h / k });
   }
 
-  /** Its ring, its brackets and its painted picture, made as first asked for, shown as asked. */
-  private decorate(node: Node, style: Gathered): void {
-    // (the painted picture first, so under the ring: a slot's frame is drawn over its art, as `.slot.art::after`)
-    const border = typeof style.box.border === 'number' ? style.box.border : 0;
-    const w = (typeof style.box.width === 'number' ? style.box.width : 0) - border * 2;
-    const h = (typeof style.box.height === 'number' ? style.box.height + 0 : w + border * 2) - border * 2;
-    const painted = w > 0 ? style.paint?.(node.element, w, h) ?? null : null;
-    if (painted && !node.painted) {
-      node.painted = new Panel(node.panel, { position: 'absolute', inset: 0 }, { radius: style.look.radius });
-    }
-    node.painted?.show(!!painted);
-    if (painted) node.painted!.picture(`painted ${painted.key} ${w}x${h}`, w, h, painted.paint);
-    const ring = style.ring;
-    if (ring && !node.ring) node.ring = new Panel(node.panel, { position: 'absolute', inset: 0, border: 1 });
-    if (node.ring) {
-      node.ring.show(!!ring);
-      if (ring) node.ring.look({ border: ring, radius: node.panel.looked.radius });
-    }
-    if (style.brackets && !node.brackets) node.brackets = makeBrackets(node.panel);
-    node.brackets?.show(style.brackets);
-    if (style.brackets) for (const bar of node.brackets!.inside) bar.look({ fill: accent() });
+  /** A `pre`'s words as they are, its line breaks kept and its lines wrapped at its width (`white-space: pre-wrap`). */
+  private sayKept(node: Node, text: TextStyle & SheetText): void {
+    const align = text.align === 'center' ? 'center' : text.align === 'end' ? 'right' : 'left';
+    node.kept ??= new KeptText(node.panel);
+    node.kept.set(node.element.textContent ?? '', text, align);
+  }
+
+  /** The rules giving `inline`'s text in `node`'s line, found again only as its key or its line's changes
+   *  (matched every frame, each run's every rule was a tenth of the pause menu's frame). */
+  private inlineRules(inline: Element, node: Node): Rule[] {
+    const key = `${node.matched?.key ?? ''}>${ownKey(inline, this.styled)}`;
+    const kept = this.inlineMatched.get(inline);
+    if (kept?.key === key) return kept.rules;
+    const rules = this.sheet.filter((rule) => rule.text && inline.matches(rule.at));
+    this.inlineMatched.set(inline, { key, rules });
+    return rules;
   }
 
   /** Its words as styled runs, each inline element in it styled by its rules. */
@@ -299,9 +275,9 @@ export class SheetTree implements Forwarded {
     const runs = says !== undefined ? [{ text: says, style: text }] : runsOf(node.element, text, (inline, outer) => {
       if (inline.classList.contains('hidden') || (inline as HTMLElement).hidden) return null;
       let style: RunStyle = { ...outer };
-      for (const rule of this.sheet) {
+      for (const rule of this.inlineRules(inline, node)) {
         if (rule.when && !rule.when()) continue;
-        if (rule.text && inline.matches(rule.at)) style = { ...style, ...now(rule.text, inline, node.panel) };
+        style = { ...style, ...now(rule.text!, inline, node.panel) };
       }
       return style;
     });
@@ -312,23 +288,10 @@ export class SheetTree implements Forwarded {
     node.line.panel.style({ justify: align });
   }
 
-  /** Its SVG (itself, or the one in it) drawn as its stylesheet paints it, at `size` (px) or its own box's, turned
-   *  `turn` degrees. */
-  private drawPicture(node: Node, size: [number, number] | undefined, turn: number): void {
-    const svg = node.element instanceof SVGSVGElement ? node.element : node.element.querySelector('svg');
-    if (!svg) return;
-    const [w, h] = size ?? [Number(svg.getAttribute('width')) || 16, Number(svg.getAttribute('height')) || 16];
-    node.picture ??= new Panel(node.panel, { width: w, height: h, shrink: 0 });
-    node.picture.style({ width: w, height: h });
-    const { key, image } = svgArt(svg);
-    if (!image) return;
-    node.picture.picture(`sheet ${key} ${w}x${h} ${turn}`, w, h, (c) => {
-      c.save();
-      c.translate(w / 2, h / 2);
-      c.rotate((turn * Math.PI) / 180);
-      c.drawImage(image, -w / 2, -h / 2, w, h);
-      c.restore();
-    });
+  /** Its controls and those inside it no longer followed (taken away). */
+  private uncontrol(node: Node): void {
+    this.controlled.delete(node);
+    for (const kid of node.kids) this.uncontrol(kid);
   }
 
   /** Its elements' panels, made again where the markup changed. */
@@ -342,6 +305,7 @@ export class SheetTree implements Forwarded {
       && elements.every((child, at) => (node.kids[at].words ?? node.kids[at].element) === child);
     if (!same) {
       for (const kid of node.kids) {
+        this.uncontrol(kid);
         stopFields(kid);
         kid.panel.remove();
         kid.anchor?.remove();
@@ -352,26 +316,4 @@ export class SheetTree implements Forwarded {
     }
     for (const kid of node.kids) this.follow(kid, text, key, hits, node);
   }
-}
-
-/** Whether `element` is a field typed into: a text input or a text area (not a box ticked, a slider or a button). */
-function isField(element: Element): element is FieldInput {
-  if (element instanceof HTMLTextAreaElement) return true;
-  // (a ticked box and a slider are `formControls.ts`'s)
-  return element instanceof HTMLInputElement && !NOT_TYPED.has(element.type);
-}
-
-/** the inputs that aren't typed into */
-const NOT_TYPED = new Set(['checkbox', 'radio', 'range', 'button', 'submit', 'reset', 'color', 'file', 'hidden']);
-
-/** A placeholder's colour: its field's at half its opacity (the browser's own `::placeholder`), where it's `#rrggbb`. */
-function dimmed(color: string | undefined): string {
-  const hex = color && /^#[0-9a-f]{6}$/i.test(color) ? color : INK;
-  return alpha(hex, 0.5);
-}
-
-/** Every text field in `node` and what's in it stops following its input (taken away). */
-function stopFields(node: Node): void {
-  node.field?.stop();
-  for (const kid of node.kids) stopFields(kid);
 }

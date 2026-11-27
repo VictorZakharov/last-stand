@@ -15,11 +15,15 @@
           </div>
         </div>
         <div class="br-col">
-          <label class="br-label" for="br-text">What happened? <small class="br-count"></small></label>
-          <textarea id="br-text" rows="4" enterkeyhint="done" placeholder="What you were doing, and what the game did"></textarea>
-          <label class="br-label" for="br-expected">What did you expect? <small>optional</small></label>
-          <input id="br-expected" type="text" enterkeyhint="done" placeholder="What should have happened">
-          <details class="br-sent"><summary>See everything in the report</summary><pre></pre></details>
+          <div class="br-what">
+            <label class="br-label" for="br-text">What happened? <small class="br-count"></small></label>
+            <textarea id="br-text" rows="4" enterkeyhint="done" placeholder="What you were doing, and what the game did"></textarea>
+          </div>
+          <div class="br-more">
+            <label class="br-label" for="br-expected">What did you expect? <small>optional</small></label>
+            <input id="br-expected" type="text" enterkeyhint="done" placeholder="What should have happened">
+            <details class="br-sent"><summary>See everything in the report</summary><pre></pre></details>
+          </div>
         </div>
       </div>
       <div class="br-privacy">The game adds where you were, its version and your device's make, so the bug can be found. Never your name tag, a room's code or your saves. Nothing leaves this device until you press Send, which sends it to the game's own server.</div>

@@ -3,7 +3,7 @@
 // screen's rail and its one panel at a time, an upright tablet's), the rail, the inventory's frame and tabs, and the
 // attributes. The equipment and the stash are `stashSheet.ts`, the key bar and the spellbook `loadoutSheet.ts`. Sizes
 // are px of the lobby's scale (`#menu .panel`'s `zoom: var(--ui)`); `#menu`'s own gaps and padding are css px.
-import { framed, SHORT_OR_UPRIGHT } from './controlsSheet';
+import { framed, mediaQuery, SHORT_OR_UPRIGHT } from './controlsSheet';
 import { accent } from './diagFrame';
 import { safeInsets } from './kit/safeArea';
 import { FRAME, INK, INK_DIM, WELL, WELL_LIT, alpha } from './kit/theme';
@@ -11,8 +11,7 @@ import { uiScales } from './scale';
 import type { Sheet } from './kit/sheet';
 
 /** CSS's `(orientation: portrait) and (max-width: 1000px) and (min-height: 521px)`: an upright tablet */
-export const UPRIGHT = (): boolean =>
-  matchMedia('(orientation: portrait) and (max-width: 1000px) and (min-height: 521px)').matches;
+export const UPRIGHT = mediaQuery('(orientation: portrait) and (max-width: 1000px) and (min-height: 521px)');
 /** a phone held sideways, one panel beside the rail (`SHORT_OR_UPRIGHT` but not upright) */
 export const SIDEWAYS = (): boolean => SHORT_OR_UPRIGHT() && !UPRIGHT();
 

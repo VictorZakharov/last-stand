@@ -13,8 +13,12 @@ const MOST_SIDE = 8192;
 /** a slot's height rounds up to one of these (px): each shelf of the atlas holds slots of one height (a downed
  *  partner's marker is some 200 px of art, 1000 at an 8K screen's UI scale at 100%) */
 const HEIGHTS = [16, 24, 32, 48, 64, 96, 128, 192, 256, 384, 512, 768, 1024];
-/** a full atlas is packed again (every label shown painted anew) when this share of it is slots given back */
+/** a full atlas is packed again (every label shown painted anew) when this share of it is slots given back, or as
+ *  soon as those would hold this many times the label that didn't fit: kept for a quarter alone, the bug report's
+ *  words grown a line at a time and its report's lines shown and put away filled shelves of every height with
+ *  slots given back, under a quarter of the atlas, and the next label didn't fit (#973) */
 const REPACK_SPARE = 0.25;
+const REPACK_WANTED = 2;
 /** a slot's width rounds up to a multiple of this (px) */
 const WIDTH_STEP = 16;
 /** a slot holds a label of up to this many times its size, and this many px more (more would waste it) */
@@ -38,6 +42,8 @@ let side = SIDE_MIN;
 /** the area of the slots given back, px, and whether a slot was asked for that didn't fit */
 let spareArea = 0;
 let full = false;
+/** the area of the last slot asked for that didn't fit (px) */
+let wantedArea = 0;
 /** what the labels are painted on before their slot is uploaded */
 let canvas: HTMLCanvasElement | null = null;
 let ctx: CanvasRenderingContext2D | null = null;
@@ -85,6 +91,7 @@ export function takeSlot(w: number, h: number): Slot | null {
   if (!shelf) {
     if (nextY + size.h + GUTTER > side) {
       full = true;
+      wantedArea = size.w * size.h;
       if (!crowded() && !warned && import.meta.env.DEV) console.error('overlay: the label atlas is full');
       warned = true;
       return null;
@@ -99,7 +106,8 @@ export function takeSlot(w: number, h: number): Slot | null {
 }
 
 /** Whether the atlas is full of slots given back, and so worth packing again. */
-const crowded = (): boolean => full && spareArea >= REPACK_SPARE * side * side;
+const crowded = (): boolean => full
+  && (spareArea >= REPACK_SPARE * side * side || spareArea >= REPACK_WANTED * wantedArea);
 
 /** Whether the atlas should be emptied for every label shown to be painted again: full of slots given back. */
 export const atlasCrowded = crowded;
@@ -126,6 +134,7 @@ export function clearAtlas(ratio: number): void {
   nextY = 0;
   spareArea = 0;
   full = false;
+  wantedArea = 0;
   warned = false;
 }
 

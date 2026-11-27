@@ -45,15 +45,20 @@ export function closeCard(): void {
 const boxWords = (box: DOMRect): string =>
   `${box.width.toFixed(0)}x${box.height.toFixed(0)} px at ${box.left.toFixed(0)}, ${box.top.toFixed(0)}`;
 
+/** frames for the UI kit to draw the canary's plant */
+const PLANT_FRAMES = 2;
+
 /** Whether `inner` lies within `outer` (to half a px). */
 const within = (inner: DOMRect, outer: DOMRect): boolean => inner.left >= outer.left - 0.5
   && inner.right <= outer.right + 0.5 && inner.top >= outer.top - 0.5 && inner.bottom <= outer.bottom + 0.5;
 
 /** The card within the window, its title and its page's control shown. */
-export function cardChecked(page: CardPage, canary: boolean): Found {
+export async function cardChecked(lab: Lab, page: CardPage, canary: boolean): Promise<Found> {
   const control = CONTROL[page];
   const controlElement = document.querySelector(`#vcard ${control.selector}`);
   if (canary) controlElement?.classList.add('hidden');
+  // (the plant drawn by the UI kit in its next frames: read at once, the card still showed the control)
+  if (canary) await lab.step(PLANT_FRAMES);
   const window_ = new DOMRect(0, 0, innerWidth, innerHeight);
   const card = boxOf(document.getElementById('vcard')!);
   const title = document.querySelector('#vcard .vc-title')!;

@@ -6,6 +6,7 @@
 import { measure, type TextStyle } from '../overlay/paint';
 import { onFrame, Panel } from './panel';
 import { pressable } from './press';
+import { wrapText } from './wrap';
 
 /** the caret's width (px of the reference layout), and how long it shows and hides in turn while still (ms) */
 const CARET_W = 1.5;
@@ -48,30 +49,44 @@ function caretAt(input: FieldInput, style: TextStyle): number {
  */
 export function textField(panel: Panel, input: FieldInput, style: TextStyle, placeholder: TextStyle,
   keepsFocus = false): Field {
-  panel.style({ overflow: 'hidden', direction: 'row', alignItems: 'center', justify: 'start' });
+  const area = input instanceof HTMLTextAreaElement;
+  // (a text area's lines from its top, wrapped at its width; an input's one line in its middle)
+  panel.style({ overflow: 'hidden', direction: 'row', alignItems: area ? 'start' : 'center', justify: 'start' });
   // (its words and caret in a line of their own, so the field's padding moves both)
-  const line = new Panel(panel, { position: 'relative', alignItems: 'center', shrink: 0 });
-  const words = new Panel(line, { shrink: 0 });
+  const line = new Panel(panel, area
+    ? { position: 'relative', grow: 1, shrink: 1, minWidth: 0 }
+    : { position: 'relative', alignItems: 'center', shrink: 0 });
+  const words = new Panel(line, area ? { grow: 1, shrink: 1, minWidth: 0 } : { shrink: 0 });
   const caret = new Panel(line, { position: 'absolute', width: CARET_W }, { fill: style.color });
   pressable({ panel, mirror: input, press: () => focusAtEnd(input), keepsFocus });
-  const stop = onFrame(() => follow(words, caret, input, style, placeholder));
+  const stop = onFrame(() => follow(words, caret, input, style, placeholder, area));
   return { panel, words, caret, input, stop };
 }
 
-/** `input` focused, its caret at its end (a press anywhere on the field, as an input's own). */
-function focusAtEnd(input: FieldInput): void {
+/** `input` focused, its caret at its end (a press anywhere on the field, as an input's own; the forwarder's too). */
+export function focusAtEnd(input: FieldInput): void {
   input.focus({ preventScroll: true });
   const end = input.value.length;
   input.setSelectionRange(end, end);
 }
 
-/** The field's words and caret brought up to the input's value, caret and focus. */
-function follow(words: Panel, caret: Panel, input: FieldInput, style: TextStyle, placeholder: TextStyle): void {
+/** The field's words and caret brought up to the input's value, caret and focus (a text area's wrapped). */
+function follow(words: Panel, caret: Panel, input: FieldInput, style: TextStyle, placeholder: TextStyle,
+  area: boolean): void {
   const shown = shownOf(input);
-  words.say(shown.text, shown.placeholder ? placeholder : style);
+  words.say(shown.text, shown.placeholder ? placeholder : style, area ? 'left' : null);
   const focused = document.activeElement === input;
   const lit = focused && Math.floor(performance.now() / BLINK_MS) % 2 === 0;
   const tall = style.line ? style.line * style.size : measure('Ag', style).h;
-  caret.style({ height: tall, inset: [0, 'auto', 'auto', caretAt(input, style)] });
+  const at = area ? caretInLines(input, style, words.wrapWidth) : { x: caretAt(input, style), y: 0 };
+  caret.style({ height: tall, inset: [at.y, 'auto', 'auto', at.x] });
   caret.look({ opacity: lit ? 1 : 0 });
+}
+
+/** Where a text area's caret stands in its words wrapped at `width` (px): after the line its text before it ends on. */
+function caretInLines(input: FieldInput, style: TextStyle, width: number): { x: number; y: number } {
+  if (!input.value || !width) return { x: 0, y: 0 };
+  const before = wrapText(input.value.slice(0, input.selectionEnd ?? input.value.length), style, width, 'left');
+  const last = before.lines[before.lines.length - 1];
+  return { x: last.w, y: (before.lines.length - 1) * before.line };
 }

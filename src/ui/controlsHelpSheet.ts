@@ -5,6 +5,7 @@
 // lobby's scale. Not drawn: the keyboard's faded right edge (CSS's mask; the rows end before it) and a key's
 // tooltip (its `title`).
 import { drawnAt } from './kit/press';
+import { kitFrame } from './kit/panel';
 import { SHORT } from './controlsSheet';
 import { accent } from './diagFrame';
 import { INK, INK_DIM, alpha } from './kit/theme';
@@ -26,10 +27,23 @@ const TOP_KEY_H = 34;
 /** The diagrams' zoom: 0.6 in the pause menu on a short screen (`.pause-box .controls-help.diagrams { zoom: .6 }`). */
 const zoomOf = (element: Element): number => (SHORT() && element.closest('.pause-box') ? 0.6 : 1);
 
+/** each pause page's drawn box, read once a frame (read for each key, its search of every stand-in was a fifth of
+ *  the pause menu's frame) */
+const pagesDrawn = new WeakMap<Element, { frame: number; drawn: ReturnType<typeof drawnAt> }>();
+
+/** `page`'s drawn box this frame. */
+function pageDrawn(page: Element): ReturnType<typeof drawnAt> {
+  const kept = pagesDrawn.get(page);
+  if (kept?.frame === kitFrame()) return kept.drawn;
+  const drawn = drawnAt(page);
+  pagesDrawn.set(page, { frame: kitFrame(), drawn });
+  return drawn;
+}
+
 /** The keyboard's column's width (CSS's `100cqw`: the pause page's inside, else the window's), px of its scale. */
 function columnOf(element: Element): number {
   const page = element.closest('.pb-page');
-  const drawn = page ? drawnAt(page) : null;
+  const drawn = page ? pageDrawn(page) : null;
   const zoom = zoomOf(element);
   if (!drawn) return innerWidth / uiScales.ui / zoom;
   return (drawn.w / uiScales.ui - 24) / zoom;

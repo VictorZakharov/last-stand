@@ -40,8 +40,10 @@ async function press(lab: Lab, node: HTMLElement): Promise<void> {
     await lab.clickOn(node);
     return;
   }
+  // (laid out by the UI kit first, as the menu may have opened this frame: a box not yet laid out has nothing to
+  // scroll to; then drawn scrolled in its next frames)
+  await lab.step(REVEAL_FRAMES);
   revealOf(node);
-  // (the UI kit draws it scrolled in its next frame)
   await lab.step(REVEAL_FRAMES);
   const box = boxOf(node);
   const x = box.x + box.width / 2;

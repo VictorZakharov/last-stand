@@ -76,6 +76,7 @@ export class Panel {
   /** Its layout changed: `style`'s fields over those it had (nothing sent where none differs). */
   style(style: PanelStyle): this {
     if (!differs(this.styleNow, style)) return this;
+    sent++;
     this.styleNow = { ...this.styleNow, ...style };
     uiRestyle(this.id, this.styleFloats());
     return this;
@@ -84,6 +85,7 @@ export class Panel {
   /** Its look changed: `look`'s fields over those it had (nothing sent where none differs). */
   look(look: PanelLook): this {
     if (!differs(this.lookNow, look)) return this;
+    sent++;
     this.lookNow = { ...this.lookNow, ...look };
     uiRelook(this.id, lookFloats(this.fullLook(), this.scale()));
     return this;
@@ -101,8 +103,10 @@ export class Panel {
    *  width, a share of the row, or stretched across a column), as its text asks for none. */
   say(text: string, style: TextStyle, wrap: TextAlign | null = null): this {
     if (text === '') return this.silence();
-    const same = this.text && this.text.text === text && this.text.style === style;
+    // (by value: a sheet gives a new style each time it follows, and every text was measured and painted again)
+    const same = this.text && this.text.text === text && sameStyle(this.text.style, style);
     if (same && this.text!.align === wrap) return this;
+    sent++;
     if (wrap) return this.sayWrapped(text, style, wrap);
     const label = this.text?.label ?? new Label(0);
     const measured = measure(text, style);
@@ -119,6 +123,11 @@ export class Panel {
     this.paintedAt = 0;
     if (restyle) uiRestyle(this.id, this.styleFloats());
     return this;
+  }
+
+  /** The width its wrapped text was last broken at (px of the reference layout; 0 before it's laid out). */
+  get wrapWidth(): number {
+    return this.text?.wrapped?.width ?? 0;
   }
 
   /** `say`'s text broken at its panel's width, as wide as that and as tall as its lines (`wrapAgain`). */
@@ -167,6 +176,7 @@ export class Panel {
    *  `key` changes (a skill's icon in a state: `key` names both). */
   picture(key: string, w: number, h: number, paint: Paint): this {
     if (this.text && this.text.style === null && this.text.text === key) return this;
+    sent++;
     const label = this.text?.label ?? new Label(0);
     label.sizedBy = this.scaled;
     label.show({ w, h, paint });
@@ -276,12 +286,25 @@ export class Panel {
   }
 
   /** Written again at the scale now, its text painted again where the atlas let it go or the ratio changed. */
-  refresh(ratio: number): void {
+  /** It and every panel inside it brought up to date, `seenRound` whether what's round it is seen: a text not seen
+   *  gives its slot of the atlas back (painted, the pause menu's hidden tabs and every screen put away held their
+   *  texts' slots, and opening the bug report twice filled the atlas: #973). */
+  refreshTree(ratio: number, seenRound: boolean): void {
+    const seen = seenRound && (this.lookNow.opacity ?? 1) > 0 && this.styleNow.display !== 'none';
+    this.refresh(ratio, seen);
+    for (const child of this.children) child.refreshTree(ratio, seen);
+  }
+
+  private refresh(ratio: number, seen: boolean): void {
     const k = this.scale();
     const text = this.text;
     let relook = false;
     if (text?.align) this.wrapAgain(k);
-    if (text) {
+    if (text && !seen && text.label.slot) {
+      text.label.release();
+      this.paintedAt = 0;
+    }
+    if (text && seen) {
       const paint = ratio * k;
       const label = text.label;
       if (label.painted !== paint || !label.slot) {
@@ -310,6 +333,20 @@ function contentOf(text: Text, k: number): { w: number; h: number } {
 }
 
 /** Whether any of `change`'s fields differs from `now`'s (a list or an object by its parts as text). */
+/** Whether two texts' styles are alike field for field (their shadows by value). */
+function sameStyle(a: TextStyle | null, b: TextStyle): boolean {
+  if (a === b) return true;
+  if (!a) return false;
+  const keys = new Set([...Object.keys(a), ...Object.keys(b)]) as Set<keyof TextStyle>;
+  for (const key of keys) {
+    const [was, now] = [a[key], b[key]];
+    if (was === now) continue;
+    if (Array.isArray(was) && Array.isArray(now) && JSON.stringify(was) === JSON.stringify(now)) continue;
+    return false;
+  }
+  return true;
+}
+
 function differs<T extends object>(now: T, change: Partial<T>): boolean {
   for (const key of Object.keys(change) as (keyof T)[]) {
     const a = now[key];
@@ -366,24 +403,40 @@ export function layer(z: number): Panel {
 export const everyLayer = (): [number, Panel][] => [...layers.entries()];
 
 const everyFrame = new Set<() => void>();
+/** the frames the panels were brought up to date for */
+let frames = 0;
+/** how many changes panels have sent the engine (a style, a look, a text or a picture) */
+let sent = 0;
+/** How many changes panels have sent the engine so far: a tree that sent none in a frame has settled. */
+export const kitSent = (): number => sent;
+/** Which frame the panels are being brought up to date for: what's read once a frame is keyed by it. */
+export const kitFrame = (): number => frames;
 /** `tick` run before each frame's panels are brought up to date (an animation's step), until `stop` is called. */
 export function onFrame(tick: () => void): () => void {
   everyFrame.add(tick);
   return () => everyFrame.delete(tick);
 }
 
+/** The ticks run before each frame, and how many panels there are: what the kit does each frame, for the lab's
+ *  measure of its cost (`lab ui --cost`). */
+export const frameTicks = (): ReadonlySet<() => void> => everyFrame;
+export const panelCount = (): number => panels.size;
+
 /** Every panel brought up to date before the engine's frame (the screen's size and ratio, each text painted), all
  *  of them shown or not. */
 function refreshPanels(shown: boolean): void {
   const canvas = engineCanvas();
   if (!canvas) return;
+  frames++;
   // (an animation's step may make the first panel, and the screen's with it)
   for (const tick of everyFrame) tick();
   if (!screen) return;
   uiScreen(innerWidth, innerHeight, canvas.width / Math.max(1, innerWidth));
   screen.show(shown);
   const ratio = G.renderer.getPixelRatio();
-  for (const panel of panels) panel.refresh(ratio);
+  for (const panel of panels) {
+    if (!panel.parent) panel.refreshTree(ratio, true);
+  }
 }
 overFrame.panels = refreshPanels;
 overFrame.hidePanels = () => { screen?.show(false); };

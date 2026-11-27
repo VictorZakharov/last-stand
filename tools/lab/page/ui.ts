@@ -15,6 +15,7 @@ import { floatText } from '../../../src/ui/floaters';
 import * as overlay from '../../../src/ui/overlay/layer';
 import { hdrOutput } from './hdrOutput';
 import { digitsShown } from './digits';
+import { kitCost } from './uiKitCost';
 import { asked, boxText, describe, runSetUp, settleAnimations } from './uiKit';
 import type { Found, Steps } from './uiKit';
 
@@ -25,6 +26,8 @@ export interface UiOptions {
   state: UiState;
   /** HDR forced on first, as on a display in HDR mode (the pause menu then shows its levels) */
   hdr?: boolean;
+  /** what the UI kit's screens cost the main thread each frame said (`uiKitCost.ts`) */
+  cost?: boolean;
   /** the system's cursor planted on the page's body: the cursors' check must find it */
   canary?: boolean;
   /** the bug report states' reports service, the lab's own (node/tracesService.mjs): Send sends there alone */
@@ -182,7 +185,10 @@ export async function ui(lab: Lab, options: UiOptions): Promise<Report> {
   asked.reports = options.reports;
   await steps.open(lab);
   const pictured = await pictureState(lab, state, steps.held ?? {});
-  const found = (await steps.check?.(canary, lab)) ?? { lines: [], problems: [] };
+  // (timed as the state stands, before its check moves anything)
+  const cost = options.cost ? kitCost(state, canary) : { lines: [], problems: [] };
+  const checked = (await steps.check?.(canary, lab)) ?? { lines: [], problems: [] };
+  const found = { lines: [...cost.lines, ...checked.lines], problems: [...cost.problems, ...checked.problems] };
   const extra = (await steps.pictures?.(lab)) ?? [];
   const cursors = cursorsShown(canary);
   const digits = await digitsShown(lab, canary);

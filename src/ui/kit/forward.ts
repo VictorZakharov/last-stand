@@ -7,6 +7,7 @@
 // began and ended on one element, the context menu, and a drag of a `draggable` element (dragstart, dragenter,
 // dragover, dragleave, drop and dragend, with a `DataTransfer` the page's handlers write and read). The game's code
 // listens as it did.
+import { focusAtEnd } from './field';
 import { engineCanvas } from '../../engine/index';
 import { overPanels } from '../../core/input';
 import { uiHit } from '../../engine/ui';
@@ -195,10 +196,20 @@ function release(e: PointerEvent, under: Element | null): void {
   if (!shared) return;
   // (a button, a label, a ticked box and a summary by their own `click`: a dispatched click ticks nothing, and a
   // disabled button refuses its own)
-  const own = shared.closest('button, label, input, summary');
-  if (own instanceof HTMLElement) own.click();
+  const own = shared.closest('button, label, input, summary, textarea');
+  // (a field typed into focused, as a press on it focuses it: its own `click` focuses nothing)
+  if (isTyped(own)) focusAtEnd(own);
+  else if (own instanceof HTMLElement) own.click();
   else shared.dispatchEvent(mouse('click', e));
   clicked = true;
+}
+
+/** the inputs typed into (not ticked, slid or pressed) */
+const TYPED = new Set(['text', 'search', 'email', 'url', 'tel', 'password', 'number']);
+
+/** Whether `element` is a field typed into: a text area, or an input of a typed kind. */
+function isTyped(element: Element | null): element is HTMLInputElement | HTMLTextAreaElement {
+  return element instanceof HTMLTextAreaElement || (element instanceof HTMLInputElement && TYPED.has(element.type));
 }
 
 /** The browser's press `e`, told to the element under it already, stopped short of the page (heard on the window

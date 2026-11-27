@@ -5,6 +5,7 @@ import { drawnFor } from './press';
 import { elementAt } from './forward';
 import { scrollRoom, scrollTo } from './scroll';
 import { uiScales } from '../scale';
+import { engineCanvas } from '../../engine/index';
 
 /** How far `element` scrolls past what it shows (css px): its drawn panel's room, else the page's own. */
 export function scrollMore(element: Element): number {
@@ -31,7 +32,11 @@ export function reveal(element: Element): void {
   scrollTo(round, round.scrolled + off);
 }
 
-/** The page's element drawn under (`x`, `y`) css px taking the pointer: a screen's the kit draws, else the page's. */
+/** The page's element drawn under (`x`, `y`) css px taking the pointer: the page's own where it lies over the
+ *  engine's canvas (a notice, a ghost the kit draws), else a screen's the kit draws there, else the page's. */
 export function elementUnder(x: number, y: number): Element | null {
-  return elementAt(x, y) ?? document.elementFromPoint(x, y);
+  const page = document.elementFromPoint(x, y);
+  const canvas = engineCanvas();
+  const overKit = !!page && !!canvas && page !== canvas && !page.contains(canvas);
+  return overKit ? page : elementAt(x, y) ?? page;
 }

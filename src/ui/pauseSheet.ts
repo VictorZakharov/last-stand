@@ -6,7 +6,7 @@
 // install dialog opens over it. Sizes are px of the lobby's scale. Not drawn: the box's red glow is a single fill
 // round its top's middle (CSS's ellipse over its gradient), a lit tab's line along its top.
 import { drawModal, windowShare } from './modalSheet';
-import { SHORT, TOUCH } from './controlsSheet';
+import { mediaQuery, SHORT, TOUCH } from './controlsSheet';
 import { CONTROLS_HELP } from './controlsHelpSheet';
 import { COLOUR_PICKER } from './colourPickerSheet';
 import { TABS } from './lobbySheet';
@@ -18,7 +18,7 @@ import { uiScales } from './scale';
 import type { Painted, Sheet } from './kit/sheet';
 
 /** CSS's `(max-width: 720px)`: the settings in one column, the title over the two buttons */
-const NARROW = (): boolean => matchMedia('(max-width: 720px)').matches;
+export const NARROW = mediaQuery('(max-width: 720px)');
 /** a co-op partner's text (`$ally-text`) */
 const ALLY_TEXT = '#9ccfff';
 /** the build's quiet lines */
@@ -135,6 +135,9 @@ const DEVELOPER: Sheet = [
 const hexAccent = (): string => (/^#[0-9a-f]{6}$/i.test(accent()) ? accent() : '#e2c07e');
 
 const SHEET: Sheet = [
+  // (out of sight under the bug report opened over it, kept as it is to come back to: two boxes one over another
+  // read as a muddle)
+  { at: '#pause', when: () => !!document.querySelector('#bug-report:not(.hidden)'), box: { display: 'none' } },
   ...TABS,
   ...CONTROLS_HELP,
   ...COLOUR_PICKER,
