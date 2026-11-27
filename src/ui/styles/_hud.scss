@@ -44,25 +44,10 @@
    engine (ui/aimMarks.ts): `#crosshair`, `#charge-ring`, `#look-hint` out of sight (`.kit-mirror`) */
 /* the banner is drawn by the engine (ui/bannerPanel.ts): `#banner` out of sight (`.kit-mirror`) */
 
-/* a duel (ui/duelHud.ts): each side's name either side of the round's badge, the score and the round's time under
-   the badge; nothing of a run's spoils; the result where the banner stands */
-#duel-score { position: absolute; top: hud(22px); left: 50%; transform: translateX(-50%); display: grid; grid-template-columns: minmax(0, 1fr) hud(96px) minmax(0, 1fr);
-  width: min(74vw, hud(620px)); align-items: start; pointer-events: none; font-family: var(--font-display); text-shadow: 0 2px 4px #000, 0 0 10px rgba(0,0,0,.8); }
+/* a duel (ui/duelHud.ts): its score and result drawn by the engine (ui/duelPanels.ts), their elements out of sight
+   (`.kit-mirror`); nothing of a run's spoils */
 #duel-score.hidden, #duel-result.hidden { display: none; }
-#duel-score .ds-a, #duel-score .ds-b { font-size: 19px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-top: hud(12px); }
-#duel-score .ds-a { text-align: right; color: #f0a184; }
-#duel-score .ds-b { text-align: left; color: #9fd0ff; }
-#duel-score .ds-mid { display: flex; flex-direction: column; align-items: center; padding-top: hud(62px); }
-#duel-score .ds-points { font-size: 24px; color: #ffe7b0; letter-spacing: 2px; }
-#duel-score .ds-note { font: 15px var(--font-body); font-style: normal; color: var(--ink-dim); letter-spacing: 1px; }
 #hud.duel #spoils { display: none; }
-#duel-result { position: absolute; top: 24%; left: 50%; transform: translateX(-50%); width: min(86vw, 460px); box-sizing: border-box; padding: 18px 22px; text-align: center;
-  background: linear-gradient(180deg, rgba(8,7,9,.94), rgba(8,7,9,.86)); border: 1px solid var(--frame); outline: 3px solid rgba(74,54,32,.9); pointer-events: none; }
-#duel-result .dr-title { font: 900 44px var(--font-display); letter-spacing: 3px; color: #f3e1b0; }
-#duel-result[data-outcome="lost"] .dr-title { color: #e2a08c; }
-#duel-result .dr-who { margin-top: 4px; font-size: 19px; color: var(--ink); }
-#duel-result .dr-score { margin-top: 6px; font: 700 30px var(--font-display); color: #ffe7b0; letter-spacing: 3px; }
-#duel-result .dr-note { margin-top: 8px; font-size: 14px; color: var(--ink-dim); }
 
 /* the choice after a wave and the badge are drawn by the engine (ui/decisionPanel.ts, ui/waveBadge.ts: their
    numbers are those rules'); a row of buttons in a dialog still takes this */

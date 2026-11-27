@@ -6,6 +6,10 @@ import { banner } from '../../../../src/ui/hud';
 import { caught, type Found, type Steps } from '../uiKit';
 import { boxOf, type Lab } from '../lab';
 
+/** the engine's banner, where the commit draws it: held half way as the page's animation is paused there */
+interface BannerPanel { BANNER_HOLD: { share: number | null } }
+const KIT = Object.values(import.meta.glob<BannerPanel>('../../../../src/ui/bannerPanel.ts', { eager: true }))[0];
+
 /** what it says: a wave's start */
 const TITLE = 'Wave 7';
 const SUB = 'The horde grows';
@@ -20,6 +24,7 @@ async function openBanner(lab: Lab): Promise<void> {
     animation.pause();
     animation.currentTime = HALF_MS;
   }
+  if (KIT) KIT.BANNER_HOLD.share = 0.5;
   await lab.step(Math.round(HALF_MS / FRAME_MS));
 }
 
@@ -42,6 +47,7 @@ const STATE: Steps = {
   inRun: true,
   open: openBanner,
   close() {
+    if (KIT) KIT.BANNER_HOLD.share = null;
     document.querySelector('#banner')?.classList.add('hidden');
   },
   check(canary) {

@@ -93,12 +93,21 @@ export function describe(element: Element): string {
   return `${element.tagName.toLowerCase()}${own}${within ? ` in #${within.id}` : ''}`;
 }
 
+/** the UI kit's clock where the commit has one (an A/B's other commit may not) */
+interface Motion { finishMotion(): void }
+const KIT_MOTION = Object.values(import.meta.glob<Motion>('../../../src/ui/kit/motion.ts', { eager: true }))[0];
+
 /**
  * Every animation of the page brought to its end (an endless one to its start), so a picture shows the UI at rest:
- * CSS animations run on the browser's own clock, not the lab's. One driven by a scroll is at rest already.
+ * CSS animations run on the browser's own clock, not the lab's. One driven by a scroll is at rest already, and one a
+ * state holds paused stays where it's held.
  */
 export function settleAnimations(): void {
+  // (the engine's, where the commit draws UI by it: stepped on the page's clock as CSS's are, `src/ui/kit/motion.ts`)
+  KIT_MOTION?.finishMotion();
   for (const animation of document.getAnimations().filter(onTheClock)) {
+    // (one a state holds paused, at the moment it pictures, is left as it is: the banner's half way)
+    if (animation.playState === 'paused') continue;
     const iterations = animation.effect?.getComputedTiming().iterations ?? 1;
     if (iterations === Infinity) {
       animation.pause();

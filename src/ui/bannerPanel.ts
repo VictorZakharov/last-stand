@@ -31,6 +31,9 @@ let drawn: Banner | null = null;
 let shownCount = '';
 let begun = -Infinity;
 
+/** its showing held at a share of its time (the lab's picture of it half way), or none */
+export const BANNER_HOLD: { share: number | null } = { share: null };
+
 function make(page: HTMLElement): Banner {
   const root = new Panel(null, {
     position: 'absolute', inset: [TOP, 0, 'auto', 0], direction: 'column', alignItems: 'center',
@@ -55,7 +58,7 @@ function follow(): void {
     shownCount = count;
     begun = now();
   }
-  const t = along(begun, TIME);
+  const t = BANNER_HOLD.share ?? along(begun, TIME);
   const seen = shows && t < 1;
   drawn.root.show(seen);
   if (!seen) return;

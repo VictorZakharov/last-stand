@@ -498,14 +498,17 @@ the SCSS. In the order they're taken: the kit's own pieces first, then what show
   yet: the spoils' bump as a rarity's count rises. The rooms' two-round pipelines, asked by the walk once the lobby
   shows, counted as compiled in play and failed the tutorial (6): asked behind the lobby now (`ahead.ts`).
 - [x] The run's banner (`ui/bannerPanel.ts`: its keyframes' fade and rise, not its 0.96 scale): `lab ui --states
-  banner`, held half way (a state of its own; main's side has none to compare with).
+  banner --ab --fresh`, held half way, its box main's (267x124). The lab's settling finishes the kit's animations
+  too (`settleAnimations`), and leaves a paused one of the page's as it's held.
 - [x] The crosshair, the charge ring and the look hint (`ui/aimMarks.ts`): `lab draw --class ranger --views third
   --ab` holds the crosshair's pictures to main's as it's drawn, at its beat's height and bold, its beat and drift
   read off the engine's (`CROSSHAIR`), both canaries caught.
 - [x] The buffs (`ui/buffsPanel.ts`): `lab ui --states barsBusy,barsBusyTouch --ab` (a ward and the ale added),
   their boxes main's. Their words under them now show on a desktop: main's bottom bar was painted over them.
-- [ ] The rest of the run's HUD (`hud.html`): the party's frames, the downed note and the
-  revive, the duel's score and result.
+- [x] A duel's score and result (`ui/duelPanels.ts`: their text and the result's box css px, as main's never scaled
+  them): `lab ui --states duelHud --ab --fresh`, their boxes within 2 px of main's. Main's note has old-style digits
+  (its `font` shorthand), the drawn one lining. A name too long for its column is squeezed, not cut with an ellipsis.
+- [ ] The rest of the run's HUD (`hud.html`): the party's frames, the downed note and the revive.
 - [ ] The overlays down the left (`diag.html`: the performance overlay, the net's, the battle log), the chat.
 - [ ] The touch controls (`touch.html`).
 - [ ] The damage meter, the sit hint.

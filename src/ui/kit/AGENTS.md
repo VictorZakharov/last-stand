@@ -8,8 +8,10 @@ the world's labels (Bulwark's `ui.rs` and `gpu/panels.rs`, the page's calls in `
 the run's target frame (`ui/targetFrame.ts`), the wave's badge (`ui/waveBadge.ts`), the choice after a wave
 (`ui/decisionPanel.ts`), the bottom bar (`ui/bottomBar.ts`, `hotbarPanel.ts`, `slotFace.ts`, `frenzyPips.ts`),
 the minimap's column (`ui/minimapColumn.ts`), the training's tracker (`ui/trainingPanel.ts`), the banner
-(`ui/bannerPanel.ts`), the close views' crosshair, charge ring and look hint (`ui/aimMarks.ts`) and the buffs
-(`ui/buffsPanel.ts`).
+(`ui/bannerPanel.ts`), the close views' crosshair, charge ring and look hint (`ui/aimMarks.ts`), the buffs
+(`ui/buffsPanel.ts`) and a duel's score and result (`ui/duelPanels.ts`).
+- **A new state of `lab ui` runs on main's side only with `--fresh`** the first time: an A/B's kept side was run
+  with the states of its day, and says nothing of one added since.
 
 The rules across the game are the [root AGENTS.md](../../../AGENTS.md).
 
