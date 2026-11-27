@@ -1,8 +1,8 @@
 // A canary's plant of a layout, wherever the element is drawn (#973): on the page, its inline style; where the UI kit
-// draws it (`.kit-mirror`), the panel the kit draws for it, laid out as planted. A stylesheet or an inline style planted
-// on an element the kit draws moves nothing, and the canary goes unseen (the talk's card, its Leave). The kit keeps a
-// field it was given from outside until a rule of the element's gives that field: plant fields its rules leave alone,
-// or the tree takes them back as it follows the page.
+// draws it (`.kit-mirror`), the panel the kit draws for it, laid out as planted. A stylesheet or an inline style
+// planted on an element the kit draws moves nothing, and the canary goes unseen (the talk's card, its Leave). The kit
+// keeps a field it was given from outside until a rule of the element's gives that field: plant fields its rules leave
+// alone, or the tree takes them back as it follows the page.
 import { uiScales } from '../../../src/ui/scale';
 import type { Lab } from './lab';
 
@@ -12,6 +12,8 @@ export interface Planted {
   down?: number;
   /** this tall, and not shrunk to fit its room */
   height?: number;
+  /** this wide, and not shrunk to fit its room */
+  width?: number;
 }
 
 /** A panel the UI kit draws, laid out as told (src/ui/kit/panel.ts) */
@@ -35,6 +37,9 @@ function pageStyle(planted: Planted): Partial<CSSStyleDeclaration> {
   const style: Partial<CSSStyleDeclaration> = {};
   if (planted.down !== undefined) Object.assign(style, { position: 'relative', top: `${planted.down}px` });
   if (planted.height !== undefined) Object.assign(style, { height: `${planted.height}px`, maxHeight: 'none' });
+  if (planted.width !== undefined) {
+    Object.assign(style, { width: `${planted.width}px`, maxWidth: 'none', flexShrink: '0' });
+  }
   return style;
 }
 
@@ -45,6 +50,9 @@ function kitStyle(planted: Planted, k: number): Record<string, unknown> {
     'auto', 'auto'] });
   if (planted.height !== undefined) {
     Object.assign(style, { height: planted.height / k, maxHeight: planted.height / k, shrink: 0 });
+  }
+  if (planted.width !== undefined) {
+    Object.assign(style, { width: planted.width / k, maxWidth: planted.width / k, shrink: 0 });
   }
   return style;
 }

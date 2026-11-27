@@ -170,6 +170,10 @@ The rules across the game are the [root AGENTS.md](../../../AGENTS.md).
 - **A list scrolled to its end by the page is held there by the kit** (`scrollToEnd` in `drawn.ts`): the page's
   `scrollTop` reached the panel a frame before its new lines were laid out, and the talk's newest line stood below
   its edge.
+- **A world's pick by the canvas asks `overPanels` first** (`bindPointer` in `game/village.ts`, the floor's names,
+  the keeper's mugs): a button the page drew took the press, but a drawn one leaves its target the canvas, and the
+  ale's Put down over Bertram opened his talk as it put the mug down (`lab tavern --parts touch`). A page's element
+  the screens are drawn over (`seeThrough`: the touch stick's pad) is the canvas's to the lab's `elementUnder` too.
 - **Check a panel against main's page with `npm run lab -- ui --states <state> --ab`**: its box's lines and its
   pictures beside main's (`ui --states target`: the frame's box 384x52 at 113 on both, its name and line read off
   the engine's frame where the tree has it, off `#target` on main's).

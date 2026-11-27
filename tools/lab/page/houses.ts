@@ -9,6 +9,8 @@
 // before the cottage's door, the village shown again and the room hidden, the
 // yard's dummies still on their spots. Each in another of the views.
 import { boundsOf, Box3, Mesh, Node, Vec3 } from './sceneApi.ts';
+import { boxOf } from './lab';
+import { plantLayout } from './kitPlant';
 import type { Lab, Pictured, Report } from './lab';
 import { G } from '../../../src/state';
 import { HOUSES, ROOM_IDS, insideOf, outsideOf, type RoomId } from '../../../src/data/houses';
@@ -193,7 +195,8 @@ async function ledgerProblems(lab: Lab, moments: Pictured[]): Promise<string[]> 
   const pages = card.querySelectorAll('.rec-book section').length;
   if (pages < 4) problems.push(`the ledger's card shows ${pages} pages of 4`);
   moments.push(await lab.screen('houses-ledger'));
-  const box = card.getBoundingClientRect();
+  await lab.step(3);
+  const box = boxOf(card);
   if (box.left < 0 || box.top < 0 || box.right > innerWidth || box.bottom > innerHeight) {
     problems.push(`the ledger's card leaves the window: ${box.left},${box.top} to ${box.right},${box.bottom}`);
   }
@@ -244,7 +247,8 @@ async function codexProblems(lab: Lab, moments: Pictured[]): Promise<string[]> {
   await lab.step(5);
   const guide = document.getElementById('guide')!;
   if (guide.classList.contains('hidden')) problems.push('the Codex opened no guide');
-  const box = (guide.querySelector('.gd-box') ?? guide).getBoundingClientRect();
+  await lab.step(3);
+  const box = boxOf(guide.querySelector('.gd-box') ?? guide);
   if (box.left < -1 || box.top < -1 || box.right > innerWidth + 1 || box.bottom > innerHeight + 1) {
     problems.push(`the guide leaves the window: ${box.left},${box.top} to ${box.right},${box.bottom}`);
   }
@@ -277,15 +281,16 @@ async function scholarProblems(lab: Lab, moments: Pictured[], plant: boolean): P
   const box = card.querySelector('.tk-box') as HTMLElement;
   // (its max width lifted too, and kept from shrinking: the modal box's own and its flex row both held a width set
   // past the window in it)
-  if (plant) Object.assign(box.style, { width: `${innerWidth * 2}px`, maxWidth: 'none', flexShrink: '0' });
+  const unplant = plant ? await plantLayout(lab, box, { width: innerWidth * 2 }) : null;
+  await lab.step(3);
   if (card.classList.contains('hidden')) problems.push('E at the scholar opened no talk');
   const within = (r: DOMRect) => r.left >= -1 && r.top >= -1 && r.right <= innerWidth + 1 && r.bottom <= innerHeight + 1;
   const outside = (what: string, r: DOMRect) => `${what} leaves the window: ${r.left.toFixed(0)},${r.top.toFixed(0)} to ${r.right.toFixed(0)},${r.bottom.toFixed(0)}`;
-  const boxAt = box.getBoundingClientRect();
+  const boxAt = boxOf(box);
   const caught = plant && !within(boxAt);
   if (!within(boxAt) && !plant) problems.push(outside('the talk card', boxAt));
   for (const reply of card.querySelectorAll('.tk-reply')) {
-    const r = reply.getBoundingClientRect();
+    const r = boxOf(reply);
     if (!within(r) && !plant) problems.push(outside(`the reply "${reply.textContent}"`, r));
   }
   moments.push(await lab.screen('houses-scholar-talk'));
@@ -301,7 +306,7 @@ async function scholarProblems(lab: Lab, moments: Pictured[], plant: boolean): P
   await lab.step(5);
   if (!card.classList.contains('hidden')) problems.push('Esc left the talk open');
   if (G.menuOpen) problems.push('the Esc that ended the talk opened the pause menu');
-  if (plant) Object.assign(box.style, { width: '', maxWidth: '', flexShrink: '' });
+  await unplant?.();
   return { problems, caught };
 }
 

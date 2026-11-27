@@ -3,7 +3,7 @@
 // draws nothing there.
 import { drawnFor } from './press';
 import { onFrame } from './panel';
-import { elementAt } from './forward';
+import { elementAt, seenThrough } from './forward';
 import { scrollRoom, scrollTo } from './scroll';
 export { picturesLoaded } from './svgArt';
 import { uiScales } from '../scale';
@@ -39,7 +39,8 @@ export function reveal(element: Element): void {
 export function elementUnder(x: number, y: number): Element | null {
   const page = document.elementFromPoint(x, y);
   const canvas = engineCanvas();
-  const overKit = !!page && !!canvas && page !== canvas && !page.contains(canvas);
+  // (a page's element the screens are drawn over, the touch controls' move pad, is the canvas's there)
+  const overKit = !!page && !!canvas && page !== canvas && !page.contains(canvas) && !seenThrough(page);
   return overKit ? page : elementAt(x, y) ?? page;
 }
 

@@ -73,6 +73,9 @@ export function seeThrough(element: Element): void {
   through.add(element);
 }
 
+/** Whether `element` is a page's element the kit's screens are drawn over (`seeThrough`). */
+export const seenThrough = (element: Element): boolean => through.has(element);
+
 /** Whether a pointer event is the engine's canvas's, its place a place on it (not under the mouse's lock). */
 function onCanvas(e: PointerEvent | MouseEvent): boolean {
   const target = e.target;

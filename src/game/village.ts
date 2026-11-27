@@ -13,7 +13,7 @@ import { G } from '../state';
 import { RUN } from '../data/balance';
 import { VILLAGE_OBJECTS, YARD, worldToYard, type VillageObject } from '../data/village';
 import { HOUSE_OBJECTS } from '../data/houses';
-import { input, isDown, wasPressed, cylinder } from '../core/input';
+import { input, isDown, overPanels, wasPressed, cylinder } from '../core/input';
 import { setLens, viewMode } from '../core/renderer';
 import { groundHeight } from '../world/ground';
 import { anchorLabel, promptArt, textArt } from '../ui/floaters';
@@ -340,7 +340,10 @@ export function inYard(x: number, z: number): boolean {
  *  to it and uses it (the press never reaches the game: no attack, no move stick). */
 function bindPointer(): void {
   const canvas = G.renderer.domElement;
-  const over = (e: MouseEvent): VillageObject | null => (e.target === canvas ? objectAt(e.clientX, e.clientY) : null);
+  // (a press on a panel the engine draws over the world is the panel's: the ale's Put down over Bertram opened his
+  // talk as it put the mug down)
+  const over = (e: MouseEvent): VillageObject | null =>
+    (e.target === canvas && !overPanels.at(e.clientX, e.clientY) ? objectAt(e.clientX, e.clientY) : null);
   window.addEventListener('mousemove', (e) => {
     if (input.touchMode) return;
     const o = over(e);

@@ -16,7 +16,7 @@ import { basesFor, newItemId, rarityOf } from '../loot/items';
 import { groundHeight } from '../world/ground';
 import { project, floatText, onLayout } from '../ui/floaters';
 import { hideTooltip, itemTooltip, itemTooltipHTML, moveTooltip, showTooltipAt, type TooltipContent } from '../ui/tooltip';
-import { input } from '../core/input';
+import { input, overPanels } from '../core/input';
 import { itemIconImage } from '../ui/itemIcons';
 import { Label, ORDER, labelAt, type LabelArt } from '../ui/overlay/layer';
 import { drawText, measure, OUTLINE, roundRect, svgImage, type TextStyle } from '../ui/overlay/paint';
@@ -272,7 +272,9 @@ let hovered: Drop | null = null, pressed: Drop | null = null;
 function bindPicking(): void {
   const canvas = G.renderer.domElement;
   // (only where the game field itself is under the pointer: a panel or the touch controls over a name keep it)
-  const over = (e: MouseEvent): Drop | null => (e.target === canvas ? dropAt(e.clientX, e.clientY) : null);
+  // (a press on a panel the engine draws over the world is the panel's: core/input.ts's overPanels)
+  const over = (e: MouseEvent): Drop | null =>
+    (e.target === canvas && !overPanels.at(e.clientX, e.clientY) ? dropAt(e.clientX, e.clientY) : null);
   window.addEventListener('mousemove', (e) => {
     if (input.touchMode) return;
     const d = over(e);

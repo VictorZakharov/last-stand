@@ -600,5 +600,7 @@ the SCSS. In the order they're taken: the kit's own pieces first, then what show
 - [x] The talk with the village's folk (`screens/talk/talkSheet.ts`, the face in its oval `folkFaceSheet.ts`, which
   the merchant's will take): `lab ui --states talk,talkTouch --ab` at 1920x1080 and 844x390@3, the card within a px
   of main's, each reply a finger's height on touch; `lab talk` and both canaries pass.
-- [ ] The guide's pages, the trade, the merchant, the drink.
+- [x] The ale's Drink and Put down and its notice (`screens/drink/drinkSheet.ts`): `lab tavern --parts touch --ab
+  --screen 844x390@3`, the buttons where main's stand; `--parts touch,boost,eyes` and `lab houses --canary` pass.
+- [ ] The guide's pages, the trade, the merchant.
 - [ ] The loading screen (styled before any script runs: the last, if at all).

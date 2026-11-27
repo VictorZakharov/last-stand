@@ -6,6 +6,7 @@
 // down on the bar. Each beat pictured as the player sees it.
 import { Mesh, Node, PerspectiveCamera, Vec3 } from './sceneApi.ts';
 import { waitingMug } from './takeAle';
+import { boxOf } from './lab';
 import type { Lab, Pictured } from './lab';
 import { G } from '../../../src/state';
 import { armsCamera, faceCamera, viewMode } from '../../../src/core/renderer';
@@ -81,7 +82,8 @@ export async function throughTheEyes(lab: Lab, c: EyesCase, lines: string[], pro
   await useByE(lab, c.keeper, problems);
   await c.frames(12);
   const card = document.getElementById('talk');
-  const box = card?.querySelector('.tk-box')?.getBoundingClientRect();
+  const talkBox = card?.querySelector('.tk-box');
+  const box = talkBox ? boxOf(talkBox) : null;
   const within = !!box && box.left >= -1 && box.top >= -1
     && box.right <= innerWidth + 1 && box.bottom <= innerHeight + 1;
   const open = !!card && !card.classList.contains('hidden');

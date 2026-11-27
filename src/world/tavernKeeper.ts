@@ -42,7 +42,7 @@ import { MugLedger, type Mug, type MugPlace } from '../game/mugs';
 import { isGuest, isHost } from '../net/role';
 import { tavernLink } from '../net/tavernLink';
 import { onMessages } from '../net/messages';
-import { cursorRay, input, spendPress, wasPressed } from '../core/input';
+import { cursorRay, input, overPanels, spendPress, wasPressed } from '../core/input';
 import { outline } from '../ui/overlay/outline';
 import { claimPointWhen, objectNearAt, objectPointed, takeClickWhen, takeKeyWhen } from '../game/keyTakers';
 import { drinkChoice, type DrinkPick } from '../game/drinkChoice';
@@ -1743,6 +1743,7 @@ export function tavernKeeper(b: Build, talking: () => boolean): TavernKeeper {
   });
   addEventListener('pointerdown', (e) => {
     if (e.button !== 0 || !keeper || !KEEPER_TAKE.click || !takeFree() || e.target !== G.renderer.domElement) return;
+    if (overPanels.at(e.clientX, e.clientY)) return;
     const press = pressAt(e.clientX, e.clientY);
     const id = mugAt(press.x, press.y, waitingNow(), POINTED_MOST);
     if (id < 0) return;

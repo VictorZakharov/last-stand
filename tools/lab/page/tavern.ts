@@ -12,6 +12,7 @@
 // none may jump or go from sight but into a hero's hand, and his planted feet must not slide. Frames drawn during the
 // check must request no engine pipelines. `--canary` includes letting the hero walk while drinking.
 import { Maths, Node, Quat, Vec3 } from './sceneApi.ts';
+import { boxOf } from './lab';
 import type { Frame, Lab, Pictured, Report, ViewName } from './lab';
 import { G } from '../../../src/state';
 import { enterRoom } from '../../../src/game/rooms';
@@ -634,7 +635,7 @@ export async function tavern(lab: Lab, options: TavernOptions): Promise<Report> 
     if (options.parts.includes('touch')) {
       await viewAs(lab, 'top');
       await standAtBar();
-      const touch = await tavernTouch(lab, tv, options.canary);
+      const touch = await tavernTouch(lab, tv, options.canary, moments);
       lines.push(touch.text);
       problems.push(...touch.problems);
     }
@@ -676,7 +677,8 @@ export async function tavern(lab: Lab, options: TavernOptions): Promise<Report> 
   if (await frames(TALK_READ, () => talkAnswerable()) < 0) problems.push('the keeper\'s lines never all showed');
   const card = document.getElementById('talk')!;
   if (card.classList.contains('hidden')) problems.push('E at the keeper opened no talk');
-  const box = card.querySelector('.tk-box')!.getBoundingClientRect();
+  await lab.step(3);
+  const box = boxOf(card.querySelector('.tk-box')!);
   if (box.left < -1 || box.top < -1 || box.right > innerWidth + 1 || box.bottom > innerHeight + 1) problems.push('the talk card leaves the window');
   const first = card.querySelector('.tk-reply')?.textContent ?? '';
   if (!/beer/i.test(first)) problems.push(`the keeper's first reply offers no beer: "${first}"`);

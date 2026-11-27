@@ -49,6 +49,7 @@ import { drawPause } from './pauseSheet';
 import { drawDialogs } from './dialogsSheet';
 import { drawSaves } from './savesSheet';
 import { drawHeroes } from './heroesSheet';
+import { drawDrink } from './screens/drink/drinkSheet';
 import { drawDecision } from './decisionPanel';
 import { drawBottomBar } from './bottomBar';
 
@@ -89,6 +90,7 @@ export function initHud(): void {
   drawSaves();
   drawPause();
   drawDialogs();
+  drawDrink();
   drawItemSheet();
   drawTooltip();
   drawBottomBar();

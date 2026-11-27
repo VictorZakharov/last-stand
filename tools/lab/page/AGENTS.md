@@ -172,6 +172,10 @@ end touch the same lines and conflict (`npm run check:sorted` holds the order; t
   Calling the draw sampler after the carry left the room measured the village. The first-person 10% beat
   comes before confirming Drink because the choice holds the cast at 16%. On touch, position the mug clear of
   the movement pad and put it down from an open edge within reach of the bar.
+- `tavernTouch.ts`, `keeperBoostRun.ts`: the touch part leaves the game in touch mode, where E takes no mug (no
+  pointer to aim it), so the boost part moves the mouse first: it passed only while a stray talk's Escape, a fault of
+  the drawn buttons' (Put down's tap opening Bertram's talk), happened to end it. The choice is pictured
+  (`ale-choice-touch`).
 - `throws.ts`: the vine's shot lets the bow go `SHOT.loosedAfter` frames into the hold, drawn as far as it is: held for its whole draw and the quiver's fetch from the throw, the arrow left a frame after the vine let him go (on main too).
 - `tour.ts`: `lab tour`, the game at 20 fixed stands as the player sees them (the square, the campfire, the hall
   from above, inside and after hero selection, every cottage's door, every house's room, each biome), held to another
