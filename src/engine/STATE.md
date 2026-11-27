@@ -530,7 +530,8 @@ the SCSS. In the order they're taken: the kit's own pieces first, then what show
   stay laid out and take the fingers (`.kit-ghost`: painting nothing by a filter, so their opacity still says
   whether they show), the panels standing where each is laid out; an icon of the page's SVG is drawn as it's styled
   (`kit/svgArt.ts`). A fade of a round button's opacity isn't followed: shown or not.
-- [ ] The damage meter, the sit hint.
+- [x] The damage meter, the sit hint: the world's labels already (`overlay/`, drawn by the engine's overlay pass),
+  no element of the page's to move.
 - [ ] The tooltip and the item's sheet.
 - [ ] The lobby (`menu.html`: the rail, the loadout and spellbook, the equipment, the stash and its filter, the
   stats, the village's card, the duel's menu), the summary, the dialogs (duel ask, install, rotate, perf ask,
