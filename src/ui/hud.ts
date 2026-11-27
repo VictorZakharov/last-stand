@@ -17,6 +17,8 @@ import { choiceTaught } from './choiceLesson';
 import { isCoop, readying } from '../net/role';
 import { skillArt } from './skillArt';
 import { drawVillageOnMinimap, villageMinimapScale } from './villageMinimap';
+import { initMinimapColumn } from './minimapColumn';
+import { initTrainingPanel } from './trainingPanel';
 
 import { SKILL_KEYS } from '../loot/loadout';
 import { FRENZY } from '../data/balance';
@@ -49,6 +51,9 @@ export function initHud(): void {
   drawDecision();
   drawWaveBadge();
   drawBottomBar();
+  // (the minimap's column, the training's tracker in it)
+  initMinimapColumn();
+  initTrainingPanel();
   mmCtx = $<HTMLCanvasElement>('#minimap').getContext('2d')!;
   on('lootGained', renderSpoils);
   on('waveStarted', () => renderSpoils());
@@ -456,7 +461,13 @@ const minimapHooks: ((c: CanvasRenderingContext2D, S: number) => void)[] = [];
 /** Runs `draw` each time the minimap is drawn, in its turned frame (`S` px a metre, its middle the arena's). */
 export function onMinimap(draw: (c: CanvasRenderingContext2D, S: number) => void): void { minimapHooks.push(draw); }
 
+/** how many times the minimap has been drawn (its picture on the engine's panel is painted again as it changes:
+ *  `minimapColumn.ts`) */
+let draws = 0;
+export const minimapDraws = (): number => draws;
+
 function drawMinimap() {
+  draws++;
   const c = mmCtx, W = 200, inRun = G.mode === 'run';
   const S = inRun ? W / MINIMAP_METRES : villageMinimapScale(W); // world units -> px
   c.clearRect(0, 0, W, W);

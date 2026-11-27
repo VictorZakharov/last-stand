@@ -233,6 +233,8 @@ export class Panel {
 
   /** Taken away, with every panel inside it. */
   remove(): void {
+    // (taken away already, with a panel round it: its id may be another panel's now, which this would take away)
+    if (this.removed) return;
     this.forget();
     uiRemove(this.id);
   }

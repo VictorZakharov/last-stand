@@ -11,6 +11,10 @@ export interface TextStyle {
   face: 'display' | 'body';
   size: number;
   weight?: number;
+  /** slanted (CSS's `font-style: italic`) */
+  italic?: boolean;
+  /** a line under it (CSS's `text-decoration: underline`) */
+  underline?: boolean;
   color: string;
   shadows?: Shadow[];
   /** px between letters */
@@ -91,7 +95,8 @@ export function liningLoaded(): Promise<void> {
 }
 
 /** The canvas font for `s`. */
-export const fontOf = (s: TextStyle): string => `${s.weight ?? 400} ${s.size}px ${fontFaces()[s.face]}`;
+export const fontOf = (s: TextStyle): string =>
+  `${s.italic ? 'italic ' : ''}${s.weight ?? 400} ${s.size}px ${fontFaces()[s.face]}`;
 
 let measurer: CanvasRenderingContext2D | null = null;
 /** A context to measure text with (never drawn). */
@@ -150,6 +155,8 @@ export function drawText(c: CanvasRenderingContext2D, t: Measured, x: number, y:
   c.shadowColor = 'transparent';
   c.shadowBlur = c.shadowOffsetX = c.shadowOffsetY = 0;
   c.fillText(t.text, x, baseline);
+  // (as the browser draws one: a tenth of the size under the baseline, a fourteenth of it thick)
+  if (s.underline) c.fillRect(x, baseline + s.size * 0.1, t.w, Math.max(1 / scale, s.size / 14));
 }
 
 /** A vertical gradient over a box (`stops` top to bottom, evenly). */

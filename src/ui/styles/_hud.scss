@@ -41,26 +41,7 @@
 
 // (`--mm-room`: the minimap's width, which the touch HUD's full screen button stands beside, `_touch.scss`)
 #hud { --mm-room: 212px; }
-#minimap-wrap { position: absolute; top: hud(8px); right: hud(12px); width: var(--mm-room); display: flex; flex-direction: column; align-items: center; }
-.mm-title { font-family: var(--font-display); font-size: 16px; color: #f0e2c0; text-shadow: 0 2px 4px #000; margin-bottom: 2px; }
-// (a finger held on it pings there: ui/ping.ts)
-body.touch #minimap { pointer-events: auto; touch-action: none; -webkit-touch-callout: none; user-select: none; }
-#minimap { width: 200px; height: 200px; border-radius: 50%; border: 4px solid #6e6a62; box-shadow: 0 0 0 2px #000, inset 0 0 20px #000, 0 6px 14px rgba(0,0,0,.8); background: rgba(10,10,12,.55); }
-.objectives { align-self: stretch; margin-top: 12px; padding-left: 8px; }
-.obj-title { font-family: var(--font-display); font-size: 16px; color: #8fa8ff; text-shadow: 0 1px 3px #000; }
-.obj-line { display: flex; align-items: center; gap: 6px; font-size: 14px; text-shadow: 0 1px 2px #000; }
-.obj-line .box { width: 10px; height: 10px; border: 1px solid var(--ink-dim); }
-.obj-line.done .box { background: var(--highlight); }
-#spoils { align-self: stretch; margin-top: 10px; padding: 6px 8px; background: rgba(0,0,0,.45); border-left: 2px solid var(--frame); }
-.sp-title { font-size: 13px; color: var(--ink-dim); text-transform: uppercase; letter-spacing: 1px; }
-.sp-title b { color: var(--highlight); font-size: 15px; }
-.sp-list { font-size: 13px; font-weight: 500; max-height: 170px; overflow: hidden; }
-.sp-list { display: flex; flex-wrap: wrap; gap: 2px 10px; }
-.sp-r { display: inline-block; transform-origin: left center; white-space: nowrap; text-shadow: 0 1px 2px #000; }
-/* a rarity's count pulses when an item of it is gained */
-.sp-r.bump { animation: sp-bump .5s ease-out; }
-@keyframes sp-bump { from { transform: scale(1.5); text-shadow: 0 0 10px currentColor; } }
-@media (prefers-reduced-motion: reduce) { .sp-r.bump { animation: none; } }
+/* the minimap's column is drawn by the engine (ui/minimapColumn.ts): its elements out of sight (`.kit-mirror`) */
 
 /* the close views (V): a crosshair at the centre, and the click that takes the mouse for looking. Bold while a drawn
    shot is held at full draw (`.full`, main.ts), swelling into it once as a heart knocks, never pulsing on; on a layer
@@ -129,5 +110,4 @@ body.touch #minimap { pointer-events: auto; touch-action: none; -webkit-touch-ca
    elements centred with translateX(-50%) scale from their left edge (= screen centre).
    The scale leaves an element's offsets from the screen's edges alone: give those as hud() too. */
 #banner    { scale: var(--hud, 1); transform-origin: left top; }
-#minimap-wrap { scale: var(--hud, 1); transform-origin: right top; }
 #buffs     { scale: var(--hud, 1); transform-origin: left bottom; left: calc(50% - 470px * var(--hud, 1)); bottom: hud(76px); }

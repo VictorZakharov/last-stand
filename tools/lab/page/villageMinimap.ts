@@ -5,7 +5,7 @@
 // the yard alone, and put away with the inventory; the camera turned, each house walked into drawn upright on the
 // canvas, its roof to the top (from play: "lets always orient icons north, house icons I mean"). Its canary reads the
 // arrow half a turn off, sets the tracker over the minimap and reads the houses as turned with the camera.
-import type { Lab, Pictured } from './lab';
+import { boxOf, type Lab, type Pictured } from './lab';
 import { G } from '../../../src/state';
 import { cameraYaw, turnBy } from '../../../src/core/renderer';
 import { HOUSES, ROOM_IDS } from '../../../src/data/houses';
@@ -128,8 +128,9 @@ function shareDrawn(pixels: ImageData): number {
 
 /** The tracker against the minimap, as boxes: its problems. */
 function trackerBelow(): string[] {
-  const map = document.querySelector('#minimap')!.getBoundingClientRect();
-  const tracker = document.querySelector('#training')!.getBoundingClientRect();
+  // (where the engine draws them: the page's are out of sight, `ui/minimapColumn.ts`, `ui/trainingPanel.ts`)
+  const map = boxOf(document.querySelector('#minimap')!);
+  const tracker = boxOf(document.querySelector('#training')!);
   const problems: string[] = [];
   if (tracker.top < map.bottom) problems.push('the tracker lies over the minimap');
   if (tracker.top - map.bottom > map.width * MOST_BELOW) problems.push('the tracker stands far under the minimap');

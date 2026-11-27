@@ -22,6 +22,7 @@ import { Label, ORDER } from './overlay/layer';
 import { drawText, measure, OUTLINE, type TextStyle } from './overlay/paint';
 import { onLayout, onScreenOrEdge, project } from './floaters';
 import { MINIMAP_METRES, onMinimap } from './hud';
+import { minimapDrawn } from './minimapColumn';
 import { nameOf } from './coop';
 import { uiScales } from './scale';
 import type { Enemy } from '../entities/enemy';
@@ -47,16 +48,15 @@ function pingColour(p: Player): string {
 let minimap: HTMLCanvasElement | null = null;
 const mapCanvas = (): HTMLCanvasElement | null => (minimap ??= document.querySelector<HTMLCanvasElement>('#minimap'));
 
-/** The arena's point under (x, y) of the page (css px) on the minimap, none off its round or with it hidden. */
+/** The arena's point under (x, y) of the page (css px) on the minimap, none off its round or with it hidden: the
+ *  minimap as the engine draws it (`minimapColumn.ts`; the page's canvas is out of sight). */
 export function mapToWorld(x: number, y: number): { x: number; z: number } | null {
   const c = mapCanvas();
-  if (!c) return null;
-  const rect = c.getBoundingClientRect();
-  if (rect.width < 1 || !c.offsetWidth) return null;
-  // (its border is in its box, and the page scales the whole of it: `--hud`)
-  const border = c.clientLeft * (rect.width / c.offsetWidth);
-  const inner = rect.width - 2 * border, W = c.width, S = W / MINIMAP_METRES;
-  const px = ((x - rect.left - border) / inner - 0.5) * W, py = ((y - rect.top - border) / inner - 0.5) * W;
+  const drawn = minimapDrawn();
+  if (!c || !drawn || drawn.box.w < 1) return null;
+  const rect = drawn.box, border = drawn.bezel;
+  const inner = rect.w - 2 * border, W = c.width, S = W / MINIMAP_METRES;
+  const px = ((x - rect.x - border) / inner - 0.5) * W, py = ((y - rect.y - border) / inner - 0.5) * W;
   if (Math.hypot(px, py) > W / 2) return null;
   const yaw = -cameraYaw(), cos = Math.cos(yaw), sin = Math.sin(yaw);
   return { x: (px * cos - py * sin) / S, z: (px * sin + py * cos) / S };
@@ -101,12 +101,25 @@ function pingAt(aim: Aim): void {
   ping({ k: aim.foe ? 'foe' : 'spot', x: aim.x, z: aim.z }, aim.foe);
 }
 
+/** Whether (x, y) of the page (css px) lies on the minimap as it's drawn. */
+function overMinimap(x: number, y: number): boolean {
+  const drawn = minimapDrawn();
+  if (!drawn) return false;
+  const { box } = drawn;
+  return Math.hypot(x - box.x - box.w / 2, y - box.y - box.h / 2) <= box.w / 2;
+}
+
+/** whether the window listens for a finger on the minimap */
+let bound = false;
+
+/** A finger on the minimap heard: on the window as it captures, the minimap being drawn by the engine (its disk takes
+ *  the pointer on touch, so the world never has it). */
 function bindMinimap(): void {
-  const c = mapCanvas();
-  if (!c || c.dataset.pings) return;
-  c.dataset.pings = '1';
+  if (bound) return;
+  bound = true;
+  const c = window;
   c.addEventListener('pointerdown', (e) => {
-    if (e.pointerType === 'mouse') return;
+    if (e.pointerType === 'mouse' || !overMinimap(e.clientX, e.clientY)) return;
     press = { id: e.pointerId, x0: e.clientX, y0: e.clientY, x: e.clientX, y: e.clientY, t: 0 };
     e.preventDefault();
   });
@@ -123,7 +136,9 @@ function bindMinimap(): void {
   });
   c.addEventListener('pointercancel', (e) => { if (press && e.pointerId === press.id) press = null; });
   // (a long press is the browser's context menu too)
-  c.addEventListener('contextmenu', (e) => e.preventDefault());
+  c.addEventListener('contextmenu', (e) => {
+    if (overMinimap(e.clientX, e.clientY)) e.preventDefault();
+  });
 }
 
 /** the foe this game outlines as the one Left Shift let go would ping (held by us: anything else's outline is its own) */

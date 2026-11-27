@@ -12,7 +12,9 @@ import { boxOf, middleOf } from './lab';
 import { G } from '../../../src/state';
 import { readCookie, writeCookie } from '../../../src/core/cookies';
 import { setView } from '../../../src/core/renderer';
-import { programsCompiledInGame } from '../../../src/core/shaders';
+import * as shaders from '../../../src/core/shaders';
+
+const { programsCompiledInGame } = shaders;
 import { setTraceConsent, traceConsent } from '../../../src/perf/consent';
 import { TUTORIAL, type TutorialStepId } from '../../../src/data/tutorial';
 import { YARD_DUMMIES, yardToWorld } from '../../../src/data/village';
@@ -125,7 +127,8 @@ function ringProblems(step: string, selector: string): string[] {
 /** What's wrong with where the tracker stands as it asks for `step`. */
 function trackerProblems(step: string): string[] {
   if (!shows('#training')) return [`${step}: the tracker isn't shown`];
-  const box = element('#training').getBoundingClientRect();
+  // (where the engine draws it: the page's is out of sight, `ui/trainingPanel.ts`)
+  const box = boxOf(element('#training'));
   const problems: string[] = [];
   if (box.left < 0 || box.top < 0 || box.right > innerWidth || box.bottom > innerHeight) {
     problems.push(`${step}: the tracker reaches past the window (${box.width.toFixed(0)}x${box.height.toFixed(0)} px at ${box.left.toFixed(0)}, ${box.top.toFixed(0)})`);
@@ -240,6 +243,8 @@ export async function tutorial(lab: Lab, options: TutorialOptions): Promise<Repo
     await lab.step(SHOW_FRAMES, REST);
   }
   const compiledBefore = programsCompiledInGame();
+  // (what compiled, named where the commit has the list: `lateCompiles`)
+  const lateBefore = (shaders as { lateCompiles?: string[] }).lateCompiles?.length ?? 0;
   const lifeBefore = p.life;
   await use('notice');
   check(open('#help') && open('#help .help-tour'), 'the notice board shows no tutorial');
@@ -500,7 +505,8 @@ export async function tutorial(lab: Lab, options: TutorialOptions): Promise<Repo
   };
   problems.push(...kept());
   const compiled = programsCompiledInGame() - compiledBefore;
-  check(compiled === 0, `${compiled} programs were compiled on the walk`);
+  const named = (shaders as { lateCompiles?: string[] }).lateCompiles?.slice(lateBefore) ?? [];
+  check(compiled === 0, `${compiled} programs were compiled on the walk${named.length ? `: ${named.join('; ')}` : ''}`);
   lines.push(`  programs compiled on the walk: ${compiled}`);
   await stand(ON_THE_SQUARE);
   await use('notice');

@@ -491,11 +491,17 @@ the SCSS. In the order they're taken: the kit's own pieces first, then what show
 - [x] The kit: text that wraps at its panel's laid-out width.
 - [x] The kit: a panel that scrolls, its children clipped to it.
 - [x] The kit: a text field (the page's input kept out of sight, its value and caret drawn).
-- [ ] The run's HUD (`hud.html`): the minimap's frame, the spoils, the buffs, the banner, the party's frames, the
-  downed note and the revive, the duel's score and result, the look hint, the crosshair and the charge ring.
+- [x] The minimap's column (`ui/minimapColumn.ts`: the place's name, the minimap in its bezel, the objectives, the
+  spoils) and the training's tracker in it, beside it or afloat (`ui/trainingPanel.ts`); the pings read the drawn
+  minimap (`ui/ping.ts`). `lab ui --states run,villageHud,villageHudTouch,hudTouch --ab` at 1920x1080, 844x390 and
+  751x298 holds their boxes to main's; `village --only minimapOut` and `tutorial` read the drawn boxes. Not drawn
+  yet: the spoils' bump as a rarity's count rises. The tutorial's walk compiles the room's six two-round pipelines
+  as he walks into the hall (named in its failure now).
+- [ ] The rest of the run's HUD (`hud.html`): the buffs, the banner, the party's frames, the downed note and the
+  revive, the duel's score and result, the look hint, the crosshair and the charge ring.
 - [ ] The overlays down the left (`diag.html`: the performance overlay, the net's, the battle log), the chat.
 - [ ] The touch controls (`touch.html`).
-- [ ] The training's tracker, the damage meter, the sit hint.
+- [ ] The damage meter, the sit hint.
 - [ ] The tooltip and the item's sheet.
 - [ ] The lobby (`menu.html`: the rail, the loadout and spellbook, the equipment, the stash and its filter, the
   stats, the village's card, the duel's menu), the summary, the dialogs (duel ask, install, rotate, perf ask,

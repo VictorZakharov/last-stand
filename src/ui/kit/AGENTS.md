@@ -6,7 +6,8 @@ kit: a `Panel` is a box in a tree, laid out as CSS's flexbox lays one out (`Pane
 other panels or a line of text (`say`). The engine lays the tree out and draws it in one call over its frame, after
 the world's labels (Bulwark's `ui.rs` and `gpu/panels.rs`, the page's calls in `engine/ui.ts`). Moved onto it so far:
 the run's target frame (`ui/targetFrame.ts`), the wave's badge (`ui/waveBadge.ts`), the choice after a wave
-(`ui/decisionPanel.ts`) and the bottom bar (`ui/bottomBar.ts`, `hotbarPanel.ts`, `slotFace.ts`, `frenzyPips.ts`).
+(`ui/decisionPanel.ts`), the bottom bar (`ui/bottomBar.ts`, `hotbarPanel.ts`, `slotFace.ts`, `frenzyPips.ts`),
+the minimap's column (`ui/minimapColumn.ts`) and the training's tracker (`ui/trainingPanel.ts`).
 
 The rules across the game are the [root AGENTS.md](../../../AGENTS.md).
 
@@ -60,7 +61,16 @@ The rules across the game are the [root AGENTS.md](../../../AGENTS.md).
   tooltip listens to. The Alt cursor over mouse look hovers and presses what a panel stands for
   (`standsForAt`: `elementFromPoint` finds the canvas), and the tutorial's ring rings a drawn box (`shownBox`).
 - **A panel taken away is forgotten by the presses, tips and stand-ins** (`Panel.gone`): its id is the next panel's,
-  and a bar rebuilt for touch otherwise kept the desktop's skill bar standing in for `#hotbar`.
+  and a bar rebuilt for touch otherwise kept the desktop's skill bar standing in for `#hotbar`. Taking it away again
+  does nothing (`remove` on a panel gone): the tracker inside the minimap's column went with the column rebuilt for
+  a phone's screen, and its own `remove` after took away the new column's minimap, whose id it had become.
+- **A text's words are drawn across its box, so a text in a column stands at its start** (`alignSelf: 'start'`): left
+  to stretch across the column, the training's and the objectives' titles were drawn twice as wide.
+- **A panel's own shadow is drawn under its fill too** (CSS's `box-shadow` is outside the box alone): a see-through
+  box with one reads dark; give it a ring round it instead (the training's ticked boxes).
+- **CSS's `zoom` is the port's to carry**: a panel scales by the HUD's or the lobby's scale alone, so a part the page
+  zoomed (the minimap's column at 0.85 on the shortest screens) multiplies its lengths and its text's sizes itself
+  (`minimapZoom`, `zoomed` in `minimapColumn.ts`), offsets inside it too, as CSS zooms them.
 - **What the page's CSS laid over its neighbours, the kit draws after them**: the skill bar is laid over the bottom
   bar's row in a room of its own size (as its z-index drew it over the bars' shadows), and the Frenzy over it.
 - **Text wraps at its panel's width** (`say(text, style, align)`, `wrap.ts`): broken at spaces as CSS breaks it,
