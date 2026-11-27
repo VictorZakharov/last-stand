@@ -1078,8 +1078,15 @@ export class Lab {
    * and clicked in one frame, the lobby's slot had no panel yet and the click went to the world).
    */
   async clickOn(element: Element): Promise<void> {
-    if (element.closest('.kit-mirror')) await this.step(KIT_FRAMES);
-    element.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    if (element.closest('.kit-mirror')) {
+      // (scrolled into view where the kit draws it: the page's scroll moves nothing there, and Odo's stash's pieces
+      // lay below its fold)
+      await this.step(KIT_FRAMES);
+      revealOf(element);
+      await this.step(KIT_FRAMES);
+    } else {
+      element.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    }
     const sliding = document.getAnimations().filter((animation) => animation instanceof CSSTransition);
     await Promise.all(sliding.map((animation) => animation.finished.catch(() => undefined)));
     const at = middleOf(element);

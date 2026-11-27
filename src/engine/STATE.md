@@ -605,5 +605,7 @@ the SCSS. In the order they're taken: the kit's own pieces first, then what show
 - [x] The trade between two players, its ask and its last word (`screens/trade/tradeSheet.ts`): `lab coop
   --scenarios trade --pictures`, both trades by clicks and by taps and the window on all six screens by mouse and
   touch (its `--ab` can't load main's side: the lab's scene is the engine's API there, `sceneApi.ts`).
-- [ ] The guide's pages, the merchant.
+- [x] Odo's trade (`screens/merchant/merchantSheet.ts`, his face `folkFaceSheet.ts`): `lab merchant --ab` at
+  1920x1080, 844x390@3, 820x1180@2 and 1024x700@1, the lines the same and the pictures alike; its canary caught.
+- [ ] The guide's pages.
 - [ ] The loading screen (styled before any script runs: the last, if at all).

@@ -2,7 +2,7 @@
 // under a point, on a screen the kit draws in the page's place. Each answers as the page's own would where the kit
 // draws nothing there.
 import { drawnFor } from './press';
-import { onFrame } from './panel';
+import { onFrame, type Panel } from './panel';
 import { elementAt, seenThrough } from './forward';
 import { scrollRoom, scrollTo } from './scroll';
 export { picturesLoaded } from './svgArt';
@@ -50,11 +50,22 @@ const END_FRAMES = 4;
 /** `element`'s scrolling list scrolled to its end, where the kit draws it (the page's `scrollTop = scrollHeight`,
  *  which the kit's panel never hears: the talk's lines as he says more), held there as it's laid out again. */
 export function scrollToEnd(element: Element): void {
+  holdScroll(element, scrollRoom);
+}
+
+/** `element`'s scrolling list scrolled to its top, where the kit draws it (the page's `scrollTop = 0`: Odo's stash
+ *  after Auto-fill, which stood scrolled past its end, empty, as the pieces left it shorter). */
+export function scrollToTop(element: Element): void {
+  holdScroll(element, () => 0);
+}
+
+/** `element`'s list held at the scroll `at` gives over the next frames, as the kit lays it out again. */
+function holdScroll(element: Element, at: (panel: Panel) => number): void {
   const panel = element.closest('.kit-mirror') ? drawnFor(element) : null;
   if (!panel) return;
   let left = END_FRAMES;
   const stop = onFrame(() => {
-    scrollTo(panel, scrollRoom(panel));
+    scrollTo(panel, at(panel));
     if (--left <= 0) stop();
   });
 }

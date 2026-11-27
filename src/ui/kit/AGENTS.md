@@ -176,6 +176,14 @@ The rules across the game are the [root AGENTS.md](../../../AGENTS.md).
   the screens are drawn over (`seeThrough`: the touch stick's pad) is the canvas's to the lab's `elementUnder` too.
 - **The tooltip pinned on touch takes the pointer over a drawn modal** (`_base.scss`): a ghost under a modal takes
   none, and the trade's Offer in a pinned tooltip's foot, drawn over the window, took no tap.
+- **A page's grid of areas is wrapped in the markup** (Odo's columns: `.mc-left`, `.mc-right`, `display: contents`
+  on the page, whose grid takes their children as its own) and laid out as flex here.
+- **A length in `vh` inside a zoomed box is the window's share in the box's own px** (Odo's stash, `40vh`): divided
+  by the scale as a share of the window is elsewhere, it stood two rows short of main's.
+- **A list the page scrolls to its top or end is scrolled where the kit draws it** (`scrollToTop`, `scrollToEnd`
+  in `drawn.ts`): Odo's stash after Auto-fill stood scrolled past its new end, empty. The lab's `clickOn` scrolls
+  where the kit draws (`revealOf`): the page's `scrollIntoView` moved nothing, and a piece below the fold lay off
+  the screen.
 - **Check a panel against main's page with `npm run lab -- ui --states <state> --ab`**: its box's lines and its
   pictures beside main's (`ui --states target`: the frame's box 384x52 at 113 on both, its name and line read off
   the engine's frame where the tree has it, off `#target` on main's).

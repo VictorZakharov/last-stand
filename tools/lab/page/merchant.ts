@@ -9,6 +9,7 @@
 // Then three runs begun: a new stock, full again. `--canary` puts the epic back in his stock after the trade, which
 // must be caught.
 import { Vec3 } from './sceneApi.ts';
+import { boxOf } from './lab';
 import type { Lab, Pictured, Report } from './lab';
 import { G } from '../../../src/state';
 import { RESTOCK_RUNS, STOCK_RARITIES, STOCKED_FROM, TRADED, type TradedRarity } from '../../../src/data/merchant';
@@ -59,7 +60,7 @@ async function stand(lab: Lab, x: number, z: number, facing: number): Promise<vo
 
 /** Whether the trade screen's box lies within the window. */
 function withinWindow(): boolean {
-  const box = element('#merchant .mc-box').getBoundingClientRect();
+  const box = boxOf(element('#merchant .mc-box'));
   return box.left >= -1 && box.top >= -1 && box.right <= innerWidth + 1 && box.bottom <= innerHeight + 1;
 }
 
