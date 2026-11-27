@@ -495,8 +495,8 @@ the SCSS. In the order they're taken: the kit's own pieces first, then what show
   spoils) and the training's tracker in it, beside it or afloat (`ui/trainingPanel.ts`); the pings read the drawn
   minimap (`ui/ping.ts`). `lab ui --states run,villageHud,villageHudTouch,hudTouch --ab` at 1920x1080, 844x390 and
   751x298 holds their boxes to main's; `village --only minimapOut` and `tutorial` read the drawn boxes. Not drawn
-  yet: the spoils' bump as a rarity's count rises. The tutorial's walk compiles the room's six two-round pipelines
-  as he walks into the hall (named in its failure now).
+  yet: the spoils' bump as a rarity's count rises. The rooms' two-round pipelines, asked by the walk once the lobby
+  shows, counted as compiled in play and failed the tutorial (6): asked behind the lobby now (`ahead.ts`).
 - [ ] The rest of the run's HUD (`hud.html`): the buffs, the banner, the party's frames, the downed note and the
   revive, the duel's score and result, the look hint, the crosshair and the charge ring.
 - [ ] The overlays down the left (`diag.html`: the performance overlay, the net's, the battle log), the chat.

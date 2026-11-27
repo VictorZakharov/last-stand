@@ -61,18 +61,25 @@ export class Ahead {
       this.late = shown;
       this.begunLate ||= shown;
     }
+    if (!this.walkFor(budget)) return;
+    this.rest = AHEAD_REST;
+    if (this.late) ROOMS.asked = true;
+  }
+
+  /** The walk's stack met for up to `budget` ms: whether it was met whole. */
+  private walkFor(budget: number): boolean {
+    const stack = this.stack;
     const until = perfClock.now() + budget;
     let visited = 0;
     while (stack.length) {
       // (the clock read once every few objects: most are met already, and cost less than reading it)
-      if (++visited % 16 === 0 && perfClock.now() >= until) return;
+      if (++visited % 16 === 0 && perfClock.now() >= until) return false;
       const object = stack.pop()!;
       if ((object as Mesh).isMesh) this.prepareMesh(object as Mesh);
       const children = object.children;
       for (let i = 0; i < children.length; i++) stack.push(children[i]);
     }
-    this.rest = AHEAD_REST;
-    if (this.late) ROOMS.asked = true;
+    return true;
   }
 
   /** `objects` and all under them handed over ahead with the pipelines they'll draw with, shown or not and in
@@ -107,10 +114,20 @@ export class Ahead {
       // screen they were 12 pipelines more for a phone's boot to wait for. Every layer's, not the room's own
       // alone: a cottage's in view from the hall made its own at that draw, and was left out of the frame)
       const apart = this.late;
-      if (mayLayer(material)) this.core.engine.ready_material_layers(id, skinned, counted, apart);
-      // (and a column's own depth, written before the layers' ghosts while a cover is opened whole: the
-      // engine's `draw_under_depth`. With the rooms' own, after the lobby shows)
-      else if (this.late && standsUnder(material)) this.core.engine.ready_material_layers(id, skinned, counted, false);
+      // (the rooms' asked once the lobby shows are asked behind it, ahead of their need, as a warm-up's are:
+      // counted as compiled in play, they failed the tutorial's walk into the hall, 6 pipelines)
+      const wasBehind = PIPELINES.behind;
+      PIPELINES.behind ||= this.late;
+      try {
+        if (mayLayer(material)) this.core.engine.ready_material_layers(id, skinned, counted, apart);
+        // (and a column's own depth, written before the layers' ghosts while a cover is opened whole: the
+        // engine's `draw_under_depth`. With the rooms' own, after the lobby shows)
+        else if (this.late && standsUnder(material)) {
+          this.core.engine.ready_material_layers(id, skinned, counted, false);
+        }
+      } finally {
+        PIPELINES.behind = wasBehind;
+      }
     }
   }
 }
