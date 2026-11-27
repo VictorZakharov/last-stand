@@ -214,7 +214,7 @@ export class Bridge {
     stats.solid = this.draws.solid;
     stats.casters = this.draws.casters;
     // (what the page outlines, its records again beside the frame's for the outline's mask alone)
-    if (!core.tape) writeOutlined(core, (mesh) => this.addMesh(mesh));
+    if (!core.tape) writeOutlined(core, (mesh) => this.draws.recordNow(mesh, true));
     if (this.watched) this.watch(this.watched);
     this.lightsNow();
     this.lightCache.tell();

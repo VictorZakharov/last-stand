@@ -19,6 +19,8 @@ import { drawFrame, type Canvas } from './light';
 import { faceCamera, holdAdaptation, setZoom } from '../../../src/core/renderer';
 import { groundHeight } from '../../../src/world/ground';
 import { closeHeroSelect, openHeroSelect } from '../../../src/ui/heroSelect';
+import { hallFocus, hallHeroes } from '../../../src/game/hall';
+import { outline } from '../../../src/ui/overlay/outline';
 
 /** the hour the village is lit for at every stand: the late afternoon of the owner's pictures, long shadows */
 const HOUR = 16;
@@ -103,6 +105,13 @@ async function inHeroSelect(lab: Lab): Promise<void> {
   await lab.step(SELECT_FRAMES);
 }
 
+/** Hero selection with the hero in focus outlined, as the mouse over him outlines him (`lightHero`: white, 0.85). */
+async function heroOutlined(lab: Lab): Promise<void> {
+  await inHeroSelect(lab);
+  outline(hallHeroes()[hallFocus()].player.obj, 0xffffff, 0.85);
+  await lab.step(SETTLE_FRAMES);
+}
+
 /** Hero selection opened and closed again, the hero back in the hall from above (the hall's heroes on its dais,
  *  their bodies taken out of the shown world and back). */
 async function afterHeroSelect(lab: Lab): Promise<void> {
@@ -130,6 +139,7 @@ function stands(): Stand[] {
       await inHallLookingOut(lab);
     } },
     { name: 'hero selection', go: inHeroSelect },
+    { name: 'hero selection, the hero in focus outlined', go: heroOutlined },
     { name: 'the hall from above, after hero selection', go: afterHeroSelect },
   ];
   COTTAGES.forEach((cottage, index) => list.push({ name: `cottage ${index}'s door`, go: (lab) => atDoor(lab, cottage) }));
@@ -154,6 +164,7 @@ async function readStand(lab: Lab, stand: Stand, canary: boolean): Promise<Stand
     const pictured = await lab.screen(stand.name);
     return { name: stand.name, apart: apartAtOneMoment(lab, canary), pictured };
   } finally {
+    outline(null);
     closeHeroSelect();
     leaveRoom();
     setZoom(1);

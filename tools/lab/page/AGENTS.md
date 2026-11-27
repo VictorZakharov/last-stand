@@ -95,6 +95,15 @@ end touch the same lines and conflict (`npm run check:sorted` holds the order; t
   hero in a look. `haze --class warrior` reads the axe hazing 0.9% of the frame at 270 degrees in the forest, on main
   too, where its missing surface had every case fail on a halo instead: not looked into.
 - `music.ts`: the village's lobby plays the hour's battleground's track (`biomeOfHour`): each round holds the hour to its battleground's (`HOUR_OF`), and the lab's own hour had the forest's lobby play the crypt's.
+- `outlineShape.ts`, `outlines.ts`: `lab outlines` holds every kind of outline the game draws (the hall's hero, the
+  hero in the village, a foe, a seat by the campfire) to the thing's silhouette, read from frames drawn at one moment
+  with no outline, the thing shown and hidden: read with the outline drawn, its glow round the line went as the thing
+  did and was taken for it, and every outline read 100% inside on three's commit too. Deep inside is the silhouette
+  all round a line pixel within 5 px: by rays meeting the thing within 14, the gaps between his legs and his arm and
+  body, which the line rightly fills, read 10% of his outline. The engine's outline is taken away through its own
+  call where the commit has it (`import.meta.glob`), and a frame left with magenta in it throws. Its canaries: his
+  head alone outlined (13% inside), and his outline read against his head alone (92% far): his neighbour on the dais
+  outlined with him went unseen, off the screen.
 - `perf.ts`, `uploads.ts`: each phase says what a frame sent the GPU: the engine's device's queue's writes
   (`writeBuffer`, `writeTexture`, `copyExternalImageToTexture`: their calls and bytes, the queue's prototype wrapped as
   the first count is asked), and the scene's buffers whose version changed, by object and attribute (each handed to the

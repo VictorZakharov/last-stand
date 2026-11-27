@@ -78,6 +78,8 @@ export class Draws {
   casters = 0;
   /** whether the records being made are kept on their node, and so counted in the totals (`write`) */
   private counting = false;
+  /** whether the records being made are written whatever the mesh's layers (`recordNow`) */
+  private anyLayer = false;
 
   constructor(private core: Core, private materials: Materials, private geometries: Geometries,
     private seeKinds: SeeKinds) {}
@@ -131,9 +133,16 @@ export class Draws {
     this.view = view;
   }
 
-  /** `mesh`'s records written into this frame's alone, as the walk wrote every mesh (a lamp's casters, an outline). */
-  recordNow(mesh: Mesh): void {
-    this.recordInto(mesh, true);
+  /** `mesh`'s records written into this frame's alone, as the walk wrote every mesh (a lamp's casters, an outline).
+   *  `anyLayer`: written whatever its layers (an outline's mask: a foe drawn as one keeps its pieces on the crowd's
+   *  layer, which no camera draws, and Quarry Mark's and a ping's outline went round nothing). */
+  recordNow(mesh: Mesh, anyLayer = false): void {
+    this.anyLayer = anyLayer;
+    try {
+      this.recordInto(mesh, true);
+    } finally {
+      this.anyLayer = false;
+    }
   }
 
   /** `mesh`'s records as they'd be kept on its node, copied out (a body drawn as one keeps them on its root's). */
@@ -338,7 +347,12 @@ export class Draws {
     const instanced = mesh as InstancedMesh, skinned = mesh as SkinnedMesh;
     if (instanced.isInstancedMesh && instanced.count === 0) return;
     const set = instanced.isInstancedMesh ? this.instanced.get(instanced) ?? this.geometries.setId(instanced) : 0;
-    const bones = frame && look?.list ? this.geometries.listOf(look.list()) : skinned.isSkinnedMesh ? 0 : -1;
+    // (a skinned mesh's records made for the frame alone carry its bones as they stand: the outline's mask and the
+    // lamps' shadows of movers took the body in its bind pose, the arms held out, with none; kept on its node, its
+    // skin is the engine's, `skinOf`)
+    const skinnedNow = frame && skinned.isSkinnedMesh && skinned.skeleton;
+    const bones = frame && look?.list ? this.geometries.listOf(look.list())
+      : skinnedNow ? this.geometries.bonesOf(skinned) : skinned.isSkinnedMesh ? 0 : -1;
     const range = geometry.drawRange;
     const from = range.start, to = range.count === Infinity ? Infinity : range.start + range.count;
     const put = (material: AnyMaterial, first: number, count: number, geometryOf: number, rawCount: number,
@@ -381,7 +395,7 @@ export class Draws {
   /** How the frame's views draw `mesh`. */
   private roleOf(mesh: Mesh): Role {
     const view = this.view!;
-    if (mesh.layers.test(view.camera.layers)) return 'seen';
+    if (this.anyLayer || mesh.layers.test(view.camera.layers)) return 'seen';
     // (on the arms' layer alone, seen through his eyes: the game draws them with a camera of their own, which the
     // engine's frame has in it. Left out, he held nothing: from play, "no warrior weapon in first person")
     if (view.arms && mesh.layers.test(view.arms.layers)) return 'arms';
@@ -425,7 +439,11 @@ export class Draws {
     r[at + 6] = flags;
     r[at + RAW_INSTANCES] = raw;
     const skinned = mesh as SkinnedMesh;
-    if (skinned.isSkinnedMesh && frame) {
+    if (skinned.isSkinnedMesh && frame && skinned.bindMode === AttachedBindMode) {
+      // (bound where it stands: its world after its world's inverse, as three keeps an attached bind's inverse. By
+      // the inverse as bound, a hero placed after his bind had his pieces' masks off him: a glove beside him)
+      r.set(IDENTITY, at + 8);
+    } else if (skinned.isSkinnedMesh && frame) {
       scratchMatrix.multiplyMatrices(mesh.matrixWorld, skinned.bindMatrixInverse).toArray(r, at + 8);
     } else {
       r.set(mesh.matrixWorld.elements, at + 8);
