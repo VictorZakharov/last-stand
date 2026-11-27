@@ -20,9 +20,9 @@ const FINGER = 40;
 
 const CREAM = '#ffe7b0';
 const NOTE = '#f0c88a';
-/** the ledger's boards: at least this wide (px), this far apart across, the card's padding and the book's, and a
- *  board's own padding and border */
-const BOARD = { least: 210, apart: 16, around: 22 * 2 + 2 * 2 + 4, inside: 10 * 2 + 1 * 2 };
+/** the ledger's boards: at least this wide (px), this far apart across, the card's padding and the book's, and how
+ *  far under its share a board is held (a row filled exactly wrapped its last board by a fraction of a px) */
+const BOARD = { least: 210, apart: 16, around: 22 * 2 + 2 * 2 + 4, rounding: 0.01 };
 /** the ledger card's width (px) */
 const LEDGER = 760;
 
@@ -30,9 +30,7 @@ const LEDGER = 760;
 function boardWidth(): number {
   const book = Math.min(LEDGER, innerWidth / uiScales.ui - SIDES * 2) - BOARD.around;
   const columns = Math.max(1, Math.floor((book + BOARD.apart) / (BOARD.least + BOARD.apart)));
-  // (less its own padding and border: a width is its content's, as CSS's `content-box`, where a grid's column is the
-  // whole board's)
-  return (book - BOARD.apart * (columns - 1)) / columns - BOARD.inside;
+  return (book - BOARD.apart * (columns - 1)) / columns - BOARD.rounding;
 }
 
 /** the window's height in px of the lobby's scale */

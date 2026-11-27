@@ -35,6 +35,9 @@ export interface Rule {
   at: string;
   /** whether it applies now (its `@media`'s query: a short screen's), always where none */
   when?: () => boolean;
+  /** drawn apart, by another screen or left on the page: no panel made for it here, nor stood in for it (the lobby's
+   *  tree held the card's hidden, and the lab read the card as not shown) */
+  apart?: boolean;
   /** its layout (not inherited) */
   box?: Dyn<PanelStyle>;
   /** laid out as CSS's flex or grid (`display: flex`): what's in it is boxes, never runs of a line of text */

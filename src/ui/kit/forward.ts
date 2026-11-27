@@ -59,9 +59,20 @@ function elementAt(x: number, y: number): Element | null {
   return null;
 }
 
+/** the page's elements over the canvas that the kit's screens are drawn over (`seeThrough`) */
+const through = new Set<EventTarget>();
+
+/** `element`, a page's element over the engine's canvas, under the kit's screens as the player sees them: a press on
+ *  it where one of their elements is drawn is that element's (the touch controls' move pad, over the left half of the
+ *  screen: the page's panels stood over it, and drawn by the kit the village's card took no tap there). */
+export function seeThrough(element: Element): void {
+  through.add(element);
+}
+
 /** Whether a pointer event is the engine's canvas's, its place a place on it (not under the mouse's lock). */
 function onCanvas(e: PointerEvent | MouseEvent): boolean {
-  return e.target === engineCanvas() && !document.pointerLockElement;
+  const target = e.target;
+  return !!target && (target === engineCanvas() || through.has(target)) && !document.pointerLockElement;
 }
 
 /** The mouse event `type` as the browser makes it at `e`'s place. */

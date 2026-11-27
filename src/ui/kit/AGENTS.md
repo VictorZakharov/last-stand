@@ -20,8 +20,9 @@ card (`ui/villageCardPanel.ts`).
   and grid make their children boxes). A grid is ported as wrapping rows, its columns' widths given (the ledger's
   `boardWidth`). The shared controls are `ui/controlsSheet.ts`. Each frame's style is whole: a field no rule gives
   now is taken back (`whole`), or a card hidden once stayed hidden, as a style keeps the fields it isn't given.
-- **A width is its content's, as CSS's `content-box`**: a grid's column is the whole cell, so a cell's padding and
-  border come off it (the ledger's boards wrapped two to a row where main's stood three).
+- **A width is its whole box's, as the page's `box-sizing: border-box`**, and **a row its items fill exactly wraps
+  its last by a fraction of a px**: give each item its share a hair under (`ROUNDING` in `stashSheet.ts`; the stash
+  stood four to a row and the ledger's boards two where main's stood five and three).
 - **A button's words are kept whole** (`whole` on `.btn` and `.seg button`): left to wrap, a segmented button's
   `1 v 1` stood on three lines where CSS's sized the row to its words.
 - **A page's control laid out by the page and drawn by the kit is a ghost** (`.kit-ghost`, `_base.scss`): laid out

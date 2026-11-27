@@ -9,6 +9,7 @@
 // plain ring shows the spot for one with no preview of its own), or after a tap at the nearest foe; a movement skill
 // (Veilstep) tapped goes the way the move stick points, or the way the hero faces. The mode follows the last input
 // used, so touch laptops work too.
+import { seeThrough } from './kit/forward';
 import { Mesh, Vec3 } from '../engine/api/index.ts';
 import * as shapes from '../engine/api/shapes/index.ts';
 import { G } from '../state';
@@ -134,6 +135,8 @@ export function initTouch(v: TouchVillage): void {
 
   // move stick: anywhere on the left pad
   const pad = $('#touch-pad'), base = $('#touch-stick'), knob = base.querySelector<HTMLElement>('.knob')!;
+  // (the kit's panels drawn over it take the taps there: the lobby's on a short screen, the village's card)
+  seeThrough(pad);
   pad.addEventListener('pointerdown', (e) => {
     e.preventDefault();
     if (stick) return;

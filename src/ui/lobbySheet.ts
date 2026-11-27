@@ -47,7 +47,7 @@ export const LOBBY: Sheet = [
   { at: '#menu.ahead', look: { opacity: 0.004 } },
   // (the crest stays on the page: its letters are the loading screen's logo gathered into it, `logoWind.ts`; the card
   // is `villageCardPanel.ts`'s)
-  { at: '.menu-crest, #vcard', box: { display: 'none' } },
+  { at: '.menu-crest, #vcard', apart: true },
   { at: '#menu .panel', hits: true, ease: 0.35 },
   { at: '#menu.ahead .panel', hits: false },
   { at: '#menu.stowed .panel', hits: false, look: { opacity: 0 } },

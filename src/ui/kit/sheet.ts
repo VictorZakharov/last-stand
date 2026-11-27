@@ -282,7 +282,8 @@ export class SheetTree implements Forwarded {
 
   /** Its elements' panels, made again where the markup changed. */
   private followKids(node: Node, text: TextStyle, key: string, hits: boolean): void {
-    const elements = [...node.element.children].filter((child) => !SKIPPED.has(child.tagName.toUpperCase()));
+    const elements = [...node.element.children].filter((child) => !SKIPPED.has(child.tagName.toUpperCase())
+      && !this.sheet.some((rule) => rule.apart && child.matches(rule.at)));
     const same = elements.length === node.kids.length && elements.every((child, at) => node.kids[at].element === child);
     if (!same) {
       for (const kid of node.kids) {

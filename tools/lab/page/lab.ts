@@ -184,6 +184,8 @@ const KEY_EVENTS: Record<KeyType, string[]> = {
 /** how long an input's event may take to reach the page, ms of the browser's own clock (2 s failed a click now and
  *  then as a check's eight sessions booted at once, the machine at full load) */
 const INPUT_WAIT_MS = 10000;
+/** frames for what the kit draws to be laid out where it's drawn before it's clicked (`clickOn`) */
+const KIT_FRAMES = 3;
 
 /** An input's events as the page gets them: their names, which of them are this input's, and what it is (`touch`). */
 interface InputEvents {
@@ -1044,9 +1046,12 @@ export class Lab {
    * `element` clicked at its middle as a mouse clicks it (`click`), scrolled to first as the player scrolls to it (a
    * phone's pause menu has its Abandon below the screen's edge) and once the page's transitions are over: the lab's
    * frames outrun the browser's clock, which they run on, and a lobby's panel was still sliding back in from the
-   * stowed lobby, its tab 31 px off. Throws if its middle is off the screen even so. No frame runs.
+   * stowed lobby, its tab 31 px off. Throws if its middle is off the screen even so. No frame runs, but for an
+   * element the kit draws in its place (`.kit-mirror`): it's laid out on the kit's frames, so a few run first (opened
+   * and clicked in one frame, the lobby's slot had no panel yet and the click went to the world).
    */
   async clickOn(element: Element): Promise<void> {
+    if (element.closest('.kit-mirror')) await this.step(KIT_FRAMES);
     element.scrollIntoView({ block: 'nearest', inline: 'nearest' });
     const sliding = document.getAnimations().filter((animation) => animation instanceof CSSTransition);
     await Promise.all(sliding.map((animation) => animation.finished.catch(() => undefined)));

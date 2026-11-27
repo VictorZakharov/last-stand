@@ -543,9 +543,16 @@ the SCSS. In the order they're taken: the kit's own pieces first, then what show
   training` passes; `lab practice` fails on main alike (fanShot's cooldown, Hedgeward never cast).
 - [ ] The tooltip and the item's sheet (drawn over the lobby's panels: after them, as the page's elements stand over
   every panel).
-- [ ] The lobby (`menu.html`: the rail, the loadout and spellbook, the equipment, the stash and its filter, the
-  stats), the summary, the dialogs (duel ask, install, rotate, perf ask,
-  save delete, cloud).
+- [x] The lobby's panels (`ui/lobbyPanels.ts`, its sheets `lobbySheet.ts`, `stashSheet.ts`, `loadoutSheet.ts`: the
+  rail, the key bar and spellbook with each slot's face painted as the skill bar's, the equipment and its doll, the
+  attributes, the stash, its chips and its filter lifted over the doll, the slot focus's light, the stowed panels'
+  fade and slide). The page's handlers hear the pointer as before (`kit/forward.ts`: a tooltip, a right-click, a drag
+  between the stash and the equipment, a long press); the crest stays on the page. `lab ui --states lobby,glow,
+  litTouch,sheetTouch,skillTips,skillTipsTouch,tooltip --ab` pass, every box within a few px of main's (a phone's
+  stash grows to the panel's foot); `village --only wornStaysOn`, `tutorial` and `tutorial --touch` (a phone's),
+  `touch`, `tap` pass. Not drawn: the stash's fade where a row is cut, the glow's arc and sheen (motion alone), an
+  item's glow past its border, a picture's brightness on hover (its fill and border are lit instead).
+- [ ] The summary, the dialogs (duel ask, install, rotate, perf ask, save delete, cloud).
 - [ ] The pause menu (`pause.html`: its tabs, the settings, the performance tab), the bug report, photo mode.
 - [ ] The save slots, hero selection's panels, Play together and its rooms, How to play, the village's map.
 - [ ] The guide's pages, the talk, the trade, the merchant, the drink.
