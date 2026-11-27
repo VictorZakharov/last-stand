@@ -1147,10 +1147,12 @@ export function updateCamera(dt: number, focus: THREE.Vector3, height: number, f
 
 const ease = (t: number): number => t * t * (3 - 2 * t);
 const _fwd = new THREE.Vector3(), _pivot = new THREE.Vector3(), _look = new THREE.Vector3(), _quat = new THREE.Quaternion(), _quat2 = new THREE.Quaternion();
-/** What is drawn over the finished frame: the world's labels and the outline, handed to the engine for its frame
- *  (`labels`, each frame before it's drawn, `shown` false for none; ui/overlay). */
+/** What is drawn over the finished frame: the world's labels and the outline (`labels`; ui/overlay) and the UI's
+ *  panels (`panels`; ui/kit), handed to the engine for its frame, each frame before it's drawn, `shown` false for
+ *  none (photo mode). */
 export const overFrame = {
   labels: (_shown: boolean): void => {},
+  panels: (_shown: boolean): void => {},
 };
 /** For a harness: whether a canvas of three's lies over the engine's: none, there is one canvas (the lab's checks of
  *  the overlays ask it of this tree and of main's). */
@@ -1273,6 +1275,7 @@ export function render(): void {
   // (a picture asked for from another camera: drawn first, the frame's own draw after it is what the page shows)
   if (frameApart.take) drawApart(pixels.width, pixels.height, graded);
   overFrame.labels(overlaysShown);
+  overFrame.panels(!document.body.classList.contains('photo'));
   drawRust(G.scene, G.camera, G.time, pixels.width, pixels.height, gl, graded);
   // (a photo's picture: the engine's frame, the labels in it as photo mode leaves them out)
   if (frameShot.take) {

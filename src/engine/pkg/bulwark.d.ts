@@ -301,6 +301,41 @@ export class Engine {
      * counted (a few frames late).
      */
     stats(): Float32Array;
+    /**
+     * A panel's picture `width` by `height` of the UI's pixels (a negative width: none).
+     */
+    ui_content(id: number, width: number, height: number): void;
+    /**
+     * The topmost panel that takes the pointer at `x`, `y` (the UI's pixels), or -1.
+     */
+    ui_hit(x: number, y: number): number;
+    /**
+     * A panel made with the page's id `id` inside `parent` (-1: the screen), before its child `before` (-1: at
+     * its end), laid out by `style` (`ui/style.rs`'s numbers) and painted by `look` (`ui/look.rs`'s).
+     */
+    ui_make(id: number, parent: number, before: number, style: Float32Array | number[], look: Float32Array | number[]): void;
+    /**
+     * A panel's box as last laid out (x, y, width, height in the UI's pixels); empty if it isn't shown.
+     */
+    ui_rect(id: number): Float32Array;
+    ui_relook(id: number, look: Float32Array | number[]): void;
+    /**
+     * A panel taken away, with all inside it.
+     */
+    ui_remove(id: number): void;
+    ui_restyle(id: number, style: Float32Array | number[]): void;
+    /**
+     * How many rows the panels' pass draws.
+     */
+    ui_rows(): number;
+    /**
+     * The panels' screen: `width` by `height` of the UI's pixels, `scale` of the screen's pixels each.
+     */
+    ui_screen(width: number, height: number, scale: number): void;
+    /**
+     * The panels laid out now, if anything changed (the frame does it too): so a box is read as it will be drawn.
+     */
+    ui_update(): void;
 }
 
 /**
@@ -393,13 +428,23 @@ export interface InitOutput {
     readonly engine_set_volume: (a: number, b: number, c: number, d: number) => void;
     readonly engine_show_kept: (a: number, b: number, c: number, d: number) => void;
     readonly engine_stats: (a: number, b: number) => void;
+    readonly engine_ui_content: (a: number, b: number, c: number, d: number) => void;
+    readonly engine_ui_hit: (a: number, b: number, c: number) => number;
+    readonly engine_ui_make: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => void;
+    readonly engine_ui_rect: (a: number, b: number, c: number) => void;
+    readonly engine_ui_relook: (a: number, b: number, c: number, d: number) => void;
+    readonly engine_ui_remove: (a: number, b: number) => void;
+    readonly engine_ui_restyle: (a: number, b: number, c: number, d: number) => void;
+    readonly engine_ui_rows: (a: number) => number;
+    readonly engine_ui_screen: (a: number, b: number, c: number, d: number) => void;
+    readonly engine_ui_update: (a: number) => void;
     readonly start: () => void;
-    readonly __wasm_bindgen_func_elem_1857: (a: number, b: number, c: number, d: any) => void;
-    readonly __wasm_bindgen_func_elem_1882: (a: number, b: number, c: any, d: any) => void;
-    readonly __wasm_bindgen_func_elem_731: (a: number, b: number, c: number, d: any) => void;
-    readonly __wasm_bindgen_func_elem_731_81: (a: number, b: number, c: number, d: any) => void;
-    readonly __wasm_bindgen_func_elem_731_82: (a: number, b: number, c: number, d: any) => void;
-    readonly __wasm_bindgen_func_elem_733: (a: number, b: number, c: any) => void;
+    readonly __wasm_bindgen_func_elem_1910: (a: number, b: number, c: number, d: any) => void;
+    readonly __wasm_bindgen_func_elem_1935: (a: number, b: number, c: any, d: any) => void;
+    readonly __wasm_bindgen_func_elem_784: (a: number, b: number, c: number, d: any) => void;
+    readonly __wasm_bindgen_func_elem_784_91: (a: number, b: number, c: number, d: any) => void;
+    readonly __wasm_bindgen_func_elem_784_92: (a: number, b: number, c: number, d: any) => void;
+    readonly __wasm_bindgen_func_elem_786: (a: number, b: number, c: any) => void;
     readonly __wbindgen_export: (a: number, b: number) => number;
     readonly __wbindgen_export2: (a: number, b: number, c: number, d: number) => number;
     readonly __wbindgen_export3: (a: number, b: number, c: number) => void;

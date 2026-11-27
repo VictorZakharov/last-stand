@@ -445,3 +445,24 @@ never waited for the engine's frame. `lab rustcheck` holds the page to one canva
 - [ ] HDR output: three's canvas gave it; the engine's is SDR (`initHdrForWebGPU` unused).
 - [ ] The lab's hooks round three's `render` (the skip-draw, `perf`'s canary doubling, `villagePortalNight`'s count of
   renders) reach nothing under the engine: kept optional for `--ab` against main, each to read the engine instead.
+
+## 2026-11-26: a UI kit in the engine, the first panel on it (#973)
+
+The UI moves off the page as the labels did. Bulwark lays out a tree of the page's panels by taffy's flexbox (MIT,
+read before use, `=0.15.1`, its flexbox alone: 113 KB of the wasm, 43.5 KB gzipped; with its grid and block, 320 KB)
+and draws it in one instanced call after the labels: rounded boxes with borders, fills top to bottom, shadows, and
+the labels' atlas for text (`ui.rs`, `gpu/panels.rs`; the page's `engine/ui.ts`, the game's `ui/kit/panel.ts`). The
+frame's GPU clock ends at that pass where it draws: the labels, the outline and the panels are the frame's time now.
+
+- [x] `lab panels` (Bulwark): 64 to 4,096 slots of a stash's grid. On the 4070 Ti at 1080p a layout from nothing is
+  0.13 to 4.1 ms (a microsecond a slot), a look changed a twentieth of that (laid out not; every row painted
+  again), the GPU's frame 0.03 ms more with 4,096. Percents of nothing: the gain is the page's own layout, paint and
+  canvas left out, which a frame of the DOM's HUD pays and this clock never saw.
+- [x] The run's target frame on it (`ui/targetFrame.ts`; `#target` and its rules gone from the page). `lab ui
+  --states target --ab`: its box 384x52 at 113 on both trees, the name, its line and the boss's look as main's
+  pictures; its canary aims away from every foe.
+- [ ] Clicks: the kit finds the panel under a point (`uiHit`); nothing routes the page's pointer to it yet, as no
+  panel moved takes one. The next panels (the bottom bar's bars and hotbar, the badge, the choice after a wave) do.
+- [ ] Text that wraps: a line is painted whole; a panel with paragraphs needs the page to break them at its width.
+- [ ] The rows are painted again whole for any change (a twentieth of a layout): kept by panel when a large panel
+  (the stash) changes often.

@@ -8,7 +8,7 @@
 /* the village: its minimap alone (the training under it, as a run's objectives lie), and in its practice the run's
    skill bar; nothing else of a run's */
 #hud.lobby:not(.practice) > :not(#minimap-wrap) { display: none; }
-#hud.lobby :is(#target, #banner, #wavebadge, #decision, #party, #down-note, #spectate, #btn-revive, .objectives, #spoils, #duel-score, #duel-result) {
+#hud.lobby :is(#banner, #wavebadge, #decision, #party, #down-note, #spectate, #btn-revive, .objectives, #spoils, #duel-score, #duel-result) {
   display: none;
 }
 
@@ -81,14 +81,6 @@
   position: relative; box-shadow: 0 0 8px rgba(0,0,0,.8); }
 .buff .bt { position: absolute; bottom: -14px; font-size: 11px; color: #fff; text-shadow: 0 0 3px #000; white-space: nowrap; }
 
-#target { position: absolute; top: 88px; left: 50%; transform: translateX(-50%); text-align: center; min-width: 260px; }
-.t-name { font-family: var(--font-display); font-size: 19px; font-weight: 700; color: #f5d27a; text-shadow: 0 2px 4px #000, 0 0 10px #000; }
-.t-sub { font-size: 12px; color: var(--ink-dim); margin-bottom: 3px; text-shadow: 0 1px 2px #000; }
-.t-bar { position: relative; height: 12px; width: 300px; margin: 0 auto; background: #120808; border: 1px solid #000; box-shadow: 0 0 0 1px var(--frame-dark), inset 0 0 6px #000; }
-.t-fill { position: absolute; inset: 0; background: linear-gradient(#e03a30, #7a0a0a); width: 100%; z-index: 1; }
-.t-ghost { position: absolute; inset: 0; background: rgba(255,220,160,.5); width: 100%; transition: width .5s ease-out .1s; }
-#target.boss .t-bar { width: 520px; height: 16px; box-shadow: 0 0 0 1px #a060ff, 0 0 14px rgba(160,96,255,.5); }
-#target.boss .t-name { font-size: 24px; color: #d8b0ff; }
 
 // (`--mm-room`: the minimap's width, which the touch HUD's full screen button stands beside, `_touch.scss`)
 #hud { --mm-room: 212px; }
@@ -246,10 +238,8 @@ body.touch #minimap { pointer-events: auto; touch-action: none; -webkit-touch-ca
    elements centred with translateX(-50%) scale from their left edge (= screen centre).
    The scale leaves an element's offsets from the screen's edges alone: give those as hud() too. */
 #bottombar { scale: var(--hud, 1); transform-origin: left bottom; }
-#target    { scale: var(--hud, 1); transform-origin: left top; top: hud(88px); }
 /* (in a duel the score and the round's clock stand under the badge: the rival aimed at is named under them. Where a
    foe's name stands it lay over the score) */
-#hud.duel #target { top: hud(150px); }
 #wavebadge { scale: var(--hud, 1); transform-origin: left top; }
 #decision  { scale: var(--hud, 1); transform-origin: left top; }
 #banner    { scale: var(--hud, 1); transform-origin: left top; }

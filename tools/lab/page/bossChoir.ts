@@ -56,11 +56,22 @@ function cantorUp(): Enemy {
   return cantor;
 }
 
+/** The engine's target frame's module (ui/targetFrame.ts), where the tree has it. */
+interface TargetFrame { targetShown(): { name: string; sub: string } | null }
+
 // --- bars -------------------------------------------------------------------------------------------------
 
-/** The boss bar's words as the page shows them. */
-function bossBar(): { name: string; sub: string; shown: boolean } {
+/** The boss bar's words as the game shows them: the engine's target frame's (ui/targetFrame.ts), or the page's
+ *  `#target` where the tree has that (main's, for --ab). */
+async function bossBar(): Promise<{ name: string; sub: string; shown: boolean }> {
   const box = document.querySelector('#target');
+  if (!box) {
+    // (by a glob: on main's tree the module isn't there, and an import of it would stop this one loading)
+    const found = import.meta.glob<TargetFrame>('../../../src/ui/targetFrame.ts');
+    const load = Object.values(found)[0];
+    const shown = load ? (await load()).targetShown() : null;
+    return { name: shown?.name ?? '', sub: shown?.sub ?? '', shown: !!shown };
+  }
   return {
     name: box?.querySelector('.t-name')?.textContent ?? '',
     sub: box?.querySelector('.t-sub')?.textContent ?? '',
@@ -77,12 +88,12 @@ export async function bars({ lab, stand, canary, lines, problems }: ChoirMeasure
   if (canary) for (const guard of guards) (guard as { guard: boolean }).guard = false;
   const cantor = cantorUp();
   await lab.step(2, keepHero);
-  const first = bossBar();
+  const first = await bossBar();
   // (the Cantor moved to the end of the fight's list: a guard first, as a guest's spawns or a slow rise can leave it)
   G.enemies.splice(G.enemies.indexOf(cantor), 1);
   G.enemies.push(cantor);
   await lab.step(2, keepHero);
-  const last = bossBar();
+  const last = await bossBar();
   lines.push(`bars: wave 10's boss bar reads "${first.name}" / "${first.sub}" with the Cantor first in the fight, `
     + `"${last.name}" / "${last.sub}" with a guard first`);
   for (const [read, when] of [[first, 'first'], [last, 'last']] as const) {
@@ -99,7 +110,7 @@ export async function bars({ lab, stand, canary, lines, problems }: ChoirMeasure
   guards[0].takeDamage(guards[0].life - 0.5 * guards[0].maxLife, {});
   guards[1].takeDamage(guards[1].life + 1, {});
   await lab.step(2, keepHero);
-  const one = bossBar();
+  const one = await bossBar();
   lines.push(`bars: one guard fallen, the other at half its life: "${one.sub}"`);
   if (!/Warded while 1 guard stands/.test(one.sub)) problems.push(`bars: with one guard standing the line reads "${one.sub}"`);
 }

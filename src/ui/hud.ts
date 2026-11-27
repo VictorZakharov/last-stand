@@ -24,6 +24,7 @@ import type { Enemy } from '../entities/enemy';
 import type { Item, SkillDef, SkillKey } from '../types';
 import { aleBoost } from '../game/aleBoost';
 import { ALE_BOOST } from '../data/tavern';
+import { showTarget } from './targetFrame';
 
 /** querySelector that asserts the element exists (HUD markup is static). */
 const $ = <T extends Element = HTMLElement>(s: string, root: ParentNode = document): T => root.querySelector<T>(s)!;
@@ -49,6 +50,8 @@ export function showHud(v: boolean, lobby = false, practice = false): void {
   $('#hud').classList.toggle('hidden', !v);
   $('#hud').classList.toggle('lobby', lobby);
   $('#hud').classList.toggle('practice', practice);
+  // (the target frame is the engine's, not the page's: hidden with the HUD and in the lobby)
+  if (!v || lobby) showTarget(null, false);
   $('.mm-title').textContent = lobby ? 'Wardenhollow' : 'The Last Stand';
   if (!lobby) minimapOut(true);
 }
@@ -406,7 +409,6 @@ export function updateHud(): void {
 }
 
 function updateTarget() {
-  const box = h('#target');
   // (an encounter's main boss, never one of its guards: from play, the bar named a guard "The Bell-Warden" at the
   // Ossuary Cantor's wave; each guard's own bar is over it in the world)
   let e = G.enemies.find((x) => x.boss && !x.guard && x.alive);
@@ -418,16 +420,16 @@ function updateTarget() {
       if (d < best) { best = d; e = x; }
     }
   }
-  if (!e) { box.classList.add('hidden'); return; }
-  box.classList.remove('hidden');
-  // (a guard aimed at is a target as any foe is, named a guard: no boss's bar of its own)
-  box.classList.toggle('boss', e.boss && !e.guard);
-  // (a pair sharing one life named as the pair while both stand: data/enemies.ts `pair`)
-  setText(h('#target .t-name'), e.def.pair && partnerOf(e) ? e.def.pair : e.name);
-  setText(h('#target .t-sub'), e.guard ? 'Guard' : e.boss ? bossLine(e) : e.hero ? 'Hero' : '');
-  const k = pct(e.life / e.maxLife);
-  setStyle(h('#target .t-fill'), 'width', k);
-  setStyle(h('#target .t-ghost'), 'width', k);
+  const duel = h('#hud').classList.contains('duel');
+  if (!e) { showTarget(null, duel); return; }
+  showTarget({
+    // (a pair sharing one life named as the pair while both stand: data/enemies.ts `pair`)
+    name: e.def.pair && partnerOf(e) ? e.def.pair : e.name,
+    sub: e.guard ? 'Guard' : e.boss ? bossLine(e) : e.hero ? 'Hero' : '',
+    life: e.life / e.maxLife,
+    // (a guard aimed at is a target as any foe is, named a guard: no boss's bar of its own)
+    boss: e.boss && !e.guard,
+  }, duel);
 }
 
 /** A boss's line under its name: warded, and by how many guards still standing, while its guards stand (so the
