@@ -59,16 +59,19 @@ export interface PanelLook {
   /** whether it takes the pointer */
   hits?: boolean;
   shadow?: PanelShadow;
+  /** how far round from the top, clockwise, its fill reaches, 0 to 1 (CSS's `conic-gradient(fill p, transparent 0)`:
+   *  a cooldown's shade) */
+  sweep?: number;
   /** how far what's inside it is scrolled up (px) */
   scroll?: number;
   /** its picture: the overlay's atlas's corners (u, v of the top left, then of the bottom right), a tint, and how far
-   *  it reaches past its box each side (px) */
+   *  it reaches past its box each side (px); with none, it's rounded by the panel's corners */
   picture?: { uv: [number, number, number, number]; tint?: string; bleed?: number };
 }
 
 /** floats a panel's layout and look take (Bulwark's `STYLE_FLOATS`, `LOOK_FLOATS`) */
 export const STYLE_FLOATS = 56;
-export const LOOK_FLOATS = 36;
+export const LOOK_FLOATS = 37;
 
 const PX = 1;
 const PERCENT = 2;
@@ -146,6 +149,7 @@ export function lookFloats(l: PanelLook, scale: number): Float32Array {
     f[34] = l.radial.stop;
     f[35] = l.radial.y;
   }
+  if (l.sweep !== undefined) f[36] = l.sweep;
   f[26] = (l.scroll ?? 0) * scale;
   if (l.shadow) {
     f[27] = l.shadow.blur * scale;

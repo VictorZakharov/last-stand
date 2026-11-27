@@ -18,6 +18,7 @@ import { SKILL_KEYS } from '../loot/loadout';
 import { sfx } from '../core/audio';
 import { input } from '../core/input';
 import { KEY_LABEL } from './hud';
+import { shownBox } from './kit/press';
 import type { SkillKey } from '../types';
 
 /** a key said in words in a step (the mouse's buttons by name: "LMB" meant nothing to a new player) */
@@ -180,7 +181,7 @@ function markedNow(): HTMLElement | null {
     const selector = mark.replace(/\{key:(\w+)\}/g, (_, impl: string) => SKILL_KEYS.find((k) => G.player.skillAt(k)?.def.impl === impl) ?? 'none');
     const el = document.querySelector<HTMLElement>(selector);
     if (!el || el.classList.contains('active') || !el.checkVisibility(SHOWN)) continue;
-    const box = el.getBoundingClientRect();
+    const box = shownBox(el);
     if (box.width >= 1 && box.height >= 1 && box.bottom > 0 && box.top < innerHeight) return el;
   }
   return null;
@@ -205,7 +206,7 @@ function placeAfloat(): void {
 
 /** The ring put round `el` (none: hidden), written only when where it stands changes. */
 function placeRing(el: HTMLElement | null): void {
-  const box = el?.getBoundingClientRect();
+  const box = el ? shownBox(el) : undefined;
   const at = box ? [box.left - RING_PAD, box.top - RING_PAD, box.width + 2 * RING_PAD, box.height + 2 * RING_PAD].map(Math.round).join(',') : '';
   if (at === ringAt) return;
   ringAt = at;

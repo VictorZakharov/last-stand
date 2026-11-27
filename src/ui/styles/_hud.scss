@@ -12,44 +12,8 @@
   display: none;
 }
 
-/* bottom HUD: [health] [abilities] [energy] in a single compact row */
-#bottombar { position: absolute; left: 50%; bottom: hud(12px); transform: translateX(-50%); display: flex; align-items: center; gap: 0;
-  filter: drop-shadow(0 6px 14px rgba(0,0,0,.85)); }
-.bar { position: relative; width: 300px; height: 46px; background: linear-gradient(#0a0808, #1a1414); overflow: hidden;
-  @include frame(var(--frame), 0 0 0 1px #000, inset 0 8px 14px rgba(0,0,0,.6)); }
-.bar.life { border-radius: 23px 0 0 23px; border-right: none; }
-.bar.energy { border-radius: 0 23px 23px 0; border-left: none; }
-.bar .fill { position: absolute; top: 0; bottom: 0; left: 0; width: 100%; transition: width .1s linear; }
-.bar.life .fill { left: auto; right: 0; background: linear-gradient(180deg, #ff5a4a 0%, #c4141c 35%, #6a0408 100%); box-shadow: inset 0 1px 0 rgba(255,255,255,.35); }
-.bar.life .lag { position: absolute; top: 0; bottom: 0; right: 0; background: rgba(255,210,140,.45); transition: width .6s ease-out .15s; z-index: 0; }
-.bar.life .fill { z-index: 1; }
-.bar.energy .fill { background: linear-gradient(180deg, #7affd8 0%, #1fae8a 35%, #0a4a3c 100%); box-shadow: inset 0 1px 0 rgba(255,255,255,.35); }
-.bar .txt { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; z-index: 2;
-  font-family: var(--font-display); font-size: 17px; font-weight: 700; color: #fff; text-shadow: 0 1px 2px #000, 0 0 4px #000; }
-.bar .bar-label { position: absolute; top: 3px; z-index: 2; font-size: 10px; letter-spacing: 2px; text-transform: uppercase; color: rgba(255,255,255,.55); text-shadow: 0 1px 2px #000; }
-.bar.life .bar-label { left: 22px; } .bar.energy .bar-label { right: 22px; }
-.bar.low .fill { animation: lowpulse .6s infinite alternate; }
-@keyframes lowpulse { to { filter: brightness(1.8); } }
-/* the warrior's Frenzy (ui/hud.ts updateFrenzy): a row of pips over the skill bar, lit a pip a stack in its own colour
-   from orange to deep red; the five past the cap only while Unchained runs. Nothing animates: a lit pip's glow is a
-   still shadow, set as the stacks change */
-#frenzy { position: absolute; left: 50%; bottom: calc(100% + 6px); transform: translateX(-50%); z-index: 3;
-  display: flex; align-items: center; gap: 8px; padding: 3px 10px; border-radius: 10px; background: rgba(10, 6, 6, .72);
-  box-shadow: 0 0 0 1px #000, inset 0 0 0 1px rgba($frame, .45); }
-#frenzy.hidden { display: none; }
-#frenzy .fz-label { font-size: 10px; letter-spacing: 2px; text-transform: uppercase; color: rgba(255, 210, 170, .7);
-  text-shadow: 0 1px 2px #000; }
-#frenzy.full .fz-label { color: #ff8a5a; }
-#frenzy .fz-pips { display: flex; gap: 3px; }
-#frenzy i { display: none; width: 10px; height: 14px; transform: skewX(-14deg); border-radius: 2px;
-  background: rgba(40, 18, 14, .9); box-shadow: inset 0 0 0 1px rgba(255, 140, 90, .25); }
-#frenzy i.shown { display: block; }
-#frenzy i.extra { box-shadow: inset 0 0 0 1px rgba(255, 70, 40, .55); }
-#frenzy i.on { background: linear-gradient(180deg, #fff2c8 -40%, var(--c) 45%, color-mix(in srgb, var(--c) 55%, #000) 100%);
-  box-shadow: 0 0 6px var(--c), inset 0 0 0 1px rgba(0, 0, 0, .5); }
-#frenzy.unchained { box-shadow: 0 0 0 1px #000, inset 0 0 0 1px rgba(255, 80, 40, .7), 0 0 10px rgba(255, 60, 30, .45); }
-#hotbar { display: flex; gap: 6px; padding: 7px 12px; position: relative; z-index: 3; background: $tray;
-  @include frame(rgba($frame, .6), 0 0 0 1px #000, 0 6px 14px rgba(0,0,0,.8)); border-radius: 4px; }
+/* the bottom bar ([health] [abilities] [energy]) is drawn by the engine (ui/bottomBar.ts); `.slot` stays for the
+   page's other skill slots (the loadout, the hero selection, the save slots, the touch buttons) */
 .slot { position: relative; width: 62px; height: 62px; border: 1px solid #000; box-shadow: inset 0 0 0 1px rgba($frame, .7), inset 0 0 12px rgba(0,0,0,.9);
   display: flex; align-items: center; justify-content: center; overflow: hidden; border-radius: 3px; pointer-events: auto; }
 .slot .icon { font-size: 33px; line-height: 1; filter: drop-shadow(0 0 6px currentColor); }
@@ -164,7 +128,6 @@ body.touch #minimap { pointer-events: auto; touch-action: none; -webkit-touch-ca
    Uses the individual `scale` property so it composes with existing transforms;
    elements centred with translateX(-50%) scale from their left edge (= screen centre).
    The scale leaves an element's offsets from the screen's edges alone: give those as hud() too. */
-#bottombar { scale: var(--hud, 1); transform-origin: left bottom; }
 #banner    { scale: var(--hud, 1); transform-origin: left top; }
 #minimap-wrap { scale: var(--hud, 1); transform-origin: right top; }
 #buffs     { scale: var(--hud, 1); transform-origin: left bottom; left: calc(50% - 470px * var(--hud, 1)); bottom: hud(76px); }

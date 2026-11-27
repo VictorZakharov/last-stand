@@ -7,7 +7,16 @@ const ART: Record<string, string> = {};
 for (const [path, url] of Object.entries(import.meta.glob<string>('./skillArt/*.webp', { eager: true, query: '?url', import: 'default' }))) {
   ART[path.slice(path.lastIndexOf('/') + 1, -'.webp'.length)] = url;
 }
-for (const url of Object.values(ART)) { const im = new Image(); im.decoding = 'async'; im.src = url; }
+const PICTURES = new Map<string, HTMLImageElement>();
+for (const url of Object.values(ART)) {
+  const im = new Image();
+  im.decoding = 'async';
+  im.src = url;
+  PICTURES.set(url, im);
+}
+
+/** The picture fetched at boot for the art at `url` (the engine's skill bar paints it: ui/slotFace.ts). */
+export const artPicture = (url: string): HTMLImageElement | undefined => PICTURES.get(url);
 
 /** the skill's painted icon, if it has one */
 export const skillArt = (def: SkillDef): string | undefined => ART[def.impl];

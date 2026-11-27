@@ -1,6 +1,7 @@
 // A panel of the game's UI drawn by the engine (#973: the UI moved off the page; engine/ui.ts writes it, Bulwark's
 // ui.rs lays it out): a box laid out as CSS's flexbox lays one out, in px of the UI's reference layout at a scale
-// (the HUD's or the lobby's, ui/scale.ts), painted by its look, holding other panels or a line of text. A text is a
+// (the HUD's, the lobby's or the touch controls', ui/scale.ts), painted by its look, holding other panels, a line of
+// text or a picture painted with the canvas (a skill's icon). Either is a
 // label of the overlay's (painted into its atlas with the canvas, as the world's labels are, and painted again when
 // the atlas is emptied), laid out by its text's box, its shadows reaching past it as CSS's do.
 import { G } from '../../state';
@@ -17,11 +18,23 @@ import {
 } from '../../engine/ui';
 
 /** The UI's scale a panel is drawn at. */
-export type Scaled = 'hud' | 'ui';
+export type Scaled = 'hud' | 'ui' | 'touch';
 
 /** A line of text a panel shows: what it says and how, and how far its line's box reaches past the face's own each
- *  side (px: negative where its line height is shorter, as CSS's half-leading). */
-interface Text { text: string; style: TextStyle; label: Label; w: number; h: number; reach: number; lead: number }
+ *  side (px: negative where its line height is shorter, as CSS's half-leading); or a picture (no style), `text` the
+ *  key it's painted again by. */
+interface Text {
+  text: string;
+  style: TextStyle | null;
+  label: Label;
+  w: number;
+  h: number;
+  reach: number;
+  lead: number;
+}
+
+/** How a picture is painted: its top left at the origin, `scale` the canvas's pixels per px of it. */
+export type Paint = (c: CanvasRenderingContext2D, scale: number) => void;
 
 const panels = new Set<Panel>();
 let nextId = 0;
@@ -37,6 +50,7 @@ export class Panel {
   /** the scale and canvas ratio its numbers were last written at, and its text painted at */
   private writtenAt = 0;
   private paintedAt = 0;
+  private removed = false;
 
   readonly parent: Panel | null;
 
@@ -98,6 +112,20 @@ export class Panel {
     return this;
   }
 
+  /** It shows a picture `w` by `h` px painted by `paint`, laid out as an image is, and painted again only when
+   *  `key` changes (a skill's icon in a state: `key` names both). */
+  picture(key: string, w: number, h: number, paint: Paint): this {
+    if (this.text && this.text.style === null && this.text.text === key) return this;
+    const label = this.text?.label ?? new Label(0);
+    label.sizedBy = this.scaled;
+    label.show({ w, h, paint });
+    const restyle = (this.text?.lead ?? 0) !== 0;
+    this.text = { text: key, style: null, label, w, h, reach: 0, lead: 0 };
+    this.paintedAt = 0;
+    if (restyle) uiRestyle(this.id, this.styleFloats());
+    return this;
+  }
+
   /** Its layout as the engine takes it: its text's line height laid out as margins round the face's box. */
   private styleFloats(): Float32Array {
     const lead = this.text?.lead ?? 0;
@@ -144,7 +172,13 @@ export class Panel {
     uiRemove(this.id);
   }
 
+  /** Whether it was taken away (its id may be another panel's now). */
+  get gone(): boolean {
+    return this.removed;
+  }
+
   private forget(): void {
+    this.removed = true;
     for (const child of [...this.children]) child.forget();
     this.text?.label.remove();
     this.parent?.children.delete(this);

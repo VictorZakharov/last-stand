@@ -7,7 +7,7 @@
 // are health lost to the shade, a program compiled on the way, and progress the cookie doesn't keep. Its canaries:
 // the tracker as tall as two windows, and the cookie emptied, each of which must be found.
 import type { Frame, Lab, Pictured, Report } from './lab';
-import { middleOf } from './lab';
+import { boxOf, middleOf } from './lab';
 import { G } from '../../../src/state';
 import { readCookie, writeCookie } from '../../../src/core/cookies';
 import { setView } from '../../../src/core/renderer';
@@ -86,7 +86,7 @@ function boxesOf(selector: string): DOMRect[] {
   if (!shows(selector)) return [];
   const whole = element(selector);
   const parts = selector.startsWith('#touch-') ? [...whole.children] as HTMLElement[] : [whole];
-  return parts.filter((part) => part.checkVisibility(SHOWN)).map((part) => part.getBoundingClientRect()).filter((box) => box.width >= 1);
+  return parts.filter((part) => part.checkVisibility(SHOWN)).map((part) => boxOf(part)).filter((box) => box.width >= 1);
 }
 
 /** What of the page lies under a point: the element's tag and class, and the nearest part with an id. */
@@ -111,10 +111,10 @@ function ringProblems(step: string, selector: string): string[] {
   const target = document.querySelector<HTMLElement>(selector);
   if (!target?.checkVisibility(SHOWN)) return [`${step}: ${selector}, which the step points at, isn't shown`];
   if (!ring?.classList.contains('on')) {
-    const t = target.getBoundingClientRect();
+    const t = boxOf(target);
     return [`${step}: nothing rings ${selector} (it stands at ${t.left.toFixed(0)}, ${t.top.toFixed(0)}, ${t.width.toFixed(0)}x${t.height.toFixed(0)})`];
   }
-  const r = ring.getBoundingClientRect(), t = target.getBoundingClientRect();
+  const r = ring.getBoundingClientRect(), t = boxOf(target);
   const middle = { x: t.left + t.width / 2, y: t.top + t.height / 2 };
   const round = r.left <= t.left && r.top <= t.top && r.right >= t.right && r.bottom >= t.bottom
     && middle.x > r.left && middle.x < r.right && middle.y > r.top && middle.y < r.bottom;

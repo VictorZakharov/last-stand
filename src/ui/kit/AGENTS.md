@@ -5,8 +5,8 @@ kit: a `Panel` is a box in a tree, laid out as CSS's flexbox lays one out (`Pane
 (`PanelLook`: a fill or a fill from top to bottom, a border, rounded corners, an opacity, a shadow, a scroll), holding
 other panels or a line of text (`say`). The engine lays the tree out and draws it in one call over its frame, after
 the world's labels (Bulwark's `ui.rs` and `gpu/panels.rs`, the page's calls in `engine/ui.ts`). Moved onto it so far:
-the run's target frame (`ui/targetFrame.ts`), the wave's badge (`ui/waveBadge.ts`) and the choice after a wave
-(`ui/decisionPanel.ts`).
+the run's target frame (`ui/targetFrame.ts`), the wave's badge (`ui/waveBadge.ts`), the choice after a wave
+(`ui/decisionPanel.ts`) and the bottom bar (`ui/bottomBar.ts`, `hotbarPanel.ts`, `slotFace.ts`, `frenzyPips.ts`).
 
 The rules across the game are the [root AGENTS.md](../../../AGENTS.md).
 
@@ -47,6 +47,22 @@ The rules across the game are the [root AGENTS.md](../../../AGENTS.md).
 - **Lengths are laid out to fractions of a px** (Bulwark's taffy tree, rounding off): rounded, a 1 px border at a
   HUD's scale of 0.6 lost its top side. **A fill may go round a centre** (`radial`: CSS's `radial-gradient(circle
   at 50% y, a, b stop)`, sized by the box inside its border, as CSS sizes a background): the badge's gem.
+- **A panel shows a picture painted with the canvas** (`picture(key, w, h, paint)`: a skill's icon in its slot, a
+  bar's fill, the Frenzy's pips), painted again only as its key changes, so paint what changes rarely and lay out
+  what changes each frame (a fill's width, a cooldown's sweep) as panels. **Paint in px of the art**: the atlas's
+  context is scaled to the screen already, `scale` only for what its transform doesn't scale (a shadow's blur and
+  offset); scaled again, the icons were drawn 1.28 times too large, cut at their foot. A picture stretched across a
+  wider box blends its ends with the atlas's empty pixels beside it: paint it its box's size (the bars' fills were
+  4 px across, faded at both ends). A picture is rounded by its panel's corners (Bulwark), and a box can be swept
+  round from the top (`sweep`: CSS's `conic-gradient(c p, transparent 0)`, a cooldown's shade).
+- **A panel that only shows a tip takes no press** (`tips` in `press.ts`: the skill bar's slots, whose press is
+  the world's): the mouse over it is told to its page element as the mouse's own enter, move and leave, which the
+  tooltip listens to. The Alt cursor over mouse look hovers and presses what a panel stands for
+  (`standsForAt`: `elementFromPoint` finds the canvas), and the tutorial's ring rings a drawn box (`shownBox`).
+- **A panel taken away is forgotten by the presses, tips and stand-ins** (`Panel.gone`): its id is the next panel's,
+  and a bar rebuilt for touch otherwise kept the desktop's skill bar standing in for `#hotbar`.
+- **What the page's CSS laid over its neighbours, the kit draws after them**: the skill bar is laid over the bottom
+  bar's row in a room of its own size (as its z-index drew it over the bars' shadows), and the Frenzy over it.
 - **Check a panel against main's page with `npm run lab -- ui --states <state> --ab`**: its box's lines and its
   pictures beside main's (`ui --states target`: the frame's box 384x52 at 113 on both, its name and line read off
   the engine's frame where the tree has it, off `#target` on main's).

@@ -191,7 +191,10 @@ async function pointerOnBank(lab: Lab, canary: boolean): Promise<DecisionFound> 
   const button = document.querySelector<HTMLButtonElement>('#decision .bank');
   if (!bank || !button || !PRESSES) return { lines: [], problems: ['decision: no Bank drawn to point at'] };
   if (canary) button.disabled = true;
-  // (read as the move is handled: a frame the lab steps sets the game's mouse as its own input has it)
+  // (read as the move is handled: a frame the lab steps sets the game's mouse as its own input has it; moved once
+  // beside it first, as a state on touch before this one leaves the game in touch mode, which a mouse's first move
+  // only ends)
+  await lab.mouseTo({ x: bank.x - 4, y: bank.y - 4 });
   await lab.mouseTo({ x: bank.x + bank.w / 2, y: bank.y + bank.h / 2 });
   const shown = PRESSES.pressablesShown().find((p) => p.label.includes('Bank'))?.state ?? 'none';
   const overUi = input.mouse.overUI;

@@ -154,12 +154,22 @@ end touch the same lines and conflict (`npm run check:sorted` holds the order; t
 - `twins.ts`: the compiles' canary is a material of a blending, side and depth none else has together (as `compiles`'s):
   a flat-shaded Phong of its own made no pipeline under the engine, and went uncaught.
 - `twinsBelt.ts`: the Twins' belt skulls (`lab twins --parts belt,bomb,poison,inherit,cost,beltPictures`). A throw's record is held by itself, never by its index in `SKULLS_THROWN`: the log keeps the last 16, and `compiles` waited 300 frames for a bomb whose index had run past its end. A cloud judged through a stun is thrown to land before the blast (`CLOUD_BEFORE`): landed after it, its ticks proved nothing. The floor's pictures in each view set the view up through `lab.setup` (`setView` alone came out top-down), and found a real leak: a bomb's skull and glow stayed lying for good where a set-up cleared the effects on its fuse.
+- `uiBars.ts`: the bottom bar as a fight leaves it (`barsBusy`, `barsBusyTouch`): the health set by the lab's own
+  hold (`lab.lifeShare`: set on the hero, it was full again at the next frame), each fill as drawn held to the
+  page's share, its canary planted where the engine draws the bar alone and put back after (left, the touch
+  state after it read the planted share as the page's, and passed).
 - `uiCloudIdentity.ts`: the service's health is asked once a visit (`serviceHealth` in `loot/cloudApi.ts`), so the state forgets it before and after its stub answers: a state before it asked the lab's server, and Google's button stayed hidden in a run of every state, alone it passed.
 - `uiDecision.ts`: the choice drawn by the kit is read off its panels (`decisionShown`), its unfolding finished by
   the kit's clock (`unfolded`: `finishMotion` and three frames; 60 frames stepped moved the scene behind it). The
   mouse over Bank is read right after `lab.mouseTo`, before any step: `lab.step` writes the lab's own mouse into
-  the game's, and the game counted it over no UI. Its canary makes Bank unpressable (`POINTER_CANARY`).
+  the game's, and the game counted it over no UI; it moves the mouse beside Bank first, as a touch state before it
+  leaves the game in touch mode, which a mouse's first move only ends. Its canary makes Bank unpressable
+  (`POINTER_CANARY`).
 - `uiPerfAsk.ts`, `uiStates/decisionTouch.ts`: a canary's plant must land where it's judged: the prompt's moved to the window's top, onto the choice (moved down to the middle it left the choice on a 1080 screen, and went unseen on main), and the choice's padding is planted and judged on a short screen alone.
+- `uiSkillTips.ts`, `uiStates/skillTips.ts`: a slot the engine draws is reached where nothing of the page lies over
+  its canvas (`reachable`). The state moves the mouse first, a move that moves (the mouse was left in the middle):
+  after a touch state the game stayed in touch mode, the skill bar hidden, and main's side found 0 of 0 skills and
+  passed.
 - `villageBloomLow.ts`: the bloom's pixels are the engine's own sizes at the share it was told (`Levels.now`'s
   `bloomSent`, Bulwark's post.rs), the bloom taken out by `rust.bloom`: it read three's bloom passes, 0 pixels both
   ways. Low's level switched in play makes its plain set aside (`plainSet.ts`), 72 pipelines, waited for with frames

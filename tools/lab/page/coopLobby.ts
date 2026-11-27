@@ -17,14 +17,14 @@ import { SKILL_KEYS } from '../../../src/loot/loadout';
 import type { SkillKey } from '../../../src/types';
 import { ABANDON_HOLD_MS, showPause, toggleMenuStowed } from '../../../src/ui/menus';
 import { askForHeroes } from './uiHeroes';
-import { realWait, type Frame, type Lab } from './lab';
+import { boxOf, realWait, type Frame, type Lab } from './lab';
 
 /** how much longer than its hold Leave the run is held (ms): its timer runs on the browser's clock */
 const HOLD_SLACK_MS = 300;
 
 /** The middle of `element` on the page (css px). */
 function middleOf(element: Element): { x: number; y: number } {
-  const box = element.getBoundingClientRect();
+  const box = boxOf(element);
   return { x: box.left + box.width / 2, y: box.top + box.height / 2 };
 }
 
@@ -220,7 +220,7 @@ export function coopHallSeen(): HallSeen {
 function shows(selector: string): boolean {
   const element = document.querySelector<HTMLElement>(selector);
   if (!element?.checkVisibility({ opacityProperty: true, visibilityProperty: true })) return false;
-  const box = element.getBoundingClientRect();
+  const box = boxOf(element);
   return box.width >= 1 && box.height >= 1;
 }
 

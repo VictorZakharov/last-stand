@@ -1,5 +1,6 @@
-// In-run HUD: bars, hotbar, score, minimap, spoils, the choice after a wave (the page's, out of sight: the engine draws
-// it and the wave's badge, decisionPanel.ts and waveBadge.ts, from what this writes there).
+// In-run HUD: bars, hotbar, score, minimap, spoils, the choice after a wave. The bottom bar (bars, hotbar, Frenzy),
+// the wave's badge and the choice are the page's out of sight: the engine draws them from what this writes there
+// (bottomBar.ts, waveBadge.ts, decisionPanel.ts).
 import { duelObjective } from './duelHud';
 import { G } from '../state';
 import { input } from '../core/input';
@@ -28,6 +29,7 @@ import { ALE_BOOST } from '../data/tavern';
 import { showTarget } from './targetFrame';
 import { drawWaveBadge } from './waveBadge';
 import { drawDecision } from './decisionPanel';
+import { drawBottomBar } from './bottomBar';
 
 /** querySelector that asserts the element exists (HUD markup is static). */
 const $ = <T extends Element = HTMLElement>(s: string, root: ParentNode = document): T => root.querySelector<T>(s)!;
@@ -46,6 +48,7 @@ export function initHud(): void {
   // (the choice first: the badge is drawn over it, as its z-index had it)
   drawDecision();
   drawWaveBadge();
+  drawBottomBar();
   mmCtx = $<HTMLCanvasElement>('#minimap').getContext('2d')!;
   on('lootGained', renderSpoils);
   on('waveStarted', () => renderSpoils());

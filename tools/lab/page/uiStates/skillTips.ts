@@ -8,6 +8,12 @@ import type { Steps } from '../uiKit';
 
 /** Each skill's tooltip on the hotbar opened by the mouse moved over its slot. */
 async function openSkillTips(lab: Lab): Promise<void> {
+  // (the mouse moved first: a state on touch before this one leaves the game in touch mode, where the hotbar
+  // isn't shown, and measured on main so it found no skills; a mouse's move ends it, a move that moves: it was left
+  // in the middle)
+  await lab.mouseTo({ x: innerWidth / 2 - 8, y: innerHeight / 2 - 8 });
+  await lab.mouseTo({ x: innerWidth / 2, y: innerHeight / 2 });
+  await lab.step(2);
   const slots = [...document.querySelectorAll<HTMLElement>('#hotbar .slot:not(.empty)')];
   await openEach(slots, 'the mouse', (slot) => lab.mouseTo(middleOf(slot)), () => undefined);
 }

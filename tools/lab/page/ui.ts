@@ -8,7 +8,7 @@
 // shows the same lines and the same pictures on both, whatever the screens' pixel ratios: a 4K screen at 300% as at
 // 100%.
 import * as THREE from 'three';
-import { boxOf, seenOf } from './lab';
+import { boxOf, kitDrawsItself, seenOf } from './lab';
 import type { Frame, Lab, Pictured, Report } from './lab';
 import { NUMBER_COLORS } from '../../../src/data/balance';
 import { floatText } from '../../../src/ui/floaters';
@@ -63,7 +63,7 @@ function namedBoxes(): string[] {
   const lines: string[] = [];
   for (const element of document.querySelectorAll<HTMLElement>('[id]')) {
     const mirrored = element.closest('.kit-mirror');
-    if (mirrored && mirrored !== element) continue;
+    if (mirrored && mirrored !== element && !kitDrawsItself(element)) continue;
     const rect = boxOf(element);
     if (rect.width < 1 || rect.height < 1) continue;
     if (!seenOf(element)) continue;

@@ -7,7 +7,7 @@ import { yardToWorld } from '../../../src/data/village';
 import { restartTraining, skipTraining } from '../../../src/game/training';
 import { inYard } from '../../../src/game/village';
 import { groundHeight } from '../../../src/world/ground';
-import type { Lab } from './lab';
+import { boxOf as drawnBox, type Lab } from './lab';
 import type { TouchFound } from './uiTouch';
 
 /** the canary's problem, and what it plants */
@@ -33,7 +33,7 @@ const SHOWN = { visibilityProperty: true, opacityProperty: true };
 function boxOf(selector: string): DOMRect | null {
   const element = document.querySelector<HTMLElement>(selector);
   if (!element?.checkVisibility(SHOWN)) return null;
-  const box = element.getBoundingClientRect();
+  const box = drawnBox(element);
   return box.width >= 1 && box.height >= 1 ? box : null;
 }
 

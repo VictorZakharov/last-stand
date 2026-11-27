@@ -147,6 +147,11 @@ export function boxOf(element: Element): DOMRect {
   return drawn ? new DOMRect(drawn.x, drawn.y, drawn.w, drawn.h) : new DOMRect(0, 0, 0, 0);
 }
 
+/** Whether the UI kit draws a panel in `element`'s own place (`#hotbar` in the bottom bar's), not only round it. */
+export function kitDrawsItself(element: Element): boolean {
+  return !!KIT_PRESS?.drawsItself?.(element);
+}
+
 /** Whether `element` can be seen: where the UI kit draws it, its panel's opacity; else the page's own. */
 export function seenOf(element: Element): boolean {
   if (!KIT_PRESS || !element.closest('.kit-mirror')) {
@@ -253,6 +258,7 @@ const SETTLE_FRAMES = 90;
 interface KitPress {
   drawnAt(element: Element): { x: number; y: number; w: number; h: number } | null;
   drawnSeen(element: Element): boolean;
+  drawsItself?(element: Element): boolean;
 }
 const KIT_PRESS = Object.values(import.meta.glob<KitPress>('../../../src/ui/kit/press.ts', { eager: true }))[0];
 const RUN_PHASES = Object.values(import.meta.glob<RunPhaseModule>('../../../src/world/runPhase.ts', { eager: true }));

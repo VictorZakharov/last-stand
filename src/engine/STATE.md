@@ -468,6 +468,14 @@ frame's GPU clock ends at that pass where it draws: the labels, the outline and 
   touch buttons 55.0 px tall against 54.5), on a phone's 844x390 at 3 too; the mouse over Bank is shown on it and
   counted over the UI (its canary: Bank made unpressable); `lab bosswave` clicks Continue on the canvas. Not drawn:
   the unfolding's flare and sweep, and Continue's spinning key while it's sent (a pulsing dot).
+- [x] The bottom bar on the kit (`ui/bottomBar.ts`, `hotbarPanel.ts`, `slotFace.ts`, `frenzyPips.ts`; the bars',
+  the skill bar's and the Frenzy's rules gone from the SCSS): a panel shows a picture painted with the canvas (a
+  slot's face, a fill), a box sweeps round from the top (Bulwark: a cooldown), a slot shows its tooltip and takes
+  no press. `lab ui --states run,hudTouch,barsBusy,barsBusyTouch --ab` holds its boxes to main's (the bar 73.9% of
+  the window wide, the skill bar 33.9%), its pictures alike at full and as a fight leaves it (low health, short
+  energy, a cooldown); each fill as drawn held to the page's share (its canary a share never followed);
+  `skillTips` opens every slot's tooltip by the mouse (7 of 7), `cursor` by the Alt cursor. Not checked in a
+  picture: the Frenzy (the lab's warrior holds a weapon), a slot's glow as it's cast.
 - [ ] Text that wraps: a line is painted whole; a panel with paragraphs needs the page to break them at its width.
 - [ ] The rows are painted again whole for any change (a twentieth of a layout): kept by panel when a large panel
   (the stash) changes often.
