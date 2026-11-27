@@ -221,6 +221,11 @@ export class Panel {
     return this.styleNow;
   }
 
+  /** Its look as set now. */
+  get looked(): Readonly<PanelLook> {
+    return this.lookNow;
+  }
+
   /** How far what's inside it is scrolled up (px of the reference layout). */
   get scrolled(): number {
     return this.lookNow.scroll ?? 0;

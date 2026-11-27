@@ -12,6 +12,44 @@ import { CLASS_IDS } from '../../../src/data/classes/index';
 import { portraitHtml, syncPortrait } from '../../../src/ui/portraitPicker';
 import type { Player } from '../../../src/entities/player';
 
+/** A party card as the engine draws it (`src/ui/partyPanel.ts`, where the commit has it): its parts' boxes, its
+ *  borders and colours. Where it hasn't, the page's card is read by its styles. */
+type DrawnBox = { x: number; y: number; w: number; h: number } | null;
+interface CardDrawn {
+  card: DrawnBox; content: DrawnBox; name: DrawnBox; cls: DrawnBox; portrait: DrawnBox; star: DrawnBox;
+  border: number[]; borderColour: string; clsColour: string;
+}
+const PARTY = Object.values(import.meta.glob<{ partyCardsDrawn(): CardDrawn[] }>('../../../src/ui/partyPanel.ts',
+  { eager: true }))[0];
+
+/** The local player's card as drawn (the party's first), after a frame for it to follow the page. */
+async function ownCardDrawn(lab: Lab): Promise<CardDrawn | null> {
+  if (!PARTY) return null;
+  await lab.step(1);
+  return PARTY.partyCardsDrawn()[0] ?? null;
+}
+
+/** A drawn box as the page's (css px); an empty one where it isn't drawn. */
+const asRect = (box: DrawnBox): DOMRect => (box ? new DOMRect(box.x, box.y, box.w, box.h) : new DOMRect());
+
+/** The own card's class colour, its left border and the host's star, as drawn: the problems. */
+function drawnCardProblems(drawn: CardDrawn, host: boolean): string[] {
+  const problems: string[] = [];
+  if (drawn.clsColour !== G.player.cls.accent) problems.push('class colour differed from Hero Selection');
+  const [top, right, bottom, left] = drawn.border;
+  if (!(left >= 3 && top === 0 && right === 0 && bottom === 0)) {
+    problems.push('own card did not have a thick plain border on the left only');
+  }
+  if (host) {
+    const star = drawn.star;
+    const picture = drawn.portrait;
+    const corner = !!star && !!picture && Math.abs(star.x - picture.x) < 3
+      && Math.abs(star.y + star.h - (picture.y + picture.h)) < 3;
+    if (!corner) problems.push('host star was not over the bottom-left corner of the portrait');
+  }
+  return problems;
+}
+
 /** Plant another class's image request and require the resource audit to catch it. */
 export interface PortraitOptions {
   canary: boolean;
@@ -26,6 +64,25 @@ function requestedClasses(): string[] {
     return match ? [match[1]] : [];
   });
   return [...new Set(classes)];
+}
+
+/** The page's own card, where the page draws it: its class colour, its left border and the host's star, by its
+ *  styles. */
+function pageCardChecks(card: HTMLElement, picture: HTMLElement, check: (ok: boolean, message: string) => void): void {
+  const probe = document.createElement('span');
+  probe.style.color = G.player.cls.accent;
+  card.appendChild(probe);
+  check(getComputedStyle(element('#party .self .pf-class')).color === getComputedStyle(probe).color,
+    'class colour differed from Hero Selection');
+  probe.remove();
+  const border = getComputedStyle(card);
+  const others = [border.borderTopWidth, border.borderRightWidth, border.borderBottomWidth];
+  check(parseFloat(border.borderLeftWidth) >= 3 && border.borderLeftStyle === 'solid'
+    && others.every((width) => parseFloat(width) === 0), 'own card did not have a thick plain border on the left only');
+  if (G.player.slot !== 0) return;
+  const star = getComputedStyle(picture, '::after');
+  check(star.content.includes('★') && star.position === 'absolute' && star.left === '1px' && star.bottom === '0px',
+    'host star was not over the bottom-left corner of the portrait');
 }
 
 /** Read the UI's actual downloads and choices without assuming the manifest's bookkeeping is correct. */
@@ -100,33 +157,24 @@ export async function portraits(lab: Lab, options: PortraitOptions): Promise<Rep
     const card = element('#party .self');
     check(!card.textContent?.includes('You · '), 'current player card still said You');
     check(element('#party .self .pf-class').textContent === G.player.cls.name, 'card class was missing');
-    const probe = document.createElement('span');
-    probe.style.color = G.player.cls.accent;
-    card.appendChild(probe);
-    check(getComputedStyle(element('#party .self .pf-class')).color === getComputedStyle(probe).color,
-      'class colour differed from Hero Selection');
-    probe.remove();
-    const border = getComputedStyle(card);
-    check(parseFloat(border.borderLeftWidth) >= 3 && border.borderLeftStyle === 'solid'
-      && [border.borderTopWidth, border.borderRightWidth, border.borderBottomWidth].every((width) => parseFloat(width) === 0),
-      'own card did not have a thick plain border on the left only');
     check(!card.querySelector('.pf-host'), 'Host text still occupied a separate row');
     const picture = element('#party .self .pf-portrait');
     check(picture.classList.contains('host') === (G.player.slot === 0), 'host star showed for the wrong player');
-    if (G.player.slot === 0) {
-      const star = getComputedStyle(picture, '::after');
-      check(star.content.includes('★') && star.position === 'absolute' && star.left === '1px' && star.bottom === '0px',
-        'host star was not over the bottom-left corner of the portrait');
-    }
+    const drawnCard = await ownCardDrawn(lab);
+    if (drawnCard) problems.push(...drawnCardProblems(drawnCard, G.player.slot === 0));
+    else pageCardChecks(card, picture, check);
     for (const [width, height] of [[1024, 700], [1920, 1080], [844, 390], [1180, 820], [820, 1180]]) {
       await lab.showOn({ width, height, ratio: 1 });
       if (width <= 1180 && width !== 1024) await touchMode(lab);
-      const name = element('#party .self .pf-name').getBoundingClientRect();
-      const cls = element('#party .self .pf-class').getBoundingClientRect();
-      const content = element('#party .self .pf-content').getBoundingClientRect();
+      const drawn = await ownCardDrawn(lab);
+      const name = drawn ? asRect(drawn.name) : element('#party .self .pf-name').getBoundingClientRect();
+      const cls = drawn ? asRect(drawn.cls) : element('#party .self .pf-class').getBoundingClientRect();
+      const content = drawn ? asRect(drawn.content) : element('#party .self .pf-content').getBoundingClientRect();
       check(Math.abs(name.top - cls.top) < 2 && name.right <= cls.left && Math.abs(cls.right - content.right) < 2,
         `${width}x${height}: name and class were not left/right on one line`);
-      check(card.scrollWidth <= card.clientWidth, `${width}x${height}: card content overflowed`);
+      const box = drawn ? asRect(drawn.card) : null;
+      const overflowed = box ? content.right > box.right + 0.5 : card.scrollWidth > card.clientWidth;
+      check(!overflowed, `${width}x${height}: card content overflowed`);
       moments.push(await lab.screen(`player-card-${width}x${height}`, [], '#party'));
     }
     G.player.life = G.player.stats.maxLife / 2;

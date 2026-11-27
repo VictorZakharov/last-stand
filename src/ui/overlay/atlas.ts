@@ -20,6 +20,9 @@ const WIDTH_STEP = 16;
 /** a slot holds a label of up to this many times its size, and this many px more (more would waste it) */
 const SLACK = 2;
 const SLACK_PX = 16;
+/** px left clear after each slot, right and below: a label filling its slot was sampled, filtered, with a row of
+ *  the slot under it (a party card's words underlined in its life bar's red, #973) */
+const GUTTER = 2;
 
 /** A slot: its region of the atlas, px from the top left. */
 export interface Slot { x: number; y: number; w: number; h: number }
@@ -80,7 +83,7 @@ export function takeSlot(w: number, h: number): Slot | null {
   if (given) return given;
   let shelf = shelves.find((s) => s.h === size.h && s.used + size.w <= side);
   if (!shelf) {
-    if (nextY + size.h > side) {
+    if (nextY + size.h + GUTTER > side) {
       full = true;
       if (!crowded() && !warned && import.meta.env.DEV) console.error('overlay: the label atlas is full');
       warned = true;
@@ -88,10 +91,10 @@ export function takeSlot(w: number, h: number): Slot | null {
     }
     shelf = { y: nextY, h: size.h, used: 0 };
     shelves.push(shelf);
-    nextY += size.h;
+    nextY += size.h + GUTTER;
   }
   const slot = { x: shelf.used, y: shelf.y, w: size.w, h: size.h };
-  shelf.used += size.w;
+  shelf.used += size.w + GUTTER;
   return slot;
 }
 

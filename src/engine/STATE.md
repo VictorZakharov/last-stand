@@ -508,7 +508,11 @@ the SCSS. In the order they're taken: the kit's own pieces first, then what show
 - [x] A duel's score and result (`ui/duelPanels.ts`: their text and the result's box css px, as main's never scaled
   them): `lab ui --states duelHud --ab --fresh`, their boxes within 2 px of main's. Main's note has old-style digits
   (its `font` shorthand), the drawn one lining. A name too long for its column is squeezed, not cut with an ellipsis.
-- [ ] The rest of the run's HUD (`hud.html`): the party's frames, the downed note and the revive.
+- [x] The party's frames (`ui/partyPanel.ts`): `lab ui --states perfParty,coop,coopTouch --ab`, `#party`'s box
+  main's (the state's partners now made with the game's own markup, `tagFor`'s), `lab portraits` reading the
+  drawn card. The overlay atlas keeps 2 px clear round each slot: a label filling its slot was sampled with a row
+  of the slot under it, and the cards' words were underlined in the bar's red.
+- [ ] The rest of the run's HUD (`hud.html`): the downed note and the revive, the watching bar.
 - [ ] The overlays down the left (`diag.html`: the performance overlay, the net's, the battle log), the chat.
 - [ ] The touch controls (`touch.html`).
 - [ ] The damage meter, the sit hint.

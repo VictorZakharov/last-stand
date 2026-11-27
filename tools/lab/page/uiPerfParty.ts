@@ -2,7 +2,7 @@
 // ui/coop.ts `tagFor`) with the mini performance overlay shown, as a player with it on meets them (#492: it lay over a
 // partner's frame, both in the top left corner). The overlay must stand clear of every frame and within the window.
 // Its canary pins the overlays back to the corner, which must be caught.
-import type { Lab } from './lab';
+import { boxOf, type Lab } from './lab';
 import * as perfHud from '../../../src/ui/perfHud';
 
 /** What the state found besides its boxes: lines for its report, and its problems. */
@@ -16,18 +16,26 @@ export const PERF_PARTY_CANARY = { name: 'over a partner', what: 'the overlays p
 /** frames run for the overlay to draw (it draws every 250 ms) and the overlays to move clear */
 const DRAW_FRAMES = 40;
 /** the partners' frames made, as a party of three's */
-const PARTNERS = ['Partner · partner · Warrior', 'Second · partner · Mage'];
+const PARTNERS = [['Partner', 'Warrior'], ['Second', 'Mage']];
 
 const party = (): HTMLElement => document.querySelector<HTMLElement>('#party')!;
 const overlay = (): HTMLElement => document.querySelector<HTMLElement>('#perf')!;
 const diag = (): HTMLElement => document.querySelector<HTMLElement>('#diag')!;
 
+/** A partner's frame as `tagFor` writes it: no portrait, the name and class over the bar at 70%. */
+function partnerMarkup(name: string, cls: string): string {
+  const heading = `<div class="pf-heading"><span class="pf-name">${name}</span><span class="pf-class">${cls}</span></div>`;
+  const bar = '<div class="pf-bar"><div class="pf-fill" style="width:70%"></div><div class="pf-mend"></div></div>';
+  const content = `<div class="pf-content">${heading}${bar}<div class="pf-state"></div></div>`;
+  return `<span class="pf-portrait" hidden></span>${content}<div class="pf-plus">+</div>`;
+}
+
 /** Two partners' frames in the party's corner, the mini overlay shown (with the canary, the overlays pinned there). */
 export async function openPerfParty(lab: Lab, canary: boolean): Promise<void> {
-  for (const name of PARTNERS) {
+  for (const [name, cls] of PARTNERS) {
     const frame = document.createElement('div');
     frame.className = 'pf lab-party';
-    frame.innerHTML = `<div class="pf-name">${name}</div><div class="pf-bar"><div class="pf-fill" style="width:70%"></div></div><div class="pf-state"></div>`;
+    frame.innerHTML = partnerMarkup(name, cls);
     party().appendChild(frame);
   }
   perfHud.setPerfHudSize('mini', false);
@@ -50,7 +58,8 @@ export function perfPartyChecked(): PerfPartyFound {
   if (!overlay().checkVisibility()) problems.push('perfParty: the overlay isn\'t shown');
   let gap = Infinity;
   for (const frame of frames) {
-    const box = frame.getBoundingClientRect();
+    // (where the engine draws it, `src/ui/partyPanel.ts`: the page's is out of sight)
+    const box = boxOf(frame);
     const apart = Math.max(box.left - panel.right, panel.left - box.right, box.top - panel.bottom, panel.top - box.bottom);
     gap = Math.min(gap, apart);
     if (apart < 0) problems.push(`perfParty: the overlay lies over a partner's frame (${Math.round(-apart)} px into it)`);
