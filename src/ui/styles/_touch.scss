@@ -55,7 +55,6 @@ body.unarmed #touch-skills { visibility: hidden; }
 #btn-full.on .full-leave { display: block; }
 body.touch #btn-full.cant { display: none !important; }
 /* touch HUD: the hotbar gives way to the buttons, the bars move up out of the thumbs' way (ui/bottomBar.ts) */
-body.touch #buffs { left: $touch-beside; top: touch(76px); bottom: auto; transform-origin: left top; }
 
 .mouse-only { display: inline; } .touch-inline { display: none; }
 body.touch .mouse-only { display: none; } body.touch .touch-inline { display: inline; }

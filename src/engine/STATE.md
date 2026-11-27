@@ -502,7 +502,9 @@ the SCSS. In the order they're taken: the kit's own pieces first, then what show
 - [x] The crosshair, the charge ring and the look hint (`ui/aimMarks.ts`): `lab draw --class ranger --views third
   --ab` holds the crosshair's pictures to main's as it's drawn, at its beat's height and bold, its beat and drift
   read off the engine's (`CROSSHAIR`), both canaries caught.
-- [ ] The rest of the run's HUD (`hud.html`): the buffs, the party's frames, the downed note and the
+- [x] The buffs (`ui/buffsPanel.ts`): `lab ui --states barsBusy,barsBusyTouch --ab` (a ward and the ale added),
+  their boxes main's. Their words under them now show on a desktop: main's bottom bar was painted over them.
+- [ ] The rest of the run's HUD (`hud.html`): the party's frames, the downed note and the
   revive, the duel's score and result.
 - [ ] The overlays down the left (`diag.html`: the performance overlay, the net's, the battle log), the chat.
 - [ ] The touch controls (`touch.html`).

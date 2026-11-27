@@ -32,6 +32,7 @@ import { showTarget } from './targetFrame';
 import { drawWaveBadge } from './waveBadge';
 import { drawBanner } from './bannerPanel';
 import { drawAimMarks } from './aimMarks';
+import { drawBuffs } from './buffsPanel';
 import { drawDecision } from './decisionPanel';
 import { drawBottomBar } from './bottomBar';
 
@@ -56,6 +57,7 @@ export function initHud(): void {
   drawWaveBadge();
   drawBanner();
   drawAimMarks();
+  drawBuffs();
   drawBottomBar();
   // (the minimap's column, the training's tracker in it)
   initMinimapColumn();

@@ -4,6 +4,7 @@
 // its lines and its picture compare with main's; where the engine draws the bar, each fill as drawn is held to the
 // share the page wrote. Its canary writes a share the drawn bar hasn't followed.
 import { G } from '../../../src/state';
+import { aleBoost } from '../../../src/game/aleBoost';
 import { SKILL_KEYS } from '../../../src/loot/loadout';
 import type { Lab } from './lab';
 import { caught, type Found } from './uiKit';
@@ -22,6 +23,9 @@ const ENERGY_LEFT = 0.04;
 /** how much of its cooldown the cooling skill has left, and the Frenzy's stacks */
 const COOLDOWN_LEFT = 0.6;
 const FRENZY_STACKS = 3;
+/** the buffs over the bar's left end: a ward with time left on it (s), and the tavern's ale for waves to come */
+const WARD = { amount: 40, t: 7.4 };
+const ALE_WAVES = 2;
 /** how far a drawn fill may be from the page's share (a px or two of a 300 px bar) */
 const SHARE_SLACK = 0.01;
 /** frames for the HUD to write what was set, then for the kit to draw it */
@@ -58,6 +62,8 @@ export async function openBarsBusy(lab: Lab): Promise<void> {
   lab.lifeShare = LIFE_LEFT;
   hero.energy = hero.stats.maxEnergy * ENERGY_LEFT;
   hero.frenzy = FRENZY_STACKS;
+  hero.ward = { ...WARD };
+  aleBoost.waves = ALE_WAVES;
   cooled = coolOne();
   await lab.step(SETTLE);
   MOTION?.finishMotion();
@@ -70,6 +76,8 @@ export function closeBarsBusy(lab: Lab): void {
   lab.lifeShare = 1;
   hero.energy = hero.stats.maxEnergy;
   hero.frenzy = 0;
+  hero.ward = null;
+  aleBoost.waves = 0;
   hero.cooldowns.clear();
 }
 

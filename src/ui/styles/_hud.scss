@@ -33,10 +33,7 @@
 .slot.busy .icon { filter: grayscale(.85) brightness(.4); }
 .slot.sep { margin-left: 10px; }
 
-#buffs { position: absolute; left: calc(50% - 470px); bottom: 76px; display: flex; gap: 4px; }
-.buff { width: 30px; height: 30px; border: 1px solid var(--frame); display: flex; align-items: center; justify-content: center; font-size: 18px; background: #111;
-  position: relative; box-shadow: 0 0 8px rgba(0,0,0,.8); }
-.buff .bt { position: absolute; bottom: -14px; font-size: 11px; color: #fff; text-shadow: 0 0 3px #000; white-space: nowrap; }
+/* the buffs are drawn by the engine (ui/buffsPanel.ts): `#buffs` out of sight (`.kit-mirror`) */
 
 
 // (`--mm-room`: the minimap's width, which the touch HUD's full screen button stands beside, `_touch.scss`)
@@ -76,4 +73,3 @@
    Uses the individual `scale` property so it composes with existing transforms;
    elements centred with translateX(-50%) scale from their left edge (= screen centre).
    The scale leaves an element's offsets from the screen's edges alone: give those as hud() too. */
-#buffs     { scale: var(--hud, 1); transform-origin: left bottom; left: calc(50% - 470px * var(--hud, 1)); bottom: hud(76px); }
