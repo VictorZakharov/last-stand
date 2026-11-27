@@ -532,9 +532,19 @@ the SCSS. In the order they're taken: the kit's own pieces first, then what show
   (`kit/svgArt.ts`). A fade of a round button's opacity isn't followed: shown or not.
 - [x] The damage meter, the sit hint: the world's labels already (`overlay/`, drawn by the engine's overlay pass),
   no element of the page's to move.
-- [ ] The tooltip and the item's sheet.
+- [x] The kit: a screen ported as a typed style sheet (`ui/kit/sheet.ts`: rules keyed by the SCSS's own selectors,
+  matched by the page's `matches`, each element a panel following the page's hidden markup, its buttons pressed on
+  the engine's canvas; the shared controls' rules in `ui/controlsSheet.ts`).
+- [x] The village's card (`ui/villageCardPanel.ts`: a portal's, the training grounds', the chronicle's, the duel's
+  menu, the great ledger): `lab ui --states cardPortal,cardTraining,cardChronicle,cardDuel,cardRecords --ab`, the
+  ledger 973x669 as main's, the chronicle within 3 px, the portal within 3; a segmented button stands 1.4 px taller
+  than main's, so the duel's card is 11 px taller (479 to 468). On a phone held sideways the duel's Begin button
+  spans its row where main's is as wide as its words. `ui --states clicked` presses Leave where it's drawn; `lab
+  training` passes; `lab practice` fails on main alike (fanShot's cooldown, Hedgeward never cast).
+- [ ] The tooltip and the item's sheet (drawn over the lobby's panels: after them, as the page's elements stand over
+  every panel).
 - [ ] The lobby (`menu.html`: the rail, the loadout and spellbook, the equipment, the stash and its filter, the
-  stats, the village's card, the duel's menu), the summary, the dialogs (duel ask, install, rotate, perf ask,
+  stats), the summary, the dialogs (duel ask, install, rotate, perf ask,
   save delete, cloud).
 - [ ] The pause menu (`pause.html`: its tabs, the settings, the performance tab), the bug report, photo mode.
 - [ ] The save slots, hero selection's panels, Play together and its rooms, How to play, the village's map.
