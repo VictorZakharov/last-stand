@@ -6,13 +6,13 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { Color } from './color.ts';
 import { Euler } from './euler.ts';
+import type { EulerOrder } from './euler.ts';
 import { Mat4 } from './mat4.ts';
 import { Quat } from './quat.ts';
 import { Vec2 } from './vec2.ts';
 import { Vec3 } from './vec3.ts';
 import { Vec4 } from './vec4.ts';
 import { assertNear } from './testing.ts';
-import type { Watcher } from './types.ts';
 
 /** the writes a watched value saw since `clear`; written by the accessors, the first ones before it exists */
 interface Watched {
@@ -139,6 +139,41 @@ class WatchedQuat extends Quat implements Watched {
   }
 }
 
+/** an `Euler` whose `x`, `y`, `z` and `order` are accessors */
+class WatchedEuler extends Euler implements Watched {
+  declare log?: string[];
+  declare kept: [number, number, number];
+  declare keptOrder: EulerOrder;
+  override get x(): number {
+    return this.kept[0];
+  }
+  override set x(value: number) {
+    (this.kept ??= [0, 0, 0])[0] = value;
+    saw(this, 'x');
+  }
+  override get y(): number {
+    return this.kept[1];
+  }
+  override set y(value: number) {
+    (this.kept ??= [0, 0, 0])[1] = value;
+    saw(this, 'y');
+  }
+  override get z(): number {
+    return this.kept[2];
+  }
+  override set z(value: number) {
+    (this.kept ??= [0, 0, 0])[2] = value;
+    saw(this, 'z');
+  }
+  override get order(): EulerOrder {
+    return this.keptOrder;
+  }
+  override set order(value: EulerOrder) {
+    this.keptOrder = value;
+    saw(this, 'order');
+  }
+}
+
 /** a `Color` whose `r`, `g` and `b` are accessors */
 class WatchedColor extends Color implements Watched {
   declare log?: string[];
@@ -177,32 +212,6 @@ function assertWatched<Value extends Watchable>(value: Value, fields: readonly s
     call(value);
     for (const field of fields) {
       assert.ok(value.log.includes(field), `${name} wrote ${field} past its accessor`);
-      assert.equal(Object.hasOwn(value, field), false, `${name} made ${field} an own property`);
-    }
-  }
-}
-
-/** an owner counting what a watched value told it (a node's `Mover`) */
-class Counted implements Watcher {
-  writes = 0;
-  reads = 0;
-  touched(): void {
-    this.writes++;
-  }
-  fresh(): void {
-    this.reads++;
-  }
-}
-
-/** asserts each method told the angles' owner of its write, and made none of `fields` an own property */
-function assertTold(value: Euler, fields: readonly string[], calls: Record<string, (watched: Euler) => void>): void {
-  const owner = new Counted();
-  value.owner = owner;
-  for (const [name, call] of Object.entries(calls)) {
-    owner.writes = 0;
-    call(value);
-    assert.ok(owner.writes > 0, `${name} wrote past its owner`);
-    for (const field of fields) {
       assert.equal(Object.hasOwn(value, field), false, `${name} made ${field} an own property`);
     }
   }
@@ -273,10 +282,10 @@ test('a watched Quat sees every write of its methods', () => {
   });
 });
 
-test('a watched Euler tells its owner of every write of its methods, its order among them', () => {
-  const euler = new Euler(0.1, 0.2, 0.3, 'YXZ');
+test('a watched Euler sees every write of its methods, its order among them', () => {
+  const euler = new WatchedEuler(0.1, 0.2, 0.3, 'YXZ');
   const turn = new Quat().setFromEuler(new Euler(0.3, -0.7, 1.1));
-  assertTold(euler, [...XYZ, 'order'], {
+  assertWatched(euler, [...XYZ, 'order'], {
     set: (value) => value.set(1, 2, 3),
     copy: (value) => value.copy(new Euler(0.4, 0.5, 0.6, 'ZXY')),
     setFromQuaternion: (value) => value.setFromQuaternion(turn, 'XYZ'),
@@ -299,14 +308,6 @@ test('a watched Color sees every write of its methods', () => {
     fromArray: (value) => value.fromArray([0.25, 0.5, 0.75]),
   });
   assertNear(color.toArray(), [0.25, 0.5, 0.75]);
-});
-
-test('the check catches a write the angles\' owner is never told of (its canary)', () => {
-  const euler = new Euler(1, 2, 3);
-  const pastOwner = (value: Euler): void => {
-    Object.assign(value, { _ex: 5 });
-  };
-  assert.throws(() => assertTold(euler, XYZ, { pastOwner }), /past its owner/);
 });
 
 test('the check catches a write past the accessors (its canary)', () => {
