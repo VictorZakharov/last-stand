@@ -29,7 +29,9 @@ let minCaster = 0;
 const LIFE = 6, SHRINK = 1.3;
 const GRAVITY = 15, BOUNCE = 0.35, HALF = Math.PI / 2;
 
-interface Chunk { shape: Shape; pool: string; x: number; y: number; z: number; vx: number; vy: number; vz: number; rx: number; ry: number; rz: number; wx: number; wy: number; wz: number; sx: number; sy: number; sz: number; t: number; life: number; rest: boolean; tx: number; tz: number }
+interface Chunk { shape: Shape; pool: string; x: number; y: number; z: number; vx: number; vy: number; vz: number; rx: number; ry: number; rz: number; wx: number; wy: number; wz: number; sx: number; sy: number; sz: number; t: number; life: number; rest: boolean; tx: number; tz: number;
+  /** written lying still at full size (its matrix stands till it shrinks) / written gone */
+  still: boolean; zeroed: boolean }
 interface Pool { mesh: InstancedMesh; chunks: Chunk[]; next: number; max: number }
 const pools: Record<string, Pool> = {};
 let coalMat: LitMaterial | null = null;
@@ -139,7 +141,7 @@ export function rubble(x: number, z: number, { count, color, kind = 'stone', rad
       vx: Math.cos(a) * speed * rand(0.3, 1), vy: rand(1.5, 4.5) * (speed / 4), vz: Math.sin(a) * speed * rand(0.3, 1),
       rx: rand(0, 6), ry: rand(0, 6), rz: rand(0, 6), wx: rand(-9, 9), wy: rand(-9, 9), wz: rand(-9, 9),
       sx: s * part.sx * rand(0.8, 1.2), sy: s * part.sy * rand(0.8, 1.2), sz: s * part.sz * rand(0.8, 1.2), t: 0,
-      life: life ?? (BREAKS[kind] ? BREAKS[kind]!.life + rand(0, 1) : LIFE + rand(0, 3)), rest: false, tx: 0, tz: 0,
+      life: life ?? (BREAKS[kind] ? BREAKS[kind]!.life + rand(0, 1) : LIFE + rand(0, 3)), rest: false, tx: 0, tz: 0, still: false, zeroed: false,
     });
     pool.mesh.setColorAt(slot, _c.set(part.color ?? color).multiplyScalar((part.shade ?? 1) * rand(0.75, 1.15)));
     // (placed where it starts at once: drawn before the next update with the pool's unset place, a fresh piece stood
@@ -190,12 +192,24 @@ export function updateRubble(dt: number): void {
 
 function updatePool({ mesh, chunks }: Pool, dt: number): void {
   if (!mesh.count) return;
-  let live = 0;
+  // (a piece lying still at full size, or gone, keeps the matrix last written: every piece's was composed and the
+  // whole pool sent again every frame, those lying still the most of them)
+  let live = 0, wrote = false;
   for (let i = 0; i < mesh.count; i++) {
     const c = chunks[i];
-    if (!c || c.t >= c.life) { _m.makeScale(0, 0, 0); mesh.setMatrixAt(i, _m); continue; }
+    if (!c || c.t >= c.life) {
+      if (c?.zeroed) continue;
+      _m.makeScale(0, 0, 0);
+      mesh.setMatrixAt(i, _m);
+      if (c) c.zeroed = true;
+      wrote = true;
+      continue;
+    }
     c.t += dt;
     live++;
+    const shrinking = c.life - c.t < SHRINK;
+    if (c.still && !shrinking) continue;
+    let settled = false;
     if (!c.rest) {
       c.vy -= GRAVITY * dt;
       c.x += c.vx * dt; c.y += c.vy * dt; c.z += c.vz * dt;
@@ -213,13 +227,15 @@ function updatePool({ mesh, chunks }: Pool, dt: number): void {
       if (Math.abs(tx - c.rx) + Math.abs(tz - c.rz) > 1e-3) {
         c.rx += (tx - c.rx) * k; c.rz += (tz - c.rz) * k;
         c.y = groundHeight(c.x, c.z) + halfHeight(c);
-      }
+      } else settled = true;
     }
-    const k = c.life - c.t < SHRINK ? Math.max(0, (c.life - c.t) / SHRINK) : 1;
+    const k = shrinking ? Math.max(0, (c.life - c.t) / SHRINK) : 1;
     _m.compose(_p.set(c.x, c.y, c.z), _q.setFromEuler(_e.set(c.rx, c.ry, c.rz)), _s.set(c.sx * k, c.sy * k, c.sz * k));
     mesh.setMatrixAt(i, _m);
+    wrote = true;
+    c.still = settled && !shrinking;
   }
-  mesh.instanceMatrix.needsUpdate = true;
+  if (wrote) mesh.instanceMatrix.needsUpdate = true;
   if (!live) mesh.count = 0;
 }
 

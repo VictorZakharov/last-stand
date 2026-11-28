@@ -185,7 +185,11 @@ const cz = (g: Grid, c: number): number => (Math.floor(c / g.n) + 0.5) * CELL - 
 export function lineClear(ax: number, az: number, bx: number, bz: number, radius: number, above = -Infinity,
   through = false): boolean {
   const dx = bx - ax, dz = bz - az, len2 = dx * dx + dz * dz;
+  // (the line's box first: most circles lie off it, and each foe asks every frame)
+  const minX = Math.min(ax, bx) - radius, maxX = Math.max(ax, bx) + radius;
+  const minZ = Math.min(az, bz) - radius, maxZ = Math.max(az, bz) + radius;
   for (const o of G.arena.obstacles) {
+    if (o.x + o.r < minX || o.x - o.r > maxX || o.z + o.r < minZ || o.z - o.r > maxZ) continue;
     if (o.h <= above || (through && o.prop)) continue;
     const k = len2 > 1e-9 ? Math.min(1, Math.max(0, ((o.x - ax) * dx + (o.z - az) * dz) / len2)) : 0;
     const px = ax + dx * k - o.x, pz = az + dz * k - o.z, r = o.r + radius;

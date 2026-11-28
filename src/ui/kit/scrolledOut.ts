@@ -3,6 +3,7 @@
 // scrolled near again. A long scrolled page held every text's slot, seen or not: the guide's hero's page filled the
 // atlas (the engine's fault banner, "the label atlas is full") and the words past it were never painted.
 import type { Panel } from './panel';
+import { holdLayout } from '../../engine/ui';
 
 /** how far past a view a panel keeps its slots, a share of the view's size each way: a wheel's turn or a finger's
  *  flick comes into it painted (a full view each way held three views of the guide's hero's page, and its atlas was
@@ -38,9 +39,14 @@ function gather(round: Panel, view: Box, out: Set<Panel>): void {
   }
 }
 
-/** Every panel far out of the view of a scrolling panel of `panels` shown now (read off the layout as it stands:
- *  one layout of the tree, before the frame's own). */
+/** Every panel far out of the view of a scrolling panel of `panels` shown now, read off the last frame's layout: laid
+ *  out again here first, the whole tree was laid out twice a frame (a slot given back a frame late costs nothing). */
 export function scrolledOut(panels: Iterable<Panel>): Set<Panel> {
+  return holdLayout(() => gatherOut(panels));
+}
+
+/** `scrolledOut`'s work, its boxes as last laid out. */
+function gatherOut(panels: Iterable<Panel>): Set<Panel> {
   const out = new Set<Panel>();
   for (const panel of panels) {
     if (panel.styled.overflow !== 'scroll' || !panel.seen) continue;

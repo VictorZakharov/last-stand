@@ -502,7 +502,9 @@ function hallInside(dt: number): void {
   const fromAbove = lobby && view === 'top' && !wallsNoneHeld;
   for (const wall of HALL_WALL_SIDES) {
     const hidesHim = roofAway && wallHidesNearHim(wall);
-    const canSeePast = !(wall.kind === 'hallFront' && outsideInFront) || frontOutsideThinsHeld;
+    // (asked from above alone, where it counts: asked every frame wherever he was, a fight in the crypt read the fog's
+    // rays for every wall of the village's hall, `seenShareAt`, a fifth of the village's stage)
+    const canSeePast = fromAbove && (!(wall.kind === 'hallFront' && outsideInFront) || frontOutsideThinsHeld);
     let hidesFloor = false;
     if (canSeePast) hidesFloor = hidesSeenFloor(wall.kind, wallSpan(wall));
     else {
@@ -522,7 +524,8 @@ function hallInside(dt: number): void {
   columnsFade(dt);
   // (the portico's beam as a wall: solid while he is outside with the front wall whole, unless it directly hides him)
   const beamHides = roofAway && beamHidesHim();
-  const beamSeen = (!outsideInFront || frontOutsideThinsHeld) && hidesSeenFloor('hallBeam', BEAM_SPAN);
+  const beamSeen = fromAbove && (!outsideInFront || frontOutsideThinsHeld) && hidesSeenFloor('hallBeam', BEAM_SPAN);
+  if (!fromAbove) hidingSeen.delete('hallBeam');
   const beamThins = fromAbove && (beamHides || (frontOutsideThinsHeld && seesIn) || beamSeen);
   beamFade = Maths.damp(beamFade, !beamThins ? 0 : beamHides || seesIn ? WALL_GHOST : SIGHT_GHOST, CUT_AWAY_FADE, dt);
   fadeWhole('hallBeam', beamFade < CUT_AWAY_NONE ? 0 : beamFade);
