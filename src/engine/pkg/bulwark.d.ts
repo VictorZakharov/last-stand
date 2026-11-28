@@ -345,11 +345,75 @@ export class Engine {
 }
 
 /**
+ * One body's leg IK and its rig.
+ */
+export class Legs {
+    free(): void;
+    [Symbol.dispose](): void;
+    /**
+     * `bodyPhase` (`side` under 0: between the two).
+     */
+    body_phase(phase: number, side: number): number;
+    cadence(): number;
+    capture_arms(): void;
+    /**
+     * Each foot as the page reads it, `FOOT` numbers: its state (0 planted, 1 swinging, 2 a timed step), where it
+     * stands (x, y, z), its yaw, whether it has a stance's spot and the spot (x, z) and its turn out, where its stride
+     * lands (x, y, z) and how far through it it is; and the lab's reads: dragged, out of reach, where it is in its window,
+     * its pitch and why its last stride left (`LeftFor`'s code).
+     */
+    feet(out: Float64Array): void;
+    hips_turn(): number;
+    hold_arms(weight: number): void;
+    intend(x: number, z: number, faces_way: boolean): void;
+    lean(): number;
+    /**
+     * A body of `parents.len()` joints depth first (-1 the root's), its named joints in `Named`'s order.
+     */
+    constructor(parents: Int32Array | number[], named: Uint32Array | number[], thigh: number, shin: number);
+    pelvis_yaw(): number;
+    /**
+     * The rig put as the page has it: the root's matrix in the world, then each joint's `PUT` numbers.
+     */
+    put(state: Float64Array | number[]): void;
+    /**
+     * The walk cycle as the gait reads it (phase, rate, backing), the pelvis's drop (dropped, wanted) and the frame's
+     * plan (duty, cycle, curve, speed).
+     */
+    reads(out: Float64Array): void;
+    reset(): void;
+    set_off(phase: number): number;
+    /**
+     * Its feet's shapes (sole, toe, heel, the left then the right), as the page reads them at its first update.
+     */
+    shape(numbers: Float64Array | number[]): void;
+    /**
+     * A standing foot's spot (`none`: under its hip).
+     */
+    stance(i: number, none: boolean, x: number, z: number, yaw: number): void;
+    /**
+     * Each joint as the IK left it, `TAKEN` numbers each: which turn it wrote read before both are made fresh.
+     */
+    take(out: Float64Array): void;
+    thigh_forward(side: number): number;
+    /**
+     * `update`, with what the page sets on it directly this frame (`active`, `rooted`); `leg_w` read where `own_legs`.
+     */
+    update(dt: number, phase: number, dead: number, weight: number, lean: number, own_legs: boolean, left: number, right: number, active: boolean, rooted: boolean): void;
+    walking(): boolean;
+}
+
+/**
  * Cloth hung from a waist draped over a body's limbs, in place (cloth.rs): `points` three floats each, `cols` a row
  * and its first row the waist; `down` and `round` each point's length to the one above and the next round, as cut;
  * `limbs` eight floats each (an axis's two ends, its radius at each), the hands' `hands` first, then the legs'.
  */
 export function drape_cloth(points: Float32Array, down: Float32Array | number[], round: Float32Array | number[], limbs: Float64Array | number[], hands: number, cols: number, layer: number, slit: boolean, tucked: boolean, angles: Float32Array | number[], passes: number): void;
+
+/**
+ * The floor's levels and edges (`GROUND_LEVELS`, `GROUND_EDGES`), and the place's relief (`heights` empty: none).
+ */
+export function legs_ground(levels: Float64Array | number[], edges: Float64Array | number[], heights: Float32Array | number[], half: number, cell: number, n: number, dais: boolean): void;
 
 export function start(): void;
 
@@ -358,6 +422,7 @@ export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembl
 export interface InitOutput {
     readonly memory: WebAssembly.Memory;
     readonly __wbg_engine_free: (a: number, b: number) => void;
+    readonly __wbg_legs_free: (a: number, b: number) => void;
     readonly drape_cloth: (a: number, b: number, c: any, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: number, n: number, o: number, p: number, q: number) => void;
     readonly engine_add_custom_material: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number) => number;
     readonly engine_add_material: (a: number, b: number, c: number, d: number, e: number, f: number) => number;
@@ -445,13 +510,34 @@ export interface InitOutput {
     readonly engine_ui_rows: (a: number) => number;
     readonly engine_ui_screen: (a: number, b: number, c: number, d: number) => void;
     readonly engine_ui_update: (a: number) => void;
+    readonly legs_body_phase: (a: number, b: number, c: number) => number;
+    readonly legs_cadence: (a: number) => number;
+    readonly legs_capture_arms: (a: number) => void;
+    readonly legs_feet: (a: number, b: number, c: number, d: any) => void;
+    readonly legs_ground: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number) => void;
+    readonly legs_hips_turn: (a: number) => number;
+    readonly legs_hold_arms: (a: number, b: number) => void;
+    readonly legs_intend: (a: number, b: number, c: number, d: number) => void;
+    readonly legs_lean: (a: number) => number;
+    readonly legs_new: (a: number, b: number, c: number, d: number, e: number, f: number) => number;
+    readonly legs_pelvis_yaw: (a: number) => number;
+    readonly legs_put: (a: number, b: number, c: number) => void;
+    readonly legs_reads: (a: number, b: number, c: number, d: any) => void;
+    readonly legs_reset: (a: number) => void;
+    readonly legs_set_off: (a: number, b: number) => number;
+    readonly legs_shape: (a: number, b: number, c: number) => void;
+    readonly legs_stance: (a: number, b: number, c: number, d: number, e: number, f: number) => void;
+    readonly legs_take: (a: number, b: number, c: number, d: any) => void;
+    readonly legs_thigh_forward: (a: number, b: number) => number;
+    readonly legs_update: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number) => void;
+    readonly legs_walking: (a: number) => number;
     readonly start: () => void;
-    readonly __wasm_bindgen_func_elem_1911: (a: number, b: number, c: number, d: any) => void;
-    readonly __wasm_bindgen_func_elem_1936: (a: number, b: number, c: any, d: any) => void;
-    readonly __wasm_bindgen_func_elem_785: (a: number, b: number, c: number, d: any) => void;
-    readonly __wasm_bindgen_func_elem_785_92: (a: number, b: number, c: number, d: any) => void;
-    readonly __wasm_bindgen_func_elem_785_93: (a: number, b: number, c: number, d: any) => void;
-    readonly __wasm_bindgen_func_elem_787: (a: number, b: number, c: any) => void;
+    readonly __wasm_bindgen_func_elem_2012: (a: number, b: number, c: number, d: any) => void;
+    readonly __wasm_bindgen_func_elem_2037: (a: number, b: number, c: any, d: any) => void;
+    readonly __wasm_bindgen_func_elem_886: (a: number, b: number, c: number, d: any) => void;
+    readonly __wasm_bindgen_func_elem_886_113: (a: number, b: number, c: number, d: any) => void;
+    readonly __wasm_bindgen_func_elem_886_114: (a: number, b: number, c: number, d: any) => void;
+    readonly __wasm_bindgen_func_elem_888: (a: number, b: number, c: any) => void;
     readonly __wbindgen_export: (a: number, b: number) => number;
     readonly __wbindgen_export2: (a: number, b: number, c: number, d: number) => number;
     readonly __wbindgen_export3: (a: number, b: number, c: number) => void;

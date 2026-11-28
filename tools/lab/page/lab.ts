@@ -1685,7 +1685,7 @@ function holdTheWave(kept: Set<Enemy>): void {
 
 /** Sets the game's tunable values (`Fixture.tune`; src/core/tuning.ts), each by its path: whole lists first, then
  *  some of a list's numbers (`path[i,j]`, each to its one value) over what's set then. */
-function setTunes(tunes: Record<string, number[]>): void {
+export function setTunes(tunes: Record<string, number[]>): void {
   const paths = Object.keys(tunes);
   if (!paths.length) return;
   if (!window.__tune) throw new Error('lab: --tune: this game has no tunable values');

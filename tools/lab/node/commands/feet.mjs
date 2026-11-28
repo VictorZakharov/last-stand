@@ -1,6 +1,6 @@
 // `npm run lab -- feet`: its command line (help, options) and its work on a side (node/commands/AGENTS.md).
-import { picturePairs, asText, problemsIn, textWithMoments } from '../commandKit.mjs';
-import { COMMON_OPTIONS } from '../optionKit.mjs';
+import { picturePairs, tunesFrom, asText, problemsIn, textWithMoments } from '../commandKit.mjs';
+import { SETUP_OPTIONS, COMMON_OPTIONS } from '../optionKit.mjs';
 
 /** `lab feet`, as the command line reads it and each side runs it (node/commands/AGENTS.md). */
 export default {
@@ -18,6 +18,7 @@ export default {
     canary: { kind: 'switch', help: 'plant faults the measures must catch: a planted ankle slid, one sunk' },
     frames: { kind: 'switch', help: 'list every stance and standing case flagged, and what was wrong with it' },
     trace: { kind: 'switch', help: 'each frame of each walk, foot by foot (pick one with --scenarios)' },
+    tune: SETUP_OPTIONS.tune,
     ...COMMON_OPTIONS,
   },
   keepsPage: true,
@@ -27,6 +28,7 @@ export default {
       canary: Boolean(options.canary),
       frames: Boolean(options.frames),
       trace: Boolean(options.trace),
+      tune: options.tune === undefined ? undefined : tunesFrom(options.tune),
     });
   },
   finish(results, options, session) {

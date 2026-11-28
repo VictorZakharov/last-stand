@@ -33,8 +33,21 @@ export interface Relief {
 
 /** the biome's relief, if it has one (the arena sets it as it switches biome) */
 let relief: Relief | null = null;
+/** how many times the relief was set, so a copy of it (the engine's) knows when to take it again */
+let reliefSets = 0;
 export function setRelief(r: Relief | null): void {
   relief = r;
+  reliefSets++;
+}
+
+/** a stamp that changes as the relief is set (`reliefNow`'s copies are taken again when it does) */
+export function reliefStamp(): number {
+  return reliefSets;
+}
+
+/** the relief the floor has now (the lab's `legtape` writes it for Bulwark's port of the animation) */
+export function reliefNow(): Relief | null {
+  return relief;
 }
 
 /** the grid a relief is baked on (m): a root's top, 0.56 m across at its widest, over 4 or more cells */

@@ -1073,6 +1073,206 @@ export class Engine {
 if (Symbol.dispose) Engine.prototype[Symbol.dispose] = Engine.prototype.free;
 
 /**
+ * One body's leg IK and its rig.
+ */
+export class Legs {
+    __destroy_into_raw() {
+        const ptr = this.__wbg_ptr;
+        this.__wbg_ptr = 0;
+        LegsFinalization.unregister(this);
+        return ptr;
+    }
+    free() {
+        const ptr = this.__destroy_into_raw();
+        wasm.__wbg_legs_free(ptr, 0);
+    }
+    /**
+     * `bodyPhase` (`side` under 0: between the two).
+     * @param {number} phase
+     * @param {number} side
+     * @returns {number}
+     */
+    body_phase(phase, side) {
+        const ret = wasm.legs_body_phase(this.__wbg_ptr, phase, side);
+        return ret;
+    }
+    /**
+     * @returns {number}
+     */
+    cadence() {
+        const ret = wasm.legs_cadence(this.__wbg_ptr);
+        return ret;
+    }
+    capture_arms() {
+        wasm.legs_capture_arms(this.__wbg_ptr);
+    }
+    /**
+     * Each foot as the page reads it, `FOOT` numbers: its state (0 planted, 1 swinging, 2 a timed step), where it
+     * stands (x, y, z), its yaw, whether it has a stance's spot and the spot (x, z) and its turn out, where its stride
+     * lands (x, y, z) and how far through it it is; and the lab's reads: dragged, out of reach, where it is in its window,
+     * its pitch and why its last stride left (`LeftFor`'s code).
+     * @param {Float64Array} out
+     */
+    feet(out) {
+        var ptr0 = passArrayF64ToWasm0(out, wasm.__wbindgen_export);
+        var len0 = WASM_VECTOR_LEN;
+        wasm.legs_feet(this.__wbg_ptr, ptr0, len0, out);
+    }
+    /**
+     * @returns {number}
+     */
+    hips_turn() {
+        const ret = wasm.legs_hips_turn(this.__wbg_ptr);
+        return ret;
+    }
+    /**
+     * @param {number} weight
+     */
+    hold_arms(weight) {
+        wasm.legs_hold_arms(this.__wbg_ptr, weight);
+    }
+    /**
+     * @param {number} x
+     * @param {number} z
+     * @param {boolean} faces_way
+     */
+    intend(x, z, faces_way) {
+        wasm.legs_intend(this.__wbg_ptr, x, z, faces_way);
+    }
+    /**
+     * @returns {number}
+     */
+    lean() {
+        const ret = wasm.legs_lean(this.__wbg_ptr);
+        return ret;
+    }
+    /**
+     * A body of `parents.len()` joints depth first (-1 the root's), its named joints in `Named`'s order.
+     * @param {Int32Array | number[]} parents
+     * @param {Uint32Array | number[]} named
+     * @param {number} thigh
+     * @param {number} shin
+     */
+    constructor(parents, named, thigh, shin) {
+        const val3 = +thigh;
+        const val4 = +shin;
+        let ptr0, len0, ptr1, len1;
+        try {
+            ptr0 = passArray32ToWasm0(parents, wasm.__wbindgen_export);
+            len0 = WASM_VECTOR_LEN;
+            ptr1 = passArray32ToWasm0(named, wasm.__wbindgen_export);
+            len1 = WASM_VECTOR_LEN;
+        } catch (e) {
+            if (ptr1) { wasm.__wbindgen_export3(ptr1, len1 * 4, 4); }
+            if (ptr0) { wasm.__wbindgen_export3(ptr0, len0 * 4, 4); }
+            throw e;
+        }
+        const ret = wasm.legs_new(ptr0, len0, ptr1, len1, val3, val4);
+        this.__wbg_ptr = ret;
+        LegsFinalization.register(this, this.__wbg_ptr, this);
+        return this;
+    }
+    /**
+     * @returns {number}
+     */
+    pelvis_yaw() {
+        const ret = wasm.legs_pelvis_yaw(this.__wbg_ptr);
+        return ret;
+    }
+    /**
+     * The rig put as the page has it: the root's matrix in the world, then each joint's `PUT` numbers.
+     * @param {Float64Array | number[]} state
+     */
+    put(state) {
+        const ptr0 = passArrayF64ToWasm0(state, wasm.__wbindgen_export);
+        const len0 = WASM_VECTOR_LEN;
+        wasm.legs_put(this.__wbg_ptr, ptr0, len0);
+    }
+    /**
+     * The walk cycle as the gait reads it (phase, rate, backing), the pelvis's drop (dropped, wanted) and the frame's
+     * plan (duty, cycle, curve, speed).
+     * @param {Float64Array} out
+     */
+    reads(out) {
+        var ptr0 = passArrayF64ToWasm0(out, wasm.__wbindgen_export);
+        var len0 = WASM_VECTOR_LEN;
+        wasm.legs_reads(this.__wbg_ptr, ptr0, len0, out);
+    }
+    reset() {
+        wasm.legs_reset(this.__wbg_ptr);
+    }
+    /**
+     * @param {number} phase
+     * @returns {number}
+     */
+    set_off(phase) {
+        const ret = wasm.legs_set_off(this.__wbg_ptr, phase);
+        return ret;
+    }
+    /**
+     * Its feet's shapes (sole, toe, heel, the left then the right), as the page reads them at its first update.
+     * @param {Float64Array | number[]} numbers
+     */
+    shape(numbers) {
+        const ptr0 = passArrayF64ToWasm0(numbers, wasm.__wbindgen_export);
+        const len0 = WASM_VECTOR_LEN;
+        wasm.legs_shape(this.__wbg_ptr, ptr0, len0);
+    }
+    /**
+     * A standing foot's spot (`none`: under its hip).
+     * @param {number} i
+     * @param {boolean} none
+     * @param {number} x
+     * @param {number} z
+     * @param {number} yaw
+     */
+    stance(i, none, x, z, yaw) {
+        wasm.legs_stance(this.__wbg_ptr, i, none, x, z, yaw);
+    }
+    /**
+     * Each joint as the IK left it, `TAKEN` numbers each: which turn it wrote read before both are made fresh.
+     * @param {Float64Array} out
+     */
+    take(out) {
+        var ptr0 = passArrayF64ToWasm0(out, wasm.__wbindgen_export);
+        var len0 = WASM_VECTOR_LEN;
+        wasm.legs_take(this.__wbg_ptr, ptr0, len0, out);
+    }
+    /**
+     * @param {number} side
+     * @returns {number}
+     */
+    thigh_forward(side) {
+        const ret = wasm.legs_thigh_forward(this.__wbg_ptr, side);
+        return ret;
+    }
+    /**
+     * `update`, with what the page sets on it directly this frame (`active`, `rooted`); `leg_w` read where `own_legs`.
+     * @param {number} dt
+     * @param {number} phase
+     * @param {number} dead
+     * @param {number} weight
+     * @param {number} lean
+     * @param {boolean} own_legs
+     * @param {number} left
+     * @param {number} right
+     * @param {boolean} active
+     * @param {boolean} rooted
+     */
+    update(dt, phase, dead, weight, lean, own_legs, left, right, active, rooted) {
+        wasm.legs_update(this.__wbg_ptr, dt, phase, dead, weight, lean, own_legs, left, right, active, rooted);
+    }
+    /**
+     * @returns {boolean}
+     */
+    walking() {
+        const ret = wasm.legs_walking(this.__wbg_ptr);
+        return ret !== 0;
+    }
+}
+if (Symbol.dispose) Legs.prototype[Symbol.dispose] = Legs.prototype.free;
+
+/**
  * Cloth hung from a waist draped over a body's limbs, in place (cloth.rs): `points` three floats each, `cols` a row
  * and its first row the waist; `down` and `round` each point's length to the one above and the next round, as cut;
  * `limbs` eight floats each (an axis's two ends, its radius at each), the hands' `hands` first, then the legs'.
@@ -1116,6 +1316,38 @@ export function drape_cloth(points, down, round, limbs, hands, cols, layer, slit
         throw e;
     }
     wasm.drape_cloth(ptr0, len0, points, ptr1, len1, ptr2, len2, ptr3, len3, val6, val7, val8, val9, val10, ptr4, len4, val11);
+}
+
+/**
+ * The floor's levels and edges (`GROUND_LEVELS`, `GROUND_EDGES`), and the place's relief (`heights` empty: none).
+ * @param {Float64Array | number[]} levels
+ * @param {Float64Array | number[]} edges
+ * @param {Float32Array | number[]} heights
+ * @param {number} half
+ * @param {number} cell
+ * @param {number} n
+ * @param {boolean} dais
+ */
+export function legs_ground(levels, edges, heights, half, cell, n, dais) {
+    const val4 = +half;
+    const val5 = +cell;
+    const val6 = +n;
+    const val7 = +dais;
+    let ptr0, len0, ptr1, len1, ptr2, len2;
+    try {
+        ptr0 = passArrayF64ToWasm0(levels, wasm.__wbindgen_export);
+        len0 = WASM_VECTOR_LEN;
+        ptr1 = passArrayF64ToWasm0(edges, wasm.__wbindgen_export);
+        len1 = WASM_VECTOR_LEN;
+        ptr2 = passArrayF32ToWasm0(heights, wasm.__wbindgen_export);
+        len2 = WASM_VECTOR_LEN;
+    } catch (e) {
+        if (ptr2) { wasm.__wbindgen_export3(ptr2, len2 * 4, 4); }
+        if (ptr1) { wasm.__wbindgen_export3(ptr1, len1 * 8, 8); }
+        if (ptr0) { wasm.__wbindgen_export3(ptr0, len0 * 8, 8); }
+        throw e;
+    }
+    wasm.legs_ground(ptr0, len0, ptr1, len1, ptr2, len2, val4, val5, val6, val7);
 }
 
 export function start() {
@@ -1624,7 +1856,7 @@ function __wbg_get_imports() {
                     const a = state0.a;
                     state0.a = 0;
                     try {
-                        return __wasm_bindgen_func_elem_1936(a, state0.b, arg0, arg1);
+                        return __wasm_bindgen_func_elem_2037(a, state0.b, arg0, arg1);
                     } finally {
                         state0.a = a;
                     }
@@ -2380,27 +2612,27 @@ function __wbg_get_imports() {
         }, arguments); },
         __wbindgen_generic_0000000000000001: function(arg0, arg1) {
             // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [Externref], shim_idx: 104, ret: Result(Unit), inner_ret: Some(Result(Unit)) }, mutable: true }) -> Externref`.
-            const ret = makeMutClosure(arg0, arg1, __wasm_bindgen_func_elem_1911);
+            const ret = makeMutClosure(arg0, arg1, __wasm_bindgen_func_elem_2012);
             return ret;
         },
         __wbindgen_generic_0000000000000002: function(arg0, arg1) {
             // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [NamedExternref("GPUDevice")], shim_idx: 44, ret: Result(Unit), inner_ret: Some(Result(Unit)) }, mutable: true }) -> Externref`.
-            const ret = makeMutClosure(arg0, arg1, __wasm_bindgen_func_elem_785);
+            const ret = makeMutClosure(arg0, arg1, __wasm_bindgen_func_elem_886);
             return ret;
         },
         __wbindgen_generic_0000000000000003: function(arg0, arg1) {
             // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [NamedExternref("GPUUncapturedErrorEvent")], shim_idx: 48, ret: Unit, inner_ret: Some(Unit) }, mutable: true }) -> Externref`.
-            const ret = makeMutClosure(arg0, arg1, __wasm_bindgen_func_elem_787);
+            const ret = makeMutClosure(arg0, arg1, __wasm_bindgen_func_elem_888);
             return ret;
         },
         __wbindgen_generic_0000000000000004: function(arg0, arg1) {
             // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [NamedExternref("any")], shim_idx: 44, ret: Result(Unit), inner_ret: Some(Result(Unit)) }, mutable: true }) -> Externref`.
-            const ret = makeMutClosure(arg0, arg1, __wasm_bindgen_func_elem_785_92);
+            const ret = makeMutClosure(arg0, arg1, __wasm_bindgen_func_elem_886_113);
             return ret;
         },
         __wbindgen_generic_0000000000000005: function(arg0, arg1) {
             // Cast intrinsic for `Closure(Closure { owned: true, function: Function { arguments: [NamedExternref("undefined")], shim_idx: 44, ret: Result(Unit), inner_ret: Some(Result(Unit)) }, mutable: true }) -> Externref`.
-            const ret = makeMutClosure(arg0, arg1, __wasm_bindgen_func_elem_785_93);
+            const ret = makeMutClosure(arg0, arg1, __wasm_bindgen_func_elem_886_114);
             return ret;
         },
         __wbindgen_generic_0000000000000006: function(arg0) {
@@ -2433,18 +2665,18 @@ function __wbg_get_imports() {
     };
 }
 
-function __wasm_bindgen_func_elem_787(arg0, arg1, arg2) {
-    wasm.__wasm_bindgen_func_elem_787(arg0, arg1, arg2);
+function __wasm_bindgen_func_elem_888(arg0, arg1, arg2) {
+    wasm.__wasm_bindgen_func_elem_888(arg0, arg1, arg2);
 }
 
-function __wasm_bindgen_func_elem_1936(arg0, arg1, arg2, arg3) {
-    wasm.__wasm_bindgen_func_elem_1936(arg0, arg1, arg2, arg3);
+function __wasm_bindgen_func_elem_2037(arg0, arg1, arg2, arg3) {
+    wasm.__wasm_bindgen_func_elem_2037(arg0, arg1, arg2, arg3);
 }
 
-function __wasm_bindgen_func_elem_1911(arg0, arg1, arg2) {
+function __wasm_bindgen_func_elem_2012(arg0, arg1, arg2) {
     try {
         const retptr = wasm.__wbindgen_add_to_stack_pointer(-16) >>> 0;
-        wasm.__wasm_bindgen_func_elem_1911(retptr, arg0, arg1, arg2);
+        wasm.__wasm_bindgen_func_elem_2012(retptr, arg0, arg1, arg2);
         var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
         var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
         if (r1) {
@@ -2455,10 +2687,10 @@ function __wasm_bindgen_func_elem_1911(arg0, arg1, arg2) {
     }
 }
 
-function __wasm_bindgen_func_elem_785(arg0, arg1, arg2) {
+function __wasm_bindgen_func_elem_886(arg0, arg1, arg2) {
     try {
         const retptr = wasm.__wbindgen_add_to_stack_pointer(-16) >>> 0;
-        wasm.__wasm_bindgen_func_elem_785(retptr, arg0, arg1, arg2);
+        wasm.__wasm_bindgen_func_elem_886(retptr, arg0, arg1, arg2);
         var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
         var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
         if (r1) {
@@ -2469,10 +2701,10 @@ function __wasm_bindgen_func_elem_785(arg0, arg1, arg2) {
     }
 }
 
-function __wasm_bindgen_func_elem_785_92(arg0, arg1, arg2) {
+function __wasm_bindgen_func_elem_886_113(arg0, arg1, arg2) {
     try {
         const retptr = wasm.__wbindgen_add_to_stack_pointer(-16) >>> 0;
-        wasm.__wasm_bindgen_func_elem_785_92(retptr, arg0, arg1, arg2);
+        wasm.__wasm_bindgen_func_elem_886_113(retptr, arg0, arg1, arg2);
         var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
         var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
         if (r1) {
@@ -2483,10 +2715,10 @@ function __wasm_bindgen_func_elem_785_92(arg0, arg1, arg2) {
     }
 }
 
-function __wasm_bindgen_func_elem_785_93(arg0, arg1, arg2) {
+function __wasm_bindgen_func_elem_886_114(arg0, arg1, arg2) {
     try {
         const retptr = wasm.__wbindgen_add_to_stack_pointer(-16) >>> 0;
-        wasm.__wasm_bindgen_func_elem_785_93(retptr, arg0, arg1, arg2);
+        wasm.__wasm_bindgen_func_elem_886_114(retptr, arg0, arg1, arg2);
         var r0 = getDataViewMemory0().getInt32(retptr + 4 * 0, true);
         var r1 = getDataViewMemory0().getInt32(retptr + 4 * 1, true);
         if (r1) {
@@ -2583,6 +2815,9 @@ const __wbindgen_enum_GpuVertexStepMode = ["vertex", "instance"];
 const EngineFinalization = (typeof FinalizationRegistry === 'undefined')
     ? { register: () => {}, unregister: () => {} }
     : new FinalizationRegistry(ptr => wasm.__wbg_engine_free(ptr, 1));
+const LegsFinalization = (typeof FinalizationRegistry === 'undefined')
+    ? { register: () => {}, unregister: () => {} }
+    : new FinalizationRegistry(ptr => wasm.__wbg_legs_free(ptr, 1));
 
 function addToExternrefTable0(obj) {
     const idx = wasm.__wbindgen_export5();

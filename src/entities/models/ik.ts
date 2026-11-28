@@ -22,6 +22,7 @@ import { ROM, ROM_ON, clampAnkle, clampAnkleRoll, twistAngle } from './anatomy';
 import { curve, type Keys } from './motion';
 import { Glance } from './glance';
 import { predictMotion, stepVelocity, timeToSlow, type Flat } from '../movement';
+import { RustLegs } from './rustLegs';
 
 /** `?ik=0` keeps the walk cycle's own legs and its old gait, for A/B comparison */
 export const IK = typeof location === 'undefined' || !/[?&]ik=0/.test(location.search);
@@ -697,12 +698,16 @@ export class LegIK {
   private armsCaptured = false;
   /** the smoothed blend over the walk cycle's legs */
   private w = 0;
+  /** the engine's port of all of this doing its work (`rustLegs.ts`), where the engine has loaded: each call is
+   *  handed to it, and the feet read back from it for what the game reads of them */
+  private readonly rust: RustLegs | null;
 
   constructor(private readonly j: Joints) {
     this.legs = [
       { thigh: j.thighL, knee: j.kneeL, ankle: j.ankleL },
       { thigh: j.thighR, knee: j.kneeR, ankle: j.ankleR },
     ];
+    this.rust = RustLegs.of(j);
     // (read by probes)
     j.root.userData.legs = this;
   }
@@ -715,6 +720,10 @@ export class LegIK {
    * stride landed where the body would have been at speed, 40 to 60 cm past where it stopped).
    */
   intend(goal: Vec3, facesWay = false): void {
+    if (this.rust) {
+      this.rust.intend(goal.x, goal.z, facesWay);
+      return;
+    }
     this.goal.set(goal.x, 0, goal.z);
     this.goalSaid = true;
     this.facesWay = facesWay;
@@ -722,11 +731,13 @@ export class LegIK {
 
   /** whether the body is moving as the gait sees it (read by the lab) */
   get walking(): boolean {
+    if (this.rust) return this.rust.walking;
     return this.moving;
   }
 
   /** the way the gait's pelvis faces, which the feet land turned to (rad, world; read by the lab) */
   get pelvisYaw(): number {
+    if (this.rust) return this.rust.pelvisYaw;
     return this.frame.pelvisYaw;
   }
 
@@ -740,6 +751,7 @@ export class LegIK {
    * cycle apart.
    */
   bodyPhase(phase: number, side?: number): number {
+    if (this.rust) return this.rust.bodyPhase(phase, side);
     const [left, right] = this.feetAhead;
     if (side === 0) return phase + left;
     if (side === 1) return phase + right;
@@ -755,6 +767,7 @@ export class LegIK {
    * enough to set off afresh (`STOOD`), the phase as it is.
    */
   setOff(phase: number): number {
+    if (IK && this.rust) return this.rust.setOff(phase);
     if (!IK || this.moving || this.fresh) return phase;
     // (with both feet down at once too, as a reversal from a run stands a frame or two: the phase moved with a foot in
     // the air would move the foot; stood for the cycle to carry on through it, the foot ahead as the body braked stood
@@ -807,23 +820,27 @@ export class LegIK {
   /** the walk cycle as the gait reads it: its phase (rad), how fast it moves (rad/s, signed, smoothed) and whether
    *  the legs walk backwards along the pelvis's line (read by the lab) */
   get cycleNow(): { phase: number; rate: number; backing: boolean } {
+    if (this.rust) return this.rust.reads();
     return { phase: this.lastPhase, rate: this.dphase, backing: this.backing };
   }
 
   /** how far the pelvis is dropped for the feet to reach, and how far they asked for this frame (m, read by the lab) */
   get pelvisDrop(): { dropped: number; wanted: number } {
+    if (this.rust) return this.rust.reads();
     return { dropped: this.drop, wanted: this.dropWanted };
   }
 
   /** how far the body leans forward this frame (rad): a pose that holds something at an angle in the world eases its
    *  arms by it */
   get lean(): number {
+    if (IK && this.rust) return this.rust.lean;
     return IK ? this.leanX : 0;
   }
 
   /** how far the pelvis is turned off the way the body faces as the gait last turned it (rad: a strafe's hips turned
    *  to the way it goes): the walk cycle sways the hips out along the pelvis's own side */
   get hipsTurn(): number {
+    if (IK && this.rust) return this.rust.hipsTurn;
     return IK ? this.twist : 0;
   }
 
@@ -839,6 +856,11 @@ export class LegIK {
   rooted = false;
 
   stance(i: number, x: number | null, z = 0, yaw = 0): void {
+    if (this.rust) {
+      this.rust.stance(i, x, z, yaw);
+      this.readFeet();
+      return;
+    }
     const f = this.feet[i];
     if (x === null) {
       f.stand = null;
@@ -859,6 +881,10 @@ export class LegIK {
    */
   captureArms(): void {
     if (!IK) return;
+    if (this.rust) {
+      this.rust.captureArms();
+      return;
+    }
     const j = this.j;
     updateJoints(j.root);
     j.handL.getWorldQuaternion(this.hq[0]);
@@ -873,6 +899,10 @@ export class LegIK {
    * `weight` 0..1 blends over the hand as posed.
    */
   holdArms(weight = 1): void {
+    if (IK && this.rust) {
+      this.rust.holdArms(weight);
+      return;
+    }
     if (!IK || !this.armsCaptured) return;
     this.armsCaptured = false;
     if (weight <= 0) return;
@@ -891,6 +921,7 @@ export class LegIK {
 
   /** the next frame starts from the pose as it stands (a teleport, a respawn) */
   reset(): void {
+    this.rust?.reset();
     this.fresh = true;
   }
 
@@ -902,6 +933,11 @@ export class LegIK {
    */
   update(dt: number, phase: number, dead: number, weight = 1, lean = 1, legW?: readonly [number, number]): void {
     if (!IK) return;
+    if (this.rust) {
+      this.rust.update({ dt, phase, dead, weight, lean, legW }, this.active, this.rooted, () => this.shapeNumbers());
+      this.readFeet();
+      return;
+    }
     this.intended = this.goalSaid;
     this.goalSaid = false;
     this.goalSeen.lerp(this.intended ? this.goal : this.vNow, 1 - Math.exp(-GOAL_FOLLOW * Math.max(dt, 0)));
@@ -965,7 +1001,43 @@ export class LegIK {
    * to 40% uneven, now and then a gallop.
    */
   get cadence(): number {
+    if (IK && this.rust) return this.rust.cadence;
     return IK && this.moving ? this.acrossK : 1;
+  }
+
+  /** The feet as the engine left them, for what the game and the lab read of them (`feet`): their state, place,
+   *  turn, stance, a stride's landing and progress and the lab's notes; and the frame's plan the lab reads. */
+  private readFeet(): void {
+    const read = this.rust!.feet();
+    for (let i = 0; i < 2; i++) {
+      const foot = this.feet[i];
+      const from = read[i];
+      foot.state = from.state;
+      foot.P.set(from.x, from.y, from.z);
+      foot.yaw = from.yaw;
+      if (from.stand) (foot.stand ??= new Vec3()).set(from.stand.x, 0, from.stand.z);
+      else foot.stand = null;
+      foot.syaw = from.syaw;
+      foot.B.set(from.bx, from.by, from.bz);
+      foot.t = from.t;
+      foot.dragged = from.dragged;
+      foot.over = from.over;
+      foot.window = from.window;
+      foot.pitch = from.pitch;
+      foot.leftFor = from.leftFor;
+    }
+    const plan = this.rust!.reads();
+    this.frame.duty = plan.duty;
+    this.frame.cycle = plan.cycle;
+    this.frame.curve = plan.curve;
+    this.frame.speed = plan.speed;
+  }
+
+  /** Each foot's shape as `readBody` reads it (sole, toe, heel, the left then the right), for the engine. */
+  private shapeNumbers(): number[] {
+    const j = this.j;
+    const feet = [footShape(j.ankleL, j.root), footShape(j.ankleR, j.root)];
+    return feet.flatMap((foot) => [foot.sole, foot.toe, foot.heel]);
   }
 
   /**
@@ -1030,6 +1102,7 @@ export class LegIK {
    *  where in its swing a foot was, the arms swung with the leg on their own side whenever the feet were off the
    *  cycle, and a phase lagged a running swing of 12 frames by 5. */
   thighForward(side: number): number {
+    if (this.rust) return this.rust.thighForward(side);
     return this.thighsForward[side];
   }
 
