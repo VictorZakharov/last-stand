@@ -72,7 +72,11 @@ export class UseWatch<Owner extends object, Part extends object> {
       for (const owner of this.inUse) visiting.add(owner);
       return visiting;
     }
-    for (const owner of this.polled) visiting.add(owner);
+    for (const owner of this.polled) {
+      visiting.add(owner);
+      // (asked again each frame: a material polled till its map is painted drops out once it is)
+      if (!this.rules.polled(owner)) this.polled.delete(owner);
+    }
     for (const what of changed) this.changed(what, visiting);
     this.sweepShare(visiting);
     return visiting;

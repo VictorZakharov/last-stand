@@ -543,10 +543,12 @@ export class Draws {
   }
 }
 
-/** The frame's switches every record reads, as one key. */
+/** The frame's switches every record reads, as one key. The see-through switches too (`rust.solidSee`,
+ *  `rust.houseRule`): a material drawn nowhere now isn't asked again (`frame`), so its records kept the old flags. */
 function frameKeyOf(view: View): string {
   const arms = view.arms ? view.arms.layers.mask : -1;
-  return `${TUNE.castAll}|${TUNE.lowRes}|${view.grade.casterLeast ?? 0}|${view.camera.layers.mask}|${arms}`;
+  const see = `${TUNE.solidSee}|${TUNE.houseRule}|${TUNE.houseSmooth}`;
+  return `${TUNE.castAll}|${TUNE.lowRes}|${view.grade.casterLeast ?? 0}|${view.camera.layers.mask}|${arms}|${see}`;
 }
 
 /** each geometry's attributes as a list, kept while its version stands (an attribute set or taken away moves it):

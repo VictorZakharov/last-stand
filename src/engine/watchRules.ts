@@ -21,9 +21,24 @@ function kitMoves(material: AnyMaterial, looks: KitLooks): boolean {
   return aura.r + aura.g + aura.b > 0;
 }
 
-/** Whether `material` is looked at every frame: a look of its own whose numbers follow the game's, or a see-through
- *  kind's. */
+/**
+ * Whether a map of `material`'s is still a placeholder: a canvas handed out blank (a pixel wide) and painted as its
+ * worker's map comes, which moves no version (`pbrCanvases` in core/textures.ts). Its material is asked every frame
+ * till it's painted, so the engine is handed the map painted (`textureId`'s width in maps.ts): unasked, the village's
+ * ground stayed white on a loaded PC (`lab rustcheck`'s map painted late).
+ */
+function awaitsPaint(material: AnyMaterial): boolean {
+  for (const map of texturesOf(material)) {
+    const image = map.image as { width?: number } | null | undefined;
+    if (!image || (image.width ?? 2) <= 1) return true;
+  }
+  return false;
+}
+
+/** Whether `material` is looked at every frame: a look of its own whose numbers follow the game's, a see-through
+ *  kind's, or one whose map is still to be painted. */
 function polledEachFrame(material: AnyMaterial): boolean {
+  if (awaitsPaint(material)) return true;
   const looks = (material as { kitLooks?: KitLooks }).kitLooks;
   if (looks) return kitMoves(material, looks) || !!material.seeThrough;
   if (lookOf(material)) return true;
