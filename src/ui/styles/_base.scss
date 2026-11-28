@@ -89,5 +89,9 @@ body:has(.modal.kit-mirror:not(.hidden)) :is(.kit-ghost:not(#tooltip.pinned), #t
 // shows, which on main lay over it; the save slots showed WARDENHOLLOW across their title)
 body:has(:is(#saves, .modal).kit-mirror:not(.hidden)) .menu-crest { visibility: hidden; }
 body:has(#heroes:not(.hidden) > .kit-mirror) .menu-crest { visibility: hidden; }
+// (the fight's loading bar stays on the page, under the save slots and the modals on main: none while one the kit
+// draws shows, its backdrop dimming the lobby as the bar's did; a guest's joining bar stands over them, as there.
+// Over Play together waiting for co-op, it dimmed the dialog and took its presses)
+body:has(:is(#saves, .modal).kit-mirror:not(.hidden)) #readying:not(.join) { display: none; }
 
 /* #loading is styled inline in index.html so it paints before this stylesheet and the bundle load */

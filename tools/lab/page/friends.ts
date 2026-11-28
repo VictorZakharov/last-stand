@@ -7,8 +7,12 @@ import { openCoop, coopOpen } from '../../../src/ui/coop';
 import { session } from '../../../src/net/session';
 import { refreshFriends, friendsView } from '../../../src/net/friends';
 import { signUpWithPasskey, signedIn } from '../../../src/loot/cloud';
-import type { Lab } from './lab';
-import { textOverOtherText } from './textOverlap';
+import { boxOf, type Lab } from './lab';
+import { textOverOtherText } from './textOnScreen';
+import { plantInCoop } from './coopPlant';
+
+/** `element`'s box where the engine draws it, none where there's no element. */
+const drawnBox = (element: Element | null | undefined): DOMRect | undefined => (element ? boxOf(element) : undefined);
 
 /** A person's row in the Friends tab (or a room's invite list), as it shows. */
 export interface FriendRow {
@@ -151,6 +155,8 @@ export function friendsTextOver(_lab: Lab, { where }: { where: string }): string
 /** The canary's fault: a room's cards laid out as before Victor's review of #700, each card's name and class let run
  *  on past their column over the stats beside them, as a narrow card showed them. */
 export function friendsPlantOverlap(): void {
+  // (drawn by the engine: the stats laid back over the name's column, as the page's narrow grid ran the name on)
+  if (plantInCoop([{ at: '.coop-list > .coop-card .coop-card-stats', box: { margin: [0, 0, 0, -260] } }])) return;
   const style = document.createElement('style');
   // (the name's column held to 12 px, as a narrow card squeezed it, and its text let run on past it)
   style.textContent = '#coop .coop-list > .coop-card { grid-template-columns: 36px 12px auto minmax(48px, auto) !important; } '
@@ -168,9 +174,9 @@ export interface FriendsLayout {
 
 /** Where the Friends tab's parts stand now. */
 export function friendsLayout(): FriendsLayout {
-  const me = inDialog('.coop-friend-me')?.getBoundingClientRect().top ?? -1;
+  const me = drawnBox(inDialog('.coop-friend-me'))?.top ?? -1;
   const tabs = [...document.querySelectorAll<HTMLElement>('#coop .coop-tab')]
-    .map((tab) => Math.round(tab.getBoundingClientRect().left * 10) / 10);
+    .map((tab) => Math.round(boxOf(tab).left * 10) / 10);
   return { meTop: Math.round(me * 10) / 10, tabs };
 }
 
@@ -180,7 +186,7 @@ export function friendsColumns(_lab: Lab, { where }: { where: string }): string[
   const edgesOf = (selector: string, side: 'left' | 'right'): number[] =>
     [...document.querySelectorAll<HTMLElement>(selector)]
       .filter((element) => element.getClientRects().length > 0)
-      .map((element) => element.getBoundingClientRect()[side]);
+      .map((element) => boxOf(element)[side]);
   const apart = (edges: number[]): number => (edges.length ? Math.max(...edges) - Math.min(...edges) : 0);
   const columns: [string, string, 'left' | 'right'][] = [
     ['the friends\' first buttons', '#coop .coop-friends-sections .coop-act-slot.first', 'left'],
@@ -198,6 +204,11 @@ export function friendsColumns(_lab: Lab, { where }: { where: string }): string[
 /** The canary's fault for the columns and the shifts: the rows' button slots sized by what they hold, and the note's
  *  and the badge's room let go while they're empty, as they were before Victor's rule. */
 export function friendsPlantShifts(): void {
+  const drawn = plantInCoop([
+    { at: '.coop-act-slot.first, .coop-act-slot.second', box: { width: 'auto', minWidth: 0 } },
+    { at: '.coop-friend-note.blank, .coop-badge.blank', box: { display: 'none' } },
+  ]);
+  if (drawn) return;
   const style = document.createElement('style');
   style.textContent = '#coop .coop-act-slot { width: auto !important; min-width: 0 !important; } '
     + '#coop .coop-friend-note.blank, #coop .coop-badge.blank { display: none !important; }';

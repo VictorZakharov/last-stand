@@ -599,7 +599,15 @@ the SCSS. In the order they're taken: the kit's own pieces first, then what show
 - [x] The village's map (`villageMapSheet.ts`): `lab ui --states villageMap --ab` at 1920x1080 and 844x390@3, the
   names where main's stand and its pictures alike (a faint seam, a column 3% darker, where two panels meet); both
   canaries caught (one name laid on another; the map held opaque as he walks, its write refused).
-- [ ] Play together and its rooms.
+- [x] Play together and its rooms (`ui/coopSheet.ts`, the room's view `coopRoomSheet.ts`): `lab ui --states
+  coop,coopRename,coopTouch,coopRoom,coopRoomTouch --ab` at 1920x1080, 844x390@3 and 1024x700@1, the room dialog
+  548 px tall against main's 544 (683x289 both at 1024x700), and 820x1180@2; `lab rooms` and `lab friends` pass,
+  every canary caught (the friends' planted through the dialog's sheet, `plantInCoop`, and its text read where the
+  engine draws it). Kept apart from main's: the backdrop's blur, CSS `order` on short screens (the portrait after the
+  colour), the badge's pill, the cards' flat fill, an open place's edge solid, not dashed, and the stats' columns
+  some 13 px off. Fixed on the way: `#readying` lay over a drawn modal; an intro's words beside a link ran past its
+  column (a word box's widest word is its least width now); a `:has()` on what's inside a kept element kept its first
+  answer (a rule's match is cached by the element's and its parents' keys: such rules are box functions).
 - [x] The talk with the village's folk (`screens/talk/talkSheet.ts`, the face in its oval `folkFaceSheet.ts`, which
   the merchant's will take): `lab ui --states talk,talkTouch --ab` at 1920x1080 and 844x390@3, the card within a px
   of main's, each reply a finger's height on touch; `lab talk` and both canaries pass.

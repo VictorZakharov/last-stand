@@ -4,6 +4,8 @@
 // box alone says nothing of it: a card's class name ran on over the stats' labels beside it with every box apart
 // (#700, from Victor's review: "Need to fix text overlap").
 
+// The pure part, tested in Node (`test/textOverlap.test.mjs`); reading the page's boxes is `textOnScreen.ts`.
+
 /** A run of text's box on the page (css px), named by what it is. */
 export interface TextBox {
   name: string;
@@ -43,47 +45,4 @@ export function overlapping(boxes: TextBox[]): string[] {
     }
   }
   return found;
-}
-
-/** `box` cut to what `element` and each element round it up to `root` lets show where it clips its overflow. */
-function clipped(box: TextBox, element: Element, root: Element): TextBox | null {
-  let cut = { ...box };
-  for (let at: Element | null = element; at && root.contains(at); at = at.parentElement) {
-    const style = getComputedStyle(at);
-    if (style.overflowX === 'visible' && style.overflowY === 'visible') continue;
-    const bounds = at.getBoundingClientRect();
-    cut = {
-      name: cut.name, left: Math.max(cut.left, bounds.left), top: Math.max(cut.top, bounds.top),
-      right: Math.min(cut.right, bounds.right), bottom: Math.min(cut.bottom, bounds.bottom),
-    };
-    if (cut.right <= cut.left || cut.bottom <= cut.top) return null;
-  }
-  return cut;
-}
-
-/** Every run of shown text under `root`, each named by its words, as drawn and as its clipping lets it show. */
-export function textBoxes(root: Element): TextBox[] {
-  const boxes: TextBox[] = [];
-  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
-  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
-    const words = node.textContent?.trim() ?? '';
-    const element = node.parentElement;
-    if (!words || !element || element.getClientRects().length === 0) continue;
-    if (getComputedStyle(element).visibility === 'hidden') continue;
-    const range = document.createRange();
-    range.selectNodeContents(node);
-    for (const rect of range.getClientRects()) {
-      if (rect.width < 1 || rect.height < 1) continue;
-      const box = { name: words, left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom };
-      const shown = clipped(inked(box), element, root);
-      if (shown) boxes.push(shown);
-    }
-  }
-  return boxes;
-}
-
-/** The text drawn over other text within each element `selector` matches, said with where it is. */
-export function textOverOtherText(selector: string, where: string): string[] {
-  return [...document.querySelectorAll(selector)].flatMap((root, i) =>
-    overlapping(textBoxes(root)).map((found) => `${where} (${selector} ${i + 1}): ${found}`));
 }

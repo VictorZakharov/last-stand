@@ -109,10 +109,20 @@ async function until(games, done, what) {
   }
 }
 
+/** the frames the engine takes to lay out a dialog rendered afresh, before what it draws is read */
+const LAYOUT_FRAMES = 3;
+
+/** Where `game`'s Friends tab's parts stand once the engine has laid out its last render: read at once, the tabs a
+ *  render had just made were where the frame before had them. */
+async function laidOut(game) {
+  await game.call('roomsStep', { frames: LAYOUT_FRAMES });
+  return game.call('friendsLayout');
+}
+
 /** Nothing on the Friends tab moved as a request came and went (Victor: "avoiding layout shift is one of key
  *  concepts behind good UX"): the asked one's tabs as its badge came, the asker's own code's line as its note did. */
 async function nothingShifted(asked, asker, askedBefore, askerBefore, found) {
-  const [askedAfter, askerAfter] = [await asked.call('friendsLayout'), await asker.call('friendsLayout')];
+  const [askedAfter, askerAfter] = [await laidOut(asked), await laidOut(asker)];
   const tabsMoved = askedBefore.tabs.some((left, i) => Math.abs(left - askedAfter.tabs[i]) > 0.5);
   const lineMoved = Math.abs(askerBefore.meTop - askerAfter.meTop) > 0.5;
   found.say(`as the request came: ${asked.name}'s tabs ${tabsMoved ? 'moved' : 'stayed'}, `
@@ -174,7 +184,7 @@ async function befriend(games, codes, found, dir) {
   const [brannoch, ysolde, pell] = games;
   for (const game of games) await game.call('friendsOpenTab');
   await picture(brannoch, dir, '1-friends', found);
-  const [askedBefore, askingBefore] = [await brannoch.call('friendsLayout'), await ysolde.call('friendsLayout')];
+  const [askedBefore, askingBefore] = [await laidOut(brannoch), await laidOut(ysolde)];
   await ysolde.call('friendsAdd', { code: codes.Brannoch });
   const [asked, asking] = await until([brannoch, ysolde], (b) => rowOf(b, 'Requests', 'Ysolde'),
     'Brannoch never saw Ysolde\'s request');

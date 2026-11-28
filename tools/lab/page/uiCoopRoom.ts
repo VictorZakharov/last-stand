@@ -2,13 +2,17 @@
 // alongside the host (Host badge + Trade button) and a second partner with a long name tag. Verifies that every
 // card stays one height, Host + Trade never overlap Gear level / Best wave, Trade never pokes out of its card
 // (especially on landscape touch phones where touch buttons are 36 css px tall), and stats align across cards.
-import type { Lab } from './lab';
+import { boxOf, type Lab } from './lab';
+import { plantInCoop } from './coopPlant';
 import { G } from '../../../src/state';
 import { CLASSES } from '../../../src/data/classes/index';
 import { session } from '../../../src/net/session';
 import { openCoop, renderCoop } from '../../../src/ui/coop';
 import type { Player } from '../../../src/entities/player';
 import type { Found } from './uiKit';
+
+/** `element`'s box where the engine draws it, none where there's no element. */
+const drawnBox = (element: Element | null): DOMRect | undefined => (element ? boxOf(element) : undefined);
 
 const TAP_AT = { x: 0.5, y: 0.4 };
 const TOUCH_FRAMES = 2;
@@ -108,27 +112,27 @@ function measureRoom(state: string, touch: boolean): Found {
   if (!modal || document.getElementById('coop')!.classList.contains('hidden')) {
     return { lines, problems: [`${state}: the dialog isn't shown`] };
   }
-  const box = modal.getBoundingClientRect();
+  const box = boxOf(modal);
   lines.push(`  room dialog: ${box.width.toFixed(0)}x${box.height.toFixed(0)} px`);
   if (box.left < -1 || box.top < -1 || box.right > innerWidth + 1 || box.bottom > innerHeight + 1) {
     problems.push(`${state}: the dialog reaches past the window`);
   }
   const cards = [...modal.querySelectorAll<HTMLElement>('.coop-list > .coop-card')];
   if (cards.length < 3) problems.push(`${state}: expected at least 3 party cards, got ${cards.length}`);
-  const heights = cards.map((card) => card.getBoundingClientRect().height);
+  const heights = cards.map((card) => boxOf(card).height);
   if (heights.length && Math.max(...heights) - Math.min(...heights) > 1.5) {
     problems.push(`${state}: party cards differ in height (${heights.map((h) => h.toFixed(1)).join(', ')} px)`);
   }
   const statBoxes: DOMRect[] = [];
   cards.forEach((card, index) => {
-    const cr = card.getBoundingClientRect();
+    const cr = boxOf(card);
     const label = `card ${index + 1}`;
-    const face = card.querySelector<HTMLElement>('.coop-card-face')?.getBoundingClientRect();
-    const who = card.querySelector<HTMLElement>('.coop-card-who')?.getBoundingClientRect();
-    const stats = card.querySelector<HTMLElement>('.coop-card-stats')?.getBoundingClientRect();
+    const face = drawnBox(card.querySelector<HTMLElement>('.coop-card-face'));
+    const who = drawnBox(card.querySelector<HTMLElement>('.coop-card-who'));
+    const stats = drawnBox(card.querySelector<HTMLElement>('.coop-card-stats'));
     const mark = card.querySelector<HTMLElement>('.coop-card-mark');
-    const host = card.querySelector<HTMLElement>('.coop-card-host')?.getBoundingClientRect();
-    const trade = card.querySelector<HTMLElement>('.coop-trade')?.getBoundingClientRect();
+    const host = drawnBox(card.querySelector<HTMLElement>('.coop-card-host'));
+    const trade = drawnBox(card.querySelector<HTMLElement>('.coop-trade'));
     if (stats && stats.width > 0) statBoxes.push(stats);
     const cols: [string, DOMRect][] = [];
     if (face) cols.push(['face', face]);
@@ -136,7 +140,7 @@ function measureRoom(state: string, touch: boolean): Found {
     if (stats && stats.width > 0) cols.push(['stats', stats]);
     if (mark) {
       for (const child of [...mark.children] as HTMLElement[]) {
-        const rect = child.getBoundingClientRect();
+        const rect = boxOf(child);
         if (rect.width > 0) cols.push([child.className.split(' ')[0] || 'mark', rect]);
       }
     }
@@ -169,15 +173,23 @@ function measureRoom(state: string, touch: boolean): Found {
   return { lines, problems };
 }
 
-export function coopRoomShown(state: 'coopRoom' | 'coopRoomTouch', canary: boolean): Found {
+/** the frames the engine takes to lay out a fault planted in the dialog, and to put it back */
+const PLANT_FRAMES = 3;
+
+export async function coopRoomShown(state: 'coopRoom' | 'coopRoomTouch', canary: boolean, lab: Lab): Promise<Found> {
   const touch = state === 'coopRoomTouch';
   const found = measureRoom(state, touch);
   if (!canary) return found;
   const hostCard = document.querySelector<HTMLElement>('#coop .coop-card:has(.coop-card-host)');
   if (!hostCard) return { lines: found.lines, problems: [...found.problems, `${state}: canary: no host card`] };
+  // (drawn by the engine, its column narrowed by a rule laid over the dialog's: the page's style reaches nothing there)
+  const unplant = plantInCoop([{ at: '.coop-card:has(.coop-card-host) .coop-card-mark', box: { width: 48 } }]);
   const prev = hostCard.style.gridTemplateColumns;
-  hostCard.style.gridTemplateColumns = '36px minmax(0, 1fr) auto 48px';
+  if (!unplant) hostCard.style.gridTemplateColumns = '36px minmax(0, 1fr) auto 48px';
+  await lab.step(PLANT_FRAMES);
   const planted = measureRoom(state, touch);
-  hostCard.style.gridTemplateColumns = prev;
+  if (unplant) unplant();
+  else hostCard.style.gridTemplateColumns = prev;
+  await lab.step(PLANT_FRAMES);
   return { lines: found.lines, problems: [...found.problems, ...planted.problems] };
 }

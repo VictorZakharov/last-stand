@@ -220,6 +220,17 @@ The rules across the game are the [root AGENTS.md](../../../AGENTS.md).
 - **An SVG's paint is written on its clone, each element's as computed, but a gradient's** (`paintOn` in
   `svgArt.ts`): computed, `url(#id)` names the page's whole address, which an image drawn alone can't reach, and the
   pause menu's title lost its steel, its glow drawn alone.
+- **A rule's match is cached by its element's key and its parents'** (`rulesOf` in `sheet.ts`): a `:has()` on
+  what's inside a kept element (`.modal-box:has(.coop-pages)`) keeps the answer it first had, and Play together's
+  box filled the window in a room. Ask such a question in a box function (`box: (element) => ...`, a
+  `querySelector` inside), which runs each frame. **The later rule wins, never the more specific**: order a port's
+  rules as CSS's specificity orders them (the room's code in its head stood at the plain code's size).
+- **A word box holds its widest word** (`sayWords`: `minWidth` its line's least, `maxWidth: '100%'`): beside a link
+  in a wrapping row, an intro's words ran past their column. A line of a lone `&nbsp;` trims to nothing and lays out
+  no height: give it its line's (`.coop-friend-note`), or what's under it moves as it fills.
+- **A lab canary plants rules in a sheet's tree** (`SheetTree.plant(rules)`, which returns the call that takes them
+  out; every element matched afresh): Play together's are `plantInCoop` (`ui/coopSheet.ts`, found by the lab by its
+  path, `tools/lab/page/coopPlant.ts`).
 - **Check a panel against main's page with `npm run lab -- ui --states <state> --ab`**: its box's lines and its
   pictures beside main's (`ui --states target`: the frame's box 384x52 at 113 on both, its name and line read off
   the engine's frame where the tree has it, off `#target` on main's).

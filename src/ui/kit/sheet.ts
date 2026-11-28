@@ -13,6 +13,7 @@
 import { KeptText } from './keptText';
 import { decorate, dimmed, drawPicture, isField, markNode, stopFields, type Node } from './sheetNode';
 import { RuleIndex } from './ruleIndex';
+import { elementUnder, showHovers } from './sheetHits';
 import { environmentChanged, takeMutations, takeUnlaid, watchTree } from './sheetDirty';
 import { Panel, kitFrame, kitSent, onFrame, type Scaled } from './panel';
 import { standIn } from './press';
@@ -32,8 +33,6 @@ import type { TextStyle } from '../overlay/paint';
 
 export type { Dyn, Painted, Rule, Sheet, SheetText } from './sheetRules';
 
-
-/** A screen of the page's drawn by the kit, following its element each frame. */
 /** the nodes inside a panel made in steps (`inSteps`) followed for the first time in a frame, the rest left for the frames after:
  *  a guide's hero page is some 1,900 elements, each 0.1 ms or so to follow the first time, and made in one frame it
  *  held the page 300 ms (`lab guide`, #973); its top, which shows, is made first */
@@ -44,6 +43,7 @@ const UNFINISHED = new Set<SheetTree>();
 /** Whether some tree's first build is still going on (the lab's, before it pictures the screen). */
 export const treesUnfinished = (): boolean => UNFINISHED.size > 0;
 
+/** A screen of the page's drawn by the kit, following its element each frame. */
 export class SheetTree implements Forwarded {
   readonly root: Node;
   /** the panel over the whole screen a lifted node stands in, made after the root's so drawn over it */
@@ -59,7 +59,9 @@ export class SheetTree implements Forwarded {
   /** its nodes with a box ticked or a slider, followed every frame (code sets `checked` and `value` unannounced) */
   private readonly controlled = new Set<Node>();
   /** its rules by what their selectors' last parts name: an element tested against those alone */
-  private readonly index: RuleIndex;
+  private index: RuleIndex;
+  /** how many times rules were planted or taken out (`plant`): part of every match's key, so each is matched afresh */
+  private planted = 0;
   /** its rules that keep an element apart from its parent's boxes (`apart`) */
   private readonly apart: Rule[];
   /** the nodes inside a panel made in steps followed for the first time this frame, and whether some were left for the
@@ -72,7 +74,7 @@ export class SheetTree implements Forwarded {
 
   /** `element` (kept out of sight) drawn by `sheet` in a panel inside `parent` (none: on the screen), its px those
    *  of `scaled`; `base` the text it starts from. */
-  constructor(element: Element, private readonly sheet: Sheet, private readonly scaled: Scaled,
+  constructor(element: Element, private sheet: Sheet, private readonly scaled: Scaled,
     parent: Panel | null = null, private readonly base: TextStyle = BODY) {
     this.styled = sheet.some((rule) => rule.at.includes('[style'));
     this.index = new RuleIndex(sheet);
@@ -85,6 +87,22 @@ export class SheetTree implements Forwarded {
     this.stop = onFrame(() => this.tick());
     this.forget = watchTree({ element, again: () => { this.dirty = true; } });
     forwards(this);
+  }
+
+  /** `rules` laid over its own until the call it returns takes them out: a lab canary's fault, drawn by the engine
+   *  (a style planted on the page reaches nothing it draws). */
+  plant(rules: Sheet): () => void {
+    const own = this.sheet;
+    this.relist([...own, ...rules]);
+    return () => this.relist(own);
+  }
+
+  /** Its rules from now on, every element matched afresh. */
+  private relist(sheet: Sheet): void {
+    this.sheet = sheet;
+    this.index = new RuleIndex(sheet);
+    this.planted += 1;
+    this.dirty = true;
   }
 
   /** A frame: its element followed where something it reads may have changed, and again the frame after one that
@@ -108,46 +126,12 @@ export class SheetTree implements Forwarded {
 
   /** The deepest element taking the pointer drawn under (`x`, `y`) css px (the last drawn of those that meet). */
   elementAt(x: number, y: number): Element | null {
-    const under = (node: Node): Element | null => {
-      if (!node.panel.seen || (node.anchor && !node.anchor.seen)) return null;
-      const box = node.panel.rect();
-      const inside = !!box && x >= box.x && y >= box.y && x < box.x + box.w && y < box.y + box.h;
-      // (what's in a box may reach past it, unless it's cut there)
-      if (!inside && node.panel.styled.overflow && node.panel.styled.overflow !== 'visible') return null;
-      // (the lifted first, drawn over the rest)
-      const order = [...node.kids].sort((a, b) => Number(!!b.anchor) - Number(!!a.anchor) || 0);
-      for (let at = order.length - 1; at >= 0; at--) {
-        const found = under(order[at]);
-        if (found) return found;
-      }
-      return inside && node.hits ? node.element : null;
-    };
-    // (a lifted node is drawn over the whole screen, so over its parent's later siblings too: tried first, the last
-    // drawn first; tried among its own siblings alone, the bug report's picture lifted over the column after its own
-    // lost its tick's press to what lay under it)
-    const lifted: Node[] = [];
-    const gather = (node: Node): void => {
-      if (node.anchor) lifted.push(node);
-      for (const kid of node.kids) gather(kid);
-    };
-    gather(this.root);
-    for (let at = lifted.length - 1; at >= 0; at--) {
-      const found = under(lifted[at]);
-      if (found) return found;
-    }
-    return under(this.root);
+    return elementUnder(this.root, x, y);
   }
 
   /** Each node shown as the pointer stands: over it or what's in it (CSS's `:hover`), pressing it (`:active`). */
   hovers(over: Element | null, pressed: Element | null): void {
-    const show = (node: Node): void => {
-      const hovered = !!over && node.element.contains(over);
-      const state = hovered ? (pressed && node.element.contains(pressed) ? 'down' : 'hover') : 'none';
-      if (state !== node.state) this.dirty = true;
-      node.state = state;
-      for (const kid of node.kids) show(kid);
-    };
-    show(this.root);
+    if (showHovers(this.root, over, pressed)) this.dirty = true;
     const canvas = engineCanvas();
     if (canvas && over && this.root.element.contains(over)) {
       const hand = over.closest('button:not(:disabled), [draggable="true"], a, label, select');
@@ -192,10 +176,14 @@ export class SheetTree implements Forwarded {
     node.line ??= new RunLine(node.panel);
     const text = (node.words!.textContent ?? '').replace(/\s+/g, ' ').trim();
     node.line.set([{ text, style: around }]);
+    // (no wider than the box round it, wrapping there as a text's line does: Play together's line before its link
+    // ran past its column)
+    node.panel.style({ maxWidth: '100%', minWidth: node.line.least });
   }
 
   /** The rules matching `node`'s element, found again only as its key (its and its ancestors') changes. */
-  private rulesOf(node: Node, key: string): Rule[] {
+  private rulesOf(node: Node, parentKey: string): Rule[] {
+    const key = `${parentKey}|${this.planted}`;
     if (node.matched?.key === key) return node.matched.rules;
     const rules = this.index.matching(node.element);
     node.matched = { key, rules };

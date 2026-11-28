@@ -47,6 +47,7 @@ import { drawSummary } from './summaryPanel';
 import { drawToasts } from './toastSheet';
 import { drawPause } from './pauseSheet';
 import { drawDialogs } from './dialogsSheet';
+import { drawCoop } from './coopSheet';
 import { drawSaves } from './savesSheet';
 import { drawHeroes } from './heroesSheet';
 import { drawDrink } from './screens/drink/drinkSheet';
@@ -94,6 +95,7 @@ export function initHud(): void {
   drawSaves();
   drawPause();
   drawDialogs();
+  drawCoop();
   drawDrink();
   drawTrade();
   drawMerchant();

@@ -60,6 +60,11 @@ end touch the same lines and conflict (`npm run check:sorted` holds the order; t
   at its first draw; a canary of a three material of its own (sheen, iridescence) makes no pipeline of its own there,
   the engine's pipelines being set apart by blending, side and depth writing (`describe` in `engine/materials.ts`), so the
   canaries draw a blending none else has.
+- `coopPlant.ts`, `friends.ts`, `uiCoopRoom.ts`: a canary's fault in Play together is planted in the dialog's
+  sheet (`plantInCoop`), stepped three frames and taken out after: the page's styles they planted reached nothing the
+  engine draws, and `friends --canary`'s textOverlap, columns and layoutShift and the room's narrowed column went
+  unseen. A tree that draws the dialog on the page (an A/B's older side) plants the page's styles still. `friends`
+  reads the tabs and the code's line after three frames (`laidOut`): read at once, they "moved" as they were laid out.
 - `death.ts`: the hero never lands a critical hit while a pass is measured (`onePass`): the second pass leaves each foe 0.8 of the first's damage short of death, and a crit left it standing, so which bodies fell changed from run to run.
 - `digits.ts`: the old style's canary takes the lining faces away and puts them back as it ends (`plantOldStyle`):
   deleted for good, every state after it in a run read its digits old style, the choice's chips among them.
@@ -176,6 +181,9 @@ end touch the same lines and conflict (`npm run check:sorted` holds the order; t
   pointer to aim it), so the boost part moves the mouse first: it passed only while a stray talk's Escape, a fault of
   the drawn buttons' (Put down's tap opening Bertram's talk), happened to end it. The choice is pictured
   (`ale-choice-touch`).
+- `textOnScreen.ts`: text the kit draws is read as its lines' boxes as drawn (`drawnTextBoxes`: a line its nearest
+  element that isn't inline, its runs named together), and only a line with a panel of its own (`kitDrawsItself`): a
+  line not drawn yet read the dialog's box round it, and every two texts in a fresh card overlapped by 1219x487 px.
 - `throws.ts`: the vine's shot lets the bow go `SHOT.loosedAfter` frames into the hold, drawn as far as it is: held for its whole draw and the quiver's fetch from the throw, the arrow left a frame after the vine let him go (on main too).
 - `tour.ts`: `lab tour`, the game at 20 fixed stands as the player sees them (the square, the campfire, the hall
   from above, inside and after hero selection, every cottage's door, every house's room, each biome), held to another

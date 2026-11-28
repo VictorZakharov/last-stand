@@ -8,7 +8,7 @@ const STATE: Steps = {
   order: 180,
   open: openCoopRename,
   close: closeCoopDialog,
-  check: (canary) => coopShown('coopRename', canary),
+  check: (canary, lab) => coopShown('coopRename', canary, lab),
   canary: caught(COOP_CANARY),
 };
 export default STATE;

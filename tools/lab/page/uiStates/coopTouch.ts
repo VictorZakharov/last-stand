@@ -8,7 +8,7 @@ const STATE: Steps = {
   order: 290,
   open: openCoopTouch,
   close: closeCoopDialog,
-  check: (canary) => coopShown('coopTouch', canary),
+  check: (canary, lab) => coopShown('coopTouch', canary, lab),
   canary: caught(COOP_CANARY),
 };
 export default STATE;
