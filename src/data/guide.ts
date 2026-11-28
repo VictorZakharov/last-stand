@@ -230,7 +230,7 @@ export const CLASS_NOTES: Record<string, ClassNote> = {
       nockShot: 'Your bread and butter: draw to full on tough foes, loose early on weak ones.',
       fanShot: 'Up close, every arrow of the fan can hit the same big foe.',
       piercingShot: 'Line foes up: it goes through all of them.',
-      arrowRain: 'Arrows fall at random across the area: best on a packed group.',
+      arrowRain: 'Arrows fall at random across the area: best on a packed group. It never comes down close by, so it is no help against the foes at your side: shoot those, or step away first.',
       quarryMark: 'Mark the one you are about to kill to get your cooldowns back.',
       strawman: 'Place it between you and the pack. Elites and bosses ignore it.',
       potion: 'You can move while drinking.',

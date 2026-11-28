@@ -97,6 +97,8 @@ export interface SkillDef {
   splitCount?: number;
   splitDamage?: number;
   range?: number;
+  /** an area brought down no nearer than this to the caster, its middle's distance (m; Hailfletch's) */
+  minRange?: number;
   shards?: number;
   radius?: number;
   /** Steel Tempest: how fast the hero spins (rad/s), quickened by cast speed as a cast is; it strikes once each so far
