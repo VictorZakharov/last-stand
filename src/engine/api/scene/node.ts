@@ -1,8 +1,9 @@
 // A thing in the world: its place, turn and size under its parent, its children, whether it's shown. Under a world
-// the stage shows (`../stage.ts`) it is the engine's node too, and tells the stage only what changed (`link.ts`):
-// a write to its place, turn or size, a child added or taken away. Its matrix in the world is made when it's read
-// (`matrixWorld`), from its parent's made the same way: nothing is made for what nobody reads, and the engine makes
-// its own for drawing.
+// the stage shows (`../stage.ts`) it is the engine's node too; the stage finds what moved by comparing its numbers
+// with those it last wrote, and is told the rest (`link.ts`): a child added or taken away, a frozen matrix written,
+// shown or hidden. Its matrix in the world is made when it's read (`matrixWorld`), and made again only where the
+// numbers it was made from changed, or its parent's world: nothing is made for what nobody reads, and the engine
+// makes its own for drawing. Its place, turn and size are plain vectors, as three's: one shape with every other.
 import { Euler, Mat4, Quat, Vec3 } from '../math/index.ts';
 import { Layers, type LayersOwner } from './layers.ts';
 import { NONE, type StageLink } from './link.ts';
@@ -12,7 +13,7 @@ import {
   movedAlong, placedUnder, turnedAbout, turnFacing, worldFacingOf, worldSizeOf, worldTurnOf,
 } from './nodeSpace.ts';
 import { copyNode } from './nodeCopy.ts';
-import { WatchedEuler, WatchedQuat, WatchedVec3, type Mover } from './watched.ts';
+import { watchedEuler, type Mover } from './watched.ts';
 
 /** the next node's number (three's `Object3D.id`) */
 let nextNumber = 1;
@@ -51,13 +52,13 @@ export class Node implements LayersOwner {
   parent: Node | null = null;
   readonly children: Node[] = [];
   /** its place under its parent */
-  readonly position: WatchedVec3;
+  readonly position = new Vec3();
   /** its turn under its parent, kept in step with `rotation` */
-  readonly quaternion: WatchedQuat;
+  readonly quaternion = new Quat();
   /** its turn as angles, kept in step with `quaternion` */
-  readonly rotation: WatchedEuler;
+  readonly rotation: Euler;
   /** its size under its parent */
-  readonly scale: WatchedVec3;
+  readonly scale = new Vec3(1, 1, 1);
   /** its matrix under its parent: made from its place, turn and size while `matrixAutoUpdate`, else the game's */
   readonly matrix = new Mat4();
   /** which views draw it */
@@ -82,68 +83,77 @@ export class Node implements LayersOwner {
   private frozenUnder = 0;
   private _world = new Mat4();
   /**
-   * Whether its world matrix is to be made again before it's read: set as it or a node over it moves, pushed down to
-   * everything under it (and never past a node already set: whatever is under a set node is set too), cleared as
-   * it's made. A clean node's read is its matrix as it stands; checked by walking up to the root on every read, a
-   * rig's IK, which reads and writes its joints in turn, was half again three's time (`lab perf --wave 36
-   * --throttle 4 --ab --profile="animate mage.ts"`).
+   * The numbers its matrix was last composed from (place, turn, size; NaN before the first), and a count of each
+   * change of its matrix and of its world matrix: its world is made again only where its own count or its parent's
+   * world's moved since. Told of each write instead (watched vectors, a subclass of `Vec3` and `Quat`), every maths
+   * call site the game has met two shapes and ran polymorphic: the hero's IK and the foes' animation were half again
+   * three's time (`lab perf --wave 36 --throttle 4 --ab --profile=update`).
    */
-  private worldDirty = true;
-  /** which of its two turns was written last and the other not made again since */
-  private quaternionStale = false;
-  private rotationStale = false;
+  private readonly composedFrom = new Float64Array(10).fill(NaN);
+  private localCount = 0;
+  private worldCount = 0;
+  /** the parent, its world's count and its own matrix's count its world was last made from */
+  private madeUnder: Node | null | undefined = undefined;
+  private madeUnderCount = -1;
+  private madeLocalCount = -1;
+  /** a frozen matrix written since it was last read (`moved`) */
+  private frozenMoved = true;
+  /** the quaternion its angles were last made from or made into (`freshRotation`) */
+  private readonly turnSeen = new Float64Array([0, 0, 0, 1]);
+  /** whether it's keeping its angles and quaternion in step now (the angles' own reads and writes pass then) */
+  private syncing = false;
   private listeners: Listeners | null = null;
 
   constructor() {
     const self = this;
-    const placed: Mover = {
-      touched(): void { self.moved(); },
-      fresh(): void {},
-    };
-    const turned: Mover = {
-      touched(): void {
-        self.rotationStale = true;
-        self.moved();
-      },
-      fresh(): void { self.freshQuaternion(); },
-    };
     const angled: Mover = {
-      touched(): void {
-        self.quaternionStale = true;
-        self.moved();
-      },
+      touched(): void { self.anglesWritten(); },
       fresh(): void { self.freshRotation(); },
     };
-    this.position = new WatchedVec3(placed);
-    this.quaternion = new WatchedQuat(turned);
-    this.rotation = new WatchedEuler(angled);
-    this.scale = new WatchedVec3(placed, 1, 1, 1);
+    this.rotation = watchedEuler(angled);
     this.layers.owner = this;
   }
 
-  /** The quaternion made again from the angles, where those were written since. */
-  private freshQuaternion(): void {
-    if (!this.quaternionStale) return;
-    this.quaternionStale = false;
-    const r = this.rotation;
-    scratchEuler.set(r.x, r.y, r.z, r.order);
-    scratchQuat.setFromEuler(scratchEuler);
-    this.quaternion.store(scratchQuat.x, scratchQuat.y, scratchQuat.z, scratchQuat.w);
+  /** Its angles written: its quaternion made from them now (three's way). */
+  private anglesWritten(): void {
+    if (this.syncing) return;
+    this.syncing = true;
+    const angles = this.rotation;
+    scratchEuler.set(angles.x, angles.y, angles.z, angles.order);
+    this.quaternion.setFromEuler(scratchEuler);
+    this.seeTurn();
+    this.syncing = false;
   }
 
-  /** The angles made again from the quaternion, where it was written since. */
+  /** The quaternion its angles stand for now kept (`turnSeen`). */
+  private seeTurn(): void {
+    const turn = this.quaternion;
+    const seen = this.turnSeen;
+    seen[0] = turn.x;
+    seen[1] = turn.y;
+    seen[2] = turn.z;
+    seen[3] = turn.w;
+  }
+
+  /** Its angles made again from its quaternion where that changed since they were (its angles about to be read). */
   private freshRotation(): void {
-    if (!this.rotationStale) return;
-    this.rotationStale = false;
-    const q = this.quaternion;
-    scratchQuat.set(q.x, q.y, q.z, q.w);
+    if (this.syncing) return;
+    const turn = this.quaternion;
+    const seen = this.turnSeen;
+    if (turn.x === seen[0] && turn.y === seen[1] && turn.z === seen[2] && turn.w === seen[3]) return;
+    this.syncing = true;
+    scratchQuat.set(turn.x, turn.y, turn.z, turn.w);
     scratchEuler.setFromQuaternion(scratchQuat, this.rotation.order);
     this.rotation.store(scratchEuler.x, scratchEuler.y, scratchEuler.z);
+    this.seeTurn();
+    this.syncing = false;
   }
 
-  /** Its place, turn, size or matrix changed: its world matrix is made again when next read, and the stage told. */
+  /** Its matrix written by the game, its parent changed, or shown or hidden: the stage told (a place, turn or size
+   *  written is found by comparing, `madeWorld`, `../stage.ts`). */
   moved(): void {
-    this.dirtyWorld();
+    this.frozenMoved = true;
+    if (!this._matrixWorldAutoUpdate) this.worldCount++;
     this.link?.moved(this);
   }
 
@@ -206,24 +216,52 @@ export class Node implements LayersOwner {
     return this._world;
   }
 
-  /** Its world matrix and everything's under it to be made again before they're read (`worldDirty`). */
-  private dirtyWorld(): void {
-    if (this.worldDirty) return;
-    this.worldDirty = true;
-    const children = this.children;
-    for (let i = 0; i < children.length; i++) children[i].dirtyWorld();
+  /** Its matrix composed again where its place, turn or size changed since it last was, or taken as changed where
+   *  it's frozen and the game wrote it (`frozenMoved`). */
+  private freshLocal(): void {
+    if (!this._matrixAutoUpdate) {
+      if (!this.frozenMoved) return;
+      this.frozenMoved = false;
+      this.localCount++;
+      return;
+    }
+    const place = this.position;
+    const turn = this.quaternion;
+    const size = this.scale;
+    const from = this.composedFrom;
+    if (place.x === from[0] && place.y === from[1] && place.z === from[2] && turn.x === from[3]
+      && turn.y === from[4] && turn.z === from[5] && turn.w === from[6] && size.x === from[7]
+      && size.y === from[8] && size.z === from[9]) return;
+    from[0] = place.x;
+    from[1] = place.y;
+    from[2] = place.z;
+    from[3] = turn.x;
+    from[4] = turn.y;
+    from[5] = turn.z;
+    from[6] = turn.w;
+    from[7] = size.x;
+    from[8] = size.y;
+    from[9] = size.z;
+    this.matrix.compose(place, turn, size);
+    this.localCount++;
   }
 
-  /** Its world matrix made, its parent's first, where either moved since it was last made. */
+  /** Its world matrix made, its parent's first, where its own matrix or its parent's world changed since. */
   private makeWorld(): void {
-    if (!this.worldDirty) return;
     const parent = this.parent;
     if (parent) parent.makeWorld();
-    this.worldDirty = false;
+    this.freshLocal();
     if (!this._matrixWorldAutoUpdate) return;
-    if (this._matrixAutoUpdate) this.matrix.compose(this.position, this.quaternion, this.scale);
+    const underCount = parent ? parent.worldCount : 0;
+    if (parent === this.madeUnder && underCount === this.madeUnderCount && this.localCount === this.madeLocalCount) {
+      return;
+    }
+    this.madeUnder = parent;
+    this.madeUnderCount = underCount;
+    this.madeLocalCount = this.localCount;
     if (parent) this._world.multiplyMatrices(parent._world, this.matrix);
     else this._world.copy(this.matrix);
+    this.worldCount++;
   }
 
   /** Its matrix written by the game was changed (three's `matrixWorldNeedsUpdate = true`). */
@@ -234,6 +272,7 @@ export class Node implements LayersOwner {
   /** Its matrix made from its place, turn and size now, whether or not it's made so each time (as three's). */
   updateMatrix(): void {
     this.matrix.compose(this.position, this.quaternion, this.scale);
+    this.localCount++;
     this.moved();
   }
 

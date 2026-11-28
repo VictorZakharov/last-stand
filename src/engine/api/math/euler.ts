@@ -1,24 +1,15 @@
 // Three angles turned in an order, as three's `Euler`: in place and chainable, and telling `_onChange`'s callback
 // after every write a method makes, so a node's `quaternion` follows its `rotation`. `x`, `y`, `z` and `order` are
-// declared in an interface and written through `this` alone, so `scene/`'s `WatchedEuler` can make them accessors.
+// accessors over fields of its own (as three's), telling its `owner` where it has one (a node's angles,
+// `scene/watched.ts`): every Euler one shape. Vectors and quaternions are plain fields: accessors on every one made the
+// hero's arm search twice as slow (`lab perf --wave 36 --throttle 4 --profile=solveArm`), angles are rarely maths.
 import { clamp } from './maths.ts';
 import { Mat4 } from './mat4.ts';
 import type { Quat } from './quat.ts';
+import type { Watcher } from './types.ts';
 
 /** the order an `Euler`'s turns are made in: `'XYZ'` turns about x first, then y, then z */
 export type EulerOrder = 'XYZ' | 'YXZ' | 'ZXY' | 'ZYX' | 'YZX' | 'XZY';
-
-/** what `Euler` holds; an interface, not class fields, so a subclass may give them accessors (TS2611 otherwise) */
-export interface Euler {
-  /** the turn about x, in radians */
-  x: number;
-  /** the turn about y, in radians */
-  y: number;
-  /** the turn about z, in radians */
-  z: number;
-  /** the order the three turns are made in */
-  order: EulerOrder;
-}
 
 /** a callback that does nothing: an Euler's own until `_onChange` sets one */
 function unwatched(): void {}
@@ -27,18 +18,72 @@ function unwatched(): void {}
 const LOCKED = 0.9999999;
 
 /**
- * three's `Euler`. Its fields are not class fields (a field would hide a subclass's accessors); each method
- * reads what it needs before it writes, and calls `_onChangeCallback` once its writes are done.
+ * three's `Euler`, its angles and order accessors over its own fields. Each method reads what it needs before it
+ * writes, and calls `_onChangeCallback` once its writes are done.
  */
 export class Euler {
-  /** called after a method writes these angles (a node's quaternion kept in step); not on a field's write */
+  /** called after a method writes these angles; not on a field's write */
   _onChangeCallback: () => void = unwatched;
+  /** told of every write and asked before every read (a node's turn as angles); none for plain angles */
+  owner: Watcher | undefined;
+  private _ex: number;
+  private _ey: number;
+  private _ez: number;
+  private _order: EulerOrder;
 
   constructor(x = 0, y = 0, z = 0, order: EulerOrder = 'XYZ') {
-    this.x = x;
-    this.y = y;
-    this.z = z;
-    this.order = order;
+    this.owner = undefined;
+    this._ex = x;
+    this._ey = y;
+    this._ez = z;
+    this._order = order;
+  }
+
+  /** the turn about x, in radians */
+  get x(): number {
+    this.owner?.fresh();
+    return this._ex;
+  }
+  set x(value: number) {
+    this.owner?.fresh();
+    this._ex = value;
+    this.owner?.touched();
+  }
+  /** the turn about y, in radians */
+  get y(): number {
+    this.owner?.fresh();
+    return this._ey;
+  }
+  set y(value: number) {
+    this.owner?.fresh();
+    this._ey = value;
+    this.owner?.touched();
+  }
+  /** the turn about z, in radians */
+  get z(): number {
+    this.owner?.fresh();
+    return this._ez;
+  }
+  set z(value: number) {
+    this.owner?.fresh();
+    this._ez = value;
+    this.owner?.touched();
+  }
+  /** the order the three turns are made in */
+  get order(): EulerOrder {
+    return this._order;
+  }
+  set order(value: EulerOrder) {
+    this.owner?.fresh();
+    this._order = value;
+    this.owner?.touched();
+  }
+
+  /** Its angles stored as they are, telling nobody: a node keeping them in step with its quaternion. */
+  store(x: number, y: number, z: number): void {
+    this._ex = x;
+    this._ey = y;
+    this._ez = z;
   }
 
   /** sets what's called after a method writes these angles */
@@ -49,10 +94,12 @@ export class Euler {
 
   /** writes all four without telling: the methods' one way in */
   protected put(x: number, y: number, z: number, order: EulerOrder): void {
-    this.x = x;
-    this.y = y;
-    this.z = z;
-    this.order = order;
+    this.owner?.fresh();
+    this._ex = x;
+    this._ey = y;
+    this._ez = z;
+    this._order = order;
+    this.owner?.touched();
   }
 
   /** sets the three angles, and the order when one is given */

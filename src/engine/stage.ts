@@ -1,6 +1,7 @@
 // The world handed to the engine as it changes (VictorZakharov/last-stand#973, `api/AGENTS.md`): every node under the
 // shown world is the engine's node from the moment it comes under it (`entered`), and the frame writes only the
-// nodes that moved since the last (their ten numbers and whether they're shown), has the engine place them all,
+// nodes that moved since the last (their ten numbers and whether they're shown: a place, turn or size found by
+// comparing its numbers with those last written, `writtenIfMoved`, the rest told), has the engine place them all,
 // and writes again only the draws whose inputs changed (`draws.ts`). Nothing walks the world each frame: the walk
 // of three's scene, its matrices and a record a mesh were the cost this replaces (1 ms of a desktop's frame, 3 to
 // 5 of a phone's, growing with every mesh).
@@ -169,7 +170,13 @@ export class Stage implements StageLink {
   /** The nodes that moved written into the engine, and every node placed by it. */
   place(): void {
     this.views();
-    const locals = this.locals, shownBytes = this.shownBytes, moves = this.moves;
+    const locals = this.locals, shownBytes = this.shownBytes, moves = this.moves, nodes = this.nodes;
+    let written = 0;
+    for (let id = 0; id < nodes.length; id++) {
+      const node = nodes[id];
+      if (!node || this.queued[id] || !node.matrixAutoUpdate) continue;
+      if (writtenIfMoved(node, locals, id * LOCAL)) written++;
+    }
     for (let i = 0; i < moves.length; i++) {
       const node = moves[i];
       const id = node.engineId;
@@ -178,7 +185,7 @@ export class Stage implements StageLink {
       writeLocals(node, locals, id * LOCAL);
       shownBytes[id] = node.visible ? 1 : 0;
     }
-    this.written = moves.length;
+    this.written = written + moves.length;
     moves.length = 0;
     this.core.engine.place_nodes();
     this.core.freshViews();
@@ -203,6 +210,21 @@ export class Stage implements StageLink {
     for (let at: Node | null = node; at && at !== this.world; at = at.parent) if (!at.visible) return false;
     return true;
   }
+}
+
+/** Whether `node`'s place, turn and size differ from those written into `locals` at `at` (as the engine's 32-bit
+ *  floats hold them), written there where they do. */
+function writtenIfMoved(node: Node, locals: Float32Array, at: number): boolean {
+  const place = node.position;
+  const turn = node.quaternion;
+  const size = node.scale;
+  const fround = Math.fround;
+  if (locals[at] === fround(place.x) && locals[at + 1] === fround(place.y) && locals[at + 2] === fround(place.z)
+    && locals[at + 3] === fround(turn.x) && locals[at + 4] === fround(turn.y) && locals[at + 5] === fround(turn.z)
+    && locals[at + 6] === fround(turn.w) && locals[at + 7] === fround(size.x) && locals[at + 8] === fround(size.y)
+    && locals[at + 9] === fround(size.z)) return false;
+  writeLocals(node, locals, at);
+  return true;
 }
 
 /** `node`'s place, turn and size written into `locals` at `at`: its matrix's, where the game writes its matrix. */
