@@ -34,6 +34,11 @@ export type Scaled = 'hud' | 'ui' | 'touch' | 'panes';
 export type Paint = (c: CanvasRenderingContext2D, scale: number) => void;
 
 const panels = new Set<Panel>();
+/** the panels with no parent (the screens, the layers), kept as they're made and taken away: filtered out of every
+ *  panel each frame, they were a walk of thousands */
+const roots = new Set<Panel>();
+/** the panels that scroll (`overflow: 'scroll'`), kept as their style says so: what `scrolledOut` looks into */
+const scrollers = new Set<Panel>();
 /** the panels far out of a scrolling panel's view this frame, their texts' slots given back (`scrolledOut.ts`) */
 let outOfView: Set<Panel> = new Set();
 let nextId = 0;
@@ -63,9 +68,11 @@ export class Panel {
     countSent();
     this.parent = parent === null && !makingScreen() ? layer(LAYERS.hud) : parent;
     this.styleNow = style;
+    this.noteScrolls();
     this.lookNow = look;
     this.parent?.children.add(this);
     panels.add(this);
+    if (!this.parent) roots.add(this);
     const k = this.scale();
     const before = placedBefore()?.id ?? null;
     uiMake(this.id, this.parent?.id ?? null, before, styleFloats(style, k), lookFloats(this.fullLook(), k));
@@ -77,8 +84,15 @@ export class Panel {
     if (!differs(this.styleNow, style)) return this;
     countSent();
     this.styleNow = { ...this.styleNow, ...style };
+    this.noteScrolls();
     uiRestyle(this.id, this.styleFloats());
     return this;
+  }
+
+  /** Kept among the panels that scroll while its style says it does. */
+  private noteScrolls(): void {
+    if (this.styleNow.overflow === 'scroll') scrollers.add(this);
+    else scrollers.delete(this);
   }
 
   /** Its look changed: `look`'s fields over those it had (nothing sent where none differs). */
@@ -312,6 +326,8 @@ export class Panel {
     this.text?.label.remove();
     this.parent?.children.delete(this);
     panels.delete(this);
+    roots.delete(this);
+    scrollers.delete(this);
     freeIds.push(this.id);
   }
 
@@ -403,8 +419,7 @@ function refreshPanels(shown: boolean): void {
   uiScreen(innerWidth, innerHeight, canvas.width / Math.max(1, innerWidth));
   screen.show(shown);
   const ratio = G.renderer.getPixelRatio();
-  outOfView = scrolledOut(panels);
-  const roots = [...panels].filter((panel) => !panel.parent);
+  outOfView = scrolledOut(scrollers);
   for (const panel of roots) panel.releaseTree(true);
   beginPaints();
   for (const panel of roots) panel.refreshTree(ratio, true);
