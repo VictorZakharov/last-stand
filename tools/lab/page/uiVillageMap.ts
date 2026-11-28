@@ -7,6 +7,7 @@
 // user opens a map and attempts to walk... if not attempt to walk, then keep opaque as current"): its opacity read
 // standing, walking and stopped, and the hero checked to have walked. Its canary walks again with the map held opaque.
 import { setVillageMap } from '../../../src/ui/villageMap';
+import { boxOf } from './lab';
 import type { Lab } from './lab';
 import type { TouchFound } from './uiTouch';
 
@@ -36,8 +37,18 @@ interface WalkedWith {
 /** What `openVillageMap` read as he walked with the map open. */
 let walkedWith: WalkedWith | undefined;
 
-/** The map's whole opacity as drawn. */
-const mapOpacity = (): number => Number(getComputedStyle(document.querySelector('#vmap')!).opacity);
+/** the UI kit's presses (src/ui/kit/press.ts), where the tree has them: a drawn panel's opacity */
+interface KitPress {
+  drawnOpacity?(element: Element): number;
+}
+const KIT_PRESS = Object.values(import.meta.glob<KitPress>('../../../src/ui/kit/press.ts', { eager: true }))[0];
+
+/** The map's whole opacity as drawn: the sheet's panel's where the kit draws it, else the page's. */
+function mapOpacity(): number {
+  const sheet = document.querySelector('#vmap .vm-sheet')!;
+  if (KIT_PRESS?.drawnOpacity && sheet.closest('.kit-mirror')) return KIT_PRESS.drawnOpacity(sheet);
+  return Number(getComputedStyle(document.querySelector('#vmap')!).opacity);
+}
 
 /** Walked with the map open and stood again, its opacity read each way. */
 async function walkWithMap(lab: Lab): Promise<WalkedWith> {
@@ -87,14 +98,14 @@ export async function closeVillageMap(lab: Lab): Promise<void> {
 
 /** Where `name`'s pointer's tip stands across the page (css px): its `left` as laid out, which it's centred on. */
 function tipOf(name: HTMLElement): number {
-  const box = name.getBoundingClientRect();
+  const box = boxOf(name);
   return box.left + parseFloat(getComputedStyle(name, '::after').left);
 }
 
 /** The names' boxes against each other and the sheet, and their tips against their places. */
 function namesFound(): TouchFound {
-  const sheet = document.querySelector('#vmap .vm-sheet')!.getBoundingClientRect();
-  const shown = names().map((name) => ({ name, box: name.getBoundingClientRect() }));
+  const sheet = boxOf(document.querySelector('#vmap .vm-sheet')!);
+  const shown = names().map((name) => ({ name, box: boxOf(name) }));
   const problems: string[] = [];
   if (shown.length < 2) problems.push('villageMap: no names on the map');
   let worstTip = 0;
@@ -118,12 +129,18 @@ function namesFound(): TouchFound {
 
 /** A walk with the map open, held opaque by a style over the game's own: the walk's canary. */
 async function walkHeldOpaque(lab: Lab): Promise<WalkedWith> {
-  const held = document.createElement('style');
-  held.textContent = '#vmap { opacity: 1 !important; }';
-  document.head.append(held);
-  const walk = await walkWithMap(lab);
-  held.remove();
-  return walk;
+  // (its opacity taken away as the game writes it: a stylesheet's moves nothing the kit draws, which reads the style
+  // the game writes)
+  // (a write of its opacity refused, as a lab step runs the game's frame and the kit's in one task: an observer of the
+  // page's style never ran between them)
+  const map = document.querySelector<HTMLElement>('#vmap')!;
+  map.style.removeProperty('opacity');
+  Object.defineProperty(map.style, 'opacity', { configurable: true, get: () => '', set: () => undefined });
+  try {
+    return await walkWithMap(lab);
+  } finally {
+    delete (map.style as { opacity?: string }).opacity;
+  }
 }
 
 /** The names and the walk checked; with the canary, again with one name laid on another and walked with the map held
@@ -139,8 +156,11 @@ export async function villageMapShown(canary: boolean, lab: Lab): Promise<TouchF
   const heldTop = second.style.top;
   second.style.left = first.style.left;
   second.style.top = first.style.top;
+  // (the kit's frames to draw it there)
+  await lab.step(3);
   const planted = namesFound();
   second.style.left = heldLeft;
   second.style.top = heldTop;
+  await lab.step(3);
   return { lines: found.lines, problems: [...found.problems, ...planted.problems, ...heldWalk.problems] };
 }

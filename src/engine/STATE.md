@@ -596,7 +596,10 @@ the SCSS. In the order they're taken: the kit's own pieces first, then what show
   --states help --ab` at 1920x1080 and 844x390@3, its buttons and keyboard within 0.1% of main's; the mouse's
   callouts show their skills' pictures (the pause menu's too), the rules' bold words bold.
 - [x] Hero selection's panels (`heroesSheet.ts`; the choice on the hero stays on the page).
-- [ ] Play together and its rooms, the village's map.
+- [x] The village's map (`villageMapSheet.ts`): `lab ui --states villageMap --ab` at 1920x1080 and 844x390@3, the
+  names where main's stand and its pictures alike (a faint seam, a column 3% darker, where two panels meet); both
+  canaries caught (one name laid on another; the map held opaque as he walks, its write refused).
+- [ ] Play together and its rooms.
 - [x] The talk with the village's folk (`screens/talk/talkSheet.ts`, the face in its oval `folkFaceSheet.ts`, which
   the merchant's will take): `lab ui --states talk,talkTouch --ab` at 1920x1080 and 844x390@3, the card within a px
   of main's, each reply a finger's height on touch; `lab talk` and both canaries pass.

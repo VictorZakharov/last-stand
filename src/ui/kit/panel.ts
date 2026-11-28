@@ -215,6 +215,13 @@ export class Panel {
   }
 
   /** Whether it can be seen: it and every panel round it shown and with some opacity (`checkVisibility`'s). */
+  /** Its opacity as drawn: its own times every panel's round it. */
+  get opacity(): number {
+    let opacity = 1;
+    for (let panel: Panel | null = this; panel; panel = panel.parent) opacity *= panel.lookNow.opacity ?? 1;
+    return opacity;
+  }
+
   get seen(): boolean {
     for (let panel: Panel | null = this; panel; panel = panel.parent) {
       if ((panel.lookNow.opacity ?? 1) <= 0 || panel.styleNow.display === 'none') return false;

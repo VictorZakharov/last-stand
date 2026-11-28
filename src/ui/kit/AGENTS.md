@@ -184,6 +184,12 @@ The rules across the game are the [root AGENTS.md](../../../AGENTS.md).
   in `drawn.ts`): Odo's stash after Auto-fill stood scrolled past its new end, empty. The lab's `clickOn` scrolls
   where the kit draws (`revealOf`): the page's `scrollIntoView` moved nothing, and a piece below the fold lay off
   the screen.
+- **What the page moves by a transform the kit reads off its style** (the map's panels' `translate` and `scaleX`,
+  the hero's arrow's `rotate`, painted in steps of 3°) and its names' boxes off the page's own layout, laid out by
+  `layNames` as before. A large picture is the atlas's too (the map's four panels, each its canvas): its edge blends
+  with the atlas's empty pixels, so a panel's picture bleeds a pixel of its own edge past its box.
+- **A canary of a style the game writes each frame refuses the write** (`uiVillageMap.ts`): a lab step runs the
+  game's frame and the kit's in one task, and an observer that took the write away never ran between them.
 - **Check a panel against main's page with `npm run lab -- ui --states <state> --ab`**: its box's lines and its
   pictures beside main's (`ui --states target`: the frame's box 384x52 at 113 on both, its name and line read off
   the engine's frame where the tree has it, off `#target` on main's).

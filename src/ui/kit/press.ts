@@ -205,6 +205,11 @@ export function drawnAt(element: Element): { x: number; y: number; w: number; h:
   return drawnFor(element)?.rect() ?? null;
 }
 
+/** The opacity of the panel drawn in place of `element` as drawn (none drawn: 0). */
+export function drawnOpacity(element: Element): number {
+  return drawnFor(element)?.opacity ?? 0;
+}
+
 /** Where `element` is shown (css px): the panel drawn in its place where the kit draws it (`.kit-mirror`), else
  *  its own box (the tutorial's ring round the skill bar's slots). */
 export function shownBox(element: Element): DOMRect {
