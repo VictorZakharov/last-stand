@@ -100,8 +100,11 @@ export class Node implements LayersOwner {
       touched(): void { self.moved(); },
       fresh(): void {},
     };
+    // (a write makes its own side fresh: what it didn't write was made fresh before it, by the accessor or the
+    // maths' getters, and a whole write leaves nothing of before)
     const turned: Mover = {
       touched(): void {
+        self.quaternionStale = false;
         self.rotationStale = true;
         self.moved();
       },
@@ -109,6 +112,7 @@ export class Node implements LayersOwner {
     };
     const angled: Mover = {
       touched(): void {
+        self.rotationStale = false;
         self.quaternionStale = true;
         self.moved();
       },

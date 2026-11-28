@@ -76,8 +76,9 @@ export class WatchedQuat extends Quat {
 
   /** All four written by a method of the maths (`Quat.put`), its node told once: through the four accessors, each
    *  write asked whether it was fresh and told its node it moved, four times a slerp or a multiply. */
+  // (not made fresh first: all four are written, and its node's `touched` drops the staleness. Made fresh, every
+  // bone's `rotation.set` in a pose's reset turned its quaternion into angles to throw them away)
   protected override put(x: number, y: number, z: number, w: number): void {
-    this.owner?.fresh();
     this._qx = x;
     this._qy = y;
     this._qz = z;
@@ -151,8 +152,8 @@ export class WatchedEuler extends Euler {
 
   /** All three angles and the order written by a method of the maths (`Euler.put`: `set`, `copy`...), its node told
    *  once: a bone's `rotation.set` went through four accessors, each telling it. */
+  // (not made fresh first, as the quaternion's `put`)
   protected override put(x: number, y: number, z: number, order: Euler['order']): void {
-    this.owner?.fresh();
     this._ex = x;
     this._ey = y;
     this._ez = z;

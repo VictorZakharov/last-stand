@@ -39,6 +39,16 @@ test('angles set a field at a time, in their own order, read as three\'s quatern
   near(node.quaternion.toArray(), [0.064071348, 0.091157549, 0.143572175, 0.983347443], 1e-8);
 });
 
+test('angles set whole over a quaternion written since, and a quaternion over angles, each read as the last', () => {
+  const node = new Node();
+  node.quaternion.setFromAxisAngle(new Vec3(1, 0.2, 0).normalize(), 0.8);
+  node.rotation.set(0, 0.5, 0);
+  near(node.quaternion.toArray(), [0, 0.247403959, 0, 0.968912422], 1e-9);
+  node.rotation.set(0.3, 0, 0);
+  node.quaternion.setFromAxisAngle(new Vec3(1, 0.2, 0).normalize(), 0.8);
+  near(angles(node), [0.790196824, 0.141153367, -0.058945673], 1e-8);
+});
+
 /** a parent placed and turned, with a child placed and scaled under it */
 function family(): { parent: Node; child: Node } {
   const parent = new Node();
