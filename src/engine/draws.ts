@@ -502,10 +502,20 @@ function frameKeyOf(view: View): string {
   return `${TUNE.castAll}|${TUNE.lowRes}|${view.grade.casterLeast ?? 0}|${view.camera.layers.mask}|${arms}`;
 }
 
+/** each geometry's attributes as a list, kept while its version stands (an attribute set or taken away moves it):
+ *  walked by name each frame, the geometries' stamps were 1 s of a slowed CPU's wave 36 */
+const attributeLists = new WeakMap<Geometry, { version: number; attributes: { version: number }[] }>();
+
 /** What a geometry's records read of it: its own version and its attributes' and index's. */
 function geometryStamp(geometry: Geometry): number {
+  let kept = attributeLists.get(geometry);
+  if (!kept || kept.version !== geometry.version) {
+    kept = { version: geometry.version, attributes: Object.values(geometry.attributes) };
+    attributeLists.set(geometry, kept);
+  }
   let stamp = geometry.version * 65536;
-  for (const name in geometry.attributes) stamp += geometry.attributes[name].version;
+  const attributes = kept.attributes;
+  for (let i = 0; i < attributes.length; i++) stamp += attributes[i].version;
   return stamp + (geometry.index?.version ?? 0) * 256;
 }
 

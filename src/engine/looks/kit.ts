@@ -178,11 +178,10 @@ function kitLook(kit: KitLooks, material: LitMaterial): RustLook {
       const u = kit.u, edge = u.uEdge.value;
       now[0] = u.uDissolve.value; now[1] = u.uFrozen.value; now[2] = u.uChar.value; now[3] = u.uHit.value;
       now[4] = edge.r; now[5] = edge.g; now[6] = edge.b;
-      now[7] = material.emissiveIntensity; now[8] = material.opacity; now[9] = material.version;
-      now[10] = (material.transparent ? 1 : 0) + (material.depthWrite ? 2 : 0) + (material.visible ? 4 : 0);
+      // (its glow, opacity, flags and colours by its version alone: each moves it as it changes, and read field by
+      // field through their accessors, a wave's foes' looks were a sixth of the materials' time)
+      now[9] = material.version;
       now[11] = kit.near.value;
-      const tint = material.color, glow = material.emissive;
-      now[12] = tint.r; now[13] = tint.g; now[14] = tint.b; now[15] = glow.r; now[16] = glow.g; now[17] = glow.b;
       kit.shade.value.toArray(now, 18);
       kit.aura.value.toArray(now, 22);
       kit.hair.value.toArray(now, 25);

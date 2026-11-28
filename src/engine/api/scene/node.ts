@@ -36,6 +36,9 @@ interface DrawFlags {
   renderOrder: number;
 }
 
+/** every node's moves counted together: a world matrix made since the last of them is made (`Node.makeWorld`) */
+let worldMoves = 0;
+
 /** A thing in the world. */
 export class Node implements LayersOwner {
   /** what every node says it is */
@@ -77,6 +80,8 @@ export class Node implements LayersOwner {
   /** its own moves, counted, and the count its world matrix was made at */
   private moves = 0;
   private builtAt = -1;
+  /** the world's count of moves when its world matrix was last made or found made (`worldMoves`) */
+  private checkedAt = -1;
   /** its parent's world as its own was made from it: which parent, and that parent's count of makes */
   private builtUnder: Node | null = null;
   private builtUnderMakes = -1;
@@ -137,6 +142,7 @@ export class Node implements LayersOwner {
   /** Its place, turn, size or matrix changed: its world matrix is made again when next read, and the stage told. */
   moved(): void {
     this.moves++;
+    worldMoves++;
     this.link?.moved(this);
   }
 
@@ -200,6 +206,11 @@ export class Node implements LayersOwner {
 
   /** Its world matrix made, its parent's first, where either changed since it was last made. */
   private makeWorld(): void {
+    // (nothing anywhere moved since it was last made or found made: as it was. Walked up to the root on every read,
+    // an update of a rig's every node was a walk up from each, 1.7 s of a slowed CPU's wave 36, `lab perf --wave 36
+    // --throttle 4 --profile=update`)
+    if (this.checkedAt === worldMoves) return;
+    this.checkedAt = worldMoves;
     const parent = this.parent;
     let parentMakes = -1;
     if (parent) {

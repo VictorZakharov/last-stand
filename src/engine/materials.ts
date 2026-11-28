@@ -30,6 +30,11 @@ interface MaterialEntry {
   /** its look's own maps as last sent, and its every map's stamp added up then (`mapsStamp`) */
   extra?: Uint32Array;
   mapsAt?: number;
+  /** its version, maps and see-through kind as it was last described (`stillPlain`) */
+  version?: number;
+  textures?: (Texture | null | undefined)[];
+  texturesAt?: number;
+  kind?: number;
 }
 
 export type AnyMaterial = Material & Partial<{
@@ -200,6 +205,10 @@ export class Materials {
       if (now) now.mapsAt = stamp;
       return id;
     }
+    if (entry && this.stillPlain(material, entry)) {
+      entry.seen = frame;
+      return entry.id;
+    }
     const key = this.describe(material);
     if (key < 0) {
       if (!entry) {
@@ -213,6 +222,7 @@ export class Materials {
     if (!entry || !entry.id) {
       entry = { id: this.sharedId(key), params: p.slice(), maps: maps.slice(), key, seen: frame, changes: 0, own: false };
       this.materials.set(material, entry);
+      this.keepPlain(material, entry);
       return entry.id;
     }
     entry.seen = frame;
@@ -235,7 +245,48 @@ export class Materials {
     kept.maps.set(maps);
     kept.params.set(p);
     kept.key = key;
+    this.keepPlain(material, kept);
     return kept.id;
+  }
+
+  /**
+   * Whether a plain material drawn before is as it was described: its version (every field that changes how it's
+   * drawn moves it, a map swapped among them), its maps' own stamps and its see-through kind the same. Its fields are
+   * accessors, and every material described again every frame was a fifth of a slowed CPU's wave 36 (`lab perf
+   * --wave 36 --throttle 4 --profile=materialId`). `TUNE.still` off describes each every frame, to compare.
+   */
+  private stillPlain(material: AnyMaterial, entry: MaterialEntry): boolean {
+    if (!TUNE.still || !entry.id || entry.version !== material.version || !entry.textures) return false;
+    if (entry.kind !== this.seeKinds.kindOf(material.seeThrough as SeeThrough | undefined)) return false;
+    let stamp = 0;
+    for (const texture of entry.textures) stamp += mapStamp(texture);
+    return stamp === entry.texturesAt;
+  }
+
+  /**
+   * A look's material described into the scratch arrays (`describe`), or what it was described as last where it's
+   * as it was then (`stillPlain`): a foe's look moves every frame its fur sways or its gear glows, and each move
+   * described its material again, field by field.
+   */
+  private describedNow(material: AnyMaterial, look: RustLook, entry: MaterialEntry | undefined): number {
+    if (!entry || !this.stillPlain(material, entry)) return this.describe(material, look);
+    this.scratchParams.set(entry.params);
+    this.scratchMaps.set(entry.maps);
+    return entry.key & ~CASTS_AS_PLACED;
+  }
+
+  /** What `stillPlain` compares a plain material by, kept as it's described. */
+  private keepPlain(material: AnyMaterial, entry: MaterialEntry): void {
+    const textures = [
+      material.map, material.alphaMap, material.normalMap, material.bumpMap,
+      material.roughnessMap, material.metalnessMap, material.emissiveMap,
+    ];
+    let stamp = 0;
+    for (const texture of textures) stamp += mapStamp(texture);
+    entry.version = material.version;
+    entry.textures = textures;
+    entry.texturesAt = stamp;
+    entry.kind = this.seeKinds.kindOf(material.seeThrough as SeeThrough | undefined);
   }
 
   /** The page's shaders' names by the ids the engine gave them (a breakdown's rows: perf/gpuParts.ts). */
@@ -305,7 +356,7 @@ export class Materials {
    *  `SHARED_CHANGES` moves, written in place from then on. Such a look has no maps or volume of its own. */
   private sharedLookId(material: AnyMaterial, look: RustLook, entry: MaterialEntry | undefined): number {
     const core = this.core, frame = core.frame;
-    const described = this.describe(material, look);
+    const described = this.describedNow(material, look, entry);
     if (described < 0) return 0;
     const key = described | (look.casts ? CASTS_AS_PLACED : 0);
     const p = this.scratchParams, maps = this.scratchMaps, numbers = this.scratchLook;
@@ -319,6 +370,7 @@ export class Materials {
         custom: numbers.slice(0, count),
       };
       this.materials.set(material, entry);
+      this.keepPlain(material, entry);
       return entry.id;
     }
     entry.seen = frame;
@@ -331,6 +383,7 @@ export class Materials {
     }
     if (sameMaps && sameParams && sameNumbers) {
       this.sendTail(kept.id, look);
+      if (kept.version !== material.version) this.keepPlain(material, kept);
       return kept.id;
     }
     kept.changes++;
@@ -351,6 +404,7 @@ export class Materials {
     kept.params.set(p);
     sent.set(numbers.subarray(0, count));
     kept.key = key;
+    this.keepPlain(material, kept);
     this.sendTail(kept.id, look);
     return kept.id;
   }
@@ -384,7 +438,7 @@ export class Materials {
   /** A material with a look of its own: an engine material to itself, its shader's numbers sent as they move. */
   private lookId(material: AnyMaterial, look: RustLook, entry: MaterialEntry | undefined): number {
     const core = this.core, held = this.maps;
-    const described = this.describe(material, look);
+    const described = this.describedNow(material, look, entry);
     if (described < 0) return 0;
     const key = described | (look.casts ? CASTS_AS_PLACED : 0);
     const p = this.scratchParams, maps = this.scratchMaps, numbers = this.scratchLook;
@@ -420,6 +474,7 @@ export class Materials {
         volume, extra: extra.slice(),
       };
       this.materials.set(material, entry);
+      this.keepPlain(material, entry);
       core.held.materials++;
       core.stats.newMaterials++;
       core.freshViews();
@@ -431,6 +486,7 @@ export class Materials {
       core.engine.set_material_params(kept.id, p);
       kept.params.set(p);
     }
+    if (kept.version !== material.version) this.keepPlain(material, kept);
     if (numbers.some((value, index) => value !== sent[index])) {
       core.engine.set_material_custom(kept.id, numbers);
       sent.set(numbers);
