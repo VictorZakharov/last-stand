@@ -17,6 +17,7 @@ import { SCHOLAR_DESK, SCHOLAR_DOES } from '../../data/houses/library';
 import { HOUSE_OBJECTS } from '../../data/houses';
 import { scholarRounds, type Rounds } from '../scholarRounds';
 import { chairSeat } from '../seats';
+import { joinParts, seatWoods } from '../stool';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import {
   BODY, CANDLE, CROSS_UNDER, DISPLAY, LANTERN, ROOM_LOOK, againstWall, begin, box, candle, chandelier, drum, finish, framed, hearth, inkedPage, lantern, onWall, pageTexture, pageVariant, showPage,
@@ -536,11 +537,25 @@ function scholarDesk(g: THREE.Group, M: Mats, b: Build): {
   const chair = new THREE.Group();
   chair.name = 'scholar chair';
   d.add(chair);
-  box(chair, 0.48, 0.05, 0.46, 0, 0.41, -0.04, M.oak).name = 'scholar chair seat';
-  for (const sx of [-1, 1]) for (const sz of [-1, 1]) box(chair, 0.05, 0.41, 0.05, sx * 0.2, 0, -0.04 + sz * 0.19, M.timber).name = 'scholar chair leg';
-  for (const sx of [-1, 1]) box(chair, 0.055, 0.72, 0.05, sx * 0.21, 0.46, -0.25, M.timber);
-  for (let k = -2; k <= 2; k++) box(chair, 0.04, 0.5, 0.02, k * 0.07, 0.52, -0.255, M.panel);
-  box(chair, 0.5, 0.08, 0.06, 0, 1.12, -0.25, M.oak).name = 'scholar chair rail';
+  // (built as a joiner builds one, from play, "they will break on first day of service": its back legs run on up as
+  // the back's posts in one piece, an apron under the seat on three sides, stretchers low between the legs; in the
+  // seats' woods, `seatWoods` in stool.ts)
+  const { seat: seatWood, frame } = seatWoods(M);
+  box(chair, 0.48, 0.05, 0.46, 0, 0.41, -0.04, seatWood).name = 'scholar chair seat';
+  for (const sx of [-1, 1]) box(chair, 0.05, 0.41, 0.05, sx * 0.2, 0, 0.15, frame).name = 'scholar chair leg';
+  for (const sx of [-1, 1]) box(chair, 0.05, 1.12, 0.05, sx * 0.2, 0, -0.23, frame).name = 'scholar chair leg';
+  for (const sx of [-1, 1]) {
+    box(chair, 0.025, 0.07, 0.33, sx * 0.2, 0.33, -0.04, frame);
+    box(chair, 0.03, 0.035, 0.33, sx * 0.2, 0.12, -0.04, frame);
+  }
+  box(chair, 0.35, 0.07, 0.025, 0, 0.33, 0.15, frame);
+  box(chair, 0.35, 0.035, 0.03, 0, 0.18, 0.15, frame);
+  box(chair, 0.35, 0.035, 0.03, 0, 0.18, -0.23, frame);
+  for (let k = -2; k <= 2; k++) box(chair, 0.04, 0.6, 0.02, k * 0.07, 0.46, -0.235, M.panel);
+  box(chair, 0.5, 0.08, 0.06, 0, 1.06, -0.23, seatWood).name = 'scholar chair rail';
+  // (its parts but its seat one mesh a wood, its frame named as its legs were: `lab scholar` reads their feet)
+  const seatMesh = chair.getObjectByName('scholar chair seat')!;
+  joinParts(chair, [seatMesh], new Map<THREE.Material, string>([[frame, 'scholar chair leg'], [seatWood, 'scholar chair rail']]));
   // (his book, open towards him: turned half round, its first page on his left; out on the table a forearm's length
   // from its edge, where his elbows rest)
   const SIZE = 0.44, BOOK = { y: 0.76, z: 0.62 };

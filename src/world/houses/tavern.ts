@@ -10,6 +10,8 @@ import {
   writing,
 } from '../rooms';
 import { keepPotteryApart, plateShelf, potteryOn } from '../potShelf';
+import { bottles, herbs, mantel, oldBottleDraws } from '../tavernDressing';
+import { barCounter } from '../tavernBar';
 import { lengthSeat } from '../seats';
 import { mulberry } from '../../util';
 import { keeperTalk, tavernKeeper } from '../tavernKeeper';
@@ -46,24 +48,10 @@ function crossedAxes(g: THREE.Object3D, M: Mats, x: number, y: number): void {
   g.add(boss);
 }
 
-/** Bunches of dried herbs hung from a beam at (x, y, z), `n` of them along x. */
-function herbs(g: THREE.Object3D, x: number, y: number, z: number, n: number, rng: () => number): void {
-  const greens = [0x5a6a30, 0x7a7a3a, 0x6a5a30, 0x8a6a4a];
-  for (let k = 0; k < n; k++) {
-    const m = new THREE.MeshStandardMaterial({ color: greens[k % greens.length], roughness: 0.95 });
-    const bunch = new THREE.Mesh(new THREE.ConeGeometry(0.07 + rng() * 0.03, 0.32 + rng() * 0.12, 7).rotateX(Math.PI), m);
-    bunch.position.set(x + k * 0.32 + (rng() - 0.5) * 0.06, y - 0.32, z + (rng() - 0.5) * 0.1);
-    bunch.rotation.z = (rng() - 0.5) * 0.2;
-    bunch.castShadow = true;
-    g.add(bunch);
-    const tie = new THREE.Mesh(new THREE.CylinderGeometry(0.005, 0.005, 0.14, 4), m);
-    tie.position.set(bunch.position.x, y - 0.08, bunch.position.z);
-    g.add(tie);
-  }
-}
-
 /** the height of the tavern's table tops, where its cups and candles stand (m), and how thick their worn top is */
 const TOP = 0.76, WORN = 0.012;
+/** the top of the hearth's mantel shelf (m: `hearth` in rooms.ts, its opening's 1.0 high, 0.35 over it, 0.1 thick) */
+const MANTEL_TOP = 1.45;
 
 /** The tavern: the hearth in the back wall, the bar down the east wall with its shelves of bottles and kegs, the party's
  *  round table by the hearth with its map, a long table and benches, barrels by the door, the party board beside it. */
@@ -85,13 +73,12 @@ export function build(group: THREE.Group): Room {
   };
   hearth(g, M, new THREE.Vector3(0.6, 0, -hz), 0, high, b.updaters, obstacles);
   // (tankards and a pot on the mantel)
-  for (const x of [-0.3, 0.1, 0.55, 1.2, 1.5]) tankard(g, M, x, 1.46, -hz + 0.78, x > 1);
+  // (on its top at 1.45, jugs, tankards and candles: five tankards alike stood a centimetre over it)
+  mantel(g, M, 0.6, MANTEL_TOP, -hz + 0.8);
   // --- the bar: a counter down the east wall, a shelf of bottles behind it, kegs on a rack ---
-  const barX = hx - 1.3, barFrom = -hz + 0.9, barTo = 1.0, barLong = barTo - barFrom;
-  box(g, 0.55, 1.0, barLong, barX, 0, (barFrom + barTo) / 2, M.panel);
-  box(g, 0.7, 0.07, barLong + 0.1, barX, 1.0, (barFrom + barTo) / 2, M.oak);
-  box(g, 0.6, 0.08, 0.06, barX, 0.08, barTo + 0.05, M.timber);
-  for (let z = barFrom + 0.4; z < barTo; z += 0.75) box(g, 0.04, 0.85, 0.08, barX - 0.29, 0.08, z, M.timber);
+  const barX = hx - 1.3, barFrom = -hz + 0.9, barTo = 1.0;
+  // (framed and fielded, a thick top with its nosing, a brass foot rail: world/tavernBar.ts)
+  barCounter(g, M, barX, barFrom, barTo, { worn, rim });
   for (let z = barFrom + 0.3; z < barTo - 0.2; z += 0.8) obstacles.push({ x: barX, z, r: 0.42, h: 1.07 });
   obstacles.push({ x: barX, z: barTo - 0.2, r: 0.42, h: 1.07 });
   // (the keeper's place clear: his cask stands at his left, his mug slides across before him)
@@ -100,35 +87,20 @@ export function build(group: THREE.Group): Room {
   // his legs near straight, as a man stood, from review; lower, his knees bend as a man's on a high stool, "the hero can
   // sit on the bar stools", Kenneth's round 3)
   for (const z of BAR_STOOLS) {
-    const barStool = stool(g, T, BAR_STOOL_X, z, BAR_STOOL_HIGH);
-    const rung = new THREE.Mesh(new THREE.TorusGeometry(0.118, 0.011, 6, 20).rotateX(Math.PI / 2), T.timber);
-    rung.position.set(BAR_STOOL_X, BAR_STOOL_RUNG, z);
-    rung.castShadow = true;
-    barStool.group.add(rung);
+    const barStool = stool(g, T, BAR_STOOL_X, z, BAR_STOOL_HIGH, BAR_STOOL_RUNG);
     // (sat on facing the bar, whichever side he comes from: his back to the bar, he looked out at the room, "should sit
     // the other way, facing the counter", Kenneth's round 4)
     // (come close to to sit, as the bar's keep-out stands between it and the bar)
     b.seats.push({ ...stoolSeatOf(barStool, BAR_STOOL_X, z), faces: { x: 1, z: 0 }, near: 0.06 });
   }
   const east = onWall(g, id, 'east');
-  const bottles: THREE.Matrix4[] = [], tints: THREE.Color[] = [];
-  const glassTints = [0x2a5a2a, 0x6a2a14, 0x1a3a5a, 0x8a6a2a, 0x3a1a3a];
   for (const y of [1.35, 1.85]) {
     box(east, 2.6, 0.05, 0.3, -1.0, y - 0.05, 0.15, M.oak);
     for (const sx of [-1, 1]) box(east, 0.04, 0.12, 0.24, -1.0 + sx * 1.2, y - 0.17, 0.12, M.iron);
-    for (let x = -2.2; x < 0.2; x += 0.11 + rng() * 0.05) {
-      const tall = 0.2 + rng() * 0.12;
-      bottles.push(new THREE.Matrix4().compose(new THREE.Vector3(x, y + tall / 2, 0.15), new THREE.Quaternion(), new THREE.Vector3(1, tall / 0.3, 1)));
-      tints.push(new THREE.Color(glassTints[(rng() * glassTints.length) | 0]));
-    }
   }
-  const bottleGeo = new THREE.LatheGeometry([[0, -0.15], [0.04, -0.15], [0.045, -0.13], [0.045, 0.05], [0.016, 0.1], [0.014, 0.15], [0, 0.15]]
-    .map(([r, y]) => new THREE.Vector2(r, y)), 10);
-  const bottleMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.15, metalness: 0.2 });
-  const bottleMesh = new THREE.InstancedMesh(bottleGeo, bottleMat, bottles.length);
-  bottles.forEach((m, i) => { bottleMesh.setMatrixAt(i, m); bottleMesh.setColorAt(i, tints[i]); });
-  bottleMesh.castShadow = true;
-  east.add(bottleMesh);
+  // (every form of bottle, from a stream of their own: one shape in five tints, they read as one bottle copied)
+  oldBottleDraws(rng);
+  bottles(east, [1.35, 1.85], -2.25, 0.25, 0.15);
   // (kegs on a rack behind the bar, at its far end)
   box(g, 0.7, 0.4, 1.5, hx - 0.4, 0, -hz + 1.1, M.timber);
   for (const z of [-hz + 0.7, -hz + 1.45]) barrel(g, M, hx - 0.4, 0.4, z, true, Math.PI / 2);
@@ -202,11 +174,13 @@ export function build(group: THREE.Group): Room {
   const potter = mulberry(733), pottery = potteryOn(back);
   plateShelf(back, pottery, M, -4.3, 1.75, 1.4, potter);
   plateShelf(back, pottery, M, -4.3, 2.35, 1.4, potter);
-  plateShelf(back, pottery, M, 3.0, 1.95, 1.6, potter);
+  // (between the wall's posts at 2.7 and 5.3: at 3.0 its board ran through the first, from play)
+  plateShelf(back, pottery, M, 4.0, 1.95, 1.6, potter);
   keepPotteryApart(pottery);
   // (dried herbs from the beams)
   // (over the bar alone: over the long table they hung before the sign)
-  herbs(g, barX - 0.5, high - 0.26, -2.2, 6, rng);
+  // (five, the last 0.4 m short of the east wall's lantern: a sixth hung in its frame as the player saw it)
+  herbs(g, barX - 0.75, high - 0.26, -2.2, 5);
   // (a pair of antlers over the west wall, and sacks of grain)
   lantern(west, M, -(hz - 0.6), 2.3, 0, 0, 1);
   lantern(east, M, hz - 0.4, 2.4, 0, 0, 1);

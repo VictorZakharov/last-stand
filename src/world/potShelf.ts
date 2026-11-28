@@ -14,8 +14,8 @@ export const POTTERY = 'pottery';
 /** the name of a shelf's boards' group */
 export const PLATE_SHELF = 'plate shelf';
 
-// (one set over every shelf: the merge then draws every clay pot together, and every pewter one)
-const CLAY = clayMaterial();
+// (one set over every shelf, and the tavern's mantel: the merge then draws every clay pot together, and every pewter one)
+export const CLAY = clayMaterial();
 // (a soft metal's sheen: at 0.7 metal and 0.45 rough it read as grey card, at 0.85 near black, with little bright
 // round it to give back)
 const PEWTER = new THREE.MeshStandardMaterial({ color: 0xaaa79e, metalness: 0.6, roughness: 0.35 });

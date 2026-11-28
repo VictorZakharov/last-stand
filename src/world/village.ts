@@ -65,6 +65,7 @@ import { HOUSES, ROOM_IDS, type RoomId } from '../data/houses';
 import { solidsOver } from './meadowSolids';
 import { fireRing } from './fireRing';
 import { torchFire } from './torchFire';
+import { candleDish, flameGeometry, taperWax, taperWick } from './candleKit';
 import type { Relief } from './ground';
 import type { Obstacle } from '../types';
 
@@ -1702,23 +1703,6 @@ function hallColumns(scene: THREE.Object3D, capital: THREE.Material, M: Mats, li
 /** A small flame's materials (the chronicle's candle's): its tongue and the glow round it. */
 interface TorchLook { fire: THREE.Material; glow: THREE.Material }
 
-/** A flame's outline turned round its axis, `r` its widest and `h` its height: round at its foot, drawn in to a tip
- *  (`lean` puts its tip off its axis along x, as a draught bends it). */
-function flameGeometry(r: number, h: number, lean: number): THREE.BufferGeometry {
-  const outline: THREE.Vector2[] = [];
-  for (let k = 0; k <= 12; k++) {
-    const t = k / 12;
-    // (a round foot to its widest a fifth up, then in to the tip by a curve)
-    const wide = t < 0.2 ? Math.sin((t / 0.2) * Math.PI / 2) : Math.pow(1 - (t - 0.2) / 0.8, 1.6);
-    outline.push(new THREE.Vector2(Math.max(r * wide, 0.0005), h * t));
-  }
-  const g = new THREE.LatheGeometry(outline, 10);
-  const at = g.attributes.position;
-  for (let i = 0; i < at.count; i++) at.setX(i, at.getX(i) + lean * (at.getY(i) / h) ** 2);
-  g.computeVertexNormals();
-  return g;
-}
-
 /** The torches' look: a flame of its own, a pointed tongue a hot core and a soft glow round it, smaller and dimmer than
  *  a lantern's glass (passed close, the glass's bloomed into a blob that hid the heroes behind it; the same kind of
  *  material, so the same program). Drawn as a lit egg, a review read each as "a solid light bulb". */
@@ -2299,30 +2283,17 @@ function buildLectern(scene: THREE.Object3D, M: Mats, obstacles: Obstacle[]): vo
   const ring = new THREE.Mesh(new THREE.TorusGeometry(0.017, 0.0035, 6, 14).rotateY(Math.PI / 2), M.freeBrass);
   ring.position.set(armAt.x, armAt.y + 0.002, armAt.z + 0.078);
   lectern.add(ring);
-  const dish = new THREE.Mesh(new THREE.LatheGeometry([[0.001, 0], [0.05, 0], [0.066, 0.016], [0.06, 0.018], [0.046, 0.006], [0.001, 0.006]]
-    .map(([r, y]) => new THREE.Vector2(r, y)), 28), M.freeBrass);
+  const dish = new THREE.Mesh(candleDish(), M.freeBrass);
   dish.position.set(armAt.x, armAt.y - 0.012, armAt.z);
   lectern.add(dish);
   const stick = new THREE.Group();
   stick.position.set(armAt.x + 0.008, armAt.y - 0.006, armAt.z - 0.006);
   stick.rotation.set(0.05, 0, -0.04);
   lectern.add(stick);
-  // the wax: pooled in the dish, a taper melted hollow at its top, runs down it each ending in a bead
-  const wax = new THREE.Mesh(new THREE.LatheGeometry([[0.048, 0.001], [0.03, 0.006], [0.022, 0.016], [0.02, 0.05], [0.0195, 0.104],
-    [0.021, 0.116], [0.017, 0.122], [0.012, 0.117], [0.001, 0.114]].map(([r, y]) => new THREE.Vector2(r, y)), 16), M.wax);
-  stick.add(wax);
-  for (const [a, top, long] of [[0.6, 0.118, 0.05], [1.9, 0.118, 0.085], [3.1, 0.116, 0.03], [4.3, 0.118, 0.066], [5.4, 0.116, 0.1]] as const) {
-    const run = new THREE.Mesh(new THREE.CapsuleGeometry(0.0028, long, 3, 6), M.wax);
-    run.position.set(Math.cos(a) * 0.0205, top - long / 2, Math.sin(a) * 0.0205);
-    stick.add(run);
-    const bead = new THREE.Mesh(new THREE.SphereGeometry(0.0048, 6, 5), M.wax);
-    bead.position.set(Math.cos(a) * 0.0215, top - long, Math.sin(a) * 0.0215);
-    stick.add(bead);
-  }
-  const wick = new THREE.Mesh(new THREE.CylinderGeometry(0.0012, 0.0016, 0.016, 4), M.iron);
-  wick.position.set(0.001, 0.122, 0);
-  wick.rotation.z = -0.28;
-  stick.add(wick);
+  // the wax: pooled in the dish, a taper melted hollow at its top, runs down it each ending in a bead, its wick
+  // (`candleKit.ts`, which the houses' candles are made by too)
+  taperWax(stick, M.wax, 0.122, true);
+  taperWick(stick, M.iron, 0.122);
   scene.add(lectern);
   obstacles.push({ x, z, r: 0.45, h: high + 1.1 });
 }
