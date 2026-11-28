@@ -18,7 +18,7 @@ interface Row {
   spans: [number, number][];
 }
 
-/** the least width of a row or of the canvas a run is sent from (px), doubled as one needs more */
+/** the least width of a row (px), doubled as one needs more */
 const LEAST_WIDTH = 256;
 /** the most rows kept, the longest unused let go past it (sent first): a row a shelf, as a slot given back and
  *  taken again may be on any shelf of its height, and a row a height sent its spans at every change of shelf,
@@ -55,8 +55,6 @@ function joined(spans: [number, number][]): [number, number][] {
 /** The rows of an atlas `side` px square, its slots `gutter` px apart. */
 export class AtlasRows {
   private rows = new Map<number, Row>();
-  /** the canvas a run is copied into to be sent from its top left (the engine's copy reads from there) */
-  private out: { canvas: HTMLCanvasElement; c: CanvasRenderingContext2D } | null = null;
   /** the row the label being painted is on, and its slot */
   private painting: { row: Row; slot: Box } | null = null;
 
@@ -121,27 +119,12 @@ export class AtlasRows {
     this.rows.delete(shelf);
   }
 
-  /** `row`'s spans sent, a copy a run. */
+  /** `row`'s spans sent, a copy a run, each read where it was painted (copied to a canvas's top left first, every
+   *  run was drawn twice on the CPU: 267 ms of a wave's run at wave 36). */
   private sendRow(row: Row): void {
     if (!row.spans.length) return;
     const h = Math.min(row.canvas.height, this.side - row.shelf);
-    for (const [from, to] of joined(row.spans)) {
-      const w = to - from;
-      const out = this.outOf(w, h);
-      out.c.clearRect(0, 0, w, h);
-      out.c.drawImage(row.canvas, from, 0, w, h, 0, 0, w, h);
-      overlayPaint(out.canvas, w, h, from, row.shelf);
-    }
+    for (const [from, to] of joined(row.spans)) overlayPaint(row.canvas, from, 0, to - from, h, from, row.shelf);
     row.spans = [];
-  }
-
-  /** The canvas runs are sent from, made or grown to `w` by `h` at least. */
-  private outOf(w: number, h: number): { canvas: HTMLCanvasElement; c: CanvasRenderingContext2D } {
-    const out = this.out;
-    if (out && out.canvas.width >= w && out.canvas.height >= h) return out;
-    const width = Math.max(out?.canvas.width ?? 0, widthFor(w, this.side));
-    const height = Math.max(out?.canvas.height ?? 0, h);
-    this.out = cpuCanvas(width, height);
-    return this.out;
   }
 }

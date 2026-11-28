@@ -530,17 +530,20 @@ export class Engine {
         wasm.engine_overlay_atlas(this.__wbg_ptr, side);
     }
     /**
-     * The top left `width` by `height` pixels of a canvas of the page's copied into the atlas at `x`, `y`, its
-     * colours premultiplied by its alpha (as the overlay draws them); false for a source it can't take.
+     * The `width` by `height` pixels of a canvas of the page's from `from_x`, `from_y` copied into the atlas at `x`,
+     * `y`, its colours premultiplied by its alpha (as the overlay draws them); false for a source it can't take.
+     * (Read where the page painted them: copied to a canvas's top left first, each run was drawn twice on the CPU.)
      * @param {any} source
+     * @param {number} from_x
+     * @param {number} from_y
      * @param {number} width
      * @param {number} height
      * @param {number} x
      * @param {number} y
      * @returns {boolean}
      */
-    overlay_paint(source, width, height, x, y) {
-        const ret = wasm.engine_overlay_paint(this.__wbg_ptr, source, width, height, x, y);
+    overlay_paint(source, from_x, from_y, width, height, x, y) {
+        const ret = wasm.engine_overlay_paint(this.__wbg_ptr, source, from_x, from_y, width, height, x, y);
         return ret !== 0;
     }
     /**

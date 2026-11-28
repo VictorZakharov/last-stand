@@ -19,9 +19,12 @@ export function overlayAtlas(side: number): boolean {
   return true;
 }
 
-/** The top left `w` by `h` pixels of `canvas` copied into the atlas at `x`, `y`; false if it can't be yet. */
-export function overlayPaint(canvas: HTMLCanvasElement, w: number, h: number, x: number, y: number): boolean {
-  return engine()?.overlay_paint(canvas, w, h, x, y) ?? false;
+/** The `w` by `h` pixels of `canvas` from `fromX`, `fromY` copied into the atlas at `x`, `y`; false if it can't be
+ *  yet. */
+export function overlayPaint(
+  canvas: HTMLCanvasElement, fromX: number, fromY: number, w: number, h: number, x: number, y: number,
+): boolean {
+  return engine()?.overlay_paint(canvas, fromX, fromY, w, h, x, y) ?? false;
 }
 
 /**

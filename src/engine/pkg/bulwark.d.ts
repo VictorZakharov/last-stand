@@ -159,10 +159,11 @@ export class Engine {
      */
     overlay_atlas(side: number): void;
     /**
-     * The top left `width` by `height` pixels of a canvas of the page's copied into the atlas at `x`, `y`, its
-     * colours premultiplied by its alpha (as the overlay draws them); false for a source it can't take.
+     * The `width` by `height` pixels of a canvas of the page's from `from_x`, `from_y` copied into the atlas at `x`,
+     * `y`, its colours premultiplied by its alpha (as the overlay draws them); false for a source it can't take.
+     * (Read where the page painted them: copied to a canvas's top left first, each run was drawn twice on the CPU.)
      */
-    overlay_paint(source: any, width: number, height: number, x: number, y: number): boolean;
+    overlay_paint(source: any, from_x: number, from_y: number, width: number, height: number, x: number, y: number): boolean;
     /**
      * The overlay's rows from the next frame on (`ROW_FLOATS` each: a box of the screen in its pixels, its slot's
      * corners' uv, its share), over a screen of `width` by `height` pixels; none, nothing laid over it.
@@ -397,7 +398,7 @@ export interface InitOutput {
     readonly engine_node_worlds: (a: number) => number;
     readonly engine_nodes_drawn: (a: number, b: number) => void;
     readonly engine_overlay_atlas: (a: number, b: number) => void;
-    readonly engine_overlay_paint: (a: number, b: any, c: number, d: number, e: number, f: number) => number;
+    readonly engine_overlay_paint: (a: number, b: any, c: number, d: number, e: number, f: number, g: number, h: number) => number;
     readonly engine_overlay_rows: (a: number, b: number, c: number, d: number, e: number) => void;
     readonly engine_place_nodes: (a: number) => void;
     readonly engine_poll_clock: (a: number) => void;
