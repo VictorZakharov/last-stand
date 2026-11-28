@@ -216,11 +216,13 @@ async function publicRoom(games, found, relay, dir) {
 /** A password room: listed locked, its password nowhere in the list; a wrong one turned away, the right one in. */
 async function lockedRoom(games, found, relay, dir) {
   const code = await hostOpens(games, LOCKED);
+  // (the relay read once the browser lists it, as the public room's: read the moment the host's page said it was
+  // hosting, its card could still be on its way from the socket's worker, src/net/relaySocket.ts)
+  const shown = await guestLists(games, (rows) => rows.some((r) => r.code === code), 'the password room');
   const { rooms, text } = await relayList(relay.url, relay.origin);
   found.say(`password room: the relay lists it ${rooms.find((r) => r.code === code)?.locked ? 'locked' : 'unlocked'}`);
   found.expect(rooms.find((r) => r.code === code)?.locked === true, 'the password room isn\'t listed locked');
   found.expect(!text.includes(LOCKED.password), 'the relay\'s list holds the room\'s password');
-  const shown = await guestLists(games, (rows) => rows.some((r) => r.code === code), 'the password room');
   found.expect(shown.rows.find((r) => r.code === code)?.locked === true, 'the browser doesn\'t show the password room locked');
   await games[1].call('roomsJoinListed', { tag: TAGS.guest, code, password: WRONG });
   const [, refused] = await until(games, (h, g) => g.session === 'failed' || g.session === 'joined',

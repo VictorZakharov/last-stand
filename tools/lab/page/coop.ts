@@ -58,6 +58,7 @@ export {
 export { coopChoirCast, coopChoirSamples, coopChoirSetup, coopChoirSpawn } from './coopChoir';
 export { coopPointAtSeat, coopSeatsSeen, coopSitOn, coopStandBySeat, coopStandUp } from './coopSeats';
 import { wallTouchInput } from './coopWallTouch';
+import { HITCH_FRAMES, inHitch } from './coopHitches';
 export { coopWallTouchKey, coopWallTouchSeen, coopWallTouchStand, coopWallTouchWalk } from './coopWallTouch';
 export {
   coopTavernAsk, coopTavernDisconnect, coopTavernDrink, coopTavernLeave, coopTavernLedger, coopTavernMug,
@@ -287,6 +288,8 @@ interface Scenario {
   /** likewise the frames in which the guest never hears of a foe's death, as the guest in #579 didn't (its copies
    *  stood, still, through the choice after the wave and on into the next) */
   diesLost?: number;
+  /** each game holds the messages come to it now and then for a long frame's length (`coopHitches.ts`) */
+  hitches?: boolean;
   /** the skill (its `impl`) the guest's hero must know to play it, or one of them: a class's own */
   skill?: string | string[];
   /** the frames (after it settled) each game's screen is pictured at, with `--pictures` */
@@ -911,6 +914,18 @@ const SCENARIOS: Record<string, Scenario> = {
     hostInput: () => ({}),
     guestInput: strikeInput,
   },
+  // (last: the scenarios run on from each other, so one added before them moved every reading after it)
+  hitches: {
+    about: 'as walk, and from 15 s on each game holds the messages come to it for 150 ms every 2 s (the guest half way '
+      + 'between the host\'s), as a long frame does: the play-out must wait no longer for them',
+    frames: HITCH_FRAMES,
+    host: [9, 19],
+    guest: [15, 23],
+    foes: [],
+    hitches: true,
+    hostInput: (frame) => ({ keys: roundAt(frame, 12) }),
+    guestInput: (frame) => ({ keys: zigzagAt(frame) }),
+  },
 };
 
 /** The scenarios, by name, and what each plays. */
@@ -928,6 +943,9 @@ const wire = {
   /** this page's choices dropped on their way to the host, by kind (`bank`, `vote`): every one or the first alone
    *  (`coopDropChoice`) */
   dropChoices: new Map<Choice, Lose>(),
+  /** the canary of `hitches`: messages handed over with no time of their arrival, as main's link handed them (the
+   *  game takes the moment it handles one) */
+  unstamped: false,
 };
 
 /** A guest's choice after a wave as it goes to the host (`sendControl` in main.ts): Bank, or Continue. */
@@ -970,7 +988,7 @@ export function coopLinkTime(): number {
 
 /** Stands in for the browser's BroadcastChannel, which the game's `?net=local` link talks over. */
 class LabChannel {
-  onmessage: ((event: { data: unknown }) => void) | null = null;
+  onmessage: ((event: { data: unknown; timeStamp?: number }) => void) | null = null;
 
   constructor(readonly name: string) {
     wire.channels.add(this);
@@ -1005,17 +1023,31 @@ function loseSpawns(message: Arriving): void {
   if (spawns || dies) packet.data.x = packet.data.x.filter((event) => event.k !== spawns && event.k !== dies);
 }
 
-/** Hands the game the messages that have arrived by the frame about to run, in the order they arrive. */
+/**
+ * Hands the game the messages that have arrived by the frame about to run, in the order they arrive, each with when
+ * it arrived (its event's `timeStamp`, on the page's clock), as the relay's socket in its worker stamps them; none
+ * while the scenario has this game in a hitch.
+ */
 function deliver(): void {
+  if (hitching()) return;
   const by = wireTime() + window.__labClock.frame;
   while (wire.inbox.length && wire.inbox[0].due <= by) {
     const message = wire.inbox.shift()!;
     loseSpawns(message);
     if (pickLost(message.data) || tradeLost(message.data)) continue;
+    const arrived = Math.min(wire.start + message.due, performance.now());
+    const event = wire.unstamped ? { data: message.data } : { data: message.data, timeStamp: arrived };
     for (const channel of wire.channels) {
-      if (channel.name === message.name) channel.onmessage?.({ data: message.data });
+      if (channel.name === message.name) channel.onmessage?.(event);
     }
   }
+}
+
+/** Whether this game holds the messages come to it in the frame about to run, a long frame of its own (`hitches`). */
+function hitching(): boolean {
+  if (!SCENARIOS[play.scenario]?.hitches || play.extra !== null) return false;
+  const recorded = play.frame + play.turnFrame - SETTLE_FRAMES;
+  return recorded >= 0 && inHitch(recorded, play.role === 'guest');
 }
 
 /**
@@ -1043,6 +1075,8 @@ const play = {
   extra: null as number | null,
   scenario: '',
   frame: 0,
+  /** the frames run of the turn under way (`deliver` runs before each) */
+  turnFrame: 0,
   samples: [] as Sample[],
   /** arrows seen in flight, so a new one is counted as loosed once */
   seen: new WeakSet<Projectile>(),
@@ -1366,6 +1400,7 @@ export async function coopScenario(lab: Lab, { name, canary }: { name: string; c
   play.scenario = name;
   play.frame = 0;
   play.samples = [];
+  wire.unstamped = name === 'hitches' && Boolean(canary);
   play.attacks.clear();
   dodger = new Dodger();
   resetPings();
@@ -1416,6 +1451,7 @@ export async function coopFrames(lab: Lab, turn: CoopTurn): Promise<CoopTurnResu
     return play.role === 'host' ? scenario.hostInput(at) : scenario.guestInput(at);
   };
   const record = (frame: number): void => {
+    play.turnFrame = frame + 1;
     watchHall();
     watchTags();
     watchHeroCost();
@@ -1425,8 +1461,10 @@ export async function coopFrames(lab: Lab, turn: CoopTurn): Promise<CoopTurnResu
     const sample = sampleNow();
     if (play.frame + frame >= SETTLE_FRAMES) play.samples.push(sample);
   };
+  play.turnFrame = 0;
   await lab.step(turn.frames, inputOf, record);
   play.frame += turn.frames;
+  play.turnFrame = 0;
   return { sent: wire.outbox.splice(0), state: stateNow() };
 }
 

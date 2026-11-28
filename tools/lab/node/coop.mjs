@@ -23,6 +23,7 @@ import { fightPartyDuel } from './coopDuelParty.mjs';
 import { everyoneBanks } from './coopBanks.mjs';
 import { runsEnds } from './coopEnds.mjs';
 import { tradeTogether } from './coopTrade.mjs';
+import { hitchesCanaryLines } from './coopHitches.mjs';
 import * as heroColours from '../../../src/data/heroColours.ts';
 
 const { HERO_COLOURS } = heroColours;
@@ -218,6 +219,19 @@ export class Pair {
     this.behind = pages.map(() => 0);
     // (a turn's messages are handed over after it, so none may be due before the next turn ends)
     this.turnFrames = Math.max(1, Math.min(MOST_TURN, Math.floor(ping / 2 / frameMs)));
+  }
+
+  /**
+   * The link's jitter, and so its stalls, taken away while `on` (its ping kept), and put back after: a scenario that
+   * reads the games' own lateness (`hitches`) reads it with none of the link's, whose stalls moved the play-out's wait
+   * by 60 ms from one run to the next.
+   */
+  steady(on) {
+    for (const ways of this.ways) {
+      for (const way of ways) {
+        if (way) way.jitter = on ? 0 : this.link.jitter;
+      }
+    }
   }
 
   /** A way of the link, drawing its delays from the party's one stream. */
@@ -898,10 +912,13 @@ export async function runCoop(side, options) {
       // (the canary of `afk`: the guest's state never says it's away, which the host's screen must miss)
       if (canary && name === 'afk') await callPage(guest, 'coopAfkQuiet', { quiet: true });
       const { frames, pictures: at } = await callPage(side.page, 'coopScenarioFrames', { name });
+      // (the games' own hitches read on a link of no jitter: node/coopHitches.mjs)
+      pair.steady(name === 'hitches');
       if (pictures && at.length) {
         const files = await pair.runPicturing(settle + frames, name, at.map((frame) => settle + frame));
         lines.push(`${name}: pictured ${files.length} screens in ${PICTURES}`);
       } else await pair.run(settle + frames, name);
+      pair.steady(false);
       const samplesOf = (page) => callPage(page, 'coopSamples');
       const [hostSamples, guestSamples] = await Promise.all([side.page, guest].map(samplesOf));
       const judged = judgeScenario({ name, about: about[name], host: hostSamples, guest: guestSamples, frameMs });
@@ -909,6 +926,7 @@ export async function runCoop(side, options) {
       // (a scenario's own canary, which must be caught: the belt's skulls, the Stag's stakes)
       if (canary && name === 'belt') problems.push(...beltCanary(judged.problems, lines));
       else if (canary && name === 'stag') problems.push(...stagCanaryLines(judged.problems, lines));
+      else if (canary && name === 'hitches') problems.push(...hitchesCanaryLines(judged.problems, lines));
       else problems.push(...judged.problems);
       if (canary && name === 'afk') {
         await callPage(guest, 'coopAfkQuiet', { quiet: false });
