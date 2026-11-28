@@ -41,6 +41,17 @@ shown as long on each; the same stones at the same spots. Over a 300 ms link the
 radius over 983 frames, shown 16.38 s and 16.37 s, the six stones 5 mm apart at most. `--canary` has the guest's game
 raise each stone a metre off the spot it's told, which must read as the stones apart (1.001 m).
 
+`coop --scenarios hitches` (`page/coopHitches.ts`, judged by `node/coopHitches.mjs`; run last of the combat
+scenarios by default): a game's long frames, as a busy game has them. A page's socket hands it a message only between
+frames, so on the page each long frame read as a late link: the relay's pings read 56 to 97 ms at wave 44 on a route
+of 22 (the main thread's wait), and each partner's play-out waited 80 to 210 ms more than the link needed (the
+scoreboard's "shown N ms behind"). The relay's socket is a worker's now (`src/net/relaySocket.ts`), which stamps when
+each message arrived, and the play-out judges the link's lateness by that. The scenario plays `walk`, and from 6 s on
+each game holds the messages come to it for 150 ms every 2 s (the guest's half way between the host's); the lab's
+link hands each over with its arrival as its event's `timeStamp`, as the worker's does. Judged: each game's play-out
+(its median wait behind the freshest report) with the hitches against before them, at most 30 ms longer. `--canary`
+hands the messages over unstamped, as main's link did, which must read as a longer wait.
+
 `coop --scenarios seats` runs alone, in the village with no run (`node/coopSeats.mjs`, `page/coopSeats.ts`): a seat a
 partner sits on can't be used (`seatTaken` in `world/seats.ts`; from the owner, "need to check if another player is
 already sitting, if yes, then cannot use an object", "it should work in coop ofc (in village)"). The guest sits on one

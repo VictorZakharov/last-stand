@@ -32,6 +32,7 @@ export default {
         'wall-touch',
         'banks',
         'belt', 'choir',
+        'hitches',
         'rootmother', 'rootcage', 'rootburrow', 'stag', 'tavern', 'tavern-recovery', 'hidden-host',
       ],
       help: 'the scenarios (all the hero can play by default): walk, foes, shoot, evade (a ranger or a mage), dodge, '
@@ -41,6 +42,8 @@ export default {
         + 'stakes\' life), rootcage (her root cage at the guest, the host breaking a root of it), rootburrow (her burrow '
         + 'alike on both screens), belt (the '
         + 'Ossuary Twins\' belt skulls); '
+        + 'hitches (as walk, each game holding the messages come to it for 150 ms every 2 s, as a long frame does: '
+        + 'the play-out must wait no longer for them; its canary the messages handed over unstamped); '
         + 'ends alone: the ways a run ends that left a '
         + 'player apart from the party; banks alone (--party 3): every player banking after a wave, in turns and '
         + 'at once, every game back in the lobby by itself; houses alone: a partner gone into a village house shown to the host outside '

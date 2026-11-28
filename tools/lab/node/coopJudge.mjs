@@ -9,6 +9,7 @@ import { describePings } from './coopPings.mjs';
 import { describeChat } from './coopChat.mjs';
 import { describeAfk } from './coopAfk.mjs';
 import { describeStag } from './coopStag.mjs';
+import { describeHitches } from './coopHitches.mjs';
 
 /** the longest delay looked for, frames (a second and a quarter) */
 const MOST_DELAY = 75;
@@ -1216,5 +1217,6 @@ export function judgeScenario({ name, about, host, guest, frameMs }) {
   if (name === 'afk') add(describeAfk(host, guest, frameMs));
   if (name === 'wall') add(describeWall(host, guest, frameMs));
   if (name === 'belt') add(describeBelt(host, guest));
+  if (name === 'hitches') add(describeHitches(host, guest, frameMs));
   return { lines, problems };
 }

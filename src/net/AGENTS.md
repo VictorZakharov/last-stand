@@ -91,6 +91,16 @@ end touch the same lines and conflict (`npm run check:sorted` holds the order; t
 <!-- sorted -->
 - `afk.ts`: who in a room is away from the game (#847, the protocol's part `afk-1`): this game's player while its page is hidden or no key, click, touch or mouse move has come for a minute (`IDLE_MS`), said in its state (`StateMsg.afk`); a partner while its state says so or none has come from it for 3 s (`QUIET_MS`), as a hidden page draws no frames and sends nothing. Shown as Idle over the name tag (from review, "not everyone knows what AFK is"; `updateNameTags` in `ui/coop.ts`). `npm run lab -- coop --scenarios afk` (`--canary`).
 - `friends.ts`: friends and who of them is online (#676 part 2; the service `server/saves/friends.mjs`): a cloud save account's, per site (a preview's are its own), so a player signed out of cloud saves has none. Signed in, the game says where it is every 30 s (8 s while Play together is open), and at once when its room changes (checked every 2 s, `presenceRoom`): its name tag, class, and its room's code, name, map, wave, players and size, or none; the answer is the friends as they stand. A friend's room is shown to friends only where its host lets them (`RoomPlan.friends`, the create page's "Friends can see and join it"); the host tells its guests in the `welcome` (`kind`, `name`, `max`, `fr`; the protocol's part `friends-1`), so a guest's game says the room only as the host allows. Joining a friend's room is an ordinary join by its code (the relay still asks a password room's password). An invite is the service's, held 10 minutes; the inviter's game sends the room as it stands. Appear offline is the device's (`last-stand.friends.hidden.v1`). `npm run lab -- friends` (`--canary`).
+- `relaySocket.ts`: the relay's WebSocket is a worker's (`relaySocket.worker.ts`), which times the ping to the
+  server and stamps when each message arrived; the page's own socket only where no worker can be made. On the
+  page a reply waited for the frame being drawn: four players in one city, 20 ms from the relay (`npm run lab --
+  relay`: 22.7 ms, the relay's own share a ms or two, a 4-player fight's messages moving it nothing), saw pings of
+  56 to 97 ms at wave 44, and each long frame read as a late link, so a partner's play-out (`Timeline.heard`, given
+  the arrival by `Link.onMessage`) waited 80 to 210 ms more than the link needed (the scoreboard's "shown N ms
+  behind"). An arrival is taken only where it's a moment of the page's clock within 3 s (`arrivedAt`: the lab's
+  clock isn't the worker's), else it's now, as before. `npm run lab -- coop --scenarios hitches` (each game's
+  messages held 150 ms every 2 s on a link of no jitter: the play-out waits 2 ms longer, 86 to 102 with the stamps
+  left off, its `--canary`); `lab rooms` plays the worker's socket against a relay of the lab's own.
 - `session.ts`: a hero something else moves (seized, thrown, knocked: placed by what holds him, his own velocity
   none) reports how fast he went since his last report as his velocity (`reportedVelocity`), and how high he's held
   up or thrown (`hl`, `Player.lift`): reporting none, a partner's copy of a hero the Stag of Ash tossed stood on the

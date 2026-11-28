@@ -4,6 +4,7 @@
 // server down there's no co-op. `?server=wss://host` picks another relay server, and `?net=local` a BroadcastChannel
 // between tabs of one browser, for testing with no server at all.
 import { netLog, countMsg, watchServer, serverState, serverRtt } from './netlog';
+import { arrivedAt, relaySocket, type RelaySocket } from './relaySocket';
 
 export type Channel = 'hello' | 'look' | 'pl' | 'ev' | 'w' | 'dmg' | 'st' | 'ctl';
 
@@ -13,7 +14,9 @@ export interface Link {
   /** a public room's card, sent to the relay by its host for the list (`server/relay/rooms.mjs`) */
   card(c: RoomCard): void;
   send(ch: Channel, data: unknown, to?: string): void;
-  onMessage(fn: (ch: Channel, data: unknown, from: string) => void): void;
+  /** each message as it comes, with when it arrived (`performance.now()`: in a worker, before the frame that hands
+   *  it over; a partner's play-out judges the link's lateness by it, `Timeline.heard`) */
+  onMessage(fn: (ch: Channel, data: unknown, from: string, at: number) => void): void;
   onJoin(fn: (peer: string) => void): void;
   onLeave(fn: (peer: string) => void): void;
   leave(): void;
@@ -134,12 +137,11 @@ function serverLink(code: string, server: string, as: LinkAs): Promise<Link> {
   const url = `${server.replace(/\/+$/, '')}/room/${APP}/${code}?id=${self}${flags}`;
   /** why the relay turned this link away, as it said before closing the socket */
   let refused: RefusedWhy | null = null;
-  let onMsg: (ch: Channel, data: unknown, from: string) => void = () => {};
+  let onMsg: (ch: Channel, data: unknown, from: string, at: number) => void = () => {};
   let join: (peer: string) => void = () => {}, gone: (peer: string) => void = () => {};
   const peers = new Set<string>();
-  let ws: WebSocket | null = null, left = false, tries = 0, opened = false, lostAt = 0;
+  let ws: RelaySocket | null = null, left = false, tries = 0, opened = false, lostAt = 0;
   const host = new URL(server).host;
-  let pinger: ReturnType<typeof setInterval> | undefined;
   watchServer(host);
   netLog(`opening the link to room ${code} as ${self.slice(0, 6)} through ${host}`);
   return new Promise((resolve, reject) => {
@@ -147,16 +149,16 @@ function serverLink(code: string, server: string, as: LinkAs): Promise<Link> {
       self,
       send(ch, data, to) {
         countMsg('out');
-        if (ws?.readyState === WebSocket.OPEN) ws.send(JSON.stringify(to ? { ch, d: data, to } : { ch, d: data }));
+        ws?.send(JSON.stringify(to ? { ch, d: data, to } : { ch, d: data }));
       },
       card(c) { toServer({ t: 'card', c }); },
       onMessage(fn) { onMsg = fn; },
       onJoin(fn) { join = fn; },
       onLeave(fn) { gone = fn; },
-      leave() { left = true; clearInterval(pinger); for (const t of missing.values()) clearTimeout(t); missing.clear(); netLog('left the room'); ws?.close(LEFT_CODE, 'left'); },
+      leave() { left = true; for (const t of missing.values()) clearTimeout(t); missing.clear(); netLog('left the room'); ws?.close(LEFT_CODE, 'left'); },
     };
     /** a message for the relay itself (a host's password and card, a joiner's password) */
-    const toServer = (m: unknown) => { if (ws?.readyState === WebSocket.OPEN) ws.send(JSON.stringify(m)); };
+    const toServer = (m: unknown) => ws?.send(JSON.stringify(m));
     /** peers not back after a reconnect, and when they're given up */
     const missing = new Map<string, ReturnType<typeof setTimeout>>();
     const lose = (p: string) => { missing.delete(p); if (peers.delete(p)) { netLog(`peer ${p.slice(0, 6)} left`); gone(p); } };
@@ -166,16 +168,16 @@ function serverLink(code: string, server: string, as: LinkAs): Promise<Link> {
       if (!peers.has(p)) { peers.add(p); netLog(`peer ${p.slice(0, 6)} joined`); join(p); }
     };
     const connect = () => {
-      const t0 = performance.now(), sock = new WebSocket(url);
+      const t0 = performance.now(), sock = relaySocket(url);
       ws = sock;
       serverState('connecting');
       sock.onopen = () => { tries = 0; serverState('open'); netLog(`server ${host} open after ${((performance.now() - t0) / 1000).toFixed(1)}s`); };
-      sock.onmessage = (e) => {
+      sock.onRtt = serverRtt;
+      sock.onmessage = (text, at) => {
         let m: {
           t?: string; p?: string; peers?: string[]; ch?: Channel; d?: unknown; from?: string; n?: number; v?: number; why?: string;
         };
-        try { m = JSON.parse(e.data as string); } catch { return; }
-        if (m.t === 'pong') { if (typeof m.n === 'number') serverRtt(performance.now() - m.n); return; }
+        try { m = JSON.parse(text); } catch { return; }
         // a locked room asks for its password (again after a reconnect: the relay may have restarted)
         if (m.t === 'locked') {
           if (as.password) toServer({ t: 'pass', pw: as.password });
@@ -198,10 +200,11 @@ function serverLink(code: string, server: string, as: LinkAs): Promise<Link> {
           if (opening?.password) toServer({ t: 'lock', pw: opening.password });
           // (the peers already there are met once the session has its handlers on the link, after it's resolved)
           if (!opened) {
-            opened = true; resolve(link); setTimeout(() => sock.onmessage?.(e), 0);
-            pinger = setInterval(() => { if (ws?.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ t: 'ping', n: performance.now() })); }, PING_MS);
+            opened = true; resolve(link); setTimeout(() => sock.onmessage(text, at), 0);
+            sock.ping(PING_MS);
             return;
           }
+          sock.ping(PING_MS);
           // (after a reconnect: whoever came meanwhile is new, and whoever isn't there yet has GRACE to come back, as a
           // restarted server, a deploy, loses its rooms and every game reconnects on its own: told at once, the guest
           // took the host as gone and left the room before the host was back)
@@ -210,16 +213,15 @@ function serverLink(code: string, server: string, as: LinkAs): Promise<Link> {
           for (const p of now) arrive(p);
         } else if (m.t === 'join' && m.p) arrive(m.p);
         else if (m.t === 'leave' && m.p && peers.delete(m.p)) { netLog(`peer ${m.p.slice(0, 6)} left`); gone(m.p); }
-        else if (m.ch && m.from && peers.has(m.from)) { countMsg('in'); onMsg(m.ch, m.d, m.from); }
+        else if (m.ch && m.from && peers.has(m.from)) { countMsg('in'); onMsg(m.ch, m.d, m.from, at); }
       };
-      sock.onclose = (e) => {
+      sock.onclose = (closeCode, reason) => {
         if (ws !== sock || left) return;
         serverState('closed');
-        netLog(`server ${host} closed (${e.code}${e.reason ? ' ' + e.reason : ''})`);
+        netLog(`server ${host} closed (${closeCode}${reason ? ' ' + reason : ''})`);
         // (turned away by the room: said why, and not tried again)
         if (refused) {
           left = true;
-          clearInterval(pinger);
           if (!opened) reject(new RoomRefused(refused));
           else for (const p of [...peers]) { peers.delete(p); gone(p); }
           return;
@@ -227,7 +229,7 @@ function serverLink(code: string, server: string, as: LinkAs): Promise<Link> {
         // (never opened: the server is down or turned us away; open, it has RECONNECT to come back: a deploy restarts it)
         if (!opened) { reject(new ServerDown(`the co-op server ${host} didn't answer`)); return; }
         if (!tries++) lostAt = performance.now();
-        if (performance.now() - lostAt > RECONNECT) { clearInterval(pinger); netLog(`server ${host} lost`); for (const p of [...peers]) { peers.delete(p); gone(p); } return; }
+        if (performance.now() - lostAt > RECONNECT) { netLog(`server ${host} lost`); for (const p of [...peers]) { peers.delete(p); gone(p); } return; }
         setTimeout(connect, Math.min(4000, 500 * tries));
       };
     };
@@ -241,7 +243,7 @@ function localLink(code: string): Link {
   const self = Math.random().toString(36).slice(2, 10);
   const bc = new BroadcastChannel(`${APP}:${code}`);
   const peers = new Set<string>();
-  let onMsg: (ch: Channel, data: unknown, from: string) => void = () => {};
+  let onMsg: (ch: Channel, data: unknown, from: string, at: number) => void = () => {};
   let join: (peer: string) => void = () => {}, gone: (peer: string) => void = () => {};
   type Packet = { from: string; to?: string; ch?: Channel; data?: unknown; sys?: 'here' | 'bye' | 'ack' };
   let left = false;
@@ -256,7 +258,9 @@ function localLink(code: string): Link {
       if (p.sys === 'here') post({ sys: 'ack', to: p.from });
       return;
     }
-    if (peers.has(p.from) && p.ch) onMsg(p.ch, p.data, p.from);
+    // (when it came: its event's own time, made as a channel hands it over, as now; the lab's carried link stamps the
+    // moment it arrived)
+    if (peers.has(p.from) && p.ch) onMsg(p.ch, p.data, p.from, arrivedAt(e.timeStamp));
   };
   const bye = () => post({ sys: 'bye' });
   window.addEventListener('pagehide', bye);

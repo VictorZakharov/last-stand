@@ -443,13 +443,13 @@ function wire(l: Link): void {
     if (role.current === 'guest' || session.status === 'joining') send('hello', hello(), peer);
   });
   l.onLeave((peer) => peerLeft(peer));
-  l.onMessage((ch, data, from) => {
+  l.onMessage((ch, data, from, at) => {
     const m = data as Record<string, unknown>;
     if (ch === 'hello') onHello(from, m);
     else if (ch === 'look') onLook(from, m as unknown as Look);
-    else if (ch === 'pl') onState(from, m as unknown as StateMsg);
-    else if (ch === 'ev') onActions(from, m as unknown as ActionsMsg);
-    else if (ch === 'w') onFight(from, m as unknown as WorldMessage);
+    else if (ch === 'pl') onState(from, m as unknown as StateMsg, at);
+    else if (ch === 'ev') onActions(from, m as unknown as ActionsMsg, at);
+    else if (ch === 'w') onFight(from, m as unknown as WorldMessage, at);
     else if (ch === 'dmg') onHits(from, m as unknown as HitReport[]);
     else if (ch === 'st') onNumbers(from, m as unknown as NumbersMsg);
     else if (ch === 'ctl') onControl(from, m);
@@ -848,14 +848,15 @@ interface StateMsg {
 /** A player's actions since its last frame, stamped with its clock (ms). */
 interface ActionsMsg { t: number; a: PlayerAction[] }
 
-function onState(from: string, m: StateMsg): void {
+/** `at`: when each message arrived (`Link.onMessage`), which its sender's timeline judges the link's lateness by. */
+function onState(from: string, m: StateMsg, at: number): void {
   const peer = session.peers.get(from);
   if (!peer?.player) return;
   if (receivePortrait(peer.player, m.av)) {
     if (peer.look) peer.look.av = portraitOf(peer.player);
     hooks.changed();
   }
-  peer.clock.heard(m.t);
+  peer.clock.heard(m.t, at);
   heardFrom(peer.player, m.afk === 1);
   // (gone into a house or out of one: its place in the other frame, never a slide across from the last)
   const room = m.rm ?? 0;
@@ -870,17 +871,17 @@ function onState(from: string, m: StateMsg): void {
   if (inRun !== peer.inRun) { peer.inRun = inRun; syncAway(); hooks.changed(); }
 }
 
-function onActions(from: string, m: ActionsMsg): void {
+function onActions(from: string, m: ActionsMsg, at: number): void {
   const peer = session.peers.get(from);
   if (!peer?.player) return;
-  peer.clock.heard(m.t);
+  peer.clock.heard(m.t, at);
   for (const a of m.a) peer.actions.push(m.t, a);
 }
 
-function onFight(from: string, m: WorldMessage): void {
+function onFight(from: string, m: WorldMessage, at: number): void {
   const peer = session.peers.get(from);
   if (!peer || from !== session.hostId) return;
-  peer.clock.heard(m.t);
+  peer.clock.heard(m.t, at);
   onWorld(m);
 }
 
