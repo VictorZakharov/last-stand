@@ -28,7 +28,7 @@ import { Lights } from './lights';
 import { Bodies } from './bodies';
 import { Draws } from './draws';
 import { Maps } from './maps';
-import { Materials } from './materials';
+import { Materials, type MaterialsLooked } from './materials';
 import { SEE_FLAGS, SeeKinds } from './seeKinds';
 import { Sprites } from './sprites';
 import { Stage } from './stage';
@@ -59,6 +59,8 @@ export class Bridge {
   readonly bodies: Bodies;
   /** what a frame handed over and drew */
   readonly stats: Core['stats'];
+  /** what the last frame asked of its materials, by look (a harness's) */
+  get materialsLooked(): MaterialsLooked { return this.materials.counted; }
   /** what wasn't handed over, by its kind, on the last frame */
   readonly skipped: Core['skipped'];
   /** how many of each the engine holds */

@@ -2,7 +2,7 @@
 // hero's dye, most at its edges, wisps drifting slowly up it and breathing (`ITEM_GLOW` in core/materials.ts). No
 // light and no program of its own: each item's parts draw with copies of their kit materials (`kitCopy`), the same
 // program as every kit material's, their glow a uniform's colour of their own.
-import { Color, Material, Mesh, Node } from '../../engine/api/index.ts';
+import { Color, Material, Mesh, Node, noteChanged } from '../../engine/api/index.ts';
 import { ITEM_GLOW, kitCopy, ownAura } from '../../core/materials';
 import { sameKitMaterial } from './kitTwin';
 import { isDualQuaternionSkinned } from './dualQuaternion';
@@ -43,6 +43,8 @@ export function drawnIn(mesh: Mesh, materials: Material[]): boolean {
 
 export class ItemGlows {
   private readonly auras = new Map<GlowSlot, Color[]>();
+  /** each slot's glowing materials, told as their glow is set (`noteChanged`: the engine asks them only then) */
+  private readonly glowing = new Map<GlowSlot, Material[]>();
 
   /** `kitMats`: the kit's materials, which the copies join (disposed with them) */
   constructor(private readonly kitMats: Material[]) {}
@@ -58,6 +60,8 @@ export class ItemGlows {
     const copies = new Map<Material, Material>();
     const auras = this.auras.get(slot) ?? [];
     this.auras.set(slot, auras);
+    const glowing: Material[] = [];
+    this.glowing.set(slot, glowing);
     for (const part of parts) {
       part.traverse((o) => {
         const mesh = o as Mesh;
@@ -69,13 +73,17 @@ export class ItemGlows {
           if (inPlace) {
             copies.set(material, material);
             const aura = ownAura(material);
-            if (aura) auras.push(aura);
+            if (aura) {
+              auras.push(aura);
+              glowing.push(material);
+            }
             return material;
           }
           copy = kitCopy(material);
           copies.set(material, copy);
           this.kitMats.push(copy);
           auras.push((copy as unknown as { kitLooks: { aura: { value: Color } } }).kitLooks.aura.value);
+          glowing.push(copy);
           return copy;
         };
         mesh.material = Array.isArray(mesh.material) ? mesh.material.map(mine) : mine(mesh.material);
@@ -91,6 +99,7 @@ export class ItemGlows {
       const share = rarity ? WEAPON_SHARE[rarity] ?? 1 : 1;
       const scale = slot === 'weapon' ? ITEM_GLOW.weapon * share : 1;
       for (const aura of auras) glowOf(rarity, aura).multiplyScalar(scale);
+      for (const material of this.glowing.get(slot) ?? []) noteChanged(material);
     }
   }
 }

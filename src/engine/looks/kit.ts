@@ -5,7 +5,7 @@
 // another colour, a worn item's glow in its rarity's colour, the hood's shade, the fur's sway
 // (entities/models/furSway.ts), and a hand's maps read triplanar (entities/models/triplanar.ts). A held blade's highlights through the eyes are held to a most (`kit.u.uShine`).
 import type { LitMaterial, Material, Vec3 } from '../api/index.ts';
-import { NEAR_GLOW, itemGlowUniforms, type KitLooks } from '../../core/materials';
+import { ITEM_GLOW, NEAR_GLOW, itemGlowUniforms, type KitLooks } from '../../core/materials';
 import { rustLook, rustShader, type RustLook, type RustShader } from '../custom';
 
 /** how many of the look's numbers tell two materials apart (past them: the clocks, and the glow's shape) */
@@ -146,7 +146,8 @@ fn surface_hook(s: ptr<function, Surface>, in: VertexOut) -> bool {
   // (a worn item's glow in its rarity's colour, black for none)
   let aura = m.c[5].xyz;
   if (aura.r + aura.g + aura.b > 0.0) {
-    (*s).emissive += aura * m.c[10].w * aura_tendrils(at, m.c[8].x, m.c[9], m.c[10]);
+    // (its clock the frame's time over its cycle: every glow at one moment, none of them described again for it)
+    (*s).emissive += aura * m.c[10].w * aura_tendrils(at, fract(g.cam_pos.w * m.c[8].x), m.c[9], m.c[10]);
   }
   // (in a hood's shade, all its light dimmed: x how deep, y where up the mesh it's full, z where it's gone, w how
   // much more aside)
@@ -178,7 +179,7 @@ function kitLook(kit: KitLooks, material: LitMaterial): RustLook {
     moved() {
       // (its opacity, flags and colours by its version alone: each moves it as it changes)
       now[0] = material.version;
-      now[1] = glows() ? itemGlowUniforms.clock.value : 0;
+      now[1] = 0;
       now[2] = itemGlowUniforms.loop.value.w;
       const sway = fur();
       now[3] = sway ? sway.time.value : 0;
@@ -209,7 +210,7 @@ function kitLook(kit: KitLooks, material: LitMaterial): RustLook {
       else out.fill(0, AT.lag, AT.lag + 3);
       const tile = material.userData.triplanar as number | undefined;
       out[AT.triplanar] = tile ? 1 / tile : 0;
-      out[AT.auraClock] = glows() ? itemGlowUniforms.clock.value : 0;
+      out[AT.auraClock] = glows() ? 1 / ITEM_GLOW.cycle : 0;
       out[AT.furTime] = sway ? sway.time.value : 0;
       itemGlowUniforms.shape.value.toArray(out, AT.shape);
       itemGlowUniforms.loop.value.toArray(out, AT.loop);

@@ -7,6 +7,7 @@
 import type { KitLooks } from '../core/materials';
 import type { AnyMaterial } from './materials';
 import type { Core } from './core';
+import { lookOf } from './custom';
 
 /** where a record's own numbers begin, and how many (plan.rs `OWN`, `OWN_FLOATS`) */
 export const OWN = 24;
@@ -37,9 +38,30 @@ export function writeKit(kit: KitNumbers | null, into: Float32Array, at: number)
   into[at + 7] = kit.uShine.value;
 }
 
-/** A node's kit, and how many meshes drawn on it hold it there. */
+/** What writes a thing's own numbers at `at` of `into`: its kit's, or its look's (`RustLook.own`). */
+export type OwnWriter = (into: Float32Array, at: number) => void;
+
+/** each kit's writer, made once */
+const kitWriters = new WeakMap<KitNumbers, OwnWriter>();
+
+/** What writes `material`'s thing's own numbers: its kit's, or its look's; none where it has neither. */
+export function ownWriterOf(material: AnyMaterial): OwnWriter | null {
+  const kit = kitOf(material);
+  if (kit) {
+    let writer = kitWriters.get(kit);
+    if (!writer) {
+      writer = (into, at) => writeKit(kit, into, at);
+      kitWriters.set(kit, writer);
+    }
+    return writer;
+  }
+  const look = lookOf(material);
+  return look?.own ? (into, at) => look.own!(into, at) : null;
+}
+
+/** A node's writer, and how many meshes drawn on it hold it there. */
 interface Held {
-  kit: KitNumbers;
+  writer: OwnWriter;
   holders: number;
 }
 
@@ -50,14 +72,14 @@ export class OwnNumbers {
 
   constructor(private core: Core) {}
 
-  /** `kit` shown on the records drawn on node `node` from now on. */
-  hold(node: number, kit: KitNumbers): void {
+  /** `writer`'s numbers shown on the records drawn on node `node` from now on. */
+  hold(node: number, writer: OwnWriter): void {
     const held = this.byNode.get(node);
     if (held) {
-      held.kit = kit;
+      held.writer = writer;
       held.holders++;
     } else {
-      this.byNode.set(node, { kit, holders: 1 });
+      this.byNode.set(node, { writer, holders: 1 });
     }
   }
 
@@ -70,13 +92,13 @@ export class OwnNumbers {
     view.fill(0, node * OWN_FLOATS, (node + 1) * OWN_FLOATS);
   }
 
-  /** Every held node's numbers written as its kit stands now. */
+  /** Every held node's numbers written as its kit or look stands now. */
   write(): void {
     let most = -1;
     for (const node of this.byNode.keys()) if (node > most) most = node;
     if (most < 0) return;
     const view = this.viewFor(most);
-    for (const [node, held] of this.byNode) writeKit(held.kit, view, node * OWN_FLOATS);
+    for (const [node, held] of this.byNode) held.writer(view, node * OWN_FLOATS);
   }
 
   /** The engine's nodes' own numbers, viewed with room for node `node`: adding nodes or growing memory moves them. */

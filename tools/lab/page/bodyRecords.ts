@@ -24,6 +24,18 @@ export interface BodyCensus {
   records: number;
   draws: number;
   objects: number;
+  /** the materials the frame asked whether they changed, and described again, by look (`Materials.counted`) */
+  looked: Map<string, number>;
+  described: Map<string, number>;
+}
+
+/** How many a count holds in all, then each name's, the most first. */
+function countWords(counts: Map<string, number>): string {
+  let all = 0;
+  for (const count of counts.values()) all += count;
+  const sorted = [...counts].sort((a, b) => b[1] - a[1]);
+  const each = sorted.map(([name, count]) => `${name} ${count}`);
+  return each.length ? `${all} (${each.join(', ')})` : '0';
 }
 
 /** Each body's root in the scene with its kind's name: every hero's and every standing foe's. */
@@ -90,7 +102,11 @@ export async function bodyCensus(lab: Lab): Promise<BodyCensus> {
     for (const material of materialsOf(object as Mesh)) count.materials.add(material);
   }
   const stats = bridge.stats;
-  return { kinds, rest, records: stats.records, draws: stats.draws, objects: stats.objects };
+  const { looked, described } = bridge.materialsLooked;
+  return {
+    kinds, rest, records: stats.records, draws: stats.draws, objects: stats.objects,
+    looked: new Map(looked), described: new Map(described),
+  };
 }
 
 /** The census as a report's lines: the frame's counts, then each kind's, the most meshes first. */
@@ -98,6 +114,8 @@ export function censusLines(census: BodyCensus): string[] {
   const lines = [
     `handed to the engine in one frame: ${census.records} records, ${census.draws} draws, `
       + `${census.objects} objects walked; ${census.rest} meshes no body's`,
+    `  its materials asked whether they changed: ${countWords(census.looked)}`,
+    `  described again: ${countWords(census.described)}`,
   ];
   const sorted = [...census.kinds].sort((a, b) => b[1].meshes - a[1].meshes);
   for (const [name, count] of sorted) {

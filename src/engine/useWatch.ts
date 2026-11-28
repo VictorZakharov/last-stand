@@ -52,6 +52,11 @@ export class UseWatch<Owner extends object, Part extends object> {
     this.untrack(owner);
   }
 
+  /** Whether `owner` is looked at every frame (`WatchRules.polled`). */
+  isPolled(owner: Owner): boolean {
+    return this.polled.has(owner);
+  }
+
   /** Everything looked at on the next frame. */
   lookAtAll(): void {
     this.all = true;

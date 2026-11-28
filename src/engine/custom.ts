@@ -52,6 +52,10 @@ export interface RustLook {
   moved?(frame: number): boolean;
   /** its meshes' `onBeforeRender` is run before each is recorded (it lists what's drawn, sets the numbers) */
   before?: boolean;
+  /** its thing's own numbers, 8 of them, written at `at` of `out` each frame onto the node its records are drawn on
+   *  (`ownNumbers.ts`; read as `in.own0`, `in.own1`): what moves as the game runs (a fire's moment of its loop, its
+   *  puff), which in `numbers` described its material again every frame */
+  own?(out: Float32Array, at: number): void;
   /** its draw's list, as it is this frame: floats its vertex hook reads by `bones[(*v).list + row]`, 16 a row
    *  (a field's tiles, any number of them: its numbers hold 80 at most). For a mesh that isn't skinned */
   list?(): Float32Array;
@@ -61,6 +65,29 @@ export interface RustLook {
 }
 
 const looks = new WeakMap<Material, RustLook>();
+
+/** `look` asked whether it moved by its numbers alone (`RustLook.moved`): each frame they're read and set beside
+ *  those last read. For a look whose numbers are all it shows by and are few, its clocks among its own numbers
+ *  (`own`): described again only as they move, where a look with no `moved` was described every frame. */
+export function movedByNumbers(look: Omit<RustLook, 'moved'>): RustLook {
+  const was = new Float32Array(LOOK_FLOATS).fill(NaN);
+  const now = new Float32Array(LOOK_FLOATS);
+  return {
+    ...look,
+    moved() {
+      now.fill(0);
+      look.numbers(now);
+      let moved = false;
+      for (let at = 0; at < LOOK_FLOATS; at++) {
+        if (now[at] !== was[at]) {
+          was[at] = now[at];
+          moved = true;
+        }
+      }
+      return moved;
+    },
+  };
+}
 
 /** `material` drawn by `look` under the Rust engine. */
 export function rustLook<M extends Material>(material: M, look: RustLook): M {

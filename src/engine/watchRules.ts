@@ -5,10 +5,28 @@ import { Attribute, Geometry, type Texture } from './api/index.ts';
 import { lookOf } from './custom';
 import type { AnyMaterial } from './materials';
 import { UseWatch } from './useWatch';
+import type { KitLooks } from '../core/materials';
 
-/** Whether `material` is looked at every frame: a look of its own, the kit's, or a see-through kind. */
+/**
+ * Whether a kit's `material` has numbers of its own that move as the game runs: a fur's sway (its clock, its lag)
+ * or a worn item's glow (its clock). The kit's flash, dissolve, frost and char are its thing's (`ownNumbers.ts`),
+ * and what else a kit's material shows (its glow's colour, its hood's shade, its hair's colour) is told as it's set
+ * (`noteChanged`: `ItemGlows.set`, `shade` and `setHair` in models/head.ts). Every foe's material was asked every
+ * frame whether these had moved: a third of a slowed CPU's render at wave 36.
+ */
+function kitMoves(material: AnyMaterial, looks: KitLooks): boolean {
+  const fur = material.userData.fur as { lag?: { value?: { isVector3?: boolean } } } | undefined;
+  if (fur?.lag?.value?.isVector3) return true;
+  const aura = looks.aura.value;
+  return aura.r + aura.g + aura.b > 0;
+}
+
+/** Whether `material` is looked at every frame: a look of its own whose numbers follow the game's, or a see-through
+ *  kind's. */
 function polledEachFrame(material: AnyMaterial): boolean {
-  if (lookOf(material) || (material as { kitLooks?: unknown }).kitLooks) return true;
+  const looks = (material as { kitLooks?: KitLooks }).kitLooks;
+  if (looks) return kitMoves(material, looks) || !!material.seeThrough;
+  if (lookOf(material)) return true;
   return !!material.seeThrough;
 }
 

@@ -15,7 +15,7 @@ import type { Geometries } from './geometry';
 import { watchGeometries, watchMaterials } from './watchRules';
 import type { AnyMaterial, Materials } from './materials';
 import { SEE_FLAGS, type SeeKinds } from './seeKinds';
-import { OWN, OwnNumbers, kitOf, writeKit } from './ownNumbers';
+import { OWN, OWN_FLOATS, OwnNumbers, ownWriterOf } from './ownNumbers';
 import { casterGeometry } from '../entities/models/farDetail';
 
 /** a record's flags (plan.rs) */
@@ -185,6 +185,9 @@ export class Draws {
     for (const material of this.materialWatch.toVisit(changed)) {
       const use = this.materialUse.get(material);
       if (!use) continue;
+      // (one asked every frame and drawn nowhere now, another place's: asked once it's drawn again. The crypt's fight
+      // asked the village's grass, portals and skies every frame)
+      if (this.materialWatch.isPolled(material) && !anySeen(use.meshes, seen)) continue;
       const stamp = this.materialStamp(material);
       if (stamp === use.stamp) continue;
       use.stamp = stamp;
@@ -268,11 +271,11 @@ export class Draws {
       entry.drawn.push(engine.draw_on_node(node, record, placing, placed, skin, reach));
     }
     this.core.freshViews();
-    // (its kit's numbers on the node, written each frame: `ownNumbers.ts`)
+    // (its kit's or its look's own numbers on the node, written each frame: `ownNumbers.ts`)
     for (const material of entry.materials) {
-      const kit = kitOf(material);
-      if (!kit) continue;
-      this.own.hold(node, kit);
+      const writer = ownWriterOf(material);
+      if (!writer) continue;
+      this.own.hold(node, writer);
       entry.ownOn = node;
       break;
     }
@@ -479,7 +482,9 @@ export class Draws {
     r[at + 6] = flags;
     r[at + RAW_INSTANCES] = raw;
     // (kept on a node, the engine writes its node's in their place)
-    writeKit(kitOf(material), r, at + OWN);
+    const writer = ownWriterOf(material);
+    if (writer) writer(r, at + OWN);
+    else r.fill(0, at + OWN, at + OWN + OWN_FLOATS);
     const skinned = mesh as SkinnedMesh;
     if (skinned.isSkinnedMesh && frame && skinned.bindMode === AttachedBindMode) {
       // (bound where it stands: its world after its world's inverse, as three keeps an attached bind's inverse. By
@@ -604,4 +609,10 @@ function sameItems<T>(a: readonly T[], b: readonly T[]): boolean {
   if (a.length !== b.length) return false;
   for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
   return true;
+}
+
+/** Whether any of `meshes` is shown now. */
+function anySeen(meshes: Set<Mesh>, seen: (node: Node) => boolean): boolean {
+  for (const mesh of meshes) if (seen(mesh)) return true;
+  return false;
 }

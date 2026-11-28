@@ -4,7 +4,7 @@
 // the head is 1/7.5 of the heroes' stature (a realistic figure: an ideal one is 8 heads, a heroic 8.5).
 import {
   Attribute, CanvasTexture, CatmullRom3, ClampToEdgeWrapping, Color, DataTexture, DoubleSide, floats, Geometry,
-  LinearFilter, LinearMipmapLinearFilter, LitMaterial, Material, mergeGeometries, Mesh, NoColorSpace, Node,
+  LinearFilter, LinearMipmapLinearFilter, LitMaterial, Material, mergeGeometries, Mesh, NoColorSpace, Node, noteChanged,
   RepeatWrapping, RGBAFormat, SRGBColorSpace, Texture, Vec2, Vec3, Vec4,
 } from '../../engine/api/index.ts';
 import * as shapes from '../../engine/api/shapes/index.ts';
@@ -609,7 +609,10 @@ export function* headSteps(
   const shade = (depth: number) => head.traverse((o) => {
     if (o.userData.hoodPart) return;
     const m = (o as Mesh).material as Material | undefined;
-    (m?.userData.shade as { value: Vec4 } | undefined)?.value.set(depth, full, gone, 6);
+    const shade = m?.userData.shade as { value: Vec4 } | undefined;
+    if (!m || !shade) return;
+    shade.value.set(depth, full, gone, 6);
+    noteChanged(m);
   });
   // (each material's colour as built, from the face's hair: the cards `hk` times it, the cap `capK` times, the tufts 1.2)
   const hairShift = (skin as unknown as { kitLooks: { hair: { value: Vec3 } } }).kitLooks.hair.value;
@@ -619,6 +622,7 @@ export function* headSteps(
     capMat?.color.setRGB(c[0] * capK, c[1] * capK, c[2] * capK, SRGBColorSpace);
     tuftMat?.color.setRGB(c[0] * hk, c[1] * hk, c[2] * hk, SRGBColorSpace).multiplyScalar(1.2 / hk);
     hairShift.set(c[0] - L.hair[0], c[1] - L.hair[1], c[2] - L.hair[2]);
+    noteChanged(skin);
   };
   return { group: head, face, eyes, surface, midZ, hair, crop, beards, shade, setHair };
 }

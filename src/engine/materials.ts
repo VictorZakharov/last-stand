@@ -53,8 +53,19 @@ export type AnyMaterial = Material & Partial<{
 /** the name the engine's module of the looks joined is known by (a breakdown's rows: perf/gpuParts.ts) */
 const JOINED_NAME = 'looks joined';
 
+/** What a frame asked of the materials it drew, by look (a harness's: `lab perf`'s census). */
+export interface MaterialsLooked {
+  /** the frame they were counted on */
+  frame: number;
+  /** asked whether they changed, and described again (their numbers or their fields read), by look or type */
+  looked: Map<string, number>;
+  described: Map<string, number>;
+}
+
 export class Materials {
   private materials = new WeakMap<Material, MaterialEntry>();
+  /** what the last frame asked of its materials (`MaterialsLooked`) */
+  readonly counted: MaterialsLooked = { frame: -1, looked: new Map(), described: new Map() };
   /** the engine's materials by what they hold: two of the game's that look alike are one there, and their meshes
    *  one draw call (each foe's pieces have materials of their own) */
   private shared = new Map<string, number>();
@@ -190,6 +201,8 @@ export class Materials {
     let entry = this.materials.get(material);
     if (entry && entry.seen === frame) return entry.id;
     const look = lookOf(material) ?? kitLookOf(material);
+    const name = look?.shader.name ?? material.type;
+    this.count('looked', name, frame);
     // (not once a map of its own has changed, by its version or its picture's size: it's handed over again and its
     // old one dropped, and a look that stood still was never asked its maps again and kept drawing with it, the village's ground and its grass white with nothing to read; from play, "village loaded
     // with white ground", "same problem on desktop")
@@ -200,6 +213,7 @@ export class Materials {
       return entry.id;
     }
     if (look) {
+      this.count('described', name, frame);
       const id = look.shared ? this.sharedLookId(material, look, entry) : this.lookId(material, look, entry);
       const now = this.materials.get(material);
       if (now) now.mapsAt = stamp;
@@ -209,6 +223,7 @@ export class Materials {
       entry.seen = frame;
       return entry.id;
     }
+    this.count('described', name, frame);
     const key = this.describe(material);
     if (key < 0) {
       if (!entry) {
@@ -247,6 +262,18 @@ export class Materials {
     kept.key = key;
     this.keepPlain(material, kept);
     return kept.id;
+  }
+
+  /** One more material `how` on `frame` by its look `name` (`counted`). */
+  private count(how: 'looked' | 'described', name: string, frame: number): void {
+    const counted = this.counted;
+    if (counted.frame !== frame) {
+      counted.frame = frame;
+      counted.looked.clear();
+      counted.described.clear();
+    }
+    const counts = counted[how];
+    counts.set(name, (counts.get(name) ?? 0) + 1);
   }
 
   /**
