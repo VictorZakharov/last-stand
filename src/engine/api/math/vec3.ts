@@ -1,47 +1,33 @@
-// A point or a direction in 3D, in place and chainable as three's `Vector3`. `x`, `y` and `z` are accessors over
-// fields of its own, telling its `owner` of each write where it has one (a node's place and size, `scene/watched.ts`):
-// every vector is one shape, so the maths' every call site sees one (a watched subclass made two, and the IK, the
-// cloth and the foes' AI ran polymorphic: `lab perf --wave 36 --throttle 4 --profile=solveArm`).
+// A point or a direction in 3D, in place and chainable as three's `Vector3`. `x`, `y` and `z` are written through
+// `this` alone and declared in an interface, so a watched subclass (`scene/`'s `WatchedVec3`) can make them
+// accessors (see `Vec3`'s note).
 import { clamp } from './maths.ts';
 import { Quat } from './quat.ts';
 import type { Euler } from './euler.ts';
 import type { Mat3 } from './mat3.ts';
 import type { Mat4 } from './mat4.ts';
 import type { Spherical } from './spherical.ts';
-import type { AttributeLike, NumberArray, ProjectingCamera, Vec3Tuple, Watcher } from './types.ts';
+import type { AttributeLike, NumberArray, ProjectingCamera, Vec3Tuple } from './types.ts';
 
-/** three's `Vector3`, its components accessors over its own fields (one shape for every vector). */
-export class Vec3 {
-  /** told of every write (a node's place or size); none for a plain vector */
-  owner: Watcher | undefined;
-  private _x: number;
-  private _y: number;
-  private _z: number;
-
-  constructor(x = 0, y = 0, z = 0) {
-    this.owner = undefined;
-    this._x = x;
-    this._y = y;
-    this._z = z;
-  }
-
+/** what `Vec3` holds; an interface, not class fields, so a subclass may give them accessors (TS2611 otherwise) */
+export interface Vec3 {
   /** the first component */
-  get x(): number { return this._x; }
-  set x(value: number) {
-    this._x = value;
-    this.owner?.touched();
-  }
+  x: number;
   /** the second component */
-  get y(): number { return this._y; }
-  set y(value: number) {
-    this._y = value;
-    this.owner?.touched();
-  }
+  y: number;
   /** the third component */
-  get z(): number { return this._z; }
-  set z(value: number) {
-    this._z = value;
-    this.owner?.touched();
+  z: number;
+}
+
+/**
+ * three's `Vector3`. Its components are not class fields: under `useDefineForClassFields` a field would be an own
+ * property of each vector, hiding a subclass's accessors, so they are assigned in the constructor alone.
+ */
+export class Vec3 {
+  constructor(x = 0, y = 0, z = 0) {
+    this.x = x;
+    this.y = y;
+    this.z = z;
   }
 
   /** true: what the game tests for three's `isVector3` */
@@ -49,17 +35,11 @@ export class Vec3 {
     return true;
   }
 
-  /** `{ x, y, z }`, as JSON writes three's vector (its own fields are `_x`... and its owner) */
-  toJSON(): { x: number; y: number; z: number } {
-    return { x: this._x, y: this._y, z: this._z };
-  }
-
-  /** sets all three, its owner told once */
+  /** sets all three */
   set(x: number, y: number, z: number): this {
-    this._x = x;
-    this._y = y;
-    this._z = z;
-    this.owner?.touched();
+    this.x = x;
+    this.y = y;
+    this.z = z;
     return this;
   }
 
