@@ -661,3 +661,10 @@ Unslowed, the frame is 13.5 against 17.5 standing and 14.1 against 23.0 casting.
   - the see-through switches are in the frame's key (unseen meshes kept their solid flags).
 - [ ] The update at or under main's: the shape of a node's vectors is what's left, and needs a design that keeps
   reads as cheap as a plain field's.
+- Taken out after (f3cac2dff, read in `lab perf ... --profile` against the run before, `profileread --against`):
+  - the polled materials' maps asked last (`polledEachFrame`: 472 ms of the run's polling to 260);
+  - the minimap's box and the scrolled panels' views read as last laid out (`holdLayout`: 234 ms to 80);
+  - the hall's floor test (`hidesSeenFloor`) run from above alone, never in a fight (198 ms to none);
+  - rubble lying still not composed or sent again (196 ms to 135), `lineClear` a box test first (141 to 52);
+  - labels sent to the atlas from where they were painted (Bulwark ac5f7fd: `sendRow` 588 ms to 432).
+  - `profileread --callers <fn>` says who calls a function, by its time under each: the tool these were found by.

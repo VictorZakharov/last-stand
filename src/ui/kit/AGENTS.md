@@ -214,6 +214,9 @@ The rules across the game are the [root AGENTS.md](../../../AGENTS.md).
   its tag), so an element is tested against the rules that could match it alone; the same rules as testing every
   one over 13,216 elements. A box read while a tree follows its page is as last laid out (`holdLayout` in
   `engine/ui.ts`): each read after a change laid the whole tree out again, 143 ms of a guide page's first frame.
+  So is the minimap's box as it follows the camera (`minimapColumn.ts`) and the scrolled panels' views each frame
+  (`scrolledOut.ts`): read fresh, each laid out every panel there was in a fight, 234 ms of wave 36's profiled run
+  for the minimap alone, 80 now. The one layout a frame left is `wrapAgain`'s, which needs the frame's widths.
 - **A page's box not laid out yet is asked for again** (`readUnlaid`, `takeUnlaid` in `sheetDirty.ts`): a width
   read off a box the engine hasn't laid out is 0, and the tree follows again the next frame (the guide's tiles stood
   0 px wide after a page opened).

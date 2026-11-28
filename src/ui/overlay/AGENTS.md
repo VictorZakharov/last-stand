@@ -16,6 +16,9 @@ The rules across the game are the [root AGENTS.md](../../../AGENTS.md).
   each painted at its slot's place on a CPU canvas of its shelf's row (`willReadFrequently`: on the GPU each send
   waited on both), and each run of slots side by side sent in one copy. A label a copy, a guide page's 950 words were
   2 to 3 s of copies over a walk through its pages. A label is clipped to its slot and its gutter cleared as it's
-  painted (art past its slot landed in its neighbour's, marks above the guide's headings). Sent straight from the
-  row's canvas, uncopied, the engine's copy cost as much as the copy saved (it reads the whole canvas). Each word
+  painted (art past its slot landed in its neighbour's, marks above the guide's headings). A run is read where it
+  was painted (`overlayPaint`'s `fromX`, Bulwark ac5f7fd): copied first to a canvas's top left, each run was drawn
+  twice on the CPU, 267 ms of `drawImage` in wave 36's profiled run (`lab perf voidLance --wave 36 --throttle 4
+  --profile`); read in place the browser's copy took 131 ms more, `sendRow` 588 ms to 432. (Sent whole from the
+  row's canvas before the engine took an origin, its copy cost as much as the copy saved.) Each word
   measured is kept by its font (`measure` in `paint.ts`, cleared as a font loads).
