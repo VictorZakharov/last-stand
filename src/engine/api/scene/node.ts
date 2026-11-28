@@ -73,6 +73,13 @@ export class Node implements LayersOwner {
   };
   private _matrixAutoUpdate = true;
   private _matrixWorldAutoUpdate = true;
+  /**
+   * How many nodes here and under it are frozen (`matrixAutoUpdate` false: the game writes their matrices): what
+   * `updateMatrixWorld` looks for. A rig has none, and the walk it made down every joint to make each world matrix,
+   * which a read makes anyway, was the update's slowest walk at wave 36 (`lab perf --wave 36 --throttle 4
+   * --profile=update`: `traverse` 0.46 s).
+   */
+  private frozenUnder = 0;
   private _world = new Mat4();
   /**
    * Whether its world matrix is to be made again before it's read: set as it or a node over it moves, pushed down to
@@ -179,6 +186,7 @@ export class Node implements LayersOwner {
     // only made it when read here, and parts nothing had read stood frozen at the world's middle)
     if (!value) this.matrix.compose(this.position, this.quaternion, this.scale);
     this._matrixAutoUpdate = value;
+    this.countFrozen(value ? -1 : 1);
     this.moved();
   }
 
@@ -232,10 +240,16 @@ export class Node implements LayersOwner {
   /** Its world matrix and those under it made now (they're made when read too): a matrix the game writes, here
    *  and under it, is taken as changed first. */
   updateMatrixWorld(_force?: boolean): void {
-    this.traverse((node) => {
-      if (!node._matrixAutoUpdate) node.moved();
-      node.makeWorld();
-    });
+    if (this.frozenUnder === 0) return;
+    if (!this._matrixAutoUpdate) this.moved();
+    const children = this.children;
+    for (let i = 0; i < children.length; i++) children[i].updateMatrixWorld();
+  }
+
+  /** `change` more frozen nodes here and under it, counted on it and on every node over it (`frozenUnder`). */
+  private countFrozen(change: number): void {
+    if (change === 0) return;
+    for (let at: Node | null = this; at; at = at.parent) at.frozenUnder += change;
   }
 
   /** Kept for the game's calls (three's `updateWorldMatrix`): its own matrix taken as changed if the game writes
@@ -253,6 +267,7 @@ export class Node implements LayersOwner {
       if (node.parent) node.parent.detach(node, within);
       node.parent = this;
       this.children.push(node);
+      this.countFrozen(node.frozenUnder);
       node.moved();
       if (within) this.link!.reparented(node);
       else if (this.link) this.link.entered(node);
@@ -273,6 +288,7 @@ export class Node implements LayersOwner {
     const at = this.children.indexOf(node);
     if (at < 0) return;
     this.children.splice(at, 1);
+    this.countFrozen(-node.frozenUnder);
     if (!within && node.link) node.link.left(node);
     node.parent = null;
     node.moved();

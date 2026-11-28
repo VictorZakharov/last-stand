@@ -124,3 +124,23 @@ test('updateMatrix makes a frozen node\'s matrix from where it now stands, as th
   part.updateMatrix();
   near(part.matrixWorld.elements.slice(12, 15), [1, 2, 3], 1e-9);
 });
+
+test('a matrix the game writes on a frozen node deep in a group is taken by the group\'s updateMatrixWorld', () => {
+  const group = new Node();
+  const joint = new Node();
+  const part = new Node();
+  group.add(joint);
+  part.matrixAutoUpdate = false;
+  // (frozen before it's added: its count goes up with it)
+  joint.add(part);
+  near(part.matrixWorld.elements.slice(12, 15), [0, 0, 0], 1e-9);
+  part.matrix.makeTranslation(3, 1, 2);
+  group.updateMatrixWorld();
+  near(part.matrixWorld.elements.slice(12, 15), [3, 1, 2], 1e-9);
+  // (taken away, the group has nothing frozen left: its walk stops at once, the part's own still made)
+  joint.remove(part);
+  part.matrix.makeTranslation(5, 0, 0);
+  group.updateMatrixWorld();
+  part.updateMatrixWorld();
+  near(part.matrixWorld.elements.slice(12, 15), [5, 0, 0], 1e-9);
+});
