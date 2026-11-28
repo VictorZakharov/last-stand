@@ -12,7 +12,7 @@ import {
   movedAlong, placedUnder, turnedAbout, turnFacing, worldFacingOf, worldSizeOf, worldTurnOf,
 } from './nodeSpace.ts';
 import { copyNode } from './nodeCopy.ts';
-import { WatchedEuler, WatchedQuat, WatchedVec3, type Mover } from './watched.ts';
+import { watchedEuler, watchedQuat, watchedVec3, type Mover } from './watched.ts';
 
 /** the next node's number (three's `Object3D.id`) */
 let nextNumber = 1;
@@ -51,13 +51,13 @@ export class Node implements LayersOwner {
   parent: Node | null = null;
   readonly children: Node[] = [];
   /** its place under its parent */
-  readonly position: WatchedVec3;
+  readonly position: Vec3;
   /** its turn under its parent, kept in step with `rotation` */
-  readonly quaternion: WatchedQuat;
+  readonly quaternion: Quat;
   /** its turn as angles, kept in step with `quaternion` */
-  readonly rotation: WatchedEuler;
+  readonly rotation: Euler;
   /** its size under its parent */
-  readonly scale: WatchedVec3;
+  readonly scale: Vec3;
   /** its matrix under its parent: made from its place, turn and size while `matrixAutoUpdate`, else the game's */
   readonly matrix = new Mat4();
   /** which views draw it */
@@ -114,10 +114,10 @@ export class Node implements LayersOwner {
       },
       fresh(): void { self.freshRotation(); },
     };
-    this.position = new WatchedVec3(placed);
-    this.quaternion = new WatchedQuat(turned);
-    this.rotation = new WatchedEuler(angled);
-    this.scale = new WatchedVec3(placed, 1, 1, 1);
+    this.position = watchedVec3(placed);
+    this.quaternion = watchedQuat(turned);
+    this.rotation = watchedEuler(angled);
+    this.scale = watchedVec3(placed, 1, 1, 1);
     this.layers.owner = this;
   }
 

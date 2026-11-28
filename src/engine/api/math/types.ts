@@ -46,3 +46,11 @@ export const WebGLCoordinateSystem = 2000;
 export const WebGPUCoordinateSystem = 2001;
 /** which clip space a projection or a frustum is made for */
 export type CoordinateSystem = typeof WebGLCoordinateSystem | typeof WebGPUCoordinateSystem;
+
+/** What a watched value tells of a write, and asks before a read (a node's place, turn or size: `scene/watched.ts`). */
+export interface Watcher {
+  /** a value of its own was written */
+  touched(): void;
+  /** about to be read: made again first if what it's kept in step with was written since */
+  fresh(): void;
+}

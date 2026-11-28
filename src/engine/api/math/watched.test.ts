@@ -6,13 +6,13 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { Color } from './color.ts';
 import { Euler } from './euler.ts';
-import type { EulerOrder } from './euler.ts';
 import { Mat4 } from './mat4.ts';
 import { Quat } from './quat.ts';
 import { Vec2 } from './vec2.ts';
 import { Vec3 } from './vec3.ts';
 import { Vec4 } from './vec4.ts';
 import { assertNear } from './testing.ts';
+import type { Watcher } from './types.ts';
 
 /** the writes a watched value saw since `clear`; written by the accessors, the first ones before it exists */
 interface Watched {
@@ -41,33 +41,6 @@ class WatchedVec2 extends Vec2 implements Watched {
   override set y(value: number) {
     (this.kept ??= [0, 0])[1] = value;
     saw(this, 'y');
-  }
-}
-
-/** a `Vec3` whose `x`, `y` and `z` are accessors */
-class WatchedVec3 extends Vec3 implements Watched {
-  declare log?: string[];
-  declare kept: [number, number, number];
-  override get x(): number {
-    return this.kept[0];
-  }
-  override set x(value: number) {
-    (this.kept ??= [0, 0, 0])[0] = value;
-    saw(this, 'x');
-  }
-  override get y(): number {
-    return this.kept[1];
-  }
-  override set y(value: number) {
-    (this.kept ??= [0, 0, 0])[1] = value;
-    saw(this, 'y');
-  }
-  override get z(): number {
-    return this.kept[2];
-  }
-  override set z(value: number) {
-    (this.kept ??= [0, 0, 0])[2] = value;
-    saw(this, 'z');
   }
 }
 
@@ -102,75 +75,6 @@ class WatchedVec4 extends Vec4 implements Watched {
   override set w(value: number) {
     (this.kept ??= [0, 0, 0, 0])[3] = value;
     saw(this, 'w');
-  }
-}
-
-/** a `Quat` whose `x`, `y`, `z` and `w` are accessors */
-class WatchedQuat extends Quat implements Watched {
-  declare log?: string[];
-  declare kept: [number, number, number, number];
-  override get x(): number {
-    return this.kept[0];
-  }
-  override set x(value: number) {
-    (this.kept ??= [0, 0, 0, 1])[0] = value;
-    saw(this, 'x');
-  }
-  override get y(): number {
-    return this.kept[1];
-  }
-  override set y(value: number) {
-    (this.kept ??= [0, 0, 0, 1])[1] = value;
-    saw(this, 'y');
-  }
-  override get z(): number {
-    return this.kept[2];
-  }
-  override set z(value: number) {
-    (this.kept ??= [0, 0, 0, 1])[2] = value;
-    saw(this, 'z');
-  }
-  override get w(): number {
-    return this.kept[3];
-  }
-  override set w(value: number) {
-    (this.kept ??= [0, 0, 0, 1])[3] = value;
-    saw(this, 'w');
-  }
-}
-
-/** an `Euler` whose `x`, `y`, `z` and `order` are accessors */
-class WatchedEuler extends Euler implements Watched {
-  declare log?: string[];
-  declare kept: [number, number, number];
-  declare keptOrder: EulerOrder;
-  override get x(): number {
-    return this.kept[0];
-  }
-  override set x(value: number) {
-    (this.kept ??= [0, 0, 0])[0] = value;
-    saw(this, 'x');
-  }
-  override get y(): number {
-    return this.kept[1];
-  }
-  override set y(value: number) {
-    (this.kept ??= [0, 0, 0])[1] = value;
-    saw(this, 'y');
-  }
-  override get z(): number {
-    return this.kept[2];
-  }
-  override set z(value: number) {
-    (this.kept ??= [0, 0, 0])[2] = value;
-    saw(this, 'z');
-  }
-  override get order(): EulerOrder {
-    return this.keptOrder;
-  }
-  override set order(value: EulerOrder) {
-    this.keptOrder = value;
-    saw(this, 'order');
   }
 }
 
@@ -217,6 +121,38 @@ function assertWatched<Value extends Watchable>(value: Value, fields: readonly s
   }
 }
 
+/** an owner counting what a watched value told it (a node's `Mover`) */
+class Counted implements Watcher {
+  writes = 0;
+  reads = 0;
+  touched(): void {
+    this.writes++;
+  }
+  fresh(): void {
+    this.reads++;
+  }
+}
+
+/** a value of the maths' that tells an owner (`Vec3`, `Quat`, `Euler`) */
+interface Owned {
+  owner: Watcher | undefined;
+}
+
+/** asserts each method told the value's owner of its write, and made none of `fields` an own property */
+function assertTold<Value extends Owned & object>(value: Value, fields: readonly string[],
+  calls: Record<string, (watched: Value) => void>): void {
+  const owner = new Counted();
+  value.owner = owner;
+  for (const [name, call] of Object.entries(calls)) {
+    owner.writes = 0;
+    call(value);
+    assert.ok(owner.writes > 0, `${name} wrote past its owner`);
+    for (const field of fields) {
+      assert.equal(Object.hasOwn(value, field), false, `${name} made ${field} an own property`);
+    }
+  }
+}
+
 const XY = ['x', 'y'] as const;
 const XYZ = ['x', 'y', 'z'] as const;
 const XYZW = ['x', 'y', 'z', 'w'] as const;
@@ -234,10 +170,10 @@ test('a watched Vec2 sees every write of its methods', () => {
   assertNear(vector.toArray(), [7, 8]);
 });
 
-test('a watched Vec3 sees every write of its methods, and they read through its accessors', () => {
-  const vector = new WatchedVec3(1, 2, 3);
+test('a watched Vec3 tells its owner of every write of its methods', () => {
+  const vector = new Vec3(1, 2, 3);
   const quarterTurnY = new Quat().setFromAxisAngle(new Vec3(0, 1, 0), Math.PI / 2);
-  assertWatched(vector, XYZ, {
+  assertTold(vector, XYZ, {
     set: (value) => value.set(1, 0, 0),
     applyQuaternion: (value) => value.applyQuaternion(quarterTurnY),
     copy: (value) => value.copy(new Vec3(2, 0, 0)),
@@ -265,10 +201,10 @@ test('a watched Vec4 sees every write of its methods', () => {
   assertNear(vector.toArray(), [7, 8, 9, 10]);
 });
 
-test('a watched Quat sees every write of its methods', () => {
-  const quaternion = new WatchedQuat();
+test('a watched Quat tells its owner of every write of its methods', () => {
+  const quaternion = new Quat();
   const other = new Quat().setFromEuler(new Euler(0.3, -0.7, 1.1));
-  assertWatched(quaternion, XYZW, {
+  assertTold(quaternion, XYZW, {
     set: (value) => value.set(0, 0, 0, 1),
     copy: (value) => value.copy(other),
     multiply: (value) => value.multiply(other),
@@ -282,10 +218,10 @@ test('a watched Quat sees every write of its methods', () => {
   });
 });
 
-test('a watched Euler sees every write of its methods, its order among them', () => {
-  const euler = new WatchedEuler(0.1, 0.2, 0.3, 'YXZ');
+test('a watched Euler tells its owner of every write of its methods, its order among them', () => {
+  const euler = new Euler(0.1, 0.2, 0.3, 'YXZ');
   const turn = new Quat().setFromEuler(new Euler(0.3, -0.7, 1.1));
-  assertWatched(euler, [...XYZ, 'order'], {
+  assertTold(euler, [...XYZ, 'order'], {
     set: (value) => value.set(1, 2, 3),
     copy: (value) => value.copy(new Euler(0.4, 0.5, 0.6, 'ZXY')),
     setFromQuaternion: (value) => value.setFromQuaternion(turn, 'XYZ'),
@@ -311,11 +247,32 @@ test('a watched Color sees every write of its methods', () => {
 });
 
 test('the check catches a write past the accessors (its canary)', () => {
-  const vector = new WatchedVec3(1, 2, 3);
-  const pastAccessors = (value: WatchedVec3): void => {
+  const vector = new WatchedVec2(1, 2);
+  const pastAccessors = (value: WatchedVec2): void => {
     Object.defineProperty(value, 'x', { value: 5, writable: true, enumerable: true, configurable: true });
   };
-  assert.throws(() => assertWatched(vector, XYZ, { pastAccessors }), /past its accessor/);
+  assert.throws(() => assertWatched(vector, XY, { pastAccessors }), /past its accessor/);
+});
+
+test('the check catches a write its owner is never told of (its canary)', () => {
+  const vector = new Vec3(1, 2, 3);
+  const pastOwner = (value: Vec3): void => {
+    Object.assign(value, { _x: 5 });
+  };
+  assert.throws(() => assertTold(vector, XYZ, { pastOwner }), /past its owner/);
+});
+
+test('a plain vector, quaternion and angles are one shape with a watched one', () => {
+  const owner = new Counted();
+  const pairs: [object, object][] = [
+    [new Vec3(), Object.assign(new Vec3(), { owner })],
+    [new Quat(), Object.assign(new Quat(), { owner })],
+    [new Euler(), Object.assign(new Euler(), { owner })],
+  ];
+  for (const [plain, watched] of pairs) {
+    assert.deepEqual(Object.keys(plain), Object.keys(watched));
+    assert.equal(Object.getPrototypeOf(plain), Object.getPrototypeOf(watched));
+  }
 });
 
 test('Quat and Euler call their change callback after a method writes, not on a field\'s write', () => {

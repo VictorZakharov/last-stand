@@ -1,40 +1,85 @@
 // A turn, as three's `Quaternion`: in place and chainable, and telling `_onChange`'s callback after every write
-// a method makes, so a node's `rotation` follows its `quaternion`. `x`, `y`, `z` and `w` are declared in an
-// interface and written through `this` alone, so `scene/`'s `WatchedQuat` can make them accessors.
+// a method makes, so a node's `rotation` follows its `quaternion`. `x`, `y`, `z` and `w` are accessors over fields
+// of its own, telling its `owner` where it has one (a node's turn, `scene/watched.ts`): one shape for every quaternion.
 import { clamp } from './maths.ts';
 import type { Euler } from './euler.ts';
 import type { Mat4 } from './mat4.ts';
 import type { Vec3 } from './vec3.ts';
-import type { NumberArray, Vec4Tuple } from './types.ts';
-
-/** what `Quat` holds; an interface, not class fields, so a subclass may give them accessors (TS2611 otherwise) */
-export interface Quat {
-  /** the axis's x times the half angle's sine */
-  x: number;
-  /** the axis's y times the half angle's sine */
-  y: number;
-  /** the axis's z times the half angle's sine */
-  z: number;
-  /** the half angle's cosine */
-  w: number;
-}
+import type { NumberArray, Vec4Tuple, Watcher } from './types.ts';
 
 /** a callback that does nothing: a quaternion's own until `_onChange` sets one */
 function unwatched(): void {}
 
 /**
- * three's `Quaternion`. Its components are not class fields (a field would hide a subclass's accessors); each
- * method reads them all before it writes any, and calls `_onChangeCallback` once its writes are done.
+ * three's `Quaternion`, its components accessors over its own fields. Each method reads them all before it writes
+ * any, and calls `_onChangeCallback` once its writes are done.
  */
 export class Quat {
-  /** called after a method writes this quaternion (a node's rotation kept in step); not on a field's write */
+  /** called after a method writes this quaternion; not on a field's write */
   _onChangeCallback: () => void = unwatched;
+  /** told of every write and asked before every read (a node's turn, kept in step with its angles); none for a plain
+   *  quaternion */
+  owner: Watcher | undefined;
+  private _qx: number;
+  private _qy: number;
+  private _qz: number;
+  private _qw: number;
 
   constructor(x = 0, y = 0, z = 0, w = 1) {
-    this.x = x;
-    this.y = y;
-    this.z = z;
-    this.w = w;
+    this.owner = undefined;
+    this._qx = x;
+    this._qy = y;
+    this._qz = z;
+    this._qw = w;
+  }
+
+  /** the axis's x times the half angle's sine */
+  get x(): number {
+    this.owner?.fresh();
+    return this._qx;
+  }
+  set x(value: number) {
+    this.owner?.fresh();
+    this._qx = value;
+    this.owner?.touched();
+  }
+  /** the axis's y times the half angle's sine */
+  get y(): number {
+    this.owner?.fresh();
+    return this._qy;
+  }
+  set y(value: number) {
+    this.owner?.fresh();
+    this._qy = value;
+    this.owner?.touched();
+  }
+  /** the axis's z times the half angle's sine */
+  get z(): number {
+    this.owner?.fresh();
+    return this._qz;
+  }
+  set z(value: number) {
+    this.owner?.fresh();
+    this._qz = value;
+    this.owner?.touched();
+  }
+  /** the half angle's cosine */
+  get w(): number {
+    this.owner?.fresh();
+    return this._qw;
+  }
+  set w(value: number) {
+    this.owner?.fresh();
+    this._qw = value;
+    this.owner?.touched();
+  }
+
+  /** Its four numbers stored as they are, telling nobody: a node keeping it in step with its angles. */
+  store(x: number, y: number, z: number, w: number): void {
+    this._qx = x;
+    this._qy = y;
+    this._qz = z;
+    this._qw = w;
   }
 
   /** sets what's called after a method writes this quaternion */
@@ -45,10 +90,12 @@ export class Quat {
 
   /** writes all four without telling: the methods' one way in (a node's own writes them and tells it once) */
   protected put(x: number, y: number, z: number, w: number): void {
-    this.x = x;
-    this.y = y;
-    this.z = z;
-    this.w = w;
+    this.owner?.fresh();
+    this._qx = x;
+    this._qy = y;
+    this._qz = z;
+    this._qw = w;
+    this.owner?.touched();
   }
 
   /** sets all four */
