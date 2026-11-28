@@ -668,3 +668,25 @@ Unslowed, the frame is 13.5 against 17.5 standing and 14.1 against 23.0 casting.
   - rubble lying still not composed or sent again (196 ms to 135), `lineClear` a box test first (141 to 52);
   - labels sent to the atlas from where they were painted (Bulwark ac5f7fd: `sendRow` 588 ms to 432).
   - `profileread --callers <fn>` says who calls a function, by its time under each: the tool these were found by.
+
+## 2026-11-28: the animation moved into Rust whole (#973)
+
+From the owner: "move whole system to Rust". Ported function by function the drape ran no faster in wasm than in the
+script (363 us a call in the page against about 255 native, `lab drapetape` and Bulwark's `drape`): the gain is in
+whole systems on flat data, one call a frame, not in single functions.
+
+Census (wave 36, the Crypt, CPU slowed 4 times, profiled): the models' `animate` is 3.3 s of the run's 15.8 s of
+frames, about a fifth. The foes 1.4 s (four kinds, up to 38 at once: each kind's own pose 30 to 60 lines, the cost the
+leg IK, `ik.ts`, some 1,600 lines of code run for each), the mage 1.9 s (0.65 the drape). The heroes are most of the
+code (the warrior's pose about 2,000 lines) and read world matrices mid-pose 180 times a frame (the warrior's).
+
+Order, each step held to the script's results call for call by a tape of its real calls replayed in Rust (as
+`drapetape`), within a tolerance (V8's and Rust's `exp`, `sin` may differ in the last bit), each call from the tape's
+own state so nothing builds up:
+- [ ] the ground's height and the body's motion (`world/ground.ts`, `entities/movement.ts`)
+- [ ] the shared rig's per-frame helpers and the anatomy's clamps (`rig.ts`, `anatomy.ts`)
+- [ ] the leg IK and the look (`ik.ts` `LegIK`, `LookAt`): the foes' cost
+- [ ] the four Crypt foes' poses, then the other foes and bosses
+- [ ] the joints' world and skin matrices made in Rust, handed to the engine with no node written
+- [ ] arm IK, hands, glance, sit, cloth (`armIK.ts`, `hands.ts`, `glance.ts`, `sit.ts`, `armor.ts`, `hood.ts`)
+- [ ] the heroes: mage, ranger, warrior
