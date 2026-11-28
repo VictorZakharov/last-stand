@@ -11,7 +11,7 @@ import {
 } from '../core/seeThrough';
 import { G } from '../state';
 import { RUN } from '../data/balance';
-import { VILLAGE_OBJECTS, YARD, worldToYard, type VillageObject } from '../data/village';
+import { VILLAGE_OBJECTS, YARD, inYard, worldToYard, type VillageObject } from '../data/village';
 import { HOUSE_OBJECTS } from '../data/houses';
 import { input, isDown, wasPressed, cylinder } from '../core/input';
 import { setLens, viewMode } from '../core/renderer';
@@ -64,8 +64,6 @@ const HALL_NEAR = 22;
 const HALL_SEEN = 12;
 /** how far before the hall's door its portico reaches (m), where a camera looking in sees no grass but through it */
 const PORTICO_DEEP = 3;
-/** how far into the yard the hero must stand to cast (m in from its fence) */
-const YARD_IN = 0.2;
 /** an object's column for the pointer: as wide as its reach's share, and up to its name */
 const PICK_SHARE = 0.55, PICK_MOST = 2.6;
 
@@ -330,11 +328,8 @@ export function armedEverywhere(on: boolean): void {
   armedAnywhere = on;
 }
 
-/** Whether (x, z) is in the training yard, far enough in from its fence to cast. */
-export function inYard(x: number, z: number): boolean {
-  const [across, along] = worldToYard(x, z);
-  return Math.abs(across) < YARD.halfX - YARD_IN && Math.abs(along) < YARD.halfZ - YARD_IN;
-}
+/** (`inYard` is the yard's data's: the foes ask it, with nothing of the village's to load) */
+export { inYard };
 
 /** The pointer on the village's objects: over one, the hand cursor and its name; a click or a tap on one walks the hero
  *  to it and uses it (the press never reaches the game: no attack, no move stick). */

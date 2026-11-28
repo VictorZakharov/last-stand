@@ -18,7 +18,7 @@ import { hairColour, type HeroLook } from '../data/heroLooks';
 import { SKILL_IMPLS } from '../combat/skills/index';
 import type { ChannelSkill, SkillImpl } from '../combat/skills/types';
 import { computeStats, gearOf } from '../loot/items';
-import { BLOCK, COOP, FIST_GUARD, FRENZY, FULL_DRAW, PVP } from '../data/balance';
+import { BLOCK, COOP, FIST_GUARD, FRENZY, FULL_DRAW, HERO_RADIUS, PVP } from '../data/balance';
 import { tickFrenzy } from '../combat/frenzy';
 import { ALE } from '../data/tavern';
 import { recorder } from '../perf/recorder';
@@ -74,8 +74,8 @@ const BUSY_HOLD = 0.15;
 const DENIED_EVERY = 0.3;
 /** how near a point on his way to a spot the hero comes before heading for the next (m: about a stride) */
 const ROUTE_PASSED = 0.6;
-/** how far round his middle a hero's body keeps off what's round it (m) */
-export const HERO_RADIUS = 0.45;
+/** (`HERO_RADIUS` is the balance's: the duel and a rival read it with nothing of the hero's to load) */
+export { HERO_RADIUS };
 /** how fast the body turns at most onto the way it goes (rad/s): eased alone, it swung half round in four frames at a
  *  reversal, 38 degrees in the first, and the pelvis and legs snapped round with it */
 const TURN_MOST = 9;

@@ -10,14 +10,14 @@
 // as it does in any run.
 import * as THREE from 'three';
 import { G } from '../state';
-import { COOP, PVP } from '../data/balance';
+import { COOP, HERO_RADIUS, PVP } from '../data/balance';
 import { BIOME_IDS, type BiomeId } from '../data/biomes';
 import { DAMAGE_TYPES, hurtByRival } from '../combat/damage';
 import { clearProjectiles } from '../combat/projectiles';
 import { clearEffects } from '../fx/effects';
 import { clearTimers } from '../core/timers';
 import { Rival, type RivalHit } from '../entities/rival';
-import { HERO_RADIUS, type Player } from '../entities/player';
+import type { Player } from '../entities/player';
 import { resolveWorld } from '../world/collision';
 import { isGuest, readying } from '../net/role';
 import { floatText } from '../ui/floaters';

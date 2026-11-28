@@ -10,7 +10,7 @@ import { G } from '../state';
 import { addEffect } from './effects';
 import { arrowGeometry, arrowLite, ARROW } from '../entities/models/bow';
 import { hullHit } from '../entities/models/hulls';
-import { groundHeight } from '../world/arena';
+import { groundHeight } from '../world/ground';
 import { pavedAt } from '../world/villagePlan';
 import { basinTop, FOUNTAIN } from '../world/fountain';
 import { BIOMES } from '../data/biomes';

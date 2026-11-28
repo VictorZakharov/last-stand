@@ -61,6 +61,9 @@ export const FULL_DRAW = 0.98;
 export const BLOCK = { recovery: 0.7, arc: 1.4, guardBreak: 1.5 };
 
 /** Co-op: party size, reviving a downed teammate, and how much more the arena throws at a party. */
+/** how far round his middle a hero's body keeps off what's round it (m) */
+export const HERO_RADIUS = 0.45;
+
 export const COOP = {
   maxPlayers: 4,
   /** the longest the host's countdown holds for a guest still readying its run (s): from play, "readying the fight for
