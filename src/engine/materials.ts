@@ -1,6 +1,8 @@
 // The game's materials handed to the engine: each described by its numbers, maps and key, look-alikes sharing one
 // engine material so their meshes batch, and a material with a look of its own (`custom.ts`) by its shader's numbers.
-import * as THREE from 'three';
+import {
+  AdditiveBlending, BackSide, Color, CustomBlending, DoubleSide, Material, OneFactor, Texture, Vec2, VolumeTexture,
+} from './api/index.ts';
 import { COLUMN_SHAFT, type SeeThrough } from '../core/seeThrough';
 import type { Core } from './core';
 import { lookOf, LOOK_FLOATS, RUST_SHADERS, type RustLook, type RustShader } from './custom';
@@ -16,7 +18,7 @@ import type { SeeKinds } from './seeKinds';
 const CASTS_AS_PLACED = 32;
 /** how many times a material's numbers may move before it stops sharing the engine's materials */
 const SHARED_CHANGES = 8;
-const WHITE = new THREE.Color(1, 1, 1);
+const WHITE = new Color(1, 1, 1);
 
 interface MaterialEntry {
   id: number; params: Float32Array; maps: Uint32Array; key: number; seen: number;
@@ -28,34 +30,49 @@ interface MaterialEntry {
   /** its look's own maps as last sent, and its every map's stamp added up then (`mapsStamp`) */
   extra?: Uint32Array;
   mapsAt?: number;
+  /** its version, maps and see-through kind as it was last described (`stillPlain`) */
+  version?: number;
+  textures?: (Texture | null | undefined)[];
+  texturesAt?: number;
+  kind?: number;
 }
 
-export type AnyMaterial = THREE.Material & Partial<{
+export type AnyMaterial = Material & Partial<{
   /** lit on both sides as its front (a hair card's: `bothSidesOut` in entities/models/head.ts) */
   litBothSides: boolean;
-  color: THREE.Color; map: THREE.Texture | null; roughness: number; metalness: number; emissive: THREE.Color;
-  emissiveIntensity: number; emissiveMap: THREE.Texture | null; normalMap: THREE.Texture | null;
-  normalScale: THREE.Vector2; roughnessMap: THREE.Texture | null; metalnessMap: THREE.Texture | null;
-  isMeshBasicMaterial: boolean; isMeshBasicNodeMaterial: boolean; isShaderMaterial: boolean;
-  isMeshPhongMaterial: boolean; alphaMap: THREE.Texture | null;
-  flatShading: boolean; bumpMap: THREE.Texture | null; bumpScale: number;
+  color: Color; map: Texture | null; roughness: number; metalness: number; emissive: Color;
+  emissiveIntensity: number; emissiveMap: Texture | null; normalMap: Texture | null;
+  normalScale: Vec2; roughnessMap: Texture | null; metalnessMap: Texture | null;
+  isLitMaterial: boolean; isUnlitMaterial: boolean; isLookMaterial: boolean; alphaMap: Texture | null;
+  flatShading: boolean; bumpMap: Texture | null; bumpScale: number;
   clearcoat: number; clearcoatRoughness: number;
-  sheen: number; sheenColor: THREE.Color; sheenRoughness: number; sheenColorMap: THREE.Texture | null;
-  positionNode: unknown; colorNode: unknown; fragmentNode: unknown; vertexNode: unknown; seeThrough: unknown;
+  sheen: number; sheenColor: Color; sheenRoughness: number; sheenColorMap: Texture | null;
+  seeThrough: unknown;
 }>;
 
 /** the name the engine's module of the looks joined is known by (a breakdown's rows: perf/gpuParts.ts) */
 const JOINED_NAME = 'looks joined';
 
+/** What a frame asked of the materials it drew, by look (a harness's: `lab perf`'s census). */
+export interface MaterialsLooked {
+  /** the frame they were counted on */
+  frame: number;
+  /** asked whether they changed, and described again (their numbers or their fields read), by look or type */
+  looked: Map<string, number>;
+  described: Map<string, number>;
+}
+
 export class Materials {
-  private materials = new WeakMap<THREE.Material, MaterialEntry>();
+  private materials = new WeakMap<Material, MaterialEntry>();
+  /** what the last frame asked of its materials (`MaterialsLooked`) */
+  readonly counted: MaterialsLooked = { frame: -1, looked: new Map(), described: new Map() };
   /** the engine's materials by what they hold: two of the game's that look alike are one there, and their meshes
    *  one draw call (each foe's pieces have materials of their own) */
   private shared = new Map<string, number>();
   /** a shared look's engine material: its numbers past those that tell its materials apart, as last sent */
   private tails = new Map<number, Float32Array>();
   private shaders = new Map<string, number>();
-  private volumes = new WeakMap<THREE.Data3DTexture, { id: number; version: number; cells: number }>();
+  private volumes = new WeakMap<VolumeTexture, { id: number; version: number; cells: number }>();
   private scratchParams = new Float32Array(32);
   private scratchMaps = new Uint32Array(4);
   private scratchLook = new Float32Array(LOOK_FLOATS);
@@ -91,22 +108,16 @@ export class Materials {
   /** A material's numbers, maps and key written to the scratch arrays; false for one the engine can't draw. */
   private describe(material: AnyMaterial, look?: RustLook): number {
     // (a shader material is drawn by its look alone: unlit, white under whatever its look writes)
-    if (!look && (!material.color || material.isShaderMaterial)) return -1;
-    // (moved or cut by three's nodes: grass grown from a texture, a flame's own fragment)
-    // (placed by its nodes: the village's blades, grown from their cells. A position node alone is the wind's sway,
-    // which the engine leaves out: the Thornwood's grass stands still. One with a look of its own for the engine
-    // is drawn by that)
-    const placedByNodes = (material.positionNode && material.colorNode) || material.fragmentNode || material.vertexNode;
-    if (!look && placedByNodes) return -1;
+    if (!look && (!material.color || material.isLookMaterial)) return -1;
     const p = this.scratchParams, maps = this.scratchMaps, held = this.maps;
-    const unlit = !!(material.isMeshBasicMaterial || material.isMeshBasicNodeMaterial || material.isShaderMaterial);
+    const unlit = !!(material.isUnlitMaterial || material.isLookMaterial);
     const map = material.map ?? null;
     const tint = material.color ?? WHITE;
     p[0] = tint.r; p[1] = tint.g; p[2] = tint.b; p[3] = material.opacity;
     const glow = material.emissive, glowBy = material.emissiveIntensity ?? 1;
     p[4] = glow ? glow.r * glowBy : 0; p[5] = glow ? glow.g * glowBy : 0; p[6] = glow ? glow.b * glowBy : 0;
     p[7] = material.alphaTest;
-    p[8] = material.roughness ?? (material.isMeshPhongMaterial ? 0.5 : 1);
+    p[8] = material.roughness ?? (material.isLitMaterial ? 0.5 : 1);
     p[9] = material.metalness ?? 0;
     p[10] = material.normalScale?.x ?? 1;
     // (what the game dissolves where it hides the hero: core/seeThrough.ts marks it)
@@ -127,8 +138,8 @@ export class Materials {
     maps[2] = held.textureId(rough);
     maps[3] = held.textureId(material.emissiveMap);
     // (2: light added or laid over, shown only where the hero sees: no surface for the sight's fog to grey)
-    const light = material.blending === THREE.AdditiveBlending
-      || (material.blending === THREE.CustomBlending && material.blendSrc === THREE.OneFactor);
+    const light = material.blending === AdditiveBlending
+      || (material.blending === CustomBlending && material.blendSrc === OneFactor);
     // (4: lit on both sides as its front, a hair card's: `bothSidesOut` in entities/models/head.ts)
     // (8: skinned by dual quaternions, a hand's: entities/models/dualQuaternion.ts)
     p[16] = (unlit ? 1 : 0) + (light ? 2 : 0) + (material.litBothSides ? 4 : 0)
@@ -141,7 +152,7 @@ export class Materials {
       + (bumped ? 128 : 0)
       // (256: fades by its alpha where its kind is seen through; 512: its colour already multiplied by its alpha)
       + (look?.fades ? 256 : 0)
-      + (material.blending === THREE.CustomBlending && material.blendSrc === THREE.OneFactor ? 512 : 0);
+      + (material.blending === CustomBlending && material.blendSrc === OneFactor ? 512 : 0);
     // (a clear coat and its roughness, how much a height map bumps it; a cloth's sheen and its roughness)
     p[24] = material.clearcoat ?? 0; p[25] = material.clearcoatRoughness ?? 0;
     p[26] = bumped ? material.bumpScale ?? 1 : 0; p[27] = 0;
@@ -156,9 +167,9 @@ export class Materials {
     p[18] = maps[1] ? 1 : 0;
     p[19] = (maps[2] ? 1 : 0) + (alphaAlone && maps[0] ? 2 : 0);
     // (3: its colour already multiplied by its alpha, the flames' light over what they hide)
-    const multiplied = material.blending === THREE.CustomBlending && material.blendSrc === THREE.OneFactor;
-    const blend = multiplied ? 3 : material.blending === THREE.AdditiveBlending ? 2 : material.transparent ? 1 : 0;
-    const side = material.side === THREE.DoubleSide ? 1 : material.side === THREE.BackSide ? 2 : 0;
+    const multiplied = material.blending === CustomBlending && material.blendSrc === OneFactor;
+    const blend = multiplied ? 3 : material.blending === AdditiveBlending ? 2 : material.transparent ? 1 : 0;
+    const side = material.side === DoubleSide ? 1 : material.side === BackSide ? 2 : 0;
     // (what a column wears, its iron band and its capital, writes its depth whatever the game's own thinning
     // says: with none written, the shaft's ghost, drawn after, lay over its own band, from play "why the
     // stripes on columns disappear". Not the shaft: a flame behind it shows through its ghost)
@@ -190,21 +201,29 @@ export class Materials {
     let entry = this.materials.get(material);
     if (entry && entry.seen === frame) return entry.id;
     const look = lookOf(material) ?? kitLookOf(material);
+    const name = look?.shader.name ?? material.type;
+    this.count('looked', name, frame);
     // (not once a map of its own has changed, by its version or its picture's size: it's handed over again and its
     // old one dropped, and a look that stood still was never asked its maps again and kept drawing with it, the village's ground and its grass white with nothing to read; from play, "village loaded
     // with white ground", "same problem on desktop")
-    const stamp = look ? mapsStamp(material, look) : 0;
+    const stamp = look ? this.lookMapsStamp(material, look, entry) : 0;
     const mapsKept = entry?.mapsAt === stamp || !TUNE.looksByMaps;
-    if (TUNE.still && look?.moved && entry?.id && mapsKept && !look.moved()) {
+    if (TUNE.still && look?.moved && entry?.id && mapsKept && !look.moved(frame)) {
       entry.seen = frame;
       return entry.id;
     }
     if (look) {
+      this.count('described', name, frame);
       const id = look.shared ? this.sharedLookId(material, look, entry) : this.lookId(material, look, entry);
       const now = this.materials.get(material);
       if (now) now.mapsAt = stamp;
       return id;
     }
+    if (entry && this.stillPlain(material, entry)) {
+      entry.seen = frame;
+      return entry.id;
+    }
+    this.count('described', name, frame);
     const key = this.describe(material);
     if (key < 0) {
       if (!entry) {
@@ -218,6 +237,7 @@ export class Materials {
     if (!entry || !entry.id) {
       entry = { id: this.sharedId(key), params: p.slice(), maps: maps.slice(), key, seen: frame, changes: 0, own: false };
       this.materials.set(material, entry);
+      this.keepPlain(material, entry);
       return entry.id;
     }
     entry.seen = frame;
@@ -240,7 +260,71 @@ export class Materials {
     kept.maps.set(maps);
     kept.params.set(p);
     kept.key = key;
+    this.keepPlain(material, kept);
     return kept.id;
+  }
+
+  /** One more material `how` on `frame` by its look `name` (`counted`). */
+  private count(how: 'looked' | 'described', name: string, frame: number): void {
+    const counted = this.counted;
+    if (counted.frame !== frame) {
+      counted.frame = frame;
+      counted.looked.clear();
+      counted.described.clear();
+    }
+    const counts = counted[how];
+    counts.set(name, (counts.get(name) ?? 0) + 1);
+  }
+
+  /**
+   * Whether a plain material drawn before is as it was described: its version (every field that changes how it's
+   * drawn moves it, a map swapped among them), its maps' own stamps and its see-through kind the same. Its fields are
+   * accessors, and every material described again every frame was a fifth of a slowed CPU's wave 36 (`lab perf
+   * --wave 36 --throttle 4 --profile=materialId`). `TUNE.still` off describes each every frame, to compare.
+   */
+  private stillPlain(material: AnyMaterial, entry: MaterialEntry): boolean {
+    if (!TUNE.still || !entry.id || entry.version !== material.version || !entry.textures) return false;
+    if (entry.kind !== this.seeKinds.kindOf(material.seeThrough as SeeThrough | undefined)) return false;
+    let stamp = 0;
+    for (const texture of entry.textures) stamp += mapStamp(texture);
+    return stamp === entry.texturesAt;
+  }
+
+  /**
+   * A look's material described into the scratch arrays (`describe`), or what it was described as last where it's
+   * as it was then (`stillPlain`): a foe's look moves every frame its fur sways or its gear glows, and each move
+   * described its material again, field by field.
+   */
+  private describedNow(material: AnyMaterial, look: RustLook, entry: MaterialEntry | undefined): number {
+    if (!entry || !this.stillPlain(material, entry)) return this.describe(material, look);
+    this.scratchParams.set(entry.params);
+    this.scratchMaps.set(entry.maps);
+    return entry.key & ~CASTS_AS_PLACED;
+  }
+
+  /** A look's every map's stamp added up (`mapsStamp`): its material's maps read from the list kept as it was last
+   *  described where its version stands (each map field is an accessor, and a wave's foes read seven each a frame). */
+  private lookMapsStamp(material: AnyMaterial, look: RustLook, entry: MaterialEntry | undefined): number {
+    if (!entry?.textures || entry.version !== material.version) return mapsStamp(material, look);
+    let sum = 0;
+    for (const texture of entry.textures) sum += mapStamp(texture);
+    const own = look.maps;
+    if (own) for (let slot = 0; slot < own.length; slot++) sum += mapStamp(own[slot]);
+    return sum;
+  }
+
+  /** What `stillPlain` compares a plain material by, kept as it's described. */
+  private keepPlain(material: AnyMaterial, entry: MaterialEntry): void {
+    const textures = [
+      material.map, material.alphaMap, material.normalMap, material.bumpMap,
+      material.roughnessMap, material.metalnessMap, material.emissiveMap,
+    ];
+    let stamp = 0;
+    for (const texture of textures) stamp += mapStamp(texture);
+    entry.version = material.version;
+    entry.textures = textures;
+    entry.texturesAt = stamp;
+    entry.kind = this.seeKinds.kindOf(material.seeThrough as SeeThrough | undefined);
   }
 
   /** The page's shaders' names by the ids the engine gave them (a breakdown's rows: perf/gpuParts.ts). */
@@ -269,7 +353,7 @@ export class Materials {
   }
 
   /** A volume's id, its cells sent again as its version moves on (a new one made when its size does). */
-  private volumeId(volume: THREE.Data3DTexture | undefined): number {
+  private volumeId(volume: VolumeTexture | undefined): number {
     if (!volume) return 0;
     const core = this.core;
     const { data, width, height, depth } = volume.image as { data: Uint8Array; width: number; height: number; depth: number };
@@ -310,7 +394,7 @@ export class Materials {
    *  `SHARED_CHANGES` moves, written in place from then on. Such a look has no maps or volume of its own. */
   private sharedLookId(material: AnyMaterial, look: RustLook, entry: MaterialEntry | undefined): number {
     const core = this.core, frame = core.frame;
-    const described = this.describe(material, look);
+    const described = this.describedNow(material, look, entry);
     if (described < 0) return 0;
     const key = described | (look.casts ? CASTS_AS_PLACED : 0);
     const p = this.scratchParams, maps = this.scratchMaps, numbers = this.scratchLook;
@@ -324,6 +408,7 @@ export class Materials {
         custom: numbers.slice(0, count),
       };
       this.materials.set(material, entry);
+      this.keepPlain(material, entry);
       return entry.id;
     }
     entry.seen = frame;
@@ -336,6 +421,7 @@ export class Materials {
     }
     if (sameMaps && sameParams && sameNumbers) {
       this.sendTail(kept.id, look);
+      if (kept.version !== material.version) this.keepPlain(material, kept);
       return kept.id;
     }
     kept.changes++;
@@ -356,6 +442,7 @@ export class Materials {
     kept.params.set(p);
     sent.set(numbers.subarray(0, count));
     kept.key = key;
+    this.keepPlain(material, kept);
     this.sendTail(kept.id, look);
     return kept.id;
   }
@@ -389,7 +476,7 @@ export class Materials {
   /** A material with a look of its own: an engine material to itself, its shader's numbers sent as they move. */
   private lookId(material: AnyMaterial, look: RustLook, entry: MaterialEntry | undefined): number {
     const core = this.core, held = this.maps;
-    const described = this.describe(material, look);
+    const described = this.describedNow(material, look, entry);
     if (described < 0) return 0;
     const key = described | (look.casts ? CASTS_AS_PLACED : 0);
     const p = this.scratchParams, maps = this.scratchMaps, numbers = this.scratchLook;
@@ -425,6 +512,7 @@ export class Materials {
         volume, extra: extra.slice(),
       };
       this.materials.set(material, entry);
+      this.keepPlain(material, entry);
       core.held.materials++;
       core.stats.newMaterials++;
       core.freshViews();
@@ -436,6 +524,7 @@ export class Materials {
       core.engine.set_material_params(kept.id, p);
       kept.params.set(p);
     }
+    if (kept.version !== material.version) this.keepPlain(material, kept);
     if (numbers.some((value, index) => value !== sent[index])) {
       core.engine.set_material_custom(kept.id, numbers);
       sent.set(numbers);

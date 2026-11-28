@@ -19,7 +19,9 @@
 //
 // `--canary` plants a fault each part must catch: no special boss wave (the Colossus on the 15th), a pair that shares
 // nothing, a chain that never snaps, no collapse at half, a mend that mends nothing, a program compiled in the fight.
-import * as THREE from 'three';
+import {
+  AdditiveBlending, BackSide, boundsOf, Geometry, LitMaterial, Mesh, Node, shapes, UnlitMaterial, Vec3
+} from './sceneApi.ts';
 import type { Fixture, Lab, Pictured, Report } from './lab';
 import type { Enemy } from '../../../src/entities/enemy';
 import type { BiomeId } from '../../../src/data/biomes';
@@ -87,10 +89,10 @@ const CLEAR_STEP = 0.15;
 
 /** A spot `away` m from the hero, nearest the way to the arena's middle, where a boss of `radius` stands clear of the
  *  props with nothing between it and him. */
-function clearSpot(away: number, radius: number): THREE.Vector3 {
+function clearSpot(away: number, radius: number): Vec3 {
   const hero = G.player.pos;
-  const inward = new THREE.Vector3(-hero.x, 0, -hero.z).normalize();
-  const up = new THREE.Vector3(0, 1, 0);
+  const inward = new Vec3(-hero.x, 0, -hero.z).normalize();
+  const up = new Vec3(0, 1, 0);
   for (let turn = 0; turn <= CLEAR_MOST; turn += CLEAR_STEP) {
     for (const sign of turn === 0 ? [1] : [1, -1]) {
       const way = inward.clone().applyAxisAngle(up, turn * sign);
@@ -105,8 +107,8 @@ function clearSpot(away: number, radius: number): THREE.Vector3 {
 /** Slab and Reliquary risen abreast `away` m from the hero, dazed (thinking nothing) unless `thinks`. */
 export async function pairAt(lab: Lab, away: number, thinks: boolean): Promise<{ slab: Enemy; reliquary: Enemy }> {
   const at = clearSpot(away, ENEMIES.twinslab.radius);
-  const toHero = new THREE.Vector3(G.player.pos.x - at.x, 0, G.player.pos.z - at.z).normalize();
-  const side = new THREE.Vector3(-toHero.z, 0, toHero.x);
+  const toHero = new Vec3(G.player.pos.x - at.x, 0, G.player.pos.z - at.z).normalize();
+  const side = new Vec3(-toHero.z, 0, toHero.x);
   let other = at.clone().addScaledVector(side, ABREAST);
   if (inObstacle(other, ENEMIES.twinreliquary.radius)) other = at.clone().addScaledVector(side, -ABREAST);
   const slab = lab.spawnFoe('twinslab', at, { wave: FIRST_WAVE });
@@ -256,7 +258,7 @@ async function chain(lab: Lab, options: TwinsOptions, lines: string[], problems:
   try {
     const { slab, reliquary } = await pairAt(lab, 9, false);
     // (Reliquary set past the chain's reach across the hero, so he stands on the line between them)
-    const way = new THREE.Vector3(G.player.pos.x - slab.pos.x, 0, G.player.pos.z - slab.pos.z).normalize();
+    const way = new Vec3(G.player.pos.x - slab.pos.x, 0, G.player.pos.z - slab.pos.z).normalize();
     reliquary.pos.copy(slab.pos).addScaledVector(way, reach + 4);
     const apart = (): number => Math.hypot(reliquary.pos.x - slab.pos.x, reliquary.pos.z - slab.pos.z);
     const was = apart();
@@ -394,13 +396,13 @@ async function compiles(lab: Lab, options: TwinsOptions, lines: string[], proble
     if (options.canary) {
       // (a blending, side and depth no other material has together: the engine's pipelines are set apart by those,
       // and a three material of its own, flat-shaded Phong, made none under it: `compiles.ts`'s canary)
-      const material = new THREE.MeshBasicMaterial({
+      const material = new UnlitMaterial({
         color: 0x123456,
-        blending: THREE.AdditiveBlending,
-        side: THREE.BackSide,
+        blending: AdditiveBlending,
+        side: BackSide,
         depthWrite: true,
       });
-      const odd = new THREE.Mesh(new THREE.TorusKnotGeometry(0.3, 0.1), material);
+      const odd = new Mesh(shapes.torusKnot(0.3, 0.1), material);
       odd.position.copy(slab.pos).setY(2);
       G.scene.add(odd);
       await framesLetGo(lab, 8);
@@ -425,9 +427,9 @@ async function pictures(lab: Lab, options: TwinsOptions, lines: string[]): Promi
   await standIn(lab, options.fixture, 'crypt');
   const moments: Pictured[] = [];
   const { slab, reliquary } = await pairAt(lab, 11, false);
-  const middle = (): THREE.Vector3 => slab.pos.clone().add(reliquary.pos).multiplyScalar(0.5).setY(2.8);
+  const middle = (): Vec3 => slab.pos.clone().add(reliquary.pos).multiplyScalar(0.5).setY(2.8);
   // (each turned as the hero faces: he's turned on them first, so `back` looks at their fronts past him)
-  const faceThem = (at: THREE.Vector3): void => {
+  const faceThem = (at: Vec3): void => {
     G.player.facing = Math.atan2(at.x - G.player.pos.x, at.z - G.player.pos.z);
   };
   const seen = (label: string, note: string): void => {
@@ -445,8 +447,8 @@ async function pictures(lab: Lab, options: TwinsOptions, lines: string[]): Promi
     await lab.until(reached, 12 * FPS, `${who.type} never reached its ${name}`, keepWhole);
     who.dazed = 1e4;
   };
-  const before = (who: Enemy, metres: number): THREE.Vector3 =>
-    who.pos.clone().add(new THREE.Vector3(Math.sin(who.facing) * metres, 0, Math.cos(who.facing) * metres));
+  const before = (who: Enemy, metres: number): Vec3 =>
+    who.pos.clone().add(new Vec3(Math.sin(who.facing) * metres, 0, Math.cos(who.facing) * metres));
   const drawing = lab.drawing;
   lab.drawing = true;
   try {
@@ -461,7 +463,7 @@ async function pictures(lab: Lab, options: TwinsOptions, lines: string[]): Promi
     await act(reliquary, 'volley', 0.55);
     await lab.step(12, keepWhole);
     seen('5 skull volley', 'three to five skulls curving in on the hero, each on its own arc');
-    const way = new THREE.Vector3(reliquary.pos.x - slab.pos.x, 0, reliquary.pos.z - slab.pos.z).normalize();
+    const way = new Vec3(reliquary.pos.x - slab.pos.x, 0, reliquary.pos.z - slab.pos.z).normalize();
     reliquary.pos.copy(slab.pos).addScaledVector(way, TWINS.chain.max + 2);
     await lab.step(3, keepWhole);
     seen('6 the chain snaps', 'drifted too far apart: the chain snaps tight, dragging them together, hurting anyone between');
@@ -498,16 +500,16 @@ const OTHER_OFF = 30;
 const SKULL_DOWN = 0.6;
 
 /** The triangles a geometry draws. */
-const trianglesIn = (geometry: THREE.BufferGeometry): number =>
+const trianglesIn = (geometry: Geometry): number =>
   (geometry.index ? geometry.index.count : geometry.attributes.position.count) / 3;
 
 /** The triangles a model draws, every mesh of it drawn (a belt skull off its rope is undrawn). */
-function trianglesOf(root: THREE.Object3D): number {
+function trianglesOf(root: Node): number {
   // (every mesh drawn counts, a shared geometry as often as it's drawn: the belt skulls share one, and counted once
   // the twins read 2k fewer than they draw)
   let count = 0;
   root.traverseVisible((object) => {
-    const mesh = object as THREE.Mesh;
+    const mesh = object as Mesh;
     if (mesh.isMesh) count += trianglesIn(mesh.geometry);
   });
   return Math.round(count);
@@ -515,16 +517,16 @@ function trianglesOf(root: THREE.Object3D): number {
 
 /** The triangles of each of a model's meshes, the most first: its depth in the model's tree and its material's colour,
  *  so a budget can be cut where it goes. */
-function trianglesByMesh(root: THREE.Object3D, most: number): string {
+function trianglesByMesh(root: Node, most: number): string {
   const rows: [string, number][] = [];
-  const seen = new Set<THREE.BufferGeometry>();
+  const seen = new Set<Geometry>();
   root.traverse((object) => {
-    const mesh = object as THREE.Mesh;
+    const mesh = object as Mesh;
     if (!mesh.isMesh || seen.has(mesh.geometry)) return;
     seen.add(mesh.geometry);
     let depth = 0;
-    for (let at: THREE.Object3D | null = mesh.parent; at && at !== root; at = at.parent) depth++;
-    const material = mesh.material as THREE.MeshStandardMaterial;
+    for (let at: Node | null = mesh.parent; at && at !== root; at = at.parent) depth++;
+    const material = mesh.material as LitMaterial;
     const colour = material.color ? `#${material.color.getHexString()}` : material.type;
     rows.push([`depth ${depth} ${colour}`, Math.round(trianglesIn(mesh.geometry))]);
   });
@@ -537,7 +539,7 @@ function bonesTriangles(): string {
   const span = 1.85;
   const thick = 0.17;
   const hip = 0.464;
-  const bones: [string, THREE.BufferGeometry][] = [
+  const bones: [string, Geometry][] = [
     ['heavy skull', twinSkull(0.0092, 'heavy')], ['long skull', twinSkull(0.0092, 'long')], ['jaw', jaw(0.0082)],
     ['small skull', skull(0.019)], ['small jaw', jaw(0.016)],
     ['pelvis', pelvis(hip)], ['scapula', scapula(span * 0.44)], ['sternum', sternum(span * 0.38)],
@@ -553,8 +555,8 @@ function bonesTriangles(): string {
 const CASKET_FROM = 4.5;
 
 /** Where `who`'s skull is drawn, in the world: just under the top of its body as posed. */
-function skullOf(who: Enemy): THREE.Vector3 {
-  const box = new THREE.Box3().setFromObject(who.model.root);
+function skullOf(who: Enemy): Vec3 {
+  const box = boundsOf(who.model.root);
   return who.pos.clone().setY(box.max.y - SKULL_DOWN);
 }
 
@@ -583,14 +585,14 @@ async function look(lab: Lab, options: TwinsOptions, lines: string[], problems: 
   const moments: Pictured[] = [];
   const { slab, reliquary } = await pairAt(lab, 12, false);
   // (the chain to his brother hidden: drawn, it glared across every picture of either)
-  const lay = slab.model.root.userData.layChain as (to: THREE.Vector3 | null, taut: number) => void;
-  slab.model.root.userData.layChain = (_to: THREE.Vector3 | null, taut: number) => lay(null, taut);
+  const lay = slab.model.root.userData.layChain as (to: Vec3 | null, taut: number) => void;
+  slab.model.root.userData.layChain = (_to: Vec3 | null, taut: number) => lay(null, taut);
   const drawing = lab.drawing;
   lab.drawing = true;
   try {
     for (const [who, name, other] of [[slab, 'Slab', reliquary], [reliquary, 'Reliquary', slab]] as const) {
       // (the other one sent well off behind the hero, so each stands alone in its pictures)
-      const away = new THREE.Vector3(G.player.pos.x - who.pos.x, 0, G.player.pos.z - who.pos.z).normalize();
+      const away = new Vec3(G.player.pos.x - who.pos.x, 0, G.player.pos.z - who.pos.z).normalize();
       other.pos.copy(G.player.pos).addScaledVector(away, OTHER_OFF);
       const toHero = Math.atan2(G.player.pos.x - who.pos.x, G.player.pos.z - who.pos.z);
       await lab.step(20, () => {
@@ -608,10 +610,10 @@ async function look(lab: Lab, options: TwinsOptions, lines: string[], problems: 
       moments.push(lab.picture(`${name} sides`, ['left', 'right'], [`${name} from both sides`], whole));
       moments.push(lab.picture(`${name} skull`, ['back', 'left', 'right'], [`${name}'s skull, its face and both sides`],
         { at: skullOf(who), distance: SKULL_FROM }));
-      const casket = who.model.root.userData.casket as THREE.Object3D | undefined;
+      const casket = who.model.root.userData.casket as Node | undefined;
       if (casket) {
         moments.push(lab.picture(`${name}'s casket`, ['back', 'left'], [`the casket ${name} holds, its skulls circling it`],
-          { at: casket.getWorldPosition(new THREE.Vector3()), distance: CASKET_FROM }));
+          { at: casket.getWorldPosition(new Vec3()), distance: CASKET_FROM }));
       }
       for (const twin of [who, other]) {
         sighted(twin);

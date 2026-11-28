@@ -1,12 +1,13 @@
 // Shared mutable game state. Systems read/write through this object instead of
 // passing long parameter lists around. Keep it flat and documented.
-import type * as THREE from 'three';
+import type { PerspectiveCamera, World } from './engine/api/index.ts';
 import type { Arena } from './world/arena';
 import type { Player } from './entities/player';
 import type { Enemy } from './entities/enemy';
 import type { Projectile } from './combat/projectiles';
 import type { RunState } from './game/run';
 import type { Profile } from './types';
+import type { GameScreen } from './core/screen';
 
 export interface GameState {
   time: number;                 // seconds since start (unpaused)
@@ -18,9 +19,10 @@ export interface GameState {
   mode: 'menu' | 'run';
 
   // three.js core (set by core/renderer)
-  scene: THREE.Scene;
-  camera: THREE.PerspectiveCamera;
-  renderer: THREE.WebGLRenderer;
+  scene: World;
+  camera: PerspectiveCamera;
+  /** the page's canvas and its size (the engine's: core/screen.ts) */
+  renderer: GameScreen;
 
   // world
   arena: Arena;

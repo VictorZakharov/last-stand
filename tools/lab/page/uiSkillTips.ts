@@ -1,6 +1,6 @@
 // The skill tooltips' states of `lab ui` (`uiStates/skillTips.ts` by the mouse over the hotbar, `skillTipsTouch.ts` by
 // a finger's tap in the lobby): each skill a player can reach opened, its box kept, and every one within the window.
-import { middleOf } from './lab';
+import { boxOf, middleOf } from './lab';
 import { asked, boxText, share } from './uiKit';
 import type { Found } from './uiKit';
 
@@ -37,6 +37,8 @@ function tooltipBox(): DOMRect | null {
 export function reachable(slot: HTMLElement): boolean {
   const middle = middleOf(slot);
   const under = document.elementFromPoint(middle.x, middle.y);
+  // (a slot the engine draws, its page's out of sight: reached where nothing of the page lies over its canvas)
+  if (slot.closest('.kit-mirror')) return boxOf(slot).width >= 1 && under?.id === 'rust-canvas';
   return !!under && slot.contains(under);
 }
 

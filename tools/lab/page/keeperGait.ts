@@ -5,7 +5,7 @@
 // Kenneth's round 3 of #704: "his leg is basically straight in the walking animation", "when he turns, his feet end up
 // crossing each other... They just hit each other", "he does a bunch of these turns where he stops walking and looks
 // left and right", "he walks through a bar chair".
-import * as THREE from 'three';
+import { Maths, Node, Quat, Vec3 } from './sceneApi.ts';
 import type { Keeper } from '../../../src/entities/models/keeper';
 import type { TavernKeeper } from '../../../src/world/tavernKeeper';
 import type { Point } from '../../../src/world/tavernNav';
@@ -45,16 +45,16 @@ class Worst {
   }
 }
 
-const _q = new THREE.Quaternion(), _roomQ = new THREE.Quaternion(), _fwd = new THREE.Vector3();
+const _q = new Quat(), _roomQ = new Quat(), _fwd = new Vec3();
 /** the way his pelvis faces on the floor (rad, the room's: 0 to +z) */
-function pelvisHeading(keeper: Keeper, room: THREE.Object3D): number {
+function pelvisHeading(keeper: Keeper, room: Node): number {
   room.getWorldQuaternion(_roomQ).invert();
   _fwd.set(0, 0, 1).applyQuaternion(keeper.joints.hips.getWorldQuaternion(_q)).applyQuaternion(_roomQ);
   return Math.atan2(_fwd.x, _fwd.z);
 }
 
 /** the mean of his feet's headings on the floor (rad, the room's: 0 to +z) */
-export function feetHeading(keeper: Keeper, room: THREE.Object3D): number {
+export function feetHeading(keeper: Keeper, room: Node): number {
   room.getWorldQuaternion(_roomQ).invert();
   let sx = 0, sz = 0;
   for (const ankle of keeper.ankles) {
@@ -66,7 +66,7 @@ export function feetHeading(keeper: Keeper, room: THREE.Object3D): number {
 }
 
 /** a hinge joint's bend (degrees), from its turn */
-const bendOf = (joint: THREE.Object3D) => THREE.MathUtils.radToDeg(2 * Math.acos(Math.min(1, Math.abs(joint.quaternion.w))));
+const bendOf = (joint: Node) => Maths.radToDeg(2 * Math.acos(Math.min(1, Math.abs(joint.quaternion.w))));
 
 /** His walk frame by frame. */
 export class GaitWatch {
@@ -98,10 +98,10 @@ export class GaitWatch {
   /** his body's middle against the stools and tables, walking */
   readonly walked = new Worst();
   private circles: Circle[] | null = null;
-  private readonly a = new THREE.Vector3();
-  private readonly b = new THREE.Vector3();
-  private readonly c = new THREE.Vector3();
-  private readonly rootWas = new THREE.Vector3();
+  private readonly a = new Vec3();
+  private readonly b = new Vec3();
+  private readonly c = new Vec3();
+  private readonly rootWas = new Vec3();
 
   forget(): void {
     this.yawWas = null;
@@ -113,7 +113,7 @@ export class GaitWatch {
     this.frame++;
     const room = keeper.root.parent!, yaw = keeper.root.rotation.y, speed = tv.body().speed;
     // --- his feet against each other, in the room's frame across his facing ---
-    const feet: [THREE.Vector3, THREE.Vector3] = [this.a, this.b];
+    const feet: [Vec3, Vec3] = [this.a, this.b];
     keeper.feet(feet);
     room.worldToLocal(this.a);
     room.worldToLocal(this.b);

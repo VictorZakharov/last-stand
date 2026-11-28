@@ -5,7 +5,10 @@
 // torches on the columns and dust in the firelight. Its point lights are as many as a biome's (10, two casting the still
 // shadows: the braziers'), so showing it compiles nothing the lobby's programs don't have; its materials are the
 // crypt's stone (core/textures.ts recipes, the same maps), warmed with the heroes (game/warmup.ts `heroParts`).
-import * as THREE from 'three';
+import {
+  Color, DoubleSide, Geometry, LitMaterial, Material, Mesh, Node, PointLight, Vec2, Vec3,
+} from '../engine/api/index.ts';
+import * as shapes from '../engine/api/shapes/index.ts';
 import { ARENA } from '../data/balance';
 import { CLASSES, CLASS_IDS } from '../data/classes/index';
 import { ashlar, bannerCloth, flagstone, granite, limestone, pbrMaterialMaps } from '../core/textures';
@@ -20,8 +23,8 @@ import type { Relief } from './ground';
 /** The row of heroes: the line across the stage (z, m) and how far apart they stand. */
 export const HALL_ROW = { z: 0.4, gap: 1.75 };
 /** Where hero `i` of the row stands (on the stage's floor: his plinth lifts him, `groundHeight`). */
-export const hallSpot = (i: number): THREE.Vector3 =>
-  new THREE.Vector3((i - (CLASS_IDS.length - 1) / 2) * HALL_ROW.gap, 0, HALL_ROW.z);
+export const hallSpot = (i: number): Vec3 =>
+  new Vec3((i - (CLASS_IDS.length - 1) / 2) * HALL_ROW.gap, 0, HALL_ROW.z);
 
 /** the flagstones' tiles and the wall's ashlar's a metre (a flagstone tile is five 0.45 m slabs across) */
 const FLAGS = 1 / 2.25;
@@ -82,34 +85,34 @@ function plinthRelief(): Relief {
 }
 
 /** A mesh casting and taking shadows, added to `group`. */
-function solid(group: THREE.Object3D, geometry: THREE.BufferGeometry, material: THREE.Material): THREE.Mesh {
-  const mesh = new THREE.Mesh(geometry, material);
+function solid(group: Node, geometry: Geometry, material: Material): Mesh {
+  const mesh = new Mesh(geometry, material);
   mesh.castShadow = mesh.receiveShadow = true;
   group.add(mesh);
   return mesh;
 }
 
 /** A column at (x, z) on the floor: a square base, its shaft and a capital. */
-function column(group: THREE.Object3D, x: number, z: number, stone: THREE.Material, trim: THREE.Material): void {
+function column(group: Node, x: number, z: number, stone: Material, trim: Material): void {
   solid(group, boxWithUV(1.15, 0.45, 1.15, 0.5), trim).position.set(x, 0.225, z);
-  const shaft = new THREE.CylinderGeometry(COLUMNS.radius * 0.88, COLUMNS.radius, COLUMNS.high, 20, 1);
+  const shaft = shapes.cylinder(COLUMNS.radius * 0.88, COLUMNS.radius, COLUMNS.high, 20, 1);
   solid(group, shaft, stone).position.set(x, 0.45 + COLUMNS.high / 2, z);
   solid(group, boxWithUV(1.05, 0.4, 1.05, 0.5), trim).position.set(x, 0.45 + COLUMNS.high + 0.2, z);
 }
 
 /** A torch on a column's inner face at (x, z): an iron basket on a bracket, its fire and its light. */
-function torch(group: THREE.Object3D, x: number, z: number, iron: THREE.Material, updaters: Updater[]): void {
+function torch(group: Node, x: number, z: number, iron: Material, updaters: Updater[]): void {
   const side = Math.sign(-x);
-  const bracket = new THREE.Mesh(new THREE.BoxGeometry(TORCH.in, 0.06, 0.06), iron);
+  const bracket = new Mesh(shapes.box(TORCH.in, 0.06, 0.06), iron);
   bracket.position.set(x + side * TORCH.in / 2, TORCH.up - 0.25, z);
   group.add(bracket);
-  const outline = [[0.03, 0], [0.05, 0.12], [0.13, 0.3], [0.15, 0.34], [0, 0.26]].map(([r, y]) => new THREE.Vector2(r, y));
-  const basket = new THREE.Mesh(new THREE.LatheGeometry(outline, 10), iron);
-  const at = new THREE.Vector3(x + side * TORCH.in, TORCH.up, z);
+  const outline = [[0.03, 0], [0.05, 0.12], [0.13, 0.3], [0.15, 0.34], [0, 0.26]].map(([r, y]) => new Vec2(r, y));
+  const basket = new Mesh(shapes.lathe(outline, 10), iron);
+  const at = new Vec3(x + side * TORCH.in, TORCH.up, z);
   basket.position.set(at.x, at.y - 0.3, at.z);
   basket.castShadow = true;
   group.add(basket);
-  const light = new THREE.PointLight(TORCH.color, TORCH.intensity, TORCH.distance, 2);
+  const light = new PointLight(TORCH.color, TORCH.intensity, TORCH.distance, 2);
   light.position.set(at.x, at.y + 0.45, at.z);
   group.add(light);
   buildFire(group, {
@@ -119,22 +122,22 @@ function torch(group: THREE.Object3D, x: number, z: number, iron: THREE.Material
 }
 
 /** Hero `i`'s banner on the back wall behind him, in his class's colour, on an iron rod, lit from in front. */
-function banner(group: THREE.Object3D, i: number, iron: THREE.Material, rng: () => number): void {
+function banner(group: Node, i: number, iron: Material, rng: () => number): void {
   const x = hallSpot(i).x;
   const cloth = bannerCloth(256, 512, CLASSES[CLASS_IDS[i]].hall.banner);
-  const velvet = new THREE.MeshPhysicalMaterial({
-    map: cloth, roughness: 0.9, sheen: 1, sheenColorMap: cloth, sheenColor: new THREE.Color(1.8, 1.8, 1.8),
-    sheenRoughness: 0.4, side: THREE.DoubleSide,
+  const velvet = new LitMaterial({
+    map: cloth, roughness: 0.9, sheen: 1, sheenColorMap: cloth, sheenColor: new Color(1.8, 1.8, 1.8),
+    sheenRoughness: 0.4, side: DoubleSide,
   });
   seeThrough(velvet, 'prop');
   // (`bannerGeo` hangs facing -z, away from a crypt's wall's face: turned round to face the hall)
   const geometry = bannerGeo(rng).rotateY(Math.PI).scale(BANNER.scale, BANNER.scale, BANNER.scale);
   const hung = solid(group, geometry, velvet);
   hung.position.set(x, BANNER.top, WALL.z + BANNER.off);
-  const rod = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.9 * BANNER.scale + 0.3, 8).rotateZ(Math.PI / 2), iron);
+  const rod = new Mesh(shapes.cylinder(0.03, 0.03, 0.9 * BANNER.scale + 0.3, 8).rotateZ(Math.PI / 2), iron);
   rod.position.set(x, BANNER.top + 0.03, WALL.z + BANNER.off);
   group.add(rod);
-  const light = new THREE.PointLight(BANNER_LIGHT.color, BANNER_LIGHT.intensity, BANNER_LIGHT.distance, 2);
+  const light = new PointLight(BANNER_LIGHT.color, BANNER_LIGHT.intensity, BANNER_LIGHT.distance, 2);
   light.position.set(x, BANNER_LIGHT.up, WALL.z + BANNER_LIGHT.out);
   group.add(light);
 }
@@ -151,22 +154,22 @@ function mote(): void {
 }
 
 /** The hall of heroes built into `group` (shown in the biomes' place: `Arena.showHall`). */
-export function buildHeroHall(group: THREE.Group): HeroHall {
+export function buildHeroHall(group: Node): HeroHall {
   const rng = mulberry(4242);
   const updaters: Updater[] = [];
   // (the biomes' own stones, the same recipes: their maps and programs are theirs; the floor the forest dais's slabs)
-  const floorMat = new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(flagstone(47, 5), 1, 1.2), color: 0x707078 });
-  const stageMat = new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(flagstone(47, 5), 1, 1.2), color: 0x8c8c94 });
-  const graniteMat = new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(granite(7), 2, 0.8), color: 0xd0d0d8 });
-  const wallMat = new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(ashlar(21, 6, 3), 1, 1.2), color: 0x9a9eac });
-  const carved = new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(limestone(11), 2, 1.6), color: 0x8a8c92 });
+  const floorMat = new LitMaterial({ ...pbrMaterialMaps(flagstone(47, 5), 1, 1.2), color: 0x707078 });
+  const stageMat = new LitMaterial({ ...pbrMaterialMaps(flagstone(47, 5), 1, 1.2), color: 0x8c8c94 });
+  const graniteMat = new LitMaterial({ ...pbrMaterialMaps(granite(7), 2, 0.8), color: 0xd0d0d8 });
+  const wallMat = new LitMaterial({ ...pbrMaterialMaps(ashlar(21, 6, 3), 1, 1.2), color: 0x9a9eac });
+  const carved = new LitMaterial({ ...pbrMaterialMaps(limestone(11), 2, 1.6), color: 0x8a8c92 });
   // (rougher than the crypt's: polished, the braziers' bowls took their own light as a white spot over the flames'
   // foot, "reflections are glaring")
-  const iron = new THREE.MeshStandardMaterial({ color: 0x2a2a2e, metalness: 0.9, roughness: 0.75 });
+  const iron = new LitMaterial({ color: 0x2a2a2e, metalness: 0.9, roughness: 0.75 });
   for (const m of [wallMat, carved, iron]) seeThrough(m, 'prop');
 
   // --- The floor, the stage (the dais's square and its step) and the plinths ---
-  const floor = new THREE.Mesh(new THREE.PlaneGeometry(40, 40).rotateX(-Math.PI / 2), floorMat);
+  const floor = new Mesh(shapes.plane(40, 40).rotateX(-Math.PI / 2), floorMat);
   const uv = floor.geometry.attributes.uv;
   for (let k = 0; k < uv.count; k++) uv.setXY(k, uv.getX(k) * 40 * FLAGS, uv.getY(k) * 40 * FLAGS);
   floor.receiveShadow = true;
@@ -175,10 +178,10 @@ export function buildHeroHall(group: THREE.Group): HeroHall {
   solid(group, boxWithUV((h + 0.7) * 2, 0.18, (h + 0.7) * 2, FLAGS), stageMat).position.set(0, 0.09, 0);
   solid(group, boxWithUV(h * 2, top, h * 2, FLAGS), stageMat).position.set(0, top / 2, 0);
   for (const at of CLASS_IDS.map((_, i) => hallSpot(i))) {
-    const lower = new THREE.CylinderGeometry(PLINTH.lower, PLINTH.lower, PLINTH.step, 40);
+    const lower = shapes.cylinder(PLINTH.lower, PLINTH.lower, PLINTH.step, 40);
     solid(group, lower, graniteMat).position.set(at.x, top + PLINTH.step / 2, at.z);
     const upperHigh = PLINTH.top - PLINTH.step;
-    const upper = new THREE.CylinderGeometry(PLINTH.upper, PLINTH.upper * 1.04, upperHigh, 40);
+    const upper = shapes.cylinder(PLINTH.upper, PLINTH.upper * 1.04, upperHigh, 40);
     solid(group, upper, graniteMat).position.set(at.x, top + PLINTH.step + upperHigh / 2, at.z);
   }
 
@@ -198,7 +201,7 @@ export function buildHeroHall(group: THREE.Group): HeroHall {
     for (const z of COLUMNS.z.slice(0, 2)) torch(group, side * COLUMNS.x, z, iron, updaters);
   }
   for (let i = 0; i < CLASS_IDS.length; i++) banner(group, i, iron, rng);
-  const high = new THREE.PointLight(HIGH_LIGHT.color, HIGH_LIGHT.intensity, HIGH_LIGHT.distance, 2);
+  const high = new PointLight(HIGH_LIGHT.color, HIGH_LIGHT.intensity, HIGH_LIGHT.distance, 2);
   high.position.set(...HIGH_LIGHT.at);
   group.add(high);
 

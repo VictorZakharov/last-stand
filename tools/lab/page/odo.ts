@@ -8,7 +8,7 @@
 // compiled, and his update must cost no more than `COST` a frame by the browser's own clock (its figure is in the
 // glance's notes: a line of the report must read the same on every run). `--canary` drags his standing feet along
 // under him, which the slip must catch.
-import * as THREE from 'three';
+import { Maths, Node, Quat, Vec3 } from './sceneApi.ts';
 import type { Lab, Pictured, Report } from './lab';
 import { G } from '../../../src/state';
 import { RUST } from '../../../src/engine';
@@ -83,7 +83,7 @@ function deeper(deepest: Deepest, depth: number, at: string): void {
 }
 
 /** How far the point `at` (the shop's frame) is inside the counter, or 0. */
-function intoCounter(odo: Odo, at: THREE.Vector3): number {
+function intoCounter(odo: Odo, at: Vec3): number {
   const { top, near, far } = odo.life.shop.counter;
   const depth = Math.min(at.x + COUNTER_HALF, COUNTER_HALF - at.x, at.z - near, far - at.z, top - at.y);
   return Math.max(0, depth);
@@ -92,16 +92,16 @@ function intoCounter(odo: Odo, at: THREE.Vector3): number {
 /** His arms' points (the upper arm's middle, the elbow, the forearm's middle, the wrist) against the counter. */
 function armsAgainstCounter(odo: Odo, seen: Watch): void {
   const j = odo.joints, shop = odo.root.parent!;
-  const point = new THREE.Vector3();
-  const elbow = new THREE.Vector3();
-  const hand = new THREE.Vector3();
-  const shoulder = new THREE.Vector3();
+  const point = new Vec3();
+  const elbow = new Vec3();
+  const hand = new Vec3();
+  const shoulder = new Vec3();
   const arms = [['left', j.shoulderL, j.elbowL, j.handL], ['right', j.shoulderR, j.elbowR, j.handR]] as const;
   for (const [name, s, e, h] of arms) {
     s.getWorldPosition(shoulder);
     e.getWorldPosition(elbow);
     h.getWorldPosition(hand);
-    const points: [string, THREE.Vector3][] = [
+    const points: [string, Vec3][] = [
       ['upper arm', shoulder.clone().lerp(elbow, 0.5)],
       ['elbow', elbow],
       ['forearm', elbow.clone().lerp(hand, 0.5)],
@@ -116,8 +116,8 @@ function armsAgainstCounter(odo: Odo, seen: Watch): void {
 /** where his hands are wanted this frame (his root's frame, and how far toward it), to say where a fault was */
 function handsAimed(odo: Odo): string {
   const d = odo.life.doing;
-  const at = (v: THREE.Vector3) => `${v.x.toFixed(2)},${v.y.toFixed(2)},${v.z.toFixed(2)}`;
-  const elbow = (joint: THREE.Object3D) => at(odo.root.worldToLocal(joint.getWorldPosition(new THREE.Vector3())));
+  const at = (v: Vec3) => `${v.x.toFixed(2)},${v.y.toFixed(2)},${v.z.toFixed(2)}`;
+  const elbow = (joint: Node) => at(odo.root.worldToLocal(joint.getWorldPosition(new Vec3())));
   const w = odo.life.walker;
   const inHand = odo.life.things.filter((t) => t.held).map((t) => `${t.obj.name || t.obj.type} in ${t.held}`);
   const held = inHand.join(', ') || 'nothing';
@@ -127,9 +127,9 @@ function handsAimed(odo: Odo): string {
 }
 
 /** The capsules of `hand` in the world: each its two ends and its radius. */
-function capsulesOf(hand: Hand): [THREE.Vector3, THREE.Vector3, number][] {
+function capsulesOf(hand: Hand): [Vec3, Vec3, number][] {
   return handCapsules(hand).map(([[ja, pa], [jb, pb], r]) => {
-    const capsule: [THREE.Vector3, THREE.Vector3, number] = [
+    const capsule: [Vec3, Vec3, number] = [
       ja.localToWorld(pa.clone()), jb.localToWorld(pb.clone()), r,
     ];
     return capsule;
@@ -137,7 +137,7 @@ function capsulesOf(hand: Hand): [THREE.Vector3, THREE.Vector3, number][] {
 }
 
 /** How far the segment a to b (`r` thick) goes into any of `hands`' capsules. */
-function intoHands(hands: Hand[], a: THREE.Vector3, b: THREE.Vector3, r: number): number {
+function intoHands(hands: Hand[], a: Vec3, b: Vec3, r: number): number {
   let depth = 0;
   for (const hand of hands) {
     for (const [ca, cb, cr] of capsulesOf(hand)) depth = Math.max(depth, cr + r - segmentDistance(a, b, ca, cb));
@@ -148,15 +148,15 @@ function intoHands(hands: Hand[], a: THREE.Vector3, b: THREE.Vector3, r: number)
 /** The quill's shaft past his pinch (from 3.5 cm up from its nib), and the dagger's blade, against his hands. */
 function heldAgainstHands(odo: Odo, seen: Watch): void {
   const quill = odo.root.getObjectByName('odo quill shaft')?.parent;
-  if (quill && quill.getWorldScale(new THREE.Vector3()).x > 0.5) {
-    const a = quill.localToWorld(new THREE.Vector3(0, 0.035, 0));
-    const b = quill.localToWorld(new THREE.Vector3(0, 0.21, 0));
+  if (quill && quill.getWorldScale(new Vec3()).x > 0.5) {
+    const a = quill.localToWorld(new Vec3(0, 0.035, 0));
+    const b = quill.localToWorld(new Vec3(0, 0.21, 0));
     deeper(seen.quill, intoHands([odo.hands.L], a, b, 0.002), `${odo.life.now}, the quill`);
   }
   const dagger = odo.life.shop.blade.dagger;
   if (dagger.held) {
-    const a = dagger.obj.localToWorld(new THREE.Vector3(0, 0.13, 0));
-    const b = dagger.obj.localToWorld(new THREE.Vector3(0, 0.3, 0));
+    const a = dagger.obj.localToWorld(new Vec3(0, 0.13, 0));
+    const b = dagger.obj.localToWorld(new Vec3(0, 0.3, 0));
     deeper(seen.blade, intoHands([odo.hands.L], a, b, 0.004), `${odo.life.now}, the blade into his left hand`);
     deeper(seen.blade, intoHands([odo.hands.R], a, b, 0.004), `${odo.life.now}, the blade into his right hand`);
   }
@@ -166,9 +166,9 @@ function heldAgainstHands(odo: Odo, seen: Watch): void {
 function standInShop(x: number, z: number, facing: number): void {
   const room = G.arena.rooms!.merchant;
   room.group.updateMatrixWorld(true);
-  const at = room.group.localToWorld(new THREE.Vector3(x, 0, z));
+  const at = room.group.localToWorld(new Vec3(x, 0, z));
   G.player.walkTo = null;
-  G.player.place(new THREE.Vector3(at.x, groundHeight(at.x, at.z), at.z), facing);
+  G.player.place(new Vec3(at.x, groundHeight(at.x, at.z), at.z), facing);
 }
 
 /** The canary's fault: his feet that stand on the floor kept under his moving body, which is what sliding is. */
@@ -190,10 +190,10 @@ function watch(lab: Lab, odo: Odo, seen: Watch, canary: boolean): void {
   const shape = bodyShape(odo.joints, { L: odo.hands.L.vis, R: odo.hands.R.vis });
   const life = odo.life;
   const ankles = [odo.root.getObjectByName('odo ankleL')!, odo.root.getObjectByName('odo ankleR')!];
-  const before = [new THREE.Vector3(), new THREE.Vector3()];
+  const before = [new Vec3(), new Vec3()];
   const stood = [false, false];
-  const now = new THREE.Vector3();
-  const want = new THREE.Vector3();
+  const now = new Vec3();
+  const want = new Vec3();
   odo.update = (dt, scene, far) => {
     if (canary) dragFeet(odo);
     const arrivals = life.arrivals;
@@ -271,17 +271,17 @@ function sideYaw(odo: Odo, side: Side): number {
 interface Framing {
   distance?: number;
   joint?: string;
-  point?: THREE.Vector3;
+  point?: Vec3;
   /** how far above the joint (m, the world's up) */
   lift?: number;
 }
 
 /** Where `framing` points in the world. */
-function framedOn(odo: Odo, framing: Framing): THREE.Vector3 {
+function framedOn(odo: Odo, framing: Framing): Vec3 {
   odo.root.updateMatrixWorld(true);
   const joint = framing.joint ? odo.root.getObjectByName(framing.joint) : undefined;
-  if (joint) return joint.getWorldPosition(new THREE.Vector3()).add(new THREE.Vector3(0, framing.lift ?? 0, 0));
-  return odo.root.localToWorld((framing.point ?? new THREE.Vector3(0, 1.0, 0.1)).clone());
+  if (joint) return joint.getWorldPosition(new Vec3()).add(new Vec3(0, framing.lift ?? 0, 0));
+  return odo.root.localToWorld((framing.point ?? new Vec3(0, 1.0, 0.1)).clone());
 }
 
 /**
@@ -294,12 +294,12 @@ function pictureOdo(
   const shop = odo.root.parent!;
   const at = framedOn(odo, framing);
   const distance = framing.distance ?? 3.2;
-  const turn = shop.getWorldQuaternion(new THREE.Quaternion());
+  const turn = shop.getWorldQuaternion(new Quat());
   const keep = G.player.facing;
   const tiles: Pictured['tiles'] = [];
   for (const side of sides) {
     const yaw = sideYaw(odo, side);
-    const way = new THREE.Vector3(Math.sin(yaw), 0, Math.cos(yaw)).applyQuaternion(turn);
+    const way = new Vec3(Math.sin(yaw), 0, Math.cos(yaw)).applyQuaternion(turn);
     // (the 'front' view looks from the hero's facing; 'above' from half a turn and a little round from it, high)
     G.player.facing = Math.atan2(way.x, way.z) - (side.above ? ABOVE_TURN : 0);
     const shot = lab.picture(label, [side.above ? 'above' : 'front'], [], { at, distance });
@@ -377,7 +377,7 @@ const HEARTS: Heart[] = [
       label: 'odo-grip-coin', sides: [FRONT, SIDE], framing: { joint: 'odo coin', distance: 0.5 },
       notes: 'the coin pinched in his fingers',
     }, {
-      label: 'odo-scale', sides: [FRONT, ABOVE], framing: { point: new THREE.Vector3(-0.5, 1.22, 0.6), distance: 1.0 },
+      label: 'odo-scale', sides: [FRONT, ABOVE], framing: { point: new Vec3(-0.5, 1.22, 0.6), distance: 1.0 },
       notes: 'his scale and the gems in their bowl',
     }],
   },
@@ -394,11 +394,11 @@ const HEARTS: Heart[] = [
 /** How far (degrees) his head's way is off the hero's, flat. */
 function headOffHero(odo: Odo): number {
   const head = odo.root.getObjectByName('odo head')!;
-  const at = head.getWorldPosition(new THREE.Vector3());
-  const ahead = new THREE.Vector3(0, 0, 1).applyQuaternion(head.getWorldQuaternion(new THREE.Quaternion()));
+  const at = head.getWorldPosition(new Vec3());
+  const ahead = new Vec3(0, 0, 1).applyQuaternion(head.getWorldQuaternion(new Quat()));
   ahead.setY(0).normalize();
   const toHero = G.player.pos.clone().sub(at).setY(0).normalize();
-  return THREE.MathUtils.radToDeg(Math.acos(THREE.MathUtils.clamp(ahead.dot(toHero), -1, 1)));
+  return Maths.radToDeg(Math.acos(Maths.clamp(ahead.dot(toHero), -1, 1)));
 }
 
 /** Where the duster is: in his hand, in its pot, or set down on the counter. */
@@ -412,7 +412,7 @@ function dusterIs(odo: Odo): string {
 async function walkIn(lab: Lab, odo: Odo, lines: string[], problems: string[], moments: Pictured[]): Promise<void> {
   const life = odo.life;
   const out = outsideOf('merchant');
-  G.player.place(new THREE.Vector3(out.x, groundHeight(out.x, out.z), out.z), out.facing + Math.PI);
+  G.player.place(new Vec3(out.x, groundHeight(out.x, out.z), out.z), out.facing + Math.PI);
   await lab.step(5);
   // (some way into his dusting as the shop is come into)
   life.asked = 'dust';
@@ -462,17 +462,17 @@ async function walkIn(lab: Lab, odo: Odo, lines: string[], problems: string[], m
   const elbowAt = { joint: 'odo elbowL', distance: 0.5 };
   moments.push(pictureOdo(lab, odo, 'odo-elbow-bent', elbowSides, ['his elbow bent, at the rolled sleeve'], elbowAt));
   const room = ['his shop round him: shelves, crate, counter, scale, ledger'];
-  const roomFraming = { point: new THREE.Vector3(0, 1.2, 0.4), distance: 5 };
+  const roomFraming = { point: new Vec3(0, 1.2, 0.4), distance: 5 };
   moments.push(pictureOdo(lab, odo, 'odo-room', [ROOM_ON, ROOM], room, roomFraming));
   // (the showpieces: the sword on its velvet board behind his desk, and the circlet on its stand at the counter's end)
-  const sword = { point: new THREE.Vector3(-0.1, 1.6, -0.8), distance: 1.9 };
+  const sword = { point: new Vec3(-0.1, 1.6, -0.8), distance: 1.9 };
   moments.push(pictureOdo(lab, odo, 'odo-showpiece-sword', [{ angle: 0.45, name: 'from the counter', room: true }],
     ['the showpiece behind his desk'], sword));
-  const circlet = { point: new THREE.Vector3(-1.85, 1.2, 0.7), distance: 0.75 };
+  const circlet = { point: new Vec3(-1.85, 1.2, 0.7), distance: 0.75 };
   moments.push(pictureOdo(lab, odo, 'odo-showpiece-circlet', [{ angle: 0.5, name: 'from the counter', room: true }],
     ['the circlet on its stand'], circlet));
   // (the display table by the door, from above as the player sees it and level with it; in his frame at his desk)
-  const table = { point: new THREE.Vector3(-1.7, 0.85, 4.35), distance: 1.6 };
+  const table = { point: new Vec3(-1.7, 0.85, 4.35), distance: 1.6 };
   const tableSides: Side[] = [
     { angle: 1.2, name: 'from above, as the player sees it', room: true, above: true },
     { angle: 0.9, name: 'level with it', room: true },
@@ -484,14 +484,14 @@ async function walkIn(lab: Lab, odo: Odo, lines: string[], problems: string[], m
 async function walkFrames(lab: Lab, odo: Odo): Promise<Pictured> {
   const tiles: Pictured['tiles'] = [];
   for (let frame = 0; frame < 4; frame++) {
-    const legs = { point: new THREE.Vector3(0, 0.75, 0), distance: 2.6 };
+    const legs = { point: new Vec3(0, 0.75, 0), distance: 2.6 };
     const shot = pictureOdo(lab, odo, 'odo-walk-frames', [ALONG], [], legs);
     tiles.push(...shot.tiles.map((tile) => ({ ...tile, view: `${(frame * 0.2).toFixed(1)} s` })));
     await lab.step(Math.round(0.2 * FPS));
   }
   // (from low behind as he walks along behind the counter, the one way nothing stands between: what he wears under
   // his waistcoat, which a low camera sees)
-  const low = { point: new THREE.Vector3(0, 0.55, 0), distance: 1.7 };
+  const low = { point: new Vec3(0, 0.55, 0), distance: 1.7 };
   const behind = pictureOdo(lab, odo, 'odo-walk-frames', [BEHIND, SIDE], [], low);
   tiles.push(...behind.tiles.map((tile) => ({ ...tile, view: `low, ${tile.view}` })));
   return { label: 'odo-walk-frames', tiles, notes: ['his walk, a fifth of a second apart; then from low behind'] };
@@ -535,14 +535,14 @@ function coinInFingers(odo: Odo, lines: string[], problems: string[]): void {
     return;
   }
   odo.root.updateMatrixWorld(true);
-  const at = coin.getWorldPosition(new THREE.Vector3());
+  const at = coin.getWorldPosition(new Vec3());
   // (the nearest of his digits' last joints, each a leaf of the hand's joints, its tip's segment)
   let near = Infinity;
   hand.traverse((joint) => {
-    if (joint.children.length || !(joint as THREE.Group).isGroup) return;
-    near = Math.min(near, joint.getWorldPosition(new THREE.Vector3()).distanceTo(at));
+    if (joint.children.length || !(joint as Node).isNode) return;
+    near = Math.min(near, joint.getWorldPosition(new Vec3()).distanceTo(at));
   });
-  const size = coin.getWorldScale(new THREE.Vector3()).x;
+  const size = coin.getWorldScale(new Vec3()).x;
   lines.push(`weigh: the coin at ${size > 0.5 ? 'its size' : 'no size'}, ${(near * 100).toFixed(1)} cm from his `
     + `nearest fingertip joint, in his ${coin.parent === hand ? 'right hand' : 'other place'}`);
   if (size < 0.5) problems.push('weigh: the coin is not shown as he holds it up');

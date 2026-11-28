@@ -8,7 +8,7 @@
 // still are drawn once, a lamp a frame (`engine/lampShadows.ts`): the step's frame draws the sun's map and no lamp's.
 // Then the frame as the step left the lamps' maps against every one of them drawn again at that moment. `canary` asks
 // for every lamp's map at the step: their faces must be counted.
-import * as THREE from 'three';
+import { Vec3 } from './sceneApi.ts';
 import type { Lab } from './lab';
 import { G } from '../../../src/state';
 import { RUST } from '../../../src/engine';
@@ -107,7 +107,7 @@ const said = (drawn: Drawn): string => `${drawn.scene} draws in the scene (${tho
 /** The hero stood at `spot`. */
 export function standAt([x, z]: [number, number]): void {
   G.player.walkTo = null;
-  G.player.place(new THREE.Vector3(x, groundHeight(x, z), z), Math.PI);
+  G.player.place(new Vec3(x, groundHeight(x, z), z), Math.PI);
 }
 
 /**

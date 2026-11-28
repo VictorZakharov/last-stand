@@ -1,7 +1,7 @@
 // A hero's wrist: a flattened tube from the forearm onto the heel of the hand, bent through joints turned part of the way
 // from the forearm to the hand as it's drawn. Round, with the hand's bend blended into it over a few centimetres, it stood
 // out of the palm by its rim wherever the wrist bent, and the hand looked apart from the arm.
-import * as THREE from 'three';
+import { Attribute, Geometry, Maths, Node, Quat } from '../../engine/api/index.ts';
 import { clamp, smooth } from '../../util';
 import { joint } from './rig';
 import { lathe } from './shapes';
@@ -13,7 +13,7 @@ import { lathe } from './shapes';
  * on its forearm (through the eyes 140 to 180, and past it), and its cuff flickered between two shapes with the hand still (#161).
  * Measured from the middle, the way round flips only half a turn from it, where the hand never goes.
  */
-function blendTurn(out: THREE.Quaternion, q: THREE.Quaternion, share: number, middle: THREE.Quaternion): THREE.Quaternion {
+function blendTurn(out: Quat, q: Quat, share: number, middle: Quat): Quat {
   // (q and -q are one turn, each the other way round: the one nearer the middle)
   const sign = q.dot(middle) < 0 ? -1 : 1;
   const w = clamp(q.w * sign, -1, 1), half = Math.acos(w), s = Math.sin(half);
@@ -24,7 +24,7 @@ function blendTurn(out: THREE.Quaternion, q: THREE.Quaternion, share: number, mi
 
 /** a tube round the forearm joint's bone (along -y, its space), flattened: rings of [y, half across, half through] from
  *  the bottom up (the wrist wider across the back of the hand than through it, as the forearm is towards it) */
-export function ovalTube(rings: [number, number, number][], segs: number): THREE.BufferGeometry {
+export function ovalTube(rings: [number, number, number][], segs: number): Geometry {
   const g = lathe(rings.map(([y, rx]) => [rx, y] as [number, number]), segs), p = g.attributes.position;
   if (!p) return g;
   for (let i = 0; i < p.count; i++) {
@@ -41,34 +41,34 @@ export function ovalTube(rings: [number, number, number][], segs: number): THREE
 const BEND_FROM = 0.03, BEND_OVER = 0.058;
 
 /** `tube` (in the forearm's space) told how far along a wrist's joints each of its points is, for `Sculpt.skinChain` */
-export function wristBent(tube: THREE.BufferGeometry, foreL: number): THREE.BufferGeometry {
+export function wristBent(tube: Geometry, foreL: number): Geometry {
   const p = tube.attributes.position;
   if (!p) return tube;
   const shares = Float32Array.from({ length: p.count }, (_, i) => smooth(clamp((-p.getY(i) - (foreL - BEND_FROM)) / BEND_OVER, 0, 1)));
-  tube.setAttribute('skinK', new THREE.BufferAttribute(shares, 1));
+  tube.setAttribute('skinK', new Attribute(shares, 1));
   return tube;
 }
 
 /** A wrist's joints on the forearm: a quarter, half, three quarters and all of the turn of the hand as it's drawn. */
 export interface Wrist {
   /** the forearm's joint and those after it, a piece's chain for `Sculpt.skinChain` */
-  chain: THREE.Object3D[];
+  chain: Node[];
   /** turned as the hand and its drawn hand are this frame: after the pose and whatever closes the hand */
-  bend(vis: THREE.Object3D): void;
+  bend(vis: Node): void;
 }
 
 /** the part-turned joints of a hand's wrist (`left`, its side; `middle` of its turns about its length, deg: `blendTurn`) */
-export function wristOf(hand: THREE.Object3D, left: boolean, middleDeg = left ? -135 : 135): Wrist {
+export function wristOf(hand: Node, left: boolean, middleDeg = left ? -135 : 135): Wrist {
   const forearm = hand.parent!;
   const axis = hand.position.clone().normalize();
-  const middle = new THREE.Quaternion().setFromAxisAngle(axis, THREE.MathUtils.degToRad(middleDeg));
+  const middle = new Quat().setFromAxisAngle(axis, Maths.degToRad(middleDeg));
   const SHARES = [0.25, 0.5, 0.75, 1];
   const joints = SHARES.map((_, i) => {
     const part = joint(forearm, hand.position.x, hand.position.y, hand.position.z);
     part.name = `wrist${left ? 'L' : 'R'}${i + 1}`;
     return part;
   });
-  const whole = new THREE.Quaternion();
+  const whole = new Quat();
   return {
     chain: [forearm, ...joints],
     bend(vis) {

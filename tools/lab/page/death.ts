@@ -6,7 +6,7 @@
 // and how high, how long it took to lie still and how low it lay, and anything a body can't do: a part of it under
 // the floor, inside a prop or past the arena's wall, its pose off its points, a number gone NaN. A storm's kills must
 // go round it. The shaders compiled meanwhile must be none.
-import * as THREE from 'three';
+import { LookMaterial, Mesh, Quat, Vec3 } from './sceneApi.ts';
 import { screenArea, type Fixture, type Lab, type Pictured, type Report } from './lab';
 import type { Enemy } from '../../../src/entities/enemy';
 import type { EnemyId } from '../../../src/data/enemies';
@@ -109,13 +109,13 @@ interface Fallen {
   /** frames from the press to the fall, and the throw */
   fellAt: number;
   fling: Fling;
-  from: THREE.Vector3;
+  from: Vec3;
   /** where the hero stood as it fell (a charge carries him on past it), and which way the swing the player saw went
    *  then (+1 from his right to his left) */
-  heroAt: THREE.Vector3;
+  heroAt: Vec3;
   swing: number;
   /** the way it was going over the first frames after its fall (m/s, along the ground) */
-  early: THREE.Vector3;
+  early: Vec3;
   /** the turn its blow gives it about its upright (its lever across the body times its throw, m²/s: + turning as a
    *  heading turns to the left), and how far it turned over its first `TURN_FRAMES` (rad), from its shoulders'
    *  heading as it fell */
@@ -127,7 +127,7 @@ interface Fallen {
   highest: number;
   restAt: number;
   /** where it lay still, or began to dissolve (`ended`) without lying still */
-  lay: THREE.Vector3;
+  lay: Vec3;
   ended: boolean;
   layHips: number;
   under: Worst;
@@ -153,7 +153,7 @@ const centimetres = (value: number): string => `${(value * 100).toFixed(0)} cm`;
 const seconds = (value: number): string => `${value.toFixed(2)} s`;
 const percentOf = (share: number): string => `${(share * 100).toFixed(0)}%`;
 const frameTime = (): number => window.__labClock.frame / 1000;
-const flat = (from: THREE.Vector3, to: THREE.Vector3): number => Math.hypot(to.x - from.x, to.z - from.z);
+const flat = (from: Vec3, to: Vec3): number => Math.hypot(to.x - from.x, to.z - from.z);
 
 /** The kind of foe the skills are cast at: the biome's commonest in its third wave. */
 export function foeKind(): EnemyId {
@@ -163,16 +163,16 @@ export function foeKind(): EnemyId {
 
 /** Where `stand` puts its foes round a hero at `at` facing `facing` (rad), and where the skill is aimed. */
 export function placesFor(
-  stand: Stand, at: THREE.Vector3, facing: number,
-): { spots: THREE.Vector3[]; aim: THREE.Vector3 } {
-  const forward = new THREE.Vector3(Math.sin(facing), 0, Math.cos(facing));
-  const left = new THREE.Vector3(Math.cos(facing), 0, -Math.sin(facing));
-  const spots: THREE.Vector3[] = [];
+  stand: Stand, at: Vec3, facing: number,
+): { spots: Vec3[]; aim: Vec3 } {
+  const forward = new Vec3(Math.sin(facing), 0, Math.cos(facing));
+  const left = new Vec3(Math.cos(facing), 0, -Math.sin(facing));
+  const spots: Vec3[] = [];
   for (let i = 0; i < stand.count; i++) {
     const middle = stand.count > 1 ? i / (stand.count - 1) - 0.5 : 0;
     if (stand.round !== undefined) {
       const way = facing + (i / stand.count) * Math.PI * 2;
-      spots.push(at.clone().add(new THREE.Vector3(Math.sin(way), 0, Math.cos(way)).multiplyScalar(stand.round)));
+      spots.push(at.clone().add(new Vec3(Math.sin(way), 0, Math.cos(way)).multiplyScalar(stand.round)));
       continue;
     }
     const ahead = (stand.ahead ?? 4) + (stand.along ?? 0) * i;
@@ -185,7 +185,7 @@ export function placesFor(
 }
 
 /** The foes risen at `spots`, standing dazed (still, thinking of nothing), each holding `lives[i]` of its life. */
-export async function foesAt(lab: Lab, spots: THREE.Vector3[], lives: number[]): Promise<Enemy[]> {
+export async function foesAt(lab: Lab, spots: Vec3[], lives: number[]): Promise<Enemy[]> {
   const kind = foeKind();
   const foes = spots.map((spot) => lab.spawnFoe(kind, spot));
   await lab.until(() => foes.every((foe) => foe.spawning <= 0), RISE_FRAMES, 'the foes never rose');
@@ -210,12 +210,12 @@ function countHits(foes: Enemy[]): number[] {
 }
 
 /** A body's points as drawn: each joint's place in the world (the head's middle, above its joint) and its size. */
-function drawnPoint(joints: Joints, name: (typeof RAGDOLL_POINTS)[number], out: THREE.Vector3): THREE.Vector3 {
+function drawnPoint(joints: Joints, name: (typeof RAGDOLL_POINTS)[number], out: Vec3): Vec3 {
   joints[name].getWorldPosition(out);
   if (name !== 'head') return out;
-  const scale = joints.head.getWorldScale(new THREE.Vector3()).x;
-  const turn = joints.head.getWorldQuaternion(new THREE.Quaternion());
-  const up = new THREE.Vector3(0, joints.P.headR * scale, 0).applyQuaternion(turn);
+  const scale = joints.head.getWorldScale(new Vec3()).x;
+  const turn = joints.head.getWorldQuaternion(new Quat());
+  const up = new Vec3(0, joints.P.headR * scale, 0).applyQuaternion(turn);
   return out.add(up);
 }
 
@@ -232,7 +232,7 @@ function worse(worst: Worst, amount: number, part: string, at: number): void {
  * level's square through its top or its side, whichever is less (a ball by the dais's step, its middle off it, is in
  * the step only as far as it reaches over the edge).
  */
-function depthInFloor(point: THREE.Vector3, radius: number): number {
+function depthInFloor(point: Vec3, radius: number): number {
   const own = groundHeight(point.x, point.z);
   let deepest = own + radius - point.y;
   GROUND_EDGES.forEach((edge, i) => {
@@ -247,7 +247,7 @@ function depthInFloor(point: THREE.Vector3, radius: number): number {
 }
 
 /** How deep a point of size `radius` at `point` is in a prop (m; 0 out of every one). */
-function depthInProps(point: THREE.Vector3, radius: number): number {
+function depthInProps(point: Vec3, radius: number): number {
   let deepest = 0;
   for (const prop of G.arena.obstacles) {
     const reach = prop.r + radius - Math.hypot(point.x - prop.x, point.z - prop.z);
@@ -263,8 +263,8 @@ function measureBody(body: Fallen, since: number): void {
   const ragdoll = corpse?.ragdoll;
   const joints = body.foe.model.joints;
   if (!ragdoll || !joints) return;
-  const at = new THREE.Vector3();
-  const point = new THREE.Vector3();
+  const at = new Vec3();
+  const point = new Vec3();
   RAGDOLL_BONES.forEach(([from, to], i) => {
     ragdoll.point(RAGDOLL_POINTS.indexOf(from), at);
     const length = at.distanceTo(ragdoll.point(RAGDOLL_POINTS.indexOf(to), point));
@@ -300,14 +300,14 @@ interface Cast {
 /** A body followed from the frame it fell (`frame` from the press). */
 function fallen(foe: Enemy, dealt: number, frame: number): Fallen {
   const joints = foe.model.joints;
-  const hips = joints ? joints.hips.getWorldPosition(new THREE.Vector3()) : foe.pos.clone();
+  const hips = joints ? joints.hips.getWorldPosition(new Vec3()) : foe.pos.clone();
   return {
     foe, dealt, fellAt: frame, fling: foe.fling!, from: foe.pos.clone(), heroAt: G.player.pos.clone(),
     swing: swingSeen(),
-    early: new THREE.Vector3(),
+    early: new Vec3(),
     torque: foe.fling!.oz * foe.fling!.vx - foe.fling!.ox * foe.fling!.vz, headingAt: NaN, turned: 0,
     standingHips: hips.y - groundHeight(hips.x, hips.z), path: 0, highest: 0, restAt: -1,
-    lay: new THREE.Vector3(), ended: false, layHips: 0,
+    lay: new Vec3(), ended: false, layHips: 0,
     under: noWorst(), inProp: noWorst(), poseOff: noWorst(), stretch: noWorst(),
     bones: [], outside: false, broken: false,
   };
@@ -322,8 +322,8 @@ const TURN_WRONG = (5 * Math.PI) / 180;
 
 /** The heading of a body's shoulders, from its right one to its left (rad, as a heading: 0 along +z). */
 function shouldersHeading(ragdoll: Ragdoll): number {
-  const left = ragdoll.point(RAGDOLL_POINTS.indexOf('shoulderL'), new THREE.Vector3());
-  const right = ragdoll.point(RAGDOLL_POINTS.indexOf('shoulderR'), new THREE.Vector3());
+  const left = ragdoll.point(RAGDOLL_POINTS.indexOf('shoulderL'), new Vec3());
+  const right = ragdoll.point(RAGDOLL_POINTS.indexOf('shoulderR'), new Vec3());
   return Math.atan2(left.x - right.x, left.z - right.z);
 }
 
@@ -374,8 +374,8 @@ function traceLine(body: Fallen, since: number): string {
   const ragdoll = body.foe.corpse?.ragdoll;
   const joints = body.foe.model.joints;
   if (!ragdoll || !joints) return '';
-  const at = new THREE.Vector3();
-  const point = new THREE.Vector3();
+  const at = new Vec3();
+  const point = new Vec3();
   const parts = RAGDOLL_POINTS.map((name, i) => {
     drawnPoint(joints, name, at);
     const radius = ragdoll.radius(i);
@@ -391,10 +391,10 @@ function traceLine(body: Fallen, since: number): string {
 }
 
 /** The skill cast at `foes` and every body followed until it has dissolved. */
-async function castAt(lab: Lab, skill: BoundSkill, foes: Enemy[], aim: THREE.Vector3, plan: PassPlan): Promise<Cast> {
+async function castAt(lab: Lab, skill: BoundSkill, foes: Enemy[], aim: Vec3, plan: PassPlan): Promise<Cast> {
   const dealt = countHits(foes);
   const bodies = new Map<Enemy, Fallen>();
-  const last = new Map<Enemy, THREE.Vector3>();
+  const last = new Map<Enemy, Vec3>();
   const moments: Pictured[] = [];
   const canary = { under: false, back: false, turned: false };
   const holdFrames = Math.max(1, Math.round(holdFor(skill.def) / frameTime()));
@@ -465,11 +465,11 @@ function plantUnder(on: boolean, body: Fallen, canary: { under: boolean }, since
 }
 
 /** A body's way over its first frames, its path along the ground, and when and where it lay still. */
-function followBody(body: Fallen, last: Map<Enemy, THREE.Vector3>, frame: number): void {
+function followBody(body: Fallen, last: Map<Enemy, Vec3>, frame: number): void {
   const joints = body.foe.model.joints;
   const corpse = body.foe.corpse;
   if (!joints || !corpse?.ragdoll) return;
-  const hips = joints.hips.getWorldPosition(new THREE.Vector3());
+  const hips = joints.hips.getWorldPosition(new Vec3());
   const before = last.get(body.foe);
   if (before) body.path += flat(before, hips);
   last.set(body.foe, hips);
@@ -491,7 +491,7 @@ function followBody(body: Fallen, last: Map<Enemy, THREE.Vector3>, frame: number
 }
 
 /** The height of what lies under `at`: the floor, or the top of a prop it's over. */
-function surfaceUnder(at: THREE.Vector3): number {
+function surfaceUnder(at: Vec3): number {
   let top = groundHeight(at.x, at.z);
   for (const prop of G.arena.obstacles) {
     if (Math.hypot(at.x - prop.x, at.z - prop.z) < prop.r) top = Math.max(top, groundHeight(prop.x, prop.z) + prop.h);
@@ -505,7 +505,7 @@ async function pictureBodies(lab: Lab, bodies: Fallen[], label: string): Promise
   const points = bodies.flatMap((body) => [body.from.clone(), body.foe.obj.position.clone().setY(1)]);
   points.push(G.player.pos.clone());
   const seen = await lab.screen(label, [], screenArea(points, PICTURE_MARGIN));
-  const middle = points.reduce((sum, point) => sum.add(point), new THREE.Vector3()).divideScalar(points.length);
+  const middle = points.reduce((sum, point) => sum.add(point), new Vec3()).divideScalar(points.length);
   const spread = Math.max(...points.map((point) => flat(point, middle)));
   middle.y = 0.6;
   const close = lab.capture(['left', 'back'], { at: middle, distance: Math.max(6, spread * 3) });
@@ -515,7 +515,7 @@ async function pictureBodies(lab: Lab, bodies: Fallen[], label: string): Promise
 /** A body pictured close up as `plan.close` says, from its left, its right and behind the hero, framed on its part. */
 function pictureClose(lab: Lab, body: Fallen, plan: PassPlan): Pictured {
   const { part, depth, frames } = plan.close!;
-  const at = drawnPoint(body.foe.model.joints!, part, new THREE.Vector3());
+  const at = drawnPoint(body.foe.model.joints!, part, new Vec3());
   const tiles = lab.capture(['left', 'right', 'back'], { at, distance: CLOSE_DISTANCE });
   const when = seconds(frames * frameTime());
   const deepest = `its ${part} at its deepest, ${centimetres(depth)} under the floor`;
@@ -559,7 +559,7 @@ interface Pass {
 function swingSeen(): number {
   let way: number | null = null;
   G.scene.traverse((object) => {
-    const material = (object as THREE.Mesh).material as THREE.ShaderMaterial | undefined;
+    const material = (object as Mesh).material as LookMaterial | undefined;
     const sweep = material?.uniforms?.uDir;
     if (sweep && material.uniforms.uStart) way = sweep.value as number;
   });
@@ -735,13 +735,13 @@ function turnProblems(body: Fallen): string[] {
 function wayProblems(run: SkillRun, cast: Cast, body: Fallen): string[] {
   const impl = run.skill.def.impl;
   const hero = body.heroAt;
-  const out = new THREE.Vector3(body.from.x - hero.x, 0, body.from.z - hero.z).normalize();
+  const out = new Vec3(body.from.x - hero.x, 0, body.from.z - hero.z).normalize();
   const way = body.early;
   if (way.length() < 0.3 || WHIRLS.has(impl)) return [];
   const problems: string[] = [];
   const speed = way.length().toFixed(1);
   if (ELSEWHERE.has(impl)) {
-    const thrown = new THREE.Vector3(body.fling.vx, 0, body.fling.vz);
+    const thrown = new Vec3(body.fling.vx, 0, body.fling.vz);
     if (way.dot(thrown) <= 0) problems.push(`a body went against its throw (${speed} m/s)`);
     return problems;
   }

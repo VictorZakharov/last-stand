@@ -73,29 +73,19 @@ const htmlParts = (): Plugin => ({
 });
 
 // ez-tree (procedural trees) from its source, not its build, which carries its bark and leaf pictures inlined: its
-// texture module is swapped for a stub (src/world/ezTreeTextures.ts), so none of them ship
+// texture module is swapped for a stub (src/world/ezTreeTextures.ts), so none of them ship, and the `three` it imports
+// is three's names for the engine's scene API (src/world/ezTreeThree.ts), so three is in no bundle (#973)
 const slash = (p: string): string => p.split('\\').join('/').toLowerCase();
 const EZ_TREE = fileURLToPath(new URL('./node_modules/@dgreenheck/ez-tree/src/lib/', import.meta.url)).split('\\').join('/');
 const ezTreeTextures = () => ({
   name: 'ez-tree-textures',
   enforce: 'pre' as const,
   resolveId(source: string, importer?: string) {
-    if (source === './textures' && importer && slash(importer).startsWith(slash(EZ_TREE))) return fileURLToPath(new URL('./src/world/ezTreeTextures.ts', import.meta.url));
+    const fromEzTree = !!importer && slash(importer).startsWith(slash(EZ_TREE));
+    if (!fromEzTree) return null;
+    if (source === './textures') return fileURLToPath(new URL('./src/world/ezTreeTextures.ts', import.meta.url));
+    if (source === 'three') return fileURLToPath(new URL('./src/world/ezTreeThree.ts', import.meta.url));
     return null;
-  },
-});
-
-// three's async compile (WebGPU) works a constant 8 ms before it yields a frame: its build is made to read how long
-// from a global the game sets (core/webgpu.ts `compileSlice`: 40 ms under the loading screen and the fight's loading
-// bar, where its 8 ms kept the GPU's compilers a third busy). A production build's alone: the dev server's
-// pre-bundled three keeps its 8 ms.
-const COMPILE_SLICE = '>= _compileYieldInterval;';
-const threeCompileSlice = () => ({
-  name: 'three-compile-slice',
-  transform(code: string, id: string) {
-    if (!/three[\\/]build[\\/]three\.webgpu\.js$/.test(id)) return null;
-    if (!code.includes(COMPILE_SLICE)) throw new Error(`three-compile-slice: three's build has no '${COMPILE_SLICE}'`);
-    return { code: code.replace(COMPILE_SLICE, '>= (globalThis.__compileSliceMs ?? _compileYieldInterval);'), map: null };
   },
 });
 
@@ -133,7 +123,7 @@ const WEBGPU_BUILD = /node_modules[\\/]three[\\/]build[\\/]three\.(webgpu|tsl)\.
 
 export default defineConfig({
   base: './',              // relative asset paths so dist/ works on any static host (e.g. GitHub Pages)
-  plugins: [htmlParts(), screenStyles(), bootFullScreen(), ezTreeTextures(), threeCompileSlice(), buildVersion(), pwa()],
+  plugins: [htmlParts(), screenStyles(), bootFullScreen(), ezTreeTextures(), buildVersion(), pwa()],
   resolve: { alias: { 'ez-tree': EZ_TREE + 'index.js' } },
   // (a screen's styles, in its own folder, take the theme and the mixins by name as every other stylesheet does)
   css: { preprocessorOptions: { scss: { loadPaths: [fileURLToPath(new URL('./src/ui/styles/', import.meta.url))] } } },

@@ -1,5 +1,5 @@
 // The village's grass counted as it was last drawn: what `lab village`'s checks of it share.
-import type * as THREE from 'three';
+import type { InstancedGeometry, Mesh } from './sceneApi.ts';
 import type { Lab } from './lab';
 import { G } from '../../../src/state';
 import { RUST } from '../../../src/engine';
@@ -18,9 +18,9 @@ const MOST_FRAMES = 60;
 export function grassVertices(): number {
   let vertices = 0;
   G.arena.village!.meadow.traverse((part) => {
-    const mesh = part as THREE.Mesh;
+    const mesh = part as Mesh;
     if (!mesh.isMesh) return;
-    const geometry = mesh.geometry as THREE.InstancedBufferGeometry;
+    const geometry = mesh.geometry as InstancedGeometry;
     vertices += geometry.instanceCount * geometry.attributes.position.count;
   });
   return vertices;

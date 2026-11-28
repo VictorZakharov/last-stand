@@ -8,7 +8,7 @@
 // The measure is run over a runner's own thighs too (`runner.ts`'s curves, after Novacheck 1998 and Fukuchi et al.
 // 2017), at a jog and a fast run: half a stride apart it must find them never together, and a quarter of a stride
 // apart, a gallop's, about a sixth of the stride (its canary, `runnerCanary`).
-import * as THREE from 'three';
+import { Maths, Node, Vec2, Vec3 } from './sceneApi.ts';
 import type { Joints } from '../../../src/entities/models/rig';
 import { runnerAt } from './runner';
 
@@ -54,19 +54,19 @@ export class TogetherWatch {
 
 /** Each thigh's swing forward along the way the body goes, from its line hip to knee a frame apart. */
 export class ThighSwings {
-  private readonly last: (THREE.Vector3 | null)[] = [null, null];
+  private readonly last: (Vec3 | null)[] = [null, null];
 
   /**
    * This frame's swings (deg/s, forward along `way` positive), or none while the body stands (`way` null) or on the
    * first frame. Both frames' lines are read along this frame's way, so the way turning isn't read as a swing.
    */
-  read(joints: Joints, way: THREE.Vector2 | null, seconds: number): [number, number] | null {
+  read(joints: Joints, way: Vec2 | null, seconds: number): [number, number] | null {
     const lines = [lineOf(joints.thighL, joints.kneeL), lineOf(joints.thighR, joints.kneeR)];
     const before = [...this.last];
     this.last[0] = lines[0];
     this.last[1] = lines[1];
     if (!way || !before[0] || !before[1]) return null;
-    const swing = (side: number, was: THREE.Vector3) => {
+    const swing = (side: number, was: Vec3) => {
       return (thighAngle(lines[side], way) - thighAngle(was, way)) / seconds;
     };
     return [swing(0, before[0]), swing(1, before[1])];
@@ -74,15 +74,15 @@ export class ThighSwings {
 }
 
 /** A thigh's line in the world, hip to knee. */
-function lineOf(thigh: THREE.Object3D, knee: THREE.Object3D): THREE.Vector3 {
-  const hip = thigh.getWorldPosition(new THREE.Vector3());
-  return knee.getWorldPosition(new THREE.Vector3()).sub(hip);
+function lineOf(thigh: Node, knee: Node): Vec3 {
+  const hip = thigh.getWorldPosition(new Vec3());
+  return knee.getWorldPosition(new Vec3()).sub(hip);
 }
 
 /** A thigh's line against straight down, along `way` (deg, forward positive): as the runner's curves have it. */
-function thighAngle(line: THREE.Vector3, way: THREE.Vector2): number {
+function thighAngle(line: Vec3, way: Vec2): number {
   const along = line.x * way.x + line.z * way.y;
-  return THREE.MathUtils.radToDeg(Math.atan2(along, -line.y));
+  return Maths.radToDeg(Math.atan2(along, -line.y));
 }
 
 /** The stretches of frames a frame apart in `frames`: each one's first frame and how many. */

@@ -3,7 +3,7 @@
 // (`useWhileSatBy` in `entities/sitting.ts`, `usedWhileSat` in `game/village.ts`); Esc then closes it and he still
 // sits; and a step of the stick still gets him up. Said: the log sat on, its distance from the campfire, and what E
 // and the stick did. `canary` leaves E to the sit while he's sat, as it was: E must get him up and open nothing.
-import * as THREE from 'three';
+import { Vec3 } from './sceneApi.ts';
 import type { Lab, Pictured } from './lab';
 import { G } from '../../../src/state';
 import { groundHeight } from '../../../src/world/ground';
@@ -62,7 +62,7 @@ async function sitOnLog(lab: Lab, log: Seat): Promise<void> {
   const { at, facing } = startOff(log);
   G.player.sitting.clear();
   G.player.walkTo = null;
-  G.player.place(new THREE.Vector3(at[0], groundHeight(at[0], at[1]), at[1]), facing);
+  G.player.place(new Vec3(at[0], groundHeight(at[0], at[1]), at[1]), facing);
   SIT.auto = true;
   G.player.sitting.only = log;
   G.player.sits = true;

@@ -6,7 +6,7 @@
 // a blow lands as its swing shows and is judged against where the guest stands on its own screen.
 // Its own character stays its own to move and cast, and what its skills hit, it deals there and
 // then on its copies and reports to the host, which deals it on its foes (the guest's kill).
-import * as THREE from 'three';
+import { Vec3 } from '../engine/api/index.ts';
 import { readyNextBoss } from '../game/bossReady';
 import { biomeReady, readyBiome } from '../game/biomeReady';
 import { foeWarm } from '../game/warmup';
@@ -368,7 +368,7 @@ function apply(ev: WorldEvent): void {
       copied.add(ev.id);
       asked.delete(ev.id);
       if (G.enemies.some((e) => e.id === ev.id)) return;
-      const e = spawnEnemy(ev.ty, new THREE.Vector3(ev.x, 0, ev.z), { id: ev.id, name: ev.n, maxLife: ev.ml, hero: !!ev.h, wave: ev.w, training: !!ev.tr, guard: !!ev.gd });
+      const e = spawnEnemy(ev.ty, new Vec3(ev.x, 0, ev.z), { id: ev.id, name: ev.n, maxLife: ev.ml, hero: !!ev.h, wave: ev.w, training: !!ev.tr, guard: !!ev.gd });
       e.facing = ev.f;
       e.net = { x: ev.x, z: ev.z, vx: 0, vz: 0, f: ev.f };
       return;

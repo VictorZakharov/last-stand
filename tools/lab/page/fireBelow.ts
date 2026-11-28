@@ -4,7 +4,7 @@
 // is drawn (its meshes' pixels in the lab's `parts` look), the light the flames add must be next to nothing. (Its
 // pixels found as those it changed read the sky too: the frame's grade and bloom move with what's drawn.) The
 // canary takes the bowl from the shader: the flames show through it, which must be caught.
-import * as THREE from 'three';
+import { LookMaterial, Mesh, Node, type Uniform, Vec2 } from './sceneApi.ts';
 
 /** a pixel counts as changed past this many levels (of 255) on its brightest channel */
 const CHANGED = 8;
@@ -20,10 +20,10 @@ export interface Below {
   /** which pixels of the drawing the solid parts round the bed cover (1 where they do) */
   solidsDrawn: () => Uint8Array;
   /** the flames' volume (its material's `uBowl`, where it has one, is the bowl the shader knows) */
-  flames: THREE.Mesh;
+  flames: Mesh;
   /** the fire's other glowing parts (its coals, its embers), hidden throughout: from under a bowl taken away, the
    *  coals' bloom over the sky read as bowl */
-  glows: THREE.Object3D[];
+  glows: Node[];
   canary: boolean;
 }
 
@@ -46,11 +46,11 @@ function paint(image: ImageData, i: number, shade: number[]): void {
 }
 
 /** The bowl the flames' shader knows, if it knows one (a tree before #291's has none to know). */
-const bowlOf = (flames: THREE.Mesh): { value: THREE.Vector2[] } | undefined =>
-  (flames.material as THREE.ShaderMaterial).uniforms.uBowl;
+const bowlOf = (flames: Mesh): Uniform<Vec2[]> | undefined =>
+  (flames.material as LookMaterial).uniforms.uBowl as Uniform<Vec2[]> | undefined;
 
 /** A bowl the shader knows as none: its rim under its foot. */
-const noBowl = (): THREE.Vector2[] => [0, 0, -1].map((y) => new THREE.Vector2(y, 0));
+const noBowl = (): Vec2[] => [0, 0, -1].map((y) => new Vec2(y, 0));
 
 /** Whether pixel `i` (its first channel's index) differs between `a` and `b`. */
 function changed(a: ImageData, b: ImageData, i: number): boolean {
@@ -59,7 +59,7 @@ function changed(a: ImageData, b: ImageData, i: number): boolean {
 }
 
 /** `objects` hidden while `read` runs. */
-function without<T>(objects: THREE.Object3D[], read: () => T): T {
+function without<T>(objects: Node[], read: () => T): T {
   const shown = objects.map((object) => object.visible);
   for (const object of objects) object.visible = false;
   try {

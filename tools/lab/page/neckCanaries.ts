@@ -2,7 +2,7 @@
 // the same slices: a ridge round the neck, skin laid over the collar, the neck's skin paler and wider, and a neck that
 // stops short inside a loose collar (then with a floor under it, which must read closed). A canary missed is a
 // problem.
-import * as THREE from 'three';
+import { Attribute, DoubleSide, floats, Geometry, LitMaterial, Mesh, Node } from './sceneApi.ts';
 import type { Model } from '../../../src/types';
 import { HEAD_MM } from '../../../src/entities/models/head';
 import { sliceNeck, ANGLES, type Slices } from './neckSlices';
@@ -22,10 +22,10 @@ const FLOORED_COLLAR: Profile = [[-40, -12], [12, -12], [12, 2]];
 const CANARY_LEAST = 0.5;
 
 /** The neck's skin on `model`: its mesh (head.ts `buildNeck` names it). */
-function neckSkinOf(model: Model): THREE.Mesh {
-  let found: THREE.Mesh | null = null;
+function neckSkinOf(model: Model): Mesh {
+  let found: Mesh | null = null;
   model.joints!.neck.traverse((object) => {
-    if (object.name === 'neck' && (object as THREE.Mesh).isMesh) found = object as THREE.Mesh;
+    if (object.name === 'neck' && (object as Mesh).isMesh) found = object as Mesh;
   });
   if (!found) throw new Error('lab: neck: the hero has no mesh named neck on his neck joint (head.ts buildNeck)');
   return found;
@@ -40,7 +40,7 @@ const OVER_CLOTHES: Profile = [[-2, -3], [2, -1], [2, 5], [-2, 7]];
 
 /** The skin the canary plants round the neck at height `y` (face mm), `radii` out on each line: a ring of `profile`,
  *  drawn as the neck is. */
-function canaryRing(model: Model, y: number, radii: number[], profile: Profile): THREE.Mesh {
+function canaryRing(model: Model, y: number, radii: number[], profile: Profile): Mesh {
   const headJoint = model.joints!.head.position.y;
   const positions: number[] = [];
   for (let ray = 0; ray <= ANGLES; ray++) {
@@ -60,19 +60,19 @@ function canaryRing(model: Model, y: number, radii: number[], profile: Profile):
       index.push(a, b, a + 1, b, b + 1, a + 1);
     }
   }
-  const geometry = new THREE.BufferGeometry();
-  geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  const geometry = new Geometry();
+  geometry.setAttribute('position', floats(positions, 3));
   geometry.setIndex(index);
   geometry.computeVertexNormals();
-  const ring = new THREE.Mesh(geometry, neckSkinOf(model).material);
+  const ring = new Mesh(geometry, neckSkinOf(model).material);
   ring.name = 'neck';
   return ring;
 }
 
 /** `geometry` made `share` as wide round its axis, and what puts it back (its places, as a skinned mesh's own scale
  *  is undone by its bind: every hero's neck is skinned). */
-function widened(geometry: THREE.BufferGeometry, share: number): () => void {
-  const position = geometry.attributes.position as THREE.BufferAttribute;
+function widened(geometry: Geometry, share: number): () => void {
+  const position = geometry.attributes.position as Attribute;
   const kept = Float32Array.from(position.array as ArrayLike<number>);
   for (let i = 0; i < position.count; i++) {
     position.setX(i, position.getX(i) * share);
@@ -131,7 +131,7 @@ function collarRow(slices: Slices): { row: number; lines: number } {
 }
 
 /** What `planted` reads as on `model`: each added to the neck joint for `read`, then taken away. */
-function withPlanted<T>(model: Model, planted: THREE.Mesh | THREE.Mesh[], read: () => T): T {
+function withPlanted<T>(model: Model, planted: Mesh | Mesh[], read: () => T): T {
   const meshes = Array.isArray(planted) ? planted : [planted];
   for (const mesh of meshes) model.joints!.neck.add(mesh);
   model.root.updateMatrixWorld(true);
@@ -173,7 +173,7 @@ export function canaries(what: string, model: Model, clean: Slices): { lines: st
       + ' round it', through > THROUGH_MOST);
   }
   const skin = neckSkinOf(model);
-  const material = skin.material as THREE.MeshStandardMaterial;
+  const material = skin.material as LitMaterial;
   const colour = material.color.clone();
   material.color.multiplyScalar(1.3);
   const restore = widened(skin.geometry, 1.06);
@@ -208,15 +208,15 @@ export function canaries(what: string, model: Model, clean: Slices): { lines: st
  *  the short neck and a collar of `profile` planted at `row` in place of all of the hero's own; null where none has a
  *  gap. */
 function holesRound(model: Model, clean: Slices, row: number, profile: Profile): number | null {
-  const hidden: THREE.Object3D[] = [];
+  const hidden: Node[] = [];
   model.root.traverse((object) => {
-    if ((object as THREE.Mesh).isMesh && object.visible) hidden.push(object);
+    if ((object as Mesh).isMesh && object.visible) hidden.push(object);
   });
   for (const object of hidden) object.visible = false;
   const [y, radii] = [clean.lines[0].samples[row].y, radiiAt(clean, row)];
   const neck = canaryRing(model, y, radii, SHORT_NECK);
   const collar = canaryRing(model, y, radii, profile);
-  const cloth = new THREE.MeshStandardMaterial({ side: THREE.DoubleSide });
+  const cloth = new LitMaterial({ side: DoubleSide });
   collar.material = cloth;
   collar.name = 'canary collar';
   try {

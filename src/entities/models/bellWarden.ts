@@ -11,7 +11,8 @@
 //   shuddering as it rings; its bronze's veins and its clapper glowing over the warning.
 // - **As it falls** its haunting fails and it sinks to the floor, tipped on its lip, its ghost scattered.
 // Drawn in its crowd (models/crowd.ts): every change is a joint's place or a glow's strength, nothing hidden.
-import * as THREE from 'three';
+import { Color, Geometry, Mesh, Node, Texture, Vec2, Vec3 } from '../../engine/api/index.ts';
+import * as shapes from '../../engine/api/shapes/index.ts';
 import { additive, createKit } from '../../core/materials';
 import { grunge, pbrMaterialMaps, radialDecal, veins } from '../../core/textures';
 import { joint, ramp } from './rig';
@@ -21,9 +22,9 @@ import { bellGhosts, type GhostCue } from './bellGhosts';
 import { BELL_WARDEN } from '../../data/foes/bellwarden';
 import type { AnimState, Model } from '../../types';
 
-const NONE = new THREE.BufferGeometry();
+const NONE = new Geometry();
 /** a geometry made only where the kind's pieces aren't replayed (models/shapes.ts) */
-const made = (f: () => THREE.BufferGeometry): THREE.BufferGeometry => (skipping() ? NONE : f());
+const made = (f: () => Geometry): Geometry => (skipping() ? NONE : f());
 
 /** the bell: its lip's radius and its height; how high its crown floats (m: its lip at a hero's waist) */
 const LIP = 1.62, BELL_H = 4.6, CROWN_Y = 5.5;
@@ -37,13 +38,13 @@ export function buildBellWarden(): Model {
   // cast bronze gone brown and green, its veins glowing pale from within (bright as it tolls)
   const bronze = kit.std({
     color: 0xa0702e, metalness: 0.5, roughness: 0.5, map: g.map, roughnessMap: g.roughnessMap, normalMap: g.normalMap,
-    normalScale: new THREE.Vector2(0.9, 0.9), emissive: new THREE.Color(0xc8d8ff), emissiveMap: veins(23, 6), emissiveIntensity: 0.12,
+    normalScale: new Vec2(0.9, 0.9), emissive: new Color(0xc8d8ff), emissiveMap: veins(23, 6), emissiveIntensity: 0.12,
   });
   const verdigris = kit.std({ color: 0x2f5446, metalness: 0.3, roughness: 0.7, map: g.map, normalMap: g.normalMap });
   const iron = kit.std({ color: 0x3e3b38, metalness: 0.85, roughness: 0.55, roughnessMap: g.roughnessMap, normalMap: g.normalMap });
   const clapper = kit.glow(0xdce8ff, 5);
 
-  const root = new THREE.Group();
+  const root = new Node();
   const S = new Sculpt('bellwarden').glow(clapper);
   const r = mulberry(31);
 
@@ -74,28 +75,28 @@ export function buildBellWarden(): Model {
   S.add(made(() => lathe(profile.map(([rr, y]) => [Math.max(0.01, rr - 0.1), y] as [number, number]).reverse(), 32)), bronze, swing);
   // bands round the sound bow and the shoulder, a verdigris crust under them, the crown's canons (its loops)
   for (const [y, rr] of [0.07, 0.8, 0.84].map((h) => [-BELL_H + BELL_H * h, radiusAt(h) + 0.02] as const)) {
-    S.add(made(() => new THREE.TorusGeometry(rr, 0.045, 6, 48).rotateX(Math.PI / 2)), bronze, swing, [0, y, 0]);
+    S.add(made(() => shapes.torus(rr, 0.045, 6, 48).rotateX(Math.PI / 2)), bronze, swing, [0, y, 0]);
   }
-  S.add(made(() => new THREE.TorusGeometry(radiusAt(0.14), 0.05, 6, 40).rotateX(Math.PI / 2)), verdigris, swing, [0, -BELL_H + BELL_H * 0.14, 0], [0, 0, 0], [1, 1, 0.6]);
+  S.add(made(() => shapes.torus(radiusAt(0.14), 0.05, 6, 40).rotateX(Math.PI / 2)), verdigris, swing, [0, -BELL_H + BELL_H * 0.14, 0], [0, 0, 0], [1, 1, 0.6]);
   for (let i = 0; i < 9; i++) {
     // (streaks of verdigris run down from the shoulder's band: thin, where the rain ran off it)
     const a = r() * Math.PI * 2, h = 0.55 + r() * 0.25, y = -BELL_H + BELL_H * h, rr = radiusAt(h) - 0.005;
-    S.add(made(() => organic(new THREE.SphereGeometry(1, 8, 6), 0.25, 3, i)), verdigris, swing, [Math.sin(a) * rr, y, Math.cos(a) * rr], [0, a, 0], [0.07 + r() * 0.06, 0.25 + r() * 0.35, 0.025]);
+    S.add(made(() => organic(shapes.sphere(1, 8, 6), 0.25, 3, i)), verdigris, swing, [Math.sin(a) * rr, y, Math.cos(a) * rr], [0, a, 0], [0.07 + r() * 0.06, 0.25 + r() * 0.35, 0.025]);
   }
-  for (const x of [-0.35, 0, 0.35]) S.add(made(() => new THREE.TorusGeometry(0.16, 0.05, 6, 12)), bronze, swing, [x, 0.02, 0], [0, Math.PI / 2, 0]);
+  for (const x of [-0.35, 0, 0.35]) S.add(made(() => shapes.torus(0.16, 0.05, 6, 12)), bronze, swing, [x, 0.02, 0], [0, Math.PI / 2, 0]);
   // a broken iron ring on the crown, where a headstock once held it: nothing holds it now
-  S.add(made(() => new THREE.TorusGeometry(0.34, 0.06, 6, 18, Math.PI * 1.4)), iron, swing, [0, 0.12, 0], [Math.PI / 2, 0, 0.6]);
+  S.add(made(() => shapes.torus(0.34, 0.06, 6, 18, Math.PI * 1.4)), iron, swing, [0, 0.12, 0], [Math.PI / 2, 0, 0.6]);
 
   // the clapper: an iron rod hung from the crown inside, a pale light at its foot (it hangs below the lip)
   const clap = joint(swing, 0, -0.3, 0);
-  S.add(made(() => new THREE.CylinderGeometry(0.05, 0.05, BELL_H - 0.3, 6).translate(0, -(BELL_H - 0.3) / 2, 0)), iron, clap);
-  S.add(made(() => new THREE.SphereGeometry(0.3, 16, 12)), clapper, clap, [0, -(BELL_H - 0.1), 0]);
+  S.add(made(() => shapes.cylinder(0.05, 0.05, BELL_H - 0.3, 6).translate(0, -(BELL_H - 0.3) / 2, 0)), iron, clap);
+  S.add(made(() => shapes.sphere(0.3, 16, 12)), clapper, clap, [0, -(BELL_H - 0.1), 0]);
   S.build();
 
   // the glow on the floor under it: the haunting holding it up (its own mesh, added light: the ground flash's program)
   const pool = additive(0xb8ccff, 0.8, 0.45);
   pool.map = floorGlow();
-  const under = new THREE.Mesh(new THREE.PlaneGeometry(2, 2).rotateX(-Math.PI / 2), pool);
+  const under = new Mesh(shapes.plane(2, 2).rotateX(-Math.PI / 2), pool);
   under.name = 'bell\'s glow under it';
   under.scale.setScalar(LIP * 1.9);
   under.position.y = 0.06;
@@ -107,7 +108,7 @@ export function buildBellWarden(): Model {
   // (its bell and what it hangs from, where `lab boss --parts swing` reads its swing about its crown and its lag)
   root.userData.bell = swing;
   root.userData.hover = hover;
-  const cue: GhostCue = { rush: 0, burst: 0, scatter: 0, bell: new THREE.Vector3() };
+  const cue: GhostCue = { rush: 0, burst: 0, scatter: 0, bell: new Vec3() };
 
   // what it eases through: its sinking as it falls, its shudder as it rings
   let down = 0, shudder = 0;
@@ -176,8 +177,8 @@ export function buildBellWarden(): Model {
 
 /** the floor glow's picture, made once: a soft round light fading to nothing (its colour fading to black: added
  *  light reads the colour, not the alpha, and a white faded by its alpha alone drew a flat disc with a hard edge) */
-let floorGlowMap: THREE.Texture | null = null;
-const floorGlow = (): THREE.Texture => (floorGlowMap ??= radialDecal('rgba(255,255,255,1)', 'rgba(0,0,0,1)', false));
+let floorGlowMap: Texture | null = null;
+const floorGlow = (): Texture => (floorGlowMap ??= radialDecal('rgba(255,255,255,1)', 'rgba(0,0,0,1)', false));
 
 /**
  * The bell's turn about its crown through a toll at share `s` of its action, its strike at `h` (rad, forward positive):

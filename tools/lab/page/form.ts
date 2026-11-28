@@ -6,7 +6,7 @@
 // judged at a man's size: the hero's speed and lengths scaled by his legs against a man's (`MAN_LEG`). Each way is
 // pictured at eight points of the stride: stick figures of his run over a runner's, the hero from the side, and the
 // game's own views; measured first, then run again to picture the frames chosen.
-import * as THREE from 'three';
+import { Node, Quat, Vec3 } from './sceneApi.ts';
 import type { Lab, Pictured, Tile, ViewName } from './lab';
 import type { LegIK } from '../../../src/entities/models/ik';
 import { legLength } from '../../../src/entities/models/ik';
@@ -141,49 +141,49 @@ export function stylesOf(lab: Lab): WeaponStyle[] {
 
 // --- measuring a frame -------------------------------------------------------------------------------------------
 
-const _a = new THREE.Vector3();
-const _b = new THREE.Vector3();
-const _c = new THREE.Vector3();
-const _q = new THREE.Quaternion();
+const _a = new Vec3();
+const _b = new Vec3();
+const _c = new Vec3();
+const _q = new Quat();
 
 /** The view from the hero's side: the way he faces along the ground, and where the hips stand on it. */
 interface SideView {
-  forward: THREE.Vector3;
-  origin: THREE.Vector3;
+  forward: Vec3;
+  origin: Vec3;
   ground: number;
   toMan: number;
 }
 
-const at = (joint: THREE.Object3D, out = new THREE.Vector3()): THREE.Vector3 => joint.getWorldPosition(out);
+const at = (joint: Node, out = new Vec3()): Vec3 => joint.getWorldPosition(out);
 
-function sideOf(view: SideView, point: THREE.Vector3): Side {
+function sideOf(view: SideView, point: Vec3): Side {
   const ahead = _c.copy(point).sub(view.origin).dot(view.forward);
   return [ahead * view.toMan, (point.y - view.ground) * view.toMan];
 }
 
 /** A line's angle from straight down, forward positive (deg), seen from the side. */
-function fromDown(view: SideView, from: THREE.Object3D, to: THREE.Object3D): number {
+function fromDown(view: SideView, from: Node, to: Node): number {
   const line = at(to, _a).sub(at(from, _b));
   return Math.atan2(line.dot(view.forward), -line.y) * DEG;
 }
 
 /** The angle at `middle` between its two neighbours, as a bend from straight (deg). */
-function bendAt(from: THREE.Object3D, middle: THREE.Object3D, to: THREE.Object3D): number {
-  const centre = at(middle, new THREE.Vector3());
+function bendAt(from: Node, middle: Node, to: Node): number {
+  const centre = at(middle, new Vec3());
   return 180 - at(from, _a).sub(centre).angleTo(at(to, _b).sub(centre)) * DEG;
 }
 
 /** The foot against square to its shin, toes up positive (deg). */
-function ankleOf(knee: THREE.Object3D, ankle: THREE.Object3D): number {
-  const shinDown = at(ankle, new THREE.Vector3()).sub(at(knee, _a)).normalize();
+function ankleOf(knee: Node, ankle: Node): number {
+  const shinDown = at(ankle, new Vec3()).sub(at(knee, _a)).normalize();
   const toes = _b.set(0, 0, 1).applyQuaternion(ankle.getWorldQuaternion(_q));
   return toes.angleTo(shinDown) * DEG - 90;
 }
 
 /** The upper arm's swing against the trunk, forward positive (deg): its line in the chest's frame, seen from the
  *  side. */
-function armSwing(lab: Lab, shoulder: THREE.Object3D, elbow: THREE.Object3D): number {
-  const arm = at(elbow, new THREE.Vector3()).sub(at(shoulder, _a));
+function armSwing(lab: Lab, shoulder: Node, elbow: Node): number {
+  const arm = at(elbow, new Vec3()).sub(at(shoulder, _a));
   lab.joints.chest.getWorldQuaternion(_q);
   const forward = _b.set(0, 0, 1).applyQuaternion(_q);
   const down = _c.set(0, -1, 0).applyQuaternion(_q);
@@ -191,37 +191,37 @@ function armSwing(lab: Lab, shoulder: THREE.Object3D, elbow: THREE.Object3D): nu
 }
 
 /** A joint's turn about the vertical off the way the body faces (deg). */
-function yawOf(joint: THREE.Object3D, facing: number): number {
+function yawOf(joint: Node, facing: number): number {
   const forward = _a.set(0, 0, 1).applyQuaternion(joint.getWorldQuaternion(_q));
   const turn = Math.atan2(forward.x, forward.z) - facing;
   return Math.atan2(Math.sin(turn), Math.cos(turn)) * DEG;
 }
 
 /** A foot's toes, in the world: ahead of the ankle along the foot and down to the sole. */
-function toesOf(lab: Lab, ankle: THREE.Object3D): THREE.Vector3 {
-  return ankle.localToWorld(new THREE.Vector3(0, -0.06, 0.16));
+function toesOf(lab: Lab, ankle: Node): Vec3 {
+  return ankle.localToWorld(new Vec3(0, -0.06, 0.16));
 }
 
 function measureFrame(lab: Lab, legs: LegIK, toMan: number): FormFrame {
   const j = lab.joints;
   const facing = lab.player.facing;
-  const forward = new THREE.Vector3(Math.sin(facing), 0, Math.cos(facing));
-  const origin = at(j.hips, new THREE.Vector3());
+  const forward = new Vec3(Math.sin(facing), 0, Math.cos(facing));
+  const origin = at(j.hips, new Vec3());
   const view: SideView = { forward, origin, ground: lab.player.pos.y, toMan };
-  const leg = (thigh: THREE.Object3D, knee: THREE.Object3D, ankle: THREE.Object3D, side: number): LegFrame => ({
+  const leg = (thigh: Node, knee: Node, ankle: Node, side: number): LegFrame => ({
     thigh: fromDown(view, thigh, knee),
     knee: bendAt(thigh, knee, ankle),
     ankle: ankleOf(knee, ankle),
     planted: legs.feet[side].state === 'plant',
   });
-  const arm = (shoulder: THREE.Object3D, elbow: THREE.Object3D, hand: THREE.Object3D): ArmFrame => ({
+  const arm = (shoulder: Node, elbow: Node, hand: Node): ArmFrame => ({
     shoulder: armSwing(lab, shoulder, elbow),
     elbow: bendAt(shoulder, elbow, hand),
   });
-  const neck = at(j.neck, new THREE.Vector3()).sub(origin);
-  const headUp = new THREE.Vector3(0, 1, 0).applyQuaternion(j.head.getWorldQuaternion(_q));
-  const pair = (left: THREE.Object3D, right: THREE.Object3D): [Side, Side] =>
-    [sideOf(view, at(left, new THREE.Vector3())), sideOf(view, at(right, new THREE.Vector3()))];
+  const neck = at(j.neck, new Vec3()).sub(origin);
+  const headUp = new Vec3(0, 1, 0).applyQuaternion(j.head.getWorldQuaternion(_q));
+  const pair = (left: Node, right: Node): [Side, Side] =>
+    [sideOf(view, at(left, new Vec3())), sideOf(view, at(right, new Vec3()))];
   return {
     hips: (origin.y - view.ground) * toMan,
     legs: [leg(j.thighL, j.kneeL, j.ankleL, 0), leg(j.thighR, j.kneeR, j.ankleR, 1)],
@@ -233,8 +233,8 @@ function measureFrame(lab: Lab, legs: LegIK, toMan: number): FormFrame {
     trunk: trunkSampleOf(j, [legs.feet[0].state === 'plant', legs.feet[1].state === 'plant']),
     facing,
     stick: {
-      head: sideOf(view, j.head.localToWorld(new THREE.Vector3(0, 0.12, 0))),
-      neck: sideOf(view, at(j.neck, new THREE.Vector3())),
+      head: sideOf(view, j.head.localToWorld(new Vec3(0, 0.12, 0))),
+      neck: sideOf(view, at(j.neck, new Vec3())),
       hips: sideOf(view, origin),
       shoulders: pair(j.shoulderL, j.shoulderR),
       elbows: pair(j.elbowL, j.elbowR),

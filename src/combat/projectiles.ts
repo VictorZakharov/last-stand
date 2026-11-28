@@ -1,12 +1,14 @@
 // Generic projectile system used by player skills and enemies.
-import * as THREE from 'three';
+import {
+  AdditiveBlending, Color, ColorRepresentation, LookMaterial, Material, Mesh, UnlitMaterial, Vec3,
+} from '../engine/api/index.ts';
+import * as shapes from '../engine/api/shapes/index.ts';
 import { G } from '../state';
 import { particles, col, burst } from '../fx/particles';
 import { flash, flashFree, release, type LightSlot } from '../fx/lights';
 import type { Enemy } from '../entities/enemy';
 import type { Player } from '../entities/player';
 import { nearGlow } from '../core/materials';
-import { portShader } from '../core/shaderPorts';
 import { effectLook, rgb, FX_PLAIN_VERTEX, effectShader } from '../engine/effects';
 import { hurtProp, PROP_DAMAGE } from '../world/destructible';
 import type { Obstacle } from '../types';
@@ -14,30 +16,12 @@ import { entry, strikesBody, type Struck } from './strikes';
 import { evades, SEEN_AHEAD, type Threat } from '../entities/evade';
 import { cutVineAlong } from '../entities/throws';
 
-const coreGeo = new THREE.SphereGeometry(1, 12, 8);
-const matCache = new Map<string, THREE.Material>();
-/**
- * A hostile bolt's core is energy, not a ball: added light, brightest in the middle, fading to a soft rim.
- */
-const orbShader = {
-  vertexShader: /* glsl */`varying vec3 vN; varying vec3 vV;
-    void main(){ vec4 mv = modelViewMatrix * vec4(position, 1.0); vN = normalize(normalMatrix * normal); vV = normalize(-mv.xyz); gl_Position = projectionMatrix * mv; }`,
-  fragmentShader: /* glsl */`uniform vec3 uColor; varying vec3 vN; varying vec3 vV;
-    void main(){
-      float f = max(dot(normalize(vN), normalize(vV)), 0.0);
-      vec3 c = uColor * (0.15 + 1.1 * f * f);
-      gl_FragColor = vec4(c, 1.0);
-    }`,
-  transparent: true, blending: THREE.AdditiveBlending, depthWrite: false,
-};
-/** `orbShader` on WebGPU (core/shaderPorts.ts) */
-const orbPort: Parameters<typeof portShader>[1] = ({ wgslFn, normalView, positionViewDirection }, u) => ({
-  fragment: wgslFn(`fn boltOrb(n: vec3f, v: vec3f, color: vec3f) -> vec4f {
-    let f = max(dot(normalize(n), normalize(v)), 0.0);
-    return vec4f(color * (0.15 + 1.1 * f * f), 1.0);
-  }`)({ n: normalView, v: positionViewDirection, color: u.uColor }),
-});
-/** the orb for the Rust engine (src/engine/effects.ts): the port's WGSL above, the view taken in the world */
+const coreGeo = shapes.sphere(1, 12, 8);
+const matCache = new Map<string, Material>();
+/** A hostile bolt's core is energy, not a ball: added light, brightest in the middle, fading to a soft rim (its
+ *  look, `ORB_HOOKS`). */
+const ORB_DRAW = { transparent: true, blending: AdditiveBlending, depthWrite: false } as const;
+/** the orb for the Rust engine (src/engine/effects.ts), the view taken in the world */
 const ORB_HOOKS = FX_PLAIN_VERTEX + /* wgsl */ `
 fn surface_hook(s: ptr<function, Surface>, in: VertexOut) -> bool {
   let color = m.c[0].rgb;
@@ -47,36 +31,36 @@ fn surface_hook(s: ptr<function, Surface>, in: VertexOut) -> bool {
   return true;
 }
 `;
-function coreMat(color: THREE.ColorRepresentation, intensity: number, orb: boolean): THREE.Material {
+function coreMat(color: ColorRepresentation, intensity: number, orb: boolean): Material {
   const key = `${color}:${intensity}:${orb}`;
   let m = matCache.get(key);
   if (!m) {
-    const c = new THREE.Color(color).multiplyScalar(intensity);
+    const c = new Color(color).multiplyScalar(intensity);
     m = orb ? effectLook(
-        portShader(nearGlow(new THREE.ShaderMaterial({ ...orbShader, uniforms: { uColor: { value: c } } })), orbPort),
+        nearGlow(new LookMaterial({ ...ORB_DRAW, uniforms: { uColor: { value: c } } })),
         'bolt-orb', ORB_HOOKS, { numbers(u, out) { rgb(u, 'uColor', out, 0); } })
-      : nearGlow(new THREE.MeshBasicMaterial({ color: c }));
+      : nearGlow(new UnlitMaterial({ color: c }));
     matCache.set(key, m);
   }
   return m;
 }
 
 /** Cores for the load-time warm-up: each kind shares its program (the colour is a uniform). */
-export const coreSamples = (): THREE.Mesh[] => [false, true].map((orb) => new THREE.Mesh(coreGeo, coreMat(0xffffff, 4, orb)));
+export const coreSamples = (): Mesh[] => [false, true].map((orb) => new Mesh(coreGeo, coreMat(0xffffff, 4, orb)));
 
-export interface TrailOpts { color: THREE.ColorRepresentation; colorEnd?: THREE.ColorRepresentation; intensity?: number; size?: number; rate?: number; life?: number }
+export interface TrailOpts { color: ColorRepresentation; colorEnd?: ColorRepresentation; intensity?: number; size?: number; rate?: number; life?: number }
 
 export interface ProjectileOpts {
-  pos: THREE.Vector3;
+  pos: Vec3;
   /** normalized direction */
-  dir: THREE.Vector3;
+  dir: Vec3;
   speed: number;
   radius?: number;
   life?: number;
   /** hostile projectiles hit the players, friendly ones hit enemies */
 
   hostile?: boolean;
-  color?: THREE.ColorRepresentation;
+  color?: ColorRepresentation;
   size?: number;
   intensity?: number;
   /** attach a dynamic light of this intensity (0 = none); a hostile bolt's only takes a free light */
@@ -96,7 +80,7 @@ export interface ProjectileOpts {
   pierce?: boolean;
   ignore?: Set<Enemy>;
   /** a mesh of its own instead of the glowing core (sized by the caller) */
-  mesh?: THREE.Mesh;
+  mesh?: Mesh;
   /** every frame of its flight, after it moved (its own look: spin, trail...) */
   tick?(proj: Projectile, dt: number): void;
   onHit?(target: Enemy | Player, proj: Projectile): void;
@@ -104,7 +88,7 @@ export interface ProjectileOpts {
   /** it met a prop's circle (`o`, on its step from `from` to `to`, its point's with a `tip`): instead of fading out where
    *  it is, it ends as this has it (true: the prop takes the blow) or flies on past that prop (false: its circle is
    *  rounder than what it draws, and missed it) */
-  onProp?(o: Obstacle, proj: Projectile, from: THREE.Vector3, to: THREE.Vector3): boolean;
+  onProp?(o: Obstacle, proj: Projectile, from: Vec3, to: Vec3): boolean;
   /** how far ahead of where it is it meets a prop (m): an arrow's point. A projectile with one meets the props before
    *  its own flight (`tick`) can put it in the ground: tested by its middle after that, an arrow aimed low at the
    *  ranger's wall put its point in the ground at the wall's foot first and stood there, dealing nothing (from
@@ -120,10 +104,10 @@ export interface ProjectileOpts {
   judged?: Set<Enemy>;
 }
 
-const _to = new THREE.Vector3(), _from = new THREE.Vector3(), _hits: Enemy[] = [], _along: number[] = [], _order: number[] = [];
+const _to = new Vec3(), _from = new Vec3(), _hits: Enemy[] = [], _along: number[] = [], _order: number[] = [];
 const _heads: boolean[] = [], _struck: Struck = { head: false };
-const _ahead = new THREE.Vector3(), _stepFrom = new THREE.Vector3(), _stepTo = new THREE.Vector3();
-const _flat = new THREE.Vector3();
+const _ahead = new Vec3(), _stepFrom = new Vec3(), _stepTo = new Vec3();
+const _flat = new Vec3();
 
 /** whether the props are met by a projectile's middle after its own flight, as before its `tip` (the lab's canary) */
 let propsLate = false;
@@ -134,8 +118,8 @@ export function holdPropsAfterFlight(late: boolean): void {
 }
 
 export class Projectile {
-  readonly pos: THREE.Vector3;
-  readonly vel: THREE.Vector3;
+  readonly pos: Vec3;
+  readonly vel: Vec3;
   readonly speed: number;
   readonly radius: number;
   life: number;
@@ -165,10 +149,10 @@ export class Projectile {
   /** the foes that have seen it coming (each judged once a cast, `foresee`) */
   readonly judged: Set<Enemy>;
   readonly trail?: TrailOpts;
-  readonly color: THREE.ColorRepresentation;
+  readonly color: ColorRepresentation;
   alive = true;
   trailAcc = 0;
-  readonly mesh: THREE.Mesh;
+  readonly mesh: Mesh;
   readonly light: LightSlot | null;
 
   constructor(o: ProjectileOpts) {
@@ -195,7 +179,7 @@ export class Projectile {
     this.judged = o.judged ?? new Set();
     this.trail = o.trail;
     this.color = o.color ?? 0xffffff;
-    this.mesh = o.mesh ?? new THREE.Mesh(coreGeo, coreMat(this.color, o.intensity ?? 4, this.hostile));
+    this.mesh = o.mesh ?? new Mesh(coreGeo, coreMat(this.color, o.intensity ?? 4, this.hostile));
     this.mesh.name = 'projectile';
     if (!o.mesh) this.mesh.scale.setScalar(o.size ?? 0.12);
     this.size = this.mesh.scale.x;
@@ -316,7 +300,7 @@ export class Projectile {
 
   /** The foes this frame's step from `from` strikes, struck: the first alone (true: it's gone), or going on through
    *  them each, in the order the step meets them. */
-  private strikeFoes(from: THREE.Vector3): boolean {
+  private strikeFoes(from: Vec3): boolean {
     _hits.length = 0; _along.length = 0; _heads.length = 0;
     for (const e of G.enemies) {
       if (!e.alive || e.invulnerable || this.ignore.has(e) || !e.struckBy(this.by)) continue;
@@ -349,7 +333,7 @@ export class Projectile {
    * its body (`strikesBody`: struck within its circle and under its height, it flew through a boss's arms and crown
    * and struck a small foe it went by); any other there or within its circle, at any height.
    */
-  private strikes(e: Enemy, from: THREE.Vector3): number {
+  private strikes(e: Enemy, from: Vec3): number {
     const ahead = _ahead.copy(this.vel).setLength(this.point);
     const body = strikesBody(e, _stepFrom.copy(from).add(ahead), _stepTo.copy(this.pos).add(ahead), this.radius * 0.5, _struck);
     if (this.level) return body;
@@ -390,7 +374,7 @@ export class Projectile {
 
   /** The square of the least distance on the ground from (x, z) to its step from `from` to `to`, or to `to` alone
    *  unless it's `swept`. */
-  private stepDistanceSq(x: number, z: number, from: THREE.Vector3, to: THREE.Vector3): number {
+  private stepDistanceSq(x: number, z: number, from: Vec3, to: Vec3): number {
     if (!this.swept) return (to.x - x) ** 2 + (to.z - z) ** 2;
     const dx = to.x - from.x, dz = to.z - from.z, lengthSq = dx * dx + dz * dz;
     const t = lengthSq > 0 ? Math.max(0, Math.min(1, ((x - from.x) * dx + (z - from.z) * dz) / lengthSq)) : 0;

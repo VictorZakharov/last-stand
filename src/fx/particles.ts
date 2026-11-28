@@ -1,36 +1,14 @@
 // CPU-simulated, GPU-rendered point particles. One additive pool (glows, sparks)
 // and one alpha-blended pool (smoke, dust, debris).
-import * as THREE from 'three';
+import {
+  AdditiveBlending, Attribute, Blending, Color, ColorRepresentation, DynamicDrawUsage, InstancedAttribute,
+  InstancedGeometry, LookMaterial, Material, Mesh, NormalBlending, World,
+} from '../engine/api/index.ts';
 import { G } from '../state';
 import { nearGlow } from '../core/materials';
 import { pointScale } from '../core/renderer';
 import { dazedField } from './dazed';
-import { particleQuads, type ParticleQuads } from './particleNodes';
-
-const VERT = /* glsl */`
-  attribute float aSize;
-  attribute vec4 aColor;
-  varying vec4 vColor;
-  uniform float uScale;
-  void main(){
-    vec4 mv = modelViewMatrix * vec4(position, 1.0);
-    // fade out near the lens: in first person a burst around the player starts at the camera, a bolt's
-    // trail stacks along the view as it flies at it, and each point there covers much of the screen
-    vColor = vec4(aColor.rgb, aColor.a * smoothstep(0.5, 3.5, -mv.z));
-    gl_PointSize = aSize * uScale / -mv.z;
-    gl_Position = projectionMatrix * mv;
-  }`;
-
-const FRAG = /* glsl */`
-  varying vec4 vColor;
-  uniform float uSoft;
-  void main(){
-    vec2 p = gl_PointCoord - 0.5;
-    float d = length(p) * 2.0;
-    if (d > 1.0) discard;
-    float a = pow(1.0 - d, uSoft);
-    gl_FragColor = vec4(vColor.rgb, vColor.a * a);
-  }`;
+import { particleQuads } from './particleNodes';
 
 /** Options for spawning one particle. Colors are linear RGB and may exceed 1 (HDR). */
 export interface ParticleSpawn {
@@ -38,7 +16,7 @@ export interface ParticleSpawn {
   vx?: number; vy?: number; vz?: number;
   life?: number;
   size?: number; sizeEnd?: number;
-  color: THREE.Color; colorEnd?: THREE.Color;
+  color: Color; colorEnd?: Color;
   alpha?: number;
   gravity?: number;
   drag?: number;
@@ -52,15 +30,14 @@ class Pool {
   readonly vel: Float32Array; readonly life: Float32Array; readonly maxLife: Float32Array;
   readonly s0: Float32Array; readonly s1: Float32Array; readonly c0: Float32Array; readonly c1: Float32Array;
   readonly a0: Float32Array; readonly grav: Float32Array; readonly drag: Float32Array;
-  readonly aPos: THREE.InstancedBufferAttribute; readonly aCol: THREE.InstancedBufferAttribute;
-  readonly aSize: THREE.InstancedBufferAttribute;
-  private readonly attrs: THREE.BufferAttribute[];
-  readonly mat: THREE.ShaderMaterial;
-  readonly points: THREE.Mesh;
-  /** the pool as instanced quads (particleNodes.ts) */
-  private readonly quads: ParticleQuads;
+  readonly aPos: InstancedAttribute; readonly aCol: InstancedAttribute;
+  readonly aSize: InstancedAttribute;
+  private readonly attrs: Attribute[];
+  readonly mat: LookMaterial;
+  /** the pool as instanced quads (particleNodes.ts), handed to the engine as its sprites (engine/sprites.ts) */
+  readonly points: Mesh<InstancedGeometry, Material>;
 
-  constructor(max: number, blending: THREE.Blending, soft: number) {
+  constructor(max: number, blending: Blending, soft: number) {
     this.max = max;
     this.pos = new Float32Array(max * 3);
     this.col = new Float32Array(max * 4);
@@ -78,23 +55,21 @@ class Pool {
     this.drag = new Float32Array(max);
 
     // (an instance's, a quad each)
-    this.aPos = new THREE.InstancedBufferAttribute(this.pos, 3).setUsage(THREE.DynamicDrawUsage);
-    this.aCol = new THREE.InstancedBufferAttribute(this.col, 4).setUsage(THREE.DynamicDrawUsage);
-    this.aSize = new THREE.InstancedBufferAttribute(this.size, 1).setUsage(THREE.DynamicDrawUsage);
+    this.aPos = new InstancedAttribute(this.pos, 3).setUsage(DynamicDrawUsage);
+    this.aCol = new InstancedAttribute(this.col, 4).setUsage(DynamicDrawUsage);
+    this.aSize = new InstancedAttribute(this.size, 1).setUsage(DynamicDrawUsage);
     this.attrs = [this.aPos, this.aCol, this.aSize];
-    this.mat = new THREE.ShaderMaterial({
-      vertexShader: VERT, fragmentShader: FRAG,
+    this.mat = new LookMaterial({
       uniforms: { uScale: { value: 400 }, uSoft: { value: soft } },
       transparent: true, depthWrite: false, blending,
     });
     // glowing (additive) particles dim with distance like every effect glow
-    if (blending === THREE.AdditiveBlending) nearGlow(this.mat);
-    this.quads = particleQuads(this.aPos, this.aCol, this.aSize, blending, soft);
-    this.points = this.quads.mesh;
+    if (blending === AdditiveBlending) nearGlow(this.mat);
+    this.points = particleQuads({ aCenter: this.aPos, aColor: this.aCol, aSize: this.aSize }, this.mat);
     // (the profiler's particles: quads, a mesh, src/perf/sceneParts.ts)
     this.points.userData.particles = true;
     this.points.frustumCulled = false;
-    this.points.renderOrder = blending === THREE.AdditiveBlending ? 20 : 10;
+    this.points.renderOrder = blending === AdditiveBlending ? 20 : 10;
   }
 
   spawn(o: ParticleSpawn): void {
@@ -133,13 +108,12 @@ class Pool {
       this.col[i4 + 3] = this.a0[i] * Math.min(1, t * 12) * (1 - t * t);
       i++;
     }
-    this.quads.mesh.geometry.instanceCount = this.count;
+    this.points.geometry.instanceCount = this.count;
     // (not drawn while empty, a draw call of nothing; shown through the boot's warm-up, which runs no update)
     this.points.visible = this.count > 0;
     // upload only the live particles, not the whole pool (a zero-length range would upload all of it)
     if (this.count) for (const a of this.attrs) { a.clearUpdateRanges(); a.addUpdateRange(0, this.count * a.itemSize); a.needsUpdate = true; }
     this.mat.uniforms.uScale.value = pointScale();
-    this.quads.scale.value = pointScale();
   }
 
   kill(i: number): void {
@@ -154,9 +128,9 @@ class Pool {
 export const particles = {
   glow: null as unknown as Pool,
   smoke: null as unknown as Pool,
-  init(scene: THREE.Scene): void {
-    this.glow = new Pool(9000, THREE.AdditiveBlending, 1.6);
-    this.smoke = new Pool(3000, THREE.NormalBlending, 1.2);
+  init(scene: World): void {
+    this.glow = new Pool(9000, AdditiveBlending, 1.6);
+    this.smoke = new Pool(3000, NormalBlending, 1.2);
     this.glow.points.name = 'particles: glow';
     this.smoke.points.name = 'particles: smoke';
     scene.add(this.glow.points, this.smoke.points);
@@ -167,7 +141,7 @@ export const particles = {
 };
 
 /** Color helper: hex (or color) scaled into HDR range. */
-export const col = (hex: THREE.ColorRepresentation, mul = 1): THREE.Color => new THREE.Color(hex).multiplyScalar(mul);
+export const col = (hex: ColorRepresentation, mul = 1): Color => new Color(hex).multiplyScalar(mul);
 
 // Convenience emitters -------------------------------------------------------
 
@@ -180,7 +154,7 @@ export function setParticleShare(share: number): void { particleShare = share; }
 const thinned = (count: number): number => count <= 1 ? count : Math.max(1, Math.round(count * particleShare));
 
 export interface BurstOpts {
-  count?: number; color?: THREE.ColorRepresentation; colorEnd?: THREE.ColorRepresentation | null; intensity?: number;
+  count?: number; color?: ColorRepresentation; colorEnd?: ColorRepresentation | null; intensity?: number;
   speed?: number; up?: number; life?: number; size?: number; sizeEnd?: number; gravity?: number; drag?: number; spread?: number;
 }
 
@@ -197,7 +171,7 @@ export function burst(pos: Vec3Like, { count = 20, color = 0xffffff, colorEnd = 
   }
 }
 
-export interface SmokeOpts { count?: number; color?: THREE.ColorRepresentation; alpha?: number; size?: number; sizeEnd?: number; life?: number; speed?: number; rise?: number }
+export interface SmokeOpts { count?: number; color?: ColorRepresentation; alpha?: number; size?: number; sizeEnd?: number; life?: number; speed?: number; rise?: number }
 
 export function smokePuff(pos: Vec3Like, { count = 8, color = 0x111118, alpha = 0.55, size = 1.4, sizeEnd = 3, life = 1.4, speed = 1.2, rise = 0.8 }: SmokeOpts = {}): void {
   const c = col(color);
@@ -211,7 +185,7 @@ export function smokePuff(pos: Vec3Like, { count = 8, color = 0x111118, alpha = 
   }
 }
 
-export interface DebrisOpts { count?: number; color?: THREE.ColorRepresentation; speed?: number; size?: number; life?: number }
+export interface DebrisOpts { count?: number; color?: ColorRepresentation; speed?: number; size?: number; life?: number }
 
 export function debris(pos: Vec3Like, { count = 10, color = 0x2a2a30, speed = 6, size = 0.18, life = 1.1 }: DebrisOpts = {}): void {
   const c = col(color);

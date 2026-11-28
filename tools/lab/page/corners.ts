@@ -2,7 +2,7 @@
 // normals or texture part there (the mage's staff: 12,234 points, 2,515 places), and a measure reading the deepest
 // point of a weapon every frame (page/weaponFloor.ts, page/weaponBody.ts) read each place about five times over.
 
-/** The points of a geometry's positions, as a `THREE.BufferAttribute` gives them. */
+/** The points of a geometry's positions, as a `Attribute` gives them. */
 export interface Positions {
   count: number;
   /** none on an interleaved attribute, whose corners are found once */

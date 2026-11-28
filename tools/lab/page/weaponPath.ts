@@ -4,7 +4,7 @@
 // down in 1 line, without changing direction/turning", "its called keeping momentum", "just draw a line of the same
 // point of the axe, at different intervals, and see which line it makes"): a blow kept in one upright plane draws a
 // straight line from above, however its arc bends within that plane.
-import * as THREE from 'three';
+import { Material, Mesh, Node, shapes, UnlitMaterial, Vec3 } from './sceneApi.ts';
 import type { Lab, Pictured } from './lab';
 import { G } from '../../../src/state';
 import { bladeOffLine } from './weaponFloor';
@@ -24,7 +24,7 @@ const CANARY_CAUGHT = 0.2;
 /** A point of the path: where the tip was, its frame, whether it moved fast to get there, and how far its blade was
  *  off the blow's line (degrees, `bladeOffLine`). */
 interface PathPoint {
-  at: THREE.Vector3;
+  at: Vec3;
   frame: string;
   fast: boolean;
   blade: number;
@@ -37,7 +37,7 @@ interface Stray {
   fast: number;
 }
 
-const _tip = new THREE.Vector3();
+const _tip = new Vec3();
 
 /** The tip's path through a cast, and how straight its fast part runs. */
 export class WeaponPath {
@@ -136,7 +136,7 @@ function strayOf(points: PathPoint[]): Stray | null {
 }
 
 /** The level way the points run along, seen from above: the main axis of their spread (x, z in a vector's x, z). */
-function lineOf(points: PathPoint[]): THREE.Vector3 {
+function lineOf(points: PathPoint[]): Vec3 {
   const middle = middleOf(points);
   let xx = 0;
   let xz = 0;
@@ -149,30 +149,30 @@ function lineOf(points: PathPoint[]): THREE.Vector3 {
     zz += dz * dz;
   }
   const angle = 0.5 * Math.atan2(2 * xz, xx - zz);
-  return new THREE.Vector3(Math.cos(angle), 0, Math.sin(angle));
+  return new Vec3(Math.cos(angle), 0, Math.sin(angle));
 }
 
 /** The middle of the points (their mean). */
-function middleOf(points: PathPoint[]): THREE.Vector3 {
-  const sum = new THREE.Vector3();
+function middleOf(points: PathPoint[]): Vec3 {
+  const sum = new Vec3();
   for (const { at } of points) sum.add(at);
   return sum.divideScalar(points.length);
 }
 
 /** The path as a tube from point to point, the fast part in red and the rest in yellow, a white mark every few
  *  frames: drawn over everything (a line one pixel wide was lost against the grass). */
-function drawPath(points: PathPoint[]): THREE.Group {
-  const group = new THREE.Group();
-  const slow = new THREE.MeshBasicMaterial({ color: 0xffd81a, depthTest: false });
-  const fast = new THREE.MeshBasicMaterial({ color: 0xff2618, depthTest: false });
+function drawPath(points: PathPoint[]): Node {
+  const group = new Node();
+  const slow = new UnlitMaterial({ color: 0xffd81a, depthTest: false });
+  const fast = new UnlitMaterial({ color: 0xff2618, depthTest: false });
   for (let i = 1; i < points.length; i++) {
     group.add(segmentBetween(points[i - 1].at, points[i].at, points[i].fast ? fast : slow));
   }
-  const mark = new THREE.SphereGeometry(MARK_RADIUS, 10, 8);
-  const markMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff, depthTest: false });
+  const mark = shapes.sphere(MARK_RADIUS, 10, 8);
+  const markMaterial = new UnlitMaterial({ color: 0xffffff, depthTest: false });
   points.forEach((point, i) => {
     if (i % MARK_EVERY !== 0) return;
-    const sphere = new THREE.Mesh(mark, markMaterial);
+    const sphere = new Mesh(mark, markMaterial);
     sphere.position.copy(point.at);
     group.add(sphere);
   });
@@ -184,24 +184,24 @@ function drawPath(points: PathPoint[]): THREE.Group {
 }
 
 /** A cylinder from `from` to `to`. */
-function segmentBetween(from: THREE.Vector3, to: THREE.Vector3, material: THREE.Material): THREE.Mesh {
+function segmentBetween(from: Vec3, to: Vec3, material: Material): Mesh {
   const length = from.distanceTo(to);
-  const geometry = new THREE.CylinderGeometry(LINE_RADIUS, LINE_RADIUS, Math.max(length, 1e-4), 6);
-  const segment = new THREE.Mesh(geometry, material);
+  const geometry = shapes.cylinder(LINE_RADIUS, LINE_RADIUS, Math.max(length, 1e-4), 6);
+  const segment = new Mesh(geometry, material);
   segment.position.lerpVectors(from, to, 0.5);
   if (length > 1e-6) {
-    const way = new THREE.Vector3().subVectors(to, from).normalize();
-    segment.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), way);
+    const way = new Vec3().subVectors(to, from).normalize();
+    segment.quaternion.setFromUnitVectors(new Vec3(0, 1, 0), way);
   }
   return segment;
 }
 
 /** Frees what `drawPath` made. */
-function disposeDrawn(group: THREE.Group): void {
+function disposeDrawn(group: Node): void {
   group.traverse((object) => {
-    const drawn = object as THREE.Mesh;
+    const drawn = object as Mesh;
     drawn.geometry?.dispose();
-    const material = drawn.material as THREE.Material | undefined;
+    const material = drawn.material as Material | undefined;
     material?.dispose();
   });
 }

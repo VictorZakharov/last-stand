@@ -5,7 +5,7 @@
 // lands through each window's middle it lit nothing at 8:30, the palisade 5 to 10 m east of the hall shading its east
 // wall from a low sun, and the morning sun, south of east, lands each window's light some 5 m past it toward the dais.
 // `canary` draws both frames without the sun.
-import * as THREE from 'three';
+import { DirectionalLight, Vec3 } from './sceneApi.ts';
 import type { Lab, Pictured, Tile } from './lab';
 import { G } from '../../../src/state';
 import { holdHour } from '../../../src/game/clock';
@@ -18,7 +18,7 @@ import type { LightsChecked } from './villageLights';
 
 /** the hour read (the sun east of south, over the palisade), where the hero stands and the way he faces */
 const HOUR = 9.5;
-const STAND = new THREE.Vector3(TERRACE.x, TERRACE.high, -24);
+const STAND = new Vec3(TERRACE.x, TERRACE.high, -24);
 const FACING = Math.PI;
 const SETTLE = 60;
 /** a pixel the sun lights: at least this share of its light the sun's (and not black) */
@@ -35,10 +35,10 @@ const MOST_LIT = 0.06;
 const PICTURED_GAIN = 3;
 
 /** The sun's light. */
-function sunLight(): THREE.DirectionalLight {
-  let sun: THREE.DirectionalLight | null = null;
+function sunLight(): DirectionalLight {
+  let sun: DirectionalLight | null = null;
   G.scene.traverse((o) => {
-    if (!sun && (o as THREE.DirectionalLight).isDirectionalLight) sun = o as THREE.DirectionalLight;
+    if (!sun && (o as DirectionalLight).isDirectionalLight) sun = o as DirectionalLight;
   });
   if (!sun) throw new Error('lab: no sun in the scene');
   return sun;

@@ -8,55 +8,12 @@
 /* the village: its minimap alone (the training under it, as a run's objectives lie), and in its practice the run's
    skill bar; nothing else of a run's */
 #hud.lobby:not(.practice) > :not(#minimap-wrap) { display: none; }
-#hud.lobby :is(#target, #banner, #wavebadge, #decision, #party, #down-note, #spectate, #btn-revive, .objectives, #spoils, #duel-score, #duel-result) {
+#hud.lobby :is(#banner, #wavebadge, #decision, #party, #down-note, #spectate, #btn-revive, .objectives, #spoils, #duel-score, #duel-result) {
   display: none;
 }
 
-/* bottom HUD: [health] [abilities] [energy] in a single compact row */
-#bottombar { position: absolute; left: 50%; bottom: hud(12px); transform: translateX(-50%); display: flex; align-items: center; gap: 0;
-  filter: drop-shadow(0 6px 14px rgba(0,0,0,.85)); }
-.bar { position: relative; width: 300px; height: 46px; background: linear-gradient(#0a0808, #1a1414); overflow: hidden;
-  @include frame(var(--frame), 0 0 0 1px #000, inset 0 8px 14px rgba(0,0,0,.6)); }
-.bar.life { border-radius: 23px 0 0 23px; border-right: none; }
-.bar.energy { border-radius: 0 23px 23px 0; border-left: none; }
-.bar .fill { position: absolute; top: 0; bottom: 0; left: 0; width: 100%; transition: width .1s linear; }
-.bar.life .fill { left: auto; right: 0; background: linear-gradient(180deg, #ff5a4a 0%, #c4141c 35%, #6a0408 100%); box-shadow: inset 0 1px 0 rgba(255,255,255,.35); }
-.bar.life .lag { position: absolute; top: 0; bottom: 0; right: 0; background: rgba(255,210,140,.45); transition: width .6s ease-out .15s; z-index: 0; }
-.bar.life .fill { z-index: 1; }
-.bar.energy .fill { background: linear-gradient(180deg, #7affd8 0%, #1fae8a 35%, #0a4a3c 100%); box-shadow: inset 0 1px 0 rgba(255,255,255,.35); }
-.bar .txt { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; z-index: 2;
-  font-family: var(--font-display); font-size: 17px; font-weight: 700; color: #fff; text-shadow: 0 1px 2px #000, 0 0 4px #000; }
-.bar .bar-label { position: absolute; top: 3px; z-index: 2; font-size: 10px; letter-spacing: 2px; text-transform: uppercase; color: rgba(255,255,255,.55); text-shadow: 0 1px 2px #000; }
-.bar.life .bar-label { left: 22px; } .bar.energy .bar-label { right: 22px; }
-.bar.low .fill { animation: lowpulse .6s infinite alternate; }
-@keyframes lowpulse { to { filter: brightness(1.8); } }
-.gem { width: 64px; height: 64px; z-index: 2; border-radius: 50%; display: flex; flex-direction: column; align-items: center; justify-content: center;
-  @include gem;
-   box-shadow: 0 0 0 2px #000, inset 0 0 12px #000, 0 0 18px rgba(0,0,0,.9); }
-.gem-label { font-size: 9px; letter-spacing: 2px; text-transform: uppercase; color: var(--ink-dim); margin-top: 2px; }
-.gem-num { font-family: var(--font-display); font-size: 24px; font-weight: 900; color: var(--accent); line-height: 1; text-shadow: 0 0 8px rgba($accent-glow, .5); }
-#wavebadge { position: absolute; top: hud(10px); left: 50%; transform: translateX(-50%); width: 70px; height: 70px; }
-#wavebadge .gem-num { font-size: 28px; }
-/* the warrior's Frenzy (ui/hud.ts updateFrenzy): a row of pips over the skill bar, lit a pip a stack in its own colour
-   from orange to deep red; the five past the cap only while Unchained runs. Nothing animates: a lit pip's glow is a
-   still shadow, set as the stacks change */
-#frenzy { position: absolute; left: 50%; bottom: calc(100% + 6px); transform: translateX(-50%); z-index: 3;
-  display: flex; align-items: center; gap: 8px; padding: 3px 10px; border-radius: 10px; background: rgba(10, 6, 6, .72);
-  box-shadow: 0 0 0 1px #000, inset 0 0 0 1px rgba($frame, .45); }
-#frenzy.hidden { display: none; }
-#frenzy .fz-label { font-size: 10px; letter-spacing: 2px; text-transform: uppercase; color: rgba(255, 210, 170, .7);
-  text-shadow: 0 1px 2px #000; }
-#frenzy.full .fz-label { color: #ff8a5a; }
-#frenzy .fz-pips { display: flex; gap: 3px; }
-#frenzy i { display: none; width: 10px; height: 14px; transform: skewX(-14deg); border-radius: 2px;
-  background: rgba(40, 18, 14, .9); box-shadow: inset 0 0 0 1px rgba(255, 140, 90, .25); }
-#frenzy i.shown { display: block; }
-#frenzy i.extra { box-shadow: inset 0 0 0 1px rgba(255, 70, 40, .55); }
-#frenzy i.on { background: linear-gradient(180deg, #fff2c8 -40%, var(--c) 45%, color-mix(in srgb, var(--c) 55%, #000) 100%);
-  box-shadow: 0 0 6px var(--c), inset 0 0 0 1px rgba(0, 0, 0, .5); }
-#frenzy.unchained { box-shadow: 0 0 0 1px #000, inset 0 0 0 1px rgba(255, 80, 40, .7), 0 0 10px rgba(255, 60, 30, .45); }
-#hotbar { display: flex; gap: 6px; padding: 7px 12px; position: relative; z-index: 3; background: $tray;
-  @include frame(rgba($frame, .6), 0 0 0 1px #000, 0 6px 14px rgba(0,0,0,.8)); border-radius: 4px; }
+/* the bottom bar ([health] [abilities] [energy]) is drawn by the engine (ui/bottomBar.ts); `.slot` stays for the
+   page's other skill slots (the loadout, the hero selection, the save slots, the touch buttons) */
 .slot { position: relative; width: 62px; height: 62px; border: 1px solid #000; box-shadow: inset 0 0 0 1px rgba($frame, .7), inset 0 0 12px rgba(0,0,0,.9);
   display: flex; align-items: center; justify-content: center; overflow: hidden; border-radius: 3px; pointer-events: auto; }
 .slot .icon { font-size: 33px; line-height: 1; filter: drop-shadow(0 0 6px currentColor); }
@@ -76,182 +33,28 @@
 .slot.busy .icon { filter: grayscale(.85) brightness(.4); }
 .slot.sep { margin-left: 10px; }
 
-#buffs { position: absolute; left: calc(50% - 470px); bottom: 76px; display: flex; gap: 4px; }
-.buff { width: 30px; height: 30px; border: 1px solid var(--frame); display: flex; align-items: center; justify-content: center; font-size: 18px; background: #111;
-  position: relative; box-shadow: 0 0 8px rgba(0,0,0,.8); }
-.buff .bt { position: absolute; bottom: -14px; font-size: 11px; color: #fff; text-shadow: 0 0 3px #000; white-space: nowrap; }
+/* the buffs are drawn by the engine (ui/buffsPanel.ts): `#buffs` out of sight (`.kit-mirror`) */
 
-#target { position: absolute; top: 88px; left: 50%; transform: translateX(-50%); text-align: center; min-width: 260px; }
-.t-name { font-family: var(--font-display); font-size: 19px; font-weight: 700; color: #f5d27a; text-shadow: 0 2px 4px #000, 0 0 10px #000; }
-.t-sub { font-size: 12px; color: var(--ink-dim); margin-bottom: 3px; text-shadow: 0 1px 2px #000; }
-.t-bar { position: relative; height: 12px; width: 300px; margin: 0 auto; background: #120808; border: 1px solid #000; box-shadow: 0 0 0 1px var(--frame-dark), inset 0 0 6px #000; }
-.t-fill { position: absolute; inset: 0; background: linear-gradient(#e03a30, #7a0a0a); width: 100%; z-index: 1; }
-.t-ghost { position: absolute; inset: 0; background: rgba(255,220,160,.5); width: 100%; transition: width .5s ease-out .1s; }
-#target.boss .t-bar { width: 520px; height: 16px; box-shadow: 0 0 0 1px #a060ff, 0 0 14px rgba(160,96,255,.5); }
-#target.boss .t-name { font-size: 24px; color: #d8b0ff; }
 
 // (`--mm-room`: the minimap's width, which the touch HUD's full screen button stands beside, `_touch.scss`)
 #hud { --mm-room: 212px; }
-#minimap-wrap { position: absolute; top: hud(8px); right: hud(12px); width: var(--mm-room); display: flex; flex-direction: column; align-items: center; }
-.mm-title { font-family: var(--font-display); font-size: 16px; color: #f0e2c0; text-shadow: 0 2px 4px #000; margin-bottom: 2px; }
-// (a finger held on it pings there: ui/ping.ts)
-body.touch #minimap { pointer-events: auto; touch-action: none; -webkit-touch-callout: none; user-select: none; }
-#minimap { width: 200px; height: 200px; border-radius: 50%; border: 4px solid #6e6a62; box-shadow: 0 0 0 2px #000, inset 0 0 20px #000, 0 6px 14px rgba(0,0,0,.8); background: rgba(10,10,12,.55); }
-.objectives { align-self: stretch; margin-top: 12px; padding-left: 8px; }
-.obj-title { font-family: var(--font-display); font-size: 16px; color: #8fa8ff; text-shadow: 0 1px 3px #000; }
-.obj-line { display: flex; align-items: center; gap: 6px; font-size: 14px; text-shadow: 0 1px 2px #000; }
-.obj-line .box { width: 10px; height: 10px; border: 1px solid var(--ink-dim); }
-.obj-line.done .box { background: var(--highlight); }
-#spoils { align-self: stretch; margin-top: 10px; padding: 6px 8px; background: rgba(0,0,0,.45); border-left: 2px solid var(--frame); }
-.sp-title { font-size: 13px; color: var(--ink-dim); text-transform: uppercase; letter-spacing: 1px; }
-.sp-title b { color: var(--highlight); font-size: 15px; }
-.sp-list { font-size: 13px; font-weight: 500; max-height: 170px; overflow: hidden; }
-.sp-list { display: flex; flex-wrap: wrap; gap: 2px 10px; }
-.sp-r { display: inline-block; transform-origin: left center; white-space: nowrap; text-shadow: 0 1px 2px #000; }
-/* a rarity's count pulses when an item of it is gained */
-.sp-r.bump { animation: sp-bump .5s ease-out; }
-@keyframes sp-bump { from { transform: scale(1.5); text-shadow: 0 0 10px currentColor; } }
-@media (prefers-reduced-motion: reduce) { .sp-r.bump { animation: none; } }
+/* the minimap's column is drawn by the engine (ui/minimapColumn.ts): its elements out of sight (`.kit-mirror`) */
 
-/* the close views (V): a crosshair at the centre, and the click that takes the mouse for looking. Bold while a drawn
-   shot is held at full draw (`.full`, main.ts), swelling into it once as a heart knocks, never pulsing on; on a layer
-   of its own, so the swell is the compositor's alone (a page element moved every frame repaints round it). Centred
-   by `translate`, which applies after `scale`, so it swells about its own middle: centred by `transform`, it swelled
-   about where its box was before that, and shifted up and left */
-#crosshair { position: absolute; left: 50%; top: 50%; width: hud(22px); height: hud(22px); translate: -50% -50%;
-  will-change: transform; --w: #{hud(2px)}; --c: rgba(255, 240, 210, 0.9); }
-#crosshair.full { --w: #{hud(3.5px)}; --c: rgb(255, 240, 210); animation: crosshair-beat .3s; }
-#crosshair::before, #crosshair::after { content: ''; position: absolute; filter: drop-shadow(0 0 hud(1.5px) #000); }
-#crosshair::before { left: 50%; top: 0; bottom: 0; width: var(--w); margin-left: calc(var(--w) / -2); background: linear-gradient(var(--c) 0 35%, transparent 35% 65%, var(--c) 65%); }
-#crosshair::after { top: 50%; left: 0; right: 0; height: var(--w); margin-top: calc(var(--w) / -2); background: linear-gradient(90deg, var(--c) 0 35%, transparent 35% 65%, var(--c) 65%); }
-/* a held skill's charge in the close views (ui/chargeMark.ts): a ring round the crosshair drawn clockwise from the
-   top, whole at full charge. Two half rings, each in a box over one half of the circle that hides what's outside
-   it, each turned into its box by its transform alone (painted once; a stroke's dash changed every frame painted
-   the ring again each frame of a charge): the right box's from the top down to the foot over the charge's first
-   half, the left box's from the foot back up to the top over its second. */
-#charge-ring { position: absolute; left: 50%; top: 50%; width: hud(54px); height: hud(54px); translate: -50% -50%;
-  border-radius: 50%; box-shadow: inset 0 0 0 hud(1.5px) rgba(255, 240, 210, .22); pointer-events: none; --cr: rgba(255, 240, 210, .95); }
-#charge-ring.full { --cr: #ffd98a; }
-#charge-ring > b { position: absolute; top: 0; width: 50%; height: 100%; overflow: hidden; }
-#charge-ring > .cr-right { left: 50%; }
-#charge-ring > .cr-left { left: 0; }
-#charge-ring > b > i { position: absolute; top: 0; width: 200%; height: 100%; box-sizing: border-box; border-radius: 50%;
-  border: hud(3px) solid var(--cr); will-change: transform; }
-/* (each half ring is the half of a whole one that lies outside its box until it's turned in) */
-#charge-ring > .cr-right > i { left: -100%; clip-path: inset(0 50% 0 0); }
-#charge-ring > .cr-left > i { left: 0; clip-path: inset(0 0 0 50%); }
-/* (a heart's knock: a quick swell and a settle, as the downed partner's marker beats, ui/coop.ts) */
-@keyframes crosshair-beat { 0% { scale: 1; animation-timing-function: ease-out; } 35% { scale: 1.5; animation-timing-function: ease-out; } 100% { scale: 1; } }
-@media (prefers-reduced-motion: reduce) { #crosshair.full { animation: none; } }
-#look-hint { position: absolute; left: 50%; top: 58%; transform: translateX(-50%); padding: 0.5em 1em; border-radius: 6px; background: rgba(8, 8, 14, 0.75); color: #f0e6d0; font-size: hud(15px); white-space: nowrap; }
-#banner { position: absolute; top: 22%; left: 50%; transform: translateX(-50%); text-align: center; animation: banner 2.8s ease forwards; }
-.b-title { font-family: var(--font-display); font-size: 54px; font-weight: 900; letter-spacing: 4px; color: #f3e1b0;
-  text-shadow: 0 0 20px rgba(0,0,0,.9), 0 4px 6px #000, 0 0 40px rgba($accent-glow, .35); }
-.b-sub { font-size: 20px; color: var(--ink-dim); letter-spacing: 2px; text-shadow: 0 2px 4px #000; }
-@keyframes banner { 0% { opacity: 0; transform: translate(-50%, 10px) scale(.96); } 12% { opacity: 1; transform: translate(-50%, 0) scale(1); } 80% { opacity: 1; } 100% { opacity: 0; } }
+/* the close views' crosshair, a held skill's charge ring round it and the hint to click to look are drawn by the
+   engine (ui/aimMarks.ts): `#crosshair`, `#charge-ring`, `#look-hint` out of sight (`.kit-mirror`) */
+/* the banner is drawn by the engine (ui/bannerPanel.ts): `#banner` out of sight (`.kit-mirror`) */
 
-/* a duel (ui/duelHud.ts): each side's name either side of the round's badge, the score and the round's time under
-   the badge; nothing of a run's spoils; the result where the banner stands */
-#duel-score { position: absolute; top: hud(22px); left: 50%; transform: translateX(-50%); display: grid; grid-template-columns: minmax(0, 1fr) hud(96px) minmax(0, 1fr);
-  width: min(74vw, hud(620px)); align-items: start; pointer-events: none; font-family: var(--font-display); text-shadow: 0 2px 4px #000, 0 0 10px rgba(0,0,0,.8); }
+/* a duel (ui/duelHud.ts): its score and result drawn by the engine (ui/duelPanels.ts), their elements out of sight
+   (`.kit-mirror`); nothing of a run's spoils */
 #duel-score.hidden, #duel-result.hidden { display: none; }
-#duel-score .ds-a, #duel-score .ds-b { font-size: 19px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-top: hud(12px); }
-#duel-score .ds-a { text-align: right; color: #f0a184; }
-#duel-score .ds-b { text-align: left; color: #9fd0ff; }
-#duel-score .ds-mid { display: flex; flex-direction: column; align-items: center; padding-top: hud(62px); }
-#duel-score .ds-points { font-size: 24px; color: #ffe7b0; letter-spacing: 2px; }
-#duel-score .ds-note { font: 15px var(--font-body); font-style: normal; color: var(--ink-dim); letter-spacing: 1px; }
 #hud.duel #spoils { display: none; }
-#duel-result { position: absolute; top: 24%; left: 50%; transform: translateX(-50%); width: min(86vw, 460px); box-sizing: border-box; padding: 18px 22px; text-align: center;
-  background: linear-gradient(180deg, rgba(8,7,9,.94), rgba(8,7,9,.86)); border: 1px solid var(--frame); outline: 3px solid rgba(74,54,32,.9); pointer-events: none; }
-#duel-result .dr-title { font: 900 44px var(--font-display); letter-spacing: 3px; color: #f3e1b0; }
-#duel-result[data-outcome="lost"] .dr-title { color: #e2a08c; }
-#duel-result .dr-who { margin-top: 4px; font-size: 19px; color: var(--ink); }
-#duel-result .dr-score { margin-top: 6px; font: 700 30px var(--font-display); color: #ffe7b0; letter-spacing: 3px; }
-#duel-result .dr-note { margin-top: 8px; font-size: 14px; color: var(--ink-dim); }
 
-/* bank or continue: it grows out of the wave badge (same top and centre, so the badge's circle is the
-   top middle of the box: --badge), across to a strip and down to the whole box; the details fold away
-   after a while (.compact), and once chosen it all folds back into the badge (.closing) */
-#decision { --badge: 70px; position: absolute; left: 50%; top: hud(10px); transform: translateX(-50%); width: 560px; padding: 18px 22px; text-align: center; pointer-events: auto;
-  background: linear-gradient(rgba(20,17,16,.96), rgba(8,7,8,.96)); @include frame(var(--frame), 0 10px 40px rgba(0,0,0,.9));
-  overflow: hidden; transition: padding .5s ease; }
-#decision.opening { animation: dc-open .9s cubic-bezier(.5, 0, .2, 1) both, dc-flare 1.1s .75s ease-out; }
-#decision.opening::after { content: ''; position: absolute; inset: 0; pointer-events: none;
-  background: linear-gradient(105deg, transparent 42%, rgba($accent-glow, .22) 50%, transparent 58%) no-repeat 0 0 / 300% 100%;
-  animation: dc-sweep 1s .7s ease-in-out both; }
-#decision.opening :is(.dc-title, .dc-bag, .dc-party, .dc-risk, .dc-buttons) { animation: dc-in .45s ease-out both; }
-#decision.opening .dc-title { animation-name: dc-title; animation-duration: .7s; animation-delay: .5s; }
-#decision.opening .dc-bag { animation-delay: .7s; }
-#decision.opening .dc-party, #decision.opening .dc-risk { animation-delay: .78s; }
-#decision.opening .dc-buttons { animation-delay: .86s; }
-#decision.compact { padding-block: 10px; }
-#decision.closing { animation: dc-close .65s cubic-bezier(.6, 0, .4, 1) both; pointer-events: none; }
-#decision.closing > * { opacity: 0; transition: opacity .15s; }
-.dc-details { display: grid; grid-template-rows: 1fr; transition: grid-template-rows .5s ease, opacity .3s; }
-.dc-details > div { min-height: 0; overflow: hidden; }
-#decision.compact .dc-details { grid-template-rows: 0fr; opacity: 0; }
-@keyframes dc-open {
-  0% { opacity: 0; clip-path: inset(0 calc(50% - var(--badge) / 2) calc(100% - var(--badge)) round calc(var(--badge) / 2)); }
-  12%, 22% { opacity: 1; clip-path: inset(0 calc(50% - var(--badge) / 2) calc(100% - var(--badge)) round calc(var(--badge) / 2)); }
-  55% { clip-path: inset(0 0 calc(100% - var(--badge)) round calc(var(--badge) / 2)); }
-  100% { clip-path: inset(0 round 4px); }
-}
-@keyframes dc-close {
-  0% { clip-path: inset(0 round 4px); }
-  50% { clip-path: inset(0 0 calc(100% - var(--badge)) round calc(var(--badge) / 2)); }
-  85% { opacity: 1; clip-path: inset(0 calc(50% - var(--badge) / 2) calc(100% - var(--badge)) round calc(var(--badge) / 2)); }
-  100% { opacity: 0; clip-path: inset(0 calc(50% - var(--badge) / 2) calc(100% - var(--badge)) round calc(var(--badge) / 2)); }
-}
-@keyframes dc-flare { 35% { box-shadow: inset 0 0 0 1px var(--accent), inset 0 0 24px rgba($accent-glow, .25), 0 0 34px rgba($accent-glow, .45), 0 10px 40px rgba(0,0,0,.9); } }
-@keyframes dc-sweep { from { background-position: 100% 0; } to { background-position: 0 0; } }
-@keyframes dc-in { from { opacity: 0; transform: translateY(-8px); filter: blur(3px); } }
-@keyframes dc-title { from { opacity: 0; letter-spacing: 12px; filter: blur(4px); text-shadow: 0 0 24px $accent-glow; } }
-.dc-title { font-family: var(--font-display); font-size: 26px; color: var(--accent); margin-bottom: 10px; }
-.dc-bag { display: flex; flex-wrap: wrap; gap: 4px; justify-content: center; margin-bottom: 10px; max-height: 120px; overflow: auto; }
-.dc-bag .chip { font-size: 13px; padding: 2px 7px; background: rgba(0,0,0,.6); border: 1px solid rgba(255,255,255,.1); pointer-events: auto; }
-.dc-risk { color: var(--danger); font-size: 15px; margin-bottom: 12px; }
-/* what each choice stakes, a small line under each button's label (#347): the buttons' padding gives the line its
-   room, so they stay main's height and the choice main's size */
-#decision .dc-buttons .btn { display: inline-flex; align-items: center; justify-content: center; }
-// (Continue on its way to the host: its key cap a spinner, the cap's box kept so nothing moves, the spinner on a
-// layer of its own, its transform alone moving)
-#decision .cont.sending .k { position: relative; color: transparent; }
-// (the button is dimmed meanwhile, as one pressed is: the arc drawn bright and thick enough to read through it)
-#decision .cont.sending .k::after { content: ''; position: absolute; left: 50%; top: 50%; width: 9px; height: 9px;
-  margin: -6.5px 0 0 -6.5px; border-radius: 50%; border: 2px solid rgba(255, 255, 255, .12);
-  border-top-color: #fff; border-right-color: #fff; will-change: transform; animation: dc-spin .9s linear infinite; }
-@keyframes dc-spin { to { transform: rotate(1turn); } }
-@media (prefers-reduced-motion: reduce) { #decision .cont.sending .k::after { animation-duration: 3s; } }
-#decision .dc-label { display: inline-flex; flex-direction: column; align-items: center; }
-#decision .stake { font-family: var(--font-body); font-weight: normal; font-size: 10.5px; line-height: 1.15; letter-spacing: .3px; color: var(--ink-dim); }
-#decision .stake:empty { display: none; }
-#decision.staked .dc-buttons .btn { padding-block: 6px; }
-#decision.staked .dc-label > :first-child { line-height: 1.1; }
+/* the choice after a wave and the badge are drawn by the engine (ui/decisionPanel.ts, ui/waveBadge.ts: their
+   numbers are those rules'); a row of buttons in a dialog still takes this */
 .dc-buttons { display: flex; gap: 12px; justify-content: center; }
-/* the badge flares and gives way as the choice grows out of it, and pops back once it folds in again */
-#wavebadge { transition: opacity .3s, transform .3s; }
-#wavebadge.morphed { transition-delay: .12s; opacity: 0; transform: translateX(-50%) scale(.6); animation: gem-flare .3s ease-out; }
-#wavebadge.back { animation: gem-flare .6s ease-out; }
-#wavebadge.back .gem-num { animation: gem-num .5s cubic-bezier(.3, 1.6, .5, 1); }
-@keyframes gem-flare { 30% { box-shadow: 0 0 0 2px #000, inset 0 0 12px #000, 0 0 30px rgba($accent-glow, .8); } }
-@keyframes gem-num { from { scale: 1.6; opacity: 0; } }
-@media (prefers-reduced-motion: reduce) {
-  #decision, #decision *, #decision::after, #wavebadge, #wavebadge .gem-num { animation: none !important; transition: none !important; }
-}
 
 /* ---------- responsive UI scale ----------
    --hud is set by ui/scale.ts, a share of the screen from a 1500x780 reference layout.
    Uses the individual `scale` property so it composes with existing transforms;
    elements centred with translateX(-50%) scale from their left edge (= screen centre).
    The scale leaves an element's offsets from the screen's edges alone: give those as hud() too. */
-#bottombar { scale: var(--hud, 1); transform-origin: left bottom; }
-#target    { scale: var(--hud, 1); transform-origin: left top; top: hud(88px); }
-/* (in a duel the score and the round's clock stand under the badge: the rival aimed at is named under them. Where a
-   foe's name stands it lay over the score) */
-#hud.duel #target { top: hud(150px); }
-#wavebadge { scale: var(--hud, 1); transform-origin: left top; }
-#decision  { scale: var(--hud, 1); transform-origin: left top; }
-#banner    { scale: var(--hud, 1); transform-origin: left top; }
-#minimap-wrap { scale: var(--hud, 1); transform-origin: right top; }
-#buffs     { scale: var(--hud, 1); transform-origin: left bottom; left: calc(50% - 470px * var(--hud, 1)); bottom: hud(76px); }

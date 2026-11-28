@@ -1,7 +1,11 @@
 // Building blocks shared by the biome arenas: the biome contract, UV-scaled boxes, instancing
 // and geometry helpers, the spawn-portal membrane, the environment map and the static shadow bake.
-import * as THREE from 'three';
-import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import {
+  Attribute, Box3, boundsOf, Camera, CanvasTexture, Color, Curve, Euler, floats, Geometry, InstancedMesh,
+  LightShadow, Mat4, Material, mergeGeometries, Mesh, Node, PointLight, Quat, SkinnedMesh, Texture,
+  UnlitMaterial, Vec3, World,
+} from '../engine/api/index.ts';
+import * as shapes from '../engine/api/shapes/index.ts';
 import { HERO_SHADOW_LAYER } from '../core/layers';
 import { keepMiddle, seeThroughFade, thinsByMiddle } from '../core/seeThrough';
 import { membraneMaterial, spillMaterial } from './portalNodes';
@@ -24,7 +28,7 @@ export type Updater = (dt: number, t: number) => void;
 export type RGB = [number, number, number];
 
 /** A spawn gate: where enemies enter and the direction into the arena. */
-export interface Portal { pos: THREE.Vector3; dir: THREE.Vector3; pulse(): void }
+export interface Portal { pos: Vec3; dir: Vec3; pulse(): void }
 
 /** Scene-wide lighting a biome sets when it becomes active (the lights themselves are shared). */
 export interface BiomeLook {
@@ -67,15 +71,15 @@ export interface Biome {
   rollAhead?(seed: number): boolean;
 }
 
-export type BiomeBuilder = (group: THREE.Group) => Biome;
+export type BiomeBuilder = (group: Node) => Biome;
 
 export const WALL_R = 28.5;   // radius of the arena's boundary (inner face)
 export const GATE_W = 4.2;    // spawn gate width
 
-const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _e = new THREE.Euler(), _s = new THREE.Vector3(), _p = new THREE.Vector3();
+const _m = new Mat4(), _q = new Quat(), _e = new Euler(), _s = new Vec3(), _p = new Vec3();
 
 /** the point lights casting the shadows of what stands still (`staticShadow`) */
-const stillShadows = new Set<THREE.PointLight>();
+const stillShadows = new Set<PointLight>();
 /** their shadow maps' size (px a face of the cube), their nearest (m), their bias and their edges' softness */
 const STILL_SHADOW = { size: 512, near: 0.3, bias: -0.004, radius: 3 };
 
@@ -86,7 +90,7 @@ const STILL_SHADOW = { size: 512, near: 0.3, bias: -0.004, radius: 3 };
  * braziers, the bonfires): a biome casting another count would compile every lit program again as it's shown, and
  * each light that casts is a lit shader's point light written out again (`loopPointLights` in `core/renderer.ts`).
  */
-export function staticShadow(light: THREE.PointLight): void {
+export function staticShadow(light: PointLight): void {
   light.castShadow = true;
   light.shadow.mapSize.set(STILL_SHADOW.size, STILL_SHADOW.size);
   light.shadow.camera.near = STILL_SHADOW.near;
@@ -110,20 +114,20 @@ export function setSunShadowStill(on: boolean): void { sunStill = on; }
 export const sunShadowStill = (): boolean => sunStill;
 /** `object` and all under it standing still for good: their matrices made once, never again each frame (three makes
  *  every object's again as it renders, still or not: the village's cottages, lamps and walls were most of its 860). */
-export function standStill(object: THREE.Object3D): void {
+export function standStill(object: Node): void {
   object.updateMatrixWorld(true);
   object.traverse((part) => { part.matrixAutoUpdate = false; });
   object.matrixWorldAutoUpdate = false;
-  // (the engine keeps it from then on, handed over once: `engine/kept.ts`)
+  // (never written again: what doesn't move isn't, `engine/stage.ts`)
   object.userData.standsStill = true;
 }
 
 /** pooled lights casting still shadows while they're lit at a lamp (`lampShadow`), and how often one has been
  *  asked to be drawn again (`drawLampShadows`) */
-const lampShadows = new Set<THREE.PointLight>();
+const lampShadows = new Set<PointLight>();
 let lampsAsked = 0;
 /** the lamp lights whose cubes are being drawn a face a frame (`drawLampShadows`), and the next face of each */
-const lampFaces = new Map<THREE.PointLight, number>();
+const lampFaces = new Map<PointLight, number>();
 /** the faces of a cube */
 const CUBE_FACES = 6;
 
@@ -133,7 +137,7 @@ const CUBE_FACES = 6;
  * it, the hero too, two lamps' twelve faces were 6 ms of a frame's GPU on a desktop at midnight (`npm run lab -- perf
  * --village --hour 0`: 8.5 ms of shadows against 2.2 at noon), where the goal is a steady 144 frames a second.
  */
-export function lampShadow(light: THREE.PointLight, on: boolean): void {
+export function lampShadow(light: PointLight, on: boolean): void {
   light.castShadow = on;
   if (!on) {
     lampShadows.delete(light);
@@ -150,14 +154,14 @@ export function lampShadow(light: THREE.PointLight, on: boolean): void {
 }
 
 /** what moves that isn't a body: kept out of what's drawn still, and drawn over it each frame as the heroes are */
-const movers: THREE.Object3D[] = [];
+const movers: Node[] = [];
 /** `group`, which moves, drawn over the kept shadow maps each frame. */
-export function movesInShadows(group: THREE.Object3D): void {
+export function movesInShadows(group: Node): void {
   movers.push(group);
   group.traverse((part) => part.layers.enable(HERO_SHADOW_LAYER));
 }
 /** What moves that isn't a body, drawn over the kept shadow maps (`movesInShadows`). */
-export const shadowMovers = (): readonly THREE.Object3D[] => movers;
+export const shadowMovers = (): readonly Node[] => movers;
 /**
  * The lamps' still shadows asked to be drawn again, with the next frame's still ones; or `light`'s alone, moved to
  * another lamp, a face of its cube a frame over the next six (`nextLampFace`), ready once the last is drawn
@@ -165,28 +169,28 @@ export const shadowMovers = (): readonly THREE.Object3D[] => movers;
  * was both lamps' twelve faces of the village in one frame, 142 to 167 draws and 3.5M triangles on Very low, at every
  * lamp he walked past by night (#593; from play, "FPS is not stable, even on high end hardware").
  */
-export function drawLampShadows(_light?: THREE.PointLight): void {
+export function drawLampShadows(_light?: PointLight): void {
   // (no cube is kept and no face drawn alone)
   lampsAsked++;
 }
 
 /** Whether `light`'s cube is whole at the lamp it stands at, not being drawn a face a frame. */
-export const lampShadowReady = (light: THREE.PointLight): boolean => !lampFaces.has(light);
+export const lampShadowReady = (light: PointLight): boolean => !lampFaces.has(light);
 
 /** The next face of a lamp's cube to draw, of those being drawn a face a frame, or null. */
-export function nextLampFace(): { light: THREE.PointLight; face: number } | null {
+export function nextLampFace(): { light: PointLight; face: number } | null {
   for (const [light, face] of lampFaces) return { light, face };
   return null;
 }
 
 /** `face` of `light`'s cube drawn: on to its next, or ready. */
-export function lampFaceDrawn(light: THREE.PointLight, face: number): void {
+export function lampFaceDrawn(light: PointLight, face: number): void {
   if (face + 1 < CUBE_FACES) lampFaces.set(light, face + 1);
   else lampFaces.delete(light);
 }
 
 /** The pooled lights casting the lamps' still shadows now (`lampShadow`). */
-export const lampShadowLights = (): ReadonlySet<THREE.PointLight> => lampShadows;
+export const lampShadowLights = (): ReadonlySet<PointLight> => lampShadows;
 
 /** How often the lamps' still shadows have been asked to be drawn again (`drawLampShadows`). */
 export const lampShadowsAsked = (): number => lampsAsked;
@@ -195,8 +199,8 @@ export const lampShadowsAsked = (): number => lampsAsked;
  * Where the shadow maps of `shown`'s still-shadow lights were drawn again, of what stands in it alone. Nothing is
  * drawn now:
  */
-export function drawStillShadows(_renderer: THREE.WebGLRenderer, _scene: THREE.Scene, _camera: THREE.Camera,
-  _shown: THREE.Group, _kept: THREE.LightShadow, _drawn: StillDrawn = ALL_STILL): void {
+export function drawStillShadows(_renderer: unknown, _scene: World, _camera: Camera,
+  _shown: Node, _kept: LightShadow, _drawn: StillDrawn = ALL_STILL): void {
   // (under the Rust engine none of three's shadow maps is read: the engine casts the sun's own. Drawn all the same,
   // three built its shaders for every still thing in view at each change of place, 4 s on a warm page and 20 s on
   // a cold one, the game stopped meanwhile. From play: "it cannot freeze 20sec")
@@ -207,7 +211,7 @@ const CONTACT_REACH = 1.7;
 const CONTACT_DARK = 0.7;
 
 /** A soft round shadow's alpha, dark in its middle and gone at its edge. */
-function contactTexture(): THREE.CanvasTexture {
+function contactTexture(): CanvasTexture {
   const size = 128;
   const canvas = canvasOf(size);
   const g = ctx2d(canvas);
@@ -228,13 +232,13 @@ function contactTexture(): THREE.CanvasTexture {
  * it the floor was lit to its foot by the sky: a fallen drum or a column stood on the floor as if pasted over it.
  * Returns its updater (each prop's patch shown while it stands).
  */
-export function contactShadows(scene: THREE.Object3D, obstacles: Obstacle[]): Updater {
+export function contactShadows(scene: Node, obstacles: Obstacle[]): Updater {
   const circles = [...obstacles];
-  const mat = new THREE.MeshBasicMaterial({
+  const mat = new UnlitMaterial({
     color: 0x000000, alphaMap: contactTexture(), transparent: true, opacity: CONTACT_DARK, depthWrite: false,
     polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
   });
-  const mesh = new THREE.InstancedMesh(new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2), mat, circles.length);
+  const mesh = new InstancedMesh(shapes.plane(1, 1).rotateX(-Math.PI / 2), mat, circles.length);
   const standing = circles.map(() => true);
   const place = (i: number, shown: boolean): void => {
     const o = circles[i], d = shown ? o.r * 2 * CONTACT_REACH : 0;
@@ -260,14 +264,14 @@ export function contactShadows(scene: THREE.Object3D, obstacles: Obstacle[]): Up
 
 /** `parts` marked as a tree's (its bark, its leaves, its roots, the copies casting their shadows): what the developer
  *  mode's Trees checkbox takes out of what's drawn (`src/dev/marked.ts`). Returns them. */
-export function asTree<T extends THREE.Object3D>(...parts: T[]): T[] {
+export function asTree<T extends Node>(...parts: T[]): T[] {
   for (const part of parts) part.userData.tree = true;
   return parts;
 }
 
 /** `parts` marked as grass (its blades, the copies `cullInCells` returns): what the developer mode's Grass checkbox
  *  takes out of what's drawn (`src/dev/marked.ts`). Returns them. */
-export function asGrass<T extends THREE.Object3D>(...parts: T[]): T[] {
+export function asGrass<T extends Node>(...parts: T[]): T[] {
   for (const part of parts) part.userData.grass = true;
   return parts;
 }
@@ -275,7 +279,7 @@ export function asGrass<T extends THREE.Object3D>(...parts: T[]): T[] {
 /** `material` marked as leaves' (leaf cards, fronds, fallen leaves, ivy): every mesh drawn in it is what the
  *  developer mode's Leaves checkbox takes out of what's drawn (`src/dev/marked.ts`). A mark on the material, as a
  *  tree's leaves are merged and culled into meshes of their own; its clones keep it. Returns it. */
-export function asLeaves<M extends THREE.Material>(material: M): M {
+export function asLeaves<M extends Material>(material: M): M {
   material.userData.leaves = true;
   return material;
 }
@@ -307,15 +311,15 @@ export function treeSpots(rng: () => number, { n, near, far, apart }: TreeSpots,
   }
   return spots;
 }
-export function setInstance(mesh: THREE.InstancedMesh, i: number, x: number, y: number, z: number, rx: number, ry: number, rz: number, sx: number, sy = sx, sz = sx): void {
+export function setInstance(mesh: InstancedMesh, i: number, x: number, y: number, z: number, rx: number, ry: number, rz: number, sx: number, sy = sx, sz = sx): void {
   _e.set(rx, ry, rz); _q.setFromEuler(_e);
   mesh.setMatrixAt(i, _m.compose(_p.set(x, y, z), _q, _s.set(sx, sy, sz)));
 }
 
 /** Nudge every vertex along its direction from the origin by a hash of its position, so
  * duplicated (non-indexed) corners move together and the surface stays closed. */
-export function lumpy(g: THREE.BufferGeometry, amount: number, seed: number): THREE.BufferGeometry {
-  const pos = g.attributes.position, v = new THREE.Vector3();
+export function lumpy(g: Geometry, amount: number, seed: number): Geometry {
+  const pos = g.attributes.position, v = new Vec3();
   for (let i = 0; i < pos.count; i++) {
     v.fromBufferAttribute(pos, i);
     const k = Math.sin(v.x * 12.9898 + v.y * 78.233 + v.z * 37.719 + seed) * 43758.5453;
@@ -329,9 +333,9 @@ export function lumpy(g: THREE.BufferGeometry, amount: number, seed: number): TH
 
 /** Each face's UVs laid from the side it faces most (box mapping), in its geometry's units: a map's tile a unit across
  *  whichever way a face turns (`g` unindexed). */
-export function boxUVs(g: THREE.BufferGeometry): void {
+export function boxUVs(g: Geometry): void {
   const p = g.attributes.position, uv = g.attributes.uv;
-  const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3(), q = new THREE.Vector3();
+  const a = new Vec3(), b = new Vec3(), c = new Vec3(), q = new Vec3();
   for (let i = 0; i + 2 < p.count; i += 3) {
     a.fromBufferAttribute(p, i);
     b.fromBufferAttribute(p, i + 1);
@@ -351,9 +355,9 @@ export function boxUVs(g: THREE.BufferGeometry): void {
  * its foot flattened to sit on the ground, each face its own normal (facets, as split stone has), and box-mapped UVs in
  * metres (a polyhedron's own wrap a sphere's map round it: stretched 2 to 1 and pinched at its poles, `lab tiles`).
  */
-export function boulderGeo(seed: number, radius = 1, detail = 2): THREE.BufferGeometry {
-  const g = new THREE.IcosahedronGeometry(1, detail);
-  const p = g.attributes.position, v = new THREE.Vector3();
+export function boulderGeo(seed: number, radius = 1, detail = 2): Geometry {
+  const g = shapes.icosahedron(1, detail);
+  const p = g.attributes.position, v = new Vec3();
   for (let i = 0; i < p.count; i++) {
     v.fromBufferAttribute(p, i);
     const lump = valueNoise3(v.x * 1.6, v.y * 1.6, v.z * 1.6, seed) - 0.5;
@@ -369,7 +373,7 @@ export function boulderGeo(seed: number, radius = 1, detail = 2): THREE.BufferGe
 
 /** A tuft of thin curved blades with vertex colors (`base` at the root, `tip` at the tips, linear
  * RGB); normals point up so the tufts light like the ground they grow from. */
-export function buildGrassGeo(rng: () => number, base: RGB, tip: RGB): THREE.BufferGeometry {
+export function buildGrassGeo(rng: () => number, base: RGB, tip: RGB): Geometry {
   const pos: number[] = [], colr: number[] = [];
   for (let i = 0; i < 7; i++) {
     const a = rng() * TAU, d = rng() * 0.12, w = 0.03 + rng() * 0.02, ht = 0.25 + rng() * 0.3, bend = 0.08 + rng() * 0.12;
@@ -377,10 +381,10 @@ export function buildGrassGeo(rng: () => number, base: RGB, tip: RGB): THREE.Buf
     pos.push(cx - px, 0, cz - pz, cx + px, 0, cz + pz, cx + Math.cos(a) * bend, ht, cz + Math.sin(a) * bend);
     colr.push(...base, ...base, ...tip);
   }
-  const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-  g.setAttribute('color', new THREE.Float32BufferAttribute(colr, 3));
-  g.setAttribute('normal', new THREE.Float32BufferAttribute(pos.map((_, i) => (i % 3 === 1 ? 1 : 0)), 3));
+  const g = new Geometry();
+  g.setAttribute('position', floats(pos, 3));
+  g.setAttribute('color', floats(colr, 3));
+  g.setAttribute('normal', floats(pos.map((_, i) => (i % 3 === 1 ? 1 : 0)), 3));
   return g;
 }
 
@@ -393,7 +397,7 @@ export interface TuftColours { root: RGB; mid: RGB; tip: RGB; dry: RGB; dryShare
  * tip (some tips yellowed). Its normals lie between the blade's face and straight up, so a tuft is lit round rather
  * than as flat cards.
  */
-export function buildGrassTuft(rng: () => number, blades: number, c: TuftColours): THREE.BufferGeometry {
+export function buildGrassTuft(rng: () => number, blades: number, c: TuftColours): Geometry {
   const SEGMENTS = 3;
   const pos: number[] = [], nor: number[] = [], col: number[] = [];
   const mix = (a: RGB, b: RGB, k: number): RGB => [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k, a[2] + (b[2] - a[2]) * k];
@@ -431,17 +435,17 @@ export function buildGrassTuft(rng: () => number, blades: number, c: TuftColours
       vertex(k0, -1); vertex(k1, 1); vertex(k1, -1);
     }
   }
-  const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-  g.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
-  g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  const g = new Geometry();
+  g.setAttribute('position', floats(pos, 3));
+  g.setAttribute('normal', floats(nor, 3));
+  g.setAttribute('color', floats(col, 3));
   return g;
 }
 
 // Box whose UVs are scaled by world size so textures don't stretch.
 // `grained`: a map's v laid along each face's longer side, as a beam's grain runs along it.
-export function boxWithUV(w: number, h: number, d: number, texel = 0.5, grained = false): THREE.BufferGeometry {
-  const g = new THREE.BoxGeometry(w, h, d);
+export function boxWithUV(w: number, h: number, d: number, texel = 0.5, grained = false): Geometry {
+  const g = shapes.box(w, h, d);
   const uv = g.attributes.uv, n = g.attributes.normal;
   for (let i = 0; i < uv.count; i++) {
     const ax = Math.abs(n.getX(i)), ay = Math.abs(n.getY(i));
@@ -465,77 +469,36 @@ export function boxWithUV(w: number, h: number, d: number, texel = 0.5, grained 
  *  blew it out white, "blinding light on face"), and how much more as foes come through (`pulse`) */
 const PORTAL_LIGHT = { intensity: 12, reach: 11, out: 1.2, up: 3.4, pulse: 1.2 };
 
-export function portalMembrane(parent: THREE.Object3D, angle: number, colors: { a: RGB; b: RGB; core: RGB }, updaters: Updater[], arch = false,
-  place?: GatePlace): { mesh: THREE.Mesh; portal: Portal } {
+export function portalMembrane(parent: Node, angle: number, colors: { a: RGB; b: RGB; core: RGB }, updaters: Updater[], arch = false,
+  place?: GatePlace): { mesh: Mesh; portal: Portal } {
   const uniforms = {
     uTime: { value: 0 }, uPower: { value: 0.4 }, uArch: { value: arch ? 1 : 0 },
-    uA: { value: new THREE.Color(...colors.a) }, uB: { value: new THREE.Color(...colors.b) }, uCore: { value: new THREE.Color(...colors.core) },
+    uA: { value: new Color(...colors.a) }, uB: { value: new Color(...colors.b) }, uCore: { value: new Color(...colors.core) },
   };
-  const noise = `
-      float h(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7)))*43758.5453); }
-      float n(vec2 p){ vec2 i=floor(p), f=fract(p); f=f*f*(3.0-2.0*f);
-        return mix(mix(h(i),h(i+vec2(1,0)),f.x), mix(h(i+vec2(0,1)),h(i+vec2(1,1)),f.x), f.y); }
-      float fbm(vec2 p){ float v = 0.0, a = 0.5; for (int k = 0; k < 4; k++) { v += n(p) * a; p = p * 2.03 + 17.1; a *= 0.5; } return v; }`;
-  // alpha-blended, not additive: the vortex hides what's behind the gate
-  const mat = new THREE.ShaderMaterial({
-    uniforms, transparent: true, depthWrite: false, side: THREE.DoubleSide,
-    vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
-    fragmentShader: `
-      varying vec2 vUv; uniform float uTime; uniform float uPower; uniform float uArch; uniform vec3 uA; uniform vec3 uB; uniform vec3 uCore;
-      ${noise}
-      void main(){
-        vec2 p = vUv*2.0-1.0;
-        // rounded rectangle filling the opening: sd < 0 inside
-        vec2 q = abs(p) - vec2(0.72, 0.8);
-        float sd = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - 0.14;
-        // or straight sides under a round top
-        float archSd = p.y > 0.08 ? length(vec2(p.x, p.y - 0.08)) - 0.8 : max(abs(p.x) - 0.8, -0.92 - p.y);
-        sd = mix(sd, archSd, uArch);
-        float r = length(p * vec2(1.0, 0.95));
-        // twist the plane round the centre, tighter towards it (no atan: no seam)
-        float tw = 3.2 * (1.0 - smoothstep(0.0, 1.1, r)) + uTime * 0.9;
-        vec2 w = mat2(cos(tw), -sin(tw), sin(tw), cos(tw)) * p;
-        float arms = fbm(w * 2.2 + vec2(0.0, uTime * 0.25));
-        float fine = fbm(w * 5.5 - uTime * 0.4);
-        vec3 c = mix(uA * 0.3, uB, smoothstep(0.35, 0.75, arms)) * (0.35 + fine * 1.3);
-        // a dark heart round a bright pinpoint core
-        c *= mix(0.25, 1.0, smoothstep(0.08, 0.6, r));
-        c += uCore * (exp(-r * r * 60.0) * 1.6 + exp(-r * r * 8.0) * 0.25);
-        // sparks swept round with the swirl
-        vec2 sg = w * 9.0 + vec2(uTime * 0.7, 0.0);
-        c += uCore * step(0.965, h(floor(sg))) * (1.0 - smoothstep(0.1, 0.5, length(fract(sg) - 0.5))) * 1.2;
-        float inside = 1.0 - smoothstep(-0.03, 0.02, sd);
-        // crackling rim along the edge
-        float crackle = 0.6 + 0.8 * n(p * 7.0 + vec2(uTime * 3.0, -uTime * 2.0));
-        vec2 e = min(vUv, 1.0 - vUv);
-        float rim = (exp(-abs(sd) * 30.0) * crackle + exp(-abs(sd) * 8.0) * 0.25) * smoothstep(0.0, 0.06, min(e.x, e.y));
-        c = c * inside + mix(uB, uCore, 0.55) * rim;
-        gl_FragColor = vec4(c * uPower * 2.3, clamp(inside * 0.94 + rim, 0.0, 1.0) * (1.0 - seeFade()));
-      }`,
-  });
-  // (it hides what's behind the gate, the hero too: it fades as the gate round it dissolves)
-  seeThroughFade(mat, 'prop');
-  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(GATE_W, 4.4), membraneMaterial(uniforms));
-  // (the lab's handle on its uniforms, which the node material it's drawn with doesn't show: `lab village`)
+  // alpha-blended, not additive: the vortex hides what's behind the gate; it hides the hero too, so it fades as the
+  // gate round it dissolves
+  const membrane = seeThroughFade(membraneMaterial(uniforms), 'prop');
+  const mesh = new Mesh(shapes.plane(GATE_W, 4.4), membrane);
+  // (the lab's handle on its uniforms: `lab village`)
   mesh.userData.portal = uniforms;
   mesh.position.set(0, 2.2, 0.1);
   parent.add(mesh);
   // light spilling across the floor in front of the gate
-  const spill = new THREE.Mesh(new THREE.PlaneGeometry(GATE_W + 2.5, 4).rotateX(-Math.PI / 2).rotateY(Math.PI),
+  const spill = new Mesh(shapes.plane(GATE_W + 2.5, 4).rotateX(-Math.PI / 2).rotateY(Math.PI),
     spillMaterial(uniforms));
   spill.position.set(0, 0.04, 2.0);
   parent.add(spill);
   // its light on what stands round it: the arch, the wall, the floor, a body coming through (a glow on the floor alone,
   // "portals emit no light")
-  const glow = new THREE.PointLight(new THREE.Color(...colors.b).lerp(new THREE.Color(...colors.core), 0.5),
+  const glow = new PointLight(new Color(...colors.b).lerp(new Color(...colors.core), 0.5),
     PORTAL_LIGHT.intensity, PORTAL_LIGHT.reach, 2);
   glow.position.set(0, PORTAL_LIGHT.up, PORTAL_LIGHT.out);
   // (a renderer that bakes its still lights reads it by a strength of its own, its pulse: lightCache.ts `StillLight`)
   glow.userData.still = { side: 'apart', full: PORTAL_LIGHT.intensity };
   parent.add(glow);
 
-  const pos = new THREE.Vector3(Math.cos(angle) * (WALL_R - 2.5), 0, Math.sin(angle) * (WALL_R - 2.5));
-  const dir = new THREE.Vector3(-Math.cos(angle), 0, -Math.sin(angle));
+  const pos = new Vec3(Math.cos(angle) * (WALL_R - 2.5), 0, Math.sin(angle) * (WALL_R - 2.5));
+  const dir = new Vec3(-Math.cos(angle), 0, -Math.sin(angle));
   // the membrane's centre in the world, and the direction along it
   let cx = Math.cos(angle) * (WALL_R + 0.7), cz = Math.sin(angle) * (WALL_R + 0.7), sx = -Math.sin(angle), sz = Math.cos(angle);
   if (place) {
@@ -546,7 +509,7 @@ export function portalMembrane(parent: THREE.Object3D, angle: number, colors: { 
     sx = Math.cos(place.facing);
     sz = -Math.sin(place.facing);
   }
-  const coreCol = new THREE.Color(...colors.core), edgeCol = new THREE.Color(...colors.b), mistCol = new THREE.Color(...colors.a);
+  const coreCol = new Color(...colors.core), edgeCol = new Color(...colors.b), mistCol = new Color(...colors.a);
   const due = runPhase({ pulse: 0, acc: 0 });
   updaters.push((dt, t) => {
     due.pulse = Math.max(0, due.pulse - dt * 0.8);
@@ -578,36 +541,12 @@ export function portalMembrane(parent: THREE.Object3D, angle: number, colors: { 
 
 /** Night sky dome: fog colour at the horizon (where the ground fades into it), a faint glow
  * just above, `zenith` overhead, a moon towards `moonDir` and a sprinkle of stars. Unfogged, behind everything. */
-export function buildSky(fogColor: number, moonDir: THREE.Vector3, zenith: RGB = [0.004, 0.005, 0.012]): THREE.Mesh {
-  const fog = new THREE.Color(fogColor);
-  const mat = new THREE.ShaderMaterial({
-    uniforms: { uFog: { value: new THREE.Vector3(fog.r, fog.g, fog.b) }, uMoon: { value: moonDir }, uZenith: { value: new THREE.Vector3(...zenith) } },
-    side: THREE.BackSide, depthWrite: false, fog: false,
-    // on the far plane, drawn after everything opaque: the depth test skips every covered pixel
-    vertexShader: `varying vec3 vDir; void main(){ vDir = position; gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.0); gl_Position.z = gl_Position.w; }`,
-    fragmentShader: `
-      varying vec3 vDir; uniform vec3 uFog; uniform vec3 uMoon; uniform vec3 uZenith;
-      // no sin(): its precision loss on big cell coordinates lines the stars up in rings round the zenith
-      float h(vec3 p){ p = fract(p * 0.1031); p += dot(p, p.zyx + 31.32); return fract((p.x + p.y) * p.z); }
-      void main(){
-        vec3 d = normalize(vDir);
-        float y = max(d.y, 0.0);
-        vec3 c = mix(uFog, uFog * vec3(1.5, 1.45, 1.35), 1.0 - smoothstep(0.0, 0.18, abs(y - 0.05)));
-        c = mix(c, uZenith, smoothstep(0.08, 0.7, y));
-        float m = max(dot(d, uMoon), 0.0);
-        c += vec3(0.06, 0.07, 0.12) * pow(m, 300.0) + vec3(0.02, 0.025, 0.04) * pow(m, 8.0);
-        c = mix(c, vec3(0.5, 0.54, 0.64) * (0.85 + 0.15 * h(floor(d * 900.0))), smoothstep(0.99988, 0.99993, m));
-        // cubic cells cut the sphere unevenly (more cells towards the diagonals): scale them to even the density out
-        vec3 ad = abs(d);
-        vec3 g = floor(d * 700.0);
-        float dens = 0.004 * 1.732 / (ad.x + ad.y + ad.z);
-        float b = h(g + 1.0);
-        vec3 tint = mix(vec3(0.6, 0.68, 1.0), vec3(1.0, 0.85, 0.7), h(g + 2.0));
-        c += tint * 0.55 * step(1.0 - dens, h(g)) * smoothstep(0.12, 0.4, y) * (0.25 + 1.1 * b * b * b);
-        gl_FragColor = vec4(c, 1.0);
-      }`,
-  });
-  const sky = new THREE.Mesh(new THREE.SphereGeometry(150, 32, 16), nightSkyMaterial(mat.uniforms));
+export function buildSky(fogColor: number, moonDir: Vec3, zenith: RGB = [0.004, 0.005, 0.012]): Mesh {
+  const fog = new Color(fogColor);
+  const uniforms = {
+    uFog: { value: new Vec3(fog.r, fog.g, fog.b) }, uMoon: { value: moonDir }, uZenith: { value: new Vec3(...zenith) },
+  };
+  const sky = new Mesh(shapes.sphere(150, 32, 16), nightSkyMaterial(uniforms));
   sky.renderOrder = 100;
   sky.frustumCulled = false;
   return sky;
@@ -615,40 +554,20 @@ export function buildSky(fogColor: number, moonDir: THREE.Vector3, zenith: RGB =
 
 /** Day sky dome: `horizon` (the fog colour, where the ground fades into it) rising into `zenith`, a sun
  * towards `sunDir` with a warm glow round it, and slow soft clouds. Unfogged, behind everything. */
-export function buildDaySky(horizon: number, zenith: RGB, sunDir: THREE.Vector3): { mesh: THREE.Mesh; update: (t: number) => void } {
-  const hz = new THREE.Color(horizon);
-  const mat = new THREE.ShaderMaterial({
-    uniforms: { uHorizon: { value: new THREE.Vector3(hz.r, hz.g, hz.b) }, uZenith: { value: new THREE.Vector3(...zenith) }, uSun: { value: sunDir.clone().normalize() }, uTime: { value: 0 } },
-    side: THREE.BackSide, depthWrite: false, fog: false,
-    // on the far plane, drawn after everything opaque: the depth test skips every covered pixel
-    vertexShader: `varying vec3 vDir; void main(){ vDir = position; gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.0); gl_Position.z = gl_Position.w; }`,
-    fragmentShader: `
-      varying vec3 vDir; uniform vec3 uHorizon; uniform vec3 uZenith; uniform vec3 uSun; uniform float uTime;
-      float h(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
-      float n(vec2 p){ vec2 i = floor(p), f = fract(p); f = f*f*(3.0-2.0*f);
-        return mix(mix(h(i), h(i+vec2(1,0)), f.x), mix(h(i+vec2(0,1)), h(i+vec2(1,1)), f.x), f.y); }
-      void main(){
-        vec3 d = normalize(vDir);
-        float y = max(d.y, 0.0);
-        vec3 c = mix(uHorizon, uZenith, smoothstep(0.0, 0.55, y));
-        float m = max(dot(d, uSun), 0.0);
-        c += vec3(0.5, 0.42, 0.28) * pow(m, 12.0) * 0.35 + vec3(1.0, 0.92, 0.75) * smoothstep(0.9993, 0.9996, m) * 2.5;
-        // clouds on a plane overhead, thinning towards the horizon
-        vec2 p = d.xz / max(d.y, 0.08) * 1.6 + vec2(uTime * 0.01, uTime * 0.004);
-        float cl = n(p) * 0.55 + n(p * 2.3 + 5.0) * 0.3 + n(p * 5.1 + 9.0) * 0.15;
-        cl = smoothstep(0.5, 0.8, cl) * smoothstep(0.04, 0.3, y);
-        c = mix(c, uHorizon * 1.25 + vec3(0.08, 0.07, 0.05) * pow(m, 4.0), cl * 0.7);
-        gl_FragColor = vec4(c, 1.0);
-      }`,
-  });
-  const mesh = new THREE.Mesh(new THREE.SphereGeometry(150, 32, 16), daySkyMaterial(mat.uniforms));
+export function buildDaySky(horizon: number, zenith: RGB, sunDir: Vec3): { mesh: Mesh; update: (t: number) => void } {
+  const hz = new Color(horizon);
+  const uniforms = {
+    uHorizon: { value: new Vec3(hz.r, hz.g, hz.b) }, uZenith: { value: new Vec3(...zenith) },
+    uSun: { value: sunDir.clone().normalize() }, uTime: { value: 0 },
+  };
+  const mesh = new Mesh(shapes.sphere(150, 32, 16), daySkyMaterial(uniforms));
   mesh.renderOrder = 100;
   mesh.frustumCulled = false;
-  return { mesh, update: (t) => { mat.uniforms.uTime.value = t; } };
+  return { mesh, update: (t) => { uniforms.uTime.value = t; } };
 }
 
 /** Place a gate group on the boundary at `angle`, its local +Z facing the arena center. */
-export function placeGate(g: THREE.Object3D, angle: number, place?: GatePlace): void {
+export function placeGate(g: Node, angle: number, place?: GatePlace): void {
   if (place) {
     g.position.set(place.x, 0, place.z);
     g.rotation.y = place.facing;
@@ -667,7 +586,7 @@ export interface EnvColours { sky: RGB; panel: RGB }
 
 /** what stands for a biome's environment in `scene.environment`: the engine reads only that one is set (its sky's
  *  fill, `engine/globals.ts`), never a map, as it lights by the sky's two halves alone */
-const ENVIRONMENT_SET = new THREE.Texture();
+const ENVIRONMENT_SET = new Texture();
 
 /**
  * The environment of `colours`, as the scene holds it. While three drew the scene, a map baked by its generator (a
@@ -675,7 +594,7 @@ const ENVIRONMENT_SET = new THREE.Texture();
  * its pipelines in the GPU's process's main thread as a run began (a frame of 118 ms after Start, `npm run stalls --
  * --scenario boot --dawn`), compiled again with each generator.
  */
-export function envMap(_renderer: THREE.WebGLRenderer, _colours: EnvColours): THREE.Texture {
+export function envMap(_renderer: unknown, _colours: EnvColours): Texture {
   return ENVIRONMENT_SET;
 }
 
@@ -686,12 +605,12 @@ export function envMap(_renderer: THREE.WebGLRenderer, _colours: EnvColours): TH
  * (`inShadowsOnly`), and stop the originals casting. Instanced props are already one call, and a mesh that can
  * still go (`userData.noBake`: a breakable prop) is cast by its biome's breakables' casters (`breakableShadows.ts`).
  */
-export function bakeStaticShadows(group: THREE.Group): void {
+export function bakeStaticShadows(group: Node): void {
   group.updateMatrixWorld(true);
   const pieces: Piece[] = [];
   group.traverse((o) => {
-    const m = o as THREE.Mesh;
-    if (!m.isMesh || !m.castShadow || (m as THREE.InstancedMesh).isInstancedMesh || m.userData.noBake) return;
+    const m = o as Mesh;
+    if (!m.isMesh || !m.castShadow || (m as InstancedMesh).isInstancedMesh || m.userData.noBake) return;
     pieces.push(...piecesOf(m));
     m.castShadow = false;
   });
@@ -702,8 +621,8 @@ export function bakeStaticShadows(group: THREE.Group): void {
       positions.set(piece.positions, at);
       at += piece.positions.length;
     }
-    const geometry = new THREE.BufferGeometry().setAttribute('position', new THREE.BufferAttribute(positions, 3));
-    const caster = new THREE.Mesh(geometry, casterMaterial(side, shadowSide));
+    const geometry = new Geometry().setAttribute('position', new Attribute(positions, 3));
+    const caster = new Mesh(geometry, casterMaterial(side, shadowSide));
     caster.castShadow = true;
     inShadowsOnly(caster);
     caster.name = `${group.name} static shadow caster`;
@@ -713,20 +632,20 @@ export function bakeStaticShadows(group: THREE.Group): void {
 
 /** Whether `mesh` can be drawn merged with others of its material (`mergeStill`): a plain mesh standing still, one
  *  material, nothing run round its draw. */
-function mergeable(mesh: THREE.Mesh, kept = false): boolean {
-  if (!mesh.isMesh || (mesh as THREE.InstancedMesh).isInstancedMesh || (mesh as THREE.SkinnedMesh).isSkinnedMesh) return false;
+function mergeable(mesh: Mesh, kept = false): boolean {
+  if (!mesh.isMesh || (mesh as InstancedMesh).isInstancedMesh || (mesh as SkinnedMesh).isSkinnedMesh) return false;
   if (Array.isArray(mesh.material) || (mesh.userData.noMerge && !kept)) return false;
   // (a mesh with parts of its own stays: merged, it went from the scene and they with it, the library's books' pages)
   if (mesh.children.length) return false;
   if (Object.keys(mesh.geometry.morphAttributes).length) return false;
-  return !mesh.matrixAutoUpdate && mesh.visible && mesh.onBeforeRender === THREE.Object3D.prototype.onBeforeRender;
+  return !mesh.matrixAutoUpdate && mesh.visible && !mesh.onBeforeRender;
 }
 
 /** What sets a geometry's merge apart: its material, its attributes, whether it's indexed. */
-function mergeKey(mesh: THREE.Mesh): string {
+function mergeKey(mesh: Mesh): string {
   const geometry = mesh.geometry;
   const attributes = Object.keys(geometry.attributes).sort().join(',');
-  const material = mesh.material as THREE.Material;
+  const material = mesh.material as Material;
   return `${material.uuid}|${attributes}|${geometry.index ? 'indexed' : 'flat'}|${mesh.receiveShadow}|${mesh.castShadow}`;
 }
 
@@ -737,18 +656,18 @@ function mergeKey(mesh: THREE.Mesh): string {
  * the baked shadow caster keep copies of their own, so the originals go; their shadows are the caster's
  * (`bakeStaticShadows`, run first).
  */
-export function mergeStill(root: THREE.Object3D): void {
+export function mergeStill(root: Node): void {
   root.updateMatrixWorld(true);
   // (what thins by its own middle keeps it through the merge: merged, each column stood at the origin, and thinned
   // nowhere, core/seeThrough.ts `keepMiddle`)
   root.traverse((object) => {
-    const mesh = object as THREE.Mesh;
+    const mesh = object as Mesh;
     if (mesh.isMesh && thinsByMiddle(mesh.material)) keepMiddle(mesh);
   });
   mergeUnder(root, false);
   // (what's kept out of that merge, a part with materials of its own that's shown and hidden as one, is merged
   // within itself: the hall's roof and front wall were some 100 draws of their rafters, slates and courses)
-  const within: THREE.Object3D[] = [];
+  const within: Node[] = [];
   root.traverse((object) => { if (object.userData.mergeWithin) within.push(object); });
   for (const part of within) mergeUnder(part, true);
 }
@@ -758,7 +677,7 @@ export function mergeStill(root: THREE.Object3D): void {
  * on its shield) drawn by three as it is turns its winding round, which a merge's identity matrix doesn't, and its
  * faces were culled as backs.
  */
-function placedPart(geometry: THREE.BufferGeometry, matrix: THREE.Matrix4): THREE.BufferGeometry {
+function placedPart(geometry: Geometry, matrix: Mat4): Geometry {
   const part = geometry.clone().applyMatrix4(matrix);
   if (matrix.determinant() >= 0) return part;
   if (part.index) {
@@ -770,7 +689,7 @@ function placedPart(geometry: THREE.BufferGeometry, matrix: THREE.Matrix4): THRE
     }
     return part;
   }
-  for (const attribute of Object.values(part.attributes) as THREE.BufferAttribute[]) {
+  for (const attribute of Object.values(part.attributes) as Attribute[]) {
     const size = attribute.itemSize;
     const array = attribute.array;
     for (let vertex = 0; vertex + 2 < attribute.count; vertex += 3) {
@@ -785,18 +704,18 @@ function placedPart(geometry: THREE.BufferGeometry, matrix: THREE.Matrix4): THRE
 }
 
 /** The nearest of `object` and what's over it that's merged within itself (`userData.mergeWithin`), if any. */
-function withinOf(object: THREE.Object3D): THREE.Object3D | null {
-  for (let o: THREE.Object3D | null = object; o; o = o.parent) if (o.userData.mergeWithin) return o;
+function withinOf(object: Node): Node | null {
+  for (let o: Node | null = object; o; o = o.parent) if (o.userData.mergeWithin) return o;
   return null;
 }
 
 /** The mergeable meshes under `root` drawn as one a material, the merged ones added to it; `kept`: those kept out
  *  of the place's merge (`noMerge`), merged among themselves and kept out still. */
-function mergeUnder(root: THREE.Object3D, kept: boolean): void {
-  const fromWorld = root.matrixWorld.clone().invert(), toRoot = new THREE.Matrix4();
-  const groups = new Map<string, THREE.Mesh[]>();
+function mergeUnder(root: Node, kept: boolean): void {
+  const fromWorld = root.matrixWorld.clone().invert(), toRoot = new Mat4();
+  const groups = new Map<string, Mesh[]>();
   root.traverse((object) => {
-    const mesh = object as THREE.Mesh;
+    const mesh = object as Mesh;
     if (!mergeable(mesh, kept) || (kept && !mesh.userData.noMerge)) return;
     // (a part merged within itself takes its own meshes alone, never those of another such part within it: the house
     // of records' trophies hang on a wall merged within itself, and merged into the wall's mesh each was shown with
@@ -814,8 +733,8 @@ function mergeUnder(root: THREE.Object3D, kept: boolean): void {
     for (const part of parts) part.dispose();
     if (!merged) continue;
     const first = meshes[0];
-    const one = new THREE.Mesh(merged, first.material);
-    one.name = `${root.name} still: ${(first.material as THREE.Material).name || first.name || 'merged'}`;
+    const one = new Mesh(merged, first.material);
+    one.name = `${root.name} still: ${(first.material as Material).name || first.name || 'merged'}`;
     one.receiveShadow = first.receiveShadow;
     one.castShadow = first.castShadow;
     one.renderOrder = first.renderOrder;
@@ -834,8 +753,8 @@ function mergeUnder(root: THREE.Object3D, kept: boolean): void {
       // in a production build; `userData.preciseBox` a box round its vertices, not round its turned bounding box: a
       // plate leant back read 4 cm deeper than it is, and a pair seemed to cut into each other)
       if (import.meta.env.DEV && mesh.parent) {
-        const parts = (mesh.parent.userData.mergedParts ??= []) as THREE.Box3[];
-        parts.push(new THREE.Box3().setFromObject(mesh, mesh.userData.preciseBox === true));
+        const parts = (mesh.parent.userData.mergedParts ??= []) as Box3[];
+        parts.push(boundsOf(mesh, new Box3(), mesh.userData.preciseBox === true));
       }
       mesh.removeFromParent();
     }
@@ -848,11 +767,11 @@ function mergeUnder(root: THREE.Object3D, kept: boolean): void {
  * for each draw is most of a phone's frame in the village, traces PFQA-FY0M and 02XR-1GKY). A mesh with parts
  * of its own, or hidden, stays as it is.
  */
-export function mergeChildren(parent: THREE.Object3D): void {
-  const groups = new Map<string, THREE.Mesh[]>();
+export function mergeChildren(parent: Node): void {
+  const groups = new Map<string, Mesh[]>();
   for (const child of parent.children) {
-    const mesh = child as THREE.Mesh;
-    if (!mesh.isMesh || (mesh as THREE.InstancedMesh).isInstancedMesh || (mesh as THREE.SkinnedMesh).isSkinnedMesh) continue;
+    const mesh = child as Mesh;
+    if (!mesh.isMesh || (mesh as InstancedMesh).isInstancedMesh || (mesh as SkinnedMesh).isSkinnedMesh) continue;
     if (Array.isArray(mesh.material) || mesh.children.length || !mesh.visible) continue;
     const key = `${mergeKey(mesh)}|${mesh.renderOrder}|${mesh.layers.mask}`;
     if (!groups.has(key)) groups.set(key, []);
@@ -868,7 +787,7 @@ export function mergeChildren(parent: THREE.Object3D): void {
     for (const part of parts) part.dispose();
     if (!merged) continue;
     const first = meshes[0];
-    const one = new THREE.Mesh(merged, first.material);
+    const one = new Mesh(merged, first.material);
     one.name = first.name;
     one.receiveShadow = first.receiveShadow;
     one.castShadow = first.castShadow;
@@ -881,10 +800,10 @@ export function mergeChildren(parent: THREE.Object3D): void {
 }
 
 /** Tube along `curve` whose radius tapers linearly from r0 to r1. */
-export function taperedTube(curve: THREE.Curve<THREE.Vector3>, r0: number, r1: number): THREE.BufferGeometry {
+export function taperedTube(curve: Curve<Vec3>, r0: number, r1: number): Geometry {
   const segs = 24, radial = 8;
-  const g = new THREE.TubeGeometry(curve, segs, 1, radial, false);
-  const pos = g.attributes.position, uv = g.attributes.uv, c = new THREE.Vector3(), v = new THREE.Vector3();
+  const g = shapes.tube(curve, segs, 1, radial, false);
+  const pos = g.attributes.position, uv = g.attributes.uv, c = new Vec3(), v = new Vec3();
   for (let i = 0; i <= segs; i++) {
     const k = i / segs;
     curve.getPointAt(k, c);

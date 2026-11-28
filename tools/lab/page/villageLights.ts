@@ -8,7 +8,7 @@
 // (from play: "lights too bright, can't see geometry even", "we should always check all lights for blinding").
 // `canary` hangs a glaring orb in the first light, which must be caught.
 import { theFlames } from './villageFire';
-import * as THREE from 'three';
+import { Color, Mesh, PointLight, shapes, UnlitMaterial, Vec3 } from './sceneApi.ts';
 import { screenArea, type Lab, type Pictured } from './lab';
 import { G } from '../../../src/state';
 import { CHRONICLE, COTTAGES, TERRACE, VILLAGE_OBJECTS } from '../../../src/data/village';
@@ -23,7 +23,7 @@ export interface LightsChecked { lines: string[]; problems: string[]; caught: bo
 
 /** A light to read: its name, where it burns, how big it is (m across, the box its own pixels are counted over) and
  *  how far off it the hero stands (m, on the ground). */
-interface LightCase { name: string; at: THREE.Vector3; span: number; off: number; noonToo?: boolean }
+interface LightCase { name: string; at: Vec3; span: number; off: number; noonToo?: boolean }
 
 /** the frames the hero is given to settle and to look */
 const SETTLE = 15;
@@ -54,11 +54,11 @@ const NOON = 12;
 interface ScreenBox { x: number; y: number; half: number }
 
 /** Where `point` falls on the canvas and how many of its pixels `span` m across it covers there, or null behind. */
-function boxOn(canvas: Canvas, point: THREE.Vector3, span: number): ScreenBox | null {
+function boxOn(canvas: Canvas, point: Vec3, span: number): ScreenBox | null {
   const camera = G.camera;
   const middle = point.clone().project(camera);
   if (middle.z > 1) return null;
-  const right = new THREE.Vector3().setFromMatrixColumn(camera.matrixWorld, 0);
+  const right = new Vec3().setFromMatrixColumn(camera.matrixWorld, 0);
   const side = point.clone().addScaledVector(right, span / 2).project(camera);
   const x = ((middle.x + 1) / 2) * canvas.width;
   const y = ((middle.y + 1) / 2) * canvas.height;
@@ -97,7 +97,7 @@ async function standBy(lab: Lab, light: LightCase): Promise<boolean> {
     const x = light.at.x + Math.sin(a) * light.off;
     const z = light.at.z + Math.cos(a) * light.off;
     G.player.walkTo = null;
-    G.player.place(new THREE.Vector3(x, groundHeight(x, z), z), a + Math.PI);
+    G.player.place(new Vec3(x, groundHeight(x, z), z), a + Math.PI);
     await lab.step(SETTLE);
     if (Math.hypot(G.player.pos.x - x, G.player.pos.z - z) < 0.2) return true;
   }
@@ -124,8 +124,8 @@ function ownLights(): LightCase[] {
   if (!village) throw new Error('lab: village: no village group in the scene');
   const found: LightCase[] = [];
   village.traverse((o) => {
-    if (!(o as THREE.PointLight).isPointLight) return;
-    const at = o.getWorldPosition(new THREE.Vector3());
+    if (!(o as PointLight).isPointLight) return;
+    const at = o.getWorldPosition(new Vec3());
     const where = [at.x, at.y, at.z].map((v) => v.toFixed(1)).join(', ');
     found.push({ name: `the light by the ${nearestObject(at.x, at.z)} (${where})`, at, span: 1, off: 3.5 });
   });
@@ -133,11 +133,11 @@ function ownLights(): LightCase[] {
 }
 
 /** A cottage's left window, where its builder puts it. */
-function aWindow(): THREE.Vector3 {
+function aWindow(): Vec3 {
   const c = COTTAGES[0];
-  const local = new THREE.Vector3(-(COTTAGE.w / 2 - WINDOW.across), WINDOW.high, COTTAGE.d / 2 + WINDOW.out);
-  local.multiplyScalar(c.size).applyAxisAngle(new THREE.Vector3(0, 1, 0), c.facing);
-  return local.add(new THREE.Vector3(c.x, 0, c.z));
+  const local = new Vec3(-(COTTAGE.w / 2 - WINDOW.across), WINDOW.high, COTTAGE.d / 2 + WINDOW.out);
+  local.multiplyScalar(c.size).applyAxisAngle(new Vec3(0, 1, 0), c.facing);
+  return local.add(new Vec3(c.x, 0, c.z));
 }
 
 /** Every kind of light to read: a street lamp's lantern, a hall torch, a window, and the village's own lights. */
@@ -145,7 +145,7 @@ function lightCases(): LightCase[] {
   const lanterns = [...G.arena.village.lanterns];
   lanterns.sort((a, b) => Math.hypot(a.x, a.z) - Math.hypot(b.x, b.z));
   const torch = G.arena.village.hallTorches[DAIS_LIGHTS];
-  const bookAt = new THREE.Vector3(CHRONICLE.x, TERRACE.high + BOOK_UP, CHRONICLE.z);
+  const bookAt = new Vec3(CHRONICLE.x, TERRACE.high + BOOK_UP, CHRONICLE.z);
   return [
     { name: 'street lamp', at: lanterns[0], span: 0.6, off: 3 },
     // (from play, close under it looking up, "this light is blinding": its post burned white)
@@ -158,10 +158,10 @@ function lightCases(): LightCase[] {
 }
 
 /** The canary's orb, far past white, hung at `at`. */
-function plantOrb(at: THREE.Vector3): () => void {
-  const glare = new THREE.Color(ORB_GLARE, ORB_GLARE, ORB_GLARE);
-  const material = new THREE.MeshBasicMaterial({ color: glare });
-  const orb = new THREE.Mesh(new THREE.SphereGeometry(ORB_RADIUS, 12, 8), material);
+function plantOrb(at: Vec3): () => void {
+  const glare = new Color(ORB_GLARE, ORB_GLARE, ORB_GLARE);
+  const material = new UnlitMaterial({ color: glare });
+  const orb = new Mesh(shapes.sphere(ORB_RADIUS, 12, 8), material);
   orb.position.copy(at);
   G.scene.add(orb);
   return () => {

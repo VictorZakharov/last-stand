@@ -4,7 +4,7 @@
 // or an axe's head, a blade's point: the last `HEAD_LONG` of it to its tip, a capsule `HEAD_R` round) and his head's
 // skin (`bodyShape`'s ellipsoid), and fails a sit whose nearest is within `CLEAR_MOST`.
 
-import * as THREE from 'three';
+import { Vec3 } from './sceneApi.ts';
 import { bodyShape, capsuleDepth, type Solid } from '../../../src/entities/models/anatomy';
 import type { Lab } from './lab';
 
@@ -25,13 +25,13 @@ const BEFORE_MOMENT = 9;
 const BEFORE_LONG = 1.2;
 const BEFORE_STEP = 0.04;
 
-const _tip = new THREE.Vector3();
-const _back = new THREE.Vector3();
-const _way = new THREE.Vector3();
-const _scale = new THREE.Vector3();
+const _tip = new Vec3();
+const _back = new Vec3();
+const _way = new Vec3();
+const _scale = new Vec3();
 
 /** The gap between a capsule (world, m) and a head's solid (m: negative, how far into it). */
-export function gapTo(head: Solid, from: THREE.Vector3, to: THREE.Vector3, radius: number): number {
+export function gapTo(head: Solid, from: Vec3, to: Vec3, radius: number): number {
   head.at.updateWorldMatrix(true, false);
   const scale = _scale.setFromMatrixScale(head.at.matrixWorld).y;
   return -capsuleDepth(from, to, radius / scale, head) * scale;
@@ -45,8 +45,8 @@ export function byFace(gap: number): boolean {
 /** The canary: a weapon's head laid at his head's middle is by his face; one two metres off isn't. */
 export function faceCanary(head: Solid): boolean {
   const middle = head.at.localToWorld(head.c.clone());
-  const off = middle.clone().add(new THREE.Vector3(2, 0, 0));
-  const up = new THREE.Vector3(0, HEAD_LONG, 0);
+  const off = middle.clone().add(new Vec3(2, 0, 0));
+  const up = new Vec3(0, HEAD_LONG, 0);
   const near = gapTo(head, middle, middle.clone().add(up), HEAD_R);
   const far = gapTo(head, off, off.clone().add(up), HEAD_R);
   return byFace(near) && !byFace(far);
@@ -54,15 +54,15 @@ export function faceCanary(head: Solid): boolean {
 
 /** His frame as a camera ahead of him sees it: his face's middle, his right-to-left and his up, in the world. */
 export interface FaceView {
-  middle: THREE.Vector3;
-  across: THREE.Vector3;
-  up: THREE.Vector3;
-  ahead: THREE.Vector3;
+  middle: Vec3;
+  across: Vec3;
+  up: Vec3;
+  ahead: Vec3;
 }
 
 /** Whether a point is before his face from ahead of him: ahead of its middle and inside its window, widened by `round`
  *  (m: the weapon's own half thickness there). */
-export function beforeFace(view: FaceView, point: THREE.Vector3, round: number): boolean {
+export function beforeFace(view: FaceView, point: Vec3, round: number): boolean {
   _off.subVectors(point, view.middle);
   if (_off.dot(view.ahead) <= 0) return false;
   const wide = Math.abs(_off.dot(view.across));
@@ -72,7 +72,7 @@ export function beforeFace(view: FaceView, point: THREE.Vector3, round: number):
 
 /** Whether any of a weapon from its tip back `BEFORE_LONG` along `back` (a unit way, tip to grip) is before his face,
  *  its far end as round as a head (`HEAD_R`), its haft as a line. */
-export function weaponBeforeFace(view: FaceView, tip: THREE.Vector3, back: THREE.Vector3): boolean {
+export function weaponBeforeFace(view: FaceView, tip: Vec3, back: Vec3): boolean {
   for (let along = 0; along <= BEFORE_LONG; along += BEFORE_STEP) {
     _point.copy(tip).addScaledVector(back, along);
     if (beforeFace(view, _point, along <= HEAD_LONG ? HEAD_R : 0)) return true;
@@ -89,8 +89,8 @@ export function beforeCanary(view: FaceView): boolean {
   return weaponBeforeFace(view, ahead, down) && !weaponBeforeFace(view, aside, down);
 }
 
-const _off = new THREE.Vector3();
-const _point = new THREE.Vector3();
+const _off = new Vec3();
+const _point = new Vec3();
 
 /** The nearest a held weapon's far end came to his face over a sit, and how long it stood before his face from
  *  ahead. */
@@ -106,10 +106,10 @@ export class FaceClear {
   private beforeFrames = 0;
   private beforeAt = '';
   private readonly view: FaceView = {
-    middle: new THREE.Vector3(),
-    across: new THREE.Vector3(),
-    up: new THREE.Vector3(),
-    ahead: new THREE.Vector3(),
+    middle: new Vec3(),
+    across: new Vec3(),
+    up: new Vec3(),
+    ahead: new Vec3(),
   };
 
   /** Notes this frame's gap, and whether the weapon is before his face, while he's posed by the sit. */

@@ -1,8 +1,8 @@
 // The forms the tavern's shelf pottery is thrown in (#733), with the kit of `pottery.ts`: pitchers with a soft pulled
 // lip and a strap handle opposite it, tall jugs, bowls, beakers, slipware plates trailed in cream slip, and pewter
 // chargers. Each pot's proportions and glaze are its own, so no two on a shelf are copies.
-import * as THREE from 'three';
-import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { Color, Geometry, mergeGeometries, Vec2, Vec3 } from '../engine/api/index.ts';
+import * as shapes from '../engine/api/shapes/index.ts';
 import { CLAYS, GLAZES, handle, throwPot, varied, type Profile } from './pottery';
 import { DESIGNS, slipUv } from './slipware';
 
@@ -27,7 +27,7 @@ function insideOf(outside: Profile, wall: number, deep: number): Profile {
 
 /** Turn a pot's mouth out into a soft pouring lip on its -x side, opposite its handle: pulled by a finger, a little
  *  proud of the rim (a beak of 2 cm read as a modern pitcher's). */
-function pouringLip(geometry: THREE.BufferGeometry, from: number, over: number): void {
+function pouringLip(geometry: Geometry, from: number, over: number): void {
   const position = geometry.attributes.position;
   for (let k = 0; k < position.count; k++) {
     const y = position.getY(k);
@@ -44,7 +44,7 @@ const PITCHER: Profile = [[0, 0], [0.044, 0], [0.05, 0.006], [0.056, 0.02], [0.0
   [0.046, 0.222]];
 
 /** A pitcher: foot, round belly, shoulder, neck and a flared lip with a pouring lip, and a strap handle. */
-export function pitcher(rng: () => number): THREE.BufferGeometry {
+export function pitcher(rng: () => number): Geometry {
   const glaze = pick(rng, [GLAZES.honey, GLAZES.honey, GLAZES.green, GLAZES.iron]);
   const { profile, wide, tall } = varied(PITCHER, rng);
   const height = 0.222 * tall;
@@ -54,7 +54,7 @@ export function pitcher(rng: () => number): THREE.BufferGeometry {
   }, rng, (lathe) => pouringLip(lathe, height - 0.025, 0.025));
   // (its ends sunk into the neck and the belly, close along the body: stood off it, it read as an ear)
   const loop = handle([[0.034, 0.195], [0.066, 0.19], [0.086, 0.15], [0.08, 0.098], [0.064, 0.066]]
-    .map(([x, y]) => new THREE.Vector3(x * wide, y * tall, 0)), glaze);
+    .map(([x, y]) => new Vec3(x * wide, y * tall, 0)), glaze);
   return mergeGeometries([body, loop])!;
 }
 
@@ -62,7 +62,7 @@ const TALL_JUG: Profile = [[0, 0], [0.038, 0], [0.043, 0.006], [0.05, 0.03], [0.
   [0.05, 0.175], [0.034, 0.2], [0.022, 0.215], [0.02, 0.24], [0.024, 0.252], [0.025, 0.258]];
 
 /** A tall jug for ale or oil: a narrow neck over a long belly, a small handle at its shoulder. */
-export function tallJug(rng: () => number): THREE.BufferGeometry {
+export function tallJug(rng: () => number): Geometry {
   const glaze = pick(rng, [GLAZES.iron, GLAZES.green, GLAZES.honey]);
   const { profile, wide, tall } = varied(TALL_JUG, rng);
   const body = throwPot({
@@ -70,7 +70,7 @@ export function tallJug(rng: () => number): THREE.BufferGeometry {
     glazedTo: 0.258 * tall * (0.3 + rng() * 0.3),
   }, rng);
   const loop = handle([[0.02, 0.236], [0.046, 0.232], [0.062, 0.2], [0.054, 0.168]]
-    .map(([x, y]) => new THREE.Vector3(x * wide, y * tall, 0)), glaze);
+    .map(([x, y]) => new Vec3(x * wide, y * tall, 0)), glaze);
   return mergeGeometries([body, loop])!;
 }
 
@@ -79,7 +79,7 @@ const BOWL: Profile = [[0, 0.004], [0.026, 0.004], [0.028, 0], [0.034, 0], [0.03
 
 /** A bowl: a foot ring, a rounded wall and a rolled rim, glazed inside and over its top half outside; `under`, one
  *  with another in it, its inside only a rim's width (hidden by the bowl in it). */
-export function bowl(rng: () => number, under = false): THREE.BufferGeometry {
+export function bowl(rng: () => number, under = false): Geometry {
   const { profile, tall } = varied(BOWL, rng, 0.3);
   return throwPot({
     // (its glaze's line runs round a wall 7 cm high: its own points and a few more draw it)
@@ -93,7 +93,7 @@ const BEAKER: Profile = [[0, 0], [0.026, 0], [0.031, 0.008], [0.034, 0.03], [0.0
   [0.038, 0.09]];
 
 /** A beaker: a straight-walled drinking cup with a rounded foot. */
-export function beaker(rng: () => number): THREE.BufferGeometry {
+export function beaker(rng: () => number): Geometry {
   const { profile, tall } = varied(BEAKER, rng, 0.6);
   return throwPot({
     outside: profile, inside: insideOf(profile, 0.005, 0.03), sides: 12, step: 0.02,
@@ -104,11 +104,11 @@ export function beaker(rng: () => number): THREE.BufferGeometry {
 
 /** the glaze under a plate's map: white, the map's own colours shown, darkened only where the vertices say (its
  *  rim's broken glaze, its well's shadow) */
-const WHITE = new THREE.Color(0xffffff);
+const WHITE = new Color(0xffffff);
 
 /** A slipware plate, its face up (+y): a foot ring, a well and a broad rim, its face trailed in slip, the design one of the atlas's
  *  (`slipware.ts`). */
-export function slipPlate(rng: () => number): THREE.BufferGeometry {
+export function slipPlate(rng: () => number): Geometry {
   const design = Math.floor(rng() * DESIGNS);
   return throwPot({
     // (the underside, leant against the wall and never seen: its foot ring's edge and the rim, no more)
@@ -122,12 +122,12 @@ export function slipPlate(rng: () => number): THREE.BufferGeometry {
 }
 
 /** A pewter charger, its face up (+y): a broad flat rim with a bead at its edge, a shallow well. */
-export function charger(): THREE.BufferGeometry {
+export function charger(): Geometry {
   // (its back, against the wall, its foot's edge and the rim alone)
   const points: Profile = [[0, 0], [0.056, 0.004], [0.142, 0.02], [0.146, 0.026], [0.143, 0.031], [0.137, 0.029],
     [0.1, 0.025], [0.09, 0.016], [0, 0.011]];
   // (32 sides: its round edge, seen face on, showed 28 as facets)
-  return new THREE.LatheGeometry(points.map(([r, y]) => new THREE.Vector2(r, y)), 32);
+  return shapes.lathe(points.map(([r, y]) => new Vec2(r, y)), 32);
 }
 
 /** a pot's turn on the shelf: its handle seen side on, a little towards the room */

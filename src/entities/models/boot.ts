@@ -1,13 +1,14 @@
 // A tall leather riding boot (the ranger's): its foot sculpted over a last (a rounded heel counter, the instep falling to
 // a broad ball and a toe box lifted at its tip) on a welted sole with a stacked heel, its shaft up the shin to below the
 // knee, bending with the ankle and creased where it bends, a cuff turned down at its top, and buckled straps round it.
-import * as THREE from 'three';
+import { Geometry, Material, Node, Outline } from '../../engine/api/index.ts';
+import * as shapes from '../../engine/api/shapes/index.ts';
 import { Sculpt, lathe } from './shapes';
 import { belt, buckle, lod } from './armor';
 import { curve, type Keys } from './motion';
 import { clamp, lerp, mulberry } from '../../util';
 
-export interface BootMats { leather: THREE.Material; sole: THREE.Material; strap: THREE.Material; metal: THREE.Material }
+export interface BootMats { leather: Material; sole: Material; strap: Material; metal: Material }
 
 /** the floor in the ankle's frame (the rig's `groundFeet` keeps the ankle that far above it) */
 const FLOOR = -0.07;
@@ -26,8 +27,8 @@ const shaftR = (y: number) => { for (let i = 1; i < SHAFT.length; i++) if (y <= 
 
 /** the boot's foot: a sphere's surface laid over the last, its poles at the heel and the toe, flat underneath (the
  *  tavern's keeper's too, models/keeper.ts) */
-export function foot(): THREE.BufferGeometry {
-  const g = new THREE.SphereGeometry(1, lod(28, 12), lod(24, 10)), p = g.attributes.position;
+export function foot(): Geometry {
+  const g = shapes.sphere(1, lod(28, 12), lod(24, 10)), p = g.attributes.position;
   for (let i = 0; i < p.count; i++) {
     const x = p.getX(i), y = p.getY(i), z = p.getZ(i), t = (1 - y) / 2, rho = Math.sqrt(Math.max(0, 1 - y * y));
     const a = Math.atan2(z, x), cx = Math.cos(a), cy = Math.sin(a), cap = rho ** 0.3;
@@ -41,21 +42,21 @@ export function foot(): THREE.BufferGeometry {
 }
 
 /** the sole's outline round the foot, `out` past the upper (the welt), from `t0` to `t1` of the way along it */
-export function sole(out: number, t0: number, t1: number, depth: number): THREE.BufferGeometry {
-  const s = new THREE.Shape(), N = 14, at = (k: number) => lerp(t0, t1, k / N);
+export function sole(out: number, t0: number, t1: number, depth: number): Geometry {
+  const s = new Outline(), N = 14, at = (k: number) => lerp(t0, t1, k / N);
   const w = (t: number) => curve(HALF_W, t) + out, z = (t: number) => lerp(HEEL - out * 0.6, TOE + out * 0.6, t);
   // (round at the heel and the toe: the ends' points drawn in)
   const end = (k: number) => k === 0 || (k === N && t1 === 1) ? 0.6 : 1;
   s.moveTo(-w(at(0)) * end(0), z(at(0)));
   for (let k = 1; k <= N; k++) s.lineTo(-w(at(k)) * end(k), z(at(k)));
   for (let k = N; k >= 0; k--) s.lineTo(w(at(k)) * end(k), z(at(k)));
-  const g = new THREE.ExtrudeGeometry(s, { depth, bevelEnabled: true, bevelThickness: 0.002, bevelSize: 0.002, bevelSegments: 1, curveSegments: 4 });
+  const g = shapes.extrude(s, { depth, bevelEnabled: true, bevelThickness: 0.002, bevelSize: 0.002, bevelSegments: 1, curveSegments: 4 });
   // (the shape's y is the foot's z; extruded down from its top)
   return g.rotateX(Math.PI / 2).translate(0, FLOOR + depth + 0.002, 0);
 }
 
 /** the shaft, creased round the ankle where it bends (wavy folds, deepest in front over the instep) and a little uneven */
-function shaft(seed: number): THREE.BufferGeometry {
+function shaft(seed: number): Geometry {
   const rnd = mulberry(seed), ph = [rnd() * 6, rnd() * 6, rnd() * 6], g = lathe(SHAFT.slice(0, -1), lod(28, 12)), p = g.attributes.position;
   for (let i = 0; i < p.count; i++) {
     const x = p.getX(i), y = p.getY(i), z = p.getZ(i), a = Math.atan2(x, z);
@@ -70,7 +71,7 @@ function shaft(seed: number): THREE.BufferGeometry {
 }
 
 /** the cuff: the shaft's top turned down over itself, its fold a rounded lip, its edge a little wavy */
-function cuff(seed: number): THREE.BufferGeometry {
+function cuff(seed: number): Geometry {
   const rnd = mulberry(seed), ph = rnd() * 6;
   const g = lathe([[0.074, -0.135], [0.078, -0.125], [0.081, -0.095], [0.084, -0.06], [0.083, -0.049], [0.078, -0.042], [0.072, -0.045], [0.07, -0.06], [0.07, -0.085]], lod(28, 12)), p = g.attributes.position;
   for (let i = 0; i < p.count; i++) {
@@ -83,17 +84,17 @@ function cuff(seed: number): THREE.BufferGeometry {
 }
 
 /** a strap round the boot with its buckle on the outer side (`side`: +1 the left boot, whose outer side is +x) */
-function strap(S: Sculpt, m: BootMats, j: THREE.Object3D, rx: number, rz: number, y: number, tilt: number, side: number, c: [number, number, number] = [0, 0, 0]): void {
+function strap(S: Sculpt, m: BootMats, j: Node, rx: number, rz: number, y: number, tilt: number, side: number, c: [number, number, number] = [0, 0, 0]): void {
   S.add(belt(rx, rz, y, 0.025, 0.006, tilt, lod(28, 12)), m.strap, j, c);
   // (the buckle on the outer side, its frame standing on the strap, the tongue's end past it)
   const by = y, bx = side * (rx + 0.004);
   S.add(buckle(0.026, 0.032, 0.005), m.metal, j, [c[0] + bx, c[1] + by, c[2]], [0, side * Math.PI / 2, 0]);
-  S.add(new THREE.BoxGeometry(0.005, 0.021, 0.035), m.strap, j, [c[0] + side * (rx + 0.004), c[1] + by, c[2] - 0.026]);
+  S.add(shapes.box(0.005, 0.021, 0.035), m.strap, j, [c[0] + side * (rx + 0.004), c[1] + by, c[2] - 0.026]);
 }
 
 /** One boot on a leg: the foot on its ankle, the shaft and cuff on its knee (the shaft's foot skinned to the ankle).
  *  `side` +1 the left leg. */
-export function buildBoot(S: Sculpt, m: BootMats, knee: THREE.Object3D, ankle: THREE.Object3D, side: number): void {
+export function buildBoot(S: Sculpt, m: BootMats, knee: Node, ankle: Node, side: number): void {
   const seed = side > 0 ? 11 : 23;
   S.skin(shaft(seed), m.leather, knee, ankle, 0.35, 0.42);
   S.add(cuff(seed + 1), m.leather, knee);

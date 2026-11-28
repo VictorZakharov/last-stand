@@ -1,7 +1,7 @@
 // What stands on the meadow, as its grass meets it: over each 12.5 cm cell of the meadow's square, the lowest solid
 // above the ground there (m), read once at build from every mesh built but the ground (its triangles laid over the
 // cells: their faces' and their edges', so an upright face's foot counts as much as a log's underside). Each blade is
-// held under it (`VERTEX_BLADE` in meadow.ts, `bladeNodes` in meadowNodes.ts): one rooted under a log lies under it,
+// held under it (`bladeLook` in engine/looks/meadow.ts): one rooted under a log lies under it,
 // one beside a post grows up beside it, and one leaning into a post is bent down where it meets it. From play,
 // "grass grows through logs" and the lamps' feet; cleared round each prop by hand, the grass stood back from them, as
 // grass in life doesn't ("let grass be closer to props, like real life. Just not going through them"). What's built
@@ -9,7 +9,10 @@
 //
 // Its size: one byte a cell, 768 x 768 over the village's 96 m, 576 KB on the GPU and as much in memory while it's
 // built, read by every grass ring's vertices (nearest, no mipmaps). Nothing is kept across visits.
-import * as THREE from 'three';
+import {
+  Box3, ClampToEdgeWrapping, DataTexture, Geometry, InstancedMesh, Mat4, Mesh, NearestFilter, Node, RedFormat,
+  UnsignedByteType, Vec3,
+} from '../engine/api/index.ts';
 import { shapesOf } from './simpleTrees';
 import type { MeadowMask } from './meadow';
 
@@ -45,7 +48,7 @@ class SolidCells {
 
   /** The edge from `a` to `b` over every cell it crosses, at its lowest within that cell (met every so far along it, a
    *  slanted trunk's edge crossing a cell's corner for less than the step left a blade through its bark). */
-  edge(a: THREE.Vector3, b: THREE.Vector3): void {
+  edge(a: Vec3, b: Vec3): void {
     if (Math.min(a.y, b.y) >= SOLID_RANGE || Math.max(a.y, b.y) < 0) return;
     const shares = [0, 1];
     const crossings = (from: number, to: number): void => {
@@ -76,7 +79,7 @@ class SolidCells {
 
   /** The triangle (a, b, c) over every cell it covers, at its lowest there: a plane's lowest over a cell is at a corner
    *  of what of it the cell holds, so its edges (each in every cell it crosses) and the cells' corners inside it. */
-  triangle(a: THREE.Vector3, b: THREE.Vector3, c: THREE.Vector3): void {
+  triangle(a: Vec3, b: Vec3, c: Vec3): void {
     if (Math.min(a.y, b.y, c.y) >= SOLID_RANGE || Math.max(a.y, b.y, c.y) < 0) return;
     if (!this.grows(Math.min(a.x, b.x, c.x), Math.min(a.z, b.z, c.z), Math.max(a.x, b.x, c.x), Math.max(a.z, b.z, c.z))) return;
     this.edge(a, b);
@@ -110,17 +113,17 @@ class SolidCells {
  *  a ghost's twin or leaf cards cut out by their picture). Not by `transparent`: what thins as it hides him (`seeThrough`)
  *  blends but stands solid, the seat logs among it, and left out by it they stood out of the map, blades up through their
  *  tops (from review, "Not fixed"). */
-export function solid(mesh: THREE.Mesh): boolean {
+export function solid(mesh: Mesh): boolean {
   const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
   return materials.every((m) => m.depthWrite && m.colorWrite && m.visible && m.alphaTest === 0);
 }
 
 /** `mesh`'s triangles placed by `matrix`, met by `cells`. */
-function meetMesh(cells: SolidCells, geometry: THREE.BufferGeometry, matrix: THREE.Matrix4): void {
+function meetMesh(cells: SolidCells, geometry: Geometry, matrix: Mat4): void {
   const position = geometry.attributes.position;
   const index = geometry.index;
   const count = index ? index.count : position.count;
-  const corners = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()];
+  const corners = [new Vec3(), new Vec3(), new Vec3()];
   for (let i = 0; i + 2 < count; i += 3) {
     for (let k = 0; k < 3; k++) {
       corners[k].fromBufferAttribute(position, index ? index.getX(i + k) : i + k).applyMatrix4(matrix);
@@ -134,7 +137,7 @@ function meetMesh(cells: SolidCells, geometry: THREE.BufferGeometry, matrix: THR
  * (`SOLID_RANGE` at 1, rows running with z), from every mesh under `root` but those under `ground` (what the grass
  * grows on), its instances each where they stand, where any grass grows near.
  */
-export function solidsOver(root: THREE.Object3D, ground: ReadonlySet<THREE.Object3D>, mask: MeadowMask): THREE.DataTexture {
+export function solidsOver(root: Node, ground: ReadonlySet<Node>, mask: MeadowMask): DataTexture {
   const grown = mask.grassCells(GRASS_NEAR.cell, GRASS_NEAR.margin);
   const at = (v: number): number => Math.max(0, Math.min(grown.n - 1, Math.floor((v + mask.half) / grown.cell)));
   const grows = (x0: number, z0: number, x1: number, z1: number): boolean => {
@@ -144,22 +147,22 @@ export function solidsOver(root: THREE.Object3D, ground: ReadonlySet<THREE.Objec
     return false;
   };
   const cells = new SolidCells(mask.half, grows);
-  const box = new THREE.Box3();
-  const placed = new THREE.Matrix4();
-  const instance = new THREE.Matrix4();
+  const box = new Box3();
+  const placed = new Mat4();
+  const instance = new Mat4();
   root.updateMatrixWorld(true);
-  const visit = (object: THREE.Object3D): void => {
+  const visit = (object: Node): void => {
     if (ground.has(object) || !object.visible) return;
-    const mesh = object as THREE.Mesh;
+    const mesh = object as Mesh;
     if (mesh.isMesh && mesh.geometry.attributes.position && solid(mesh)) {
       // (a tree's trunk in both its shapes, grown and simple: a level switches them live)
       for (const geometry of shapesOf(mesh)) {
         if (!geometry.boundingBox) geometry.computeBoundingBox();
-        const instanced = mesh as THREE.InstancedMesh;
+        const instanced = mesh as InstancedMesh;
         const count = instanced.isInstancedMesh ? instanced.count : 1;
         for (let i = 0; i < count; i++) {
           placed.copy(mesh.matrixWorld);
-          if (instanced.isInstancedMesh) placed.multiply(instanced.getMatrixAt(i, instance) as unknown as THREE.Matrix4);
+          if (instanced.isInstancedMesh) placed.multiply(instanced.getMatrixAt(i, instance) as unknown as Mat4);
           box.copy(geometry.boundingBox!).applyMatrix4(placed);
           if (box.min.y < SOLID_RANGE && box.max.y >= 0) meetMesh(cells, geometry, placed);
         }
@@ -168,9 +171,9 @@ export function solidsOver(root: THREE.Object3D, ground: ReadonlySet<THREE.Objec
     for (const child of object.children) visit(child);
   };
   visit(root);
-  const texture = new THREE.DataTexture(cells.bytes, cells.side, cells.side, THREE.RedFormat, THREE.UnsignedByteType);
-  texture.magFilter = texture.minFilter = THREE.NearestFilter;
-  texture.wrapS = texture.wrapT = THREE.ClampToEdgeWrapping;
+  const texture = new DataTexture(cells.bytes, cells.side, cells.side, RedFormat, UnsignedByteType);
+  texture.magFilter = texture.minFilter = NearestFilter;
+  texture.wrapS = texture.wrapT = ClampToEdgeWrapping;
   texture.generateMipmaps = false;
   texture.needsUpdate = true;
   return texture;

@@ -3,7 +3,7 @@
 // and an axe's or a maul's head whole (a part's box would not do: a weapon's pieces are merged into one mesh per
 // material, whose box holds the head's breadth all down the haft). Thunder Crescent's blow, stopped by its tip,
 // put an axe's or a maul's head into the floor to its middle.
-import * as THREE from 'three';
+import { Maths, Mesh, Quat, Vec3 } from './sceneApi.ts';
 import type { Lab } from './lab';
 import { distinctCorners } from './corners';
 import { groundHeight } from '../../../src/world/ground';
@@ -19,9 +19,9 @@ function propTop(x: number, z: number): number {
 
 /** a ray down through the wall starts this high (m): over the crypt's walls and the trunks beyond the ring */
 const WALL_RAY_FROM = 60;
-const _rayFrom = new THREE.Vector3();
-const _rayTo = new THREE.Vector3();
-const _wallHit = { point: new THREE.Vector3(), normal: new THREE.Vector3(), t: 0, stone: false, name: '' };
+const _rayFrom = new Vec3();
+const _rayTo = new Vec3();
+const _wallHit = { point: new Vec3(), normal: new Vec3(), t: 0, stone: false, name: '' };
 
 /** How far the point (x, y, z) is into the arena's wall (m; none, -Infinity), as the wall is drawn (`Wall.cast`):
  *  the less of how far under its top (a ray straight down to it) and how far past its face (a ray out from the middle
@@ -64,13 +64,13 @@ interface Under {
   along: number;
 }
 
-const _corner = new THREE.Vector3();
-const _flat = new THREE.Vector3();
-const _side = new THREE.Vector3();
-const _up = new THREE.Vector3(0, 1, 0);
-const _quarter = new THREE.Quaternion();
-const _gripAt = new THREE.Vector3();
-const _gripWay = new THREE.Vector3();
+const _corner = new Vec3();
+const _flat = new Vec3();
+const _side = new Vec3();
+const _up = new Vec3(0, 1, 0);
+const _quarter = new Quat();
+const _gripAt = new Vec3();
+const _gripWay = new Vec3();
 
 /** The frames the weapon was under the floor, and the deepest. */
 export class WeaponFloor {
@@ -146,7 +146,7 @@ export function bladeOffLine(lab: Lab): number {
   grip.updateWorldMatrix(true, false);
   const normal = _flat.set(1, 0, 0).transformDirection(grip.matrixWorld);
   const side = _side.set(1, 0, 0).transformDirection(lab.model.root.matrixWorld);
-  return THREE.MathUtils.radToDeg(Math.acos(Math.min(1, Math.abs(normal.dot(side)))));
+  return Maths.radToDeg(Math.acos(Math.min(1, Math.abs(normal.dot(side)))));
 }
 
 /** The canary: the weapon turned a quarter round its grip, read, and turned back (degrees: must read past
@@ -182,7 +182,7 @@ function deepestUnder(lab: Lab, at: string): Under | null {
   _gripWay.set(0, 1, 0).transformDirection(grip.matrixWorld);
   let deepest: Under | null = null;
   grip.traverseVisible((object) => {
-    const mesh = object as THREE.Mesh;
+    const mesh = object as Mesh;
     if (!mesh.isMesh) return;
     const corners = mesh.geometry.attributes.position;
     for (const i of distinctCorners(corners)) {

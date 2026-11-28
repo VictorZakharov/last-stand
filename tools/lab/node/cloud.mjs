@@ -203,7 +203,7 @@ async function download(run) {
   // the code typed on a phone: the field in view over its keyboard (the owner: "cannot see code while typing")
   const typing = await b.typingPicture(PICTURES, 'code-typing', '#cloud-dialog .cd-code');
   run.shots.push({ lines: ['  code-typing (B):', ...typing.lines], problems: typing.problems });
-  await b.page.locator('#cloud-dialog .cd-code').fill(code);
+  await b.page.locator('#cloud-dialog .cd-code').fill(code, { force: true });
   await b.click('#cloud-dialog .dc-buttons .primary');
   const asked = await b.until((state) => state.dialog.open && state.dialog.title.includes('cloud save comes'),
     'was told the cloud save comes down');
@@ -251,7 +251,7 @@ async function conflictOn(run, { home, away, classId, tags, fate, label }) {
   if (!fate.test(asked.dialog.text)) problems.push(`the dialog never says ${fate}: "${oneLine(asked.dialog.text)}"`);
   expect(problems, `${away.name}'s slots while it asks`, slotsText(await away.slots()), before);
   await shoot(run, away, label);
-  await away.page.locator('#cloud-dialog .dc-buttons button', { hasText: 'Keep the cloud\'s' }).click();
+  await away.click('#cloud-dialog .dc-buttons button', 'Keep the cloud\'s');
   await away.until((state) => !state.dialog.open && state.pending === 0 && state.status === 'synced',
     'settled the conflict');
   return { asked, problems };

@@ -1,6 +1,8 @@
 // Procedural textures: cobblestone, ashlar, flagstones, marble, slate, forest floor, bark, grunge, rune circles, decals.
 // Everything is generated on the CPU once at startup (no external art assets).
-import * as THREE from 'three';
+import {
+  CanvasTexture, ClampToEdgeWrapping, NoColorSpace, RepeatWrapping, SRGBColorSpace, Texture, Vec2,
+} from '../engine/api/index.ts';
 import { makeFbm, mulberry, clamp } from '../util';
 import { RECIPES, PRELOAD, recipeKey, makeVoronoi, photosFor, type PBRData, type RecipeName, type RecipeArgs } from './pbr';
 import type { FaceId } from '../entities/models/face';
@@ -26,12 +28,12 @@ export function readCtx2d(c: HTMLCanvasElement): CanvasRenderingContext2D {
   return c.getContext('2d', { willReadFrequently: true })!;
 }
 
-function toTexture(canvas: HTMLCanvasElement, srgb: boolean, u = 1, v = u): THREE.CanvasTexture {
-  const t = new THREE.CanvasTexture(canvas);
-  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+function toTexture(canvas: HTMLCanvasElement, srgb: boolean, u = 1, v = u): CanvasTexture {
+  const t = new CanvasTexture(canvas);
+  t.wrapS = t.wrapT = RepeatWrapping;
   t.repeat.set(u, v);
   t.anisotropy = 8;
-  t.colorSpace = srgb ? THREE.SRGBColorSpace : THREE.NoColorSpace;
+  t.colorSpace = srgb ? SRGBColorSpace : NoColorSpace;
   t.needsUpdate = true;
   return t;
 }
@@ -39,7 +41,7 @@ function toTexture(canvas: HTMLCanvasElement, srgb: boolean, u = 1, v = u): THRE
 export interface PBRCanvases { albedo: HTMLCanvasElement; normal: HTMLCanvasElement; rough: HTMLCanvasElement }
 
 const cache = new Map<string, PBRCanvases>();
-const texCache: Record<string, THREE.CanvasTexture> = {};
+const texCache: Record<string, CanvasTexture> = {};
 /** maps made by the loading workers, waiting to be asked for */
 const made = new Map<string, PBRData>();
 /** whether a map was made afresh, not read back from a visit before (`mapsMadeAfresh`) */
@@ -152,13 +154,13 @@ export const faceCanvases = (who: FaceId): PBRCanvases => pbrCanvases('face', wh
 export const faceGrid = (who: FaceId): PBRData['grid'] => grids.get(recipeKey('face', [who]));
 
 /** The key of the map `texture` is painted with (`bark()`), where it's one of these canvases. */
-export const mapKeyOf = (texture: THREE.Texture): string | undefined => keyOfCanvas.get(texture.image as HTMLCanvasElement);
+export const mapKeyOf = (texture: Texture): string | undefined => keyOfCanvas.get(texture.image as HTMLCanvasElement);
 
 /**
  * Resolved once every map `textures` are painted with has come: what a warm-up draws waits for its own maps alone
  * (the lobby's, not the fight's: those come while it shows).
  */
-export function mapsArrived(textures: Iterable<THREE.Texture>): Promise<void> {
+export function mapsArrived(textures: Iterable<Texture>): Promise<void> {
   const waits: Promise<void>[] = [];
   for (const texture of textures) {
     const key = mapKeyOf(texture);
@@ -305,7 +307,7 @@ export function readyFace(who: FaceId): Promise<void> {
 /** How often a map's tile repeats across a surface's UVs: as often both ways, or `[along u, along v]`. */
 export type Repeat = number | readonly [number, number];
 
-interface MapTextures { map: THREE.Texture; normalMap: THREE.Texture; roughnessMap: THREE.Texture }
+interface MapTextures { map: Texture; normalMap: Texture; roughnessMap: Texture }
 
 // Textures are shared per (maps, repeat): every enemy of a kind reuses one GPU upload
 // instead of uploading (and mipmapping) its own copies when it first comes into view.
@@ -313,7 +315,7 @@ interface MapTextures { map: THREE.Texture; normalMap: THREE.Texture; roughnessM
 const mapTextures = new WeakMap<PBRCanvases, Map<string, MapTextures>>();
 
 /** `t` copied (its source and upload shared) to repeat `u` by `v` times. */
-function repeated(t: THREE.Texture, u: number, v: number): THREE.Texture {
+function repeated(t: Texture, u: number, v: number): Texture {
   const copy = t.clone();
   copy.repeat.set(u, v);
   return copy;
@@ -331,12 +333,12 @@ export function pbrMaterialMaps(maps: PBRCanvases, repeat: Repeat, normalScale =
       : { map: toTexture(maps.albedo, true, u, v), normalMap: toTexture(maps.normal, false, u, v), roughnessMap: toTexture(maps.rough, false, u, v) };
     byRepeat.set(`${u},${v}`, tex);
   }
-  return { ...tex, normalScale: new THREE.Vector2(normalScale, normalScale) };
+  return { ...tex, normalScale: new Vec2(normalScale, normalScale) };
 }
 
-export function textureFromCanvas(c: HTMLCanvasElement, srgb = true): THREE.CanvasTexture {
+export function textureFromCanvas(c: HTMLCanvasElement, srgb = true): CanvasTexture {
   const t = toTexture(c, srgb, 1);
-  t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping;
+  t.wrapS = t.wrapT = ClampToEdgeWrapping;
   return t;
 }
 
@@ -349,7 +351,7 @@ const THREAD = '#c99a48', THREAD_SHADE = '#4a2c10';
  * edges and the order's sigil embroidered over its upper half (a ring round a crescent, a blade down through both, a star over it), the same on
  * every banner. The canvas is the banner's u across and v down from its top (`bannerGeo` in `world/crypt.ts`).
  */
-export function bannerCloth(width = 256, height = 512, base: readonly number[] = VELVET.base): THREE.CanvasTexture {
+export function bannerCloth(width = 256, height = 512, base: readonly number[] = VELVET.base): CanvasTexture {
   const c = canvasOf(width, height);
   const g = ctx2d(c);
   const rng = mulberry(31);
@@ -409,7 +411,7 @@ export function bannerCloth(width = 256, height = 512, base: readonly number[] =
 }
 
 // Glowing rune circle drawn with 2D canvas (white on transparent; tinted by material).
-export function runeCircle(seed = 1, size = 1024): THREE.CanvasTexture {
+export function runeCircle(seed = 1, size = 1024): CanvasTexture {
   const c = canvasOf(size);
   const g = ctx2d(c);
   const rng = mulberry(seed);
@@ -492,7 +494,7 @@ export function radialDecal(inner = 'rgba(0,0,0,0.9)', outer = 'rgba(0,0,0,0)', 
 }
 
 // Emissive lava/aether crack texture for brute skins.
-export function cracks(seed = 5): THREE.CanvasTexture {
+export function cracks(seed = 5): CanvasTexture {
   const key = 'cracks' + seed;
   if (texCache[key]) return texCache[key];
   const vor = makeVoronoi(seed, 6);
@@ -513,7 +515,7 @@ export function cracks(seed = 5): THREE.CanvasTexture {
 }
 
 // Emissive veins: sparse branching lines on black that tile (corruption spreading under skin).
-export function veins(seed = 3, count = 7): THREE.CanvasTexture {
+export function veins(seed = 3, count = 7): CanvasTexture {
   const key = `veins${seed},${count}`;
   if (texCache[key]) return texCache[key];
   const r = mulberry(seed), size = 512, c = canvasOf(size), g = ctx2d(c);

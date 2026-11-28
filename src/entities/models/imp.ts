@@ -1,7 +1,8 @@
 // Voidling: a small, fast, wiry demon. Ridged horns curl back from a long skull, a glowing maw full of
 // needle teeth, torn bat wings, hooked claws and spurs, a spined back and a whipping barbed tail;
 // void light shows through veins in its skin and a split in its belly.
-import * as THREE from 'three';
+import { DoubleSide, floats, Geometry, Node, Vec2, Vec3 } from '../../engine/api/index.ts';
+import * as shapes from '../../engine/api/shapes/index.ts';
 import { createKit } from '../../core/materials';
 import { grunge, pbrMaterialMaps, veins } from '../../core/textures';
 import type { AnimState, Model } from '../../types';
@@ -9,16 +10,16 @@ import { buildHumanoid, joint, resetPose, walkCycle, deathFall, ramp, pulse } fr
 import { LegIK } from './ik';
 import { Sculpt, horn, limb, organic, skipping, stripRig, taperTube } from './shapes';
 
-const V = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
+const V = (x: number, y: number, z: number) => new Vec3(x, y, z);
 
 /** a bat wing for the left side (+X): three finger bones and a scalloped membrane between them */
-function wing(): { bones: THREE.BufferGeometry[]; membrane: THREE.BufferGeometry } {
-  if (skipping()) return { bones: [], membrane: new THREE.BufferGeometry() };
+function wing(): { bones: Geometry[]; membrane: Geometry } {
+  if (skipping()) return { bones: [], membrane: new Geometry() };
   const tips = [V(0.46, 0.2, -0.1), V(0.5, -0.06, -0.16), V(0.36, -0.3, -0.14), V(0.12, -0.36, -0.06)];
   const knuckle = V(0.16, 0.12, -0.05);
   const bones = [taperTube([V(0, 0, 0), V(0.08, 0.08, -0.02), knuckle], (t) => 0.018 * (1 - t * 0.3), 8, 6)];
   for (const tip of tips.slice(0, 3)) bones.push(taperTube([knuckle, knuckle.clone().lerp(tip, 0.5).add(V(0, 0.03, 0)), tip], (t) => 0.012 * (1 - t * 0.85), 10, 5));
-  const pos: number[] = [], tri = (a: THREE.Vector3, b: THREE.Vector3, c: THREE.Vector3) => pos.push(a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z);
+  const pos: number[] = [], tri = (a: Vec3, b: Vec3, c: Vec3) => pos.push(a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z);
   const root = V(0, -0.02, 0);
   tri(root, knuckle, tips[0]);
   for (let i = 0; i < tips.length - 1; i++) {
@@ -28,9 +29,9 @@ function wing(): { bones: THREE.BufferGeometry[]; membrane: THREE.BufferGeometry
     tri(knuckle, tips[i], mid); tri(from, mid, tips[i + 1]);
     if (from !== knuckle) tri(root, knuckle, mid);
   }
-  const membrane = new THREE.BufferGeometry();
-  membrane.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-  membrane.setAttribute('uv', new THREE.Float32BufferAttribute(pos.flatMap((v, i) => (i % 3 === 2 ? [] : [v * 2])), 2));
+  const membrane = new Geometry();
+  membrane.setAttribute('position', floats(pos, 3));
+  membrane.setAttribute('uv', floats(pos.flatMap((v, i) => (i % 3 === 2 ? [] : [v * 2])), 2));
   membrane.computeVertexNormals();
   return { bones, membrane };
 }
@@ -39,13 +40,13 @@ export function buildImp(): Model {
   const kit = createKit(0xff60ff);
   const g = pbrMaterialMaps(grunge(), 2, 1);
   const skin = kit.rim({
-    color: 0x55203a, roughness: 0.5, map: g.map, normalMap: g.normalMap, normalScale: new THREE.Vector2(1.3, 1.3),
+    color: 0x55203a, roughness: 0.5, map: g.map, normalMap: g.normalMap, normalScale: new Vec2(1.3, 1.3),
     emissive: 0xff3ce0, emissiveMap: veins(21, 5), emissiveIntensity: 0.55,
   }, 0xc04090, 0.45);
   const hide = kit.std({ color: 0x2a0e1c, roughness: 0.6, normalMap: g.normalMap });
   const horny = kit.std({ color: 0x1c1412, roughness: 0.28, metalness: 0.2, normalMap: g.normalMap });
   const claw = kit.std({ color: 0xe4d6b8, roughness: 0.3 });
-  const membrane = kit.std({ color: 0x4a1030, roughness: 0.7, side: THREE.DoubleSide, emissive: 0xff2aa0, emissiveMap: veins(5, 5), emissiveIntensity: 0.5 });
+  const membrane = kit.std({ color: 0x4a1030, roughness: 0.7, side: DoubleSide, emissive: 0xff2aa0, emissiveMap: veins(5, 5), emissiveIntensity: 0.5 });
   const eye = kit.glow(0xfff040, 8);
   const maw = kit.glow(0xff3cd0, 3.5);
 
@@ -61,42 +62,42 @@ export function buildImp(): Model {
   S.skinPair(lim(P.thighL + 0.054, 0.06, 0.04, 0.35, 0.3), skin, j.thighL, j.kneeL, j.thighR, j.kneeR, P.thighL - 0.072, P.thighL);
   S.skinPair(lim(P.shinL + 0.038, 0.042, 0.028, 0.35, 0.2), skin, j.kneeL, j.ankleL, j.kneeR, j.ankleR, P.shinL - 0.05, P.shinL);
   S.pair(horn(0.1, 0.014, 0.6, V(1, 0, 0), V(0, 0.2, -1)), horny, j.ankleL, j.ankleR, [0, 0.02, -0.02]);
-  S.pair(organic(new THREE.SphereGeometry(1, 10, 8), 0.1, 4, 2), skin, j.ankleL, j.ankleR, [0, -0.02, 0.04], [0, 0, 0], [0.035, 0.025, 0.08]);
+  S.pair(organic(shapes.sphere(1, 10, 8), 0.1, 4, 2), skin, j.ankleL, j.ankleR, [0, -0.02, 0.04], [0, 0, 0], [0.035, 0.025, 0.08]);
   for (const x of [-0.022, 0, 0.022]) S.pair(taperTube([V(0, 0, 0), V(0, -0.005, 0.04), V(0, -0.03, 0.065)], (t) => 0.011 * (1 - t * 0.8), 8, 5), claw, j.ankleL, j.ankleR, [x, -0.025, 0.1]);
 
   // --- body: a narrow waist, a deep chest, void light leaking through a split belly, a spined back
-  S.add(organic(new THREE.SphereGeometry(1, 14, 10), 0.08, 4, 3), skin, j.hips, [0, 0.01, 0], [0, 0, 0], [0.1, 0.07, 0.08]);
-  S.add(organic(new THREE.SphereGeometry(1, 14, 10), 0.08, 4, 4), skin, j.spine, [0, 0.07, 0], [0, 0, 0], [0.085, 0.11, 0.07]);
-  S.add(new THREE.SphereGeometry(1, 10, 8), maw, j.spine, [0, 0.06, 0.05], [0, 0, 0], [0.01, 0.05, 0.02]);
-  S.add(organic(new THREE.SphereGeometry(1, 18, 12), 0.07, 4, 5), skin, j.chest, [0, 0.06, -0.01], [0, 0, 0], [0.14, 0.15, 0.11]);
+  S.add(organic(shapes.sphere(1, 14, 10), 0.08, 4, 3), skin, j.hips, [0, 0.01, 0], [0, 0, 0], [0.1, 0.07, 0.08]);
+  S.add(organic(shapes.sphere(1, 14, 10), 0.08, 4, 4), skin, j.spine, [0, 0.07, 0], [0, 0, 0], [0.085, 0.11, 0.07]);
+  S.add(shapes.sphere(1, 10, 8), maw, j.spine, [0, 0.06, 0.05], [0, 0, 0], [0.01, 0.05, 0.02]);
+  S.add(organic(shapes.sphere(1, 18, 12), 0.07, 4, 5), skin, j.chest, [0, 0.06, -0.01], [0, 0, 0], [0.14, 0.15, 0.11]);
   // chitin plates down the front: a keel on the chest, bands over the belly
-  S.add(organic(new THREE.SphereGeometry(1, 12, 8), 0.05, 6, 6), hide, j.chest, [0, 0.07, 0.085], [0.15, 0, 0], [0.1, 0.1, 0.035]);
-  for (let i = 0; i < 3; i++) S.add(new THREE.SphereGeometry(1, 12, 6), hide, j.spine, [0, 0.13 - i * 0.045, 0.058 - i * 0.004], [0.1, 0, 0], [0.065 - i * 0.006, 0.02, 0.02]);
-  S.add(organic(new THREE.SphereGeometry(1, 12, 8), 0.05, 5, 8), hide, j.chest, [0, 0.14, -0.07], [0, 0, 0], [0.12, 0.08, 0.06]);
+  S.add(organic(shapes.sphere(1, 12, 8), 0.05, 6, 6), hide, j.chest, [0, 0.07, 0.085], [0.15, 0, 0], [0.1, 0.1, 0.035]);
+  for (let i = 0; i < 3; i++) S.add(shapes.sphere(1, 12, 6), hide, j.spine, [0, 0.13 - i * 0.045, 0.058 - i * 0.004], [0.1, 0, 0], [0.065 - i * 0.006, 0.02, 0.02]);
+  S.add(organic(shapes.sphere(1, 12, 8), 0.05, 5, 8), hide, j.chest, [0, 0.14, -0.07], [0, 0, 0], [0.12, 0.08, 0.06]);
   for (let i = 0; i < 5; i++) S.add(horn(0.07 + (i < 2 ? 0.03 : 0), 0.016, -0.8, V(1, 0, 0), V(0, 0.5, -1)), horny, j.chest, [0, 0.2 - i * 0.06, -0.1]);
   for (let i = 0; i < 3; i++) S.add(horn(0.05, 0.012, -0.6, V(1, 0, 0), V(0, 0.4, -1)), horny, j.spine, [0, 0.12 - i * 0.05, -0.065]);
 
   // --- head: long skull, heavy brow, slit eyes, curled ridged horns, swept ears, a jaw that gapes
   S.add(limb(0.12, 0.035, 0.05), skin, j.neck, [0, 0.1, 0], [Math.PI, 0, 0]);
-  S.add(organic(new THREE.SphereGeometry(1, 18, 14), 0.06, 5, 9), skin, j.head, [0, 0.1, 0], [0, 0, 0], [0.12, 0.105, 0.13]);
-  S.add(organic(new THREE.SphereGeometry(1, 14, 10), 0.08, 6, 10), skin, j.head, [0, 0.07, 0.11], [0.25, 0, 0], [0.075, 0.05, 0.09]);
-  S.add(organic(new THREE.SphereGeometry(1, 12, 8), 0.05, 6, 11), hide, j.head, [0, 0.135, 0.085], [0.3, 0, 0], [0.1, 0.03, 0.05]);
-  S.pair(new THREE.SphereGeometry(1, 10, 6), eye, j.head, null, [0.052, 0.113, 0.118], [0, -0.5, -0.45], [0.03, 0.012, 0.012]);
-  for (let i = -3; i <= 3; i++) if (i) S.add(new THREE.ConeGeometry(0.006, 0.03, 4), claw, j.head, [i * 0.012, 0.04, 0.17 - Math.abs(i) * 0.012], [Math.PI, 0, 0]);
+  S.add(organic(shapes.sphere(1, 18, 14), 0.06, 5, 9), skin, j.head, [0, 0.1, 0], [0, 0, 0], [0.12, 0.105, 0.13]);
+  S.add(organic(shapes.sphere(1, 14, 10), 0.08, 6, 10), skin, j.head, [0, 0.07, 0.11], [0.25, 0, 0], [0.075, 0.05, 0.09]);
+  S.add(organic(shapes.sphere(1, 12, 8), 0.05, 6, 11), hide, j.head, [0, 0.135, 0.085], [0.3, 0, 0], [0.1, 0.03, 0.05]);
+  S.pair(shapes.sphere(1, 10, 6), eye, j.head, null, [0.052, 0.113, 0.118], [0, -0.5, -0.45], [0.03, 0.012, 0.012]);
+  for (let i = -3; i <= 3; i++) if (i) S.add(shapes.cone(0.006, 0.03, 4), claw, j.head, [i * 0.012, 0.04, 0.17 - Math.abs(i) * 0.012], [Math.PI, 0, 0]);
   S.pair(horn(0.3, 0.035, 2.2, V(1, 0.2, 0), V(0.35, 0.8, -0.5), 6), horny, j.head, null, [0.07, 0.18, 0.02]);
   S.pair(horn(0.12, 0.018, 1.2, V(1, 0, 0), V(0.3, 0.3, -1)), horny, j.head, null, [0.1, 0.13, -0.02]);
-  S.pair(new THREE.ConeGeometry(0.045, 0.2, 4).translate(0, 0.1, 0), skin, j.head, null, [0.11, 0.1, -0.03], [-0.6, 0, -1.2], [1, 1, 0.4]);
+  S.pair(shapes.cone(0.045, 0.2, 4).translate(0, 0.1, 0), skin, j.head, null, [0.11, 0.1, -0.03], [-0.6, 0, -1.2], [1, 1, 0.4]);
   const jaw = joint(j.head, 0, 0.05, 0.03);
-  S.add(organic(new THREE.SphereGeometry(1, 12, 8), 0.06, 6, 12), skin, jaw, [0, -0.02, 0.08], [0.1, 0, 0], [0.06, 0.025, 0.09]);
-  S.add(new THREE.SphereGeometry(1, 10, 6), maw, jaw, [0, 0.0, 0.07], [0, 0, 0], [0.045, 0.012, 0.07]);
-  for (let i = -3; i <= 3; i++) if (i) S.add(new THREE.ConeGeometry(0.005, 0.025, 4), claw, jaw, [i * 0.011, 0.01, 0.13 - Math.abs(i) * 0.012]);
+  S.add(organic(shapes.sphere(1, 12, 8), 0.06, 6, 12), skin, jaw, [0, -0.02, 0.08], [0.1, 0, 0], [0.06, 0.025, 0.09]);
+  S.add(shapes.sphere(1, 10, 6), maw, jaw, [0, 0.0, 0.07], [0, 0, 0], [0.045, 0.012, 0.07]);
+  for (let i = -3; i <= 3; i++) if (i) S.add(shapes.cone(0.005, 0.025, 4), claw, jaw, [i * 0.011, 0.01, 0.13 - Math.abs(i) * 0.012]);
 
   // --- arms: wiry, a spur off each elbow, hooked claws
-  S.pair(organic(new THREE.SphereGeometry(0.045, 10, 8), 0.005, 40, 13), skin, j.shoulderL, j.shoulderR, [0, 0.005, 0]);
+  S.pair(organic(shapes.sphere(0.045, 10, 8), 0.005, 40, 13), skin, j.shoulderL, j.shoulderR, [0, 0.005, 0]);
   S.skinPair(lim(P.upperL + 0.038, 0.042, 0.03, 0.35), skin, j.shoulderL, j.elbowL, j.shoulderR, j.elbowR, P.upperL - 0.05, P.upperL);
   S.skinPair(lim(P.foreL + 0.029, 0.032, 0.024, 0.3, 0.25), skin, j.elbowL, j.handL, j.elbowR, j.handR, P.foreL - 0.038, P.foreL);
   S.pair(horn(0.09, 0.013, 0.5, V(1, 0, 0), V(0, 0.4, -1)), horny, j.elbowL, j.elbowR, [0, -0.01, -0.02]);
-  S.pair(organic(new THREE.SphereGeometry(1, 10, 8), 0.08, 5, 14), skin, j.handL, j.handR, [0, -0.03, 0], [0, 0, 0], [0.035, 0.04, 0.02]);
+  S.pair(organic(shapes.sphere(1, 10, 8), 0.08, 5, 14), skin, j.handL, j.handR, [0, -0.03, 0], [0, 0, 0], [0.035, 0.04, 0.02]);
   for (let f = 0; f < 3; f++) {
     const c = taperTube([V(0, 0, 0), V(0, -0.05, 0.01), V(0, -0.09, 0.04), V(0, -0.1, 0.075)], (t) => 0.009 * (1 - t * 0.85), 10, 5);
     S.pair(c, claw, j.handL, j.handR, [(f - 1) * 0.02, -0.055, 0.005], [0, 0, (f - 1) * 0.15]);
@@ -109,17 +110,17 @@ export function buildImp(): Model {
   S.pair(w.membrane, membrane, wingL, wingR);
 
   // --- tail: tapering segments, a glowing barb at the end
-  const tail: THREE.Group[] = [];
-  let parent: THREE.Object3D = j.hips;
+  const tail: Node[] = [];
+  let parent: Node = j.hips;
   for (let i = 0; i < 7; i++) {
     const tj = joint(parent, 0, 0, i === 0 ? -0.07 : -0.1);
     const r0 = 0.034 * (1 - i * 0.1);
     S.add(limb(0.105, r0, r0 * 0.9), skin, tj, [0, 0, 0], [Math.PI / 2, 0, 0]);
-    if (i % 2 === 0 && i < 6) S.add(new THREE.ConeGeometry(0.01, 0.035, 4), skin, tj, [0, r0 * 0.9, -0.04], [-0.5, 0, 0]);
+    if (i % 2 === 0 && i < 6) S.add(shapes.cone(0.01, 0.035, 4), skin, tj, [0, r0 * 0.9, -0.04], [-0.5, 0, 0]);
     tail.push(tj); parent = tj;
   }
-  S.add(new THREE.OctahedronGeometry(0.04, 0), horny, parent, [0, 0, -0.1], [Math.PI / 2, 0, 0], [0.6, 1.8, 0.35]);
-  S.add(new THREE.OctahedronGeometry(0.02, 0), maw, parent, [0, 0, -0.1], [Math.PI / 2, 0, 0], [0.5, 1.8, 0.5]);
+  S.add(shapes.octahedron(0.04, 0), horny, parent, [0, 0, -0.1], [Math.PI / 2, 0, 0], [0.6, 1.8, 0.35]);
+  S.add(shapes.octahedron(0.02, 0), maw, parent, [0, 0, -0.1], [Math.PI / 2, 0, 0], [0.5, 1.8, 0.5]);
   S.build();
 
   const root = j.root;

@@ -8,21 +8,22 @@
 //   nothing of it blinks.
 // Additive meshes of the kit's plain glow material (the same program as a shockwave's) and the particle pools:
 // nothing new to compile.
-import * as THREE from 'three';
+import { Mesh, Vec3 } from '../engine/api/index.ts';
+import * as shapes from '../engine/api/shapes/index.ts';
 import { additive } from '../core/materials';
 import { addEffect, shockwave, decal, crackDecal } from './effects';
 import { particles, col, smokePuff, debris } from './particles';
 import { rand } from '../util';
 import type { Effect } from '../types';
 
-const ball = new THREE.SphereGeometry(1, 14, 10);
-const shellA = new THREE.IcosahedronGeometry(1, 1), shellB = new THREE.IcosahedronGeometry(1, 0);
+const ball = shapes.sphere(1, 14, 10);
+const shellA = shapes.icosahedron(1, 1), shellB = shapes.icosahedron(1, 0);
 const WHITE_HOT = 0xfff0c0;
 
 /** The orb in flight: its mesh (the projectile's own, sized here), what turns it each frame, and its end. */
 export interface CinderOrb {
-  mesh: THREE.Mesh;
-  tick(pos: THREE.Vector3, vel: THREE.Vector3, dt: number): void;
+  mesh: Mesh;
+  tick(pos: Vec3, vel: Vec3, dt: number): void;
   dispose(): void;
 }
 
@@ -32,9 +33,9 @@ const ORB = { core: 0.17, inner: 1.7, outer: 2.3 };
 export function cinderOrb(color: number, colorEnd: number): CinderOrb {
   const coreMat = additive(WHITE_HOT, 3), innerMat = additive(color, 1.5, 0.6), outerMat = additive(colorEnd, 1.1, 0.4);
   for (const m of [coreMat, innerMat, outerMat]) m.depthWrite = false;
-  const mesh = new THREE.Mesh(ball, coreMat);
+  const mesh = new Mesh(ball, coreMat);
   mesh.scale.setScalar(ORB.core);
-  const inner = new THREE.Mesh(shellA, innerMat), outer = new THREE.Mesh(shellB, outerMat);
+  const inner = new Mesh(shellA, innerMat), outer = new Mesh(shellB, outerMat);
   mesh.add(inner, outer);
   const ember = col(color, 3), emberEnd = col(colorEnd, 0.6), wake = col(colorEnd, 1.4), wakeEnd = col(0x501000, 0.3);
   let t = rand(0, 10);
@@ -73,8 +74,8 @@ export function cinderOrb(color: number, colorEnd: number): CinderOrb {
 const BLAST = { burns: 1.3 };
 
 /** The orb bursting at `at`, over `radius`. */
-export function cinderBlast(at: THREE.Vector3, radius: number, color: number, colorEnd: number): Effect {
-  const floor = new THREE.Vector3(at.x, 0, at.z);
+export function cinderBlast(at: Vec3, radius: number, color: number, colorEnd: number): Effect {
+  const floor = new Vec3(at.x, 0, at.z);
     // the flash: a pop of white-hot light at the strike, gone in a moment (a sphere swelling out of it read as a pale
   // bubble over the blast, as the shell of flame after it read as a dome: nothing here has a hard edge)
   const pop = col(WHITE_HOT, 2.4), popEnd = col(color, 0.8);

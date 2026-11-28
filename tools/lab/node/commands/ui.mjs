@@ -93,6 +93,11 @@ export default {
         + 'its box twice the window\'s height and drops the report\'s picture on its way)',
     },
     hdr: { kind: 'switch', help: 'HDR on, as on a display in HDR mode (the pause menu shows its levels)' },
+    cost: {
+      kind: 'switch',
+      help: 'say what the UI kit\'s screens cost the main thread each frame in each state, by the browser\'s '
+        + 'own clock (its trees followed, standing still: page/uiKitCost.ts); the canary plants a tick of 3 ms',
+    },
     canary: {
       kind: 'switch',
       help: 'plant the system\'s cursor on the page\'s body in each state, old-style digits on it and the labels\' '
@@ -114,7 +119,8 @@ export default {
     side.production.answersHealth = !canary;
     try {
       for (const state of states) {
-        const command = { state, hdr: Boolean(options.hdr), canary, reports: service?.url };
+        const hdr = Boolean(options.hdr);
+        const command = { state, hdr, cost: Boolean(options.cost), canary, reports: service?.url };
         const report = await side.command('ui', command);
         const read = state === 'bugReport' ? await checkReportSent(report, service, canary) : report;
         reports.push(withAsks(read, state, side.production.take(), canary));

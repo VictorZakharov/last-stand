@@ -3,7 +3,7 @@
 // crosshair rests on the fire as he faces it, and the fire's floor is a seat: outlined, it took E, so the campfire by
 // him was never named and Play together never opened. The fire's floor is left to the campfire while he stands at it
 // in a close view (`fireInUse` in `game/village.ts`). `canary` leaves no seat alone, as it was: the seat must take E.
-import * as THREE from 'three';
+import { Vec3 } from './sceneApi.ts';
 import type { Lab, Pictured } from './lab';
 import { G } from '../../../src/state';
 import { pointerLocked } from '../../../src/core/input';
@@ -29,13 +29,13 @@ async function useFacingFire(lab: Lab): Promise<{ seatLit: boolean; opened: bool
   if (!fire) throw new Error('lab: village: no campfire to stand by');
   const [sx, sz] = fire.stand;
   G.player.walkTo = null;
-  G.player.place(new THREE.Vector3(sx, groundHeight(sx, sz), sz), 0);
+  G.player.place(new Vec3(sx, groundHeight(sx, sz), sz), 0);
   await viewBy(lab, 'third');
   lab.pointerLock(true);
   // (a key the game doesn't use, the gesture the lock is taken on)
   await lab.press('KeyJ');
   await lab.until(() => pointerLocked(), LOCK_COMES, 'the pointer locked');
-  const sight = new THREE.Vector3(fire.at[0], groundHeight(fire.at[0], fire.at[1]) + FIRE_HIGH, fire.at[1]);
+  const sight = new Vec3(fire.at[0], groundHeight(fire.at[0], fire.at[1]) + FIRE_HIGH, fire.at[1]);
   await lab.step(LOOKING, () => ({ sight }));
   const seatLit = G.player.sitting.pointed;
   const says = seatLit ? 'the prompt is E Sit' : 'the prompt is Play together';

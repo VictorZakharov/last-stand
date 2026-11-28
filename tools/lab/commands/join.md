@@ -72,18 +72,19 @@ the game rebuilt or reloaded (#529's second half: "letting AI create as you watc
 [`examples/beacon.ts`](../examples/beacon.ts) is the shape to copy:
 
 ```ts
-import * as THREE from 'three';
+import { LitMaterial, Mesh } from '../../../src/engine/api/index.ts';
+import * as shapes from '../../../src/engine/api/shapes/index.ts';
 import type { MakeKit } from '../../../src/dev/agentMakes';
 
 export function build(kit: MakeKit): void {
-  const stone = new THREE.Mesh(new THREE.OctahedronGeometry(0.35), new THREE.MeshStandardMaterial({ color: 0xffd27a }));
+  const stone = new Mesh(shapes.octahedron(0.35), new LitMaterial({ color: 0xffd27a }));
   kit.group.add(stone);
   kit.each((dt, t) => { stone.rotation.y += dt; });
 }
 ```
 
 - **`kit`**: `group` (the thing's own, at its place on the ground: what `build` adds to it, or returns, is the
-  thing), `THREE`, `G` (the game's state), `ground(x, z)` (the ground's height) and `each(fn)` (run each frame with
+  thing), `api` (the engine's scene API), `G` (the game's state), `ground(x, z)` (the ground's height) and `each(fn)` (run each frame with
   the game's step, 0 while it's frozen, and the thing's own time). `build` may be async. **It is a place's kit too**
   (`world/placeKit.ts`: `scene`, the thing's group; `M`, the village's own materials; `wall`; `obstacles` and
   `updaters`), so a place's module builds as it stands: `join make rack --file src/world/places/rack.ts --at 0,0,0`
@@ -91,7 +92,7 @@ export function build(kit: MakeKit): void {
   beside it, and the obstacles a made thing names are counted, not the game's).
 - **The file is TypeScript or JavaScript**, its types taken off here before it's sent (parsed, not type checked: a
   syntax error is said with its line; keep the file under `tools/lab/examples` or `src` and `npm run typecheck`
-  checks it). **It imports three and the game's own modules** (`import { boxWithUV } from '../../../src/world/props'`, a
+  checks it). **It imports the engine's API and the game's own modules** (`import { boxWithUV } from '../../../src/world/props'`, a
   relative import written from the repository's root before it's sent): each is answered with the game's module as
   it runs there, the same instance the game uses, not with the file in your tree (edit `props.ts` and the game still
   runs its own). **A preview offers a list of kits** (`src/dev/gameModules.ts`: `world/props`, `world/fire`,

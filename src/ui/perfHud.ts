@@ -3,7 +3,7 @@
 // kept in a cookie. Its timings run whether it's shown or not, for the always-on recorder (src/perf/recorder.ts),
 // which they hand every frame to.
 import { framesUncapped } from '../core/frameLoop';
-import * as THREE from 'three';
+import { Vec2 } from '../engine/api/index.ts';
 import { RUST } from '../engine';
 import type { FrameStats } from '../engine/bridge';
 import { G } from '../state';
@@ -15,10 +15,11 @@ import { atlasUse } from './overlay/atlas';
 import { QUALITY } from '../data/quality';
 import { loadingLeft, loadingSteps } from './loading';
 import { isWarm, isWarming } from '../game/warm';
-import { nameWebGpuPasses, lastFrameParts } from '../perf/webgpuPasses';
 import { viewMode, sceneRatio, sceneSamples, sceneSize } from '../core/renderer';
 import { recorder } from '../perf/recorder';
 
+import type { GameScreen } from '../core/screen';
+import { PIPELINES } from '../engine/pipelinesAside';
 /** How much of the overlay shows: none of it, its frame rate and graph alone, or all of it. */
 export type PerfHudSize = 'off' | 'mini' | 'full';
 /** the cookie the size is kept in (before Mini it kept '1' for shown and '0' for hidden) */
@@ -41,6 +42,7 @@ const $ = (s: string): HTMLElement => document.querySelector<HTMLElement>(s)!;
 // and the graph's time)
 export { perfClock } from '../core/perfClock';
 import { perfClock } from '../core/perfClock';
+import { shownBox } from './kit/press';
 
 /** One frame: rAF time, interval since the previous one, our total / update / render time,
  *  how late our callback started after the rAF timestamp, the update split by stage, and what was on screen. */
@@ -51,7 +53,7 @@ let enabled = false;
 let observed = false;
 let shownSize: PerfHudSize = 'off';
 let el: HTMLElement;
-let renderer: THREE.WebGLRenderer;
+let renderer: GameScreen;
 let gpuName = 'unknown';
 const samples: Sample[] = [];   // one per frame inside WINDOW_MS
 let lastFrame = 0, cpuStart = 0, lastDraw = 0;
@@ -114,13 +116,9 @@ function watchLongFrames(): void {
   }).observe({ type: LONG_FRAMES, buffered: true });
 }
 
-export function initPerfHud(r: THREE.WebGLRenderer): void {
+export function initPerfHud(r: GameScreen): void {
   renderer = r;
   el = $('#perf');
-  // postprocessing issues several render calls per frame: count them all, reset per frame
-  renderer.info.autoReset = false;
-  timesGpu = (renderer as unknown as WebGpuTimes).hasFeature('timestamp-query');
-  if (timesGpu) nameWebGpuPasses(renderer);
   gpuName = 'WebGPU';
   el.onclick = copyReport;
   watchLongFrames();
@@ -157,7 +155,6 @@ export function setPerfHudSize(to: PerfHudSize, persist = true): void {
 
 /** Call at the very start of a rAF callback. */
 export function perfBeginFrame(now: number): void {
-  renderer.info.reset();
   cpuStart = perfClock.now();
   frameNow = now;
   ringAt = recorder.begin(now);
@@ -186,8 +183,7 @@ export function perfLap(stage?: string): void {
 const engineStats = (): FrameStats | null => RUST.bridge?.stats ?? null;
 function frameDraws(): number {
   const engine = engineStats();
-  if (engine) return engine.draws + engine.shadowDraws;
-  return (renderer.info.render as unknown as { drawCalls: number }).drawCalls;
+  return engine ? engine.draws + engine.shadowDraws : 0;
 }
 // (a warm-up behind the lobby said: a phone's lobby stalled 150 to 300 ms at a time with our own work at 10 ms, and
 // the report couldn't tell whether the fight's programs were being made then)
@@ -200,8 +196,8 @@ export function perfEndFrame(): void {
   callsBefore = frameCalls;
   trisBefore = frameTris;
   frameCalls = frameDraws();
-  frameTris = engineStats()?.triangles ?? renderer.info.render.triangles;
-  recorder.end(end - cpuStart, split.upd, split.rnd, frameCalls, frameTris, renderer.info.programs?.length ?? 0,
+  frameTris = engineStats()?.triangles ?? 0;
+  recorder.end(end - cpuStart, split.upd, split.rnd, frameCalls, frameTris, PIPELINES.made,
     G.enemies.length, particles.glow.count + particles.smoke.count);
   takeWebGpuTime();
   if (!enabled && !observed) return;
@@ -224,43 +220,28 @@ export function lastPerfFrame(): Readonly<{ cpu: number; upd: number; rnd: numbe
 /** The GPU's frames come back since the last take, oldest first (for a harness: tools/lab `perf`). */
 export const takeGpuFrames = (): GpuFrame[] => gpuTaken.splice(0);
 
-/** what of three's WebGPU renderer times the GPU */
-interface WebGpuTimes {
-  hasFeature(name: string): boolean;
-  resolveTimestampsAsync(type: 'render' | 'compute'): Promise<number | undefined>;
-}
-/** whether WebGPU's timestamp queries are there to read */
-let timesGpu = false;
-/** whether a read of them is under way: one at a time, each its latest frame's */
-let readingGpuTime = false;
-/** whether a harness reads them itself (`holdWebGpuTimes`) */
+/** the engine's GPU readings taken so far (`gpuReads`), so each is taken once */
+let gpuReadsTaken = 0;
+/** whether a harness reads the GPU's times itself (`holdWebGpuTimes`) */
 let webGpuTimesHeld = false;
 
-/** WebGPU's timestamps left to a harness that reads them itself (tools/lab `passes`): three keeps one pool, and a
- *  read takes every query in it, so the overlay's read each frame took the harness's renders before it could. */
+/** The GPU's times left to a harness that reads them itself (tools/lab `passes`). */
 export function holdWebGpuTimes(held: boolean): void {
   webGpuTimesHeld = held;
 }
 
-/** The latest frame's GPU time on WebGPU (all its passes, and the GPU-driven drawing's culling), asked for if none is
- *  on its way, and its split by pass (`perf/webgpuPasses.ts`: every frame's, as three times each pass). */
+/** The engine's latest frame's GPU time, as its clock comes back (a few frames after the frame: Bulwark's
+ *  timestamps), taken once a reading. */
 function takeWebGpuTime(): void {
-  if (!timesGpu || readingGpuTime || webGpuTimesHeld) return;
-  readingGpuTime = true;
-  const at = ringAt;
-  const gpuTimer = renderer as unknown as WebGpuTimes;
-  void Promise.all([gpuTimer.resolveTimestampsAsync('render'), gpuTimer.resolveTimestampsAsync('compute')])
-    .then(([render, compute]) => {
-      // (the engine's passes are timed by its own timestamps: three's alone read 0.07 ms, from play "is GPU time real?")
-      const ms = (render ?? 0) + (compute ?? 0) + (engineStats()?.gpuMs ?? 0);
-      if (ms <= 0) return;
-      const parts = lastFrameParts(renderer);
-      recorder.gpu(at, ms, parts);
-      noteGpuFrame(ms);
-      if (enabled || observed) gpuTimes.push({ t: frameNow, ms });
-      if (gpuTaken.push({ ms, parts, whole: true }) > GPU_KEPT) gpuTaken.shift();
-    })
-    .finally(() => { readingGpuTime = false; });
+  const stats = engineStats();
+  if (!stats || webGpuTimesHeld || stats.gpuReads === gpuReadsTaken) return;
+  gpuReadsTaken = stats.gpuReads;
+  const ms = stats.gpuMs;
+  if (ms <= 0) return;
+  recorder.gpu(ringAt, ms, null);
+  noteGpuFrame(ms);
+  if (enabled || observed) gpuTimes.push({ t: frameNow, ms });
+  if (gpuTaken.push({ ms, parts: null, whole: true }) > GPU_KEPT) gpuTaken.shift();
 }
 
 // --- stats ------------------------------------------------------------------------
@@ -320,7 +301,7 @@ function graphPath(buckets: (number | null)[], top: number): string {
 function draw(now: number): void {
   const s = computeStats(now);
   const info = renderer.info;
-  const size = renderer.getDrawingBufferSize(new THREE.Vector2());
+  const size = renderer.getDrawingBufferSize(new Vec2());
   const peak = Math.max(60, ...s.buckets.map((v) => v ?? 0));
   const top = Math.ceil(peak / 30) * 30;
   const set = (k: string, v: string) => { el.querySelector(`[data-p="${k}"]`)!.textContent = v; };
@@ -330,7 +311,7 @@ function draw(now: number): void {
   set('avg', fmtFps(s.avgFps));
   set('low', fmtFps(s.lowFps));
   set('cpu', fmt(s.cpu, 2));
-  set('gpu', timesGpu ? fmt(s.gpu, 2) : 'n/a');
+  set('gpu', gpuReadsTaken > 0 ? fmt(s.gpu, 2) : 'n/a');
   set('top', String(top));
   set('mid', String(top / 2));
   set('calls', kilo(Math.max(frameCalls, callsBefore)));
@@ -339,7 +320,7 @@ function draw(now: number): void {
   set('geo', String(info.memory.geometries));
   set('tex', String(info.memory.textures));
   // (the scene's resolution: the canvas's own, at the screen's ratio, holds the overlays drawn over it)
-  const scene = sceneSize(new THREE.Vector2());
+  const scene = sceneSize(new Vec2());
   set('res', `${scene.x}×${scene.y} @${sceneRatio().toFixed(2)}`);
   set('quality', `${QUALITY[qualityLevel()].label}${qualitySetting() === 'auto' ? ' (auto)' : ''}`);
   set('ents', `${G.enemies.length} / ${G.projectiles.length} / ${particles.glow.count + particles.smoke.count}`);
@@ -427,14 +408,14 @@ function jsBench(): number {
 function report(): string {
   const s = computeStats(frameNow);
   const info = renderer.info;
-  const size = renderer.getDrawingBufferSize(new THREE.Vector2());
+  const size = renderer.getDrawingBufferSize(new Vec2());
   return [
     `Last Stand performance report (${new Date().toISOString()}, build ${BUILD})`,
     `URL ${location.href}`,
     `FPS now ${fmtFps(s.fps)} | 15s avg ${fmtFps(s.avgFps)} | 1% low ${fmtFps(s.lowFps)}`,
-    `Frame p50 ${fmt(s.p50)} ms | p95 ${fmt(s.p95)} ms | CPU ${fmt(s.cpu, 2)} ms | GPU ${timesGpu ? fmt(s.gpu, 2) + ' ms' : 'n/a'}`,
-    `Draw calls ${frameCalls} | triangles ${frameTris} | programs ${info.programs?.length ?? 0} (compiled after load ${programsCompiledInGame()}) | geometries ${info.memory.geometries} | textures ${info.memory.textures}`,
-    `Canvas ${size.x}x${size.y} | pixel ratio ${renderer.getPixelRatio()} | scene ${sceneSize(new THREE.Vector2()).toArray().join('x')} at ${sceneRatio()} | devicePixelRatio ${window.devicePixelRatio} | window ${window.innerWidth}x${window.innerHeight}`,
+    `Frame p50 ${fmt(s.p50)} ms | p95 ${fmt(s.p95)} ms | CPU ${fmt(s.cpu, 2)} ms | GPU ${gpuReadsTaken > 0 ? fmt(s.gpu, 2) + ' ms' : 'n/a'}`,
+    `Draw calls ${frameCalls} | triangles ${frameTris} | pipelines ${PIPELINES.made} (compiled after load ${programsCompiledInGame()}) | geometries ${info.memory.geometries} | textures ${info.memory.textures}`,
+    `Canvas ${size.x}x${size.y} | pixel ratio ${renderer.getPixelRatio()} | scene ${sceneSize(new Vec2()).toArray().join('x')} at ${sceneRatio()} | devicePixelRatio ${window.devicePixelRatio} | window ${window.innerWidth}x${window.innerHeight}`,
     `Quality ${qualityLevel()} (setting ${qualitySetting()}${budgetNote()}) | MSAA ${sceneSamples()} | shadow map ${QUALITY[qualityLevel()].shadowMap} | label atlas ${Math.round(atlasUse() * 100)}% used | vsync ${framesUncapped() ? 'off' : 'on'}`,
     `Warm: the fight ${isWarm('fight') ? 'yes' : 'no'}, the heroes ${isWarm('heroes') ? 'yes' : 'no'}${isWarming() ? ', warming now' : ''}`,
     `Mode ${G.mode} | biome ${G.arena.biome} | view ${viewMode()} | enemies ${G.enemies.length} | projectiles ${G.projectiles.length} | particles ${particles.glow.count + particles.smoke.count}`,
@@ -477,7 +458,8 @@ export function copyPerfReportAt(x: number, y: number): void {
 /** Whether the overlay is shown at this point of the page (css px): a finger held there moves it (`ui/touch.ts`). */
 export function perfHudAt(x: number, y: number): boolean {
   if (!enabled || !el) return false;
-  const box = el.getBoundingClientRect();
+  // (where the engine draws it, `diagPanels.ts`: the page's is out of sight)
+  const box = shownBox(el);
   return x >= box.left && x <= box.right && y >= box.top && y <= box.bottom;
 }
 

@@ -10,8 +10,12 @@
 // material, whose program is theirs. It's made a slice a frame (`SLICE_MS`), each set drawn in its parts' place as
 // it's made (its upload a frame of its own), and made again from the start as soon as a part it was made of changes
 // (his far detail, his gear shown or hidden). `?stillAsOne=0` draws each part on its own.
-import * as THREE from 'three';
+import {
+  Attribute, Bone, Color, DetachedBindMode, Geometry, InstancedMesh, LookMaterial, Mat3,
+  Mat4, Material, Mesh, Node, Skeleton, SkinnedMesh, StaticDrawUsage, TypedArray, Vec3, Vec4,
+} from '../../engine/api/index.ts';
 import { perfClock } from '../../core/perfClock';
+import { kitMarkOf } from './kitTwin';
 
 /** Whether a still hero is drawn as a few meshes (`?stillAsOne=0`: each part on its own), read at each step. Off on
  *  WebGPU while it drew a hero as one its own way (`drawAsOne.ts`), and left off when that went with three's drawing
@@ -30,52 +34,52 @@ const SLICE_MS = 1.5;
 /** A part as it was merged: the mesh, what it drew and the layers it was drawn on (it's taken off every layer while
  *  merged: hidden, what hangs from it would go with it). */
 interface Merged {
-  readonly mesh: THREE.Mesh;
-  readonly geometry: THREE.BufferGeometry;
-  readonly material: THREE.Material;
+  readonly mesh: Mesh;
+  readonly geometry: Geometry;
+  readonly material: Material;
   readonly layers: number;
 }
 
 /** The attributes a part is merged with: what its material reads (a skinned part's bones are laid in its vertices). */
-const attributesOf = (geometry: THREE.BufferGeometry): string[] => Object.keys(geometry.attributes)
+const attributesOf = (geometry: Geometry): string[] => Object.keys(geometry.attributes)
   .filter((name) => name !== 'skinIndex' && name !== 'skinWeight')
   .sort();
 
 /** Whether `mesh` can be merged: one opaque material drawn by three as it stands (no work of its own before its draw,
  *  no glow, no hood's shade, which read its own space), casting no shadow, its shape fixed and its attributes plain. */
-function mergeable(mesh: THREE.SkinnedMesh): boolean {
-  if (!mesh.isMesh || (mesh as unknown as THREE.InstancedMesh).isInstancedMesh) return false;
+function mergeable(mesh: SkinnedMesh): boolean {
+  if (!mesh.isMesh || (mesh as unknown as InstancedMesh).isInstancedMesh) return false;
   if (Object.hasOwn(mesh, 'onBeforeRender') || mesh.renderOrder !== 0 || mesh.castShadow) return false;
-  if (mesh.userData.drawsAlone || mesh.morphTargetInfluences?.length || mesh.layers.mask === 0) return false;
+  if (mesh.userData.drawsAlone || mesh.layers.mask === 0) return false;
   if (mesh.isSkinnedMesh && !mesh.skeleton) return false;
   const material = mesh.material;
-  if (Array.isArray(material) || material.transparent || (material as THREE.ShaderMaterial).isShaderMaterial) return false;
+  if (Array.isArray(material) || material.transparent || (material as LookMaterial).isLookMaterial) return false;
   if (readsOwnSpace(material)) return false;
   const geometry = mesh.geometry;
   if (geometry.groups.length > 1 || geometry.drawRange.start !== 0 || geometry.drawRange.count !== Infinity) return false;
   if (Object.keys(geometry.morphAttributes).length || geometry.attributes.tangent || !geometry.attributes.normal) return false;
   for (const name of Object.keys(geometry.attributes)) {
     const attribute = geometry.attributes[name];
-    if (!(attribute instanceof THREE.BufferAttribute)) return false;
+    if (!(attribute instanceof Attribute)) return false;
   }
-  const position = geometry.attributes.position as THREE.BufferAttribute;
-  const normal = geometry.attributes.normal as THREE.BufferAttribute;
-  return position.usage === THREE.StaticDrawUsage && position.array instanceof Float32Array
+  const position = geometry.attributes.position as Attribute;
+  const normal = geometry.attributes.normal as Attribute;
+  return position.usage === StaticDrawUsage && position.array instanceof Float32Array
     && normal.array instanceof Float32Array;
 }
 
 /** what the kit's patch gives a material (`core/materials.ts`): its looks read off it, and its hood's shade */
 interface KitLooked {
-  kitLooks?: { aura: { value: THREE.Color }; rim: { value: THREE.Color }; near: { value: number };
-    hair: { value: THREE.Vector3 } };
+  kitLooks?: { aura: { value: Color }; rim: { value: Color }; near: { value: number };
+    hair: { value: Vec3 } };
 }
 
 /** Whether `material` draws by the place in its mesh's own space (a worn item's glow, a hood's shade), which a merge
  *  moves. */
-function readsOwnSpace(material: THREE.Material): boolean {
+function readsOwnSpace(material: Material): boolean {
   const aura = (material as KitLooked).kitLooks?.aura.value;
   if (aura && (aura.r > 0 || aura.g > 0 || aura.b > 0)) return true;
-  const shade = material.userData.shade?.value as THREE.Vector4 | undefined;
+  const shade = (material.userData.shade as { value: Vec4 } | undefined)?.value;
   return !!shade && shade.x > 0;
 }
 
@@ -95,16 +99,18 @@ const UNDRAWN = new Set(['id', 'uuid', 'name', 'version', 'userData', 'kitLooks'
  *  else by what it is. */
 function valueKey(value: unknown): string {
   if (value === null || typeof value !== 'object') return String(value);
-  const numbers = value as { isColor?: boolean; isVector2?: boolean; isVector3?: boolean; isVector4?: boolean;
+  const numbers = value as { isColor?: boolean; isVec2?: boolean; isVec3?: boolean; isVec4?: boolean;
     toArray?: () => number[] };
-  if (numbers.isColor || numbers.isVector2 || numbers.isVector3 || numbers.isVector4) return numbers.toArray!().join(',');
+  if (numbers.isColor || numbers.isVec2 || numbers.isVec3 || numbers.isVec4) return numbers.toArray!().join(',');
   return `#${idOf(value)}`;
 }
 
-/** What `material` draws as: its kind, its shader's patch and key, and every property and look it draws by. Two
- *  materials of one key draw the same (a skinned part's copy and the rigid parts' material it was copied from). */
-function lookOf(material: THREE.Material): string {
-  const words = [material.type, String(idOf(material.onBeforeCompile)), material.customProgramCacheKey()];
+/** What `material` draws as: its kind, the kit material it is or was copied from (models/kitTwin.ts), and every
+ *  property and look it draws by. Two materials of one key draw the same (a skinned part's copy and the rigid parts'
+ *  material it was copied from). */
+function lookOf(material: Material): string {
+  const mark = kitMarkOf(material);
+  const words = [material.type, mark ? String(idOf(mark)) : '-'];
   for (const name of Object.keys(material).sort()) {
     if (UNDRAWN.has(name) || name.startsWith('_')) continue;
     words.push(`${name}=${valueKey((material as unknown as Record<string, unknown>)[name])}`);
@@ -116,32 +122,32 @@ function lookOf(material: THREE.Material): string {
 }
 
 /** What parts must share to be merged: their look, their layers, their shadows taken, their attributes' kinds. */
-function keyOf(mesh: THREE.Mesh, looks: Map<THREE.Material, string>): string {
-  const material = mesh.material as THREE.Material;
+function keyOf(mesh: Mesh, looks: Map<Material, string>): string {
+  const material = mesh.material as Material;
   let look = looks.get(material);
   if (look === undefined) looks.set(material, look = lookOf(material));
   const geometry = mesh.geometry;
   const attributes = attributesOf(geometry).map((name) => {
-    const attribute = geometry.attributes[name] as THREE.BufferAttribute;
+    const attribute = geometry.attributes[name] as Attribute;
     return `${name}${attribute.itemSize}${attribute.array.constructor.name}${attribute.normalized}`;
   });
   return `${look}|${mesh.layers.mask}|${mesh.receiveShadow}|${attributes.join(',')}`;
 }
 
 /** Whether `object` is shown as far up as `root`. */
-function shownUnder(object: THREE.Object3D, root: THREE.Object3D): boolean {
-  for (let at: THREE.Object3D | null = object; at; at = at.parent) {
+function shownUnder(object: Node, root: Node): boolean {
+  for (let at: Node | null = object; at; at = at.parent) {
     if (!at.visible) return false;
     if (at === root) return true;
   }
   return false;
 }
 
-const _world = new THREE.Matrix4();
-const _bone = new THREE.Matrix4();
-const _holderInverse = new THREE.Matrix4();
-const _normals = new THREE.Matrix3();
-const _turn = new THREE.Matrix3();
+const _world = new Mat4();
+const _bone = new Mat4();
+const _holderInverse = new Mat4();
+const _normals = new Mat3();
+const _turn = new Mat3();
 
 /**
  * Where a part's vertices go in the holder's space, by bone: each bone's matrix for positions (16 numbers) and for
@@ -152,20 +158,20 @@ const _turn = new THREE.Matrix3();
  */
 interface BoneMatrices { readonly places: Float32Array; readonly normals: Float32Array }
 
-function boneMatricesOf(mesh: THREE.Mesh, holder: THREE.Object3D): BoneMatrices {
+function boneMatricesOf(mesh: Mesh, holder: Node): BoneMatrices {
   _holderInverse.copy(holder.matrixWorld).invert();
   _world.multiplyMatrices(_holderInverse, mesh.matrixWorld);
   _normals.getNormalMatrix(mesh.matrixWorld);
   _turn.setFromMatrix4(holder.matrixWorld).transpose();
   _normals.premultiply(_turn);
-  const skinned = mesh as THREE.SkinnedMesh;
+  const skinned = mesh as SkinnedMesh;
   if (!skinned.isSkinnedMesh) {
     return { places: Float32Array.from(_world.elements), normals: Float32Array.from(_normals.elements) };
   }
   const bones = skinned.skeleton.bones;
   const places = new Float32Array(bones.length * 16);
   const normals = new Float32Array(bones.length * 9);
-  const blend = new THREE.Matrix3();
+  const blend = new Mat3();
   for (let b = 0; b < bones.length; b++) {
     // (a bone's matrix as three's skeleton makes it, from its world matrix and its inverse at the bind)
     _bone.multiplyMatrices(bones[b].matrixWorld, skinned.skeleton.boneInverses[b]);
@@ -181,7 +187,7 @@ function boneMatricesOf(mesh: THREE.Mesh, holder: THREE.Object3D): BoneMatrices 
 /** A part's vertices that its index draws, in order, and its index into them. */
 interface Used { readonly vertices: Uint32Array; readonly index: Uint32Array }
 
-function usedOf(geometry: THREE.BufferGeometry): Used {
+function usedOf(geometry: Geometry): Used {
   const count = geometry.attributes.position.count;
   const own = geometry.index;
   if (!own) {
@@ -205,25 +211,25 @@ function usedOf(geometry: THREE.BufferGeometry): Used {
 
 /** A set of parts as it's merged: its parts, what each draws, and the arrays laid so far. */
 interface Laying {
-  readonly parts: THREE.Mesh[];
+  readonly parts: Mesh[];
   readonly used: Used[];
   readonly names: string[];
-  arrays: Map<string, THREE.TypedArray>;
+  arrays: Map<string, TypedArray>;
   index: Uint32Array | Uint16Array;
   vertex: number;
   corner: number;
 }
 
 /** Part `k` of `laying` laid into its arrays, in the holder's space. */
-function layPart(laying: Laying, k: number, holder: THREE.Object3D): void {
+function layPart(laying: Laying, k: number, holder: Node): void {
   const mesh = laying.parts[k];
   const used = laying.used[k];
   const geometry = mesh.geometry;
   const bones = boneMatricesOf(mesh, holder);
-  const skin = (mesh as THREE.SkinnedMesh).isSkinnedMesh ? geometry.attributes : null;
+  const skin = (mesh as SkinnedMesh).isSkinnedMesh ? geometry.attributes : null;
   const from = laying.vertex;
   for (const name of laying.names) {
-    const source = geometry.attributes[name] as THREE.BufferAttribute;
+    const source = geometry.attributes[name] as Attribute;
     const into = laying.arrays.get(name)!;
     if (name === 'position' || (name === 'normal' && !stillAsOne.unturned)) {
       layTurned(source, into, from, used.vertices, name === 'position', bones, skin);
@@ -240,7 +246,7 @@ function layPart(laying: Laying, k: number, holder: THREE.Object3D): void {
 }
 
 /** An attribute's values for `vertices` copied into `into` from vertex `from`. */
-function layCopied(source: THREE.BufferAttribute, into: THREE.TypedArray, from: number, vertices: Uint32Array): void {
+function layCopied(source: Attribute, into: TypedArray, from: number, vertices: Uint32Array): void {
   const size = source.itemSize;
   const array = source.array;
   for (let v = 0; v < vertices.length; v++) {
@@ -250,13 +256,13 @@ function layCopied(source: THREE.BufferAttribute, into: THREE.TypedArray, from: 
 }
 
 /** Positions (`place`) or normals for `vertices` put where their bones put them, into `into` from vertex `from`. */
-function layTurned(source: THREE.BufferAttribute, into: THREE.TypedArray, from: number, vertices: Uint32Array,
-  place: boolean, bones: BoneMatrices, skin: Record<string, THREE.BufferAttribute | THREE.InterleavedBufferAttribute> | null): void {
+function layTurned(source: Attribute, into: TypedArray, from: number, vertices: Uint32Array,
+  place: boolean, bones: BoneMatrices, skin: Record<string, Attribute> | null): void {
   const array = source.array as Float32Array;
   const boneIndex = skin?.skinIndex;
   const boneWeight = skin?.skinWeight;
-  const out = new THREE.Vector3();
-  const one = new THREE.Vector3();
+  const out = new Vec3();
+  const one = new Vec3();
   for (let v = 0; v < vertices.length; v++) {
     const vertex = vertices[v];
     const x = array[vertex * 3], y = array[vertex * 3 + 1], z = array[vertex * 3 + 2];
@@ -279,7 +285,7 @@ function layTurned(source: THREE.BufferAttribute, into: THREE.TypedArray, from: 
 }
 
 /** (x, y, z) put by bone `b`'s matrix into `out`: as a point (`place`) or as a normal. */
-function turned(bones: BoneMatrices, b: number, place: boolean, x: number, y: number, z: number, out: THREE.Vector3): void {
+function turned(bones: BoneMatrices, b: number, place: boolean, x: number, y: number, z: number, out: Vec3): void {
   if (place) {
     const m = bones.places;
     const at = b * 16;
@@ -295,15 +301,15 @@ function turned(bones: BoneMatrices, b: number, place: boolean, x: number, y: nu
 }
 
 /** A set's arrays made, each the size of every part's vertices it draws. */
-function begin(parts: THREE.Mesh[]): Laying {
+function begin(parts: Mesh[]): Laying {
   const used = parts.map((part) => usedOf(part.geometry));
   const vertices = used.reduce((sum, u) => sum + u.vertices.length, 0);
   const corners = used.reduce((sum, u) => sum + u.index.length, 0);
   const names = attributesOf(parts[0].geometry);
-  const arrays = new Map<string, THREE.TypedArray>();
+  const arrays = new Map<string, TypedArray>();
   for (const name of names) {
-    const attribute = parts[0].geometry.attributes[name] as THREE.BufferAttribute;
-    const kind = attribute.array.constructor as new (length: number) => THREE.TypedArray;
+    const attribute = parts[0].geometry.attributes[name] as Attribute;
+    const kind = attribute.array.constructor as new (length: number) => TypedArray;
     arrays.set(name, new kind(vertices * attribute.itemSize));
   }
   const index = vertices > 65535 ? new Uint32Array(corners) : new Uint16Array(corners);
@@ -312,31 +318,29 @@ function begin(parts: THREE.Mesh[]): Laying {
 
 /** The mesh a laid set is drawn as: a plain one with a rigid part's material, else a skinned one on `skeleton`'s
  *  one bone that never moves, with a skinned part's (their programs are theirs). */
-function meshOf(laying: Laying, skeleton: THREE.Skeleton): THREE.Mesh {
+function meshOf(laying: Laying, skeleton: Skeleton): Mesh {
   const first = laying.parts[0];
-  const geometry = new THREE.BufferGeometry();
+  const geometry = new Geometry();
   for (const name of laying.names) {
-    const attribute = first.geometry.attributes[name] as THREE.BufferAttribute;
-    geometry.setAttribute(name, new THREE.BufferAttribute(laying.arrays.get(name)!, attribute.itemSize, attribute.normalized));
+    const attribute = first.geometry.attributes[name] as Attribute;
+    geometry.setAttribute(name, new Attribute(laying.arrays.get(name)!, attribute.itemSize, attribute.normalized));
   }
-  geometry.setIndex(new THREE.BufferAttribute(laying.index, 1));
+  geometry.setIndex(new Attribute(laying.index, 1));
   geometry.computeBoundingSphere();
   geometry.computeBoundingBox();
-  const rigid = laying.parts.find((part) => !(part as THREE.SkinnedMesh).isSkinnedMesh);
-  let mesh: THREE.Mesh;
-  if (rigid) mesh = new THREE.Mesh(geometry, rigid.material);
+  const rigid = laying.parts.find((part) => !(part as SkinnedMesh).isSkinnedMesh);
+  let mesh: Mesh;
+  if (rigid) mesh = new Mesh(geometry, rigid.material);
   else {
     // (every vertex wholly on the one bone: indices as floats, as the heroes' are, `Sculpt.skin`)
     const vertices = laying.vertex;
-    geometry.setAttribute('skinIndex', new THREE.BufferAttribute(new Float32Array(vertices * 4), 4));
+    geometry.setAttribute('skinIndex', new Attribute(new Float32Array(vertices * 4), 4));
     const weights = new Float32Array(vertices * 4);
     for (let v = 0; v < vertices; v++) weights[v * 4] = 1;
-    geometry.setAttribute('skinWeight', new THREE.BufferAttribute(weights, 4));
-    const skinned = new THREE.SkinnedMesh(geometry, first.material);
-    skinned.bindMode = THREE.DetachedBindMode;
-    skinned.bind(skeleton, new THREE.Matrix4());
-    skinned.boundingSphere = geometry.boundingSphere!.clone();
-    skinned.boundingBox = geometry.boundingBox!.clone();
+    geometry.setAttribute('skinWeight', new Attribute(weights, 4));
+    const skinned = new SkinnedMesh(geometry, first.material);
+    skinned.bindMode = DetachedBindMode;
+    skinned.bind(skeleton, new Mat4());
     mesh = skinned;
   }
   mesh.name = 'still as one';
@@ -347,7 +351,7 @@ function meshOf(laying: Laying, skeleton: THREE.Skeleton): THREE.Mesh {
 }
 
 /** Whether `part` is hidden or draws another geometry or material than it was merged with. */
-const changedSince = (part: Merged, holder: THREE.Object3D): boolean => !shownUnder(part.mesh, holder)
+const changedSince = (part: Merged, holder: Node): boolean => !shownUnder(part.mesh, holder)
   || part.mesh.geometry !== part.geometry || part.mesh.material !== part.material;
 
 /** A hero standing still drawn as a few meshes: `step` each frame he stands (a slice of the merge, then its meshes in
@@ -356,12 +360,12 @@ export class StillAsOne {
   private steps: Generator<void, boolean, undefined> | null = null;
   /** whether every set is merged and shown */
   private done = false;
-  private meshes: THREE.Mesh[] = [];
+  private meshes: Mesh[] = [];
   private merged: Merged[] = [];
   /** the bone the sets of skinned parts alone are drawn on, never moved (out of the scene: its matrix is none) */
-  private readonly skeleton = new THREE.Skeleton([new THREE.Bone()]);
+  private readonly skeleton = new Skeleton([new Bone()]);
 
-  constructor(private readonly holder: THREE.Object3D) {}
+  constructor(private readonly holder: Node) {}
 
   /** how many times a merge was let go, and why the last was (a lab's report of a hero never merged) */
   private undone = 0;
@@ -436,16 +440,16 @@ export class StillAsOne {
   /** The merge, a set or a part a step, each set shown in its parts' place as it's made (their uploads a frame
    *  apart); false once a part changed as it was merged. */
   private *merge(): Generator<void, boolean, undefined> {
-    const parts: THREE.Mesh[] = [];
+    const parts: Mesh[] = [];
     this.holder.traverse((object) => {
-      const mesh = object as THREE.SkinnedMesh;
+      const mesh = object as SkinnedMesh;
       if (mesh.isMesh && shownUnder(mesh, this.holder) && mergeable(mesh)) parts.push(mesh);
     });
-    const looks = new Map<THREE.Material, string>();
+    const looks = new Map<Material, string>();
     const sets = new Map<string, Merged[]>();
     for (const mesh of parts) {
       const key = keyOf(mesh, looks);
-      const part = { mesh, geometry: mesh.geometry, material: mesh.material as THREE.Material, layers: mesh.layers.mask };
+      const part = { mesh, geometry: mesh.geometry, material: mesh.material as Material, layers: mesh.layers.mask };
       const set = sets.get(key);
       if (set) set.push(part);
       else sets.set(key, [part]);
@@ -472,7 +476,7 @@ export class StillAsOne {
   }
 
   /** `mesh` drawn in the place of the parts of `set`, which are taken off every layer. */
-  private show(mesh: THREE.Mesh, set: readonly Merged[]): void {
+  private show(mesh: Mesh, set: readonly Merged[]): void {
     for (const part of set) part.mesh.layers.mask = 0;
     this.merged.push(...set);
     this.holder.add(mesh);

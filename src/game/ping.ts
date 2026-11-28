@@ -6,7 +6,7 @@ import { G } from '../state';
 import { PING } from '../data/balance';
 import { sfx } from '../core/audio';
 import { aimedFoe } from '../combat/skills/quarryMark';
-import type * as THREE from 'three';
+import type { Vec3 } from '../engine/api/index.ts';
 import type { Enemy } from '../entities/enemy';
 import type { Player } from '../entities/player';
 import { onMessages } from '../net/messages';
@@ -42,7 +42,7 @@ export function setPingNet(send: ((m: PingMessage) => void) | null): void { send
 let lastSent = -Infinity;
 
 /** The foe a ping at `target` (the aim: its `y` over the floor) points out, as Quarry Mark's aim would mark it. */
-export const foeAimed = (target: THREE.Vector3): Enemy | null => aimedFoe(G.player, target, PING.foeNear);
+export const foeAimed = (target: Vec3): Enemy | null => aimedFoe(G.player, target, PING.foeNear);
 
 /** The foe nearest (x, z) within `near` (m) of its middle: a ping on the minimap, where there's no body to aim at. */
 export function foeNear(x: number, z: number, near: number): Enemy | null {

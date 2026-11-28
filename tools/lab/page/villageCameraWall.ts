@@ -6,7 +6,7 @@
 // hand's breadth off, what it showed was a slice of his back, cut by the near plane (from play, "if you stopped moving
 // cam through walls, you need to make sure it looks good at all angles"); the canary leaves it there too. Each spot
 // the camera came close at is pictured, as no count says it looks good.
-import * as THREE from 'three';
+import { Mesh, Vec3 } from './sceneApi.ts';
 import type { Lab } from './lab';
 import { G } from '../../../src/state';
 import { boomKeepsShoulder, boomStandsBehind, faceCamera, lookBy } from '../../../src/core/renderer';
@@ -77,13 +77,13 @@ interface Read {
 
 /** how far short of the camera the lines to it end (m): what stands at its back hides nothing */
 const EYE_OFF = 0.15;
-const boomOf = (point: THREE.Vector3): number => G.camera.position.distanceTo(point);
+const boomOf = (point: Vec3): number => G.camera.position.distanceTo(point);
 
 /** How far his body's nearest point stands past the near plane (m); under 0, the plane cuts him. */
 function clearOfNear(): number {
   const { x, y, z } = G.player.obj.position;
-  const look = G.camera.getWorldDirection(new THREE.Vector3());
-  const body = new THREE.Vector3();
+  const look = G.camera.getWorldDirection(new Vec3());
+  const body = new Vec3();
   let least = Infinity;
   for (const up of BODY_POINTS) {
     body.set(x, y + up, z).sub(G.camera.position);
@@ -97,7 +97,7 @@ function clearOfNear(): number {
 function headHidden(): boolean {
   let hidden = false;
   G.player.model.joints!.neck.traverse((object) => {
-    if ((object as THREE.Mesh).isMesh && object.layers.isEnabled(HIDDEN_LAYER)) hidden = true;
+    if ((object as Mesh).isMesh && object.layers.isEnabled(HIDDEN_LAYER)) hidden = true;
   });
   return hidden;
 }
@@ -105,23 +105,23 @@ function headHidden(): boolean {
 /** Whether his head is drawn inside the frame. */
 function headInFrame(): boolean {
   const { x, y, z } = G.player.obj.position;
-  const head = new THREE.Vector3(x, y + HEAD, z).project(G.camera);
+  const head = new Vec3(x, y + HEAD, z).project(G.camera);
   return Math.abs(head.x) <= 1 && Math.abs(head.y) <= 1;
 }
 
 /** Where the way out from `from` at `angle` ends, short of what's built; null if it meets nothing, or ends on another
  *  level (from the terrace's height it flies over the palisade, to where he never walks). */
-function wallAlong(from: { x: number; z: number }, angle: number): THREE.Vector3 | null {
-  const start = new THREE.Vector3(from.x, groundHeight(from.x, from.z) + CHEST, from.z);
-  const end = start.clone().add(new THREE.Vector3(Math.sin(angle) * FURTHEST, 0, Math.cos(angle) * FURTHEST));
-  const hit = { point: new THREE.Vector3(), normal: new THREE.Vector3(), t: 0, stone: false, name: '' };
+function wallAlong(from: { x: number; z: number }, angle: number): Vec3 | null {
+  const start = new Vec3(from.x, groundHeight(from.x, from.z) + CHEST, from.z);
+  const end = start.clone().add(new Vec3(Math.sin(angle) * FURTHEST, 0, Math.cos(angle) * FURTHEST));
+  const hit = { point: new Vec3(), normal: new Vec3(), t: 0, stone: false, name: '' };
   if (!G.arena.wall.cast(start, end, hit)) return null;
   const reach = hit.point.distanceTo(start) - SHORT_OF_WALL;
   const x = from.x + Math.sin(angle) * reach;
   const z = from.z + Math.cos(angle) * reach;
   const floor = groundHeight(x, z);
   if (Math.abs(floor - groundHeight(from.x, from.z)) > SAME_LEVEL) return null;
-  return new THREE.Vector3(x, floor, z);
+  return new Vec3(x, floor, z);
 }
 
 /** The most the camera moves in a frame while nothing else does (m). */
@@ -143,9 +143,9 @@ function lookDown(down: number): void {
 }
 
 /** The camera read with him stood at `at`, turned to `facing`, looking `down`, pictured if close and `pictures`. */
-async function readSpot(lab: Lab, read: Read, at: THREE.Vector3, facing: number, label: string,
+async function readSpot(lab: Lab, read: Read, at: Vec3, facing: number, label: string,
   pictures: boolean, down: number = CAMERA.third.pitch): Promise<void> {
-  const hit = { point: new THREE.Vector3(), normal: new THREE.Vector3(), t: 0, stone: false, name: '' };
+  const hit = { point: new Vec3(), normal: new Vec3(), t: 0, stone: false, name: '' };
   G.player.walkTo = null;
   G.player.place(at, facing);
   faceCamera(facing);
@@ -192,7 +192,7 @@ async function readSpots(lab: Lab, pictures: boolean): Promise<Read> {
     }
   }
   for (const [x, z] of IN_THE_DOORWAY) {
-    const at = new THREE.Vector3(x, groundHeight(x, z), z);
+    const at = new Vec3(x, groundHeight(x, z), z);
     for (let way = 0; way < WAYS; way++) {
       const facing = (way / WAYS) * Math.PI * 2;
       for (const down of LOOKS_DOWN) {

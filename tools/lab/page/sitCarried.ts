@@ -11,7 +11,7 @@
 // piece's end (on a pommel, as a greatsword is stood under it) holds it to the floor, not in a grip: it turns under
 // the palm as it's pushed upright, and isn't counted as turned in the hand; nor does an open hand, its fingers let
 // go for the blade to swing round in it as a swordsman regrips (the game's `Model.fists`).
-import * as THREE from 'three';
+import { Box3, Maths, Mesh, Node, Quat, SkinnedMesh, Vec3 } from './sceneApi.ts';
 import type { Fist } from '../../../src/types';
 import type { Lab } from './lab';
 import { FIST_OPEN } from './range';
@@ -22,7 +22,7 @@ const HELD_WITHIN = 0.06;
  *  line */
 const STRAPPED_WITHIN = HELD_WITHIN + 0.04;
 /** where a palm's middle is in its hand's frame (rig units): down the hand from the wrist, onto its palm */
-export const PALM_AT = new THREE.Vector3(0, -0.06, -0.02);
+export const PALM_AT = new Vec3(0, -0.06, -0.02);
 /** a palm within this share of a piece's length of either end rests on it (a greatsword's pommel: 0.03 to 0.06; its
  *  fist round its grip: 0.27). Judged by which way the palm faced, a fist round a grip read 0.76 along the blade, as
  *  much as a palm laid on a slanting pommel */
@@ -57,12 +57,12 @@ const DEG = 180 / Math.PI;
 /** A rigid mesh followed: the piece it belongs to (the object over it hung from a joint: a staff's shaft, rings and
  *  crystal are one), its name, that joint, whether a hand can hold it (it hangs from a hand), and its box's corners. */
 interface Part {
-  mesh: THREE.Mesh;
-  group: THREE.Object3D;
+  mesh: Mesh;
+  group: Node;
   name: string;
-  joint: THREE.Object3D;
+  joint: Node;
   inHand: boolean;
-  corners: THREE.Vector3[];
+  corners: Vec3[];
 }
 
 /** A jump: what it did, by how much of its limit, on which frame. */
@@ -74,17 +74,17 @@ interface Jump {
 
 /** A held piece's middle, in the world and in its hand's frame (scaled as the world is). */
 interface Origin {
-  world: THREE.Vector3;
-  onJoint: THREE.Vector3;
+  world: Vec3;
+  onJoint: Vec3;
 }
 
 /** One mesh's frames: where its corners were (the world's and its joint's), and what it did. */
 interface Followed {
   part: Part;
-  world: THREE.Vector3[] | null;
-  onJoint: THREE.Vector3[] | null;
-  start: THREE.Vector3[] | null;
-  quaternion: THREE.Quaternion | null;
+  world: Vec3[] | null;
+  onJoint: Vec3[] | null;
+  start: Vec3[] | null;
+  quaternion: Quat | null;
   heldEver: boolean;
   movedFrom: number;
   loose: number;
@@ -93,7 +93,7 @@ interface Followed {
   jump: Jump | null;
   /** its turn in its joint's frame the frame before, while held, and how far it has turned in the hand since it was
    *  taken (degrees), the most it did and where */
-  inHandWas: THREE.Quaternion | null;
+  inHandWas: Quat | null;
   /** where the piece's own middle (its group's origin: a grip, a bow's handle) was the frame before, in the world and
    *  in its joint's frame (m), while held */
   originWas: Origin | null;
@@ -129,7 +129,7 @@ export class Carried {
   /** the piece `trace` names, frame by frame: how far its meshes went and turned at most, held or not */
   readonly traced: string[] = [];
   /** each hand and elbow where it was the frame before, for the trace: whether a piece jumped with its hand or in it */
-  private readonly handsWere = new Map<THREE.Object3D, HandAt>();
+  private readonly handsWere = new Map<Node, HandAt>();
 
   /** `trace`: a piece to list frame by frame (`lab sit --trace`), by its name */
   constructor(private readonly lab: Lab, private readonly trace?: string) {
@@ -157,7 +157,7 @@ export class Carried {
       }
       const world = part.corners.map((corner) => part.mesh.localToWorld(corner.clone()));
       const onJoint = world.map((point) => part.joint.worldToLocal(point.clone()).multiplyScalar(k));
-      const quaternion = part.mesh.getWorldQuaternion(new THREE.Quaternion());
+      const quaternion = part.mesh.getWorldQuaternion(new Quat());
       const inHand = held.has(part.group);
       each.heldEver ||= inHand;
       each.start ??= onJoint;
@@ -202,7 +202,7 @@ export class Carried {
   private fistsNow(): string {
     const fists = this.lab.model.fists ?? [];
     return fists.map((fist) => {
-      const across = THREE.MathUtils.radToDeg(fist.across ?? 0).toFixed(0);
+      const across = Maths.radToDeg(fist.across ?? 0).toFixed(0);
       return `, ${fist.hand} fist curled ${fist.curl.toFixed(2)}, its handle ${across}° off across its palm`;
     }).join('');
   }
@@ -210,7 +210,7 @@ export class Carried {
   /** How far each hand and elbow went and turned since the frame before, as a line's end. */
   private handsMoved(): string {
     const joints = this.lab.joints;
-    const arms: [string, THREE.Object3D][] = [
+    const arms: [string, Node][] = [
       ['right hand', joints.handR], ['elbow', joints.elbowR], ['left hand', joints.handL], ['elbow', joints.elbowL],
     ];
     return arms.map(([name, joint]) => `${name} ${handMoved(joint, this.handsWere)}`).join(', ');
@@ -252,7 +252,7 @@ export class Carried {
  * turning on its own mount (a staff's crystal, `userData.sitAnimated`) is passed over, and so is a two-hander tipped
  * upright on its far end on the ground as his hand turns round it (`userData.tipping`), the one turn in his hand there is.
  */
-function followInHand(each: Followed, held: boolean, quaternion: THREE.Quaternion, frame: string): void {
+function followInHand(each: Followed, held: boolean, quaternion: Quat, frame: string): void {
   const { mesh, joint, group } = each.part;
   if (!held || mesh.userData.sitAnimated || mesh.parent?.userData.sitAnimated) {
     each.inHandWas = null;
@@ -261,9 +261,9 @@ function followInHand(each: Followed, held: boolean, quaternion: THREE.Quaternio
     each.slid = 0;
     return;
   }
-  const inJoint = joint.getWorldQuaternion(new THREE.Quaternion()).invert().multiply(quaternion);
-  const world = group.getWorldPosition(new THREE.Vector3());
-  const onJoint = joint.worldToLocal(world.clone()).multiply(joint.getWorldScale(new THREE.Vector3()));
+  const inJoint = joint.getWorldQuaternion(new Quat()).invert().multiply(quaternion);
+  const world = group.getWorldPosition(new Vec3());
+  const onJoint = joint.worldToLocal(world.clone()).multiply(joint.getWorldScale(new Vec3()));
   const origin = { world, onJoint };
   if (!each.inHandWas || !each.quaternion || !each.originWas) each.inHandFrom = frame;
   else {
@@ -284,12 +284,12 @@ function followInHand(each: Followed, held: boolean, quaternion: THREE.Quaternio
 /** How far a held piece's middle moved from `was` to `now`, the lesser of in the world and in the hand's frame; of a
  *  haft slid through the fist along its length on purpose (`userData.slidesAlong`: a maul stood head up, his fist going
  *  up it as its butt comes down onto the floor), only what's across that length. */
-function slidAcross(group: THREE.Object3D, joint: THREE.Object3D, now: Origin, was: Origin): number {
+function slidAcross(group: Node, joint: Node, now: Origin, was: Origin): number {
   const world = now.world.clone().sub(was.world);
   const onJoint = now.onJoint.clone().sub(was.onJoint);
   const slider = slidingOf(group);
   if (slider) {
-    const length = new THREE.Vector3(0, 1, 0).transformDirection(slider.matrixWorld);
+    const length = new Vec3(0, 1, 0).transformDirection(slider.matrixWorld);
     world.addScaledVector(length, -world.dot(length));
     const inJoint = length.clone().transformDirection(joint.matrixWorld.clone().invert());
     onJoint.addScaledVector(inJoint, -onJoint.dot(inJoint));
@@ -298,14 +298,14 @@ function slidAcross(group: THREE.Object3D, joint: THREE.Object3D, now: Origin, w
 }
 
 /** What `object` is part of that slides through the fist along its own length (`userData.slidesAlong`), if anything. */
-function slidingOf(object: THREE.Object3D): THREE.Object3D | null {
-  for (let at: THREE.Object3D | null = object; at; at = at.parent) if (at.userData.slidesAlong) return at;
+function slidingOf(object: Node): Node | null {
+  for (let at: Node | null = object; at; at = at.parent) if (at.userData.slidesAlong) return at;
   return null;
 }
 
 /** Whether `object` is part of what's being tipped upright on its far end (`userData.tipping`). */
-function isTipping(object: THREE.Object3D): boolean {
-  for (let at: THREE.Object3D | null = object; at; at = at.parent) if (at.userData.tipping) return true;
+function isTipping(object: Node): boolean {
+  for (let at: Node | null = object; at; at = at.parent) if (at.userData.tipping) return true;
   return false;
 }
 
@@ -341,14 +341,14 @@ function traceInto(frame: TraceFrame, went: number, turned: number, held: boolea
 
 /** A hand's place and turn in the world at a frame. */
 interface HandAt {
-  at: THREE.Vector3;
-  quaternion: THREE.Quaternion;
+  at: Vec3;
+  quaternion: Quat;
 }
 
 /** How far a hand went and turned since it was last read, `were` keeping where it was. */
-function handMoved(hand: THREE.Object3D, were: Map<THREE.Object3D, HandAt>): string {
-  const at = hand.getWorldPosition(new THREE.Vector3());
-  const now = { at, quaternion: hand.getWorldQuaternion(new THREE.Quaternion()) };
+function handMoved(hand: Node, were: Map<Node, HandAt>): string {
+  const at = hand.getWorldPosition(new Vec3());
+  const now = { at, quaternion: hand.getWorldQuaternion(new Quat()) };
   const was = were.get(hand);
   were.set(hand, now);
   if (!was) return 'first seen';
@@ -370,7 +370,7 @@ function worse(jump: Jump | null, by: string, size: number, at: string): Jump | 
 }
 
 /** Where each mesh of what he holds now is in its joint's frame (m), and how it's turned on it: by piece. */
-export type HeldNow = Map<string, { onJoint: THREE.Vector3[]; quaternion: THREE.Quaternion }[]>;
+export type HeldNow = Map<string, { onJoint: Vec3[]; quaternion: Quat }[]>;
 
 /** What he holds now, mesh by mesh in its joint's frame, to compare with what he holds later (`heldApart`). */
 export function heldNow(lab: Lab): HeldNow {
@@ -390,8 +390,8 @@ export function heldNow(lab: Lab): HeldNow {
       else part.mesh.localToWorld(point);
       return part.joint.worldToLocal(point).multiplyScalar(k);
     });
-    const quaternion = part.joint.getWorldQuaternion(new THREE.Quaternion()).invert()
-      .multiply((animated || part.mesh).getWorldQuaternion(new THREE.Quaternion()));
+    const quaternion = part.joint.getWorldQuaternion(new Quat()).invert()
+      .multiply((animated || part.mesh).getWorldQuaternion(new Quat()));
     const meshes = now.get(part.name) ?? [];
     meshes.push({ onJoint, quaternion });
     now.set(part.name, meshes);
@@ -440,17 +440,17 @@ export function turnHeld(lab: Lab, angle: number): (() => void) | null {
 }
 
 /** Each palm's middle in the world now. */
-function palmsOf(lab: Lab): THREE.Vector3[] {
+function palmsOf(lab: Lab): Vec3[] {
   return [lab.joints.handL, lab.joints.handR].map((hand) => hand.localToWorld(PALM_AT.clone()));
 }
 
 /** each piece's box in its own frame, every mesh of it */
-const piecesBoxes = new WeakMap<THREE.Object3D, THREE.Box3>();
+const piecesBoxes = new WeakMap<Node, Box3>();
 
 /** Whether a hand (its palm at `palm`) grips a piece: on it, round it rather than resting on its end, and, on a game
  *  that tells its fists (`fists`), with a fist for that hand curled `FIST_OPEN` or more. (A hand with no fist told
  *  read as gripping: the ranger's opening off his bow laid on the floor "slid" 20 cm through it.) */
-function gripsIt(part: Part, palm: THREE.Vector3, hand: Fist['hand'], fists?: readonly Fist[]): boolean {
+function gripsIt(part: Part, palm: Vec3, hand: Fist['hand'], fists?: readonly Fist[]): boolean {
   if (palmOn(part.mesh, palm) >= HELD_WITHIN || onItsEnd(part.group, palm)) return false;
   if (!fists) return true;
   const fist = fists.find((each) => each.hand === hand);
@@ -458,36 +458,36 @@ function gripsIt(part: Part, palm: THREE.Vector3, hand: Fist['hand'], fists?: re
 }
 
 /** Whether a palm rests on a piece's end, as on a pommel's top: within `END_SHARE` of either end of its length. */
-function onItsEnd(group: THREE.Object3D, palm: THREE.Vector3): boolean {
+function onItsEnd(group: Node, palm: Vec3): boolean {
   const along = alongPiece(group, palm);
   return along < END_SHARE || along > 1 - END_SHARE;
 }
 
 /** Where `palm` is along a piece's length: 0 at one end, 1 at the other. */
-function alongPiece(group: THREE.Object3D, palm: THREE.Vector3): number {
+function alongPiece(group: Node, palm: Vec3): number {
   const box = pieceBox(group);
   const local = group.worldToLocal(palm.clone());
   const axis = lengthAxis(box);
-  const size = box.getSize(new THREE.Vector3());
+  const size = box.getSize(new Vec3());
   return (local.getComponent(axis) - box.min.getComponent(axis)) / size.getComponent(axis);
 }
 
 /** Which of a box's sides is its longest (0, 1 or 2: x, y, z). */
-function lengthAxis(box: THREE.Box3): number {
-  const size = box.getSize(new THREE.Vector3());
+function lengthAxis(box: Box3): number {
+  const size = box.getSize(new Vec3());
   if (size.x >= size.y && size.x >= size.z) return 0;
   return size.y >= size.z ? 1 : 2;
 }
 
 /** A piece's box in its own frame, every mesh of it, made once. */
-function pieceBox(group: THREE.Object3D): THREE.Box3 {
+function pieceBox(group: Node): Box3 {
   const made = piecesBoxes.get(group);
   if (made) return made;
   group.updateMatrixWorld(true);
   const toPiece = group.matrixWorld.clone().invert();
-  const box = new THREE.Box3();
+  const box = new Box3();
   group.traverse((object) => {
-    const mesh = object as THREE.Mesh;
+    const mesh = object as Mesh;
     if (!mesh.isMesh) return;
     if (!mesh.geometry.boundingBox) mesh.geometry.computeBoundingBox();
     const inPiece = mesh.matrixWorld.clone().premultiply(toPiece);
@@ -500,10 +500,10 @@ function pieceBox(group: THREE.Object3D): THREE.Box3 {
 /** The pieces a palm is on now: of those hung from a hand, any whose mesh a palm is within `HELD_WITHIN` of; a piece
  *  strapped to the forearm (`userData.strapped`, a shield) the wrist or the forearm's middle too. (A shield on a forearm
  *  resting on his knee, the palm turned down off it, read "moved 50 cm with no hand on it", following the arm.) */
-function heldPieces(lab: Lab, parts: Part[]): Set<THREE.Object3D> {
+function heldPieces(lab: Lab, parts: Part[]): Set<Node> {
   const palms = palmsOf(lab);
   const arms = forearmsOf(lab);
-  const held = new Set<THREE.Object3D>();
+  const held = new Set<Node>();
   for (const part of parts) {
     if (!part.inHand || held.has(part.group) || !shown(part.mesh)) continue;
     const onPalm = palms.some((palm) => palmOn(part.mesh, palm) < HELD_WITHIN);
@@ -514,25 +514,25 @@ function heldPieces(lab: Lab, parts: Part[]): Set<THREE.Object3D> {
 }
 
 /** Each wrist and each forearm's middle in the world now. */
-function forearmsOf(lab: Lab): THREE.Vector3[] {
+function forearmsOf(lab: Lab): Vec3[] {
   const sides = [[lab.joints.handL, lab.joints.elbowL], [lab.joints.handR, lab.joints.elbowR]];
   return sides.flatMap(([hand, elbow]) => {
-    const wrist = hand.getWorldPosition(new THREE.Vector3());
-    const middle = elbow.getWorldPosition(new THREE.Vector3()).lerp(wrist, 0.5);
+    const wrist = hand.getWorldPosition(new Vec3());
+    const middle = elbow.getWorldPosition(new Vec3()).lerp(wrist, 0.5);
     return [wrist, middle];
   });
 }
 
 /** Every rigid mesh of his model that isn't cloth, with the piece it belongs to. */
 function partsOf(lab: Lab): Part[] {
-  const joints = new Map<THREE.Object3D, string>(Object.entries(lab.joints)
-    .filter(([, joint]) => (joint as THREE.Object3D)?.isObject3D)
-    .map(([name, joint]) => [joint as THREE.Object3D, name]));
+  const joints = new Map<Node, string>(Object.entries(lab.joints)
+    .filter(([, joint]) => (joint as Node)?.isNode)
+    .map(([name, joint]) => [joint as Node, name]));
   const hands = [lab.joints.handL, lab.joints.handR];
   const parts: Part[] = [];
   lab.model.root.traverse((object) => {
-    const mesh = object as THREE.Mesh;
-    if (!mesh.isMesh || (mesh as THREE.SkinnedMesh).isSkinnedMesh || CLOTHS.includes(mesh.geometry.name)) return;
+    const mesh = object as Mesh;
+    if (!mesh.isMesh || (mesh as SkinnedMesh).isSkinnedMesh || CLOTHS.includes(mesh.geometry.name)) return;
     const hung = hungFrom(mesh, joints);
     if (!hung) return;
     const { group, joint } = hung;
@@ -546,22 +546,22 @@ function partsOf(lab: Lab): Part[] {
 
 /** The object over `mesh` hung straight from a joint (the mesh itself if it is), and that joint. */
 function hungFrom(
-  mesh: THREE.Object3D, joints: Map<THREE.Object3D, string>,
-): { group: THREE.Object3D; joint: THREE.Object3D } | null {
-  for (let at: THREE.Object3D = mesh; at.parent; at = at.parent) {
+  mesh: Node, joints: Map<Node, string>,
+): { group: Node; joint: Node } | null {
+  for (let at: Node = mesh; at.parent; at = at.parent) {
     if (joints.has(at.parent)) return { group: at, joint: at.parent };
   }
   return null;
 }
 
 /** Whether `object` hangs anywhere under `over`. */
-function isUnder(object: THREE.Object3D, over: THREE.Object3D): boolean {
+function isUnder(object: Node, over: Node): boolean {
   for (let at = object.parent; at; at = at.parent) if (at === over) return true;
   return false;
 }
 
 /** A piece's name: its own, the first named object under it (a grip's weapon), or the joint it hangs from. */
-function nameOver(piece: THREE.Object3D, joints: Map<THREE.Object3D, string>): string {
+function nameOver(piece: Node, joints: Map<Node, string>): string {
   if (piece.name) return piece.name;
   let under = '';
   piece.traverseVisible((object) => {
@@ -571,19 +571,19 @@ function nameOver(piece: THREE.Object3D, joints: Map<THREE.Object3D, string>): s
 }
 
 /** A mesh's own name, its geometry's, or its kind. */
-function meshName(mesh: THREE.Mesh): string {
+function meshName(mesh: Mesh): string {
   return mesh.name || mesh.geometry.name || mesh.geometry.type.replace('Geometry', '').toLowerCase() || 'mesh';
 }
 
 /** A box's opposite corners and one across them: enough to see it slide and turn. */
-function cornersOf(box: THREE.Box3): THREE.Vector3[] {
-  return [box.min.clone(), box.max.clone(), new THREE.Vector3(box.min.x, box.max.y, box.min.z)];
+function cornersOf(box: Box3): Vec3[] {
+  return [box.min.clone(), box.max.clone(), new Vec3(box.min.x, box.max.y, box.min.z)];
 }
 
-const _local = new THREE.Vector3(), _scale = new THREE.Vector3();
+const _local = new Vec3(), _scale = new Vec3();
 
 /** How far `palm` is from `mesh`'s box (m). */
-function palmOn(mesh: THREE.Mesh, palm: THREE.Vector3): number {
+function palmOn(mesh: Mesh, palm: Vec3): number {
   mesh.worldToLocal(_local.copy(palm));
   // (a piece never drawn yet has no box: the ranger's built behind the lobby since, on main)
   const geometry = mesh.geometry;
@@ -592,18 +592,18 @@ function palmOn(mesh: THREE.Mesh, palm: THREE.Vector3): number {
 }
 
 /** The farthest any point of `a` is from its own in `b`. */
-function farthest(a: THREE.Vector3[], b: THREE.Vector3[]): number {
+function farthest(a: Vec3[], b: Vec3[]): number {
   return Math.max(...a.map((point, i) => point.distanceTo(b[i])));
 }
 
 /** Whether `object` is worn on a strap (`userData.worn` on it or over it). */
-function worn(object: THREE.Object3D): boolean {
-  for (let at: THREE.Object3D | null = object; at; at = at.parent) if (at.userData.worn) return true;
+function worn(object: Node): boolean {
+  for (let at: Node | null = object; at; at = at.parent) if (at.userData.worn) return true;
   return false;
 }
 
 /** Whether `object` is drawn: it and everything over it shown. */
-function shown(object: THREE.Object3D): boolean {
-  for (let at: THREE.Object3D | null = object; at; at = at.parent) if (!at.visible) return false;
+function shown(object: Node): boolean {
+  for (let at: Node | null = object; at; at = at.parent) if (!at.visible) return false;
   return true;
 }

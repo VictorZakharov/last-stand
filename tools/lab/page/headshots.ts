@@ -4,7 +4,7 @@
 // combat/strikes.ts `onHead`); here the hero's own chance of one is put to nothing, so a critical hit is the game
 // having judged a headshot. Head shots must strike and crit; landed body controls must be ordinary hits. Where the
 // head is, is read off the foe as drawn (the middle of the vertices its head joint moves), not off the game's test.
-import * as THREE from 'three';
+import { Bone, Mesh, Node, Raycaster, SkinnedMesh, Vec3 } from './sceneApi.ts';
 import type { Fixture, Frame, Lab, Report } from './lab';
 import type { Enemy } from '../../../src/entities/enemy';
 import type { EnemyId } from '../../../src/data/enemies';
@@ -84,18 +84,18 @@ interface Pair {
 }
 
 /** The joint a model's head and all on it ride (its rig's, or the dummy's own). */
-function headJoint(foe: Enemy): THREE.Object3D | null {
+function headJoint(foe: Enemy): Node | null {
   return foe.model.joints?.head ?? foe.model.head ?? null;
 }
 
 /** The joint the trunk hangs from, the canary's stand-in for the head. */
-export function trunkJoint(foe: Enemy): THREE.Object3D | null {
+export function trunkJoint(foe: Enemy): Node | null {
   if (foe.type === 'stag') return foe.obj.getObjectByName('stag-trunk') ?? null;
   return foe.model.joints?.chest ?? foe.model.head?.parent ?? null;
 }
 
 /** Sets which joint the model's head is (the canary); returns the undo. */
-export function plantHead(foe: Enemy, joint: THREE.Object3D): () => void {
+export function plantHead(foe: Enemy, joint: Node): () => void {
   const model = foe.model;
   if (model.joints) {
     const was = model.joints.head;
@@ -112,8 +112,8 @@ export function plantHead(foe: Enemy, joint: THREE.Object3D): () => void {
 }
 
 /** Adds to `points` the world positions of `mesh`'s vertices whose most-weighted bone is `joint`. */
-function skinnedOn(mesh: THREE.SkinnedMesh, joint: THREE.Object3D, points: THREE.Vector3[]): void {
-  const bone = mesh.skeleton.bones.indexOf(joint as THREE.Bone);
+function skinnedOn(mesh: SkinnedMesh, joint: Node, points: Vec3[]): void {
+  const bone = mesh.skeleton.bones.indexOf(joint as Bone);
   if (bone < 0) return;
   // (posed as now: the lab's frames draw nothing, so the bones' matrices are where the last draw left them)
   mesh.skeleton.update();
@@ -123,18 +123,18 @@ function skinnedOn(mesh: THREE.SkinnedMesh, joint: THREE.Object3D, points: THREE
     let most = 0;
     for (let k = 1; k < 4; k++) if (weight.getComponent(i, k) > weight.getComponent(i, most)) most = k;
     if (skin.getComponent(i, most) !== bone) continue;
-    points.push(mesh.localToWorld(mesh.getVertexPosition(i, new THREE.Vector3())));
+    points.push(mesh.localToWorld(mesh.getVertexPosition(i, new Vec3())));
   }
 }
 
 /** Adds to `points` the world positions of the vertices of the rigid meshes set straight on `joint`. */
-function rigidOn(joint: THREE.Object3D, points: THREE.Vector3[]): void {
+function rigidOn(joint: Node, points: Vec3[]): void {
   for (const child of joint.children) {
-    const mesh = child as THREE.Mesh;
-    if (!mesh.isMesh || (mesh as THREE.SkinnedMesh).isSkinnedMesh) continue;
+    const mesh = child as Mesh;
+    if (!mesh.isMesh || (mesh as SkinnedMesh).isSkinnedMesh) continue;
     const position = mesh.geometry.attributes.position;
     for (let i = 0; i < position.count; i++) {
-      points.push(mesh.localToWorld(new THREE.Vector3().fromBufferAttribute(position, i)));
+      points.push(mesh.localToWorld(new Vec3().fromBufferAttribute(position, i)));
     }
   }
 }
@@ -145,16 +145,16 @@ const SKULL_SHARE = 0.5;
 
 /** The vertices of `foe`'s skull as drawn now: of those its head joint itself moves (not a cap or a jaw on a joint of
  *  its own), the half of them nearest the joint; none where it has no head joint. */
-function skullOf(foe: Enemy): THREE.Vector3[] {
+function skullOf(foe: Enemy): Vec3[] {
   const joint = headJoint(foe);
   if (!joint) return [];
   foe.obj.updateMatrixWorld(true);
-  const points: THREE.Vector3[] = [];
+  const points: Vec3[] = [];
   rigidOn(joint, points);
   foe.obj.traverse((object) => {
-    if ((object as THREE.SkinnedMesh).isSkinnedMesh) skinnedOn(object as THREE.SkinnedMesh, joint, points);
+    if ((object as SkinnedMesh).isSkinnedMesh) skinnedOn(object as SkinnedMesh, joint, points);
   });
-  const at = joint.getWorldPosition(new THREE.Vector3());
+  const at = joint.getWorldPosition(new Vec3());
   points.sort((a, b) => a.distanceToSquared(at) - b.distanceToSquared(at));
   return points.slice(0, Math.round(points.length * SKULL_SHARE));
 }
@@ -168,7 +168,7 @@ const INSIDE = 0.5;
 const HEAD_MARGIN = 0.04;
 
 /** Where a bow's head shot is seen from: the bow, and the camera the crosshair aims by. */
-const bowAndEye = (): THREE.Vector3[] => [G.player.castPoint, G.camera.position];
+const bowAndEye = (): Vec3[] => [G.player.castPoint, G.camera.position];
 
 /**
  * Where a head shot is aimed: inside `foe`'s skull, the point nearest its middle that the bow's line and the camera's
@@ -177,25 +177,25 @@ const bowAndEye = (): THREE.Vector3[] => [G.player.castPoint, G.camera.position]
  * Null where it has no head; its middle where no point is met so (the shot is then likely to be judged a body's).
  * `froms` are where the lines start (a punch's: the camera's alone, as its fist's line is the crosshair's).
  */
-export function headAim(foe: Enemy, froms: () => THREE.Vector3[] = bowAndEye): THREE.Vector3 | null {
+export function headAim(foe: Enemy, froms: () => Vec3[] = bowAndEye): Vec3 | null {
   const skull = skullOf(foe);
   if (!skull.length) return null;
-  const middle = skull.reduce((sum, point) => sum.add(point), new THREE.Vector3()).divideScalar(skull.length);
+  const middle = skull.reduce((sum, point) => sum.add(point), new Vec3()).divideScalar(skull.length);
   const step = Math.max(1, Math.floor(skull.length / HEAD_TRIES));
   const tries = [middle];
   for (let i = 0; i < skull.length; i += step) tries.push(middle.clone().lerp(skull[i], INSIDE));
   tries.sort((a, b) => a.distanceToSquared(middle) - b.distanceToSquared(middle));
-  const seen = (point: THREE.Vector3) => froms().every(
+  const seen = (point: Vec3) => froms().every(
     (from) => metFrom(foe, from, point) === 'head',
   );
-  const clear = (point: THREE.Vector3) => aroundOnScreen(point).every(seen);
+  const clear = (point: Vec3) => aroundOnScreen(point).every(seen);
   return tries.find(clear) ?? tries.find(seen) ?? middle;
 }
 
 /** `point` and four points `HEAD_MARGIN` round it, across the camera's view. */
-function aroundOnScreen(point: THREE.Vector3): THREE.Vector3[] {
-  const right = new THREE.Vector3().setFromMatrixColumn(G.camera.matrixWorld, 0);
-  const up = new THREE.Vector3().setFromMatrixColumn(G.camera.matrixWorld, 1);
+function aroundOnScreen(point: Vec3): Vec3[] {
+  const right = new Vec3().setFromMatrixColumn(G.camera.matrixWorld, 0);
+  const up = new Vec3().setFromMatrixColumn(G.camera.matrixWorld, 1);
   const offsets = [right, right.clone().negate(), up, up.clone().negate()];
   return [point, ...offsets.map((offset) => point.clone().addScaledVector(offset, HEAD_MARGIN))];
 }
@@ -208,18 +208,18 @@ export async function turnFoe(lab: Lab, foe: Enemy, side: number): Promise<void>
 }
 
 /** Where its chest shot is aimed: its chest joint, or a share of its height over its middle. */
-export function chestPoint(foe: Enemy): THREE.Vector3 {
+export function chestPoint(foe: Enemy): Vec3 {
   const chest = foe.type === 'stag' ? trunkJoint(foe) : foe.model.joints?.chest;
-  if (chest) return chest.getWorldPosition(new THREE.Vector3());
+  if (chest) return chest.getWorldPosition(new Vec3());
   return foe.pos.clone().setY(foe.obj.position.y + foe.height * CHEST_SHARE);
 }
 
 /** Top-down, the head can cover the chest's center on screen. Aim at a visible part of the torso. */
-function topChestPoint(foe: Enemy): THREE.Vector3 {
+function topChestPoint(foe: Enemy): Vec3 {
   const middle = chestPoint(foe);
   const eye = G.camera.position;
-  const right = new THREE.Vector3().setFromMatrixColumn(G.camera.matrixWorld, 0);
-  const up = new THREE.Vector3().setFromMatrixColumn(G.camera.matrixWorld, 1);
+  const right = new Vec3().setFromMatrixColumn(G.camera.matrixWorld, 0);
+  const up = new Vec3().setFromMatrixColumn(G.camera.matrixWorld, 1);
   const offsets = [0, -0.1, 0.1, -0.2, 0.2, -0.3, 0.3];
   let fallback = middle;
   for (const offset of offsets) {
@@ -238,7 +238,7 @@ function topChestPoint(foe: Enemy): THREE.Vector3 {
  *  moves, turns nor attacks) and doesn't evade. (Dazed, it reeled, and its head moved off a shot's line as it flew.) */
 async function standFoe(lab: Lab, kind: EnemyId): Promise<Enemy> {
   const hero = G.player;
-  const forward = new THREE.Vector3(Math.sin(hero.facing), 0, Math.cos(hero.facing));
+  const forward = new Vec3(Math.sin(hero.facing), 0, Math.cos(hero.facing));
   const foe = lab.spawnFoe(kind, hero.pos.clone().addScaledVector(forward, AHEAD).setY(0));
   // (a tall one further off: its head within the bow's steepest arc)
   const ahead = Math.max(AHEAD, foe.height * AHEAD_PER_HEIGHT);
@@ -251,7 +251,7 @@ async function standFoe(lab: Lab, kind: EnemyId): Promise<Enemy> {
 }
 
 /** Where a shot is aimed, read off the foe as it's posed now. */
-type Target = (foe: Enemy) => THREE.Vector3;
+type Target = (foe: Enemy) => Vec3;
 
 /**
  * One shot of `skill` drawn to full at `target` and loosed, followed until its arrows are gone. The aim follows the
@@ -309,7 +309,7 @@ function catchHits(foe: Enemy, landed: Landed): void {
 /** How high over `foe`'s feet the hero's arrow striking it now is (m): the nearest of his in flight, put where it
  *  struck before its hit is dealt. */
 function struckAt(foe: Enemy): number {
-  let nearest: THREE.Vector3 | null = null;
+  let nearest: Vec3 | null = null;
   for (const shot of G.projectiles) {
     if (shot.hostile || !shot.alive) continue;
     if (!nearest || shot.pos.distanceTo(foe.pos) < nearest.distanceTo(foe.pos)) nearest = shot.pos;
@@ -318,7 +318,7 @@ function struckAt(foe: Enemy): number {
 }
 
 /** The game's own aim now, in the world (`Player.aim` is its height over the floor under it). */
-function gameAim(): THREE.Vector3 {
+function gameAim(): Vec3 {
   const aim = G.player.aim;
   return aim.clone().setY(aim.y + groundHeight(aim.x, aim.z));
 }
@@ -327,11 +327,11 @@ function gameAim(): THREE.Vector3 {
 const LOOK_BACK = 4;
 
 /** The name of the rig's joint (or the dummy's head) that a piece rides: the nearest named one up from it. */
-export function jointName(foe: Enemy, piece: THREE.Object3D): string {
-  const joints = Object.entries(foe.model.joints ?? {}) as [string, THREE.Object3D][];
-  const named = new Map<THREE.Object3D, string>(joints.map(([name, joint]) => [joint, name]));
+export function jointName(foe: Enemy, piece: Node): string {
+  const joints = Object.entries(foe.model.joints ?? {}) as [string, Node][];
+  const named = new Map<Node, string>(joints.map(([name, joint]) => [joint, name]));
   if (foe.model.head) named.set(foe.model.head, 'head');
-  for (let at: THREE.Object3D | null = piece; at && at !== foe.obj; at = at.parent) {
+  for (let at: Node | null = piece; at && at !== foe.obj; at = at.parent) {
     const name = named.get(at);
     if (name) return name;
   }
@@ -339,9 +339,9 @@ export function jointName(foe: Enemy, piece: THREE.Object3D): string {
 }
 
 /** What of `foe` a straight line from `from` to `point` meets first, by the joint it rides. */
-function metFrom(foe: Enemy, from: THREE.Vector3, point: THREE.Vector3): string | null {
+function metFrom(foe: Enemy, from: Vec3, point: Vec3): string | null {
   const way = point.clone().sub(from).normalize();
-  const ray = new THREE.Raycaster(point.clone().addScaledVector(way, -LOOK_BACK), way, 0, LOOK_BACK * 2);
+  const ray = new Raycaster(point.clone().addScaledVector(way, -LOOK_BACK), way, 0, LOOK_BACK * 2);
   const hit = castSolid(foe.obj, ray);
   if (!hit) return null;
   return jointName(foe, (hit as Partial<HullHit>).joint ?? hit.object);

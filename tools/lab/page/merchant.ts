@@ -8,7 +8,8 @@
 // epic in the stash, the stock one fewer, saved. His other epic: Auto-fill cheapest pays with a few rares, no epic, enough.
 // Then three runs begun: a new stock, full again. `--canary` puts the epic back in his stock after the trade, which
 // must be caught.
-import * as THREE from 'three';
+import { Vec3 } from './sceneApi.ts';
+import { boxOf } from './lab';
 import type { Lab, Pictured, Report } from './lab';
 import { G } from '../../../src/state';
 import { RESTOCK_RUNS, STOCK_RARITIES, STOCKED_FROM, TRADED, type TradedRarity } from '../../../src/data/merchant';
@@ -53,13 +54,13 @@ const rankOf = (item: Item): number => TRADED.indexOf(item.rarity as TradedRarit
 /** The hero put at (x, z), facing `facing`, and let settle. */
 async function stand(lab: Lab, x: number, z: number, facing: number): Promise<void> {
   G.player.walkTo = null;
-  G.player.place(new THREE.Vector3(x, groundHeight(x, z), z), facing);
+  G.player.place(new Vec3(x, groundHeight(x, z), z), facing);
   await lab.step(SETTLE);
 }
 
 /** Whether the trade screen's box lies within the window. */
 function withinWindow(): boolean {
-  const box = element('#merchant .mc-box').getBoundingClientRect();
+  const box = boxOf(element('#merchant .mc-box'));
   return box.left >= -1 && box.top >= -1 && box.right <= innerWidth + 1 && box.bottom <= innerHeight + 1;
 }
 
@@ -140,7 +141,7 @@ function odoPictured(lab: Lab): Pictured[] {
   if (!room) return [];
   const [, hz] = HOUSES.merchant.half;
   room.group.updateMatrixWorld(true);
-  const at = room.group.localToWorld(new THREE.Vector3(ODO_AT.x, ODO_AT.face, -hz + ODO_AT.fromBack));
+  const at = room.group.localToWorld(new Vec3(ODO_AT.x, ODO_AT.face, -hz + ODO_AT.fromBack));
   // (the hero faces the counter, so his 'back' view looks at Odo's front)
   // (behind him stands the shop's back wall: a view from there sees the wall alone)
   const close = lab.picture('odo-close', ['back', 'left', 'right'], ['Odo from 1.3 m: his front and his sides'],

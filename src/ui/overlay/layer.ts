@@ -3,14 +3,13 @@
 // a downed partner's marker. Each is a label painted with the canvas into the atlas (atlas.ts) when what it shows
 // changes, and placed every frame where it shows; all of them are one draw. (As page elements over the canvas,
 // moved every frame by a transform, Chrome repainted the page round them, and froze for seconds on Windows.)
-import * as THREE from 'three';
 import { G } from '../../state';
 import { frameRect, overFrame } from '../../core/renderer';
-import { drawOverFrame, labelsMaterial } from '../../core/webgpu';
+import { OVERLAY_ROW, overlayRows } from '../../engine/overlay';
 import { uiScales } from '../scale';
-import { drawOutline, outlineShown } from './outline';
+import { sendOutline } from './outline';
 import {
-  atlasCrowded, atlasSide, atlasTexture, clearAtlas, fits, freeSlot, paintCanvas, takeSlot, uploadSlot, type Slot,
+  atlasCrowded, atlasSide, clearAtlas, fits, freeSlot, paintAt, takeSlot, uploadSlot, type Slot,
 } from './atlas';
 
 /**
@@ -40,7 +39,7 @@ export class Label {
   painted = 0;
   paintedFonts = -1;
   /** the UI's scale it's drawn at: the HUD's, or the lobby's for what only the lobby shows (ui/scale.ts) */
-  sizedBy: 'hud' | 'ui' = 'hud';
+  sizedBy: 'hud' | 'ui' | 'touch' | 'panes' = 'hud';
   /** where its anchor shows this frame (css px), and whether it shows at all */
   x = 0;
   y = 0;
@@ -88,12 +87,20 @@ export class Label {
     // (with no room in the atlas, painted next frame it's shown: marked painted, a co-op partner's tag that found the
     // atlas full of a fight's numbers wasn't drawn until its art next changed, its bar a step down)
     if (!this.slot) return;
+    const { c, x } = paintAt(this.slot);
+    c.setTransform(ratio, 0, 0, ratio, x, 0);
+    art.paint(c, ratio);
+    // (painted only once it's in the engine's atlas: before the engine has started, painted again next frame)
+    if (!uploadSlot(this.slot)) return;
     this.painted = ratio;
     this.paintedFonts = fontLoads;
-    const c = paintCanvas(this.slot);
-    c.setTransform(ratio, 0, 0, ratio, 0, 0);
-    art.paint(c, ratio);
-    uploadSlot(this.slot);
+  }
+
+  /** Its slot given back while it isn't seen (a panel hidden), painted again into a new one when it next is. */
+  release(): void {
+    if (this.slot) freeSlot(this.slot);
+    this.slot = null;
+    this.painted = 0;
   }
 
   /** Takes it off the screen for good, its slot given back. */
@@ -109,57 +116,11 @@ const labels = new Set<Label>();
 let fontLoads = 0;
 if (typeof document !== 'undefined') document.fonts?.addEventListener('loadingdone', () => { fontLoads++; });
 
-// --- drawing: one instanced quad a label, its box in canvas pixels and its slot's corners in the atlas
-let mesh: THREE.Mesh<THREE.InstancedBufferGeometry, THREE.Material> | null = null;
-/** the size of the canvas the labels are placed in (px), and the atlas they show: the material's */
-const view = new THREE.Vector2();
-let setAtlas: (texture: THREE.Texture) => void = () => {};
-let rects: THREE.InstancedBufferAttribute, uvs: THREE.InstancedBufferAttribute, alphas: THREE.InstancedBufferAttribute;
-const scene = new THREE.Scene(), camera = new THREE.OrthographicCamera();
-/** drawn once at load whatever is shown, so its program compiles then (as every other does) */
-let warmed = false;
-
-function makeMesh(room: number): void {
-  const geo = new THREE.InstancedBufferGeometry();
-  geo.setAttribute('position', new THREE.Float32BufferAttribute([0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 1, 0], 3));
-  geo.setIndex([0, 2, 1, 1, 2, 3]);
-  // (three's start is Infinity, which WebGPU's draw refuses)
-  geo.instanceCount = 0;
-  rects = new THREE.InstancedBufferAttribute(new Float32Array(room * 4), 4).setUsage(THREE.DynamicDrawUsage);
-  uvs = new THREE.InstancedBufferAttribute(new Float32Array(room * 4), 4).setUsage(THREE.DynamicDrawUsage);
-  alphas = new THREE.InstancedBufferAttribute(new Float32Array(room), 1).setUsage(THREE.DynamicDrawUsage);
-  geo.setAttribute('aRect', rects);
-  geo.setAttribute('aUv', uvs);
-  geo.setAttribute('aAlpha', alphas);
-  if (mesh) {
-    mesh.geometry.dispose();
-    mesh.geometry = geo;
-    return;
-  }
-  const mat = nodeMaterial();
-  Object.assign(mat, {
-    // (premultiplied by alpha: the atlas is, from the canvas)
-    blending: THREE.CustomBlending,
-    blendSrc: THREE.OneFactor,
-    blendDst: THREE.OneMinusSrcAlphaFactor,
-    blendSrcAlpha: THREE.OneFactor,
-    blendDstAlpha: THREE.OneMinusSrcAlphaFactor,
-    transparent: true,
-    depthTest: false,
-    depthWrite: false,
-    toneMapped: false,
-  });
-  mesh = new THREE.Mesh(geo, mat);
-  mesh.frustumCulled = false;
-  scene.add(mesh);
-}
-
-/** The labels' material, as nodes (core/webgpu.ts). */
-function nodeMaterial(): THREE.Material {
-  const made = labelsMaterial(atlasTexture(), view);
-  setAtlas = made.setAtlas;
-  return made.material;
-}
+// --- drawing: a row a label, its box in canvas pixels, its slot's corners in the atlas and its share,
+// handed to the engine, which draws them all in one call over its finished frame (engine/overlay.ts)
+let rows = new Float32Array(64 * OVERLAY_ROW);
+/** how many of `rows` this frame's labels fill */
+let filled = 0;
 
 /** the labels drawn last frame, in the order drawn (lowest first) */
 let drawn: Label[] = [];
@@ -185,7 +146,9 @@ export function layoutLabels(): void {
   if (most !== atlasRatio || atlasCrowded()) restartAtlas(most);
   const side = atlasSide();
   drawn = [...labels].filter((l) => l.shown && l.alpha > 0.002 && l.size.w > 0).sort((a, b) => a.order - b.order);
-  if (!mesh || rects.count < drawn.length) makeMesh(Math.max(64, 2 ** Math.ceil(Math.log2(drawn.length + 1))));
+  if (rows.length < drawn.length * OVERLAY_ROW) {
+    rows = new Float32Array(2 ** Math.ceil(Math.log2(drawn.length + 1)) * OVERLAY_ROW);
+  }
   let n = 0;
   for (const l of drawn) {
     const k = uiScales[l.sizedBy], paint = ratio * k;
@@ -205,55 +168,22 @@ export function layoutLabels(): void {
     l.box.y = y / ratio;
     l.box.w = w * l.scale * k;
     l.box.h = h * l.scale * k;
-    rects.setXYZW(n, x, y, pw * l.scale, ph * l.scale);
-    uvs.setXYZW(n, slot.x / side, slot.y / side, (slot.x + pw) / side, (slot.y + ph) / side);
-    alphas.setX(n, l.alpha);
+    rows.set([x, y, pw * l.scale, ph * l.scale, slot.x / side, slot.y / side, (slot.x + pw) / side,
+      (slot.y + ph) / side, l.alpha], n * OVERLAY_ROW);
     n++;
   }
-  mesh!.geometry.instanceCount = n;
-  rects.needsUpdate = uvs.needsUpdate = alphas.needsUpdate = true;
-  if (n > 0) {
-    rects.addUpdateRange(0, n * 4);
-    uvs.addUpdateRange(0, n * 4);
-    alphas.addUpdateRange(0, n);
-  }
+  filled = n;
 }
 
-/** Draws this frame's labels over the finished frame. */
-function drawLabels(): void {
-  if (!mesh) makeMesh(64);
-  const count = mesh!.geometry.instanceCount;
-  if (count === 0 && warmed) return;
-  if (count === 0) {
-    // (one transparent quad, so the program compiles with the rest at load)
-    rects.setXYZW(0, 0, 0, 1, 1);
-    alphas.setX(0, 0);
-    rects.needsUpdate = alphas.needsUpdate = true;
-    mesh!.geometry.instanceCount = 1;
-  }
-  warmed = true;
-  const gl = G.renderer;
+/** This frame's labels and outline handed to the engine, drawn over its frame from now on (none where `shown`
+ *  is false: photo mode, the free camera's World labels off). */
+function sendLabels(shown: boolean): void {
   const f = frameRect();
-  view.set(f.width, f.height);
-  // (the atlas is made again, larger, as labels take more canvas pixels: a higher ratio, a larger UI)
-  setAtlas(atlasTexture());
-  drawOverFrame(gl, () => gl.render(scene, camera));
-  if (count === 0) mesh!.geometry.instanceCount = 0;
+  overlayRows(rows, shown ? filled : 0, f.width, f.height);
+  sendOutline(shown);
 }
-// (an outline round what a held skill would take, under the labels: a foe's bar and numbers stay over it)
-overFrame.draw = () => {
-  drawOutline();
-  drawLabels();
-};
-// (nothing to draw once the labels' program is warmed: no label shown, nothing outlined)
-overFrame.empty = () => warmed && drawn.length === 0 && !outlineShown();
-
-/** The labels' scene, its mesh made: compiled with the post chain, as the frame's last draws (core/renderer.ts
- *  `compilePasses`). */
-export function labelsScene(): THREE.Scene {
-  if (!mesh) makeMesh(64);
-  return scene;
-}
+// (all of it the engine's: nothing is drawn on three's canvas, left out of the page's frame)
+overFrame.labels = sendLabels;
 
 /** The labels drawn last frame, lowest first (tools/lab's `ui` measures their boxes). */
 export function drawnLabels(): readonly Label[] { return drawn; }

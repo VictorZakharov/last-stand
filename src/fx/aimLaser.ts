@@ -3,128 +3,31 @@
 // screen space), so it reads from the top-down camera and stays a hairline through the eyes; it fades out near the
 // camera (through the eyes it starts at the bow, under the view) and eases in and out, never flashing. It isn't
 // dimmed with distance (`nearGlow`): a fixed width in pixels never grows to fill the view up close.
-import * as THREE from 'three';
+import {
+  AdditiveBlending, Attribute, Color, DoubleSide, DynamicDrawUsage, Geometry, LookMaterial, Mesh, Node, Vec2, Vec3,
+} from '../engine/api/index.ts';
 import { G } from '../state';
 import { addEffect } from './effects';
 import { sceneRatio, sceneSize } from '../core/renderer';
-import { portShader, type Tsl } from '../core/shaderPorts';
 import { effectLook, num, rgb, type EffectLook, effectShader } from '../engine/effects';
 
 /** the line's and the dot's width (css px), how bright and opaque, how quickly it eases in and out (s) */
 const WIDTH = 2, DOT = 7, GLOW = 1.6, ALPHA = 0.7, EASE_IN = 0.12, EASE_OUT = 0.18;
 /** the line fades in over this range of distance from the camera (m) */
 const NEAR0 = 0.8, NEAR1 = 3;
-const COLOR = new THREE.Color(0xff2414);
+const COLOR = new Color(0xff2414);
 /** at most this many lines (a fan's five), each of this many points */
 export const LASER_LINES = 5, LASER_POINTS = 160;
 
-const lineVert = /* glsl */`
-  attribute vec3 next; attribute float side; attribute float along;
-  uniform vec2 uRes; uniform float uWidth; uniform float uNear0; uniform float uNear1;
-  varying float vFade; varying float vSide;
-  void main() {
-    vec4 mv = modelViewMatrix * vec4(position, 1.0);
-    vec4 a = projectionMatrix * mv, b = projectionMatrix * modelViewMatrix * vec4(next, 1.0);
-    // across the line on screen, a fixed number of pixels
-    vec2 d = (b.xy / max(b.w, 1e-4) - a.xy / max(a.w, 1e-4)) * uRes;
-    float l = length(d);
-    vec2 n = l > 1e-5 ? vec2(-d.y, d.x) / l : vec2(0.0, 1.0);
-    a.xy += n * side * uWidth / uRes * a.w;
-    gl_Position = a;
-    vFade = smoothstep(uNear0, uNear1, -mv.z) * (1.0 - smoothstep(0.8, 1.0, along));
-    vSide = side;
-  }`;
-const lineFrag = /* glsl */`
-  uniform vec3 uColor; uniform float uAlpha;
-  varying float vFade; varying float vSide;
-  void main() {
-    // soft across its width: brightest down the middle
-    float k = 1.0 - vSide * vSide;
-    gl_FragColor = vec4(uColor * (0.35 + 0.65 * k), uAlpha * clamp(vFade, 0.0, 1.0) * (0.4 + 0.6 * k));
-  }`;
-const dotVert = /* glsl */`
-  attribute vec2 corner;
-  uniform vec2 uRes; uniform float uWidth;
-  varying vec2 vC;
-  void main() {
-    vec4 a = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-    a.xy += corner * uWidth / uRes * a.w;
-    gl_Position = a;
-    vC = corner;
-  }`;
-const dotFrag = /* glsl */`
-  uniform vec3 uColor; uniform float uAlpha;
-  varying vec2 vC;
-  void main() {
-    float r = length(vC), core = 1.0 - smoothstep(0.25, 0.45, r), halo = 1.0 - smoothstep(0.3, 1.0, r);
-    gl_FragColor = vec4(uColor * (0.5 + 1.2 * core), uAlpha * max(core, halo * 0.45));
-  }`;
-
-// The line and the dot on WebGPU (core/shaderPorts.ts), the shaders above in WGSL
-function linePort(t: Tsl, u: Tsl) {
-  const { wgslFn, attribute, positionGeometry, modelViewMatrix, cameraProjectionMatrix, varying } = t;
-  const vertex = wgslFn(`fn laserLine(pos: vec3f, next: vec3f, side: f32, mv: mat4x4f, proj: mat4x4f, res: vec2f,
-    width: f32) -> vec4f {
-    let a = proj * mv * vec4f(pos, 1.0);
-    let b = proj * mv * vec4f(next, 1.0);
-    let d = (b.xy / max(b.w, 1e-4) - a.xy / max(a.w, 1e-4)) * res;
-    let l = length(d);
-    var n = vec2f(0.0, 1.0);
-    if (l > 1e-5) { n = vec2f(-d.y, d.x) / l; }
-    return vec4f(a.xy + n * side * width / res * a.w, a.zw);
-  }`);
-  const fade = wgslFn(`fn laserFade(pos: vec3f, along: f32, mv: mat4x4f, near0: f32, near1: f32) -> f32 {
-    let z = -(mv * vec4f(pos, 1.0)).z;
-    return smoothstep(near0, near1, z) * (1.0 - smoothstep(0.8, 1.0, along));
-  }`);
-  const colour = wgslFn(`fn laserLineColour(fade: f32, side: f32, color: vec3f, alpha: f32) -> vec4f {
-    let k = 1.0 - side * side;
-    return vec4f(color * (0.35 + 0.65 * k), alpha * clamp(fade, 0.0, 1.0) * (0.4 + 0.6 * k));
-  }`);
-  const side = attribute('side', 'float');
-  return {
-    vertex: vertex({
-      pos: positionGeometry, next: attribute('next', 'vec3'), side, mv: modelViewMatrix, proj: cameraProjectionMatrix,
-      res: u.uRes, width: u.uWidth,
-    }),
-    fragment: colour({
-      fade: varying(fade({ pos: positionGeometry, along: attribute('along', 'float'), mv: modelViewMatrix,
-        near0: u.uNear0, near1: u.uNear1 })),
-      side: varying(side), color: u.uColor, alpha: u.uAlpha,
-    }),
-  };
-}
-function dotPort(t: Tsl, u: Tsl) {
-  const { wgslFn, attribute, positionGeometry, modelViewMatrix, cameraProjectionMatrix, varying } = t;
-  const vertex = wgslFn(`fn laserDot(pos: vec3f, corner: vec2f, mv: mat4x4f, proj: mat4x4f, res: vec2f,
-    width: f32) -> vec4f {
-    let a = proj * mv * vec4f(pos, 1.0);
-    return vec4f(a.xy + corner * width / res * a.w, a.zw);
-  }`);
-  const colour = wgslFn(`fn laserDotColour(c: vec2f, color: vec3f, alpha: f32) -> vec4f {
-    let r = length(c);
-    let core = 1.0 - smoothstep(0.25, 0.45, r);
-    let halo = 1.0 - smoothstep(0.3, 1.0, r);
-    return vec4f(color * (0.5 + 1.2 * core), alpha * max(core, halo * 0.45));
-  }`);
-  const corner = attribute('corner', 'vec2');
-  return {
-    vertex: vertex({
-      pos: positionGeometry, corner, mv: modelViewMatrix, proj: cameraProjectionMatrix, res: u.uRes, width: u.uWidth,
-    }),
-    fragment: colour({ c: varying(corner), color: u.uColor, alpha: u.uAlpha }),
-  };
-}
-
 const uniforms = {
-  uRes: { value: new THREE.Vector2(1, 1) }, uWidth: { value: WIDTH }, uNear0: { value: NEAR0 }, uNear1: { value: NEAR1 },
+  uRes: { value: new Vec2(1, 1) }, uWidth: { value: WIDTH }, uNear0: { value: NEAR0 }, uNear1: { value: NEAR1 },
   uColor: { value: COLOR.clone().multiplyScalar(GLOW) }, uAlpha: { value: 0 },
 };
 // (the dot shares the line's uniforms but its width)
 const dotUniforms = { ...uniforms, uWidth: { value: DOT } };
-const shaderOpts = { transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide } as const;
+const shaderOpts = { transparent: true, depthWrite: false, blending: AdditiveBlending, side: DoubleSide } as const;
 
-// The line and the dot for the Rust engine (src/engine/effects.ts), the ports' WGSL above. The engine hands a vertex
+// The line and the dot for the Rust engine (src/engine/effects.ts). The engine hands a vertex
 // its position, normal, uv and colour alone, so there the line's next point rides as its normal and its side and how
 // far along as its uv (`lineGeometry`), and the dot's corner as its uv (`dotGeometry`). Both are widened on the
 // screen by the vertex's `screen`, in the scene's pixels (uRes).
@@ -147,7 +50,7 @@ fn vertex_hook(v: ptr<function, Vertex>, instance: u32) {
   var n = vec2f(0.0, 1.0);
   if (l > 1e-5) { n = vec2f(-d.y, d.x) / l; }
   (*v).screen = n * side * width / res;
-  // (a.w is how far before the camera the point is: the port's -mv.z)
+  // (a.w is how far before the camera the point is)
   let fade = smoothstep(near0, near1, a.w) * (1.0 - smoothstep(0.8, 1.0, along));
   (*v).c0 = vec4f(fade, side, 0.0, 0.0);
   (*v).normal = vec3f(0.0, 1.0, 0.0);
@@ -184,34 +87,31 @@ fn surface_hook(s: ptr<function, Surface>, in: VertexOut) -> bool {
   return true;
 }
 `;
-/** the line's and the dot's numbers alike: the scene's size, the width, the alpha; where the line fades in; the colour */
+/** the line's and the dot's numbers: the scene's size, the width, the alpha; where the line fades in; the colour */
 const laserLook: EffectLook = {
   numbers(u, out) {
-    const res = u.uRes.value as THREE.Vector2;
+    const res = u.uRes.value as Vec2;
     out[0] = res.x; out[1] = res.y; out[2] = num(u, 'uWidth'); out[3] = num(u, 'uAlpha');
     out[4] = num(u, 'uNear0'); out[5] = num(u, 'uNear1');
     rgb(u, 'uColor', out, 8);
   },
 };
 
-const lineMat = effectLook(
-  portShader(new THREE.ShaderMaterial({ vertexShader: lineVert, fragmentShader: lineFrag, uniforms, ...shaderOpts }), linePort),
-  'aim-laser-line', LINE_HOOKS, laserLook);
-const dotMat = effectLook(
-  portShader(new THREE.ShaderMaterial({ vertexShader: dotVert, fragmentShader: dotFrag, uniforms: dotUniforms, ...shaderOpts }), dotPort),
-  'aim-laser-dot', DOT_HOOKS, laserLook);
+const lineMat = effectLook(new LookMaterial({ uniforms, ...shaderOpts }), 'aim-laser-line', LINE_HOOKS, laserLook);
+const dotMat = effectLook(new LookMaterial({ uniforms: dotUniforms, ...shaderOpts }), 'aim-laser-dot', DOT_HOOKS,
+  laserLook);
 
-function lineGeometry(): THREE.BufferGeometry {
-  const n = LASER_LINES * LASER_POINTS * 2, g = new THREE.BufferGeometry();
+function lineGeometry(): Geometry {
+  const n = LASER_LINES * LASER_POINTS * 2, g = new Geometry();
   for (const [name, size] of [['position', 3], ['next', 3], ['side', 1], ['along', 1]] as const) {
-    g.setAttribute(name, new THREE.BufferAttribute(new Float32Array(n * size), size).setUsage(THREE.DynamicDrawUsage));
+    g.setAttribute(name, new Attribute(new Float32Array(n * size), size).setUsage(DynamicDrawUsage));
   }
-  const side = g.getAttribute('side') as THREE.BufferAttribute;
+  const side = g.getAttribute('side') as Attribute;
   for (let i = 0; i < n; i++) side.setX(i, i % 2 ? 1 : -1);
   // (the Rust engine's vertex has no attributes of the line's own: its next point as its normal, its side and how far
   // along as its uv, `write`)
   g.setAttribute('normal', g.getAttribute('next'));
-  const uv = new THREE.BufferAttribute(new Float32Array(n * 2), 2).setUsage(THREE.DynamicDrawUsage);
+  const uv = new Attribute(new Float32Array(n * 2), 2).setUsage(DynamicDrawUsage);
   for (let i = 0; i < n; i++) uv.setX(i, side.getX(i));
   g.setAttribute('uv', uv);
   const idx: number[] = [];
@@ -219,34 +119,34 @@ function lineGeometry(): THREE.BufferGeometry {
     const v = (l * LASER_POINTS + i) * 2;
     idx.push(v, v + 1, v + 2, v + 1, v + 3, v + 2);
   }
-  g.setIndex(new THREE.BufferAttribute(new Uint32Array(idx), 1).setUsage(THREE.DynamicDrawUsage));
+  g.setIndex(new Attribute(new Uint32Array(idx), 1).setUsage(DynamicDrawUsage));
   return g;
 }
 
-function dotGeometry(): THREE.BufferGeometry {
-  const g = new THREE.BufferGeometry(), n = LASER_LINES * 4;
-  g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(n * 3), 3).setUsage(THREE.DynamicDrawUsage));
+function dotGeometry(): Geometry {
+  const g = new Geometry(), n = LASER_LINES * 4;
+  g.setAttribute('position', new Attribute(new Float32Array(n * 3), 3).setUsage(DynamicDrawUsage));
   const corner = new Float32Array(n * 2), idx: number[] = [];
   for (let i = 0; i < LASER_LINES; i++) {
     corner.set([-1, -1, 1, -1, 1, 1, -1, 1], i * 8);
     idx.push(i * 4, i * 4 + 1, i * 4 + 2, i * 4, i * 4 + 2, i * 4 + 3);
   }
-  g.setAttribute('corner', new THREE.BufferAttribute(corner, 2));
+  g.setAttribute('corner', new Attribute(corner, 2));
   // (the Rust engine's vertex has no attribute of the dot's own: its corner as its uv)
   g.setAttribute('uv', g.getAttribute('corner'));
   g.setIndex(idx);
   return g;
 }
 
-let line: THREE.Mesh | null = null, dots: THREE.Mesh | null = null;
+let line: Mesh | null = null, dots: Mesh | null = null;
 /** what was asked for this frame: the paths and their ends (an end is null where the path just stops) */
 let shownAt = -1;
-const asked: { pts: THREE.Vector3[]; end: THREE.Vector3 | null }[] = [];
+const asked: { pts: Vec3[]; end: Vec3 | null }[] = [];
 let lines = 0;
 
 /** The aim preview's meshes, for warm-up (their programs compile at load). */
-export function warmLaser(): THREE.Object3D[] {
-  const l = new THREE.Mesh(lineGeometry(), lineMat), d = new THREE.Mesh(dotGeometry(), dotMat);
+export function warmLaser(): Node[] {
+  const l = new Mesh(lineGeometry(), lineMat), d = new Mesh(dotGeometry(), dotMat);
   l.frustumCulled = d.frustumCulled = false;
   return [l, d];
 }
@@ -255,7 +155,7 @@ export function warmLaser(): THREE.Object3D[] {
  * Show the preview this frame along these paths (points from the bow on, at most LASER_POINTS each), each with its
  * end's dot (or none). Call every frame it should show; once a frame passes without a call it eases out.
  */
-export function showLaser(paths: { pts: THREE.Vector3[]; end: THREE.Vector3 | null }[]): void {
+export function showLaser(paths: { pts: Vec3[]; end: Vec3 | null }[]): void {
   if (!line) start();
   shownAt = G.time;
   asked.length = 0;
@@ -264,10 +164,10 @@ export function showLaser(paths: { pts: THREE.Vector3[]; end: THREE.Vector3 | nu
 }
 
 /** The paths shown this frame (none once a frame passes without a call): what `tools/lab`'s `bowprop` reads. */
-export const laserPaths = (): readonly { pts: THREE.Vector3[]; end: THREE.Vector3 | null }[] => (G.time - shownAt < 0.05 ? asked : []);
+export const laserPaths = (): readonly { pts: Vec3[]; end: Vec3 | null }[] => (G.time - shownAt < 0.05 ? asked : []);
 
 function start(): void {
-  [line, dots] = warmLaser() as [THREE.Mesh, THREE.Mesh];
+  [line, dots] = warmLaser() as [Mesh, Mesh];
   line.renderOrder = dots.renderOrder = 5;
   G.scene.add(line, dots);
   uniforms.uAlpha.value = 0;
@@ -292,10 +192,10 @@ function start(): void {
 }
 
 function write(): void {
-  const g = line!.geometry, pos = g.getAttribute('position') as THREE.BufferAttribute, nxt = g.getAttribute('next') as THREE.BufferAttribute;
-  const along = g.getAttribute('along') as THREE.BufferAttribute;
-  const uv = g.getAttribute('uv') as THREE.BufferAttribute | undefined;
-  const dp = dots!.geometry.getAttribute('position') as THREE.BufferAttribute;
+  const g = line!.geometry, pos = g.getAttribute('position') as Attribute, nxt = g.getAttribute('next') as Attribute;
+  const along = g.getAttribute('along') as Attribute;
+  const uv = g.getAttribute('uv') as Attribute | undefined;
+  const dp = dots!.geometry.getAttribute('position') as Attribute;
   lines = asked.length;
   let tris = 0, nd = 0;
   asked.forEach((p, l) => {

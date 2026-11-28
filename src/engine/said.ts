@@ -41,13 +41,17 @@ let blacks = 0;
 const SMALL = [16, 9] as const;
 const BLACK = 2;
 const BLACK_CHECKS = 3;
+/** the share of the copy's pixels black for the frame to be: the UI's panels are drawn over it on the same canvas
+ *  (the bottom bar, the minimap, the objectives: under a fifth of a 16 by 9 copy's cells at any size) */
+const BLACK_SHARE = 0.7;
 /** the frames after the load the frame is checked at: three, a second apart at 60 frames a second */
 const CHECKED_AT = [90, 150, 210];
 
 /**
- * The frame just drawn checked for being all black, in the task that drew it (the canvas's picture is gone after
- * it): `BLACK_CHECKS` in a row are a fault. A GPU that refuses the frame says so on some devices and not on
- * others; a black frame is black on all of them. Costs a read back from the GPU, so it's asked a few times alone.
+ * The frame just drawn checked for being black but for the UI's panels over it (`BLACK_SHARE`), in the task that
+ * drew it (the canvas's picture is gone after it): `BLACK_CHECKS` in a row are a fault. A GPU that refuses the
+ * frame says so on some devices and not on others; a black frame is black on all of them. Costs a read back from
+ * the GPU, so it's asked a few times alone.
  */
 export function frameChecked(): void {
   if (!drawn) return;
@@ -56,10 +60,15 @@ export function frameChecked(): void {
   if (!small) return;
   small.drawImage(drawn, 0, 0, SMALL[0], SMALL[1]);
   const pixels = small.getImageData(0, 0, SMALL[0], SMALL[1]).data;
-  let brightest = 0;
-  for (let at = 0; at < pixels.length; at += 4) brightest = Math.max(brightest, pixels[at], pixels[at + 1], pixels[at + 2]);
-  blacks = brightest <= BLACK ? blacks + 1 : 0;
-  if (blacks === BLACK_CHECKS) fault('the frame is black', `every pixel of ${drawn.width}x${drawn.height}, ${BLACK_CHECKS} checks in a row`);
+  let black = 0;
+  for (let at = 0; at < pixels.length; at += 4) {
+    if (Math.max(pixels[at], pixels[at + 1], pixels[at + 2]) <= BLACK) black++;
+  }
+  blacks = black >= BLACK_SHARE * SMALL[0] * SMALL[1] ? blacks + 1 : 0;
+  const share = `${Math.round(100 * black / (SMALL[0] * SMALL[1]))}%`;
+  if (blacks === BLACK_CHECKS) {
+    fault('the frame is black', `${share} of ${drawn.width}x${drawn.height}, ${BLACK_CHECKS} checks in a row`);
+  }
 }
 
 /** The engine's frame on `canvas` checked at its few frames after the load (`frame` counted from it). */

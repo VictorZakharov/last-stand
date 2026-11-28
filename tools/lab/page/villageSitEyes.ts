@@ -4,7 +4,7 @@
 // exit 1st person view when sitting? He should not"), and a step must get him up, through the eyes still. Said: the
 // log, each of those, and the view at each. `canary` holds the sit off (`Player.sits`), as through the eyes it was
 // held off: E must not sit him.
-import * as THREE from 'three';
+import { Vec3 } from './sceneApi.ts';
 import type { Lab, Pictured } from './lab';
 import { G } from '../../../src/state';
 import { pointerLocked } from '../../../src/core/input';
@@ -55,10 +55,10 @@ function logByFire(): Seat {
 }
 
 /** The log's middle at its seat's height: where the crosshair is turned to. */
-const logSight = (log: Seat): THREE.Vector3 => {
+const logSight = (log: Seat): Vec3 => {
   const x = (log.ax + log.bx) / 2;
   const z = (log.az + log.bz) / 2;
-  return new THREE.Vector3(x, groundHeight(x, z) + log.sit * 0.8, z);
+  return new Vec3(x, groundHeight(x, z) + log.sit * 0.8, z);
 };
 
 /** Through the eyes off the log, the crosshair on it: outlined, E, sat, a step, up. */
@@ -66,7 +66,7 @@ async function sitThroughEyes(lab: Lab, log: Seat): Promise<FromEyes> {
   const { at, facing } = startOff(log);
   G.player.sitting.clear();
   G.player.walkTo = null;
-  G.player.place(new THREE.Vector3(at[0], groundHeight(at[0], at[1]), at[1]), facing);
+  G.player.place(new Vec3(at[0], groundHeight(at[0], at[1]), at[1]), facing);
   await viewBy(lab, 'first');
   lab.pointerLock(true);
   // (a key the game doesn't use, the gesture the lock is taken on)

@@ -2,7 +2,7 @@
 // (models/surfaceNets.ts): a tapering tube, an ellipsoid, a tapering rounded slab, a half-space, each in a frame of
 // its own (a joint's), joined softly to the rest or cut away. Each knows a sphere that holds it, so a point far from
 // it is never asked of it: asked of every part, a hand's field took 5 s to mesh.
-import * as THREE from 'three';
+import { Mat4, Node, Vec3, Vec3Tuple } from '../../engine/api/index.ts';
 import { clamp } from '../../util';
 import type { Field } from './surfaceNets';
 
@@ -10,7 +10,7 @@ import type { Field } from './surfaceNets';
  *  than the true distance), and a sphere that holds it (its centre, its radius). */
 export interface Shape {
   distance: (x: number, y: number, z: number) => number;
-  centre: THREE.Vector3Tuple;
+  centre: Vec3Tuple;
   radius: number;
 }
 
@@ -27,7 +27,7 @@ export interface Part {
   shapeOnly?: boolean;
   sayOnly?: boolean;
   /** the holding sphere's centre in the sculpt's frame */
-  at?: THREE.Vector3Tuple;
+  at?: Vec3Tuple;
 }
 
 /** how much nearer a part's distance may say a point is than its holding sphere does (a shape squashed to `depth`
@@ -57,7 +57,7 @@ export function tube(r0: number, r1: number, from: number, to: number, depth: nu
 }
 
 /** A capsule from `a` to `b` (in its frame), of radius `r`. */
-export function capsule(a: THREE.Vector3, b: THREE.Vector3, r: number): Shape {
+export function capsule(a: Vec3, b: Vec3, r: number): Shape {
   const ab = b.clone().sub(a);
   const length2 = Math.max(ab.lengthSq(), 1e-12);
   return {
@@ -124,21 +124,21 @@ export function above(y: number): Shape {
 }
 
 /** `object`'s frame in `space`'s (`space` above it in one hierarchy), inverted: from `space`'s frame into its own. */
-export function frameIn(object: THREE.Object3D, space: THREE.Object3D): Float64Array {
-  const m = new THREE.Matrix4();
-  for (let o: THREE.Object3D | null = object; o && o !== space; o = o.parent) {
+export function frameIn(object: Node, space: Node): Float64Array {
+  const m = new Mat4();
+  for (let o: Node | null = object; o && o !== space; o = o.parent) {
     o.updateMatrix();
     m.premultiply(o.matrix);
   }
   return new Float64Array(m.invert().elements);
 }
-export const IDENTITY = new Float64Array(new THREE.Matrix4().elements);
+export const IDENTITY = new Float64Array(new Mat4().elements);
 
 /** Where `part`'s holding sphere is in the sculpt's frame. */
-function centreOf(part: Part): THREE.Vector3Tuple {
+function centreOf(part: Part): Vec3Tuple {
   if (!part.at) {
-    const toSculpt = new THREE.Matrix4().fromArray(part.frame).invert();
-    part.at = new THREE.Vector3(...part.shape.centre).applyMatrix4(toSculpt).toArray();
+    const toSculpt = new Mat4().fromArray(part.frame).invert();
+    part.at = new Vec3(...part.shape.centre).applyMatrix4(toSculpt).toArray();
   }
   return part.at;
 }

@@ -3,7 +3,7 @@
 // table's, and how much of it the run's camera sees round his hand and arm; the rag's turn in his hand frame to frame
 // (it spun round in his fist as he finished wiping); the broom's bristles against the floor as he sweeps (touching it,
 // never into it) and as he carries it (never into it).
-import * as THREE from 'three';
+import { Camera, Mesh, Node, Quat, Raycaster, Vec3 } from './sceneApi.ts';
 import { G } from '../../../src/state';
 import { BAR, TABLES } from '../../../src/data/tavern';
 import type { Keeper } from '../../../src/entities/models/keeper';
@@ -50,30 +50,30 @@ export class ClothAndBroom {
   spin = false;
   private spun = 0;
   private frame = 0;
-  private ragWas: THREE.Quaternion | null = null;
+  private ragWas: Quat | null = null;
   private heldBefore = '';
-  private handWas: THREE.Quaternion | null = null;
-  private inHandWas: THREE.Quaternion | null = null;
-  private readonly ray = new THREE.Raycaster();
-  private readonly v = new THREE.Vector3();
+  private handWas: Quat | null = null;
+  private inHandWas: Quat | null = null;
+  private readonly ray = new Raycaster();
+  private readonly v = new Vec3();
 
-  read(keeper: Keeper, room: THREE.Object3D, step: string, doing: string, broomSaid = ''): void {
+  read(keeper: Keeper, room: Node, step: string, doing: string, broomSaid = ''): void {
     this.frame++;
     room.updateMatrixWorld(true);
-    const pad = room.getObjectByName('keeper rag flat') as THREE.Mesh | undefined;
+    const pad = room.getObjectByName('keeper rag flat') as Mesh | undefined;
     if (pad && pad.scale.x > 0.5 && /wipe/.test(step)) this.readCloth(pad, keeper, room, step, doing);
     this.readRag(keeper, doing);
     const broom = room.getObjectByName('broom');
     if (broom) this.readBroom(broom, room, step, `${doing} (${broomSaid})`);
   }
 
-  private readCloth(pad: THREE.Mesh, keeper: Keeper, room: THREE.Object3D, step: string, doing: string): void {
+  private readCloth(pad: Mesh, keeper: Keeper, room: Node, step: string, doing: string): void {
     this.wipeFrames++;
     const at = pad.position, top = step === 'wipe bar' ? barTop() : nearestTable(at);
     const off = Math.abs(at.y - top.y - 0.003);
     this.off.see(off, () => `${(off * 1000).toFixed(1)} mm off the ${top.name}'s top, ${doing}`);
     for (const [sx, sz] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
-      const corner = new THREE.Vector3(sx * PAD.x, 0, sz * PAD.z).applyAxisAngle(new THREE.Vector3(0, 1, 0), pad.rotation.y).add(at);
+      const corner = new Vec3(sx * PAD.x, 0, sz * PAD.z).applyAxisAngle(new Vec3(0, 1, 0), pad.rotation.y).add(at);
       const past = pastEdge(corner, top);
       this.past.see(past, () => `a corner ${(past * 100).toFixed(1)} cm past the ${top.name}'s edge, ${doing}`);
     }
@@ -98,8 +98,8 @@ export class ClothAndBroom {
     // (the canary's: turned on further each frame, as the fault's turns added up)
     if (this.spin) rag.rotateY(this.spun += 0.6);
     // (in the world, as the player sees it turn: its turn in his hand counts his wrist's own)
-    const now = rag.getWorldQuaternion(new THREE.Quaternion());
-    const hand = keeper.joints.handR.getWorldQuaternion(new THREE.Quaternion()), inIt = rag.quaternion.clone();
+    const now = rag.getWorldQuaternion(new Quat());
+    const hand = keeper.joints.handR.getWorldQuaternion(new Quat()), inIt = rag.quaternion.clone();
     if (this.ragWas && this.handWas && this.inHandWas) {
       const turned = this.ragWas.angleTo(now), handTurned = this.handWas.angleTo(hand), inTurned = this.inHandWas.angleTo(inIt);
       const deg = (a: number) => (a * 180 / Math.PI).toFixed(0);
@@ -110,7 +110,7 @@ export class ClothAndBroom {
     this.inHandWas = inIt;
   }
 
-  private readBroom(broom: THREE.Object3D, room: THREE.Object3D, step: string, doing: string): void {
+  private readBroom(broom: Node, room: Node, step: string, doing: string): void {
     // (the broom within the holder his hand holds, `broom grip`: carried while that's in a hand)
     const grip = broom.parent, sweeping = step === 'sweep', carried = !!grip?.parent && grip !== room && grip.parent !== room;
     if (!sweeping && !carried) return;
@@ -154,20 +154,20 @@ function barTop(): Top {
   return { name: 'bar', x: BAR.x, z: (BAR.from + BAR.to) / 2, y: BAR.top, hx: BAR.half, hz: (BAR.to - BAR.from) / 2 };
 }
 
-function nearestTable(at: THREE.Vector3): Top {
+function nearestTable(at: Vec3): Top {
   const tops = Object.entries(TABLES).map(([name, t]) => ({ name, ...t, y: t.top }) as Top);
   return tops.sort((a, b) => Math.hypot(a.x - at.x, a.z - at.z) - Math.hypot(b.x - at.x, b.z - at.z))[0];
 }
 
 /** how far `point` (room) lies past `top`'s edge (m; 0 or less on it) */
-function pastEdge(point: THREE.Vector3, top: Top): number {
+function pastEdge(point: Vec3, top: Top): number {
   if (top.r !== undefined) return Math.hypot(point.x - top.x, point.z - top.z) - top.r;
   return Math.max(Math.abs(point.x - top.x) - top.hx!, Math.abs(point.z - top.z) - top.hz!);
 }
 
 /** the share of the rag's grid of points the camera sees, his own parts alone in the way */
-function seenShare(pad: THREE.Mesh, keeper: Keeper, ray: THREE.Raycaster, v: THREE.Vector3): number {
-  const camera = G.camera as THREE.Camera, from = camera.getWorldPosition(new THREE.Vector3());
+function seenShare(pad: Mesh, keeper: Keeper, ray: Raycaster, v: Vec3): number {
+  const camera = G.camera as Camera, from = camera.getWorldPosition(new Vec3());
   let seen = 0, all = 0;
   for (let i = 0; i < GRID[0]; i++) {
     for (let k = 0; k < GRID[1]; k++) {
@@ -184,11 +184,11 @@ function seenShare(pad: THREE.Mesh, keeper: Keeper, ray: THREE.Raycaster, v: THR
 }
 
 /** the lowest of the broom's points over the room's floor (m) */
-function lowestOf(broom: THREE.Object3D, room: THREE.Object3D): number {
+function lowestOf(broom: Node, room: Node): number {
   let lowest = Infinity;
-  const v = new THREE.Vector3();
+  const v = new Vec3();
   broom.traverse((o) => {
-    const mesh = o as THREE.Mesh;
+    const mesh = o as Mesh;
     if (!mesh.isMesh) return;
     const pos = mesh.geometry.attributes.position;
     for (let i = 0; i < pos.count; i++) {

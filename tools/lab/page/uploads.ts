@@ -5,7 +5,7 @@
 // version changed, each handed to the engine again: on a phone's GPU a buffer written while a frame still queued
 // reads it holds the page until that frame is done (or copies it): from play, the S25's render took 3.3 ms a frame
 // standing in the village and 10 to 17 walking (trace JQ2E-3Y1K), its draws much the same.
-import * as THREE from 'three';
+import { Attribute, InstancedMesh, Mesh, Node } from './sceneApi.ts';
 import { G } from '../../../src/state';
 
 /** one kind of upload's running count: its calls and their bytes */
@@ -112,26 +112,33 @@ export function uploadsBetween(
 }
 
 /** each attribute's version as last read, to tell which changed (three sends an attribute again when it does) */
-const versions = new WeakMap<THREE.BufferAttribute | THREE.InterleavedBuffer, number>();
+const versions = new WeakMap<Attribute, number>();
 
 /** A name for `object`: its own and its parent's, as a reader finds it. */
-function nameOf(object: THREE.Object3D): string {
+function nameOf(object: Node): string {
   const own = object.name || object.type;
   const parent = object.parent && object.parent !== G.scene ? object.parent.name || object.parent.type : '';
   return parent ? `${parent} > ${own}` : own;
 }
 
 /** The buffers `mesh` sends three, with a name each: its geometry's attributes, and an instanced mesh's instances. */
-function buffersOf(mesh: THREE.Mesh): [string, THREE.BufferAttribute | THREE.InterleavedBufferAttribute][] {
-  const named: [string, THREE.BufferAttribute | THREE.InterleavedBufferAttribute][] = [];
+function buffersOf(mesh: Mesh): [string, Attribute][] {
+  const named: [string, Attribute][] = [];
   for (const [key, attribute] of Object.entries(mesh.geometry.attributes)) named.push([key, attribute]);
   if (mesh.geometry.index) named.push(['index', mesh.geometry.index]);
-  const instanced = mesh as THREE.InstancedMesh;
+  const instanced = mesh as InstancedMesh;
   if (instanced.isInstancedMesh) {
     named.push(['instanceMatrix', instanced.instanceMatrix]);
     if (instanced.instanceColor) named.push(['instanceColor', instanced.instanceColor]);
   }
   return named;
+}
+
+/** The store `attribute`'s numbers are sent from: itself (the API has no interleaved attributes; a tree of three's,
+ *  an A/B's other side, has, and sends one's shared buffer, `data`, with a version of its own). */
+function storeOf(attribute: Attribute): Attribute {
+  const interleaved = attribute as Attribute & { isInterleavedBufferAttribute?: boolean; data?: Attribute };
+  return interleaved.isInterleavedBufferAttribute && interleaved.data ? interleaved.data : attribute;
 }
 
 /** The scene's buffers whose version changed since the last call (each sent again as it's next drawn, in whole or by
@@ -140,12 +147,10 @@ function buffersOf(mesh: THREE.Mesh): [string, THREE.BufferAttribute | THREE.Int
 export function buffersChanged(): { name: string; bytes: number }[] {
   const changed: { name: string; bytes: number }[] = [];
   G.scene.traverse((object) => {
-    const mesh = object as THREE.Mesh;
+    const mesh = object as Mesh;
     if (!mesh.geometry) return;
     for (const [key, attribute] of buffersOf(mesh)) {
-      const store = (attribute as THREE.InterleavedBufferAttribute).isInterleavedBufferAttribute
-        ? (attribute as THREE.InterleavedBufferAttribute).data
-        : (attribute as THREE.BufferAttribute);
+      const store = storeOf(attribute);
       const was = versions.get(store);
       versions.set(store, store.version);
       if (was === undefined || was === store.version) continue;

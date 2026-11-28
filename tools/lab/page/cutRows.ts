@@ -4,14 +4,14 @@
 // eyes saw, so a unit test plants each fault (test/cutRows.test.mjs). (The owner: "should naturally hit towards left
 // with 2 handed, then dont return to neutral right away, wait for another attack, if user keeps attacking, swipe the
 // other direction".)
-import * as THREE from 'three';
+import { Vec3 } from './sceneApi.ts';
 
 /** A frame of a cut as the eyes see it: the weapon's hilt and tip in the camera's space (m: x right, y up, -z ahead),
  *  the hand holding it, which way the cut swings (`Model.swing`: 1 the forehand, right to left; null on a game without
  *  it), whether the frame is in a cast, and its number. */
 export interface CutFrame {
-  grip: THREE.Vector3;
-  tip: THREE.Vector3;
+  grip: Vec3;
+  tip: Vec3;
   hand: Hand;
   side: number | null;
   inCast: boolean;
@@ -66,7 +66,7 @@ const nearRest = (frame: CutFrame, rest: CutFrame) =>
   apart(strikingWay(frame), strikingWay(rest)) <= REST_NEAR && apart(bladeWay(frame), bladeWay(rest)) <= REST_TURN;
 
 /** How far apart two ways are (degrees). */
-const apart = (a: THREE.Vector3, b: THREE.Vector3) => a.angleTo(b) * DEG;
+const apart = (a: Vec3, b: Vec3) => a.angleTo(b) * DEG;
 
 /** Each cast of a row of cuts: its frames (from the frame before it began, as `castFrames` has them) and the index
  *  among them its strike starts at (none: its frames' end). */

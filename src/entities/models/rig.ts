@@ -1,12 +1,13 @@
 // Procedural humanoid rig: a hierarchy of joint Groups with primitive meshes,
 // plus reusable procedural animation helpers. Forward is +Z, left is +X.
-import * as THREE from 'three';
+import { Box3, Euler, Geometry, Mat4, Material, Mesh, Node, Quat, Vec3 } from '../../engine/api/index.ts';
+import * as shapes from '../../engine/api/shapes/index.ts';
 import { clampAnkle, clampAnkleRoll } from './anatomy';
 import { groundHeight } from '../../world/ground';
 import { tunable } from '../../core/tuning';
 
-export function part(geo: THREE.BufferGeometry, mat: THREE.Material, parent: THREE.Object3D, x = 0, y = 0, z = 0): THREE.Mesh {
-  const m = new THREE.Mesh(geo, mat);
+export function part(geo: Geometry, mat: Material, parent: Node, x = 0, y = 0, z = 0): Mesh {
+  const m = new Mesh(geo, mat);
   m.position.set(x, y, z);
   m.castShadow = true;
   m.receiveShadow = true;
@@ -16,21 +17,21 @@ export function part(geo: THREE.BufferGeometry, mat: THREE.Material, parent: THR
 
 /** Frees the geometry of everything under `root` (a model's dispose), but `keep` and what a build shares with the next
  *  one (`userData.shared`: a hero's head, a creature's sculpt). */
-export function disposeGeometries(root: THREE.Object3D, keep?: THREE.BufferGeometry): void {
+export function disposeGeometries(root: Node, keep?: Geometry): void {
   root.traverse((o) => {
-    const geo = (o as THREE.Mesh).geometry;
+    const geo = (o as Mesh).geometry;
     if (geo && geo !== keep && !geo.userData.shared) geo.dispose();
   });
 }
 
-export function joint(parent: THREE.Object3D, x = 0, y = 0, z = 0): THREE.Group {
-  const g = new THREE.Group();
+export function joint(parent: Node, x = 0, y = 0, z = 0): Node {
+  const g = new Node();
   g.position.set(x, y, z);
   parent.add(g);
   return g;
 }
 
-const capsule = (r: number, len: number) => new THREE.CapsuleGeometry(r, Math.max(0.001, len - r * 2), 4, 10);
+const capsule = (r: number, len: number) => shapes.capsule(r, Math.max(0.001, len - r * 2), 4, 10);
 
 export const DEFAULT_PROPORTIONS = {
   hipY: 0.95, hipW: 0.2,
@@ -46,25 +47,25 @@ export type BodyPart = 'skin' | 'torso' | 'legs' | 'feet' | 'arms' | 'hands';
 /** Named joints of a humanoid. L = +X (character's left), R = -X. */
 export interface Joints {
   P: Proportions;
-  root: THREE.Group; body: THREE.Group; hips: THREE.Group; spine: THREE.Group; chest: THREE.Group; chestMesh: THREE.Mesh;
-  neck: THREE.Group; head: THREE.Group;
-  thighL: THREE.Group; kneeL: THREE.Group; ankleL: THREE.Group;
-  thighR: THREE.Group; kneeR: THREE.Group; ankleR: THREE.Group;
-  shoulderL: THREE.Group; elbowL: THREE.Group; handL: THREE.Group;
-  shoulderR: THREE.Group; elbowR: THREE.Group; handR: THREE.Group;
+  root: Node; body: Node; hips: Node; spine: Node; chest: Node; chestMesh: Mesh;
+  neck: Node; head: Node;
+  thighL: Node; kneeL: Node; ankleL: Node;
+  thighR: Node; kneeR: Node; ankleR: Node;
+  shoulderL: Node; elbowL: Node; handL: Node;
+  shoulderR: Node; elbowR: Node; handR: Node;
 }
 
 /**
  * Build a humanoid. `M` maps body parts to materials (missing entries fall back
  * to `skin`). `overrides` tweak the default proportions.
  */
-export function buildHumanoid(M: Partial<Record<BodyPart, THREE.Material>> & { skin: THREE.Material }, overrides: Partial<Proportions> = {}): Joints {
+export function buildHumanoid(M: Partial<Record<BodyPart, Material>> & { skin: Material }, overrides: Partial<Proportions> = {}): Joints {
   const P: Proportions = { ...DEFAULT_PROPORTIONS, ...overrides };
   const mat = (k: BodyPart) => M[k] ?? M.skin;
-  const root = new THREE.Group();
+  const root = new Node();
   const body = joint(root);
   const hips = joint(body, 0, P.hipY, 0);
-  part(new THREE.SphereGeometry(1, 16, 12).scale(P.hipW * 0.95, 0.12, P.chestD * 0.95), mat('legs'), hips, 0, 0.02, 0);
+  part(shapes.sphere(1, 16, 12).scale(P.hipW * 0.95, 0.12, P.chestD * 0.95), mat('legs'), hips, 0, 0.02, 0);
 
   const leg = (s: number) => {
     const thigh = joint(hips, s * P.hipW * 0.55, -0.02, 0);
@@ -72,15 +73,15 @@ export function buildHumanoid(M: Partial<Record<BodyPart, THREE.Material>> & { s
     const knee = joint(thigh, 0, -P.thighL, 0);
     part(capsule(P.shinR, P.shinL), mat('legs'), knee, 0, -P.shinL / 2, 0);
     const ankle = joint(knee, 0, -P.shinL, 0);
-    part(new THREE.BoxGeometry(P.shinR * 1.9, P.shinR * 1.2, P.shinR * 4.2), mat('feet'), ankle, 0, -P.shinR * 0.5, P.shinR * 1.1);
+    part(shapes.box(P.shinR * 1.9, P.shinR * 1.2, P.shinR * 4.2), mat('feet'), ankle, 0, -P.shinR * 0.5, P.shinR * 1.1);
     return { thigh, knee, ankle };
   };
   const legL = leg(1), legR = leg(-1);
 
   const spine = joint(hips, 0, 0.06, 0);
-  part(new THREE.SphereGeometry(1, 16, 12).scale(P.waistW, P.torsoL * 0.35, P.chestD * 0.9), mat('torso'), spine, 0, P.torsoL * 0.2, 0);
+  part(shapes.sphere(1, 16, 12).scale(P.waistW, P.torsoL * 0.35, P.chestD * 0.9), mat('torso'), spine, 0, P.torsoL * 0.2, 0);
   const chest = joint(spine, 0, P.torsoL * 0.45, 0);
-  const chestMesh = part(new THREE.SphereGeometry(1, 20, 14).scale(P.chestW, P.torsoL * 0.42, P.chestD), mat('torso'), chest, 0, P.torsoL * 0.12, 0);
+  const chestMesh = part(shapes.sphere(1, 20, 14).scale(P.chestW, P.torsoL * 0.42, P.chestD), mat('torso'), chest, 0, P.torsoL * 0.12, 0);
   const neck = joint(chest, 0, P.torsoL * 0.5, 0);
   part(capsule(P.headR * 0.42, P.neckL + 0.06), mat('skin'), neck, 0, P.neckL * 0.4, 0);
   const head = joint(neck, 0, P.neckL, 0);
@@ -89,12 +90,12 @@ export function buildHumanoid(M: Partial<Record<BodyPart, THREE.Material>> & { s
     const shoulder = joint(chest, s * P.shoulderW, P.torsoL * P.shoulderY, 0);
     // (where it sits with the shoulder girdle at rest: the girdle slides it, anatomy.ts `girdlePlace`)
     shoulder.userData.rest = shoulder.position.clone();
-    part(new THREE.SphereGeometry(P.upperR * 1.35, 12, 10), mat('arms'), shoulder);
+    part(shapes.sphere(P.upperR * 1.35, 12, 10), mat('arms'), shoulder);
     part(capsule(P.upperR, P.upperL), mat('arms'), shoulder, 0, -P.upperL / 2, 0);
     const elbow = joint(shoulder, 0, -P.upperL, 0);
     part(capsule(P.foreR, P.foreL), mat('arms'), elbow, 0, -P.foreL / 2, 0);
     const hand = joint(elbow, 0, -P.foreL, 0);
-    part(new THREE.SphereGeometry(P.handR, 10, 8).scale(0.9, 1.25, 0.65), mat('hands'), hand, 0, -P.handR * 0.9, 0);
+    part(shapes.sphere(P.handR, 10, 8).scale(0.9, 1.25, 0.65), mat('hands'), hand, 0, -P.handR * 0.9, 0);
     return { shoulder, elbow, hand };
   };
   const armL = arm(1), armR = arm(-1);
@@ -293,10 +294,10 @@ const HERO_FALL = { buckle: 0.3, lands: 0.55, rebound: 0.22, bounce: 0.09, back:
 /** where a fallen hero's arms lie (`heroFall`), each joint's turn from the rig's rest: the right out on the ground and
  *  bent a little, the left by his side, a little out and bent */
 const ARMS_LYING = {
-  shoulderR: new THREE.Euler(0, 0, -0.85), elbowR: new THREE.Euler(-0.35, 0, 0),
-  shoulderL: new THREE.Euler(0, 0, 0.35), elbowL: new THREE.Euler(-0.5, 0, 0),
+  shoulderR: new Euler(0, 0, -0.85), elbowR: new Euler(-0.35, 0, 0),
+  shoulderL: new Euler(0, 0, 0.35), elbowL: new Euler(-0.5, 0, 0),
 };
-const _lie = new THREE.Quaternion();
+const _lie = new Quat();
 
 /**
  * A hero falling, `k` from 0 (standing) to 1 (lying), played back the other way as he's raised (#751: "Improve
@@ -342,15 +343,15 @@ export function heroFall(j: Joints, k: number, dirSign = -1): void {
   liftOffFloor(j);
 }
 
-const _inv = new THREE.Matrix4();
-const _at = new THREE.Vector3();
-const _box = new THREE.Box3();
-const _corner = new THREE.Vector3();
-const _axis = new THREE.Vector3();
-const _flat = new THREE.Vector3();
-const _turn = new THREE.Quaternion();
-const _parentTurn = new THREE.Quaternion();
-const _handTurn = new THREE.Quaternion();
+const _inv = new Mat4();
+const _at = new Vec3();
+const _box = new Box3();
+const _corner = new Vec3();
+const _axis = new Vec3();
+const _flat = new Vec3();
+const _turn = new Quat();
+const _parentTurn = new Quat();
+const _handTurn = new Quat();
 /** how much further than the rig's radii a lying hero's gear reaches toward the ground (m: `liftOffFloor`), each a
  *  little over what the three heroes lying read (a boot 3.7 cm past the ankle's, the ranger's quiver 2.3 cm past the
  *  chest's, the mage's crystal 1.1 cm past the hand's) */
@@ -362,11 +363,11 @@ const LAID_FROM = 0.35;
  * What `hand` holds turned to lie along the ground, by `share` (0 as held, 1 lying flat): the long axis of its bounds,
  * in the hand's own frame, levelled in the world's by turning the hand, its heading kept. Its matrices must be current.
  */
-function layHeldFlat(hand: THREE.Group, share: number): void {
+function layHeldFlat(hand: Node, share: number): void {
   _box.makeEmpty();
   _inv.copy(hand.matrixWorld).invert();
   hand.traverse((o) => {
-    const mesh = o as THREE.Mesh;
+    const mesh = o as Mesh;
     if (!mesh.isMesh || !mesh.visible || o === hand) return;
     const geometry = mesh.geometry;
     if (!geometry.boundingBox) geometry.computeBoundingBox();
@@ -409,7 +410,7 @@ function liftOffFloor(j: Joints): void {
   // a quiver or a pack on the back, a staff's crystal by the hand; read off the drawn models lying, `LIFT_MORE`)
   const M = LIFT_MORE;
   const back = P.chestD + M.back, foot = P.shinR + M.foot, hand = P.handR + M.hand;
-  const parts: [THREE.Object3D, number][] = [
+  const parts: [Node, number][] = [
     [j.hips, P.chestD], [j.spine, back], [j.chest, back], [j.neck, P.headR * 0.5], [j.head, P.headR],
     [j.shoulderL, P.upperR], [j.shoulderR, P.upperR], [j.elbowL, P.foreR], [j.elbowR, P.foreR],
     [j.handL, hand], [j.handR, hand], [j.thighL, P.thighR], [j.thighR, P.thighR],
@@ -435,9 +436,9 @@ export const pulse = (t: number, a: number, b: number): number => (t <= a || t >
 /** Ramp 0 → 1 between a and b. */
 export const ramp = (t: number, a: number, b: number): number => Math.min(1, Math.max(0, (t - a) / (b - a)));
 
-const _t = new THREE.Vector3(), _h = new THREE.Vector3(), _e = new THREE.Vector3(), _p = new THREE.Vector3();
-const _q = new THREE.Quaternion(), _q2 = new THREE.Quaternion();
-const X_AXIS = new THREE.Vector3(1, 0, 0), DOWN = new THREE.Vector3(0, -1, 0);
+const _t = new Vec3(), _h = new Vec3(), _e = new Vec3(), _p = new Vec3();
+const _q = new Quat(), _q2 = new Quat();
+const X_AXIS = new Vec3(1, 0, 0), DOWN = new Vec3(0, -1, 0);
 
 /** A reach of `d` toward an arm of `length` eased into its end over the last `soft` share of it: unchanged short of
  *  that, then nearing the full length without reaching it. */
@@ -456,7 +457,7 @@ function softReach(d: number, length: number, soft: number): number {
  * of a reach swing it 10), and a shoulder brought a centimetre nearer a grip held still in the view jumped the elbow
  * 7 cm in a frame (Bull Rush stopped by the wall, #294).
  */
-export function reachArm(shoulder: THREE.Object3D, elbow: THREE.Object3D, upper: number, fore: number, target: THREE.Vector3, pole: THREE.Vector3, hinge = 1, soft = 0): void {
+export function reachArm(shoulder: Node, elbow: Node, upper: number, fore: number, target: Vec3, pole: Vec3, hinge = 1, soft = 0): void {
   _t.copy(target).sub(shoulder.position);
   const d = Math.min(Math.max(softReach(_t.length(), upper + fore, soft), 0.02), upper + fore - 1e-4);
   const cosE = (upper * upper + fore * fore - d * d) / (2 * upper * fore);
@@ -476,9 +477,9 @@ export function reachArm(shoulder: THREE.Object3D, elbow: THREE.Object3D, upper:
   shoulder.quaternion.copy(_q);
 }
 
-const _a = new THREE.Vector3(), _hip = new THREE.Vector3(), _k = new THREE.Quaternion(), _r = new THREE.Quaternion();
-const _q0 = new THREE.Quaternion(), _fw = new THREE.Quaternion(), _toe = new THREE.Vector3();
-const _level = new THREE.Quaternion(), _ahead = new THREE.Vector3(), _up = new THREE.Vector3(0, 1, 0);
+const _a = new Vec3(), _hip = new Vec3(), _k = new Quat(), _r = new Quat();
+const _q0 = new Quat(), _fw = new Quat(), _toe = new Vec3();
+const _level = new Quat(), _ahead = new Vec3(), _up = new Vec3(0, 1, 0);
 /** how far forward of the ankle the toes are (the rig's units) */
 const TOE = 0.15;
 
@@ -491,7 +492,7 @@ const TOE = 0.15;
 /** Turns `ankle` (by `share`, 0 to 1) so its foot lies level in the world, heading the way it points now, rolled no
  *  further than the ankle rolls (under a shin leaning out past that, it lies on its edge: laid flat, a running
  *  reversal's landing read 57 degrees at the ankle). */
-function layFlat(knee: THREE.Object3D, ankle: THREE.Object3D, share: number, left: boolean): void {
+function layFlat(knee: Node, ankle: Node, share: number, left: boolean): void {
   ankle.getWorldQuaternion(_k);
   _ahead.set(0, 0, 1).applyQuaternion(_k);
   _level.setFromAxisAngle(_up, Math.atan2(_ahead.x, _ahead.z));
@@ -504,7 +505,7 @@ function layFlat(knee: THREE.Object3D, ankle: THREE.Object3D, share: number, lef
 /** The world matrices of `root` and what's under it, its leaf meshes left out: what a pose reads between its steps is its
  *  joints, and a hero's meshes (most of what's under him) are made again as the scene is drawn, or as he ends his pose.
  *  Each whole walk took about 0.25 ms of a frame, up to 8 a frame as a ranger shoots. */
-export function updateJoints(root: THREE.Object3D): void {
+export function updateJoints(root: Node): void {
   if (root.matrixAutoUpdate) root.updateMatrix();
   if (root.parent) root.matrixWorld.multiplyMatrices(root.parent.matrixWorld, root.matrix);
   else root.matrixWorld.copy(root.matrix);
@@ -512,7 +513,7 @@ export function updateJoints(root: THREE.Object3D): void {
   const kids = root.children;
   for (let i = 0; i < kids.length; i++) {
     const kid = kids[i];
-    if (kid.children.length || !(kid as THREE.Mesh).isMesh) updateJoints(kid);
+    if (kid.children.length || !(kid as Mesh).isMesh) updateJoints(kid);
   }
 }
 

@@ -1,6 +1,6 @@
 // Damage rolls and application for both sides.
 import { damageTaken, spotTaken } from '../entities/bossKit';
-import type * as THREE from 'three';
+import type { Vec3 } from '../engine/api/index.ts';
 import { G } from '../state';
 import { NUMBER_COLORS } from '../data/balance';
 import { floatText } from '../ui/floaters';
@@ -113,7 +113,7 @@ let logSink: ((hit: LoggedHit) => void) | null = null;
 /** Where the hits go for the battle log (null while it's off: nothing is made for it). */
 export function setLogSink(fn: typeof logSink): void { logSink = fn; }
 
-let sparSink: ((p: Player, from: THREE.Vector3 | null, foe: Enemy | null) => void) | null = null;
+let sparSink: ((p: Player, from: Vec3 | null, foe: Enemy | null) => void) | null = null;
 /** Where a harmless foe's blows at the local hero go outside a run (the village's tutorial spars by them:
  *  game/tutorial.ts). */
 export function setSparSink(fn: typeof sparSink): void { sparSink = fn; }
@@ -172,7 +172,7 @@ export function carryEnemy(enemy: Enemy, by: Player, way: XZ, seconds: number): 
 /** Damage a player (after armor / resistance / ward), dealt `by` a foe's attack. Only its own game's: a partner's is
  *  judged where its player sees the blow (net/role). */
 export function hurtPlayer(
-  p: Player, amount: number, type: DamageType = 'physical', from: THREE.Vector3 | null = null, by: Attacker | null = null,
+  p: Player, amount: number, type: DamageType = 'physical', from: Vec3 | null = null, by: Attacker | null = null,
 ): number {
   if (!p.active || !p.local) return 0;
   // (thrown through the air: nothing lands on him till he's down, his landing hurt by what threw him once he is)
@@ -190,7 +190,7 @@ export function hurtPlayer(
 
 /** A rival's hit on the local hero in a duel (game/duel.ts), as his own game works it out: his armour or resistance,
  *  then his block and ward (`Player.takeDamage`). Null: it didn't land (he's down, or guarded). */
-export function hurtByRival(p: Player, amount: number, type: DamageType, from: THREE.Vector3 | null): HitResult | null {
+export function hurtByRival(p: Player, amount: number, type: DamageType, from: Vec3 | null): HitResult | null {
   if (!p.active || !p.local) return null;
   const s = p.stats;
   const reduce = type === 'physical' ? s.armor : s.resist;

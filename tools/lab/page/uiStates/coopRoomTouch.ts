@@ -7,7 +7,7 @@ const STATE: Steps = {
   order: 295,
   open: (lab) => openCoopRoom(lab, true),
   close: closeCoopRoom,
-  check: (canary) => coopRoomShown('coopRoomTouch', canary),
+  check: (canary, lab) => coopRoomShown('coopRoomTouch', canary, lab),
   canary: caught(COOP_ROOM_CANARY),
 };
 export default STATE;

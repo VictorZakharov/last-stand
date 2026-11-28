@@ -2,7 +2,7 @@
 // the arena stands between him and the foes he casts at. The crypt's columns are rolled afresh with each run, and a
 // fixed spot met one in some runs: the log's bolts struck nothing there, a column between (`lab log --class mage`).
 
-import * as THREE from 'three';
+import { Vec3 } from './sceneApi.ts';
 import { G } from '../../../src/state';
 
 /** A lane: where the hero stands and the way he faces (rad). */
@@ -25,16 +25,16 @@ const GRID = 2;
 const OFF_DAIS = 7;
 
 /** The ways ahead of and to the left of a body facing `facing` (rad, 0 along +z). */
-export function waysOf(facing: number): { forward: THREE.Vector3; left: THREE.Vector3 } {
-  const forward = new THREE.Vector3(Math.sin(facing), 0, Math.cos(facing));
-  const left = new THREE.Vector3(Math.cos(facing), 0, -Math.sin(facing));
+export function waysOf(facing: number): { forward: Vec3; left: Vec3 } {
+  const forward = new Vec3(Math.sin(facing), 0, Math.cos(facing));
+  const left = new Vec3(Math.cos(facing), 0, -Math.sin(facing));
   return { forward, left };
 }
 
 /** Whether the lane from `at` along `facing` (rad) is clear of every prop, off the dais and inside the arena's wall. */
 export function laneClear(at: [number, number], facing: number, size: LaneSize): boolean {
   const { forward, left } = waysOf(facing);
-  const from = new THREE.Vector3(at[0], 0, at[1]);
+  const from = new Vec3(at[0], 0, at[1]);
   const end = from.clone().addScaledVector(forward, size.long);
   if (Math.hypot(end.x, end.z) > G.arena.radius - size.wide) return false;
   for (let along = 0; along <= size.long; along++) {
@@ -42,7 +42,7 @@ export function laneClear(at: [number, number], facing: number, size: LaneSize):
     if (Math.max(Math.abs(point.x), Math.abs(point.z)) < OFF_DAIS) return false;
   }
   return G.arena.obstacles.every((prop) => {
-    const off = new THREE.Vector3(prop.x - from.x, 0, prop.z - from.z);
+    const off = new Vec3(prop.x - from.x, 0, prop.z - from.z);
     const along = off.dot(forward);
     const across = Math.abs(off.dot(left));
     return along < -prop.r || along > size.long + prop.r || across > size.wide + prop.r;

@@ -60,7 +60,14 @@ end touch the same lines and conflict (`npm run check:sorted` holds the order; t
   at its first draw; a canary of a three material of its own (sheen, iridescence) makes no pipeline of its own there,
   the engine's pipelines being set apart by blending, side and depth writing (`describe` in `engine/materials.ts`), so the
   canaries draw a blending none else has.
+- `coopPlant.ts`, `friends.ts`, `uiCoopRoom.ts`: a canary's fault in Play together is planted in the dialog's
+  sheet (`plantInCoop`), stepped three frames and taken out after: the page's styles they planted reached nothing the
+  engine draws, and `friends --canary`'s textOverlap, columns and layoutShift and the room's narrowed column went
+  unseen. A tree that draws the dialog on the page (an A/B's older side) plants the page's styles still. `friends`
+  reads the tabs and the code's line after three frames (`laidOut`): read at once, they "moved" as they were laid out.
 - `death.ts`: the hero never lands a critical hit while a pass is measured (`onePass`): the second pass leaves each foe 0.8 of the first's damage short of death, and a crit left it standing, so which bodies fell changed from run to run.
+- `digits.ts`: the old style's canary takes the lining faces away and puts them back as it ends (`plantOldStyle`):
+  deleted for good, every state after it in a run read its digits old style, the choice's chips among them.
 - `draws.ts`: the ghosts' count is a pass of its own (`ghosts`, its camera the scene's on `GHOST_COUNT_LAYER`): counted as the scene's, its 40 to 50 draws read as the scene's own. Its last list names the programs and looks drawn by more than one material (each a draw of its own however alike): what's left to merge, found by it (the village's ghost was 46 draws drawn mesh by mesh).
 - `gpuPasses.ts`: the frame by its parts is the engine's breakdown (`gpuParts`), the canary the bloom taken out: its
   passes keep a fifth of their time with `TUNE.bloom` 0 (0.17 ms of 0.78 at 2880 by 1800 at 2), so it asks them to
@@ -76,7 +83,15 @@ end touch the same lines and conflict (`npm run check:sorted` holds the order; t
   `--cold`).
 - `haze.ts`: the weapons are the named ones a blow is measured by and whatever else a hand holds (`isHeld`: the staff, the bow): by name alone the mage's and the ranger's runs said "no weapons in the frame" with the staff filling a third of it.
 - `houses.ts`, `housesFaces.ts`: `lab houses` hung on main, unseen, its page held in one task: the faces round a door are read by some 80 thousand rays, sent at each of the room's meshes whole, and the rooms' still parts had become merged meshes of thousands of triangles (`mergeRoom`). They go at chunks now (`rayChunks.ts`), and only those that reach the front wall, where every ray starts (`reachesFront`): 6.5 s a room, the check 61 s. While it couldn't run three more of its readings went stale, found by its canary once it ran: the chandeliers against the beams read each one's meshes, of which a merge leaves none, so it passed with nothing read (it reads `mergedParts` now, the box of each mesh a merge took, kept by `mergeStill` in dev builds, and throws where a chandelier or a ceiling has no part); the programs compiled going in were three's, none under the engine (it counts the engine's pipelines made, `PIPELINES.made`, 0 in every visit; the plant that compiled one is gone); and it found a real fault, the shop's crates' posts in their lids' top face. A check that sends thousands of rays at a place sends them at chunks, and a command's work on its page has a limit now (`COMMAND_TIMEOUT_MS` in `node/side.mjs`, 20 minutes), so one held so fails saying it.
-- `lab.ts`: `drawn`'s lit pictures (`lab.drawn`, the close-ups `glow` and others read) are read off the engine's canvas in the task that drew them (`shownIn`, `readOpaque`): they were cropped from three's canvas, blank under the engine, and `lab glow` read no glow on any item, every reading of it passing over nothing. A measure that reads pixels names the canvas it reads (`drawnCanvas` in `pixels.ts`), never `G.renderer.domElement`, which is three's (the pointer's target still).
+- `kit.ts`: `lab kit` builds the kit's pieces in the lobby, each in a colour nothing else has (magenta), and reads
+  them off the engine's frame: a wrapped text's lines by its height and none of its ink past its block, a scrolling
+  panel turned by the wheel to its end and none of its rows drawn outside it, a field clicked and typed into. The
+  wrap's canary went unseen once, its line count exempted from the canary's run: left unwrapped, a line is squeezed
+  into its panel's width, never spilt past it, so only the count catches it. The field's words stood centred at its
+  top till it was checked where they stand (a field in a column took the column's centring).
+- `lab.ts`: `drawn`'s lit pictures (`lab.drawn`, the close-ups `glow` and others read) are read off the engine's canvas in the task that drew them (`shownIn`, `readOpaque`): they were cropped from three's canvas, blank under the engine, and `lab glow` read no glow on any item, every reading of it passing over nothing. A measure that reads pixels names the canvas it reads (`drawnCanvas` in `pixels.ts`), never `G.renderer.domElement` (three's canvas then; the engine's now, three's renderer gone, #973). An element the kit draws in its place (`.kit-mirror`, hidden off
+  the page) is read and pressed where the engine draws it (`boxOf`, `middleOf`: `drawnAt` in `ui/kit/press.ts`):
+  read off the page, the choice's buttons were 1 px boxes in the window's corner.
 - `lobbyStart.ts`, `lobbyFrames.ts`: `lab lobbystart` lets the page's time pass between the frames it steps (`LabClock.flow`) and puts the browser's clock in `perfClock`'s place: the game times the slices it spreads over frames by them (`builtInSlices`, `tickDetail`, a warm-up's compile), and on the lab's clock, standing still, none ever ended, so a hero's whole build, 11 poses of a hall hero and every hero's simplified triangles each read as one task of 60 to 350 ms that a player's browser spreads over frames. What held the page between frames is the message round trips that ran a task (`untilResumed`), not the time a slice waited for a worker. Its ceiling is 25 ms (two warm-up tasks of up to 10 ms can run between two frames); the aim is 12. The heroes' fewer triangles are made in the game's worker under it (`detailOnPage(false)`), and on the page everywhere else in the lab, by the fixed clock (`detailOnPage` in `lab.ts` calls the game's where the tree has it: an A/B copies the lab's page code into main's tree, and a named import of an export main hasn't got stopped the page loading there). `--held` sets `WARM_BEHIND.heldMost` to 0, as a phone's GPU holds the frames behind which the lab's never does.
 - `looks.ts`, `haze.ts`: a look (wire, faces, parts) is drawn by the engine (`drawnByEngine`), its pipelines made
   first on the browser's time (`readyLook`, which a command awaits before picturing in it; a draw left out throws).
@@ -91,6 +106,15 @@ end touch the same lines and conflict (`npm run check:sorted` holds the order; t
   hero in a look. `haze --class warrior` reads the axe hazing 0.9% of the frame at 270 degrees in the forest, on main
   too, where its missing surface had every case fail on a halo instead: not looked into.
 - `music.ts`: the village's lobby plays the hour's battleground's track (`biomeOfHour`): each round holds the hour to its battleground's (`HOUR_OF`), and the lab's own hour had the forest's lobby play the crypt's.
+- `outlineShape.ts`, `outlines.ts`: `lab outlines` holds every kind of outline the game draws (the hall's hero, the
+  hero in the village, a foe, a seat by the campfire) to the thing's silhouette, read from frames drawn at one moment
+  with no outline, the thing shown and hidden: read with the outline drawn, its glow round the line went as the thing
+  did and was taken for it, and every outline read 100% inside on three's commit too. Deep inside is the silhouette
+  all round a line pixel within 5 px: by rays meeting the thing within 14, the gaps between his legs and his arm and
+  body, which the line rightly fills, read 10% of his outline. The engine's outline is taken away through its own
+  call where the commit has it (`import.meta.glob`), and a frame left with magenta in it throws. Its canaries: his
+  head alone outlined (13% inside), and his outline read against his head alone (92% far): his neighbour on the dais
+  outlined with him went unseen, off the screen.
 - `perf.ts`, `uploads.ts`: each phase says what a frame sent the GPU: the engine's device's queue's writes
   (`writeBuffer`, `writeTexture`, `copyExternalImageToTexture`: their calls and bytes, the queue's prototype wrapped as
   the first count is asked), and the scene's buffers whose version changed, by object and attribute (each handed to the
@@ -119,6 +143,15 @@ end touch the same lines and conflict (`npm run check:sorted` holds the order; t
   again came back in 1 ms of 519, the browser's caches keying a shader by its code. Salted alone, every pipeline
   pays its module's whole compile, which the game pays once a module: `costsShared` salts a module once for all its
   pipelines, the reading of what a boot pays (13.6 s where alone read 25.7).
+- `rustFlames.ts`, `rustStill.ts`: a check of the doorways' cull or the flames stands him in the hall turned to its
+  door (`inHallLookingOut`, `lab village`'s stand): before its dais, his back to the door, the camera looks out of no
+  doorway and into none, and from above no flame is in view, so both read nothing whatever the switch (405,428
+  triangles either way; no flame at fewer pixels). The cull is read by the frame's triangles: the engine batches
+  alike things as one instanced draw, which a hidden one leaves with an instance fewer.
+- `rustLook.ts`: photo mode's look is read at saturation 0 and 2, each 8 px block's colour apart from the frame's
+  mean tint, over the screen's middle: the engine draws the HUD's panels on its canvas, the grain is coloured pixel
+  by pixel, and the grade tints shadows cool and highlights warm after the look, so on the village's square
+  saturation 0 kept 0.36 of the colour with the look plainly grey on screen.
 - `screenCells.ts`, `trail.ts`, `fire.ts`: a frame is read off the engine's canvas in the task that drew it (`webGpuPixels`) and summed on the CPU. The sums were made on the GPU by a WebGL program of the lab's own (`gridSums.ts`, gone), and `cast`, `fire` and `trail` stopped at their first frame under the engine ("gl.readPixels is not a function"). What still meant three under the engine, and what reads the engine now: a wait for the GPU is the engine's device's queue (`gpuDone` in `core/webgpu.ts`, `engineWorkDone`: three's queue alone never waited for the engine's frame), the exposure a canary strobes is the engine's (`TUNE.exposure`: three's `toneMappingExposure` reached nothing, and `cast`'s strobe went unseen), a count of what compiled is the engine's pipelines (`PIPELINES.made`: three's `info.programs` is undefined on its WebGPU renderer, and sixteen checks read 0 whatever compiled), and a particle pool hidden by `visible` is hidden from the engine too (`engine/sprites.ts`). **The engine's first frame after the camera is aimed isn't its steady one**: `fire`'s fire put out read lit by the fire's bed (77 pixels 0.09 of white apart from the next frame), so a reading taken right after a camera cut draws a frame first and lets it go.
 - `shaderModules.ts`: `naga` reads the modules off the lab's page script's list (`__labShaderModules`), not the
   engine's census (`PIPELINES_ASKED`): the census holds the scene's pipelines alone, and a module never drawn with yet
@@ -144,14 +177,43 @@ end touch the same lines and conflict (`npm run check:sorted` holds the order; t
   Calling the draw sampler after the carry left the room measured the village. The first-person 10% beat
   comes before confirming Drink because the choice holds the cast at 16%. On touch, position the mug clear of
   the movement pad and put it down from an open edge within reach of the bar.
+- `tavernTouch.ts`, `keeperBoostRun.ts`: the touch part leaves the game in touch mode, where E takes no mug (no
+  pointer to aim it), so the boost part moves the mouse first: it passed only while a stray talk's Escape, a fault of
+  the drawn buttons' (Put down's tap opening Bertram's talk), happened to end it. The choice is pictured
+  (`ale-choice-touch`).
+- `textOnScreen.ts`: text the kit draws is read as its lines' boxes as drawn (`drawnTextBoxes`: a line its nearest
+  element that isn't inline, its runs named together), and only a line with a panel of its own (`kitDrawsItself`): a
+  line not drawn yet read the dialog's box round it, and every two texts in a fresh card overlapped by 1219x487 px.
 - `throws.ts`: the vine's shot lets the bow go `SHOT.loosedAfter` frames into the hold, drawn as far as it is: held for its whole draw and the quiver's fetch from the throw, the arrow left a frame after the vine let him go (on main too).
+- `tour.ts`: `lab tour`, the game at 20 fixed stands as the player sees them (the square, the campfire, the hall
+  from above, inside and after hero selection, every cottage's door, every house's room, each biome), held to another
+  commit's pictures by `--ab=<commit>` (`463b90dfc` is the last drawn by three). Under three's removal the hall's
+  floor, columns and dais stood at the world's middle, and no check pictured the hall from above. Each stand's frame
+  is drawn twice at one moment (`drawFrame`), the eye's adaptation held, and the two held to each other: held by
+  `G.paused` instead, a stand over the shoulder showed the pause menu. A door's stand is set up once and then turned:
+  `inVillage` again left a run already left, its Escape opening the lobby's pause menu. A module an A/B's other
+  commit hasn't got (the engine's API) isn't imported here. `--canary` hides the hero for the second draw.
 - `trail.ts`: the trail is read with the engine's bloom out (`TUNE.bloom` 0): the game's `holdBloom` holds three's
   passes alone, and the trail was read with its glow.
 - `twins.ts`: the compiles' canary is a material of a blending, side and depth none else has together (as `compiles`'s):
   a flat-shaded Phong of its own made no pipeline under the engine, and went uncaught.
 - `twinsBelt.ts`: the Twins' belt skulls (`lab twins --parts belt,bomb,poison,inherit,cost,beltPictures`). A throw's record is held by itself, never by its index in `SKULLS_THROWN`: the log keeps the last 16, and `compiles` waited 300 frames for a bomb whose index had run past its end. A cloud judged through a stun is thrown to land before the blast (`CLOUD_BEFORE`): landed after it, its ticks proved nothing. The floor's pictures in each view set the view up through `lab.setup` (`setView` alone came out top-down), and found a real leak: a bomb's skull and glow stayed lying for good where a set-up cleared the effects on its fuse.
+- `uiBars.ts`: the bottom bar as a fight leaves it (`barsBusy`, `barsBusyTouch`): the health set by the lab's own
+  hold (`lab.lifeShare`: set on the hero, it was full again at the next frame), each fill as drawn held to the
+  page's share, its canary planted where the engine draws the bar alone and put back after (left, the touch
+  state after it read the planted share as the page's, and passed).
 - `uiCloudIdentity.ts`: the service's health is asked once a visit (`serviceHealth` in `loot/cloudApi.ts`), so the state forgets it before and after its stub answers: a state before it asked the lab's server, and Google's button stayed hidden in a run of every state, alone it passed.
+- `uiDecision.ts`: the choice drawn by the kit is read off its panels (`decisionShown`), its unfolding finished by
+  the kit's clock (`unfolded`: `finishMotion` and three frames; 60 frames stepped moved the scene behind it). The
+  mouse over Bank is read right after `lab.mouseTo`, before any step: `lab.step` writes the lab's own mouse into
+  the game's, and the game counted it over no UI; it moves the mouse beside Bank first, as a touch state before it
+  leaves the game in touch mode, which a mouse's first move only ends. Its canary makes Bank unpressable
+  (`POINTER_CANARY`).
 - `uiPerfAsk.ts`, `uiStates/decisionTouch.ts`: a canary's plant must land where it's judged: the prompt's moved to the window's top, onto the choice (moved down to the middle it left the choice on a 1080 screen, and went unseen on main), and the choice's padding is planted and judged on a short screen alone.
+- `uiSkillTips.ts`, `uiStates/skillTips.ts`: a slot the engine draws is reached where nothing of the page lies over
+  its canvas (`reachable`). The state moves the mouse first, a move that moves (the mouse was left in the middle):
+  after a touch state the game stayed in touch mode, the skill bar hidden, and main's side found 0 of 0 skills and
+  passed.
 - `villageBloomLow.ts`: the bloom's pixels are the engine's own sizes at the share it was told (`Levels.now`'s
   `bloomSent`, Bulwark's post.rs), the bloom taken out by `rust.bloom`: it read three's bloom passes, 0 pixels both
   ways. Low's level switched in play makes its plain set aside (`plainSet.ts`), 72 pipelines, waited for with frames

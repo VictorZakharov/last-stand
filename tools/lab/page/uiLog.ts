@@ -1,6 +1,6 @@
 // The battle log's states of `lab ui` (`uiStates/log.ts`, `logLobby.ts`, `logTouch.ts`): hits dealt and taken listed
 // in it, and its panel checked: a row for each line, within the window, over nothing of the HUD.
-import type { Lab } from './lab';
+import { boxOf, type Lab } from './lab';
 import { G } from '../../../src/state';
 import type { DamageType, SkillDef } from '../../../src/types';
 import type { Enemy } from '../../../src/entities/enemy';
@@ -77,11 +77,12 @@ export async function closeLog(): Promise<void> {
 /** The page's named elements shown that `panel` lies over, other than the layers as wide as the screen it lies on
  *  (the HUD, the touch controls' pad: a third of the window or more). */
 function namedUnder(panel: HTMLElement): string[] {
-  const box = panel.getBoundingClientRect();
+  const box = boxOf(panel);
   const covered: string[] = [];
   for (const element of document.querySelectorAll<HTMLElement>('[id]')) {
     if (element.contains(panel) || panel.contains(element)) continue;
-    const rect = element.getBoundingClientRect();
+    // (each where it's drawn: the engine's, `.kit-mirror`, or the page's own)
+    const rect = boxOf(element);
     if (rect.width < 1 || rect.height < 1 || rect.width * rect.height >= innerWidth * innerHeight / 3) continue;
     if (!element.checkVisibility({ opacityProperty: true, visibilityProperty: true })) continue;
     const across = rect.left < box.right && box.left < rect.right;
@@ -97,7 +98,7 @@ export function logShown(): Found {
   if (listed < 0) return { lines: ['  no battle log in this tree'], problems: [] };
   const panel = document.getElementById('blog')!;
   const rows = panel.querySelectorAll('.bl-line').length;
-  const box = panel.getBoundingClientRect();
+  const box = boxOf(panel);
   const list = panel.querySelector<HTMLElement>('.bl-lines')!;
   const lines = [`  battle log: ${listed} lines listed, ${rows} shown`];
   const problems: string[] = [];
@@ -108,13 +109,19 @@ export function logShown(): Found {
     const where = boxText({ x: box.x, y: box.y, w: box.width, h: box.height });
     problems.push(`log: the panel reaches past the window (${where})`);
   }
-  if (list.scrollWidth > list.clientWidth + 0.5) {
-    problems.push(`log: its lines are ${list.scrollWidth} px wide, in a panel ${list.clientWidth} px wide`);
+  const listBox = boxOf(list);
+  const widest = Math.max(listBox.right, ...[...list.querySelectorAll('.bl-line')].map((row) => boxOf(row).right));
+  if (widest > listBox.right + 0.5) {
+    const wide = (widest - listBox.left).toFixed(0);
+    problems.push(`log: its lines are ${wide} px wide, in a panel ${listBox.width.toFixed(0)} px wide`);
   }
   const head = panel.querySelector<HTMLElement>('.bl-head')!;
-  const tops = [...head.children].map((part) => part.getBoundingClientRect().top);
+  const headBox = boxOf(head);
+  const parts = [...head.children].map((part) => boxOf(part));
+  const tops = parts.map((part) => part.top);
   const wrapped = Math.max(...tops) - Math.min(...tops) > HEAD_SLACK;
-  if (head.scrollWidth > head.clientWidth + 0.5 || wrapped) {
+  const past = parts.some((part) => part.right > headBox.right + 0.5);
+  if (past || wrapped) {
     problems.push(`log: its head (${head.textContent?.trim()}) doesn't fit on a line of the panel`);
   }
   return { lines, problems };

@@ -1,5 +1,6 @@
 // The lobby's panels (the inventory: equipment, attributes, skills; with the village's chest, the stash), summary,
 // pause and help modals. The village's objects open them (game/village.ts); I opens the inventory anywhere.
+import { shownBox } from './kit/press';
 import { dialog } from './dialogs';
 import { G } from '../state';
 import { holdToConfirm, resetHold } from './holdButton';
@@ -554,7 +555,8 @@ export function lobbyViewShift(): { x: number; y: number } {
   if (!onePanel.matches || menu.classList.contains('hidden') || menu.classList.contains('stowed')) return { x: 0, y: 0 };
   const panel = [...menu.querySelectorAll<HTMLElement>('.menu-center, .menu-right')].find((p) => p.offsetParent);
   if (!panel) return { x: 0, y: 0 };
-  const r = panel.getBoundingClientRect();
+  // (as drawn: the kit draws the panels in the page's place, `lobbyPanels.ts`)
+  const r = shownBox(panel);
   return window.innerWidth > window.innerHeight ? { x: r.right / 2, y: 0 } : { x: 0, y: r.bottom / 2 };
 }
 
@@ -566,7 +568,7 @@ function lobbyClearance(): { x: number; y: number } {
   if (menu.classList.contains('hidden') || menu.classList.contains('stowed') || !onePanel.matches) return { x: 0, y: 0 };
   const panel = [...menu.querySelectorAll<HTMLElement>('#lobby-rail, .menu-center, .menu-right')].filter((p) => p.offsetParent).pop();
   if (!panel) return { x: 0, y: 0 };
-  const r = panel.getBoundingClientRect();
+  const r = shownBox(panel);
   return window.innerWidth > window.innerHeight ? { x: r.right, y: 0 } : { x: 0, y: r.bottom };
 }
 
@@ -608,9 +610,12 @@ function partyClearance(): number {
     partyWatched = true;
     partyResized.observe(party);
   }
-  const key = `${innerWidth}x${innerHeight} ${$('#hud').className} ${document.body.className} ${party.childElementCount}`;
+  // (the frames are drawn by the engine, `partyPanel.ts`: their box is the drawn one's, which grows with a state's
+  // line, so it's keyed by it too; reading it lays out the kit's panels alone, not the page)
+  const box = shownBox(party);
+  const key = `${innerWidth}x${innerHeight} ${$('#hud').className} ${document.body.className} ${party.childElementCount}`
+    + ` ${box.height.toFixed(1)}`;
   if (partyRoom?.key === key) return partyRoom.y;
-  const box = party.getBoundingClientRect();
   let y = 0;
   if (party.offsetParent && box.height > 0) {
     const top = parseFloat(getComputedStyle($('#diag')).top) || 0;

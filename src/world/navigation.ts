@@ -24,9 +24,28 @@ const LOOKAHEAD = 20;
 /** bodies share the field of the smallest size class that holds them (fewer fields to keep fresh) */
 const SIZES = [0.65, 1.05];
 
+/** the most clearance a cell is known to have (m): a cell is open to a size by its clearance against the size and half
+ *  the margin, the largest `SIZES[1] + MARGIN / 2`, so what lies past this is never read. Capped, an obstacle reaches
+ *  only the cells within its radius and this, and a prop broken or raised changes those alone (`patchGrid`): every
+ *  break made the whole grid again, each cell against every obstacle, a million distances a break, and the foes' AI
+ *  took three times main's at wave 36 (`lab perf --wave 36 --throttle 4 --ab --profile=update`: `getGrid`) */
+const CLEAR_MOST = 1.25;
+
 /** `clear`: each cell's clearance from the wall and every obstacle; `firm`: from the wall and the obstacles that don't
- *  break alone (a big foe's, which walks through the rest) */
-interface Grid { obstacles: Obstacle[]; rev: number; n: number; half: number; clear: Float32Array; firm: Float32Array; steps: Int32Array; weights: Float32Array; sideX: Int32Array; sideZ: Int32Array }
+ *  break alone (a big foe's, which walks through the rest); `wallClear` from the wall alone; each at most `CLEAR_MOST`.
+ *  `standing`: the obstacles laid into it, each as it was laid. */
+interface Grid {
+  obstacles: Obstacle[]; rev: number; n: number; half: number; clear: Float32Array; firm: Float32Array;
+  wallClear: Float32Array; standing: Map<Obstacle, Laid>; steps: Int32Array; weights: Float32Array;
+  sideX: Int32Array; sideZ: Int32Array;
+}
+
+/** An obstacle's circle as it was laid into the grid, and whether it breaks (a run's roll moves a stump's in place). */
+interface Laid { x: number; z: number; r: number; breaks: boolean }
+
+const laidOf = (o: Obstacle): Laid => ({ x: o.x, z: o.z, r: o.r, breaks: !!o.prop });
+const sameLaid = (laid: Laid, o: Obstacle): boolean =>
+  laid.x === o.x && laid.z === o.z && laid.r === o.r && laid.breaks === !!o.prop;
 interface Field { r: number; open: Uint8Array; cost: Float32Array; t: number; cell: number }
 
 let grid: Grid | null = null;
@@ -41,30 +60,115 @@ export function forgetFields(): void {
   rebuiltAt = -1;
 }
 
-/** The clearance grid of the current biome (rebuilt when the biome's obstacles change). */
+/** The clearance grid of the current biome: made for a biome's obstacles, and patched where a prop breaks, comes
+ *  back or is raised (`patchGrid`). */
 function getGrid(): Grid {
   const obstacles = G.arena.obstacles;
   if (grid?.obstacles === obstacles && grid.rev === propState.rev) return grid;
+  if (grid?.obstacles === obstacles) {
+    patchGrid(grid);
+    grid.rev = propState.rev;
+    fields.clear();
+    return grid;
+  }
   // the outermost cells lie beyond the wall, so they're never open: no bounds checks needed
   const wall = G.arena.wall, n = Math.ceil((2 * wall.most) / CELL) + 2, half = (n * CELL) / 2;
-  const clear = new Float32Array(n * n), firm = new Float32Array(n * n);
+  const wallClear = new Float32Array(n * n);
   for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
     const x = (i + 0.5) * CELL - half, z = (j + 0.5) * CELL - half;
-    let c = wall.reachAt(x, z) - Math.hypot(x, z), f = c;
-    for (const o of obstacles) {
-      const d = Math.hypot(x - o.x, z - o.z) - o.r;
-      c = Math.min(c, d);
-      if (!o.prop) f = Math.min(f, d);
-    }
-    clear[j * n + i] = c;
-    firm[j * n + i] = f;
+    wallClear[j * n + i] = Math.min(CLEAR_MOST, wall.reachAt(x, z) - Math.hypot(x, z));
   }
   // the 8 neighbours; a diagonal step's two side cells are sideX[k] and sideZ[k] away
   const steps = new Int32Array([1, -1, n, -n, n + 1, n - 1, -n + 1, -n - 1]);
   const sideX = new Int32Array([0, 0, 0, 0, 1, -1, 1, -1]), sideZ = new Int32Array([0, 0, 0, 0, n, n, -n, -n]);
   const weights = new Float32Array([1, 1, 1, 1, Math.SQRT2, Math.SQRT2, Math.SQRT2, Math.SQRT2].map((w) => w * CELL));
   fields.clear();
-  return (grid = { obstacles, rev: propState.rev, n, half, clear, firm, steps, weights, sideX, sideZ });
+  const made: Grid = {
+    obstacles, rev: propState.rev, n, half, clear: wallClear.slice(), firm: wallClear.slice(), wallClear,
+    standing: new Map(obstacles.map((o) => [o, laidOf(o)])), steps, weights, sideX, sideZ,
+  };
+  for (const laid of made.standing.values()) layWithin(made, laid, 0, n - 1, 0, n - 1);
+  return (grid = made);
+}
+
+/** The cells `o` reaches (its radius and `CLEAR_MOST` round it): the first and last column, the first and last row. */
+function cellsOf(g: Grid, o: Laid): [number, number, number, number] {
+  const reach = o.r + CLEAR_MOST;
+  const first = (at: number) => Math.max(0, Math.floor((at - reach + g.half) / CELL));
+  const last = (at: number) => Math.min(g.n - 1, Math.floor((at + reach + g.half) / CELL));
+  return [first(o.x), last(o.x), first(o.z), last(o.z)];
+}
+
+/** `o` laid into the cells it reaches from column `i0` to `i1` and row `j0` to `j1`: each given its clearance from
+ *  it where that's less. */
+function layWithin(g: Grid, o: Laid, i0: number, i1: number, j0: number, j1: number): void {
+  const [oi0, oi1, oj0, oj1] = cellsOf(g, o);
+  const { n, half, clear, firm } = g;
+  for (let j = Math.max(j0, oj0); j <= Math.min(j1, oj1); j++) {
+    const z = (j + 0.5) * CELL - half;
+    for (let i = Math.max(i0, oi0); i <= Math.min(i1, oi1); i++) {
+      const c = j * n + i;
+      const d = Math.hypot((i + 0.5) * CELL - half - o.x, z - o.z) - o.r;
+      if (d < clear[c]) clear[c] = d;
+      if (!o.breaks && d < firm[c]) firm[c] = d;
+    }
+  }
+}
+
+/** The cells `o` reached made again from the wall and every obstacle standing that reaches them. */
+function clearUnder(g: Grid, o: Laid): void {
+  const [i0, i1, j0, j1] = cellsOf(g, o);
+  const { n, clear, firm, wallClear } = g;
+  for (let j = j0; j <= j1; j++) {
+    for (let i = i0; i <= i1; i++) {
+      const c = j * n + i;
+      clear[c] = wallClear[c];
+      firm[c] = wallClear[c];
+    }
+  }
+  for (const other of g.standing.values()) layWithin(g, other, i0, i1, j0, j1);
+}
+
+/** what a check may break in the patch, to prove it's caught (`lab navgrid --canary`): a gone obstacle's cells left
+ *  as they were */
+export const NAV_CANARY = { leaveGone: false };
+
+/**
+ * The grid as patched against one made whole for the obstacles standing now (the lab's, `lab navgrid`): how many
+ * cells there are, and how many differ in either clearance. Patched and made whole take the same minimum of the same
+ * distances, so they agree to the bit.
+ */
+export function gridAgainstWhole(): { cells: number; differ: number } {
+  const patched = getGrid();
+  grid = null;
+  const whole = getGrid();
+  grid = patched;
+  fields.clear();
+  let differ = 0;
+  for (let c = 0; c < whole.clear.length; c++) {
+    if (whole.clear[c] !== patched.clear[c] || whole.firm[c] !== patched.firm[c]) differ++;
+  }
+  return { cells: whole.clear.length, differ };
+}
+
+/** The grid brought to the obstacles standing now: what's gone taken out where it reached, what's come laid in. */
+function patchGrid(g: Grid): void {
+  const now = new Set(g.obstacles);
+  const gone: Laid[] = [];
+  for (const [o, laid] of g.standing) {
+    if (now.has(o) && sameLaid(laid, o)) continue;
+    gone.push(laid);
+    g.standing.delete(o);
+  }
+  const come: Laid[] = [];
+  for (const o of now) {
+    if (g.standing.has(o)) continue;
+    const laid = laidOf(o);
+    g.standing.set(o, laid);
+    come.push(laid);
+  }
+  if (!NAV_CANARY.leaveGone) for (const laid of gone) clearUnder(g, laid);
+  for (const laid of come) layWithin(g, laid, 0, g.n - 1, 0, g.n - 1);
 }
 
 const cellOf = (g: Grid, x: number, z: number): number => {
@@ -81,7 +185,11 @@ const cz = (g: Grid, c: number): number => (Math.floor(c / g.n) + 0.5) * CELL - 
 export function lineClear(ax: number, az: number, bx: number, bz: number, radius: number, above = -Infinity,
   through = false): boolean {
   const dx = bx - ax, dz = bz - az, len2 = dx * dx + dz * dz;
+  // (the line's box first: most circles lie off it, and each foe asks every frame)
+  const minX = Math.min(ax, bx) - radius, maxX = Math.max(ax, bx) + radius;
+  const minZ = Math.min(az, bz) - radius, maxZ = Math.max(az, bz) + radius;
   for (const o of G.arena.obstacles) {
+    if (o.x + o.r < minX || o.x - o.r > maxX || o.z + o.r < minZ || o.z - o.r > maxZ) continue;
     if (o.h <= above || (through && o.prop)) continue;
     const k = len2 > 1e-9 ? Math.min(1, Math.max(0, ((o.x - ax) * dx + (o.z - az) * dz) / len2)) : 0;
     const px = ax + dx * k - o.x, pz = az + dz * k - o.z, r = o.r + radius;

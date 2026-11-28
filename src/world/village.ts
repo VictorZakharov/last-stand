@@ -12,13 +12,16 @@
 // off (world/wall.ts outlines), so feet climb the steps one by one; its wall is what's built (`wallShape` 'free'). Its
 // light follows the hour (`daylight`, a uniform's change: nothing compiles), and as a biome it has 10 point lights, two
 // casting the still shadows (the hall's braziers).
-import { unrepeatedNodes } from './villageNodes';
 import { rustLook } from '../engine/custom';
 import { pavingLook } from '../engine/looks/paving';
 import { villageSkyMaterial } from './skyNodes';
-import * as THREE from 'three';
+import {
+  AdditiveBlending, Attribute, BackSide, Box3, boundsOf, CanvasTexture, CatmullRom3, Color, DoubleSide, Euler, floats, Geometry,
+  InstancedMesh, Light, LitMaterial, Mat4, Material, Maths, mergeGeometries, Mesh, Node, Outline, PointLight, Quat,
+  RepeatWrapping, SRGBColorSpace, Texture, UnlitMaterial, Vec2, Vec3, Vec4,
+} from '../engine/api/index.ts';
+import * as shapes from '../engine/api/shapes/index.ts';
 import type { SightDoor, SightRoof, SightWall } from '../core/sight';
-import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import {
   CAMPFIRE, CHEST, CHRONICLE, COTTAGES, DAY, ENTRANCES, GAP_HALF, HALL, NOTICE, RACK, STEP_RISE, TERRACE, YARD, exitPlace, portalPlace,
   type Cottage, type Spot,
@@ -137,9 +140,9 @@ const STREET = { every: 6, first: 3, off: 1.1, clear: 0.9, apart: 4.5, square: 8
  *  start round (m out from the middle) and how far before the gate's face at most */
 const MOTES = { rate: 70, high: 2.2, rim: 1.0, ahead: 2.8 };
 /** each portal's motes' colours, its gate's (`portalMembrane`'s colours in crypt.ts and forest.ts) */
-const MOTE_COLORS: Record<BiomeId, { rim: THREE.Color; core: THREE.Color }> = {
-  crypt: { rim: new THREE.Color(1.0, 0.25, 0.55), core: new THREE.Color(1.0, 0.6, 1.0) },
-  forest: { rim: new THREE.Color(0.45, 0.9, 0.15), core: new THREE.Color(0.7, 1.0, 0.55) },
+const MOTE_COLORS: Record<BiomeId, { rim: Color; core: Color }> = {
+  crypt: { rim: new Color(1.0, 0.25, 0.55), core: new Color(1.0, 0.6, 1.0) },
+  forest: { rim: new Color(0.45, 0.9, 0.15), core: new Color(0.7, 1.0, 0.55) },
 };
 /** the yard's gate posts' height, and the light at each, of no strength: two of the village's 10 (a count every lit
  *  program is made for) */
@@ -197,65 +200,65 @@ export interface Village extends Biome {
   /** its trees as they stand (the map draws them) */
   trees: readonly { x: number; z: number; height: number }[];
   /** what stops his sight from above (core/sight.ts), the walls and the hall, which may be shut to him */
-  sight: { walls: SightWall[]; hall: THREE.Vector4; roofs: SightRoof[]; doors: SightDoor[] };
+  sight: { walls: SightWall[]; hall: Vec4; roofs: SightRoof[]; doors: SightDoor[] };
   /** the signposts' arms as built (world/signposts.ts; tools/lab `houses` reads them) */
   signArms: readonly BuiltArm[];
   /** the street lamps' lanterns, each lit by the lit shaders' lamps (`core/lamps.ts`; game/village.ts `lightLamps`) */
-  lanterns: readonly THREE.Vector3[];
+  lanterns: readonly Vec3[];
   /** the hall of heroes' roof, ceiling and front wall (cut away over the hero inside, but through his eyes, as from
    *  above and over his shoulder they hid the room: game/village.ts) */
-  hallCutaway: readonly THREE.Object3D[];
+  hallCutaway: readonly Node[];
   /** the meadow's grass (left undrawn from inside the hall, its doorway out of sight: game/village.ts) */
-  meadow: THREE.Object3D;
+  meadow: Node;
   /** its materials (the developer mode's invited agent builds with them: dev/agentMakes.ts) */
   mats: Mats;
   /** what stands loose in the hall's room, wholly within its walls (left undrawn from outside it in the close views,
    *  its doorway out of sight: game/village.ts) */
-  hallRoom: readonly THREE.Object3D[];
+  hallRoom: readonly Node[];
   /** the lights on the hall's dais (its first two, lit whenever the hero is inside) and its torches' flames (the
    *  nearest lit), by the pooled lights */
-  hallTorches: readonly THREE.Vector3[];
+  hallTorches: readonly Vec3[];
   /** the torches on the hall's front wall either side of its door, by the pooled lights outside it */
-  porchTorches: readonly THREE.Vector3[];
+  porchTorches: readonly Vec3[];
   /** the porch torches' fires: their baskets go with the front wall as it opens over him inside, and these with them
    *  (game/village.ts) */
-  porchFires: THREE.Object3D;
+  porchFires: Node;
   /** each torch's fire's flicker (1 at rest, swelling with its puffs): the hall's columns' in `hallTorches`' order
    *  after its dais's, then the door's */
-  torchFlickers: readonly THREE.PointLight[];
+  torchFlickers: readonly PointLight[];
   /** its two lights casting the still shadows (the hall's braziers), which hand their shadows to the lamps lit by
    *  night (game/village.ts `castFromLamps`) */
-  stillLights: readonly THREE.PointLight[];
+  stillLights: readonly PointLight[];
   /** how far into the night its hour is: 0 by day, 1 by night */
   readonly night: number;
   /** each portal's way out into the village, by its battleground: where a hero coming back stands, and his facing */
-  exits: Record<BiomeId, { at: THREE.Vector3; facing: number }>;
+  exits: Record<BiomeId, { at: Vec3; facing: number }>;
 }
 
 /** What `build` adds to `scene`, built to stand still, frozen as it stands (`standStill`), but for a part holding a
  *  light (a brazier's sways with its fire, and three places a light by its matrix); returns what it returns. */
-function stillBuilt<T>(scene: THREE.Object3D, build: () => T): T {
+function stillBuilt<T>(scene: Node, build: () => T): T {
   const from = scene.children.length;
   const built = build();
   for (const part of scene.children.slice(from)) {
     let lit = false;
-    part.traverse((object) => { if ((object as THREE.Light).isLight) lit = true; });
+    part.traverse((object) => { if ((object as Light).isLight) lit = true; });
     if (!lit) standStill(part);
   }
   return built;
 }
 
 /** A mesh casting and taking shadows, added to `group`. */
-function solid(group: THREE.Object3D, geometry: THREE.BufferGeometry, material: THREE.Material): THREE.Mesh {
-  const mesh = new THREE.Mesh(geometry, material);
+function solid(group: Node, geometry: Geometry, material: Material): Mesh {
+  const mesh = new Mesh(geometry, material);
   mesh.castShadow = mesh.receiveShadow = true;
   group.add(mesh);
   return mesh;
 }
 
 /** A box of size (w, h, d) standing on y0, its middle at (x, z), turned `turn` about y, added to `group`. */
-function block(group: THREE.Object3D, w: number, h: number, d: number, x: number, y0: number, z: number,
-  material: THREE.Material, texel = 0.5, turn = 0): THREE.Mesh {
+function block(group: Node, w: number, h: number, d: number, x: number, y0: number, z: number,
+  material: Material, texel = 0.5, turn = 0): Mesh {
   // (wood's grain along its length: across a beam's top, its stripes read as teeth along the edge, "house topology errors")
   const mesh = solid(group, boxWithUV(w, h, d, texel, material.userData.grained === true), material);
   mesh.position.set(x, y0 + h / 2, z);
@@ -266,8 +269,8 @@ function block(group: THREE.Object3D, w: number, h: number, d: number, x: number
 /** A block of walling at (x, y0, z) as `block` lays it, unturned, its courses laid by the world's place, not the block's
  *  corner (a tile `1 / texel` m): each block's own ran from its corner, and the one over the hall's door met the wings
  *  beside it a part course off, its joints across theirs ("misaligned texture"). */
-function walling(group: THREE.Object3D, w: number, h: number, d: number, x: number, y0: number, z: number,
-  material: THREE.Material, texel = 0.5): THREE.Mesh {
+function walling(group: Node, w: number, h: number, d: number, x: number, y0: number, z: number,
+  material: Material, texel = 0.5): Mesh {
   const mesh = block(group, w, h, d, x, y0, z, material, texel);
   const g = mesh.geometry, at = g.attributes.position, uv = g.attributes.uv, n = g.attributes.normal;
   for (let i = 0; i < uv.count; i++) {
@@ -310,38 +313,38 @@ const stepAt = (along: number, top: number): number => Math.min(top, Math.max(0,
 
 /** The village's materials, made once: its stones, its woods, its plaster, its iron. */
 export interface Mats {
-  yardFloor: THREE.Material; cobbles: THREE.Material; flags: THREE.Material;
-  ashlar: THREE.Material; coping: THREE.Material; granite: THREE.Material; column: THREE.Material;
+  yardFloor: Material; cobbles: Material; flags: Material;
+  ashlar: Material; coping: Material; granite: Material; column: Material;
   /** the ledges' and the fountain's stones: what stands free in the ashlar's and the coping's looks */
-  freeAshlar: THREE.Material; freeCoping: THREE.Material;
+  freeAshlar: Material; freeCoping: Material;
   /** the notice board's and the lectern's wood and brass: what stands free, as the lamps (`prop`) */
-  freeTimber: THREE.Material; freePlanks: THREE.Material; freeBrass: THREE.Material;
+  freeTimber: Material; freePlanks: Material; freeBrass: Material;
   /** the weapons rack's: pale oak (in the houses' dark timber, seen from the square on its shaded side, it was a black
    *  frame lost against the yard's fence behind it) and its blades' bright steel, standing free */
-  rackTimber: THREE.MeshStandardMaterial; rackPlanks: THREE.MeshStandardMaterial; steel: THREE.Material;
+  rackTimber: LitMaterial; rackPlanks: LitMaterial; steel: Material;
   /** a lamp's plinth, thinned from the ground up */
-  footAshlar: THREE.Material;
+  footAshlar: Material;
   /** the campfire's ring of field stones (`fireRing.ts`): the rock's maps, each stone's colour and soot its vertices' */
-  fireStones: THREE.Material;
+  fireStones: Material;
   /** the terrace's stair: the granite's maps, matte as worn steps are (`stairGranite`) */
-  stairGranite: THREE.Material;
-  plaster: THREE.Material; gable: THREE.Material; chimney: THREE.Material; timber: THREE.Material; planks: THREE.Material; logs: THREE.Material; roof: THREE.Material; boardRoof: THREE.Material;
+  stairGranite: Material;
+  plaster: Material; gable: Material; chimney: Material; timber: Material; planks: Material; logs: Material; roof: Material; boardRoof: Material;
   /** the palisade's logs and tips: a fence's hole, opened by it alone (`fence` in core/seeThrough.ts) */
-  palisadeLogs: THREE.Material; palisadeTips: THREE.Material;
-  iron: THREE.Material; window: THREE.MeshStandardMaterial;
-  hallGlass: THREE.MeshStandardMaterial;
-  glass: THREE.MeshStandardMaterial; paper: THREE.Material; pagesLeft: THREE.Material; pagesRight: THREE.Material; pagesEdge: THREE.Material; ribbon: THREE.Material;
-  binding: THREE.Material; brass: THREE.Material; lining: THREE.Material; liningInside: THREE.Material; wax: THREE.Material;
-  gold: THREE.Material; coin: THREE.MeshStandardMaterial; gilt: THREE.MeshStandardMaterial; pearl: THREE.Material; gem: THREE.Material;
-  lockBrass: THREE.MeshStandardMaterial;
-  chestWood: THREE.Material; chestIron: THREE.Material;
-  lantern: THREE.MeshBasicMaterial; lanternIron: THREE.MeshBasicMaterial;
+  palisadeLogs: Material; palisadeTips: Material;
+  iron: Material; window: LitMaterial;
+  hallGlass: LitMaterial;
+  glass: LitMaterial; paper: Material; pagesLeft: Material; pagesRight: Material; pagesEdge: Material; ribbon: Material;
+  binding: Material; brass: Material; lining: Material; liningInside: Material; wax: Material;
+  gold: Material; coin: LitMaterial; gilt: LitMaterial; pearl: Material; gem: Material;
+  lockBrass: LitMaterial;
+  chestWood: Material; chestIron: Material;
+  lantern: UnlitMaterial; lanternIron: UnlitMaterial;
   /** a house walked into's door (world/door.ts): its leaf's darker planks, its iron (the planks' look, dark and
    *  metal: the same program), and its sign's face (`signFace`: its picture its own) */
-  doorLeaf: THREE.MeshStandardMaterial; doorIron: THREE.MeshStandardMaterial;
-  signFace(map: THREE.Texture): THREE.Material;
+  doorLeaf: LitMaterial; doorIron: LitMaterial;
+  signFace(map: Texture): Material;
   /** a signpost's arms' faces (world/signposts.ts): what stands free's planks with their picture */
-  propFace(map: THREE.Texture): THREE.Material;
+  propFace(map: Texture): Material;
 }
 
 /** how bright a cottage's window burns at night: its candlelit panes as a room's glow, short of a lamp's flame (at 2.4
@@ -356,10 +359,8 @@ const WINDOW_GLOW = 1.3;
  * metres across each: changed every half metre, the stones were mush), and blended between (its tile's own stones came round every 1.5 m in rows, "ground texture tiling is still a little too
  * obvious"). Its own program, made at the village's warm-up.
  */
-function unrepeated<M extends THREE.MeshStandardMaterial>(m: M): M {
-  unrepeatedNodes(m);
-  rustLook(m, pavingLook());
-  return m;
+function unrepeated<M extends LitMaterial>(m: M): M {
+  return rustLook(m, pavingLook());
 }
 
 function makeMats(): Mats {
@@ -368,28 +369,28 @@ function makeMats(): Mats {
   // (the lid's lining is a half cylinder, a tile round it whole: its picture repeated to the box's diamonds)
   const lining = quiltedLining(), liningLid = quiltedLining();
   for (const t of [liningLid.map, liningLid.bumpMap]) t.repeat.set(3, 2);
-  const ashlarStone = new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(stoneMaps, 1, 1.2), color: 0xd0c4b0 });
-  const copingStone = new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(limestone(11), 2, 1.2), color: 0x9c968c });
+  const ashlarStone = new LitMaterial({ ...pbrMaterialMaps(stoneMaps, 1, 1.2), color: 0xd0c4b0 });
+  const copingStone = new LitMaterial({ ...pbrMaterialMaps(limestone(11), 2, 1.2), color: 0x9c968c });
   const mats: Mats = {
-    yardFloor: new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(soil(), 8, 0.8), color: 0xc8b090 }),
-    cobbles: unrepeated(new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(cobblestone(), 1, 1.1), color: 0xfff4e4 })),
-    flags: new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(flagMaps, 1, 1.2), color: 0xd0c8bc }),
+    yardFloor: new LitMaterial({ ...pbrMaterialMaps(soil(), 8, 0.8), color: 0xc8b090 }),
+    cobbles: unrepeated(new LitMaterial({ ...pbrMaterialMaps(cobblestone(), 1, 1.1), color: 0xfff4e4 })),
+    flags: new LitMaterial({ ...pbrMaterialMaps(flagMaps, 1, 1.2), color: 0xd0c8bc }),
     ashlar: ashlarStone,
     coping: copingStone,
-    granite: new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(granite(7), 2, 0.8), color: 0xc8c4c0 }),
+    granite: new LitMaterial({ ...pbrMaterialMaps(granite(7), 2, 0.8), color: 0xc8c4c0 }),
     // (stuccoed, the plaster's stained wash: limestone's pits read as pocks on a shaft, a review said, and marble's
     // maps are slabs; a shaft's own uvs run once round it and once up it, so a tile round and two up are near square)
-    column: new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(grunge(), [1, 2], 0.5), color: 0xccc2b0 }),
+    column: new LitMaterial({ ...pbrMaterialMaps(grunge(), [1, 2], 0.5), color: 0xccc2b0 }),
     // (lime plaster, washed warm and stained: the grunge map's patches under a cream)
-    plaster: new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(grunge(), 1, 0.6), color: 0xd8c8a8 }),
-    timber: new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(wood(), 1, 1), color: 0x5a4030, userData: { grained: true } }),
-    planks: new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(wood(), 1, 1), color: 0x8a6a4a, userData: { grained: true } }),
-    logs: new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(bark(), [1, 2], 1.4), color: 0x8a7a6a }),
-    roof: new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(slate(33, 2, 2), 1, 1.3), color: 0x6a6870 }),
-    iron: new THREE.MeshStandardMaterial({ color: 0x2a2a2e, metalness: 0.9, roughness: 0.7 }),
+    plaster: new LitMaterial({ ...pbrMaterialMaps(grunge(), 1, 0.6), color: 0xd8c8a8 }),
+    timber: new LitMaterial({ ...pbrMaterialMaps(wood(), 1, 1), color: 0x5a4030, userData: { grained: true } }),
+    planks: new LitMaterial({ ...pbrMaterialMaps(wood(), 1, 1), color: 0x8a6a4a, userData: { grained: true } }),
+    logs: new LitMaterial({ ...pbrMaterialMaps(bark(), [1, 2], 1.4), color: 0x8a7a6a }),
+    roof: new LitMaterial({ ...pbrMaterialMaps(slate(33, 2, 2), 1, 1.3), color: 0x6a6870 }),
+    iron: new LitMaterial({ color: 0x2a2a2e, metalness: 0.9, roughness: 0.7 }),
     // (lit from within by night: its glow is a uniform the hour sets, `daylight`)
     // (its panes' glass and leads, lit from within by their own picture: `windowPanes`)
-    window: new THREE.MeshStandardMaterial({
+    window: new LitMaterial({
       name: 'cottageWindow', map: panes.glass, roughness: 0.25, metalness: 0.2, emissive: 0xffd0a0, emissiveMap: panes.lit, emissiveIntensity: 0,
     }),
     // (the hall's windows' glass, seen through both ways: its leads whole, the glass between them `GLASS.through`
@@ -399,71 +400,71 @@ function makeMats(): Mats {
     // stood whole and dark, `flagsOf` in engine/seeKinds.ts). Matte to the lamps: a torch's lamp is lit 1.1 m out in
     // the aisle from its flame (`wallTorch`), and glossy (0.1) the glass shone with it as a bright patch low on the
     // middle windows, where no flame stood, at any hour (from play: "what's this light on window sill from ?")
-    hallGlass: new THREE.MeshStandardMaterial({
+    hallGlass: new LitMaterial({
       name: 'hallGlass', map: panes.leads, transparent: true, opacity: GLASS.opacity, depthWrite: false, roughness: 1, metalness: 0,
-      side: THREE.DoubleSide,
+      side: DoubleSide,
     }),
-    glass: new THREE.MeshStandardMaterial({ color: 0x2a2014, roughness: 0.3, emissive: 0xffc070, emissiveIntensity: 2.2 }),
-    paper: new THREE.MeshStandardMaterial({ map: noticePaper(), roughness: 0.9 }),
+    glass: new LitMaterial({ color: 0x2a2014, roughness: 0.3, emissive: 0xffc070, emissiveIntensity: 2.2 }),
+    paper: new LitMaterial({ map: noticePaper(), roughness: 0.9 }),
     // (old pages: as pale as the notices, the book burned white under the porch's torch and its own candle)
-    pagesLeft: new THREE.MeshStandardMaterial({ map: bookPage(78, false), color: 0x7a7264, roughness: 1 }),
-    pagesRight: new THREE.MeshStandardMaterial({ map: bookPage(79, true), color: 0x7a7264, roughness: 1 }),
-    pagesEdge: new THREE.MeshStandardMaterial({ map: pageEdges(), roughness: 1 }),
-    ribbon: new THREE.MeshStandardMaterial({ color: 0x5a1416, roughness: 0.7 }),
+    pagesLeft: new LitMaterial({ map: bookPage(78, false), color: 0x7a7264, roughness: 1 }),
+    pagesRight: new LitMaterial({ map: bookPage(79, true), color: 0x7a7264, roughness: 1 }),
+    pagesEdge: new LitMaterial({ map: pageEdges(), roughness: 1 }),
+    ribbon: new LitMaterial({ color: 0x5a1416, roughness: 0.7 }),
     // (darker than it looks: pale, the porch's torch beside it lit it evenly bright from rim to foot, its bloom round it)
-    wax: new THREE.MeshStandardMaterial({ color: 0x7a7262, roughness: 0.6 }),
-    pearl: new THREE.MeshStandardMaterial({ color: 0x8e8878, roughness: 0.2, metalness: 0.1 }),
-    chestWood: new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(boards(), 1, 0.6), color: 0xb09070 }),
-    chestIron: new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(hammered(), 1, 1), color: 0xe6e6ea, metalness: 0.4 }),
-    binding: new THREE.MeshStandardMaterial({ color: 0x4a1c16, roughness: 0.8 }),
-    lining: new THREE.MeshStandardMaterial({ ...lining, bumpScale: 3, roughness: 0.95 }),
-    liningInside: new THREE.MeshStandardMaterial({ ...liningLid, bumpScale: 3, roughness: 0.95, side: THREE.BackSide }),
+    wax: new LitMaterial({ color: 0x7a7262, roughness: 0.6 }),
+    pearl: new LitMaterial({ color: 0x8e8878, roughness: 0.2, metalness: 0.1 }),
+    chestWood: new LitMaterial({ ...pbrMaterialMaps(boards(), 1, 0.6), color: 0xb09070 }),
+    chestIron: new LitMaterial({ ...pbrMaterialMaps(hammered(), 1, 1), color: 0xe6e6ea, metalness: 0.4 }),
+    binding: new LitMaterial({ color: 0x4a1c16, roughness: 0.8 }),
+    lining: new LitMaterial({ ...lining, bumpScale: 3, roughness: 0.95 }),
+    liningInside: new LitMaterial({ ...liningLid, bumpScale: 3, roughness: 0.95, side: BackSide }),
     // (a little warmth of their own: lit by the moon alone, gold went olive; at 0x5a3808 they glowed a flat yellow, every
     // coin one colour whatever lit it, "this needs more detail"; metal, and dark in their colours (`GOLDEN`): what a coin
     // takes of the noon sky the porch's shade doesn't reach, and pale gold bloomed white, less metal paler still)
-    gold: new THREE.MeshStandardMaterial({ ...coinsPile(), color: 0x6a5430, bumpScale: 2, roughness: 0.85, metalness: 0.1, emissive: 0x140c02 }),
-    coin: new THREE.MeshStandardMaterial({ ...coinFaces(), vertexColors: true, bumpScale: 1.6, roughness: 0.56, metalness: 0.8, emissive: 0x1e1304 }),
-    gilt: new THREE.MeshStandardMaterial({ ...chased(), color: 0xa07c34, bumpScale: 1.5, roughness: 0.42, metalness: 0.8, emissive: 0x1e1304 }),
+    gold: new LitMaterial({ ...coinsPile(), color: 0x6a5430, bumpScale: 2, roughness: 0.85, metalness: 0.1, emissive: 0x140c02 }),
+    coin: new LitMaterial({ ...coinFaces(), vertexColors: true, bumpScale: 1.6, roughness: 0.56, metalness: 0.8, emissive: 0x1e1304 }),
+    gilt: new LitMaterial({ ...chased(), color: 0xa07c34, bumpScale: 1.5, roughness: 0.42, metalness: 0.8, emissive: 0x1e1304 }),
     // (white: each stone's colour and its facets' are in its vertices, some near white, as a stone flashes)
-    gem: new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.42, metalness: 0.1, emissive: 0x0c0c0c }),
-    lockBrass: new THREE.MeshStandardMaterial({ ...lockPlate(), color: 0x989088, bumpScale: 1.5, roughness: 0.55, metalness: 0.7, emissive: 0x100a02 }),
-    brass: new THREE.MeshStandardMaterial({ color: 0x6e5a2e, roughness: 0.5, metalness: 0.3 }),
+    gem: new LitMaterial({ vertexColors: true, roughness: 0.42, metalness: 0.1, emissive: 0x0c0c0c }),
+    lockBrass: new LitMaterial({ ...lockPlate(), color: 0x989088, bumpScale: 1.5, roughness: 0.55, metalness: 0.7, emissive: 0x100a02 }),
+    brass: new LitMaterial({ color: 0x6e5a2e, roughness: 0.5, metalness: 0.3 }),
     // (the street lamps' panes: their own picture, lit by nothing, as bright as the hour sets, `daylight`)
-    lantern: new THREE.MeshBasicMaterial({ map: lanternPane(), color: LANTERN_PANE.day }),
+    lantern: new UnlitMaterial({ map: lanternPane(), color: LANTERN_PANE.day }),
     // (the lantern's frame, crown and cup, dark against its glass: lit, the lamp's light 15 cm off them burned the
     // crown's rim white)
-    lanternIron: new THREE.MeshBasicMaterial({ color: 0x141214 }),
+    lanternIron: new UnlitMaterial({ color: 0x141214 }),
     freeAshlar: ashlarStone.clone(),
     freeCoping: copingStone.clone(),
     footAshlar: ashlarStone.clone(),
     // (the stair's granite, at its recipe's arguments: its maps are made once for both, a tile 0.33 m across a stone;
     // in the Thornwood's rock, whose picture has its moss and lichen, the stones read pale and green, a review; matte,
     // as weathered field stone is: by the granite's own roughness they shone as polished pebbles)
-    fireStones: new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(granite(7), 3, 2), roughnessMap: null, vertexColors: true, roughness: 1 }),
+    fireStones: new LitMaterial({ ...pbrMaterialMaps(granite(7), 3, 2), roughnessMap: null, vertexColors: true, roughness: 1 }),
     // (the terrace's stair, worn matte by feet as the paving round it: by the granite's own roughness, polished, each
     // tread's edge caught the stair's two lamps at night as one highlight straight back at a camera in the hall's door,
     // a bright line along the top step past the paving, from play "at night, the top step lights up too bright, not
     // sure where it's from" (#946, `lab village --only stepPlainAtNight`)
-    stairGranite: new THREE.MeshStandardMaterial({
+    stairGranite: new LitMaterial({
       name: 'stairGranite', ...pbrMaterialMaps(granite(7), 2, 0.8), roughnessMap: null, color: 0xc8c4c0,
       roughness: STAIR_ROUGH,
     }),
-    gable: undefined as unknown as THREE.Material,
-    chimney: undefined as unknown as THREE.Material,
-    boardRoof: undefined as unknown as THREE.Material,
-    freeTimber: undefined as unknown as THREE.Material,
-    freePlanks: undefined as unknown as THREE.Material,
-    freeBrass: undefined as unknown as THREE.Material,
-    rackTimber: undefined as unknown as THREE.MeshStandardMaterial,
-    rackPlanks: undefined as unknown as THREE.MeshStandardMaterial,
-    doorLeaf: undefined as unknown as THREE.MeshStandardMaterial,
-    doorIron: undefined as unknown as THREE.MeshStandardMaterial,
-    signFace: undefined as unknown as (map: THREE.Texture) => THREE.Material,
-    propFace: undefined as unknown as (map: THREE.Texture) => THREE.Material,
+    gable: undefined as unknown as Material,
+    chimney: undefined as unknown as Material,
+    boardRoof: undefined as unknown as Material,
+    freeTimber: undefined as unknown as Material,
+    freePlanks: undefined as unknown as Material,
+    freeBrass: undefined as unknown as Material,
+    rackTimber: undefined as unknown as LitMaterial,
+    rackPlanks: undefined as unknown as LitMaterial,
+    doorLeaf: undefined as unknown as LitMaterial,
+    doorIron: undefined as unknown as LitMaterial,
+    signFace: undefined as unknown as (map: Texture) => Material,
+    propFace: undefined as unknown as (map: Texture) => Material,
     // (pale and half metal: all metal, a blade showed the sky's blue and no steel, a dark line from the square)
-    steel: new THREE.MeshStandardMaterial({ color: 0xc4c9d0, metalness: 0.4, roughness: 0.38 }),
-    palisadeLogs: undefined as unknown as THREE.Material,
-    palisadeTips: undefined as unknown as THREE.Material,
+    steel: new LitMaterial({ color: 0xc4c9d0, metalness: 0.4, roughness: 0.38 }),
+    palisadeLogs: undefined as unknown as Material,
+    palisadeTips: undefined as unknown as Material,
   };
   // (the palisade thins as a fence: as what's built, its hole opened by it alone, from play, "at border of map, the house
   // behind player suddenly disappeared": the houses' hole opened by it took the cottage beside him to its footing)
@@ -484,14 +485,14 @@ function makeMats(): Mats {
   mats.freePlanks = mats.planks.clone();
   mats.freeBrass = mats.brass.clone();
   mats.boardRoof = mats.roof.clone();
-  mats.rackTimber = (mats.timber as THREE.MeshStandardMaterial).clone();
+  mats.rackTimber = (mats.timber as LitMaterial).clone();
   mats.rackTimber.color.set(0xd8b488);
-  mats.rackPlanks = (mats.planks as THREE.MeshStandardMaterial).clone();
+  mats.rackPlanks = (mats.planks as LitMaterial).clone();
   mats.rackPlanks.color.set(0xf0d4a4);
   // (the houses' doors, in the planks' own program: an oak darker than the cottages', iron of the same maps dark and
   // metal, and the dark of a room unlit past it, warm a little. The iron is wrought, not polished: at 0.75 metal and
   // 0.55 rough its straps' edges, under a pixel deep from the top view, shone as dotted lines across the door, #912)
-  const planksBase = (mats.planks as THREE.MeshStandardMaterial).clone();
+  const planksBase = (mats.planks as LitMaterial).clone();
   mats.doorLeaf = planksBase.clone();
   mats.doorLeaf.color.set(0x6a4528);
   mats.doorIron = planksBase.clone();
@@ -532,7 +533,7 @@ function makeMats(): Mats {
 
 /** A page of the chronicle (read from the desk's low edge, its lines running along the canvas's y): a hand's lines of
  *  ink on old paper, a red capital to begin them, and on `drawn` pages a sketch among them. */
-function bookPage(seed: number, drawn: boolean): THREE.CanvasTexture {
+function bookPage(seed: number, drawn: boolean): CanvasTexture {
   const c = canvasOf(256, 256), g = ctx2d(c), rng = mulberry(seed);
   g.fillStyle = '#d8c8a0';
   g.fillRect(0, 0, 256, 256);
@@ -594,27 +595,27 @@ function bookPage(seed: number, drawn: boolean): THREE.CanvasTexture {
     }
     g.stroke();
   }
-  const map = new THREE.CanvasTexture(c);
-  map.colorSpace = THREE.SRGBColorSpace;
+  const map = new CanvasTexture(c);
+  map.colorSpace = SRGBColorSpace;
   map.anisotropy = 8;
   return map;
 }
 
 /** A page block's edge: the leaves' lines, side by side. */
-function pageEdges(): THREE.CanvasTexture {
+function pageEdges(): CanvasTexture {
   const c = canvasOf(8, 32), g = ctx2d(c), rng = mulberry(80);
   for (let y = 0; y < 32; y++) {
     const shade = 104 + rng() * 60;
     g.fillStyle = `rgb(${shade},${shade * 0.88},${shade * 0.68})`;
     g.fillRect(0, y, 8, 1);
   }
-  const map = new THREE.CanvasTexture(c);
-  map.colorSpace = THREE.SRGBColorSpace;
+  const map = new CanvasTexture(c);
+  map.colorSpace = SRGBColorSpace;
   return map;
 }
 
 /** The notices pinned to the board: a sheet of rough paper, its lines of ink as a hand writes them, a seal or two. */
-function noticePaper(): THREE.CanvasTexture {
+function noticePaper(): CanvasTexture {
   const c = canvasOf(256, 256), g = ctx2d(c), rng = mulberry(77);
   g.fillStyle = '#d8c8a0';
   g.fillRect(0, 0, 256, 256);
@@ -644,11 +645,11 @@ function noticePaper(): THREE.CanvasTexture {
 /** how bright a street lamp's panes are drawn by day and by night (their picture's colours times these): drawn in
  *  a lit glowing material with the lamp's light 0.25 m off them, they burned white and the bloom hid the whole
  *  lantern ("lights too bright, can't see geometry even"; `lab village`'s lamps check) */
-const LANTERN_PANE = { day: new THREE.Color(0.22, 0.2, 0.18), night: new THREE.Color(0.5, 0.47, 0.44) };
+const LANTERN_PANE = { day: new Color(0.22, 0.2, 0.18), night: new Color(0.5, 0.47, 0.44) };
 
 /** A street lamp's pane as lit from within (one of six round the lantern, `repeat` 6 across): warm and brightest
  *  low in its middle, where the flame burns, amber to its edges, its frame's dark edge round it. */
-function lanternPane(): THREE.CanvasTexture {
+function lanternPane(): CanvasTexture {
   const W = 32, H = 64;
   const c = canvasOf(W, H), g = ctx2d(c);
   const glow = g.createRadialGradient(W / 2, H * 0.62, 2, W / 2, H * 0.55, H * 0.6);
@@ -660,18 +661,18 @@ function lanternPane(): THREE.CanvasTexture {
   g.strokeStyle = '#1a120c';
   g.lineWidth = 3;
   g.strokeRect(0, 0, W, H);
-  const t = new THREE.CanvasTexture(c);
-  t.colorSpace = THREE.SRGBColorSpace;
-  t.wrapS = THREE.RepeatWrapping;
+  const t = new CanvasTexture(c);
+  t.colorSpace = SRGBColorSpace;
+  t.wrapS = RepeatWrapping;
   t.repeat.set(6, 1);
   return t;
 }
 
 function windowPanes(): {
-  glass: THREE.CanvasTexture; lit: THREE.CanvasTexture; leads: THREE.CanvasTexture;
+  glass: CanvasTexture; lit: CanvasTexture; leads: CanvasTexture;
 } {
   const W = 128, H = 112, bar = 8, lead = 1.5;
-  const draw = (lit: boolean): THREE.CanvasTexture => {
+  const draw = (lit: boolean): CanvasTexture => {
     const c = canvasOf(W, H), g = ctx2d(c), rng = mulberry(lit ? 31 : 37);
     if (lit) {
       const glow = g.createRadialGradient(W / 2, H * 0.8, 4, W / 2, H * 0.7, W * 0.75);
@@ -710,7 +711,7 @@ function windowPanes(): {
 /** The hall's glass, `W` by `H`, its panes' leads (`lead` wide) and frame (`bar`) dark and whole, the glass between
  *  them tinted and `GLASS.through` of it shown (in its alpha: an alpha map beside no colour map is read as one, a
  *  look the engine never took, and the panes stood whole and pale). */
-function leadsAlpha(W: number, H: number, bar: number, lead: number): THREE.CanvasTexture {
+function leadsAlpha(W: number, H: number, bar: number, lead: number): CanvasTexture {
   const c = canvasOf(W, H), g = ctx2d(c);
   g.fillStyle = `rgba(${GLASS.tint.join(',')},${GLASS.through})`;
   g.fillRect(0, 0, W, H);
@@ -733,14 +734,14 @@ function leadsAlpha(W: number, H: number, bar: number, lead: number): THREE.Canv
  * Built at once, it was one task of 2.2 s in a boot with the CPU 4 times slower, the loading screen still. Nothing
  * between two yields reads what a later piece builds; the pieces draw their random numbers in the same order.
  */
-export function* villageSteps(scene: THREE.Group): Generator<void, Village, undefined> {
+export function* villageSteps(scene: Node): Generator<void, Village, undefined> {
   const rng = mulberry(9001);
   const obstacles: Obstacle[] = [];
   const updaters: Updater[] = [];
   const wall = new Wall('village');
   const levels = new Levels();
   const M = makeMats();
-  const lights: THREE.PointLight[] = [];
+  const lights: PointLight[] = [];
 
   const sky = buildDaySky();
   scene.add(sky.mesh);
@@ -801,7 +802,7 @@ export function* villageSteps(scene: THREE.Group): Generator<void, Village, unde
   const exits = {} as Village['exits'];
   for (const id of BIOME_IDS) {
     const p = exitPlace(id);
-    exits[id] = { at: new THREE.Vector3(p.x, 0, p.z), facing: p.facing };
+    exits[id] = { at: new Vec3(p.x, 0, p.z), facing: p.facing };
   }
   stillBuilt(scene, () => { for (const c of COTTAGES) buildCottage(scene, wall, M, c, rng); });
   yield;
@@ -811,7 +812,7 @@ export function* villageSteps(scene: THREE.Group): Generator<void, Village, unde
   yield;
   // (in a group of its own, which the outline of its seat draws: sat round on the floor, as a bonfire is; its ring of
   // field stones in it too, `fireRing.ts`)
-  const campfireGroup = new THREE.Group();
+  const campfireGroup = new Node();
   campfireGroup.name = 'campfire';
   scene.add(campfireGroup);
   const campfire = buildBonfire(campfireGroup, CAMPFIRE[0], CAMPFIRE[1], null, M.logs, updaters, false);
@@ -865,7 +866,7 @@ export function* villageSteps(scene: THREE.Group): Generator<void, Village, unde
     candleLit += ((candleNear ? 1 : 0) - candleLit) * Math.min(1, dt * 5);
     // (never quite out: a light at no strength stays a light, or every shader compiles again)
     candle.scale.setScalar(Math.max(0.001, candleLit));
-    (candle.children[1] as THREE.PointLight).intensity = CANDLE.intensity * candleLit;
+    (candle.children[1] as PointLight).intensity = CANDLE.intensity * candleLit;
   });
 
   return {
@@ -940,7 +941,7 @@ function hoardLight(M: Mats, day: number): void {
 /** the hoard's metal, by day and by night, and the gilt's and the lock's colours by day */
 const METAL_BY_DAY = { metal: 0.85, rough: 0.62 }, METAL_BY_NIGHT = { metal: 0.6, rough: 0.56, bright: 1.35 };
 const GILT = 0xa8863c, LOCK_BRASS = 0x6e6048, GILT_SHEEN = 0.65, GILT_METAL = 0.7;
-const METAL_WARMTH = { day: 0x140c02, night: 0x3c2206 }, warmthByNight = new THREE.Color(METAL_WARMTH.night);
+const METAL_WARMTH = { day: 0x140c02, night: 0x3c2206 }, warmthByNight = new Color(METAL_WARMTH.night);
 
 /** How high the sun is at `hour` (the sine of its height over the horizon: below 0 it's night). */
 function sunHeight(hour: number): number {
@@ -956,10 +957,10 @@ const CAMPFIRE_BY_DAY = 0.3;
  *  0.9%, `lab village --only heroBesideFire`), and dimmed to pass it, its red on the ground fell under
  *  `campfireBurns`'s floor */
 const CAMPFIRE_LIGHT = { soft: 40, by: 1.5 };
-const dayness = (hour: number): number => THREE.MathUtils.smoothstep(sunHeight(hour), -0.12, 0.35);
+const dayness = (hour: number): number => Maths.smoothstep(sunHeight(hour), -0.12, 0.35);
 
 /** The way to the key light at `hour`: the sun along its arc from east through south to west, by night the moon. */
-function skyLightDir(hour: number, out = new THREE.Vector3()): THREE.Vector3 {
+function skyLightDir(hour: number, out = new Vec3()): Vec3 {
   const day = DAY.dusk - DAY.dawn;
   const sun = (hour - DAY.dawn) / day;
   const up = sun >= 0 && sun <= 1;
@@ -972,15 +973,15 @@ function skyLightDir(hour: number, out = new THREE.Vector3()): THREE.Vector3 {
   return out.set(Math.cos(round) * Math.cos(height), Math.sin(height), Math.sin(round) * Math.cos(height) * 0.75 + 0.25).normalize();
 }
 
-const _a = new THREE.Color(), _b = new THREE.Color();
+const _a = new Color(), _b = new Color();
 /** `a` to `b` by `k`, as a hex colour. */
 const mixHex = (a: number, b: number, k: number): number => _a.set(a).lerp(_b.set(b), k).getHex();
 
 /** The village's look at `hour`: night to twilight as the sun nears the horizon, twilight to day as it climbs. */
 function lookAt(hour: number): Omit<BiomeLook, 'env'> {
   const s = sunHeight(hour);
-  const toTwilight = THREE.MathUtils.smoothstep(s, -0.35, -0.02);
-  const toDay = THREE.MathUtils.smoothstep(s, 0.02, 0.5);
+  const toTwilight = Maths.smoothstep(s, -0.35, -0.02);
+  const toDay = Maths.smoothstep(s, 0.02, 0.5);
   const low = s < 0.02;
   const [from, to, k] = low ? [NIGHT, TWILIGHT, toTwilight] as const : [TWILIGHT, NOON, toDay] as const;
   const fog = mixHex(from.fog, to.fog, k);
@@ -988,21 +989,21 @@ function lookAt(hour: number): Omit<BiomeLook, 'env'> {
   return {
     background: fog,
     fog: { color: fog, near: 55, far: 150 },
-    hemi: { sky: mixHex(from.hemi, to.hemi, k), ground: mixHex(from.ground, to.ground, k), intensity: THREE.MathUtils.lerp(from.hemiI, to.hemiI, k) },
-    moon: { color: mixHex(from.light, to.light, k), intensity: THREE.MathUtils.lerp(from.lightI, to.lightI, k), pos: [dir.x, dir.y, dir.z] },
-    envIntensity: THREE.MathUtils.lerp(from.env, to.env, k),
-    adapt: THREE.MathUtils.lerp(from.adapt, to.adapt, k),
+    hemi: { sky: mixHex(from.hemi, to.hemi, k), ground: mixHex(from.ground, to.ground, k), intensity: Maths.lerp(from.hemiI, to.hemiI, k) },
+    moon: { color: mixHex(from.light, to.light, k), intensity: Maths.lerp(from.lightI, to.lightI, k), pos: [dir.x, dir.y, dir.z] },
+    envIntensity: Maths.lerp(from.env, to.env, k),
+    adapt: Maths.lerp(from.adapt, to.adapt, k),
   };
 }
 
 /** The sky over the village: the fog's colour at the horizon rising into its zenith, the sun's disc and glow by day, by
  *  night the moon and stars; clouds drifting. Set by the hour (`set`: uniforms alone). Unfogged, behind everything. */
-function buildDaySky(): { mesh: THREE.Mesh; update: Updater; set(hour: number): void } {
+function buildDaySky(): { mesh: Mesh; update: Updater; set(hour: number): void } {
   const uniforms = {
-    uHorizon: { value: new THREE.Color() }, uZenith: { value: new THREE.Color() }, uSun: { value: new THREE.Vector3(0, 1, 0) },
+    uHorizon: { value: new Color() }, uZenith: { value: new Color() }, uSun: { value: new Vec3(0, 1, 0) },
     uDay: { value: 0 }, uTime: { value: 0 },
   };
-  const mesh = new THREE.Mesh(new THREE.SphereGeometry(150, 32, 16), villageSkyMaterial(uniforms));
+  const mesh = new Mesh(shapes.sphere(150, 32, 16), villageSkyMaterial(uniforms));
   mesh.renderOrder = 100;
   mesh.frustumCulled = false;
   return {
@@ -1011,7 +1012,7 @@ function buildDaySky(): { mesh: THREE.Mesh; update: Updater; set(hour: number): 
     set(hour) {
       const look = lookAt(hour), day = dayness(hour);
       uniforms.uHorizon.value.set(look.fog.color);
-      const k = THREE.MathUtils.smoothstep(sunHeight(hour), -0.3, 0.4);
+      const k = Maths.smoothstep(sunHeight(hour), -0.3, 0.4);
       uniforms.uZenith.value.setRGB(...(k < 0.5 ? lerpRGB(NIGHT.sky, TWILIGHT.sky, k * 2) : lerpRGB(TWILIGHT.sky, NOON.sky, k * 2 - 1)));
       skyLightDir(hour, uniforms.uSun.value);
       uniforms.uDay.value = day;
@@ -1025,9 +1026,9 @@ const lerpRGB = (a: RGB, b: RGB, k: number): RGB => [a[0] + (b[0] - a[0]) * k, a
 
 /** The ground: a meadow's sward out past the fog (bare earth where the mask has no grass), the cobbled square round the
  *  fountain, its edge wandering, and the cobbled roads winding from it. */
-function buildGround(scene: THREE.Object3D, M: Mats, mask: MaskUniforms): void {
-  const earth = meadowGround(new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(soil(), 90, 1.1), color: 0xe0c8a4 }), mask);
-  const ground = new THREE.Mesh(new THREE.CircleGeometry(220, 96).rotateX(-Math.PI / 2), earth);
+function buildGround(scene: Node, M: Mats, mask: MaskUniforms): void {
+  const earth = meadowGround(new LitMaterial({ ...pbrMaterialMaps(soil(), 90, 1.1), color: 0xe0c8a4 }), mask);
+  const ground = new Mesh(shapes.circle(220, 96).rotateX(-Math.PI / 2), earth);
   ground.receiveShadow = true;
   scene.add(ground);
   // (the square and the roads cobbled alike, a tile a metre and a half in the world's frame: where they overlap, they
@@ -1148,7 +1149,7 @@ function mitred({ line, out, closed }: CurbRun, w: number): Spot[] {
 
 /** The curbs' faces, each run's wound by the way it goes out from its paving: wound alike, a run going out to its
  *  right showed its underside, its top culled, and of a curb along one side of each road only a sliver was drawn. */
-export function curbGeometry(): THREE.BufferGeometry {
+export function curbGeometry(): Geometry {
   const positions: number[] = [], uvs: number[] = [];
   for (const run of curbLines()) {
     const { line } = run;
@@ -1183,17 +1184,17 @@ export function curbGeometry(): THREE.BufferGeometry {
     quad(s3, s2, s1, s0, 0, CURB.w);
     quad(e0, e1, e2, e3, 0, CURB.w);
   }
-  const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-  g.setAttribute('uv', new THREE.Float32BufferAttribute(uvs.map((v, k) => (k % 2 ? v * 0.3 : v)), 2));
+  const g = new Geometry();
+  g.setAttribute('position', floats(positions, 3));
+  g.setAttribute('uv', floats(uvs.map((v, k) => (k % 2 ? v * 0.3 : v)), 2));
   g.computeVertexNormals();
   return g;
 }
 
 /** The curbs: a low stone strip out from each edge of the paving (`curbLines`), mitred round its bends and capped at
  *  its ends. One mesh, standing still. */
-function curbs(m: THREE.Material): THREE.Mesh {
-  const mesh = new THREE.Mesh(curbGeometry(), m);
+function curbs(m: Material): Mesh {
+  const mesh = new Mesh(curbGeometry(), m);
   mesh.name = 'curbs';
   mesh.receiveShadow = true;
   mesh.userData.noBake = true;
@@ -1222,21 +1223,21 @@ function squareOutline(): Spot[] {
 }
 
 /** UVs a tile `tile` m in the world's frame (x, z), for a flat geometry lying on the ground. */
-function worldUVs(g: THREE.BufferGeometry, tile: number): void {
+function worldUVs(g: Geometry, tile: number): void {
   const p = g.attributes.position, uv = new Float32Array(p.count * 2);
   for (let k = 0; k < p.count; k++) {
     uv[k * 2] = p.getX(k) / tile;
     uv[k * 2 + 1] = p.getZ(k) / tile;
   }
-  g.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+  g.setAttribute('uv', new Attribute(uv, 2));
 }
 
 /** A flat patch of `m` over the polygon `points` (x, z), `y` over the ground. */
-function flatPatch(points: readonly Spot[], m: THREE.Material, y: number): THREE.Mesh {
-  const shape = new THREE.Shape(points.map(([x, z]) => new THREE.Vector2(x, -z)));
-  const g = new THREE.ShapeGeometry(shape).rotateX(-Math.PI / 2);
+function flatPatch(points: readonly Spot[], m: Material, y: number): Mesh {
+  const shape = new Outline(points.map(([x, z]) => new Vec2(x, -z)));
+  const g = shapes.flat(shape).rotateX(-Math.PI / 2);
   worldUVs(g, 1.5);
-  const mesh = new THREE.Mesh(g, m);
+  const mesh = new Mesh(g, m);
   mesh.position.y = y;
   mesh.receiveShadow = true;
   return mesh;
@@ -1244,7 +1245,7 @@ function flatPatch(points: readonly Spot[], m: THREE.Material, y: number): THREE
 
 /** A road along `line` (points every 0.4 m), `width` m wide, its edges wandering a little either side (each road its
  *  own, `seed`). */
-function roadStrip(line: readonly Spot[], width: number, m: THREE.Material, seed: number): THREE.Mesh {
+function roadStrip(line: readonly Spot[], width: number, m: Material, seed: number): Mesh {
   const positions: number[] = [], index: number[] = [];
   const [left, right] = roadEdges(line, width);
   line.forEach((_, i) => {
@@ -1254,12 +1255,12 @@ function roadStrip(line: readonly Spot[], width: number, m: THREE.Material, seed
       index.push(a, a + 1, a + 2, a + 1, a + 3, a + 2);
     }
   });
-  const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  const g = new Geometry();
+  g.setAttribute('position', floats(positions, 3));
   g.setIndex(index);
   worldUVs(g, 1.5);
   g.computeVertexNormals();
-  const mesh = new THREE.Mesh(g, m);
+  const mesh = new Mesh(g, m);
   mesh.position.y = 0.016;
   mesh.receiveShadow = true;
   return mesh;
@@ -1325,7 +1326,7 @@ function wayPoint(id: BiomeId, across: number, out: number): Spot {
 }
 
 /** The fountain in the middle of the square (world/fountain.ts). */
-function buildSquare(scene: THREE.Object3D, M: Mats, obstacles: Obstacle[], updaters: Updater[]): FountainLight {
+function buildSquare(scene: Node, M: Mats, obstacles: Obstacle[], updaters: Updater[]): FountainLight {
   return buildFountain(scene, { stone: M.freeAshlar, coping: M.freeCoping }, obstacles, updaters);
 }
 
@@ -1335,7 +1336,7 @@ function buildSquare(scene: THREE.Object3D, M: Mats, obstacles: Obstacle[], upda
  * A wall facing a ledge, from the ground to `top` (m) along x0..x1 at z (or along z0..z1 at x: `alongZ`), its coping on
  * top: drawn, flown into, and kept off by bodies (its outline), so the only way onto what it faces is a stair.
  */
-function ledgeWall(scene: THREE.Object3D, wall: Wall, M: Mats, a0: number, a1: number, at: number, top: number, alongZ = false): void {
+function ledgeWall(scene: Node, wall: Wall, M: Mats, a0: number, a1: number, at: number, top: number, alongZ = false): void {
   const len = a1 - a0, mid = (a0 + a1) / 2, t = PARAPET.thick;
   const body = alongZ ? block(scene, t, top, len, at, 0, mid, M.freeAshlar, 0.5) : block(scene, len, top, t, mid, 0, at, M.freeAshlar, 0.5);
   const cap = alongZ ? block(scene, t + 0.12, 0.12, len + 0.12, at, top, mid, M.freeCoping) : block(scene, len + 0.12, 0.12, t + 0.12, mid, top, at, M.freeCoping);
@@ -1352,7 +1353,7 @@ const FLAGS_TILE = 2.25;
 const flagsAt = (x: number, z: number): [number, number] => [x / FLAGS_TILE, -z / FLAGS_TILE];
 
 /** `mesh`'s top laid in the flags by the world's place (a mesh unturned). */
-function pavedAsTheTerrace(mesh: THREE.Mesh): void {
+function pavedAsTheTerrace(mesh: Mesh): void {
   const { uv, position, normal } = mesh.geometry.attributes;
   for (let k = 0; k < uv.count; k++) {
     if (normal.getY(k) < 0.5) continue;
@@ -1361,7 +1362,7 @@ function pavedAsTheTerrace(mesh: THREE.Mesh): void {
 }
 
 /** The terrace: a stone platform the hall stands on, faced on every side by its walls, a broad stair up its middle. */
-function buildTerrace(scene: THREE.Object3D, wall: Wall, levels: Levels, M: Mats): void {
+function buildTerrace(scene: Node, wall: Wall, levels: Levels, M: Mats): void {
   const { x: X, front, back, half, high, stairHalf, stairFoot } = TERRACE;
   const deep = front - back;
   block(scene, half * 2, high, deep, X, 0, (front + back) / 2, M.ashlar, 0.5).receiveShadow = true;
@@ -1369,7 +1370,7 @@ function buildTerrace(scene: THREE.Object3D, wall: Wall, levels: Levels, M: Mats
   // (from play, "this floor is now flickering"; `lab village --only hallFloorSteady`)
   const inside = HALL.inHalf + 0.05;
   const paved = (x0: number, x1: number, z0: number, z1: number): void => {
-    const top = new THREE.Mesh(new THREE.PlaneGeometry(x1 - x0, z1 - z0).rotateX(-Math.PI / 2), M.flags);
+    const top = new Mesh(shapes.plane(x1 - x0, z1 - z0).rotateX(-Math.PI / 2), M.flags);
     const { uv, position } = top.geometry.attributes;
     top.position.set((x0 + x1) / 2, high + 0.005, (z0 + z1) / 2);
     // (by the world's place, so its pieces' stones run on across their edges)
@@ -1404,11 +1405,11 @@ function buildTerrace(scene: THREE.Object3D, wall: Wall, levels: Levels, M: Mats
 }
 
 /** A stair's cheek wall at x, from its foot (z0, `low` m tall) to the ledge (z1, `high`): a sloping slab of stone. */
-function cheek(scene: THREE.Object3D, wall: Wall, M: Mats, x: number, z0: number, z1: number, low: number, high: number): void {
-  const s = new THREE.Shape();
+function cheek(scene: Node, wall: Wall, M: Mats, x: number, z0: number, z1: number, low: number, high: number): void {
+  const s = new Outline();
   // (drawn in (z, y), then turned so its depth runs across x)
   s.moveTo(z0, 0); s.lineTo(z1, 0); s.lineTo(z1, high); s.lineTo(z0, low); s.lineTo(z0, 0);
-  const g = new THREE.ExtrudeGeometry(s, { depth: PARAPET.thick, bevelEnabled: false }).rotateY(-Math.PI / 2);
+  const g = shapes.extrude(s, { depth: PARAPET.thick, bevelEnabled: false }).rotateY(-Math.PI / 2);
   g.translate(x + PARAPET.thick / 2, 0, 0);
   // (its uvs as a box's would be: the extrusion's are in shape units already, a metre a tile)
   const mesh = solid(scene, g, M.freeAshlar);
@@ -1420,10 +1421,10 @@ function cheek(scene: THREE.Object3D, wall: Wall, M: Mats, x: number, z0: number
  *  windows down the long ones, a stone-framed double door standing open in the front one under a portico of four
  *  columns with a torch either side of the door, two rows of columns down the inside to a dais at the far end where
  *  the other heroes stand, the two braziers behind them (the still shadows' lights), and a roof. */
-function buildHall(scene: THREE.Object3D, wall: Wall, levels: Levels, M: Mats, obstacles: Obstacle[],
+function buildHall(scene: Node, wall: Wall, levels: Levels, M: Mats, obstacles: Obstacle[],
   updaters: Updater[]): {
-  cutaway: THREE.Object3D[]; torches: THREE.Vector3[]; dais: THREE.Vector3[]; porch: THREE.Vector3[];
-  porchFires: THREE.Object3D; flickers: THREE.PointLight[];
+  cutaway: Node[]; torches: Vec3[]; dais: Vec3[]; porch: Vec3[];
+  porchFires: Node; flickers: PointLight[];
 } {
   const y0 = TERRACE.high, X = TERRACE.x, half = HALL.half, thick = HALL.half - HALL.inHalf;
   const eaves = HALL.wallHigh;
@@ -1442,9 +1443,9 @@ function buildHall(scene: THREE.Object3D, wall: Wall, levels: Levels, M: Mats, o
   // the back and side walls, a plinth course along their feet outside, tall windows down the long ones (a group of their
   // own, thinned from above as the front wall is where they stand before him: the camera can turn to see over any)
   // (each wall a group of its own: it thins by itself, as it stands between the camera and him, `hallInside`)
-  const walls = new THREE.Group();
+  const walls = new Node();
   scene.add(walls);
-  const sideWalls = [new THREE.Group(), new THREE.Group()];
+  const sideWalls = [new Node(), new Node()];
   for (const side of sideWalls) scene.add(side);
   // (between the side walls, as the front wall's wings are: run to their outer faces, each shared a plane with them at the
   // corners, from play, "still flickering")
@@ -1473,7 +1474,7 @@ function buildHall(scene: THREE.Object3D, wall: Wall, levels: Levels, M: Mats, o
   // the front wall either side of the door and over it, its plinth course, the door in its stone frame (a group of
   // their own: cut away with the roof over the hero inside, as from above they hid the room)
   const { doorHalf: dh, doorHigh: high } = HALL, wing = half - dh;
-  const frontWall = new THREE.Group();
+  const frontWall = new Node();
   scene.add(frontWall);
   for (const s of [-1, 1]) {
     const cx = X + s * (dh + wing / 2);
@@ -1500,13 +1501,13 @@ function buildHall(scene: THREE.Object3D, wall: Wall, levels: Levels, M: Mats, o
   M.column.userData[COLUMN_SHAFT] = true;
   // (what stands free in it, thinned further: interior columns and the portico as separate groups so interior columns
   // blend behind a thinned front wall while portico columns stand over it)
-  const roomColumns = new THREE.Group();
+  const roomColumns = new Node();
   scene.add(roomColumns);
   // (their capitals with them: left whole, from over the roof one stood over him as a tall dark slab, from play, "why this
   // not becoming transparent ?")
   const capital = capitalStone(M.granite);
   // (the torches' fires in a group of their own, out of the groups `fadesWhole` puts in a wall's materials)
-  const fires = new THREE.Group();
+  const fires = new Node();
   scene.add(fires);
   const lit: TorchLit = { fires, updaters, flickers: [] };
   const torches = hallColumns(roomColumns, capital, M, lit, obstacles, ceiling);
@@ -1523,26 +1524,26 @@ function buildHall(scene: THREE.Object3D, wall: Wall, levels: Levels, M: Mats, o
   // the torches either side of the door, on the front wall's face (cut away with it over the hero inside), their fires
   // in a group of their own the game hides with them: from above in the hall they hung in the air where the wall had
   // opened, from play
-  const porchFires = new THREE.Group();
+  const porchFires = new Node();
   scene.add(porchFires);
   const porchLit: TorchLit = { fires: porchFires, updaters, flickers: lit.flickers };
   const porch = [-1, 1].map((s) => wallTorch(frontWall, M, porchLit, X + s * PORCH_TORCH.x, y0 + PORCH_TORCH.up, face, 0,
     1, true, PORCH_TORCH.out));
   // the portico: a pair of columns either side, one entablature across the whole front
-  const portico = new THREE.Group();
+  const portico = new Node();
   scene.add(portico);
   for (const s of [-1, 1]) {
     for (const x of COLONNADE.x) {
       const cx = X + s * x, cz = COLONNADE.z;
       wall.add(block(portico, 1.0, 0.4, 1.0, cx, y0, cz, M.granite), true, 'wall', true);
-      const shaft = new THREE.CylinderGeometry(COLONNADE.radius * 0.88, COLONNADE.radius, COLONNADE.high, 18);
+      const shaft = shapes.cylinder(COLONNADE.radius * 0.88, COLONNADE.radius, COLONNADE.high, 18);
       solid(portico, shaft, M.column).position.set(cx, y0 + 0.4 + COLONNADE.high / 2, cz);
       // (thinned with it: left whole, it stood solid over him from the square, the shaft under it a ghost, from play "why
       // this not becoming transparent ?")
       block(portico, 0.95, 0.32, 0.95, cx, y0 + 0.4 + COLONNADE.high, cz, capital);
     }
   }
-  const beam = new THREE.Group();
+  const beam = new Node();
   scene.add(beam);
   block(beam, half * 2, COLONNADE.lintel, HALL.beamDeep, X, y0 + HALL.beamFoot, HALL.beamZ, M.coping);
   const roof = hallRoof(scene, M, y0 + eaves, back, front);
@@ -1577,19 +1578,19 @@ export function inHallsBulk(x: number, y: number, z: number): boolean {
 /** The portico's columns as they stand, each a box from its plinth's foot to its capital's top: what of the hall
  *  stands free outside it, between the camera and him as he walks round the terrace (`porticoHidesHim` in
  *  game/village.ts). */
-export const PORTICO_COLUMNS: readonly THREE.Box3[] = [-1, 1].flatMap((s) => COLONNADE.x.map((x) => {
+export const PORTICO_COLUMNS: readonly Box3[] = [-1, 1].flatMap((s) => COLONNADE.x.map((x) => {
   const cx = TERRACE.x + s * x, top = TERRACE.high + 0.4 + COLONNADE.high + 0.32;
-  return new THREE.Box3(
-    new THREE.Vector3(cx - 0.5, TERRACE.high, COLONNADE.z - 0.5), new THREE.Vector3(cx + 0.5, top, COLONNADE.z + 0.5),
+  return new Box3(
+    new Vec3(cx - 0.5, TERRACE.high, COLONNADE.z - 0.5), new Vec3(cx + 0.5, top, COLONNADE.z + 0.5),
   );
 }));
 
 /** The hall's room's columns, each a box round its plinth and shaft from the terrace to the walls' top (its capital
  *  is under the ceiling, lower): what stands between the camera and him over the shoulder (`game/village.ts`). */
-export const ROOM_COLUMNS: readonly THREE.Box3[] = HALL.columnZ.flatMap((z) => [-1, 1].map((s) => {
+export const ROOM_COLUMNS: readonly Box3[] = HALL.columnZ.flatMap((z) => [-1, 1].map((s) => {
   const x = TERRACE.x + s * HALL.columnX;
-  return new THREE.Box3(
-    new THREE.Vector3(x - 0.41, TERRACE.high, z - 0.41), new THREE.Vector3(x + 0.41, TERRACE.high + HALL.wallHigh, z + 0.41),
+  return new Box3(
+    new Vec3(x - 0.41, TERRACE.high, z - 0.41), new Vec3(x + 0.41, TERRACE.high + HALL.wallHigh, z + 0.41),
   );
 }));
 
@@ -1599,7 +1600,7 @@ const TORCH_REACH = 0.8;
 
 /** A room column's box (`ROOM_COLUMNS`) grown out to its torch on the aisle side: a camera kept off the column alone
  *  stood in its torch, whose basket and fire the near plane cut (#948). */
-function withItsTorch(box: THREE.Box3): THREE.Box3 {
+function withItsTorch(box: Box3): Box3 {
   const middle = (box.min.x + box.max.x) / 2;
   const grown = box.clone();
   if (middle > TERRACE.x) grown.min.x = middle - TORCH_REACH;
@@ -1616,10 +1617,10 @@ export function hallSills(): { x: number; y: number; deep: number; wide: number;
 
 /** The hall's windows as openings its doorway's cull sees through (`Opening` in `doorways.ts`): each one's foot in
  *  its wall's outer face, the way out, its half width and its height. */
-export function hallWindows(): { sill: THREE.Vector3; out: THREE.Vector3; half: number; high: number }[] {
+export function hallWindows(): { sill: Vec3; out: Vec3; half: number; high: number }[] {
   return [-1, 1].flatMap((s) => windowsAlong().map((z) => ({
-    sill: new THREE.Vector3(TERRACE.x + s * HALL.half, TERRACE.high + WINDOWS.sill, z),
-    out: new THREE.Vector3(s, 0, 0),
+    sill: new Vec3(TERRACE.x + s * HALL.half, TERRACE.high + WINDOWS.sill, z),
+    out: new Vec3(s, 0, 0),
     half: WINDOWS.wide / 2,
     high: WINDOWS.high,
   })));
@@ -1635,7 +1636,7 @@ function windowsAlong(): number[] {
  *  the sun and the moon light the hall through them (from play, "windows need to be real, and let sun/moonlight
  *  through": a pane's picture on a whole wall, they let none in). Each pane is leaded glass seen through both ways,
  *  each window an opening the doorway's cull draws through as it does the door (`doorways.ts`, `hallPortal.ts`). */
-function hallSideWall(scene: THREE.Object3D, wall: Wall, M: Mats, sideX: number, s: number, thick: number, eaves: number,
+function hallSideWall(scene: Node, wall: Wall, M: Mats, sideX: number, s: number, thick: number, eaves: number,
   back: number, face: number): ShelterOpening[] {
   const y0 = TERRACE.high, { sill, high, wide } = WINDOWS, top = sill + high;
   const add = (len: number, h: number, y: number, z: number): void => {
@@ -1647,7 +1648,7 @@ function hallSideWall(scene: THREE.Object3D, wall: Wall, M: Mats, sideX: number,
   for (let k = 0; k < edges.length; k += 2) add(edges[k + 1] - edges[k], high, y0 + sill, (edges[k] + edges[k + 1]) / 2);
   // (set back to the wall's middle, each side's reveal its own: at 8 cm in from each face, the panes read as pictures
   // on the wall, "the windows are still pictures painted on the wall")
-  const pane = new THREE.BoxGeometry(0.04, high, wide);
+  const pane = shapes.box(0.04, high, wide);
   for (const z of windowsAlong()) {
     // (a limestone lining round the opening, the wall's depth shown by it: in the brick's own colour the reveals read
     // as none, "no reveal, jamb, depth or wall thickness")
@@ -1666,18 +1667,18 @@ function hallSideWall(scene: THREE.Object3D, wall: Wall, M: Mats, sideX: number,
     wall.addGeometry(pane, mesh.matrixWorld, true, 'beyond', undefined, 'hallGlass');
   }
   // (each an opening the sky lights the hall through, on the wall's inner face, facing in)
-  return windowsAlong().map((z) => ({ at: new THREE.Vector3(sideX - s * thick / 2, y0 + sill + high / 2, z), way: -s }));
+  return windowsAlong().map((z) => ({ at: new Vec3(sideX - s * thick / 2, y0 + sill + high / 2, z), way: -s }));
 }
 
 /** The hall's two rows of columns down its length, from the door to the dais (each a granite base, a stucco shaft up
  *  to the ceiling's beams, a granite capital), kept off by a circle each; and a torch on each, on its side to the
  *  aisle (an iron bracket, a flame in a cup: lit by the pool's lights as the hero walks past, game/village.ts
  *  `lightLamps`, the hall's own ten being spent outside). Returns where each torch's light is. */
-function hallColumns(scene: THREE.Object3D, capital: THREE.Material, M: Mats, lit: TorchLit, obstacles: Obstacle[],
-  ceiling: number): THREE.Vector3[] {
-  const y0 = TERRACE.high, torches: THREE.Vector3[] = [];
+function hallColumns(scene: Node, capital: Material, M: Mats, lit: TorchLit, obstacles: Obstacle[],
+  ceiling: number): Vec3[] {
+  const y0 = TERRACE.high, torches: Vec3[] = [];
   const shaftHigh = ceiling - y0 - 0.35 - 0.3;
-  const shaft = new THREE.CylinderGeometry(COLUMN_IN.radius * 0.9, COLUMN_IN.radius, shaftHigh, 18);
+  const shaft = shapes.cylinder(COLUMN_IN.radius * 0.9, COLUMN_IN.radius, shaftHigh, 18);
   for (const z of HALL.columnZ) {
     for (const s of [-1, 1]) {
       const x = TERRACE.x + s * HALL.columnX;
@@ -1691,7 +1692,7 @@ function hallColumns(scene: THREE.Object3D, capital: THREE.Material, M: Mats, li
       // the other)
       // (proud of the tapering shaft all round: level with it there, it showed as a dash from some sides, a review)
       // (open at its ends: with the shaft cut away above it from above, its lid stood as a black disc on the column)
-      const hoop = new THREE.CylinderGeometry(COLUMN_IN.radius * 1.01, COLUMN_IN.radius * 1.01, 0.1, 18, 1, true);
+      const hoop = shapes.cylinder(COLUMN_IN.radius * 1.01, COLUMN_IN.radius * 1.01, 0.1, 18, 1, true);
       const band = solid(scene, hoop, M.iron);
       band.position.set(x, y0 + 2.4, z);
       band.castShadow = false;
@@ -1701,17 +1702,17 @@ function hallColumns(scene: THREE.Object3D, capital: THREE.Material, M: Mats, li
 }
 
 /** A small flame's materials (the chronicle's candle's): its tongue and the glow round it. */
-interface TorchLook { fire: THREE.Material; glow: THREE.Material }
+interface TorchLook { fire: Material; glow: Material }
 
 /** The torches' look: a flame of its own, a pointed tongue a hot core and a soft glow round it, smaller and dimmer than
  *  a lantern's glass (passed close, the glass's bloomed into a blob that hid the heroes behind it; the same kind of
  *  material, so the same program). Drawn as a lit egg, a review read each as "a solid light bulb". */
 function torchLook(): TorchLook {
   return {
-    fire: new THREE.MeshStandardMaterial({ color: 0x2a2014, roughness: 0.3, emissive: 0xffc070, emissiveIntensity: 1.1 }),
-    glow: new THREE.MeshBasicMaterial({
+    fire: new LitMaterial({ color: 0x2a2014, roughness: 0.3, emissive: 0xffc070, emissiveIntensity: 1.1 }),
+    glow: new UnlitMaterial({
       // (faint: at 0.35, over a torch's own lit wall the ring round it was 2.3% blown out, `lab village`'s lights)
-      color: 0xff8a30, transparent: true, opacity: 0.18, blending: THREE.AdditiveBlending, depthWrite: false,
+      color: 0xff8a30, transparent: true, opacity: 0.18, blending: AdditiveBlending, depthWrite: false,
     }),
   };
 }
@@ -1719,28 +1720,28 @@ function torchLook(): TorchLook {
 /** the glowing materials `fadesWhole` made copies of, each with its copy: a copy glows as what it was made from does by
  *  the hour (left as built, the hall's windows' panes stood black at noon: from play, "why windows so dark? its
  *  daylight outside") */
-const glowTwins: [THREE.MeshStandardMaterial, THREE.MeshStandardMaterial][] = [];
+const glowTwins: [LitMaterial, LitMaterial][] = [];
 
 /** What's under `group` drawn in materials of its own that thin as `kind` says (`fadeWhole`): the hall's cut away parts,
  *  as a material a hole round the hero alone has is the rest of the village's too. */
-function fadesWhole(group: THREE.Object3D, kind: FadesWhole, inHall = false,
-  but: THREE.Object3D[] = []): Map<THREE.Material, THREE.Material> {
-  const fading = new Map<THREE.Material, THREE.Material>();
-  const left = new Set<THREE.Object3D>(but.flatMap((part) => {
-    const under: THREE.Object3D[] = [];
+function fadesWhole(group: Node, kind: FadesWhole, inHall = false,
+  but: Node[] = []): Map<Material, Material> {
+  const fading = new Map<Material, Material>();
+  const left = new Set<Node>(but.flatMap((part) => {
+    const under: Node[] = [];
     part.traverse((object) => under.push(object));
     return under;
   }));
   group.traverse((object) => {
-    const mesh = object as THREE.Mesh;
+    const mesh = object as Mesh;
     if (!mesh.isMesh || left.has(mesh)) return;
-    const was = mesh.material as THREE.Material;
+    const was = mesh.material as Material;
     if (!fading.has(was)) {
       const copy = was.clone();
       if (inHall) copy.userData[IN_HALL_COLUMN] = true;
       const twin = seeThrough(copy, kind);
       fading.set(was, twin);
-      if ((was as THREE.MeshStandardMaterial).emissiveMap) glowTwins.push([was as THREE.MeshStandardMaterial, twin as THREE.MeshStandardMaterial]);
+      if ((was as LitMaterial).emissiveMap) glowTwins.push([was as LitMaterial, twin as LitMaterial]);
     }
     mesh.material = fading.get(was)!;
   });
@@ -1749,32 +1750,32 @@ function fadesWhole(group: THREE.Object3D, kind: FadesWhole, inHall = false,
 
 /** The materials `fadesWhole` made (`made`: each by the one it was made from) in the turns of those they were made
  *  from (`turns`), any other after them. */
-function inTurns(made: Map<THREE.Material, THREE.Material>, turns: readonly THREE.Material[]): THREE.Material[] {
+function inTurns(made: Map<Material, Material>, turns: readonly Material[]): Material[] {
   const ranked = turns.flatMap((from) => (made.has(from) ? [made.get(from)!] : []));
   return [...ranked, ...[...made.values()].filter((twin) => !ranked.includes(twin))];
 }
 
 /** the materials of each set of columns (the room's, the portico's) that `fadesWhole` made, in the turns they're
  *  drawn in */
-const columnSets: THREE.Material[][] = [];
+const columnSets: Material[][] = [];
 
 /** For a harness (tools/lab): each set of the hall's columns' materials, in the turns their parts are drawn in. */
-export function columnTurns(): readonly (readonly THREE.Material[])[] {
+export function columnTurns(): readonly (readonly Material[])[] {
   return columnSets;
 }
 
 /** Each set of the hall's columns sorted as one by the engine once merged (`sortAsOne`): merged by material across
  *  the room, its plinths and its shafts swapped turns as the camera moved, and its plinths showed through the ghost
  *  of the column before him, then didn't. */
-export function sortColumnsAsOne(root: THREE.Object3D): void {
+export function sortColumnsAsOne(root: Node): void {
   const [room, portico] = columnSets.map((set) => {
-    const meshes: THREE.Mesh[] = [];
+    const meshes: Mesh[] = [];
     root.traverse((object) => {
-      const mesh = object as THREE.Mesh;
+      const mesh = object as Mesh;
       if (mesh.isMesh && !Array.isArray(mesh.material) && set.includes(mesh.material)) meshes.push(mesh);
     });
     // (each material's merge, in its turn)
-    return meshes.sort((a, b) => set.indexOf(a.material as THREE.Material) - set.indexOf(b.material as THREE.Material));
+    return meshes.sort((a, b) => set.indexOf(a.material as Material) - set.indexOf(b.material as Material));
   });
   // (each set by a box round itself: the room's and the portico's still swap turns, but only where the front wall
   // stands between them, sharing no pixel, `lab village --only blendedOrderSteady`; boxes mirrored about the wall
@@ -1785,7 +1786,7 @@ export function sortColumnsAsOne(root: THREE.Object3D): void {
 
 /** `granite` for a column's capital: drawn after its shaft and thinned as pale as it (`OVER_SHAFT` in
  *  core/seeThrough.ts), a material of its own, so merged apart from the bases. */
-function capitalStone(granite: THREE.Material): THREE.Material {
+function capitalStone(granite: Material): Material {
   const stone = granite.clone();
   stone.userData[OVER_SHAFT] = true;
   return stone;
@@ -1793,29 +1794,29 @@ function capitalStone(granite: THREE.Material): THREE.Material {
 
 /** Where the hall's torches' fires go and what they hand back: the group of their fires, the village's updaters, and
  *  each torch's flicker in the order built (its columns', then its door's). */
-interface TorchLit { fires: THREE.Object3D; updaters: Updater[]; flickers: THREE.PointLight[] }
+interface TorchLit { fires: Node; updaters: Updater[]; flickers: PointLight[] }
 
 /** A torch on a wall's face at (x, z), `y` its bracket's top, standing out along (dx, dz) (a unit along x or z): an
  *  iron bracket, an arm out, a basket and its fire (`torchFire`: a lit tongue in a cup, still, from play "these
  *  lights are super lame"). Returns where its light is: out from it, as at its flame the wall beside it burned
  *  white. */
-function wallTorch(scene: THREE.Object3D, M: Mats, lit: TorchLit, x: number, y: number, z: number, dx: number,
-  dz: number, plated = true, out = 1.1): THREE.Vector3 {
+function wallTorch(scene: Node, M: Mats, lit: TorchLit, x: number, y: number, z: number, dx: number,
+  dz: number, plated = true, out = 1.1): Vec3 {
   const alongX = dx !== 0;
   const plate = plated ? block(scene, alongX ? 0.08 : 0.12, 0.5, alongX ? 0.12 : 0.08, x, y - 0.55, z, M.iron) : null;
   const arm = block(scene, alongX ? 0.3 : 0.06, 0.06, alongX ? 0.06 : 0.3, x + dx * 0.15, y - 0.3, z + dz * 0.15, M.iron);
-  const bed = new THREE.Vector3(x + dx * 0.32, y - 0.04, z + dz * 0.32);
+  const bed = new Vec3(x + dx * 0.32, y - 0.04, z + dz * 0.32);
   lit.flickers.push(torchFire(scene, lit.fires, M.iron, bed, lit.updaters).flicker);
   // (its own light is out from it: cast into the lamps' shadows, the bracket and cup threw a hole of shadow round the
   // torch on its own wall)
   for (const part of [plate, arm]) if (part) part.castShadow = false;
-  return new THREE.Vector3(x + dx * out, y + 0.3, z + dz * out);
+  return new Vec3(x + dx * out, y + 0.3, z + dz * out);
 }
 
 /** The dais across the hall's far end, a step up onto it, and on it a plinth for each hero (granite, a coping on its
  *  top), stood on (its top a level) and kept off (a circle round it: the hero walks between them, the others stand on
  *  them); behind each its class's banner on the back wall. Returns where the lights on the heroes hang. */
-function hallDais(scene: THREE.Object3D, backWall: THREE.Object3D, levels: Levels, M: Mats, obstacles: Obstacle[]): THREE.Vector3[] {
+function hallDais(scene: Node, backWall: Node, levels: Levels, M: Mats, obstacles: Obstacle[]): Vec3[] {
   const y0 = TERRACE.high, X = TERRACE.x, inHalf = HALL.inHalf, top = y0 + HALL.daisHigh;
   const deep = HALL.daisZ - HALL.wall, step = STEP_RUN, rise = HALL.daisHigh / 2;
   block(scene, inHalf * 2, rise, step, X, y0, HALL.daisZ - step / 2, M.granite);
@@ -1839,29 +1840,29 @@ function hallDais(scene: THREE.Object3D, backWall: THREE.Object3D, levels: Level
   for (const [i, dx] of HALL.plinths.entries()) {
     const x = X + dx, bannerTop = top + HALL_BANNER.top, bz = HALL.wall + HALL_BANNER.off;
     const cloth = bannerCloth(256, 512, CLASSES[CLASS_IDS[i]].hall.banner);
-    const velvet = seeThrough(new THREE.MeshStandardMaterial({ map: cloth, roughness: 0.85, side: THREE.DoubleSide }), 'prop');
+    const velvet = seeThrough(new LitMaterial({ map: cloth, roughness: 0.85, side: DoubleSide }), 'prop');
     const s = HALL_BANNER.scale;
     // (on the back wall's kind: left whole as the wall thinned, they hung in the air, a review)
     solid(backWall, bannerGeo(rng).rotateY(Math.PI).scale(s, s, s), velvet).position.set(x, bannerTop, bz);
-    const rod = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.9 * s + 0.3, 8).rotateZ(Math.PI / 2), M.iron);
+    const rod = new Mesh(shapes.cylinder(0.03, 0.03, 0.9 * s + 0.3, 8).rotateZ(Math.PI / 2), M.iron);
     rod.position.set(x, bannerTop + 0.03, bz);
     backWall.add(rod);
   }
   // (the heroes lit from before and above, between them: seen from the door, lit by the torches alone they stood dark)
-  return [-1, 1].map((s) => new THREE.Vector3(X + s * HALL.plinths[2] / 2, top + DAIS_LIGHT.up, z + DAIS_LIGHT.ahead));
+  return [-1, 1].map((s) => new Vec3(X + s * HALL.plinths[2] / 2, top + DAIS_LIGHT.up, z + DAIS_LIGHT.ahead));
 }
 
 /** The hall's door in the front wall's face at `face` (z): a frame of dressed stone round it, a lintel stone over it,
  *  and its two leaves of planks set back in it, iron-strapped, an iron ring on each. */
-function hallDoor(scene: THREE.Object3D, M: Mats, X: number, y0: number, face: number): THREE.Object3D[] {
+function hallDoor(scene: Node, M: Mats, X: number, y0: number, face: number): Node[] {
   const { doorHalf: dh, doorHigh: high } = HALL, f = DOOR.frame;
   // (its frame and its leaves are what's handed back, the doorway: where the wall goes whole they stay, a ghost)
-  const leaves: THREE.Object3D[] = [];
+  const leaves: Node[] = [];
   for (const s of [-1, 1]) leaves.push(block(scene, f, high, 0.2, X + s * (dh + f / 2 - 0.02), y0, face + 0.08, M.coping));
   leaves.push(block(scene, dh * 2 + f * 2 + 0.2, f, 0.24, X, y0 + high, face + 0.1, M.coping));
   // (each leaf hung on its side of the frame and swung in, open: the hall is walked into)
   for (const s of [-1, 1]) {
-    const leaf = new THREE.Group();
+    const leaf = new Node();
     leaves.push(leaf);
     leaf.position.set(X + s * (dh - DOOR.clear), y0, face - DOOR.set);
     leaf.rotation.y = -s * DOOR.open;
@@ -1869,7 +1870,7 @@ function hallDoor(scene: THREE.Object3D, M: Mats, X: number, y0: number, face: n
     const lx = -s * dh / 2;
     block(leaf, dh - 0.03, high - 0.02, 0.12, lx, 0, 0, M.planks, 0.5);
     for (const y of DOOR.straps) block(leaf, dh - 0.12, 0.09, 0.03, lx, y, 0.07, M.iron);
-    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.1, 0.018, 6, 16), M.iron);
+    const ring = new Mesh(shapes.torus(0.1, 0.018, 6, 16), M.iron);
     ring.position.set(-s * (dh - 0.22), 1.3, 0.1);
     leaf.add(ring);
   }
@@ -1878,9 +1879,9 @@ function hallDoor(scene: THREE.Object3D, M: Mats, X: number, y0: number, face: n
 
 /** The hall's ceiling and roof over its walls, from `back` to `front` (z), its eaves at `eaves` (m): a planked
  *  ceiling on beams across, a gabled slate roof whose ridge runs from front to back, a gable over each end. */
-function hallRoof(scene: THREE.Object3D, M: Mats, eaves: number, back: number, front: number): THREE.Object3D {
+function hallRoof(scene: Node, M: Mats, eaves: number, back: number, front: number): Node {
   const X = TERRACE.x, half = HALL.half, deep = front - back, mid = (front + back) / 2;
-  const roof = new THREE.Group();
+  const roof = new Node();
   scene.add(roof);
   // (short of the portico's beam's and the gables' faces, which it shared a plane with: as the view moved, a stripe of it
   // showed through them, from play, "still flickering")
@@ -1905,12 +1906,12 @@ function hallRoof(scene: THREE.Object3D, M: Mats, eaves: number, back: number, f
   // down the middle of the floor and over him, the camera level with it, from play "where the vertical white bar end")
   block(roof, 0.4, 0.3, length, X, eaves + ROOF.rise + 0.02, mid, M.roof);
   // the gables: a triangle of stone over each end's top, from eave to eave and up to the ridge
-  const gable = new THREE.Shape();
+  const gable = new Outline();
   gable.moveTo(-half, 0);
   gable.lineTo(half, 0);
   gable.lineTo(0, ROOF.rise);
   gable.lineTo(-half, 0);
-  const geometry = new THREE.ExtrudeGeometry(gable, { depth: ROOF.gable, bevelEnabled: false });
+  const geometry = shapes.extrude(gable, { depth: ROOF.gable, bevelEnabled: false });
   for (const z of [front - ROOF.gable, back]) solid(roof, geometry, M.ashlar).position.set(X, eaves, z);
   return roof;
 }
@@ -1919,16 +1920,16 @@ function hallRoof(scene: THREE.Object3D, M: Mats, eaves: number, back: number, f
  *  there are enough, gems, then pearls, then a goblet; none of it in an empty stash. All of it stands under the lid's
  *  drum as it shuts. Spread over `w` by `d`, the box's rim at `h`; its `userData.show` sets how full it is and how far
  *  the lid stands open. */
-function chestHoard(chest: THREE.Object3D, M: Mats, w: number, d: number, h: number): void {
-  const g = new THREE.Group();
+function chestHoard(chest: Node, M: Mats, w: number, d: number, h: number): void {
+  const g = new Node();
   g.name = 'chest-hoard';
   chest.add(g);
   // (the heap and all that lies on it, raised from the floor as it fills)
-  const heaped = new THREE.Group();
+  const heaped = new Node();
   g.add(heaped);
-  const add = (geo: THREE.BufferGeometry, material: THREE.Material, x: number, y: number, z: number,
-    into: THREE.Object3D = heaped): THREE.Mesh => {
-    const mesh = new THREE.Mesh(geo, material);
+  const add = (geo: Geometry, material: Material, x: number, y: number, z: number,
+    into: Node = heaped): Mesh => {
+    const mesh = new Mesh(geo, material);
     mesh.position.set(x, y, z);
     into.add(mesh);
     return mesh;
@@ -1943,20 +1944,20 @@ function chestHoard(chest: THREE.Object3D, M: Mats, w: number, d: number, h: num
     // steep front, bare between them seen from before it)
     return base + rise * lump(u, v) * (Math.max(0, 1 - u * u) * Math.max(0, 1 - v * v)) ** 0.9;
   };
-  const heap = new THREE.PlaneGeometry(w - 0.02, d - 0.02, 36, 22).rotateX(-Math.PI / 2);
+  const heap = shapes.plane(w - 0.02, d - 0.02, 36, 22).rotateX(-Math.PI / 2);
   const at = heap.attributes.position;
   for (let k = 0; k < at.count; k++) at.setY(k, heapAt(at.getX(k), at.getZ(k)));
   heap.computeVertexNormals();
   const heapMesh = add(heap, M.gold, 0, 0, 0);
   // the coins lying every way over it, thick enough that the heap reads as coins, of four designs and sizes, most gold
   // of its own shade, some tarnished, a few silver
-  const coins: THREE.BufferGeometry[] = [];
+  const coins: Geometry[] = [];
   const bed = new CoinBed(w, d, heapAt);
   const coinOf = ({ x, y, z, turn }: LaidCoin, radius: number): void => {
     const metal = rng();
     const tint = metal < 0.08 ? SILVER : metal < 0.26 ? TARNISHED : GOLDEN;
     const shade = 0.82 + rng() * 0.3;
-    const colour = new THREE.Color(tint[0] * shade, tint[1] * shade, tint[2] * shade);
+    const colour = new Color(tint[0] * shade, tint[1] * shade, tint[2] * shade);
     coins.push(coinGeometry(Math.floor(rng() * 4), radius, COIN_THICK, colour)
       .applyQuaternion(turn).translate(x, y, z));
   };
@@ -1994,14 +1995,14 @@ function chestHoard(chest: THREE.Object3D, M: Mats, w: number, d: number, h: num
     return { gem, skin: heapAt(x, z), y: bed.topOver(x, z, 0.025) - 0.006, from: (k + 1) / (gemsAt.length + 1), size };
   });
   // a string of pearls over the heap
-  const pearls: THREE.BufferGeometry[] = [];
+  const pearls: Geometry[] = [];
   let pearlsOverSkin = 0;
   for (let k = 0; k < 34; k++) {
     // (before the crown, not over it: on the coins' top under it, it hung in an arc across the crown)
     const t = k / 33, x = -0.14 + 0.36 * t, z = 0.13 + 0.05 * Math.sin(t * Math.PI * 2.4);
     const pearlY = bed.topOver(x, z, 0.012) + 0.009;
     pearlsOverSkin += (pearlY - heapAt(x, z)) / 34;
-    pearls.push(new THREE.SphereGeometry(0.012, 10, 8).translate(x, pearlY, z));
+    pearls.push(shapes.sphere(0.012, 10, 8).translate(x, pearlY, z));
   }
   const pearlsMesh = add(mergeGeometries(pearls)!, M.pearl, 0, 0, 0);
   for (const p of pearls) p.dispose();
@@ -2013,7 +2014,7 @@ function chestHoard(chest: THREE.Object3D, M: Mats, w: number, d: number, h: num
   goblet.rotation.set(0.32, 0, 0.26);
   for (let k = 0; k < 6; k++) {
     const a = (k / 6) * TAU;
-    const stone = new THREE.Mesh(stones[k % stones.length], M.gem);
+    const stone = new Mesh(stones[k % stones.length], M.gem);
     // (set low: at their full depth, they stood out from the cup like pegs)
     stone.position.set(Math.sin(a) * 0.049, 0.125, Math.cos(a) * 0.049);
     stone.rotation.set(Math.PI / 2, a, 0, 'YXZ');
@@ -2029,7 +2030,7 @@ function chestHoard(chest: THREE.Object3D, M: Mats, w: number, d: number, h: num
   crownMesh.rotation.set(0.42, 0.35, -0.16);
   for (let k = 0; k < crownPoints(); k++) {
     const a = crownPointAngle(k);
-    const stone = new THREE.Mesh(stones[k % stones.length], M.gem);
+    const stone = new Mesh(stones[k % stones.length], M.gem);
     stone.position.set(Math.sin(a) * (crown.size.r + 0.003), crown.size.band * 0.55, Math.cos(a) * (crown.size.r + 0.003));
     stone.rotation.set(Math.PI / 2, a, 0, 'YXZ');
     stone.scale.set(0.34, 0.16, 0.34);
@@ -2058,7 +2059,7 @@ function chestHoard(chest: THREE.Object3D, M: Mats, w: number, d: number, h: num
     heaped.scale.y = level;
     heaped.position.y = CHEST_FLOOR * (1 - level);
     // (a few coins lie on the bare floor: the heap's skin comes up from under it as they cover it)
-    const risen = THREE.MathUtils.smoothstep(full, 0.25, 0.5);
+    const risen = Maths.smoothstep(full, 0.25, 0.5);
     // (well under the floor until then: its lumps came through the coins in torn islands at 10 items of 60, a review)
     heapMesh.position.y = -(1 - risen) * 0.3 / level;
     // (fewer than the share: flat on the floor they cover far more of it than heaped, and by the share 10 items of 60
@@ -2086,13 +2087,13 @@ function chestHoard(chest: THREE.Object3D, M: Mats, w: number, d: number, h: num
 }
 
 /** The stash's chest right of the hall's door: an iron-bound box, its lid hinged at the back (returned, to swing). */
-function buildChest(scene: THREE.Object3D, M: Mats, obstacles: Obstacle[]): THREE.Object3D {
-  const g = new THREE.Group();
+function buildChest(scene: Node, M: Mats, obstacles: Obstacle[]): Node {
+  const g = new Node();
   g.position.set(CHEST.x, TERRACE.high, CHEST.z);
   g.rotation.y = CHEST.facing;
   const w = 1.15, d = 0.7, h = 0.55, side = 0.05, strap = 0.42, tile = 0.84;
   // (a board's grain along the box's faces: the tile's v along its length)
-  const laid = (mesh: THREE.Mesh): THREE.Mesh => {
+  const laid = (mesh: Mesh): Mesh => {
     const uv = mesh.geometry.attributes.uv;
     for (let k = 0; k < uv.count; k++) uv.setXY(k, uv.getY(k), uv.getX(k));
     return mesh;
@@ -2111,9 +2112,9 @@ function buildChest(scene: THREE.Object3D, M: Mats, obstacles: Obstacle[]): THRE
     block(g, 0.012, 0.025, d + 0.02, s * (w / 2 + 0.006), h - 0.025, 0, M.timber).castShadow = false;
   }
   // its iron: straps up the faces, a plate on each corner, a ring handle at each end, each riveted
-  const rivets: THREE.BufferGeometry[] = [];
+  const rivets: Geometry[] = [];
   const rivet = (x: number, y: number, z: number): void => {
-    rivets.push(new THREE.SphereGeometry(0.015, 8, 5).translate(x, y, z));
+    rivets.push(shapes.sphere(0.015, 8, 5).translate(x, y, z));
   };
   for (const x of [-strap, strap]) {
     for (const s of [-1, 1]) {
@@ -2129,66 +2130,66 @@ function buildChest(scene: THREE.Object3D, M: Mats, obstacles: Obstacle[]): THRE
       rivet(cx + sx * 0.006, 0.17, sz * (d / 2 - 0.03));
       rivet(sx * (w / 2 - 0.03), 0.17, cz + sz * 0.006);
     }
-    const handle = new THREE.Mesh(new THREE.TorusGeometry(0.05, 0.009, 6, 14).rotateY(Math.PI / 2), M.chestIron);
+    const handle = new Mesh(shapes.torus(0.05, 0.009, 6, 14).rotateY(Math.PI / 2), M.chestIron);
     handle.position.set(sx * (w / 2 + 0.032), 0.31, 0);
     g.add(handle);
     block(g, 0.01, 0.07, 0.07, sx * (w / 2 + 0.02), 0.335, 0, M.chestIron).castShadow = false;
     rivet(sx * (w / 2 + 0.027), 0.385, 0);
   }
   // its lock: a brass plate on the front, riveted, the keyhole in it
-  const plate = new THREE.Mesh(plateGeometry(0.16, 0.2, 0.03), M.lockBrass);
+  const plate = new Mesh(plateGeometry(0.16, 0.2, 0.03), M.lockBrass);
   // (under the box's rim: up to it, the rim's edge showed through the plate's top)
   plate.position.set(0, h - 0.115, d / 2 + 0.012);
   g.add(plate);
-  const keyhole = new THREE.Mesh(keyholeGeometry(), M.iron);
+  const keyhole = new Mesh(keyholeGeometry(), M.iron);
   keyhole.position.set(0, h - 0.105, d / 2 + 0.0275);
   g.add(keyhole);
-  for (const x of [-0.06, 0.06]) for (const y of [h - 0.17, h - 0.03]) rivets.push(new THREE.SphereGeometry(0.009, 6, 4).translate(x, y, d / 2 + 0.03));
+  for (const x of [-0.06, 0.06]) for (const y of [h - 0.17, h - 0.03]) rivets.push(shapes.sphere(0.009, 6, 4).translate(x, y, d / 2 + 0.03));
   chestHoard(g, M, w - side * 2, d - side * 2, h);
-  const hinge = new THREE.Group();
+  const hinge = new Node();
   hinge.name = 'chest-lid';
   hinge.position.set(0, h, -d / 2);
   g.add(hinge);
   // the lid: its half drum of staves, its back edge on the hinge, lined inside (seen from within), a rim round its face
-  const lid = new THREE.Mesh(new THREE.CylinderGeometry(d / 2, d / 2, w, 24, 1, false, 0, Math.PI).rotateZ(Math.PI / 2), M.chestWood);
+  const lid = new Mesh(shapes.cylinder(d / 2, d / 2, w, 24, 1, false, 0, Math.PI).rotateZ(Math.PI / 2), M.chestWood);
   lid.position.set(0, 0, d / 2);
   lid.castShadow = true;
   hinge.add(lid);
-  const lining = new THREE.Mesh(
-    new THREE.CylinderGeometry(d / 2 - side, d / 2 - side, w - side * 2, 16, 1, false, 0, Math.PI).rotateZ(Math.PI / 2),
+  const lining = new Mesh(
+    shapes.cylinder(d / 2 - side, d / 2 - side, w - side * 2, 16, 1, false, 0, Math.PI).rotateZ(Math.PI / 2),
     M.liningInside);
   lining.position.set(0, 0, d / 2);
   hinge.add(lining);
   for (const z of [side / 2, d - side / 2]) block(hinge, w, 0.012, side, 0, 0, z, M.timber).castShadow = false;
   for (const s of [-1, 1]) block(hinge, side, 0.012, d, s * (w - side) / 2, 0, d / 2, M.timber).castShadow = false;
-  const lidRivets: THREE.BufferGeometry[] = [];
+  const lidRivets: Geometry[] = [];
   for (const x of [-strap, strap]) {
     // (open ended: its end caps stood across the lid's hollow, black wedges in the lining)
-    const band = new THREE.Mesh(new THREE.CylinderGeometry(d / 2 + 0.014, d / 2 + 0.014, 0.075, 24, 1, true, 0, Math.PI).rotateZ(Math.PI / 2), M.chestIron);
+    const band = new Mesh(shapes.cylinder(d / 2 + 0.014, d / 2 + 0.014, 0.075, 24, 1, true, 0, Math.PI).rotateZ(Math.PI / 2), M.chestIron);
     band.position.set(x, 0, d / 2);
     hinge.add(band);
     for (const a of [0.45, 1.05, Math.PI / 2 + 0.52, Math.PI - 0.45]) {
-      lidRivets.push(new THREE.SphereGeometry(0.015, 8, 5).translate(x, Math.sin(a) * (d / 2 + 0.016), d / 2 + Math.cos(a) * (d / 2 + 0.016)));
+      lidRivets.push(shapes.sphere(0.015, 8, 5).translate(x, Math.sin(a) * (d / 2 + 0.016), d / 2 + Math.cos(a) * (d / 2 + 0.016)));
     }
     // (the hinge's iron, over the box's back)
     block(g, 0.09, 0.09, 0.02, x, h - 0.06, -d / 2 - 0.03, M.chestIron).castShadow = false;
   }
   // the hasp on the lid's front edge, down over the lock as it shuts
-  const hasp = new THREE.Mesh(plateGeometry(0.05, 0.075, 0.012), M.lockBrass);
+  const hasp = new Mesh(plateGeometry(0.05, 0.075, 0.012), M.lockBrass);
   hasp.position.set(0, -0.03, d + 0.03);
   hinge.add(hasp);
   // the lining's brass studs, rows across the inside of the lid (flat cloth alone read as a box's flap)
-  const studs: THREE.BufferGeometry[] = [];
+  const studs: Geometry[] = [];
   for (const a of [0.5, 1.05, 1.6, 2.15, 2.65]) {
     for (let k = -4; k <= 4; k++) {
       const r = d / 2 - side - 0.004;
-      studs.push(new THREE.SphereGeometry(0.006, 6, 4).translate(k * 0.115, Math.sin(a) * r, d / 2 + Math.cos(a) * r));
+      studs.push(shapes.sphere(0.006, 6, 4).translate(k * 0.115, Math.sin(a) * r, d / 2 + Math.cos(a) * r));
     }
   }
-  hinge.add(new THREE.Mesh(mergeGeometries(studs)!, M.brass));
+  hinge.add(new Mesh(mergeGeometries(studs)!, M.brass));
   for (const s of studs) s.dispose();
-  g.add(new THREE.Mesh(mergeGeometries(rivets)!, M.chestIron));
-  hinge.add(new THREE.Mesh(mergeGeometries(lidRivets)!, M.chestIron));
+  g.add(new Mesh(mergeGeometries(rivets)!, M.chestIron));
+  hinge.add(new Mesh(mergeGeometries(lidRivets)!, M.chestIron));
   for (const r of [...rivets, ...lidRivets]) r.dispose();
   // (the box's parts and the lid's each drawn as one a material: a mesh a board, strap and plate it was 90 draws, now 35)
   mergeChildren(g);
@@ -2200,34 +2201,34 @@ function buildChest(scene: THREE.Object3D, M: Mats, obstacles: Obstacle[]): THRE
 }
 
 /** The candle's flame and its light, over the lectern's candle (the part of it that moves: lit as the hero comes). */
-function candleFlame(scene: THREE.Object3D, look: TorchLook, lights: THREE.PointLight[]): THREE.Group {
+function candleFlame(scene: Node, look: TorchLook, lights: PointLight[]): Node {
   const { x, z, facing } = CHRONICLE, turn = facing + Math.PI / 2;
-  const group = new THREE.Group();
+  const group = new Node();
   // (as the lectern's group turns its holder: at its 0.068, 0.394 off the post)
   group.position.set(x + 0.068 * Math.cos(turn) + 0.394 * Math.sin(turn), TERRACE.high + 1.283, z - 0.068 * Math.sin(turn) + 0.394 * Math.cos(turn));
   // (a see-through orange tongue round a pale core, on a wick: one colour, darker than the wax it wasn't what's lit,
   // brighter it was "a glowing cone", a review; the same programs as a torch's flame and its glow)
-  const fireOf = (colour: number, lit: number): THREE.MeshStandardMaterial => {
-    const fire = look.fire.clone() as THREE.MeshStandardMaterial;
+  const fireOf = (colour: number, lit: number): LitMaterial => {
+    const fire = look.fire.clone() as LitMaterial;
     fire.emissive.setHex(colour);
     fire.emissiveIntensity = lit;
     return fire;
   };
-  const tongue = look.glow.clone() as THREE.MeshBasicMaterial;
+  const tongue = look.glow.clone() as UnlitMaterial;
   tongue.color.setHex(CANDLE.flame);
   tongue.opacity = CANDLE.flameShows;
-  const flame = new THREE.Mesh(flameGeometry(0.015, 0.07, 0.004), tongue);
+  const flame = new Mesh(flameGeometry(0.015, 0.07, 0.004), tongue);
   flame.name = 'candle-flame';
   group.add(flame);
   // (what lights up is its fire: a light of 2.2 a hand's breadth over the wax burned the whole candle white, from play
   // "candle should light up, meaning the fire on it, not whole candle"; just over it, the wax falls off from the top)
-  const light = new THREE.PointLight(CANDLE.color, CANDLE.intensity, CANDLE.distance, 2);
+  const light = new PointLight(CANDLE.color, CANDLE.intensity, CANDLE.distance, 2);
   light.position.y = CANDLE.over;
   group.add(light);
-  const core = new THREE.Mesh(flameGeometry(0.008, 0.038, 0.002), fireOf(CANDLE.core, CANDLE.coreLit));
+  const core = new Mesh(flameGeometry(0.008, 0.038, 0.002), fireOf(CANDLE.core, CANDLE.coreLit));
   core.position.y = 0.006;
   group.add(core);
-  const wick = new THREE.Mesh(new THREE.CylinderGeometry(0.0015, 0.0015, 0.014, 5), fireOf(0, 0));
+  const wick = new Mesh(shapes.cylinder(0.0015, 0.0015, 0.014, 5), fireOf(0, 0));
   wick.position.y = 0.002;
   group.add(wick);
   scene.add(group);
@@ -2237,17 +2238,17 @@ function candleFlame(scene: THREE.Object3D, look: TorchLook, lights: THREE.Point
 
 /** The chronicle's lectern left of the hall's door, across it from the chest: a post on a foot, its slanted desk,
  *  the book open on it, a candle (its light, one of the village's). */
-function buildLectern(scene: THREE.Object3D, M: Mats, obstacles: Obstacle[]): void {
+function buildLectern(scene: Node, M: Mats, obstacles: Obstacle[]): void {
   const { x, z, facing } = CHRONICLE, high = TERRACE.high;
   // (laid out facing -x, turned to its facing)
-  const lectern = new THREE.Group();
+  const lectern = new Node();
   lectern.position.set(x, high, z);
   lectern.rotation.y = facing + Math.PI / 2;
   block(lectern, 0.5, 0.08, 0.5, 0, 0, 0, M.freeTimber);
   block(lectern, 0.12, 1.0, 0.12, 0, 0.08, 0, M.freeTimber);
   // the desk sloping down to the reader, a lip along its low edge, the book open on it: its binding, two blocks of pages
   // falling away from the gutter
-  const desk = new THREE.Group();
+  const desk = new Node();
   desk.position.y = 1.08;
   desk.rotation.z = 0.35;
   lectern.add(desk);
@@ -2259,7 +2260,7 @@ function buildLectern(scene: THREE.Object3D, M: Mats, obstacles: Obstacle[]): vo
     // (under the sheet everywhere: its top over the sheet's low edges stood out of them as pale strips down the gutter)
     block(desk, 0.28, 0.014, 0.2, 0.01, 0.05, s * 0.104, M.pagesEdge).castShadow = false;
     // (the page itself: a sheet rising out of the gutter and falling away to its edge)
-    const sheet = new THREE.PlaneGeometry(0.28, 0.215, 1, 10).rotateX(-Math.PI / 2);
+    const sheet = shapes.plane(0.28, 0.215, 1, 10).rotateX(-Math.PI / 2);
     const at = sheet.attributes.position;
     for (let k = 0; k < at.count; k++) {
       const t = Math.abs(at.getZ(k) + 0.1075) / 0.215, out = s > 0 ? t : 1 - t;
@@ -2267,7 +2268,7 @@ function buildLectern(scene: THREE.Object3D, M: Mats, obstacles: Obstacle[]): vo
       at.setY(k, 0.066 + 0.018 * Math.max(0, Math.sin(Math.min(1, Math.max(0, out) * 1.15) * Math.PI)) ** 0.7);
     }
     sheet.computeVertexNormals();
-    const page = new THREE.Mesh(sheet, s > 0 ? M.pagesRight : M.pagesLeft);
+    const page = new Mesh(sheet, s > 0 ? M.pagesRight : M.pagesLeft);
     page.position.set(0.01, 0, s * 0.1075);
     desk.add(page);
   }
@@ -2275,18 +2276,18 @@ function buildLectern(scene: THREE.Object3D, M: Mats, obstacles: Obstacle[]): vo
   block(desk, 0.12, 0.002, 0.004, -0.07, 0.067, 0.001, M.ribbon).castShadow = false;
   // the candle's holder, on an iron arm off the desk's side, clear of the book: a round dish, its lip, the wax run down
   const armAt = { x: 0.06, y: 1.165, z: 0.4 };
-  const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.08, 6).rotateX(Math.PI / 2), M.iron);
+  const arm = new Mesh(shapes.cylinder(0.008, 0.008, 0.08, 6).rotateX(Math.PI / 2), M.iron);
   arm.position.set(armAt.x, armAt.y - 0.012, armAt.z - 0.05);
   lectern.add(arm);
   // (bolted to the desk's side by a plate, its finger's ring on the far side of the dish)
   block(lectern, 0.05, 0.04, 0.008, armAt.x, armAt.y - 0.03, 0.31, M.iron).castShadow = false;
-  const ring = new THREE.Mesh(new THREE.TorusGeometry(0.017, 0.0035, 6, 14).rotateY(Math.PI / 2), M.freeBrass);
+  const ring = new Mesh(shapes.torus(0.017, 0.0035, 6, 14).rotateY(Math.PI / 2), M.freeBrass);
   ring.position.set(armAt.x, armAt.y + 0.002, armAt.z + 0.078);
   lectern.add(ring);
-  const dish = new THREE.Mesh(candleDish(), M.freeBrass);
+  const dish = new Mesh(candleDish(), M.freeBrass);
   dish.position.set(armAt.x, armAt.y - 0.012, armAt.z);
   lectern.add(dish);
-  const stick = new THREE.Group();
+  const stick = new Node();
   stick.position.set(armAt.x + 0.008, armAt.y - 0.006, armAt.z - 0.006);
   stick.rotation.set(0.05, 0, -0.04);
   lectern.add(stick);
@@ -2303,25 +2304,25 @@ function buildLectern(scene: THREE.Object3D, M: Mats, obstacles: Obstacle[]): vo
 /** What stands loose under `root` wholly within the hall's room, but `kept` (its roof and walls) and what holds a
  *  light (hidden, its light would go with it, and every lit program compile again): a group not wholly within is
  *  gone into, two deep. What's merged with the village's still meshes is drawn with them whatever. */
-function looseInHall(root: THREE.Object3D, kept: readonly THREE.Object3D[]): THREE.Object3D[] {
-  const found: THREE.Object3D[] = [];
-  const box = new THREE.Box3();
+function looseInHall(root: Node, kept: readonly Node[]): Node[] {
+  const found: Node[] = [];
+  const box = new Box3();
   const X = TERRACE.x;
-  const holdsLight = (part: THREE.Object3D): boolean => {
+  const holdsLight = (part: Node): boolean => {
     let holds = false;
-    part.traverse((under) => { holds = holds || (under as THREE.Light).isLight === true; });
+    part.traverse((under) => { holds = holds || (under as Light).isLight === true; });
     return holds;
   };
-  const visit = (group: THREE.Object3D, deep: number): void => {
+  const visit = (group: Node, deep: number): void => {
     for (const child of group.children) {
       if (kept.includes(child) || child.name.startsWith('village still')) continue;
-      box.setFromObject(child);
+      boundsOf(child, box);
       if (box.isEmpty()) continue;
       const within = box.min.x > X - HALL.inHalf - 0.05 && box.max.x < X + HALL.inHalf + 0.05
         && box.min.z > HALL.wall - 0.05 && box.max.z < HALL.inFront + 0.05 && box.min.y > TERRACE.high - 0.3;
       if (within) {
         if (!holdsLight(child)) found.push(child);
-      } else if (deep < 2 && !(child as THREE.Mesh).isMesh) {
+      } else if (deep < 2 && !(child as Mesh).isMesh) {
         visit(child, deep + 1);
       }
     }
@@ -2336,19 +2337,19 @@ const PALISADE_CELL = 8;
 
 /** The palisade along its winding line: sharpened logs side by side, open at each way out's gap (the wall: walked up
  *  to and flown into). */
-function buildPalisade(scene: THREE.Object3D, wall: Wall, M: Mats, rng: () => number): void {
+function buildPalisade(scene: Node, wall: Wall, M: Mats, rng: () => number): void {
   const n = Math.ceil(palisadeCurve.getLength() / (PALISADE.radius * 2.05));
-  const spots: [THREE.Vector3, number, number][] = [];
+  const spots: [Vec3, number, number][] = [];
   for (const p of palisadeCurve.getSpacedPoints(n).slice(0, n)) {
     if (fromGap(p.x, p.z) < GAP_HALF) continue;
     spots.push([p, PALISADE.low + rng() * (PALISADE.high - PALISADE.low), rng()]);
   }
-  const shaft = new THREE.CylinderGeometry(PALISADE.radius, PALISADE.radius * 1.08, 1, 7).translate(0, 0.5, 0);
-  const tip = new THREE.ConeGeometry(PALISADE.radius, 0.55, 7).translate(0, 0.275, 0);
-  const logs = new THREE.InstancedMesh(shaft, M.palisadeLogs, spots.length);
-  const tips = new THREE.InstancedMesh(tip, M.palisadeTips, spots.length);
+  const shaft = shapes.cylinder(PALISADE.radius, PALISADE.radius * 1.08, 1, 7).translate(0, 0.5, 0);
+  const tip = shapes.cone(PALISADE.radius, 0.55, 7).translate(0, 0.275, 0);
+  const logs = new InstancedMesh(shaft, M.palisadeLogs, spots.length);
+  const tips = new InstancedMesh(tip, M.palisadeTips, spots.length);
   logs.name = tips.name = FENCE;
-  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), s = new THREE.Vector3(), at = new THREE.Vector3();
+  const m = new Mat4(), q = new Quat(), e = new Euler(), s = new Vec3(), at = new Vec3();
   for (const [i, [p, h, k]] of spots.entries()) {
     e.set((k - 0.5) * 0.04, k * TAU, (k - 0.5) * 0.05);
     q.setFromEuler(e);
@@ -2371,8 +2372,8 @@ function buildPalisade(scene: THREE.Object3D, wall: Wall, M: Mats, rng: () => nu
 /** A cottage where `c` says, its door the way it faces, `size` its scale: a stone footing, lime walls
  *  framed in dark timber, a door and shuttered windows (lit by night), a slate roof and its chimney. Its walls are a
  *  part of the wall a body is kept off; its roof is flown into. */
-function buildCottage(scene: THREE.Object3D, wall: Wall, M: Mats, c: Cottage, rng: () => number): void {
-  const g = new THREE.Group();
+function buildCottage(scene: Node, wall: Wall, M: Mats, c: Cottage, rng: () => number): void {
+  const g = new Node();
   g.position.set(c.x, 0, c.z);
   g.rotation.y = c.facing;
   g.scale.setScalar(c.size);
@@ -2402,7 +2403,7 @@ function buildCottage(scene: THREE.Object3D, wall: Wall, M: Mats, c: Cottage, rn
   for (const sx of [-1, 1]) {
     const wx = sx * (w / 2 - 1.2), face = d / 2 + 0.05;
     // (its own uvs: the panes' picture once across its face)
-    solid(g, new THREE.BoxGeometry(0.8, 0.7, 0.04), M.window).position.set(wx, 1.7, face);
+    solid(g, shapes.box(0.8, 0.7, 0.04), M.window).position.set(wx, 1.7, face);
     for (const ex of [-1, 1]) block(g, 0.08, 0.85, 0.1, wx + ex * 0.44, 1.27, face + 0.02, M.timber);
     // (its head proud of the sides it sits over, for the same reason)
     block(g, 0.96, 0.08, 0.12, wx, 2.05, face + 0.02, M.timber);
@@ -2411,7 +2412,7 @@ function buildCottage(scene: THREE.Object3D, wall: Wall, M: Mats, c: Cottage, rn
     for (const k of [-1, 1]) {
       // (hung by its edge on the casing and swung out from the wall: turned about its middle, one edge of each stood
       // through the plaster and the other off it, "house topology errors")
-      const hinge = new THREE.Group();
+      const hinge = new Node();
       hinge.position.set(wx + k * 0.48, 1.37, d / 2 + 0.09);
       hinge.rotation.y = -k * (0.3 + rng() * 0.6);
       g.add(hinge);
@@ -2420,7 +2421,7 @@ function buildCottage(scene: THREE.Object3D, wall: Wall, M: Mats, c: Cottage, rn
   }
   // the roof: two slopes of slate over the gables, and the gables' triangles of plaster
   const slope = Math.hypot(d / 2 + eave, rise), pitch = Math.atan2(rise, d / 2 + eave);
-  const roofParts: THREE.Mesh[] = [];
+  const roofParts: Mesh[] = [];
   for (const sz of [-1, 1]) {
     // (one a hair wider: their ends, in one plane, fought where the slopes overlap at the ridge)
     const slab = block(g, w + eave * 2 + (sz > 0 ? 0.02 : 0), slate, slope, 0, 0, 0, M.roof);
@@ -2431,18 +2432,18 @@ function buildCottage(scene: THREE.Object3D, wall: Wall, M: Mats, c: Cottage, rn
   // (its top along the slopes' middle, from the walls' tops to the ridge: from the walls' plate to the ridge, steeper
   // than the roof, a sliver stood open over each slope into the roof; its upright edges a hair in from the walls'
   // faces, which in one plane they fought)
-  const gable = new THREE.Shape(), half = d / 2 - 0.01;
+  const gable = new Outline(), half = d / 2 - 0.01;
   gable.moveTo(-half, 0); gable.lineTo(half, 0); gable.lineTo(half, roofAtWall); gable.lineTo(0, rise);
   gable.lineTo(-half, roofAtWall); gable.lineTo(-half, 0);
   for (const sx of [-1, 1]) {
-    const tri = new THREE.ExtrudeGeometry(gable, { depth: 0.1, bevelEnabled: false }).rotateY(Math.PI / 2);
+    const tri = shapes.extrude(gable, { depth: 0.1, bevelEnabled: false }).rotateY(Math.PI / 2);
     solid(g, tri, M.gable).position.set(sx * (w / 2) - 0.05, h, 0);
   }
   const chimney = block(g, 0.6, rise + 1.2, 0.6, w / 2 - 0.9, h - 0.2, -d / 4, M.chimney);
   g.userData.chimney = chimney;
   scene.add(g);
   g.updateMatrixWorld(true);
-  chimneys.push(new THREE.Vector3(w / 2 - 0.9, h + rise + 1.1, -d / 4).applyMatrix4(g.matrixWorld));
+  chimneys.push(new Vec3(w / 2 - 0.9, h + rise + 1.1, -d / 4).applyMatrix4(g.matrixWorld));
   wall.add(body, true, 'wall', true);
   for (const part of [...roofParts, chimney]) wall.add(part, true, 'beyond');
 }
@@ -2462,7 +2463,7 @@ const DOOR_STEPS = { rise: 0.25, lower: 0.5, upper: 0.26, wide: [1.5, 1.3] };
  * the dark of the room past it, and its name on a sign over it (from play, "door should look like a door", "show the
  * house name over the door").
  */
-function houseDoor(g: THREE.Object3D, M: Mats, id: RoomId, face: number): void {
+function houseDoor(g: Node, M: Mats, id: RoomId, face: number): void {
   const door = buildDoor({ frame: M.timber, leaf: M.doorLeaf, iron: M.doorIron }, {
     wide: HOUSE_DOOR.wide, high: HOUSE_DOOR.high, leafZ: 0.03, hinge: -1, faces: 1, head: HOUSE_DOOR.head,
     frameOut: HOUSE_DOOR.frameOut,
@@ -2481,7 +2482,7 @@ function houseDoor(g: THREE.Object3D, M: Mats, id: RoomId, face: number): void {
 }
 
 /** where each cottage's chimney smokes (`chimneySmoke`) */
-const chimneys: THREE.Vector3[] = [];
+const chimneys: Vec3[] = [];
 /** A thin smoke from every chimney, drifting off with the wind. */
 /**
  * Motes drawn into each portal's vortex from round its rim and the air before it, in its colours: the gate's sheet
@@ -2492,12 +2493,12 @@ function portalMotes(): Updater {
   const ways = BIOME_IDS.map((id) => {
     const p = portalPlace(id);
     // (toward the village from the gate's face, and across it)
-    const out = new THREE.Vector3(Math.sin(p.facing), 0, Math.cos(p.facing));
-    const across = new THREE.Vector3(out.z, 0, -out.x);
-    const middle = new THREE.Vector3(p.x, MOTES.high, p.z);
+    const out = new Vec3(Math.sin(p.facing), 0, Math.cos(p.facing));
+    const across = new Vec3(out.z, 0, -out.x);
+    const middle = new Vec3(p.x, MOTES.high, p.z);
     return { middle, out, across, colors: MOTE_COLORS[id] };
   });
-  const from = new THREE.Vector3();
+  const from = new Vec3();
   let due = 0;
   return (dt) => {
     due += dt * MOTES.rate * ways.length;
@@ -2537,11 +2538,11 @@ function chimneySmoke(): Updater {
 
 /** The training yard: a fence of posts and rails round a field of trodden grass, a gate on its north side between two
  *  taller posts (from play, a fire on each read as "floating campfires"; their lights stay, of no strength). */
-function buildYard(parent: THREE.Object3D, wall: Wall, M: Mats): void {
+function buildYard(parent: Node, wall: Wall, M: Mats): void {
   // (its fence in the wood that stands free, no part of a house: a house's part, the rule that opens a house over
   // ground he sees made a ghost of all of it, from play "why are you thinning the fence in the training area ?")
   // (laid out in its own frame: its gate side at -z, turned as the plan has it)
-  const scene = new THREE.Group();
+  const scene = new Node();
   scene.position.set(YARD.x, 0, YARD.z);
   scene.rotation.y = YARD.turn;
   parent.add(scene);
@@ -2577,7 +2578,7 @@ function buildYard(parent: THREE.Object3D, wall: Wall, M: Mats): void {
   for (const s of [-1, 1]) {
     const px = gateAt + s * gate;
     block(scene, 0.26, YARD_GATE.up, 0.26, px, 0, n0, M.freeTimber);
-    const light = new THREE.PointLight(YARD_GATE.color, 0, YARD_GATE.distance, 2);
+    const light = new PointLight(YARD_GATE.color, 0, YARD_GATE.distance, 2);
     light.position.set(px, YARD_GATE.up, n0);
     scene.add(light);
   }
@@ -2595,7 +2596,7 @@ const SEALED_INSIDE = 0.7;
 /** how far out from the hall's door he looks in through it (m): as far as the dais's heroes stand for him */
 const HALL_DOOR_SEEN = 12;
 
-function sightOfThePlace(): { walls: SightWall[]; hall: THREE.Vector4; roofs: SightRoof[]; doors: SightDoor[] } {
+function sightOfThePlace(): { walls: SightWall[]; hall: Vec4; roofs: SightRoof[]; doors: SightDoor[] } {
   const walls: SightWall[] = [];
   const roofs: SightRoof[] = [];
   const around = (corners: [number, number][]): void => {
@@ -2628,9 +2629,9 @@ function sightOfThePlace(): { walls: SightWall[]; hall: THREE.Vector4; roofs: Si
   // (what's shut to him starts inside the walls: at their faces, a face read itself in or out of it by its depth's last
   // bits, wedges of black over the front wall he stood before, moving as he moved, from play, "here we dont need to see
   // through the wall, because I'm in front of the wall", "this is still flickering")
-  const inside = new THREE.Vector4(west + SEALED_INSIDE, HALL.wall + SEALED_INSIDE, east - SEALED_INSIDE, HALL.door - SEALED_INSIDE);
+  const inside = new Vec4(west + SEALED_INSIDE, HALL.wall + SEALED_INSIDE, east - SEALED_INSIDE, HALL.door - SEALED_INSIDE);
   // (the room the hall's walls thin for: its floor, out to under the portico's beam)
-  hallRoomIs(new THREE.Vector4(inside.x, inside.y, inside.z, COLONNADE.z + 1), new THREE.Vector4(
+  hallRoomIs(new Vec4(inside.x, inside.y, inside.z, COLONNADE.z + 1), new Vec4(
     TERRACE.x - HALL.doorHalf, HALL.inFront, TERRACE.x + HALL.doorHalf, HALL.inFront,
   ));
   // (its door, the room seen through it as from the doorway: core/sight.ts's `seeThroughDoor`)
@@ -2656,10 +2657,10 @@ const BENCH = { at: [0.4, 2.3, 4.2], out: 2.2, r: [0.28, 0.3], long: 1.7, y: 0.2
 
 /** Logs to sit on round the campfire, one draw (an instance each, as the outline of the one pointed at needs it
  *  apart), each a seat along its middle (`world/seats.ts`). */
-function buildBenches(scene: THREE.Object3D, M: Mats, obstacles: Obstacle[]): Seat[] {
+function buildBenches(scene: Node, M: Mats, obstacles: Obstacle[]): Seat[] {
   const [cx, cz] = CAMPFIRE;
-  const geometry = new THREE.CylinderGeometry(BENCH.r[0], BENCH.r[1], BENCH.long, 10).rotateZ(Math.PI / 2);
-  const logs = new THREE.InstancedMesh(geometry, M.logs, BENCH.at.length);
+  const geometry = shapes.cylinder(BENCH.r[0], BENCH.r[1], BENCH.long, 10).rotateZ(Math.PI / 2);
+  const logs = new InstancedMesh(geometry, M.logs, BENCH.at.length);
   logs.name = 'campfire benches';
   logs.castShadow = logs.receiveShadow = true;
   const seats: Seat[] = [];
@@ -2679,8 +2680,8 @@ function buildBenches(scene: THREE.Object3D, M: Mats, obstacles: Obstacle[]): Se
 }
 
 /** The notice board: two posts, a board under a little roof, notices pinned to it. */
-function buildNoticeBoard(scene: THREE.Object3D, wall: Wall, M: Mats): void {
-  const g = new THREE.Group();
+function buildNoticeBoard(scene: Node, wall: Wall, M: Mats): void {
+  const g = new Node();
   g.position.set(NOTICE.x, 0, NOTICE.z);
   g.rotation.y = NOTICE.facing;
   for (const s of [-1, 1]) block(g, 0.16, 2.6, 0.16, s * 0.9, 0, 0, M.freeTimber);
@@ -2688,7 +2689,7 @@ function buildNoticeBoard(scene: THREE.Object3D, wall: Wall, M: Mats): void {
   const roof = block(g, 2.3, 0.08, 0.7, 0, 2.55, 0.05, M.boardRoof);
   roof.rotation.x = 0.35;
   for (const [x, y, w, h, tilt] of [[-0.5, 1.6, 0.5, 0.6, 0.05], [0.15, 1.5, 0.45, 0.55, -0.08], [0.6, 1.75, 0.4, 0.4, 0.1], [-0.1, 1.15, 0.5, 0.35, 0]]) {
-    const note = new THREE.Mesh(new THREE.PlaneGeometry(w, h), M.paper);
+    const note = new Mesh(shapes.plane(w, h), M.paper);
     note.position.set(x, y, 0.05);
     note.rotation.z = tilt;
     g.add(note);
@@ -2700,19 +2701,19 @@ function buildNoticeBoard(scene: THREE.Object3D, wall: Wall, M: Mats): void {
 
 /** A lamp post at (x, z) by the stair: where its lantern is lit (lit by the lit shaders' lamps, as a street lamp),
  *  and a point light there of no strength, one of the village's 10 (a count every lit program is made for). */
-function buildLamp(scene: THREE.Object3D, x: number, z: number, M: Mats,
-  obstacles: Obstacle[]): { light: THREE.PointLight; lantern: THREE.Vector3 } {
+function buildLamp(scene: Node, x: number, z: number, M: Mats,
+  obstacles: Obstacle[]): { light: PointLight; lantern: Vec3 } {
   const lantern = lampPost(scene, x, z, x < 0 ? 0 : Math.PI, M, obstacles);
-  const light = new THREE.PointLight(LAMPS.color, 0, 1, 2);
+  const light = new PointLight(LAMPS.color, 0, 1, 2);
   light.position.copy(lantern);
   scene.add(light);
   return { light, lantern };
 }
 
 /** The point lights under `scene` that cast shadows. */
-function castingLights(scene: THREE.Object3D): THREE.PointLight[] {
-  const found: THREE.PointLight[] = [];
-  scene.traverse((o) => { if ((o as THREE.PointLight).isPointLight && o.castShadow) found.push(o as THREE.PointLight); });
+function castingLights(scene: Node): PointLight[] {
+  const found: PointLight[] = [];
+  scene.traverse((o) => { if ((o as PointLight).isPointLight && o.castShadow) found.push(o as PointLight); });
   return found;
 }
 
@@ -2724,8 +2725,8 @@ function castingLights(scene: THREE.Object3D): THREE.PointLight[] {
  *  iron frame under a crown and its finial, a cup under it (from play: "can we have fancier streetlights ?"; a
  *  timber post, a bar and a cone over a glowing tube before). The lantern hangs from the bracket's end at `LANTERN`. */
 const LANTERN = { out: 0.52, y: -0.16, top: 0.15, bottom: 0.11, high: 0.3 };
-let lampParts: { column: THREE.BufferGeometry; bracket: THREE.BufferGeometry; frame: THREE.BufferGeometry;
-  cup: THREE.BufferGeometry; panes: THREE.BufferGeometry } | null = null;
+let lampParts: { column: Geometry; bracket: Geometry; frame: Geometry;
+  cup: Geometry; panes: Geometry } | null = null;
 
 function lampGeometries(): NonNullable<typeof lampParts> {
   if (lampParts) return lampParts;
@@ -2736,62 +2737,62 @@ function lampGeometries(): NonNullable<typeof lampParts> {
     [0.05, 0.8], [0.046, H - 0.3], [0.062, H - 0.27], [0.062, H - 0.22], [0.044, H - 0.19], [0.04, H + 0.02],
     [0.06, H + 0.06], [0.05, H + 0.13], [0.001, H + 0.16],
   ];
-  const column = new THREE.LatheGeometry(profile.map(([r, y]) => new THREE.Vector2(r, y)), 10);
-  const arm = new THREE.CatmullRomCurve3([
-    new THREE.Vector3(0.03, H - 0.02, 0), new THREE.Vector3(0.22, H + 0.06, 0), new THREE.Vector3(0.42, H + 0.08, 0),
-    new THREE.Vector3(LANTERN.out, H + 0.02, 0), new THREE.Vector3(LANTERN.out, H - 0.04, 0),
+  const column = shapes.lathe(profile.map(([r, y]) => new Vec2(r, y)), 10);
+  const arm = new CatmullRom3([
+    new Vec3(0.03, H - 0.02, 0), new Vec3(0.22, H + 0.06, 0), new Vec3(0.42, H + 0.08, 0),
+    new Vec3(LANTERN.out, H + 0.02, 0), new Vec3(LANTERN.out, H - 0.04, 0),
   ]);
   // (the scroll under the arm: out from the post, up and curled into itself under the arm's middle)
-  const scroll = new THREE.CatmullRomCurve3(Array.from({ length: 14 }, (_, k) => {
+  const scroll = new CatmullRom3(Array.from({ length: 14 }, (_, k) => {
     const t = k / 13;
     const a = Math.PI * 1.1 + t * Math.PI * 2.2, r = 0.13 * (1 - t * 0.7);
-    return new THREE.Vector3(0.2 + Math.cos(a) * r * (1 - t) + t * 0.06, H - 0.12 + Math.sin(a) * r, 0);
+    return new Vec3(0.2 + Math.cos(a) * r * (1 - t) + t * 0.06, H - 0.12 + Math.sin(a) * r, 0);
   }));
-  const brace = new THREE.CatmullRomCurve3([
-    new THREE.Vector3(0.03, H - 0.42, 0), new THREE.Vector3(0.12, H - 0.3, 0), new THREE.Vector3(0.2, H - 0.25, 0),
+  const brace = new CatmullRom3([
+    new Vec3(0.03, H - 0.42, 0), new Vec3(0.12, H - 0.3, 0), new Vec3(0.2, H - 0.25, 0),
   ]);
   const bracket = mergeGeometries([
-    new THREE.TubeGeometry(arm, 20, 0.022, 6), new THREE.TubeGeometry(scroll, 28, 0.014, 5),
-    new THREE.TubeGeometry(brace, 8, 0.016, 5),
+    shapes.tube(arm, 20, 0.022, 6), shapes.tube(scroll, 28, 0.014, 5),
+    shapes.tube(brace, 8, 0.016, 5),
   ].map((g) => g.toNonIndexed()));
   const { out, y, top, bottom, high } = LANTERN;
-  const at = (g: THREE.BufferGeometry, gx: number, gy: number, gz: number): THREE.BufferGeometry => g.translate(gx, gy, gz);
+  const at = (g: Geometry, gx: number, gy: number, gz: number): Geometry => g.translate(gx, gy, gz);
   const ly = H + y;
-  const pieces: THREE.BufferGeometry[] = [
+  const pieces: Geometry[] = [
     // (the crown, its finial and the ring it hangs by; the rims round the glass's top and foot; the cup under it)
-    at(new THREE.ConeGeometry(top + 0.06, 0.13, 6), out, ly + high / 2 + 0.065, 0),
-    at(new THREE.CylinderGeometry(top + 0.065, top + 0.065, 0.03, 6), out, ly + high / 2, 0),
-    at(new THREE.SphereGeometry(0.03, 6, 4), out, ly + high / 2 + 0.16, 0),
-    at(new THREE.TorusGeometry(0.025, 0.007, 4, 8), out, ly + high / 2 + 0.2, 0),
-    at(new THREE.CylinderGeometry(bottom + 0.02, bottom + 0.02, 0.025, 6), out, ly - high / 2, 0),
+    at(shapes.cone(top + 0.06, 0.13, 6), out, ly + high / 2 + 0.065, 0),
+    at(shapes.cylinder(top + 0.065, top + 0.065, 0.03, 6), out, ly + high / 2, 0),
+    at(shapes.sphere(0.03, 6, 4), out, ly + high / 2 + 0.16, 0),
+    at(shapes.torus(0.025, 0.007, 4, 8), out, ly + high / 2 + 0.2, 0),
+    at(shapes.cylinder(bottom + 0.02, bottom + 0.02, 0.025, 6), out, ly - high / 2, 0),
   ];
   // (casting nothing: the lamp's light burns inside the glass, and the cup under it threw a dark disc 3 m across)
-  const cup = stripUVs(at(new THREE.ConeGeometry(bottom, 0.1, 6).rotateX(Math.PI), out, ly - high / 2 - 0.06, 0));
+  const cup = stripUVs(at(shapes.cone(bottom, 0.1, 6).rotateX(Math.PI), out, ly - high / 2 - 0.06, 0));
   // (an iron bar up each corner of the glass, leaning out with it)
   for (let k = 0; k < 6; k++) {
     const a = (k / 6) * TAU;
     const lean = Math.atan2(top - bottom, high);
     const r = (top + bottom) / 2 + 0.004;
-    const bar = new THREE.BoxGeometry(0.014, high, 0.014).rotateZ(-lean).rotateY(-a);
+    const bar = shapes.box(0.014, high, 0.014).rotateZ(-lean).rotateY(-a);
     pieces.push(at(bar, out + Math.cos(a) * r, ly, Math.sin(a) * r));
   }
   const frame = mergeGeometries(pieces.map((g) => (g.index ? g.toNonIndexed() : g)).map((g) => {
     g.deleteAttribute('uv');
     return g;
   }));
-  const panes = at(new THREE.CylinderGeometry(top, bottom, high, 6, 1, true), out, ly, 0);
+  const panes = at(shapes.cylinder(top, bottom, high, 6, 1, true), out, ly, 0);
   lampParts = { column, bracket: stripUVs(bracket), frame, cup, panes };
   return lampParts;
 }
 
 /** `g` with its uvs left out (merged with parts that have none). */
-function stripUVs(g: THREE.BufferGeometry): THREE.BufferGeometry {
+function stripUVs(g: Geometry): Geometry {
   g.deleteAttribute('uv');
   return g;
 }
 
-function lampPost(scene: THREE.Object3D, x: number, z: number, turn: number, M: Mats, obstacles: Obstacle[]): THREE.Vector3 {
-  const g = new THREE.Group();
+function lampPost(scene: Node, x: number, z: number, turn: number, M: Mats, obstacles: Obstacle[]): Vec3 {
+  const g = new Node();
   g.position.set(x, 0, z);
   g.rotation.y = -turn;
   scene.add(g);
@@ -2804,7 +2805,7 @@ function lampPost(scene: THREE.Object3D, x: number, z: number, turn: number, M: 
   const pieces = [[parts.column, M.lanternIron], [parts.bracket, M.lanternIron], [parts.frame, M.lanternIron], [parts.cup, M.lanternIron],
     [parts.panes, M.lantern]] as const;
   for (const [geo, m] of pieces) {
-    const mesh = new THREE.Mesh(geo, m);
+    const mesh = new Mesh(geo, m);
     mesh.castShadow = geo !== parts.panes && geo !== parts.cup;
     mesh.receiveShadow = true;
     g.add(mesh);
@@ -2812,19 +2813,19 @@ function lampPost(scene: THREE.Object3D, x: number, z: number, turn: number, M: 
   obstacles.push({ x, z, r: 0.35, h: LAMPS.high });
   g.updateMatrixWorld(true);
   // (its light at the middle of its glass: 0.25 m out from it, it lit the iron and the glass from a hand's breadth)
-  return g.localToWorld(new THREE.Vector3(LANTERN.out, LAMPS.high + LANTERN.y, 0));
+  return g.localToWorld(new Vec3(LANTERN.out, LAMPS.high + LANTERN.y, 0));
 }
 
 
 /** a pool of lamplight shown whole */
-const WHITE = new THREE.Color(1, 1, 1);
+const WHITE = new Color(1, 1, 1);
 
 /**
  * The street lamps along the roads, a post every `STREET.every` m on alternate sides, each its lantern over the road
  * (from play: "its dark so we need lights in the village"), and their lanterns, where the lit shaders' lamps light
  * (`core/lamps.ts`, game/village.ts `lightLamps`).
  */
-function buildStreetLamps(scene: THREE.Object3D, M: Mats, obstacles: Obstacle[]): THREE.Vector3[] {
+function buildStreetLamps(scene: Node, M: Mats, obstacles: Obstacle[]): Vec3[] {
   const spots: { x: number; z: number; turn: number }[] = [];
   // (the stair's lamps, hung by `buildLamp` with their lights, are lamps too)
   const lamps: Spot[] = [-1, 1].map((s) => [TERRACE.x + s * LAMPS.x, LAMPS.z]);
@@ -2866,7 +2867,7 @@ function buildStreetLamps(scene: THREE.Object3D, M: Mats, obstacles: Obstacle[])
 // --- the trees ------------------------------------------------------------------------------------------------------
 
 /** A tree's place: where, its kind (`TREE_KINDS`), its height (m), how it's turned and its crown's colour. */
-interface TreeSpot { x: number; z: number; kind: number; height: number; turn: number; colour: THREE.Color }
+interface TreeSpot { x: number; z: number; kind: number; height: number; turn: number; colour: Color }
 
 /** the kinds the village grows (the forest's first three: grown once for both, `growTree`) */
 const VILLAGE_KINDS = [0, 1, 2];
@@ -2881,7 +2882,7 @@ const LEAVES_FAR = { keep: 0.5, grow: 1.35 };
 function treeSpots(rng: () => number): TreeSpot[] {
   const r = (a: number, b: number): number => a + rng() * (b - a);
   // spring greens, a little apart tree to tree
-  const crown = (): THREE.Color => new THREE.Color().setRGB(r(0.13, 0.22), r(0.3, 0.42), r(0.06, 0.12)).multiplyScalar(2.1);
+  const crown = (): Color => new Color().setRGB(r(0.13, 0.22), r(0.3, 0.42), r(0.06, 0.12)).multiplyScalar(2.1);
   const spots: TreeSpot[] = [];
   const clear = (x: number, z: number, apart: number): boolean => spots.every((s) => Math.hypot(s.x - x, s.z - z) >= apart);
   const add = (x: number, z: number, height: number): void => {
@@ -2912,25 +2913,25 @@ function treeSpots(rng: () => number): TreeSpot[] {
 
 /** The trees, a pair of instanced meshes a kind (bark, leaves), each culled tree by tree; each in the village is an
  *  obstacle round its trunk's foot, and every trunk is met by what flies. */
-function buildTrees(scene: THREE.Object3D, wall: Wall, obstacles: Obstacle[], spots: readonly TreeSpot[]): void {
+function buildTrees(scene: Node, wall: Wall, obstacles: Obstacle[], spots: readonly TreeSpot[]): void {
   const kinds: TreeKind[] = VILLAGE_KINDS.map((k) => growTree(TREE_KINDS[k]));
-  const leafMat = asLeaves(seeThrough(new THREE.MeshStandardMaterial({
-    map: leafClusterTexture(), alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.8,
+  const leafMat = asLeaves(seeThrough(new LitMaterial({
+    map: leafClusterTexture(), alphaTest: 0.5, side: DoubleSide, roughness: 0.8,
   }), 'foliage'));
-  const mx = new THREE.Matrix4();
+  const mx = new Mat4();
   kinds.forEach((kind, k) => {
     const mine = spots.filter((s) => s.kind === k);
-    const barkMat = seeThrough(new THREE.MeshStandardMaterial({
+    const barkMat = seeThrough(new LitMaterial({
       ...pbrMaterialMaps(bark(), TREE_KINDS[VILLAGE_KINDS[k]].bark, 1.6), color: 0xd8c8b0,
     }), 'prop');
-    const barks = new THREE.InstancedMesh(kind.bark, barkMat, mine.length);
+    const barks = new InstancedMesh(kind.bark, barkMat, mine.length);
     const inside = mine.filter((s) => withinVillage(s.x, s.z)).length;
     const crowns = [
       { name: 'in the village', look: LEAVES_NEAR, count: inside, at: 0 },
       { name: 'in the wood', look: LEAVES_FAR, count: mine.length - inside, at: 0 },
     ].map((crown) => {
       const thin = thinnedLeaves(kind.leaves, crown.look.keep, crown.look.grow, k + 1);
-      return { ...crown, mesh: new THREE.InstancedMesh(thin, leafMat, crown.count) };
+      return { ...crown, mesh: new InstancedMesh(thin, leafMat, crown.count) };
     });
     mine.forEach((s, i) => {
       // (sunk a little: a trunk is an open tube at its foot)
@@ -2947,7 +2948,7 @@ function buildTrees(scene: THREE.Object3D, wall: Wall, obstacles: Obstacle[], sp
     });
     barks.castShadow = barks.receiveShadow = true;
     barks.name = `village trees' bark: ${TREE_KINDS[VILLAGE_KINDS[k]].preset}`;
-    const drawnBark = cullInCells(barks, eachInstance), drawnCrowns: THREE.Mesh[][] = [];
+    const drawnBark = cullInCells(barks, eachInstance), drawnCrowns: Mesh[][] = [];
     scene.add(...asTree(...drawnBark));
     for (const { mesh, name } of crowns) {
       mesh.castShadow = mesh.receiveShadow = true;

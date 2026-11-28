@@ -4,7 +4,9 @@
 // topples onto its broad face (nothing rests on its end), stays a few seconds and shrinks away. One instanced mesh
 // per shape variant, from fixed pools (the oldest piece is reused when one runs out). Every material is a standard
 // one, so the few programs are all warmed in `warmup.ts`.
-import * as THREE from 'three';
+import {
+  Color, Euler, InstancedMesh, LitMaterial, LitParameters, Mat4, Material, Quat, Vec3,
+} from '../engine/api/index.ts';
 import { G } from '../state';
 import { groundHeight } from '../world/ground';
 import { rand } from '../util';
@@ -27,11 +29,13 @@ let minCaster = 0;
 const LIFE = 6, SHRINK = 1.3;
 const GRAVITY = 15, BOUNCE = 0.35, HALF = Math.PI / 2;
 
-interface Chunk { shape: Shape; pool: string; x: number; y: number; z: number; vx: number; vy: number; vz: number; rx: number; ry: number; rz: number; wx: number; wy: number; wz: number; sx: number; sy: number; sz: number; t: number; life: number; rest: boolean; tx: number; tz: number }
-interface Pool { mesh: THREE.InstancedMesh; chunks: Chunk[]; next: number; max: number }
+interface Chunk { shape: Shape; pool: string; x: number; y: number; z: number; vx: number; vy: number; vz: number; rx: number; ry: number; rz: number; wx: number; wy: number; wz: number; sx: number; sy: number; sz: number; t: number; life: number; rest: boolean; tx: number; tz: number;
+  /** written lying still at full size (its matrix stands till it shrinks) / written gone */
+  still: boolean; zeroed: boolean }
+interface Pool { mesh: InstancedMesh; chunks: Chunk[]; next: number; max: number }
 const pools: Record<string, Pool> = {};
-let coalMat: THREE.MeshStandardMaterial | null = null;
-const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _e = new THREE.Euler(0, 0, 0, 'YXZ'), _p = new THREE.Vector3(), _s = new THREE.Vector3(), _c = new THREE.Color();
+let coalMat: LitMaterial | null = null;
+const _m = new Mat4(), _q = new Quat(), _e = new Euler(0, 0, 0, 'YXZ'), _p = new Vec3(), _s = new Vec3(), _c = new Color();
 
 /** One kind of piece in a recipe: its shape, its share of a prop's pieces, its size along each axis (a splinter's
  * grain runs along z, a tube's y) and its colour (`null`: the prop's own) */
@@ -78,12 +82,12 @@ export const BREAKS: Partial<Record<RubbleKind, { count: number; size: number; s
 
 export function initRubble(): void {
   const wood = woodAtlas(), shroom = mushroomAtlas();
-  const std = (o: THREE.MeshStandardMaterialParameters) => new THREE.MeshStandardMaterial({ roughness: 0.95, metalness: 0.05, ...o });
+  const std = (o: LitParameters) => new LitMaterial({ roughness: 0.95, metalness: 0.05, ...o });
   const stoneMat = std({ flatShading: true, vertexColors: true, bumpMap: rockBump(), bumpScale: 1.5 });
   coalMat = std({ flatShading: true, emissive: 0xffffff, emissiveIntensity: 2.2, emissiveMap: coalTexture() });
   const woodMat = std({ map: textureFromCanvas(wood.albedo), bumpMap: textureFromCanvas(wood.height, false), bumpScale: 2, roughness: 0.85, metalness: 0 });
   const shroomMat = std({ map: textureFromCanvas(shroom.albedo), bumpMap: textureFromCanvas(shroom.height, false), bumpScale: 2, emissive: 0xffffff, emissiveMap: textureFromCanvas(shroom.glow), emissiveIntensity: 1.1, roughness: 0.6, metalness: 0 });
-  const mats: Record<Shape, THREE.Material> = { stone: stoneMat, coal: coalMat, shell: shroomMat, stem: shroomMat, stub: woodMat, splinter: woodMat, chip: woodMat, bark: woodMat };
+  const mats: Record<Shape, Material> = { stone: stoneMat, coal: coalMat, shell: shroomMat, stem: shroomMat, stub: woodMat, splinter: woodMat, chip: woodMat, bark: woodMat };
   for (const shape of Object.keys(POOL) as Shape[]) {
     const { max, variants } = POOL[shape];
     for (let v = 0; v < variants; v++) {
@@ -93,7 +97,7 @@ export function initRubble(): void {
         : shape === 'stem' ? tornTubeGeometry(seed, STEM_COLS)
         : shape === 'stub' ? tornTubeGeometry(seed, STUB_COLS)
         : flakeGeometry(shape, seed);
-      const mesh = new THREE.InstancedMesh(geo, mats[shape], max);
+      const mesh = new InstancedMesh(geo, mats[shape], max);
       mesh.name = `rubble: ${shape} ${v + 1}`;
       // the colour attribute exists from the start (adding it later would change the shader)
       for (let i = 0; i < max; i++) mesh.setColorAt(i, _c.set(0x808080));
@@ -137,7 +141,7 @@ export function rubble(x: number, z: number, { count, color, kind = 'stone', rad
       vx: Math.cos(a) * speed * rand(0.3, 1), vy: rand(1.5, 4.5) * (speed / 4), vz: Math.sin(a) * speed * rand(0.3, 1),
       rx: rand(0, 6), ry: rand(0, 6), rz: rand(0, 6), wx: rand(-9, 9), wy: rand(-9, 9), wz: rand(-9, 9),
       sx: s * part.sx * rand(0.8, 1.2), sy: s * part.sy * rand(0.8, 1.2), sz: s * part.sz * rand(0.8, 1.2), t: 0,
-      life: life ?? (BREAKS[kind] ? BREAKS[kind]!.life + rand(0, 1) : LIFE + rand(0, 3)), rest: false, tx: 0, tz: 0,
+      life: life ?? (BREAKS[kind] ? BREAKS[kind]!.life + rand(0, 1) : LIFE + rand(0, 3)), rest: false, tx: 0, tz: 0, still: false, zeroed: false,
     });
     pool.mesh.setColorAt(slot, _c.set(part.color ?? color).multiplyScalar((part.shade ?? 1) * rand(0.75, 1.15)));
     // (placed where it starts at once: drawn before the next update with the pool's unset place, a fresh piece stood
@@ -188,12 +192,24 @@ export function updateRubble(dt: number): void {
 
 function updatePool({ mesh, chunks }: Pool, dt: number): void {
   if (!mesh.count) return;
-  let live = 0;
+  // (a piece lying still at full size, or gone, keeps the matrix last written: every piece's was composed and the
+  // whole pool sent again every frame, those lying still the most of them)
+  let live = 0, wrote = false;
   for (let i = 0; i < mesh.count; i++) {
     const c = chunks[i];
-    if (!c || c.t >= c.life) { _m.makeScale(0, 0, 0); mesh.setMatrixAt(i, _m); continue; }
+    if (!c || c.t >= c.life) {
+      if (c?.zeroed) continue;
+      _m.makeScale(0, 0, 0);
+      mesh.setMatrixAt(i, _m);
+      if (c) c.zeroed = true;
+      wrote = true;
+      continue;
+    }
     c.t += dt;
     live++;
+    const shrinking = c.life - c.t < SHRINK;
+    if (c.still && !shrinking) continue;
+    let settled = false;
     if (!c.rest) {
       c.vy -= GRAVITY * dt;
       c.x += c.vx * dt; c.y += c.vy * dt; c.z += c.vz * dt;
@@ -211,13 +227,15 @@ function updatePool({ mesh, chunks }: Pool, dt: number): void {
       if (Math.abs(tx - c.rx) + Math.abs(tz - c.rz) > 1e-3) {
         c.rx += (tx - c.rx) * k; c.rz += (tz - c.rz) * k;
         c.y = groundHeight(c.x, c.z) + halfHeight(c);
-      }
+      } else settled = true;
     }
-    const k = c.life - c.t < SHRINK ? Math.max(0, (c.life - c.t) / SHRINK) : 1;
+    const k = shrinking ? Math.max(0, (c.life - c.t) / SHRINK) : 1;
     _m.compose(_p.set(c.x, c.y, c.z), _q.setFromEuler(_e.set(c.rx, c.ry, c.rz)), _s.set(c.sx * k, c.sy * k, c.sz * k));
     mesh.setMatrixAt(i, _m);
+    wrote = true;
+    c.still = settled && !shrinking;
   }
-  mesh.instanceMatrix.needsUpdate = true;
+  if (wrote) mesh.instanceMatrix.needsUpdate = true;
   if (!live) mesh.count = 0;
 }
 

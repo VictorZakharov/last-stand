@@ -3,7 +3,10 @@
 // in drips and pools dark where it stopped, its foot and lower body bare matte clay, the glaze broken pale over the lip,
 // a chip at the rim. All the clay is one material (vertex colours, and the glaze's shine a roughness read off the uv:
 // `GLAZED`, `RAW`), so the room's merge draws every pot in one call. The pots' forms are `potForms.ts`.
-import * as THREE from 'three';
+import {
+  Attribute, CanvasTexture, CatmullRom3, Color, Geometry, LinearFilter, LitMaterial, Maths, Vec2, Vec3,
+} from '../engine/api/index.ts';
+import * as shapes from '../engine/api/shapes/index.ts';
 import { canvasOf, ctx2d } from '../core/textures';
 
 /** A profile's points, radius and height (m), from the foot outwards and up. */
@@ -15,8 +18,8 @@ export interface Pot {
   /** the inside from the lip back down (a plate's face is its inside) */
   inside: Profile;
   sides: number;
-  glaze: THREE.Color;
-  clay: THREE.Color;
+  glaze: Color;
+  clay: Color;
   /** the height the outside's glaze runs down to (m): its drips hang lower, the foot stays bare */
   glazedTo: number;
   /** the most the outside's points are apart (m): fine where its glaze's line shows; a plate's back needs none */
@@ -33,7 +36,7 @@ export const GLAZED = 0.25;
 const RAW = 0.75;
 
 /** One material for every clay pot: white, its colours the vertices', its shine its uv's row of `roughness`. */
-export function clayMaterial(): THREE.MeshStandardMaterial {
+export function clayMaterial(): LitMaterial {
   const canvas = canvasOf(1, 2), context = ctx2d(canvas);
   // (the canvas's top row is v 0.75 as three flips it: bare clay, matte; the bottom row a lead glaze's soft sheen,
   // 0.43: at 0.27 each candle stood on a jug as a sharp white dot)
@@ -41,14 +44,14 @@ export function clayMaterial(): THREE.MeshStandardMaterial {
   context.fillRect(0, 0, 1, 1);
   context.fillStyle = 'rgb(110,110,110)';
   context.fillRect(0, 1, 1, 1);
-  const roughness = new THREE.CanvasTexture(canvas);
+  const roughness = new CanvasTexture(canvas);
   roughness.generateMipmaps = false;
-  roughness.minFilter = THREE.LinearFilter;
-  return new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1, roughnessMap: roughness, vertexColors: true });
+  roughness.minFilter = LinearFilter;
+  return new LitMaterial({ color: 0xffffff, roughness: 1, roughnessMap: roughness, vertexColors: true });
 }
 
 /** sRGB hex to the linear colour a vertex holds */
-const colour = (hex: number): THREE.Color => new THREE.Color(hex);
+const colour = (hex: number): Color => new Color(hex);
 
 /** The lead glazes: honey (amber over the clay), copper green, iron brown. In the room's candlelight a deeper honey
  *  read as cherry red, so it's yellower than it looks by day. */
@@ -118,7 +121,7 @@ interface Spot { inside: boolean; lip: boolean; radius: number; angle: number; y
 
 /** A glazed vertex's colour: the glaze, pooled dark where it stopped and deep inside, broken pale
  *  over the lip. */
-function glazeAt(tint: THREE.Color, pot: Pot, spot: Spot): void {
+function glazeAt(tint: Color, pot: Pot, spot: Spot): void {
   tint.copy(pot.glaze);
   if (spot.lip) tint.lerp(pot.clay, 0.35).multiplyScalar(1.1);
   // (where the glaze ran and stopped it lies thick: a dark bead 15 mm over its edge)
@@ -129,13 +132,13 @@ function glazeAt(tint: THREE.Color, pot: Pot, spot: Spot): void {
 }
 
 /** A bare vertex's colour: the clay, even and matte, darker where it stood on the shelves and the kiln's floor. */
-function clayAt(tint: THREE.Color, pot: Pot, y: number): void {
+function clayAt(tint: Color, pot: Pot, y: number): void {
   tint.copy(pot.clay).multiplyScalar(y < 0.006 ? 0.7 : 0.9 + 0.1 * Math.min(1, y / 0.03));
 }
 
 /** The lathe's first and last sides hold the same points: give each pair one normal, so the seam shows no crease. */
-function joinSeam(lathe: THREE.BufferGeometry, count: number, sides: number): void {
-  const normal = lathe.attributes.normal, joined = new THREE.Vector3(), other = new THREE.Vector3();
+function joinSeam(lathe: Geometry, count: number, sides: number): void {
+  const normal = lathe.attributes.normal, joined = new Vec3(), other = new Vec3();
   for (let point = 0; point < count; point++) {
     const last = sides * count + point;
     joined.fromBufferAttribute(normal, point).add(other.fromBufferAttribute(normal, last)).normalize();
@@ -157,7 +160,7 @@ function dripsOf(rng: () => number, height: number): Drip[] {
  * A pot thrown: its lathe, wobbled as a hand leaves it, coloured and given its shine by its glaze; `shape` moves its
  * points before its normals are made (a pouring lip). The seam's normals are joined so it shows no crease.
  */
-export function throwPot(pot: Pot, rng: () => number, shape?: (lathe: THREE.BufferGeometry) => void): THREE.BufferGeometry {
+export function throwPot(pot: Pot, rng: () => number, shape?: (lathe: Geometry) => void): Geometry {
   const height = Math.max(...pot.outside.map(([, y]) => y));
   const wobble = wobbleOf(rng, pot.wobble ?? 1);
   const drips = dripsOf(rng, height);
@@ -168,12 +171,12 @@ export function throwPot(pot: Pot, rng: () => number, shape?: (lathe: THREE.Buff
   const outside = densified(pot.outside, pot.step ?? 0.012, from, to);
   const points = [...outside, ...pot.inside];
   const count = points.length, firstInside = outside.length;
-  const lathe = new THREE.LatheGeometry(points.map(([r, y]) => new THREE.Vector2(r, y)), pot.sides);
+  const lathe = shapes.lathe(points.map(([r, y]) => new Vec2(r, y)), pot.sides);
   const wave = height * 0.03, waveAt = rng() * Math.PI * 2, seed = rng() * 100;
   const chips = [rng() * Math.PI * 2, rng() < 0.5 ? rng() * Math.PI * 2 : -1];
   const position = lathe.attributes.position, uv = lathe.attributes.uv;
   const colours = new Float32Array(position.count * 3);
-  const tint = new THREE.Color(), bare = new THREE.Color();
+  const tint = new Color(), bare = new Color();
   for (let side = 0; side <= pot.sides; side++) {
     const angle = (side / pot.sides) * Math.PI * 2;
     const line = glazeLine(pot, drips, wave, waveAt, angle);
@@ -190,7 +193,7 @@ export function throwPot(pot: Pot, rng: () => number, shape?: (lathe: THREE.Buff
       const lip = point === firstInside - 1 || point === firstInside;
       // (how glazed, eased over the 10 mm between two points: judged glazed or not, a drip's edge zigzagged along the
       // triangles' diagonals)
-      const glazed = inside ? 1 : THREE.MathUtils.smoothstep(y, line - 0.005, line + 0.005);
+      const glazed = inside ? 1 : Maths.smoothstep(y, line - 0.005, line + 0.005);
       glazeAt(tint, pot, { inside, lip, radius, angle, y, line, depth: height - y });
       // (the glaze's mottle, a few hundredths either way, by the side round: the last side is the first again, and
       // hashed by its own index the seam showed as a line)
@@ -206,7 +209,7 @@ export function throwPot(pot: Pot, rng: () => number, shape?: (lathe: THREE.Buff
       else uv.setXY(at, 0.5, chipped ? RAW : RAW + (GLAZED - RAW) * glazed);
     }
   }
-  lathe.setAttribute('color', new THREE.BufferAttribute(colours, 3));
+  lathe.setAttribute('color', new Attribute(colours, 3));
   shape?.(lathe);
   lathe.computeVertexNormals();
   joinSeam(lathe, count, pot.sides);
@@ -214,8 +217,8 @@ export function throwPot(pot: Pot, rng: () => number, shape?: (lathe: THREE.Buff
 }
 
 /** A loop handle pulled as a strap (wider than it is thick), its ends sunk into the pot, in its glaze. */
-export function handle(path: readonly THREE.Vector3[], glaze: THREE.Color): THREE.BufferGeometry {
-  const tube = new THREE.TubeGeometry(new THREE.CatmullRomCurve3([...path]), 12, 0.009, 6, false);
+export function handle(path: readonly Vec3[], glaze: Color): Geometry {
+  const tube = shapes.tube(new CatmullRom3([...path]), 12, 0.009, 6, false);
   // (a strap: the tube's section widened across the pot, its path in the x-y plane; a round wire of 7.5 mm read as
   // wire)
   tube.scale(1, 1, 1.8);
@@ -225,7 +228,7 @@ export function handle(path: readonly THREE.Vector3[], glaze: THREE.Color): THRE
     colours[k + 1] = glaze.g * 0.9;
     colours[k + 2] = glaze.b * 0.9;
   }
-  tube.setAttribute('color', new THREE.BufferAttribute(colours, 3));
+  tube.setAttribute('color', new Attribute(colours, 3));
   const uv = tube.attributes.uv;
   for (let k = 0; k < uv.count; k++) uv.setXY(k, 0.5, GLAZED);
   return tube;

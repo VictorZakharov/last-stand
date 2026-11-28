@@ -6,8 +6,8 @@
 // of his legs to its own. From the owner, of a pick-up posed by hand for days: "did you try digging? maybe others have
 // already implemented it".
 
-import * as THREE from 'three';
-import { BVHLoader } from 'three/examples/jsm/loaders/BVHLoader.js';
+import { Bone, Node, Quat, Vec3 } from './sceneApi.ts';
+import { posesOf, readBvh, sampleBvh, type Bvh, type JointPose } from './bvh';
 import { resetPose, type Joints } from '../../../src/entities/models/rig';
 import type { Lab, Tile } from './lab';
 import { picture, type LivePicture } from './live';
@@ -19,13 +19,13 @@ interface Mapped {
   /** the bone the joint's length runs to (the way it points at rest), or none for the hips, turned whole */
   toward?: string;
   /** the way the joint's own length runs at rest in its frame (down a limb, up the trunk, ahead along a foot) */
-  rest: THREE.Vector3;
+  rest: Vec3;
 }
 
-const DOWN = new THREE.Vector3(0, -1, 0);
-const UP = new THREE.Vector3(0, 1, 0);
+const DOWN = new Vec3(0, -1, 0);
+const UP = new Vec3(0, 1, 0);
 /** a foot from the ankle to its toes in the rig (`buildHumanoid`'s foot: forward and a little down) */
-const ALONG_FOOT = new THREE.Vector3(0, -0.45, 1).normalize();
+const ALONG_FOOT = new Vec3(0, -0.45, 1).normalize();
 
 /** The hero's joints, parents first, as CMU's skeleton (in its BVH conversion's names) has them. */
 const MAP: Mapped[] = [
@@ -50,16 +50,20 @@ function limb(ours: 'L' | 'R', theirs: 'Left' | 'Right'): Mapped[] {
   ] as Mapped[];
 }
 
-/** A clip read and made ready to sample: its bones under a holder, its mixer, its floor and its legs' length. */
+/** A clip read and made ready to sample: its bones under a holder, its motion, its floor and its legs' length. */
 export interface Clip {
   name: string;
   seconds: number;
   frames: number;
-  holder: THREE.Group;
-  mixer: THREE.AnimationMixer;
-  bones: Map<string, THREE.Bone>;
+  holder: Node;
+  /** its skeleton and frames (bvh.ts), and each joint's pose as last sampled */
+  motion: Bvh;
+  poses: JointPose[];
+  /** a bone a joint of its skeleton, in its order */
+  skeleton: Bone[];
+  bones: Map<string, Bone>;
   /** each mapped joint's turn that lays the rig's rest along the clip's (its world rest) */
-  laid: Map<keyof Joints, THREE.Quaternion>;
+  laid: Map<keyof Joints, Quat>;
   /** the clip's floor (its lowest toe over the clip) and its leg's length, in its own units */
   floor: number;
   leg: number;
@@ -80,47 +84,60 @@ export function clipOf(name: string, text?: string): Clip {
   return clip;
 }
 
+/** `motion`'s skeleton as bones at rest under a holder of their own, each at its offset (an end site a bone too,
+ *  `ENDSITE`, as three's loader made it, to point its parent at). */
+function bonesOf(motion: Bvh, holder: Node): Bone[] {
+  const skeleton = motion.joints.map((joint) => {
+    const bone = new Bone();
+    bone.name = joint.name;
+    bone.position.copy(joint.offset);
+    return bone;
+  });
+  motion.joints.forEach((joint, i) => (joint.parent < 0 ? holder : skeleton[joint.parent]).add(skeleton[i]));
+  return skeleton;
+}
+
 function readClip(name: string, text: string): Clip {
-  const { skeleton, clip } = new BVHLoader().parse(text);
-  const holder = new THREE.Group();
-  holder.add(skeleton.bones[0]);
-  const bones = new Map(skeleton.bones.map((bone) => [bone.name, bone]));
+  const motion = readBvh(text);
+  const holder = new Node();
+  const skeleton = bonesOf(motion, holder);
+  const bones = new Map(skeleton.map((bone) => [bone.name, bone]));
   holder.updateMatrixWorld(true);
-  const laid = new Map<keyof Joints, THREE.Quaternion>();
+  const laid = new Map<keyof Joints, Quat>();
   for (const mapped of MAP) laid.set(mapped.joint, layRest(mapped, bones));
   const standing = heightOf(bones, 'Hips') - heightOf(bones, 'LeftToeBase');
-  const mixer = new THREE.AnimationMixer(holder);
-  mixer.clipAction(clip).play();
-  const frames = clip.tracks[0]?.times.length ?? 0;
   const leg = legOf(bones);
-  const read: Clip = { name, seconds: clip.duration, frames, holder, mixer, bones, laid, floor: 0, leg, standing };
+  const read: Clip = {
+    name, seconds: motion.seconds, frames: motion.frames.length, holder, motion, poses: posesOf(motion), skeleton,
+    bones, laid, floor: 0, leg, standing,
+  };
   read.floor = floorOf(read);
   return read;
 }
 
 /** The turn laying a joint's rest along its bone's in the clip's rest (all its bones unturned): the hips none. */
-function layRest(mapped: Mapped, bones: Map<string, THREE.Bone>): THREE.Quaternion {
-  if (!mapped.toward) return new THREE.Quaternion();
+function layRest(mapped: Mapped, bones: Map<string, Bone>): Quat {
+  if (!mapped.toward) return new Quat();
   const from = bones.get(mapped.bone);
   const to = mapped.toward === mapped.bone ? endOf(from) : bones.get(mapped.toward);
   if (!from || !to) throw new Error(`mocap: the clip has no ${mapped.bone} or ${mapped.toward}`);
-  const way = to.getWorldPosition(new THREE.Vector3()).sub(from.getWorldPosition(new THREE.Vector3()));
-  if (way.lengthSq() < 1e-12) return new THREE.Quaternion();
-  return new THREE.Quaternion().setFromUnitVectors(mapped.rest, way.normalize());
+  const way = to.getWorldPosition(new Vec3()).sub(from.getWorldPosition(new Vec3()));
+  if (way.lengthSq() < 1e-12) return new Quat();
+  return new Quat().setFromUnitVectors(mapped.rest, way.normalize());
 }
 
 /** A bone's first child (its end site, a head's top), to point it at. */
-function endOf(bone: THREE.Bone | undefined): THREE.Bone | undefined {
-  return bone?.children.find((child): child is THREE.Bone => (child as THREE.Bone).isBone);
+function endOf(bone: Bone | undefined): Bone | undefined {
+  return bone?.children.find((child): child is Bone => (child as Bone).isBone);
 }
 
 /** A bone's height in the clip's world as it stands now. */
-function heightOf(bones: Map<string, THREE.Bone>, name: string): number {
-  return bones.get(name)!.getWorldPosition(new THREE.Vector3()).y;
+function heightOf(bones: Map<string, Bone>, name: string): number {
+  return bones.get(name)!.getWorldPosition(new Vec3()).y;
 }
 
 /** The clip's leg from hip to ankle at rest, in its own units. */
-function legOf(bones: Map<string, THREE.Bone>): number {
+function legOf(bones: Map<string, Bone>): number {
   const thigh = bones.get('LeftLeg')!.position.length();
   const shin = bones.get('LeftFoot')!.position.length();
   return thigh + shin;
@@ -129,7 +146,7 @@ function legOf(bones: Map<string, THREE.Bone>): number {
 /** The clip's floor: its lowest toe over the whole clip, sampled every tenth of a second. */
 function floorOf(clip: Clip): number {
   let lowest = Infinity;
-  const toe = new THREE.Vector3();
+  const toe = new Vec3();
   for (let at = 0; at <= clip.seconds; at += 0.1) {
     sampleAt(clip, at);
     for (const name of ['LeftToeBase', 'RightToeBase']) {
@@ -141,18 +158,22 @@ function floorOf(clip: Clip): number {
 
 /** The clip's bones as they are at `seconds` into it. */
 function sampleAt(clip: Clip, seconds: number): void {
-  clip.mixer.setTime(Math.min(Math.max(0, seconds), clip.seconds));
+  sampleBvh(clip.motion, seconds, clip.poses);
+  clip.skeleton.forEach((bone, i) => {
+    bone.position.copy(clip.poses[i].position);
+    bone.quaternion.copy(clip.poses[i].quaternion);
+  });
   clip.holder.updateMatrixWorld(true);
 }
 
-const _facing = new THREE.Vector3();
-const _turn = new THREE.Quaternion();
-const _bone = new THREE.Quaternion();
-const _parent = new THREE.Quaternion();
-const _hips = new THREE.Vector3();
+const _facing = new Vec3();
+const _turn = new Quat();
+const _bone = new Quat();
+const _parent = new Quat();
+const _hips = new Vec3();
 
 /** The turn from the clip's world to the hero's: its person's facing at this moment onto the hero's root. */
-function clipToHero(clip: Clip, root: THREE.Object3D, out: THREE.Quaternion): THREE.Quaternion {
+function clipToHero(clip: Clip, root: Node, out: Quat): Quat {
   const hips = clip.bones.get('Hips')!;
   hips.getWorldQuaternion(_bone);
   _facing.set(0, 0, 1).applyQuaternion(_bone).setY(0).normalize();
@@ -166,9 +187,9 @@ export function poseAt(lab: Lab, clip: Clip, seconds: number): void {
   sampleAt(clip, seconds);
   const joints = lab.joints;
   resetPose(joints);
-  const toHero = clipToHero(clip, joints.root, new THREE.Quaternion());
+  const toHero = clipToHero(clip, joints.root, new Quat());
   for (const mapped of MAP) {
-    const joint = joints[mapped.joint] as THREE.Object3D;
+    const joint = joints[mapped.joint] as Node;
     clip.bones.get(mapped.bone)!.getWorldQuaternion(_bone);
     const world = toHero.clone().multiply(_bone).multiply(clip.laid.get(mapped.joint)!);
     joint.parent!.updateWorldMatrix(true, false);
@@ -195,17 +216,17 @@ export interface BodyRead {
   hands: { height: number; ahead: number }[];
 }
 
-const _a = new THREE.Vector3();
-const _b = new THREE.Vector3();
-const _ankles = new THREE.Vector3();
+const _a = new Vec3();
+const _b = new Vec3();
+const _ankles = new Vec3();
 
 /** The body as the clip has it now (sampled), as the pick-up's keys take it; `scale` the hero's metres a unit. */
 function bodyRead(clip: Clip, scale: number): BodyRead {
-  const at = (name: string, out: THREE.Vector3) => clip.bones.get(name)!.getWorldPosition(out);
+  const at = (name: string, out: Vec3) => clip.bones.get(name)!.getWorldPosition(out);
   clip.bones.get('Hips')!.getWorldQuaternion(_bone);
   const ahead = _facing.set(0, 0, 1).applyQuaternion(_bone).setY(0).normalize().clone();
   at('LeftFoot', _ankles).add(at('RightFoot', _a)).multiplyScalar(0.5);
-  const hips = at('Hips', new THREE.Vector3());
+  const hips = at('Hips', new Vec3());
   const leanOf = (from: string, to: string) => {
     const way = at(to, _b).sub(at(from, _a));
     return Math.atan2(way.dot(ahead), way.y);

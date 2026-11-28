@@ -1,6 +1,10 @@
 // Transient visual effects (shockwaves, decals, telegraphs, lightning, ice).
 // Each effect is { update(dt) -> boolean alive, dispose() }.
-import * as THREE from 'three';
+import {
+  AdditiveBlending, Attribute, CanvasTexture, Color, ColorRepresentation, DoubleSide, Euler, Geometry, InstancedMesh,
+  LitMaterial, Mat4, Material, Mesh, Node, Quat, SRGBColorSpace, Texture, UnlitMaterial, Vec3,
+} from '../engine/api/index.ts';
+import * as shapes from '../engine/api/shapes/index.ts';
 import { initRubble, updateRubble, clearRubble } from './rubble';
 import { burst, smokePuff } from './particles';
 import { G } from '../state';
@@ -18,15 +22,15 @@ type Pos = { x: number; y?: number; z: number };
 const floor = (pos: Pos): number => Math.max(pos.y ?? 0, groundHeight(pos.x, pos.z));
 
 const active: Effect[] = [];
-const GEO = {} as Record<'ring' | 'disc' | 'plane' | 'spike' | 'pillar' | 'crystal', THREE.BufferGeometry>;
-const TEX = {} as Record<'scorch' | 'frost' | 'soft' | 'band' | 'rune' | 'cracks' | 'front' | 'halo' | 'rim' | 'outside', THREE.Texture>;
+const GEO = {} as Record<'ring' | 'disc' | 'plane' | 'spike' | 'pillar' | 'crystal', Geometry>;
+const TEX = {} as Record<'scorch' | 'frost' | 'soft' | 'band' | 'rune' | 'cracks' | 'front' | 'halo' | 'rim' | 'outside', Texture>;
 
 export function initEffects(): void {
   initRubble();
-  GEO.ring = new THREE.RingGeometry(0.82, 1, 64, 1).rotateX(-Math.PI / 2);
-  GEO.disc = new THREE.CircleGeometry(1, 48).rotateX(-Math.PI / 2);
-  GEO.plane = new THREE.PlaneGeometry(2, 2).rotateX(-Math.PI / 2);
-  GEO.spike = new THREE.ConeGeometry(0.22, 1.6, 5, 1).translate(0, 0.8, 0);
+  GEO.ring = shapes.ring(0.82, 1, 64, 1).rotateX(-Math.PI / 2);
+  GEO.disc = shapes.circle(1, 48).rotateX(-Math.PI / 2);
+  GEO.plane = shapes.plane(2, 2).rotateX(-Math.PI / 2);
+  GEO.spike = shapes.cone(0.22, 1.6, 5, 1).translate(0, 0.8, 0);
   TEX.scorch = radialDecal('rgba(8,6,10,0.85)', 'rgba(8,6,10,0)', true, 5);
   TEX.frost = radialDecal('rgba(170,225,255,0.55)', 'rgba(170,225,255,0)', true, 9);
   TEX.soft = radialDecal('rgba(255,255,255,1)', 'rgba(255,255,255,0)', false);
@@ -37,8 +41,8 @@ export function initEffects(): void {
   TEX.halo = glowRingTexture(HALO_PEAK, 0.3);
   TEX.rim = glowRingTexture(RIM_PEAK, 0.45);
   TEX.outside = outsideTexture(OUTSIDE_AT);
-  GEO.pillar = new THREE.CylinderGeometry(1, 1, 1, 24, 1, true).translate(0, 0.5, 0);
-  GEO.crystal = new THREE.OctahedronGeometry(0.2, 0).scale(0.55, 2.6, 0.55).translate(0, 0.35, 0);
+  GEO.pillar = shapes.cylinder(1, 1, 1, 24, 1, true).translate(0, 0.5, 0);
+  GEO.crystal = shapes.octahedron(0.2, 0).scale(0.55, 2.6, 0.55).translate(0, 0.35, 0);
 }
 
 export function addEffect<E extends Effect>(e: E): E { active.push(e); return e; }
@@ -53,7 +57,7 @@ const BAND_PEAK = 0.86, HALO_PEAK = 0.72, RIM_PEAK = 0.8;
 
 /** A ring of light's texture: nothing in the middle, rising to its brightest at `peak` (a share of the radius) over
  *  `width`, and falling off to nothing at the edge, its falloff eased so no edge reads as a line. */
-function glowRingTexture(peak: number, width: number): THREE.Texture {
+function glowRingTexture(peak: number, width: number): Texture {
   const size = 256;
   const c = canvasOf(size);
   const g = ctx2d(c);
@@ -71,16 +75,16 @@ function glowRingTexture(peak: number, width: number): THREE.Texture {
 }
 
 /** An additive soft quad of `map` on the floor at `pos` (a ring's or a disc's), with its material. */
-function softQuad(pos: Pos, map: THREE.Texture, color: THREE.ColorRepresentation, intensity: number, opacity: number, lift: number) {
+function softQuad(pos: Pos, map: Texture, color: ColorRepresentation, intensity: number, opacity: number, lift: number) {
   const mat = additive(color, intensity, opacity);
   mat.map = map;
-  const m = new THREE.Mesh(GEO.plane, mat);
+  const m = new Mesh(GEO.plane, mat);
   m.position.set(pos.x, floor(pos) + lift, pos.z);
   return { m, mat };
 }
 
 /** The soft halo's texture, for a ring of light drawn on a quad of one's own (an encounter's bosses' auras). */
-export const haloMap = (): THREE.Texture => TEX.halo;
+export const haloMap = (): Texture => TEX.halo;
 /** where the halo's peak lies on its quad (a share of its half-width) */
 export const HALO_AT = HALO_PEAK;
 
@@ -90,7 +94,7 @@ const OUTSIDE_AT = 0.4;
 
 /** The ground outside a ring lit: nothing inside its edge, rising just past it to a glow that lies on outward, eased
  *  to nothing at the quad's own edge (no line anywhere). */
-function outsideTexture(edge: number): THREE.Texture {
+function outsideTexture(edge: number): Texture {
   const size = 256;
   const c = canvasOf(size);
   const g = ctx2d(c);
@@ -109,7 +113,7 @@ function outsideTexture(edge: number): THREE.Texture {
 /** A ring set on the floor at `pos` each frame (the Ossuary Cantor's choir's): a bright soft band at its radius and
  *  the ground outside it lit, both with no hard edge. `set(radius, edge, outside)` places it, each part lit by its
  *  share (0..1); `dispose` takes it away. */
-export function edgeRing(pos: Pos, color: THREE.ColorRepresentation, intensity = 1.4) {
+export function edgeRing(pos: Pos, color: ColorRepresentation, intensity = 1.4) {
   const edge = softQuad(pos, TEX.front, color, intensity * 1.3, 0, 0.1);
   const out = softQuad(pos, TEX.outside, color, intensity * 0.55, 0, 0.095);
   const dispose = tracked(edge.m, [edge.mat, out.mat]);
@@ -146,7 +150,7 @@ export function glowRing(pos: Pos, { color = 0xffffff, intensity = 2, from = 0.3
 
 /** A warning of light where an attack lands: a soft band at `radius` breathing slowly (well under 1.5 a second) and a
  *  soft glow filling in from the middle over `duration`, both with no hard edge. Call cancel() to take it away. */
-export function glowTelegraph(pos: Pos, radius: number, duration: number, color: THREE.ColorRepresentation): Effect & { cancel(): void } {
+export function glowTelegraph(pos: Pos, radius: number, duration: number, color: ColorRepresentation): Effect & { cancel(): void } {
   // (its rim wide and falling off inward: a narrow band still read as a drawn line round it)
   const band = softQuad(pos, TEX.rim, color, 1.25, 0.9, 0.07);
   const fill = softQuad(pos, TEX.soft, color, 0.9, 0.5, 0.065);
@@ -183,7 +187,7 @@ export const effectsGoing = (): number => active.filter((e) => !e.standing).leng
 
 export function clearEffects(): void { for (const e of active) e.dispose?.(); active.length = 0; clearRubble(); }
 
-function tracked(obj: THREE.Object3D, mats: THREE.Material[]): () => void {
+function tracked(obj: Node, mats: Material[]): () => void {
   G.scene.add(obj);
   return () => { G.scene.remove(obj); for (const m of mats) m.dispose(); };
 }
@@ -191,7 +195,7 @@ function tracked(obj: THREE.Object3D, mats: THREE.Material[]): () => void {
 // Expanding ground shockwave ring.
 export function shockwave(pos: Pos, { color = 0xffffff, intensity = 3, from = 0.3, to = 4, life = 0.45, y = floor(pos) + 0.08, thickness = 1 } = {}) {
   const mat = additive(color, intensity);
-  const m = new THREE.Mesh(GEO.ring, mat);
+  const m = new Mesh(GEO.ring, mat);
   m.name = 'shockwave';
   m.position.set(pos.x, y, pos.z);
   m.scale.set(from, thickness, from);
@@ -219,7 +223,7 @@ export const GROUND_FLASH = tunable('groundFlash', { hollow: 1 });
 export function groundFlash(pos: Pos, { color = 0xffffff, intensity = 2, radius = 3, life = 0.35 } = {}) {
   const mat = additive(color, intensity);
   mat.map = GROUND_FLASH.hollow ? TEX.band : TEX.soft;
-  const m = new THREE.Mesh(GEO.plane, mat);
+  const m = new Mesh(GEO.plane, mat);
   m.name = 'ground flash';
   m.position.set(pos.x, floor(pos) + 0.06, pos.z);
   m.scale.setScalar(radius);
@@ -242,7 +246,7 @@ export function soundRing(pos: Pos, { color = 0xd8e4ff, intensity = 1.3, speed =
   const mat = front.mat, inner = behind.mat, m = front.m, wash = behind.m;
   m.position.set(0, 0, 0);
   wash.position.set(0, -0.005, 0);
-  const g = new THREE.Group();
+  const g = new Node();
   g.add(m, wash);
   g.position.set(pos.x, floor(pos) + 0.09, pos.z);
   g.visible = false;
@@ -269,9 +273,9 @@ export function soundRing(pos: Pos, { color = 0xd8e4ff, intensity = 1.3, speed =
 
 // Ground decal that fades out (scorch / frost).
 export function decal(pos: Pos, { type = 'scorch' as 'scorch' | 'frost', size = 2.5, life = 6, opacity = 1 } = {}) {
-  const mat = new THREE.MeshBasicMaterial({ map: TEX[type], transparent: true, depthWrite: false, opacity, polygonOffset: true, polygonOffsetFactor: -2 });
-  if (type === 'frost') { mat.blending = THREE.AdditiveBlending; mat.color.setScalar(0.8); }
-  const m = new THREE.Mesh(GEO.plane, mat);
+  const mat = new UnlitMaterial({ map: TEX[type], transparent: true, depthWrite: false, opacity, polygonOffset: true, polygonOffsetFactor: -2 });
+  if (type === 'frost') { mat.blending = AdditiveBlending; mat.color.setScalar(0.8); }
+  const m = new Mesh(GEO.plane, mat);
   m.name = `${type} decal`;
   m.position.set(pos.x, floor(pos) + 0.03 + Math.random() * 0.01, pos.z);
   m.rotation.y = Math.random() * Math.PI * 2;
@@ -283,20 +287,20 @@ export function decal(pos: Pos, { type = 'scorch' as 'scorch' | 'frost', size = 
 }
 
 // Enemy attack telegraph: outline ring + filling disc. Call cancel() to remove early.
-export function telegraph(pos: Pos, radius: number, duration: number, color: THREE.ColorRepresentation = 0xff3020): Effect & { cancel(): void; group: THREE.Group } {
+export function telegraph(pos: Pos, radius: number, duration: number, color: ColorRepresentation = 0xff3020): Effect & { cancel(): void; group: Node } {
   const ringMat = additive(color, 1.6, 0.9);
   const fillMat = additive(color, 0.8, 0.35);
-  const ring = new THREE.Mesh(GEO.ring, ringMat);
-  const fill = new THREE.Mesh(GEO.disc, fillMat);
-  const g = new THREE.Group();
+  const ring = new Mesh(GEO.ring, ringMat);
+  const fill = new Mesh(GEO.disc, fillMat);
+  const g = new Node();
   g.add(ring, fill);
   g.position.set(pos.x, floor(pos) + 0.07, pos.z);
   ring.scale.set(radius, 1, radius);
   const dispose = tracked(g, [ringMat, fillMat]);
   let t = 0, dead = false;
-  const e = addEffect<Effect & { cancel(): void; group: THREE.Group }>({
+  const e = addEffect<Effect & { cancel(): void; group: Node }>({
     cancel() { dead = true; },
-    group: new THREE.Group(),
+    group: new Node(),
     update(dt: number) {
       t += dt; const k = Math.min(1, t / duration);
       fill.scale.set(radius * k, 1, radius * k);
@@ -314,14 +318,14 @@ export function telegraph(pos: Pos, radius: number, duration: number, color: THR
  * its circle: not the ground flash's band, #917), moved to where `at` says each frame (false: gone), swelling in over its
  * first half second and fading over its last. A slow churn (well under a beat a second).
  */
-export function driftGlow(at: (t: number, out: THREE.Vector3) => boolean, radius: number, life: number,
+export function driftGlow(at: (t: number, out: Vec3) => boolean, radius: number, life: number,
   { color = 0x8adf40, intensity = 0.9 } = {}): Effect {
   const mat = additive(color, intensity);
   mat.map = TEX.soft;
-  const m = new THREE.Mesh(GEO.plane, mat);
+  const m = new Mesh(GEO.plane, mat);
   m.name = 'drifting glow';
   const dispose = tracked(m, [mat]);
-  const pos = new THREE.Vector3();
+  const pos = new Vec3();
   let t = 0;
   return addEffect({
     update(dt: number) {
@@ -337,13 +341,13 @@ export function driftGlow(at: (t: number, out: THREE.Vector3) => boolean, radius
 
 // A pool of lava left where a chunk landed (the Cinder Brute's, entities/throws.ts): a glowing disc over a scorch,
 // swelling in, churning slowly (well under a beat a second) and cooling out over its last second.
-export function lavaPool(pos: Pos, radius: number, life: number, color: THREE.ColorRepresentation = 0xff5a14): Effect {
+export function lavaPool(pos: Pos, radius: number, life: number, color: ColorRepresentation = 0xff5a14): Effect {
   const glowMat = additive(color, 1.6);
   glowMat.map = TEX.soft;
   const coreMat = additive(0xffc060, 1.1);
   coreMat.map = TEX.soft;
-  const glow = new THREE.Mesh(GEO.plane, glowMat), core = new THREE.Mesh(GEO.plane, coreMat);
-  const g = new THREE.Group();
+  const glow = new Mesh(GEO.plane, glowMat), core = new Mesh(GEO.plane, coreMat);
+  const g = new Node();
   g.add(glow, core);
   g.position.set(pos.x, floor(pos) + 0.05, pos.z);
   core.position.y = 0.01;
@@ -374,14 +378,14 @@ const LANE_TILE = 1.4;
  * `cancel()` to take it away early.
  */
 export function laneMark(ox: number, oz: number, angle: number, length: number, width: number, duration: number,
-  color: THREE.ColorRepresentation = 0xff6a20): Effect & { cancel(): void } {
+  color: ColorRepresentation = 0xff6a20): Effect & { cancel(): void } {
   const fillMat = additive(color, 0.8, 0.35), edgeMat = additive(color, 1.6, 0.9);
-  const g = new THREE.Group(), dx = Math.sin(angle), dz = Math.cos(angle);
+  const g = new Node(), dx = Math.sin(angle), dz = Math.cos(angle);
   const n = Math.max(1, Math.ceil(length / LANE_TILE)), tile = length / n;
-  const fills: THREE.Mesh[] = [];
+  const fills: Mesh[] = [];
   for (let i = 0; i < n; i++) {
     const along = (i + 0.5) * tile, x = ox + dx * along, z = oz + dz * along, y = floor({ x, z }) + 0.07;
-    const fill = new THREE.Mesh(GEO.plane, fillMat);
+    const fill = new Mesh(GEO.plane, fillMat);
     fill.name = 'lane';
     fill.position.set(x, y, z);
     fill.rotation.y = angle;
@@ -389,7 +393,7 @@ export function laneMark(ox: number, oz: number, angle: number, length: number, 
     fill.visible = false;
     fills.push(fill);
     for (const side of [-1, 1]) {
-      const edge = new THREE.Mesh(GEO.plane, edgeMat);
+      const edge = new Mesh(GEO.plane, edgeMat);
       edge.name = 'lane edge';
       edge.position.set(x + dz * side * width / 2, y + 0.005, z - dx * side * width / 2);
       edge.rotation.y = angle;
@@ -428,18 +432,18 @@ export function fireLine(x0: number, z0: number, x1: number, z1: number, reach: 
   glowMat.map = TEX.soft;
   const coreMat = additive(0xffb050, 1.0);
   coreMat.map = TEX.soft;
-  const scorchMat = new THREE.MeshBasicMaterial({ map: TEX.scorch, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 });
-  const g = new THREE.Group(), length = Math.hypot(x1 - x0, z1 - z0);
-  const n = Math.max(1, Math.round(length / FIRE_STEP)), pools: { glow: THREE.Mesh; core: THREE.Mesh; phase: number; x: number; z: number; y: number }[] = [];
+  const scorchMat = new UnlitMaterial({ map: TEX.scorch, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 });
+  const g = new Node(), length = Math.hypot(x1 - x0, z1 - z0);
+  const n = Math.max(1, Math.round(length / FIRE_STEP)), pools: { glow: Mesh; core: Mesh; phase: number; x: number; z: number; y: number }[] = [];
   for (let i = 0; i <= n; i++) {
     const k = i / n, x = x0 + (x1 - x0) * k, z = z0 + (z1 - z0) * k, y = floor({ x, z });
-    const scorch = new THREE.Mesh(GEO.plane, scorchMat);
+    const scorch = new Mesh(GEO.plane, scorchMat);
     scorch.name = 'fire scorch';
     scorch.position.set(x, y + 0.03, z);
     scorch.rotation.y = Math.random() * Math.PI * 2;
     scorch.scale.setScalar(reach * 1.5);
     scorch.renderOrder = 1;
-    const glow = new THREE.Mesh(GEO.plane, glowMat), core = new THREE.Mesh(GEO.plane, coreMat);
+    const glow = new Mesh(GEO.plane, glowMat), core = new Mesh(GEO.plane, coreMat);
     glow.name = 'fire glow';
     core.name = 'fire core';
     glow.position.set(x, y + 0.05, z);
@@ -448,7 +452,7 @@ export function fireLine(x0: number, z0: number, x1: number, z1: number, reach: 
     pools.push({ glow, core, phase: Math.random() * 6.3, x, z, y });
   }
   const dispose = tracked(g, [glowMat, coreMat, scorchMat]);
-  const at = new THREE.Vector3();
+  const at = new Vec3();
   let t = 0, flame = 0, smoke = 0;
   return addEffect({
     update(dt: number) {
@@ -481,14 +485,14 @@ export function fireLine(x0: number, z0: number, x1: number, z1: number, reach: 
 }
 
 // Jagged lightning bolt rendered as a camera-facing ribbon.
-const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _d = new THREE.Vector3(), _side = new THREE.Vector3(), _view = new THREE.Vector3();
-export function lightning(from: THREE.Vector3, to: THREE.Vector3, { color = 0x9fb2ff, intensity = 5, width = 0.09, life = 0.14, segments = 12, jag = 0.5, branches = 2 } = {}) {
-  const build = (a: THREE.Vector3, b: THREE.Vector3, segs: number, w: number) => {
-    const pts: THREE.Vector3[] = [];
+const _a = new Vec3(), _b = new Vec3(), _d = new Vec3(), _side = new Vec3(), _view = new Vec3();
+export function lightning(from: Vec3, to: Vec3, { color = 0x9fb2ff, intensity = 5, width = 0.09, life = 0.14, segments = 12, jag = 0.5, branches = 2 } = {}) {
+  const build = (a: Vec3, b: Vec3, segs: number, w: number) => {
+    const pts: Vec3[] = [];
     _d.subVectors(b, a);
     for (let i = 0; i <= segs; i++) {
       const p = a.clone().addScaledVector(_d, i / segs);
-      if (i > 0 && i < segs) p.add(new THREE.Vector3(rand(-jag, jag), rand(-jag, jag) * 0.6, rand(-jag, jag)));
+      if (i > 0 && i < segs) p.add(new Vec3(rand(-jag, jag), rand(-jag, jag) * 0.6, rand(-jag, jag)));
       pts.push(p);
     }
     const pos = new Float32Array(pts.length * 2 * 3);
@@ -500,21 +504,21 @@ export function lightning(from: THREE.Vector3, to: THREE.Vector3, { color = 0x9f
     }
     const idx: number[] = [];
     for (let i = 0; i < pts.length - 1; i++) { const k = i * 2; idx.push(k, k + 1, k + 2, k + 1, k + 3, k + 2); }
-    const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    const geo = new Geometry();
+    geo.setAttribute('position', new Attribute(pos, 3));
     geo.setIndex(idx);
     return { geo, pts };
   };
   const mat = additive(color, intensity);
-  const group = new THREE.Group();
-  const geos: THREE.BufferGeometry[] = [];
+  const group = new Node();
+  const geos: Geometry[] = [];
   const main = build(from, to, segments, width);
-  group.add(new THREE.Mesh(main.geo, mat)); geos.push(main.geo);
+  group.add(new Mesh(main.geo, mat)); geos.push(main.geo);
   for (let i = 0; i < branches; i++) {
     const start = main.pts[1 + Math.floor(Math.random() * (main.pts.length - 2))];
-    _a.copy(start); _b.copy(start).add(new THREE.Vector3(rand(-1.5, 1.5), rand(-1, 0.3), rand(-1.5, 1.5)));
+    _a.copy(start); _b.copy(start).add(new Vec3(rand(-1.5, 1.5), rand(-1, 0.3), rand(-1.5, 1.5)));
     const br = build(_a.clone(), _b.clone(), 5, width * 0.5);
-    group.add(new THREE.Mesh(br.geo, mat)); geos.push(br.geo);
+    group.add(new Mesh(br.geo, mat)); geos.push(br.geo);
   }
   G.scene.add(group);
   let t = 0;
@@ -534,8 +538,8 @@ const SPIKES = {
 // Spikes erupting from the ground in a radius (ice by default), standing `life` s in all, `height` times their size.
 export function iceSpikes(center: Pos, radius: number, count = 28, inner = 0,
   { look = 'ice' as keyof typeof SPIKES, life = 2.2, height = 1 } = {}): Effect {
-  const mat = new THREE.MeshPhysicalMaterial({ ...SPIKES[look], metalness: 0, transparent: true, flatShading: true });
-  const inst = new THREE.InstancedMesh(GEO.spike, mat, count);
+  const mat = new LitMaterial({ ...SPIKES[look], metalness: 0, transparent: true, flatShading: true });
+  const inst = new InstancedMesh(GEO.spike, mat, count);
   inst.name = `${look} spikes`;
   inst.castShadow = true;
   const data: { x: number; z: number; s: number; delay: number; tilt: number; rot: number; tilt2: number }[] = [];
@@ -543,7 +547,7 @@ export function iceSpikes(center: Pos, radius: number, count = 28, inner = 0,
     const a = Math.random() * Math.PI * 2, r = Math.sqrt(inner * inner + Math.random() * (radius * radius - inner * inner));
     data.push({ x: center.x + Math.cos(a) * r, z: center.z + Math.sin(a) * r, s: rand(0.5, 1.3), delay: (r / radius) * 0.25, tilt: rand(-0.5, 0.5), rot: rand(0, 6.28), tilt2: rand(-0.5, 0.5) });
   }
-  const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), s = new THREE.Vector3(), p = new THREE.Vector3();
+  const m4 = new Mat4(), q = new Quat(), e = new Euler(), s = new Vec3(), p = new Vec3();
   G.scene.add(inst);
   let t = 0;
   return addEffect({
@@ -570,7 +574,7 @@ export function iceSpikes(center: Pos, radius: number, count = 28, inner = 0,
 export function effectCount(): number { return active.length; }
 
 // Jagged radial cracks (white on transparent), tinted by the material.
-function crackTexture(): THREE.CanvasTexture {
+function crackTexture(): CanvasTexture {
   const size = 512, c = document.createElement('canvas');
   c.width = c.height = size;
   const g = c.getContext('2d')!;
@@ -590,15 +594,15 @@ function crackTexture(): THREE.CanvasTexture {
     g.stroke();
   };
   for (let i = 0; i < 11; i++) branch(size / 2, size / 2, (i / 11) * Math.PI * 2 + rand(-0.2, 0.2), rand(150, 240), 5, 2);
-  const tex = new THREE.CanvasTexture(c);
-  tex.colorSpace = THREE.SRGBColorSpace;
+  const tex = new CanvasTexture(c);
+  tex.colorSpace = SRGBColorSpace;
   return tex;
 }
 
 /** Small rotating rune glyph marking a target spot. Returns an effect with cancel(). */
 export function glyphMarker(pos: Pos, { radius = 1.2, color = 0xffffff, intensity = 1.2, life = 0.5 } = {}) {
-  const mat = nearGlow(new THREE.MeshBasicMaterial({ map: TEX.rune, color: new THREE.Color(color).multiplyScalar(intensity), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, opacity: 0 }));
-  const m = new THREE.Mesh(GEO.plane, mat);
+  const mat = nearGlow(new UnlitMaterial({ map: TEX.rune, color: new Color(color).multiplyScalar(intensity), transparent: true, blending: AdditiveBlending, depthWrite: false, opacity: 0 }));
+  const m = new Mesh(GEO.plane, mat);
   m.name = 'glyph marker';
   m.position.set(pos.x, floor(pos) + 0.05, pos.z);
   const dispose = tracked(m, [mat]);
@@ -621,8 +625,8 @@ export function glyphMarker(pos: Pos, { radius = 1.2, color = 0xffffff, intensit
  *  top stays where it was, for pillars that come one after another, each lit till the next's comes). */
 export function lightPillar(pos: Pos, { color = 0xffffff, intensity = 3, radius = 0.6, height = 9, life = 0.45, sink = 0.4 } = {}) {
   const mat = additive(color, intensity);
-  mat.side = THREE.DoubleSide;
-  const m = new THREE.Mesh(GEO.pillar, mat);
+  mat.side = DoubleSide;
+  const m = new Mesh(GEO.pillar, mat);
   m.name = 'light pillar';
   m.position.set(pos.x, floor(pos), pos.z);
   const dispose = tracked(m, [mat]);
@@ -641,9 +645,9 @@ export function lightPillar(pos: Pos, { color = 0xffffff, intensity = 3, radius 
 
 /** Glowing cracks in the floor that cool down and fade. */
 export function crackDecal(pos: Pos, { size = 3, color = 0xffffff, intensity = 2.5, life = 3 } = {}) {
-  const mat = nearGlow(new THREE.MeshBasicMaterial({ map: TEX.cracks, color: new THREE.Color(color).multiplyScalar(intensity), transparent: true,
-    blending: THREE.AdditiveBlending, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -3 }));
-  const m = new THREE.Mesh(GEO.plane, mat);
+  const mat = nearGlow(new UnlitMaterial({ map: TEX.cracks, color: new Color(color).multiplyScalar(intensity), transparent: true,
+    blending: AdditiveBlending, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -3 }));
+  const m = new Mesh(GEO.plane, mat);
   m.name = 'crack decal';
   m.position.set(pos.x, floor(pos) + 0.04, pos.z);
   m.rotation.y = Math.random() * Math.PI * 2;
@@ -663,12 +667,12 @@ export function crackDecal(pos: Pos, { size = 3, color = 0xffffff, intensity = 2
 }
 
 /** Crystals jut out of the ground around a point, then shatter. `onShatter(pos)` per crystal. */
-export function crystalBurst(center: Pos, { count = 8, radius = 1.6, color = 0x5dffa8, life = 1.1, scale = 1, onShatter = null as ((p: THREE.Vector3) => void) | null } = {}): Effect {
-  const mat = new THREE.MeshStandardMaterial({
-    color: 0x0c2a1e, emissive: new THREE.Color(color), emissiveIntensity: 2.2, roughness: 0.15, metalness: 0.1, flatShading: true,
+export function crystalBurst(center: Pos, { count = 8, radius = 1.6, color = 0x5dffa8, life = 1.1, scale = 1, onShatter = null as ((p: Vec3) => void) | null } = {}): Effect {
+  const mat = new LitMaterial({
+    color: 0x0c2a1e, emissive: new Color(color), emissiveIntensity: 2.2, roughness: 0.15, metalness: 0.1, flatShading: true,
     transparent: true,
   });
-  const inst = new THREE.InstancedMesh(GEO.crystal, mat, count);
+  const inst = new InstancedMesh(GEO.crystal, mat, count);
   inst.castShadow = true;
   const data: { x: number; z: number; a: number; tilt: number; s: number; spin: number; delay: number }[] = [];
   for (let i = 0; i < count; i++) {
@@ -676,7 +680,7 @@ export function crystalBurst(center: Pos, { count = 8, radius = 1.6, color = 0x5
     // tilt outwards, away from the impact
     data.push({ x: center.x + Math.cos(a) * r, z: center.z + Math.sin(a) * r, a, tilt: rand(0.35, 0.8), s: rand(0.7, 1.3) * scale, spin: rand(0, 6.28), delay: r / radius * 0.08 });
   }
-  const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), s = new THREE.Vector3(), p = new THREE.Vector3();
+  const m4 = new Mat4(), q = new Quat(), e = new Euler(), s = new Vec3(), p = new Vec3();
   G.scene.add(inst);
   let t = 0, shattered = false;
   return addEffect({
@@ -696,7 +700,7 @@ export function crystalBurst(center: Pos, { count = 8, radius = 1.6, color = 0x5
       mat.emissiveIntensity = 2.2 + Math.max(0, 1 - t * 3) * 4;
       if (!shattered && t > life) {
         shattered = true;
-        if (onShatter) for (const d of data) onShatter(new THREE.Vector3(d.x, 0.5 * d.s, d.z));
+        if (onShatter) for (const d of data) onShatter(new Vec3(d.x, 0.5 * d.s, d.z));
         return false;
       }
       return true;

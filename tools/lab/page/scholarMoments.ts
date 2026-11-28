@@ -7,7 +7,7 @@
 // down, a book taken by its spine, the book he holds and the one he reads, and what he wears from round him and at his
 // belt. From play: "walking animation
 // needs improvement... very robotic like movements... that's not how you grab a book".
-import * as THREE from 'three';
+import { boundsOf, Box3, InstancedMesh, Mesh, Node, Quat, Vec3 } from './sceneApi.ts';
 import type { Lab, Pictured, Report, ViewName } from './lab';
 import { G } from '../../../src/state';
 import { faceCamera, saveCamera, settleCamera } from '../../../src/core/renderer';
@@ -44,10 +44,10 @@ const LOOK_ASIDE = 0.18;
  *  was pushed out of it into his face.) */
 async function pictureHim(lab: Lab, s: Scholar, label: string, note: string, spots = SPOTS): Promise<Pictured> {
   const hero = G.player, was = hero.pos.clone(), wasFacing = hero.facing, restore = saveCamera();
-  const at = s.root.getWorldPosition(new THREE.Vector3());
-  const f = new THREE.Vector3(0, 0, 1).applyQuaternion(s.root.getWorldQuaternion(new THREE.Quaternion())).setY(0).normalize();
-  const side = new THREE.Vector3(f.z, 0, -f.x);
-  if (side.dot(new THREE.Vector3(-at.x, 0, -at.z)) < 0) side.negate();
+  const at = s.root.getWorldPosition(new Vec3());
+  const f = new Vec3(0, 0, 1).applyQuaternion(s.root.getWorldQuaternion(new Quat())).setY(0).normalize();
+  const side = new Vec3(f.z, 0, -f.x);
+  if (side.dot(new Vec3(-at.x, 0, -at.z)) < 0) side.negate();
   const drawing = lab.drawing;
   lab.drawing = true;
   for (const [ahead, aside] of spots) {
@@ -71,9 +71,9 @@ async function pictureHim(lab: Lab, s: Scholar, label: string, note: string, spo
 
 /** Him close up, lit, by the lab's views (`views`, turned as he faces: `front` before him), framed on `at` (world)
  *  from `distance` m; the hero turned as he faces for it, and back after. */
-function closeHim(lab: Lab, s: Scholar, label: string, note: string, views: ViewName[], at: THREE.Vector3, distance: number): Pictured {
+function closeHim(lab: Lab, s: Scholar, label: string, note: string, views: ViewName[], at: Vec3, distance: number): Pictured {
   const hero = G.player, wasFacing = hero.facing;
-  const f = new THREE.Vector3(0, 0, 1).applyQuaternion(s.root.getWorldQuaternion(new THREE.Quaternion())).setY(0).normalize();
+  const f = new Vec3(0, 0, 1).applyQuaternion(s.root.getWorldQuaternion(new Quat())).setY(0).normalize();
   hero.place(hero.pos.clone(), Math.atan2(f.x, f.z));
   s.root.updateMatrixWorld(true);
   const shot = lab.picture(label, views, [note], { at, distance });
@@ -83,14 +83,14 @@ function closeHim(lab: Lab, s: Scholar, label: string, note: string, views: View
 /** `close` taken with the room's walls and furniture hidden for it (the floor, him and what he holds kept, and with
  *  `shelves` its shelved books): at a case or by a wall, the views behind him stood inside them, and their pictures were black */
 function inTheOpen(s: Scholar, close: () => Pictured, shelves = false): Pictured {
-  const room = G.arena.rooms!.library!, keep = new Set<THREE.Object3D>(), hidden: THREE.Object3D[] = [];
+  const room = G.arena.rooms!.library!, keep = new Set<Node>(), hidden: Node[] = [];
   s.root.traverse((o) => keep.add(o));
   for (const name of ['library held book', 'library open held book', 'library dusting cloth', 'library globe']) room.group.getObjectByName(name)?.traverse((o) => keep.add(o));
-  const box = new THREE.Box3(), size = new THREE.Vector3();
+  const box = new Box3(), size = new Vec3();
   room.group.traverse((o) => {
-    const m = o as THREE.Mesh;
-    if (!m.isMesh || keep.has(m) || !m.visible || (shelves && (m as THREE.InstancedMesh).isInstancedMesh)) return;
-    box.setFromObject(m).getSize(size);
+    const m = o as Mesh;
+    if (!m.isMesh || keep.has(m) || !m.visible || (shelves && (m as InstancedMesh).isInstancedMesh)) return;
+    boundsOf(m, box).getSize(size);
     if (size.y < 0.08 && size.x > 3 && size.z > 3) return;
     m.visible = false;
     hidden.push(m);
@@ -98,8 +98,8 @@ function inTheOpen(s: Scholar, close: () => Pictured, shelves = false): Pictured
   try { return close(); } finally { for (const m of hidden) m.visible = true; }
 }
 /** where in the world a point `up` m over his feet is, and an object of the room by name */
-const overHim = (s: Scholar, up: number) => s.root.getWorldPosition(new THREE.Vector3()).add(new THREE.Vector3(0, up, 0));
-const placeOf = (o: THREE.Object3D) => o.getWorldPosition(new THREE.Vector3());
+const overHim = (s: Scholar, up: number) => s.root.getWorldPosition(new Vec3()).add(new Vec3(0, up, 0));
+const placeOf = (o: Node) => o.getWorldPosition(new Vec3());
 
 export async function scholarMoments(lab: Lab): Promise<Report> {
   await toVillage(lab);
@@ -118,7 +118,7 @@ export async function scholarMoments(lab: Lab): Promise<Report> {
   // (seen through the hero's eyes: over his shoulder, the hero stood between)
   await viewAs(lab, 'first');
   // (the hero by the door, out of his ways)
-  G.player.place(new THREE.Vector3(1.6, 0, 2.5).applyMatrix4(room.group.matrixWorld), Math.PI);
+  G.player.place(new Vec3(1.6, 0, 2.5).applyMatrix4(room.group.matrixWorld), Math.PI);
   lab.drawing = false;
   // (sat at his book: his cowl from behind and above, as a player standing behind him sees it, and from before him; his
   // table's stack from its spines' side)

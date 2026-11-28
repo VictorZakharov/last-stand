@@ -2,11 +2,11 @@
 // choice after a wave, and over it on touch. The prompt must lie inside the window, each button's label on one line
 // and a finger's height on touch, and over none of what the screen shows round it (the choice, the touch HUD's
 // corners, the bars). Its canary moves it down onto the choice, which must be found.
-import type { Lab } from './lab';
+import { boxOf as drawnBox, type Lab } from './lab';
 import { G } from '../../../src/state';
 import { showDecision } from '../../../src/ui/hud';
 import { askNow, putAway } from '../../../src/perf/consent';
-import { closeDecision, linesOf } from './uiDecision';
+import { closeDecision, linesOf, unfolded } from './uiDecision';
 
 /** What a state found besides its boxes: lines for its report, and its problems. */
 export interface AskFound {
@@ -31,7 +31,8 @@ export const ASK_CANARY = { name: 'lies over', what: 'the prompt moved up onto t
 function boxOf(selector: string): DOMRect | null {
   const element = document.querySelector<HTMLElement>(selector);
   if (!element?.checkVisibility({ opacityProperty: true, visibilityProperty: true })) return null;
-  const box = element.getBoundingClientRect();
+  // (where the engine draws it, for a page's element it draws in its place)
+  const box = drawnBox(element);
   return box.width >= 1 && box.height >= 1 ? box : null;
 }
 
@@ -48,6 +49,7 @@ export async function openPerfAsk(lab: Lab): Promise<void> {
 export async function openPerfAskBreak(lab: Lab): Promise<void> {
   showDecision();
   for (const animation of document.getElementById('decision')!.getAnimations({ subtree: true })) animation.finish();
+  await unfolded(lab);
   await openPerfAsk(lab);
 }
 

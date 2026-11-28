@@ -4,8 +4,9 @@ import type { Engine, InitOutput } from './pkg/bulwark';
 import type { Tape } from './tape';
 import { GLOBALS } from './globals';
 
-/** how many floats a record is (`RECORD_FLOATS` in the engine's plan.rs) */
-export const RECORD = 24;
+/** how many floats a record is (`RECORD_FLOATS` in the engine's plan.rs: its ids and flags, its matrix, its own
+ *  numbers, `ownNumbers.ts`) */
+export const RECORD = 32;
 /** the largest side a map is handed over at */
 export const MAX_MAP = 2048;
 
@@ -96,6 +97,11 @@ export class Core {
     this.globals = new Float32Array(memory, globalsAt, GLOBALS.all);
     this.capacity = records;
     this.boneCapacity = boneFloats;
+  }
+
+  /** The engine's memory as it stands (a call into it that grows it moves it). */
+  get memory(): ArrayBuffer {
+    return this.wasm.memory.buffer;
   }
 
   /** The views taken again if a call into the engine grew its memory under them. */

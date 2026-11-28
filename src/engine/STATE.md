@@ -281,7 +281,7 @@ not intend to support the old way of rendering".
   start fails the boot, and the loading screen says where the browser has no WebGPU.
 - [x] The branches for three's WebGL renderer and for three's WebGPU renderer drawing the scene are folded out
   of the game and the tools; the lab and stalls ask for no other renderer.
-- three's WebGPURenderer is still the engine's host: the labels' and the outline's canvas, the portraits. The
+- three's WebGPURenderer was the engine's host then: the labels' and the outline's canvas, the portraits (all the engine's now, #973). The
   comparisons with WebGL above (`--webgl`, `--three`, `&renderer=webgl`) can't be run again from this tree:
   `--ab` against a commit before this one is what's left of them.
 - [x] The hall's column bands and torch cups from above: a shaft was drawn over its own band, all that blends
@@ -431,3 +431,240 @@ a return against 30, the lobby shown at the same time or sooner (10.1 s against 
 - [ ] Left: the flames, the embers and the meadow's blades a module each (about 1.2 s); the plain levels' set is
   compiled the same way and not counted here (`--boot verylow`).
 - [ ] The owner's next boot report to read: whether the GPU's process still holds the page.
+
+## 2026-11-26: three's renderer out of the game (#973)
+
+The engine's canvas is the page's one (`bootRust` adds it to `#game`; `G.renderer` is `core/screen.ts`, its size and
+pixel ratio, no drawing), and the labels and the outline are drawn by the engine over its graded frame. Gone with
+three's WebGPURenderer: its device (the page held two), its canvas over the engine's (left out of the page's frame
+with nothing to draw, it still took the pointer), its passes' timer (`perf/webgpuPasses.ts`), its pipelines' hooks
+and its compile of the overlays' passes. The uncapped frames' fence waits on the engine's queue: on three's device it
+never waited for the engine's frame. `lab rustcheck` holds the page to one canvas taking the pointer, with a canary.
+
+- [x] 284 of 583 files still import three (its maths, its scene, its node materials' modules): the next stages.
+- [ ] HDR output: three's canvas gave it; the engine's is SDR (`initHdrForWebGPU` unused).
+- [ ] The lab's hooks round three's `render` (the skip-draw, `perf`'s canary doubling, `villagePortalNight`'s count of
+  renders) reach nothing under the engine: kept optional for `--ab` against main, each to read the engine instead.
+
+## 2026-11-26: a UI kit in the engine, the first panel on it (#973)
+
+The UI moves off the page as the labels did. Bulwark lays out a tree of the page's panels by taffy's flexbox (MIT,
+read before use, `=0.15.1`, its flexbox alone: 113 KB of the wasm, 43.5 KB gzipped; with its grid and block, 320 KB)
+and draws it in one instanced call after the labels: rounded boxes with borders, fills top to bottom, shadows, and
+the labels' atlas for text (`ui.rs`, `gpu/panels.rs`; the page's `engine/ui.ts`, the game's `ui/kit/panel.ts`). The
+frame's GPU clock ends at that pass where it draws: the labels, the outline and the panels are the frame's time now.
+
+- [x] `lab panels` (Bulwark): 64 to 4,096 slots of a stash's grid. On the 4070 Ti at 1080p a layout from nothing is
+  0.13 to 4.1 ms (a microsecond a slot), a look changed a twentieth of that (laid out not; every row painted
+  again), the GPU's frame 0.03 ms more with 4,096. Percents of nothing: the gain is the page's own layout, paint and
+  canvas left out, which a frame of the DOM's HUD pays and this clock never saw.
+- [x] The run's target frame on it (`ui/targetFrame.ts`; `#target` and its rules gone from the page). `lab ui
+  --states target --ab`: its box 384x52 at 113 on both trees, the name, its line and the boss's look as main's
+  pictures; its canary aims away from every foe.
+- [x] Clicks: a press on the engine's canvas over a panel is the panel's (`ui/kit/press.ts`), standing for a button
+  of the page's kept out of sight. The wave's badge and the choice after a wave are on the kit (`ui/waveBadge.ts`,
+  `ui/decisionPanel.ts`), their rules gone from the SCSS: `lab ui --states run,decision,decisionTouch,perfAskBreak,
+  summary,waveAfterDuel --ab` holds their boxes to main's within a px (the choice 716x242 against 717x243, its
+  touch buttons 55.0 px tall against 54.5), on a phone's 844x390 at 3 too; the mouse over Bank is shown on it and
+  counted over the UI (its canary: Bank made unpressable); `lab bosswave` clicks Continue on the canvas. Not drawn:
+  the unfolding's flare and sweep, and Continue's spinning key while it's sent (a pulsing dot).
+- [x] The bottom bar on the kit (`ui/bottomBar.ts`, `hotbarPanel.ts`, `slotFace.ts`, `frenzyPips.ts`; the bars',
+  the skill bar's and the Frenzy's rules gone from the SCSS): a panel shows a picture painted with the canvas (a
+  slot's face, a fill), a box sweeps round from the top (Bulwark: a cooldown), a slot shows its tooltip and takes
+  no press. `lab ui --states run,hudTouch,barsBusy,barsBusyTouch --ab` holds its boxes to main's (the bar 73.9% of
+  the window wide, the skill bar 33.9%), its pictures alike at full and as a fight leaves it (low health, short
+  energy, a cooldown); each fill as drawn held to the page's share (its canary a share never followed);
+  `skillTips` opens every slot's tooltip by the mouse (7 of 7), `cursor` by the Alt cursor. Not checked in a
+  picture: the Frenzy (the lab's warrior holds a weapon), a slot's glow as it's cast.
+- [x] Text that wraps (2026-11-27: `kit/wrap.ts`, `lab kit`).
+- [ ] The rows are painted again whole for any change (a twentieth of a layout): kept by panel when a large panel
+  (the stash) changes often.
+
+## 2026-11-27: the rest of the UI onto the kit, a census (#973)
+
+What's still on the page, by its markup (`src/ui/html/`, `src/ui/screens/`) and its styles (`src/ui/styles/`,
+265 KB of SCSS, some 1,900 rules, on 2026-11-27). Each part is ported rule for rule into typed panels
+(`ui/kit/AGENTS.md`), held to the commit before it by `lab ui --states <its states> --ab`, its rules taken out of
+the SCSS. In the order they're taken: the kit's own pieces first, then what shows in a fight, then the lobby's.
+
+- [x] The guide's portraits drawn by the engine (`sceneApart`, `ui/guide/portraitDraw.ts`).
+- [x] The kit: text that wraps at its panel's laid-out width.
+- [x] The kit: a panel that scrolls, its children clipped to it.
+- [x] The kit: a text field (the page's input kept out of sight, its value and caret drawn).
+- [x] The minimap's column (`ui/minimapColumn.ts`: the place's name, the minimap in its bezel, the objectives, the
+  spoils) and the training's tracker in it, beside it or afloat (`ui/trainingPanel.ts`); the pings read the drawn
+  minimap (`ui/ping.ts`). `lab ui --states run,villageHud,villageHudTouch,hudTouch --ab` at 1920x1080, 844x390 and
+  751x298 holds their boxes to main's; `village --only minimapOut` and `tutorial` read the drawn boxes. Not drawn
+  yet: the spoils' bump as a rarity's count rises. The rooms' two-round pipelines, asked by the walk once the lobby
+  shows, counted as compiled in play and failed the tutorial (6): asked behind the lobby now (`ahead.ts`).
+- [x] The run's banner (`ui/bannerPanel.ts`: its keyframes' fade and rise, not its 0.96 scale): `lab ui --states
+  banner --ab --fresh`, held half way, its box main's (267x124). The lab's settling finishes the kit's animations
+  too (`settleAnimations`), and leaves a paused one of the page's as it's held.
+- [x] The crosshair, the charge ring and the look hint (`ui/aimMarks.ts`): `lab draw --class ranger --views third
+  --ab` holds the crosshair's pictures to main's as it's drawn, at its beat's height and bold, its beat and drift
+  read off the engine's (`CROSSHAIR`), both canaries caught.
+- [x] The buffs (`ui/buffsPanel.ts`): `lab ui --states barsBusy,barsBusyTouch --ab` (a ward and the ale added),
+  their boxes main's. Their words under them now show on a desktop: main's bottom bar was painted over them.
+- [x] A duel's score and result (`ui/duelPanels.ts`: their text and the result's box css px, as main's never scaled
+  them): `lab ui --states duelHud --ab --fresh`, their boxes within 2 px of main's. Main's note has old-style digits
+  (its `font` shorthand), the drawn one lining. A name too long for its column is squeezed, not cut with an ellipsis.
+- [x] The party's frames (`ui/partyPanel.ts`): `lab ui --states perfParty,coop,coopTouch --ab`, `#party`'s box
+  main's (the state's partners now made with the game's own markup, `tagFor`'s), `lab portraits` reading the
+  drawn card. The overlay atlas keeps 2 px clear round each slot: a label filling its slot was sampled with a row
+  of the slot under it, and the cards' words were underlined in the bar's red.
+- [x] The downed note, the revive prompt and touch button, the watching bar (`ui/downedPanels.ts`): `lab ui
+  --states downed,downedTouch --ab`, every box main's; `lab coop --scenarios walk` taps the bar's buttons where
+  they're drawn. The touch revive is held through the kit's presses (`Pressable.held`). The prompt's key cap
+  keeps its drop shadow, not its glow.
+- [x] The overlays down the left (`ui/diagPanels.ts`, `netLogPanels.ts`): `lab ui --states perf,perfMini,perfGraph,
+  perfParty,log,logLobby,logTouch --ab`, Mini 220 px as main's, the log within 0.7% of its height; `#diag` is still
+  placed by the page (its clearance, a finger's place), the panels following its offsets. Full is 3% shorter than
+  main's, whose grid wrapped "Foes / Proj / Fx" onto two lines. `lab log`, `lab cursor` pass; `lab touchpad` and
+  `lab overui` fail on main alike (the developer panel open over the stick; Hedgeward's key over the UI).
+- [x] The chat (`ui/chatPanels.ts`): `lab ui --states chat,chatOpen,chatTouch --ab`, every box within 3 px of
+  main's (main's Send showed the system's cursor); `lab coop --scenarios chat` types, sends, shuts and fades it.
+  The kit's presses keep the field's focus where main's prevented `pointerdown` (`Pressable.keepsFocus`).
+- [x] The touch controls (`ui/touchPanels.ts`: the stick, the skill buttons, the round buttons, the village's Use,
+  Bag and Map): `lab ui --states hudTouch,buttonsTouch,buttonsRunTouch,villageHudTouch --ab`, every box main's and
+  each button pictured beside main's; `lab touch`, `lab tap --class mage`, `lab longpress` pass. Their page elements
+  stay laid out and take the fingers (`.kit-ghost`: painting nothing by a filter, so their opacity still says
+  whether they show), the panels standing where each is laid out; an icon of the page's SVG is drawn as it's styled
+  (`kit/svgArt.ts`). A fade of a round button's opacity isn't followed: shown or not.
+- [x] The damage meter, the sit hint: the world's labels already (`overlay/`, drawn by the engine's overlay pass),
+  no element of the page's to move.
+- [x] The kit: a screen ported as a typed style sheet (`ui/kit/sheet.ts`: rules keyed by the SCSS's own selectors,
+  matched by the page's `matches`, each element a panel following the page's hidden markup, its buttons pressed on
+  the engine's canvas; the shared controls' rules in `ui/controlsSheet.ts`).
+- [x] The village's card (`ui/villageCardPanel.ts`: a portal's, the training grounds', the chronicle's, the duel's
+  menu, the great ledger): `lab ui --states cardPortal,cardTraining,cardChronicle,cardDuel,cardRecords --ab`, the
+  ledger 973x669 as main's, the chronicle within 3 px, the portal within 3; a segmented button stands 1.4 px taller
+  than main's, so the duel's card is 11 px taller (479 to 468). On a phone held sideways the duel's Begin button
+  spans its row where main's is as wide as its words. `ui --states clicked` presses Leave where it's drawn; `lab
+  training` passes; `lab practice` fails on main alike (fanShot's cooldown, Hedgeward never cast).
+- [x] The tooltip and the item's sheet (`ui/tooltipPanel.ts`, `itemSheetPanel.ts`; the modals' backdrop and box
+  `modalSheet.ts`): the tooltip laid out and placed by the page as before (`.kit-ghost`), its cards drawn where it
+  stands, over every other screen; the sheet's box as wide as its cards ask. `ui --states tooltip,skillTips,
+  skillTipsTouch,sheetTouch --ab` pass, the sheet 667x214 against main's 666x218 on a phone, 667x361 with a card
+  longer than the window; its canary caught.
+- [x] The lobby's panels (`ui/lobbyPanels.ts`, its sheets `lobbySheet.ts`, `stashSheet.ts`, `loadoutSheet.ts`: the
+  rail, the key bar and spellbook with each slot's face painted as the skill bar's, the equipment and its doll, the
+  attributes, the stash, its chips and its filter lifted over the doll, the slot focus's light, the stowed panels'
+  fade and slide). The page's handlers hear the pointer as before (`kit/forward.ts`: a tooltip, a right-click, a drag
+  between the stash and the equipment, a long press); the crest stays on the page. `lab ui --states lobby,glow,
+  litTouch,sheetTouch,skillTips,skillTipsTouch,tooltip --ab` pass, every box within a few px of main's (a phone's
+  stash grows to the panel's foot); `village --only wornStaysOn`, `tutorial` and `tutorial --touch` (a phone's),
+  `touch`, `tap` pass. Not drawn: the stash's fade where a row is cut, the glow's arc and sheen (motion alone), an
+  item's glow past its border, a picture's brightness on hover (its fill and border are lit instead).
+- [x] The summary (`ui/summaryPanel.ts`), the prompts (`ui/toastSheet.ts`: the performance report's ask, the
+  duel's), Install (`ui/dialogsSheet.ts`). Left on the page, as they show over the loading screen: the full screen
+  prompt, the update toast, the turn-me cover. The save slots' delete and cloud dialogs move with the save slots (a
+  dialog over a page screen can't be drawn under it).
+- [x] The pause menu (`ui/pauseSheet.ts`, the keyboard and the mouse `controlsHelpSheet.ts`, the colour picker
+  `colourPickerSheet.ts`; the kit's ticks and sliders `kit/formControls.ts`): `lab ui --states pause,pauseSettings,
+  pausePerformance --ab` at 1920x1080, 1024x700, 844x390@3 and 820x1180@2, every box within 0.5% of main's (a
+  phone's Performance tab with a profile scrolls 22 px in its pages' cell, main's 25); volume, the colour wheel,
+  advanced graphics, the kept tab pass.
+- [x] The bug report (`ui/bugReportSheet.ts`; the kit's text area `kit/field.ts`, a `pre`'s lines `kit/keptText.ts`):
+  `lab ui --states bugReport,bugReportTouch --ab` pass, the form 54.7% of the window's width as main's, 56.9% of its
+  height against 56.3%. A short screen's grid is the right column's two halves as boxes of their own, the picture
+  placed under what was expected from the drawn boxes.
+- [x] Photo mode stays on the page: the kit draws on the engine's canvas, which a photo is, so its panel would be in
+  every shot; it shows only while the world is posed and moves nothing each frame.
+- [x] What the kit costs a frame (`lab ui --cost`, `tools/lab/page/uiKitCost.ts`, its canary a 3 ms tick): every
+  sheet followed its page each frame, the pause menu 6.2 ms of the main thread on this PC standing still. A tree
+  follows only when what it reads changes now (`kit/sheetDirty.ts`): 0.1 to 0.2 ms standing still in every state, 0.3
+  to 3 ms a frame after a change. The labels' atlas held every text's slot, shown or not (57% used at boot, full
+  after opening the bug report twice: the engine's fault): a text not seen gives its slot back (15% at boot). The
+  stick's area and the ghosts took the pointer over a modal the kit draws: a finger on the pause menu's left half
+  moved the stick (`_base.scss`).
+- [ ] Seen failing on main too: `lab ui --states target` run after the lobby's states (the frame not shown);
+  `glow --canary`'s two loops (the glow check reads the page's CSS loops, which the lobby's port stopped: to read
+  the kit's).
+- [x] The save slots (`ui/savesSheet.ts`, its grids `savesGrid.ts`; the cloud's bar and its two dialogs
+  `ui/cloudSheet.ts`): `lab ui --states saves,savesHeroes,cloudIdentity --ab` at 1920x1080, 844x390@3 and 820x1180@2,
+  the panes, the heroes' cards and the bar as main's (the identity 368x87 px against 369x83; the phone's to the pixel
+  but for the body's fade where its scroll cuts it, not drawn, nor the slots' glide as the cloud moves them);
+  `savesHeroes` (new: slots 2 and 3 with played heroes, given back after) and `saveDelete` (new: its field drawn with
+  the focus, DELETE arming the button, its canary KEEP typed). `lab cloud` and `cloud --google` pass, their clicks
+  where the kit draws each control (`clickDrawn` in `node/cloudDevice.mjs`), the kit given its frames after each
+  resize. Fixed on the way: the village's crest, left on the page, showed WARDENHOLLOW across the screen's title (hid
+  under a kit screen or modal now); a modal typed into on a phone stood against the window's left edge (the kit's
+  box is a column: its top is `justify`), the bug report's too; a box lifted over the screen took no press where it
+  lay over a later column (the bug report's picture's tick on a phone: the hit test tries lifted boxes first over the
+  whole tree); a `<br>` broke no line; an email address reached past its pane (`anywhere`).
+- [x] How to play (`ui/helpSheet.ts`, the controls `controlsHelpSheet.ts`, the rules `helpTextSheet.ts`): `lab ui
+  --states help --ab` at 1920x1080 and 844x390@3, its buttons and keyboard within 0.1% of main's; the mouse's
+  callouts show their skills' pictures (the pause menu's too), the rules' bold words bold.
+- [x] Hero selection's panels (`heroesSheet.ts`; the choice on the hero stays on the page).
+- [x] The village's map (`villageMapSheet.ts`): `lab ui --states villageMap --ab` at 1920x1080 and 844x390@3, the
+  names where main's stand and its pictures alike (a faint seam, a column 3% darker, where two panels meet); both
+  canaries caught (one name laid on another; the map held opaque as he walks, its write refused).
+- [x] Play together and its rooms (`ui/coopSheet.ts`, the room's view `coopRoomSheet.ts`): `lab ui --states
+  coop,coopRename,coopTouch,coopRoom,coopRoomTouch --ab` at 1920x1080, 844x390@3 and 1024x700@1, the room dialog
+  548 px tall against main's 544 (683x289 both at 1024x700), and 820x1180@2; `lab rooms` and `lab friends` pass,
+  every canary caught (the friends' planted through the dialog's sheet, `plantInCoop`, and its text read where the
+  engine draws it). Kept apart from main's: the backdrop's blur, CSS `order` on short screens (the portrait after the
+  colour), the badge's pill, the cards' flat fill, an open place's edge solid, not dashed, and the stats' columns
+  some 13 px off. Fixed on the way: `#readying` lay over a drawn modal; an intro's words beside a link ran past its
+  column (a word box's widest word is its least width now); a `:has()` on what's inside a kept element kept its first
+  answer (a rule's match is cached by the element's and its parents' keys: such rules are box functions).
+- [x] The talk with the village's folk (`screens/talk/talkSheet.ts`, the face in its oval `folkFaceSheet.ts`, which
+  the merchant's will take): `lab ui --states talk,talkTouch --ab` at 1920x1080 and 844x390@3, the card within a px
+  of main's, each reply a finger's height on touch; `lab talk` and both canaries pass.
+- [x] The ale's Drink and Put down and its notice (`screens/drink/drinkSheet.ts`): `lab tavern --parts touch --ab
+  --screen 844x390@3`, the buttons where main's stand; `--parts touch,boost,eyes` and `lab houses --canary` pass.
+- [x] The trade between two players, its ask and its last word (`screens/trade/tradeSheet.ts`): `lab coop
+  --scenarios trade --pictures`, both trades by clicks and by taps and the window on all six screens by mouse and
+  touch (its `--ab` can't load main's side: the lab's scene is the engine's API there, `sceneApi.ts`).
+- [x] Odo's trade (`screens/merchant/merchantSheet.ts`, his face `folkFaceSheet.ts`): `lab merchant --ab` at
+  1920x1080, 844x390@3, 820x1180@2 and 1024x700@1, the lines the same and the pictures alike; its canary caught.
+- [x] The guide (`ui/guide/guideSheet.ts`, its pages `guidePageSheet.ts`, a hero's `guideHeroSheet.ts`, its paints
+  `guidePaint.ts`, its room's lengths `guideRoom.ts`): `lab ui --states guideKeys,guideBoss,guideTips --ab`, its
+  close button within a tenth of a percent of main's, the legend's page 560 px tall to main's 556 (629 before its
+  margins collapsed as CSS's do, `marginCollapse.ts`); a phone's and an upright tablet's pages with nothing past
+  them. Its cost: a hero's page is some 1,900 elements, made in steps (`inSteps`, 80 a frame, its top first) and
+  its words laid as one picture a line (`runLayout.ts`), the labels sent a row at a time (`overlay/atlasRows.ts`)
+  and at most 150 painted a frame. G's frame is 66 ms of script here (main's whole frame 35), the page's first
+  steps and the pictures beginning the frame after; `lab guide` reads 103 to 117 ms for its longest moments on the
+  shared PC loaded at 70 to 90% by other work (its bound is 100), from 194 to 850 ms a page before.
+- [ ] The loading screen (styled before any script runs: the last, if at all).
+
+## 2026-11-28: against main, and what's left in the update (#973)
+
+`npm run lab -- perf voidLance --class mage --biome crypt --wave 36 --screen 1440x778@2 --quality verylow@1120320
+--throttle 4 --ab=c0db18979`, three rounds of 88d45788d (main's side kept from one), the median frame in ms:
+
+| | main | this branch |
+| --- | --- | --- |
+| standing: the frame | 59.2 | 52.0 to 53.4 |
+| standing: the update | 11.7 to 12.4 | 13.0 to 13.7 |
+| standing: the render | 21.3 | 15.0 to 15.9 |
+| casting: the frame | 65.5 | 55.6 to 56.8 |
+| casting: the page's work | 35.2 | 30.1 to 30.7 |
+
+Unslowed, the frame is 13.5 against 17.5 standing and 14.1 against 23.0 casting. The build's code is 4.29 MB
+(1.53 gzipped) against main's 5.69 (1.86).
+
+- The update is still 5 to 17% over main's. Part of it is a move: world matrices made as they're read are paid for by
+  the poses and the IK that read them, where main made every one in its render.
+- The rest is a node's watched vectors: its position, quaternion and rotation are a second hidden class beside the
+  plain maths, and V8's maths call sites see both (`.tmp/shapes-bench.ts`: 13.5 ms a round plain alone, 21.2 with
+  watched ones mixed in).
+- Two ways out were tried and reverted (`src/engine/api/AGENTS.md`).
+- Taken out of the update today:
+  - the foes' clearance grid patched where a prop breaks, not made whole (06e6f0e3d, `lab navgrid`);
+  - the kit's roots and scrolling panels kept as sets, not found by a walk each frame (9c2b93cd5);
+  - a whole write of a node's turn no longer making the other turn fresh first, only to overwrite it (aa7e96a7d:
+    `resetPose` ran at twice main's cost, within the noise after).
+- rustcheck's two regressions from the material watch fixed (8a08363a0):
+  - a material is polled while a map of its is a blank placeholder (the village's white ground on a loaded PC);
+  - the see-through switches are in the frame's key (unseen meshes kept their solid flags).
+- [ ] The update at or under main's: the shape of a node's vectors is what's left, and needs a design that keeps
+  reads as cheap as a plain field's.
+- Taken out after (f3cac2dff, read in `lab perf ... --profile` against the run before, `profileread --against`):
+  - the polled materials' maps asked last (`polledEachFrame`: 472 ms of the run's polling to 260);
+  - the minimap's box and the scrolled panels' views read as last laid out (`holdLayout`: 234 ms to 80);
+  - the hall's floor test (`hidesSeenFloor`) run from above alone, never in a fight (198 ms to none);
+  - rubble lying still not composed or sent again (196 ms to 135), `lineClear` a box test first (141 to 52);
+  - labels sent to the atlas from where they were painted (Bulwark ac5f7fd: `sendRow` 588 ms to 432).
+  - `profileread --callers <fn>` says who calls a function, by its time under each: the tool these were found by.

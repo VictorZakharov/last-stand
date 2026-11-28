@@ -7,7 +7,7 @@
 // lines are listed as the panel shows them, and the panel must show them all. (The owner, testing #255, a Bull Rush
 // cast over a charging Power Strike: "there is 0 damage on dummies from bull rush itself". It had hit, its number
 // shown a moment after Power Strike's.)
-import * as THREE from 'three';
+import { Vec3 } from './sceneApi.ts';
 import type { Fixture, Lab, Report } from './lab';
 import type { Enemy } from '../../../src/entities/enemy';
 import type { HitResult } from '../../../src/entities/player';
@@ -259,7 +259,7 @@ async function pauseRound(
 /** Where the hero and a cast's foes stood as it ended, and in which place: what a cast that struck nothing needs
  *  said to be looked into. */
 function whereStood(cast: Cast): string {
-  const at = (pos: THREE.Vector3): string => `${pos.x.toFixed(1)},${pos.z.toFixed(1)}`;
+  const at = (pos: Vec3): string => `${pos.x.toFixed(1)},${pos.z.toFixed(1)}`;
   const foes = cast.foes.map((foe) => `${at(foe.pos)}${foe.alive ? '' : ' dead'}`).join('; ');
   const hero = `the hero at ${at(G.player.pos)} facing ${G.player.facing.toFixed(2)}`;
   return `in the ${G.arena.place}, ${hero}, foes at ${foes}`;
@@ -284,8 +284,8 @@ async function takenRound(lab: Lab, log: BattleLog, options: LogOptions, attacke
   await lab.setup(options.fixture);
   log.clearBattleLog();
   const hero = G.player;
-  const ahead = new THREE.Vector3(Math.sin(hero.facing), 0, Math.cos(hero.facing));
-  const across = new THREE.Vector3(ahead.z, 0, -ahead.x);
+  const ahead = new Vec3(Math.sin(hero.facing), 0, Math.cos(hero.facing));
+  const across = new Vec3(ahead.z, 0, -ahead.x);
   const foes = Array.from({ length: attacker.count }, (_, i) => {
     const aside = (i - (attacker.count - 1) / 2) * APART;
     const at = hero.pos.clone().addScaledVector(ahead, attacker.ahead).addScaledVector(across, aside);

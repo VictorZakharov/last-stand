@@ -16,7 +16,7 @@
 //   from half under till she rises (`Enemy.invulnerable`, `Enemy.buried`).
 // - The host moves her only while she's wholly under, at `speed`; a guest's copy follows the host's reports, under
 //   the floor too by then.
-import * as THREE from 'three';
+import { Mesh, Quat, Vec3 } from '../engine/api/index.ts';
 import { G } from '../state';
 import { ROOTMOTHER } from '../data/foes/rootmother';
 import { ARENA } from '../data/balance';
@@ -42,7 +42,7 @@ const EARTH = 0x2a2418, AMBER = 0xff9a38;
  *  `settle` s after (a heap a share of its size, as drawn as a flat disc it read as a hole); the ridge's size over her
  *  way (m: across, up, along) */
 const MOUND = { wide: 2.4, high: 1.1, settle: 2.5, bulge: 0.8, torn: 2.8 };
-const RIDGE = new THREE.Vector3(0.9, 0.55, 1.8);
+const RIDGE = new Vec3(0.9, 0.55, 1.8);
 /** what shows her way from above: a soft glow under the ridge (m round, strength), the dust off it (s between puffs,
  *  its colour) and how bright its cracks glow behind it */
 const RIDGE_GLOW = { radius: 2.2, intensity: 0.7, dustEvery: 0.1, cracks: 0.55 };
@@ -53,8 +53,8 @@ const TRIES = 24;
 const foeOf = (id: number): Enemy | null => G.enemies.find((e) => e.id === id) ?? null;
 const ease = (k: number): number => k * k * (3 - 2 * k);
 const clamp01 = (k: number): number => Math.min(1, Math.max(0, k));
-const UP = new THREE.Vector3(0, 1, 0);
-const _at = new THREE.Vector3(), _q = new THREE.Quaternion(), _size = new THREE.Vector3(), _n = new THREE.Vector3();
+const UP = new Vec3(0, 1, 0);
+const _at = new Vec3(), _q = new Quat(), _size = new Vec3(), _n = new Vec3();
 
 /** A burrow as every game plays it: where she went under and where she rises, when it began (G.time) and how long she
  *  travels under the floor (s); for the lab, when its warning began and she began to rise (G.time, -1 not yet), and
@@ -172,10 +172,10 @@ export function burrowAt(id: number, fx0: number, fz0: number, tx: number, tz: n
   BURROW_LOG.push(log);
   if (BURROW_LOG.length > 8) BURROW_LOG.shift();
   const s = stages(travel);
-  const way = new THREE.Vector3(tx - fx0, 0, tz - fz0);
+  const way = new Vec3(tx - fx0, 0, tz - fz0);
   const length = way.length() || 1;
   way.divideScalar(length);
-  const turn = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), way);
+  const turn = new Quat().setFromUnitVectors(new Vec3(0, 0, 1), way);
   heave(fx0, fz0, 1.4);
   rootSounds.groan(B.sink);
   rootSounds.crack(B.sink);
@@ -218,7 +218,7 @@ export function burrowAt(id: number, fx0: number, fz0: number, tx: number, tz: n
         // with it, dust thrown up off it, and its cracks glow faintly behind it; all soft light and particles)
         if (!glowing) {
           glowing = true;
-          const along = (at: number, out: THREE.Vector3): boolean => {
+          const along = (at: number, out: Vec3): boolean => {
             const j = clamp01(at / travel);
             out.set(fx0 + (tx - fx0) * j, 0, fz0 + (tz - fz0) * j);
             return at < travel;
@@ -287,7 +287,7 @@ export function burrowAt(id: number, fx0: number, fz0: number, tx: number, tz: n
 
 /** The pooled lump `m` at (x, z), sized `size`, its middle a quarter of its height under the floor and `settled` of
  *  its height more as it settles into it; put away once `done`. */
-function lump(m: THREE.Mesh, x: number, z: number, size: THREE.Vector3, settled: number, done: boolean): void {
+function lump(m: Mesh, x: number, z: number, size: Vec3, settled: number, done: boolean): void {
   if (done) { m.scale.setScalar(CAGE_NO_SIZE); return; }
   _q.setFromAxisAngle(UP, 0);
   placeLump(m, _at.set(x, groundHeight(x, z) - size.y * (0.25 + settled), z), _q, size);

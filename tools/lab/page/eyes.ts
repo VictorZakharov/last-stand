@@ -5,7 +5,7 @@
 // is as the skill fires, and whether a two-hander stays in both hands, both seen.
 // A film of the frames goes with it. (Through the eyes the warrior's strikes read as weak, #224; the owner: "first
 // person view should at least in spirit match common sense, two handed, heavy".)
-import * as THREE from 'three';
+import { Maths, Node, PerspectiveCamera, Quat, Vec3 } from './sceneApi.ts';
 import { G } from '../../../src/state';
 import type { Lab, Fixture, Pictured, Report, ViewName } from './lab';
 import { bindKnown, holdFor, pressing, skillNamed, type BoundSkill } from './cast';
@@ -75,8 +75,8 @@ interface Spot {
   ahead: boolean;
   /** in the frame or near its edge (`NEAR_FRAME`) */
   near: boolean;
-  at: THREE.Vector3;
-  way: THREE.Vector3;
+  at: Vec3;
+  way: Vec3;
 }
 
 /** A frame as the eyes saw it. */
@@ -347,15 +347,15 @@ function diagrams(seen: Seen[], strikes: (Strike | null)[], name: string): Pictu
 
 /** How wide the arms' lens sees (inFrame.ts `armsLens`: their own camera's, or the game's). */
 function lensNow(): Lens {
-  const lens = armsLens() as THREE.PerspectiveCamera;
-  const halfUp = Math.tan(THREE.MathUtils.degToRad(lens.fov) / 2) / lens.zoom;
+  const lens = armsLens() as PerspectiveCamera;
+  const halfUp = Math.tan(Maths.degToRad(lens.fov) / 2) / lens.zoom;
   return { halfUp, halfAcross: halfUp * lens.aspect };
 }
 
 /** The arms and the held weapon in the eyes' space (the camera's), for the swing diagram. */
 function armsAt(lab: Lab): ArmsAt {
   const { joints } = lab;
-  const inEyes = (object: THREE.Object3D) => G.camera.worldToLocal(object.getWorldPosition(new THREE.Vector3()));
+  const inEyes = (object: Node) => G.camera.worldToLocal(object.getWorldPosition(new Vec3()));
   const arm = (side: 'R' | 'L'): ArmAt => [
     inEyes(joints[`shoulder${side}`]),
     inEyes(joints[`elbow${side}`]),
@@ -450,8 +450,8 @@ class Presses {
 function shouldersSeen(lab: Lab): string {
   lab.model.root.updateWorldMatrix(true, true);
   G.camera.updateMatrixWorld();
-  const inEyes = (joint: THREE.Object3D) => {
-    const at = G.camera.worldToLocal(joint.getWorldPosition(new THREE.Vector3()));
+  const inEyes = (joint: Node) => {
+    const at = G.camera.worldToLocal(joint.getWorldPosition(new Vec3()));
     return `(${at.x.toFixed(2)}, ${at.y.toFixed(2)}, ${(-at.z).toFixed(2)})`;
   };
   const P = lab.joints.P;
@@ -462,9 +462,9 @@ function shouldersSeen(lab: Lab): string {
 }
 
 /** The point `distance` m ahead of the hero, the way he faces. */
-function aheadOf(lab: Lab, distance: number): THREE.Vector3 {
+function aheadOf(lab: Lab, distance: number): Vec3 {
   const facing = lab.player.facing;
-  const way = new THREE.Vector3(Math.sin(facing), 0, Math.cos(facing));
+  const way = new Vec3(Math.sin(facing), 0, Math.cos(facing));
   return lab.player.pos.clone().addScaledVector(way, distance);
 }
 
@@ -513,8 +513,8 @@ function seeFrame(lab: Lab, frame: number, casts: CastCount, last: Seen | undefi
   const gripObject = lab.model.tip?.parent ?? lab.joints.handR;
   const tip = spotOf(tipObject);
   const grip = spotOf(gripObject);
-  const tipAt = tipObject.getWorldPosition(new THREE.Vector3());
-  const blade = spotOf(tipAt.lerp(gripObject.getWorldPosition(new THREE.Vector3()), 0.5));
+  const tipAt = tipObject.getWorldPosition(new Vec3());
+  const blade = spotOf(tipAt.lerp(gripObject.getWorldPosition(new Vec3()), 0.5));
   const lower = lab.model.lowerGrip;
   const hand = lab.model.tip?.parent?.parent === lab.joints.handL ? 'left' : 'right';
   const body = bodyBreaches(lab.joints, grippingSides(lab));
@@ -533,8 +533,8 @@ function seeFrame(lab: Lab, frame: number, casts: CastCount, last: Seen | undefi
     held: lower ? lower.held || lower.free : null,
     grasp: lower ? { ...lower } : null,
     lowerOff: lab.model.offGrip ? lowerOffOf(lab, lab.model.offGrip) : null,
-    moved: last ? THREE.MathUtils.radToDeg(last.blade.way.angleTo(blade.way)) : 0,
-    seenMoved: last?.blade.near && blade.near ? THREE.MathUtils.radToDeg(last.blade.way.angleTo(blade.way)) : 0,
+    moved: last ? Maths.radToDeg(last.blade.way.angleTo(blade.way)) : 0,
+    seenMoved: last?.blade.near && blade.near ? Maths.radToDeg(last.blade.way.angleTo(blade.way)) : 0,
     armsPast,
     armsPastWords: armsPast.map((breach) => describeBreach(breach) + armOf(body.angles, breach.name)),
     wrists: wristsOf(body.angles),
@@ -558,7 +558,7 @@ const ARM_SAMPLES = 4;
 /** Whether an arm is in or near the frame anywhere from its shoulder to its fist (`Spot.near`). */
 function armNear(lab: Lab, side: 'R' | 'L'): boolean {
   const joints = [lab.joints[`shoulder${side}`], lab.joints[`elbow${side}`], lab.joints[`hand${side}`]];
-  const [shoulder, elbow, wrist] = joints.map((joint) => joint.getWorldPosition(new THREE.Vector3()));
+  const [shoulder, elbow, wrist] = joints.map((joint) => joint.getWorldPosition(new Vec3()));
   const fist = fistOf(lab, lab.joints[`hand${side}`]);
   for (const [from, to] of [[shoulder, elbow], [elbow, wrist], [wrist, fist]]) {
     for (let i = 0; i <= ARM_SAMPLES; i++) {
@@ -631,21 +631,21 @@ function fistsSeen(lab: Lab): SeenFist[] {
 /** Where a hand's fist closes (world): along the hand as it's drawn from its wrist (its -y, as the rig hangs the hand;
  *  along the joint's, which a fist round a handle is turned off by about 90 degrees, a point beside the fist was
  *  read, out of the frame while the fist was in it). */
-function fistOf(lab: Lab, hand: THREE.Object3D): THREE.Vector3 {
-  const along = new THREE.Vector3(0, -1, 0).transformDirection(drawnHand(hand).matrixWorld);
-  const wrist = hand.getWorldPosition(new THREE.Vector3());
+function fistOf(lab: Lab, hand: Node): Vec3 {
+  const along = new Vec3(0, -1, 0).transformDirection(drawnHand(hand).matrixWorld);
+  const wrist = hand.getWorldPosition(new Vec3());
   return wrist.addScaledVector(along, FIST_ALONG * lab.model.root.scale.x);
 }
 
 /** How far the other hand's fist is from a two-hander's lower grip, `lower` (m, the hero's scale taken out). */
-function lowerOffOf(lab: Lab, lower: THREE.Object3D): number {
+function lowerOffOf(lab: Lab, lower: Node): number {
   const fist = fistOf(lab, lab.joints.handL);
-  return fist.distanceTo(lower.getWorldPosition(new THREE.Vector3())) / lab.model.root.scale.x;
+  return fist.distanceTo(lower.getWorldPosition(new Vec3())) / lab.model.root.scale.x;
 }
 
 /** Where `object` (or a point of the world) is as the game's camera shows it. */
-function spotOf(object: THREE.Object3D | THREE.Vector3): Spot {
-  const world = object instanceof THREE.Vector3 ? object.clone() : object.getWorldPosition(new THREE.Vector3());
+function spotOf(object: Node | Vec3): Spot {
+  const world = object instanceof Vec3 ? object.clone() : object.getWorldPosition(new Vec3());
   const at = G.camera.worldToLocal(world.clone());
   const way = at.clone().normalize();
   // (where it's drawn: through the arms' own camera, if they have one)
@@ -762,7 +762,7 @@ function landingOf(frames: Seen[], strike: Strike, skill: { arc?: number; spin?:
   const cut = frames.map(cutOf);
   const fired = frames.findIndex((frame) => frame.fires);
   const meets = aimCrossing(cut, strike.from - 1, strike.to + 1, fired >= 0 ? fired : strike.fastest);
-  const arc = skill.arc ? THREE.MathUtils.radToDeg(skill.arc) : null;
+  const arc = skill.arc ? Maths.radToDeg(skill.arc) : null;
   const turns = skill.spin ? skill.spin / (2 * Math.PI) : null;
   return { meets, swept: sweptOver(cut, strike.from, strike.to), arc, turns };
 }
@@ -961,7 +961,7 @@ const slidOf = (fist: Fist) => Math.abs(fist.along ?? 0);
 function describeFist(fist: Fist): string {
   const off = `the handle ${(fist.off * 100).toFixed(1)} cm from where the fist closes`;
   const along = `${(slidOf(fist) * 100).toFixed(1)} cm along it from its grip`;
-  return `${off}, ${along}, the fingers curled ${THREE.MathUtils.radToDeg(fist.curl).toFixed(0)}°`;
+  return `${off}, ${along}, the fingers curled ${Maths.radToDeg(fist.curl).toFixed(0)}°`;
 }
 
 /** Each hand's fist on its handle over every frame: the furthest off it and the least curled, seen or not; and the
@@ -974,7 +974,7 @@ function describeFists(seen: Seen[]): string {
     const off = Math.max(...fists.map((fist) => fist.off));
     const slid = Math.max(...fists.map(slidOf));
     const curl = Math.min(...fists.map((fist) => fist.curl));
-    const curled = THREE.MathUtils.radToDeg(curl).toFixed(0);
+    const curled = Maths.radToDeg(curl).toFixed(0);
     const along = `${(slid * 100).toFixed(1)} cm along it from its grip`;
     const shown = seen.filter((frame) => frame.fists.some((fist) => fist.hand === hand && fist.on));
     const where = shown.length ? `in the frame on frames ${spansOf(shown.map((frame) => frame.frame))}` : 'never seen';
@@ -1143,7 +1143,7 @@ function framesOf(frames: Seen[]): string {
 function plantFaults(lab: Lab): () => void {
   // (each joint's place too: a swing through the eyes brings its shoulder forward, and the arms frozen by their turns
   // alone still swung)
-  let held: { turn: THREE.Quaternion; at: THREE.Vector3 }[] | null = null;
+  let held: { turn: Quat; at: Vec3 }[] | null = null;
   return () => {
     const joints = FROZEN_JOINTS.map((name) => lab.joints[name]);
     held ??= joints.map((joint) => ({ turn: joint.quaternion.clone(), at: joint.position.clone() }));
@@ -1169,7 +1169,7 @@ function plantFaults(lab: Lab): () => void {
 function plantLift(
   lab: Lab, by = () => liftFor(lab), when = () => true, hand: Fist['hand'] = 'right',
 ): { plant: () => void; unplant: () => void } {
-  let lifted: { grip: THREE.Object3D; at: THREE.Vector3 } | null = null;
+  let lifted: { grip: Node; at: Vec3 } | null = null;
   const plant = () => {
     if (!when()) return;
     lab.model.root.updateWorldMatrix(true, true);
@@ -1192,14 +1192,14 @@ function plantLift(
 function liftFor(lab: Lab): number {
   const lower = lab.model.offGrip;
   if (!lower) return CANARY_LIFT;
-  const below = -G.camera.worldToLocal(lower.getWorldPosition(new THREE.Vector3())).y;
+  const below = -G.camera.worldToLocal(lower.getWorldPosition(new Vec3())).y;
   return Math.max(CANARY_LIFT, below);
 }
 
 /** Moves `object` up the eyes' view by `by` (m). */
-function liftInView(object: THREE.Object3D, by: number): void {
-  const up = new THREE.Vector3(0, 1, 0).applyQuaternion(G.camera.getWorldQuaternion(new THREE.Quaternion()));
-  const lifted = object.getWorldPosition(new THREE.Vector3()).addScaledVector(up, by);
+function liftInView(object: Node, by: number): void {
+  const up = new Vec3(0, 1, 0).applyQuaternion(G.camera.getWorldQuaternion(new Quat()));
+  const lifted = object.getWorldPosition(new Vec3()).addScaledVector(up, by);
   object.position.copy(object.parent!.worldToLocal(lifted));
 }
 
@@ -1375,7 +1375,7 @@ async function elbowCanary(lab: Lab, options: EyesOptions, skill: BoundSkill, fo
   // (the first plant is the rest's, read before the press)
   let planted = -2;
   const elbow = lab.joints.elbowR;
-  let was: THREE.Vector3 | null = null;
+  let was: Vec3 | null = null;
   const plant = () => {
     if (++planted !== frame) return;
     was = elbow.position.clone();

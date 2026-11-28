@@ -5,7 +5,7 @@ import { clickTaken } from '../game/keyTakers';
 import { drinkChoice } from '../game/drinkChoice';
 /** the share of his pace he walks at with a mug of the tavern's ale in his hand */
 const ALE_CARRY_PACE = 0.55;
-import * as THREE from 'three';
+import { Material, Maths, Node, PointLight, SkinnedMesh, Vec3 } from '../engine/api/index.ts';
 import { gaitRate, legLength, LookAt, type LegIK } from './models/ik';
 import { stepVelocity } from './movement';
 import { foeNear, Sitting } from './sitting';
@@ -53,7 +53,7 @@ const STUN = { grace: 1.5 };
 const WALK_PACE = typeof location === 'undefined' ? 1
   : Math.min(8, Math.max(1, Number(/[?&]walkPace=([\d.]+)/.exec(location.search)?.[1] ?? 1)));
 
-const _lookFrom = new THREE.Vector3(), _lookAt = new THREE.Vector3(), _neck = new THREE.Vector3(), _aura = new THREE.Vector3();
+const _lookFrom = new Vec3(), _lookAt = new Vec3(), _neck = new Vec3(), _aura = new Vec3();
 /** an overhead blow comes down on a foe whose near side is within this ahead (m: a two-hander's reach past the hands
  *  held before him), on the share of its height its top is taken at (the shoulders and the head) */
 const STRUCK_REACH = 2.2, STRUCK_TOP = 0.85;
@@ -110,7 +110,7 @@ const isBowShot = (s: KnownSkill): boolean => s.impl.anim === 'bow' && !s.impl.c
 /** `replay`: a remote player's cast, shown for its pose and charge; its owner says when it fires. A drawn shot
  *  (`SkillDef.draw`) has `drawT`, the time to full draw, and no end or firing time until it's loosed (`key` the key
  *  holding it, `power` how far it was drawn) */
-interface CastState { skill: KnownSkill; t: number; dur: number; fireAt: number; fired: boolean; target: THREE.Vector3; replay?: boolean; key?: SkillKey; drawT?: number; power?: number;
+interface CastState { skill: KnownSkill; t: number; dur: number; fireAt: number; fired: boolean; target: Vec3; replay?: boolean; key?: SkillKey; drawT?: number; power?: number;
   /** a bow's shot with no arrow on the string: the seconds taking one from the quiver first (`ClassDef.quiver`), before the draw */
   nockT?: number }
 interface ChannelState { skill: KnownSkill; key: SkillKey; state: unknown; t: number }
@@ -178,7 +178,7 @@ const NO_HANDS: SitHands = { before: 0, after: 0 };
 const AURA_LOW = { from: 0.5, to: 1.2, over: 2.9 };
 
 /** the local hero's lights (`heroLights`) */
-let lightsKept: { staff: THREE.PointLight; hand: THREE.PointLight } | null = null;
+let lightsKept: { staff: PointLight; hand: PointLight } | null = null;
 
 /**
  * The local hero's lights, the cast point's and the free hand's, made once and kept from hero to hero (each takes
@@ -186,10 +186,10 @@ let lightsKept: { staff: THREE.PointLight; hand: THREE.PointLight } | null = nul
  * made with each hero had every lit pipeline made again at a class switch, and the warm-up's compiles before the hero
  * was built (with a light standing in for his) went unused. The warm-up compiles the biome with them in.
  */
-export function heroLights(): { staff: THREE.PointLight; hand: THREE.PointLight } {
+export function heroLights(): { staff: PointLight; hand: PointLight } {
   lightsKept ??= {
-    staff: new THREE.PointLight(0xffffff, 0, 6, 2 + HELD_SOFT),
-    hand: new THREE.PointLight(0xffffff, 0, 3.5, 2 + HELD_SOFT),
+    staff: new PointLight(0xffffff, 0, 6, 2 + HELD_SOFT),
+    hand: new PointLight(0xffffff, 0, 3.5, 2 + HELD_SOFT),
   };
   return lightsKept;
 }
@@ -209,12 +209,12 @@ export class Player {
    *  string takes out the other four: taking none, the four appeared on the string) */
   nocked = 0;
   private sinceShot = Infinity;
-  readonly obj = new THREE.Group();
+  readonly obj = new Node();
   /** follows the cast point; every class has one, so switching class keeps the light count. A
    *  remote player has none: another light would change the count and recompile every shader */
-  readonly staffLight: THREE.PointLight | null;
+  readonly staffLight: PointLight | null;
   /** at the off-hand, lit where it glows (`ClassDef.aura.hand`); every class has one too, unlit without it */
-  readonly handLight: THREE.PointLight | null;
+  readonly handLight: PointLight | null;
   /** his meshes drawn from fewer triangles seen from afar (`models/farDetail.ts`) */
   readonly farDetail: FarDetail;
   /** how lit a light lit only at full draw is (`ClassDef.aura.drawn`), eased in and out */
@@ -228,20 +228,20 @@ export class Player {
   /** the colour the hero wears (data/heroColours.ts; null: his own): the player's pick, in co-op the one the host gave
    *  (net/heroColour.ts) */
   colour: HeroColourId | null = null;
-  readonly spawn = new THREE.Vector3(0, 0, 3);
+  readonly spawn = new Vec3(0, 0, 3);
   /** a remote player: its latest reported state */
   /** the time since he was last posed, and the frames counted to his next (a partner's at Very low: `poseEvery`) */
   private poseOwed = 0;
   private poseTurn = 0;
   readonly remote: RemoteState = { x: 0, z: 3, vx: 0, vz: 0, f: Math.PI, ax: 0, az: 0, sit: { w: 0, hip: 0, foot: 0, before: 0, after: 0 } };
 
-  readonly pos = new THREE.Vector3(0, 0, 3);
-  readonly vel = new THREE.Vector3();
+  readonly pos = new Vec3(0, 0, 3);
+  readonly vel = new Vec3();
   /** the velocity the input steers the body towards (`stepVelocity`), told to the legs (`LegIK.intend`), and whether
    *  it has been set yet */
-  private readonly goal = new THREE.Vector3();
+  private readonly goal = new Vec3();
   private steered = false;
-  readonly aim = new THREE.Vector3();
+  readonly aim = new Vec3();
   /** the foe whose body the aim is on (the local hero's: the eye's ray met it, `input.foe`) */
   aimFoe: Enemy | null = null;
   readonly radius = HERO_RADIUS;
@@ -253,7 +253,7 @@ export class Player {
   private facesWay = false;
   /** a drawn shot pressed for while busy (a tap during the last one's reload): it's drawn as soon as the hero is free, and
    *  forgotten when any other skill is pressed or cast; an aimed skill let go meanwhile, cast `at` where it was let go */
-  private queued: { skill: KnownSkill; key: SkillKey; at?: THREE.Vector3 } | null = null;
+  private queued: { skill: KnownSkill; key: SkillKey; at?: Vec3 } | null = null;
   /** an aimed skill (`SkillDef.aimed`) whose key is held: where it would land is shown, and it's cast as the key is
    *  let go */
   aiming: { skill: KnownSkill; key: SkillKey } | null = null;
@@ -266,10 +266,10 @@ export class Player {
   armed = true;
   /** where he walks of himself, with no key or stick held (the village: an object clicked, walked to and used), or
    *  null; a key or the stick takes him back */
-  walkTo: THREE.Vector3 | null = null;
+  walkTo: Vec3 | null = null;
   /** the way to `walkTo` (`world/walkPath.ts`): the points he heads for in turn, and the spot it was found for */
   private route: [number, number][] = [];
-  private routeFor: THREE.Vector3 | null = null;
+  private routeFor: Vec3 | null = null;
 
   /** all skills of the class, by id */
   readonly known = new Map<string, KnownSkill>();
@@ -391,7 +391,7 @@ export class Player {
    *  stays on him, as his skills come from the weapon in his hands */
   gearless = false;
   /** shoved by a rival's blow in a duel (m/s, dying away as a foe's knock does) */
-  readonly knock = new THREE.Vector3();
+  readonly knock = new Vec3();
   /** in a duel, a rival's skills: chilled (slowed) until, and held (frozen or dazed: standing, casting nothing) until,
    *  frozen or not, and no hold taking him again until `holdRest` (all game time) */
   chilledUntil = -1;
@@ -503,7 +503,7 @@ export class Player {
     // The two local lights belong to the scene, shared with cached heroes. Removing them changes every shader's key.
     G.scene.remove(this.obj);
     this.farDetail.dispose();
-    this.obj.traverse((o) => { const m = o as THREE.SkinnedMesh; if (m.isSkinnedMesh) { m.skeleton.dispose(); (m.material as THREE.Material).dispose(); } });   // (skinned meshes own a copy of their material)
+    this.obj.traverse((o) => { const m = o as SkinnedMesh; if (m.isSkinnedMesh) { m.skeleton.dispose(); (m.material as Material).dispose(); } });   // (skinned meshes own a copy of their material)
     this.model.dispose();
     // (its lights stay in the scene, the next hero's: `heroLights`. Taken out with a spare hero let go, the frame's 20
     // were 18 and a wave compiled 14 programs late)
@@ -573,7 +573,7 @@ export class Player {
   }
 
   /** Stand at a spot facing a direction, as if always there. */
-  place(pos: THREE.Vector3, facing: number): void {
+  place(pos: Vec3, facing: number): void {
     this.pos.set(pos.x, 0, pos.z);
     // (standing: a hero placed while walking glided on from the spot, a third of a metre)
     this.vel.set(0, 0, 0);
@@ -636,8 +636,8 @@ export class Player {
 
   // through the eyes, the weapon and hand in view: the model stays placed there until the next pose (and where arms
   // drawn by a camera of their own show it, renderer.ts `seenFromArms`)
-  get castPoint(): THREE.Vector3 {
-    const at = (this.model.tip ?? this.model.root).getWorldPosition(new THREE.Vector3());
+  get castPoint(): Vec3 {
+    const at = (this.model.tip ?? this.model.root).getWorldPosition(new Vec3());
     return this.eyes ? seenFromArms(at, at) : at;
   }
 
@@ -662,19 +662,19 @@ export class Player {
   /** Where a light for an effect round the body goes when seen through the eyes: ahead in the view, a
    *  little above it. At the body it's at the camera and burns the weapons in view white; straight above,
    *  their steel still mirrors it back into the view. */
-  lightAhead(out: THREE.Vector3, ahead = 3, up = 0.6): THREE.Vector3 {
+  lightAhead(out: Vec3, ahead = 3, up = 0.6): Vec3 {
     const cam = G.camera.position, yaw = cameraYaw();
     return out.set(cam.x - Math.sin(yaw) * ahead, cam.y + up, cam.z - Math.cos(yaw) * ahead);
   }
 
-  get palmPoint(): THREE.Vector3 {
-    return (this.model.palm ?? this.model.root).getWorldPosition(new THREE.Vector3());
+  get palmPoint(): Vec3 {
+    return (this.model.palm ?? this.model.root).getWorldPosition(new Vec3());
   }
 
   /** The heading (like `facing`) of a shot leaving `from` (the weapon's tip) for `target`: the way the body aims, closing
    *  on the target from `SHOT_NEAR` on. Aimed from the tip, out beside and ahead of the body, a target near the feet sent
    *  the shot sideways or back while the body faced it. */
-  shotHeading(from: THREE.Vector3, target: THREE.Vector3): number {
+  shotHeading(from: Vec3, target: Vec3): number {
     const dx = target.x - this.pos.x, dz = target.z - this.pos.z, d = Math.hypot(dx, dz);
     if (d < 1e-3) return this.facing;
     const k = Math.max(d, SHOT_NEAR) / d;
@@ -855,7 +855,7 @@ export class Player {
 
   /** `key`: the key casting it, which holds a drawn shot (`SkillDef.draw`) until it's let go; `at`: where it's cast (the
    *  aim by default) */
-  tryCast(s: KnownSkill, key?: SkillKey, at: THREE.Vector3 = this.aim): boolean {
+  tryCast(s: KnownSkill, key?: SkillKey, at: Vec3 = this.aim): boolean {
     this.refused = null;
     if (this.staggered || !this.alive) return false;
     if (this.cooldownLeft(s.def.impl) > 0) { this.refused = 'cooldown'; return false; }
@@ -926,7 +926,7 @@ export class Player {
   }
 
   /** `power`: how far a drawn shot was drawn (1 for any other cast) */
-  fire(s: KnownSkill, target: THREE.Vector3, power = 1): void {
+  fire(s: KnownSkill, target: Vec3, power = 1): void {
     if (s.impl.channel) return;
     if (isBowShot(s)) this.nocked = 0;
     // sandbox (lobby practice): no costs or cooldowns
@@ -959,7 +959,7 @@ export class Player {
   }
 
   /** The ale the tavern's keeper slid across to him, drunk facing `at` (the bar): false if he's busy, out or dead. */
-  drinkAle(at: THREE.Vector3): boolean {
+  drinkAle(at: Vec3): boolean {
     const ale = this.skillOf(ALE.impl);
     return !!ale && this.tryCast(ale, undefined, at);
   }
@@ -976,7 +976,7 @@ export class Player {
     // (a hidden partner's casts let go: away, banked or out of the hall of heroes, its spells were drawn all the same)
     if (!s || !this.alive || !this.obj.visible) return;
     if (a.t === 'cast') {
-      const target = new THREE.Vector3(a.x, 0, a.z);
+      const target = new Vec3(a.x, 0, a.z);
       const nockT = a.n ?? 0;
       this.casting = a.h
         ? { skill: s, t: 0, dur: Infinity, fireAt: Infinity, fired: false, target, replay: true, drawT: a.dur, nockT }
@@ -988,7 +988,7 @@ export class Player {
       const own = this.casting?.skill === s ? this.casting : null;
       if (own?.drawT && !own.fired) this.loose(own, a.k ?? 1);
       else if (own) own.fired = true;
-      this.fire(s, new THREE.Vector3(a.x, a.y ?? 0, a.z), a.k ?? 1);
+      this.fire(s, new Vec3(a.x, a.y ?? 0, a.z), a.k ?? 1);
     } else if (!this.channel) {
       if (a.h) this.hands = a.h;
       this.channel = { skill: s, key: a.k, state: (s.impl as ChannelSkill).start(this, s.def), t: 0 };
@@ -1034,7 +1034,7 @@ export class Player {
   /** Rush along `dir` (normalized, on the ground) at `speed` for `dur` seconds; `step` runs every frame of it. Cast as
    *  an open dash runs, it rides on that one instead, its own way given up: posed over its legs for its time (Twin
    *  Fangs' lunge in Bull Rush's charge, its cuts landing as it runs; put in the charge's place, it cut it short). */
-  startDash(dir: THREE.Vector3, speed: number, dur: number, { lift = 0, anim = 'charge', hold = 0, through = false, open = false, step, pace }: DashOpts = {}): void {
+  startDash(dir: Vec3, speed: number, dur: number, { lift = 0, anim = 'charge', hold = 0, through = false, open = false, step, pace }: DashOpts = {}): void {
     if (this.dash?.open && this.dashRunning()) { this.dash.ride = { anim, t: 0, dur: dur + hold }; return; }
     this.rootedUntil = -1;
     this.dash = { vx: dir.x * speed, vz: dir.z * speed, t: 0, dur, hold, lift, anim, through, open, step, pace };
@@ -1049,7 +1049,7 @@ export class Player {
 
   /** The point the hero heads for on his way to `to`: the way found again when `to` changed, each point passed once
    *  he's within a stride of it (`ROUTE_PASSED`). */
-  private routeStep(to: THREE.Vector3): [number, number] {
+  private routeStep(to: Vec3): [number, number] {
     if (this.routeFor !== to) {
       this.routeFor = to;
       this.route = walkPath(this.pos.x, this.pos.z, to.x, to.z, this.radius);
@@ -1066,7 +1066,7 @@ export class Player {
    * The speed `goal` asks of him out toward the wall no more than he can brake from in the room left before it (as
    * one slows walking up to a wall): stopped by it in a frame from a run, the legs were thrown past their ranges.
    */
-  private slowForWall(goal: THREE.Vector3): void {
+  private slowForWall(goal: Vec3): void {
     const r = Math.hypot(this.pos.x, this.pos.z);
     if (r < 1e-3) return;
     const ux = this.pos.x / r, uz = this.pos.z / r;
@@ -1220,7 +1220,7 @@ export class Player {
     floatText(this.pos.x, 2.6, this.pos.z, 'No target', 'info', '#e8d9b0');
   }
 
-  faceTowards(p: THREE.Vector3, instant = false): void {
+  faceTowards(p: Vec3, instant = false): void {
     const a = Math.atan2(p.x - this.pos.x, p.z - this.pos.z);
     this.facing = instant ? a : angleDamp(this.facing, a, 18, G.dt);
   }
@@ -1580,7 +1580,7 @@ export class Player {
         at.y += 0.35;
         // (sat: stood, a one-hander's point hangs by his foot, and his light was always there)
         const sat = Math.min(1, (this.sitting.pose?.w ?? 0) / 0.2);
-        const low = sat - sat * smooth(THREE.MathUtils.clamp((at.y - this.obj.position.y - AURA_LOW.from) / (AURA_LOW.to - AURA_LOW.from), 0, 1));
+        const low = sat - sat * smooth(Maths.clamp((at.y - this.obj.position.y - AURA_LOW.from) / (AURA_LOW.to - AURA_LOW.from), 0, 1));
         if (low > 0) at.lerp(_aura.copy(this.obj.position).setY(this.obj.position.y + AURA_LOW.over), low);
       }
       const glow = this.cls.aura.intensity;
@@ -1700,7 +1700,7 @@ export class Player {
     return this.style === 'bare' && !!c?.drawT && !c.fired && c.skill.impl.anim === 'punch' && !this.staggered;
   }
 
-  takeDamage(amount: number, _type: DamageType, from: THREE.Vector3 | null): HitResult | null {
+  takeDamage(amount: number, _type: DamageType, from: Vec3 | null): HitResult | null {
     if (!this.alive || G.time < this.guardUntil) return null;
     // (his fists' guard takes a share off a blow from his front)
     const front = !from || angleOff(Math.atan2(from.x - this.pos.x, from.z - this.pos.z), this.facing) < BLOCK.arc;
@@ -1720,7 +1720,7 @@ export class Player {
 
   /** A sparring blow (the village's tutorial, game/tutorial.ts): the shield's part of a hit of `amount` worked out and
    *  shown as a real one's, a broken guard too, with no health or ward lost. Null: the hero is down. */
-  spar(amount: number, from: THREE.Vector3 | null): HitResult | null {
+  spar(amount: number, from: Vec3 | null): HitResult | null {
     if (!this.alive) return null;
     const life = this.life, ward = this.ward?.amount;
     const r = this.resolveHit(amount, from);
@@ -1732,7 +1732,7 @@ export class Player {
   }
 
   /** Work out a hit: the shield's block, then the ward, then health. */
-  private resolveHit(amount: number, from: THREE.Vector3 | null): HitResult {
+  private resolveHit(amount: number, from: Vec3 | null): HitResult {
     const r: HitResult = { taken: 0, blocked: 0, broke: false, absorbed: 0 };
     const s = this.stats;
     // shield block: a chance per hit (then a short recovery), or every frontal hit while the shield is raised

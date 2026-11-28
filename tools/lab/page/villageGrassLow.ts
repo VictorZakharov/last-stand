@@ -7,7 +7,7 @@
 // Very low spreads them four times as far (from play, a laptop's integrated GPU at 5 frames a second over the shoulder
 // with a sixteenth of its pixels drawn: the grass was 296k of the frame's 534k triangles) and must shade at most a
 // tenth of High's. Each is pictured. `canary` leaves the blades as close as High's on Low, which must be found.
-import * as THREE from 'three';
+import { Vec3 } from './sceneApi.ts';
 import type { Lab, Pictured } from './lab';
 import { G } from '../../../src/state';
 import { holdHour } from '../../../src/game/clock';
@@ -23,7 +23,7 @@ import { plainMade } from './villageBloomLow';
 import { drawnWhole } from './gpuTurns';
 
 /** where he stands and the way he faces: open meadow ahead, the cottages off to the side */
-const STAND = new THREE.Vector3(10, 0, 4);
+const STAND = new Vec3(10, 0, 4);
 const FACING = Math.PI / 2;
 /** the frames given to settle after a switch */
 const SETTLE = 30;

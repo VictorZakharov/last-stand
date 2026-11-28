@@ -1,7 +1,10 @@
 // Material kit: every entity builds its materials through a kit so that
 // shared per-entity FX uniforms (dissolve, frozen, charred, hit flash) can be driven
 // with a single write each frame.
-import * as THREE from 'three';
+import {
+  AdditiveBlending, Color, ColorRepresentation, DoubleSide, LitMaterial, LitParameters, Material, UnlitMaterial, Vec3,
+  Vec4,
+} from '../engine/api/index.ts';
 import { tunable } from './tuning';
 import { readCookie, writeCookie } from './cookies';
 
@@ -20,8 +23,7 @@ export const SHINE = tunable('shine', { eyes: 0.7 });
  * (distance / ref)^pow, never below min.
  */
 export const NEAR_GLOW = { ref: 20, pow: 0.75, min: 0.25 };
-const NEAR_GLOW_GLSL = /* glsl */`
-float nearGlow(){ return clamp(pow((1.0 / gl_FragCoord.w) / ${NEAR_GLOW.ref.toFixed(1)}, ${NEAR_GLOW.pow.toFixed(2)}), ${NEAR_GLOW.min.toFixed(2)}, 1.0); }`;
+
 
 /**
  * A worn item's glow in its rarity's colour (#404, from play: "slight glow, not much, no light source", "should not
@@ -48,10 +50,10 @@ export const ITEM_GLOW = tunable('itemGlow', {
 /** the glow's shape (x its cells a metre across, y along, z the level its strands lie on, w how far either side), its loop (x the cells
  *  it rises a cycle, y the cells it moves on through time, z the face's share, w the strength) and its clock (the
  *  share of its cycle, 0 to 1: kept small on the CPU, as a game's time grows past what a float holds finely) */
-const AURA_SHAPE = { value: new THREE.Vector4() };
-const AURA_LOOP = { value: new THREE.Vector4() };
+const AURA_SHAPE = { value: new Vec4() };
+const AURA_LOOP = { value: new Vec4() };
 const AURA_CLOCK = { value: 0 };
-/** what WebGPU's kit reads them by (core/shaderPorts.ts `kitNodes`) */
+/** what the engine's kit look reads them by (engine/looks/kit.ts) */
 export const itemGlowUniforms = { shape: AURA_SHAPE, loop: AURA_LOOP, clock: AURA_CLOCK };
 
 /** A loop's cells rounded to an even count: the noise wraps where the cycle does only in whole cells, and the slow
@@ -94,115 +96,35 @@ export function tickItemGlow(time: number): void {
   AURA_CLOCK.value = (((time % cycle) + cycle) % cycle) / cycle;
 }
 
-/**
- * The glow's pattern, GLSL (the kit's patch) and WGSL (WebGPU's kit, core/shaderPorts.ts) alike: a value noise whose
- * lattice wraps along y at `per.x` cells, and through time, slice by slice, at `per.y` (two of its 3D fields
- * blended a slice apart, each slice's at an offset of its own), so the pattern drifting up and moving on through
- * time comes back to itself after a cycle. Its warp's two fields, each noise's octaves and each octave's two slices are
- * loops, the same sums in the same order: written out, ANGLE's D3D compiler made the 14 noises' 112 hashes one by one,
- * and the glow was half of a kit program's compile, some 25 programs of a first visit's boot (`npm run lab --
- * programs --cost`'s kit material, compiled in turns: 1.14 s summed by hand, 0.54 without the glow).
- */
-export const AURA_GLSL = /* glsl */ `
-float auraHash(vec3 c, float per){ c.y = mod(c.y, per); return fxHash(c); }
-float auraNoise3(vec3 x, float per){
-  vec3 i=floor(x); vec3 f=fract(x); f=f*f*(3.0-2.0*f);
-  return mix(mix(mix(auraHash(i,per),auraHash(i+vec3(1,0,0),per),f.x), mix(auraHash(i+vec3(0,1,0),per),auraHash(i+vec3(1,1,0),per),f.x),f.y),
-             mix(mix(auraHash(i+vec3(0,0,1),per),auraHash(i+vec3(1,0,1),per),f.x), mix(auraHash(i+vec3(0,1,1),per),auraHash(i+vec3(1,1,1),per),f.x),f.y), f.z);
-}
-float auraNoise(vec3 p, float w, vec2 per){
-  float s = floor(w); float f = fract(w); f = f*f*(3.0-2.0*f);
-  float s0 = mod(s, per.y); float s1 = mod(s + 1.0, per.y);
-  vec2 n;
-  for (int k = 0; k < 2; k++) n[k] = auraNoise3(p + vec3(17.31, 7.0, 11.13) * (k == 0 ? s0 : s1), per.x);
-  return mix(n.x, n.y, f);
-}
-float auraOctaves(vec3 p, float w, vec2 per, int count, vec3 weights){
-  float sum = 0.0; float scale = 1.0;
-  for (int o = 0; o < count; o++) {
-    vec3 shift = vec3(o == 0 ? 0.0 : o == 1 ? 3.7 : 9.1);
-    sum += auraNoise(p*scale + shift, w*scale, per*scale)*weights[o];
-    scale *= 2.0;
-  }
-  return sum;
-}
-float auraFbm(vec3 p, float w, vec2 per){ return auraOctaves(p, w, per, 3, vec3(0.5, 0.3, 0.2)); }
-float auraWarp(vec3 p, float w, vec2 per){ return auraOctaves(p, w, per, 2, vec3(0.62, 0.38, 0.0)); }
-float auraTendrils(vec3 at, float c, vec4 shape, vec4 loop){
-  vec3 p = at * shape.xyx - vec3(0.0, c * loop.x, 0.0);
-  float w = c * loop.y;
-  vec2 per = loop.xy;
-  vec2 warp;
-  for (int k = 0; k < 2; k++) warp[k] = auraWarp(p * 0.5 + vec3(5.0, 1.0, 3.0) * float(k), w * 0.5 + float(k), per * 0.5);
-  float tex = auraFbm(p + vec3(warp.x, warp.y, warp.x) * 2.2, w, per);
-  float strand = smoothstep(0.0, 1.0, 1.0 - abs(tex - shape.z) / shape.w);
-  return loop.z + strand * mix(0.4, 1.0, smoothstep(0.3, 0.5, warp.x));
-}
-`;
-
-const FX_CHUNK_COMMON = /* glsl */ `
-uniform vec3 uAura;
-uniform vec4 uAuraShape;
-uniform vec4 uAuraLoop;
-uniform float uAuraClock;
-uniform float uDissolve;
-uniform float uFrozen;
-uniform float uChar;
-uniform float uHit;
-uniform vec3 uEdge;
-uniform float uShine;
-varying vec3 vFxPos;
-${NEAR_GLOW_GLSL}
-float fxHash(vec3 p){ p = fract(p*0.3183099+.1); p*=17.0; return fract(p.x*p.y*p.z*(p.x+p.y+p.z)); }
-float fxNoise(vec3 x){
-  vec3 i=floor(x); vec3 f=fract(x); f=f*f*(3.0-2.0*f);
-  return mix(mix(mix(fxHash(i),fxHash(i+vec3(1,0,0)),f.x), mix(fxHash(i+vec3(0,1,0)),fxHash(i+vec3(1,1,0)),f.x),f.y),
-             mix(mix(fxHash(i+vec3(0,0,1)),fxHash(i+vec3(1,0,1)),f.x), mix(fxHash(i+vec3(0,1,1)),fxHash(i+vec3(1,1,1)),f.x),f.y), f.z);
-}
-${AURA_GLSL}`;
-
-/** A painted face's hair in another colour: the paint holds how much of the hair's colour each texel has (its roughness
- *  map's blue, 4 at full: `HAIR_SHARE_MOST` in models/face.ts, `paintFace`), and the picked colour less the face's own
- *  (`uHairShift`, in the paint's sRGB) is added in that share. A uniform's value: a colour picked compiles nothing, and
- *  none (the face's own) leaves the paint as it is. */
-export const HAIR_SHIFT_GLSL = `
-  #ifdef USE_ROUGHNESSMAP
-  if (dot(uHairShift, uHairShift) > 0.0) {
-    float hairShare = texture2D(roughnessMap, vRoughnessMapUv).b * 4.0;
-    vec3 painted = pow(max(diffuseColor.rgb, vec3(0.0)), vec3(1.0 / 2.2)) + hairShare * uHairShift;
-    diffuseColor.rgb = pow(max(painted, vec3(0.0)), vec3(2.2));
-  }
-  #endif`;
-
-/** A kit material's looks as WebGPU reads them (core/shaderPorts.ts `kitNodes`): the kit's uniforms, and the
+/** A kit material's looks as the engine reads them: the kit's uniforms, and the
  *  material's own near glow and rim. */
 export interface KitLooks {
-  u: Record<'uDissolve' | 'uFrozen' | 'uChar' | 'uHit' | 'uShine', { value: number }> & { uEdge: { value: THREE.Color } };
+  u: Record<'uDissolve' | 'uFrozen' | 'uChar' | 'uHit' | 'uShine', { value: number }> & { uEdge: { value: Color } };
   near: { value: number };
-  rim: { value: THREE.Color };
+  rim: { value: Color };
   /** the hood's shade (`Head.shade`): how deep, where up the mesh it's full, where it's gone, how much more aside */
-  shade: { value: THREE.Vector4 };
+  shade: { value: Vec4 };
   /** a worn item's glow in its rarity's colour (`ITEM_GLOW`), black for none: the material's own, never the kit's */
-  aura: { value: THREE.Color };
+  aura: { value: Color };
   /** a painted face's hair moved to another colour (`kit.face`, models/head.ts `setHair`): the picked colour less the
    *  face's own, in the paint's sRGB, added in the share of hair its roughness map's blue holds; none, as painted */
-  hair: { value: THREE.Vector3 };
+  hair: { value: Vec3 };
   /** whether the material reads `hair` (`kit.face`'s alone) */
   hairTinted: boolean;
 }
 
-export function createKit(edgeColor: THREE.ColorRepresentation = 0x66ffcc) {
+export function createKit(edgeColor: ColorRepresentation = 0x66ffcc) {
   const u = {
     uDissolve: { value: 0 },
     uFrozen: { value: 0 },
     /** burnt: charred black, embers glowing in its cracks (a body the fire killed, entities/corpse.ts) */
     uChar: { value: 0 },
     uHit: { value: 0 },
-    uEdge: { value: new THREE.Color(edgeColor).multiplyScalar(3) },
+    uEdge: { value: new Color(edgeColor).multiplyScalar(3) },
     /** the most light a highlight reflects, eased into from half of it (`SHINE`); 0: as it is */
     uShine: { value: 0 },
   };
-  const mats: THREE.Material[] = [];
+  const mats: Material[] = [];
 
   /**
    * near: an enemy's glow dims near the camera like the effect glows (its eyes up close would dazzle).
@@ -210,76 +132,17 @@ export function createKit(edgeColor: THREE.ColorRepresentation = 0x66ffcc) {
    * Both are the material's uniforms, not variants of its shader: every kit's material of a kind shares one program
    * (a variant each made 26 more programs at boot, each compiled for half a second on a first visit's ANGLE).
    */
-  function patch<M extends THREE.Material>(m: M, near = false, rim?: THREE.Color, hairTinted = false): M {
+  function patch<M extends Material>(m: M, near = false, rim?: Color, hairTinted = false): M {
     // (in a hood's shade, `Head.shade`: x how deep, y where up the mesh it's full, z where it's gone, w how much more
     // towards the sides; the game's shadow map is too coarse to shade a face under a brim)
-    const shade = { value: new THREE.Vector4() };
+    const shade = { value: new Vec4() };
     m.userData.shade = shade;
-    // (what WebGPU reads its looks from, off the material drawn: core/shaderPorts.ts `kitNodes`; a property of its
-    // own, not copied to a clone, as its `onBeforeCompile` isn't)
+    // (what the engine reads its looks from, off the material drawn; a property of its own, not copied to a clone)
     const looks: KitLooks = {
-      u, near: { value: near ? 1 : 0 }, rim: { value: rim ?? new THREE.Color(0) }, shade,
-      aura: { value: new THREE.Color(0) }, hair: { value: new THREE.Vector3() }, hairTinted,
+      u, near: { value: near ? 1 : 0 }, rim: { value: rim ?? new Color(0) }, shade,
+      aura: { value: new Color(0) }, hair: { value: new Vec3() }, hairTinted,
     };
     Object.defineProperty(m, 'kitLooks', { value: looks, configurable: true });
-    // (a method: three calls it on the material it compiles for, so a copy's own glow (`kitCopy`) is read off the copy;
-    // a wrapper calling it with no material falls back to this one's)
-    m.onBeforeCompile = function (this: THREE.Material | undefined, shader) {
-      Object.assign(shader.uniforms, u);
-      shader.uniforms.uAura = ((this as { kitLooks?: KitLooks } | undefined)?.kitLooks ?? looks).aura;
-      shader.uniforms.uAuraShape = AURA_SHAPE;
-      shader.uniforms.uAuraLoop = AURA_LOOP;
-      shader.uniforms.uAuraClock = AURA_CLOCK;
-      shader.uniforms.uNear = { value: near ? 1 : 0 };
-      shader.uniforms.uRim = { value: rim ?? new THREE.Color(0) };
-      shader.uniforms.uShade = shade;
-      if (hairTinted) shader.uniforms.uHairShift = ((this as { kitLooks?: KitLooks } | undefined)?.kitLooks ?? looks).hair;
-      shader.vertexShader = shader.vertexShader
-        .replace('#include <common>', '#include <common>\nvarying vec3 vFxPos;')
-        .replace('#include <begin_vertex>', '#include <begin_vertex>\nvFxPos = position;');
-      shader.fragmentShader = shader.fragmentShader
-        .replace('#include <common>', '#include <common>\n' + FX_CHUNK_COMMON + 'uniform float uNear;\nuniform vec3 uRim;\nuniform vec4 uShade;' + (hairTinted ? '\nuniform vec3 uHairShift;' : ''))
-        .replace('#include <color_fragment>', `#include <color_fragment>
-          ${hairTinted ? HAIR_SHIFT_GLSL : ''}
-          diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.55,0.8,1.0), uFrozen*0.75);
-          diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.045,0.035,0.03), uChar*0.9);`)
-        .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
-          totalEmissiveRadiance *= mix(1.0, nearGlow(), uNear);
-          totalEmissiveRadiance += uRim * pow(1.0 - clamp(dot(normal, normalize(vViewPosition)), 0.0, 1.0), 3.0);
-          if (uAuraLoop.w > 0.0 && dot(uAura, uAura) > 0.0) {
-            // a worn item's glow (ITEM_GLOW): tendrils of light on its surface, drifting up on a loop; passed over
-            // with the setting off (its strength 0) as on plain gear
-            totalEmissiveRadiance += uAura * uAuraLoop.w * auraTendrils(vFxPos, uAuraClock, uAuraShape, uAuraLoop);
-          }
-          // (the dissolve's and the char's noise, 16 hashes a pixel, made only while either reads it: a branch on
-          // the looks, not a define, so no program more; every body not dying skips it)
-          float dn = 0.0;
-          if (uDissolve > 0.0 || uChar > 0.0) dn = fxNoise(vFxPos*7.0)*0.65 + fxNoise(vFxPos*19.0)*0.35;
-          if (uDissolve > 0.0 && dn < uDissolve) discard;
-          float edge = uDissolve > 0.0 ? (1.0 - smoothstep(uDissolve, uDissolve + 0.09, dn)) : 0.0;
-          totalEmissiveRadiance += uEdge * edge * 3.0;
-          totalEmissiveRadiance += vec3(0.25,0.55,0.9) * uFrozen * 0.35;
-          // charred: its own glow smothered, embers in the cracks the dissolve's noise draws
-          totalEmissiveRadiance *= 1.0 - uChar * 0.7;
-          totalEmissiveRadiance += vec3(1.0,0.32,0.06) * uChar * smoothstep(0.6, 0.78, dn) * 1.6 * nearGlow();
-          // a tint, not white, dimmer near the camera like the effect glows: up close a body fills much of the screen
-          totalEmissiveRadiance += vec3(1.0,0.9,0.85) * uHit * 0.45 * nearGlow();`)
-        .replace('#include <lights_fragment_end>', `#include <lights_fragment_end>
-          if (uShade.x > 0.0) {
-            float hood = uShade.x * clamp(smoothstep(uShade.z, uShade.y, vFxPos.y) + uShade.w * abs(vFxPos.x), 0.0, 1.0);
-            reflectedLight.directDiffuse *= 1.0 - hood;
-            reflectedLight.directSpecular *= 1.0 - hood;
-            reflectedLight.indirectDiffuse *= 1.0 - hood;
-            reflectedLight.indirectSpecular *= 1.0 - hood;
-            totalEmissiveRadiance *= 1.0 - hood;
-          }
-          if (uShine > 0.0) {
-            vec3 shine = reflectedLight.directSpecular;
-            float most = max(max(shine.r, shine.g), shine.b), knee = 0.5 * uShine;
-            if (most > knee) reflectedLight.directSpecular = shine * (knee + (most - knee) / (1.0 + (most - knee) / (uShine - knee))) / most;
-          }`);
-    };
-    m.customProgramCacheKey = hairTinted ? () => 'entityfx-hair' : () => 'entityfx';
     mats.push(m);
     return m;
   }
@@ -287,38 +150,37 @@ export function createKit(edgeColor: THREE.ColorRepresentation = 0x66ffcc) {
   return {
     u,
     mats,
-    std: (p?: THREE.MeshStandardMaterialParameters) => patch(new THREE.MeshStandardMaterial(p)),
-    phys: (p?: THREE.MeshPhysicalMaterialParameters) => patch(new THREE.MeshPhysicalMaterial(p)),
+    std: (p?: LitParameters) => patch(new LitMaterial(p)),
+    phys: (p?: LitParameters) => patch(new LitMaterial(p)),
     /** a standard material with a rim of `rim` light at glancing angles (skin, cloth) */
-    rim: (p: THREE.MeshStandardMaterialParameters, rim: THREE.ColorRepresentation, strength = 1) =>
-      patch(new THREE.MeshStandardMaterial(p), false, new THREE.Color(rim).multiplyScalar(strength)),
+    rim: (p: LitParameters, rim: ColorRepresentation, strength = 1) =>
+      patch(new LitMaterial(p), false, new Color(rim).multiplyScalar(strength)),
     /** `rim`'s, for a painted face (models/head.ts): its hair's colour moved by a uniform (`KitLooks.hair`), a program of
-     *  its own every face shares, whatever colour (`HAIR_SHIFT_GLSL`) */
-    face: (p: THREE.MeshStandardMaterialParameters, rim: THREE.ColorRepresentation, strength = 1) =>
-      patch(new THREE.MeshStandardMaterial(p), false, new THREE.Color(rim).multiplyScalar(strength), true),
+     *  its own every face shares, whatever colour (`KitLooks.hair`) */
+    face: (p: LitParameters, rim: ColorRepresentation, strength = 1) =>
+      patch(new LitMaterial(p), false, new Color(rim).multiplyScalar(strength), true),
     // Unlit glow (eyes, crystals) - still dissolves via patch on MeshStandard with black base.
     // `near`: dims near the camera (enemies' glows; the heroes keep theirs)
-    glow: (color: THREE.ColorRepresentation, intensity = 3, near = true) => patch(new THREE.MeshStandardMaterial({
-      color: 0x000000, emissive: new THREE.Color(color), emissiveIntensity: intensity, roughness: 1,
+    glow: (color: ColorRepresentation, intensity = 3, near = true) => patch(new LitMaterial({
+      color: 0x000000, emissive: new Color(color), emissiveIntensity: intensity, roughness: 1,
     }), near),
     dispose() { for (const m of mats) m.dispose(); },
   };
 }
 
-/** `copy`, a copy of a kit's material, given its looks on WebGPU, which `clone` leaves behind (what they read are the
- *  kit's own uniforms, so it shows them as its original does). */
-export function sameLooks(copy: THREE.Material, original: THREE.Material): void {
+/** `copy`, a copy of a kit's material, given its looks, which `clone` leaves behind (what they read are the kit's own
+ *  uniforms, so it shows them as its original does; and its hood's shade, which says what it's a copy of:
+ *  `sameKitMaterial` in models/kitTwin.ts). */
+export function sameLooks(copy: Material, original: Material): void {
   const { kitLooks } = original as { kitLooks?: KitLooks };
   if (kitLooks) (copy as unknown as { kitLooks: KitLooks }).kitLooks = kitLooks;
 }
 
-/** A kit material's copy of its own, drawn by the same program, its glow (`kitLooks.aura`) its own: an item's parts
+/** A kit material's copy of its own, drawn by the same look, its glow (`kitLooks.aura`) its own: an item's parts
  *  glow in its rarity's colour, the rest of the hero's in that material not (models/itemGlow.ts). Dyed with its
- *  original (models/dye.ts finds it by the hook they share). */
-export function kitCopy<M extends THREE.Material>(original: M): M {
+ *  original (models/dye.ts finds it by the shade they share, `sameKitMaterial` in models/kitTwin.ts). */
+export function kitCopy<M extends Material>(original: M): M {
   const copy = original.clone() as M;
-  copy.onBeforeCompile = original.onBeforeCompile;
-  copy.customProgramCacheKey = original.customProgramCacheKey;
   // (its hood's shade its original's, the uniform the hook binds: `clone` copies user data through JSON, and the
   // head's `shade` set a plain object's value)
   copy.userData.shade = original.userData.shade;
@@ -327,37 +189,29 @@ export function kitCopy<M extends THREE.Material>(original: M): M {
 }
 
 /** `m` given looks of its own, as `from`'s but with a glow of its own (black), which it returns. */
-export function ownAura(m: THREE.Material, from: THREE.Material = m): THREE.Color | null {
+export function ownAura(m: Material, from: Material = m): Color | null {
   const looks = (from as { kitLooks?: KitLooks }).kitLooks;
   if (!looks) return null;
-  const aura = new THREE.Color(0);
+  const aura = new Color(0);
   Object.defineProperty(m, 'kitLooks', { value: { ...looks, aura: { value: aura } }, configurable: true });
   return aura;
 }
 
 /**
- * Makes an effect material (built-in or a ShaderMaterial writing gl_FragColor at the end of main) dim
- * with distance, see NEAR_GLOW. Only for effects: the world's own glows keep their look.
+ * Makes an effect material dim with distance, see NEAR_GLOW (a look material's own look reads it: `fx_near` in
+ * engine/effects.ts). Only for effects: the world's own glows keep their look.
  */
-export function nearGlow<T extends THREE.Material>(m: T): T {
-  // (for a renderer with no hook of three's: the Rust engine dims it by `NEAR_GLOW`, engine/materials.ts)
+export function nearGlow<T extends Material>(m: T): T {
+  // (a marker the engine dims it by, `NEAR_GLOW`: engine/materials.ts)
   m.userData.nearGlow = true;
-  m.onBeforeCompile = (sh) => {
-    const f = sh.fragmentShader.replace(/void\s+main\s*\(\s*\)/, `${NEAR_GLOW_GLSL}
-void main()`);
-    const end = f.lastIndexOf('}');
-    sh.fragmentShader = `${f.slice(0, end)}  gl_FragColor.rgb *= nearGlow();
-}${f.slice(end + 1)}`;
-  };
-  m.customProgramCacheKey = () => 'nearGlow';
   return m;
 }
 
 // Additive, unlit HDR material for VFX meshes (dimming with distance, see nearGlow).
-export function additive(color: THREE.ColorRepresentation, intensity = 2, opacity = 1): THREE.MeshBasicMaterial {
-  return nearGlow(new THREE.MeshBasicMaterial({
-    color: new THREE.Color(color).multiplyScalar(intensity),
-    transparent: true, opacity, blending: THREE.AdditiveBlending,
-    depthWrite: false, side: THREE.DoubleSide, toneMapped: true,
+export function additive(color: ColorRepresentation, intensity = 2, opacity = 1): UnlitMaterial {
+  return nearGlow(new UnlitMaterial({
+    color: new Color(color).multiplyScalar(intensity),
+    transparent: true, opacity, blending: AdditiveBlending,
+    depthWrite: false, side: DoubleSide, toneMapped: true,
   }));
 }

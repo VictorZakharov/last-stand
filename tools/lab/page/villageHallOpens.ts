@@ -11,7 +11,7 @@
 // `noDotsBesideHall` ("also this is broken"): while the hall alone is thinned for him, what stands free stays whole:
 // the frame hardly changes with the props' thinning held off. `--canary`: they thin as they did, the terrace's coping
 // in dots.
-import * as THREE from 'three';
+import { Mesh, shapes, UnlitMaterial, Vec3 } from './sceneApi.ts';
 import type { Lab } from './lab';
 import { G } from '../../../src/state';
 import { holdHour } from '../../../src/game/clock';
@@ -64,16 +64,16 @@ const MOST_DOTS = 0.002;
 /** The hero stood at (x, z), the camera turned to `facing`, let settle. */
 export async function standFacing(lab: Lab, x: number, z: number, facing: number): Promise<void> {
   G.player.walkTo = null;
-  G.player.place(new THREE.Vector3(x, groundHeight(x, z), z), facing);
+  G.player.place(new Vec3(x, groundHeight(x, z), z), facing);
   faceCamera(facing);
   await lab.step(SETTLE);
 }
 
 /** A bright mark on the hall's floor at (x, z), to read whether that floor shows. */
-export function floorMark(x: number, z: number): THREE.Mesh {
-  const mark = new THREE.Mesh(
-    new THREE.PlaneGeometry(MARK, MARK).rotateX(-Math.PI / 2),
-    new THREE.MeshBasicMaterial({ color: 0xff00ff }),
+export function floorMark(x: number, z: number): Mesh {
+  const mark = new Mesh(
+    shapes.plane(MARK, MARK).rotateX(-Math.PI / 2),
+    new UnlitMaterial({ color: 0xff00ff }),
   );
   mark.position.set(x, TERRACE.high + MARK_OVER, z);
   G.scene.add(mark);
@@ -81,13 +81,13 @@ export function floorMark(x: number, z: number): THREE.Mesh {
 }
 
 /** Whether `point` is in the camera's frame. */
-export function inFrame(point: THREE.Vector3): boolean {
+export function inFrame(point: Vec3): boolean {
   const place = point.clone().project(G.camera);
   return Math.abs(place.x) < 1 && Math.abs(place.y) < 1 && place.z < 1;
 }
 
 /** Whether a pixel of `canvas` over `point` shows a mark. */
-function showsMark(canvas: Canvas, point: THREE.Vector3): boolean {
+function showsMark(canvas: Canvas, point: Vec3): boolean {
   const place = point.clone().project(G.camera);
   const column = Math.floor(((place.x + 1) / 2) * canvas.width);
   const row = Math.floor(((place.y + 1) / 2) * canvas.height);
@@ -100,7 +100,7 @@ function showsMark(canvas: Canvas, point: THREE.Vector3): boolean {
 }
 
 /** The share of `marks` that show in the frame drawn now. */
-export function shownMarks(lab: Lab, marks: THREE.Mesh[]): number {
+export function shownMarks(lab: Lab, marks: Mesh[]): number {
   const canvas = drawFrame(lab);
   return marks.filter((mark) => showsMark(canvas, mark.position)).length / marks.length;
 }

@@ -3,7 +3,7 @@
 // as `weaponFloor.ts` reads them), a share of the foe's height from its feet. An overhead blow lands on the foe it
 // strikes, its top (from play: "power strike should land on the enemy its striking, or ground if no enemy to strike
 // in that trajectory"): at the foe's top it reads near 1; through the body to the floor, near 0; never over it, none.
-import * as THREE from 'three';
+import { Mesh, Vec3 } from './sceneApi.ts';
 import type { Lab } from './lab';
 import type { Enemy } from '../../../src/entities/enemy';
 
@@ -16,7 +16,7 @@ interface Over {
   at: string;
 }
 
-const _corner = new THREE.Vector3();
+const _corner = new Vec3();
 
 /** The weapon's lowest point over a foe through a scenario. */
 export class WeaponOnFoe {
@@ -65,7 +65,7 @@ function lowestOver(lab: Lab, foe: Enemy): number | null {
   const feet = foe.obj.position.y;
   let lowest: number | null = null;
   grip.traverseVisible((object) => {
-    const mesh = object as THREE.Mesh;
+    const mesh = object as Mesh;
     if (!mesh.isMesh) return;
     const corners = mesh.geometry.attributes.position;
     for (let i = 0; i < corners.count; i++) {

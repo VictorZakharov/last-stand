@@ -3,7 +3,7 @@
 // (`measureBody` in anatomy.ts). For reading a pose beside its pictures, never for choosing one. Standing, the ranger's
 // bow carried upright with the elbow bent (before #144) held 6.9 N·m at the shoulder and 5.5 at the elbow; the
 // neutral carry, the arm hanging, 4.4 and 2.4.
-import * as THREE from 'three';
+import { Node, Vec3 } from './sceneApi.ts';
 import { measureBody } from '../../../src/entities/models/anatomy';
 import type { Joints } from '../../../src/entities/models/rig';
 import { drawnHand } from './range';
@@ -35,7 +35,7 @@ export function effortOf(share: number): Effort {
 }
 
 /** The fist's middle, where a held thing's weight acts, in the hand joint's frame (m). */
-const FIST = new THREE.Vector3(0, -0.085, 0);
+const FIST = new Vec3(0, -0.085, 0);
 
 /** What each class holds, kg, by hand: a bow with its riser; a one-handed sword and a shield; a staff. */
 export const HELD: Record<string, { L?: number; R?: number }> = {
@@ -45,7 +45,7 @@ export const HELD: Record<string, { L?: number; R?: number }> = {
 };
 
 const GRAVITY = 9.81;
-const DOWN = new THREE.Vector3(0, -1, 0);
+const DOWN = new Vec3(0, -1, 0);
 
 /** One arm's load and posture. */
 export interface ArmComfort {
@@ -66,9 +66,9 @@ export interface ArmComfort {
 }
 
 /** The moment of `loads` (points and their masses) about `pivot`, N·m. */
-function momentAbout(pivot: THREE.Vector3, loads: [THREE.Vector3, number][]): number {
-  const total = new THREE.Vector3();
-  const lever = new THREE.Vector3();
+function momentAbout(pivot: Vec3, loads: [Vec3, number][]): number {
+  const total = new Vec3();
+  const lever = new Vec3();
   for (const [point, mass] of loads) {
     lever.subVectors(point, pivot).cross(DOWN).multiplyScalar(mass * GRAVITY);
     total.add(lever);
@@ -78,7 +78,7 @@ function momentAbout(pivot: THREE.Vector3, loads: [THREE.Vector3, number][]): nu
 
 /** The arm on `side` as it is now (world matrices up to date), holding `held` kg in its fist. */
 export function armComfort(joints: Joints, side: 'L' | 'R', held = 0): ArmComfort {
-  const at = (joint: THREE.Object3D) => joint.getWorldPosition(new THREE.Vector3());
+  const at = (joint: Node) => joint.getWorldPosition(new Vec3());
   const shoulder = at(joints[`shoulder${side}`]);
   const elbow = at(joints[`elbow${side}`]);
   const hand = joints[`hand${side}`];
@@ -88,7 +88,7 @@ export function armComfort(joints: Joints, side: 'L' | 'R', held = 0): ArmComfor
   const upperArmCentre = shoulder.clone().lerp(elbow, UPPER_ARM.centre);
   const forearmCentre = elbow.clone().lerp(wrist, FOREARM.centre);
   const handCentre = wrist.clone().lerp(fist, HAND.centre);
-  const belowElbow: [THREE.Vector3, number][] = [
+  const belowElbow: [Vec3, number][] = [
     [forearmCentre, FOREARM.mass],
     [handCentre, HAND.mass],
     [fist, held],

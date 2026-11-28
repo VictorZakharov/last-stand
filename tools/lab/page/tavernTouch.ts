@@ -1,15 +1,16 @@
 // `lab tavern --parts touch`: tapping a served mug and answering its choice through the real touch controls.
-import * as THREE from 'three';
+import { Vec3 } from './sceneApi.ts';
 import { KEEPER_TAKE, type TavernKeeper } from '../../../src/world/tavernKeeper';
 import { G } from '../../../src/state';
 import { input } from '../../../src/core/input';
 import { BAR } from '../../../src/data/tavern';
 import { talkOpen } from '../../../src/ui/screens/talk/talk';
-import { middleOf, type Lab, type Report } from './lab';
+import { boxOf, elementUnder, middleOf, seenOf, type Lab, type Pictured, type Report } from './lab';
 import { choosingAle, mugOnPage, waitingMug } from './takeAle';
 
 /** Tap the mug, then Put down and Drink. Check the buttons' hit targets and ledger at each transition. */
-export async function tavernTouch(lab: Lab, tv: TavernKeeper, canary: boolean): Promise<Report> {
+export async function tavernTouch(lab: Lab, tv: TavernKeeper, canary: boolean,
+  pictures: Pictured[] = []): Promise<Report> {
   const lines: string[] = [];
   const problems: string[] = [];
   const leave = document.querySelector<HTMLButtonElement>('#talk .tk-close');
@@ -28,7 +29,7 @@ export async function tavernTouch(lab: Lab, tv: TavernKeeper, canary: boolean): 
   const tapMug = async (): Promise<boolean | null> => {
     // Keep the mug on the canvas side of the touch stick's pad while staying within reach of the bar.
     if (mugOnPage(tv, id).x < innerWidth * 0.53) {
-      const right = new THREE.Vector3().setFromMatrixColumn(G.camera.matrixWorld, 0).setY(0).normalize();
+      const right = new Vec3().setFromMatrixColumn(G.camera.matrixWorld, 0).setY(0).normalize();
       G.player.walkTo = null;
       G.player.place(G.player.pos.clone().addScaledVector(right, -0.85), G.player.facing);
       await lab.step(60);
@@ -66,13 +67,14 @@ export async function tavernTouch(lab: Lab, tv: TavernKeeper, canary: boolean): 
 
   const tapChoice = async (pick: 'down' | 'drink'): Promise<boolean> => {
     const button = document.querySelector<HTMLButtonElement>(`#drink-choice [data-pick="${pick}"]`);
-    if (!button?.checkVisibility()) {
+    await lab.step(3);
+    if (!button || !seenOf(button)) {
       problems.push(`touch: the ${pick} button was hidden`);
       return false;
     }
-    const box = button.getBoundingClientRect();
+    const box = boxOf(button);
     const at = middleOf(button);
-    const hit = document.elementFromPoint(at.x, at.y);
+    const hit = elementUnder(at.x, at.y);
     if (box.left < 0 || box.top < 0 || box.right > innerWidth || box.bottom > innerHeight
         || box.height < 44 || !button.contains(hit)) {
       const on = button.classList.contains('off') ? 'disabled' : 'enabled';
@@ -87,9 +89,12 @@ export async function tavernTouch(lab: Lab, tv: TavernKeeper, canary: boolean): 
   };
   // Stand at the clear front edge of the bar so Put down is offered while carrying the mug.
   G.player.walkTo = null;
-  G.player.place(room.group.localToWorld(new THREE.Vector3(BAR.x - BAR.half - 0.4, 0, -1.5)), Math.PI / 2);
+  G.player.place(room.group.localToWorld(new Vec3(BAR.x - BAR.half - 0.4, 0, -1.5)), Math.PI / 2);
   await lab.step(20);
+  const choice = ['the mug in his hand: Drink and Put down at the screen’s foot'];
+  pictures.push(await lab.screen('ale-choice-touch', choice));
   if (!(await tapChoice('down'))) return { text: lines.join('\n'), problems };
+  if (talkOpen()) problems.push('touch: the tap on Put down also opened the keeper’s talk card');
   const down = tv.mugs.get(id);
   if (choosingAle() || down.place.at !== 'bar' || down.full <= 0.5 || down.dirty) {
     problems.push('touch: Put down did not return the same full mug to the bar');
@@ -114,9 +119,10 @@ export async function tavernTouch(lab: Lab, tv: TavernKeeper, canary: boolean): 
     lines.push(`touch: drank mug ${id} and returned it to the bar dirty`);
   }
   await lab.step(1);
+  await lab.step(3);
   const notice = document.querySelector('#ale-fortified');
-  const box = notice?.getBoundingClientRect();
-  if (!notice?.checkVisibility() || !box || box.left < 0 || box.top < 0
+  const box = notice ? boxOf(notice) : null;
+  if (!notice || !seenOf(notice) || !box || box.left < 0 || box.top < 0
     || box.right > innerWidth || box.bottom > innerHeight) problems.push('touch: the pending ale notice did not fit');
   return { text: lines.join('\n'), problems };
 }

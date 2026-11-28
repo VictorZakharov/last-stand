@@ -7,8 +7,7 @@
 // pillow with rows of sausages on it, the segments parted at every bent joint; with a ball at each joint, the fingers
 // were strings of beads.) The glove is the same surface a little further out, cut off over each finger's first
 // segment and round the thumb's, and the nails are plates laid on the backs of the fingertips.
-import * as THREE from 'three';
-import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { Attribute, Box3, floats, Geometry, Mat4, mergeGeometries, Node, Vec3, Vec4 } from '../../engine/api/index.ts';
 import { surfaceNets, type Field, type Net } from './surfaceNets';
 import { above, beyond, capsule, distanceOf, ellipsoid, fieldOf, frameIn, IDENTITY, slab, smax, tube } from './sdf';
 import type { Part, Shape } from './sdf';
@@ -19,18 +18,18 @@ import { tunable } from '../../core/tuning';
 /** A digit as the sculpt reads it: its joints from its root (each segment hangs down its joint's -y, the palm's side
  *  -z), each segment's length, and its half-width at its root. */
 export interface DigitShape {
-  j: THREE.Object3D[];
+  j: Node[];
   len: number[];
   width: number;
 }
 
 export interface HandGeometries {
   /** the skin whole, as the hand is bare */
-  skin: THREE.BufferGeometry;
+  skin: Geometry;
   /** the skin a glove leaves bare, on `skin`'s own vertices: the fingertips, the thumb's and the wrist's rim */
-  tips: THREE.BufferGeometry;
-  glove: THREE.BufferGeometry;
-  nails: THREE.BufferGeometry;
+  tips: Geometry;
+  glove: Geometry;
+  nails: Geometry;
 }
 
 /** A geometry's arrays, as a worker hands them over (models/hands.worker.ts). */
@@ -49,10 +48,10 @@ export interface PackedHand {
 /** `made` as arrays a worker can hand over, and the buffers to transfer with them. */
 export function packHand(made: HandGeometries): { packed: PackedHand; buffers: ArrayBuffer[] } {
   const buffers: ArrayBuffer[] = [];
-  const pack = (geometry: THREE.BufferGeometry): PackedGeometry => {
+  const pack = (geometry: Geometry): PackedGeometry => {
     const attributes: PackedGeometry['attributes'] = {};
     for (const [name, attribute] of Object.entries(geometry.attributes)) {
-      const array = (attribute as THREE.BufferAttribute).array as Float32Array | Uint16Array;
+      const array = (attribute as Attribute).array as Float32Array | Uint16Array;
       attributes[name] = { array, itemSize: attribute.itemSize };
       buffers.push(array.buffer as ArrayBuffer);
     }
@@ -68,11 +67,11 @@ export function packHand(made: HandGeometries): { packed: PackedHand; buffers: A
 /** The geometries a worker handed over. */
 export function unpackHand(packed: PackedHand): HandGeometries {
   const unpack = (from: PackedGeometry) => {
-    const geometry = new THREE.BufferGeometry();
+    const geometry = new Geometry();
     for (const [name, { array, itemSize }] of Object.entries(from.attributes)) {
-      geometry.setAttribute(name, new THREE.BufferAttribute(array, itemSize));
+      geometry.setAttribute(name, new Attribute(array, itemSize));
     }
-    geometry.setIndex(new THREE.BufferAttribute(from.index, 1));
+    geometry.setIndex(new Attribute(from.index, 1));
     return geometry;
   };
   const skin = unpack(packed.skin);
@@ -81,10 +80,10 @@ export function unpackHand(packed: PackedHand): HandGeometries {
 }
 
 /** A geometry of `index`'s triangles on `of`'s vertices. */
-function onVerticesOf(of: THREE.BufferGeometry, index: Uint32Array | Uint16Array): THREE.BufferGeometry {
-  const geometry = new THREE.BufferGeometry();
+function onVerticesOf(of: Geometry, index: Uint32Array | Uint16Array): Geometry {
+  const geometry = new Geometry();
   for (const [name, attribute] of Object.entries(of.attributes)) geometry.setAttribute(name, attribute);
-  geometry.setIndex(new THREE.BufferAttribute(index, 1));
+  geometry.setIndex(new Attribute(index, 1));
   return geometry;
 }
 
@@ -103,8 +102,8 @@ let cell = CELL;
  */
 const COARSE_SHARE = { skin: 0.12, glove: 0.17 };
 const COARSE_ERROR = 0.0025;
-/** the simplifier (three's meshoptimizer), loaded only for a coarse hand: null until it's ready */
-let simplifier: typeof import('three/addons/libs/meshopt_simplifier.module.js').MeshoptSimplifier | null = null;
+/** the simplifier (meshoptimizer's own build), loaded only for a coarse hand: null until it's ready */
+let simplifier: typeof import('meshoptimizer/simplifier').MeshoptSimplifier | null = null;
 let coarseHand = false;
 /**
  * The hands sculpted from now on meshed coarse, or not (Very low's: a hand was 12,500 triangles at any level, the
@@ -117,7 +116,7 @@ export async function setHandsCoarse(coarse: boolean): Promise<void> {
   cell = coarse ? COARSE_CELL : CELL;
   coarseHand = coarse;
   if (!coarse || simplifier) return;
-  const { MeshoptSimplifier } = await import('three/addons/libs/meshopt_simplifier.module.js');
+  const { MeshoptSimplifier } = await import('meshoptimizer/simplifier');
   await MeshoptSimplifier.ready;
   simplifier = MeshoptSimplifier;
 }
@@ -401,7 +400,7 @@ function palmParts(fingers: DigitShape[], thumb: DigitShape, toward: number, bui
     for (let i = 0; i + 1 < fingers.length; i++) {
       const [a, b] = [fingers[i], fingers[i + 1]].map((finger) => {
         const k = finger.j[0].position;
-        return new THREE.Vector3(k.x, k.y - SHUT_SHAPE.webDown, k.z + SHUT_SHAPE.webOut * deep);
+        return new Vec3(k.x, k.y - SHUT_SHAPE.webDown, k.z + SHUT_SHAPE.webOut * deep);
       });
       const r = (fingers[i].width + fingers[i + 1].width) / 2 * SHUT_SHAPE.web;
       palm(capsule(a, b, r), 0.006);
@@ -496,7 +495,7 @@ const PRESSED_RADII = [1.07, 1.11, 1.11, 1.04, 1.04, 0.78];
 /** A digit's parts, each in its joint's frame: two halves for each segment, narrower at its middle than at its ends,
  *  a knuckle on the back of each joint, and a pad at its tip. `first` is the index of its root joint among the bones.
  */
-function digitParts(digit: DigitShape, first: number, space: THREE.Object3D, thumb: boolean, pressed = false,
+function digitParts(digit: DigitShape, first: number, space: Node, thumb: boolean, pressed = false,
   stout = 1): Part[] {
   const w = digit.width * slimOf(thumb);
   const [l0, l1, l2] = digit.len;
@@ -557,7 +556,7 @@ function digitParts(digit: DigitShape, first: number, space: THREE.Object3D, thu
 }
 
 /** `points` with their corners cut, their ends kept: each pass rounds a bent line's elbows (Chaikin's). */
-function rounded(points: THREE.Vector4[], passes: number): THREE.Vector4[] {
+function rounded(points: Vec4[], passes: number): Vec4[] {
   let line = points;
   for (let pass = 0; pass < passes; pass++) {
     const next = [line[0]];
@@ -575,18 +574,18 @@ function rounded(points: THREE.Vector4[], passes: number): THREE.Vector4[] {
  * the way its section is broader, `wide` times its depth. A point's distance is read with the way across squeezed by
  * `wide`, so it is never more than the true one.
  */
-function sweptTube(line: THREE.Vector4[], across: THREE.Vector3, wide: number): Shape {
+function sweptTube(line: Vec4[], across: Vec3, wide: number): Shape {
   const squeeze = 1 - 1 / wide;
   const flat = line.map((point) => {
-    const at = new THREE.Vector3(point.x, point.y, point.z);
+    const at = new Vec3(point.x, point.y, point.z);
     return at.addScaledVector(across, -squeeze * at.dot(across));
   });
-  const centre = new THREE.Vector3();
-  for (const point of line) centre.add(new THREE.Vector3(point.x, point.y, point.z));
+  const centre = new Vec3();
+  for (const point of line) centre.add(new Vec3(point.x, point.y, point.z));
   centre.divideScalar(line.length);
   let radius = 0;
   for (const point of line) {
-    radius = Math.max(radius, centre.distanceTo(new THREE.Vector3(point.x, point.y, point.z)) + point.w * wide);
+    radius = Math.max(radius, centre.distanceTo(new Vec3(point.x, point.y, point.z)) + point.w * wide);
   }
   return {
     distance: (x, y, z) => {
@@ -629,13 +628,13 @@ const OPEN_SWEPT = { wide: 1.04, deep: 0.84, rootUnder: 0.002, pad: 0.0006 };
 /** the pad of the finger being swept (m), read by its points as they're placed */
 const OPEN_PAD = { now: 0 };
 
-function sweptFinger(finger: DigitShape, first: number, space: THREE.Object3D, reach: number, closed: boolean): Part {
+function sweptFinger(finger: DigitShape, first: number, space: Node, reach: number, closed: boolean): Part {
   OPEN_PAD.now = closed ? 0 : OPEN_SWEPT.pad;
-  const toSculpt = (n: number) => new THREE.Matrix4().fromArray(frameIn(finger.j[n], space)).invert();
+  const toSculpt = (n: number) => new Mat4().fromArray(frameIn(finger.j[n], space)).invert();
   // (its middle moved towards the palm by its pad, so its back stays where it was)
-  const at = (n: number, y = 0) => new THREE.Vector3(0, y, n === 0 && y === 0 ? 0 : -OPEN_PAD.now)
+  const at = (n: number, y = 0) => new Vec3(0, y, n === 0 && y === 0 ? 0 : -OPEN_PAD.now)
     .applyMatrix4(toSculpt(n));
-  const across = new THREE.Vector3(1, 0, 0).transformDirection(toSculpt(0));
+  const across = new Vec3(1, 0, 0).transformDirection(toSculpt(0));
   const w = finger.width;
   const pad = closed ? 0 : OPEN_SWEPT.pad;
   const deep = w * (closed ? SHUT_SHAPE.sweptDeep : OPEN_SWEPT.deep) + pad;
@@ -643,9 +642,9 @@ function sweptFinger(finger: DigitShape, first: number, space: THREE.Object3D, r
   const tip = at(2, -(finger.len[2] - deep * (closed ? 0.84 : 0.76)));
   // (its root well under the palm's back, so it comes out from under it at its knuckle and not along it)
   const under = closed ? SHUT_SHAPE.rootUnder : OPEN_SWEPT.rootUnder;
-  const inPalm = knuckle.clone().add(new THREE.Vector3(0, 0.018, -under));
-  const point = (at: THREE.Vector3, share: number) => new THREE.Vector4(at.x, at.y, at.z, deep * share);
-  const between = (a: THREE.Vector3, b: THREE.Vector3) => a.clone().lerp(b, 0.5);
+  const inPalm = knuckle.clone().add(new Vec3(0, 0.018, -under));
+  const point = (at: Vec3, share: number) => new Vec4(at.x, at.y, at.z, deep * share);
+  const between = (a: Vec3, b: Vec3) => a.clone().lerp(b, 0.5);
   // (shut, an even cushion; open, a finger's own shape along it: broadest at its joints, a waist between each two
   // and thinner to its tip. An even tube from knuckle to tip was a sausage: from the hand demo, "improve fingers")
   const line = closed ? rounded([
@@ -670,9 +669,9 @@ function sweptFinger(finger: DigitShape, first: number, space: THREE.Object3D, r
  * fused: one bent open on its own dragged its neighbours' skin and the palm's with it as a web (from the hand demo:
  * "shut fist is fused, why ?"). Apart, they touch, and the clefts between them are real.
  */
-function sweptFingers(fingers: DigitShape[], space: THREE.Object3D, build: HandBuild, closed: boolean): Part[][] {
-  const knuckles = fingers.map((finger) => new THREE.Vector3()
-    .applyMatrix4(new THREE.Matrix4().fromArray(frameIn(finger.j[0], space)).invert()));
+function sweptFingers(fingers: DigitShape[], space: Node, build: HandBuild, closed: boolean): Part[][] {
+  const knuckles = fingers.map((finger) => new Vec3()
+    .applyMatrix4(new Mat4().fromArray(frameIn(finger.j[0], space)).invert()));
   return fingers.map((finger, i) => {
     const gaps = [i - 1, i + 1].filter((n) => n >= 0 && n < fingers.length)
       .map((n) => knuckles[i].distanceTo(knuckles[n]));
@@ -687,11 +686,11 @@ function sweptFingers(fingers: DigitShape[], space: THREE.Object3D, build: HandB
 }
 
 /** A box round a piece's parts, with room for their blends. */
-function boxAround(parts: Part[]): THREE.Box3 {
-  const box = new THREE.Box3();
+function boxAround(parts: Part[]): Box3 {
+  const box = new Box3();
   for (const part of parts) {
     const reach = part.shape.radius + part.blend + 0.004;
-    const centre = new THREE.Vector3(...part.shape.centre);
+    const centre = new Vec3(...part.shape.centre);
     box.expandByPoint(centre.clone().addScalar(reach));
     box.expandByPoint(centre.clone().addScalar(-reach));
   }
@@ -708,9 +707,9 @@ const SHUT_FILL = tunable('shutFill', { curl: 0.8, mound: 0.78, web: 0.75 });
  * pocket inside its curl, seen from the side as a triangle open between them (from play: "this is not a natural fist
  * shape").
  */
-function curlFill(finger: DigitShape, first: number, space: THREE.Object3D, outer = 0): Part[] {
-  const toSculpt = (n: number, y = 0) => new THREE.Vector3(0, y, 0)
-    .applyMatrix4(new THREE.Matrix4().fromArray(frameIn(finger.j[n], space)).invert());
+function curlFill(finger: DigitShape, first: number, space: Node, outer = 0): Part[] {
+  const toSculpt = (n: number, y = 0) => new Vec3(0, y, 0)
+    .applyMatrix4(new Mat4().fromArray(frameIn(finger.j[n], space)).invert());
   const [knuckle, middle, last] = [0, 1, 2].map((n) => toSculpt(n));
   const tip = toSculpt(2, -finger.len[2]);
   const r = finger.width * SHUT_FILL.curl;
@@ -721,9 +720,9 @@ function curlFill(finger: DigitShape, first: number, space: THREE.Object3D, oute
   // (the little finger's side of a fist is one soft pad, the palm's edge running on over its folded finger: with none,
   // its three bones lay as shelves one on another under the bar of the palm's edge, an adversarial review's "pancakes")
   if (outer !== 0 && SHUT_SHAPE.pad > 0) {
-    const out = new THREE.Vector3(outer * finger.width * 0.35, 0, 0);
+    const out = new Vec3(outer * finger.width * 0.35, 0, 0);
     const middleOfCurl = knuckle.clone().add(middle).add(last).add(tip).multiplyScalar(0.25).add(out);
-    const edge = new THREE.Vector3(knuckle.x + out.x, knuckle.y + 0.03, knuckle.z - finger.width * 0.6);
+    const edge = new Vec3(knuckle.x + out.x, knuckle.y + 0.03, knuckle.z - finger.width * 0.6);
     const pad: Part = {
       shape: capsule(edge, middleOfCurl, finger.width * SHUT_SHAPE.pad), frame: IDENTITY, blend: 0.008,
       bones: [[0, 0.6], [first, 0.4]], shapeOnly: true,
@@ -739,9 +738,9 @@ function curlFill(finger: DigitShape, first: number, space: THREE.Object3D, oute
  * hand's, the thumb stood off the palm as a stick with a notch under it, where a fist's thumb rises out of a full
  * mound (beside the reference photographs of a boxer's fist).
  */
-function thenarFill(thumb: DigitShape, index: DigitShape, space: THREE.Object3D): Part[] {
-  const toSculpt = (joint: THREE.Object3D) => new THREE.Vector3()
-    .applyMatrix4(new THREE.Matrix4().fromArray(frameIn(joint, space)).invert());
+function thenarFill(thumb: DigitShape, index: DigitShape, space: Node): Part[] {
+  const toSculpt = (joint: Node) => new Vec3()
+    .applyMatrix4(new Mat4().fromArray(frameIn(joint, space)).invert());
   const [root, knuckle] = [thumb.j[0], thumb.j[1]].map(toSculpt);
   const indexKnuckle = toSculpt(index.j[0]);
   const heel = root.clone();
@@ -749,7 +748,7 @@ function thenarFill(thumb: DigitShape, index: DigitShape, space: THREE.Object3D)
   heel.z -= 0.006;
   const w = thumb.width * slimOf(true);
   const bones: [number, number][] = [[0, 0.3], [THUMB_ROOT, 0.7]];
-  const fill = (a: THREE.Vector3, b: THREE.Vector3, r: number): Part => (
+  const fill = (a: Vec3, b: Vec3, r: number): Part => (
     { shape: capsule(a, b, r), frame: IDENTITY, blend: 0.008, bones, shapeOnly: true }
   );
   return [
@@ -766,9 +765,9 @@ const OPEN_PAD_THENAR = 1.0;
 
 /** The thumb's pad on a fighter's one hand: full round its bone in the palm and in towards the palm's middle, moving
  *  mostly with the thumb's root. */
-function thenarPad(thumb: DigitShape, space: THREE.Object3D): Part[] {
-  const toSculpt = (joint: THREE.Object3D) => new THREE.Vector3()
-    .applyMatrix4(new THREE.Matrix4().fromArray(frameIn(joint, space)).invert());
+function thenarPad(thumb: DigitShape, space: Node): Part[] {
+  const toSculpt = (joint: Node) => new Vec3()
+    .applyMatrix4(new Mat4().fromArray(frameIn(joint, space)).invert());
   const [root, knuckle] = [thumb.j[0], thumb.j[1]].map(toSculpt);
   const heel = root.clone();
   heel.x *= 0.4;
@@ -815,7 +814,7 @@ function knuckleSkinAt(digits: DigitShape[], frames: Float64Array[][], x: number
 /** The skin's colour at each vertex (`color`, multiplying its material's): darker where the skin round it closes in,
  *  read from `field` a few millimetres out along its normal (a point outside the hand nearer to another part of it than
  *  it is out), darker and redder over the finger joints' backs (`knuckleSkinAt`), and warmer over the fingertips. */
-function shadeSkin(geometry: THREE.BufferGeometry, field: Field, digits: DigitShape[], frames: Float64Array[][],
+function shadeSkin(geometry: Geometry, field: Field, digits: DigitShape[], frames: Float64Array[][],
   closed: boolean): void {
   const position = geometry.attributes.position;
   const normal = geometry.attributes.normal;
@@ -838,7 +837,7 @@ function shadeSkin(geometry: THREE.BufferGeometry, field: Field, digits: DigitSh
       colour[i * 3 + c] = light * (1 + (TIP_WARM[c] - 1) * tip) * (1 + (KNUCKLE_TINT[c] - 1) * knuckle);
     }
   }
-  geometry.setAttribute('color', new THREE.BufferAttribute(colour, 3));
+  geometry.setAttribute('color', new Attribute(colour, 3));
 }
 
 /** the hand's bones: its own, each finger's three and the thumb's three */
@@ -860,7 +859,7 @@ function weightsAt(parts: Part[], x: number, y: number, z: number, out: { bones:
 }
 
 /** A mesh of `field` within `box` as a geometry, its vertices skinned to the joints `parts` say. */
-function skinnedNet(field: Field, box: THREE.Box3, parts: Part[], share: number): THREE.BufferGeometry {
+function skinnedNet(field: Field, box: Box3, parts: Part[], share: number): Geometry {
   const net = simplified(surfaceNets(field, box, cell), share);
   const count = net.positions.length / 3;
   // (the bones' indices as floats, as models/shapes.ts's: Uint16 ones made ANGLE compile a vertex shader at the
@@ -877,12 +876,12 @@ function skinnedNet(field: Field, box: THREE.Box3, parts: Part[], share: number)
     });
   }
   // (no texture places: its maps are read triplanar, models/triplanar.ts)
-  const geometry = new THREE.BufferGeometry();
-  geometry.setAttribute('position', new THREE.BufferAttribute(net.positions, 3));
-  geometry.setAttribute('normal', new THREE.BufferAttribute(net.normals, 3));
-  geometry.setAttribute('skinIndex', new THREE.BufferAttribute(bones, 4));
-  geometry.setAttribute('skinWeight', new THREE.BufferAttribute(shares, 4));
-  geometry.setIndex(new THREE.BufferAttribute(net.index, 1));
+  const geometry = new Geometry();
+  geometry.setAttribute('position', new Attribute(net.positions, 3));
+  geometry.setAttribute('normal', new Attribute(net.normals, 3));
+  geometry.setAttribute('skinIndex', new Attribute(bones, 4));
+  geometry.setAttribute('skinWeight', new Attribute(shares, 4));
+  geometry.setIndex(new Attribute(net.index, 1));
   return geometry;
 }
 
@@ -960,7 +959,7 @@ function inSlit(a: DigitShape, b: DigitShape, ea: Float64Array, eb: Float64Array
 
 /** `skin`'s triangles the glove leaves bare, `TUCK` under its edge, on the skin's own vertices. (The skin whole under
  *  the glove showed through it where a bent thumb pressed the two together.) */
-function bareOf(skin: THREE.BufferGeometry, digits: DigitShape[], frames: Float64Array[][]): THREE.BufferGeometry {
+function bareOf(skin: Geometry, digits: DigitShape[], frames: Float64Array[][]): Geometry {
   const position = skin.getAttribute('position');
   const cut = { past: 0, hem: 0 };
   const shown = new Uint8Array(position.count);
@@ -983,7 +982,7 @@ const SEARCH_STEP = 0.0004;
 /** The first place `field`'s surface is met going from `from` along `down` (a unit way, the hand's frame), within
  *  `reach` (m), or null. (Bisected between the search's ends, a nail missed every fingertip: the far end lay out
  *  past the finger, on its palm's side.) */
-function surfaceAlong(field: Field, from: THREE.Vector3, down: THREE.Vector3, reach: number): THREE.Vector3 | null {
+function surfaceAlong(field: Field, from: Vec3, down: Vec3, reach: number): Vec3 | null {
   const at = (distance: number) => from.clone().addScaledVector(down, distance);
   const inside = (distance: number) => {
     const p = at(distance);
@@ -1003,10 +1002,10 @@ function surfaceAlong(field: Field, from: THREE.Vector3, down: THREE.Vector3, re
 }
 
 /** The field's normal at `point`. */
-function normalAt(field: Field, point: THREE.Vector3): THREE.Vector3 {
+function normalAt(field: Field, point: Vec3): Vec3 {
   const h = 0.0002;
   const { x, y, z } = point;
-  return new THREE.Vector3(
+  return new Vec3(
     field(x + h, y, z) - field(x - h, y, z),
     field(x, y + h, z) - field(x, y - h, z),
     field(x, y, z + h) - field(x, y, z - h),
@@ -1015,14 +1014,14 @@ function normalAt(field: Field, point: THREE.Vector3): THREE.Vector3 {
 
 /** A nail on the back of `digit`'s tip: a plate laid on the skin, rounded at its root, its edge a rim into the skin,
  *  moving with the tip's joint (`bone`). Its vertices, normals and triangles are added to `into`. */
-function nail(field: Field, own: Field, digit: DigitShape, bone: number, space: THREE.Object3D, into: NailMesh,
+function nail(field: Field, own: Field, digit: DigitShape, bone: number, space: Node, into: NailMesh,
   thumb: boolean, shutThumb = false): void {
   const tip = digit.j[2];
-  const toHand = new THREE.Matrix4().fromArray(frameIn(tip, space)).invert();
+  const toHand = new Mat4().fromArray(frameIn(tip, space)).invert();
   const l2 = digit.len[2];
   const half = digit.width * slimOf(thumb) * (shutThumb ? 0.67 : NAIL_HALF);
   const lift = shutThumb ? 0.00085 : NAIL_OUT;
-  const down = new THREE.Vector3(0, 0, -1).transformDirection(toHand);
+  const down = new Vec3(0, 0, -1).transformDirection(toHand);
   const { across: NAIL_ACROSS, along: NAIL_ALONG } = coarseHand ? COARSE_NAIL_GRID : NAIL_GRID;
   const rows: number[][] = [];
   for (let a = 0; a <= NAIL_ALONG; a++) {
@@ -1032,7 +1031,7 @@ function nail(field: Field, own: Field, digit: DigitShape, bone: number, space: 
     const across = half * bed * Math.sqrt(clamp((t - NAIL_FROM) / 0.1, 0.15, 1));
     const row: number[] = [];
     for (let c = 0; c <= NAIL_ACROSS; c++) {
-      const local = new THREE.Vector3(across * (2 * c / NAIL_ACROSS - 1), -t * l2, digit.width * 2);
+      const local = new Vec3(across * (2 * c / NAIL_ACROSS - 1), -t * l2, digit.width * 2);
       const from = local.applyMatrix4(toHand);
       // (a hand sculpted closed has its fingers' nails pressed into the curl, under other flesh: each is laid on its
       // own finger's surface there, hidden until the hand opens)
@@ -1074,7 +1073,7 @@ class NailMesh {
   bones: number[] = [];
   index: number[] = [];
 
-  add(at: THREE.Vector3, normal: THREE.Vector3, bone: number): number {
+  add(at: Vec3, normal: Vec3, bone: number): number {
     this.positions.push(at.x, at.y, at.z);
     this.normals.push(normal.x, normal.y, normal.z);
     this.bones.push(bone);
@@ -1083,8 +1082,8 @@ class NailMesh {
 
   /** a copy of `vertex` moved `depth` in along its normal */
   sunk(vertex: number, depth: number, bone: number): number {
-    const at = new THREE.Vector3().fromArray(this.positions, vertex * 3);
-    const normal = new THREE.Vector3().fromArray(this.normals, vertex * 3);
+    const at = new Vec3().fromArray(this.positions, vertex * 3);
+    const normal = new Vec3().fromArray(this.normals, vertex * 3);
     if (this.colours.length) this.colours.push(...this.colours.slice(3 * vertex, 3 * vertex + 3));
     return this.add(at.addScaledVector(normal, -depth), normal, bone);
   }
@@ -1093,7 +1092,7 @@ class NailMesh {
     this.index.push(a, b, c, a, c, d);
   }
 
-  geometry(): THREE.BufferGeometry {
+  geometry(): Geometry {
     const count = this.positions.length / 3;
     // (the bones' indices as floats, as `skinnedNet`'s)
     const bones = new Float32Array(count * 4);
@@ -1102,20 +1101,20 @@ class NailMesh {
       bones[i * 4] = bone;
       shares[i * 4] = 1;
     });
-    const geometry = new THREE.BufferGeometry();
-    geometry.setAttribute('position', new THREE.Float32BufferAttribute(this.positions, 3));
-    geometry.setAttribute('normal', new THREE.Float32BufferAttribute(this.normals, 3));
-    if (this.colours.length) geometry.setAttribute('color', new THREE.Float32BufferAttribute(this.colours, 3));
-    geometry.setAttribute('uv', new THREE.Float32BufferAttribute(new Float32Array(count * 2), 2));
-    geometry.setAttribute('skinIndex', new THREE.BufferAttribute(bones, 4));
-    geometry.setAttribute('skinWeight', new THREE.BufferAttribute(shares, 4));
+    const geometry = new Geometry();
+    geometry.setAttribute('position', floats(this.positions, 3));
+    geometry.setAttribute('normal', floats(this.normals, 3));
+    if (this.colours.length) geometry.setAttribute('color', floats(this.colours, 3));
+    geometry.setAttribute('uv', floats(new Float32Array(count * 2), 2));
+    geometry.setAttribute('skinIndex', new Attribute(bones, 4));
+    geometry.setAttribute('skinWeight', new Attribute(shares, 4));
     geometry.setIndex(this.index);
     return geometry;
   }
 }
 
 /** The box the hand's field is meshed within: every joint's place, with room round it. */
-function boxOf(digits: DigitShape[], space: THREE.Object3D, margin: number): THREE.Box3 {
+function boxOf(digits: DigitShape[], space: Node, margin: number): Box3 {
   const box = palmBox();
   for (const digit of digits) {
     box.expandByPoint(pointOn(digit, 2, -digit.len[2], space));
@@ -1126,7 +1125,7 @@ function boxOf(digits: DigitShape[], space: THREE.Object3D, margin: number): THR
 
 /** The box the glove is meshed within: the palm and each digit up to its cuff (half the hand's box: meshed in the
  *  hand's, the glove took a third of the sculpt's time). */
-function gloveBox(digits: DigitShape[], space: THREE.Object3D): THREE.Box3 {
+function gloveBox(digits: DigitShape[], space: Node): Box3 {
   const box = palmBox();
   digits.forEach((digit, i) => {
     const n = i === digits.length - 1 ? 1 : 0;
@@ -1137,19 +1136,19 @@ function gloveBox(digits: DigitShape[], space: THREE.Object3D): THREE.Box3 {
 }
 
 /** the palm's box, the hand's own frame (m) */
-const palmBox = () => new THREE.Box3(new THREE.Vector3(-0.05, -0.12, -0.03), new THREE.Vector3(0.05, 0.02, 0.03));
+const palmBox = () => new Box3(new Vec3(-0.05, -0.12, -0.03), new Vec3(0.05, 0.02, 0.03));
 
 /** The point `along` its joint's y on `digit`'s joint `n` (0 its root), in the hand's frame. */
-function pointOn(digit: DigitShape, n: number, along: number, space: THREE.Object3D): THREE.Vector3 {
-  const toHand = new THREE.Matrix4().fromArray(frameIn(digit.j[n], space)).invert();
-  return new THREE.Vector3(0, along, 0).applyMatrix4(toHand);
+function pointOn(digit: DigitShape, n: number, along: number, space: Node): Vec3 {
+  const toHand = new Mat4().fromArray(frameIn(digit.j[n], space)).invert();
+  return new Vec3(0, along, 0).applyMatrix4(toHand);
 }
 
 /**
  * A fist's skin in pieces, one geometry: the palm with its thumb, and each finger's own (`pieces`, a finger each).
  * Each finger's skin follows its own bones and the palm's alone, never a neighbour's.
  */
-function skinInPieces(parts: Part[], pieces: Part[][], fingers: DigitShape[], box: THREE.Box3): THREE.BufferGeometry {
+function skinInPieces(parts: Part[], pieces: Part[][], fingers: DigitShape[], box: Box3): Geometry {
   const own = new Set(pieces.flat());
   const rest = parts.filter((part) => !own.has(part));
   const palmSays = rest.filter((part) => part.bones.length > 0 && part.bones.every(([bone]) => bone === 0));
@@ -1167,7 +1166,7 @@ function skinInPieces(parts: Part[], pieces: Part[][], fingers: DigitShape[], bo
  * hand's own): `fingers` index to little, then `thumb`; their joints are bones 1 on, in that order (0 is the hand's).
  * `toward` is the way across the hand to its thumb (+1 or -1 along x).
  */
-export function sculptHand(space: THREE.Object3D, fingers: DigitShape[], thumb: DigitShape, toward: number,
+export function sculptHand(space: Node, fingers: DigitShape[], thumb: DigitShape, toward: number,
   build: HandBuild = PLAIN, closed = false): HandGeometries {
   const digits = [...fingers, thumb];
   // (a fist's fingers swept whole, first, so they meet each other hard and the palm joins them softly; of the open

@@ -1,6 +1,9 @@
 // Geometry for the lab's measures (tools/lab): the hero's meshes as they are drawn this frame, in world space, and
 // what a line meets on its way through them. Every probe before the lab copied these by hand, and the copies drifted.
-import * as THREE from 'three';
+import {
+  Attribute, Box3, Color, DoubleSide, Geometry, Mat4, Material, Maths, Mesh, Node,
+  Raycaster, SkinnedMesh, Sphere, UnlitMaterial, Vec3,
+} from './sceneApi.ts';
 import type { Joints } from '../../../src/entities/models/rig';
 
 /** a mesh's lengths along a line: how many times the line crosses its surface, and how much of the line lies inside */
@@ -11,23 +14,23 @@ export interface Crossing {
 }
 
 /** true when the object and every one of its parents are visible */
-export function isShown(object: THREE.Object3D): boolean {
-  for (let node: THREE.Object3D | null = object; node; node = node.parent) {
+export function isShown(object: Node): boolean {
+  for (let node: Node | null = object; node; node = node.parent) {
     if (!node.visible) return false;
   }
   return true;
 }
 
 /** true when `object` is `ancestor` or lies under it */
-export function isUnder(object: THREE.Object3D, ancestor: THREE.Object3D): boolean {
-  for (let node: THREE.Object3D | null = object; node; node = node.parent) {
+export function isUnder(object: Node, ancestor: Node): boolean {
+  for (let node: Node | null = object; node; node = node.parent) {
     if (node === ancestor) return true;
   }
   return false;
 }
 
 /** the first material of a mesh */
-function firstMaterial(mesh: THREE.Mesh): THREE.Material {
+function firstMaterial(mesh: Mesh): Material {
   return Array.isArray(mesh.material) ? mesh.material[0] : mesh.material;
 }
 
@@ -35,15 +38,15 @@ function firstMaterial(mesh: THREE.Mesh): THREE.Material {
  * Names meshes by the joint each hangs from and its own name (or its material's), as `chest/coat`: what a report says
  * a line went through.
  */
-export function meshLabeller(joints: Joints): (mesh: THREE.Mesh) => string {
-  const jointNames = new Map<THREE.Object3D, string>();
+export function meshLabeller(joints: Joints): (mesh: Mesh) => string {
+  const jointNames = new Map<Node, string>();
   for (const [name, value] of Object.entries(joints)) {
-    if (value instanceof THREE.Object3D) jointNames.set(value, name);
+    if (value instanceof Node) jointNames.set(value, name);
   }
   return (mesh) => {
     let joint = '';
     for (let parent = mesh.parent; parent && !joint; parent = parent.parent) joint = jointNames.get(parent) ?? '';
-    const material = firstMaterial(mesh) as THREE.Material & { color?: THREE.Color };
+    const material = firstMaterial(mesh) as Material & { color?: Color };
     const own = mesh.name || material.name || material.color?.getHexString() || '?';
     return `${joint}/${own}`;
   };
@@ -62,27 +65,27 @@ const WEIGHT_SLACK = 1e-3;
  * positions change (cloth). Null when no such bound holds (morph targets, or weights that don't add up to one).
  */
 class MeshBound {
-  private readonly bones: { index: number; sphere: THREE.Sphere }[] = [];
+  private readonly bones: { index: number; sphere: Sphere }[] = [];
   private readonly bounded: boolean;
-  private readonly local = new THREE.Sphere();
-  private readonly world = new THREE.Sphere();
-  private readonly part = new THREE.Sphere();
-  private readonly toWorld = new THREE.Matrix4();
+  private readonly local = new Sphere();
+  private readonly world = new Sphere();
+  private readonly part = new Sphere();
+  private readonly toWorld = new Mat4();
   /** the version of a rigid mesh's positions its sphere was made from */
   private positionVersion = -1;
 
-  constructor(private readonly mesh: THREE.Mesh) {
+  constructor(private readonly mesh: Mesh) {
     if (mesh.geometry.morphAttributes.position?.length) this.bounded = false;
-    else if ((mesh as THREE.SkinnedMesh).isSkinnedMesh) this.bounded = this.measureBones(mesh as THREE.SkinnedMesh);
+    else if ((mesh as SkinnedMesh).isSkinnedMesh) this.bounded = this.measureBones(mesh as SkinnedMesh);
     else this.bounded = true;
   }
 
   /** this frame's bound in world space (the world matrices up to date), or null when there is none */
-  sphere(): THREE.Sphere | null {
+  sphere(): Sphere | null {
     if (!this.bounded) return null;
     const mesh = this.mesh;
-    if (!(mesh as THREE.SkinnedMesh).isSkinnedMesh) return this.rigidSphere();
-    const skinned = mesh as THREE.SkinnedMesh;
+    if (!(mesh as SkinnedMesh).isSkinnedMesh) return this.rigidSphere();
+    const skinned = mesh as SkinnedMesh;
     let first = true;
     for (const { index, sphere } of this.bones) {
       this.toWorld.multiplyMatrices(skinned.matrixWorld, skinned.bindMatrixInverse);
@@ -95,12 +98,12 @@ class MeshBound {
     return this.world;
   }
 
-  private rigidSphere(): THREE.Sphere {
-    const position = this.mesh.geometry.attributes.position as THREE.BufferAttribute;
+  private rigidSphere(): Sphere {
+    const position = this.mesh.geometry.attributes.position as Attribute;
     if (position.version !== this.positionVersion) {
       // (made here rather than by the geometry's own: the lab leaves the game's bounds as the game made them)
-      const point = new THREE.Vector3();
-      new THREE.Box3().setFromBufferAttribute(position).getCenter(this.local.center);
+      const point = new Vec3();
+      new Box3().setFromBufferAttribute(position).getCenter(this.local.center);
       this.local.radius = 0;
       for (let i = 0; i < position.count; i++) {
         point.fromBufferAttribute(position, i);
@@ -112,15 +115,15 @@ class MeshBound {
   }
 
   /** each bone's sphere round its own vertices; false when a vertex's weights don't add up to one */
-  private measureBones(mesh: THREE.SkinnedMesh): boolean {
-    const boxes = new Map<number, THREE.Box3>();
+  private measureBones(mesh: SkinnedMesh): boolean {
+    const boxes = new Map<number, Box3>();
     const weighted = eachBonePoint(mesh, (bone, point) => {
-      const box = boxes.get(bone) ?? new THREE.Box3();
+      const box = boxes.get(bone) ?? new Box3();
       boxes.set(bone, box.expandByPoint(point));
     });
     if (!weighted) return false;
-    const spheres = new Map<number, THREE.Sphere>();
-    for (const [bone, box] of boxes) spheres.set(bone, new THREE.Sphere(box.getCenter(new THREE.Vector3()), 0));
+    const spheres = new Map<number, Sphere>();
+    for (const [bone, box] of boxes) spheres.set(bone, new Sphere(box.getCenter(new Vec3()), 0));
     eachBonePoint(mesh, (bone, point) => {
       const sphere = spheres.get(bone)!;
       sphere.radius = Math.max(sphere.radius, point.distanceTo(sphere.center));
@@ -134,13 +137,13 @@ class MeshBound {
  * Calls `visit` with each vertex of a skinned mesh at rest, in the frame of each bone it's weighted to. Returns false
  * (having stopped) at a vertex whose weights don't add up to one: it isn't then an average of its bones' placements.
  */
-function eachBonePoint(mesh: THREE.SkinnedMesh, visit: (bone: number, point: THREE.Vector3) => void): boolean {
+function eachBonePoint(mesh: SkinnedMesh, visit: (bone: number, point: Vec3) => void): boolean {
   const { geometry, skeleton } = mesh;
-  const position = geometry.attributes.position as THREE.BufferAttribute;
-  const skinIndex = geometry.attributes.skinIndex as THREE.BufferAttribute;
-  const skinWeight = geometry.attributes.skinWeight as THREE.BufferAttribute;
-  const rest = new THREE.Vector3();
-  const point = new THREE.Vector3();
+  const position = geometry.attributes.position as Attribute;
+  const skinIndex = geometry.attributes.skinIndex as Attribute;
+  const skinWeight = geometry.attributes.skinWeight as Attribute;
+  const rest = new Vec3();
+  const point = new Vec3();
   for (let i = 0; i < position.count; i++) {
     rest.fromBufferAttribute(position, i).applyMatrix4(mesh.bindMatrix);
     let total = 0;
@@ -158,8 +161,8 @@ function eachBonePoint(mesh: THREE.SkinnedMesh, visit: (bone: number, point: THR
 
 /** a body mesh, its copy in world space and its bound */
 interface BakedPart {
-  source: THREE.Mesh;
-  copy: THREE.Mesh;
+  source: Mesh;
+  copy: Mesh;
   bound: MeshBound;
 }
 
@@ -170,24 +173,24 @@ interface BakedPart {
  */
 export class BakedBody {
   private readonly parts: BakedPart[] = [];
-  private readonly material = new THREE.MeshBasicMaterial({ side: THREE.DoubleSide });
+  private readonly material = new UnlitMaterial({ side: DoubleSide });
 
   /** `include` picks the meshes; alpha-tested cards (hair, leaves) are left out, as rays would meet their quads */
-  constructor(root: THREE.Object3D, joints: Joints, include: (mesh: THREE.Mesh) => boolean) {
+  constructor(root: Node, joints: Joints, include: (mesh: Mesh) => boolean) {
     const label = meshLabeller(joints);
     root.traverse((object) => {
-      const mesh = object as THREE.Mesh;
+      const mesh = object as Mesh;
       if (!mesh.isMesh || !include(mesh) || firstMaterial(mesh).alphaTest > 0) return;
       this.parts.push({ source: mesh, copy: this.copyOf(mesh, label(mesh)), bound: new MeshBound(mesh) });
     });
   }
 
-  private copyOf(source: THREE.Mesh, label: string): THREE.Mesh {
-    const geometry = new THREE.BufferGeometry();
+  private copyOf(source: Mesh, label: string): Mesh {
+    const geometry = new Geometry();
     const count = source.geometry.attributes.position.count;
-    geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(count * 3), 3));
+    geometry.setAttribute('position', new Attribute(new Float32Array(count * 3), 3));
     if (source.geometry.index) geometry.setIndex(source.geometry.index);
-    const copy = new THREE.Mesh(geometry, this.material);
+    const copy = new Mesh(geometry, this.material);
     copy.matrixAutoUpdate = false;
     copy.userData = { label };
     return copy;
@@ -198,13 +201,13 @@ export class BakedBody {
    * rest aren't baked or returned. Throws if a baked vertex lies outside its mesh's bound (the bound would be wrong,
    * and meshes left out by it might not be out of reach).
    */
-  bake(near?: THREE.Sphere): THREE.Mesh[] {
-    const shown: THREE.Mesh[] = [];
+  bake(near?: Sphere): Mesh[] {
+    const shown: Mesh[] = [];
     for (const { source, copy, bound } of this.parts) {
       if (!isShown(source)) continue;
       const sphere = bound.sphere();
       if (near && sphere && !sphere.intersectsSphere(near)) continue;
-      const position = copy.geometry.attributes.position as THREE.BufferAttribute;
+      const position = copy.geometry.attributes.position as Attribute;
       const out = position.array as Float32Array;
       placeVertices(source, out);
       position.needsUpdate = true;
@@ -221,9 +224,11 @@ export class BakedBody {
   }
 }
 
-/** true when an attribute's numbers can be read straight from its array (not interleaved, not normalized) */
-function readsDirectly(attribute: THREE.BufferAttribute | THREE.InterleavedBufferAttribute): boolean {
-  return !(attribute as THREE.InterleavedBufferAttribute).isInterleavedBufferAttribute && !attribute.normalized;
+/** true when an attribute's numbers can be read straight from its array (not normalized; the API has no interleaved
+ *  attributes, three's had: a tree of three's, an A/B's other side, reads one by the attribute's own getters) */
+function readsDirectly(attribute: Attribute): boolean {
+  return !(attribute as { isInterleavedBufferAttribute?: boolean }).isInterleavedBufferAttribute
+    && !attribute.normalized;
 }
 
 /**
@@ -232,10 +237,10 @@ function readsDirectly(attribute: THREE.BufferAttribute | THREE.InterleavedBuffe
  * weight, and took 30 ms a frame for the hero); a mesh with morph targets, or attributes that can't be read straight,
  * goes through three's own.
  */
-export function placeVertices(mesh: THREE.Mesh, out: Float32Array): void {
+export function placeVertices(mesh: Mesh, out: Float32Array): void {
   const { position, skinIndex, skinWeight } = mesh.geometry.attributes;
   const morphed = Boolean(mesh.geometry.morphAttributes.position?.length);
-  const skinned = (mesh as THREE.SkinnedMesh).isSkinnedMesh;
+  const skinned = (mesh as SkinnedMesh).isSkinnedMesh;
   const direct = readsDirectly(position) && (!skinned || (readsDirectly(skinIndex) && readsDirectly(skinWeight)));
   if (morphed || !direct) {
     placeEachVertex(mesh, out);
@@ -246,12 +251,12 @@ export function placeVertices(mesh: THREE.Mesh, out: Float32Array): void {
     transformPoints(points, mesh.matrixWorld.elements, out);
     return;
   }
-  skinPoints(mesh as THREE.SkinnedMesh, points, out);
+  skinPoints(mesh as SkinnedMesh, points, out);
 }
 
 /** three's own way, a vertex at a time */
-function placeEachVertex(mesh: THREE.Mesh, out: Float32Array): void {
-  const vertex = new THREE.Vector3();
+function placeEachVertex(mesh: Mesh, out: Float32Array): void {
+  const vertex = new Vec3();
   const count = mesh.geometry.attributes.position.count;
   for (let i = 0; i < count; i++) {
     mesh.getVertexPosition(i, vertex).applyMatrix4(mesh.matrixWorld);
@@ -275,15 +280,15 @@ function transformPoints(points: ArrayLike<number>, matrix: ArrayLike<number>, o
  * Skins `points` as three draws them: each vertex carried by each of its bones (the bone's world matrix, its inverse
  * at rest, the bind matrix), summed by its weights, then through the bind matrix's inverse and the mesh's world.
  */
-function skinPoints(mesh: THREE.SkinnedMesh, points: ArrayLike<number>, out: Float32Array): void {
+function skinPoints(mesh: SkinnedMesh, points: ArrayLike<number>, out: Float32Array): void {
   const { bones, boneInverses } = mesh.skeleton;
   const carried = new Float64Array(bones.length * 16);
-  const matrix = new THREE.Matrix4();
+  const matrix = new Mat4();
   for (let j = 0; j < bones.length; j++) {
     matrix.multiplyMatrices(bones[j].matrixWorld, boneInverses[j]).multiply(mesh.bindMatrix);
     matrix.toArray(carried, j * 16);
   }
-  const toWorld = new THREE.Matrix4().multiplyMatrices(mesh.matrixWorld, mesh.bindMatrixInverse).elements;
+  const toWorld = new Mat4().multiplyMatrices(mesh.matrixWorld, mesh.bindMatrixInverse).elements;
   const indices = mesh.geometry.attributes.skinIndex.array as ArrayLike<number>;
   const weights = mesh.geometry.attributes.skinWeight.array as ArrayLike<number>;
   for (let i = 0, v = 0; i < points.length; i += 3, v += 4) {
@@ -309,7 +314,7 @@ function skinPoints(mesh: THREE.SkinnedMesh, points: ArrayLike<number>, out: Flo
 }
 
 /** throws if a point of `points` lies outside `sphere` (by more than float error) */
-function checkWithin(points: Float32Array, sphere: THREE.Sphere, label: string): void {
+function checkWithin(points: Float32Array, sphere: Sphere, label: string): void {
   const reach = (sphere.radius + BOUND_SLACK) ** 2;
   const { x, y, z } = sphere.center;
   for (let i = 0; i < points.length; i += 3) {
@@ -320,16 +325,16 @@ function checkWithin(points: Float32Array, sphere: THREE.Sphere, label: string):
   }
 }
 
-const raycaster = new THREE.Raycaster();
+const raycaster = new Raycaster();
 
 /**
  * What the segment from `a` to `b` meets among `meshes` (from `BakedBody.bake`), by mesh label: each crossing of a
  * surface counts, and the length between pairs of crossings is what lies inside. `skip` leaves out labels it matches.
  */
 export function crossingsAlong(
-  meshes: THREE.Mesh[],
-  a: THREE.Vector3,
-  b: THREE.Vector3,
+  meshes: Mesh[],
+  a: Vec3,
+  b: Vec3,
   skip?: RegExp,
 ): Map<string, Crossing> {
   const result = new Map<string, Crossing>();
@@ -366,9 +371,9 @@ export function addCrossings(total: Map<string, Crossing>, more: Map<string, Cro
 }
 
 /** the least distance from point `p` to the segment `a`-`b` */
-export function pointSegmentDistance(p: THREE.Vector3, a: THREE.Vector3, b: THREE.Vector3): number {
+export function pointSegmentDistance(p: Vec3, a: Vec3, b: Vec3): number {
   const ab = b.clone().sub(a);
-  const t = THREE.MathUtils.clamp(p.clone().sub(a).dot(ab) / ab.lengthSq(), 0, 1);
+  const t = Maths.clamp(p.clone().sub(a).dot(ab) / ab.lengthSq(), 0, 1);
   return p.distanceTo(a.clone().addScaledVector(ab, t));
 }
 
@@ -376,7 +381,7 @@ export function pointSegmentDistance(p: THREE.Vector3, a: THREE.Vector3, b: THRE
  * The least distance between the segments `p0`-`p1` and `q0`-`q1`: the closest points' parameters `s` and `t` along
  * them, from Ericson's Real-Time Collision Detection (5.1.9), whose names for the dot products it keeps.
  */
-export function segmentDistance(p0: THREE.Vector3, p1: THREE.Vector3, q0: THREE.Vector3, q1: THREE.Vector3): number {
+export function segmentDistance(p0: Vec3, p1: Vec3, q0: Vec3, q1: Vec3): number {
   const d1 = p1.clone().sub(p0);
   const d2 = q1.clone().sub(q0);
   const r = p0.clone().sub(q0);
@@ -388,14 +393,14 @@ export function segmentDistance(p0: THREE.Vector3, p1: THREE.Vector3, q0: THREE.
   const c = d1.dot(r);
   const f = d2.dot(r);
   const denominator = a * e - b * b;
-  let s = denominator > 1e-12 ? THREE.MathUtils.clamp((b * f - c * e) / denominator, 0, 1) : 0;
+  let s = denominator > 1e-12 ? Maths.clamp((b * f - c * e) / denominator, 0, 1) : 0;
   let t = (b * s + f) / e;
   if (t < 0) {
     t = 0;
-    s = THREE.MathUtils.clamp(-c / a, 0, 1);
+    s = Maths.clamp(-c / a, 0, 1);
   } else if (t > 1) {
     t = 1;
-    s = THREE.MathUtils.clamp((b - c) / a, 0, 1);
+    s = Maths.clamp((b - c) / a, 0, 1);
   }
   return p0.clone().addScaledVector(d1, s).distanceTo(q0.clone().addScaledVector(d2, t));
 }

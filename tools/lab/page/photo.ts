@@ -13,7 +13,7 @@
 //
 // `--canary` plants two faults the checks must catch: the page's UI shown again (`body.photo` taken off) and the
 // world's overlays drawn over the frame again.
-import * as THREE from 'three';
+import { Mesh, Vec3 } from './sceneApi.ts';
 import type { Lab, Pictured, Report } from './lab';
 import { G } from '../../../src/state';
 import { photoCamera, photoOn } from '../../../src/ui/photo';
@@ -30,6 +30,10 @@ import { standInVillage } from './readmeShots';
 import { standIn } from './light';
 import { boxOf, touchMode } from './uiTouch';
 import { middleOf } from './lab';
+
+/** the world's overlays' hook: `labels` (the engine draws them), or three's `draw` in a tree before #973 (an A/B's other commit) */
+const OVER = overFrame as unknown as Record<'labels' | 'draw', (...args: unknown[]) => void>;
+const OVER_KEY: 'labels' | 'draw' = 'labels' in overFrame ? 'labels' : 'draw';
 
 export interface PhotoOptions {
   /** plant the faults the checks must catch: the page's UI shown, the world's overlays drawn */
@@ -180,18 +184,19 @@ function uiHidden(where: string, canary: boolean): Found {
 
 /** The world's overlays left out of the frames drawn (with the canary, drawn again). */
 async function overlaysLeftOut(lab: Lab, where: string, canary: boolean): Promise<Found> {
-  const draw = overFrame.draw;
+  const draw = OVER[OVER_KEY];
   let drawn = 0;
-  overFrame.draw = () => {
-    drawn++;
-    draw();
+  // (the labels' hook is called every frame, `shown` false where they're left out; three's `draw` only when drawn)
+  OVER[OVER_KEY] = (...args: unknown[]) => {
+    if (OVER_KEY === 'draw' || args[0] === true) drawn++;
+    draw(...args);
   };
   if (canary) showOverlays(true);
   lab.drawing = true;
   await lab.step(READ_FRAMES);
   lab.drawing = false;
   if (canary) showOverlays(false);
-  overFrame.draw = draw;
+  OVER[OVER_KEY] = draw;
   const problems = drawn ? [`${where}: the world's ${PHOTO_CANARIES[1].name} ${drawn} times`] : [];
   return { lines: [`${where}: the world's overlays drawn ${drawn} times in ${READ_FRAMES} frames`], problems };
 }
@@ -364,7 +369,7 @@ async function photoTaken(lab: Lab, where: string, letterbox: boolean): Promise<
 function heroHidden(): boolean {
   let hidden = true;
   G.player.obj.traverse((object) => {
-    if ((object as THREE.Mesh).isMesh && object.layers.mask !== 1 << HIDDEN_LAYER) hidden = false;
+    if ((object as Mesh).isMesh && object.layers.mask !== 1 << HIDDEN_LAYER) hidden = false;
   });
   return hidden;
 }
@@ -377,7 +382,7 @@ async function heroHiddenAndShown(lab: Lab, where: string): Promise<Found> {
   await lab.clickOn(box);
   let shownAgain = true;
   G.player.obj.traverse((object) => {
-    if ((object as THREE.Mesh).isMesh && object.layers.mask === 1 << HIDDEN_LAYER) shownAgain = false;
+    if ((object as Mesh).isMesh && object.layers.mask === 1 << HIDDEN_LAYER) shownAgain = false;
   });
   const problems: string[] = [];
   if (!hidden) problems.push(`${where}: Hide hero left a mesh of his drawn`);
@@ -428,7 +433,7 @@ async function notInAFight(lab: Lab, where: string): Promise<Found> {
   const before = run.phase, problems: string[] = [];
   const hold = (): void => { run.phase = 'fighting'; };
   // (a foe on the field, well off him: with none, the run calls the wave cleared within the frame)
-  const foe = lab.spawnFoe('dummy', G.player.pos.clone().add(new THREE.Vector3(0, 0, FOE_OFF)));
+  const foe = lab.spawnFoe('dummy', G.player.pos.clone().add(new Vec3(0, 0, FOE_OFF)));
   // (open before the wave, then the fight begins)
   await lab.press('KeyP');
   await lab.step(READ_FRAMES);
@@ -484,7 +489,7 @@ const ROOM_SENT = 40;
 const ROOM_FRAMES = 30;
 
 /** How far `p` stands beyond room `id`'s walls (m; negative inside them). */
-function beyondWalls(id: RoomId, p: THREE.Vector3): number {
+function beyondWalls(id: RoomId, p: Vec3): number {
   const [halfX, halfZ] = HOUSES[id].half;
   return Math.max(Math.abs(p.x) - halfX, Math.abs(p.z) - halfZ);
 }

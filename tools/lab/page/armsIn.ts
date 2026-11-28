@@ -5,7 +5,7 @@
 // drawn, so an arm in it is in nothing the player sees (the two-hander's guard read its right forearm 17.6 cm into the
 // chest, from the first frame). Read it where a pose's arm is in question: a left forearm across the belly is a lower
 // hand about to let go. The canary moves the right elbow into the chest, which must read deep in it.
-import * as THREE from 'three';
+import { Vec3 } from './sceneApi.ts';
 import { bodyShape, overlaps } from '../../../src/entities/models/anatomy';
 import type { Joints } from '../../../src/entities/models/rig';
 import { drawnHand } from './range';
@@ -69,9 +69,9 @@ export function armsInCanary(joints: Joints): string {
   const shoulder = joints.shoulderR;
   const was = shoulder.position.clone();
   joints.root.updateMatrixWorld(true);
-  const middle = joints.chest.getWorldPosition(new THREE.Vector3());
-  const elbow = joints.elbowR.getWorldPosition(new THREE.Vector3());
-  const at = shoulder.getWorldPosition(new THREE.Vector3()).add(middle).sub(elbow);
+  const middle = joints.chest.getWorldPosition(new Vec3());
+  const elbow = joints.elbowR.getWorldPosition(new Vec3());
+  const at = shoulder.getWorldPosition(new Vec3()).add(middle).sub(elbow);
   shoulder.position.copy(shoulder.parent!.worldToLocal(at));
   const right = armsInBody(joints).find((arm) => arm.side === 'R');
   shoulder.position.copy(was);

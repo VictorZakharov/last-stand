@@ -4,7 +4,7 @@
 // stripes not matching /aligned". All round each seam, a ray from outside a little above it and one a little below
 // meet the two pieces, and the stripes' phase is read off each hit's place in the cloth's map (its u, a repeat of the
 // stripes a unit of it): the two must agree within a share of a repeat.
-import * as THREE from 'three';
+import { Attribute, Mesh, Quat, Raycaster, Vec3 } from './sceneApi.ts';
 import type { Keeper } from '../../../src/entities/models/keeper';
 
 /** the most the stripes may step across a seam (a share of the stripes' repeat: a tenth, about 9 mm on his chest) */
@@ -22,7 +22,7 @@ const EVERY = 20, OFF = 0.014, ROUND = 32;
 /** A seam: the piece above it, the piece below, and the row of the upper piece's points along it (their indices). */
 /** `flat`: its two pieces lie on one another, their faces' gap read (the chest over the belly); a standing collar is a
  *  band folded up off his shoulders, its stripes' angle alone read */
-interface Seam { name: string; upper: THREE.Mesh; lower: THREE.Mesh; row: number[]; gap: Worst; flat: boolean }
+interface Seam { name: string; upper: Mesh; lower: Mesh; row: number[]; gap: Worst; flat: boolean }
 
 /** The worst of something seen, and where. */
 class Worst {
@@ -40,11 +40,11 @@ export class ShirtSeams {
   reads = 0;
   private frame = 0;
   private seams: Seam[] | null = null;
-  private readonly ray = new THREE.Raycaster();
-  private readonly at = new THREE.Vector3();
-  private readonly out = new THREE.Vector3();
-  private readonly up = new THREE.Vector3();
-  private readonly from = new THREE.Vector3();
+  private readonly ray = new Raycaster();
+  private readonly at = new Vec3();
+  private readonly out = new Vec3();
+  private readonly up = new Vec3();
+  private readonly from = new Vec3();
 
   read(keeper: Keeper, doing: string): void {
     if (this.frame++ % EVERY) return;
@@ -52,7 +52,7 @@ export class ShirtSeams {
     keeper.root.updateMatrixWorld(true);
     for (const seam of this.seams) {
       const piece = seam.upper, pos = piece.geometry.attributes.position, parent = piece.parent!;
-      const q = parent.getWorldQuaternion(new THREE.Quaternion());
+      const q = parent.getWorldQuaternion(new Quat());
       this.up.set(0, 1, 0).applyQuaternion(q);
       for (let k = 0; k < ROUND; k++) {
         const index = seam.row[Math.floor((k / ROUND) * (seam.row.length - 1))];
@@ -97,7 +97,7 @@ export class ShirtSeams {
 
   /** the stripes' phase where a ray from outside, `up` m above `at`, meets `mesh` (its u, a repeat a unit) and how far
    *  along the ray it meets it, or null */
-  private phase(mesh: THREE.Mesh, at: THREE.Vector3, up: number): { u: number; far: number; upright: number } | null {
+  private phase(mesh: Mesh, at: Vec3, up: number): { u: number; far: number; upright: number } | null {
     this.from.copy(at).addScaledVector(this.up, up).addScaledVector(this.out, 0.12);
     this.ray.set(this.from, this.out.clone().negate());
     this.ray.far = 0.2;
@@ -118,7 +118,7 @@ function seamsOf(keeper: Keeper): Seam[] {
   };
   const chest = named('shirt chest'), belly = named('shirt belly'), collar = named('shirt collar');
   /** a piece's lowest row of points (`rowsSurface`'s first row: the first `n`) */
-  const lowestRow = (mesh: THREE.Mesh, n: number) => Array.from({ length: n }, (_, i) => i).filter((i) => i < mesh.geometry.attributes.position.count);
+  const lowestRow = (mesh: Mesh, n: number) => Array.from({ length: n }, (_, i) => i).filter((i) => i < mesh.geometry.attributes.position.count);
   return [
     { name: 'the chest\'s piece over the belly\'s', upper: chest, lower: belly, row: lowestRow(chest, 41), gap: new Worst(), flat: true },
     { name: 'the collar over the chest\'s piece', upper: collar, lower: chest, row: lowestRow(collar, 25), gap: new Worst(), flat: false },
@@ -130,7 +130,7 @@ function seamsOf(keeper: Keeper): Seam[] {
 export function shiftBelly(keeper: Keeper, by: number): void {
   const belly = keeper.parts.find((part) => part.name === 'keeper shirt belly');
   if (!belly) return;
-  const uv = belly.geometry.attributes.uv as THREE.BufferAttribute;
+  const uv = belly.geometry.attributes.uv as Attribute;
   for (let i = 0; i < uv.count; i++) uv.setX(i, uv.getX(i) + by);
   uv.needsUpdate = true;
 }

@@ -49,12 +49,23 @@ export async function runSweep(call) {
     const problems = reply.problems ?? (reply.ok ? [] : ['(the server said only that it failed: restart it)']);
     runs.push({ words: combination.words.join('; '), problems });
     console.log(`== ${runs.at(-1).words}: ${problemWords(problems)}`);
+    for (const line of linesAsked(reply.text, call.options.lines)) console.log(line);
     for (const problem of problems) console.log(`  ${problem}`);
   }
   const fewest = Math.min(...runs.map((run) => run.problems.length));
   const best = runs.filter((run) => run.problems.length === fewest).map((run) => run.words);
   console.log(`fewest problems (${fewest}): ${best.join(' | ')}`);
   return fewest === 0 ? 0 : 1;
+}
+
+/**
+ * The lines of a run's report that hold any of `words` (split by `|`), none when nothing was asked: a run's own
+ * numbers read beside the others' (the same switch timed on and off in turn, so the machine's load falls on both).
+ */
+export function linesAsked(text, words) {
+  if (!words || !text) return [];
+  const asked = words.split('|').filter(Boolean);
+  return text.split('\n').filter((line) => asked.some((word) => line.includes(word)));
 }
 
 /** How many problems a run had, as words. */

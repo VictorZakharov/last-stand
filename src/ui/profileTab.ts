@@ -11,6 +11,7 @@ import {
 } from '../perf/profiler';
 import { costKnown, profileLines, shareOf } from '../perf/profileReport';
 import { partRows, type PartRow } from '../perf/gpuParts';
+import { LAYERS, everyLayer } from './kit/panel';
 
 /** the scene's parts listed under the button, the page's after them (the report has them all) */
 const PARTS_SHOWN = 3;
@@ -26,6 +27,18 @@ const PAGE_PARTS = [
 /** A page's part shown or hidden while the profiler runs (`body.profiling`, `styles/_perfAsk.scss`). */
 function showing(what: string, on: boolean): void {
   document.body.classList.toggle(what, on);
+  showLayers();
+}
+
+/** The UI kit's layers shown as the page's parts are while the profiler runs: the modals' (the pause menu) with
+ *  the pause menu, every other with the panels; all of them once it's done. */
+function showLayers(): void {
+  const body = document.body.classList;
+  const running = body.contains('profiling');
+  for (const [z, shown] of everyLayer()) {
+    const part = z === LAYERS.modal ? 'profiling-pause' : 'profiling-panels';
+    shown.show(!running || body.contains(part));
+  }
 }
 
 const $ = <T extends HTMLElement = HTMLElement>(selector: string): T => document.querySelector<T>(selector)!;
@@ -106,6 +119,7 @@ function paneShower(): (progress: ProfileProgress) => void {
 function showRunning(on: boolean): void {
   document.body.classList.toggle('profiling', on);
   if (!on) document.body.classList.remove('profiling-panels', 'profiling-pause');
+  showLayers();
   $('#profiling').classList.toggle('hidden', !on);
   if (!on) return;
   $('#profiling .prof-fill').style.transform = 'scaleX(0)';

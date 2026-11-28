@@ -7,7 +7,7 @@
 // aside, and a draw with a stand-in not yet ready is left out (the thing shows a few frames late; nothing waits).
 // Only the engine's device, and only the pipelines of its scene (their labels): its post chain's and its maps' are
 // made as it boots and drawn with at once.
-import type * as THREE from 'three';
+import type { Mesh, Node } from './api/index.ts';
 import { afterItsFirst } from './compileOnce';
 import { probeDepthOnly } from './depthProbe';
 import { fault, watchDevice } from './said';
@@ -16,10 +16,10 @@ import { fault, watchDevice } from './said';
  *  that can't import the engine (core/shaders.ts' warm-ups, a cycle through the renderer) */
 export const AHEAD = {
   /** `objects` and all under them handed to the engine with the pipelines they'll draw with, shown or not */
-  prepare: null as ((objects: readonly THREE.Object3D[]) => void) | null,
+  prepare: null as ((objects: readonly Node[]) => void) | null,
   /** the first `lamps` lamps' shadows drawn of `casters`, which stand still (world/lampAtlas.ts asks, as it asks
    *  three for its atlas; `lampShadows.ts` draws them) */
-  bakeLamps: null as ((casters: THREE.Mesh[], lamps: number) => void) | null,
+  bakeLamps: null as ((casters: Mesh[], lamps: number) => void) | null,
   /** how many times the props have changed (world/destructible.ts `state.rev`, told here: the engine can't import
    *  the world's props, a cycle through the overlays): a place's own lights' shadows are drawn again then */
   propsRev: 0,

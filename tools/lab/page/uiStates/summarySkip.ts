@@ -8,6 +8,7 @@ import { makeItem } from '../../../../src/loot/items';
 import { RARITIES } from '../../../../src/data/items';
 import { hideSummary, showSummary, summaryRevealing } from '../../../../src/ui/menus';
 import { plantsCaught, asked } from '../uiKit';
+import { middleOf } from '../lab';
 import type { Found, Steps } from '../uiKit';
 import type { Item } from '../../../../src/types';
 
@@ -15,6 +16,8 @@ import type { Item } from '../../../../src/types';
 const BAG = 90;
 /** the most the whole reveal may take (s): the first cache's 0.3 and the game's `REVEAL_MOST` */
 const MOST_S = 3.8;
+/** frames for the summary to be drawn before its title is clicked */
+const TITLE_FRAMES = 3;
 /** the canary's plant, named in the problem it must cause */
 const PLANT = 'the click left out';
 
@@ -29,9 +32,11 @@ function longBag(): Item[] {
   return Array.from({ length: BAG }, (_, i) => makeItem({ rarity: RARITIES[i % 5].id, ilvl: 12, cls: G.player.cls }));
 }
 
-/** The summary's chips still opening: each with an animation still running. */
+/** The summary's chips still opening: each with an animation still running, or where the kit draws the summary (its
+ *  reveal on the kit's clock, `src/ui/summaryPanel.ts`), each whose reveal wasn't skipped. */
 function stillOpening(): number {
   const chips = [...document.querySelectorAll<HTMLElement>('#summary .sm-items .chip')];
+  if (chips[0]?.closest('.kit-mirror')) return chips.filter((chip) => chip.classList.contains('reveal')).length;
   return chips.filter((chip) => chip.getAnimations().some((animation) => animation.playState === 'running')).length;
 }
 
@@ -46,8 +51,9 @@ const STATE: Steps = {
     lastDelay = parseFloat(chips[chips.length - 1]?.style.animationDelay || '0');
     wasRevealing = summaryRevealing();
     if (!asked.canary) {
-      const title = document.querySelector('#summary .sm-title')!.getBoundingClientRect();
-      await lab.click({ x: title.left + title.width / 2, y: title.top + title.height / 2 });
+      // (where it's drawn, a few frames on: the kit draws it on its frames)
+      await lab.step(TITLE_FRAMES);
+      await lab.click(middleOf(document.querySelector('#summary .sm-title')!));
     }
     openingAfter = stillOpening();
   },

@@ -4,7 +4,7 @@
 // and holds nobody else. Kept in a cookie as the steps ever done, so the board says what's been walked; a station can
 // be walked again from there. The sparring shade is its own too: a harmless foe of a first wave, in the training
 // grounds' look, come up in the yard for the steps that need a foe that strikes, and gone with them.
-import * as THREE from 'three';
+import { Vec3 } from '../engine/api/index.ts';
 import { G } from '../state';
 import { emit, on } from '../events';
 import { readCookie, writeCookie } from '../core/cookies';
@@ -179,7 +179,7 @@ function keepShade(active: boolean): void {
   if (!isWarm('fight')) { want('fight'); return; }
   const [x, z] = yardToWorld(SHADE.at[0], SHADE.at[1]);
   // (never worn down: it's there to be struck at, and to strike)
-  shade = spawnEnemy(SHADE.foe, new THREE.Vector3(x, 0, z), { training: true, name: SHADE.name, maxLife: 1e9 });
+  shade = spawnEnemy(SHADE.foe, new Vec3(x, 0, z), { training: true, name: SHADE.name, maxLife: 1e9 });
 }
 
 /** Whether the shade is on its way (the fight's programs not warm yet): the tracker says so. */
@@ -187,7 +187,7 @@ export const shadeComing = (): boolean => !!tutorialStep()?.shade && !sparringSh
 
 /** A harmless foe's blow at the hero (combat/damage.ts `hurtPlayer`): the shade's is taken on his shield as a real
  *  one would be, with no health lost, light for the block's step and too heavy to hold for the guard's. */
-function sparred(p: Player, from: THREE.Vector3 | null, foe: Enemy | null): void {
+function sparred(p: Player, from: Vec3 | null, foe: Enemy | null): void {
   const step = tutorialStep();
   if (!foe || foe !== sparringShade() || (step?.id !== 'block' && step?.id !== 'break')) return;
   const raise = boundSkills(p).find((s) => s.def.block);

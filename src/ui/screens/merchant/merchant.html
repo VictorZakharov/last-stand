@@ -4,6 +4,8 @@
       <div class="mc-face folk-face" aria-hidden="true"><canvas class="folk-photo"></canvas><div class="folk-wait"></div></div>
       <div class="mc-whom"><div class="sm-title">Odo the Merchant</div><p class="mc-sub">Gear for gear, no coin. Nothing above epic.</p></div>
     </div>
+    <!-- (its two columns: the page's grid takes their children as its own, display: contents) -->
+    <div class="mc-cols"><div class="mc-left">
     <div class="mc-step mc-want" data-step="1">
       <div class="mc-head"><span class="mc-label"><b class="mc-num">1</b>Choose what you want</span><span class="mc-restock"></span></div>
       <div class="mc-wares"></div>
@@ -13,6 +15,7 @@
       <p class="mc-hint"></p>
       <div class="mc-stash"></div>
     </div>
+    </div><div class="mc-right">
     <div class="mc-step mc-deal" data-step="3">
       <div class="mc-head"><span class="mc-label"><b class="mc-num">3</b>Make the trade</span></div>
       <div class="mc-deal-row">
@@ -27,4 +30,5 @@
     <p class="mc-said" role="status"></p>
     <div class="mc-row"><button class="btn mc-fill-best" disabled title="Fills your offer with the fewest of your lesser pieces that pay for it, the best first">Auto-fill cheapest</button><button class="btn primary mc-trade" disabled>Trade</button><button class="link mc-close">Leave</button></div>
     <p class="mc-warn">Odo keeps everything you give him.</p>
+    </div></div>
   </div></div>

@@ -13,7 +13,7 @@
 //
 // `objectsWalkedShort`: a clicked object is walked to by the shortest way into its reach: "when I click on campfire,
 // hero moves in from the left side, it should be the shortest path". `--canary`: the shortest way read as half as long.
-import * as THREE from 'three';
+import { Vec3 } from './sceneApi.ts';
 import type { Lab, Pictured } from './lab';
 import { G } from '../../../src/state';
 import { HALL, TERRACE, VILLAGE_OBJECTS, type VillageObject } from '../../../src/data/village';
@@ -199,7 +199,7 @@ const PORTICO_Z = -13.4;
 const CLEAR_OF_PORTICO = 0.8;
 
 /** Whether the sight from the camera to `point` passes a portico column, on the floor. */
-function passesPortico(point: THREE.Vector3): boolean {
+function passesPortico(point: Vec3): boolean {
   const eye = G.camera.position;
   const along = (PORTICO_Z - eye.z) / (point.z - eye.z);
   if (along <= 0 || along >= 1) return false;
@@ -208,7 +208,7 @@ function passesPortico(point: THREE.Vector3): boolean {
 }
 
 /** Whether the sight from the camera to `point` passes over the hall's front wall, or never meets it. */
-function seenOverFront(point: THREE.Vector3): boolean {
+function seenOverFront(point: Vec3): boolean {
   const eye = G.camera.position;
   if (passesPortico(point)) return false;
   if (eye.z <= HALL.door) return true;
@@ -218,7 +218,7 @@ function seenOverFront(point: THREE.Vector3): boolean {
 }
 
 /** The pixel `point` falls on, or null off the frame. */
-function pixelAt(point: THREE.Vector3, width: number, height: number): number | null {
+function pixelAt(point: Vec3, width: number, height: number): number | null {
   const place = point.clone().project(G.camera);
   const column = Math.floor(((place.x + 1) / 2) * width);
   const row = Math.floor(((place.y + 1) / 2) * height);
@@ -241,7 +241,7 @@ function shaftsShown(lab: Lab, hidden: boolean): { shown: number; read: number; 
   for (const z of HALL.columnZ) {
     for (const side of [-1, 1]) {
       for (const up of SHAFT_UP) {
-        const point = new THREE.Vector3(MIDDLE + side * HALL.columnX, FLOOR + up, z);
+        const point = new Vec3(MIDDLE + side * HALL.columnX, FLOOR + up, z);
         const pixel = pixelAt(point, canvas.width, canvas.height);
         if (pixel === null || !seenOverFront(point)) continue;
         read++;
@@ -352,7 +352,7 @@ function shortestInto(object: VillageObject, x: number, z: number, radius: numbe
  *  which answers no page of the lab's): how far he went. */
 async function walkedTo(lab: Lab, object: VillageObject, start: [number, number]): Promise<number> {
   G.player.walkTo = null;
-  G.player.place(new THREE.Vector3(start[0], groundHeight(start[0], start[1]), start[1]), 0);
+  G.player.place(new Vec3(start[0], groundHeight(start[0], start[1]), start[1]), 0);
   await lab.step(3);
   const [spotX, spotZ] = spotToUse(object);
   goTo(spotX, spotZ);

@@ -3,7 +3,7 @@
 // net/role.ts `dealsDamage`), the lobby's own hero hidden meanwhile. The camera comes to the hero in focus, lit by a key
 // light and a rim light from the pool (fx/lights.ts: the count never changes), and he shows off a skill of his as it
 // arrives (`HallDef.showcase`). Every hero's programs are warm before it opens (game/warm.ts, the `heroes` need).
-import * as THREE from 'three';
+import { Color, LitMaterial, Material, Mesh, Node, Vec3 } from '../engine/api/index.ts';
 import { G } from '../state';
 import { CLASSES, CLASS_IDS } from '../data/classes/index';
 import { Player } from '../entities/player';
@@ -69,7 +69,7 @@ const CORE = { size: 0.09, strength: 2.2, toward: 0.11, white: 0.1 };
 const HALO = { life: 0.2, size: 0.75, strength: 0.22, breath: 0.2, rate: 0.4 };
 
 /** Each hall hero's glowing weapon head: the mesh, and its glow's colour (before `HEAD.glow`). */
-const halos = new Map<Player, { gem: THREE.Object3D; colour: THREE.Color }>();
+const halos = new Map<Player, { gem: Node; colour: Color }>();
 const RIM = { color: 0x8fb4ff, intensity: 5, distance: 6, behind: 1.3, side: -0.8, up: 1.95 };
 /** how fast a hero turns to his showcase's spot and back: a critically damped spring's rate (1/s), so a turn speeds up
  *  from rest and settles (eased in a frame by the angle alone, he set off at full speed: turning back to the camera
@@ -97,7 +97,7 @@ export interface HallHero {
   spin: number;
   /** a showcase under way: the skill's spot and when it fires (game time), and when he faces the camera again; a
    *  channel's, when it's let go */
-  cast: { target: THREE.Vector3; fireAt: number; doneAt: number; drawn: boolean; endAt?: number } | null;
+  cast: { target: Vec3; fireAt: number; doneAt: number; drawn: boolean; endAt?: number } | null;
 }
 
 let heroes: HallHero[] = [];
@@ -135,7 +135,7 @@ const reduced = (): boolean => matchMedia('(prefers-reduced-motion: reduce)').ma
  *  and the meshes of each that cast a shadow until he stood there (under its roof he casts none: the sun's shadow map
  *  drew his every part for nothing) */
 let standing: Player[] = [];
-const castersOf = new Map<Player, THREE.Object3D[]>();
+const castersOf = new Map<Player, Node[]>();
 
 /** `p`'s shadows off while he stands in the village's hall, or back as they were. */
 function castShadows(p: Player, on: boolean): void {
@@ -144,13 +144,13 @@ function castShadows(p: Player, on: boolean): void {
     castersOf.delete(p);
     return;
   }
-  const casters: THREE.Object3D[] = [];
+  const casters: Node[] = [];
   p.obj.traverse((o) => { if (o.castShadow) { casters.push(o); o.castShadow = false; } });
   castersOf.set(p, casters);
 }
 
 /** the objects of each standing hero whose matrices are held as they are (`holdStill`) */
-const heldOf = new Map<Player, THREE.Object3D[]>();
+const heldOf = new Map<Player, Node[]>();
 
 /** each standing hero held still drawn as a few meshes (`models/stillAsOne.ts`): from the square, the two were 133
  *  draws of the frame's 439 */
@@ -179,7 +179,7 @@ function holdStill(p: Player, held: boolean): void {
   // warrior and the ranger stood on it, `lab heropick --quick`)
   p.obj.matrixWorldAutoUpdate = true;
   p.obj.updateMatrixWorld(true);
-  const objects: THREE.Object3D[] = [];
+  const objects: Node[] = [];
   p.obj.traverse((o) => { if (o.matrixAutoUpdate) { objects.push(o); o.matrixAutoUpdate = false; } });
   heldOf.set(p, objects);
   stillOf.set(p, new StillAsOne(p.obj));
@@ -218,7 +218,7 @@ export const hallHeroes = (): readonly HallHero[] => heroes;
 export const hallFocus = (): number => focus;
 
 /** Where hero `i` of the row stands: on his plinth. */
-const spot = (i: number): THREE.Vector3 => {
+const spot = (i: number): Vec3 => {
   const at = hallSpot(i);
   return at.setY(groundHeight(at.x, at.z));
 };
@@ -275,7 +275,7 @@ export function standHeroes(on: boolean, dt: number, still = false): void {
   if (standing.length < want.length && builtToStand(want[standing.length], dt)) {
     const id = want[standing.length], i = CLASS_IDS.indexOf(id);
     const player = heroIn(id, profileOf(id));
-    const at = new THREE.Vector3(TERRACE.x + HALL.plinths[i], 0, HALL.plinthZ);
+    const at = new Vec3(TERRACE.x + HALL.plinths[i], 0, HALL.plinthZ);
     at.y = groundHeight(at.x, at.z);
     // (facing the door, a little in toward the room's middle; at rest already unless the hall's screen has had him: the 11
     // poses, every time the doorway came on screen, took 47 ms of a frame as the view first turned to it)
@@ -499,7 +499,7 @@ function* hallHeroSteps(id: string, profile: Profile, look = buildableLook(id, p
   G.scene.remove(player.obj);
   yield;
   const i = CLASS_IDS.indexOf(id);
-  const at = new THREE.Vector3(TERRACE.x + HALL.plinths[i], 0, HALL.plinthZ);
+  const at = new Vec3(TERRACE.x + HALL.plinths[i], 0, HALL.plinthZ);
   at.y = groundHeight(at.x, at.z);
   yield* restingSteps(player, at, -HALL.plinths[i] * 0.06);
   return player;
@@ -621,9 +621,9 @@ export async function restyleHallHero(id: string): Promise<void> {
 /** A hall hero's glowing weapon head kept under the bloom and given a halo of its own (`HEAD`, `HALO`): its colour,
  *  glow, roughness and coat, uniforms all (no program changes), on the hall's own copy, which never fights. */
 function glowingHead(player: Player): void {
-  const done = new Set<THREE.Material>();
+  const done = new Set<Material>();
   player.model.tip?.traverse((o) => {
-    const m = (o as THREE.Mesh).material as THREE.MeshStandardMaterial | undefined;
+    const m = (o as Mesh).material as LitMaterial | undefined;
     if (!m?.emissive || m.emissiveIntensity <= 0 || m.emissive.getHex() === 0 || done.has(m)) return;
     done.add(m);
     // (a glow alone, black but for its own light, as the crystal's rings: the key light finds nothing on it, and it's
@@ -636,8 +636,8 @@ function glowingHead(player: Player): void {
     m.color.multiplyScalar(HEAD.lit);
     m.emissive.multiplyScalar(HEAD.glow);
     m.roughness = Math.max(m.roughness, HEAD.rough);
-    const coated = m as THREE.MeshPhysicalMaterial;
-    if (!coated.isMeshPhysicalMaterial) return;
+    const coated = m as LitMaterial;
+    if (!coated.isLitMaterial) return;
     // (its coat thinned and roughened, never to none: a coat of none is another program)
     if (coated.clearcoat > 0) coated.clearcoat = Math.min(coated.clearcoat, HEAD.coat);
     coated.clearcoatRoughness = Math.max(coated.clearcoatRoughness, HEAD.rough);
@@ -715,9 +715,9 @@ function shotAlong(along: number, t: number, glide?: number): Shot {
   const yaw = reduced() ? 0 : Math.sin(((t - opened) / SHOT.driftS) * Math.PI * 2) * SHOT.drift;
   const back = SHOT.back * further;
   const lift = upright ? SHOT.upright : 0;
-  const pos = new THREE.Vector3(at.x + Math.sin(yaw) * back, at.y + SHOT.high + lift, at.z + Math.cos(yaw) * back);
+  const pos = new Vec3(at.x + Math.sin(yaw) * back, at.y + SHOT.high + lift, at.z + Math.cos(yaw) * back);
   const aim = (upright ? SHOT.middle : SHOT.at) + lift;
-  return { pos, look: new THREE.Vector3(at.x, at.y + aim, at.z), fov: SHOT.fov, glide };
+  return { pos, look: new Vec3(at.x, at.y + aim, at.z), fov: SHOT.fov, glide };
 }
 
 /** The camera `k` times as far back as the shot's own (1 or more): an upright screen leaves the hero a share of its
@@ -729,7 +729,7 @@ export function frameHall(k: number, up = false): void {
 }
 
 /** Stand a remote copy at `at`, facing `facing`: its reports, as its game would send them. */
-function place(p: Player, at: THREE.Vector3, facing: number): void {
+function place(p: Player, at: Vec3, facing: number): void {
   Object.assign(p.remote, { x: at.x, z: at.z, vx: 0, vz: 0, f: facing, ax: at.x + Math.sin(facing) * 4, az: at.z + Math.cos(facing) * 4 });
   p.place(at, facing);
 }
@@ -743,7 +743,7 @@ const REST_STEP = 0.1;
 /** Hero `p` standing at `at` at once, whatever he was last doing. His last action eases out of his pose over a moment,
  *  and his feet, planted where that pose had them, stepped back under him as it went, on one bent knee (from play, "the
  *  previous hero starts irish dancing"), and a foot stepped into his stance after: both are run through before he shows. */
-function standAtRest(p: Player, at: THREE.Vector3, facing: number): void {
+function standAtRest(p: Player, at: Vec3, facing: number): void {
   p.spawn.copy(at);
   p.reset();
   p.shine = SHINE;
@@ -759,14 +759,14 @@ let atRest = new WeakSet<Player>();
 const stillSince = new WeakSet<Player>();
 
 /** `standAtRest`, and kept so. */
-function restOn(p: Player, at: THREE.Vector3, facing: number): void {
+function restOn(p: Player, at: Vec3, facing: number): void {
   standAtRest(p, at, facing);
   atRest.add(p);
   stillSince.add(p);
 }
 
 /** `restOn` a pose a piece (models/steps.ts), the same poses in the same order: each is 3 to 5 ms. */
-function* restingSteps(p: Player, at: THREE.Vector3, facing: number): Generator<void, void, undefined> {
+function* restingSteps(p: Player, at: Vec3, facing: number): Generator<void, void, undefined> {
   p.spawn.copy(at);
   p.reset();
   p.shine = SHINE;
@@ -782,7 +782,7 @@ function* restingSteps(p: Player, at: THREE.Vector3, facing: number): Generator<
 }
 
 /** Hero `p`, at rest, stood at `at`: his feet brought with him, or they stepped there from where they stood. */
-function movedAtRest(p: Player, at: THREE.Vector3, facing: number): void {
+function movedAtRest(p: Player, at: Vec3, facing: number): void {
   place(p, at, facing);
   p.update(REST_POSE);
   place(p, at, facing);
@@ -817,8 +817,8 @@ export function updateHall(dt: number): void {
   stageCamera(dragged === null ? shotAlong(focus, t) : shotAlong(dragged, t, DRAG.glide));
 }
 
-const _gemAt = new THREE.Vector3();
-const _black = new THREE.Color(0, 0, 0);
+const _gemAt = new Vec3();
+const _black = new Color(0, 0, 0);
 /** How strong the halo breathes now (`HALO`), none with reduced motion. */
 const breathing = (): number => (reduced() ? 1 : 1 + HALO.breath * Math.sin(G.time * HALO.rate * TAU));
 /** The halo round `p`'s glowing weapon head and the light at its heart, this frame of `dt` s (`HALO`, `CORE`). */
@@ -832,10 +832,10 @@ function haloRound(p: Player, dt: number): void {
   glowAt(_gemAt, CORE.size, halo.colour.clone().lerp(_white, CORE.white).multiplyScalar(CORE.strength * share));
 }
 
-const _toCamera = new THREE.Vector3();
-const _white = new THREE.Color(1, 1, 1);
+const _toCamera = new Vec3();
+const _white = new Color(1, 1, 1);
 /** A halo's glow particle at `at`, `size` m across, of `color` fading to none over `HALO.life`. */
-function glowAt(at: THREE.Vector3, size: number, color: THREE.Color): void {
+function glowAt(at: Vec3, size: number, color: Color): void {
   particles.glow.spawn({ x: at.x, y: at.y, z: at.z, life: HALO.life, size, sizeEnd: size, color, colorEnd: _black });
 }
 
@@ -857,7 +857,7 @@ function showOff(h: HallHero, t: number): void {
   if (!known) return;
   const def = known.def, from = spot(heroes.indexOf(h));
   const f = ROW.facing, right = f - Math.PI / 2;
-  const target = new THREE.Vector3(from.x + Math.sin(f) * at[0] + Math.sin(right) * at[1], 0, from.z + Math.cos(f) * at[0] + Math.cos(right) * at[1]);
+  const target = new Vec3(from.x + Math.sin(f) * at[0] + Math.sin(right) * at[1], 0, from.z + Math.cos(f) * at[0] + Math.cos(right) * at[1]);
   h.facing = Math.atan2(target.x - from.x, target.z - from.z);
   // (a channel opened as his game reports it, aimed the way he turns: his copy's aim follows his facing)
   if (def.channel) {

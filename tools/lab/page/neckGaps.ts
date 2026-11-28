@@ -6,9 +6,9 @@
 // view at all from where the line looks from. (Straight down, every collar a few mm loose read as a hole, though no
 // view the game takes showed one; looking out over the neck, a single-sided neckline seen from inside read as one,
 // though the head and neck stand in front of it.)
-import * as THREE from 'three';
+import { Box2, Maths, Ray, Triangle, Vec2, Vec3 } from './sceneApi.ts';
 import { CAMERA } from '../../../src/data/balance';
-import type { Part, Triangle } from './neckSlices';
+import type { NeckFace, Part } from './neckSlices';
 
 /** the steepest the game's cameras look down (rad above the horizon: the top-down view's at its default zoom, the
  *  third person view's highest) */
@@ -35,30 +35,30 @@ export interface Fall extends Gap {
 
 /** Whether a line of sight looking `along` sees `triangle` where it meets it at `place`: from its front, or a face
  *  drawn from both sides, and drawn there. */
-function seenAlong(triangle: Triangle, parts: Part[], along: THREE.Vector3, place: THREE.Vector3): boolean {
+function seenAlong(triangle: NeckFace, parts: Part[], along: Vec3, place: Vec3): boolean {
   const part = parts[triangle.part];
   if (triangle.facing.dot(along) >= 0 && !part.bothSides) return false;
   const [a, b, c] = triangle.places;
   const [ua, ub, uc] = triangle.uvs;
-  const uv = THREE.Triangle.getInterpolation(place, a, b, c, ua, ub, uc, new THREE.Vector2());
+  const uv = Triangle.getInterpolation(place, a, b, c, ua, ub, uc, new Vec2());
   return !uv || part.drawnAt(uv.x, uv.y);
 }
 
 /** Whether a line of sight looking `along` sees a face on the ray from `origin` `heading` (`along` or against it),
  *  up or down to height `limit` (m, the neck's frame). */
 function seesOn(
-  origin: THREE.Vector3, heading: THREE.Vector3, along: THREE.Vector3, limit: number, surfaces: Surfaces,
+  origin: Vec3, heading: Vec3, along: Vec3, limit: number, surfaces: Surfaces,
 ): boolean {
   const reach = (limit - origin.y) / heading.y;
   const end = origin.clone().addScaledVector(heading, reach);
-  const ends = [new THREE.Vector2(origin.x, origin.z), new THREE.Vector2(end.x, end.z)];
-  const box = new THREE.Box2().setFromPoints(ends);
+  const ends = [new Vec2(origin.x, origin.z), new Vec2(end.x, end.z)];
+  const box = new Box2().setFromPoints(ends);
   const [low, high] = [Math.min(origin.y, limit), Math.max(origin.y, limit)];
-  const ray = new THREE.Ray(origin, heading);
+  const ray = new Ray(origin, heading);
   for (const triangle of surfaces.triangles) {
     if (triangle.low > high || triangle.high < low || !triangle.plan.intersectsBox(box)) continue;
     const [a, b, c] = triangle.places;
-    const place = ray.intersectTriangle(a, b, c, false, new THREE.Vector3());
+    const place = ray.intersectTriangle(a, b, c, false, new Vec3());
     if (place && place.y >= low && place.y <= high && seenAlong(triangle, surfaces.parts, along, place)) return true;
   }
   return false;
@@ -67,24 +67,24 @@ function seesOn(
 /** The hero's triangles round his neck and their parts, and the heights the lines of sight are followed down to and
  *  their mouths seen from up to (m, the neck's frame). */
 export interface Surfaces {
-  triangles: Triangle[];
+  triangles: NeckFace[];
   parts: Part[];
   floor: number;
   ceiling: number;
 }
 
 /** What a line of sight looking `along` into a gap at `mouth` shows. */
-function sightOf(mouth: THREE.Vector3, along: THREE.Vector3, surfaces: Surfaces): Sight {
+function sightOf(mouth: Vec3, along: Vec3, surfaces: Surfaces): Sight {
   if (seesOn(mouth, along, along, surfaces.floor, surfaces)) return 'closed';
   return seesOn(mouth, along.clone().negate(), along, surfaces.ceiling, surfaces) ? 'hidden' : 'through';
 }
 
 /** What the lines of sight dropped into `gap` show. */
 export function fallOf(gap: Gap, surfaces: Surfaces): Fall {
-  const angle = THREE.MathUtils.degToRad(gap.angle);
+  const angle = Maths.degToRad(gap.angle);
   const [out, down] = [Math.cos(STEEPEST), Math.sin(STEEPEST)];
-  const mouth = new THREE.Vector3(Math.sin(angle) * gap.r, gap.from, Math.cos(angle) * gap.r);
-  const towards = (way: number) => new THREE.Vector3(Math.sin(angle) * out * way, -down, Math.cos(angle) * out * way);
+  const mouth = new Vec3(Math.sin(angle) * gap.r, gap.from, Math.cos(angle) * gap.r);
+  const towards = (way: number) => new Vec3(Math.sin(angle) * out * way, -down, Math.cos(angle) * out * way);
   return { ...gap, inward: sightOf(mouth, towards(-1), surfaces), outward: sightOf(mouth, towards(1), surfaces) };
 }
 

@@ -19,7 +19,7 @@
 //   sink, rising unwarned, and rising on the hero; each must be caught, and the part says which were.
 // - `rootBurrowPictures` (asked for by name): her burrow as the player sees it (her sinking, the ridge travelling,
 //   the warned rise), and her sinking from her side at a man's eye, to show her body really goes down.
-import * as THREE from 'three';
+import { Box3, Mesh, Vec3 } from './sceneApi.ts';
 import type { Lab, Pictured } from './lab';
 import type { Enemy } from '../../../src/entities/enemy';
 import { G } from '../../../src/state';
@@ -64,9 +64,9 @@ interface BurrowCase {
 function topOver(boss: Enemy): number {
   boss.model.root.updateWorldMatrix(true, true);
   let top = -Infinity;
-  const box = new THREE.Box3();
+  const box = new Box3();
   boss.model.root.traverse((object) => {
-    const mesh = object as THREE.Mesh;
+    const mesh = object as Mesh;
     if (!mesh.isMesh || mesh.userData.pooled || !mesh.geometry) return;
     if (!mesh.geometry.boundingBox) mesh.geometry.computeBoundingBox();
     box.copy(mesh.geometry.boundingBox!).applyMatrix4(mesh.matrixWorld);
@@ -227,7 +227,7 @@ export async function rootBurrowPictures(lab: Lab, options: BossOptions, lines: 
     const log = BURROW_LOG[BURROW_LOG.length - 1];
     if (!log || log === was) continue;
     const t = G.time - log.startedAt;
-    const at = new THREE.Vector3(log.fromX, 3, log.fromZ);
+    const at = new Vec3(log.fromX, 3, log.fromZ);
     // (her sink from her side, every few frames)
     if (t <= B.sink + 0.2 && Math.round(t * FPS) === sideShot * SIDE_EVERY) {
       moments.push(lab.picture(`sink side ${sideShot + 1}`, ['left'], [`her sink from her side, ${fixed(t, 2)} s in`],

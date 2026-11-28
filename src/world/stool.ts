@@ -6,8 +6,8 @@
 // leg at one point (as a turner bores them); a bar stool's foot ring too. Its seat honey oak and its legs a ruddy
 // stain, apart from the floor's and the walls' browns (from play, "adjust chair material too, so they stand out from
 // floor/walls"). Its seat stands where it did, so what a hero sits on stays (`stoolSeat` reads its top).
-import * as THREE from 'three';
-import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { Geometry, LitMaterial, Material, mergeGeometries, Mesh, Node, Vec3 } from '../engine/api/index.ts';
+import * as shapes from '../engine/api/shapes/index.ts';
 import type { Furniture, Mats } from './rooms';
 import { woodTint } from './woodTint';
 
@@ -28,7 +28,7 @@ const STRETCHERS_AT = [0.26, 0.34];
 const SEAT_TONE = 0xd0a068;
 const LEG_TONE = 0x9a4420;
 
-const UP = new THREE.Vector3(0, 1, 0);
+const UP = new Vec3(0, 1, 0);
 /** a leg's or a stretcher's sides round, open at its ends (they're in the seat, the floor and the legs) */
 const PIECE_SIDES = 6;
 
@@ -36,19 +36,19 @@ const PIECE_SIDES = 6;
  *  is kept out of its room's merge (`keepApart` in rooms.ts, so the one pointed at is outlined alone), and its legs,
  *  stretchers and tenons, a mesh each, took the tavern from 249 draws to 409 (`lab village --only
  *  sweepWithinBudgets`). */
-export function joinParts(group: THREE.Object3D, kept: readonly THREE.Object3D[],
-  names: ReadonlyMap<THREE.Material, string> = new Map()): void {
+export function joinParts(group: Node, kept: readonly Node[],
+  names: ReadonlyMap<Material, string> = new Map()): void {
   group.updateMatrixWorld(true);
   const toGroup = group.matrixWorld.clone().invert();
-  const byMaterial = new Map<THREE.Material, THREE.BufferGeometry[]>();
-  const parts: THREE.Mesh[] = [];
+  const byMaterial = new Map<Material, Geometry[]>();
+  const parts: Mesh[] = [];
   group.traverse((object) => {
-    const mesh = object as THREE.Mesh;
+    const mesh = object as Mesh;
     if (!mesh.isMesh || kept.includes(mesh)) return;
     parts.push(mesh);
   });
   for (const mesh of parts) {
-    const material = mesh.material as THREE.Material;
+    const material = mesh.material as Material;
     const placed = mesh.geometry.index ? mesh.geometry.toNonIndexed() : mesh.geometry.clone();
     for (const name of Object.keys(placed.attributes)) {
       if (name !== 'position' && name !== 'normal' && name !== 'uv') placed.deleteAttribute(name);
@@ -59,7 +59,7 @@ export function joinParts(group: THREE.Object3D, kept: readonly THREE.Object3D[]
     mesh.removeFromParent();
   }
   for (const [material, geometries] of byMaterial) {
-    const joined = new THREE.Mesh(mergeGeometries(geometries), material);
+    const joined = new Mesh(mergeGeometries(geometries), material);
     joined.name = names.get(material) ?? '';
     joined.castShadow = joined.receiveShadow = true;
     group.add(joined);
@@ -68,15 +68,15 @@ export function joinParts(group: THREE.Object3D, kept: readonly THREE.Object3D[]
 
 /** The woods a seat is made of, the rooms' woods tinted: its seat's honey oak and its frame's ruddy stain (a stool's,
  *  a bench's, a chair's). */
-export function seatWoods(M: Mats): { seat: THREE.MeshStandardMaterial; frame: THREE.MeshStandardMaterial } {
+export function seatWoods(M: Mats): { seat: LitMaterial; frame: LitMaterial } {
   return { seat: woodTint(M.oak, SEAT_TONE), frame: woodTint(M.timber, LEG_TONE) };
 }
 
 /** A round piece from `a` to `b`, of radius `r` (`rEnd` at `b`), in `material`, added to `into`. */
-function piece(into: THREE.Object3D, a: THREE.Vector3, b: THREE.Vector3, r: number, rEnd: number,
-  material: THREE.Material): THREE.Mesh {
+function piece(into: Node, a: Vec3, b: Vec3, r: number, rEnd: number,
+  material: Material): Mesh {
   const along = b.clone().sub(a);
-  const mesh = new THREE.Mesh(new THREE.CylinderGeometry(rEnd, r, along.length(), PIECE_SIDES, 1, true), material);
+  const mesh = new Mesh(shapes.cylinder(rEnd, r, along.length(), PIECE_SIDES, 1, true), material);
   mesh.position.copy(a).addScaledVector(along, 0.5);
   mesh.quaternion.setFromUnitVectors(UP, along.normalize());
   mesh.castShadow = mesh.receiveShadow = true;
@@ -85,30 +85,30 @@ function piece(into: THREE.Object3D, a: THREE.Vector3, b: THREE.Vector3, r: numb
 }
 
 /** A stool at (x, z), its seat's top at `high`; `ring`, a foot ring at that height (a bar stool's). */
-export function stool(g: THREE.Object3D, M: Mats, x: number, z: number, high = 0.5, ring?: number): Furniture {
-  const s = new THREE.Group();
+export function stool(g: Node, M: Mats, x: number, z: number, high = 0.5, ring?: number): Furniture {
+  const s = new Node();
   g.add(s);
   const { seat: seatWood, frame: legWood } = seatWoods(M);
   const under = high - SEAT;
   // (the seat, a thick disc, its edge chamfered underneath)
-  const top = new THREE.Mesh(new THREE.CylinderGeometry(STOOL_R, STOOL_R, SEAT - CHAMFER, 14), seatWood);
+  const top = new Mesh(shapes.cylinder(STOOL_R, STOOL_R, SEAT - CHAMFER, 14), seatWood);
   top.position.set(x, under + CHAMFER + (SEAT - CHAMFER) / 2, z);
   top.castShadow = top.receiveShadow = true;
   s.add(top);
-  const chamfer = new THREE.Mesh(new THREE.CylinderGeometry(STOOL_R, STOOL_R - CHAMFER, CHAMFER, 14, 1, true), seatWood);
+  const chamfer = new Mesh(shapes.cylinder(STOOL_R, STOOL_R - CHAMFER, CHAMFER, 14, 1, true), seatWood);
   chamfer.position.set(x, under + CHAMFER / 2, z);
   chamfer.castShadow = true;
   s.add(chamfer);
   // (each leg's middle at height y, its way round from the stool's middle at `turn`)
-  const legAt = (turn: number, y: number): THREE.Vector3 => {
+  const legAt = (turn: number, y: number): Vec3 => {
     const out = LEG_IN + (under - y) * Math.tan(SPLAY);
-    return new THREE.Vector3(x + Math.cos(turn) * out, y, z + Math.sin(turn) * out);
+    return new Vec3(x + Math.cos(turn) * out, y, z + Math.sin(turn) * out);
   };
   const turns = [0, 1, 2, 3].map((k) => (k + 0.5) * Math.PI / 2);
   for (const turn of turns) {
     // (from its foot into the seat, through it: its wedged tenon's end grain shows on the seat's top)
     piece(s, legAt(turn, 0), legAt(turn, under + 0.02), LEG_FOOT, LEG_TOP, legWood);
-    const tenon = new THREE.Mesh(new THREE.CircleGeometry(LEG_TOP * 0.8, 6).rotateX(-Math.PI / 2), legWood);
+    const tenon = new Mesh(shapes.circle(LEG_TOP * 0.8, 6).rotateX(-Math.PI / 2), legWood);
     tenon.position.copy(legAt(turn, under)).setY(high + 0.0005);
     s.add(tenon);
   }
@@ -120,7 +120,7 @@ export function stool(g: THREE.Object3D, M: Mats, x: number, z: number, high = 0
   if (ring !== undefined) {
     // (a ring through the legs at its height, where the feet rest)
     const radius = LEG_IN + (under - ring) * Math.tan(SPLAY);
-    const hoop = new THREE.Mesh(new THREE.TorusGeometry(radius, 0.012, 4, 16).rotateX(Math.PI / 2), legWood);
+    const hoop = new Mesh(shapes.torus(radius, 0.012, 4, 16).rotateX(Math.PI / 2), legWood);
     hoop.position.set(x, ring, z);
     hoop.castShadow = true;
     s.add(hoop);

@@ -5,7 +5,7 @@
 // foe on the screen (not at its edge), reach it unless another stands in its way. (A shot struck a foe only within its
 // circle and under its height: aimed at a boss's arm or its crown, it flew on through, and aimed past a small foe at
 // the boss it struck the small foe.)
-import * as THREE from 'three';
+import { Line3, Vec3 } from './sceneApi.ts';
 import type { Fixture, Frame, Lab, Report } from './lab';
 import type { Enemy } from '../../../src/entities/enemy';
 import type { ViewMode } from '../../../src/core/renderer';
@@ -58,9 +58,9 @@ interface Shot {
 }
 
 /** How near a flight (its positions frame by frame) comes to `point` (m). */
-function nearestTo(flight: THREE.Vector3[], point: THREE.Vector3): number {
-  const step = new THREE.Line3();
-  const on = new THREE.Vector3();
+function nearestTo(flight: Vec3[], point: Vec3): number {
+  const step = new Line3();
+  const on = new Vec3();
   let nearest = Infinity;
   for (let i = 1; i < flight.length; i++) {
     step.set(flight[i - 1], flight[i]).closestPointToPoint(point, true, on);
@@ -70,16 +70,16 @@ function nearestTo(flight: THREE.Vector3[], point: THREE.Vector3): number {
 }
 
 /** The input holding `key` (the basic attack's left button by default) over `point`, the crosshair turned onto it. */
-function holding(point: THREE.Vector3, key: SkillKey = 'mouse0'): Frame {
+function holding(point: Vec3, key: SkillKey = 'mouse0'): Frame {
   return { ...pressing(key, point, true), sight: point };
 }
 /** The input with the button let go, the aim still on `point`. */
-export const letGo = (point: THREE.Vector3): Frame => ({ aim: point, sight: point });
+export const letGo = (point: Vec3): Frame => ({ aim: point, sight: point });
 
 /** Where each foe stands, and the way it faces: each is put back there before every shot. */
 interface Stand {
   foe: Enemy;
-  at: THREE.Vector3;
+  at: Vec3;
   facing: number;
 }
 
@@ -117,7 +117,7 @@ function aimInside(over: Over, foes: Enemy[]): boolean {
 }
 
 /** The hero's basic attack (or the skill on `key`) drawn or cast over `point` until it's loosed or fired. */
-export async function drawAt(lab: Lab, point: THREE.Vector3, key: SkillKey = 'mouse0'): Promise<void> {
+export async function drawAt(lab: Lab, point: Vec3, key: SkillKey = 'mouse0'): Promise<void> {
   for (let f = 0; f < SIGHT_FRAMES && aimMiss(point) > SIGHT_NEAR; f++) await lab.step(1, () => letGo(point));
   const ready = () => {
     const cast = G.player.casting;

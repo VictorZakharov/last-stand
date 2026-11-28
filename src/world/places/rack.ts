@@ -3,7 +3,8 @@
 // skids and a heavy beam across them, four long swords stood in it point down, their tips in a trough at its foot and
 // their blades leant on the beam: a flame-bladed two-hander, a sabre, a longsword with a ring on its guard, an arming
 // sword. Where a party sets up a duel (from play: "Item you come up to to interact (open menu), is a weapons rack").
-import * as THREE from 'three';
+import { floats, Geometry, Material, Mesh, Node, Vec2 } from '../../engine/api/index.ts';
+import * as shapes from '../../engine/api/shapes/index.ts';
 import { RACK } from '../../data/village';
 import { boxWithUV } from '../props';
 import type { Obstacle } from '../../types';
@@ -11,8 +12,8 @@ import type { PlaceKit } from '../placeKit';
 
 /** The rack's materials, the village's own (world/village.ts `Mats`): all of what stands free, thinned as one. */
 export interface RackMats {
-  timber: THREE.Material; planks: THREE.Material; iron: THREE.Material; steel: THREE.Material; hilt: THREE.Material;
-  grip: THREE.Material;
+  timber: Material; planks: Material; iron: Material; steel: Material; hilt: Material;
+  grip: Material;
 }
 
 /** The rack's frame (m): its posts' place either side and their height, the beam the blades lean on (its foot, height
@@ -40,7 +41,7 @@ const SWORDS: readonly Sword[] = [
 
 /** A blade standing on its point (y up from the tip, its flats to +z and -z): a diamond across, each face flat, its
  *  middle swung aside by `aside(t)` and its half width `half(t)`, t from the tip (0) to the guard (1). */
-function bladeGeometry(length: number, thick: number, half: (t: number) => number, aside: (t: number) => number): THREE.BufferGeometry {
+function bladeGeometry(length: number, thick: number, half: (t: number) => number, aside: (t: number) => number): Geometry {
   const stations = 40;
   const at: number[] = [], uv: number[] = [], index: number[] = [];
   const corner = (k: number, c: number): [number, number, number] => {
@@ -60,17 +61,17 @@ function bladeGeometry(length: number, thick: number, half: (t: number) => numbe
       index.push(from, from + 2, from + 1, from, from + 3, from + 2);
     }
   }
-  const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.Float32BufferAttribute(at, 3));
-  g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  const g = new Geometry();
+  g.setAttribute('position', floats(at, 3));
+  g.setAttribute('uv', floats(uv, 2));
   g.setIndex(index);
   g.computeVertexNormals();
   return g;
 }
 
 /** A mesh casting and taking shadows, added to `group` at (x, y, z). */
-function part(group: THREE.Object3D, geometry: THREE.BufferGeometry, material: THREE.Material, x = 0, y = 0, z = 0): THREE.Mesh {
-  const mesh = new THREE.Mesh(geometry, material);
+function part(group: Node, geometry: Geometry, material: Material, x = 0, y = 0, z = 0): Mesh {
+  const mesh = new Mesh(geometry, material);
   mesh.position.set(x, y, z);
   mesh.castShadow = mesh.receiveShadow = true;
   group.add(mesh);
@@ -78,18 +79,18 @@ function part(group: THREE.Object3D, geometry: THREE.BufferGeometry, material: T
 }
 
 /** A timber of size (w, h, d) standing on y0, its middle at (x, z). */
-function timber(group: THREE.Object3D, w: number, h: number, d: number, x: number, y0: number, z: number, material: THREE.Material): THREE.Mesh {
+function timber(group: Node, w: number, h: number, d: number, x: number, y0: number, z: number, material: Material): Mesh {
   return part(group, boxWithUV(w, h, d, 0.5, material.userData.grained === true), material, x, y0 + h / 2, z);
 }
 
 /** A solid turned on a lathe from `profile` (radius, height). */
-const turned = (profile: [number, number][], around = 12): THREE.BufferGeometry =>
-  new THREE.LatheGeometry(profile.map(([r, y]) => new THREE.Vector2(r, y)), around);
+const turned = (profile: [number, number][], around = 12): Geometry =>
+  shapes.lathe(profile.map(([r, y]) => new Vec2(r, y)), around);
 
 /** One sword standing on its point at the group's origin: its blade, its guard and what it carries, its grip bound in
  *  leather, its pommel. */
-function buildSword(s: Sword, M: RackMats): THREE.Group {
-  const sword = new THREE.Group();
+function buildSword(s: Sword, M: RackMats): Node {
+  const sword = new Node();
   // (a flame blade's bends die out toward its point and its guard; a sabre's sweep grows toward its point)
   const aside = (t: number): number =>
     (s.wave ? s.wave * Math.sin(t * Math.PI * 9) * Math.min(1, t * 5) * Math.min(1, (1 - t) * 7) : 0)
@@ -100,44 +101,44 @@ function buildSword(s: Sword, M: RackMats): THREE.Group {
   part(sword, bladeGeometry(s.blade, s.thick, half, aside), M.steel);
   const top = s.blade;
   // the guard: a bar across, thicker at its middle, a knob at each end
-  const bar = part(sword, new THREE.CylinderGeometry(0.009, 0.009, s.guard * 2, 8).rotateZ(Math.PI / 2), M.hilt, 0, top + 0.012, 0);
+  const bar = part(sword, shapes.cylinder(0.009, 0.009, s.guard * 2, 8).rotateZ(Math.PI / 2), M.hilt, 0, top + 0.012, 0);
   bar.scale.set(1, 1.3, 1.3);
   part(sword, boxWithUV(0.05, 0.03, 0.03, 4), M.hilt, 0, top + 0.012, 0);
-  for (const side of [-1, 1]) part(sword, new THREE.SphereGeometry(0.013, 8, 6), M.hilt, side * s.guard, top + 0.012, 0);
+  for (const side of [-1, 1]) part(sword, shapes.sphere(0.013, 8, 6), M.hilt, side * s.guard, top + 0.012, 0);
   if (s.carries === 'lugs') {
     // (a two-hander's: a bare length of blade under its guard to grip, bound in leather, two lugs below it)
-    part(sword, new THREE.CylinderGeometry(0.016, 0.019, 0.15, 8), M.grip, 0, top - 0.09, 0).scale.z = 0.6;
+    part(sword, shapes.cylinder(0.016, 0.019, 0.15, 8), M.grip, 0, top - 0.09, 0).scale.z = 0.6;
     for (const side of [-1, 1]) {
-      const lug = part(sword, new THREE.ConeGeometry(0.012, 0.07, 6).rotateZ(-side * Math.PI / 2), M.steel, side * 0.05, top - 0.19, 0);
+      const lug = part(sword, shapes.cone(0.012, 0.07, 6).rotateZ(-side * Math.PI / 2), M.steel, side * 0.05, top - 0.19, 0);
       lug.rotation.z = side * 0.35;
     }
   } else if (s.carries === 'ring') {
     // (a ring off the guard's front, over the hand)
-    part(sword, new THREE.TorusGeometry(0.038, 0.005, 6, 18).rotateX(Math.PI / 2), M.hilt, 0, top + 0.012, 0.04);
+    part(sword, shapes.torus(0.038, 0.005, 6, 18).rotateX(Math.PI / 2), M.hilt, 0, top + 0.012, 0.04);
   } else if (s.carries === 'bow') {
     // (a sabre's knuckle bow, from the guard's end round to its pommel)
     const high = s.grip + 0.03;
-    const bow = part(sword, new THREE.TorusGeometry(high / 2, 0.005, 6, 16, Math.PI).rotateZ(-Math.PI / 2), M.hilt, s.guard * 0.2, top + 0.012 + high / 2, 0);
+    const bow = part(sword, shapes.torus(high / 2, 0.005, 6, 16, Math.PI).rotateZ(-Math.PI / 2), M.hilt, s.guard * 0.2, top + 0.012 + high / 2, 0);
     bow.scale.x = 0.9;
   }
   // the grip, swelling at its middle, bound in leather; a two-hander's with a band round its middle
   part(sword, turned([[0.0125, 0], [0.0155, s.grip * 0.45], [0.0115, s.grip]], 10), M.grip, 0, top + 0.024, 0);
-  if (s.grip > 0.3) part(sword, new THREE.TorusGeometry(0.0165, 0.004, 6, 12).rotateX(Math.PI / 2), M.iron, 0, top + 0.024 + s.grip * 0.45, 0);
+  if (s.grip > 0.3) part(sword, shapes.torus(0.0165, 0.004, 6, 12).rotateX(Math.PI / 2), M.iron, 0, top + 0.024 + s.grip * 0.45, 0);
   const pommelAt = top + 0.024 + s.grip;
-  const pommel: Record<Sword['pommel'], () => THREE.BufferGeometry> = {
+  const pommel: Record<Sword['pommel'], () => Geometry> = {
     pear: () => turned([[0.011, 0], [0.024, 0.02], [0.026, 0.036], [0.016, 0.056], [0.006, 0.062], [0.001, 0.064]]),
     cap: () => turned([[0.014, 0], [0.018, 0.012], [0.012, 0.026], [0.001, 0.03]]),
-    ball: () => new THREE.SphereGeometry(0.023, 12, 9).translate(0, 0.02, 0),
-    wheel: () => new THREE.CylinderGeometry(0.027, 0.027, 0.016, 16).rotateX(Math.PI / 2).translate(0, 0.024, 0),
+    ball: () => shapes.sphere(0.023, 12, 9).translate(0, 0.02, 0),
+    wheel: () => shapes.cylinder(0.027, 0.027, 0.016, 16).rotateX(Math.PI / 2).translate(0, 0.024, 0),
   };
   part(sword, pommel[s.pommel](), M.hilt, 0, pommelAt, 0);
   return sword;
 }
 
 /** The rack built under `scene` where the plan has it, and what a body is kept off there. */
-function buildWeaponsRack(scene: THREE.Object3D, M: RackMats, obstacles: Obstacle[]): void {
+function buildWeaponsRack(scene: Node, M: RackMats, obstacles: Obstacle[]): void {
   // (laid out with its swords to +z, turned to its facing)
-  const rack = new THREE.Group();
+  const rack = new Node();
   rack.name = 'weapons rack';
   rack.position.set(RACK.x, 0, RACK.z);
   rack.rotation.y = RACK.facing;
@@ -155,7 +156,7 @@ function buildWeaponsRack(scene: THREE.Object3D, M: RackMats, obstacles: Obstacl
   // the beam the blades lean on, pegged through each post; a lighter rail behind it, low
   timber(rack, post * 2 + 0.5, beamHigh, beamDeep, 0, beamFoot, 0.02, M.timber);
   for (const side of [-1, 1]) {
-    part(rack, new THREE.CylinderGeometry(0.022, 0.022, 0.07, 8).rotateX(Math.PI / 2), M.iron, side * post, beamFoot + beamHigh / 2, 0.1);
+    part(rack, shapes.cylinder(0.022, 0.022, 0.07, 8).rotateX(Math.PI / 2), M.iron, side * post, beamFoot + beamHigh / 2, 0.1);
   }
   timber(rack, post * 2, 0.1, 0.07, 0, 0.42, -0.02, M.planks);
   // the trough the points stand in: a plank on the skids, a lip along its front and its back
@@ -176,7 +177,7 @@ function buildWeaponsRack(scene: THREE.Object3D, M: RackMats, obstacles: Obstacl
     // (where its blade crosses the beam: aside by its roll, and a sabre's sweep there)
     const along = (restY - tipY) / s.blade;
     const crossX = s.x - Math.sin(s.roll) * (restY - tipY) + (s.curve ? s.curve * (1 - along) ** 2 : 0);
-    part(rack, new THREE.TorusGeometry(0.05, 0.006, 6, 12, Math.PI).rotateX(-Math.PI / 2), M.iron, crossX, restY - 0.05, face);
+    part(rack, shapes.torus(0.05, 0.006, 6, 12, Math.PI).rotateX(-Math.PI / 2), M.iron, crossX, restY - 0.05, face);
   }
   scene.add(rack);
   const cos = Math.cos(RACK.facing), sin = Math.sin(RACK.facing);

@@ -7,7 +7,7 @@
 // preview red, counting the seconds down, until it would cast. Then foes near where he vanishes and foes further off:
 // the near ones must stand dazed for their time, stars over their heads, and come on again after, and the far ones
 // keep coming all along.
-import * as THREE from 'three';
+import { Points, Vec3 } from './sceneApi.ts';
 import type { Fixture, Lab, Pictured, Report } from './lab';
 import type { Enemy } from '../../../src/entities/enemy';
 import type { SkillKey } from '../../../src/types';
@@ -32,18 +32,18 @@ interface Scenario {
   name: string;
   at: [number, number];
   /** the way he faces from where he stands */
-  facing: (at: THREE.Vector3) => number;
-  aim: (hero: THREE.Vector3, facing: number) => THREE.Vector3;
+  facing: (at: Vec3) => number;
+  aim: (hero: Vec3, facing: number) => Vec3;
   /** what must hold of where he came out, besides the checks every scenario has */
   expect: (landing: Landing) => string | null;
 }
 
 /** Where he came out, and what it took. */
 interface Landing {
-  aim: THREE.Vector3;
-  preview: THREE.Vector3 | null;
-  from: THREE.Vector3;
-  to: THREE.Vector3;
+  aim: Vec3;
+  preview: Vec3 | null;
+  from: Vec3;
+  to: Vec3;
   /** the frames from letting go until he could act again */
   frames: number;
   /** the frames he was hidden, and those a blow landed in while he was */
@@ -85,15 +85,15 @@ const SETOFF_FRAMES = 40;
 /** how far over a dazed foe's head its stars are looked for (m round the point over it) */
 const STAR_REACH = 0.6;
 
-const ahead = (hero: THREE.Vector3, facing: number, metres: number, right = 0) =>
-  new THREE.Vector3(
+const ahead = (hero: Vec3, facing: number, metres: number, right = 0) =>
+  new Vec3(
     hero.x + Math.sin(facing) * metres - Math.cos(facing) * right,
     0,
     hero.z + Math.cos(facing) * metres + Math.sin(facing) * right,
   );
 
 /** The prop nearest `at` between `least` and `most` metres from it. */
-function propNear(at: THREE.Vector3, least: number, most: number) {
+function propNear(at: Vec3, least: number, most: number) {
   const distanceTo = (prop: { x: number; z: number }) => Math.hypot(prop.x - at.x, prop.z - at.z);
   const props = G.arena.obstacles.filter((prop) => distanceTo(prop) > least && distanceTo(prop) < most);
   props.sort((a, b) => distanceTo(a) - distanceTo(b));
@@ -105,13 +105,13 @@ function propNear(at: THREE.Vector3, least: number, most: number) {
  * none. (The nearest alone: with the run's props rolled otherwise, its far side was in another, and the blink stopped
  * short of it as it should, read as stopped at the prop.)
  */
-function pastAProp(hero: THREE.Vector3, reach: number): THREE.Vector3 | null {
+function pastAProp(hero: Vec3, reach: number): Vec3 | null {
   const distanceTo = (prop: { x: number; z: number }) => Math.hypot(prop.x - hero.x, prop.z - hero.z);
   const props = G.arena.obstacles.filter((prop) => distanceTo(prop) > 2 && distanceTo(prop) < reach - 4);
   props.sort((a, b) => distanceTo(a) - distanceTo(b));
   for (const prop of props) {
-    const away = new THREE.Vector3(prop.x - hero.x, 0, prop.z - hero.z).normalize();
-    const spot = new THREE.Vector3(prop.x, 0, prop.z).addScaledVector(away, prop.r + 1.5);
+    const away = new Vec3(prop.x - hero.x, 0, prop.z - hero.z).normalize();
+    const spot = new Vec3(prop.x, 0, prop.z).addScaledVector(away, prop.r + 1.5);
     if (standable(spot)) return spot;
   }
   return null;
@@ -122,12 +122,12 @@ const CLEAR_BY = 0.4;
 const EDGE_BY = 1;
 
 /** Whether the hero could stand at `spot`: inside the arena and clear of every prop. */
-function standable(spot: THREE.Vector3): boolean {
+function standable(spot: Vec3): boolean {
   return Math.hypot(spot.x, spot.z) < G.arena.radius - EDGE_BY && !inObstacle(spot, G.player.radius + CLEAR_BY);
 }
 
 /** Facing the arena's middle, turned a step at a time either way until the spot `metres` ahead is standable. */
-const towardMiddle = (metres: number) => (at: THREE.Vector3): number => {
+const towardMiddle = (metres: number) => (at: Vec3): number => {
   const middle = Math.atan2(-at.x, -at.z);
   for (let turn = 0; turn <= Math.PI; turn += Math.PI / 24) {
     for (const facing of [middle + turn, middle - turn]) if (standable(ahead(at, facing, metres))) return facing;
@@ -138,7 +138,7 @@ const towardMiddle = (metres: number) => (at: THREE.Vector3): number => {
 const facingOf = (facing: number) => (): number => facing;
 
 const metres = (value: number): string => `${value.toFixed(2)} m`;
-const flat = (point: THREE.Vector3): string => `(${point.x.toFixed(2)}, ${point.z.toFixed(2)})`;
+const flat = (point: Vec3): string => `(${point.x.toFixed(2)}, ${point.z.toFixed(2)})`;
 
 /** How far ahead the past-reach scenario aims for a blink of `reach` (m): well past it, as a cursor might be. */
 const pastReach = (reach: number): number => Math.round(reach * 1.4);
@@ -165,7 +165,7 @@ function scenarios(reach: number): Scenario[] {
       at: [12, 22], facing: facingOf(0),
       aim: (hero) => {
         const prop = propNear(hero, 3, reach - 1);
-        return prop ? new THREE.Vector3(prop.x, 0, prop.z) : ahead(hero, 0, 5);
+        return prop ? new Vec3(prop.x, 0, prop.z) : ahead(hero, 0, 5);
       },
       expect: (landing) => (landing.from.distanceTo(landing.to) >= landing.from.distanceTo(landing.aim)
         ? 'didn\'t stop short of the prop' : null),
@@ -209,7 +209,7 @@ function clearSpot(at: [number, number]): [number, number] {
     const tries = Math.max(1, Math.round(out * 8));
     for (let k = 0; k < tries; k++) {
       const a = k / tries * Math.PI * 2;
-      const spot = new THREE.Vector3(at[0] + Math.cos(a) * out, 0, at[1] + Math.sin(a) * out);
+      const spot = new Vec3(at[0] + Math.cos(a) * out, 0, at[1] + Math.sin(a) * out);
       if (!inObstacle(spot, radius)) return [spot.x, spot.z];
     }
   }
@@ -219,7 +219,7 @@ function clearSpot(at: [number, number]): [number, number] {
 /** The hero set up on the clear spot nearest the scenario's, facing its way; returns that way. */
 async function setUpFor(lab: Lab, fixture: Fixture, scenario: Scenario): Promise<number> {
   const at = clearSpot(scenario.at);
-  const facing = scenario.facing(new THREE.Vector3(at[0], 0, at[1]));
+  const facing = scenario.facing(new Vec3(at[0], 0, at[1]));
   await lab.setup({ ...fixture, at, facing });
   return facing;
 }
@@ -230,9 +230,9 @@ function blinkKey(): SkillKey | null {
 }
 
 /** Where the preview shows he'd come out, or null if it isn't shown. */
-function previewAt(): THREE.Vector3 | null {
+function previewAt(): Vec3 | null {
   const ring = G.scene.getObjectByName('blink-preview');
-  return ring?.visible ? new THREE.Vector3(ring.position.x, 0, ring.position.z) : null;
+  return ring?.visible ? new Vec3(ring.position.x, 0, ring.position.z) : null;
 }
 
 /** The hero's cooldowns over and his energy full: each blink cast as if it were the first. */
@@ -247,12 +247,12 @@ function blowLands(): boolean {
 }
 
 /** The key held over `aim`, the preview read, the key let go; then every frame until he can act again. */
-async function blinkTo(lab: Lab, key: SkillKey, aim: THREE.Vector3, canary: boolean): Promise<Landing> {
+async function blinkTo(lab: Lab, key: SkillKey, aim: Vec3, canary: boolean): Promise<Landing> {
   const hero = G.player;
   ready();
   await lab.step(HOLD_FRAMES, () => ({ keys: [key], aim }));
   const shown = previewAt();
-  const preview = shown && canary ? shown.clone().add(new THREE.Vector3(CANARY_OFF, 0, 0)) : shown;
+  const preview = shown && canary ? shown.clone().add(new Vec3(CANARY_OFF, 0, 0)) : shown;
   const from = hero.pos.clone();
   await lab.step(1, () => ({ aim }));
   if (canary) hero.guardUntil = -1;
@@ -305,7 +305,7 @@ function landingLine(scenario: Scenario, landing: Landing): string {
 }
 
 /** The moments of a blink pictured as the player sees them: held, coming apart, crossing, forming, whole. */
-async function pictureBlink(lab: Lab, key: SkillKey, aim: THREE.Vector3): Promise<Pictured[]> {
+async function pictureBlink(lab: Lab, key: SkillKey, aim: Vec3): Promise<Pictured[]> {
   const moments: Pictured[] = [];
   ready();
   await lab.step(HOLD_FRAMES, () => ({ keys: [key], aim }));
@@ -352,15 +352,15 @@ const speedOf = (foe: Enemy): number => Math.hypot(foe.vel.x, foe.vel.z);
  */
 function starsOver(foe: Enemy): boolean {
   const top = (foe as { overHead?: number }).overHead ?? foe.height;
-  const head = new THREE.Vector3(foe.pos.x, foe.obj.position.y + top + 0.25, foe.pos.z);
-  return G.scene.children.some((object) => (object as THREE.Points).isPoints && drawsNear(object as THREE.Points, head));
+  const head = new Vec3(foe.pos.x, foe.obj.position.y + top + 0.25, foe.pos.z);
+  return G.scene.children.some((object) => (object as Points).isPoints && drawsNear(object as Points, head));
 }
 
 /** Whether `points` draws a point within `STAR_REACH` of `head` now. */
-function drawsNear(points: THREE.Points, head: THREE.Vector3): boolean {
+function drawsNear(points: Points, head: Vec3): boolean {
   const { attributes, drawRange } = points.geometry;
   const end = Math.min(attributes.position.count, drawRange.start + drawRange.count);
-  const at = new THREE.Vector3();
+  const at = new Vec3();
   for (let index = drawRange.start; index < end; index++) {
     if (at.fromBufferAttribute(attributes.position, index).distanceTo(head) < STAR_REACH) return true;
   }

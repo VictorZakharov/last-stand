@@ -5,7 +5,7 @@
 // 0.3 to 0.5 s of the GPU's process for the engine's lit shader (`lab programs --cost`, both readings). A module a
 // look was 24 of the lit shader's compiles at a first visit, most of its 25 s; the looks are one module now
 // (Bulwark's `join_shaders`, `Materials.joinLooks`), and this count is what holds them so.
-import * as THREE from 'three';
+import { LitMaterial, Mesh, shapes } from './sceneApi.ts';
 import type { Lab, Report } from './lab';
 import { G } from '../../../src/state';
 import { AHEAD, PIPELINES_ASKED, type PipelineAsked } from '../../../src/engine/pipelinesAside';
@@ -83,11 +83,11 @@ fn surface_hook(s: ptr<function, Surface>, in: VertexOut) -> bool {
  *  handed to the engine: the count must find its fragment stage among those compiled whole. */
 export function compilesCanary(_lab: Lab): Report {
   const before = compiles(PIPELINES_ASKED).fragments.length;
-  const material = rustLook(new THREE.MeshStandardMaterial(), {
+  const material = rustLook(new LitMaterial(), {
     shader: { name: `lab canary ${Date.now()}`, hooks: CANARY_HOOKS },
     numbers: () => {},
   });
-  const box = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 0.5), material);
+  const box = new Mesh(shapes.box(0.5, 0.5, 0.5), material);
   box.position.copy(G.player.pos).setY(0.5);
   try {
     AHEAD.prepare?.([box]);

@@ -5,7 +5,9 @@
 // of air kept him 1.2 to 3.2 m off the wall. Angles with a prop between him and the wall are skipped (he'd stop at
 // the prop), and the gates' openings (he walks up to the portal, which draws no surface). `--canary` reads the first
 // angle's gap a metre short of where he stopped: it must be seen.
-import * as THREE from 'three';
+import {
+  BackSide, Hit, InstancedMesh, Line3, LitMaterial, Mesh, Node, NormalBlending, Raycaster, Vec2, Vec3,
+} from './sceneApi.ts';
 import type { Frame, Lab, Report } from './lab';
 import { BIOME_IDS, BIOMES, type BiomeId } from '../../../src/data/biomes';
 import { G } from '../../../src/state';
@@ -77,11 +79,11 @@ function faceAt(biome: BiomeId, angle: number): number {
 }
 
 /** Whether a prop stands near the way from `from` out to the face's point `to` (x, z). */
-function propInWay(from: THREE.Vector2, to: THREE.Vector2): boolean {
-  const way = new THREE.Line3(new THREE.Vector3(from.x, 0, from.y), new THREE.Vector3(to.x, 0, to.y));
-  const on = new THREE.Vector3();
+function propInWay(from: Vec2, to: Vec2): boolean {
+  const way = new Line3(new Vec3(from.x, 0, from.y), new Vec3(to.x, 0, to.y));
+  const on = new Vec3();
   return G.arena.obstacles.some((o) => {
-    way.closestPointToPoint(new THREE.Vector3(o.x, 0, o.z), true, on);
+    way.closestPointToPoint(new Vec3(o.x, 0, o.z), true, on);
     return Math.hypot(on.x - o.x, on.z - o.z) < o.r + PROP_CLEAR;
   });
 }
@@ -93,22 +95,22 @@ const WALKED_THROUGH = /^(grass|weeds|pebbles)/;
 
 /** Whether a mesh draws a surface he walks up to: opaque, not cut out (but for the thicket's leaves), seen from
  *  outside (not a sky). */
-function solid(mesh: THREE.Mesh): boolean {
+function solid(mesh: Mesh): boolean {
   const material = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material;
-  if (material.transparent || material.side === THREE.BackSide) return false;
+  if (material.transparent || material.side === BackSide) return false;
   if ((material.alphaTest > 0 && mesh.name !== BRUSHED) || WALKED_THROUGH.test(mesh.name)) return false;
-  return material.blending === THREE.NormalBlending;
+  return material.blending === NormalBlending;
 }
 
 /** The biome's meshes he walks up to, its culled ones' instances all packed: drawn once unculled (a culled mesh
  *  holds only the instances in view as it was last drawn, and the lab's frames aren't drawn). */
-function solidsOf(lab: Lab, group: THREE.Group): THREE.Mesh[] {
-  const meshes: THREE.Mesh[] = [];
+function solidsOf(lab: Lab, group: Node): Mesh[] {
+  const meshes: Mesh[] = [];
   group.traverse((object) => {
-    const mesh = object as THREE.Mesh;
+    const mesh = object as Mesh;
     if (mesh.isMesh && solid(mesh) && !drawnInShadowsOnly(mesh)) meshes.push(mesh);
   });
-  const culled = meshes.filter((mesh) => (mesh as THREE.InstancedMesh).isInstancedMesh && mesh.frustumCulled);
+  const culled = meshes.filter((mesh) => (mesh as InstancedMesh).isInstancedMesh && mesh.frustumCulled);
   const drawing = lab.drawing;
   for (const mesh of culled) mesh.frustumCulled = false;
   lab.drawing = true;
@@ -152,9 +154,9 @@ function placeOf(angle: number): string {
 }
 
 /** He walks out along `angle` from START_IN in from the face until he stops; how far from the middle he stood. */
-async function walkOut(lab: Lab, angle: number, from: THREE.Vector2): Promise<number> {
+async function walkOut(lab: Lab, angle: number, from: Vec2): Promise<number> {
   const hero = G.player;
-  hero.place(new THREE.Vector3(from.x, 0, from.y), Math.atan2(Math.cos(angle), Math.sin(angle)));
+  hero.place(new Vec3(from.x, 0, from.y), Math.atan2(Math.cos(angle), Math.sin(angle)));
   hero.vel.set(0, 0, 0);
   await lab.step(SETTLE_FRAMES, () => ({ stick: [0, 0] }));
   const stick = stickToward(angle);
@@ -183,9 +185,9 @@ async function walkOut(lab: Lab, angle: number, from: THREE.Vector2): Promise<nu
 }
 
 /** A mesh's name: its own, else its material's colour and the name up its parents. */
-function nameOf(mesh: THREE.Object3D): string {
+function nameOf(mesh: Node): string {
   if (mesh.name) return mesh.name;
-  const colour = ((mesh as THREE.Mesh).material as THREE.MeshStandardMaterial).color;
+  const colour = ((mesh as Mesh).material as LitMaterial).color;
   const look = colour ? `a mesh #${colour.getHexString()}` : 'a mesh';
   for (let at = mesh.parent; at; at = at.parent) if (at.name) return `${look} in ${at.name}`;
   return look;
@@ -193,14 +195,14 @@ function nameOf(mesh: THREE.Object3D): string {
 
 /** The gap between his body, standing at `at`, and the nearest surface across the way out along `angle` (m), and
  *  what that surface is. */
-function gapAt(at: THREE.Vector3, angle: number, meshes: THREE.Mesh[]): Omit<Walk, 'degrees' | 'stopped' | 'joints'> {
-  const ray = new THREE.Raycaster();
+function gapAt(at: Vec3, angle: number, meshes: Mesh[]): Omit<Walk, 'degrees' | 'stopped' | 'joints'> {
+  const ray = new Raycaster();
   ray.layers.enableAll();
-  let nearest: THREE.Intersection | null = null;
+  let nearest: Hit | null = null;
   for (const height of HEIGHTS) {
     for (let k = -ACROSS_STEPS; k <= ACROSS_STEPS; k++) {
       const way = angle + (k / ACROSS_STEPS) * ACROSS;
-      ray.set(new THREE.Vector3(at.x, height, at.z), new THREE.Vector3(Math.cos(way), 0, Math.sin(way)));
+      ray.set(new Vec3(at.x, height, at.z), new Vec3(Math.cos(way), 0, Math.sin(way)));
       const [hit] = ray.intersectObjects(meshes, false);
       if (hit && (!nearest || hit.distance < nearest.distance)) nearest = hit;
     }
@@ -219,9 +221,9 @@ async function walksIn(lab: Lab, biome: BiomeId, angles: number, canary: boolean
   for (let i = 0; i < angles; i++) {
     const angle = ((i + 0.5) / angles) * Math.PI * 2;
     const face = faceAt(biome, angle);
-    const out = new THREE.Vector2(Math.cos(angle), Math.sin(angle));
+    const out = new Vec2(Math.cos(angle), Math.sin(angle));
     const from = out.clone().multiplyScalar(face - START_IN);
-    const gate = pastWall(biome, out.x * face, out.y * face, new THREE.Vector3()).gate;
+    const gate = pastWall(biome, out.x * face, out.y * face, new Vec3()).gate;
     if (gate || propInWay(from, out.clone().multiplyScalar(face))) {
       skipped++;
       continue;
@@ -232,7 +234,7 @@ async function walksIn(lab: Lab, biome: BiomeId, angles: number, canary: boolean
     const at = G.player.pos.clone();
     const meshes = solidsOf(lab, G.arena.groupOf(biome));
     if (canary && caught === null) {
-      at.addScaledVector(new THREE.Vector3(out.x, 0, out.y), -CANARY_SHORT);
+      at.addScaledVector(new Vec3(out.x, 0, out.y), -CANARY_SHORT);
       caught = gapAt(at, angle, meshes).gap > MOST_GAP;
       continue;
     }

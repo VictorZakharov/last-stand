@@ -2,7 +2,7 @@
 // skull close up, its triangles held to a phone's budget for one boss (as the Twins' and the Rootmother's). From play,
 // its first model read as a dark cone with a box for a head ("this looks like same picture", "full rework"), and a
 // picture taken in the fight's views was too far off to judge it by.
-import * as THREE from 'three';
+import { Geometry, Mesh, Node, Vec3 } from './sceneApi.ts';
 import { G } from '../../../src/state';
 import type { Enemy } from '../../../src/entities/enemy';
 import type { Lab, Pictured } from './lab';
@@ -17,11 +17,11 @@ const SKULL_FROM = 3.2;
 const SETTLE = 30;
 
 /** The triangles a model draws, by its meshes' geometries (each drawn once). */
-export function trianglesOf(root: THREE.Object3D): number {
-  const seen = new Set<THREE.BufferGeometry>();
+export function trianglesOf(root: Node): number {
+  const seen = new Set<Geometry>();
   let count = 0;
   root.traverse((object) => {
-    const mesh = object as THREE.Mesh;
+    const mesh = object as Mesh;
     if (!mesh.isMesh || seen.has(mesh.geometry)) return;
     seen.add(mesh.geometry);
     const geometry = mesh.geometry;
@@ -31,9 +31,9 @@ export function trianglesOf(root: THREE.Object3D): number {
 }
 
 /** Where the Cantor's skull is drawn in the world: its model's skull joint (`userData.skull`), or under its top. */
-function skullOf(cantor: Enemy): THREE.Vector3 {
-  const joint = cantor.model.root.userData.skull as THREE.Object3D | undefined;
-  if (joint) return joint.getWorldPosition(new THREE.Vector3()).add(new THREE.Vector3(0, 0.25, 0));
+function skullOf(cantor: Enemy): Vec3 {
+  const joint = cantor.model.root.userData.skull as Node | undefined;
+  if (joint) return joint.getWorldPosition(new Vec3()).add(new Vec3(0, 0.25, 0));
   return cantor.pos.clone().setY(cantor.height - 0.8);
 }
 

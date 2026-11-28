@@ -21,7 +21,10 @@
 // from a spine 1 cm lower, which must be found under the book, draws the prints 2 cm back from the spine, a gap that
 // must be found, lands the page on his left hand as it rests, which must be found through it, and hides his
 // undersleeves, which must be found bare.
-import * as THREE from 'three';
+import {
+  DoubleSide, Euler, Geometry, InstancedMesh, LitMaterial, Mat4, Maths, Mesh, Node, Quat, Raycaster, shapes,
+  UnlitMaterial, Vec2, Vec3,
+} from './sceneApi.ts';
 import type { Lab, Pictured, Report, ViewName } from './lab';
 import { G } from '../../../src/state';
 import { villageObject } from '../../../src/game/village';
@@ -51,12 +54,12 @@ const OLD_BOOK = 'room leather';
 
 /** The room's books: how many are drawn as the shelves' model (the instances of its covers' meshes), and how many of its
  *  meshes are drawn in the leather the old boxes were (merged or not). */
-function roomBooks(group: THREE.Object3D): { model: number; boxes: number } {
+function roomBooks(group: Node): { model: number; boxes: number } {
   let model = 0, boxes = 0;
   group.traverse((o) => {
-    const m = o as THREE.Mesh;
+    const m = o as Mesh;
     if (!m.isMesh) return;
-    if (/^library books \d+$/.test(m.name)) model += (m as THREE.InstancedMesh).count;
+    if (/^library books \d+$/.test(m.name)) model += (m as InstancedMesh).count;
     const materials = Array.isArray(m.material) ? m.material : [m.material];
     if (materials.some((x) => x.name === OLD_BOOK)) boxes++;
   });
@@ -120,16 +123,16 @@ const BEATS: readonly [number, string][] = [[5, 'reading'], [12.2, 'musing'], [2
   [45, 'pushing his spectacles up'], [52, 'leaning in']];
 
 /** His joints (every group under him, a finger's and an eye's too), by name and place among them. */
-export function jointsOf(s: Scholar): THREE.Object3D[] {
-  const out: THREE.Object3D[] = [];
-  s.root.traverse((o) => { if (!(o as THREE.Mesh).isMesh) out.push(o); });
+export function jointsOf(s: Scholar): Node[] {
+  const out: Node[] = [];
+  s.root.traverse((o) => { if (!(o as Mesh).isMesh) out.push(o); });
   return out;
 }
 
 /** His sleeves' cloth (the upper sleeves, the bells, their linings and cuffs), as posed now: how deep its deepest point
  *  inside the table's edges is below its top (m, 0 for none), and which mesh, with the table raised by `raise`. */
 function throughTable(s: Scholar, raise = 0): { depth: number; mesh: string } {
-  const { x0, x1, z0, z1, top } = s.table, p = new THREE.Vector3(), toRoot = new THREE.Matrix4();
+  const { x0, x1, z0, z1, top } = s.table, p = new Vec3(), toRoot = new Mat4();
   const height = top + raise, inset = 0.01;
   s.root.updateMatrixWorld(true);
   const rootInverse = s.root.matrixWorld.clone().invert();
@@ -151,7 +154,7 @@ function throughTable(s: Scholar, raise = 0): { depth: number; mesh: string } {
 
 /** How far a point (world) is over a half of the book's print (m, below it if less than 0), and whether it's over the
  *  half at all, in that half's frame (x from the spine to its edge). */
-function overHalf(s: Scholar, block: THREE.Object3D, p: THREE.Vector3, q = new THREE.Vector3()): number | null {
+function overHalf(s: Scholar, block: Node, p: Vec3, q = new Vec3()): number | null {
   const b = s.book.shape;
   block.worldToLocal(q.copy(p));
   if (q.x < 0 || q.x > b.half || Math.abs(q.z) > b.depth / 2 || q.y < -0.01) return null;
@@ -164,7 +167,7 @@ function overHalf(s: Scholar, block: THREE.Object3D, p: THREE.Vector3, q = new T
 function pageUnder(s: Scholar): { depth: number; share: number; overLeft: number | null } {
   if (!s.page.visible) return { depth: 0, share: 0, overLeft: null };
   s.root.updateMatrixWorld(true);
-  const at = s.page.geometry.attributes.position, p = new THREE.Vector3();
+  const at = s.page.geometry.attributes.position, p = new Vec3();
   let depth = 0, under = 0, overLeft: number | null = null;
   for (let i = 0; i < at.count; i++) {
     p.fromBufferAttribute(at, i).applyMatrix4(s.page.matrixWorld);
@@ -185,7 +188,7 @@ function pageUnder(s: Scholar): { depth: number; share: number; overLeft: number
 function spineGaps(s: Scholar): { print: number; halves: number } {
   s.root.updateMatrixWorld(true);
   let print = 0;
-  const q = new THREE.Vector3();
+  const q = new Vec3();
   for (const [h, printed] of s.book.prints.entries()) {
     const at = printed.geometry.attributes.position, block = s.book.blocks[h];
     let least = Infinity;
@@ -195,19 +198,19 @@ function spineGaps(s: Scholar): { print: number; halves: number } {
     }
     print = Math.max(print, least);
   }
-  const [a, b] = s.book.blocks.map((block) => block.getWorldPosition(new THREE.Vector3()));
+  const [a, b] = s.book.blocks.map((block) => block.getWorldPosition(new Vec3()));
   return { print, halves: a.distanceTo(b) };
 }
 
 /** Each hand's skinned mesh as posed now, its vertices in the world: the one shown (bare or not), its skeleton's bones
  *  made again for it (the game does as it draws; the lab poses with no draw). */
-function handPoints(s: Scholar): THREE.Vector3[][] {
+function handPoints(s: Scholar): Vec3[][] {
   s.root.updateMatrixWorld(true);
   return s.hands.map((hand) => {
     const mesh = hand.bareSkin?.visible ? hand.bareSkin : hand.skin;
     mesh.skeleton.update();
-    const out: THREE.Vector3[] = [], at = mesh.geometry.attributes.position;
-    for (let i = 0; i < at.count; i++) out.push(mesh.getVertexPosition(i, new THREE.Vector3()).applyMatrix4(mesh.matrixWorld));
+    const out: Vec3[] = [], at = mesh.geometry.attributes.position;
+    for (let i = 0; i < at.count; i++) out.push(mesh.getVertexPosition(i, new Vec3()).applyMatrix4(mesh.matrixWorld));
     return out;
   });
 }
@@ -215,13 +218,13 @@ function handPoints(s: Scholar): THREE.Vector3[][] {
 /** The page he turns, as laid now, against each hand (its points, `handPoints`): how far the page cuts into it (m, 0 for
  *  none: a hand with points more than `THROUGH_HAND` on both sides of the page, over the page and short of the strip by
  *  its edge where he pinches it). The page's section across it, from the spine to the edge, is the same all along it. */
-function pageThroughHands(s: Scholar, hands: THREE.Vector3[][]): number[] {
+function pageThroughHands(s: Scholar, hands: Vec3[][]): number[] {
   const page = s.page, frame = page.parent!, at = page.geometry.attributes.position, half = s.book.shape.depth / 2;
   s.root.updateMatrixWorld(true);
   // (its section: the row along its +z edge, spine first)
-  const section: THREE.Vector2[] = [];
-  for (let i = 0; i < at.count; i++) if (at.getZ(i) > half - 1e-6) section.push(new THREE.Vector2(at.getX(i), at.getY(i)));
-  const q = new THREE.Vector3(), p = new THREE.Vector2(), d = new THREE.Vector2(), foot = new THREE.Vector2();
+  const section: Vec2[] = [];
+  for (let i = 0; i < at.count; i++) if (at.getZ(i) > half - 1e-6) section.push(new Vec2(at.getX(i), at.getY(i)));
+  const q = new Vec3(), p = new Vec2(), d = new Vec2(), foot = new Vec2();
   return hands.map((points) => {
     let below = 0, above = 0;
     for (const point of points) {
@@ -251,15 +254,15 @@ function forearmBare(s: Scholar, hide = false): (number | null)[] {
   s.root.updateMatrixWorld(true);
   // (each cast at as two-sided: three meets only a one-sided mesh's front faces, and a ray out from inside a sleeve
   // meets its faces' backs, so through one-sided sleeves every forearm read bare)
-  const twoSided = new THREE.MeshBasicMaterial({ side: THREE.DoubleSide });
+  const twoSided = new UnlitMaterial({ side: DoubleSide });
   const clothes = s.parts.filter((m) => CLOTHES.test(m.name) && (!hide || !/undersleeve/.test(m.name))).map((m) => {
-    const stand = new THREE.Mesh(m.geometry, twoSided);
+    const stand = new Mesh(m.geometry, twoSided);
     stand.matrixWorld.copy(m.matrixWorld);
     stand.matrixAutoUpdate = false;
     return stand;
   });
-  const ray = new THREE.Raycaster(), from = new THREE.Vector3(), to = new THREE.Vector3(), axis = new THREE.Vector3();
-  const across = new THREE.Vector3(), up = new THREE.Vector3(), dir = new THREE.Vector3(), p = new THREE.Vector3();
+  const ray = new Raycaster(), from = new Vec3(), to = new Vec3(), axis = new Vec3();
+  const across = new Vec3(), up = new Vec3(), dir = new Vec3(), p = new Vec3();
   ray.far = FOREARM;
   return ['L', 'R'].map((side) => {
     s.root.getObjectByName(`scholar elbow${side}`)!.getWorldPosition(from);
@@ -282,22 +285,22 @@ function forearmBare(s: Scholar, hide = false): (number | null)[] {
 
 /** How far a point (world) is inside a sleeve (m, 0 for outside it): between two of its rings, inside the ring laid
  *  between them there, by its distance in from that ring. */
-function inSleeve(m: THREE.Mesh, point: THREE.Vector3): number {
-  const lathe = m.geometry as THREE.LatheGeometry, rows = lathe.parameters.points.length, sides = lathe.parameters.segments;
+function inSleeve(m: Mesh, point: Vec3): number {
+  const lathe = m.geometry as Geometry, rows = lathe.parameters.points.length, sides = lathe.parameters.segments;
   const at = m.geometry.attributes.position, q = m.worldToLocal(point.clone());
   // (its rings' heights: each a profile point's, the same all round it)
   let j = -1;
   for (let k = 0; k + 1 < rows; k++) if (q.y >= at.getY(k) && q.y <= at.getY(k + 1)) { j = k; break; }
   if (j < 0) return 0;
   const f = (q.y - at.getY(j)) / (at.getY(j + 1) - at.getY(j));
-  const ring: THREE.Vector2[] = [];
+  const ring: Vec2[] = [];
   for (let i = 0; i <= sides; i++) {
     const a = i * rows + j, b = a + 1;
-    ring.push(new THREE.Vector2(at.getX(a) + (at.getX(b) - at.getX(a)) * f, at.getZ(a) + (at.getZ(b) - at.getZ(a)) * f));
+    ring.push(new Vec2(at.getX(a) + (at.getX(b) - at.getX(a)) * f, at.getZ(a) + (at.getZ(b) - at.getZ(a)) * f));
   }
   // (inside by its crossings, and how far in from its nearest edge)
   let inside = false, near = Infinity;
-  const p = new THREE.Vector2(q.x, q.z), d = new THREE.Vector2(), foot = new THREE.Vector2();
+  const p = new Vec2(q.x, q.z), d = new Vec2(), foot = new Vec2();
   for (let i = 0; i < sides; i++) {
     const a = ring[i], b = ring[i + 1];
     if ((a.y > p.y) !== (b.y > p.y) && p.x < a.x + ((p.y - a.y) / (b.y - a.y)) * (b.x - a.x)) inside = !inside;
@@ -314,15 +317,15 @@ function propsInArms(s: Scholar): { depth: number; what: string } {
   const desk = s.root.parent!, book = s.book.blocks[0].parent!;
   s.root.updateMatrixWorld(true);
   desk.updateMatrixWorld(true);
-  const things: THREE.Mesh[] = [];
+  const things: Mesh[] = [];
   desk.traverse((o) => {
-    const m = o as THREE.Mesh;
+    const m = o as Mesh;
     if (!m.isMesh || !m.name.startsWith('scholar desk')) return;
-    for (let up: THREE.Object3D | null = m; up; up = up.parent) if (up === s.root || up === book) return;
+    for (let up: Node | null = m; up; up = up.parent) if (up === s.root || up === book) return;
     things.push(m);
   });
   const sleeves = s.parts.filter((m) => SLEEVES.test(m.name));
-  const p = new THREE.Vector3();
+  const p = new Vec3();
   let depth = 0, what = '';
   for (const m of things) {
     const at = m.geometry.attributes.position;
@@ -344,11 +347,11 @@ function propsInArms(s: Scholar): { depth: number; what: string } {
 /** How far his right hand's nearest fingertip is from the page's outer edge (m). */
 function fromEdge(s: Scholar): number {
   s.root.updateMatrixWorld(true);
-  const at = s.page.geometry.attributes.position, p = new THREE.Vector3(), tip = new THREE.Vector3();
+  const at = s.page.geometry.attributes.position, p = new Vec3(), tip = new Vec3();
   // (the edge: the page's points furthest from the spine, round which it turns)
   let far = 0;
   for (let i = 0; i < at.count; i++) far = Math.max(far, Math.hypot(at.getX(i), at.getY(i)));
-  const edge: THREE.Vector3[] = [];
+  const edge: Vec3[] = [];
   for (let i = 0; i < at.count; i++) {
     if (Math.hypot(at.getX(i), at.getY(i)) > far - 0.002) edge.push(p.fromBufferAttribute(at, i).applyMatrix4(s.page.matrixWorld).clone());
   }
@@ -369,7 +372,7 @@ const clamp01 = (v: number): number => Math.max(0, Math.min(1, v));
 function tipsSunk(s: Scholar): { depth: number; finger: string } {
   s.root.updateMatrixWorld(true);
   const { x0, x1, z0, z1, top } = s.table, rootInverse = s.root.matrixWorld.clone().invert();
-  const tip = new THREE.Vector3(), q = new THREE.Vector3(), scale = new THREE.Vector3();
+  const tip = new Vec3(), q = new Vec3(), scale = new Vec3();
   let depth = 0, finger = '';
   for (const [h, hand] of s.hands.entries()) {
     for (const [d, digit] of [...hand.f, hand.thumb].entries()) {
@@ -393,7 +396,7 @@ function tipsSunk(s: Scholar): { depth: number; finger: string } {
  *  where, the turn across the wrap, and how far his head turned and each hand went. */
 function walkLoop(s: Scholar, canary: boolean): { lines: string[]; problems: string[]; caught: boolean } {
   const joints = jointsOf(s), head = s.root.getObjectByName('scholar cap')!.parent!, hands = joints.filter((j) => j.userData.drawnHand);
-  const before = joints.map((j) => j.quaternion.clone()), was = new THREE.Quaternion();
+  const before = joints.map((j) => j.quaternion.clone()), was = new Quat();
   s.loopAt = SCHOLAR_LOOP - 4;
   s.update(0, null, false);
   joints.forEach((j, i) => before[i].copy(j.quaternion));
@@ -411,8 +414,8 @@ function walkLoop(s: Scholar, canary: boolean): { lines: string[]; problems: str
   let cowlInto = 0, cowlGap = 0, cowlAt = '';
   /** the stretches of the loop his sleeves were through the table (s, from and to, and the deepest in it, m) */
   const spans: { from: number; to: number; depth: number; mesh: string }[] = [];
-  const headTurn = { min: Infinity, max: -Infinity }, handAt = new THREE.Vector3();
-  const handFrom = hands.map(() => new THREE.Vector3()), handWent = hands.map(() => 0);
+  const headTurn = { min: Infinity, max: -Infinity }, handAt = new Vec3();
+  const handFrom = hands.map(() => new Vec3()), handWent = hands.map(() => 0);
   /** his fingers and his sleeves against his table's book's solids over the loop (m), and where the deepest */
   let bookFingers = 0, bookSleeves = 0, bookAt = '';
   const tableBook = bookRead(s, false);
@@ -428,14 +431,14 @@ function walkLoop(s: Scholar, canary: boolean): { lines: string[]; problems: str
     let most = 0, which = '';
     joints.forEach((j, i) => {
       was.copy(before[i]);
-      const turn = THREE.MathUtils.radToDeg(was.angleTo(j.quaternion));
+      const turn = Maths.radToDeg(was.angleTo(j.quaternion));
       if (turn > most) { most = turn; which = j.name || `joint ${i}`; }
       before[i].copy(j.quaternion);
     });
     const crossed = s.loopAt < t;
     if (crossed && !snapped) wrap = Math.max(wrap, most);
     if (most > worst) { worst = most; worstAt = `${which} at ${t.toFixed(2)} s`; }
-    const yaw = new THREE.Euler().setFromQuaternion(head.getWorldQuaternion(new THREE.Quaternion()), 'YXZ');
+    const yaw = new Euler().setFromQuaternion(head.getWorldQuaternion(new Quat()), 'YXZ');
     headTurn.min = Math.min(headTurn.min, yaw.x); headTurn.max = Math.max(headTurn.max, yaw.x);
     hands.forEach((h, i) => { h.getWorldPosition(handAt); handWent[i] = Math.max(handWent[i], handAt.distanceTo(handFrom[i])); });
     if (tableBook) {
@@ -498,7 +501,7 @@ function walkLoop(s: Scholar, canary: boolean): { lines: string[]; problems: str
       } else spans.push({ from: t, to: t, depth: through.depth, mesh: through.mesh });
     }
   }
-  const headDeg = THREE.MathUtils.radToDeg(headTurn.max - headTurn.min);
+  const headDeg = Maths.radToDeg(headTurn.max - headTurn.min);
   const lines = [`loop: ${SCHOLAR_LOOP} s posed at 60 a second; the most a joint turned in a frame ${worst.toFixed(2)}° (${worstAt}), `
     + `across the wrap ${wrap.toFixed(2)}°; his head's pitch over it ${headDeg.toFixed(1)}°, his hands went ${handWent.map((d) => d.toFixed(2)).join(' and ')} m (the left first)`,
     `his sleeves below the table's top: ${deepest > 0 ? `${(deepest * 100).toFixed(1)} cm at the deepest (${deepestAt})` : 'none'}`
@@ -584,11 +587,11 @@ function walkLoop(s: Scholar, canary: boolean): { lines: string[]; problems: str
     // (a quill stood up under his left forearm, as he reads)
     s.loopAt = 5;
     s.update(0, null, false);
-    const desk = s.root.parent!, forearm = (name: string) => desk.worldToLocal(s.root.getObjectByName(name)!.getWorldPosition(new THREE.Vector3()));
+    const desk = s.root.parent!, forearm = (name: string) => desk.worldToLocal(s.root.getObjectByName(name)!.getWorldPosition(new Vec3()));
     const under = forearm('scholar elbowL').lerp(forearm('scholar handL'), 0.5);
     // (points all up its length, as what's read of it is its points: a cone's are only at its foot and its tip, either
     // side of a forearm)
-    const planted = new THREE.Mesh(new THREE.ConeGeometry(0.011, 0.24, 6, 24));
+    const planted = new Mesh(shapes.cone(0.011, 0.24, 6, 24));
     planted.name = 'scholar desk quill (canary)';
     planted.position.set(under.x, QUILL_FOOT + 0.12, under.z);
     desk.add(planted);
@@ -611,9 +614,9 @@ function walkLoop(s: Scholar, canary: boolean): { lines: string[]; problems: str
 export function offHero(s: Scholar): number {
   const head = s.root.getObjectByName('scholar cap')!.parent!;
   s.root.updateMatrixWorld(true);
-  const from = head.getWorldPosition(new THREE.Vector3()), facing = new THREE.Vector3(0, 0, 1).applyQuaternion(head.getWorldQuaternion(new THREE.Quaternion()));
+  const from = head.getWorldPosition(new Vec3()), facing = new Vec3(0, 0, 1).applyQuaternion(head.getWorldQuaternion(new Quat()));
   const to = G.player.pos.clone().setY(G.player.pos.y + 1.55).sub(from).normalize();
-  return THREE.MathUtils.radToDeg(facing.angleTo(to));
+  return Maths.radToDeg(facing.angleTo(to));
 }
 
 /** `lab scholar`. */
@@ -643,7 +646,7 @@ export async function scholar(lab: Lab, options: ScholarOptions): Promise<Report
     return { text: swept.lines.join('\n'), problems: swept.problems, moments: [] };
   }
   let triangles = 0;
-  s.root.traverse((o) => { const m = o as THREE.Mesh; if (m.isMesh && m.visible) triangles += (m.geometry.index?.count ?? m.geometry.attributes.position.count) / 3; });
+  s.root.traverse((o) => { const m = o as Mesh; if (m.isMesh && m.visible) triangles += (m.geometry.index?.count ?? m.geometry.attributes.position.count) / 3; });
   lines.push(`Brother Hollis seated, ${Math.round(triangles / 1000)}k triangles`);
 
   // --- every book in the room the shelves' model: none a leather box, as the stacks on the floor were ---
@@ -651,7 +654,7 @@ export async function scholar(lab: Lab, options: ScholarOptions): Promise<Report
   lines.push(`the room's books: ${books.model} drawn as the shelves' model; ${books.boxes} meshes of the old leather boxes`);
   if (books.boxes) problems.push(`the library has ${books.boxes} meshes of leather book boxes (from play: "These models are not same as books on shelves")`);
   if (options.canary) {
-    const old = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.055, 0.24), new THREE.MeshStandardMaterial({ name: OLD_BOOK }));
+    const old = new Mesh(shapes.box(0.3, 0.055, 0.24), new LitMaterial({ name: OLD_BOOK }));
     room.group.add(old);
     const planted = roomBooks(room.group).boxes;
     old.removeFromParent();
@@ -709,15 +712,15 @@ export async function scholar(lab: Lab, options: ScholarOptions): Promise<Report
 
   // --- pictured at points of his loop, the hero by the door facing as he does ---
   const { x, z, turn } = SCHOLAR_DESK;
-  const placed = new THREE.Vector3(3.5, 0, 3.2);
+  const placed = new Vec3(3.5, 0, 3.2);
   G.player.place(placed, turn);
   await lab.step(400);
   const views = (options.views ?? ['front', 'left', 'right', 'back', 'above']) as ViewName[];
-  const ahead = (d: number, y: number) => new THREE.Vector3(x + Math.sin(turn) * d, y, z + Math.cos(turn) * d);
+  const ahead = (d: number, y: number) => new Vec3(x + Math.sin(turn) * d, y, z + Math.cos(turn) * d);
   // (his arms on the table: framed on its near edge, as from play the sleeves were seen through it)
   const chest = ahead(0, 1.0), face = ahead(0.08, 1.2), arms = ahead(0.3, s.table.top + 0.05);
   // (his book, from above: framed on its spine, close enough to see a page lying on the blocks or under them)
-  const book = s.page.parent!.getWorldPosition(new THREE.Vector3());
+  const book = s.page.parent!.getWorldPosition(new Vec3());
   const beats = options.at ? options.at.map((t): [number, string] => [t, `${t} s`]) : BEATS;
   for (const [t, what] of beats) {
     s.loopAt = t;
@@ -726,8 +729,8 @@ export async function scholar(lab: Lab, options: ScholarOptions): Promise<Report
     moments.push(lab.picture(`scholar-${what.replace(/\s+/g, '-')}-face`, ['front', 'left'], [`${what}: his face`], { at: face, distance: 0.75 }));
     moments.push(lab.picture(`scholar-${what.replace(/\s+/g, '-')}-arms`, ['front', 'left', 'right'], [`${what}: his arms on the table`], { at: arms, distance: 1.1 }));
     // (his left forearm close, from his left and ahead: where his quill stood up through its sleeve, from play)
-    const elbowL = s.root.getObjectByName('scholar elbowL')!.getWorldPosition(new THREE.Vector3());
-    const forearm = s.root.getObjectByName('scholar handL')!.getWorldPosition(new THREE.Vector3()).lerp(elbowL, 0.5);
+    const elbowL = s.root.getObjectByName('scholar elbowL')!.getWorldPosition(new Vec3());
+    const forearm = s.root.getObjectByName('scholar handL')!.getWorldPosition(new Vec3()).lerp(elbowL, 0.5);
     moments.push(lab.picture(`scholar-${what.replace(/\s+/g, '-')}-forearm`, ['left', 'front'], [`${what}: his left forearm close`], { at: forearm, distance: 0.6 }));
     // (and from above ahead of him, as a player standing at his table looks down at it: the close-ups turn with the
     // hero's facing, so the hero turned round makes their view from above and behind one from above and ahead)
@@ -756,7 +759,7 @@ export const SLEEVE_TAPER = { upper: 1.12, fore: 1.08 };
  *  built (its joint's frame): the upper sleeve's at the deltoid and over the elbow, the forearm's widest and narrowest. */
 export function sleeveWidths(s: Scholar): { deltoid: number; elbow: number; foreWide: number; foreNarrow: number } {
   // (read at the rows of their lathes' profiles, which they keep: `dressBells`)
-  const widthAt = (mesh: THREE.Mesh, y: number, band = 0.004) => {
+  const widthAt = (mesh: Mesh, y: number, band = 0.004) => {
     const pos = mesh.geometry.attributes.position;
     let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
     for (let i = 0; i < pos.count; i++) {
@@ -765,8 +768,8 @@ export function sleeveWidths(s: Scholar): { deltoid: number; elbow: number; fore
     }
     return Math.max(x1 - x0, z1 - z0);
   };
-  const upper = s.root.getObjectByName('scholar shoulderL')!.children.find((m) => m.name === 'scholar sleeve standing') as THREE.Mesh;
-  const fore = s.root.getObjectByName('scholar elbowL')!.children.find((m) => m.name === 'scholar bell standing') as THREE.Mesh;
+  const upper = s.root.getObjectByName('scholar shoulderL')!.children.find((m) => m.name === 'scholar sleeve standing') as Mesh;
+  const fore = s.root.getObjectByName('scholar elbowL')!.children.find((m) => m.name === 'scholar bell standing') as Mesh;
   const along = [0.03, -0.02, -0.08, -0.15, -0.2].map((y) => widthAt(fore, y));
   return { deltoid: widthAt(upper, -0.06), elbow: widthAt(upper, -0.27), foreWide: Math.max(...along.slice(0, 3)), foreNarrow: Math.min(...along.slice(3)) };
 }

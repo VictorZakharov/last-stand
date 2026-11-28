@@ -12,7 +12,7 @@
 // `wallsStayWhole` draws the frame with the hole and without, at spots round a cottage's corners and along the hall's
 // walls over the shoulder, and reads whether the near plane cuts a wall. `--canary`: what's built thinned as it was,
 // the near plane left at 0.5 m.
-import * as THREE from 'three';
+import { Box3, Vec2, Vec3 } from './sceneApi.ts';
 import type { Lab } from './lab';
 import { G } from '../../../src/state';
 import { faceCamera, farNearAtWalls, setZoom, viewMode, type ViewMode } from '../../../src/core/renderer';
@@ -68,8 +68,8 @@ const MOST_UNDER_WAIST = 0.0005;
 const LEAST_COLUMN_LEFT = 0.3;
 /** the village's lamps, and the portico's columns where this commit has them (an A/B's other side may not) */
 const { LAMPS } = world_;
-const PORTICO_COLUMNS = (world_ as { PORTICO_COLUMNS?: readonly THREE.Box3[] }).PORTICO_COLUMNS;
-const ROOM_COLUMNS = (world_ as { ROOM_COLUMNS?: readonly THREE.Box3[] }).ROOM_COLUMNS;
+const PORTICO_COLUMNS = (world_ as { PORTICO_COLUMNS?: readonly Box3[] }).PORTICO_COLUMNS;
+const ROOM_COLUMNS = (world_ as { ROOM_COLUMNS?: readonly Box3[] }).ROOM_COLUMNS;
 /** what of the frame the hole may change round his box, the post's and the cheek's */
 const SCENARIOS: readonly BehindProp[] = [
   {
@@ -106,7 +106,7 @@ const SCENARIOS: readonly BehindProp[] = [
  */
 function porticoScenario(): BehindProp[] {
   if (!PORTICO_COLUMNS) return [];
-  const middle = PORTICO_COLUMNS[2].getCenter(new THREE.Vector3());
+  const middle = PORTICO_COLUMNS[2].getCenter(new Vec3());
   return [{
     name: 'a column of the portico',
     x: middle.x,
@@ -126,7 +126,7 @@ function porticoScenario(): BehindProp[] {
  */
 function roomColumnScenario(): BehindProp[] {
   if (!ROOM_COLUMNS) return [];
-  const middle = ROOM_COLUMNS[3].getCenter(new THREE.Vector3());
+  const middle = ROOM_COLUMNS[3].getCenter(new Vec3());
   return [{
     name: "a column of the hall's room",
     x: middle.x,
@@ -145,7 +145,7 @@ async function standBehind(lab: Lab, prop: BehindProp): Promise<void> {
   const x = prop.x + Math.sin(prop.way) * prop.off - Math.cos(prop.way) * prop.aside;
   const z = prop.z + Math.cos(prop.way) * prop.off + Math.sin(prop.way) * prop.aside;
   G.player.walkTo = null;
-  G.player.place(new THREE.Vector3(x, groundHeight(x, z), z), prop.way);
+  G.player.place(new Vec3(x, groundHeight(x, z), z), prop.way);
   // (at the lobby's zoom: a check before it left the camera further out, and the column hid less of him)
   setZoom(CAMERA.lobbyZoom);
   faceCamera(prop.way);
@@ -309,8 +309,8 @@ interface WallSpot { name: string; x: number; z: number; facing: number }
 function cottageSpots(): WallSpot[] {
   const cottage = COTTAGES[0];
   const spots: WallSpot[] = [];
-  const across = new THREE.Vector2(Math.cos(cottage.facing), -Math.sin(cottage.facing));
-  const along = new THREE.Vector2(Math.sin(cottage.facing), Math.cos(cottage.facing));
+  const across = new Vec2(Math.cos(cottage.facing), -Math.sin(cottage.facing));
+  const along = new Vec2(Math.sin(cottage.facing), Math.cos(cottage.facing));
   const halfW = (COTTAGE.w / 2) * cottage.size;
   const halfD = (COTTAGE.d / 2) * cottage.size;
   for (const sideW of [-1, 1]) {
@@ -348,7 +348,7 @@ function nearCutsWall(): boolean {
   const camera = G.camera;
   camera.updateMatrixWorld();
   camera.updateProjectionMatrix();
-  const point = new THREE.Vector3();
+  const point = new Vec3();
   return NEAR_POINTS.some(([x, y]) => {
     point.set(x, y, -1).unproject(camera);
     return G.arena.wall.cast(camera.position, point, hit);
@@ -366,7 +366,7 @@ async function readWallSpots(lab: Lab, spots: WallSpot[], pictures: boolean): Pr
   for (const spot of spots) {
     for (const turn of TURNS) {
       G.player.walkTo = null;
-      G.player.place(new THREE.Vector3(spot.x, groundHeight(spot.x, spot.z), spot.z), spot.facing + turn);
+      G.player.place(new Vec3(spot.x, groundHeight(spot.x, spot.z), spot.z), spot.facing + turn);
       faceCamera(spot.facing + turn);
       await lab.step(30);
       const label = `${spot.name}, turned ${turn.toFixed(1)}`;

@@ -5,7 +5,7 @@
 // keeps at least three quarters of its light (#755: "Reduce the intensity of the grey effect (top down view) to make
 // it less harsh": pressed to 0.35 of its light and turned cold, the village past a wall read as a grey slab); what he can see is untouched, a wall he faces among it; over the shoulder none of it
 // is fogged. `canary` holds the fog off, which must be found.
-import * as THREE from 'three';
+import { Vec3 } from './sceneApi.ts';
 import type { Lab, Pictured } from './lab';
 import { G } from '../../../src/state';
 import { COTTAGES, HALL, TERRACE } from '../../../src/data/village';
@@ -127,7 +127,7 @@ function readings(): Reading[] {
 
 /** The box round (x, z) on the floor as `canvas` shows it, null where it's off the frame. */
 function boxAt(canvas: Canvas, x: number, z: number): Box | null {
-  const place = new THREE.Vector3(x, floorAt(x, z), z).project(G.camera);
+  const place = new Vec3(x, floorAt(x, z), z).project(G.camera);
   const middleX = Math.round((place.x + 1) / 2 * canvas.width);
   const middleY = Math.round((place.y + 1) / 2 * canvas.height);
   const inFrame = middleX > HALF_BOX && middleY > HALF_BOX
@@ -163,7 +163,7 @@ function judged(reading: Reading, fogged: Box, clear: Box): string | null {
 async function drawnFrom(lab: Lab, stand: [number, number]): Promise<Canvas> {
   const [x, z] = stand;
   G.player.walkTo = null;
-  G.player.place(new THREE.Vector3(x, groundHeight(x, z), z), 0);
+  G.player.place(new Vec3(x, groundHeight(x, z), z), 0);
   await lab.step(SETTLE);
   return drawFrame(lab);
 }

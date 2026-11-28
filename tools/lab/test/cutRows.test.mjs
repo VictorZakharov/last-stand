@@ -2,15 +2,15 @@
 // its blow, which it is only if its blade stops there; passing through the rest's place on its way is no fault.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import * as THREE from 'three';
+import { Vec3 } from '../../../src/engine/api/index.ts';
 import { rowOfCuts } from '../page/cutRows.ts';
 
 const FRAME_MS = 1000 / 60;
 const BLADE_LENGTH = 0.9;
 /** the blade at rest, in the eyes' space: its grip low on the right, the blade up and away */
-const REST_GRIP = new THREE.Vector3(0.25, -0.35, -0.45);
-const REST_WAY = new THREE.Vector3(0.1, 0.8, -0.3).normalize();
-const UP = new THREE.Vector3(0, 1, 0);
+const REST_GRIP = new Vec3(0.25, -0.35, -0.45);
+const REST_WAY = new Vec3(0.1, 0.8, -0.3).normalize();
+const UP = new Vec3(0, 1, 0);
 const DEG = Math.PI / 180;
 
 /** The rest's blade turned `yaw` degrees round the eyes, as a cut's frame. */

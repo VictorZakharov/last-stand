@@ -7,7 +7,7 @@
 // hall: what stands inside its walls is culled by the doorway from outside (its room and the heroes on its dais were
 // 128 of the frame's 429 draws, whatever the doorway showed of them; off the doorway's line it culls about half). `canary` culls all, the doorway or not, which
 // must change the frame.
-import * as THREE from 'three';
+import { Vec3 } from './sceneApi.ts';
 import type { Lab } from './lab';
 import { G } from '../../../src/state';
 import { RUST } from '../../../src/engine';
@@ -93,8 +93,8 @@ export async function viewBy(lab: Lab, view: ViewMode): Promise<void> {
 
 /** The hero in the hall, turned to its door with the camera over his shoulder behind him, let settle (from above,
  *  its roof is cut away and nothing is culled; the village's top view is its panels', so it's V that leaves it). */
-async function inHallLookingOut(lab: Lab): Promise<void> {
-  const at = new THREE.Vector3(TERRACE.x, 0, HALL.door - IN_FROM);
+export async function inHallLookingOut(lab: Lab): Promise<void> {
+  const at = new Vec3(TERRACE.x, 0, HALL.door - IN_FROM);
   at.y = groundHeight(at.x, at.z);
   G.player.walkTo = null;
   // (facing 0 is along +z, out of the door)
@@ -107,7 +107,7 @@ async function inHallLookingOut(lab: Lab): Promise<void> {
 /** The hero walked in, turned to the dais, the camera over his shoulder behind him in the doorway's opening, let
  *  settle (where a perf report stood him: -1.7,-19.3 facing 181 degrees). */
 async function inHallFromDoorway(lab: Lab): Promise<void> {
-  const at = new THREE.Vector3(TERRACE.x, 0, HALL.door - WALKED_IN);
+  const at = new Vec3(TERRACE.x, 0, HALL.door - WALKED_IN);
   at.y = groundHeight(at.x, at.z);
   G.player.walkTo = null;
   G.player.place(at, Math.PI);
@@ -119,7 +119,7 @@ async function inHallFromDoorway(lab: Lab): Promise<void> {
 /** The hero on the square off the doorway's line, turned to the doorway over his shoulder, let settle (on its line
  *  the cone through it meets nearly all of the hall's inside, and culls 3 of its 100 draws: off it, about half). */
 async function onSquareFacingHall(lab: Lab): Promise<void> {
-  const at = new THREE.Vector3(TERRACE.x + SQUARE_ASIDE, 0, VILLAGE_SPOT[1] - SQUARE_IN);
+  const at = new Vec3(TERRACE.x + SQUARE_ASIDE, 0, VILLAGE_SPOT[1] - SQUARE_IN);
   at.y = groundHeight(at.x, at.z);
   const facing = Math.atan2(TERRACE.x - at.x, HALL.door - at.z);
   G.player.walkTo = null;

@@ -8,7 +8,7 @@
 //   with them there): the heal on the hero read each step, as the healed one's game heals.
 // `--canary` takes the ramp's most and grace away and the chain's bonus, which the ramp's and the chain's checks must
 // all catch.
-import * as THREE from 'three';
+import { Attribute, Mesh, Vec3 } from './sceneApi.ts';
 import type { Lab } from './lab';
 import type { Player } from '../../../src/entities/player';
 import type { SkillDef } from '../../../src/types';
@@ -32,7 +32,7 @@ type ThreadState = ReturnType<typeof lifethread.start>;
 
 /** Someone in the room for the beam: where he stands, his Health and most Health, and the beam he holds, if any. */
 interface StandIn {
-  at: THREE.Vector3;
+  at: Vec3;
   life?: number;
   maxLife?: number;
   /** whom his own Lifethread is held on */
@@ -230,7 +230,7 @@ const SIDE = { caster: 4, healer: 7, second: 10, third: 13 };
 /** The chain's cases: one full healer, one with room, two full ones, and a ring of two that never reaches him. */
 function chainCases(): ChainCase[] {
   const bonus = ASKED.perLink;
-  const beside = (lab: Lab, metres: number): THREE.Vector3 => ahead(lab, 0, metres);
+  const beside = (lab: Lab, metres: number): Vec3 => ahead(lab, 0, metres);
   return [
     {
       name: 'through a full healer',
@@ -311,11 +311,11 @@ const THICKER_LEAST = 1.2;
 
 /** The beam's outer tube's width at its middle ring, from its geometry as drawn (two sides across from each other). */
 function beamWidth(): number {
-  const beam = G.scene.getObjectByName('Lifethread: beam') as THREE.Mesh | undefined;
+  const beam = G.scene.getObjectByName('Lifethread: beam') as Mesh | undefined;
   if (!beam) return 0;
-  const pos = beam.geometry.attributes.position as THREE.BufferAttribute;
-  const side = new THREE.Vector3().fromBufferAttribute(pos, WIDTH_RING * RING_SIDES);
-  const across = new THREE.Vector3().fromBufferAttribute(pos, WIDTH_RING * RING_SIDES + RING_SIDES / 2);
+  const pos = beam.geometry.attributes.position as Attribute;
+  const side = new Vec3().fromBufferAttribute(pos, WIDTH_RING * RING_SIDES);
+  const across = new Vec3().fromBufferAttribute(pos, WIDTH_RING * RING_SIDES + RING_SIDES / 2);
   return side.distanceTo(across);
 }
 
@@ -341,7 +341,7 @@ function linkedStep(lab: Lab, def: SkillDef, feeders: Player[], onFeeder = false
 /** A beam carrying another's on (his full, a partner's on him): thicker, by each it carries, and its count at his aim. */
 function linkedLook(lab: Lab, def: SkillDef, found: Found): void {
   const hero = lab.player;
-  const behind = (metres: number): THREE.Vector3 => ahead(lab, -metres);
+  const behind = (metres: number): Vec3 => ahead(lab, -metres);
   const feeder = (metres: number): Player => standIn({ at: behind(metres), beamOn: hero });
   const alone = linkedStep(lab, def, []);
   const one = linkedStep(lab, def, [feeder(3)]);

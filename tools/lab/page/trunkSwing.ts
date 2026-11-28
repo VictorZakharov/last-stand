@@ -12,7 +12,7 @@
 // a walker's pelvis turns about 4 degrees either way and tips about 4, the shoulders turn about as far the other way
 // and the hips sway about 2 cm over each foot; a runner's pelvis turns and tips a little more and the shoulders a lot
 // more (up to about 15), and the sway is about 1 cm.
-import * as THREE from 'three';
+import { Node, Vec3 } from './sceneApi.ts';
 import type { Joints } from '../../../src/entities/models/rig';
 
 /** A point in the world (m). */
@@ -235,8 +235,8 @@ export function trunkLine(swing: TrunkSwing | null, unlike: string[]): string {
 
 /** Reads a frame of the trunk and the feet off a hero's joints. */
 export function trunkSampleOf(j: Joints, planted: [boolean, boolean]): TrunkSample {
-  const at = (joint: THREE.Object3D): Point => {
-    const place = joint.getWorldPosition(new THREE.Vector3());
+  const at = (joint: Node): Point => {
+    const place = joint.getWorldPosition(new Vec3());
     return { x: place.x, y: place.y, z: place.z };
   };
   return {

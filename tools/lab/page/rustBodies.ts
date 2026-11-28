@@ -2,21 +2,21 @@
 // foe drawn alone), counted by what a frame's walk meets of it, and hidden whole for `--nobody`, so what the bodies
 // cost a frame is the difference of two runs. Counted before anything is built for them: the scene the engine keeps
 // (last-stand#828) was built before its share of the frame was known, and moved nothing.
-import * as THREE from 'three';
+import { Bone, Material, Node, Skeleton, SkinnedMesh, World } from './sceneApi.ts';
 
 /** A body's root: the first thing above its skeleton's first bone that isn't a bone (its rigid pieces hang on its
  *  bones, so they're under it too). */
-function rootOf(skeleton: THREE.Skeleton): THREE.Object3D | null {
-  let above: THREE.Object3D | null = skeleton.bones[0] ?? null;
-  while (above && (above as THREE.Bone).isBone) above = above.parent;
+function rootOf(skeleton: Skeleton): Node | null {
+  let above: Node | null = skeleton.bones[0] ?? null;
+  while (above && (above as Bone).isBone) above = above.parent;
   return above;
 }
 
 /** Every shown body's root in the scene. */
-function bodies(scene: THREE.Scene): Set<THREE.Object3D> {
-  const roots = new Set<THREE.Object3D>();
+function bodies(scene: World): Set<Node> {
+  const roots = new Set<Node>();
   scene.traverseVisible((object) => {
-    const skinned = object as THREE.SkinnedMesh;
+    const skinned = object as SkinnedMesh;
     const root = skinned.isSkinnedMesh && skinned.skeleton ? rootOf(skinned.skeleton) : null;
     if (root) roots.add(root);
   });
@@ -31,15 +31,15 @@ function bodies(scene: THREE.Scene): Set<THREE.Object3D> {
 
 /** What a frame's walk meets of the bodies: how many, their shown meshes (those moved by bones, those hung on a
  *  joint), their materials, their joints. */
-export function bodiesSaid(scene: THREE.Scene): string {
+export function bodiesSaid(scene: World): string {
   const roots = bodies(scene);
-  const materials = new Set<THREE.Material>();
-  const joints = new Set<THREE.Object3D>();
+  const materials = new Set<Material>();
+  const joints = new Set<Node>();
   let skinned = 0;
   let hung = 0;
   for (const root of roots) {
     root.traverseVisible((object) => {
-      const mesh = object as THREE.SkinnedMesh;
+      const mesh = object as SkinnedMesh;
       if (!mesh.isMesh) return;
       for (const material of [mesh.material].flat()) materials.add(material);
       if (mesh.isSkinnedMesh) {
@@ -56,7 +56,7 @@ export function bodiesSaid(scene: THREE.Scene): string {
 }
 
 /** Every body hidden, and how many. */
-export function hideBodies(scene: THREE.Scene): number {
+export function hideBodies(scene: World): number {
   const roots = bodies(scene);
   for (const root of roots) root.visible = false;
   return roots.size;

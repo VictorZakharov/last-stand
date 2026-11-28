@@ -2,7 +2,7 @@
 // `mergedParts`):
 // the shelves against its walls clear of the walls' posts, what stands on the mantel standing on its top, and the
 // candles' flames wavering from frame to frame.
-import * as THREE from 'three';
+import { Box3, Mesh, Node, Vec3 } from './sceneApi.ts';
 import { partBoxes } from './houses';
 
 /** the candles' flames' mesh's name (`FLAME_NAMES.tongue` in world/candleFlames.ts): spelt here, not
@@ -11,7 +11,7 @@ const FLAMES = 'candle flames';
 /** the fewest candles' flames the tavern shows from the room's middle (it has 18) */
 const FLAMES_LEAST = 15;
 /** the mantel shelf's size (m: `hearth` in world/rooms.ts, its width 2.3, 0.1 thick, 0.32 deep) */
-const MANTEL = new THREE.Vector3(2.3, 0.1, 0.32);
+const MANTEL = new Vec3(2.3, 0.1, 0.32);
 /** how near a part's foot must be the mantel's top to be read as standing on it, and how far off it may stand (m) */
 const ON_MANTEL = 0.03;
 const STANDS_OFF = 0.003;
@@ -19,12 +19,12 @@ const STANDS_OFF = 0.003;
 const ONE_THING = 0.01;
 
 /** A box's size. */
-function sizeOf(box: THREE.Box3): THREE.Vector3 {
-  return box.getSize(new THREE.Vector3());
+function sizeOf(box: Box3): Vec3 {
+  return box.getSize(new Vec3());
 }
 
 /** Each post of the room's walls: a timber floor to plate, 0.2 by 0.12 (`shell` in world/rooms.ts). */
-export function postsIn(room: THREE.Object3D): THREE.Box3[] {
+export function postsIn(room: Node): Box3[] {
   return partBoxes(room).filter((box) => {
     const size = sizeOf(box);
     const across = [size.x, size.z].sort((a, b) => a - b);
@@ -34,8 +34,8 @@ export function postsIn(room: THREE.Object3D): THREE.Box3[] {
 
 /** Each board standing against a wall (a shelf's: thin, flat and over half a metre long, among what's gathered as
  *  "against the <side> wall"). */
-export function boardsIn(room: THREE.Object3D): THREE.Box3[] {
-  const boards: THREE.Box3[] = [];
+export function boardsIn(room: Node): Box3[] {
+  const boards: Box3[] = [];
   room.traverse((object) => {
     if (!object.name.startsWith('against the ')) return;
     for (const box of partBoxes(object)) {
@@ -47,7 +47,7 @@ export function boardsIn(room: THREE.Object3D): THREE.Box3[] {
 }
 
 /** Each board clear of every post: what runs through one, and how many were read. */
-export function readPosts(posts: readonly THREE.Box3[], boards: readonly THREE.Box3[], lines: string[],
+export function readPosts(posts: readonly Box3[], boards: readonly Box3[], lines: string[],
   problems: string[]): void {
   if (!posts.length || !boards.length) throw new Error('lab: dressing: no posts or no shelf boards to read');
   let crossing = 0;
@@ -57,7 +57,7 @@ export function readPosts(posts: readonly THREE.Box3[], boards: readonly THREE.B
     for (const post of posts) {
       if (!inner.intersectsBox(post)) continue;
       crossing++;
-      const middle = board.getCenter(new THREE.Vector3());
+      const middle = board.getCenter(new Vec3());
       problems.push(`a shelf's board at (${middle.x.toFixed(2)}, ${middle.y.toFixed(2)}, ${middle.z.toFixed(2)}) `
         + 'runs through a post of its wall');
     }
@@ -66,7 +66,7 @@ export function readPosts(posts: readonly THREE.Box3[], boards: readonly THREE.B
 }
 
 /** The hearth's mantel shelf among the room's parts. */
-export function mantelIn(room: THREE.Object3D): THREE.Box3 {
+export function mantelIn(room: Node): Box3 {
   const found = partBoxes(room).filter((box) => sizeOf(box).distanceTo(MANTEL) < 0.012);
   if (found.length !== 1) throw new Error(`lab: dressing: ${found.length} mantels found, not one`);
   return found[0];
@@ -74,15 +74,15 @@ export function mantelIn(room: THREE.Object3D): THREE.Box3 {
 
 /** What stands on the mantel: each thing's parts whose foot is near its top, joined where their boxes meet
  *  along it (a cup and its handle), as their boxes. */
-export function onMantel(room: THREE.Object3D, mantel: THREE.Box3): THREE.Box3[] {
+export function onMantel(room: Node, mantel: Box3): Box3[] {
   const top = mantel.max.y;
   const parts = partBoxes(room).filter((box) => {
-    const middle = box.getCenter(new THREE.Vector3());
+    const middle = box.getCenter(new Vec3());
     const alongIt = middle.x > mantel.min.x && middle.x < mantel.max.x;
     const over = alongIt && middle.z > mantel.min.z && middle.z < mantel.max.z;
     return over && box.min.y > top - ON_MANTEL && box.min.y < top + ON_MANTEL;
   });
-  const things: THREE.Box3[] = [];
+  const things: Box3[] = [];
   for (const part of parts.sort((a, b) => a.min.x - b.min.x)) {
     const last = things[things.length - 1];
     // (by their boxes along it: by their middles, a cup's handle 7 cm from its body was read as a thing of its own)
@@ -94,7 +94,7 @@ export function onMantel(room: THREE.Object3D, mantel: THREE.Box3): THREE.Box3[]
 }
 
 /** Each thing on the mantel standing on its top: what floats or sinks, and the most found. */
-export function readMantel(mantel: THREE.Box3, things: readonly THREE.Box3[], lines: string[],
+export function readMantel(mantel: Box3, things: readonly Box3[], lines: string[],
   problems: string[]): void {
   if (!things.length) throw new Error('lab: dressing: nothing on the mantel to read');
   let most = 0;
@@ -103,7 +103,7 @@ export function readMantel(mantel: THREE.Box3, things: readonly THREE.Box3[], li
     if (Math.abs(off) > Math.abs(most)) most = off;
     if (Math.abs(off) <= STANDS_OFF) continue;
     const word = off > 0 ? 'over' : 'into';
-    problems.push(`a thing on the mantel at x ${thing.getCenter(new THREE.Vector3()).x.toFixed(2)} stands `
+    problems.push(`a thing on the mantel at x ${thing.getCenter(new Vec3()).x.toFixed(2)} stands `
       + `${(Math.abs(off) * 100).toFixed(1)} cm ${word} its top`);
   }
   lines.push(`${things.length} things on the mantel, the furthest off its top ${(most * 100).toFixed(1)} cm`);
@@ -111,8 +111,8 @@ export function readMantel(mantel: THREE.Box3, things: readonly THREE.Box3[], li
 
 /** The candles' flames' points now, and how many points a flame has (none: the room's flames are still meshes merged
  *  with it, as main's). */
-export function flamesNow(room: THREE.Object3D): { at: Float32Array; points: number } | null {
-  const flames = room.getObjectByName(FLAMES) as THREE.Mesh | undefined;
+export function flamesNow(room: Node): { at: Float32Array; points: number } | null {
+  const flames = room.getObjectByName(FLAMES) as Mesh | undefined;
   const points = flames?.userData.flamePoints as number | undefined;
   if (!flames || !points) return null;
   return { at: (flames.geometry.attributes.position.array as Float32Array).slice(), points };

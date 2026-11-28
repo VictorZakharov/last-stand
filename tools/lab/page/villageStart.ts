@@ -5,7 +5,7 @@
 // terrace (from play, "this is a good camera angle, but this one is not (head cut off), and I didn't do anything,
 // just climbed up": the view looked at the village's ground whatever floor he stood on, and he rose up the frame).
 // `canary` holds the view on the ground as it was.
-import * as THREE from 'three';
+import { Vec3 } from './sceneApi.ts';
 import type { Lab, Pictured } from './lab';
 import { G } from '../../../src/state';
 import { START_SPOTS, TERRACE, COTTAGES, type StartSpot } from '../../../src/data/village';
@@ -34,7 +34,7 @@ function wrongWith(spot: StartSpot): string | null {
   for (const cottage of COTTAGES) {
     if (Math.hypot(cottage.x - x, cottage.z - z) < 3 * cottage.size) return `${spot.name}: in a cottage`;
   }
-  const kept = new THREE.Vector3(x, 0, z);
+  const kept = new Vec3(x, 0, z);
   G.arena.wall?.keepIn(kept, 0.3);
   if (Math.hypot(kept.x - x, kept.z - z) > OFF_THE_WALL) return `${spot.name}: past the wall`;
   return null;
@@ -54,7 +54,7 @@ export async function startSpots(lab: Lab, canary: boolean): Promise<LightsCheck
     if (wrong) problems.push(wrong);
     if (canary) continue;
     G.player.walkTo = null;
-    G.player.place(new THREE.Vector3(spot.at[0], groundHeight(spot.at[0], spot.at[1]), spot.at[1]), spot.facing);
+    G.player.place(new Vec3(spot.at[0], groundHeight(spot.at[0], spot.at[1]), spot.at[1]), spot.facing);
     faceCamera(spot.facing);
     await lab.step(SETTLE);
     moments.push(await lab.screen(`starts ${spot.name}`, []));
@@ -70,10 +70,10 @@ export async function startSpots(lab: Lab, canary: boolean): Promise<LightsCheck
 async function headOnScreen(lab: Lab, x: number, z: number): Promise<number> {
   const y = groundHeight(x, z);
   G.player.walkTo = null;
-  G.player.place(new THREE.Vector3(x, y, z), 0);
+  G.player.place(new Vec3(x, y, z), 0);
   faceCamera(Math.PI);
   await lab.step(SETTLE);
-  const head = new THREE.Vector3(x, G.player.obj.position.y + HEAD_UP, z).project(G.camera);
+  const head = new Vec3(x, G.player.obj.position.y + HEAD_UP, z).project(G.camera);
   return (1 - head.y) / 2;
 }
 

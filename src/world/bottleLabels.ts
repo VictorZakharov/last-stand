@@ -5,7 +5,8 @@
 // lines of small print; and each label a band wrapped round a bottle's body a hair off its
 // glass (or a card on a case bottle's flat face), its uv laid into one of the atlas's cells. All the labels are one
 // mesh in one material.
-import * as THREE from 'three';
+import { CanvasTexture, Geometry, LitMaterial, SRGBColorSpace } from '../engine/api/index.ts';
+import * as shapes from '../engine/api/shapes/index.ts';
 import { canvasOf, ctx2d } from '../core/textures';
 import { mulberry } from '../util';
 
@@ -96,15 +97,15 @@ function paint(context: CanvasRenderingContext2D, k: number, rng: () => number):
 }
 
 /** The labels' material, one for all of them: the atlas painted once, paper's matte. */
-let made: THREE.MeshStandardMaterial | null = null;
-export function labelMaterial(): THREE.MeshStandardMaterial {
+let made: LitMaterial | null = null;
+export function labelMaterial(): LitMaterial {
   if (made) return made;
   const canvas = canvasOf(WIDTH, HEIGHT), context = ctx2d(canvas), rng = mulberry(7343);
   for (let k = 0; k < LABELS; k++) paint(context, k, rng);
-  const map = new THREE.CanvasTexture(canvas);
-  map.colorSpace = THREE.SRGBColorSpace;
+  const map = new CanvasTexture(canvas);
+  map.colorSpace = SRGBColorSpace;
   map.anisotropy = 8;
-  made = new THREE.MeshStandardMaterial({ map, roughness: 0.85 });
+  made = new LitMaterial({ map, roughness: 0.85 });
   return made;
 }
 
@@ -120,7 +121,7 @@ export interface LabelPlace {
 }
 
 /** a label's uv laid into cell `k` of the atlas, a margin in, from a uv of 0 to 1 */
-function intoCell(geometry: THREE.BufferGeometry, k: number): void {
+function intoCell(geometry: Geometry, k: number): void {
   const uv = geometry.attributes.uv;
   const column = k % COLUMNS, row = Math.floor(k / COLUMNS);
   for (let i = 0; i < uv.count; i++) {
@@ -133,15 +134,15 @@ function intoCell(geometry: THREE.BufferGeometry, k: number): void {
 
 /** A label of cell `k` as it sits on a bottle whose foot is the origin, facing +z: a band round its body a hair off
  *  the glass, or a card on its flat face. */
-export function labelOn(place: LabelPlace, k: number): THREE.BufferGeometry {
+export function labelOn(place: LabelPlace, k: number): Geometry {
   const high = place.to - place.from;
-  let geometry: THREE.BufferGeometry;
+  let geometry: Geometry;
   if (place.face !== undefined) {
-    geometry = new THREE.PlaneGeometry(place.wide ?? 0.04, high).translate(0, place.from + high / 2, place.face + 0.0008);
+    geometry = shapes.plane(place.wide ?? 0.04, high).translate(0, place.from + high / 2, place.face + 0.0008);
   } else {
     const radius = (place.radius ?? 0.03) + 0.0008, arc = place.arc ?? 1.4;
     // (a cylinder's open side, its middle facing +z: three's start from +z at 0, round toward +x)
-    geometry = new THREE.CylinderGeometry(radius, radius, high, 8, 1, true, -arc / 2, arc)
+    geometry = shapes.cylinder(radius, radius, high, 8, 1, true, -arc / 2, arc)
       .translate(0, place.from + high / 2, 0);
   }
   intoCell(geometry, k);

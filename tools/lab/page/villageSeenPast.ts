@@ -6,7 +6,7 @@
 // the portal, only under some angles"): round the crypt's portal, how much of its inner sheet the frame shows unchanged
 // with the sheet hidden: what draws over it from past it, what stands before it set aside. `canary` stands a plate
 // just before the sheet.
-import * as THREE from 'three';
+import { Attribute, Box3, LitMaterial, Material, Mesh, Node, Raycaster, Vec3 } from './sceneApi.ts';
 import type { Lab, Pictured } from './lab';
 import { G } from '../../../src/state';
 import { RUST } from '../../../src/engine';
@@ -53,7 +53,7 @@ interface Stand {
   x: number;
   z: number;
   facing: number;
-  past: THREE.Vector3[];
+  past: Vec3[];
   noColumns?: boolean;
   inHall?: boolean;
   /** a side wall of the hall the camera looks over into the room: his room's wall before the room, which the house
@@ -64,7 +64,7 @@ interface Stand {
 /** The hero placed at (x, z) facing `facing`, the camera behind him, let settle. */
 async function standAt(lab: Lab, x: number, z: number, facing: number): Promise<void> {
   G.player.walkTo = null;
-  G.player.place(new THREE.Vector3(x, groundHeight(x, z), z), facing);
+  G.player.place(new Vec3(x, groundHeight(x, z), z), facing);
   faceCamera(facing);
   await lab.step(SETTLE);
 }
@@ -79,9 +79,9 @@ function stands(): Stand[] {
   const x = TERRACE.x;
   const floor = TERRACE.high;
   const north = Math.PI;
-  const backWall = HALL.plinths.map((across) => new THREE.Vector3(x + across, floor + 3.6, HALL.wall + 0.02));
+  const backWall = HALL.plinths.map((across) => new Vec3(x + across, floor + 3.6, HALL.wall + 0.02));
   const frontWall = [-3, -2.2, 2.6, 4].flatMap((across) => [1.6, 3, 4.6].map((up) =>
-    new THREE.Vector3(x + across, floor + up, HALL.door + 0.02)));
+    new Vec3(x + across, floor + up, HALL.door + 0.02)));
   const cottage = COTTAGES[0];
   const halfD = (COTTAGE.d / 2) * cottage.size;
   const cos = Math.cos(cottage.facing);
@@ -89,9 +89,9 @@ function stands(): Stand[] {
   const inFront = (along: number, out: number): [number, number] =>
     [cottage.x + along * cos + out * sin, cottage.z - along * sin + out * cos];
   const [cottageX, cottageZ] = inFront(0, halfD + 1.2);
-  const onTheWall = (along: number, up: number): THREE.Vector3 => {
+  const onTheWall = (along: number, up: number): Vec3 => {
     const [wx, wz] = inFront(along, halfD + 0.02);
-    return new THREE.Vector3(wx, groundHeight(wx, wz) + up, wz);
+    return new Vec3(wx, groundHeight(wx, wz) + up, wz);
   };
   const cottageWall = [-1.6, 1.6].map((along) => onTheWall(along, 1.5));
   return [
@@ -126,14 +126,14 @@ function stands(): Stand[] {
       // (under the windows, whose panes go with the columns; clear of the front wall's ghost, which lies over the wall
       // nearer the door, no fault of the side wall's)
       past: [-1, 1].flatMap((side) => [HALL.door - 6.5, HALL.door - 9].flatMap((along) => [0.25, 0.45].map((up) =>
-        new THREE.Vector3(x + side * (HALL.inHalf + 0.02), floor + up, along)))),
+        new Vec3(x + side * (HALL.inHalf + 0.02), floor + up, along)))),
     },
     {
       name: 'on the hall\'s floor, turned to its back corner',
       x,
       z: HALL.daisZ + 3,
       facing: north + 0.9,
-      past: [...backWall, new THREE.Vector3(x + HALL.plinths[0], floor + 1.5, HALL.wall + 0.02)],
+      past: [...backWall, new Vec3(x + HALL.plinths[0], floor + 1.5, HALL.wall + 0.02)],
       inHall: true,
       wallBefore: 'hallEast',
     },
@@ -146,9 +146,9 @@ function stands(): Stand[] {
  *  (`material.seeThrough`), read off the scene, as an A/B's other commit has the same. Returns what shows them again. */
 function kindsHidden(kinds: readonly string[]): () => void {
   const values = new Set<unknown>(kinds.map((kind) => seeValue(kind as Parameters<typeof seeValue>[0])));
-  const hidden: THREE.Object3D[] = [];
+  const hidden: Node[] = [];
   G.scene.traverse((object) => {
-    const material = (object as THREE.Mesh).material as { seeThrough?: unknown } | undefined;
+    const material = (object as Mesh).material as { seeThrough?: unknown } | undefined;
     if (!object.visible || !values.has(material?.seeThrough)) return;
     object.visible = false;
     hidden.push(object);
@@ -170,7 +170,7 @@ function partsLeftOut(stand: Stand): () => void {
 }
 
 /** The pixel `point` falls on, or null off the frame. */
-function pixelOf(point: THREE.Vector3, width: number, height: number): number | null {
+function pixelOf(point: Vec3, width: number, height: number): number | null {
   const place = point.clone().project(G.camera);
   const column = Math.floor(((place.x + 1) / 2) * width);
   const row = Math.floor(((place.y + 1) / 2) * height);
@@ -269,7 +269,7 @@ export async function wallsPastHimWhole(lab: Lab, canary: boolean): Promise<Ligh
 
 /** The share of the way from the frame without the hall's columns to the frame with them whole that the ghost of the
  *  column before him takes, at `point` on its shaft. */
-function ghostShown(lab: Lab, point: THREE.Vector3): number {
+function ghostShown(lab: Lab, point: Vec3): number {
   const canvas = drawFrame(lab);
   const ghost = canvas.pixels.slice();
   hideHallColumns(true);
@@ -317,16 +317,16 @@ const SORT_PADDING = 6;
 const BEHIND_COLUMN = 0.7;
 
 /** What the capital read is drawn in. */
-function capitalMaterial(): THREE.Material {
-  const over = new THREE.Vector3(TERRACE.x + HALL.columnX, CAPITAL_TOP + 1, CAPITAL_Z);
-  const hits = new THREE.Raycaster(over, new THREE.Vector3(0, -1, 0), 0, 2).intersectObjects(G.scene.children, true);
+function capitalMaterial(): Material {
+  const over = new Vec3(TERRACE.x + HALL.columnX, CAPITAL_TOP + 1, CAPITAL_Z);
+  const hits = new Raycaster(over, new Vec3(0, -1, 0), 0, 2).intersectObjects(G.scene.children, true);
   // (by its colour: the ceiling's underside lies at its top's height, hidden from above, and a ray meets what's hidden)
   const capital = hits.find((hit) => {
-    const material = (hit.object as THREE.Mesh).material as THREE.MeshStandardMaterial;
+    const material = (hit.object as Mesh).material as LitMaterial;
     return material.color?.getHex() === GRANITE_COLOUR && Math.abs(hit.point.y - CAPITAL_TOP) < 0.05;
   });
   if (!capital) throw new Error('lab: village: no capital where it\'s read');
-  return (capital.object as THREE.Mesh).material as THREE.Material;
+  return (capital.object as Mesh).material as Material;
 }
 
 /** At how many of the places read on a capital's top the shaft under it shows, and a picture of it. */
@@ -334,11 +334,11 @@ interface CapitalRead { through: number; read: number; shot: Pictured }
 
 /** The column-kind meshes drawn in the shaft's look (the one that stands on the plinth, under its capital), and the
  *  meshes writing the depth of them all. */
-function columnParts(): { shafts: THREE.Mesh[]; depths: THREE.Mesh[] } {
-  const shafts: THREE.Mesh[] = [];
-  const depths: THREE.Mesh[] = [];
+function columnParts(): { shafts: Mesh[]; depths: Mesh[] } {
+  const shafts: Mesh[] = [];
+  const depths: Mesh[] = [];
   G.scene.traverse((object) => {
-    const mesh = object as THREE.Mesh;
+    const mesh = object as Mesh;
     const see = (mesh.material as { seeThrough?: { reach?: unknown; wholeOnly?: boolean } } | undefined)?.seeThrough;
     if (!mesh.isMesh || !see?.reach) return;
     if (see.wholeOnly) depths.push(mesh);
@@ -374,7 +374,7 @@ async function capitalOverItsShaft(lab: Lab, canary: boolean): Promise<CapitalRe
     for (let b = -CAPITAL_STEPS; b <= CAPITAL_STEPS; b++) {
       const across = (a / CAPITAL_STEPS) * CAPITAL_HALF;
       const along = (b / CAPITAL_STEPS) * CAPITAL_HALF;
-      const place = new THREE.Vector3(TERRACE.x + HALL.columnX + across, CAPITAL_TOP, CAPITAL_Z + along);
+      const place = new Vec3(TERRACE.x + HALL.columnX + across, CAPITAL_TOP, CAPITAL_Z + along);
       const pixel = pixelOf(place, canvas.width, canvas.height);
       if (pixel === null) continue;
       read++;
@@ -395,7 +395,7 @@ export async function columnsStayGhosts(lab: Lab, canary: boolean): Promise<Ligh
   holdColumnsUnderWalls(canary);
   try {
     await viewBy(lab, 'top');
-    const columnAt = new THREE.Vector3(TERRACE.x + COLUMN_ACROSS, TERRACE.high + COLUMN_READ_UP, COLUMN_Z);
+    const columnAt = new Vec3(TERRACE.x + COLUMN_ACROSS, TERRACE.high + COLUMN_READ_UP, COLUMN_Z);
     await standAt(lab, columnAt.x, columnAt.z - BEHIND_COLUMN, Math.PI);
     // (the fault as it was: the columns' depth gone too, or the depth held the walls back from over them)
     const { depths } = columnParts();
@@ -424,16 +424,16 @@ export async function columnsStayGhosts(lab: Lab, canary: boolean): Promise<Ligh
 }
 
 /** The crypt portal's sheet, as it stands in the village. */
-function cryptSheet(): THREE.Mesh {
+function cryptSheet(): Mesh {
   const place = portalPlace('crypt');
-  let nearest: THREE.Mesh | null = null;
+  let nearest: Mesh | null = null;
   let nearestOff = Infinity;
   G.scene.traverseVisible((object) => {
-    const mesh = object as THREE.Mesh;
+    const mesh = object as Mesh;
     // (its uniforms kept on the mesh, `portalMembrane`: the node material it's drawn with has none of three's)
     const uniforms = mesh.userData.portal as Record<string, unknown> | undefined;
     if (!mesh.isMesh || !uniforms?.uArch || !uniforms.uPower) return;
-    const at = mesh.getWorldPosition(new THREE.Vector3());
+    const at = mesh.getWorldPosition(new Vec3());
     const off = Math.hypot(at.x - place.x, at.z - place.z);
     if (off < nearestOff) {
       nearest = mesh;
@@ -445,16 +445,16 @@ function cryptSheet(): THREE.Mesh {
 }
 
 /** The pixels over the middle of `sheet`, each a place in the frame's array. */
-function sheetPixels(sheet: THREE.Mesh, width: number, height: number): number[] {
-  const corners = sheet.geometry.getAttribute('position') as THREE.BufferAttribute;
-  const size = new THREE.Box3().setFromBufferAttribute(corners);
+function sheetPixels(sheet: Mesh, width: number, height: number): number[] {
+  const corners = sheet.geometry.getAttribute('position') as Attribute;
+  const size = new Box3().setFromBufferAttribute(corners);
   const pixels = new Set<number>();
   const across = size.max.x;
   const up = size.max.y;
   const steps = 60;
   for (let a = -steps; a <= steps; a++) {
     for (let b = -steps; b <= steps; b++) {
-      const local = new THREE.Vector3((a / steps) * across * SHEET_READ.across, (b / steps) * up * SHEET_READ.up, 0);
+      const local = new Vec3((a / steps) * across * SHEET_READ.across, (b / steps) * up * SHEET_READ.up, 0);
       const pixel = pixelOf(sheet.localToWorld(local), width, height);
       if (pixel === null) continue;
       const column = (pixel / 4) % width;
@@ -469,24 +469,24 @@ function sheetPixels(sheet: THREE.Mesh, width: number, height: number): number[]
 const BEFORE_RAYS = 9;
 
 /** Whether `object` and everything it's under are shown (three's rays meet hidden places too). */
-function shownInWorld(object: THREE.Object3D): boolean {
-  for (let at: THREE.Object3D | null = object; at; at = at.parent) if (!at.visible) return false;
+function shownInWorld(object: Node): boolean {
+  for (let at: Node | null = object; at; at = at.parent) if (!at.visible) return false;
   return true;
 }
 
 /** What stands between the camera and the sheet's middle, shown: met by a ray from the camera before the sheet. A
  *  street lamp's post before the gate hid 7.8% of it, as it should: the check is of what's past it. */
-function beforeTheSheet(sheet: THREE.Mesh): THREE.Object3D[] {
-  const corners = sheet.geometry.getAttribute('position') as THREE.BufferAttribute;
-  const size = new THREE.Box3().setFromBufferAttribute(corners);
-  const eye = G.camera.getWorldPosition(new THREE.Vector3());
-  const ray = new THREE.Raycaster();
-  const before = new Set<THREE.Object3D>();
+function beforeTheSheet(sheet: Mesh): Node[] {
+  const corners = sheet.geometry.getAttribute('position') as Attribute;
+  const size = new Box3().setFromBufferAttribute(corners);
+  const eye = G.camera.getWorldPosition(new Vec3());
+  const ray = new Raycaster();
+  const before = new Set<Node>();
   for (let a = 0; a < BEFORE_RAYS; a++) {
     for (let b = 0; b < BEFORE_RAYS; b++) {
       const across = (a / (BEFORE_RAYS - 1) * 2 - 1) * size.max.x * SHEET_READ.across;
       const up = (b / (BEFORE_RAYS - 1) * 2 - 1) * size.max.y * SHEET_READ.up;
-      const point = sheet.localToWorld(new THREE.Vector3(across, up, 0));
+      const point = sheet.localToWorld(new Vec3(across, up, 0));
       const reach = eye.distanceTo(point);
       ray.set(eye, point.clone().sub(eye).normalize());
       ray.far = reach - 0.05;
@@ -500,7 +500,7 @@ function beforeTheSheet(sheet: THREE.Mesh): THREE.Object3D[] {
 
 /** The share of the sheet's middle the frame shows the same with the sheet hidden: what's drawn over it from past it,
  *  what stands before it hidden. */
-function overTheSheet(lab: Lab, sheet: THREE.Mesh): number {
+function overTheSheet(lab: Lab, sheet: Mesh): number {
   const before = beforeTheSheet(sheet);
   for (const object of before) object.visible = false;
   const canvas = drawFrame(lab);
@@ -534,11 +534,11 @@ const PORTAL_STANDS: readonly { out: number; aside: number; view: ViewMode }[] =
 const PLATE_BEFORE = 0.03;
 
 /** An opaque material the scene draws already beside the sheet (the gate's own): a plate in it compiles nothing. */
-function gateMaterial(sheet: THREE.Mesh): THREE.Material {
-  let found: THREE.Material | null = null;
+function gateMaterial(sheet: Mesh): Material {
+  let found: Material | null = null;
   sheet.parent?.traverse((object) => {
-    const mesh = object as THREE.Mesh;
-    const material = mesh.material as THREE.Material | undefined;
+    const mesh = object as Mesh;
+    const material = mesh.material as Material | undefined;
     if (!found && mesh.isMesh && mesh !== sheet && material && !Array.isArray(material) && !material.transparent) {
       found = material;
     }
@@ -550,12 +550,12 @@ function gateMaterial(sheet: THREE.Mesh): THREE.Material {
 /** The canary's plant: a plate of the sheet's size `PLATE_BEFORE` before it on the camera's side, as a part
  *  drawn over it would be (the engine reads no `renderOrder` and sorts what blends itself: three's order of what
  *  blends among the glows, the plant before, reached nothing). Returns its taking away. */
-function plantPlate(sheet: THREE.Mesh): () => void {
-  const plate = new THREE.Mesh(sheet.geometry, gateMaterial(sheet));
-  const normal = new THREE.Vector3(0, 0, 1).transformDirection(sheet.matrixWorld);
-  const toCamera = G.camera.getWorldPosition(new THREE.Vector3()).sub(sheet.getWorldPosition(new THREE.Vector3()));
+function plantPlate(sheet: Mesh): () => void {
+  const plate = new Mesh(sheet.geometry, gateMaterial(sheet));
+  const normal = new Vec3(0, 0, 1).transformDirection(sheet.matrixWorld);
+  const toCamera = G.camera.getWorldPosition(new Vec3()).sub(sheet.getWorldPosition(new Vec3()));
   const side = Math.sign(normal.dot(toCamera)) || 1;
-  plate.position.copy(sheet.position).addScaledVector(new THREE.Vector3(0, 0, 1), side * PLATE_BEFORE);
+  plate.position.copy(sheet.position).addScaledVector(new Vec3(0, 0, 1), side * PLATE_BEFORE);
   plate.quaternion.copy(sheet.quaternion);
   plate.scale.copy(sheet.scale);
   sheet.parent!.add(plate);

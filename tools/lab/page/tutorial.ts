@@ -6,12 +6,15 @@
 // the window and over no other part of the HUD) and pictured. A step that isn't ticked by doing it is a problem, as
 // are health lost to the shade, a program compiled on the way, and progress the cookie doesn't keep. Its canaries:
 // the tracker as tall as two windows, and the cookie emptied, each of which must be found.
+import { Vec3 } from './sceneApi.ts';
 import type { Frame, Lab, Pictured, Report } from './lab';
-import { middleOf } from './lab';
+import { boxOf, middleOf } from './lab';
 import { G } from '../../../src/state';
 import { readCookie, writeCookie } from '../../../src/core/cookies';
 import { setView } from '../../../src/core/renderer';
-import { programsCompiledInGame } from '../../../src/core/shaders';
+import * as shaders from '../../../src/core/shaders';
+
+const { programsCompiledInGame } = shaders;
 import { setTraceConsent, traceConsent } from '../../../src/perf/consent';
 import { TUTORIAL, type TutorialStepId } from '../../../src/data/tutorial';
 import { YARD_DUMMIES, yardToWorld } from '../../../src/data/village';
@@ -86,7 +89,7 @@ function boxesOf(selector: string): DOMRect[] {
   if (!shows(selector)) return [];
   const whole = element(selector);
   const parts = selector.startsWith('#touch-') ? [...whole.children] as HTMLElement[] : [whole];
-  return parts.filter((part) => part.checkVisibility(SHOWN)).map((part) => part.getBoundingClientRect()).filter((box) => box.width >= 1);
+  return parts.filter((part) => part.checkVisibility(SHOWN)).map((part) => boxOf(part)).filter((box) => box.width >= 1);
 }
 
 /** What of the page lies under a point: the element's tag and class, and the nearest part with an id. */
@@ -111,10 +114,10 @@ function ringProblems(step: string, selector: string): string[] {
   const target = document.querySelector<HTMLElement>(selector);
   if (!target?.checkVisibility(SHOWN)) return [`${step}: ${selector}, which the step points at, isn't shown`];
   if (!ring?.classList.contains('on')) {
-    const t = target.getBoundingClientRect();
+    const t = boxOf(target);
     return [`${step}: nothing rings ${selector} (it stands at ${t.left.toFixed(0)}, ${t.top.toFixed(0)}, ${t.width.toFixed(0)}x${t.height.toFixed(0)})`];
   }
-  const r = ring.getBoundingClientRect(), t = target.getBoundingClientRect();
+  const r = ring.getBoundingClientRect(), t = boxOf(target);
   const middle = { x: t.left + t.width / 2, y: t.top + t.height / 2 };
   const round = r.left <= t.left && r.top <= t.top && r.right >= t.right && r.bottom >= t.bottom
     && middle.x > r.left && middle.x < r.right && middle.y > r.top && middle.y < r.bottom;
@@ -124,7 +127,8 @@ function ringProblems(step: string, selector: string): string[] {
 /** What's wrong with where the tracker stands as it asks for `step`. */
 function trackerProblems(step: string): string[] {
   if (!shows('#training')) return [`${step}: the tracker isn't shown`];
-  const box = element('#training').getBoundingClientRect();
+  // (where the engine draws it: the page's is out of sight, `ui/trainingPanel.ts`)
+  const box = boxOf(element('#training'));
   const problems: string[] = [];
   if (box.left < 0 || box.top < 0 || box.right > innerWidth || box.bottom > innerHeight) {
     problems.push(`${step}: the tracker reaches past the window (${box.width.toFixed(0)}x${box.height.toFixed(0)} px at ${box.left.toFixed(0)}, ${box.top.toFixed(0)})`);
@@ -156,7 +160,7 @@ export async function tutorial(lab: Lab, options: TutorialOptions): Promise<Repo
 
   const stand = async ([x, z]: readonly [number, number], facing = 0): Promise<void> => {
     p.walkTo = null;
-    p.place(new lab.THREE.Vector3(x, groundHeight(x, z), z), facing);
+    p.place(new Vec3(x, groundHeight(x, z), z), facing);
     await lab.step(SHOW_FRAMES, REST);
   };
   /** A finger's tap on `target`, saying which it was if the page never heard it. */
@@ -196,7 +200,7 @@ export async function tutorial(lab: Lab, options: TutorialOptions): Promise<Repo
     return true;
   };
   /** Frames run with `frame`'s input until `step` is ticked. */
-  const until = async (step: TutorialStepId, frame?: () => { keys?: string[]; m0?: boolean; m2?: boolean; aim?: InstanceType<Lab['THREE']['Vector3']> }): Promise<void> => {
+  const until = async (step: TutorialStepId, frame?: () => { keys?: string[]; m0?: boolean; m2?: boolean; aim?: Vec3 }): Promise<void> => {
     try {
       await lab.until(() => tutorialStep()?.id !== step, STEP_FRAMES, `${step} was never ticked`, frame);
     } catch (error) {
@@ -206,7 +210,7 @@ export async function tutorial(lab: Lab, options: TutorialOptions): Promise<Repo
   };
   const keyOf = (impl: string): SkillKey | undefined => SKILL_KEYS.find((key) => p.skillAt(key)?.def.impl === impl);
   /** A skill's key held (on touch its button) while `held` frames run with the aim on `aim`. */
-  const hold = async (key: SkillKey, aim: InstanceType<Lab['THREE']['Vector3']>, done: () => boolean, limit: number): Promise<void> => {
+  const hold = async (key: SkillKey, aim: Vec3, done: () => boolean, limit: number): Promise<void> => {
     // (the mouse stays there as the key lifts: a drawn shot is loosed where it points then)
     lab.aim.copy(aim);
     if (touch) {
@@ -239,6 +243,8 @@ export async function tutorial(lab: Lab, options: TutorialOptions): Promise<Repo
     await lab.step(SHOW_FRAMES, REST);
   }
   const compiledBefore = programsCompiledInGame();
+  // (what compiled, named where the commit has the list: `lateCompiles`)
+  const lateBefore = (shaders as { lateCompiles?: string[] }).lateCompiles?.length ?? 0;
   const lifeBefore = p.life;
   await use('notice');
   check(open('#help') && open('#help .help-tour'), 'the notice board shows no tutorial');
@@ -331,7 +337,7 @@ export async function tutorial(lab: Lab, options: TutorialOptions): Promise<Repo
   // --- combat ---
   await stand(ON_THE_SQUARE);
   await lab.step(SHOW_FRAMES * 2);
-  const dummy = new lab.THREE.Vector3(YARD_DUMMIES[1][0], 0, YARD_DUMMIES[1][1]);
+  const dummy = new Vec3(YARD_DUMMIES[1][0], 0, YARD_DUMMIES[1][1]);
   const inYard = yardToWorld(...IN_YARD);
   const toYard = async (): Promise<void> => stand(inYard, Math.atan2(dummy.x - inYard[0], dummy.z - inYard[1]));
   if (await asked('yard')) await toYard();
@@ -499,7 +505,8 @@ export async function tutorial(lab: Lab, options: TutorialOptions): Promise<Repo
   };
   problems.push(...kept());
   const compiled = programsCompiledInGame() - compiledBefore;
-  check(compiled === 0, `${compiled} programs were compiled on the walk`);
+  const named = (shaders as { lateCompiles?: string[] }).lateCompiles?.slice(lateBefore) ?? [];
+  check(compiled === 0, `${compiled} programs were compiled on the walk${named.length ? `: ${named.join('; ')}` : ''}`);
   lines.push(`  programs compiled on the walk: ${compiled}`);
   await stand(ON_THE_SQUARE);
   await use('notice');

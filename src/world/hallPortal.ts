@@ -6,7 +6,7 @@
 // drawn whatever the doorway showed of them). Its windows are openings too, seen through both ways as the doorway is:
 // their glass shows what's past it (from play, "make hall windows semi transparent, so they actually show what's
 // outside behind them").
-import * as THREE from 'three';
+import { Box3, Node, Vec3 } from '../engine/api/index.ts';
 import { fadedWhole } from '../core/seeThrough';
 import { SIGHT, nearDoorAt, seesIntoRoom } from '../core/sight';
 import { HALL, TERRACE, inHall } from '../data/village';
@@ -24,27 +24,27 @@ function byDoorInside(): boolean {
 }
 
 /** The hall's doorway (`cutaway`: its roof and front wall, cut away when the camera isn't under them). */
-export function hallDoorway(cutaway: readonly THREE.Object3D[]): Doorway {
+export function hallDoorway(cutaway: readonly Node[]): Doorway {
   return {
     name: 'the hall of heroes',
-    sill: new THREE.Vector3(TERRACE.x, TERRACE.high, HALL.door),
-    out: new THREE.Vector3(0, 0, 1),
+    sill: new Vec3(TERRACE.x, TERRACE.high, HALL.door),
+    out: new Vec3(0, 0, 1),
     half: HALL.doorHalf,
     high: HALL.doorHigh,
     depth: HALL.door - HALL.inFront,
     // (its walls and roof with it)
-    box: new THREE.Box3(
-      new THREE.Vector3(TERRACE.x - HALL.half, -1, HALL.wall - 1),
-      new THREE.Vector3(TERRACE.x + HALL.half, 12, HALL.door + 0.5),
+    box: new Box3(
+      new Vec3(TERRACE.x - HALL.half, -1, HALL.wall - 1),
+      new Vec3(TERRACE.x + HALL.half, 12, HALL.door + 0.5),
     ),
-    room: new THREE.Box3(
-      new THREE.Vector3(TERRACE.x - HALL.inHalf, -Infinity, HALL.wall),
-      new THREE.Vector3(TERRACE.x + HALL.inHalf, Infinity, HALL.inFront),
+    room: new Box3(
+      new Vec3(TERRACE.x - HALL.inHalf, -Infinity, HALL.wall),
+      new Vec3(TERRACE.x + HALL.inHalf, Infinity, HALL.inFront),
     ),
     // (from its floor up, a hair past its walls' inner faces)
-    inside: new THREE.Box3(
-      new THREE.Vector3(TERRACE.x - HALL.inHalf - 0.05, TERRACE.high - 0.3, HALL.wall - 0.05),
-      new THREE.Vector3(TERRACE.x + HALL.inHalf + 0.05, 12, HALL.inFront + 0.05),
+    inside: new Box3(
+      new Vec3(TERRACE.x - HALL.inHalf - 0.05, TERRACE.high - 0.3, HALL.wall - 0.05),
+      new Vec3(TERRACE.x + HALL.inHalf + 0.05, 12, HALL.inFront + 0.05),
     ),
     // (cut away, or thinned to a ghost, what's beyond them shows)
     // (nor while he stands before its door and its front wall is opened whole for it: taken as whole, the

@@ -2,19 +2,20 @@
 // village.ts), and the houses' rooms do too (`candle` in rooms.ts): a taper melted hollow at its top, wax run down it
 // in runs that end in beads, pooled round its foot in a dish, a wick bent over, and a flame of a see-through orange
 // tongue round a pale core. Its shapes alone: each caller gives the materials.
-import * as THREE from 'three';
+import { Geometry, Material, Mesh, Node, Vec2 } from '../engine/api/index.ts';
+import * as shapes from '../engine/api/shapes/index.ts';
 
 /** A flame's outline turned round its axis, `r` its widest and `h` its height: round at its foot, drawn in to a tip
  *  (`lean` puts its tip off its axis along x, as a draught bends it). */
-export function flameGeometry(r: number, h: number, lean: number, rows = 12, sides = 10): THREE.BufferGeometry {
-  const outline: THREE.Vector2[] = [];
+export function flameGeometry(r: number, h: number, lean: number, rows = 12, sides = 10): Geometry {
+  const outline: Vec2[] = [];
   for (let k = 0; k <= rows; k++) {
     const t = k / rows;
     // (a round foot to its widest a fifth up, then in to the tip by a curve)
     const wide = t < 0.2 ? Math.sin((t / 0.2) * Math.PI / 2) : Math.pow(1 - (t - 0.2) / 0.8, 1.6);
-    outline.push(new THREE.Vector2(Math.max(r * wide, 0.0005), h * t));
+    outline.push(new Vec2(Math.max(r * wide, 0.0005), h * t));
   }
-  const g = new THREE.LatheGeometry(outline, sides);
+  const g = shapes.lathe(outline, sides);
   const at = g.attributes.position;
   for (let i = 0; i < at.count; i++) at.setX(i, at.getX(i) + lean * (at.getY(i) / h) ** 2);
   g.computeVertexNormals();
@@ -44,7 +45,7 @@ const DETAIL = {
 
 /** A taper's wax in `group` (its foot at the group's origin, `high` m to its rim): its body melted hollow at the top,
  *  runs down it each ending in a bead, and (`pooled`) the wax pooled round its foot in a dish. */
-export function taperWax(group: THREE.Object3D, wax: THREE.Material, high: number, pooled: boolean,
+export function taperWax(group: Node, wax: Material, high: number, pooled: boolean,
   detail: keyof typeof DETAIL = 'lectern'): void {
   const made = DETAIL[detail];
   const outline: [number, number][] = [
@@ -52,21 +53,21 @@ export function taperWax(group: THREE.Object3D, wax: THREE.Material, high: numbe
     [0.02, Math.min(0.05, high - 0.03)], [0.0195, high - 0.018], [0.021, high - 0.006], [0.017, high], [0.012, high - 0.005],
     [0.001, high - 0.008],
   ];
-  group.add(new THREE.Mesh(new THREE.LatheGeometry(outline.map(([r, y]) => new THREE.Vector2(r, y)), made.sides), wax));
+  group.add(new Mesh(shapes.lathe(outline.map(([r, y]) => new Vec2(r, y)), made.sides), wax));
   for (const [a, under, length] of RUNS.slice(0, made.runs)) {
     const top = high - under, long = Math.min(length, high * 0.85);
-    const run = new THREE.Mesh(new THREE.CapsuleGeometry(0.0028, long, made.runCaps, made.runSides), wax);
+    const run = new Mesh(shapes.capsule(0.0028, long, made.runCaps, made.runSides), wax);
     run.position.set(Math.cos(a) * 0.0205, top - long / 2, Math.sin(a) * 0.0205);
     group.add(run);
-    const bead = new THREE.Mesh(new THREE.SphereGeometry(0.0048, made.beadSides, made.beadRings), wax);
+    const bead = new Mesh(shapes.sphere(0.0048, made.beadSides, made.beadRings), wax);
     bead.position.set(Math.cos(a) * 0.0215, top - long, Math.sin(a) * 0.0215);
     group.add(bead);
   }
 }
 
 /** A taper's wick in `group`, standing out of its melted top at `high` and bent a little over. */
-export function taperWick(group: THREE.Object3D, material: THREE.Material, high: number): THREE.Mesh {
-  const wick = new THREE.Mesh(new THREE.CylinderGeometry(0.0012, 0.0016, 0.016, 4), material);
+export function taperWick(group: Node, material: Material, high: number): Mesh {
+  const wick = new Mesh(shapes.cylinder(0.0012, 0.0016, 0.016, 4), material);
   wick.position.set(0.001, high, 0);
   wick.rotation.z = -0.28;
   group.add(wick);
@@ -74,7 +75,7 @@ export function taperWick(group: THREE.Object3D, material: THREE.Material, high:
 }
 
 /** A candle's dish, as the lectern's is: a round tray with a lip, its foot at the origin. */
-export function candleDish(): THREE.BufferGeometry {
-  return new THREE.LatheGeometry([[0.001, 0], [0.05, 0], [0.066, 0.016], [0.06, 0.018], [0.046, 0.006], [0.001, 0.006]]
-    .map(([r, y]) => new THREE.Vector2(r, y)), 28);
+export function candleDish(): Geometry {
+  return shapes.lathe([[0.001, 0], [0.05, 0], [0.066, 0.016], [0.06, 0.018], [0.046, 0.006], [0.001, 0.006]]
+    .map(([r, y]) => new Vec2(r, y)), 28);
 }

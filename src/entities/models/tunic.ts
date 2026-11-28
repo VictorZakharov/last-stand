@@ -1,7 +1,7 @@
 // A man's plain tunic over the rig's chest (the mage's under his robe, the ranger's coat): its shape round the chest and
 // over the shoulders, the neckline round the neck and its rolled hem there, and the waist below it. Shared by the heroes
 // built on the same frame, so each meets the neck as a man's does.
-import * as THREE from 'three';
+import { Attribute, floats, Geometry, Node, Quat, Vec3 } from '../../engine/api/index.ts';
 import { belt, TILE } from './armor';
 import { curve, type Keys } from './motion';
 import { clamp } from '../../util';
@@ -27,7 +27,7 @@ export const TUNIC_Y: [number, number] = [-0.12, 0.3];
 export const WAIST: [number, number][] = [[0.148, -0.05], [0.15, 0.08], [0.152, 0.2], [0.155, 0.26]];
 
 /** a point on the tunic towards `a` round it (0 the front, +x his left) at height y, `lift` above it */
-export function onTunic(a: number, y: number, lift: number, out = new THREE.Vector3()): THREE.Vector3 {
+export function onTunic(a: number, y: number, lift: number, out = new Vec3()): Vec3 {
   const X = curve(TUNIC_W, y) + lift, Z = curve(TUNIC_D, y) + lift, e = 2 / curve(TUNIC_P, y), s = Math.sin(a), c = Math.cos(a);
   return out.set(Math.sign(s) * Math.abs(s) ** e * X, y, Math.sign(c) * Math.abs(c) ** e * Z + necklineBack(y));
 }
@@ -36,10 +36,10 @@ function within(x: number, y: number, z: number, lift: number): number {
   const X = curve(TUNIC_W, y) + lift, Z = curve(TUNIC_D, y) + lift, e = curve(TUNIC_P, y);
   return Math.abs(x / X) ** e + Math.abs((z - necklineBack(y)) / Z) ** e;
 }
-const _na = new THREE.Vector3(), _nb = new THREE.Vector3(), _nda = new THREE.Vector3(), _ndy = new THREE.Vector3();
+const _na = new Vec3(), _nb = new Vec3(), _nda = new Vec3(), _ndy = new Vec3();
 /** the tunic's own normal at angle `a` round it and height `y` (`onTunic`'s terms), facing out: the cut's, and the
  *  sleeve's top ring's where it's sewn into the cut */
-function surfaceNormal(a: number, y: number, out = new THREE.Vector3()): THREE.Vector3 {
+function surfaceNormal(a: number, y: number, out = new Vec3()): Vec3 {
   onTunic(a + 1e-3, y, 0, _na); onTunic(a - 1e-3, y, 0, _nb); _nda.subVectors(_na, _nb);
   onTunic(a, y + 1e-3, 0, _na); onTunic(a, y - 1e-3, 0, _nb); _ndy.subVectors(_na, _nb);
   out.crossVectors(_nda, _ndy).normalize();
@@ -51,7 +51,7 @@ function surfaceNormal(a: number, y: number, out = new THREE.Vector3()): THREE.V
 const OUT_STEP = 0.002;
 
 /** the way out of the tunic lifted `lift` off it at `p`: `within`'s gradient (unnormalised) */
-function outward(p: THREE.Vector3, lift: number, out: THREE.Vector3): THREE.Vector3 {
+function outward(p: Vec3, lift: number, out: Vec3): Vec3 {
   const d = 2 * OUT_STEP;
   return out.set(
     (within(p.x + OUT_STEP, p.y, p.z, lift) - within(p.x - OUT_STEP, p.y, p.z, lift)) / d,
@@ -59,15 +59,15 @@ function outward(p: THREE.Vector3, lift: number, out: THREE.Vector3): THREE.Vect
     (within(p.x, p.y, p.z + OUT_STEP, lift) - within(p.x, p.y, p.z - OUT_STEP, lift)) / d,
   );
 }
-const _g = new THREE.Vector3();
+const _g = new Vec3();
 
 /** the tunic's normal near `p` (chest joint space): what lies on it faces this way (a strap) */
-export const tunicNormal = (p: THREE.Vector3, out: THREE.Vector3): THREE.Vector3 => outward(p, 0, out).normalize();
+export const tunicNormal = (p: Vec3, out: Vec3): Vec3 => outward(p, 0, out).normalize();
 
 /** `p` (chest joint space) put out of the tunic lifted `lift` off it if it's inside, by Newton's steps along the way out
  *  of its surface (over the shoulders that's up their slope: put out across, cloth laid there slid off them); whether it
  *  was inside */
-export function outOfTunic(p: THREE.Vector3, lift: number): boolean {
+export function outOfTunic(p: Vec3, lift: number): boolean {
   if (p.y < TUNIC_Y[0] || p.y > TUNIC_Y[1]) return false;
   let v = within(p.x, p.y, p.z, lift);
   if (v >= 1) return false;
@@ -107,7 +107,7 @@ export const armholeEdge = (s: number, n: number, lift = 0) => Array.from({ leng
  * there. (A grid round the body with its points inside the hole moved out onto its edge folded its triangles over along
  * the seam, and the sleeve's top met it between their points: a jagged seam, with gaps)
  */
-export function tunicCut(around: number, rows: number): [THREE.BufferGeometry, THREE.BufferGeometry] {
+export function tunicCut(around: number, rows: number): [Geometry, Geometry] {
   return built(tunicCutSteps(around, rows));
 }
 
@@ -115,23 +115,23 @@ export function tunicCut(around: number, rows: number): [THREE.BufferGeometry, T
  *  largest single call of a hero's build otherwise, 10 to 38 ms behind the lobby (`lab behind`). */
 export function* tunicCutSteps(
   around: number, rows: number,
-): Generator<void, [THREE.BufferGeometry, THREE.BufferGeometry], undefined> {
+): Generator<void, [Geometry, Geometry], undefined> {
   // (laid out in the half's own terms with the angle round in metres at about the chest's width, about the hole's middle)
   const RW = 0.18, X = Math.PI / 2 * RW, Y0 = TUNIC_Y[0] - ARMHOLE.y, Y1 = TUNIC_Y[1] - ARMHOLE.y;
-  const p = new THREE.Vector3(), q = new THREE.Vector3(), da = new THREE.Vector3(), dy = new THREE.Vector3();
+  const p = new Vec3(), q = new Vec3(), da = new Vec3(), dy = new Vec3();
   // uvs: arc length round the chest at the hole's height and up the front's middle, read at each point's place
   const NS = 128, su = [0], sv = [0], ys = Array.from({ length: NS + 1 }, (_, j) => TUNIC_Y[0] + (TUNIC_Y[1] - TUNIC_Y[0]) * j / NS);
   for (let i = 1; i <= NS; i++) su.push(su[i - 1] + onTunic(-Math.PI + i / NS * H_TAU, ARMHOLE.y, 0, p).distanceTo(onTunic(-Math.PI + (i - 1) / NS * H_TAU, ARMHOLE.y, 0, q)) / TILE);
   for (let j = 1; j <= NS; j++) sv.push(sv[j - 1] + onTunic(0, ys[j], 0, p).distanceTo(onTunic(0, ys[j - 1], 0, q)) / TILE);
   const at = (tab: number[], x: number) => { const i = Math.min(NS - 1, Math.max(0, Math.floor(x))); return tab[i] + (tab[i + 1] - tab[i]) * (x - i); };
   const uAt = (a: number) => at(su, (a + Math.PI) / H_TAU * NS), vAt = (y: number) => at(sv, (y - TUNIC_Y[0]) / (TUNIC_Y[1] - TUNIC_Y[0]) * NS);
-  const half = (s: number): THREE.BufferGeometry => {
+  const half = (s: number): Geometry => {
     // each column from the hole's edge straight out (in those terms) to where that line leaves the half
-    const P: THREE.Vector3[][] = [], A: [number, number][][] = [];
+    const P: Vec3[][] = [], A: [number, number][][] = [];
     for (let i = 0; i < around; i++) {
       const [a0, y0] = armholeAt(s, i / around * H_TAU), ex = (s * a0 - Math.PI / 2) * RW, ey = y0 - ARMHOLE.y, l = Math.hypot(ex, ey), dx = ex / l, dyy = ey / l;
       const t = Math.min(dx > 1e-9 ? X / dx : dx < -1e-9 ? -X / dx : Infinity, dyy > 1e-9 ? Y1 / dyy : dyy < -1e-9 ? Y0 / dyy : Infinity);
-      const col: THREE.Vector3[] = [], ac: [number, number][] = [];
+      const col: Vec3[] = [], ac: [number, number][] = [];
       for (let k = 0; k <= rows; k++) {
         const f = (k / rows) ** 1.4, mx = ex + (dx * t - ex) * f, my = ey + (dyy * t - ey) * f;
         const a = s * (Math.PI / 2 + mx / RW), y = ARMHOLE.y + my;
@@ -149,10 +149,10 @@ export function* tunicCutSteps(
       const quad: [number, number][] = out ? [[i, k], [i + 1, k], [i, k + 1], [i + 1, k], [i + 1, k + 1], [i, k + 1]] : [[i, k], [i, k + 1], [i + 1, k], [i + 1, k], [i, k + 1], [i + 1, k + 1]];
       for (const [ii, kk] of quad) put(ii, kk);
     }
-    const g = new THREE.BufferGeometry();
-    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-    g.setAttribute('normal', new THREE.Float32BufferAttribute(nrm, 3));
-    g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+    const g = new Geometry();
+    g.setAttribute('position', floats(pos, 3));
+    g.setAttribute('normal', floats(nrm, 3));
+    g.setAttribute('uv', floats(uv, 2));
     return g;
   };
   yield;
@@ -169,17 +169,17 @@ export function* tunicCutSteps(
  * outside, a quarter turn its front) as a share of the round one's (none: round). In the chest's frame, smooth-shaded all round; `capT` per vertex: 0 on the armhole's edge, 1 from the tube on; `seamY`:
  * the height of the point of the armhole's edge its column of the cap leaves from (the body's own point there).
  */
-export function setInSleeve(s: number, S: THREE.Vector3, o: { len: number; r0: number; r1: number; bulge: number; at: number; join: number; joinIn?: number; full?: number; fullIn?: number; around?: number; cap?: number; tube?: number; shape?: (t: number, phi: number) => number }): THREE.BufferGeometry {
+export function setInSleeve(s: number, S: Vec3, o: { len: number; r0: number; r1: number; bulge: number; at: number; join: number; joinIn?: number; full?: number; fullIn?: number; around?: number; cap?: number; tube?: number; shape?: (t: number, phi: number) => number }): Geometry {
   const M = o.around ?? 32, NC = o.cap ?? 8, NT = o.tube ?? 14, NE = 4, full = o.full ?? 1.4;
   // (the tube's top ring lower under the arm, `joinIn` more: cut level, the cap's underside was a short flap folded in
   // under the armpit, stretched three times its length when the arm went up)
   const hj = (t: number) => o.join + (o.joinIn ?? 0) * (1 - Math.cos(t)) / 2;
   const rad = (h: number, phi = 0) => { const t = h / o.len; return (o.r0 + (o.r1 - o.r0) * t) * (1 + o.bulge * Math.exp(-(((t - o.at) / 0.28) ** 2))) * (o.shape?.(t, phi) ?? 1); };
-  const rows: THREE.Vector3[][] = [], capT: number[] = [];
-  const P0 = new THREE.Vector3(), P2 = new THREE.Vector3(), R = new THREE.Vector3(), m0 = new THREE.Vector3(), chord = new THREE.Vector3();
-  const around = (h: number, phi: number, r: number) => new THREE.Vector3(S.x + s * Math.cos(phi) * r, S.y - h, S.z + Math.sin(phi) * r);
+  const rows: Vec3[][] = [], capT: number[] = [];
+  const P0 = new Vec3(), P2 = new Vec3(), R = new Vec3(), m0 = new Vec3(), chord = new Vec3();
+  const around = (h: number, phi: number, r: number) => new Vec3(S.x + s * Math.cos(phi) * r, S.y - h, S.z + Math.sin(phi) * r);
   // the cap: from the armhole's edge to the tube's top ring, a cubic leaving the edge along the tunic and reaching the ring going down
-  const caps: THREE.Vector3[][] = [];
+  const caps: Vec3[][] = [];
   for (let i = 0; i < M; i++) {
     const t = i / M * H_TAU, [a, y] = armholeAt(s, t);
     onTunic(a, y, 0, P0); onTunic(s * Math.PI / 2 + (a - s * Math.PI / 2) * 0.9, ARMHOLE.y + (y - ARMHOLE.y) * 0.9, 0, P2);
@@ -190,10 +190,10 @@ export function setInSleeve(s: number, S: THREE.Vector3, o: { len: number; r0: n
     // and turned at the seam under the arm, raised it kept a crease there)
     const w = (1 + Math.cos(t)) / 2, fi = o.fullIn ?? full;
     m0.subVectors(P2, P0).normalize().multiplyScalar(c * (fi + (full - fi) * w));
-    const col: THREE.Vector3[] = [];
+    const col: Vec3[] = [];
     for (let k = 0; k <= NC; k++) {
       const u = k / NC, h00 = 2 * u ** 3 - 3 * u * u + 1, h10 = u ** 3 - 2 * u * u + u, h01 = -2 * u ** 3 + 3 * u * u, h11 = u ** 3 - u * u;
-      col.push(new THREE.Vector3().addScaledVector(P0, h00).addScaledVector(m0, h10).addScaledVector(R, h01).add(new THREE.Vector3(0, -c, 0).multiplyScalar(h11)));
+      col.push(new Vec3().addScaledVector(P0, h00).addScaledVector(m0, h10).addScaledVector(R, h01).add(new Vec3(0, -c, 0).multiplyScalar(h11)));
     }
     caps.push(col);
   }
@@ -214,8 +214,8 @@ export function setInSleeve(s: number, S: THREE.Vector3, o: { len: number; r0: n
       else { tris.push(A(i), B(j), B(j + 1)); j++; }
     }
   }
-  const g0 = new THREE.BufferGeometry();
-  g0.setAttribute('position', new THREE.Float32BufferAttribute(flat, 3)); g0.setIndex(tris); g0.computeVertexNormals();
+  const g0 = new Geometry();
+  g0.setAttribute('position', floats(flat, 3)); g0.setIndex(tris); g0.computeVertexNormals();
   const N = g0.attributes.normal;
   let facing = 0;
   for (let v = 0; v < N.count; v++) facing += N.getX(v) * (flat[v * 3] - S.x) + N.getZ(v) * (flat[v * 3 + 2] - S.z);
@@ -229,7 +229,7 @@ export function setInSleeve(s: number, S: THREE.Vector3, o: { len: number; r0: n
     const i = f * M, i0 = Math.floor(i) % M, i1 = (i0 + 1) % M, end = down[i0][NC] + (down[i1][NC] - down[i0][NC]) * (i - Math.floor(i));
     return end + rows[k][Math.round(f * rows[k].length) % rows[k].length].distanceTo(rows[NC][Math.round(f * M) % M]) / TILE;
   };
-  const pos: number[] = [], nrm: number[] = [], uv: number[] = [], ct: number[] = [], sy: number[] = [], _top = new THREE.Vector3();
+  const pos: number[] = [], nrm: number[] = [], uv: number[] = [], ct: number[] = [], sy: number[] = [], _top = new Vec3();
   for (let t = 0; t < tris.length; t += 3) {
     const vs = flip ? [tris[t], tris[t + 2], tris[t + 1]] : [tris[t], tris[t + 1], tris[t + 2]];
     // (a triangle across the seam round the back: its points past it counted on round from there)
@@ -246,12 +246,12 @@ export function setInSleeve(s: number, S: THREE.Vector3, o: { len: number; r0: n
     });
   }
   g0.dispose();
-  const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-  g.setAttribute('normal', new THREE.Float32BufferAttribute(nrm, 3));
-  g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
-  g.setAttribute('capT', new THREE.Float32BufferAttribute(ct, 1));
-  g.setAttribute('seamY', new THREE.Float32BufferAttribute(sy, 1));
+  const g = new Geometry();
+  g.setAttribute('position', floats(pos, 3));
+  g.setAttribute('normal', floats(nrm, 3));
+  g.setAttribute('uv', floats(uv, 2));
+  g.setAttribute('capT', floats(ct, 1));
+  g.setAttribute('seamY', floats(sy, 1));
   return g;
 }
 
@@ -262,7 +262,7 @@ export function setInSleeve(s: number, S: THREE.Vector3, o: { len: number; r0: n
  *  size about the joint, none hanging); `over`, the seam's share cut above the joint too (`keep` of it lost, from `from`
  *  above the joint, wholly `depth` on): the top of the shoulder stays the chest's and a raised arm leaves it whole */
 export type ArmBlend = { seam: number; reach: number; top: number; topY: number; join: number; joinIn: number; around: number; bulk?: number; over?: { keep: number; from: number; depth: number } };
-const DOWN = new THREE.Vector3(0, -1, 0), _sw = new THREE.Vector3(), _tw = new THREE.Quaternion(), _tq = new THREE.Quaternion(), _p = new THREE.Vector3();
+const DOWN = new Vec3(0, -1, 0), _sw = new Vec3(), _tw = new Quat(), _tq = new Quat(), _p = new Vec3();
 const smooth = (t: number) => t * t * (3 - 2 * t);
 /** the cloth round the armhole under the shoulder joint: how much of the arm's share it keeps from going, wholly this far
  *  (m) below the joint */
@@ -278,13 +278,13 @@ const UNDER = { keep: 0.7, depth: 0.08 };
  */
 export class SetInShoulders {
   /** each side's part-turned joints on the chest (+1 his left first) */
-  readonly delts: THREE.Group[][];
+  readonly delts: Node[][];
   /** points round each armhole's edge, as many as the sleeve's top */
   readonly around: number;
-  private readonly holes: THREE.Vector3[][];
-  private readonly swings = [new THREE.Quaternion(), new THREE.Quaternion()];
+  private readonly holes: Vec3[][];
+  private readonly swings = [new Quat(), new Quat()];
 
-  constructor(private readonly j: { chest: THREE.Object3D; shoulderL: THREE.Object3D; shoulderR: THREE.Object3D }, readonly K: ArmBlend, around: number) {
+  constructor(private readonly j: { chest: Node; shoulderL: Node; shoulderR: Node }, readonly K: ArmBlend, around: number) {
     this.delts = [j.shoulderL, j.shoulderR].map((sh) => [1, 2, 3].map((q) => {
       const d = joint(j.chest, ...(sh.position.toArray() as [number, number, number]));
       d.name = (sh === j.shoulderL ? 'deltL' : 'deltR') + q;
@@ -294,16 +294,16 @@ export class SetInShoulders {
     this.holes = [1, -1].map((s) => armholeEdge(s, around));
   }
 
-  private shoulder(s: number): THREE.Object3D { return s > 0 ? this.j.shoulderL : this.j.shoulderR; }
+  private shoulder(s: number): Node { return s > 0 ? this.j.shoulderL : this.j.shoulderR; }
   /** side s's shoulder joint at rest, in the chest's frame */
-  restOf(s: number): THREE.Vector3 { return this.shoulder(s).userData.rest as THREE.Vector3; }
+  restOf(s: number): Vec3 { return this.shoulder(s).userData.rest as Vec3; }
   /** the joints side s's cloth is blended along, from the chest to the shoulder (`Sculpt.skinChain`'s) */
-  chainOf(s: number): THREE.Object3D[] { return [this.j.chest, ...this.delts[s > 0 ? 0 : 1], this.shoulder(s)]; }
+  chainOf(s: number): Node[] { return [this.j.chest, ...this.delts[s > 0 ? 0 : 1], this.shoulder(s)]; }
 
   /** how far the cloth at `p` (the chest's frame, at rest) goes with the arm on side `s`, 0 to 1: less under the joint
    *  (`UNDER`), where the cloth stays with the chest as the arm rises (going with it half way, the cloth before the armpit
    *  swung out with a raised arm into a mound, a breast under it) */
-  share(p: THREE.Vector3, s: number): number {
+  share(p: Vec3, s: number): number {
     let d = Infinity;
     for (const q of this.holes[s > 0 ? 0 : 1]) d = Math.min(d, p.distanceToSquared(q));
     const reach = this.K.reach + (this.K.top - this.K.reach) * smooth(clamp((p.y - this.K.topY) / 0.03, 0, 1));
@@ -321,17 +321,17 @@ export class SetInShoulders {
   }
 
   /** `g` (the chest's frame) given its vertices' shares of side s's arm as `skinK` */
-  withArm(g: THREE.BufferGeometry, s: number): THREE.BufferGeometry {
+  withArm(g: Geometry, s: number): Geometry {
     const p = g.attributes.position, k = new Float32Array(p.count);
     for (let i = 0; i < p.count; i++) k[i] = this.share(_p.fromBufferAttribute(p, i), s);
-    g.setAttribute('skinK', new THREE.BufferAttribute(k, 1));
+    g.setAttribute('skinK', new Attribute(k, 1));
     return g;
   }
 
   /** side s's sleeve (`setInSleeve`, in the shoulder's frame), its `skinK` along the chain on to the elbow: from the
    *  seam's share at its edge (`seamShare`, the body's there) to the arm's wholly a little way down it, and over the elbow
    *  onto the forearm */
-  sleeve(s: number, o: { len: number; r0: number; r1: number; bulge: number; at: number; full?: number; fullIn?: number; cap?: number; tube?: number; shape?: (t: number, phi: number) => number }): THREE.BufferGeometry {
+  sleeve(s: number, o: { len: number; r0: number; r1: number; bulge: number; at: number; full?: number; fullIn?: number; cap?: number; tube?: number; shape?: (t: number, phi: number) => number }): Geometry {
     const at = this.restOf(s);
     const g = setInSleeve(s, at, { ...o, join: this.K.join, joinIn: this.K.joinIn, around: this.around }).translate(-at.x, -at.y, -at.z);
     const p = g.attributes.position, c = g.attributes.capT, y = g.attributes.seamY, k = new Float32Array(p.count);
@@ -339,7 +339,7 @@ export class SetInShoulders {
       const e = smooth(clamp((-p.getY(i) - 0.2) / 0.13, 0, 1)), seam = this.seamShare(y.getX(i), s);
       k[i] = (seam + (1 - seam) * smooth(c.getX(i))) * 4 / 5 + e / 5;
     }
-    g.setAttribute('skinK', new THREE.BufferAttribute(k, 1));
+    g.setAttribute('skinK', new Attribute(k, 1));
     return g;
   }
 

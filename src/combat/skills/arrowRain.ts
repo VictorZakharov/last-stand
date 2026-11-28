@@ -7,7 +7,7 @@
 // fell), and stays in it; one that comes down on a prop goes into its top (off it, if it's stone), the rest into the
 // floor (off it on stone: fx/stuckArrows). The area follows the aim at a walk, and what's in the air when the key is let
 // go still comes down.
-import * as THREE from 'three';
+import { InstancedMesh, Mat4, Mesh, Node, Quat, Vec2, Vec3 } from '../../engine/api/index.ts';
 import { G } from '../../state';
 import { hitEnemy } from '../damage';
 import { evades } from '../../entities/evade';
@@ -47,16 +47,16 @@ const MAX_FALLING = 64;
 const FOLLOW = 3.5;
 
 /** a volley's arrow on its way up: a curve from the bow (leaving along the shot) to where it splits over the area */
-interface Rising { mesh: THREE.Mesh; p0: THREE.Vector3; c: THREE.Vector3; p1: THREE.Vector3; t: number }
+interface Rising { mesh: Mesh; p0: Vec3; c: Vec3; p1: Vec3; t: number }
 /** a shower's arrow: from the split (its point at `from`) straight down to `to`, `len` away, once its `wait` is up */
-interface Falling { from: THREE.Vector3; to: THREE.Vector3; dir: THREE.Vector3; len: number; wait: number; t: number; /** props it fell past */ past?: Set<Obstacle> }
+interface Falling { from: Vec3; to: Vec3; dir: Vec3; len: number; wait: number; t: number; /** props it fell past */ past?: Set<Obstacle> }
 /** a volley's shower: its arrows still coming down */
 interface Shower { arrows: Falling[] }
 
 interface RainState {
   player: Player; def: Def;
   /** the area's middle on the floor */
-  center: THREE.Vector3;
+  center: Vec3;
   /** the volley under way: its time, whether it's loosed, and (the first only, with no arrow on the string) the seconds
    *  taking one from the quiver first */
   cyc: number; loosed: boolean; fetch: number;
@@ -72,13 +72,13 @@ interface RainState {
 
 /** a streak's longest (m) */
 const STREAK = 2;
-const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _d = new THREE.Vector3(), _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _one = new THREE.Vector3(1, 1, 1), _sc = new THREE.Vector3();
+const _a = new Vec3(), _b = new Vec3(), _d = new Vec3(), _m = new Mat4(), _q = new Quat(), _one = new Vec3(1, 1, 1), _sc = new Vec3();
 
 /** The volley's time at the hero's cast speed. */
 const pace = (p: Player): number => 1 + p.stats.castSpeed / 100;
 
 /** Where the area goes: the aim, no further than the skill's range, inside the arena. */
-function aimOf(p: Player, def: Def, out: THREE.Vector3): THREE.Vector3 {
+function aimOf(p: Player, def: Def, out: Vec3): Vec3 {
   out.set(p.aim.x - p.pos.x, 0, p.aim.z - p.pos.z);
   if (out.length() > def.range) out.setLength(def.range);
   out.add(p.pos); out.y = 0;
@@ -92,7 +92,7 @@ function loose(s: RainState): void {
   if (s.gone) return;
   const p = s.player, p0 = p.castPoint, yaw = p.shotHeading(p0, s.center);
   const u = _a.set(Math.sin(yaw) * Math.cos(PITCH), Math.sin(PITCH), Math.cos(yaw) * Math.cos(PITCH));
-  const p1 = new THREE.Vector3(s.center.x, groundHeight(s.center.x, s.center.z) + SPLIT_H, s.center.z);
+  const p1 = new Vec3(s.center.x, groundHeight(s.center.x, s.center.z) + SPLIT_H, s.center.z);
   const mesh = arrowMesh(); mesh.position.copy(p0); mesh.quaternion.setFromUnitVectors(FWD, u);
   G.scene.add(mesh);
   s.rising.push({ mesh, p0: p0.clone(), c: p0.clone().addScaledVector(u, p0.distanceTo(p1) * 0.55), p1, t: 0 });
@@ -101,7 +101,7 @@ function loose(s: RainState): void {
 
 /** It splits into its shower: from the split, each arrow to a spot anywhere in the area as it is now, all of them leaving
  *  within SPREAD. */
-function split(s: RainState, at: THREE.Vector3): void {
+function split(s: RainState, at: Vec3): void {
   burst(at, { count: 26, color: LEAF, speed: 4, up: 0, life: 0.4, size: 0.1, gravity: 1, drag: 3 });
   burst(at, { count: 8, color: 0xf3f0d0, speed: 1.5, up: 0, life: 0.25, size: 0.16, gravity: 0, drag: 4 });
   // (heard whistling down until it lands: its fall from the split, and half its arrows' spread)
@@ -109,7 +109,7 @@ function split(s: RainState, at: THREE.Vector3): void {
   const R = s.def.radius, arrows: Falling[] = [];
   for (let i = 0; i < s.def.missiles; i++) {
     const a = rand(0, Math.PI * 2), d = R * Math.sqrt(Math.random());
-    const to = new THREE.Vector3(s.center.x + Math.cos(a) * d, 0, s.center.z + Math.sin(a) * d);
+    const to = new Vec3(s.center.x + Math.cos(a) * d, 0, s.center.z + Math.sin(a) * d);
     to.y = groundHeight(to.x, to.z);
     const from = at.clone().add(_b.set(rand(-0.15, 0.15), rand(-0.1, 0.1), rand(-0.15, 0.15)));
     arrows.push({ from, to, dir: to.clone().sub(from).normalize(), len: from.distanceTo(to), wait: rand(0, SPREAD), t: -1 });
@@ -119,12 +119,12 @@ function split(s: RainState, at: THREE.Vector3): void {
 
 /** The foe a falling arrow's point at `p` is coming down through: within STRIKE of its body and between its feet and its top. */
 /** The prop a falling arrow's point has come down into, if any (not one it has fallen past: in its circle, beside what it draws). */
-function propAt(p: THREE.Vector3, past: Set<Obstacle> | undefined): Obstacle | null {
+function propAt(p: Vec3, past: Set<Obstacle> | undefined): Obstacle | null {
   for (const o of G.arena.obstacles) if (p.y < o.h && !past?.has(o) && (o.x - p.x) ** 2 + (o.z - p.z) ** 2 < o.r * o.r) return o;
   return null;
 }
 
-function struck(p: THREE.Vector3): Enemy | null {
+function struck(p: Vec3): Enemy | null {
   for (const e of G.enemies) {
     if (!e.alive || e.invulnerable) continue;
     const y0 = e.obj.position.y;
@@ -137,23 +137,23 @@ function struck(p: THREE.Vector3): Enemy | null {
 const skill: ChannelSkill<RainState> = {
   channel: true, anim: 'bow',
   hits: (def) => [{ per: 'arrow', base: (def as Def).damage, type: 'physical', note: `${(def as Def).missiles} arrows a volley` }],
-  warm: () => { const st = new THREE.InstancedMesh(streakGeo, streakMat, 1); st.count = 1; return [new THREE.Mesh(floorPatch(0.9, 1, 1, 8), additive(LEAF, 1.2, 0.5)), arrowMesh(), st]; },
+  warm: () => { const st = new InstancedMesh(streakGeo, streakMat, 1); st.count = 1; return [new Mesh(floorPatch(0.9, 1, 1, 8), additive(LEAF, 1.2, 0.5)), arrowMesh(), st]; },
   start(player, rawDef) {
     const def = rawDef as Def;
     const q = player.cls.quiver;
-    const s: RainState = { player, def, center: aimOf(player, def, new THREE.Vector3()), cyc: 0, loosed: false,
+    const s: RainState = { player, def, center: aimOf(player, def, new Vec3()), cyc: 0, loosed: false,
       fetch: q && !player.nocked ? q.fetch / pace(player) : 0, rising: [], showers: [], done: false, gone: false, judged: new Set() };
     if (s.fetch) fetchSound(player, s.fetch, 1);
     // the area on the floor, and the showers' arrows as they fall (one instanced mesh)
     const ringMat = additive(LEAF, 1.2, 0), fillMat = additive(LEAF, 0.35, 0);
     const ringGeo = floorPatch(def.radius * 0.95, def.radius, 1, 256), fillGeo = floorPatch(0, def.radius, 1, 128);
-    const ring = new THREE.Mesh(ringGeo, ringMat), fill = new THREE.Mesh(fillGeo, fillMat);
+    const ring = new Mesh(ringGeo, ringMat), fill = new Mesh(fillGeo, fillMat);
     ring.frustumCulled = fill.frustumCulled = false;
-    const area = new THREE.Group(); area.add(ring, fill);
-    const laid = new THREE.Vector2(Infinity, Infinity);
-    const rain = new THREE.InstancedMesh(arrowGeometry(), arrowMat, MAX_FALLING);
+    const area = new Node(); area.add(ring, fill);
+    const laid = new Vec2(Infinity, Infinity);
+    const rain = new InstancedMesh(arrowGeometry(), arrowMat, MAX_FALLING);
     rain.count = 0; rain.frustumCulled = false; rain.name = 'arrow rain';
-    const streaks = new THREE.InstancedMesh(streakGeo, streakMat, MAX_FALLING + 4);
+    const streaks = new InstancedMesh(streakGeo, streakMat, MAX_FALLING + 4);
     streaks.count = 0; streaks.frustumCulled = false;
     G.scene.add(area, rain, streaks);
     shockwave(s.center, { color: LEAF, intensity: 1.1, from: def.radius * 0.4, to: def.radius, life: 0.45 });

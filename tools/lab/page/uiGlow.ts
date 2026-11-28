@@ -77,7 +77,7 @@ export async function openGlow(lab: Lab): Promise<void> {
     cls: G.player.cls,
   }));
   menus.renderMenu();
-  showPanels('chest');
+  await showPanels(lab, 'chest');
   railTurned = !document.getElementById('stash')?.checkVisibility();
   const gearTab = document.querySelector('#lobby-rail [data-lt="gear"]');
   if (railTurned && gearTab) await lab.clickOn(gearTab);

@@ -12,7 +12,9 @@
 // columns' parts must be drawn in their turns at every step (a plinth under its shaft). A pixel test first proves the
 // pixels are read (the room's plinths through a ghost). The square, the cottages and every house's room were swept so
 // once (#977), and nothing that blends there turned round. `--canary` gives the room's shafts their own sphere again.
-import * as THREE from 'three';
+import {
+  AdditiveBlending, Attribute, Camera, Frustum, Geometry, LookMaterial, Mat4, Material, Mesh, Node, Sphere, Vec2, Vec3,
+} from './sceneApi.ts';
 import type { Lab, Pictured } from './lab';
 import { G } from '../../../src/state';
 import { faceCamera, setZoom, viewMode } from '../../../src/core/renderer';
@@ -29,7 +31,7 @@ import { viewBy } from './villageHallCull';
 import { flipsBetween, sphereOfPositions, turnsBroken } from './blendedOrderKeys';
 import * as villageBuild from '../../../src/world/village';
 import { pixelsShared } from './blendedOverlap';
-import type { Flip, ScreenRect, Sorted, Sphere, Stand } from './blendedOrderKeys';
+import type { Flip, KeySphere, ScreenRect, Sorted, Stand } from './blendedOrderKeys';
 import type { LightsChecked } from './villageLights';
 
 /** A place he stands, the way he faces (rad), the view, and its name. */
@@ -90,32 +92,32 @@ function places(): Place[] {
 /** how far in from a room column's middle toward the aisle he stands beside it (m) */
 const BESIDE = 0.9;
 /** each geometry's sphere as the engine makes it from its vertices, made once */
-const spheres = new WeakMap<THREE.BufferGeometry, Sphere>();
+const spheres = new WeakMap<Geometry, KeySphere>();
 
 /** `mesh`'s sphere in the world, as the engine moves it (`moved_sphere`: its radius by the matrix's largest scale). */
-function worldSphere(mesh: THREE.Mesh): Sphere {
+function worldSphere(mesh: Mesh): KeySphere {
   let local = spheres.get(mesh.geometry);
   if (!local) {
     local = sphereOfPositions(mesh.geometry.attributes.position.array as ArrayLike<number>);
     spheres.set(mesh.geometry, local);
   }
-  const middle = new THREE.Vector3(local.x, local.y, local.z).applyMatrix4(mesh.matrixWorld);
+  const middle = new Vec3(local.x, local.y, local.z).applyMatrix4(mesh.matrixWorld);
   const radius = local.radius * mesh.matrixWorld.getMaxScaleOnAxis();
   return { x: middle.x, y: middle.y, z: middle.z, radius };
 }
 
 /** Whether `object` and every parent of it are shown. */
-function shown(object: THREE.Object3D): boolean {
-  for (let at: THREE.Object3D | null = object; at; at = at.parent) if (!at.visible) return false;
+function shown(object: Node): boolean {
+  for (let at: Node | null = object; at; at = at.parent) if (!at.visible) return false;
   return true;
 }
 
 /** Where `mesh`'s box covers the screen (the whole screen where it reaches behind the camera). */
-function rectOf(mesh: THREE.Mesh, camera: THREE.Camera, width: number, height: number): ScreenRect {
+function rectOf(mesh: Mesh, camera: Camera, width: number, height: number): ScreenRect {
   if (!mesh.geometry.boundingBox) mesh.geometry.computeBoundingBox();
   const box = mesh.geometry.boundingBox!;
   const rect = { left: Infinity, top: Infinity, right: -Infinity, bottom: -Infinity };
-  const corner = new THREE.Vector3();
+  const corner = new Vec3();
   for (let k = 0; k < 8; k++) {
     corner.set(k & 1 ? box.max.x : box.min.x, k & 2 ? box.max.y : box.min.y, k & 4 ? box.max.z : box.min.z);
     corner.applyMatrix4(mesh.matrixWorld).project(camera);
@@ -135,17 +137,17 @@ function rectOf(mesh: THREE.Mesh, camera: THREE.Camera, width: number, height: n
 }
 
 /** `object`'s name, or its nearest named parent's with the steps up to it. */
-function namedFrom(object: THREE.Object3D): string {
+function namedFrom(object: Node): string {
   let up = 0;
-  for (let at: THREE.Object3D | null = object; at; at = at.parent, up++) {
+  for (let at: Node | null = object; at; at = at.parent, up++) {
     if (at.name) return up ? `${at.name} (${up} up)` : at.name;
   }
   return 'unnamed';
 }
 
 /** A record's name, the same at every step: its material's, its kind's, and where it stands. */
-function nameOf(mesh: THREE.Mesh, sphere: Sphere): string {
-  const material = mesh.material as THREE.Material & { seeThrough?: { kind?: string } };
+function nameOf(mesh: Mesh, sphere: KeySphere): string {
+  const material = mesh.material as Material & { seeThrough?: { kind?: string } };
   const what = material.name || material.type;
   const where = `${sphere.x.toFixed(1)}, ${sphere.y.toFixed(1)}, ${sphere.z.toFixed(1)}`;
   return `${namedFrom(mesh)} [${what}${inHallColumn(material) ? ', a room column' : ''}] at ${where} #${mesh.id}`;
@@ -153,23 +155,23 @@ function nameOf(mesh: THREE.Mesh, sphere: Sphere): string {
 
 /** A material's see-through flags as its records carry them: the bridge's own (`seenFlags`, on an older commit, an
  *  A/B's main, its see-through's part asked straight). */
-function flagsOf(bridge: Bridge, material: THREE.Material): number {
-  const asked = bridge as Bridge & { seenFlags?: (material: THREE.Material) => number };
+function flagsOf(bridge: Bridge, material: Material): number {
+  const asked = bridge as Bridge & { seenFlags?: (material: Material) => number };
   if (asked.seenFlags) return asked.seenFlags(material);
   // (an older bridge holds them all the same, on a part of its own it doesn't hand out)
-  const held = bridge as unknown as { seeKinds: { flagsOf(material: THREE.Material): number } };
+  const held = bridge as unknown as { seeKinds: { flagsOf(material: Material): number } };
   return held.seeKinds.flagsOf(material);
 }
 
 /** The hall's columns' sets of parts in the turns they must be drawn in (none on a commit before them, an A/B's
  *  main). */
-function columnSetsNow(): readonly (readonly THREE.Material[])[] {
-  const asked = villageBuild as { columnTurns?: () => readonly (readonly THREE.Material[])[] };
+function columnSetsNow(): readonly (readonly Material[])[] {
+  const asked = villageBuild as { columnTurns?: () => readonly (readonly Material[])[] };
   return asked.columnTurns?.() ?? [];
 }
 
 /** A material's set and turn among the hall's columns' (`columnSetsNow`), if it's one of them. */
-function turnOf(sets: readonly (readonly THREE.Material[])[], material: THREE.Material): Sorted['turn'] {
+function turnOf(sets: readonly (readonly Material[])[], material: Material): Sorted['turn'] {
   for (const [set, turns] of sets.entries()) {
     const at = turns.indexOf(material);
     if (at >= 0) return { set, at };
@@ -178,41 +180,41 @@ function turnOf(sets: readonly (readonly THREE.Material[])[], material: THREE.Ma
 }
 
 /** each record's mesh by its name, as `blendedNow` last met them */
-const meshNamed = new Map<string, THREE.Mesh>();
+const meshNamed = new Map<string, Mesh>();
 
 /** Every record the engine draws among what blends now, in the order the walk meets them, as it sorts it. */
 function blendedNow(): Sorted[] {
   const bridge = RUST.bridge;
   if (!bridge) throw new Error('the engine isn\'t drawing: no bridge to ask');
   const camera = G.camera;
-  const frustum = new THREE.Frustum().setFromProjectionMatrix(
-    new THREE.Matrix4().multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse));
-  const size = G.renderer.getSize(new THREE.Vector2());
+  const frustum = new Frustum().setFromProjectionMatrix(
+    new Mat4().multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse));
+  const size = G.renderer.getSize(new Vec2());
   const found: Sorted[] = [];
   meshNamed.clear();
   const sets = columnSetsNow();
   G.scene.traverse((object) => {
-    const mesh = object as THREE.Mesh;
+    const mesh = object as Mesh;
     if (!mesh.isMesh || Array.isArray(mesh.material) || mesh.userData.particles || !shown(mesh)) return;
-    const material = mesh.material as THREE.Material;
+    const material = mesh.material as Material;
     if (!material.visible || material.colorWrite === false || !mesh.layers.test(camera.layers)) return;
     // (a shader with no look of the engine's is never drawn by it: the ghosts' count, on a layer of its own)
-    if ((material as THREE.ShaderMaterial).isShaderMaterial && !lookOf(material)) return;
+    if ((material as LookMaterial).isLookMaterial && !lookOf(material)) return;
     const flags = flagsOf(bridge, material);
-    const blends = material.transparent || material.blending === THREE.AdditiveBlending;
+    const blends = material.transparent || material.blending === AdditiveBlending;
     if (!blends || flags & DRAWN_APART || mesh.userData.lowRes || mesh.userData.fireFlames) return;
     // (a decal on what's opaque, drawn toward the eye off it: hidden by what stands before it whatever its turn, the
     // mage's forearms' ink on either arm)
     if (material.polygonOffset && material.polygonOffsetUnits < 0) return;
     const sphere = worldSphere(mesh);
-    const ball = new THREE.Sphere(new THREE.Vector3(sphere.x, sphere.y, sphere.z), sphere.radius);
+    const ball = new Sphere(new Vec3(sphere.x, sphere.y, sphere.z), sphere.radius);
     if (mesh.frustumCulled && !frustum.intersectsSphere(ball)) return;
     const name = nameOf(mesh, sphere);
     meshNamed.set(name, mesh);
     found.push({
       name,
       thinned: (flags & SEE_FLAGS.thinned) !== 0,
-      adds: material.blending === THREE.AdditiveBlending,
+      adds: material.blending === AdditiveBlending,
       sphere,
       rect: rectOf(mesh, camera, size.x, size.y),
       turn: turnOf(sets, material),
@@ -225,7 +227,7 @@ function blendedNow(): Sorted[] {
 async function standAt(lab: Lab, place: Place): Promise<void> {
   await viewBy(lab, place.view);
   G.player.walkTo = null;
-  G.player.place(new THREE.Vector3(place.x, groundHeight(place.x, place.z), place.z), place.facing);
+  G.player.place(new Vec3(place.x, groundHeight(place.x, place.z), place.z), place.facing);
   setZoom(ZOOMS[ZOOMS.length - 1]);
   faceCamera(place.facing);
   await lab.step(SETTLE);
@@ -306,11 +308,11 @@ async function sharingPixels(lab: Lab, place: Place, boxed: Flip[]): Promise<Fli
 
 /** The room's plinths' record and its shafts': by their materials where the game says the columns' turns, else (an
  *  older commit) by their triangles, the plinths the lower of the two records of 96 (the capitals the other). */
-function plinthsAndShafts(meshes: THREE.Mesh[]): [THREE.Mesh | undefined, THREE.Mesh | undefined] {
+function plinthsAndShafts(meshes: Mesh[]): [Mesh | undefined, Mesh | undefined] {
   const turns = columnSetsNow()[0];
-  if (turns) return [0, 1].map((at) => meshes.find((mesh) => mesh.material === turns[at])) as [THREE.Mesh, THREE.Mesh];
-  const triangles = (mesh: THREE.Mesh): number => (mesh.geometry.index?.count ?? 0) / 3;
-  const middleY = (mesh: THREE.Mesh): number => worldSphere(mesh).y;
+  if (turns) return [0, 1].map((at) => meshes.find((mesh) => mesh.material === turns[at])) as [Mesh, Mesh];
+  const triangles = (mesh: Mesh): number => (mesh.geometry.index?.count ?? 0) / 3;
+  const middleY = (mesh: Mesh): number => worldSphere(mesh).y;
   const blocks = meshes.filter((mesh) => triangles(mesh) === 96).sort((a, b) => middleY(a) - middleY(b));
   return [blocks[0], meshes.find((mesh) => triangles(mesh) === 576)];
 }
@@ -341,18 +343,18 @@ async function pixelTestInAisle(lab: Lab): Promise<{ shared: number; where: stri
 function shaftsApart(): () => void {
   const undo: (() => void)[] = [];
   G.scene.traverse((object) => {
-    const mesh = object as THREE.Mesh;
+    const mesh = object as Mesh;
     if (!mesh.isMesh || Array.isArray(mesh.material) || !inHallColumn(mesh.material)) return;
     if ((mesh.geometry.index?.count ?? 0) / 3 < 500) return;
     const kept = mesh.geometry;
     const copy = kept.clone();
     const count = copy.attributes.position.count - 6;
     for (const name of Object.keys(copy.attributes)) {
-      const attribute = copy.attributes[name] as THREE.BufferAttribute;
+      const attribute = copy.attributes[name] as Attribute;
       const size = attribute.itemSize;
-      copy.setAttribute(name, new THREE.BufferAttribute(attribute.array.slice(0, count * size), size));
+      copy.setAttribute(name, new Attribute(attribute.array.slice(0, count * size), size));
     }
-    copy.setIndex(new THREE.BufferAttribute((copy.index!.array as Uint32Array).slice(0, copy.index!.count - 6), 1));
+    copy.setIndex(new Attribute((copy.index!.array as Uint32Array).slice(0, copy.index!.count - 6), 1));
     mesh.geometry = copy;
     undo.push(() => { mesh.geometry = kept; });
   });

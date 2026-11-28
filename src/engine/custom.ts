@@ -2,7 +2,7 @@
 // `vertex_hook` and `surface_hook`: the engine's lit.wgsl), the numbers and maps that shader reads, and what the
 // bridge does for its meshes. A material with a look is drawn by it; one moved or cut by three's nodes and with no
 // look isn't drawn (`Bridge.skipped`). Each look's shader is in `looks/`, beside the game's code it ports.
-import type * as THREE from 'three';
+import type { Material, Texture, VolumeTexture } from './api/index.ts';
 import type { SeeThrough } from '../core/seeThrough';
 
 /** how many floats a shader has to itself (`m.c`, 48 vec4s: `CUSTOM_FLOATS` in the engine's gpu.rs) */
@@ -32,9 +32,9 @@ export interface RustLook {
   numbers(out: Float32Array): void;
   /** the shader's maps: two read in either stage (`t_extra0`, `t_extra1`), two more as it's shaded (`t_extra2`,
    *  `t_extra3`) */
-  maps?: readonly (THREE.Texture | null)[];
+  maps?: readonly (Texture | null)[];
   /** the shader's volume (`t_volume`, read by `samp_clamp`), as it is now: a 3D map of a byte a cell */
-  volume?: () => THREE.Data3DTexture;
+  volume?: () => VolumeTexture;
   /** the attribute its meshes hand over as their vertices' positions (the meadow's blades: `bv`) */
   position?: string;
   /** its vertices stay where the mesh has them, so its meshes cast the sun's shadow as any (not one that places
@@ -49,9 +49,13 @@ export interface RustLook {
   /** whether anything its material shows by has changed since this was last asked (its numbers, its colour,
    *  its glow): with it, a material that hasn't is drawn as it was, not described again (a fight's foes are a
    *  thousand materials a frame) */
-  moved?(): boolean;
+  moved?(frame: number): boolean;
   /** its meshes' `onBeforeRender` is run before each is recorded (it lists what's drawn, sets the numbers) */
   before?: boolean;
+  /** its thing's own numbers, 8 of them, written at `at` of `out` each frame onto the node its records are drawn on
+   *  (`ownNumbers.ts`; read as `in.own0`, `in.own1`): what moves as the game runs (a fire's moment of its loop, its
+   *  puff), which in `numbers` described its material again every frame */
+  own?(out: Float32Array, at: number): void;
   /** its draw's list, as it is this frame: floats its vertex hook reads by `bones[(*v).list + row]`, 16 a row
    *  (a field's tiles, any number of them: its numbers hold 80 at most). For a mesh that isn't skinned */
   list?(): Float32Array;
@@ -60,12 +64,35 @@ export interface RustLook {
   fades?: SeeThrough;
 }
 
-const looks = new WeakMap<THREE.Material, RustLook>();
+const looks = new WeakMap<Material, RustLook>();
+
+/** `look` asked whether it moved by its numbers alone (`RustLook.moved`): each frame they're read and set beside
+ *  those last read. For a look whose numbers are all it shows by and are few, its clocks among its own numbers
+ *  (`own`): described again only as they move, where a look with no `moved` was described every frame. */
+export function movedByNumbers(look: Omit<RustLook, 'moved'>): RustLook {
+  const was = new Float32Array(LOOK_FLOATS).fill(NaN);
+  const now = new Float32Array(LOOK_FLOATS);
+  return {
+    ...look,
+    moved() {
+      now.fill(0);
+      look.numbers(now);
+      let moved = false;
+      for (let at = 0; at < LOOK_FLOATS; at++) {
+        if (now[at] !== was[at]) {
+          was[at] = now[at];
+          moved = true;
+        }
+      }
+      return moved;
+    },
+  };
+}
 
 /** `material` drawn by `look` under the Rust engine. */
-export function rustLook<M extends THREE.Material>(material: M, look: RustLook): M {
+export function rustLook<M extends Material>(material: M, look: RustLook): M {
   looks.set(material, look);
   return material;
 }
 
-export const lookOf = (material: THREE.Material): RustLook | undefined => looks.get(material);
+export const lookOf = (material: Material): RustLook | undefined => looks.get(material);

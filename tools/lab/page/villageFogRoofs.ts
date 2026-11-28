@@ -3,7 +3,7 @@
 // (`canary` holds the fog off). `roofShowsWhatHeSees`: the ground he does see, seen through a roof, isn't fogged
 // (`canary` reads his sight off where he stands). `fogUnderEaves`: the ground under a side eave past the wall lies in the
 // fog as all round it does (`canary` holds the fog off).
-import * as THREE from 'three';
+import { CustomBlending, Hit, Mesh, Raycaster, Vec3 } from './sceneApi.ts';
 import { rayChunks } from './rayChunks';
 import type { Lab } from './lab';
 import { G } from '../../../src/state';
@@ -30,7 +30,7 @@ const FOG_EASES = 40;
 const LEAST_TAKEN = 0.05;
 
 /** The light of `points` on the ground in the frame, the sum of their pixels'. */
-function lightAt(lab: Lab, points: THREE.Vector3[]): number {
+function lightAt(lab: Lab, points: Vec3[]): number {
   const canvas = drawFrame(lab);
   let light = 0;
   let read = 0;
@@ -56,11 +56,11 @@ async function takenPastBack(lab: Lab, c: Cottage): Promise<number> {
   const turned = (x: number, z: number): [number, number] => [c.x + x * cos + z * sin, c.z - x * sin + z * cos];
   const [x, z] = turned(0, halfD + 3);
   await standAt(lab, x, z, c.facing + Math.PI);
-  const points: THREE.Vector3[] = [];
+  const points: Vec3[] = [];
   for (let along = -halfW; along <= halfW; along += ALONG_BACK) {
     for (const past of PAST_BACK) {
       const [px, pz] = turned(along, -halfD - past);
-      points.push(new THREE.Vector3(px, groundHeight(px, pz) + 0.1, pz));
+      points.push(new Vec3(px, groundHeight(px, pz) + 0.1, pz));
     }
   }
   const fogged = lightAt(lab, points);
@@ -150,13 +150,13 @@ async function fogThroughRoof(
   const { halfW, halfD } = cottageHalves(c);
   const [x, z] = turned(halfW + 0.35, -halfD - 0.35);
   await standAt(lab, x, z, c.facing + Math.PI);
-  const points: THREE.Vector3[] = [];
+  const points: Vec3[] = [];
   for (let across = -halfW - ROUND_COTTAGE; across <= halfW + ROUND_COTTAGE; across += ROUND_STEP) {
     for (let along = -halfD - ROUND_COTTAGE; along <= halfD + ROUND_COTTAGE; along += ROUND_STEP) {
       const [px, pz] = turned(across, along);
       const seen = seenShareAt(px, pz) >= SEEN_BY_HIM;
       if (seen && Math.hypot(px - x, pz - z) > ROOF_READ_OFF) {
-        points.push(new THREE.Vector3(px, groundHeight(px, pz) + 0.1, pz));
+        points.push(new Vec3(px, groundHeight(px, pz) + 0.1, pz));
       }
     }
   }
@@ -177,7 +177,7 @@ const CANARY_SIGHT_OFF = 20;
  *  not `uSightOn` 0): a house from above is opened by what he sees, so with his sight off its roofs were drawn
  *  another way, by their kinds' own shares, and the two frames differed by the roofs' ghosts (22% of the light
  *  through a roof read as the fog's, where the fog took none). */
-function fogTakesAt(lab: Lab, points: THREE.Vector3[], sightOff: number): number {
+function fogTakesAt(lab: Lab, points: Vec3[], sightOff: number): number {
   const from = SIGHT.uSightFrom.value;
   const stood = from.clone();
   from.x += sightOff;
@@ -198,24 +198,24 @@ function fogTakesAt(lab: Lab, points: THREE.Vector3[], sightOff: number): number
 
 /** Every mesh shown (it and everything over it), as chunks for rays (`rayChunks.ts`): sent at the scene whole, the
  *  hidden places' meshes and all, the rays under the roofs took 73 s of this check's 78. */
-function shownMeshes(): THREE.Mesh[] {
-  const meshes: THREE.Mesh[] = [];
+function shownMeshes(): Mesh[] {
+  const meshes: Mesh[] = [];
   G.scene.traverseVisible((object) => {
-    if ((object as THREE.Mesh).isMesh) meshes.push(object as THREE.Mesh);
+    if ((object as Mesh).isMesh) meshes.push(object as Mesh);
   });
   return rayChunks(meshes);
 }
 
 /** Whether a ray from the eye to `point` meets a roof and nothing else short of it: through a wall's ghost too, the fog
  *  reads that wall, which keeps its depth. */
-function overRoofAlone(point: THREE.Vector3, meshes: THREE.Mesh[]): boolean {
+function overRoofAlone(point: Vec3, meshes: Mesh[]): boolean {
   const from = G.camera.position;
   const way = point.clone().sub(from).normalize();
   const short = point.distanceTo(from) - GROUND_ITSELF;
-  const drawn = new THREE.Raycaster(from, way, 0, short).intersectObjects(meshes, false);
-  const isRoof = (hit: THREE.Intersection): boolean => {
-    const { material } = hit.object as THREE.Mesh;
-    return !Array.isArray(material) && material?.blending === THREE.CustomBlending;
+  const drawn = new Raycaster(from, way, 0, short).intersectObjects(meshes, false);
+  const isRoof = (hit: Hit): boolean => {
+    const { material } = hit.object as Mesh;
+    return !Array.isArray(material) && material?.blending === CustomBlending;
   };
   return drawn.some(isRoof) && drawn.every(isRoof);
 }
@@ -266,11 +266,11 @@ async function greenUnderEaves(lab: Lab, c: Cottage): Promise<number> {
   const turned = (x: number, z: number): [number, number] => [c.x + x * cos + z * sin, c.z - x * sin + z * cos];
   const [x, z] = turned(halfW * 0.7, halfD + 0.8);
   await standAt(lab, x, z, c.facing + Math.PI);
-  const points: THREE.Vector3[] = [];
+  const points: Vec3[] = [];
   for (let across = -halfD * 0.8; across <= -halfD * 0.2; across += ALONG_BACK) {
     for (const out of [0.5, 0.75, 1]) {
       const [px, pz] = turned(halfW + out, across);
-      points.push(new THREE.Vector3(px, groundHeight(px, pz) + 0.1, pz));
+      points.push(new Vec3(px, groundHeight(px, pz) + 0.1, pz));
     }
   }
   return greenTaken(lab, points).taken;

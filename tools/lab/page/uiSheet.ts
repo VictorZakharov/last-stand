@@ -15,7 +15,7 @@ import * as menus from '../../../src/ui/menus';
 import { panelsBack, showPanels } from './lobbyPanels';
 import { hideTooltip } from '../../../src/ui/tooltip';
 import type { Item, Slot } from '../../../src/types';
-import { middleOf, realWait } from './lab';
+import { boxOf, middleOf, realWait } from './lab';
 import type { Lab, Pictured } from './lab';
 
 /** What a check found: lines for its report, and its problems. */
@@ -68,7 +68,7 @@ async function touchGear(lab: Lab): Promise<void> {
   const world = { x: innerWidth * TAP_AT.x, y: innerHeight * TAP_AT.y };
   if (!document.body.classList.contains('touch')) await tap(lab, world);
   if (!document.body.classList.contains('touch')) throw new Error('lab: ui: the tap left the page out of touch mode');
-  showPanels('chest');
+  await showPanels(lab, 'chest');
   railTurned = !document.getElementById('stash')?.checkVisibility();
   const gearTab = document.querySelector<HTMLElement>('#lobby-rail [data-lt="gear"]');
   if (railTurned && gearTab) await tap(lab, middleOf(gearTab));
@@ -153,19 +153,24 @@ const windowBox = () => ({ left: 0, top: 0, right: innerWidth, bottom: innerHeig
 /** The sheet's buttons against the window and the sheet as it shows, and how much of its cards scroll. */
 function buttonsFound(state: string): SheetFound {
   const box = document.querySelector<HTMLElement>('#item-sheet .modal-box')!;
-  const sheet = box.getBoundingClientRect();
+  // (as drawn: the kit draws the sheet in its page element's place, `src/ui/itemSheetPanel.ts`)
+  const sheet = boxOf(box);
   const card = document.querySelector<HTMLElement>('#item-sheet .is-card')!;
+  const cards = card.firstElementChild;
   const size = `${sheet.width.toFixed(0)}x${sheet.height.toFixed(0)} px`;
   const shares = `${percent(sheet.width, innerWidth)}% x ${percent(sheet.height, innerHeight)}% of the window`;
-  const scroll = box.scrollHeight - box.clientHeight;
+  // (drawn by the kit, the box clips what's in it and scrolls nothing itself)
+  const scroll = box.closest('.kit-mirror') ? 0 : box.scrollHeight - box.clientHeight;
+  const shown = boxOf(card).height;
+  const whole = cards ? Math.max(shown, boxOf(cards).height) : shown;
   const lines = [
     `  the sheet: ${size} (${shares})`,
-    `  its cards: ${card.clientHeight} px shown of ${card.scrollHeight}, the sheet's own scroll ${scroll} px`,
+    `  its cards: ${shown.toFixed(0)} px shown of ${whole.toFixed(0)}, the sheet's own scroll ${scroll} px`,
   ];
   const problems: string[] = [];
   for (const button of document.querySelectorAll<HTMLElement>('#item-sheet .dc-buttons .btn')) {
     const label = button.textContent?.trim() ?? '';
-    const rect = button.getBoundingClientRect();
+    const rect = boxOf(button);
     const place = `top ${rect.top.toFixed(0)}, bottom ${rect.bottom.toFixed(0)}`;
     lines.push(`  "${label}": ${rect.height.toFixed(1)} px tall, ${place}`);
     if (!within(rect, windowBox())) problems.push(`${state}: the button "${label}" lies out of the window`);
@@ -175,6 +180,9 @@ function buttonsFound(state: string): SheetFound {
   if (!within(sheet, windowBox())) problems.push(`${state}: the sheet reaches out of the window`);
   return { lines, problems };
 }
+
+/** frames for a plant to be drawn */
+const PLANT_FRAMES = 3;
 
 /** how many windows tall the block planted in the cards is (its px are the zoomed sheet's, `--ui` of the page's) */
 const TALL_WINDOWS = 3;
@@ -202,12 +210,20 @@ function plantNoScroll(): () => void {
  * The sheet checked as it opened, and again with its cards made longer than the window (their text must scroll, the
  * buttons stay); with the canary, the long cards kept from scrolling too, which must be found.
  */
-export function sheetTouchShown(canary: boolean): SheetFound {
+export async function sheetTouchShown(canary: boolean, lab: Lab): Promise<SheetFound> {
   const found = buttonsFound('sheetTouch');
   const removeTall = plantTallCard();
+  // (drawn by the kit on its frames: each plant laid out before it's read)
+  await lab.step(PLANT_FRAMES);
   const tall = buttonsFound('sheetTouch, its cards longer than the window');
-  const planted = canary ? undoAfter(plantNoScroll(), () => buttonsFound('sheetTouch')) : null;
+  let planted: SheetFound | null = null;
+  if (canary) {
+    const undo = plantNoScroll();
+    await lab.step(PLANT_FRAMES);
+    planted = undoAfter(undo, () => buttonsFound('sheetTouch'));
+  }
   removeTall();
+  await lab.step(PLANT_FRAMES);
   const lines = [...found.lines, '  its cards longer than the window:', ...tall.lines];
   return { lines, problems: [...found.problems, ...tall.problems, ...(planted?.problems ?? [])] };
 }

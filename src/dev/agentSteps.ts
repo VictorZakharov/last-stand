@@ -3,11 +3,15 @@
 //            the frame's parts
 //   picture  the frame as drawn, through the player's view or from a camera the agent places (the free camera)
 //   set      what the developer panel sets, by its controls' names (agentControls.ts)
-//   eval     code run in this page, with `G` (the game's state), `THREE` and `dev` (this mode's own pieces) in scope
+//   eval     code run in this page, with `G` (the game's state), `api` (the engine's scene API) and `dev` (this
+//            mode's own pieces) in scope
 //   make, makes, unmake   things built into the scene as the player watches (agentMakes.ts)
 //   say      a line of the agent's in the game's chat, to the player (agentChat.ts)
 // Nothing here runs until the owner has accepted the agent (agent.ts holds every message till then).
-import * as THREE from 'three';
+import {
+  Color, Euler, Maths, Mesh, Node as SceneNode, PerspectiveCamera, Quat, Raycaster, Vec2, Vec3, Vec4,
+} from '../engine/api/index.ts';
+import * as sceneApi from '../engine/api/index.ts';
 import { G } from '../state';
 import { frameApart, frameRect, frameShot, viewMode } from '../core/renderer';
 import { qualityLevel, qualitySetting, resolutionSetting } from '../core/quality';
@@ -44,7 +48,7 @@ export const frames = (count: number): Promise<void> => new Promise((done) => { 
 
 // --- plain data ----------------------------------------------------------------------------------------------------
 const round = (n: number): number => Math.round(n * 1000) / 1000;
-const xyz = (v: THREE.Vector3): number[] => [round(v.x), round(v.y), round(v.z)];
+const xyz = (v: Vec3): number[] => [round(v.x), round(v.y), round(v.z)];
 /** how deep, how long and how wide a value is told before it's cut short */
 const PLAIN = { depth: 5, text: 20_000, items: 200 };
 
@@ -64,9 +68,10 @@ export function plain(value: unknown, depth = PLAIN.depth, seen = new Set<object
   if (depth <= 0) return `[${named}]`;
   seen.add(object);
   try {
-    if (object instanceof THREE.Vector3 || object instanceof THREE.Vector2 || object instanceof THREE.Vector4
-      || object instanceof THREE.Quaternion || object instanceof THREE.Euler) return (object.toArray() as unknown[]).map((n) => plain(n));
-    if (object instanceof THREE.Color) return `#${object.getHexString()}`;
+    if (object instanceof Vec3 || object instanceof Vec2 || object instanceof Vec4
+      || object instanceof Quat) return (object.toArray() as unknown[]).map((n) => plain(n));
+    if (object instanceof Euler) return [object.x, object.y, object.z, object.order];
+    if (object instanceof Color) return `#${object.getHexString()}`;
     if (ArrayBuffer.isView(object) || Array.isArray(object)) {
       const list = Array.from(object as ArrayLike<unknown>);
       const told = list.slice(0, PLAIN.items).map((each) => plain(each, depth - 1, seen));
@@ -92,20 +97,20 @@ export function plain(value: unknown, depth = PLAIN.depth, seen = new Set<object
 }
 
 // --- look ----------------------------------------------------------------------------------------------------------
-const _ray = new THREE.Raycaster(), _centre = new THREE.Vector2(0, 0), _dir = new THREE.Vector3();
-const _point = new THREE.Vector2();
-const _euler = new THREE.Euler(0, 0, 0, 'YXZ');
+const _ray = new Raycaster(), _centre = new Vec2(0, 0), _dir = new Vec3();
+const _point = new Vec2();
+const _euler = new Euler(0, 0, 0, 'YXZ');
 
 /** Whether `object` and all above it are drawn. */
-function shown(object: THREE.Object3D): boolean {
-  for (let each: THREE.Object3D | null = object; each; each = each.parent) if (!each.visible) return false;
+function shown(object: SceneNode): boolean {
+  for (let each: SceneNode | null = object; each; each = each.parent) if (!each.visible) return false;
   return true;
 }
 
 /** The names above `object`, the scene's side first. */
-function pathOf(object: THREE.Object3D): string {
+function pathOf(object: SceneNode): string {
   const names: string[] = [];
-  for (let each: THREE.Object3D | null = object; each && each !== G.scene; each = each.parent) {
+  for (let each: SceneNode | null = object; each && each !== G.scene; each = each.parent) {
     names.unshift(each.name || each.type);
   }
   return names.join(' > ');
@@ -118,17 +123,17 @@ function underCrosshair(): unknown {
 }
 
 /** What a point of the view (-1 to 1 across and up) looks at, as `underCrosshair` says the middle's. */
-function under(point: THREE.Vector2): unknown {
+function under(point: Vec2): unknown {
   _ray.setFromCamera(point, G.camera);
   _ray.layers.mask = G.camera.layers.mask;
   const hit = _ray.intersectObjects(G.scene.children, true)
-    .find((each) => (each.object as THREE.Mesh).isMesh && shown(each.object));
+    .find((each) => (each.object as Mesh).isMesh && shown(each.object));
   if (!hit) return null;
   const foe = G.enemies.find((enemy) => {
-    for (let each: THREE.Object3D | null = hit.object; each; each = each.parent) if (each === enemy.obj) return true;
+    for (let each: SceneNode | null = hit.object; each; each = each.parent) if (each === enemy.obj) return true;
     return false;
   });
-  const material = (hit.object as THREE.Mesh).material;
+  const material = (hit.object as Mesh).material;
   const materials = (Array.isArray(material) ? material : [material]).map((each) => each?.name || each?.type);
   return {
     object: pathOf(hit.object), distance: round(hit.distance), at: xyz(hit.point), materials,
@@ -206,7 +211,7 @@ const APART = { fov: 60, near: 0.05 };
 
 /** The next frame as drawn, copied (shrunk to `side` px at its longest) before anything is drawn over it; with
  *  `apart`, the scene as that camera sees it in place of the frame, drawn beside it (`frameApart`). */
-function shot(side: number, apart?: THREE.PerspectiveCamera): Promise<HTMLCanvasElement> {
+function shot(side: number, apart?: PerspectiveCamera): Promise<HTMLCanvasElement> {
   return new Promise((resolve, reject) => {
     const take = (canvas: HTMLCanvasElement): void => {
       clearTimeout(timer);
@@ -246,18 +251,18 @@ const numbers = (value: unknown, count: number, what: string): number[] => {
 };
 
 /** A camera the agent asked for: where it stands and how it looks (a place looked at, or a yaw and a pitch). */
-function placeOf(camera: Record<string, unknown>): { at: THREE.Vector3; yaw: number; pitch: number } {
-  const at = new THREE.Vector3(...numbers(camera.at, 3, 'camera.at'));
+function placeOf(camera: Record<string, unknown>): { at: Vec3; yaw: number; pitch: number } {
+  const at = new Vec3(...numbers(camera.at, 3, 'camera.at'));
   if (camera.to === undefined) return { at, yaw: Number(camera.yaw ?? 0), pitch: Number(camera.pitch ?? 0) };
-  const way = new THREE.Vector3(...numbers(camera.to, 3, 'camera.to')).sub(at);
+  const way = new Vec3(...numbers(camera.to, 3, 'camera.to')).sub(at);
   if (way.lengthSq() < 1e-9) throw new Error('picture: camera.to is where the camera stands');
   way.normalize();
-  return { at, yaw: Math.atan2(-way.x, -way.z), pitch: Math.asin(THREE.MathUtils.clamp(way.y, -1, 1)) };
+  return { at, yaw: Math.atan2(-way.x, -way.z), pitch: Math.asin(Maths.clamp(way.y, -1, 1)) };
 }
 
 /** A camera of its own at `place`, shaped as the game's is and looking through the free camera's lens. */
-function cameraAt(place: { at: THREE.Vector3; yaw: number; pitch: number }): THREE.PerspectiveCamera {
-  const camera = new THREE.PerspectiveCamera(APART.fov, G.camera.aspect, APART.near, G.camera.far);
+function cameraAt(place: { at: Vec3; yaw: number; pitch: number }): PerspectiveCamera {
+  const camera = new PerspectiveCamera(APART.fov, G.camera.aspect, APART.near, G.camera.far);
   camera.layers.mask = G.camera.layers.mask;
   camera.position.copy(place.at);
   camera.quaternion.setFromEuler(_euler.set(place.pitch, place.yaw, 0));
@@ -272,9 +277,9 @@ function cameraAt(place: { at: THREE.Vector3; yaw: number; pitch: number }): THR
  * frame.
  */
 export async function picture(args: AgentStep): Promise<unknown> {
-  const side = THREE.MathUtils.clamp(Number(args.side ?? SIDE) || SIDE, 64, 4096);
+  const side = Maths.clamp(Number(args.side ?? SIDE) || SIDE, 64, 4096);
   const type = args.format === 'png' ? 'image/png' : 'image/jpeg';
-  let apart: THREE.PerspectiveCamera | undefined;
+  let apart: PerspectiveCamera | undefined;
   if (args.camera && typeof args.camera === 'object') {
     const place = placeOf(args.camera as Record<string, unknown>);
     if (args.keep) {
@@ -315,12 +320,13 @@ export async function evaluate(args: AgentStep): Promise<unknown> {
   if (typeof args.code !== 'string' || !args.code.trim()) throw new Error('eval: give code, a text');
   let run: (...scope: unknown[]) => Promise<unknown>;
   try {
-    run = new AsyncFunction('G', 'THREE', 'dev', `return (${args.code}\n);`);
+    run = new AsyncFunction('G', 'api', 'dev', `return (${args.code}\n);`);
   } catch {
     // (not one expression: statements, which say what they return)
-    run = new AsyncFunction('G', 'THREE', 'dev', args.code);
+    run = new AsyncFunction('G', 'api', 'dev', args.code);
   }
-  return plain(await run(G, THREE, devScope()));
+  // (`api`: the engine's scene API, where three stood: its maths, geometry, materials and scene)
+  return plain(await run(G, sceneApi, devScope()));
 }
 
 /** A step run; its result as plain data. Throws at one it doesn't know. */

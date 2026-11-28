@@ -3,7 +3,7 @@
 // the terrace's wall and a cottage, "should not see through here, because I'm in the front"). A roof over him from
 // above is the engine's house rule's, checked by `lab houserule`. `canary` holds the hole round, as it was, which must
 // take the wall beside him apart.
-import * as THREE from 'three';
+import { boundsOf, Box2, Vec2, Vec3 } from './sceneApi.ts';
 import type { Lab } from './lab';
 import { G } from '../../../src/state';
 import { faceCamera, viewMode } from '../../../src/core/renderer';
@@ -31,15 +31,15 @@ export interface PixelBox { left: number; bottom: number; right: number; top: nu
 
 /** The hero's box on screen (his body and what he holds), padded by `PAD`. */
 function heroOnScreen(canvas: Canvas): PixelBox {
-  const box = new THREE.Box3().setFromObject(G.player.obj);
-  const screen = new THREE.Box2();
+  const box = boundsOf(G.player.obj);
+  const screen = new Box2();
   for (let corner = 0; corner < 8; corner++) {
-    const at = new THREE.Vector3(
+    const at = new Vec3(
       corner & 1 ? box.max.x : box.min.x,
       corner & 2 ? box.max.y : box.min.y,
       corner & 4 ? box.max.z : box.min.z,
     ).project(G.camera);
-    screen.expandByPoint(new THREE.Vector2(((at.x + 1) / 2) * canvas.width, ((at.y + 1) / 2) * canvas.height));
+    screen.expandByPoint(new Vec2(((at.x + 1) / 2) * canvas.width, ((at.y + 1) / 2) * canvas.height));
   }
   const padX = (screen.max.x - screen.min.x) * PAD;
   const padY = (screen.max.y - screen.min.y) * PAD;
@@ -73,13 +73,13 @@ export function changedShare(a: Canvas, b: Canvas, box: PixelBox, inside: boolea
 }
 
 /** A cottage's way across it from its middle: its side walls' way out. */
-function cottageAcross(index: number): THREE.Vector3 {
+function cottageAcross(index: number): Vec3 {
   const facing = COTTAGES[index].facing;
-  return new THREE.Vector3(Math.cos(facing), 0, -Math.sin(facing));
+  return new Vec3(Math.cos(facing), 0, -Math.sin(facing));
 }
 
 /** The hero stood at `at` facing `facing`, the camera behind him, let settle; whether he stood there. */
-export async function standAt(lab: Lab, at: THREE.Vector3, facing: number): Promise<boolean> {
+export async function standAt(lab: Lab, at: Vec3, facing: number): Promise<boolean> {
   at.y = groundHeight(at.x, at.z);
   G.player.walkTo = null;
   G.player.place(at, facing);
@@ -108,7 +108,7 @@ async function besideTheWall(lab: Lab, canary: boolean): Promise<number | null> 
   const cottage = COTTAGES[0];
   const across = cottageAcross(0);
   const out = (COTTAGE.w / 2) * cottage.size + BESIDE;
-  const at = new THREE.Vector3(cottage.x, 0, cottage.z).addScaledVector(across, out);
+  const at = new Vec3(cottage.x, 0, cottage.z).addScaledVector(across, out);
   await viewBy(lab, 'third');
   if (!(await standAt(lab, at, cottage.facing))) return null;
   const { open, shut } = await withAndWithout(lab, canary ? 1 : null);

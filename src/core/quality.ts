@@ -12,7 +12,7 @@
 // screen's own pixels: what's cut is other work,
 // never the resolution (from play, "I want to run the game at full phone res, if we need
 // to cut, we need to cut something else, not resolution").
-import * as THREE from 'three';
+import { Mesh, Node, Vec3 } from '../engine/api/index.ts';
 import { G } from '../state';
 import { QUALITY, QUALITY_ORDER, AUTO_QUALITY, type QualityLevel, type QualityPreset, type QualitySetting } from '../data/quality';
 import { setBloomShare, setRenderQuality, setResolutionShare, setShadowInTurns } from './renderer';
@@ -364,16 +364,9 @@ function apply(l: QualityLevel, most = Infinity): void {
   setRenderQuality(p, most);
   setHeroDetail(p.heroDetail);
   const shadow = G.arena.moon.shadow;
-  // (the map is sized once, as it's first made: three
-  // resizes it from `mapSize` as it draws it, but the lit materials kept the old map's binding, and every frame's
-  // submit was refused for drawing with it destroyed, 543 times a lab profile, the scene's picture standing still as
-  // the game went on: a phone's hero stuck mid pose once Auto stepped down a level, trace 4CP9-45EC)
-  const resizable = shadow.map === null;
-  if (shadow.mapSize.x !== p.shadowMap && resizable) {
-    shadow.mapSize.set(p.shadowMap, p.shadowMap);
-    shadow.map?.dispose();
-    shadow.map = null;
-  }
+  // (the map's size the level's: the engine owns the map itself and sizes it from `mapSize`. three's WebGPU build
+  // sized it once, as it was first made: resized, the lit materials kept the old map's binding, trace 4CP9-45EC)
+  if (shadow.mapSize.x !== p.shadowMap) shadow.mapSize.set(p.shadowMap, p.shadowMap);
   // (a uniform: as wide on the floor at every map's size)
   shadow.radius = PENUMBRA * shadow.mapSize.x / (shadow.camera.right - shadow.camera.left);
   setRubbleShadows(p.minCasterRadius);
@@ -404,13 +397,13 @@ function apply(l: QualityLevel, most = Infinity): void {
   settle = AUTO_QUALITY.settle;
 }
 
-const _s = new THREE.Vector3();
+const _s = new Vec3();
 /** Small character parts barely show in the shadow map, but each caster is a shadow draw call. */
-export function applyShadowDetail(root: THREE.Object3D): void {
+export function applyShadowDetail(root: Node): void {
   const min = QUALITY[level].minCasterRadius;
   root.updateMatrixWorld(true);
   root.traverse((o) => {
-    const m = o as THREE.Mesh;
+    const m = o as Mesh;
     if (!m.isMesh || !(m.userData.casts ??= m.castShadow)) return;   // remember the model's own choice
     if (!m.geometry.boundingSphere) m.geometry.computeBoundingSphere();
     m.getWorldScale(_s);

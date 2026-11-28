@@ -6,7 +6,7 @@
 // and after (its reach and what it met, slice by slice, as a digest), which must agree; an A/B's digests say whether
 // main's seal bounds the same. `--canary` stands a box a metre from the first room's middle before its seal: its
 // digest must change.
-import * as THREE from 'three';
+import { Mat4, shapes } from './sceneApi.ts';
 import { G } from '../../../src/state';
 import type { Wall } from '../../../src/world/wall';
 import type { Lab, Report } from './lab';
@@ -61,8 +61,8 @@ function boundsOf(wall: Wall): string {
 
 /** The canary's box stood a metre from `wall`'s middle, at a body's height. */
 function standCanary(wall: Wall): void {
-  const box = new THREE.BoxGeometry(CANARY_SIZE, CANARY_SIZE, CANARY_SIZE);
-  const at = new THREE.Matrix4().makeTranslation(CANARY_AT, 1, 0);
+  const box = shapes.box(CANARY_SIZE, CANARY_SIZE, CANARY_SIZE);
+  const at = new Mat4().makeTranslation(CANARY_AT, 1, 0);
   wall.addGeometry(box, at, false);
 }
 

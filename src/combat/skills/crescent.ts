@@ -1,6 +1,6 @@
 // Thunder Crescent: a great weapon driven into the ground looses a crackling arc of lightning along it, striking each foe
 // it passes once.
-import * as THREE from 'three';
+import { Node, Vec3 } from '../../engine/api/index.ts';
 import { G } from '../../state';
 import { hitEnemy } from '../damage';
 import { evades } from '../../entities/evade';
@@ -26,7 +26,7 @@ const TILT = -0.55, LOW = 0.4;
  *  about where it lands seen from outside (models/warrior.ts `holdAtFloor`) */
 const BITE_AHEAD = 2;
 
-const _v = new THREE.Vector3(), _w = new THREE.Vector3();
+const _v = new Vec3(), _w = new Vec3();
 /** casts whose swing is already heard */
 const swung = new WeakSet<object>();
 
@@ -42,7 +42,7 @@ const skill: InstantSkill = {
     const def = rawDef as Def;
     // the way the body (and so the swing) faces, which turned to the target during the cast
     const facing = player.facing;
-    const dir = new THREE.Vector3(Math.sin(facing), 0, Math.cos(facing));
+    const dir = new Vec3(Math.sin(facing), 0, Math.cos(facing));
     // (cast as the blade bites the ground: where its tip is, from outside)
     const bite = player.eyes ? player.pos.clone().addScaledVector(dir, BITE_AHEAD) : player.castPoint;
     bite.y = groundHeight(bite.x, bite.z);
@@ -56,20 +56,20 @@ const skill: InstantSkill = {
     // a glowing body and a thin white-hot edge
     const R = def.width;
     const layers = [slashMesh(ARC, 0.45, def.color, true), slashMesh(ARC, 0.86, 0x9cc0ff, true)];
-    const group = new THREE.Group();
+    const group = new Node();
     for (const l of layers) { l.mesh.rotation.x = TILT; group.add(l.mesh); }
     group.scale.setScalar(R);
     group.rotation.y = facing;
     const pos = player.pos.clone().addScaledVector(dir, 0.6);
     group.position.set(pos.x, groundHeight(pos.x, pos.z) + LOW, pos.z);
     G.scene.add(group);
-    const light = flash({ color: def.color, intensity: 6, distance: 7, life: 1, hold: 99, follow: () => new THREE.Vector3(pos.x + dir.x * R, 1.2, pos.z + dir.z * R) });
+    const light = flash({ color: def.color, intensity: 6, distance: 7, life: 1, hold: 99, follow: () => new Vec3(pos.x + dir.x * R, 1.2, pos.z + dir.z * R) });
     const hit = new Set<Enemy>(), struck = new Set<Prop>(), swept = new Set<object>();
     const life = def.range / def.speed;
     let t = 0, crackle = 0, trail = 0;
 
     /** A world point on the crescent's edge, `u` from -1 (right tip) to 1 (left tip). */
-    const edgePoint = (u: number, out: THREE.Vector3) => {
+    const edgePoint = (u: number, out: Vec3) => {
       const h = u * ARC / 2;
       return layers[0].mesh.localToWorld(out.set(Math.sin(h), 0, Math.cos(h)));
     };
@@ -115,8 +115,8 @@ const skill: InstantSkill = {
             flight: dir, blow: { dir, lift: 0.25 } });
           // (a body it killed is thrown by its blow, not swept on again)
           if (e.corpse) swept.add(e.corpse);
-          const at = new THREE.Vector3(e.pos.x, e.height * 0.6, e.pos.z);
-          lightning(new THREE.Vector3(fx, group.position.y + 0.4, fz), at, { color: def.color, intensity: 3, life: 0.14, branches: 2 });
+          const at = new Vec3(e.pos.x, e.height * 0.6, e.pos.z);
+          lightning(new Vec3(fx, group.position.y + 0.4, fz), at, { color: def.color, intensity: 3, life: 0.14, branches: 2 });
           burst(at, { count: 12, color: 0xcfe4ff, speed: 5, life: 0.35, size: 0.2 });
           sfx.crescentArc();
         }

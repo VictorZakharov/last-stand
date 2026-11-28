@@ -2,7 +2,10 @@
 // takes more damage from every player's hits (`amp`, combat/damage.ts). Killed, it gives the ranger his cooldowns back (not the draught's) and the mark is spent;
 // with no kill in `duration` it fades. One mark per ranger: marking another moves it. Every game marks its own copy of the foe (a co-op guest's for the look and the cooldowns, the host's
 // for the damage), as each sees the cast land.
-import * as THREE from 'three';
+import {
+  AdditiveBlending, CanvasTexture, Color, Material, Mesh, SRGBColorSpace, UnlitMaterial, Vec3,
+} from '../../engine/api/index.ts';
+import * as shapes from '../../engine/api/shapes/index.ts';
 import { G } from '../../state';
 import { addEffect } from '../../fx/effects';
 import { burst } from '../../fx/particles';
@@ -21,8 +24,8 @@ type Def = Needs<'amp' | 'duration' | 'range'>;
 const MARK = 0xff8a5c;
 
 /** the reticle over the quarry's head: a ring, four notches pointing in, a point in the middle */
-let tex: THREE.CanvasTexture | null = null;
-function reticle(): THREE.CanvasTexture {
+let tex: CanvasTexture | null = null;
+function reticle(): CanvasTexture {
   if (tex) return tex;
   const c = document.createElement('canvas'); c.width = c.height = 128;
   const g = c.getContext('2d')!;
@@ -34,13 +37,13 @@ function reticle(): THREE.CanvasTexture {
     g.beginPath(); g.moveTo(64 + Math.cos(a) * 60, 64 + Math.sin(a) * 60); g.lineTo(64 + Math.cos(a) * 30, 64 + Math.sin(a) * 30); g.stroke();
   }
   g.beginPath(); g.arc(64, 64, 7, 0, Math.PI * 2); g.fill();
-  tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace;
+  tex = new CanvasTexture(c); tex.colorSpace = SRGBColorSpace;
   return tex;
 }
-const planeGeo = new THREE.PlaneGeometry(1, 1);
+const planeGeo = shapes.plane(1, 1);
 /** the ring at the quarry's feet, a unit one scaled to it (laid on the ground: under a foe beside the dais it went in under the step) */
 const ringGeo = () => floorPatch(0.86, 1, 1, 48);
-const reticleMat = () => nearGlow(new THREE.MeshBasicMaterial({ map: reticle(), color: new THREE.Color(MARK).multiplyScalar(1.6), transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false }));
+const reticleMat = () => nearGlow(new UnlitMaterial({ map: reticle(), color: new Color(MARK).multiplyScalar(1.6), transparent: true, opacity: 0, blending: AdditiveBlending, depthWrite: false }));
 
 interface Mark { on: Enemy | null; amp: number; left: number; end(): void }
 /** each ranger's mark, while it's up */
@@ -48,7 +51,7 @@ const marks = new WeakMap<Player, Mark>();
 
 /** How far the aim (`target`, its `y` over the floor) is off `e`'s body, its upright cylinder (m): how deep in it, less
  *  than 0, when it's within its height. */
-function offBody(e: Enemy, target: THREE.Vector3): number {
+function offBody(e: Enemy, target: Vec3): number {
   const out = Math.hypot(e.pos.x - target.x, e.pos.z - target.z) - e.radius, up = Math.max(0, target.y - e.height, -target.y);
   return up > 0 ? Math.hypot(Math.max(0, out), up) : out;
 }
@@ -58,7 +61,7 @@ function offBody(e: Enemy, target: THREE.Vector3): number {
  * middles, a boss lost to a small foe beside it: the aim on its body is a metre or two from its middle.) Judged from
  * the aim's point alone, which every game is given: each marks the same foe.
  */
-function quarry(player: Player, target: THREE.Vector3, range: number): Enemy | null {
+function quarry(player: Player, target: Vec3, range: number): Enemy | null {
   let best: Enemy | null = null, bd = Infinity;
   for (const e of G.enemies) {
     if (!markable(player, e, range)) continue;
@@ -76,7 +79,7 @@ const markable = (player: Player, e: Enemy, range: number): boolean =>
  * the aim's point (`quarry`). (By the point alone, the aim on a boss's arm marked the thornling under it, whose
  * cylinder the point was in.) Let go, the cast is aimed at its middle (`settle`), which every game picks it by.
  */
-function aimedQuarry(player: Player, target: THREE.Vector3, range: number): Enemy | null {
+function aimedQuarry(player: Player, target: Vec3, range: number): Enemy | null {
   const on = player.aimFoe;
   return on && markable(player, on, range) ? on : quarry(player, target, range);
 }
@@ -85,7 +88,7 @@ function aimedQuarry(player: Player, target: THREE.Vector3, range: number): Enem
  * The foe a co-op ping at the aim points out (game/ping.ts): the one this skill's aim would mark, anywhere on the
  * field, if the aim is on its body or within `near` of it (else none: the ping marks the spot).
  */
-export function aimedFoe(player: Player, target: THREE.Vector3, near: number): Enemy | null {
+export function aimedFoe(player: Player, target: Vec3, near: number): Enemy | null {
   const e = aimedQuarry(player, target, Infinity);
   return e && (e === player.aimFoe || offBody(e, target) <= near) ? e : null;
 }
@@ -105,8 +108,8 @@ function refund(player: Player): void {
 
 function mark(player: Player, def: Def, e: Enemy): void {
   marks.get(player)?.end();
-  const reticleM = new THREE.Mesh(planeGeo, reticleMat()), ringMat = additive(MARK, 1.3, 0);
-  const ringG = ringGeo(), ring = new THREE.Mesh(ringG, ringMat);
+  const reticleM = new Mesh(planeGeo, reticleMat()), ringMat = additive(MARK, 1.3, 0);
+  const ringG = ringGeo(), ring = new Mesh(ringG, ringMat);
   reticleM.frustumCulled = ring.frustumCulled = false;
   ring.name = 'quarry-mark-ring';
   G.scene.add(reticleM, ring);
@@ -137,7 +140,7 @@ function mark(player: Player, def: Def, e: Enemy): void {
       if (!ended && (!q || !q.alive || !G.enemies.includes(q) || (me.left -= dt) <= 0)) { ended = true; take(); }
       // (fades in, and out over its last second: never a flash)
       fade = ended ? Math.max(0, fade - dt * 3) : Math.min(1, fade + dt * 6, me.left);
-      (reticleM.material as THREE.MeshBasicMaterial).opacity = fade * (0.85 + 0.15 * Math.sin(t * 4));
+      (reticleM.material as UnlitMaterial).opacity = fade * (0.85 + 0.15 * Math.sin(t * 4));
       ringMat.opacity = 0.7 * fade;
       if (q) {
         const top = q.obj.position.y + q.overHead + 0.45;
@@ -154,7 +157,7 @@ function mark(player: Player, def: Def, e: Enemy): void {
       ended = true; take();
       if (marks.get(player) === me) marks.delete(player);
       G.scene.remove(reticleM, ring);
-      (reticleM.material as THREE.Material).dispose(); ringMat.dispose(); ringG.dispose();
+      (reticleM.material as Material).dispose(); ringMat.dispose(); ringG.dispose();
     },
   });
 }
@@ -169,7 +172,7 @@ const OUTLINED = 0xff3030, DIM = 0.45, COUNT_AT = 0.5;
 let ready: Readiness | null = null;
 
 /** Shows the would-be quarry for `target` (none: nothing shown). */
-function showQuarry(player: Player, def: Def, target: THREE.Vector3 | null, dt: number): void {
+function showQuarry(player: Player, def: Def, target: Vec3 | null, dt: number): void {
   ready ??= new Readiness('quarryMark');
   const e = target && aimedQuarry(player, target, def.range);
   if (!e) {
@@ -183,12 +186,12 @@ function showQuarry(player: Player, def: Def, target: THREE.Vector3 | null, dt: 
 
 const skill: InstantSkill = {
   anim: 'cast',
-  warm: () => [new THREE.Mesh(planeGeo, reticleMat()), new THREE.Mesh(ringGeo(), additive(MARK, 1.3, 0.7))],
+  warm: () => [new Mesh(planeGeo, reticleMat()), new Mesh(ringGeo(), additive(MARK, 1.3, 0.7))],
   canCast: (player, def, target) => !!quarry(player, target, def.range ?? 26),
   aim: (player, def, target, dt) => showQuarry(player, def as Def, target, dt),
   settle(player, def, target) {
     const e = aimedQuarry(player, target, def.range ?? 26);
-    return e ? new THREE.Vector3(e.pos.x, e.height / 2, e.pos.z) : target.clone();
+    return e ? new Vec3(e.pos.x, e.height / 2, e.pos.z) : target.clone();
   },
   cast(player, rawDef, target) {
     const def = rawDef as Def, e = quarry(player, target, def.range);

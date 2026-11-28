@@ -7,17 +7,20 @@
 // selection screen is up (the hall on the village's terrace is its door).
 // The hemisphere light and the shadow-casting moon are shared; the place shown sets their look, the village's by the
 // hour (`setHour`).
-import * as THREE from 'three';
+import {
+  Color, DirectionalLight, Fog, HemisphereLight, Node, OrthoCamera, PointLight, World,
+} from '../engine/api/index.ts';
 import { ARENA } from '../data/balance';
 import { BIOME_IDS, type BiomeId, type PlaceId } from '../data/biomes';
 import { groundHeight, setRelief } from './ground';
 import { setAdaptScale } from '../core/renderer';
+import type { GameScreen } from '../core/screen';
 import { rigMorePointLights, rigPointLights } from '../core/webgpu';
 import { castBreakablesAsOne, type BreakableShadows } from './breakableShadows';
 import { bakeStaticShadows, drawStillShadows, envMap, lampFaceDrawn, lampShadowsAsked, mergeStill, nextLampFace, type Biome, type BiomeBuilder, type BiomeLook } from './props';
 import { countGhosts, depthOfWhatStaysWhole } from '../core/seeThrough';
 import { GHOST_COUNT_LAYER } from '../core/layers';
-import { cullWhileDrawn, trimShadowCasters } from './culling';
+import { trimShadowCasters } from './culling';
 import { packWhileDrawn } from '../core/lightBounds';
 import { holdMoonShadow } from './moonShadow';
 import { hallDoorway } from './hallPortal';
@@ -68,7 +71,7 @@ const SHADE = { sky: 0.55, sun: 0.72, around: 0.5, ease: 2.5 };
 const SUN_STEPS = 8;
 
 /** The moon's shadow camera as it's placed for a biome's `look` (the box it draws round the middle). */
-function shadowCameraFor(moon: THREE.DirectionalLight, look: BiomeLook): THREE.OrthographicCamera {
+function shadowCameraFor(moon: DirectionalLight, look: BiomeLook): OrthoCamera {
   const camera = moon.shadow.camera.clone();
   camera.position.set(...look.moon.pos);
   camera.lookAt(moon.target.position);
@@ -91,9 +94,9 @@ export const painted = (): Promise<void> => new Promise((resolve) => {
 /** the most of the village's build run in one task before the boot paints a frame (ms) */
 const VILLAGE_SLICE_MS = 40;
 
-export async function buildArena(scene: THREE.Scene, renderer: THREE.WebGLRenderer) {
-  const hemi = new THREE.HemisphereLight();
-  const moon = new THREE.DirectionalLight();
+export async function buildArena(scene: World, renderer: GameScreen) {
+  const hemi = new HemisphereLight();
+  const moon = new DirectionalLight();
   moon.target.position.set(0, 0, 0);
   moon.castShadow = true;
   moon.shadow.mapSize.set(4096, 4096);
@@ -102,13 +105,12 @@ export async function buildArena(scene: THREE.Scene, renderer: THREE.WebGLRender
   moon.shadow.bias = -0.0004;
   moon.shadow.normalBias = 0.03;
   scene.add(hemi, moon, moon.target);
-  cullWhileDrawn(scene, renderer);
   // (each point light's reach packed for the shaders' loop, before each render: `core/lightBounds.ts`)
   packWhileDrawn(scene);
-  const fog = scene.fog = new THREE.Fog(0);
+  const fog = scene.fog = new Fog(0);
 
   /** the places built (a fight's biome once a run first needs it: `buildBiome`) */
-  const places = {} as Partial<Record<PlaceId, { group: THREE.Group; b: Biome; breakables?: BreakableShadows }>>;
+  const places = {} as Partial<Record<PlaceId, { group: Node; b: Biome; breakables?: BreakableShadows }>>;
   /** place `id`, which must be built */
   const placeOf = (id: PlaceId) => {
     const place = places[id];
@@ -128,7 +130,7 @@ export async function buildArena(scene: THREE.Scene, renderer: THREE.WebGLRender
     const steps = buildSteps(id);
     step(steps.build, guessMs());
     await painted();
-    const group = new THREE.Group();
+    const group = new Node();
     group.name = id;
     let at = performance.now();
     const b = BUILDERS[id](group);
@@ -161,7 +163,7 @@ export async function buildArena(scene: THREE.Scene, renderer: THREE.WebGLRender
   let calm = 1;
   // (the village is built at boot; a fight's biome as a run first needs it, `buildBiome`)
   await painted();
-  const villageGroup = new THREE.Group();
+  const villageGroup = new Node();
   villageGroup.name = 'village';
   const villageAt = performance.now();
   // (its pieces in tasks of their own, a frame painted between once a slice has gone: `villageSteps`; its build's
@@ -191,7 +193,7 @@ export async function buildArena(scene: THREE.Scene, renderer: THREE.WebGLRender
   cullByDoorways(scene, villageGroup);
   places.village = { group: villageGroup, b: village };
   // (the hall of heroes' room, shown in the village's place while the hero selection screen is up: `showHall`)
-  const hallGroup = new THREE.Group();
+  const hallGroup = new Node();
   hallGroup.name = 'hall';
   const hall = buildHeroHall(hallGroup);
   bakeStaticShadows(hallGroup);
@@ -217,17 +219,17 @@ export async function buildArena(scene: THREE.Scene, renderer: THREE.WebGLRender
   const groups = [...Object.values(places).map((place) => place.group), hallGroup, ...roomGroups];
   rigPointLights(scene, groups);
   /** Whether `groups` have as many point lights each, and as many casting (dev builds: a mismatch says so). */
-  function checkLights(groups: THREE.Group[]): void {
-    const lights = groups.map((g) => { let n = 0; g.traverse((o) => { if ((o as THREE.PointLight).isPointLight) n++; }); return n; });
+  function checkLights(groups: Node[]): void {
+    const lights = groups.map((g) => { let n = 0; g.traverse((o) => { if ((o as PointLight).isPointLight) n++; }); return n; });
     if (new Set(lights).size > 1) console.error(`Places must have the same number of point lights (switching recompiles every shader): ${lights}`);
     // (and as many casting: each is written out in every lit program, `loopPointLights`; the village's own two count
     // by night too, when they hand their shadows to the pool's lights lit at the lamps, outside its group, and the
     // scene casts as many: `castFromLamps` in game/village.ts. Counted as they stood, a run's biome built at night
     // said they differed, and every lab command that set a run up in the evening failed on it)
-    const handed = new Set<THREE.Object3D>(village.stillLights);
+    const handed = new Set<Node>(village.stillLights);
     const casting = groups.map((g) => {
       let n = 0;
-      g.traverse((o) => { if ((o as THREE.PointLight).isPointLight && (o.castShadow || handed.has(o))) n++; });
+      g.traverse((o) => { if ((o as PointLight).isPointLight && (o.castShadow || handed.has(o))) n++; });
       return n;
     });
     if (new Set(casting).size > 1) console.error(`Places must have as many point lights casting shadows: ${casting}`);
@@ -265,9 +267,9 @@ export async function buildArena(scene: THREE.Scene, renderer: THREE.WebGLRender
   /** the house's room standing in the village's stead, if one does (`showRoom`) */
   let room: RoomId | null = null;
   /** what's drawn now in the place's stead, or the place */
-  const shownGroup = (): THREE.Group => (room ? rooms[room].group : hallShown ? hallGroup : placeOf(shown).group);
+  const shownGroup = (): Node => (room ? rooms[room].group : hallShown ? hallGroup : placeOf(shown).group);
   /** Every place's group built, the hall's room and the houses' rooms: what may stand where the player is. */
-  const everyPlace = (): THREE.Group[] => [
+  const everyPlace = (): Node[] => [
     ...Object.values(places).map((place) => place!.group), hallGroup, ...Object.values(rooms).map((r) => r.group),
   ];
   /**
@@ -331,7 +333,7 @@ export async function buildArena(scene: THREE.Scene, renderer: THREE.WebGLRender
   }
   /** what of a look changes with the hour: everything but its environment's map */
   function setColours(L: BiomeLook): void {
-    (scene.background as THREE.Color).set(L.background);
+    (scene.background as Color).set(L.background);
     fog.color.set(L.fog.color); fog.near = L.fog.near; fog.far = L.fog.far;
     hemi.color.set(L.hemi.sky); hemi.groundColor.set(L.hemi.ground); hemi.intensity = L.hemi.intensity;
     moon.color.set(L.moon.color); moon.intensity = L.moon.intensity; moon.position.set(...L.moon.pos);
@@ -427,7 +429,7 @@ export async function buildArena(scene: THREE.Scene, renderer: THREE.WebGLRender
     /** The hour the village is lit for (0-24: the player's clock, or a co-op host's). */
     setHour(h: number) { hour = h; },
     /** a place's own pieces (hidden while another is shown): what the warm-up leaves out or shows */
-    groupOf(id: PlaceId): THREE.Group { return placeOf(id).group; },
+    groupOf(id: PlaceId): Node { return placeOf(id).group; },
     /** what stands where the player is now: a house's room, the hall of heroes' room or the place shown */
     shownGroup,
     /** what's wrong with which places are shown, read as the frame would draw them (none: the shown one alone) */

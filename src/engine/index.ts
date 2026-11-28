@@ -1,12 +1,12 @@
-// The Rust engine (the plain address where WebGPU is, `?renderer=rust`; core/rendererChoice.ts): Bulwark, our own WebGPU renderer in Rust and
-// WebAssembly (`pkg/`, built from the private repository VictorZakharov/bulwark), draws the game's scene on a canvas
-// of its own laid over three's. The game still boots on three's WebGPU renderer, which goes on making what the
-// engine doesn't yet (warm-ups, portraits, the overlays); only the frame's scene is the engine's. Loaded where the
-// browser has WebGPU; where it hasn't, or the engine doesn't start, the loading screen says so (no other renderer).
-import type * as THREE from 'three';
+// The Rust engine: Bulwark, our own WebGPU renderer in Rust and WebAssembly (`pkg/`, built from the private
+// repository VictorZakharov/bulwark), draws the game's frame on the page's one canvas, the world's labels and the
+// outline with it (three's renderer is gone from the game: VictorZakharov/last-stand#973). Where the browser has no
+// WebGPU, or the engine doesn't start, the loading screen says so (no other renderer).
+import type { PerspectiveCamera, World } from './api/index.ts';
 import { Bridge, TUNE, type Grade } from './bridge';
 import { perfClock } from '../core/perfClock';
 import { cullForEngine } from '../world/doorways';
+import { rustCallsReady } from './rustCalls';
 import { AHEAD, PIPELINES, pipelinesAside } from './pipelinesAside';
 import { deviceSaid, fault, keepWhatsSaid, watchFrame } from './said';
 
@@ -24,9 +24,6 @@ export const RUST = {
   /** whether the loading screen has left (set by ui/perfHud.ts, which knows: this module can't import the page's
    *  UI, a cycle through the renderer): under it a frame may take long, handing the places over ahead */
   loaded: false,
-  /** whether what the game hangs on three's render of the scene is run (the world's culling by cells, the kept
-   *  shadow maps' draws): three's own work, which the engine has no use for */
-  hooks: false,
   /** the last frame's render, whoever drew it (core/renderer.ts `render`), ms */
   renderMs: 0,
   failed: '',
@@ -40,6 +37,11 @@ export const RUST = {
 };
 
 let canvas: HTMLCanvasElement | null = null;
+/** the game's screen as `drawRust` is handed it (`core/screen.ts`): nothing reads it since three's hooks went (a
+ *  look's `onBeforeRender` is handed its mesh alone), kept till its callers are */
+export interface LookHost { getRenderTarget(): { height: number } | null }
+/** The engine's canvas, none before it has started (engine/overlay.ts sizes the labels by it). */
+export const engineCanvas = (): HTMLCanvasElement | null => canvas;
 
 let resize: ((width: number, height: number) => void) | null = null;
 
@@ -71,21 +73,23 @@ let liteWanted: boolean | null = null;
  *  (Auto judges none of them: `main.ts`) */
 export const rustSwitching = (): boolean => RUST.bridge?.levels.plainSwitching ?? false;
 
-/** The engine made on a canvas of its own over `under`, three's. A failure throws: nothing else draws the game. */
-export async function bootRust(under: HTMLCanvasElement): Promise<void> {
+/** The engine made on the page's canvas, added to `container`: the canvas the game's input takes (core/screen.ts).
+ *  A failure throws: nothing else draws the game. */
+export async function bootRust(container: HTMLElement): Promise<HTMLCanvasElement> {
   try {
     const began = performance.now();
-    const { default: init, Engine } = await import('./pkg/bulwark');
+    const module = await import('./pkg/bulwark');
+    const { default: init, Engine } = module;
     const wasm = await init();
+    rustCallsReady(module);
     const loaded = performance.now();
     canvas = document.createElement('canvas');
     canvas.id = 'rust-canvas';
-    canvas.width = under.width;
-    canvas.height = under.height;
-    canvas.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;display:block;pointer-events:none';
-    // (under three's canvas, which the engine's frames leave clear but for the world's overlays)
-    under.style.position = 'relative';
-    under.before(canvas);
+    canvas.width = Math.max(1, Math.floor(window.innerWidth * (window.devicePixelRatio || 1)));
+    canvas.height = Math.max(1, Math.floor(window.innerHeight * (window.devicePixelRatio || 1)));
+    // (its pixels are the scene's, fewer than the screen's at most levels: laid over the window whole)
+    canvas.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none';
+    container.appendChild(canvas);
     const made = canvas;
     keepWhatsSaid();
     const engine = await pipelinesAside(() => Engine.create(made));
@@ -99,6 +103,7 @@ export async function bootRust(under: HTMLCanvasElement): Promise<void> {
     RUST.boot.wasmMs = loaded - began;
     RUST.boot.deviceMs = performance.now() - loaded;
     (window as unknown as { __rust: typeof RUST }).__rust = RUST;
+    return made;
   } catch (error) {
     RUST.failed = String(error);
     fault('the engine did not start', String(error));
@@ -110,26 +115,25 @@ export async function bootRust(under: HTMLCanvasElement): Promise<void> {
 }
 
 /**
- * The engine's frame as a canvas the size of `like` (three's, which a picture's taker measures by): for a picture
- * taken in the frame's own task, while the engine's canvas still holds it (a photo, a bug report's shot). With
- * `over`, three's canvas laid over it: the world's overlays. Null if the engine isn't drawing.
+ * The engine's frame as a canvas of `width` by `height` (the screen's pixels, which a picture's taker measures by):
+ * for a picture taken in the frame's own task, while the engine's canvas still holds it (a photo, a bug report's
+ * shot), the world's labels in it. Null if the engine isn't drawing.
  */
-export function rustFrame(like: HTMLCanvasElement, over: boolean): HTMLCanvasElement | null {
+export function rustFrame(width: number, height: number): HTMLCanvasElement | null {
   if (!RUST.bridge || !canvas) return null;
   const out = document.createElement('canvas');
-  out.width = like.width;
-  out.height = like.height;
+  out.width = width;
+  out.height = height;
   const context = out.getContext('2d');
   if (!context) return null;
   context.drawImage(canvas, 0, 0, out.width, out.height);
-  if (over) context.drawImage(like, 0, 0);
   return out;
 }
 
 /** The frame's scene drawn by the engine at `width` by `height` pixels. Nothing else draws it: with no engine
  *  (the boot throws where it doesn't start) this throws too. */
-export function drawRust(scene: THREE.Scene, camera: THREE.PerspectiveCamera, time: number, width: number, height: number,
-  renderer: THREE.WebGLRenderer, grade?: Grade): void {
+export function drawRust(scene: World, camera: PerspectiveCamera, time: number, width: number, height: number,
+  renderer: LookHost, grade?: Grade): void {
   const bridge = RUST.bridge;
   if (!bridge || !canvas) throw new Error('drawRust: the engine has not started');
   if (canvas.width !== width || canvas.height !== height) {
@@ -138,11 +142,8 @@ export function drawRust(scene: THREE.Scene, camera: THREE.PerspectiveCamera, ti
     resize?.(width, height);
   }
   const began = perfClock.now();
-  // (what the game hangs on three's render of the scene: the world's culling, the crowds' rows)
-  type Hook = (renderer: THREE.WebGLRenderer, scene: THREE.Scene, camera: THREE.Camera, target: null) => void;
-  if (RUST.hooks) (scene.onBeforeRender as unknown as Hook)(renderer, scene, camera, null);
-  // (of those hooks the doorways' cull alone, which leaves nothing between its two halves: `world/doorways.ts`)
-  const shown = !RUST.hooks && TUNE.doorways ? cullForEngine(camera) : null;
+  // (the doorways' cull, which leaves nothing between its two halves: `world/doorways.ts`)
+  const shown = TUNE.doorways ? cullForEngine(camera) : null;
   if (RUST.captureNext) {
     RUST.tape = bridge.capture(width, height, RUST.captureNext, scene, camera, time, renderer, grade);
     RUST.captureNext = 0;
@@ -152,7 +153,6 @@ export function drawRust(scene: THREE.Scene, camera: THREE.PerspectiveCamera, ti
     if (budget > 0) bridge.ahead.walk(scene, budget);
   }
   shown?.();
-  if (RUST.hooks) (scene.onAfterRender as unknown as Hook)(renderer, scene, camera, null);
   if (RUST.frames++ === 0) RUST.boot.firstFrameMs = perfClock.now() - began;
   // (the frame itself checked for black a few times after the load: `said.ts`)
   if (RUST.loaded) watchFrame(canvas, ++loadedFrames);

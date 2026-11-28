@@ -3,21 +3,21 @@
 // about 20 degrees) and any bump, how far the outline rises again above its lowest point nearer the neck (the arm's tube top
 // standing over the body: the mage's tunic, a round barrel with the arms' tubes stood beside it, read as a coat hanger).
 // Run in the page by facelab.mjs.
-import * as THREE from 'three';
+import { Mesh, Node, Vec3 } from '../../src/engine/api/index.ts';
 import type { Model } from '../../src/types';
 
 export interface ShoulderShape { side: string; slope: number; bump: number }
 
 export function measureShoulders(m: Model): ShoulderShape[] {
   m.root.updateMatrixWorld(true);
-  const j = m.joints!, inv = j.chest.matrixWorld.clone().invert(), v = new THREE.Vector3();
-  let head: THREE.Object3D | null = null;
+  const j = m.joints!, inv = j.chest.matrixWorld.clone().invert(), v = new Vec3();
+  let head: Node | null = null;
   m.root.traverse((o) => { if (o.name === 'face') head = o.parent; });
-  const skip = (o: THREE.Object3D) => { for (let q: THREE.Object3D | null = o; q; q = q.parent) if (!q.visible || q === head || q === m.tip?.parent || q.name === 'flask') return true; return false; };
+  const skip = (o: Node) => { for (let q: Node | null = o; q; q = q.parent) if (!q.visible || q === head || q === m.tip?.parent || q.name === 'flask') return true; return false; };
   const C = 0.002, X0 = -0.4, Y0 = -0.1, W = 400, H = 300, mask = new Uint8Array(W * H), P = [[0, 0], [0, 0], [0, 0]];
   m.root.traverse((o) => {
-    if (!(o as THREE.Mesh).isMesh || skip(o)) return;
-    const mesh = o as THREE.Mesh, g = mesh.geometry, idx = g.index, n = idx ? idx.count : g.attributes.position.count;
+    if (!(o as Mesh).isMesh || skip(o)) return;
+    const mesh = o as Mesh, g = mesh.geometry, idx = g.index, n = idx ? idx.count : g.attributes.position.count;
     for (let t = 0; t + 2 < n; t += 3) {
       for (let k = 0; k < 3; k++) { mesh.getVertexPosition(idx ? idx.getX(t + k) : t + k, v); v.applyMatrix4(mesh.matrixWorld).applyMatrix4(inv); P[k][0] = (v.x - X0) / C; P[k][1] = (v.y - Y0) / C; }
       const [a, b, c] = P, den = (b[1] - c[1]) * (a[0] - c[0]) + (c[0] - b[0]) * (a[1] - c[1]);

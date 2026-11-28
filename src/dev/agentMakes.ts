@@ -8,7 +8,10 @@
 //   unmake  one thing taken out, or all
 // A thing belongs to the place it was made in (the village, a biome, a room, the hall) and is shown there alone. It
 // stays when the agent leaves, until the page is left or the panel's Remove is pressed: it's the player's to look at.
-import * as THREE from 'three';
+import { Geometry, InstancedMesh, Material, Mesh, Node, Texture, Vec3 } from '../engine/api/index.ts';
+// (the whole API as one value, and its shapes: a made thing's module is handed them by their paths, `apiModule`)
+import * as sceneApi from '../engine/api/index.ts';
+import * as shapes from '../engine/api/shapes/index.ts';
 import { G } from '../state';
 import type { AgentStep } from './agentSteps';
 import { gameModules, isGameModule } from './gameModules';
@@ -18,12 +21,13 @@ import type { Obstacle } from '../types';
 /** What a made thing's `build` is handed: what a place of the village is built with (world/placeKit.ts, so a place's
  *  module builds as it is), its `scene` the thing's own group, and a few things more. */
 export interface MakeKit extends PlaceKit {
-  THREE: typeof THREE;
+  /** the engine's scene API (its maths, geometry, materials, scene), where three stood */
+  api: typeof sceneApi;
   /** the game's state (src/state.ts) */
   G: typeof G;
   /** the thing's own group, at its place on the ground: what `build` adds to it, or returns, is the thing (a
    *  place's `scene` is this group too) */
-  group: THREE.Group;
+  group: Node;
   /** the ground's height at a place of the world (m) */
   ground(x: number, z: number): number;
   /** `fn` run each frame while the thing stands (as one pushed to `updaters` is): the game's step (s, 0 while it's
@@ -32,11 +36,11 @@ export interface MakeKit extends PlaceKit {
 }
 export type MakeUpdater = (dt: number, t: number) => void;
 /** A made thing's module: its `build` (or its default export). */
-export type MakeBuild = (kit: MakeKit) => THREE.Object3D | void | Promise<THREE.Object3D | void>;
+export type MakeBuild = (kit: MakeKit) => Node | void | Promise<Node | void>;
 
 interface Made {
   name: string;
-  group: THREE.Group;
+  group: Node;
   /** the place it was made in, where alone it's shown */
   place: string;
   updaters: MakeUpdater[];
@@ -66,19 +70,30 @@ function placeNow(): string {
 /** every module `code` asks for (`require("...")`, as a module's imports are once `lab join make` has sent it) */
 const asksFor = (code: string): string[] => [...new Set([...code.matchAll(/\brequire\("([^"]+)"\)/g)].map((found) => found[1]))];
 
+/** the scene API's modules a made thing may import, by their paths from `src` without `/index` or `.ts` */
+const API_MODULES: Record<string, unknown> = { 'engine/api': sceneApi, 'engine/api/shapes': shapes };
+
+/** The scene API's module `id` names (`src/engine/api`, `src/engine/api/shapes`, either with `/index` or `.ts`), or
+ *  undefined where it names another. */
+function apiModule(id: string): unknown {
+  const path = id.replace(/^src\//, '').replace(/\.ts$/, '').replace(/\/index$/, '');
+  return API_MODULES[path];
+}
+
 /**
- * `code`'s `build`: a CommonJS module, as `lab join make` sends a TypeScript file. It may import three (the game's
- * own) and the game's modules by their paths from the repository's root (`src/world/props`: gameModules.ts, the
- * same instances the game runs on; `lab join make` writes a file's relative imports so).
+ * `code`'s `build`: a CommonJS module, as `lab join make` sends a TypeScript file. It may import the engine's API
+ * (`src/engine/api`, its shapes `src/engine/api/shapes`) and the game's modules by their paths from the repository's
+ * root (`src/world/props`: gameModules.ts, the same instances the game runs on; `lab join make` writes a file's relative
+ * imports so).
  */
 async function buildOf(code: string): Promise<MakeBuild> {
   const ids = asksFor(code);
-  const game = await gameModules(ids.filter(isGameModule));
+  const game = await gameModules(ids.filter((id) => isGameModule(id) && !apiModule(id)));
   const required = (id: string): unknown => {
-    if (id === 'three') return THREE;
-    const found = game.get(id);
+    const found = apiModule(id) ?? game.get(id);
     if (found) return found;
-    throw new Error(`make: a made thing imports three and the game's own modules (src/...): not "${id}"`);
+    const asked = `not "${id}"`;
+    throw new Error(`make: a made thing imports the engine's API (src/engine/api) or the game's modules: ${asked}`);
   };
   const module = { exports: {} as Record<string, unknown> };
   new Function('exports', 'require', 'module', code)(module.exports, required, module);
@@ -88,11 +103,11 @@ async function buildOf(code: string): Promise<MakeBuild> {
 }
 
 // --- what a thing holds ---------------------------------------------------------------------------------------------
-interface Held { geometries: Set<THREE.BufferGeometry>; materials: Set<THREE.Material> }
+interface Held { geometries: Set<Geometry>; materials: Set<Material> }
 
-function heldBy(root: THREE.Object3D, into: Held = { geometries: new Set(), materials: new Set() }): Held {
+function heldBy(root: Node, into: Held = { geometries: new Set(), materials: new Set() }): Held {
   root.traverse((object) => {
-    const mesh = object as THREE.Mesh;
+    const mesh = object as Mesh;
     if (mesh.geometry) into.geometries.add(mesh.geometry);
     const material = mesh.material;
     for (const each of Array.isArray(material) ? material : material ? [material] : []) into.materials.add(each);
@@ -101,14 +116,14 @@ function heldBy(root: THREE.Object3D, into: Held = { geometries: new Set(), mate
 }
 
 /** A thing's meshes and triangles. */
-function sizeOf(root: THREE.Object3D): { meshes: number; triangles: number } {
+function sizeOf(root: Node): { meshes: number; triangles: number } {
   let meshes = 0, triangles = 0;
   root.traverse((object) => {
-    const mesh = object as THREE.Mesh;
+    const mesh = object as Mesh;
     if (!mesh.isMesh || !mesh.geometry) return;
     meshes++;
     const count = (mesh.geometry.index ?? mesh.geometry.getAttribute('position'))?.count ?? 0;
-    triangles += Math.floor(count / 3) * ((mesh as unknown as THREE.InstancedMesh).count ?? 1);
+    triangles += Math.floor(count / 3) * ((mesh as unknown as InstancedMesh).count ?? 1);
   });
   return { meshes, triangles };
 }
@@ -123,7 +138,7 @@ function remove(thing: Made): void {
   for (const geometry of own.geometries) if (!others.geometries.has(geometry)) geometry.dispose();
   for (const material of own.materials) {
     if (others.materials.has(material)) continue;
-    for (const value of Object.values(material)) if ((value as THREE.Texture | null)?.isTexture) (value as THREE.Texture).dispose();
+    for (const value of Object.values(material)) if ((value as Texture | null)?.isTexture) (value as Texture).dispose();
     material.dispose();
   }
 }
@@ -147,13 +162,13 @@ const three = (value: unknown, what: string): [number, number, number] => {
 };
 
 /** Where a thing is made: the place given, else where its earlier self stands, else on the ground before the hero. */
-function standOf(args: AgentStep, earlier: Made | undefined): { at: THREE.Vector3; turn: number } {
+function standOf(args: AgentStep, earlier: Made | undefined): { at: Vec3; turn: number } {
   const turn = typeof args.turn === 'number' ? args.turn : earlier?.group.rotation.y ?? 0;
-  if (args.at !== undefined) return { at: new THREE.Vector3(...three(args.at, 'at')), turn };
+  if (args.at !== undefined) return { at: new Vec3(...three(args.at, 'at')), turn };
   if (earlier) return { at: earlier.group.position.clone(), turn };
   const hero = G.player;
   const x = hero.pos.x + Math.sin(hero.facing) * AHEAD, z = hero.pos.z + Math.cos(hero.facing) * AHEAD;
-  return { at: new THREE.Vector3(x, G.arena.groundHeight(x, z), z), turn };
+  return { at: new Vec3(x, G.arena.groundHeight(x, z), z), turn };
 }
 
 /**
@@ -166,14 +181,14 @@ export async function make(args: AgentStep): Promise<unknown> {
   if (typeof args.code !== 'string' || !args.code.trim()) throw new Error('make: give code, a module\'s text');
   const earlier = made.get(name);
   const stand = standOf(args, earlier);
-  const group = new THREE.Group();
+  const group = new Node();
   group.name = `agent:${name}`;
   group.position.copy(stand.at);
   group.rotation.y = stand.turn;
   const updaters: MakeUpdater[] = [];
   const obstacles: Obstacle[] = [];
   const kit: MakeKit = {
-    THREE, G, group,
+    api: sceneApi, G, group,
     scene: group, wall: G.arena.wall, M: G.arena.village.mats, obstacles, updaters,
     ground: (x, z) => G.arena.groundHeight(x, z),
     each: (fn) => { updaters.push(fn); },

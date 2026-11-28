@@ -5,7 +5,7 @@
 // height as it stands through a few seconds (`bossFilm.ts`'s camera, its place the clearest of eight ways round it),
 // then the two with the Cantor from the arena's middle. What they do is measured by `encounter`
 // (bossGuardSpots.ts, boss.ts): this part judges nothing but that its moments happened.
-import * as THREE from 'three';
+import { Vec3 } from './sceneApi.ts';
 import type { Lab, Pictured } from './lab';
 import type { Enemy } from '../../../src/entities/enemy';
 import { G } from '../../../src/state';
@@ -27,10 +27,10 @@ const GUARD_LOOK_AT = 1;
 /** The ways round a guard tried for the camera: eight, a turn's eighth apart. */
 const WAYS = Array.from({ length: 8 }, (_, k) => {
   const angle = k * Math.PI / 4;
-  return new THREE.Vector3(Math.cos(angle), 0, Math.sin(angle));
+  return new Vec3(Math.cos(angle), 0, Math.sin(angle));
 });
 /** Where the wide frame of the encounter is taken from (m: the arena's middle at eye height) and how high it looks. */
-const WIDE_AT = new THREE.Vector3(0, EYE, 0);
+const WIDE_AT = new Vec3(0, EYE, 0);
 const WIDE_LOOK_AT = 2;
 const FPS = 60;
 

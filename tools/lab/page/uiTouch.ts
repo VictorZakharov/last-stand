@@ -12,8 +12,8 @@ import { G } from '../../../src/state';
 import { showDecision } from '../../../src/ui/hud';
 import { makeItem } from '../../../src/loot/items';
 import type { RarityId } from '../../../src/types';
-import type { Lab } from './lab';
-import { closeDecision, labelsOnOneLine } from './uiDecision';
+import { boxOf as drawnBox, type Lab } from './lab';
+import { closeDecision, labelsOnOneLine, unfolded } from './uiDecision';
 
 /** What a state found besides its boxes: lines for its report, and its problems. */
 export interface TouchFound {
@@ -59,7 +59,8 @@ export async function touchMode(lab: Lab): Promise<void> {
 export function boxOf(selector: string): DOMRect | null {
   const element = document.querySelector<HTMLElement>(selector);
   if (!element?.checkVisibility({ opacityProperty: true, visibilityProperty: true })) return null;
-  const box = element.getBoundingClientRect();
+  // (where the engine draws it, for a page's element it draws in its place)
+  const box = drawnBox(element);
   return box.width >= 1 && box.height >= 1 ? box : null;
 }
 
@@ -148,6 +149,7 @@ export async function openDecisionTouch(lab: Lab): Promise<void> {
   if (G.run) G.run.bag = BAG.map((rarity) => makeItem({ slot: 'weapon', rarity }));
   showDecision();
   for (const animation of document.getElementById('decision')!.getAnimations({ subtree: true })) animation.finish();
+  await unfolded(lab);
 }
 
 /** The choice put away again. */
@@ -169,7 +171,7 @@ function choiceFound(): TouchFound {
       + `(${DECISION_SHARE * 100}% at most)`);
   }
   for (const button of document.querySelectorAll<HTMLElement>('#decision .dc-buttons .btn')) {
-    const height = button.getBoundingClientRect().height;
+    const height = drawnBox(button).height;
     lines.push(`  ${button.textContent?.trim()}: ${height.toFixed(1)} px tall`);
     if (height < BUTTON_PX) {
       problems.push(`decisionTouch: a button ${height.toFixed(1)} px tall (${BUTTON_PX} at least)`);
@@ -187,12 +189,15 @@ function choiceFound(): TouchFound {
 }
 
 /** The choice checked; with the canary, again padded twice over, which must be found. */
-export function decisionTouchShown(canary: boolean): TouchFound {
+export async function decisionTouchShown(canary: boolean, lab: Lab): Promise<TouchFound> {
   const found = choiceFound();
   if (!canary || innerHeight > SHORT_SCREEN || !G.run) return found;
   const box = document.getElementById('decision')!;
   box.style.padding = CANARY_PADDING;
+  // (the choice drawn by the engine follows its page's padding the next frame)
+  await lab.step(2);
   const planted = choiceFound();
   box.style.padding = '';
+  await lab.step(2);
   return { lines: found.lines, problems: [...found.problems, ...planted.problems] };
 }

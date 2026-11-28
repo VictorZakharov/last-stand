@@ -2,24 +2,26 @@
 // more detail": struck coins of four designs, cut gems, a chased goblet, a crown, gold bars; the pictures they're
 // drawn in, the quilted lining and the lock's engraved plate. Every picture is made with its height beside it: a colour
 // alone read as a flat decal on the metal under a lamp.
-import * as THREE from 'three';
-import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
-import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import {
+  Attribute, CanvasTexture, Color, floats, Geometry, Maths, mergeGeometries, Outline, Quat, RepeatWrapping,
+  SRGBColorSpace, Vec2, Vec3,
+} from '../engine/api/index.ts';
+import * as shapes from '../engine/api/shapes/index.ts';
 import { canvasOf, ctx2d } from '../core/textures';
 import { mulberry, TAU } from '../util';
 
 /** a picture and the height it's raised by */
-export interface Relief { map: THREE.CanvasTexture; bumpMap: THREE.CanvasTexture }
+export interface Relief { map: CanvasTexture; bumpMap: CanvasTexture }
 
 /** A picture drawn twice by `paint`: in `shades` (colour: what's low, what's raised) and in greys of its height. */
 function relief(width: number, height: number, paint: (g: CanvasRenderingContext2D, low: string, high: string) => void,
   colour: [string, string]): Relief {
-  const made = (low: string, high: string, srgb: boolean): THREE.CanvasTexture => {
+  const made = (low: string, high: string, srgb: boolean): CanvasTexture => {
     const c = canvasOf(width, height);
     paint(ctx2d(c), low, high);
-    const t = new THREE.CanvasTexture(c);
-    if (srgb) t.colorSpace = THREE.SRGBColorSpace;
-    t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    const t = new CanvasTexture(c);
+    if (srgb) t.colorSpace = SRGBColorSpace;
+    t.wrapS = t.wrapT = RepeatWrapping;
     t.anisotropy = 8;
     return t;
   };
@@ -133,8 +135,8 @@ export function coinFaces(): Relief {
 const COIN_SIDES = 16;
 
 /** A coin of `radius`, its caps in `design`'s cell and its edge at a cell's corner (a rim's colour alone), in `tint`. */
-export function coinGeometry(design: number, radius: number, thick: number, tint: THREE.Color): THREE.BufferGeometry {
-  const geo = new THREE.CylinderGeometry(radius, radius, thick, COIN_SIDES);
+export function coinGeometry(design: number, radius: number, thick: number, tint: Color): Geometry {
+  const geo = shapes.cylinder(radius, radius, thick, COIN_SIDES);
   const uv = geo.attributes.uv, normal = geo.attributes.normal;
   const cellU = (design % DESIGNS) / DESIGNS, cellV = Math.floor(design / DESIGNS) / DESIGNS;
   for (let k = 0; k < uv.count; k++) {
@@ -146,15 +148,15 @@ export function coinGeometry(design: number, radius: number, thick: number, tint
 }
 
 /** `geo` coloured all in `tint`, per vertex. */
-function tinted(geo: THREE.BufferGeometry, tint: THREE.Color): THREE.BufferGeometry {
+function tinted(geo: Geometry, tint: Color): Geometry {
   const count = geo.attributes.position.count, colours = new Float32Array(count * 3);
   for (let k = 0; k < count; k++) colours.set([tint.r, tint.g, tint.b], k * 3);
-  geo.setAttribute('color', new THREE.BufferAttribute(colours, 3));
+  geo.setAttribute('color', new Attribute(colours, 3));
   return geo;
 }
 
 /** where a coin lies and how it's turned */
-export interface LaidCoin { x: number; y: number; z: number; turn: THREE.Quaternion }
+export interface LaidCoin { x: number; y: number; z: number; turn: Quat }
 
 /** how many metres a cell of the bed is, and the steepest slope a coin rests at (its tangent: at 0.6, up the heap's
  *  steep foot each hung high over its slope, the heap's front bare) */
@@ -187,8 +189,8 @@ export class CoinBed {
 
   /** The top at a spot. */
   topAt(x: number, z: number): number {
-    const column = THREE.MathUtils.clamp(Math.round((x + this.w / 2) / BED_CELL), 0, this.columns - 1);
-    const row = THREE.MathUtils.clamp(Math.round((z + this.d / 2) / BED_CELL), 0, this.rows - 1);
+    const column = Maths.clamp(Math.round((x + this.w / 2) / BED_CELL), 0, this.columns - 1);
+    const row = Maths.clamp(Math.round((z + this.d / 2) / BED_CELL), 0, this.rows - 1);
     return this.tops[this.cell(column, row)];
   }
 
@@ -208,8 +210,8 @@ export class CoinBed {
       slopeZ += along * heights[k];
       spread += across * across;
     });
-    slopeX = level ? 0 : THREE.MathUtils.clamp(slopeX / (spread * radius), -BED_STEEPEST, BED_STEEPEST);
-    slopeZ = level ? 0 : THREE.MathUtils.clamp(slopeZ / (spread * radius), -BED_STEEPEST, BED_STEEPEST);
+    slopeX = level ? 0 : Maths.clamp(slopeX / (spread * radius), -BED_STEEPEST, BED_STEEPEST);
+    slopeZ = level ? 0 : Maths.clamp(slopeZ / (spread * radius), -BED_STEEPEST, BED_STEEPEST);
     const planeAt = (across: number, along: number): number => mean + (slopeX * across + slopeZ * along) * radius;
     // (tucked under what stands over it, past a few coins' thickness: lifted clear of it, a coin dropped beside a pile hung
     // at the pile's top, a roof of coins over the heap's bare skin)
@@ -217,9 +219,9 @@ export class CoinBed {
     const lifted = Math.min(clear, thick * TUCKED_UNDER);
     const y = mean + lifted + thick / 2;
     this.stamp(x, z, radius, y + thick / 2, slopeX, slopeZ);
-    const up = new THREE.Vector3(-slopeX, 1, -slopeZ).normalize();
-    const turn = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), up)
-      .multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), spin));
+    const up = new Vec3(-slopeX, 1, -slopeZ).normalize();
+    const turn = new Quat().setFromUnitVectors(new Vec3(0, 1, 0), up)
+      .multiply(new Quat().setFromAxisAngle(new Vec3(0, 1, 0), spin));
     return { x, y, z, turn };
   }
 
@@ -332,18 +334,18 @@ export function lockPlate(): Relief {
 }
 
 /** A keyhole's shape, dark, flat on a plate's face, wound to face out: a round head over a slot widening down. */
-export function keyholeGeometry(): THREE.BufferGeometry {
-  const shape = new THREE.Shape();
+export function keyholeGeometry(): Geometry {
+  const shape = new Outline();
   shape.absarc(0, 0, 0.012, -Math.PI * 0.32, Math.PI * 1.32, false);
   shape.lineTo(-0.01, -0.034);
   shape.lineTo(0.01, -0.034);
   shape.closePath();
-  return new THREE.ShapeGeometry(shape, 16);
+  return shapes.flat(shape, 16);
 }
 
 /** A plate its picture lies on face on, its edges a plain part of it: squeezed whole onto them, its border was hatching. */
-export function plateGeometry(w: number, h: number, d: number): THREE.BufferGeometry {
-  const geo = new THREE.BoxGeometry(w, h, d);
+export function plateGeometry(w: number, h: number, d: number): Geometry {
+  const geo = shapes.box(w, h, d);
   const uv = geo.attributes.uv, normal = geo.attributes.normal;
   for (let k = 0; k < uv.count; k++) {
     if (Math.abs(normal.getZ(k)) < 0.5) uv.setXY(k, 0.5, 0.97);
@@ -382,15 +384,15 @@ const GEM_SIDES = 12, FACET_DIM = 0.4, FACET_BRIGHT = 1.2, FACET_FLASHES = 0.1;
 
 /** A gem cut as a brilliant is (a flat table, star and kite facets on its crown, a pavilion to a point), in `tint`, each
  *  facet flat and a shade of its own, a few near white, as what's behind a stone lights it; `long`: as much longer one way. */
-export function gemGeometry(seed: number, tint: number, long = 1): THREE.BufferGeometry {
+export function gemGeometry(seed: number, tint: number, long = 1): Geometry {
   const rng = mulberry(seed), points: number[] = [], colours: number[] = [];
-  const colour = new THREE.Color(tint), facetColour = new THREE.Color(), white = new THREE.Color(1, 1, 1);
-  const at = (ring: { r: number; y: number }, turn: number): THREE.Vector3 => {
+  const colour = new Color(tint), facetColour = new Color(), white = new Color(1, 1, 1);
+  const at = (ring: { r: number; y: number }, turn: number): Vec3 => {
     const a = (turn / GEM_SIDES) * TAU;
-    return new THREE.Vector3(Math.cos(a) * ring.r * long, ring.y, Math.sin(a) * ring.r);
+    return new Vec3(Math.cos(a) * ring.r * long, ring.y, Math.sin(a) * ring.r);
   };
-  const up = new THREE.Vector3(), across = new THREE.Vector3();
-  const facet = (a: THREE.Vector3, b: THREE.Vector3, c: THREE.Vector3): void => {
+  const up = new Vec3(), across = new Vec3();
+  const facet = (a: Vec3, b: Vec3, c: Vec3): void => {
     const flash = rng() < FACET_FLASHES;
     facetColour.copy(colour);
     if (flash) facetColour.lerp(white, 0.25);
@@ -403,7 +405,7 @@ export function gemGeometry(seed: number, tint: number, long = 1): THREE.BufferG
       colours.push(facetColour.r, facetColour.g, facetColour.b);
     }
   };
-  const top = new THREE.Vector3(0, TABLE.y, 0), point = new THREE.Vector3(0, CULET, 0);
+  const top = new Vec3(0, TABLE.y, 0), point = new Vec3(0, CULET, 0);
   for (let k = 0; k < GEM_SIDES; k++) {
     const t0 = at(TABLE, k), t1 = at(TABLE, k + 1), c = at(CROWN, k + 0.5);
     const g0 = at(GIRDLE, k), g1 = at(GIRDLE, k + 0.5), g2 = at(GIRDLE, k + 1);
@@ -416,23 +418,23 @@ export function gemGeometry(seed: number, tint: number, long = 1): THREE.BufferG
     facet(point, g0, g1);
     facet(point, g1, g2);
   }
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.Float32BufferAttribute(points, 3));
-  geo.setAttribute('color', new THREE.Float32BufferAttribute(colours, 3));
+  const geo = new Geometry();
+  geo.setAttribute('position', floats(points, 3));
+  geo.setAttribute('color', floats(colours, 3));
   geo.computeVertexNormals();
   return geo;
 }
 
 /** The goblet, turned: a stepped foot, a stem with a knop, a cup swelling to a flared lip with a band under it, its
  *  inside down to the cup's floor. */
-export function gobletGeometry(): THREE.BufferGeometry {
+export function gobletGeometry(): Geometry {
   const profile = [
     [0, 0], [0.034, 0], [0.036, 0.004], [0.026, 0.009], [0.018, 0.014], [0.009, 0.026], [0.008, 0.04], [0.016, 0.047],
     [0.017, 0.052], [0.016, 0.057], [0.008, 0.064], [0.009, 0.074], [0.024, 0.082], [0.038, 0.098], [0.044, 0.118],
     [0.0465, 0.122], [0.0465, 0.128], [0.044, 0.132], [0.045, 0.15], [0.05, 0.166], [0.047, 0.167], [0.041, 0.15],
     [0.036, 0.12], [0.02, 0.095], [0, 0.09],
-  ].map(([r, y]) => new THREE.Vector2(r, y));
-  return new THREE.LatheGeometry(profile, 28);
+  ].map(([r, y]) => new Vec2(r, y));
+  return shapes.lathe(profile, 28);
 }
 
 /** the crown's size: its radius, its band's height and how tall a point stands over it (m), and its points */
@@ -445,11 +447,11 @@ export const crownPointAngle = (k: number): number => (k / CROWN_POINTS) * TAU;
 export const crownPoints = (): number => CROWN_POINTS;
 
 /** A crown: a band with its points, wall thick (its inside drawn too, wound the other way), a ball on each point. */
-export function crownGeometry(): { band: THREE.BufferGeometry; size: typeof CROWN_SIZE } {
+export function crownGeometry(): { band: Geometry; size: typeof CROWN_SIZE } {
   const { r, band, point } = CROWN_SIZE;
   const sides = CROWN_POINTS * 8;
-  const shell = (radius: number, inside: boolean): THREE.BufferGeometry => {
-    const geo = new THREE.CylinderGeometry(radius, radius * 0.96, band + point, sides, 1, true).translate(0, (band + point) / 2, 0);
+  const shell = (radius: number, inside: boolean): Geometry => {
+    const geo = shapes.cylinder(radius, radius * 0.96, band + point, sides, 1, true).translate(0, (band + point) / 2, 0);
     const at = geo.attributes.position;
     for (let k = 0; k < at.count; k++) {
       if (at.getY(k) < 0.001) continue;
@@ -478,11 +480,11 @@ export function crownGeometry(): { band: THREE.BufferGeometry; size: typeof CROW
   for (let k = 0; k < CROWN_POINTS; k++) {
     // (tips stand where the shell's triangle wave peaks: half way from one point's valley to the next)
     const a = crownPointAngle(k);
-    parts.push(new THREE.SphereGeometry(0.009, 8, 6).translate(Math.sin(a) * r, band + point + 0.003, Math.cos(a) * r));
+    parts.push(shapes.sphere(0.009, 8, 6).translate(Math.sin(a) * r, band + point + 0.003, Math.cos(a) * r));
   }
   // (the rim round its foot)
-  parts.push(new THREE.TorusGeometry(r, 0.004, 6, sides).rotateX(Math.PI / 2).translate(0, 0.003, 0));
-  parts.push(new THREE.TorusGeometry(r, 0.0032, 6, sides).rotateX(Math.PI / 2).translate(0, band, 0));
+  parts.push(shapes.torus(r, 0.004, 6, sides).rotateX(Math.PI / 2).translate(0, 0.003, 0));
+  parts.push(shapes.torus(r, 0.0032, 6, sides).rotateX(Math.PI / 2).translate(0, band, 0));
   // (what's round on it plain: the picture whole on a ball read as a walnut)
   for (const part of parts.slice(shells.length)) plainMapped(part);
   const unindexed = parts.map((part) => {
@@ -495,35 +497,35 @@ export function crownGeometry(): { band: THREE.BufferGeometry; size: typeof CROW
 }
 
 /** `geo` taking one plain spot of its picture. */
-function plainMapped(geo: THREE.BufferGeometry): THREE.BufferGeometry {
+function plainMapped(geo: Geometry): Geometry {
   const uv = geo.attributes.uv;
   for (let k = 0; k < uv.count; k++) uv.setXY(k, PLAIN_COLUMN, 0.5);
   return geo;
 }
 
 /** Geometries of position, normal and uv alone as one. */
-function mergedAll(parts: THREE.BufferGeometry[]): THREE.BufferGeometry {
-  const merged = new THREE.BufferGeometry();
+function mergedAll(parts: Geometry[]): Geometry {
+  const merged = new Geometry();
   for (const name of ['position', 'normal', 'uv']) {
     const size = parts[0].getAttribute(name).itemSize, values: number[] = [];
     for (const part of parts) values.push(...(part.getAttribute(name).array as Float32Array));
-    merged.setAttribute(name, new THREE.Float32BufferAttribute(values, size));
+    merged.setAttribute(name, floats(values, size));
   }
   for (const part of parts) part.dispose();
   return merged;
 }
 
 /** A gold bar, cast: rounded edges, its top narrower than its foot, an assayer's stamp raised on it. */
-export function barGeometry(): THREE.BufferGeometry {
+export function barGeometry(): Geometry {
   const { long, wide, tall, narrows } = BAR;
-  const bar = new RoundedBoxGeometry(long, tall, wide, 3, 0.005);
+  const bar = shapes.roundedBox(long, tall, wide, 3, 0.005);
   const at = bar.attributes.position;
   for (let k = 0; k < at.count; k++) {
     const share = 1 - narrows * (at.getY(k) / tall + 0.5);
     at.setXYZ(k, at.getX(k) * share, at.getY(k), at.getZ(k) * share);
   }
   bar.computeVertexNormals();
-  const stamp = new RoundedBoxGeometry(long * 0.5, 0.0024, wide * 0.42, 1, 0.001).translate(0, tall / 2, 0);
+  const stamp = shapes.roundedBox(long * 0.5, 0.0024, wide * 0.42, 1, 0.001).translate(0, tall / 2, 0);
   const parts = [bar, stamp].map((part) => plainMapped(part));
   const merged = mergeGeometries(parts)!;
   for (const part of parts) part.dispose();

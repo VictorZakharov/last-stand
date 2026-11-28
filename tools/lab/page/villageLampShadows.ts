@@ -5,7 +5,7 @@
 // SHADOW, it was missing for half of them": lit by the shaders' list alone, every lamp but the two nearest the hero
 // lit through all that stood round it. `canary` holds the last lamp's shadows off for both readings, which must be
 // found.
-import * as THREE from 'three';
+import { PointLight, Vec3 } from './sceneApi.ts';
 import type { Lab } from './lab';
 import { G } from '../../../src/state';
 import { holdHour } from '../../../src/game/clock';
@@ -37,12 +37,12 @@ const IN_HALL = 7;
  *  `rust.lampShadows`, and its light cache's past that, `rust.cacheShadows`, baked again at the next frame's head),
  *  the shadows' map's flag and each casting light's. Held off by the list's flag alone, which the engine never
  *  reads, every lamp read 0.0% shadowed. */
-function shadowsOff(off: boolean, kept: Map<THREE.PointLight, number>, mapOn: boolean): void {
+function shadowsOff(off: boolean, kept: Map<PointLight, number>, mapOn: boolean): void {
   RUST.tune.lampShadows = off ? 0 : 1;
   RUST.tune.cacheShadows = off ? 0 : 1;
   setLampShadows(!off && mapOn);
   G.scene.traverse((object) => {
-    const light = object as THREE.PointLight;
+    const light = object as PointLight;
     if (!light.isPointLight || !light.castShadow) return;
     if (off) {
       if (!kept.has(light)) kept.set(light, light.shadow.intensity);
@@ -57,7 +57,7 @@ function shadowsOff(off: boolean, kept: Map<THREE.PointLight, number>, mapOn: bo
 /** The frame drawn from `OVER` m over `foot` and `ASIDE` m to its side `turn` (radians) and the pixels on the ground
  *  within `ROUND` m of it (found by that camera), the game's camera given back after. Straight over a lamp, the camera
  *  stood nearly where its light does, and saw every shadow hidden behind what cast it. */
-function drawnFrom(lab: Lab, foot: THREE.Vector3, turn: number): { canvas: Canvas; pixels: number[] } {
+function drawnFrom(lab: Lab, foot: Vec3, turn: number): { canvas: Canvas; pixels: number[] } {
   const camera = G.camera;
   const kept = { at: camera.position.clone(), turn: camera.quaternion.clone() };
   camera.position.set(foot.x + Math.sin(turn) * ASIDE, foot.y + OVER, foot.z + Math.cos(turn) * ASIDE);
@@ -74,9 +74,9 @@ function drawnFrom(lab: Lab, foot: THREE.Vector3, turn: number): { canvas: Canva
 }
 
 /** The pixels' indices (their first channel's) where the ground within `ROUND` m of `foot` is drawn, each once. */
-function groundPixels(canvas: Canvas, foot: THREE.Vector3): number[] {
+function groundPixels(canvas: Canvas, foot: Vec3): number[] {
   const pixels = new Set<number>();
-  const at = new THREE.Vector3();
+  const at = new Vec3();
   for (let x = -ROUND; x <= ROUND; x += GROUND_STEP) {
     for (let z = -ROUND; z <= ROUND; z += GROUND_STEP) {
       if (Math.hypot(x, z) > ROUND) continue;
@@ -94,8 +94,8 @@ function groundPixels(canvas: Canvas, foot: THREE.Vector3): number[] {
 
 /** The share of the ground round `foot` the lamps' shadows darken, seen from the side `turn`: drawn with them and
  *  held off (with `canary`, held off for both). */
-function shadowedFrom(lab: Lab, foot: THREE.Vector3, turn: number, canary: boolean,
-  kept: Map<THREE.PointLight, number>): number {
+function shadowedFrom(lab: Lab, foot: Vec3, turn: number, canary: boolean,
+  kept: Map<PointLight, number>): number {
   const mapOn = lampShadowsOn();
   if (canary) shadowsOff(true, kept, mapOn);
   const shadowed = drawnFrom(lab, foot, turn).canvas;
@@ -107,9 +107,9 @@ function shadowedFrom(lab: Lab, foot: THREE.Vector3, turn: number, canary: boole
 }
 
 /** The share of the ground round lamp `index`'s foot its shadows darken, the most seen from any of `SIDES`. */
-function shadowedRound(lab: Lab, index: number, canary: boolean, kept: Map<THREE.PointLight, number>): number {
+function shadowedRound(lab: Lab, index: number, canary: boolean, kept: Map<PointLight, number>): number {
   const lamp = G.arena.village.lanterns[index];
-  const foot = new THREE.Vector3(lamp.x, groundHeight(lamp.x, lamp.z), lamp.z);
+  const foot = new Vec3(lamp.x, groundHeight(lamp.x, lamp.z), lamp.z);
   const turns = Array.from({ length: SIDES }, (_, k) => (k / SIDES) * Math.PI * 2);
   return Math.max(...turns.map((turn) => shadowedFrom(lab, foot, turn, canary, kept)));
 }
@@ -117,9 +117,9 @@ function shadowedRound(lab: Lab, index: number, canary: boolean, kept: Map<THREE
 /** Every street lamp shadowing the ground round it at midnight, the hero in the hall (none holds a casting light). */
 export async function everyLampCasts(lab: Lab, canary: boolean): Promise<LightsChecked> {
   const lanterns = G.arena.village.lanterns;
-  const kept = new Map<THREE.PointLight, number>();
+  const kept = new Map<PointLight, number>();
   holdHour(0);
-  const at = new THREE.Vector3(TERRACE.x, 0, HALL.door - IN_HALL);
+  const at = new Vec3(TERRACE.x, 0, HALL.door - IN_HALL);
   at.y = groundHeight(at.x, at.z);
   G.player.walkTo = null;
   G.player.place(at, 0);

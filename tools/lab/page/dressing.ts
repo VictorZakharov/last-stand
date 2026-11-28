@@ -4,7 +4,7 @@
 // Read: each shelf's board clear of the wall's posts, what stands on the mantel standing on its top, and the candles'
 // flames moving. `--canary` slides a board onto a post, lifts a thing off the mantel and reads the flames from one
 // frame twice, each of which must be found.
-import * as THREE from 'three';
+import { Vec3, Vec3Tuple } from './sceneApi.ts';
 import type { Lab, Pictured, Report } from './lab';
 import { G } from '../../../src/state';
 import { enterRoom } from '../../../src/game/rooms';
@@ -20,7 +20,7 @@ export interface DressingOptions {
 interface CloseUp {
   label: string;
   view: 'back' | 'left' | 'right';
-  at: THREE.Vector3Tuple;
+  at: Vec3Tuple;
   distance: number;
 }
 
@@ -56,13 +56,13 @@ const IN_THE_ROOM = { label: 'dressing-in-the-room', at: [1.0, -0.4] as const, f
 async function pictured(lab: Lab): Promise<Pictured[]> {
   await stand(lab, [0, -1], Math.PI);
   const moments = CLOSE_UPS.map(({ label, view, at, distance }) => lab.picture(label, [view], [], {
-    at: new THREE.Vector3(...at), distance,
+    at: new Vec3(...at), distance,
   }));
   // (the lantern again a few frames on: its flame moved, as the reading of the flames says)
   const lantern = CLOSE_UPS.find((closeUp) => closeUp.label === 'dressing-lantern')!;
   await lab.step(LANTERN_LATER);
   moments.push(lab.picture('dressing-lantern-later', [lantern.view], [], {
-    at: new THREE.Vector3(...lantern.at), distance: lantern.distance,
+    at: new Vec3(...lantern.at), distance: lantern.distance,
   }));
   await stand(lab, IN_THE_ROOM.at, IN_THE_ROOM.facing);
   moments.push(await lab.screen(IN_THE_ROOM.label));
@@ -94,10 +94,10 @@ export async function dressing(lab: Lab, options: DressingOptions): Promise<Repo
     return { text: lines.join('\n'), problems, moments };
   }
   // (a board moved onto the first post, the first thing lifted, the flames read from one frame twice)
-  const post = posts[0].getCenter(new THREE.Vector3());
-  const board = boards[0].getCenter(new THREE.Vector3());
-  boards[0].translate(new THREE.Vector3(post.x - board.x, 0, post.z - board.z));
-  things[0].translate(new THREE.Vector3(0, LIFT, 0));
+  const post = posts[0].getCenter(new Vec3());
+  const board = boards[0].getCenter(new Vec3());
+  boards[0].translate(new Vec3(post.x - board.x, 0, post.z - board.z));
+  things[0].translate(new Vec3(0, LIFT, 0));
   const planted: string[] = [];
   readPosts(posts, boards, lines, planted);
   readMantel(mantel, things, lines, planted);

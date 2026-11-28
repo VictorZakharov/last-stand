@@ -1,6 +1,6 @@
 // `lab ui`'s `logTouch` state (`../uiKit.ts` `Steps`): the battle log in touch mode: clear of the touch HUD, touches
 // let through (`../uiLog.ts`).
-import type { Lab } from '../lab';
+import { boxOf, type Lab } from '../lab';
 import { closeLog, logListed, logShown, openLog } from '../uiLog';
 import { describe, TOUCH_FRAMES } from '../uiKit';
 import type { Found, Steps } from '../uiKit';
@@ -27,7 +27,8 @@ function logTouchShown(): Found {
   if (!document.body.classList.contains('touch')) {
     found.problems.push('log on touch: the tap left the page out of touch mode');
   }
-  const row = document.querySelector('#blog .bl-line')?.getBoundingClientRect();
+  const line = document.querySelector('#blog .bl-line');
+  const row = line ? boxOf(line) : null;
   const under = row ? document.elementFromPoint(row.left + row.width / 2, row.top + row.height / 2) : null;
   found.lines.push(`  a touch on a line of it lands on ${under ? describe(under) : 'nothing'}`);
   if (under?.closest('#blog')) found.problems.push('log on touch: a touch on its lines lands on the panel');

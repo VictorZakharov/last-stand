@@ -3,7 +3,7 @@
 // beside it, open where he stands to use it, shut again once he has walked off. `canary` keeps him far off at the
 // reading where it should be open, which must be found. The chronicle's candle the same way, read off its flame
 // ("candle should light up when I approach similar to chest opening").
-import * as THREE from 'three';
+import { Vec3 } from './sceneApi.ts';
 import type { Lab } from './lab';
 import { G } from '../../../src/state';
 import { groundHeight } from '../../../src/world/ground';
@@ -25,7 +25,7 @@ const FAR_OFF: Spot = [TERRACE.x - 8, -12.5];
 /** How far the lid stands turned (rad) with him stood at `spot`. */
 async function lidWith(lab: Lab, [x, z]: Spot): Promise<number> {
   G.player.walkTo = null;
-  G.player.place(new THREE.Vector3(x, groundHeight(x, z), z), 0);
+  G.player.place(new Vec3(x, groundHeight(x, z), z), 0);
   await lab.step(SWING);
   const lid = G.scene.getObjectByName('chest-lid');
   if (!lid) throw new Error('lab: village: no chest-lid in the scene');
@@ -35,7 +35,7 @@ async function lidWith(lab: Lab, [x, z]: Spot): Promise<number> {
 /** How far the candle's flame stands grown (of 1) with him stood at `spot`. */
 async function flameWith(lab: Lab, [x, z]: Spot): Promise<number> {
   G.player.walkTo = null;
-  G.player.place(new THREE.Vector3(x, groundHeight(x, z), z), 0);
+  G.player.place(new Vec3(x, groundHeight(x, z), z), 0);
   await lab.step(SWING);
   const flame = G.scene.getObjectByName('candle-flame');
   if (!flame?.parent) throw new Error('lab: village: no candle-flame in the scene');

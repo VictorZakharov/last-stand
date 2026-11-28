@@ -11,7 +11,7 @@
 //
 // The leg IK's own state is read (`LegIK.feet`: a foot's state, its reach flag, its pitch, its spot and level), the
 // soles from the ankles' joints and the IK's own foot shape (`footShape`).
-import * as THREE from 'three';
+import { Node, Quat, Vec3 } from './sceneApi.ts';
 import type { Lab, Pictured } from './lab';
 import { ARENA } from '../../../src/data/balance';
 import { groundHeight } from '../../../src/world/ground';
@@ -146,10 +146,10 @@ interface Sole {
 }
 
 /** The sole of `ankle`'s foot (`shape`) on `level` against the ground under each of its points. */
-function soleAgainst(ankle: THREE.Object3D, shape: FootShape, level: number): Sole {
-  const scale = ankle.getWorldScale(new THREE.Vector3()).x;
+function soleAgainst(ankle: Node, shape: FootShape, level: number): Sole {
+  const scale = ankle.getWorldScale(new Vec3()).x;
   const sole: Sole = { riser: 0, dip: 0, inGround: 0, deepest: 0 };
-  const point = new THREE.Vector3();
+  const point = new Vec3();
   for (let along = -shape.heel; along <= shape.toe; along += SOLE_STEP / scale) {
     ankle.localToWorld(point.set(0, -shape.sole, along));
     const ground = groundHeight(point.x, point.z);
@@ -165,7 +165,7 @@ function soleAgainst(ankle: THREE.Object3D, shape: FootShape, level: number): So
 /** How far a planted sole slipped since `last` (its points a frame before, m): the least any of its points on the
  *  ground moved. Rolling over its heel or toes, or turning on its ball, one point stays where it is; sliding, none
  *  does. (By its ankle's move, a foot turning on its ball read as 7 cm of slide.) */
-export function slipOf(points: THREE.Vector3[], last: THREE.Vector3[]): number {
+export function slipOf(points: Vec3[], last: Vec3[]): number {
   if (last.length !== points.length) return 0;
   const heights = points.map((point) => point.y - groundHeight(point.x, point.z));
   const lowest = Math.min(...heights);
@@ -178,10 +178,10 @@ export function slipOf(points: THREE.Vector3[], last: THREE.Vector3[]): number {
 }
 
 /** Moves `joint` by `offset` in the world, its matrices with it; returns the undo. */
-function shiftInWorld(joint: THREE.Object3D, offset: THREE.Vector3): () => void {
+function shiftInWorld(joint: Node, offset: Vec3): () => void {
   const parent = joint.parent!;
-  const local = offset.clone().applyQuaternion(parent.getWorldQuaternion(new THREE.Quaternion()).invert());
-  local.divideScalar(parent.getWorldScale(new THREE.Vector3()).x);
+  const local = offset.clone().applyQuaternion(parent.getWorldQuaternion(new Quat()).invert());
+  local.divideScalar(parent.getWorldScale(new Vec3()).x);
   joint.position.add(local);
   joint.updateMatrixWorld(true);
   return () => {
@@ -193,7 +193,7 @@ function shiftInWorld(joint: THREE.Object3D, offset: THREE.Vector3): () => void 
 /** The legs the leg IK runs, and each foot's shape and ankle. */
 interface Legs {
   ik: LegIK;
-  ankles: THREE.Object3D[];
+  ankles: Node[];
   shapes: FootShape[];
 }
 
@@ -232,21 +232,21 @@ async function standAtEdge(lab: Lab, inside: number, bearing: number, sink: bool
   const aimX = STEP_OUT + EDGE_AIM_OUT * Math.sin(angle);
   const aimZ = EDGE_AIM_OUT * Math.cos(angle);
   await lab.setup(fixtureAt(lab, [x, 0], Math.atan2(aimX - x, aimZ)));
-  const aim = new THREE.Vector3(aimX, groundHeight(aimX, aimZ), aimZ);
+  const aim = new Vec3(aimX, groundHeight(aimX, aimZ), aimZ);
   // (a drawn shot held at full draw; a hero whose attack isn't drawn stands, aimed: held down, the warrior's swung blow
   // after blow, each stepping in, and read as a foot moving in 9 cases of 30)
   const drawn = Boolean(lab.player.skillAt('mouse0')?.def.draw);
   const frame = () => ({ m0: drawn, aim });
   await lab.step(DRAW_FRAMES, frame);
   const legs = legsOf(lab);
-  const last = legs.ankles.map((ankle) => ankle.getWorldPosition(new THREE.Vector3()));
+  const last = legs.ankles.map((ankle) => ankle.getWorldPosition(new Vec3()));
   const result: EdgeCase = { inside, bearing, moving: [0, 0], riser: [0, 0], dip: [0, 0] };
   let canary: Canary | undefined;
   await lab.step(HOLD_FRAMES, frame, (f) => {
     const planted = sink && f === HOLD_FRAMES / 2;
-    const undo = planted ? shiftInWorld(legs.ankles[0], new THREE.Vector3(0, -CANARY_SINK, 0)) : null;
+    const undo = planted ? shiftInWorld(legs.ankles[0], new Vec3(0, -CANARY_SINK, 0)) : null;
     legs.ankles.forEach((ankle, side) => {
-      const now = ankle.getWorldPosition(new THREE.Vector3());
+      const now = ankle.getWorldPosition(new Vec3());
       const sole = soleAgainst(ankle, legs.shapes[side], legs.ik.feet[side].P.y);
       if (planted && side === 0) {
         canary = { planted: CANARY_SINK, measured: sole.dip };
@@ -346,15 +346,15 @@ class FootWatch {
   private lastTurn = 0;
   private outRun = 0;
   /** the sole's points last frame, while planted */
-  private lastSole: THREE.Vector3[] = [];
+  private lastSole: Vec3[] = [];
   /** its spot and heading last frame, while planted */
-  private lastSpot: THREE.Vector3 | null = null;
+  private lastSpot: Vec3 | null = null;
   private lastYaw = 0;
 
   constructor(private readonly name: SideName) {}
 
   /** Takes this frame of the foot (its `sole`'s points) in; returns the stance it ended, if it left the ground. */
-  observe(frame: number, foot: LegFoot, sole: THREE.Vector3[]): Stance | null {
+  observe(frame: number, foot: LegFoot, sole: Vec3[]): Stance | null {
     if (foot.state !== 'plant') {
       const ended = this.stance;
       this.stance = null;
@@ -382,7 +382,7 @@ class FootWatch {
   }
 
   /** How far the planted sole slipped since last frame, m (0 as it lands). */
-  slipOf(sole: THREE.Vector3[]): number {
+  slipOf(sole: Vec3[]): number {
     return slipOf(sole, this.lastSole);
   }
 
@@ -450,7 +450,7 @@ async function walkAcross(lab: Lab, walk: Walk, options: FeetOptions, slide: boo
   await lab.setup(fixtureAt(lab, walk.start, facing));
   const legs = legsOf(lab);
   const watches = SIDE_NAMES.map((name) => new FootWatch(name));
-  const last = legs.ankles.map((ankle) => ankle.getWorldPosition(new THREE.Vector3()));
+  const last = legs.ankles.map((ankle) => ankle.getWorldPosition(new Vec3()));
   const result: WalkResult = {
     walk,
     stances: [],
@@ -465,7 +465,7 @@ async function walkAcross(lab: Lab, walk: Walk, options: FeetOptions, slide: boo
     moment: null,
     trace: [],
   };
-  const aim = walk.aim ? new THREE.Vector3(walk.aim[0], 0, walk.aim[1]) : undefined;
+  const aim = walk.aim ? new Vec3(walk.aim[0], 0, walk.aim[1]) : undefined;
   if (options.trace) result.trace.push(describeShapes(legs));
   let worst = PICTURE_FROM - 1;
   let canary: Canary | undefined;
@@ -476,10 +476,10 @@ async function walkAcross(lab: Lab, walk: Walk, options: FeetOptions, slide: boo
   const measure = () => {
     const plantedSide = legs.ik.feet.findIndex((foot) => foot.state === 'plant');
     const planted = slide && frame === CANARY_FRAME && plantedSide >= 0;
-    const undo = planted ? shiftInWorld(legs.ankles[plantedSide], new THREE.Vector3(CANARY_SLIDE, 0, 0)) : null;
+    const undo = planted ? shiftInWorld(legs.ankles[plantedSide], new Vec3(CANARY_SLIDE, 0, 0)) : null;
     let inGround = 0;
     legs.ankles.forEach((ankle, side) => {
-      const now = ankle.getWorldPosition(new THREE.Vector3());
+      const now = ankle.getWorldPosition(new Vec3());
       const points = solePoints(ankle, legs.shapes[side]);
       if (planted && side === plantedSide) {
         canary = { planted: CANARY_SLIDE, measured: watches[side].slipOf(points) };
@@ -540,9 +540,9 @@ const fixed = (value: number, digits = 2) => value.toFixed(digits);
 /** A foot this frame, for a trace: its state, reach flag, pitch and place against its window, its spot and level, the
  *  ankle, the way the foot points (degrees, as the leg IK's yaw) and how far it is tipped toe down (rad), how deep its sole is in the ground, and how far the
  *  leg IK raises it over a step and moves its landing off a riser (cm). */
-function traceFoot(name: SideName, foot: LegFoot, ankle: THREE.Object3D, shape: FootShape): string {
-  const at = ankle.getWorldPosition(new THREE.Vector3());
-  const ahead = new THREE.Vector3(0, 0, 1).transformDirection(ankle.matrixWorld);
+function traceFoot(name: SideName, foot: LegFoot, ankle: Node, shape: FootShape): string {
+  const at = ankle.getWorldPosition(new Vec3());
+  const ahead = new Vec3(0, 0, 1).transformDirection(ankle.matrixWorld);
   const heading = Math.atan2(ahead.x, ahead.z) * 180 / Math.PI;
   const sunk = soleAgainst(ankle, shape, foot.P.y).deepest;
   const doing = `${foot.state.padEnd(5)} out ${foot.over ? 1 : 0} pitch ${fixed(foot.pitch)} window ${fixed(foot.window)}`;
@@ -558,7 +558,7 @@ function traceFoot(name: SideName, foot: LegFoot, ankle: THREE.Object3D, shape: 
  *  the ankle (cm, at the hero's scale). */
 function describeShapes(legs: Legs): string {
   const feet = legs.shapes.map((shape, side) => {
-    const scale = legs.ankles[side].getWorldScale(new THREE.Vector3()).x;
+    const scale = legs.ankles[side].getWorldScale(new Vec3()).x;
     return `${SIDE_NAMES[side]} heel ${cm(shape.heel * scale)} toe ${cm(shape.toe * scale)} sole ${cm(shape.sole * scale)}`;
   });
   return `  feet: ${feet.join(', ')}`;
@@ -567,7 +567,7 @@ function describeShapes(legs: Legs): string {
 /** This frame of a walk, for a trace: where the body is, how fast it goes and how high its hips are, and each foot. */
 function traceLine(lab: Lab, frame: number, legs: Legs): string {
   const body = lab.player.pos;
-  const hips = lab.joints.hips.getWorldPosition(new THREE.Vector3());
+  const hips = lab.joints.hips.getWorldPosition(new Vec3());
   const speed = Math.hypot(lab.player.vel.x, lab.player.vel.z);
   const gait = legs.ik.walking ? 'moving' : 'standing';
   const drop = legs.ik.pelvisDrop;

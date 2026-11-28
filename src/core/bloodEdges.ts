@@ -5,7 +5,7 @@
 // pixel is covered, green how near to nothing the Health must be for it to show (the seep's front comes in level by
 // level, a drip runs down as it falls), blue its shade (dark and clotted at the edge, brighter where it runs). The grade
 // shows what the Health reaches, so the blood spreads with no shader change and nothing on the page repainting.
-import * as THREE from 'three';
+import { CanvasTexture, LinearFilter, NoColorSpace } from '../engine/api/index.ts';
 import { mulberry } from '../util';
 
 /** the seep's depth in from an edge at its fullest, and how much deeper it runs into a corner (screen heights) */
@@ -162,10 +162,10 @@ function paintMask(g: CanvasRenderingContext2D, width: number, height: number): 
 
 const canvas = document.createElement('canvas');
 /** The mask the grade reads (`tBlood`). */
-export const bloodMask = new THREE.CanvasTexture(canvas);
+export const bloodMask = new CanvasTexture(canvas);
 bloodMask.generateMipmaps = false;
-bloodMask.minFilter = bloodMask.magFilter = THREE.LinearFilter;
-bloodMask.colorSpace = THREE.NoColorSpace;
+bloodMask.minFilter = bloodMask.magFilter = LinearFilter;
+bloodMask.colorSpace = NoColorSpace;
 
 let painted = '', seen = '', seenAt = 0;
 

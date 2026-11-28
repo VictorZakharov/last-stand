@@ -7,7 +7,7 @@
 // door's frame or him), are read off the frame drawn: the tread's pixels blown out (as `lightsNotBlinding` counts a
 // light's: its brightest channel at 0.97 of white or more) and its brightest tenth against the paving's. `--canary`
 // polishes the stair again.
-import * as THREE from 'three';
+import { LitMaterial, Material, Mesh, Vec3 } from './sceneApi.ts';
 import type { Lab, Pictured } from './lab';
 import { G } from '../../../src/state';
 import { faceCamera, setZoom, viewMode } from '../../../src/core/renderer';
@@ -51,20 +51,20 @@ const RUN = (TERRACE.stairFoot - TERRACE.front) / STEPS;
 const PAVING_UP = 0.005;
 
 /** Points on the top step's tread (`tread`) or on the paving before it, across the stair. */
-function pointsOn(tread: boolean): THREE.Vector3[] {
-  const points: THREE.Vector3[] = [];
+function pointsOn(tread: boolean): Vec3[] {
+  const points: Vec3[] = [];
   const half = TERRACE.stairHalf - SIDE_IN;
   const along = tread ? ON_TREAD.map((share) => TERRACE.front + share * RUN) : ON_PAVING.map((d) => TERRACE.front - d);
   const y = TERRACE.high + (tread ? 0 : PAVING_UP);
   for (let x = -half; x <= half; x += ACROSS_EVERY) {
-    for (const z of along) points.push(new THREE.Vector3(TERRACE.x + x, y, z));
+    for (const z of along) points.push(new Vec3(TERRACE.x + x, y, z));
   }
   return points;
 }
 
 /** The canvas's pixel (its first channel's index) `point` falls on, or null off it or unseen: behind the wall, the
  *  door's frame or him. */
-function seenPixel(canvas: Canvas, point: THREE.Vector3, his: Set<number>): number | null {
+function seenPixel(canvas: Canvas, point: Vec3, his: Set<number>): number | null {
   const hit = wallHit();
   if (G.arena.wall.cast(G.camera.position, point, hit) && hit.t < SEEN_SHORT) return null;
   const on = point.clone().project(G.camera);
@@ -76,7 +76,7 @@ function seenPixel(canvas: Canvas, point: THREE.Vector3, his: Set<number>): numb
 }
 
 /** The lights of the pixels `points` fall on where seen. */
-function lightsAt(canvas: Canvas, points: THREE.Vector3[], his: Set<number>): number[] {
+function lightsAt(canvas: Canvas, points: Vec3[], his: Set<number>): number[] {
   const lights: number[] = [];
   for (const point of points) {
     const at = seenPixel(canvas, point, his);
@@ -97,7 +97,7 @@ interface StepRead { z: number; tread: number[]; paving: number[]; blown: number
 /** The hero stood `z` down the aisle facing the door, and the step and the paving read. */
 async function readStand(lab: Lab, z: number): Promise<StepRead> {
   G.player.walkTo = null;
-  G.player.place(new THREE.Vector3(TERRACE.x, groundHeight(TERRACE.x, z), z), 0);
+  G.player.place(new Vec3(TERRACE.x, groundHeight(TERRACE.x, z), z), 0);
   setZoom(CAMERA.lobbyZoom);
   faceCamera(0);
   await lab.step(SETTLE);
@@ -125,12 +125,12 @@ function failsOf(read: StepRead): string | null {
 }
 
 /** The stair's granite meshes (the top step down: blocks over its footprint), each with its material. */
-function stairMaterials(): THREE.MeshStandardMaterial[] {
-  const found = new Set<THREE.MeshStandardMaterial>();
+function stairMaterials(): LitMaterial[] {
+  const found = new Set<LitMaterial>();
   G.arena.groupOf('village').traverse((object) => {
-    const mesh = object as THREE.Mesh;
-    if (!mesh.isMesh || (mesh.material as THREE.Material).name !== 'stairGranite') return;
-    found.add(mesh.material as THREE.MeshStandardMaterial);
+    const mesh = object as Mesh;
+    if (!mesh.isMesh || (mesh.material as Material).name !== 'stairGranite') return;
+    found.add(mesh.material as LitMaterial);
   });
   return [...found];
 }

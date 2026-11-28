@@ -5,7 +5,7 @@
 // round them, the sills left lying in the air (from play, "when thinning the wall, window sills left behind"). Each
 // vertex of each long wall's meshes is read in the world against the wall's inner face. `canary` hangs a block 15 cm
 // into the room in the east wall's material.
-import * as THREE from 'three';
+import { Material, Mesh, shapes, Vec3 } from './sceneApi.ts';
 import { G } from '../../../src/state';
 import { seeValue } from '../../../src/core/seeThrough';
 import { HALL, TERRACE } from '../../../src/data/village';
@@ -27,11 +27,11 @@ const WALLS: LongWall[] = [
 ];
 
 /** The meshes drawn in `kind`'s material, found by its value on the material (`material.seeThrough`). */
-function meshesOf(kind: LongWall['kind']): THREE.Mesh[] {
+function meshesOf(kind: LongWall['kind']): Mesh[] {
   const value = seeValue(kind);
-  const meshes: THREE.Mesh[] = [];
+  const meshes: Mesh[] = [];
   G.scene.traverse((object) => {
-    const mesh = object as THREE.Mesh;
+    const mesh = object as Mesh;
     const material = mesh.material as { seeThrough?: unknown } | undefined;
     if (mesh.isMesh && material?.seeThrough === value) meshes.push(mesh);
   });
@@ -44,11 +44,11 @@ function innerFace(wall: LongWall): number {
 }
 
 /** How far the furthest vertex of `meshes` lies in from `wall`'s inner face (m; under 0, none in), and where. */
-function furthestIn(meshes: THREE.Mesh[], wall: LongWall): { depth: number; at: THREE.Vector3 } {
+function furthestIn(meshes: Mesh[], wall: LongWall): { depth: number; at: Vec3 } {
   const face = innerFace(wall);
-  const world = new THREE.Vector3();
+  const world = new Vec3();
   let depth = -Infinity;
-  const at = new THREE.Vector3();
+  const at = new Vec3();
   for (const mesh of meshes) {
     mesh.updateWorldMatrix(true, false);
     const positions = mesh.geometry.attributes.position;
@@ -65,9 +65,9 @@ function furthestIn(meshes: THREE.Mesh[], wall: LongWall): { depth: number; at: 
 }
 
 /** The canary's block, 15 cm into the room off the east wall in its material, at the hall's middle. */
-function canaryBlock(material: THREE.Material | THREE.Material[]): THREE.Mesh {
-  const geometry = new THREE.BoxGeometry(CANARY_SIZE, CANARY_SIZE, CANARY_SIZE);
-  const block = new THREE.Mesh(geometry, material);
+function canaryBlock(material: Material | Material[]): Mesh {
+  const geometry = shapes.box(CANARY_SIZE, CANARY_SIZE, CANARY_SIZE);
+  const block = new Mesh(geometry, material);
   const east = WALLS[1];
   block.position.set(innerFace(east) + east.inward * (CANARY_IN - CANARY_SIZE / 2), TERRACE.high + 3, -24);
   return block;
@@ -80,7 +80,7 @@ export function hallWallsFlush(canary: boolean): LightsChecked {
   let caught = false;
   for (const wall of WALLS) {
     const meshes = meshesOf(wall.kind);
-    let planted: THREE.Mesh | null = null;
+    let planted: Mesh | null = null;
     if (canary && wall.kind === 'hallEast' && meshes.length > 0) {
       planted = canaryBlock(meshes[0].material);
       G.scene.add(planted);

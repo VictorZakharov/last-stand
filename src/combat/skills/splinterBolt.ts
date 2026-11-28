@@ -1,5 +1,5 @@
 // Splintering Bolt: a fan of homing arcane bolts that split on impact.
-import * as THREE from 'three';
+import { Vec3 } from '../../engine/api/index.ts';
 import { spawnProjectile } from '../projectiles';
 import { hitEnemy } from '../damage';
 import { burst } from '../../fx/particles';
@@ -13,10 +13,10 @@ import type { SkillDef } from '../../types';
 import { sfx } from '../../core/audio';
 
 function launch(
-  player: Player, origin: THREE.Vector3, angle: number, def: Def, damage: number, gen: number, ignore: Set<Enemy>, withLight: boolean,
+  player: Player, origin: Vec3, angle: number, def: Def, damage: number, gen: number, ignore: Set<Enemy>, withLight: boolean,
   judged: Set<Enemy>,
 ): void {
-  const dir = new THREE.Vector3(Math.sin(angle), 0, Math.cos(angle));
+  const dir = new Vec3(Math.sin(angle), 0, Math.cos(angle));
   spawnProjectile({
     pos: origin, dir, speed: def.speed * (gen ? 0.85 : 1), radius: gen ? 0.3 : 0.38,
     life: (def.range / def.speed) * (gen ? 0.6 : 1),

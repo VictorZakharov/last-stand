@@ -3,7 +3,7 @@
 // click or a tap on it from anywhere, which walks him there first); the panel or card a use opened put away as he walks
 // off; and his skills cast in the training yard alone. In the top view the pointer picks an object; in the close views
 // the one he's near, E using it.
-import * as THREE from 'three';
+import { Box3, Color, Frustum, Mat4, Maths, Node, Ray, Raycaster, Vec2, Vec3 } from '../engine/api/index.ts';
 import { seeFrom, seenShareAt, sightWalls } from '../core/sight';
 import {
   columnsKeepAllDepth, fadeHallDoor, fadeWhole, HALL_WALL_KINDS, type HallWallKind, columnsSeen, hallSightCone,
@@ -13,7 +13,7 @@ import { G } from '../state';
 import { RUN } from '../data/balance';
 import { VILLAGE_OBJECTS, YARD, worldToYard, type VillageObject } from '../data/village';
 import { HOUSE_OBJECTS } from '../data/houses';
-import { input, isDown, wasPressed, cylinder } from '../core/input';
+import { input, isDown, overPanels, wasPressed, cylinder } from '../core/input';
 import { setLens, viewMode } from '../core/renderer';
 import { groundHeight } from '../world/ground';
 import { anchorLabel, promptArt, textArt } from '../ui/floaters';
@@ -116,8 +116,8 @@ export function holdUse(on: boolean): void {
 /** How far the hold at the door near him has come (of 1), and the door; none held: 0. */
 export const holdShare = (): number => (heldOn ? Math.min(1, held / Math.max(holdToUse, 1e-6)) : 0);
 
-const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
-const _to = new THREE.Vector3();
+const ray = new Raycaster(), ndc = new Vec2();
+const _to = new Vec3();
 
 /** the most light a highlight on a hero reflects here (`Player.shine`): a lamp over his steel, a glint on an axe's head
  *  and a shield's rim burned white and bloomed */
@@ -250,7 +250,7 @@ function nearest(): VillageObject | null {
 }
 
 /** The object whose column a ray from the eye enters first, or null. */
-function objectAlong(r: THREE.Ray): VillageObject | null {
+function objectAlong(r: Ray): VillageObject | null {
   let best: VillageObject | null = null, bestT = Infinity;
   for (const o of OBJECTS) {
     if (!here(o)) continue;
@@ -274,7 +274,7 @@ export function goUse(o: VillageObject): void {
   if (distanceTo(o) < o.reach) { useNow(o); return; }
   going = o;
   const [x, z] = spotToUse(o);
-  G.player.walkTo = new THREE.Vector3(x, 0, z);
+  G.player.walkTo = new Vec3(x, 0, z);
 }
 
 /** the places round an object's reach looked at for the nearest to walk to, and how far in from its edge they are (m) */
@@ -305,7 +305,7 @@ export function spotToUse(o: VillageObject): [number, number] {
 /** The hero walked to (x, z), using nothing there (a place picked on the map: the training yard). */
 export function goTo(x: number, z: number): void {
   going = null;
-  G.player.walkTo = new THREE.Vector3(x, 0, z);
+  G.player.walkTo = new Vec3(x, 0, z);
 }
 
 function useNow(o: VillageObject): void {
@@ -340,7 +340,10 @@ export function inYard(x: number, z: number): boolean {
  *  to it and uses it (the press never reaches the game: no attack, no move stick). */
 function bindPointer(): void {
   const canvas = G.renderer.domElement;
-  const over = (e: MouseEvent): VillageObject | null => (e.target === canvas ? objectAt(e.clientX, e.clientY) : null);
+  // (a press on a panel the engine draws over the world is the panel's: the ale's Put down over Bertram opened his
+  // talk as it put the mug down)
+  const over = (e: MouseEvent): VillageObject | null =>
+    (e.target === canvas && !overPanels.at(e.clientX, e.clientY) ? objectAt(e.clientX, e.clientY) : null);
   window.addEventListener('mousemove', (e) => {
     if (input.touchMode) return;
     const o = over(e);
@@ -479,7 +482,7 @@ function hallInside(dt: number): void {
   // (thinned to a ghost over a moment: gone at a stroke, walls and door vanished as he stepped in, from play "why here
   // geometry disappears ... it should fade to semi transparent")
   // (further the deeper he is in: the front wall then lies over half the frame, a dark veil with hard edges, a review)
-  const deep = THREE.MathUtils.clamp((HALL.door - p.pos.z) / WALL_DEEP, 0, 1);
+  const deep = Maths.clamp((HALL.door - p.pos.z) / WALL_DEEP, 0, 1);
   const wallGhost = WALL_GHOST + (DEEP_GHOST - WALL_GHOST) * deep;
   propsLeftWhole(roofAway);
   const outsideInFront = !inside && G.camera.position.z > HALL.door;
@@ -487,19 +490,21 @@ function hallInside(dt: number): void {
   const offDoor = p.pos.z - HALL.inFront;
   const atDoor = lobby && view === 'top' && !wallsNoneHeld && !seenFloorHeld
     && Math.abs(p.pos.x - TERRACE.x) < HALL.half && G.camera.position.z > HALL.door
-    ? (1 - THREE.MathUtils.smoothstep(offDoor, DOOR_CONE.near, DOOR_CONE.far)) * THREE.MathUtils.smoothstep(offDoor, DOOR_CONE.inFrom, DOOR_CONE.in)
+    ? (1 - Maths.smoothstep(offDoor, DOOR_CONE.near, DOOR_CONE.far)) * Maths.smoothstep(offDoor, DOOR_CONE.inFrom, DOOR_CONE.in)
       * seesThroughDoor()
     : 0;
   // (a ghost from above whatever it hides, as every roof is: `ROOF_GHOST_ABOVE`; away while he sits inside or sees in through the door)
   const seesIn = !seenFloorHeld && atDoor > AT_DOOR_CONE;
   const roofWanted = roofAway || seesIn ? ROOF_GHOST : lobby && view === 'top' ? ROOF_GHOST_ABOVE : 0;
-  roofFade = THREE.MathUtils.damp(roofFade, roofWanted, CUT_AWAY_FADE, dt);
+  roofFade = Maths.damp(roofFade, roofWanted, CUT_AWAY_FADE, dt);
   // (each wall by itself, and each whole or not at all: while it hides him or the floor round him, or any floor he
   // sees, from above, except `hallFront` while he stands outside the hall with the camera out front)
   const fromAbove = lobby && view === 'top' && !wallsNoneHeld;
   for (const wall of HALL_WALL_SIDES) {
     const hidesHim = roofAway && wallHidesNearHim(wall);
-    const canSeePast = !(wall.kind === 'hallFront' && outsideInFront) || frontOutsideThinsHeld;
+    // (asked from above alone, where it counts: asked every frame wherever he was, a fight in the crypt read the fog's
+    // rays for every wall of the village's hall, `seenShareAt`, a fifth of the village's stage)
+    const canSeePast = fromAbove && (!(wall.kind === 'hallFront' && outsideInFront) || frontOutsideThinsHeld);
     let hidesFloor = false;
     if (canSeePast) hidesFloor = hidesSeenFloor(wall.kind, wallSpan(wall));
     else {
@@ -508,23 +513,24 @@ function hallInside(dt: number): void {
     }
     const wanted = fromAbove && (wallsAllThinHeld || hidesHim || hidesFloor);
     const was = wallFades.get(wall.kind) ?? 0;
-    const fade = THREE.MathUtils.damp(was, !wanted ? 0 : hidesHim ? wallGhost : SIGHT_GHOST, CUT_AWAY_FADE, dt);
+    const fade = Maths.damp(was, !wanted ? 0 : hidesHim ? wallGhost : SIGHT_GHOST, CUT_AWAY_FADE, dt);
     wallFades.set(wall.kind, fade);
     fadeWhole(wall.kind, fade < CUT_AWAY_NONE ? 0 : fade);
   }
   // (the columns alone still thin by the floor each hides inside; outside, portico columns stay solid unless hiding the hero)
   const coneWanted = fromAbove && (inside || porticoConeOutsideHeld) ? SIGHT_GHOST : 0;
-  sightCone = THREE.MathUtils.damp(sightCone, coneWanted, CUT_AWAY_FADE, dt);
+  sightCone = Maths.damp(sightCone, coneWanted, CUT_AWAY_FADE, dt);
   hallSightCone(sightCone < CUT_AWAY_NONE ? 0 : sightCone, inside, under && !inside);
   columnsFade(dt);
   // (the portico's beam as a wall: solid while he is outside with the front wall whole, unless it directly hides him)
   const beamHides = roofAway && beamHidesHim();
-  const beamSeen = (!outsideInFront || frontOutsideThinsHeld) && hidesSeenFloor('hallBeam', BEAM_SPAN);
+  const beamSeen = fromAbove && (!outsideInFront || frontOutsideThinsHeld) && hidesSeenFloor('hallBeam', BEAM_SPAN);
+  if (!fromAbove) hidingSeen.delete('hallBeam');
   const beamThins = fromAbove && (beamHides || (frontOutsideThinsHeld && seesIn) || beamSeen);
-  beamFade = THREE.MathUtils.damp(beamFade, !beamThins ? 0 : beamHides || seesIn ? WALL_GHOST : SIGHT_GHOST, CUT_AWAY_FADE, dt);
+  beamFade = Maths.damp(beamFade, !beamThins ? 0 : beamHides || seesIn ? WALL_GHOST : SIGHT_GHOST, CUT_AWAY_FADE, dt);
   fadeWhole('hallBeam', beamFade < CUT_AWAY_NONE ? 0 : beamFade);
   const doorWanted = fromAbove && outsideInFront && seesIn && !doorMiddleOffHeld ? WALL_GHOST : 0;
-  doorFade = THREE.MathUtils.damp(doorFade, doorWanted, CUT_AWAY_FADE, dt);
+  doorFade = Maths.damp(doorFade, doorWanted, CUT_AWAY_FADE, dt);
   fadeHallDoor(doorFade < CUT_AWAY_NONE ? 0 : doorFade);
   lightHim(lobby && view === 'top' && inside ? 1 : 0, dt);
   fadeWhole('hallRoof', roofFade < CUT_AWAY_NONE ? 0 : roofFade > 1 - CUT_AWAY_NONE ? 1 : roofFade);
@@ -542,7 +548,7 @@ function hallInside(dt: number): void {
     : (lobby && view === 'top' && hallHidesHim() && !under) || (lobby && view !== 'first' && porticoHidesHim())
       || (roofAway && porticoConeOutsideHeld) ? OUTSIDE_GHOST
       : lobby && view !== 'first' && inside && roomColumnHidesHim() ? ROOM_COLUMN_GHOST : 0;
-  columnFade = THREE.MathUtils.damp(columnFade, columnGhost, CUT_AWAY_FADE, dt);
+  columnFade = Maths.damp(columnFade, columnGhost, CUT_AWAY_FADE, dt);
   // (the porch torches' fires go with their baskets as the front wall opens over him from above inside: shown, they
   // hung in the air past the room, from play)
   G.arena.village.porchFires.visible = !(roofAway && inside);
@@ -646,7 +652,7 @@ function roomThroughDoor(): boolean {
 /** the hall's windows, and how far out from a window's glass the camera must be to see in through it (m) */
 const HALL_WINDOWS = hallWindows();
 const OUT_OF_WALL = 0.3;
-const _window = new THREE.Box3();
+const _window = new Box3();
 
 /** Whether the camera, outside the hall's wall, has one of its windows in view: its room shows through their glass
  *  (from play, "should be able to see hall from outside too, so both ways"), and was left out of the frame wherever
@@ -689,12 +695,12 @@ const HALL_WALL_SIDES: HallWallSide[] = (['hallFront', 'hallBack', 'hallEast', '
 });
 
 /** the portico's beam as a box, and the heights of him a sight to him is read at (m over his floor) */
-const BEAM = new THREE.Box3(
-  new THREE.Vector3(TERRACE.x - HALL.half, TERRACE.high + HALL.beamFoot, HALL.beamZ - HALL.beamDeep / 2),
-  new THREE.Vector3(TERRACE.x + HALL.half, TERRACE.high + HALL.wallHigh, HALL.beamZ + HALL.beamDeep / 2),
+const BEAM = new Box3(
+  new Vec3(TERRACE.x - HALL.half, TERRACE.high + HALL.beamFoot, HALL.beamZ - HALL.beamDeep / 2),
+  new Vec3(TERRACE.x + HALL.half, TERRACE.high + HALL.wallHigh, HALL.beamZ + HALL.beamDeep / 2),
 );
 const HIS_HEIGHTS = [0.3, 1.1, 1.8];
-const _sight = new THREE.Ray(), _sightTo = new THREE.Vector3(), _sightHit = new THREE.Vector3();
+const _sight = new Ray(), _sightTo = new Vec3(), _sightHit = new Vec3();
 
 /** Whether the portico's beam stands between the camera and him: from along it, it lay over him whole, a review. */
 function beamHidesHim(): boolean {
@@ -723,7 +729,7 @@ function roomColumnHidesHim(): boolean {
 }
 
 /** Whether one of `columns` stands between the camera and him, at his feet, waist or head. */
-function columnHidesHim(columns: readonly THREE.Box3[]): boolean {
+function columnHidesHim(columns: readonly Box3[]): boolean {
   const eye = G.camera.position, p = G.player;
   for (const up of HIS_HEIGHTS) {
     _sightTo.set(p.pos.x, p.obj.position.y + up, p.pos.z).sub(eye);
@@ -739,7 +745,7 @@ function columnHidesHim(columns: readonly THREE.Box3[]): boolean {
 /** the light he's lit by in the hall from above: a share of what a lamp gives, warm, short, how high over him and how far toward the camera. The
  *  room's torches stand on its columns, and on its dark floor he stood as a dark figure, the thinning for nothing, a review */
 const HERO_LIGHT = { color: 0xffd9a8, intensity: 38, distance: 8, over: 3.2, toward: 1.2, eases: 6 };
-const _heroLightAt = new THREE.Vector3();
+const _heroLightAt = new Vec3();
 /** the pool's light he's lit by, how bright now, and whether a harness holds it off */
 let heroLight: LightSlot | null = null;
 let heroLightNow = 0;
@@ -752,7 +758,7 @@ export function holdHeroLightOff(held: boolean): void {
 
 /** His light in the hall eased to `wanted` (a share), taken from the pool while it burns. */
 function lightHim(wanted: number, dt: number): void {
-  heroLightNow = THREE.MathUtils.damp(heroLightNow, heroLightOffHeld ? 0 : wanted, HERO_LIGHT.eases, dt);
+  heroLightNow = Maths.damp(heroLightNow, heroLightOffHeld ? 0 : wanted, HERO_LIGHT.eases, dt);
   const burning = heroLightNow > CUT_AWAY_NONE;
   if (burning && !heroLight) {
     heroLight = flash({
@@ -803,7 +809,7 @@ function columnsFade(dt: number): void {
     const past = away > 0.3 ? 1 + COLUMN_SEEN_PAST / away : 1;
     const seen = down > 0
       ? seenShareAt(G.player.pos.x + (x - G.player.pos.x) * past, G.player.pos.z + (z - G.player.pos.z) * past) : 0;
-    column.seen = THREE.MathUtils.damp(column.seen, seen * COLUMN_SEEN_MOST, CUT_AWAY_FADE, dt);
+    column.seen = Maths.damp(column.seen, seen * COLUMN_SEEN_MOST, CUT_AWAY_FADE, dt);
   }
   columnsSeen(COLUMNS_FADING);
 }
@@ -1039,8 +1045,8 @@ const ROOM_COLUMN_GHOST = 0.4;
  *  for him: shut from 4 m out, a step down the stair saw nothing of the room from above, where over the shoulder he
  *  saw in, from play "when player is down even one stair, then in top down he cannot see into the hall" */
 const DOOR_CONE = { near: HALL_SEEN - 1.5, far: HALL_SEEN, inFrom: -0.5, in: -0.1, floorIn: [0.5, 1.5, 3] };
-const _door = new THREE.Box3(), _frustum = new THREE.Frustum(), _viewProj = new THREE.Matrix4();
-const _look = new THREE.Vector3();
+const _door = new Box3(), _frustum = new Frustum(), _viewProj = new Mat4();
+const _look = new Vec3();
 /** the heights on him the camera's line runs to (m), and the points read along each */
 const HIDDEN_AT = [0.3, 1.1, 1.8];
 const HIDDEN_STEPS = 24;
@@ -1089,12 +1095,12 @@ function doorwayOnScreen(): boolean {
 
 /** the pool's lights held for the lamps, the lamps' colour, and whether their places are set */
 let lampLights: LightSlot[] = [];
-const LAMP_COLOR = new THREE.Color(LAMPLIGHT.color);
+const LAMP_COLOR = new Color(LAMPLIGHT.color);
 let lampsPlaced = false;
 
 /** Every lamp in the list's order: the street lamps, the hall's torches (its dais's two first), the torches either
  *  side of its door. */
-function allLamps(): THREE.Vector3[] {
+function allLamps(): Vec3[] {
   const village = G.arena.village;
   return [...village.lanterns, ...village.hallTorches, ...village.porchTorches];
 }
@@ -1116,7 +1122,7 @@ const torchGlow: number[] = [];
 function easeTorches(dt: number): void {
   const flickers = G.arena.village.torchFlickers;
   for (let k = 0; k < flickers.length; k++) {
-    torchGlow[k] = THREE.MathUtils.damp(torchGlow[k] ?? 1, flickers[k].intensity, TORCH_EASE, dt);
+    torchGlow[k] = Maths.damp(torchGlow[k] ?? 1, flickers[k].intensity, TORCH_EASE, dt);
   }
 }
 
@@ -1151,7 +1157,7 @@ function placeTheLamps(): LampPlace[] {
 
 /** The village's lamps placed in the lit shaders' list and their shadows of what stands still drawn, as the boot
  *  builds the world (`world/lampAtlas.ts`: a program of its own, compiled there and not at the first frame). */
-export function prepareLamps(renderer: THREE.WebGLRenderer, village: THREE.Object3D): void {
+export function prepareLamps(renderer: unknown, village: Node): void {
   bakeLampShadows(renderer, village, placeTheLamps());
   lampsPlaced = true;
 }
@@ -1229,6 +1235,6 @@ export function labelSays(o: VillageObject): { says: string; shown: boolean } {
 }
 
 /** The object `o`'s screen point of its name (the lab). */
-export function labelPoint(o: VillageObject): THREE.Vector3 {
+export function labelPoint(o: VillageObject): Vec3 {
   return _to.set(o.at[0], floorAt(o) + o.label, o.at[1]);
 }

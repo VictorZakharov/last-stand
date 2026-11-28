@@ -1,7 +1,7 @@
 // The heroes' geometries' fewer triangles made off the page (`shadowDetail.ts`): a piece's simplification is one call
 // of 1 to 15 ms (a hero's hair, 32k triangles, the longest), which no slice of a frame could cut, and on the page the
 // lobby's first seconds held frames 12 to 16 ms for it (`npm run lab -- lobbystart`).
-import { MeshoptSimplifier } from 'three/addons/libs/meshopt_simplifier.module.js';
+import { MeshoptSimplifier } from 'meshoptimizer/simplifier';
 import { simplifiedIndex, type Detail } from './simplifyIndex';
 
 /** A geometry to simplify: its id on the page, its index and positions (copies, handed over), and what to keep. */

@@ -4,7 +4,7 @@
 // fogged grass still reads greener than red or blue, and a count of plainly green pixels read 16 to 29% of what he
 // can't see as green: what the fog took of a place's green is read instead, against the same frame drawn again with
 // the fog mixed in by next to nothing (33 to 59% of it).
-import type * as THREE from 'three';
+import type { Vec3 } from './sceneApi.ts';
 import type { Lab } from './lab';
 import { G } from '../../../src/state';
 import { RUST } from '../../../src/engine';
@@ -25,7 +25,7 @@ export function isGreen(red: number, middle: number, blue: number): boolean {
 }
 
 /** The pixel's index in `canvas` (its red's) where `point` is drawn, null off the frame. */
-function pixelOf(canvas: Canvas, point: THREE.Vector3): number | null {
+function pixelOf(canvas: Canvas, point: Vec3): number | null {
   const place = point.clone().project(G.camera);
   const column = Math.floor(((place.x + 1) / 2) * canvas.width);
   const row = Math.floor(((place.y + 1) / 2) * canvas.height);
@@ -34,7 +34,7 @@ function pixelOf(canvas: Canvas, point: THREE.Vector3): number | null {
 }
 
 /** The share of `points`' pixels in the frame drawn now that's plainly green. */
-export function greenAt(lab: Lab, points: THREE.Vector3[]): number {
+export function greenAt(lab: Lab, points: Vec3[]): number {
   const canvas = drawFrame(lab);
   let green = 0;
   let read = 0;
@@ -56,7 +56,7 @@ function greenOver(canvas: Canvas, pixel: number): number {
 }
 
 /** The green of `points` in the frame drawn now (the whole frame's with none), summed, and the pixels read. */
-function greenIn(lab: Lab, points: THREE.Vector3[] | null): { green: number; read: number } {
+function greenIn(lab: Lab, points: Vec3[] | null): { green: number; read: number } {
   const canvas = drawFrame(lab);
   let green = 0;
   let read = 0;
@@ -82,7 +82,7 @@ export interface GreenTaken {
 
 /** The share of the green at `points` (the whole frame with none) the fog takes in the frame drawn now: the frame drawn
  *  again at once with the fog mixed in by next to nothing, as between two frames the grass moves. */
-export function greenTaken(lab: Lab, points: THREE.Vector3[] | null): GreenTaken {
+export function greenTaken(lab: Lab, points: Vec3[] | null): GreenTaken {
   const fogged = greenIn(lab, points);
   const fog = RUST.tune.sightFog;
   RUST.tune.sightFog = FOG_NONE;

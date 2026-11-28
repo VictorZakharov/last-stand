@@ -1,7 +1,7 @@
 // `lab ui`'s `clicked` state (`../uiKit.ts` `Steps`): the crypt's portal card left by its Leave clicked and a key
 // pressed after it: where the focus went.
 import { goUse, villageObject } from '../../../../src/game/village';
-import type { Lab } from '../lab';
+import { middleOf, type Lab } from '../lab';
 import { CARD_FRAMES, describe, standAt, standBack } from '../uiKit';
 import type { Found, Steps } from '../uiKit';
 
@@ -23,12 +23,12 @@ async function clickClass(lab: Lab): Promise<void> {
   const button = document.querySelector<HTMLElement>('#vcard:not(.hidden) .vc-close');
   if (!button) throw new Error('lab: ui: the crypt\'s portal opened no card to leave');
   let clicked = false;
-  const heard = (event: MouseEvent) => {
-    clicked = event.detail > 0;
+  // (any click: the card is drawn by the engine, whose press clicks the page's button for the mouse's)
+  const heard = () => {
+    clicked = true;
   };
   button.addEventListener('click', heard, { once: true });
-  const box = button.getBoundingClientRect();
-  await lab.click({ x: box.left + box.width / 2, y: box.top + box.height / 2 });
+  await lab.click(middleOf(button));
   button.removeEventListener('click', heard);
   if (!clicked) throw new Error('lab: ui: the mouse\'s click never reached the card\'s Leave');
   await lab.press(KEY_AFTER_CLICK);

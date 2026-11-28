@@ -1,8 +1,7 @@
-// The effects' own shaders under the Rust engine: a skill's or a bolt's `ShaderMaterial` (GLSL, with its port to
-// three's nodes beside it, `core/shaderPorts.ts`) given a look for the engine, beside both, in the file that makes
-// the material. Its hooks are the port's WGSL again; its numbers are read off the material's own uniforms each frame
-// it's drawn. Without a look a shader material isn't drawn at all (from play: "no mage visual effects on spells").
-import type * as THREE from 'three';
+// The effects' own shaders under the Rust engine: a skill's or a bolt's look material given a look for the engine,
+// in the file that makes the material (its GLSL and three's nodes left with three, #973). Its hooks are WGSL; its
+// numbers are read off the material's own uniforms each frame it's drawn. Without a look a shader material isn't drawn at all (from play: "no mage visual effects on spells").
+import type { LookMaterial } from './api/index.ts';
 import { NEAR_GLOW } from '../core/materials';
 import { rustLook, rustShader, type RustLook } from './custom';
 
@@ -68,7 +67,7 @@ export function effectShader(name: string, hooks: string): void {
 }
 
 /** `material` drawn by the engine with `hooks` (its two functions' WGSL, `FX_NOISE` before them), named `name`. */
-export function effectLook<M extends THREE.ShaderMaterial>(material: M, name: string, hooks: string, look: EffectLook): M {
+export function effectLook<M extends LookMaterial>(material: M, name: string, hooks: string, look: EffectLook): M {
   const uniforms = material.uniforms as Uniforms;
   return rustLook(material, {
     ...look,

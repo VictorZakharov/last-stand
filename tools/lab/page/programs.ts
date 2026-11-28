@@ -9,7 +9,9 @@
 // together, never shown (it must be listed asked for and never drawn), then shows one of another such blending (it
 // must be listed drawn). (Under three this read three's WebGL programs from a ledger of the game's, dev builds alone:
 // the engine replaced them, and the ledger read nothing.)
-import * as THREE from 'three';
+import {
+  AdditiveBlending, BackSide, CustomBlending, Material, Mesh, OneFactor, shapes, UnlitMaterial, Vec3,
+} from './sceneApi.ts';
 import type { Lab, Report } from './lab';
 import { G } from '../../../src/state';
 import { programsCompiledInGame } from '../../../src/core/shaders';
@@ -93,20 +95,20 @@ function lateCounted(): Report {
 }
 
 /** A box of `material` before the hero. */
-function boxOf(material: THREE.Material): THREE.Mesh {
-  const box = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 0.5), material);
-  const way = new THREE.Vector3(Math.sin(G.player.facing), 0, Math.cos(G.player.facing));
+function boxOf(material: Material): Mesh {
+  const box = new Mesh(shapes.box(0.5, 0.5, 0.5), material);
+  const way = new Vec3(Math.sin(G.player.facing), 0, Math.cos(G.player.facing));
   box.position.copy(G.player.pos).addScaledVector(way, 2).setY(0.5);
   return box;
 }
 
 /** The canary's blendings, each with a side and depth writing no other material has together. */
-function canaryMaterials(): THREE.Material[] {
-  const backAdded = { side: THREE.BackSide, depthWrite: true, blending: THREE.AdditiveBlending };
-  const multiplied = { blending: THREE.CustomBlending, blendSrc: THREE.OneFactor, transparent: true };
+function canaryMaterials(): Material[] {
+  const backAdded = { side: BackSide, depthWrite: true, blending: AdditiveBlending } as const;
+  const multiplied = { blending: CustomBlending, blendSrc: OneFactor, transparent: true } as const;
   return [
-    new THREE.MeshBasicMaterial({ color: 0xff00ff, ...backAdded }),
-    new THREE.MeshBasicMaterial({ color: 0x00ffff, ...multiplied, side: THREE.BackSide, depthWrite: true }),
+    new UnlitMaterial({ color: 0xff00ff, ...backAdded }),
+    new UnlitMaterial({ color: 0x00ffff, ...multiplied, side: BackSide, depthWrite: true }),
   ];
 }
 
@@ -127,7 +129,7 @@ async function canary(lab: Lab): Promise<Report> {
     shown.removeFromParent();
     for (const box of [unseen, shown]) {
       box.geometry.dispose();
-      (box.material as THREE.Material).dispose();
+      (box.material as Material).dispose();
     }
   }
   const ofUnseen = PIPELINES_ASKED.slice(before, handed);

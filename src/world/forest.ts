@@ -1,8 +1,12 @@
 // The Thornwood: a sunlit clearing walled in by thickets, boulders and old trees, ancient giants
 // standing over the forest beyond, with four root-arch spawn gates, a mossy stone dais ringed by
 // standing stones, glowcap mushroom clusters and two bonfires. Stumps, logs and boulders break up the floor.
-import * as THREE from 'three';
-import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import {
+  AdditiveBlending, Attribute, Box3, CatmullRom3, Color, DoubleSide, floats, Geometry, InstancedMesh,
+  LitMaterial, Mat4, Material, Maths, mergeGeometries, Mesh, Node, PointLight, Quat,
+  Raycaster, UnlitMaterial, Vec2, Vec3,
+} from '../engine/api/index.ts';
+import * as shapes from '../engine/api/shapes/index.ts';
 import { seeThrough } from '../core/seeThrough';
 import { ARENA } from '../data/balance';
 import { forestFloor, bark, flagstone, moss, rock, wood, pbrMaterialMaps, runeCircle, type Repeat } from '../core/textures';
@@ -20,8 +24,6 @@ import { bend, rag, taperTube } from '../entities/models/shapes';
 import { PropSet, instanceLook, meshLook, groupLook } from './destructible';
 import { buildFire, emberMat, type FireLog, type FireSpec } from './fire';
 import { reliefContext } from '../core/parallax';
-import { tsl, stillNodes } from '../core/webgpu';
-import { grassWindNode, mossColorNode } from './forestNodes';
 import { rustLook } from '../engine/custom';
 import { grassWindLook, mossLook } from '../engine/looks/forest';
 import { valueNoise3 } from '../core/patterns';
@@ -35,8 +37,8 @@ import { fireSeat, lengthSeat, stoneSeat, whereSat, type Seat } from './seats';
 const GATES = [0, 1, 2, 3].map((k) => (k / 4) * TAU);
 /** daylight haze: the fog, and the sky at the horizon */
 const FOG = 0x9ab4a6;
-const SUN = new THREE.Vector3(-18, 40, 14);
-const V = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
+const SUN = new Vec3(-18, 40, 14);
+const V = (x: number, y: number, z: number) => new Vec3(x, y, z);
 /** angular distance from `a` to the nearest spawn gate */
 const gateGap = (a: number) => Math.min(...GATES.map((g) => Math.abs(Math.atan2(Math.sin(a - g), Math.cos(a - g)))));
 
@@ -90,24 +92,17 @@ function clearOfFires(x: number, z: number, reach: number): [number, number] {
 
 /**
  * Wind in the grass: each blade's points swayed by the square of their height (a blade bends from its root), the tufts
- * along a wave that crosses the clearing, on the game's clock (an updater keeps the time).
+ * along a wave that crosses the clearing, on the engine's clock (its look: engine/looks/forest.ts).
  */
-function windInGrass(m: THREE.MeshStandardMaterial, updaters: Updater[]): THREE.MeshStandardMaterial {
-  // (in the render's group: the grass stands still, and a still material's refresh sends nothing of the object's)
-  const clock = tsl.uniform(0).setGroup(tsl.renderGroup);
-  updaters.push((_dt, t) => { clock.value = t; });
-  m.positionNode = grassWindNode(clock, { rate: SWAY_RATE, reach: SWAY });
-  rustLook(m, grassWindLook({ rate: SWAY_RATE, reach: SWAY }));
-  stillNodes.add(m);
-  return m;
+function windInGrass(m: LitMaterial): LitMaterial {
+  return rustLook(m, grassWindLook({ rate: SWAY_RATE, reach: SWAY }));
 }
 
 /** Large moss patches tinted over the floor in world space (a texture this big would tile visibly). The pebbles and
  *  leaves stand up out of the soil (core/parallax.ts). */
-function mossyGround<M extends THREE.Material>(m: M): M {
-  (m as M & { colorNode: unknown }).colorNode = mossColorNode();
+function mossyGround<M extends Material>(m: M): M {
   rustLook(m, mossLook(FLOOR_RELIEF));
-  reliefContext(m as unknown as THREE.MeshStandardMaterial, FLOOR_RELIEF);
+  reliefContext(m as unknown as LitMaterial, FLOOR_RELIEF);
   return m;
 }
 
@@ -122,43 +117,43 @@ export const buildForest: BiomeBuilder = (scene) => {
   const h = ARENA.daisHalf;
 
   // --- Materials ------------------------------------------------------------
-  const groundMat = mossyGround(new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(forestFloor(), FLOOR_REPEAT, 1.2), color: 0xffffff }));
-  const daisMat = new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(flagstone(47, 5), 1, 1.2), color: 0x94a488 });
+  const groundMat = mossyGround(new LitMaterial({ ...pbrMaterialMaps(forestFloor(), FLOOR_REPEAT, 1.2), color: 0xffffff }));
+  const daisMat = new LitMaterial({ ...pbrMaterialMaps(flagstone(47, 5), 1, 1.2), color: 0x94a488 });
   // weathered rock, a tile a metre on the rocks' box-mapped faces; its own moss and lichen, so the mossy stone is only
   // greener than the bare (its colours brighter than they were on grunge, whose mean was 0.78 to the rock's 0.58)
   const stoneMaps = pbrMaterialMaps(rock(17), 1, 1.6);
-  const stone = new THREE.MeshStandardMaterial({ ...stoneMaps, color: 0x989e90, roughness: 0.9 });
-  const mossStone = new THREE.MeshStandardMaterial({ ...stoneMaps, color: 0x8a967a, roughness: 0.95 });
+  const stone = new LitMaterial({ ...stoneMaps, color: 0x989e90, roughness: 0.9 });
+  const mossStone = new LitMaterial({ ...stoneMaps, color: 0x8a967a, roughness: 0.95 });
   /** bark repeated as a surface needs it (`BARK_REPEATS`, a tree kind's `bark`): copies of the one map */
-  const barkAt = (repeat: Repeat): THREE.MeshStandardMaterial =>
-    seeThrough(new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(bark(), repeat, 1.6), color: 0xd8c8b0 }), 'prop');
+  const barkAt = (repeat: Repeat): LitMaterial =>
+    seeThrough(new LitMaterial({ ...pbrMaterialMaps(bark(), repeat, 1.6), color: 0xd8c8b0 }), 'prop');
   // foliage: leaf cards cut out of painted textures round darker cores; instance colours set each plant's hue
   const clusterTex = leafClusterTexture();
-  const canopyMat = asLeaves(seeThrough(new THREE.MeshStandardMaterial({ map: clusterTex, alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.8 }), 'foliage'));
+  const canopyMat = asLeaves(seeThrough(new LitMaterial({ map: clusterTex, alphaTest: 0.5, side: DoubleSide, roughness: 0.8 }), 'foliage'));
   // (a plain colour read as a bare green ball under the cards: the moss's relief alone, its colour the instance's)
   const { map: _mossColour, ...mossRelief } = pbrMaterialMaps(moss(5), [8, 4], 1.5);
-  const coreMat = seeThrough(new THREE.MeshStandardMaterial({ ...mossRelief, color: 0x8a9a80, roughness: 0.95 }), 'foliage');
+  const coreMat = seeThrough(new LitMaterial({ ...mossRelief, color: 0x8a9a80, roughness: 0.95 }), 'foliage');
   // the same for single meshes, which have no instance colour: the tint is in the material
-  const archCanopy = asLeaves(seeThrough(new THREE.MeshStandardMaterial({ map: clusterTex, alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.8, color: 0x5e8048 }), 'foliage'));
-  const archCore = seeThrough(new THREE.MeshStandardMaterial({ color: 0x2c3c22, roughness: 0.95 }), 'foliage');
+  const archCanopy = asLeaves(seeThrough(new LitMaterial({ map: clusterTex, alphaTest: 0.5, side: DoubleSide, roughness: 0.8, color: 0x5e8048 }), 'foliage'));
+  const archCore = seeThrough(new LitMaterial({ color: 0x2c3c22, roughness: 0.95 }), 'foliage');
   // (low, beside the hero: a hole as narrow as a prop's, or the ferns round him went wherever he stood)
-  const fernMat = asLeaves(seeThrough(new THREE.MeshStandardMaterial({ map: fernTexture(), alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.8 }), 'prop'));
+  const fernMat = asLeaves(seeThrough(new LitMaterial({ map: fernTexture(), alphaTest: 0.5, side: DoubleSide, roughness: 0.8 }), 'prop'));
   const oneLeaf = leafTexture();
-  const litterMat = asLeaves(new THREE.MeshStandardMaterial({ map: oneLeaf, alphaTest: 0.5, roughness: 0.9 }));
-  const ivyMat = asLeaves(new THREE.MeshStandardMaterial({ map: oneLeaf, alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.8, color: 0x3e6a2a }));
+  const litterMat = asLeaves(new LitMaterial({ map: oneLeaf, alphaTest: 0.5, roughness: 0.9 }));
+  const ivyMat = asLeaves(new LitMaterial({ map: oneLeaf, alphaTest: 0.5, side: DoubleSide, roughness: 0.8, color: 0x3e6a2a }));
   // moss: cushions and tufts, a tile half a metre (a grunge tinted green read as a flat painted top), and a sheen,
   // sdf-harness's substrate layer for fuzz, pale at grazing angles as moss's fronds catch the light
-  const mossLayer = { sheen: 1, sheenColor: new THREE.Color(0x5a7040), sheenRoughness: 0.6, roughness: 1 };
-  const mossMat = new THREE.MeshPhysicalMaterial({ ...pbrMaterialMaps(moss(5), [7, 1.5], 1.5), ...mossLayer });
-  const logMoss = new THREE.MeshPhysicalMaterial({ ...pbrMaterialMaps(moss(5), [4, 6], 1.5), ...mossLayer });
-  const hangMat = new THREE.MeshStandardMaterial({ color: 0x2c4424, roughness: 1, side: THREE.DoubleSide });
+  const mossLayer = { sheen: 1, sheenColor: new Color(0x5a7040), sheenRoughness: 0.6, roughness: 1 };
+  const mossMat = new LitMaterial({ ...pbrMaterialMaps(moss(5), [7, 1.5], 1.5), ...mossLayer });
+  const logMoss = new LitMaterial({ ...pbrMaterialMaps(moss(5), [4, 6], 1.5), ...mossLayer });
+  const hangMat = new LitMaterial({ color: 0x2c4424, roughness: 1, side: DoubleSide });
   // (a hollow log's inside and its ends: bare wood gone grey and dark, its grain along the log, both sides drawn as
   // an end's wood is wound either way; in the bark's maps the hollow read as bark inside out)
-  const heartwood = new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(wood(), [4, 9], 1.4), color: 0x8a7a68, roughness: 0.95, side: THREE.DoubleSide });
-  const grassMat = windInGrass(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85, side: THREE.DoubleSide }), updaters);
-  const capMat = new THREE.MeshStandardMaterial({ color: 0x0c2a24, emissive: 0x2affc8, emissiveIntensity: 0.75, roughness: 0.5 });
-  const stemMat = new THREE.MeshStandardMaterial({ color: 0xb8b09a, roughness: 0.8 });
-  const glyphMat = new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0x6aff7a, emissiveIntensity: 1.4 });
+  const heartwood = new LitMaterial({ ...pbrMaterialMaps(wood(), [4, 9], 1.4), color: 0x8a7a68, roughness: 0.95, side: DoubleSide });
+  const grassMat = windInGrass(new LitMaterial({ vertexColors: true, roughness: 0.85, side: DoubleSide }));
+  const capMat = new LitMaterial({ color: 0x0c2a24, emissive: 0x2affc8, emissiveIntensity: 0.75, roughness: 0.5 });
+  const stemMat = new LitMaterial({ color: 0xb8b09a, roughness: 0.8 });
+  const glyphMat = new LitMaterial({ color: 0x000000, emissive: 0x6aff7a, emissiveIntensity: 1.4 });
   // the props dissolve between the camera and the player in the close views (the camera never pulls in)
   for (const m of [stone, mossStone, ivyMat, mossMat, logMoss, hangMat, heartwood, capMat, stemMat, glyphMat]) seeThrough(m, 'prop');
 
@@ -168,16 +163,16 @@ export const buildForest: BiomeBuilder = (scene) => {
 
   // --- Ground ---------------------------------------------------------------
   // it reaches past the fog's far end, so its edge melts into the sky's horizon
-  const ground = new THREE.Mesh(new THREE.CircleGeometry(110, 128).rotateX(-Math.PI / 2), groundMat);
+  const ground = new Mesh(shapes.circle(110, 128).rotateX(-Math.PI / 2), groundMat);
   ground.receiveShadow = true;
   scene.add(ground);
 
   // --- Central dais: old mossy flagstones with a green rune circle ------------
-  const lowerM = new THREE.Mesh(boxWithUV(2 * (h + 0.7), 0.18, 2 * (h + 0.7), 2.4), daisMat); lowerM.position.y = 0.09;
-  const upperM = new THREE.Mesh(boxWithUV(2 * h, 0.35, 2 * h, 2), daisMat); upperM.position.y = 0.175;
+  const lowerM = new Mesh(boxWithUV(2 * (h + 0.7), 0.18, 2 * (h + 0.7), 2.4), daisMat); lowerM.position.y = 0.09;
+  const upperM = new Mesh(boxWithUV(2 * h, 0.35, 2 * h, 2), daisMat); upperM.position.y = 0.175;
   for (const m of [lowerM, upperM]) { m.receiveShadow = m.castShadow = true; scene.add(m); }
-  const runeMat = new THREE.MeshBasicMaterial({ map: runeCircle(11), color: 0x000000, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false });
-  const rune = new THREE.Mesh(new THREE.PlaneGeometry(8, 8).rotateX(-Math.PI / 2), runeMat);
+  const runeMat = new UnlitMaterial({ map: runeCircle(11), color: 0x000000, transparent: true, blending: AdditiveBlending, depthWrite: false });
+  const rune = new Mesh(shapes.plane(8, 8).rotateX(-Math.PI / 2), runeMat);
   rune.position.y = ARENA.daisHeight + 0.02;
   scene.add(rune);
   const eased = runPhase({ calm: 0 });
@@ -194,20 +189,20 @@ export const buildForest: BiomeBuilder = (scene) => {
   const menhirGeo = buildMenhirGeo(rng);
   // (box-mapped in metres, as the boulders are: a tile a metre. A cylinder's own UVs ran a tile round each part and
   // up its whole height, the 0.35 m plinth's 18 times as long round as up: `lab tiles`)
-  const standing = seeThrough(new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(rock(17), 1, 1.6), color: 0x989e90, roughness: 0.9 }), 'prop');
-  const menhirProbe = new THREE.Mesh(menhirGeo);
+  const standing = seeThrough(new LitMaterial({ ...pbrMaterialMaps(rock(17), 1, 1.6), color: 0x989e90, roughness: 0.9 }), 'prop');
+  const menhirProbe = new Mesh(menhirGeo);
   for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
     // (its plinth reaches 1.16 m from its middle: 0.5 m in, it hung 0.66 m over the dais's edge, standing on air)
-    const x = sx * (h - 1.3), z = sz * (h - 1.3), g = new THREE.Group();
+    const x = sx * (h - 1.3), z = sz * (h - 1.3), g = new Node();
     scene.add(g);
-    const mh = new THREE.Mesh(menhirGeo, standing);
+    const mh = new Mesh(menhirGeo, standing);
     mh.name = 'standing stone';
     mh.position.set(x, ARENA.daisHeight, z);
     mh.rotation.y = Math.atan2(sx, sz);
     mh.updateMatrix();
     mh.castShadow = mh.receiveShadow = true;
     g.add(mh);
-    const strip = new THREE.Mesh(new THREE.BoxGeometry(0.1, 1.5, 0.02), glyphMat);
+    const strip = new Mesh(shapes.box(0.1, 1.5, 0.02), glyphMat);
     strip.position.set(x + sx * 0.4, ARENA.daisHeight + 1.9, z + sz * 0.4);
     strip.rotation.set(0, Math.atan2(sx, sz), 0);
     strip.rotateX(-0.08);
@@ -215,12 +210,12 @@ export const buildForest: BiomeBuilder = (scene) => {
     // moss on its shoulders and ivy climbing the side away from the glyphs
     // (a coat on its faces round its shoulders: a dome round where its middle would be unleaned, wider than its faces,
     // stood off them in a ring under the pyramidion, #287)
-    const moss = new THREE.Mesh(mossCoat(menhirProbe, sx + sz * 3).applyMatrix4(mh.matrix), mossMat);
+    const moss = new Mesh(mossCoat(menhirProbe, sx + sz * 3).applyMatrix4(mh.matrix), mossMat);
     moss.receiveShadow = true;
     g.add(moss);
     // (each point of it on the stone's face where it climbs: wound round at 0.62 m, near the top it stood off the
     // tapering faces in a band, #287)
-    const ivy: THREE.BufferGeometry[] = [], onStone = mh.matrix.clone();
+    const ivy: Geometry[] = [], onStone = mh.matrix.clone();
     for (let k = 0; k < 3; k++) {
       // (drawn as they were, wound the other way round the stone from its glyphs: a half turn on)
       const len = r(2.2, 3.6), ph = r(0, TAU) + Math.PI, climb = (t: number) => ph + t * 0.35 * TAU;
@@ -231,10 +226,10 @@ export const buildForest: BiomeBuilder = (scene) => {
       ivy.push(taperTube(stem, (t) => 0.035 * (1 - t * 0.5), 12, 4).applyMatrix4(onStone));
       for (let i = 0; i < 14; i++) {
         const t = i / 14, a = climb(t), at = onFace(menhirProbe, IVY_FOOT + len * (1 - t), a, IVY_LEAF);
-        ivy.push(new THREE.PlaneGeometry(0.2, 0.26).rotateY(Math.atan2(at.x, at.z)).rotateZ(r(-0.6, 0.6)).translate(at.x, at.y, at.z).applyMatrix4(onStone));
+        ivy.push(shapes.plane(0.2, 0.26).rotateY(Math.atan2(at.x, at.z)).rotateZ(r(-0.6, 0.6)).translate(at.x, at.y, at.z).applyMatrix4(onStone));
       }
     }
-    const ivyM = new THREE.Mesh(mergeAll(ivy), ivyMat);
+    const ivyM = new Mesh(mergeAll(ivy), ivyMat);
     ivyM.receiveShadow = true;
     g.add(ivyM);
     obstacles.push({ x, z, r: 0.95, h: 4 });
@@ -244,10 +239,10 @@ export const buildForest: BiomeBuilder = (scene) => {
   // --- Boundary: a wall of thicket and boulders, trees beyond --------------------
   const edgeN = 150;
   const bush = canopyGeo(rng, [[0, 0, 0, 1], [0.55, -0.2, 0.25, 0.72], [-0.5, -0.15, -0.3, 0.75]], 14, 1.0);
-  const bushes = new THREE.InstancedMesh(bush.core, coreMat, edgeN * 2);
-  const bushCards = new THREE.InstancedMesh(bush.cards, canopyMat, edgeN * 2);
-  const rocks = new THREE.InstancedMesh(boulderGeo(31), mossStone, edgeN);
-  const plantCol = new THREE.Color(), _mx = new THREE.Matrix4();
+  const bushes = new InstancedMesh(bush.core, coreMat, edgeN * 2);
+  const bushCards = new InstancedMesh(bush.cards, canopyMat, edgeN * 2);
+  const rocks = new InstancedMesh(boulderGeo(31), mossStone, edgeN);
+  const plantCol = new Color(), _mx = new Mat4();
   let bi = 0, ri = 0;
   for (let i = 0; i < edgeN; i++) {
     const a = (i / edgeN) * TAU + r(-0.01, 0.01);
@@ -278,10 +273,10 @@ export const buildForest: BiomeBuilder = (scene) => {
   // trees: short near the clearing (they'd hide the player at the edge), taller further out; a few kinds grown by
   // ez-tree, each instanced, and the ancient giants among them
   const treeN = 120, kinds = TREE_KINDS.map(growTree);
-  const barks = kinds.map((k, i) => new THREE.InstancedMesh(k.bark, barkAt(TREE_KINDS[i].bark), treeN));
-  const leaves = kinds.map((k) => new THREE.InstancedMesh(k.leaves, canopyMat, treeN));
+  const barks = kinds.map((k, i) => new InstancedMesh(k.bark, barkAt(TREE_KINDS[i].bark), treeN));
+  const leaves = kinds.map((k) => new InstancedMesh(k.leaves, canopyMat, treeN));
   const used = kinds.map(() => 0);
-  const place = (kind: number, x: number, z: number, h: number, colour: THREE.Color) => {
+  const place = (kind: number, x: number, z: number, h: number, colour: Color) => {
     const i = used[kind]++;
     // narrowed so nothing under CANOPY_Y comes within 2 m of the wall, and nothing over it more than 2 m past it, as
     // the old giants' crowns did: grown as ez-tree grows them, a giant's low limbs reached 17 m out over the clearing
@@ -320,7 +315,10 @@ export const buildForest: BiomeBuilder = (scene) => {
     barks[k].name = `trees' bark: ${TREE_KINDS[k].preset}`;
     leaves[k].name = `trees' leaves: ${TREE_KINDS[k].preset}`;
     // (what an arrow over the thicket meets: each tree's trunk, its limbs let go)
-    for (let i = 0; i < used[k]; i++) wall.addGeometry(kinds[k].trunk, barks[k].getMatrixAt(i, _mx), false, 'beyond');
+    for (let i = 0; i < used[k]; i++) {
+      barks[k].getMatrixAt(i, _mx);
+      wall.addGeometry(kinds[k].trunk, _mx, false, 'beyond');
+    }
     const bark = cullInCells(barks[k], eachInstance), crown = cullInCells(leaves[k], eachInstance);
     scene.add(...asTree(...bark, ...crown));
     simpleTree(kinds[k], bark, crown);
@@ -335,7 +333,7 @@ export const buildForest: BiomeBuilder = (scene) => {
 
   // --- Glowcap clusters (teal) and bonfires (orange): 6 of the biome's 10 point lights (and a portal's each) --
   for (const [x, z] of [[-11, -11], [11, -11], [-11, 11], [11, 11]]) {
-    const g = new THREE.Group(), u0 = updaters.length;
+    const g = new Node(), u0 = updaters.length;
     scene.add(g);
     buildGlowcaps(g, x, z, rng, capMat, stemMat, updaters);
     obstacles.push({ x, z, r: 0.75, h: 1.7 });
@@ -343,7 +341,7 @@ export const buildForest: BiomeBuilder = (scene) => {
   }
   const bonfireBark = barkAt(BARK_REPEATS.bonfire);
   for (const [x, z] of BONFIRES) {
-    const g = new THREE.Group(), u0 = updaters.length;
+    const g = new Node(), u0 = updaters.length;
     scene.add(g);
     buildBonfire(g, x, z, stone, bonfireBark, updaters);
     obstacles.push({ x, z, r: 0.9, h: 1 });
@@ -355,7 +353,7 @@ export const buildForest: BiomeBuilder = (scene) => {
   // (r, angle) spots clear of the gates' spawn areas, the lights and the lobby dummies
   const stumpSpots = [[15, 0.4], [19, 2.0], [14, 3.45], [20, 4.35], [18, 5.85], [9, 1.2]];
   // (the broken top's oak weathered grey, its rings round its middle: `world/stump.ts`)
-  const stumpWood = seeThrough(new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(wood(), 1, 1.4), color: 0xb4a898 }), 'prop');
+  const stumpWood = seeThrough(new LitMaterial({ ...pbrMaterialMaps(wood(), 1, 1.4), color: 0xb4a898 }), 'prop');
   // (sculpted from a stream of its own; the old stump's draws from the biome's are still drawn: drawn from it, every
   // prop placed after the stumps moved)
   for (let i = 0; i < OLD_STUMP_DRAWS; i++) rng();
@@ -366,7 +364,7 @@ export const buildForest: BiomeBuilder = (scene) => {
     const x = Math.cos(a) * rr, z = Math.sin(a) * rr;
     // (the old instances' size and turn still drawn from the stream: every prop placed after them would move)
     r(0.8, 1.15); r(0, TAU); r(0.8, 1.4);
-    const mesh = new THREE.Mesh(pool[0].geometry, stumpMats);
+    const mesh = new Mesh(pool[0].geometry, stumpMats);
     mesh.position.set(x, 0, z);
     mesh.castShadow = mesh.receiveShadow = true;
     mesh.name = 'stump';
@@ -383,11 +381,11 @@ export const buildForest: BiomeBuilder = (scene) => {
   // (both sides: past the heartwood's rim, 0.2 m in, an end is the bark's shell alone, and from outside only it
   // showed the floor through the log's wall)
   const log = buildLogGeo(rng), logBark = barkAt(BARK_REPEATS.log);
-  logBark.side = THREE.DoubleSide;
+  logBark.side = DoubleSide;
   for (const [rr, a, rot] of logSpots) {
-    const x = Math.cos(a) * rr, z = Math.sin(a) * rr, yaw = a + rot, parts: THREE.Mesh[] = [], n0 = obstacles.length;
+    const x = Math.cos(a) * rr, z = Math.sin(a) * rr, yaw = a + rot, parts: Mesh[] = [], n0 = obstacles.length;
     for (const [geo, mat] of [[log.bark, logBark], [log.inner, heartwood], [log.moss, logMoss], [log.fungus, capMat]] as const) {
-      const m = new THREE.Mesh(geo, mat);
+      const m = new Mesh(geo, mat);
       m.name = 'fallen log';
       m.position.set(x, 0.38, z);
       m.rotation.y = yaw;
@@ -403,7 +401,7 @@ export const buildForest: BiomeBuilder = (scene) => {
   }
 
   const boulderSpots = [[24, 0.75, 1.1], [16, 2.75, 0.8], [23, 3.6, 1.2], [13, 5.2, 0.7], [24, 5.2, 1.0], [8, 3.9, 0.6], [17, 1.55, 0.7]];
-  const boulders = new THREE.InstancedMesh(boulderGeo(37), mossStone, boulderSpots.length);
+  const boulders = new InstancedMesh(boulderGeo(37), mossStone, boulderSpots.length);
   boulderSpots.forEach(([rr, a, s], i) => {
     const x = Math.cos(a) * rr, z = Math.sin(a) * rr;
     // (turned about the vertical and tilted a little: a rock's foot is flattened to sit on the ground)
@@ -424,7 +422,7 @@ export const buildForest: BiomeBuilder = (scene) => {
   // tufts of three shapes, so no two neighbours are one tuft turned
   // (each shape from a stream of its own: drawn from the biome's, every prop placed after them moved)
   const tuftColours: TuftColours = { root: [0.015, 0.035, 0.01], mid: [0.07, 0.15, 0.03], tip: [0.2, 0.32, 0.07], dry: [0.32, 0.3, 0.1], dryShare: 0.18 };
-  const tufts = [0, 1, 2].map((kind) => new THREE.InstancedMesh(buildGrassTuft(mulberry(71 + kind), 16, tuftColours), grassMat, 534));
+  const tufts = [0, 1, 2].map((kind) => new InstancedMesh(buildGrassTuft(mulberry(71 + kind), 16, tuftColours), grassMat, 534));
   // (the one tuft there was drew 35 numbers from the biome's stream here: drawn still, so every prop placed after the
   // grass stands where it stood)
   for (let i = 0; i < 35; i++) rng();
@@ -447,8 +445,8 @@ export const buildForest: BiomeBuilder = (scene) => {
   });
 
   const shroomN = 70;
-  const caps = new THREE.InstancedMesh(new THREE.SphereGeometry(1, 10, 6, 0, TAU, 0, Math.PI / 2).scale(1, 0.55, 1), capMat, shroomN);
-  const stems = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.3, 0.4, 1, 6).translate(0, 0.5, 0), stemMat, shroomN);
+  const caps = new InstancedMesh(shapes.sphere(1, 10, 6, 0, TAU, 0, Math.PI / 2).scale(1, 0.55, 1), capMat, shroomN);
+  const stems = new InstancedMesh(shapes.cylinder(0.3, 0.4, 1, 6).translate(0, 0.5, 0), stemMat, shroomN);
   let si = 0;
   for (let tries = 0, drawn = 0; drawn < shroomN && tries < 4000; tries++) {
     // cluster around stumps, logs and the edge
@@ -471,7 +469,7 @@ export const buildForest: BiomeBuilder = (scene) => {
 
   // ferns: banks of them along the thicket, clumps round the stumps, logs and boulders
   const fernN = 300;
-  const ferns = new THREE.InstancedMesh(fernClumpGeo(rng), fernMat, fernN);
+  const ferns = new InstancedMesh(fernClumpGeo(rng), fernMat, fernN);
   let fi = 0;
   for (let tries = 0, drawn = 0; drawn < fernN && tries < 8000; tries++) {
     let x: number, z: number;
@@ -500,11 +498,11 @@ export const buildForest: BiomeBuilder = (scene) => {
 
   // roots snaking out of the thicket across the floor, half sunk in it
   // (each a tube's samples as well, the floor's relief: feet step onto them, `world/ground.ts`)
-  const roots: THREE.BufferGeometry[] = [], rootTops: [number, number, number, number][][] = [];
+  const roots: Geometry[] = [], rootTops: [number, number, number, number][][] = [];
   for (let i = 0; i < 18; i++) {
     const a = (i / 18) * TAU + r(-0.1, 0.1);
     if (gateGap(a) < 0.25) continue;
-    const pts: THREE.Vector3[] = [], len = r(3.5, 7), bendA = r(-0.4, 0.4);
+    const pts: Vec3[] = [], len = r(3.5, 7), bendA = r(-0.4, 0.4);
     for (let k = 0; k <= 5; k++) {
       const t = k / 5, rr = WALL_R + 1.5 - t * len, aa = a + bendA * t * t + Math.sin(t * 7 + i) * 0.03;
       pts.push(V(Math.cos(aa) * rr, 0.06 - t * 0.1 + Math.sin(t * 9 + i) * 0.05, Math.sin(aa) * rr));
@@ -513,14 +511,14 @@ export const buildForest: BiomeBuilder = (scene) => {
     roots.push(taperTube(pts, radius, 24, 7));
     rootTops.push(tubeSamples(pts, radius, 48));
   }
-  const rootMesh = new THREE.Mesh(mergeAll(roots), barkAt(BARK_REPEATS.roots));
+  const rootMesh = new Mesh(mergeAll(roots), barkAt(BARK_REPEATS.roots));
   rootMesh.name = 'roots';
   rootMesh.castShadow = rootMesh.receiveShadow = true;
   scene.add(rootMesh);
 
   // leaf litter: fallen leaves in drifts, thickest under the trees and against the thicket
   const litterN = 3000;
-  const litter = new THREE.InstancedMesh(litterGeo(), litterMat, litterN);
+  const litter = new InstancedMesh(litterGeo(), litterMat, litterN);
   const litterCols: [number, number, number][] = [[0.62, 0.28, 0.08], [0.45, 0.32, 0.1], [0.7, 0.48, 0.12], [0.28, 0.36, 0.1], [0.4, 0.18, 0.07]];
   let li = 0;
   for (let tries = 0; li < litterN && tries < 20000; tries++) {
@@ -540,10 +538,10 @@ export const buildForest: BiomeBuilder = (scene) => {
   asClutter(litter, true);
 
   // sunbeams slanting down through gaps in the canopy onto the edges of the clearing
-  const beams = lightShafts([[16, 1.0, 1.8], [21, 2.3, 2.2], [14, 4.0, 1.6], [20, 5.1, 2.0], [23, 3.3, 1.5]].map(([rr, a, rad]) => [Math.cos(a) * rr, Math.sin(a) * rr, rad]), SUN, new THREE.Color(0.075, 0.065, 0.035));
+  const beams = lightShafts([[16, 1.0, 1.8], [21, 2.3, 2.2], [14, 4.0, 1.6], [20, 5.1, 2.0], [23, 3.3, 1.5]].map(([rr, a, rad]) => [Math.cos(a) * rr, Math.sin(a) * rr, rad]), SUN, new Color(0.075, 0.065, 0.035));
   scene.add(beams.group);
 
-  const pebbles = new THREE.InstancedMesh(boulderGeo(43, 0.2, 1), stone, 160);
+  const pebbles = new InstancedMesh(boulderGeo(43, 0.2, 1), stone, 160);
   for (let i = 0; i < pebbles.count; i++) {
     const a = r(0, TAU), rr = r(6, WALL_R);
     const s = r(0.3, 1.2);
@@ -562,8 +560,8 @@ export const buildForest: BiomeBuilder = (scene) => {
   const young = growTree(SAPLING);
   const sapSpots = treeSpots(mulberry(2718), SAPLINGS, gateGap, obstacles,
     (x, z) => Math.max(Math.abs(x), Math.abs(z)) < h + 2 || BONFIRES.some(([bx, bz]) => Math.hypot(x - bx, z - bz) < 4));
-  const sapBark = new THREE.InstancedMesh(young.bark, barkAt(SAPLING.bark), sapSpots.length);
-  const sapLeaves = new THREE.InstancedMesh(young.leaves, canopyMat, sapSpots.length);
+  const sapBark = new InstancedMesh(young.bark, barkAt(SAPLING.bark), sapSpots.length);
+  const sapLeaves = new InstancedMesh(young.leaves, canopyMat, sapSpots.length);
   const sapRng = mulberry(1618);
   sapSpots.forEach(([x, z], i) => {
     const ht = 4.5 + sapRng() * 1.5;
@@ -639,12 +637,12 @@ const IVY_POINTS = 16;
 const IVY_FOOT = 0.2;
 const IVY_STEM = 0.03;
 const IVY_LEAF = 0.07;
-const _ray = new THREE.Raycaster();
+const _ray = new Raycaster();
 
 /** The point `off` out from `stone`'s face (in its frame) at height `y`, out from its axis toward angle `a`: a ray in
  *  from outside it. */
-function onFace(stone: THREE.Mesh, y: number, a: number, off: number): THREE.Vector3 {
-  const out = new THREE.Vector3(Math.cos(a), 0, Math.sin(a));
+function onFace(stone: Mesh, y: number, a: number, off: number): Vec3 {
+  const out = new Vec3(Math.cos(a), 0, Math.sin(a));
   _ray.set(out.clone().multiplyScalar(3).setY(y), out.clone().negate());
   const [hit] = _ray.intersectObject(stone, false);
   const at = hit ? 3 - hit.distance : 0.62;
@@ -662,7 +660,7 @@ const MOSS_RAGGED = 0.18;
 
 /** Moss on `stone`'s shoulders (in its frame): a coat cast onto its faces, thickest in its middle and coming down to
  *  them at its ragged edges, `salt` its own. */
-function mossCoat(stone: THREE.Mesh, salt: number): THREE.BufferGeometry {
+function mossCoat(stone: Mesh, salt: number): Geometry {
   const positions: number[] = [], uvs: number[] = [], index: number[] = [];
   for (let j = 0; j <= MOSS_SIDES; j++) {
     const a = (j / MOSS_SIDES) * TAU, ca = Math.cos(a), sa = Math.sin(a);
@@ -680,18 +678,18 @@ function mossCoat(stone: THREE.Mesh, salt: number): THREE.BufferGeometry {
     const a = j * row + i, b = a + row;
     index.push(a, a + 1, b, b, a + 1, b + 1);
   }
-  const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-  g.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+  const g = new Geometry();
+  g.setAttribute('position', floats(positions, 3));
+  g.setAttribute('uv', floats(uvs, 2));
   g.setIndex(index);
   g.computeVertexNormals();
   return g;
 }
 
-function buildMenhirGeo(rng: () => number): THREE.BufferGeometry {
-  const base = new THREE.CylinderGeometry(0.95, 1.05, 0.35, 7).translate(0, 0.17, 0);
-  const shaft = new THREE.CylinderGeometry(0.42, 0.7, 4.0, 6, 3).translate(0, 2.3, 0);
-  const tip = new THREE.ConeGeometry(0.42, 0.7, 6).translate(0, 4.65, 0);
+function buildMenhirGeo(rng: () => number): Geometry {
+  const base = shapes.cylinder(0.95, 1.05, 0.35, 7).translate(0, 0.17, 0);
+  const shaft = shapes.cylinder(0.42, 0.7, 4.0, 6, 3).translate(0, 2.3, 0);
+  const tip = shapes.cone(0.42, 0.7, 6).translate(0, 4.65, 0);
   const g = mergeGeometries([base, shaft, tip].map((x) => x.toNonIndexed()));
   // weathered: squash the cross-section a little and lean the top
   const pos = g.attributes.position;
@@ -706,7 +704,7 @@ function buildMenhirGeo(rng: () => number): THREE.BufferGeometry {
 }
 
 /** Merge geometries that may differ in indexing and attributes: keeps position, normal and uv. */
-function mergeAll(parts: THREE.BufferGeometry[]): THREE.BufferGeometry {
+function mergeAll(parts: Geometry[]): Geometry {
   return mergeGeometries(parts.map((p) => {
     const n = p.index ? p.toNonIndexed() : p;
     for (const k of Object.keys(n.attributes)) if (k !== 'position' && k !== 'normal' && k !== 'uv') n.deleteAttribute(k);
@@ -716,14 +714,14 @@ function mergeAll(parts: THREE.BufferGeometry[]): THREE.BufferGeometry {
 
 /** A log's sweep of moss (a part of a cylinder up y) sunk into the bark towards its sides and ends, by a wandering
  *  amount: it ends raggedly where it meets the bark (laid over it whole, it ended in a straight step, a carpet). */
-function raggedMoss(g: THREE.BufferGeometry, rng: () => number): THREE.BufferGeometry {
-  const p = g.attributes.position, box = new THREE.Box3().setFromBufferAttribute(p as THREE.BufferAttribute);
+function raggedMoss(g: Geometry, rng: () => number): Geometry {
+  const p = g.attributes.position, box = new Box3().setFromBufferAttribute(p as Attribute);
   const half = (box.max.y - box.min.y) / 2, mid = Math.PI * 0.5, span = Math.PI * 0.35, ph = rng() * TAU;
   for (let i = 0; i < p.count; i++) {
     const x = p.getX(i), y = p.getY(i), z = p.getZ(i), a = Math.atan2(x, z);
     const edge = Math.max(Math.abs(a - mid) / span, Math.abs(y) / half);
     const wander = 0.14 * Math.sin(y * 5.3 + ph) + 0.1 * Math.sin(a * 17 + y * 3 + ph * 2);
-    const sink = 1 - 0.14 * THREE.MathUtils.smoothstep(edge, 0.55 + wander, 0.95);
+    const sink = 1 - 0.14 * Maths.smoothstep(edge, 0.55 + wander, 0.95);
     p.setXYZ(i, x * sink, y, z * sink);
   }
   g.computeVertexNormals();
@@ -732,9 +730,9 @@ function raggedMoss(g: THREE.BufferGeometry, rng: () => number): THREE.BufferGeo
 
 /** A log's end: the wood between its bark's ring of vertices (from `outer` in `bark`) and its hollow's (from `hollow`
  *  in `inner`), the grain's rings round it (u across the wood, v round it, in the heartwood's tiles). */
-function logEnd(bark: THREE.BufferGeometry, inner: THREE.BufferGeometry, outer: number, hollow: number): THREE.BufferGeometry {
+function logEnd(bark: Geometry, inner: Geometry, outer: number, hollow: number): Geometry {
   const b = bark.attributes.position, h = inner.attributes.position, sides = 16, positions: number[] = [], uvs: number[] = [];
-  const corner = (p: THREE.BufferAttribute | THREE.InterleavedBufferAttribute, i: number, across: number, k: number) => {
+  const corner = (p: Attribute, i: number, across: number, k: number) => {
     positions.push(p.getX(i), p.getY(i), p.getZ(i));
     uvs.push(across * 0.06, (k / sides) * 0.3);
   };
@@ -742,22 +740,22 @@ function logEnd(bark: THREE.BufferGeometry, inner: THREE.BufferGeometry, outer: 
     corner(b, outer + k, 1, k); corner(h, hollow + k, 0, k); corner(h, hollow + k + 1, 0, k + 1);
     corner(b, outer + k, 1, k); corner(h, hollow + k + 1, 0, k + 1); corner(b, outer + k + 1, 1, k + 1);
   }
-  const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-  g.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+  const g = new Geometry();
+  g.setAttribute('position', floats(positions, 3));
+  g.setAttribute('uv', floats(uvs, 2));
   g.computeVertexNormals();
   return g;
 }
 
 /** A fallen hollow log along x (4.6 long, centred): splintered open ends showing the heartwood,
  * moss along its back, a stair of shelf fungus on one side. */
-function buildLogGeo(rng: () => number): { bark: THREE.BufferGeometry; inner: THREE.BufferGeometry; moss: THREE.BufferGeometry; fungus: THREE.BufferGeometry } {
+function buildLogGeo(rng: () => number): { bark: Geometry; inner: Geometry; moss: Geometry; fungus: Geometry } {
   const L = 4.6, SIDES = 16;
   // splinter both ends: every vertex on an end ring pulls back along the log by its own amount, the bark and the
   // hollow by the same (each splintered its own way, 0.45 m deep, the bark's shell stood out past the hollow in
   // spikes as thin as paper)
   const cuts = [0, 1].map(() => Array.from({ length: SIDES + 1 }, () => rng()));
-  const jag = (g: THREE.BufferGeometry) => {
+  const jag = (g: Geometry) => {
     const p = g.attributes.position;
     for (let i = 0; i < p.count; i++) {
       const y = p.getY(i);
@@ -769,8 +767,8 @@ function buildLogGeo(rng: () => number): { bark: THREE.BufferGeometry; inner: TH
     g.computeVertexNormals();
     return g;
   };
-  const bark = lumpy(jag(new THREE.CylinderGeometry(0.42, 0.5, L, SIDES, 6, true)), 0.035, 5).rotateZ(Math.PI / 2);
-  const inner = jag(new THREE.CylinderGeometry(0.28, 0.33, L, SIDES, 1, true)).rotateZ(Math.PI / 2);
+  const bark = lumpy(jag(shapes.cylinder(0.42, 0.5, L, SIDES, 6, true)), 0.035, 5).rotateZ(Math.PI / 2);
+  const inner = jag(shapes.cylinder(0.28, 0.33, L, SIDES, 1, true)).rotateZ(Math.PI / 2);
   // the hollow faces inwards
   const ix = inner.index!.array;
   for (let i = 0; i < ix.length; i += 3) { const t = ix[i + 1]; ix[i + 1] = ix[i + 2]; ix[i + 2] = t; }
@@ -779,10 +777,10 @@ function buildLogGeo(rng: () => number): { bark: THREE.BufferGeometry; inner: TH
   const row = SIDES + 1;
   const inside = mergeAll([inner, logEnd(bark, inner, 0, 0), logEnd(bark, inner, 6 * row, row)]);
   // a sweep of moss along the top (the cylinder's +x before it's laid along x becomes +y)
-  const moss = raggedMoss(new THREE.CylinderGeometry(0.47, 0.53, L * 0.7, 28, 14, true, Math.PI * 0.15, Math.PI * 0.7), rng);
+  const moss = raggedMoss(shapes.cylinder(0.47, 0.53, L * 0.7, 28, 14, true, Math.PI * 0.15, Math.PI * 0.7), rng);
   lumpy(moss, 0.1, 9).rotateZ(Math.PI / 2).translate(0.2, 0.02, 0);
-  const caps: THREE.BufferGeometry[] = [];
-  for (let i = 0; i < 4; i++) caps.push(new THREE.CylinderGeometry(0.2 - i * 0.03, 0.05, 0.06, 12, 1, false, 0, Math.PI).rotateY(-Math.PI / 2).translate(-0.6 + i * 0.35, 0.05 - i * 0.12, 0.45));
+  const caps: Geometry[] = [];
+  for (let i = 0; i < 4; i++) caps.push(shapes.cylinder(0.2 - i * 0.03, 0.05, 0.06, 12, 1, false, 0, Math.PI).rotateY(-Math.PI / 2).translate(-0.6 + i * 0.35, 0.05 - i * 0.12, 0.45));
   return { bark, inner: inside, moss, fungus: mergeAll(caps) };
 }
 
@@ -808,19 +806,19 @@ const STUMP_GIRTH_AT = [0.3, 0.5];
 
 /** A stump standing in the forest: its mesh and its circle, both rolled anew for a run. */
 interface Stump {
-  mesh: THREE.Mesh;
+  mesh: Mesh;
   circle: Obstacle;
 }
 
 /** One of the pool's sculpts, with its trunk's girth and its height (m, at a scale of 1). */
 interface Sculpt {
-  geometry: THREE.BufferGeometry;
+  geometry: Geometry;
   girth: number;
   height: number;
 }
 
 /** The pool's sculpts, each measured: its trunk's farthest out between STUMP_GIRTH_AT, its top. */
-function stumpPool(geometries: THREE.BufferGeometry[]): Sculpt[] {
+function stumpPool(geometries: Geometry[]): Sculpt[] {
   return geometries.map((geometry) => {
     const pos = geometry.attributes.position;
     let girth = 0;
@@ -888,14 +886,14 @@ const BARK_REPEATS = {
 
 /** A root gate's materials as the Thornwood's own are made (the village's gate: the same programs and looks). */
 export function rootGateMats(): GateMats {
-  const barkAt = (repeat: Repeat): THREE.MeshStandardMaterial =>
-    seeThrough(new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(bark(), repeat, 1.6), color: 0xd8c8b0 }), 'prop');
-  const canopyMat = asLeaves(seeThrough(new THREE.MeshStandardMaterial({
-    map: leafClusterTexture(), alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.8, color: 0x5e8048,
+  const barkAt = (repeat: Repeat): LitMaterial =>
+    seeThrough(new LitMaterial({ ...pbrMaterialMaps(bark(), repeat, 1.6), color: 0xd8c8b0 }), 'prop');
+  const canopyMat = asLeaves(seeThrough(new LitMaterial({
+    map: leafClusterTexture(), alphaTest: 0.5, side: DoubleSide, roughness: 0.8, color: 0x5e8048,
   }), 'foliage'));
-  const coreMat = seeThrough(new THREE.MeshStandardMaterial({ color: 0x2c3c22, roughness: 0.95 }), 'foliage');
-  const ivyMat = asLeaves(new THREE.MeshStandardMaterial({ map: leafTexture(), alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.8, color: 0x3e6a2a }));
-  const hangMat = new THREE.MeshStandardMaterial({ color: 0x2c4424, roughness: 1, side: THREE.DoubleSide });
+  const coreMat = seeThrough(new LitMaterial({ color: 0x2c3c22, roughness: 0.95 }), 'foliage');
+  const ivyMat = asLeaves(new LitMaterial({ map: leafTexture(), alphaTest: 0.5, side: DoubleSide, roughness: 0.8, color: 0x3e6a2a }));
+  const hangMat = new LitMaterial({ color: 0x2c4424, roughness: 1, side: DoubleSide });
   for (const m of [ivyMat, hangMat]) seeThrough(m, 'prop');
   return {
     canopyMat, coreMat, hangMat, ivyMat,
@@ -904,8 +902,8 @@ export function rootGateMats(): GateMats {
 }
 
 /** Points along the curve `taperTube` lays a tube round (by its length, `steps` of them), each with its radius. */
-function tubeSamples(pts: THREE.Vector3[], radius: (t: number) => number, steps: number): [number, number, number, number][] {
-  const curve = new THREE.CatmullRomCurve3(pts), at = new THREE.Vector3();
+function tubeSamples(pts: Vec3[], radius: (t: number) => number, steps: number): [number, number, number, number][] {
+  const curve = new CatmullRom3(pts), at = new Vec3();
   return Array.from({ length: steps + 1 }, (_, i) => {
     curve.getPointAt(i / steps, at);
     return [at.x, at.y, at.z, radius(i / steps)];
@@ -913,42 +911,42 @@ function tubeSamples(pts: THREE.Vector3[], radius: (t: number) => number, steps:
 }
 
 export interface GateMats {
-  canopyMat: THREE.Material; coreMat: THREE.Material; hangMat: THREE.Material; ivyMat: THREE.Material;
+  canopyMat: Material; coreMat: Material; hangMat: Material; ivyMat: Material;
   /** the bark of its arch's roots, of the vines round them and of the roots splaying from their feet */
-  archMat: THREE.Material; vineMat: THREE.Material; rootMat: THREE.Material;
+  archMat: Material; vineMat: Material; rootMat: Material;
 }
 
 /** A gate of the Thornwood's: two twisted roots meeting overhead round its portal's membrane, a crown of leaves on
  *  them (`place`: stood there, not in the thicket at `angle`: the village's). */
-export function buildRootGate(scene: THREE.Object3D, wall: Wall, angle: number, rockMat: THREE.Material, M: GateMats, rng: () => number,
+export function buildRootGate(scene: Node, wall: Wall, angle: number, rockMat: Material, M: GateMats, rng: () => number,
   updaters: Updater[], place?: GatePlace): Portal {
-  const g = new THREE.Group();
+  const g = new Node();
   const half = GATE_W / 2 + 0.45;
-  const hang: THREE.BufferGeometry[] = [], ivy: THREE.BufferGeometry[] = [];
+  const hang: Geometry[] = [], ivy: Geometry[] = [];
   // two twisted roots rising from each side and meeting overhead
   for (const s of [-1, 1]) {
     const pts = [[s * (half + 0.5), 0, 0.3], [s * half, 1.6, 0], [s * (half - 0.1), 3.4, -0.1], [s * (half - 0.9), 4.8, 0], [s * 0.2, 5.3, 0.05]];
-    const curve = new THREE.CatmullRomCurve3(pts.map(([x, y, z]) => new THREE.Vector3(x, y, z)));
-    const tube = new THREE.Mesh(taperedTube(curve, 0.7, 0.28), M.archMat);
+    const curve = new CatmullRom3(pts.map(([x, y, z]) => new Vec3(x, y, z)));
+    const tube = new Mesh(taperedTube(curve, 0.7, 0.28), M.archMat);
     tube.name = 'gate arch';
     tube.castShadow = tube.receiveShadow = true;
     g.add(tube);
     // a thinner root twisting around it
-    const vine = new THREE.CatmullRomCurve3(pts.map(([x, y, z], i) => new THREE.Vector3(x + Math.sin(i * 1.9) * 0.45 * s, y, z + Math.cos(i * 1.9) * 0.45)));
-    const v = new THREE.Mesh(taperedTube(vine, 0.26, 0.1), M.vineMat);
+    const vine = new CatmullRom3(pts.map(([x, y, z], i) => new Vec3(x + Math.sin(i * 1.9) * 0.45 * s, y, z + Math.cos(i * 1.9) * 0.45)));
+    const v = new Mesh(taperedTube(vine, 0.26, 0.1), M.vineMat);
     v.name = 'gate vine';
     v.castShadow = true;
     g.add(v);
     // roots splaying from its foot into the ground
     for (let k = 0; k < 3; k++) {
       const a = (k - 1) * 0.7 + (s < 0 ? Math.PI : 0), c = Math.cos(a), sn = Math.sin(a), x0 = s * (half + 0.5);
-      const root = new THREE.Mesh(taperTube([V(x0, 0.4, 0.3), V(x0 + c * 0.8, 0.12, 0.3 + sn * 0.8), V(x0 + c * 1.6, -0.05, 0.3 + sn * 1.5)], (t) => 0.3 * (1 - t * 0.8), 10, 7), M.rootMat);
+      const root = new Mesh(taperTube([V(x0, 0.4, 0.3), V(x0 + c * 0.8, 0.12, 0.3 + sn * 0.8), V(x0 + c * 1.6, -0.05, 0.3 + sn * 1.5)], (t) => 0.3 * (1 - t * 0.8), 10, 7), M.rootMat);
       root.castShadow = root.receiveShadow = true;
       root.name = 'gate roots';
       g.add(root);
     }
     // boulder at the foot
-    const boulder = new THREE.Mesh(boulderGeo(Math.round(angle * 10) + s, 0.9), rockMat);
+    const boulder = new Mesh(boulderGeo(Math.round(angle * 10) + s, 0.9), rockMat);
     boulder.name = 'gate boulder';
     boulder.position.set(s * (half + 1.3), 0.3, 0.2);
     boulder.scale.set(1.1, 0.9, 1.3);
@@ -961,18 +959,18 @@ export function buildRootGate(scene: THREE.Object3D, wall: Wall, angle: number, 
     }
     for (let k = 0; k < 40; k++) {
       const t = rng() * 0.8, p = curve.getPointAt(t), a = rng() * TAU, w = 0.5 * (1 - t * 0.5);
-      ivy.push(new THREE.PlaneGeometry(0.22, 0.3).rotateX(-0.4).rotateY(a).translate(p.x + Math.cos(a) * w, p.y + 0.1, p.z + Math.sin(a) * w));
+      ivy.push(shapes.plane(0.22, 0.3).rotateX(-0.4).rotateY(a).translate(p.x + Math.cos(a) * w, p.y + 0.1, p.z + Math.sin(a) * w));
     }
   }
-  const hangM = new THREE.Mesh(mergeAll(hang), M.hangMat);
-  const ivyM = new THREE.Mesh(mergeAll(ivy), M.ivyMat);
+  const hangM = new Mesh(mergeAll(hang), M.hangMat);
+  const ivyM = new Mesh(mergeAll(ivy), M.ivyMat);
   hangM.receiveShadow = ivyM.receiveShadow = true;
   g.add(hangM, ivyM);
   // a crown of leaves on the arch (the cards cast no shadow here: the shadow bake would make them solid)
   const crown = canopyGeo(rng, [[0, 0, 0, 1], [1.1, -0.3, 0.1, 0.7], [-1.1, -0.25, -0.1, 0.72]], 16, 0.9);
   for (const [geo, mat, cast] of [[crown.core, M.coreMat, true], [crown.cards, M.canopyMat, false]] as const) {
     geo.scale(1.5, 0.9, 1.1);
-    const m = new THREE.Mesh(geo, mat);
+    const m = new Mesh(geo, mat);
     m.position.set(0, 5.6, -0.3);
     m.castShadow = cast; m.receiveShadow = true;
     g.add(m);
@@ -986,33 +984,33 @@ export function buildRootGate(scene: THREE.Object3D, wall: Wall, angle: number, 
 }
 
 /** A mushroom cap of radius 1 (height ~0.55): a dome whose rim waves and curls under, its gills below. */
-function glowcapGeo(): { cap: THREE.BufferGeometry; gills: THREE.BufferGeometry } {
+function glowcapGeo(): { cap: Geometry; gills: Geometry } {
   const prof: [number, number][] = [[0.88, -0.02], [1, 0.05]];
   for (let i = 9; i >= 0; i--) { const rr = (i / 10) * 0.97; prof.push([rr, 0.55 - Math.pow(rr, 2.2) * 0.5]); }
-  const cap = new THREE.LatheGeometry(prof.map(([x, y]) => new THREE.Vector2(Math.max(1e-4, x), y)), 28);
+  const cap = shapes.lathe(prof.map(([x, y]) => new Vec2(Math.max(1e-4, x), y)), 28);
   const p = cap.attributes.position;
   for (let i = 0; i < p.count; i++) {
     const x = p.getX(i), z = p.getZ(i), rr = Math.hypot(x, z);
     if (rr > 0.6) p.setY(i, p.getY(i) + Math.sin(Math.atan2(z, x) * 6) * 0.06 * (rr - 0.6) / 0.4);
   }
   cap.computeVertexNormals();
-  const gills = new THREE.LatheGeometry([new THREE.Vector2(0.9, 0.0), new THREE.Vector2(0.12, 0.12)], 28);
+  const gills = shapes.lathe([new Vec2(0.9, 0.0), new Vec2(0.12, 0.12)], 28);
   return { cap, gills };
 }
 
-function buildGlowcaps(scene: THREE.Object3D, x: number, z: number, rng: () => number, cap: THREE.Material, stem: THREE.Material, updaters: Updater[]): void {
+function buildGlowcaps(scene: Node, x: number, z: number, rng: () => number, cap: Material, stem: Material, updaters: Updater[]): void {
   const { cap: capGeo, gills: gillGeo } = glowcapGeo();
   // stems bow a little (0.8 y^2 along x) and swell at the foot
-  const stemGeo = new THREE.CylinderGeometry(0.7, 1, 1, 10, 4).translate(0, 0.5, 0);
+  const stemGeo = shapes.cylinder(0.7, 1, 1, 10, 4).translate(0, 0.5, 0);
   const sp = stemGeo.attributes.position;
   for (let i = 0; i < sp.count; i++) { const y = sp.getY(i), k = 1 + (1 - y) ** 3 * 0.5; sp.setXYZ(i, sp.getX(i) * k + y * y * 0.8, y, sp.getZ(i) * k); }
   stemGeo.computeVertexNormals();
   const shrooms: [number, number, number, number][] = [[0, 0, 1.5, 0.55], [0.55, 0.25, 0.95, 0.38], [-0.4, 0.45, 0.7, 0.3], [0.1, -0.55, 0.55, 0.26], [-0.55, -0.3, 0.35, 0.18], [0.3, 0.65, 0.3, 0.15]];
   // (each part of the cluster's mushrooms merged into one mesh, placed: a mesh a stem, cap and gills, the four
   // clusters were 46 of the lobby's shadow draws a frame, and on WebGPU each draw is about 20 µs of its JS)
-  const placed = { stems: [] as THREE.BufferGeometry[], caps: [] as THREE.BufferGeometry[], gills: [] as THREE.BufferGeometry[] };
-  const at = new THREE.Object3D();
-  const place = (geo: THREE.BufferGeometry): THREE.BufferGeometry => {
+  const placed = { stems: [] as Geometry[], caps: [] as Geometry[], gills: [] as Geometry[] };
+  const at = new Node();
+  const place = (geo: Geometry): Geometry => {
     at.updateMatrix();
     return geo.clone().applyMatrix4(at.matrix);
   };
@@ -1023,20 +1021,20 @@ function buildGlowcaps(scene: THREE.Object3D, x: number, z: number, rng: () => n
     at.rotation.set(0, yaw, lean);
     placed.stems.push(place(stemGeo));
     // the cap sits on the top of the bowed stem
-    const top = new THREE.Vector3(0.8 * cr * 0.22, ht, 0).applyEuler(at.rotation);
+    const top = new Vec3(0.8 * cr * 0.22, ht, 0).applyEuler(at.rotation);
     at.position.set(x + dx + top.x, top.y, z + dz + top.z);
     at.scale.setScalar(cr);
     placed.caps.push(place(capGeo));
     placed.gills.push(place(gillGeo));
   }
   for (const [geos, mat, cast] of [[placed.stems, stem, true], [placed.caps, cap, true], [placed.gills, stem, false]] as const) {
-    const mesh = new THREE.Mesh(mergeGeometries(geos), mat);
+    const mesh = new Mesh(mergeGeometries(geos), mat);
     mesh.castShadow = cast;
     scene.add(mesh);
     for (const geo of geos) geo.dispose();
   }
   for (const geo of [stemGeo, capGeo, gillGeo]) geo.dispose();
-  const light = new THREE.PointLight(0x40ffc8, 5, 10, 2);
+  const light = new PointLight(0x40ffc8, 5, 10, 2);
   light.position.set(x, 1.9, z);
   scene.add(light);
   const due = runPhase({ acc: 0 });
@@ -1053,7 +1051,7 @@ function buildGlowcaps(scene: THREE.Object3D, x: number, z: number, rng: () => n
   });
 }
 
-export function buildBonfire(scene: THREE.Object3D, x: number, z: number, stone: THREE.Material | null, wood: THREE.Material, updaters: Updater[],
+export function buildBonfire(scene: Node, x: number, z: number, stone: Material | null, wood: Material, updaters: Updater[],
   casts = true): FireSpec {
   // (`stone` null: the caller lays a ring of its own, the village's campfire's, `fireRing.ts`)
   if (stone) bonfireRing(scene, x, z, stone);
@@ -1063,19 +1061,19 @@ export function buildBonfire(scene: THREE.Object3D, x: number, z: number, stone:
   const logs: LogParts = { bark: [], char: [], ends: [] };
   for (let i = 0; i < 5; i++) {
     const a = (i / 5) * TAU + 0.3;
-    const foot = new THREE.Vector3(x + Math.cos(a) * 0.48, 0, z + Math.sin(a) * 0.48);
-    const top = new THREE.Vector3(x + Math.cos(a + 2.4) * 0.06, 0.6 + (i % 2) * 0.07, z + Math.sin(a + 2.4) * 0.06);
+    const foot = new Vec3(x + Math.cos(a) * 0.48, 0, z + Math.sin(a) * 0.48);
+    const top = new Vec3(x + Math.cos(a + 2.4) * 0.06, 0.6 + (i % 2) * 0.07, z + Math.sin(a + 2.4) * 0.06);
     leanLog(logs, foot, top, 0.055, true);
   }
   for (const a of [0.5, 2.2]) {
-    const across = new THREE.Vector3(Math.cos(a) * 0.38, 0, Math.sin(a) * 0.38);
-    const from = new THREE.Vector3(x, 0.07, z).sub(across);
-    const to = new THREE.Vector3(x, 0.09, z).add(across);
+    const across = new Vec3(Math.cos(a) * 0.38, 0, Math.sin(a) * 0.38);
+    const from = new Vec3(x, 0.07, z).sub(across);
+    const to = new Vec3(x, 0.09, z).add(across);
     leanLog(logs, from, to, 0.07, false);
   }
-  const char = emberMat(new THREE.Vector3(x, 0.25, z), 0.6);
+  const char = emberMat(new Vec3(x, 0.25, z), 0.6);
   for (const [parts, mat] of [[logs.bark, wood], [logs.char, char]] as const) {
-    const mesh = new THREE.Mesh(mergeGeometries(parts), mat);
+    const mesh = new Mesh(mergeGeometries(parts), mat);
     mesh.name = 'bonfire logs';
     mesh.castShadow = true;
     scene.add(mesh);
@@ -1083,12 +1081,12 @@ export function buildBonfire(scene: THREE.Object3D, x: number, z: number, stone:
   // (from play, "there is no light from fire": at 18, under the village's lamps, it added 14 levels of red to what it lit)
   // (soft close to, as the lamps are: by the square alone, a hero beside it burned white, "blinding reflections from fire",
   // and the ring's stones peach)
-  const light = new THREE.PointLight(BONFIRE_COLOUR, BONFIRE_LIGHT, BONFIRE_REACH, 2 + BONFIRE_SOFT);
+  const light = new PointLight(BONFIRE_COLOUR, BONFIRE_LIGHT, BONFIRE_REACH, 2 + BONFIRE_SOFT);
   light.position.set(x, BONFIRE_LIGHT_UP, z);
   if (casts) staticShadow(light);
   scene.add(light);
   const fire: FireSpec = {
-    at: new THREE.Vector3(x, 0.03, z), radius: 0.5, height: 1.5, dish: 0, light, intensity: BONFIRE_LIGHT,
+    at: new Vec3(x, 0.03, z), radius: 0.5, height: 1.5, dish: 0, light, intensity: BONFIRE_LIGHT,
     smoke: 6, smokeColour: 0x8a8580, embers: 10, logs: logs.ends,
   };
   buildFire(scene, fire, updaters);
@@ -1097,8 +1095,8 @@ export function buildBonfire(scene: THREE.Object3D, x: number, z: number, stone:
 
 /** A bonfire's ring of stones round (x, z), merged: a mesh a stone, a bonfire's ring was 9 draws, and 9 more in the
  *  sun's shadow. */
-function bonfireRing(scene: THREE.Object3D, x: number, z: number, stone: THREE.Material): void {
-  const ringGeo = boulderGeo(47, 0.2, 1), at = new THREE.Object3D(), stones: THREE.BufferGeometry[] = [];
+function bonfireRing(scene: Node, x: number, z: number, stone: Material): void {
+  const ringGeo = boulderGeo(47, 0.2, 1), at = new Node(), stones: Geometry[] = [];
   for (let i = 0; i < 9; i++) {
     const a = (i / 9) * TAU;
     at.position.set(x + Math.cos(a) * 0.75, 0.08, z + Math.sin(a) * 0.75);
@@ -1107,7 +1105,7 @@ function bonfireRing(scene: THREE.Object3D, x: number, z: number, stone: THREE.M
     at.updateMatrix();
     stones.push(ringGeo.clone().applyMatrix4(at.matrix));
   }
-  const ring = new THREE.Mesh(mergeGeometries(stones), stone);
+  const ring = new Mesh(mergeGeometries(stones), stone);
   ring.name = 'bonfire stones';
   ring.castShadow = true;
   scene.add(ring);
@@ -1115,24 +1113,24 @@ function bonfireRing(scene: THREE.Object3D, x: number, z: number, stone: THREE.M
 
 /** A bonfire's logs, their bark's geometry and their char's, in the world's frame. */
 interface LogParts {
-  bark: THREE.BufferGeometry[];
-  char: THREE.BufferGeometry[];
+  bark: Geometry[];
+  char: Geometry[];
   /** each log as the flames know it, to hide what's behind it */
   ends: FireLog[];
 }
 
 /** A log from `from` to `to` (m), `radius` thick, into `logs`: bark with its upper 60% and its end sheathed in char
  *  (a bare end showed its pale grain at the teepee's top, in the flames), or with `barked` false charred throughout. */
-function leanLog(logs: LogParts, from: THREE.Vector3, to: THREE.Vector3, radius: number, barked: boolean): void {
+function leanLog(logs: LogParts, from: Vec3, to: Vec3, radius: number, barked: boolean): void {
   const along = to.clone().sub(from);
   const length = along.length();
-  const turn = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), along.clone().normalize());
-  const at = (share: number) => new THREE.Matrix4().compose(
-    from.clone().addScaledVector(along, share), turn, new THREE.Vector3(1, 1, 1));
-  const side = new THREE.CylinderGeometry(radius * 0.85, radius, length, 7, 1, true).applyMatrix4(at(0.5));
+  const turn = new Quat().setFromUnitVectors(new Vec3(0, 1, 0), along.clone().normalize());
+  const at = (share: number) => new Mat4().compose(
+    from.clone().addScaledVector(along, share), turn, new Vec3(1, 1, 1));
+  const side = shapes.cylinder(radius * 0.85, radius, length, 7, 1, true).applyMatrix4(at(0.5));
   // (an end facing `up` (1) or down (-1), its corners turned onto the side's)
   const end = (r: number, share: number, up: number) =>
-    new THREE.CircleGeometry(r, 7, -up * Math.PI / 2).rotateX(-up * Math.PI / 2).applyMatrix4(at(share));
+    shapes.circle(r, 7, -up * Math.PI / 2).rotateX(-up * Math.PI / 2).applyMatrix4(at(share));
   const foot = end(radius, 0, -1);
   const top = end(radius * 0.85, 1, 1);
   // (as thin as its top's seven sides are at their middles: thicker, the flames were cut short of its edges there,
@@ -1142,7 +1140,7 @@ function leanLog(logs: LogParts, from: THREE.Vector3, to: THREE.Vector3, radius:
     logs.char.push(side, foot, top);
     return;
   }
-  const sheath = new THREE.CylinderGeometry(radius * 0.9, radius * 1.02, length * 0.6, 7, 1, true);
+  const sheath = shapes.cylinder(radius * 0.9, radius * 1.02, length * 0.6, 7, 1, true);
   logs.bark.push(side, foot);
   logs.char.push(top, sheath.applyMatrix4(at(0.68)));
 }

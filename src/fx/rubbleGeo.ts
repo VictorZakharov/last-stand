@@ -1,6 +1,7 @@
 // The look of rubble pieces (`rubble.ts` throws them around): procedural geometry and painted textures. Every
 // builder is deterministic (seeded), and a piece is about 1 in half-extent so its instance scale sizes it.
-import * as THREE from 'three';
+import { CanvasTexture, floats, Geometry, Vec3 } from '../engine/api/index.ts';
+import * as shapes from '../engine/api/shapes/index.ts';
 import { mulberry } from '../util';
 import { ctx2d, textureFromCanvas } from '../core/textures';
 
@@ -13,10 +14,10 @@ const canvas = (w: number, h: number) => { const c = document.createElement('can
 /** An irregular broken stone: a subdivided ball whose points are pushed in and out (as a function of position, so it
  * stays whole) and cut by a few planes, which leave the flat faces a fracture does. Points the cuts moved are fresh
  * stone (light); the rest is the weathered outside (darker, greener), as a vertex colour. Flat shaded. */
-export function stoneGeometry(seed: number): THREE.BufferGeometry {
-  const rng = mulberry(seed), g = new THREE.IcosahedronGeometry(1, 1);
-  const cuts = Array.from({ length: 4 }, () => ({ n: new THREE.Vector3(rng() - 0.5, rng() - 0.5, rng() - 0.5).normalize(), d: 0.45 + rng() * 0.3 }));
-  const a = rng() * 50, pos = g.getAttribute('position'), v = new THREE.Vector3(), col: number[] = [];
+export function stoneGeometry(seed: number): Geometry {
+  const rng = mulberry(seed), g = shapes.icosahedron(1, 1);
+  const cuts = Array.from({ length: 4 }, () => ({ n: new Vec3(rng() - 0.5, rng() - 0.5, rng() - 0.5).normalize(), d: 0.45 + rng() * 0.3 }));
+  const a = rng() * 50, pos = g.getAttribute('position'), v = new Vec3(), col: number[] = [];
   for (let i = 0; i < pos.count; i++) {
     v.fromBufferAttribute(pos, i);
     const h = fract(Math.sin(v.x * 12.9898 + v.y * 78.233 + v.z * 37.719 + a) * 43758.5453);
@@ -27,13 +28,13 @@ export function stoneGeometry(seed: number): THREE.BufferGeometry {
     const k = fresh ? 1 : 0.62 + 0.12 * h;
     col.push(k, k, fresh ? k : k * 0.97);
   }
-  g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  g.setAttribute('color', floats(col, 3));
   g.computeBoundingSphere();
   return g;
 }
 
 /** Fine grain for a stone's bump map: speckle, pits and hairline cracks */
-export function rockBump(): THREE.CanvasTexture {
+export function rockBump(): CanvasTexture {
   const S = 128, rng = mulberry(9), c = canvas(S, S), g = ctx2d(c);
   g.fillStyle = '#909090'; g.fillRect(0, 0, S, S);
   for (let i = 0; i < 900; i++) { const v = Math.floor(rng() * 255); g.fillStyle = `rgba(${v},${v},${v},0.35)`; g.fillRect(rng() * S, rng() * S, 1 + rng() * 2, 1 + rng() * 2); }
@@ -44,7 +45,7 @@ export function rockBump(): THREE.CanvasTexture {
 }
 
 /** A hot coal: a dark crust with glowing cracks and a few bright patches, for the emissive map */
-export function coalTexture(): THREE.CanvasTexture {
+export function coalTexture(): CanvasTexture {
   const S = 128, rng = mulberry(57), c = canvas(S, S), g = ctx2d(c);
   g.fillStyle = '#1a0a04'; g.fillRect(0, 0, S, S);
   for (let i = 0; i < 7; i++) {
@@ -99,7 +100,7 @@ export function woodAtlas(): { albedo: HTMLCanvasElement; height: HTMLCanvasElem
 /** A tapered, jagged-edged lens of wood with the grain along z: a sliver, a flake or a strip of bark. Half-width,
  * half-length and half-thickness about 1, bent a little. A splinter and a flake show wood on top and bark below (a
  * strip: bark on both). */
-export function flakeGeometry(kind: 'splinter' | 'chip' | 'bark', seed: number): THREE.BufferGeometry {
+export function flakeGeometry(kind: 'splinter' | 'chip' | 'bark', seed: number): Geometry {
   const rng = mulberry(seed), NU = 7, NV = 14, pos: number[] = [], uv: number[] = [], idx: number[] = [];
   const split = kind === 'splinter';
   // per row: how far each edge is dragged in or out (jagged), and a sideways drift (a curved sliver)
@@ -132,10 +133,10 @@ export function flakeGeometry(kind: 'splinter' | 'chip' | 'bark', seed: number):
   return build(pos, uv, idx);
 }
 
-function build(pos: number[], uv: number[], idx: number[]): THREE.BufferGeometry {
-  const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-  g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+function build(pos: number[], uv: number[], idx: number[]): Geometry {
+  const g = new Geometry();
+  g.setAttribute('position', floats(pos, 3));
+  g.setAttribute('uv', floats(uv, 2));
   g.setIndex(idx);
   g.computeVertexNormals();
   return g;
@@ -205,7 +206,7 @@ export const STUB_COLS: Cols = { side: [0.53, 0.4], cap: [0.03, 0.4] };
 
 /** A torn piece of a stem or trunk: a tube whose two ends are ragged and dished, the inside showing as flesh or fresh
  * wood. The axis is y. */
-export function tornTubeGeometry(seed: number, { side, cap }: Cols): THREE.BufferGeometry {
+export function tornTubeGeometry(seed: number, { side, cap }: Cols): Geometry {
   const rng = mulberry(seed), N = 12, M = 6, pos: number[] = [], uv: number[] = [], idx: number[] = [];
   const ragged = () => smooth(smooth(Array.from({ length: N }, () => rng() * 0.6)));
   const jt = ragged(), jb = ragged(), rj = smooth(Array.from({ length: N }, () => 1 + (rng() - 0.5) * 0.24)), phase = rng() * 6;
@@ -241,7 +242,7 @@ export function tornTubeGeometry(seed: number, { side, cap }: Cols): THREE.Buffe
 
 /** A fragment of a cap: a jagged-edged piece of a dome, the teal skin outside and the gills underneath, with the
  * cut edge showing flesh. The dome faces up (+y). */
-export function shellGeometry(seed: number): THREE.BufferGeometry {
+export function shellGeometry(seed: number): Geometry {
   const rng = mulberry(seed), NA = 16, NR = 5, pos: number[] = [], uv: number[] = [], idx: number[] = [];
   const R = smooth(smooth(Array.from({ length: NA }, () => 0.6 + rng() * 0.4)));
   const K = NA + 1;

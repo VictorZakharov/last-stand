@@ -2,7 +2,9 @@
 // twice each way (a seam shows as a cross through the middle), its albedo at its own pixels round the corner where
 // four of it meet, and lit in the studio on a square and a ball, as the game's materials take it (core/textures.ts:
 // repeated, sRGB albedo, the normal and roughness maps as they are).
-import * as THREE from 'three';
+import {
+  boundsOf, CanvasTexture, LitMaterial, Mesh, NoColorSpace, RepeatWrapping, shapes, SRGBColorSpace, Vec2
+} from './sceneApi.ts';
 import type { Lab, Tile } from './lab';
 import { canvasOf } from './pixels';
 import { cameraOn, shoot, studio } from './studio';
@@ -127,13 +129,13 @@ function cornered(view: string, source: HTMLCanvasElement): Tile {
 }
 
 /** A canvas as a texture as the game makes its maps' (core/textures.ts `toTexture`), repeated `LIT_REPEAT` times. */
-function textureOf(canvas: HTMLCanvasElement, srgb: boolean): THREE.CanvasTexture {
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.wrapS = THREE.RepeatWrapping;
-  texture.wrapT = THREE.RepeatWrapping;
+function textureOf(canvas: HTMLCanvasElement, srgb: boolean): CanvasTexture {
+  const texture = new CanvasTexture(canvas);
+  texture.wrapS = RepeatWrapping;
+  texture.wrapT = RepeatWrapping;
   texture.repeat.set(LIT_REPEAT, LIT_REPEAT);
   texture.anisotropy = 8;
-  texture.colorSpace = srgb ? THREE.SRGBColorSpace : THREE.NoColorSpace;
+  texture.colorSpace = srgb ? SRGBColorSpace : NoColorSpace;
   return texture;
 }
 
@@ -145,22 +147,22 @@ async function lit(lab: Lab, name: RecipeName, canvases: ReturnType<typeof canva
     normalMap: textureOf(canvases.normal, false),
     roughnessMap: textureOf(canvases.rough, false),
   };
-  const material = new THREE.MeshStandardMaterial({
+  const material = new LitMaterial({
     ...maps,
     color: look.color,
     metalness: look.metalness,
     roughness: 1,
-    normalScale: new THREE.Vector2(look.normalScale, look.normalScale),
+    normalScale: new Vec2(look.normalScale, look.normalScale),
   });
-  const square = new THREE.Mesh(new THREE.PlaneGeometry(SQUARE_SIDE, SQUARE_SIDE), material);
+  const square = new Mesh(shapes.plane(SQUARE_SIDE, SQUARE_SIDE), material);
   square.position.y = BALL_RADIUS + 0.1 + SQUARE_SIDE / 2;
-  const ball = new THREE.Mesh(new THREE.SphereGeometry(BALL_RADIUS, 96, 48), material);
+  const ball = new Mesh(shapes.sphere(BALL_RADIUS, 96, 48), material);
   ball.position.y = -0.1 - BALL_RADIUS;
   const scene = studio();
   scene.add(square, ball);
   scene.updateMatrixWorld(true);
   try {
-    const box = new THREE.Box3().setFromObject(scene);
+    const box = boundsOf(scene);
     const { tiles } = await shoot(lab, scene, [{ name: 'lit', camera: cameraOn(box, [0, 0, 1]) }]);
     return tiles[0];
   } finally {

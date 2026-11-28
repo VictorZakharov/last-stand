@@ -4,7 +4,7 @@
 // and noon. A flicker is a patch of the frame whose light jumps one way and straight back: walking in, the frame
 // changes, but smoothly; a column thinned and kept in turns comes and goes. Read by patches, not pixels: a pixel on an
 // edge or in the grade's grain crosses any step a pixel can see, a whole column's light doesn't.
-import * as THREE from 'three';
+import { Mat4, PerspectiveCamera, Vec3 } from './sceneApi.ts';
 import type { Lab, Pictured } from './lab';
 import { G } from '../../../src/state';
 import { holdHour } from '../../../src/game/clock';
@@ -129,7 +129,7 @@ function lightRound(lights: Float32Array[], cells: number[], step: number): stri
 
 /** He stands `along` m out from the door's line (less than none: inside), `line` m off its middle, facing in. */
 function standAt(line: number, along: number): void {
-  const at = new THREE.Vector3(TERRACE.x + line, 0, HALL.door + along);
+  const at = new Vec3(TERRACE.x + line, 0, HALL.door + along);
   at.y = groundHeight(at.x, at.z);
   G.player.walkTo = null;
   G.player.place(at, Math.PI);
@@ -139,20 +139,20 @@ function standAt(line: number, along: number): void {
  *  him, `overHead` in core/renderer.ts: held where it stood alone, the lens's change read as 15% of the frame
  *  flickering). */
 interface HeldCamera {
-  place: THREE.Matrix4;
+  place: Mat4;
   fov: number;
   near: number;
 }
 
 /** The camera as it stands now. */
 function cameraNow(): HeldCamera {
-  const camera = G.camera as THREE.PerspectiveCamera;
+  const camera = G.camera as PerspectiveCamera;
   return { place: camera.matrixWorld.clone(), fov: camera.fov, near: camera.near };
 }
 
 /** The camera put back as `held`, the fog told too (it places each pixel by the camera). */
 function holdCamera(held: HeldCamera): void {
-  const camera = G.camera as THREE.PerspectiveCamera;
+  const camera = G.camera as PerspectiveCamera;
   held.place.decompose(camera.position, camera.quaternion, camera.scale);
   camera.fov = held.fov;
   camera.near = held.near;

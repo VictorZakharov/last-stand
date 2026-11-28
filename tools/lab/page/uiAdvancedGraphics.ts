@@ -5,7 +5,7 @@ import { advancedSetting, qualityLevel, qualitySetting } from '../../../src/core
 import { bloomDrawn } from '../../../src/core/renderer';
 import { burst, particles } from '../../../src/fx/particles';
 import { isTouch } from '../../../src/ui/touch';
-import type { Lab } from './lab';
+import { boxOf, elementUnder, revealOf, type Lab } from './lab';
 import { openPause } from './uiPause';
 import type { Found } from './uiKit';
 
@@ -31,17 +31,24 @@ function target(selector: string): HTMLElement {
   return node;
 }
 
+/** frames for the UI kit to draw a control scrolled into view */
+const REVEAL_FRAMES = 2;
+
 /** Press the displayed control with the current input method and its real browser hit target. */
 async function press(lab: Lab, node: HTMLElement): Promise<void> {
   if (!isTouch()) {
     await lab.clickOn(node);
     return;
   }
-  node.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'instant' });
-  const box = node.getBoundingClientRect();
+  // (laid out by the UI kit first, as the menu may have opened this frame: a box not yet laid out has nothing to
+  // scroll to; then drawn scrolled in its next frames)
+  await lab.step(REVEAL_FRAMES);
+  revealOf(node);
+  await lab.step(REVEAL_FRAMES);
+  const box = boxOf(node);
   const x = box.x + box.width / 2;
   const y = box.y + box.height / 2;
-  if (!node.contains(document.elementFromPoint(x, y))) {
+  if (!node.contains(elementUnder(x, y))) {
     throw new Error(`lab: Advanced graphics control ${node.textContent} cannot be tapped`);
   }
   await lab.tap({ x, y });

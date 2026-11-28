@@ -1,4 +1,4 @@
-// The fountain's water under the Rust engine (`world/villageNodes.ts` `waterNodes` and `causticNodes`): its normal
+// The fountain's water under the Rust engine (once three's `waterNodes` and `causticNodes`, gone, #973): its normal
 // bent by rings out from its middle, two slow swells and wavelets crossing three ways, clearer looked down into; and
 // the basin floor's web of light; what it mirrors of the sky by the hour, and how the lights round it see it
 // (`waterLooks`: rougher, a share of their highlights; its glints' most is the material's `litMost`). The falling
@@ -72,7 +72,7 @@ fn surface_hook(s: ptr<function, Surface>, in: VertexOut) -> bool {
 `,
 });
 
-/** How the lights round the water see it (`WaterLit` in world/villageNodes.ts). */
+/** How the lights round the water see it. */
 interface Lit { rough: number; shine: number }
 
 /** A pool's water, on the game's clock (`{ value }`), mirroring `sky` of the sky, lit as `lit` says. */

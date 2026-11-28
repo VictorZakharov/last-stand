@@ -3,9 +3,8 @@
 // core/renderer.ts, and the next frame waited 235 ms before drawing). The window's size is played by the page (its
 // `innerWidth` and `innerHeight`), the canvas's own drawing buffer resized as the game resizes it. Each resize is
 // timed by the browser's own clock, the event's work and the next frame's, and what it rebuilt is counted: the
-// canvas's drawing buffer, set again each way, and the render targets made at another size.
-import * as THREE from 'three';
-import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
+// canvas's drawing buffer, set again each way. (Three's render targets and post chain were timed and counted too;
+// the engine has neither on the page, VictorZakharov/last-stand#973.)
 import type { Lab, Report } from './lab';
 import { G } from '../../../src/state';
 import { frameRect, holdScreenCanvas } from '../../../src/core/renderer';
@@ -31,14 +30,12 @@ interface ResizeCost {
   /** the resize event's work, and the next frame's (ms, the browser's clock) */
   event: number;
   frame: number;
-  /** the renderer's and the post chain's resizes (ms) */
+  /** the canvas's host's resize (ms) */
   canvas: number;
-  composer: number;
-  /** the canvas's drawing buffer set again (a width or a height changed), and render targets made at another size */
+  /** the canvas's drawing buffer set again (a width or a height changed) */
   reshapes: number;
   /** of the canvas's resize, the time (ms) its width and height took to set */
   reshapeTime: number;
-  targets: number;
 }
 
 /** the phone's steps into full screen, as shares of its last: 751x298, 784x354, 832x384 */
@@ -87,24 +84,16 @@ class PlayedWindow {
   }
 }
 
-/** Counts what the page rebuilds: the canvas's drawing buffer set again, render targets made at another size. */
+/** Counts what the page rebuilds: the canvas's drawing buffer set again. */
 class Rebuilds {
   reshapes = 0;
   /** the time (ms) the canvas's sets took */
   reshapeTime = 0;
-  targets = 0;
   private readonly canvas = G.renderer.domElement;
-  private readonly targetSetSize = THREE.RenderTarget.prototype.setSize;
 
   constructor() {
     this.watchSide('width');
     this.watchSide('height');
-    const original = this.targetSetSize;
-    const counts = this;
-    THREE.RenderTarget.prototype.setSize = function (this: THREE.RenderTarget, width, height, depth = 1) {
-      if (width !== this.width || height !== this.height || depth !== this.depth) counts.targets++;
-      original.call(this, width, height, depth);
-    };
   }
 
   /** `side` of the canvas counted each time it's set to another value (each one reallocates its drawing buffer). */
@@ -128,11 +117,10 @@ class Rebuilds {
   }
 
   /** The counts since the last read, reset. */
-  take(): { reshapes: number; reshapeTime: number; targets: number } {
-    const taken = { reshapes: this.reshapes, reshapeTime: this.reshapeTime, targets: this.targets };
+  take(): { reshapes: number; reshapeTime: number } {
+    const taken = { reshapes: this.reshapes, reshapeTime: this.reshapeTime };
     this.reshapes = 0;
     this.reshapeTime = 0;
-    this.targets = 0;
     return taken;
   }
 
@@ -140,7 +128,6 @@ class Rebuilds {
   stop(): void {
     delete (this.canvas as { width?: number }).width;
     delete (this.canvas as { height?: number }).height;
-    THREE.RenderTarget.prototype.setSize = this.targetSetSize;
   }
 }
 
@@ -162,13 +149,12 @@ async function timedFrame(lab: Lab): Promise<number> {
 
 /** One resize to `size` and the frame after it: what each cost and rebuilt. */
 async function resizeOnce(lab: Lab, played: PlayedWindow, rebuilds: Rebuilds, size: WindowSize,
-  timings: { canvas: Timing; composer: Timing }): Promise<ResizeCost> {
+  timings: { canvas: Timing }): Promise<ResizeCost> {
   rebuilds.take();
   timings.canvas.lap();
-  timings.composer.lap();
   const event = played.resizeTo(size);
   const frame = await timedFrame(lab);
-  return { event, frame, canvas: timings.canvas.lap(), composer: timings.composer.lap(), ...rebuilds.take() };
+  return { event, frame, canvas: timings.canvas.lap(), ...rebuilds.take() };
 }
 
 /** The median of `values`. */
@@ -182,9 +168,8 @@ function costLine(label: string, costs: ResizeCost[]): string {
   const ms = (pick: (cost: ResizeCost) => number): string => median(costs.map(pick)).toFixed(1);
   const most = (pick: (cost: ResizeCost) => number): number => Math.max(...costs.map(pick));
   return `${label}: the event ${ms((c) => c.event)} ms, the frame after ${ms((c) => c.frame)} ms `
-    + `(the canvas's resize ${ms((c) => c.canvas)}, its drawing buffer's ${ms((c) => c.reshapeTime)}, `
-    + `the post chain's ${ms((c) => c.composer)}); `
-    + `the drawing buffer set ${most((c) => c.reshapes)} times, ${most((c) => c.targets)} render targets resized`;
+    + `(the canvas's resize ${ms((c) => c.canvas)}, its drawing buffer's ${ms((c) => c.reshapeTime)}); `
+    + `the drawing buffer set ${most((c) => c.reshapes)} times`;
 }
 
 /** A quadrant luminance check on an RGBA bottom-up buffer or 2D top-down ImageData. */
@@ -353,7 +338,6 @@ export async function resize(lab: Lab, options: ResizeOptions): Promise<Report> 
   const rebuilds = new Rebuilds();
   const timings = {
     canvas: timeCalls(G.renderer, 'setSize'),
-    composer: timeCalls(EffectComposer.prototype, 'setSize'),
   };
   let extraLines: string[] = [];
   try {
@@ -382,7 +366,6 @@ export async function resize(lab: Lab, options: ResizeOptions): Promise<Report> 
     }
   } finally {
     timings.canvas.stop();
-    timings.composer.stop();
     rebuilds.stop();
     played.restore();
     holdScreenCanvas(null);

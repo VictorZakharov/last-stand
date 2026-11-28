@@ -1,8 +1,7 @@
 // The atlas the world's overlays are drawn from (ui/overlay): one texture, every label painted into a slot of its
-// own, and a slot uploaded alone when its label changes (its region, straight from the canvas it was painted on).
-import * as THREE from 'three';
-import { G } from '../../state';
-import { copyCanvasInto } from '../../core/webgpu';
+// own when it changes, and the slots painted in a frame sent together as it's drawn (`atlasRows.ts`).
+import { overlayAtlas } from '../../engine/overlay';
+import { AtlasRows } from './atlasRows';
 
 /** the atlas's side, px, for each canvas pixel a px of a label's art takes (the canvas's ratio times the UI's scale;
  *  rounded up to a multiple of `SIDE_STEP`, at least `SIDE_MIN`): a label's pixels go with that ratio's square, and
@@ -10,24 +9,35 @@ import { copyCanvasInto } from '../../core/webgpu';
 const SIDE_PER_RATIO = 1536;
 const SIDE_MIN = 2048;
 const SIDE_STEP = 512;
+/** the largest side WebGPU promises every device's textures (`maxTextureDimension2D`'s least) */
+const MOST_SIDE = 8192;
 /** a slot's height rounds up to one of these (px): each shelf of the atlas holds slots of one height (a downed
  *  partner's marker is some 200 px of art, 1000 at an 8K screen's UI scale at 100%) */
 const HEIGHTS = [16, 24, 32, 48, 64, 96, 128, 192, 256, 384, 512, 768, 1024];
-/** a full atlas is packed again (every label shown painted anew) when this share of it is slots given back */
+/** a full atlas is packed again (every label shown painted anew) when this share of it is slots given back, or as
+ *  soon as those would hold this many times the label that didn't fit: kept for a quarter alone, the bug report's
+ *  words grown a line at a time and its report's lines shown and put away filled shelves of every height with
+ *  slots given back, under a quarter of the atlas, and the next label didn't fit (#973) */
 const REPACK_SPARE = 0.25;
+const REPACK_WANTED = 2;
+/** a full atlas is packed again too when what's painted in it now would fill no more than this share of it packed:
+ *  a scrolled page's words given back left slots of their own widths, which the words scrolled in fitted none of, and
+ *  the guide's pages filled it with half of it free (#973) */
+const REPACK_LIVE = 0.6;
 /** a slot's width rounds up to a multiple of this (px) */
 const WIDTH_STEP = 16;
 /** a slot holds a label of up to this many times its size, and this many px more (more would waste it) */
 const SLACK = 2;
 const SLACK_PX = 16;
+/** px left clear after each slot, right and below: a label filling its slot was sampled, filtered, with a row of
+ *  the slot under it (a party card's words underlined in its life bar's red, #973) */
+const GUTTER = 2;
 
 /** A slot: its region of the atlas, px from the top left. */
 export interface Slot { x: number; y: number; w: number; h: number }
 
 interface Shelf { y: number; h: number; used: number }
 
-/** the texture the labels are drawn from: a render target's, so its storage needs no copy in memory */
-let target: THREE.WebGLRenderTarget | null = null;
 const shelves: Shelf[] = [];
 /** slots given back, by their height, for the next label of that height they hold (a fight's numbers come in every
  *  width: kept for their own width alone, the atlas filled with slots no new one fitted) */
@@ -36,35 +46,20 @@ let nextY = 0;
 let side = SIDE_MIN;
 /** the area of the slots given back, px, and whether a slot was asked for that didn't fit */
 let spareArea = 0;
+/** the area of every slot placed on a shelf (px): less the spare, what's painted in the atlas now */
+let placedArea = 0;
 let full = false;
-/** what the labels are painted on before their slot is uploaded */
-let canvas: HTMLCanvasElement | null = null;
-let ctx: CanvasRenderingContext2D | null = null;
-/** the canvas as a texture three uploads from (never drawn itself: `copyTextureToTexture` reads its image) */
-let source: THREE.Texture | null = null;
+/** the area of the last slot asked for that didn't fit (px) */
+let wantedArea = 0;
+/** the rows labels are painted on, sent to the atlas as the frame is drawn */
+let rows = new AtlasRows(side, GUTTER);
 let warned = false;
 
 /** The atlas's side, px. */
 export const atlasSide = (): number => side;
 
-/** The atlas's texture (made and cleared on first use). */
-export function atlasTexture(): THREE.Texture {
-  if (target) return target.texture;
-  target = new THREE.WebGLRenderTarget(side, side, { depthBuffer: false, generateMipmaps: false });
-  const t = target.texture;
-  t.minFilter = t.magFilter = THREE.LinearFilter;
-  // (canvas pixels in, as the page's colours: drawn as they are, premultiplied by their alpha on the way)
-  t.colorSpace = THREE.NoColorSpace;
-  t.flipY = false;
-  t.premultiplyAlpha = true;
-  const gl = G.renderer, was = gl.getRenderTarget(), clear = gl.getClearAlpha(), col = gl.getClearColor(new THREE.Color());
-  gl.setRenderTarget(target);
-  gl.setClearColor(0x000000, 0);
-  gl.clear(true, false, false);
-  gl.setClearColor(col, clear);
-  gl.setRenderTarget(was);
-  return t;
-}
+/** The atlas made in the engine at its side (cleared when that changes); false before the engine has started. */
+export const atlasReady = (): boolean => overlayAtlas(side);
 
 /** Whether `slot` holds a label of `w` by `h` px, and isn't too large for it. */
 export function fits(slot: Slot, w: number, h: number): boolean {
@@ -100,23 +95,26 @@ export function takeSlot(w: number, h: number): Slot | null {
   if (given) return given;
   let shelf = shelves.find((s) => s.h === size.h && s.used + size.w <= side);
   if (!shelf) {
-    if (nextY + size.h > side) {
+    if (nextY + size.h + GUTTER > side) {
       full = true;
+      wantedArea = size.w * size.h;
       if (!crowded() && !warned && import.meta.env.DEV) console.error('overlay: the label atlas is full');
       warned = true;
       return null;
     }
     shelf = { y: nextY, h: size.h, used: 0 };
     shelves.push(shelf);
-    nextY += size.h;
+    nextY += size.h + GUTTER;
   }
   const slot = { x: shelf.used, y: shelf.y, w: size.w, h: size.h };
-  shelf.used += size.w;
+  shelf.used += size.w + GUTTER;
+  placedArea += size.w * size.h;
   return slot;
 }
 
 /** Whether the atlas is full of slots given back, and so worth packing again. */
-const crowded = (): boolean => full && spareArea >= REPACK_SPARE * side * side;
+const crowded = (): boolean => full && (spareArea >= REPACK_SPARE * side * side
+  || spareArea >= REPACK_WANTED * wantedArea || placedArea - spareArea <= REPACK_LIVE * side * side);
 
 /** Whether the atlas should be emptied for every label shown to be painted again: full of slots given back. */
 export const atlasCrowded = crowded;
@@ -124,7 +122,7 @@ export const atlasCrowded = crowded;
 /** The atlas's side for labels painted at `ratio` canvas pixels per px of their art. */
 function sideFor(ratio: number): number {
   const grown = Math.ceil((SIDE_PER_RATIO * ratio) / SIDE_STEP) * SIDE_STEP;
-  return Math.min(G.renderer.capabilities.maxTextureSize, Math.max(SIDE_MIN, grown));
+  return Math.min(MOST_SIDE, Math.max(SIDE_MIN, grown));
 }
 
 /**
@@ -136,17 +134,16 @@ export function clearAtlas(ratio: number): void {
   const wanted = sideFor(ratio);
   if (wanted !== side) {
     side = wanted;
-    target?.dispose();
-    target = null;
-    source?.dispose();
-    source = null;
-    canvas = null;
+    rows = new AtlasRows(side, GUTTER);
   }
   shelves.length = 0;
   spare.clear();
+  rows.forget();
   nextY = 0;
   spareArea = 0;
+  placedArea = 0;
   full = false;
+  wantedArea = 0;
   warned = false;
 }
 
@@ -161,31 +158,21 @@ export function freeSlot(slot: Slot): void {
   spareArea += slot.w * slot.h;
 }
 
-/** The canvas a label is painted on, cleared over a slot's size, and its context (unscaled, px). */
-export function paintCanvas(slot: Slot): CanvasRenderingContext2D {
-  if (!canvas) {
-    canvas = document.createElement('canvas');
-    canvas.width = side;
-    canvas.height = HEIGHTS[HEIGHTS.length - 1];
-    ctx = canvas.getContext('2d', { willReadFrequently: false })!;
-    source = new THREE.Texture(canvas);
-    source.flipY = false;
-  }
-  const c = ctx!;
-  c.setTransform(1, 0, 0, 1, 0, 0);
-  c.clearRect(0, 0, slot.w, slot.h);
-  return c;
+/** The context a label is painted on, cleared over its slot and held to it, and how far along it the slot starts
+ *  (px: the art's own place). */
+export function paintAt(slot: Slot): { c: CanvasRenderingContext2D; x: number } {
+  return rows.paint(slot);
 }
 
-const region = new THREE.Box2(), at = new THREE.Vector2();
-/** Uploads what was painted (the paint canvas's top left, a slot's size) into the slot. */
-export function uploadSlot(slot: Slot): void {
-  atlasTexture();
-  region.min.set(0, 0);
-  region.max.set(slot.w, slot.h);
-  at.set(slot.x, slot.y);
-  if (copyCanvasInto(G.renderer, canvas!, target!.texture, slot.w, slot.h, slot.x, slot.y)) return;
-  // (copied by three otherwise, the canvas's texture as last uploaded: uploaded again first)
-  source!.needsUpdate = true;
-  G.renderer.copyTextureToTexture(source!, target!.texture, region, at);
+/** The label painted on `slot` done, sent with the frame (`sendPainted`): false where it can't be yet (the engine
+ *  not started), the label to be painted again. */
+export function uploadSlot(slot: Slot): boolean {
+  rows.painted(slot);
+  return atlasReady();
+}
+
+/** The slots painted since the last frame sent to the atlas, a copy a run of them side by side: before the engine
+ *  draws the frame. */
+export function sendPainted(): void {
+  rows.send();
 }

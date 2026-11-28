@@ -5,7 +5,7 @@
 // a wall is moved onto the room's group as it's built, so cutting the wall puts out no light; the room's lights are
 // the lamps', out of its group by the time this runs, so they aren't counted here.) Said: each room's walls cut.
 // `canary` shows a cut wall's things again after the cut, which must be found.
-import * as THREE from 'three';
+import { Vec3 } from './sceneApi.ts';
 import { G } from '../../../src/state';
 import { HOUSES, ROOM_IDS, type RoomId } from '../../../src/data/houses';
 
@@ -19,13 +19,13 @@ const SIDES = ['back', 'front', 'west', 'east'] as const;
 interface Checked { lines: string[]; problems: string[]; caught: boolean | null }
 
 /** The eye outside wall `side` of room `id`, in the world. */
-function eyeOutside(id: RoomId, side: (typeof SIDES)[number]): THREE.Vector3 {
+function eyeOutside(id: RoomId, side: (typeof SIDES)[number]): Vec3 {
   const [hx, hz] = HOUSES[id].half;
   const local = {
-    back: new THREE.Vector3(0, ABOVE, -hz - OUTSIDE),
-    front: new THREE.Vector3(0, ABOVE, hz + OUTSIDE),
-    west: new THREE.Vector3(-hx - OUTSIDE, ABOVE, 0),
-    east: new THREE.Vector3(hx + OUTSIDE, ABOVE, 0),
+    back: new Vec3(0, ABOVE, -hz - OUTSIDE),
+    front: new Vec3(0, ABOVE, hz + OUTSIDE),
+    west: new Vec3(-hx - OUTSIDE, ABOVE, 0),
+    east: new Vec3(hx + OUTSIDE, ABOVE, 0),
   }[side];
   const room = G.arena.rooms![id];
   room.group.updateMatrixWorld(true);

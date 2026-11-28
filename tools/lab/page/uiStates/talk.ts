@@ -7,7 +7,7 @@ const STATE: Steps = {
   order: 232,
   open: (lab) => openTalkState(lab, false),
   close: closeTalkState,
-  check: (canary) => talkShown('talk', canary),
+  check: (canary, lab) => talkShown('talk', canary, lab),
   canary: caught(TALK_CANARY),
 };
 export default STATE;

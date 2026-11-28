@@ -6,7 +6,7 @@
 // point is narrower than its middle. (The owner, of the maul at rest through the eyes: "two handed maul should be
 // lowered to see more of its head"; the frame showed its head's lower edge, 14% of it. Vermintide 2's shots show a
 // hammer's and an axe's heads in the frame, a sword's point out of its top.)
-import * as THREE from 'three';
+import { Camera, Maths, Mesh, Node, PerspectiveCamera, Vec3 } from './sceneApi.ts';
 import { HEAD_FROM } from './inFrame';
 
 /** a mesh's every how many points read for its head (the sculpts' faces have thousands) */
@@ -19,38 +19,38 @@ const MIDDLE = [0.4, 0.6] as const;
 
 /** A weapon's head: its points, the world's, and whether it has one, wider than its middle (`HEADED_WIDER`). */
 export interface Head {
-  points: THREE.Vector3[];
+  points: Vec3[];
   headed: boolean;
 }
 
 /** Each shown mesh's points under `weapon`, in its own frame (y along its length, as its grip holds it). */
-function ownPoints(weapon: THREE.Object3D): THREE.Vector3[] {
+function ownPoints(weapon: Node): Vec3[] {
   weapon.updateWorldMatrix(true, true);
   const toOwn = weapon.matrixWorld.clone().invert();
-  const points: THREE.Vector3[] = [];
+  const points: Vec3[] = [];
   weapon.traverse((child) => {
-    const mesh = child as THREE.Mesh;
+    const mesh = child as Mesh;
     if (!mesh.isMesh || !mesh.visible) return;
     const toWeapon = toOwn.clone().multiply(mesh.matrixWorld);
     const position = mesh.geometry.getAttribute('position');
     for (let i = 0; i < position.count; i += POINT_STEP) {
-      points.push(new THREE.Vector3().fromBufferAttribute(position, i).applyMatrix4(toWeapon));
+      points.push(new Vec3().fromBufferAttribute(position, i).applyMatrix4(toWeapon));
     }
   });
   return points;
 }
 
 /** How far the furthest of `points` (its own frame) is from the weapon's length through its grip (m). */
-const widest = (points: THREE.Vector3[]) => Math.max(0, ...points.map((point) => Math.hypot(point.x, point.z)));
+const widest = (points: Vec3[]) => Math.max(0, ...points.map((point) => Math.hypot(point.x, point.z)));
 
 /** A weapon's head (`Head`): its points `HEAD_FROM` of its length on, from its butt to its far end. */
-export function headOf(weapon: THREE.Object3D): Head {
+export function headOf(weapon: Node): Head {
   const points = ownPoints(weapon);
   if (!points.length) return { points: [], headed: false };
   const ys = points.map((point) => point.y);
   const butt = Math.min(...ys);
   const length = Math.max(...ys) - butt;
-  const share = (point: THREE.Vector3) => (point.y - butt) / length;
+  const share = (point: Vec3) => (point.y - butt) / length;
   const head = points.filter((point) => share(point) >= HEAD_FROM);
   const middle = points.filter((point) => share(point) >= MIDDLE[0] && share(point) <= MIDDLE[1]);
   const headed = widest(head) >= HEADED_WIDER * widest(middle);
@@ -75,7 +75,7 @@ function boxInFrame(box: ScreenBox): number {
 
 /** How much of what `points` (the world's) make on the screen through `lens` is in its frame: of their box on the
  *  screen, the share in the frame, by the share of them ahead of the eyes. 0 with none ahead. */
-export function shareShown(points: THREE.Vector3[], lens: THREE.Camera): number {
+export function shareShown(points: Vec3[], lens: Camera): number {
   lens.updateMatrixWorld();
   const ahead = points.filter((point) => lens.worldToLocal(point.clone()).z < 0);
   if (!ahead.length) return 0;
@@ -91,9 +91,9 @@ export function shareShown(points: THREE.Vector3[], lens: THREE.Camera): number 
 }
 
 /** `points` (the world's) moved up the view by `frames` heights of the frame where they are, through `lens`. */
-function movedUp(points: THREE.Vector3[], lens: THREE.PerspectiveCamera, frames: number): THREE.Vector3[] {
-  const up = new THREE.Vector3(0, 1, 0).transformDirection(lens.matrixWorld);
-  const halfHeight = Math.tan(THREE.MathUtils.degToRad(lens.fov / 2));
+function movedUp(points: Vec3[], lens: PerspectiveCamera, frames: number): Vec3[] {
+  const up = new Vec3(0, 1, 0).transformDirection(lens.matrixWorld);
+  const halfHeight = Math.tan(Maths.degToRad(lens.fov / 2));
   return points.map((point) => {
     const depth = -lens.worldToLocal(point.clone()).z;
     return point.clone().addScaledVector(up, frames * 2 * halfHeight * depth);
@@ -102,7 +102,7 @@ function movedUp(points: THREE.Vector3[], lens: THREE.PerspectiveCamera, frames:
 
 /** The measure's canary: a head moved up out of the frame by a frame's height must read none of it shown (less than
  *  `CANARY_MOST`); as words, caught or missed. */
-export function headCanary(points: THREE.Vector3[], lens: THREE.PerspectiveCamera): string {
+export function headCanary(points: Vec3[], lens: PerspectiveCamera): string {
   const moved = shareShown(movedUp(points, lens, 1), lens);
   const percent = (value: number) => `${(value * 100).toFixed(0)}%`;
   return moved < CANARY_MOST

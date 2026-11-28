@@ -4,7 +4,7 @@
 // Frenzy every third blow was a two-fisted hammer, taken out: from play, "lets remove two handed strike under
 // freenzy, it makes no sense, practically".)
 // With a shield and no weapon the free hand punches alone (its style's tuning, lighter, and no Frenzy).
-import * as THREE from 'three';
+import { Vec3 } from '../../engine/api/index.ts';
 import { G } from '../../state';
 import { particles, col } from '../../fx/particles';
 import { addShake, liftView, rollView, viewMode } from '../../core/renderer';
@@ -182,11 +182,11 @@ const skill: InstantSkill = {
   },
 };
 
-const _from = new THREE.Vector3(), _way = new THREE.Vector3(), _a = new THREE.Vector3(), _b = new THREE.Vector3();
+const _from = new Vec3(), _way = new Vec3(), _a = new Vec3(), _b = new Vec3();
 /** how far behind where the punch starts its line is begun (m: a body he stands against is met from outside it),
  *  and the fist's half breadth, the lines either side of its middle (m) */
 const LINE_BACK = 0.6;
-const _eye = new THREE.Vector3(), _look = new THREE.Vector3();
+const _eye = new Vec3(), _look = new Vec3();
 
 /**
  * Over the shoulder, the way (level, into `way`) from his middle to where the crosshair's ray is as far from him
@@ -196,7 +196,7 @@ const _eye = new THREE.Vector3(), _look = new THREE.Vector3();
  * stands 0.55 m to his side: along his facing the fist passed 0.3 to 0.6 m beside the foe the crosshair was on, and
  * missed the husk, the witch, the sporecaller and the thornling outright (`lab headshots --class warrior --trace`).
  */
-export function underCrosshair(player: Player, e: Enemy, way: THREE.Vector3): boolean {
+export function underCrosshair(player: Player, e: Enemy, way: Vec3): boolean {
   if (!player.local || viewMode() !== 'third') return false;
   G.camera.getWorldPosition(_eye);
   G.camera.getWorldDirection(_look);

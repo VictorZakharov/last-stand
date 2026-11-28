@@ -1,5 +1,5 @@
 // Maelstrom: a roaming firestorm that pulls enemies in and lashes them with lightning (its look: fx/firestorm.ts).
-import * as THREE from 'three';
+import { Maths, Vec3 } from '../../engine/api/index.ts';
 import { G } from '../../state';
 import { hitEnemy } from '../damage';
 import { hurtPropsIn, PROP_DAMAGE } from '../../world/destructible';
@@ -30,7 +30,7 @@ const RISE = 0.35, SINK = 0.45;
 const WHIRL = 6.5, RING = 0.55, LIFT = 1.1, LIFT_MID = 1.6, GRIP = 3, BEAR = 0.92, REACH = 1.5;
 
 /** The whirl of a storm at `pos` going `vel`, as strong as `strength` says (its fade), on the fallen. */
-function whirl(pos: THREE.Vector3, vel: THREE.Vector3, radius: number, strength: () => number): Field {
+function whirl(pos: Vec3, vel: Vec3, radius: number, strength: () => number): Field {
   return {
     accel(p, v, out) {
       const k = strength(), dx = p.x - pos.x, dz = p.z - pos.z, d = Math.hypot(dx, dz), reach = radius * REACH;
@@ -55,12 +55,12 @@ const skill: InstantSkill = {
   warm: warmFirestorm,
   cast(player, rawDef, target) {
     const def = rawDef as Needs<'damage' | 'radius' | 'duration' | 'speed' | 'pull'>;
-    const dir = new THREE.Vector3(target.x - player.pos.x, 0, target.z - player.pos.z);
+    const dir = new Vec3(target.x - player.pos.x, 0, target.z - player.pos.z);
     if (dir.lengthSq() < 0.01) dir.set(Math.sin(player.facing), 0, Math.cos(player.facing));
     dir.normalize();
     const pos = player.pos.clone().addScaledVector(dir, 1.8);
     const storm = new Firestorm(def.radius, G.scene);
-    const light = flash({ color: FIRE, intensity: 0, distance: 10, life: 1, hold: def.duration, follow: () => new THREE.Vector3(pos.x, storm.group.position.y + LIGHT_Y, pos.z) });
+    const light = flash({ color: FIRE, intensity: 0, distance: 10, life: 1, hold: def.duration, follow: () => new Vec3(pos.x, storm.group.position.y + LIGHT_Y, pos.z) });
     const hush = sfx.maelstrom(def.duration);
     storm.burst(pos.x, pos.z);
 
@@ -71,8 +71,8 @@ const skill: InstantSkill = {
       update(dt) {
         t += dt;
         const left = def.duration - t;
-        const grow = THREE.MathUtils.smoothstep(Math.min(t / RISE, left / SINK + 0.4), 0, 1);
-        const fade = Math.min(1, t / 0.3) * THREE.MathUtils.clamp(left / SINK, 0, 1);
+        const grow = Maths.smoothstep(Math.min(t / RISE, left / SINK + 0.4), 0, 1);
+        const fade = Math.min(1, t / 0.3) * Maths.clamp(left / SINK, 0, 1);
         pos.addScaledVector(dir, def.speed * dt);
         const R = G.arena.radius - 1, r = Math.hypot(pos.x, pos.z);
         if (r > R) { pos.x *= R / r; pos.z *= R / r; }
@@ -108,7 +108,7 @@ const skill: InstantSkill = {
             const ground = storm.group.position.y;
             for (const e of inside.sort(() => Math.random() - 0.5).slice(0, LASHED)) {
               const from = storm.pointOn(pos.x, ground, pos.z, rand(1.8, 3), Math.atan2(e.pos.z - pos.z, e.pos.x - pos.x));
-              const to = new THREE.Vector3(e.pos.x, e.pos.y + e.height * 0.6, e.pos.z);
+              const to = new Vec3(e.pos.x, e.pos.y + e.height * 0.6, e.pos.z);
               lightning(from, to, { color: LASH, intensity: 3.5, width: 0.05, branches: 1 });
             }
             sfx.zap();

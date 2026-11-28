@@ -4,8 +4,9 @@
 // and the drink: at each of its beats the mug must be shown, on a layer the camera the hands are seen through draws,
 // inside that camera's view and not through it (its nearest point past the near plane); and once drunk, the mug set
 // down on the bar. Each beat pictured as the player sees it.
-import * as THREE from 'three';
+import { Mesh, Node, PerspectiveCamera, Vec3 } from './sceneApi.ts';
 import { waitingMug } from './takeAle';
+import { boxOf } from './lab';
 import type { Lab, Pictured } from './lab';
 import { G } from '../../../src/state';
 import { armsCamera, faceCamera, viewMode } from '../../../src/core/renderer';
@@ -36,13 +37,13 @@ export interface EyesCase {
  *  and its nearest point past the near plane (m: under 0, the camera inside it). */
 export interface Seen { shown: boolean; drawn: boolean; inView: boolean; clear: number; x: number; y: number }
 
-export function seenBy(thing: THREE.Object3D, camera: THREE.PerspectiveCamera, radius: number): Seen {
+export function seenBy(thing: Node, camera: PerspectiveCamera, radius: number): Seen {
   let shown = true;
-  for (let o: THREE.Object3D | null = thing; o; o = o.parent) shown &&= o.visible;
+  for (let o: Node | null = thing; o; o = o.parent) shown &&= o.visible;
   let drawn = false;
-  thing.traverseVisible((o) => { if ((o as THREE.Mesh).isMesh && o.layers.test(camera.layers)) drawn = true; });
+  thing.traverseVisible((o) => { if ((o as Mesh).isMesh && o.layers.test(camera.layers)) drawn = true; });
   camera.updateMatrixWorld();
-  const at = thing.getWorldPosition(new THREE.Vector3());
+  const at = thing.getWorldPosition(new Vec3());
   const ahead = -at.clone().applyMatrix4(camera.matrixWorldInverse).z;
   const ndc = at.clone().project(camera);
   const inView = ahead > 0 && Math.abs(ndc.x) <= 1 && Math.abs(ndc.y) <= 1;
@@ -65,10 +66,10 @@ export async function throughTheEyes(lab: Lab, c: EyesCase, lines: string[], pro
   // the camera's heading came out the other way)
   // (at where he serves from, not where he stands now: off clearing a mug a sat hero set down along the bar, the view was
   // turned 35 degrees off the bar where he'd slide the beer)
-  const keeperAt = new THREE.Vector3(c.keeper.at[0], 0, c.keeper.at[1]);
+  const keeperAt = new Vec3(c.keeper.at[0], 0, c.keeper.at[1]);
   const looksAtHim = () => {
-    const cam = G.camera as THREE.PerspectiveCamera, ahead = cam.getWorldDirection(new THREE.Vector3());
-    return ahead.dot(keeperAt.clone().sub(cam.getWorldPosition(new THREE.Vector3())).setY(0).normalize()) > 0.7;
+    const cam = G.camera as PerspectiveCamera, ahead = cam.getWorldDirection(new Vec3());
+    return ahead.dot(keeperAt.clone().sub(cam.getWorldPosition(new Vec3())).setY(0).normalize()) > 0.7;
   };
   // (held there before every frame of the case, as a player keeps looking: the lab's own aiming turned it away)
   const toHim = Math.atan2(keeperAt.x - G.player.pos.x, keeperAt.z - G.player.pos.z);
@@ -81,7 +82,8 @@ export async function throughTheEyes(lab: Lab, c: EyesCase, lines: string[], pro
   await useByE(lab, c.keeper, problems);
   await c.frames(12);
   const card = document.getElementById('talk');
-  const box = card?.querySelector('.tk-box')?.getBoundingClientRect();
+  const talkBox = card?.querySelector('.tk-box');
+  const box = talkBox ? boxOf(talkBox) : null;
   const within = !!box && box.left >= -1 && box.top >= -1
     && box.right <= innerWidth + 1 && box.bottom <= innerHeight + 1;
   const open = !!card && !card.classList.contains('hidden');
@@ -100,7 +102,7 @@ export async function throughTheEyes(lab: Lab, c: EyesCase, lines: string[], pro
   const served = await c.frames(SERVED_IN, () => {
     const mug = c.tv.mugs.mugs.find((m) => m.place.at === 'bar' && m.full > 0.5);
     if (mug && c.drinkShare() < 0) {
-      const seen = seenBy(c.tv.mugMesh(mug.id), G.camera as THREE.PerspectiveCamera, MUG.rimR);
+      const seen = seenBy(c.tv.mugMesh(mug.id), G.camera as PerspectiveCamera, MUG.rimR);
       if (!slid || (fine(seen) && !fine(slid)) || seen.clear > slid.clear) slid = seen;
     }
     servedMug = waitingMug(c.tv);
@@ -157,7 +159,7 @@ export async function throughTheEyes(lab: Lab, c: EyesCase, lines: string[], pro
   if (finished < 0) problems.push('through the eyes, the drink never finished');
   const down = c.tv.mugs.get(servedMug);
   const downSeen = down.place.at === 'bar' && down.dirty
-    ? seenBy(c.tv.mugMesh(down.id), G.camera as THREE.PerspectiveCamera, MUG.rimR) : null;
+    ? seenBy(c.tv.mugMesh(down.id), G.camera as PerspectiveCamera, MUG.rimR) : null;
   lines.push(`through the eyes: set down ${downSeen ? said(downSeen) : 'nowhere on the bar'}`);
   if (!downSeen?.shown) problems.push('through the eyes, the mug was never set down on the bar');
   moments.push(lab.picture('eyes-set-down', ['eyes'], ['the mug set down, through the eyes']));

@@ -8,7 +8,7 @@
 // still cold, the Start waited under the fight's loading bar and began the run once it was warm.
 import { G } from '../../../src/state';
 import { input } from '../../../src/core/input';
-import * as THREE from 'three';
+import { Node, Vec3 } from './sceneApi.ts';
 import { hallFocus, hallHeroes, dropSpareHeroes, heroesStanding } from '../../../src/game/hall';
 import { heroShare, isReadying, readyingLabel, chill, heroWarming, isWarm, markWarm } from '../../../src/game/warm';
 import { hasSavedClass } from '../../../src/loot/profile';
@@ -188,10 +188,10 @@ const DRAWN_OFF_MOST = 0.01;
  * ranger stood on the fountain, the hall of heroes' plinths, their dais's matrices held where its room had them.
  */
 function heroesAmiss(): string[] {
-  const owned = new Set<THREE.Object3D>([
+  const owned = new Set<Node>([
     ...G.players.map((p) => p.obj), ...hallHeroes().map((h) => h.player.obj), ...heroesStanding().map((p) => p.obj),
   ]);
-  const drawn = new THREE.Vector3();
+  const drawn = new Vec3();
   const amiss: string[] = [];
   for (const o of G.scene.children) {
     if (!o.name.startsWith('hero ') || !o.visible) continue;
@@ -206,7 +206,7 @@ function heroesAmiss(): string[] {
 }
 
 /** where the fountain is pictured from and what at (m): beside it and a little above, as the player's screenshot */
-const FOUNTAIN_SHOT = { from: new THREE.Vector3(3.5, 3.2, 6.5), at: new THREE.Vector3(0.3, 0.9, 0.4) };
+const FOUNTAIN_SHOT = { from: new Vec3(3.5, 3.2, 6.5), at: new Vec3(0.3, 0.9, 0.4) };
 
 /** The screen with the game's camera put beside the fountain for the frame (`FOUNTAIN_SHOT`), then given back. */
 async function fountainPictured(lab: Lab, frame: number): Promise<Pictured> {

@@ -14,7 +14,7 @@
 //   reach, every open spot of the arena still reachable from every other, an arrow at a stone meeting it, a stone
 //   forced up under a hero pushing him clear, and every stone sunk once it falls. Canary: no stones, and a ring of
 //   stones walling a spot in (which the reach must catch).
-import * as THREE from 'three';
+import { Vec3 } from './sceneApi.ts';
 import type { Lab, Pictured } from './lab';
 import type { Enemy } from '../../../src/entities/enemy';
 import type { GhostsSeen } from '../../../src/entities/models/bellGhosts';
@@ -56,11 +56,22 @@ function cantorUp(): Enemy {
   return cantor;
 }
 
+/** The engine's target frame's module (ui/targetFrame.ts), where the tree has it. */
+interface TargetFrame { targetShown(): { name: string; sub: string } | null }
+
 // --- bars -------------------------------------------------------------------------------------------------
 
-/** The boss bar's words as the page shows them. */
-function bossBar(): { name: string; sub: string; shown: boolean } {
+/** The boss bar's words as the game shows them: the engine's target frame's (ui/targetFrame.ts), or the page's
+ *  `#target` where the tree has that (main's, for --ab). */
+async function bossBar(): Promise<{ name: string; sub: string; shown: boolean }> {
   const box = document.querySelector('#target');
+  if (!box) {
+    // (by a glob: on main's tree the module isn't there, and an import of it would stop this one loading)
+    const found = import.meta.glob<TargetFrame>('../../../src/ui/targetFrame.ts');
+    const load = Object.values(found)[0];
+    const shown = load ? (await load()).targetShown() : null;
+    return { name: shown?.name ?? '', sub: shown?.sub ?? '', shown: !!shown };
+  }
   return {
     name: box?.querySelector('.t-name')?.textContent ?? '',
     sub: box?.querySelector('.t-sub')?.textContent ?? '',
@@ -77,12 +88,12 @@ export async function bars({ lab, stand, canary, lines, problems }: ChoirMeasure
   if (canary) for (const guard of guards) (guard as { guard: boolean }).guard = false;
   const cantor = cantorUp();
   await lab.step(2, keepHero);
-  const first = bossBar();
+  const first = await bossBar();
   // (the Cantor moved to the end of the fight's list: a guard first, as a guest's spawns or a slow rise can leave it)
   G.enemies.splice(G.enemies.indexOf(cantor), 1);
   G.enemies.push(cantor);
   await lab.step(2, keepHero);
-  const last = bossBar();
+  const last = await bossBar();
   lines.push(`bars: wave 10's boss bar reads "${first.name}" / "${first.sub}" with the Cantor first in the fight, `
     + `"${last.name}" / "${last.sub}" with a guard first`);
   for (const [read, when] of [[first, 'first'], [last, 'last']] as const) {
@@ -99,7 +110,7 @@ export async function bars({ lab, stand, canary, lines, problems }: ChoirMeasure
   guards[0].takeDamage(guards[0].life - 0.5 * guards[0].maxLife, {});
   guards[1].takeDamage(guards[1].life + 1, {});
   await lab.step(2, keepHero);
-  const one = bossBar();
+  const one = await bossBar();
   lines.push(`bars: one guard fallen, the other at half its life: "${one.sub}"`);
   if (!/Warded while 1 guard stands/.test(one.sub)) problems.push(`bars: with one guard standing the line reads "${one.sub}"`);
 }
@@ -121,14 +132,14 @@ interface DiveCase { diveAt: number; seizedAt: number; moved: number }
 async function diveCase(lab: Lab, stand: () => Promise<void>, away: number, dodges: boolean): Promise<DiveCase> {
   await stand();
   const hero = G.player;
-  const guard = lab.spawnFoe('bellwarden', hero.pos.clone().add(new THREE.Vector3(0, 0, -12)), { wave: WAVES.bossEvery * 2, guard: true });
+  const guard = lab.spawnFoe('bellwarden', hero.pos.clone().add(new Vec3(0, 0, -12)), { wave: WAVES.bossEvery * 2, guard: true });
   await lab.until(() => guard.spawning <= 0, 300, 'dive: the guard never rose');
   guard.dazed = 1e4;
   hero.pos.set(guard.pos.x, 0, guard.pos.z + away);
   const from = hero.pos.clone();
   const ghosts = guard.model.root.userData.ghosts as GhostsSeen;
   const result: DiveCase = { diveAt: -1, seizedAt: -1, moved: 0 };
-  const probe = new THREE.Vector3();
+  const probe = new Vec3();
   let wasFree = false;
   await lab.step(DIVE_WATCH * FPS, (frame) => {
     keepHero();
@@ -238,7 +249,7 @@ export async function choir({ lab, stand, canary, lines, problems }: ChoirMeasur
 /** The Cantor risen 12 m off the hero at wave 10, dazed. */
 async function cantorDazed(lab: Lab): Promise<Enemy> {
   const hero = G.player;
-  const cantor = lab.spawnFoe('cantor', hero.pos.clone().add(new THREE.Vector3(0, 0, -12)), { wave: WAVES.bossEvery * 2 });
+  const cantor = lab.spawnFoe('cantor', hero.pos.clone().add(new Vec3(0, 0, -12)), { wave: WAVES.bossEvery * 2 });
   await lab.until(() => cantor.spawning <= 0, 300, 'choir: the Cantor never rose');
   cantor.dazed = 1e4;
   return cantor;
@@ -335,9 +346,9 @@ function arrowStopped(x: number, z: number): boolean {
   const o = G.arena.obstacles.find((each) => each.prop && Math.hypot(each.x - x, each.z - z) < 0.01);
   if (!o || o.h <= ARROW_Y) return false;
   // (from the arena's middle's side: where it meets the stone's circle, as a flight's step does, then its surface)
-  const way = new THREE.Vector3(-x, 0, -z).normalize();
-  const at = new THREE.Vector3(x, ARROW_Y, z).addScaledVector(way, o.r);
-  return !!propSurface(o, at, way.clone().negate(), new THREE.Vector3());
+  const way = new Vec3(-x, 0, -z).normalize();
+  const at = new Vec3(x, ARROW_Y, z).addScaledVector(way, o.r);
+  return !!propSurface(o, at, way.clone().negate(), new Vec3());
 }
 
 /** The Cantor fought for its stones: their most, their spots, the reach, arrows, a stone under a hero, their sinking. */
@@ -411,7 +422,7 @@ async function underHero(lab: Lab, cantor: Enemy, lines: string[], problems: str
 async function walledIn(lab: Lab, canary: boolean, lines: string[], problems: string[]): Promise<void> {
   if (!canary) return;
   const before = cutOff();
-  const round = 8, at = new THREE.Vector3(-16, 0, 16);
+  const round = 8, at = new Vec3(-16, 0, 16);
   for (let k = 0; k < round; k++) {
     const angle = (k / round) * Math.PI * 2;
     raiseGrave(at.x + Math.sin(angle) * 1.4, at.z + Math.cos(angle) * 1.4, angle, 0, () => undefined);
@@ -449,14 +460,14 @@ export async function choirPictures({ lab, stand, lines }: ChoirMeasure): Promis
     await lab.step(Math.round((at - t) * FPS), keepHero);
     t = at;
     moments.push(await lab.screen(`ring ${what}`, [`the choir's ring ${what}, the player's own view`]));
-    const above = middle.clone().add(new THREE.Vector3(0, ABOVE, 0.01));
+    const above = middle.clone().add(new Vec3(0, ABOVE, 0.01));
     moments.push(await filmedFrom(lab, above, middle, `ring ${what} above`, `the choir's ring ${what}, from above`));
   }
   // (the wave's small foes cleared, so its stones are seen clear of them)
   for (const foe of G.enemies.filter((each) => each.alive && !each.def.boss)) foe.takeDamage(foe.life + 1, {});
   G.run!.queue.length = 0;
-  const spot = middle.clone().add(new THREE.Vector3(4, 0, 4));
-  const side = spot.clone().add(new THREE.Vector3(5, 0, 0)).setY(EYE);
+  const spot = middle.clone().add(new Vec3(4, 0, 4));
+  const side = spot.clone().add(new Vec3(5, 0, 0)).setY(EYE);
   fx('graveStone', cantor.id, spot.x, spot.z, -Math.PI / 2, 0.04, 1.2);
   await lab.step(36, keepHero);
   moments.push(await filmedFrom(lab, side, spot.clone().setY(0.8), 'stone warned', 'a gravestone\'s warning, from the side'));
@@ -466,7 +477,7 @@ export async function choirPictures({ lab, stand, lines }: ChoirMeasure): Promis
   await lab.step(40, keepHero);
   moments.push(await filmedFrom(lab, side, spot.clone().setY(0.8), 'stone risen', 'the gravestone risen'));
   await stonesAtMost(lab, cantor);
-  moments.push(await filmedFrom(lab, new THREE.Vector3(0, 22, 26), new THREE.Vector3(0, 0, -2), 'stones high',
+  moments.push(await filmedFrom(lab, new Vec3(0, 22, 26), new Vec3(0, 0, -2), 'stones high',
     `the arena late in the fight, its ${risenGraves.length} stones, from high over its edge`));
   // (the game's own camera back over the hero before the player's view is taken)
   await lab.step(3, keepHero);
@@ -479,14 +490,14 @@ export async function choirPictures({ lab, stand, lines }: ChoirMeasure): Promis
  *  as it shrieks and carrying him off. */
 async function nearGuard(lab: Lab, guard: Enemy): Promise<Pictured[]> {
   const hero = G.player;
-  const out = new THREE.Vector3(-guard.pos.x, 0, -guard.pos.z).normalize();
+  const out = new Vec3(-guard.pos.x, 0, -guard.pos.z).normalize();
   // (stood past the guard, on its far side from the middle, so the guard and its bar come into the frame's middle,
   // clear of the boss bar at the top)
   hero.pos.copy(guard.pos).addScaledVector(out, -6).setY(0);
   await lab.step(20, keepHero);
   const moments = [await lab.screen('bars', ['the boss bar and a guard\'s own bar over it, as the player sees them'])];
   hero.pos.copy(guard.pos).addScaledVector(out, 3.5).setY(0);
-  const across = new THREE.Vector3(out.z, 0, -out.x);
+  const across = new Vec3(out.z, 0, -out.x);
   const side = guard.pos.clone().addScaledVector(out, 2).addScaledVector(across, 7).setY(EYE);
   const between = guard.pos.clone().addScaledVector(out, 2.5).setY(1.6);
   const warn = BELL_WARDEN.dive.warn;

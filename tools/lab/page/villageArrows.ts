@@ -2,7 +2,7 @@
 // coming down in the training yard and on the meadow stands in the ground, with either biome chosen for the next
 // run, and one on the square's cobbles glances off. The village's biome was whichever run was last chosen, and in the
 // crypt's every arrow skittered off the grass. `canary` reads the square's cobbles as ground, which must be found.
-import * as THREE from 'three';
+import { Vec3 } from './sceneApi.ts';
 import type { Lab } from './lab';
 import { G } from '../../../src/state';
 import { BIOME_IDS, type BiomeId } from '../../../src/data/biomes';
@@ -12,7 +12,7 @@ import { intoGround } from '../../../src/combat/skills/ranger';
 import type { LightsChecked } from './villageLights';
 
 /** an arrow's way down (m/s), and the frames between one landing and the reading */
-const COMING_DOWN = new THREE.Vector3(8, -12, 0);
+const COMING_DOWN = new Vec3(8, -12, 0);
 /** the meadow's spot read, and the square's */
 const MEADOW = { x: -13, z: 6 };
 const SQUARE = { x: 3, z: 3 };
@@ -20,7 +20,7 @@ const SQUARE = { x: 3, z: 3 };
 /** Whether an arrow coming down at (x, z) stands in the ground there. */
 function standsAt(x: number, z: number): boolean {
   clearSpent();
-  intoGround(new THREE.Vector3(x, 0, z), COMING_DOWN.clone());
+  intoGround(new Vec3(x, 0, z), COMING_DOWN.clone());
   return spentStats().fixed === 1;
 }
 

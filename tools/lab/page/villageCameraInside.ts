@@ -12,7 +12,7 @@
 // The camera itself was brought back toward his chest by a wall behind him and stood in his hair, 0.3 m off his
 // head's middle: it's lifted out over him now (`headClear` in src/core/renderer.ts). `canary` hides his body wherever
 // the camera comes near his neck and lets the camera into his head, as they did.
-import * as THREE from 'three';
+import { Maths, Mesh, Vec3 } from './sceneApi.ts';
 import type { Lab } from './lab';
 import type { Pictured } from './lab';
 import { G } from '../../../src/state';
@@ -67,8 +67,8 @@ interface Spot { x: number; z: number; facing: number; down: number; off: number
 /** What the frames of a walk or a turn came to. */
 interface Frames { frames: number; inside: number; least: number; leastHead: number }
 
-const _seg = new THREE.Vector3();
-const _neck = new THREE.Vector3();
+const _seg = new Vec3();
+const _neck = new Vec3();
 
 /** How far the camera stands from his middle line, from his feet to his crown (m). */
 function offHim(): number {
@@ -76,7 +76,7 @@ function offHim(): number {
   const cam = G.camera.position;
   const low = y + FEET;
   const high = y + G.player.model.height;
-  _seg.set(x, THREE.MathUtils.clamp(cam.y, low, high), z);
+  _seg.set(x, Maths.clamp(cam.y, low, high), z);
   return cam.distanceTo(_seg);
 }
 
@@ -98,7 +98,7 @@ function offNeck(): number {
 function headHidden(): boolean {
   let hidden = false;
   G.player.model.joints!.neck.traverse((object) => {
-    if ((object as THREE.Mesh).isMesh && object.layers.isEnabled(HIDDEN_LAYER)) hidden = true;
+    if ((object as Mesh).isMesh && object.layers.isEnabled(HIDDEN_LAYER)) hidden = true;
   });
   return hidden;
 }
@@ -131,7 +131,7 @@ function standable(x: number, z: number): { x: number; z: number } {
 /** Him stood at (x, z), turned and looking down, with the boom at its least. */
 function standAt(spot: { x: number; z: number; facing: number; down: number }): void {
   G.player.walkTo = null;
-  G.player.place(new THREE.Vector3(spot.x, 0, spot.z), spot.facing);
+  G.player.place(new Vec3(spot.x, 0, spot.z), spot.facing);
   faceCamera(spot.facing);
   lookDown(spot.down);
   boomTo(BOOM);

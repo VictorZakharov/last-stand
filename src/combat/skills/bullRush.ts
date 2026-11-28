@@ -8,7 +8,7 @@
 // each weight slows it and at its most it stops there; a boss is struck but never carried, and stops it. A charge that
 // rammed a crowd staggers him at its stop (#560, `SkillDef.ram`). Both are his own game's to judge, as it moves him
 // (combat/ram.ts).
-import * as THREE from 'three';
+import { Vec3 } from '../../engine/api/index.ts';
 import { G } from '../../state';
 import { carryEnemy, hitEnemy } from '../damage';
 import { evades } from '../../entities/evade';
@@ -52,7 +52,7 @@ function pace(b: number): (u: number) => number {
 }
 
 /** the push-off: the ground cracks under the rear foot, a ring of dust and stone blasts out behind */
-function launch(p: THREE.Vector3, dir: THREE.Vector3): void {
+function launch(p: Vec3, dir: Vec3): void {
   const back = { x: p.x - dir.x * 0.4, y: 0, z: p.z - dir.z * 0.4 };
   crackDecal(back, { size: 1.4, color: EMBER, intensity: 0.9, life: 1.4 });
   shockwave(back, { color: EMBER, intensity: 1.4, from: 0.2, to: 1.8, life: 0.3 });
@@ -64,7 +64,7 @@ function launch(p: THREE.Vector3, dir: THREE.Vector3): void {
 }
 
 /** a footfall at full tilt: the ground thumps, dust and grit kicked up behind */
-function footfall(p: THREE.Vector3, dir: THREE.Vector3, side: number): void {
+function footfall(p: Vec3, dir: Vec3, side: number): void {
   const f = { x: p.x - dir.z * side * 0.18, y: 0, z: p.z + dir.x * side * 0.18 };
   smokePuff(f, { count: 3, color: DUST, alpha: 0.5, size: 0.5, sizeEnd: 1.6, speed: 1.6, life: 0.7 });
   debris({ x: f.x, y: 0, z: f.z }, { count: 4, speed: 3 });
@@ -73,7 +73,7 @@ function footfall(p: THREE.Vector3, dir: THREE.Vector3, side: number): void {
   sfx.bullStep(side);
 }
 
-function arrive(c: THREE.Vector3, dir: THREE.Vector3): void {
+function arrive(c: Vec3, dir: Vec3): void {
   shockwave(c, { color: EMBER, intensity: 2, from: 0.3, to: 3, life: 0.4 });
   shockwave(c, { color: 0xffffff, intensity: 0.9, from: 0.2, to: 1.8, life: 0.25 });
   groundFlash(c, { color: EMBER, intensity: 1, radius: 2, life: 0.3 });
@@ -93,7 +93,7 @@ const skill: InstantSkill = {
   warm: () => [slashMesh(WEDGE, 0.55, 0xffffff, true).mesh],
   cast(player, rawDef, target) {
     const def = rawDef as Def;
-    const dir = new THREE.Vector3(target.x - player.pos.x, 0, target.z - player.pos.z);
+    const dir = new Vec3(target.x - player.pos.x, 0, target.z - player.pos.z);
     // aiming at your own feet still charges the full distance, the way you face
     if (dir.lengthSq() < 0.01) dir.set(Math.sin(player.facing), 0, Math.cos(player.facing));
     dir.normalize();

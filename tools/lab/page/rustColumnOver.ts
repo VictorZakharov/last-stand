@@ -6,7 +6,7 @@
 // Read up the column's own axis: at each height, how much of the column is left over what's behind it, from the
 // frame as played, the frame with nothing thinned and the frame with the columns hidden.
 
-import * as THREE from 'three';
+import { Box3, Vec2, Vec3 } from './sceneApi.ts';
 import type { Lab, Pictured } from './lab';
 import { type Checked, failed, passed } from './rustPixels';
 import { type Shot, settledAt, shotAfter, show, showHouses } from './rustHouseRule';
@@ -36,15 +36,15 @@ export const COLUMN_GHOST = { left: 0.55, differ: 0.25 };
 const CANARY_DIFFER = 0.5;
 
 /** The portico's column nearest the line on the floor from the camera to him, between the two. */
-function columnOver(): THREE.Box3 {
-  const eye = new THREE.Vector2(G.camera.position.x, G.camera.position.z);
-  const him = new THREE.Vector2(G.player.pos.x, G.player.pos.z);
+function columnOver(): Box3 {
+  const eye = new Vec2(G.camera.position.x, G.camera.position.z);
+  const him = new Vec2(G.player.pos.x, G.player.pos.z);
   const to = him.clone().sub(eye);
-  let nearest: THREE.Box3 | null = null;
+  let nearest: Box3 | null = null;
   let least = Infinity;
   for (const column of PORTICO_COLUMNS) {
-    const middle = column.getCenter(new THREE.Vector3());
-    const from = new THREE.Vector2(middle.x, middle.z).sub(eye);
+    const middle = column.getCenter(new Vec3());
+    const from = new Vec2(middle.x, middle.z).sub(eye);
     const along = from.dot(to) / to.lengthSq();
     if (along <= 0 || along >= 1) continue;
     const aside = Math.abs(from.cross(to)) / to.length();
@@ -58,7 +58,7 @@ function columnOver(): THREE.Box3 {
 }
 
 /** The mean colour of the square of `shot` round a place on the screen (-1 to 1 each way). */
-function colourAt(shot: Shot, place: THREE.Vector3): [number, number, number] {
+function colourAt(shot: Shot, place: Vec3): [number, number, number] {
   const { width, height, data } = shot.pixels;
   const x = Math.round((place.x * 0.5 + 0.5) * width);
   const y = Math.round((-place.y * 0.5 + 0.5) * height);
@@ -77,7 +77,7 @@ function colourAt(shot: Shot, place: THREE.Vector3): [number, number, number] {
 
 /** How much of the column is left at a place of it, 0 to 1: null where its colour doesn't tell it from what's
  *  behind it. */
-function leftAt(at: THREE.Vector3, played: Shot, whole: Shot, bare: Shot): number | null {
+function leftAt(at: Vec3, played: Shot, whole: Shot, bare: Shot): number | null {
   const place = at.clone().project(G.camera);
   const [asPlayed, asWhole, asBare] = [played, whole, bare].map((shot) => colourAt(shot, place));
   let apart = 0;
@@ -94,17 +94,17 @@ function leftAt(at: THREE.Vector3, played: Shot, whole: Shot, bare: Shot): numbe
 
 /** How much of the column is left up its shaft's axis, and last on its capital, 0 to 1 each (a place its colour
  *  doesn't tell from what's behind it left out). */
-function leftUp(column: THREE.Box3, played: Shot, whole: Shot, bare: Shot): number[] {
-  const middle = column.getCenter(new THREE.Vector3());
-  const places: THREE.Vector3[] = [];
+function leftUp(column: Box3, played: Shot, whole: Shot, bare: Shot): number[] {
+  const middle = column.getCenter(new Vec3());
+  const places: Vec3[] = [];
   const from = column.min.y + FROM_FOOT;
   for (let step = 0; step < HEIGHTS; step++) {
     const y = from + ((column.max.y - UNDER_TOP - from) * step) / (HEIGHTS - 1);
-    places.push(new THREE.Vector3(middle.x, y, middle.z));
+    places.push(new Vec3(middle.x, y, middle.z));
   }
   // (its capital on its top face's far side from the camera: through its middle the shaft's ghost shows under it)
-  const away = new THREE.Vector2(middle.x - G.camera.position.x, middle.z - G.camera.position.z).normalize();
-  places.push(new THREE.Vector3(middle.x + away.x * CAPITAL_OUT, column.max.y, middle.z + away.y * CAPITAL_OUT));
+  const away = new Vec2(middle.x - G.camera.position.x, middle.z - G.camera.position.z).normalize();
+  places.push(new Vec3(middle.x + away.x * CAPITAL_OUT, column.max.y, middle.z + away.y * CAPITAL_OUT));
   const lefts = places.map((place) => leftAt(place, played, whole, bare));
   return lefts.filter((left): left is number => left !== null);
 }

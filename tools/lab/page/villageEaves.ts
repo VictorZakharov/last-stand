@@ -8,7 +8,7 @@
 // under the roof: each must be stopped within `STOPPED_PAST` of the point it's aimed at. Pictured from cottage 0's
 // side and end, over the shoulder and through the eyes, looking up under the eaves. `--canary`: what closes the band
 // and the slivers (the walls carried up to the roof, the gables up to its underside) let through, as it was.
-import * as THREE from 'three';
+import { Mat4, Mesh, Quat, Raycaster, Vec3 } from './sceneApi.ts';
 import type { Lab, Pictured } from './lab';
 import { G } from '../../../src/state';
 import { faceCamera, viewMode, type ViewMode } from '../../../src/core/renderer';
@@ -48,25 +48,25 @@ function undersideAt(along: number): number {
 /** `c`'s frame: a point of its own (x across, y up, z along, in its own size) into the world's, and back. */
 /** A cottage's frame both ways. */
 interface CottageFrame {
-  toWorld: (x: number, y: number, z: number) => THREE.Vector3;
-  toOwn: (point: THREE.Vector3) => THREE.Vector3;
+  toWorld: (x: number, y: number, z: number) => Vec3;
+  toOwn: (point: Vec3) => Vec3;
 }
 
 function frameOf(c: Cottage): CottageFrame {
-  const matrix = new THREE.Matrix4().compose(
-    new THREE.Vector3(c.x, 0, c.z),
-    new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), c.facing),
-    new THREE.Vector3(c.size, c.size, c.size),
+  const matrix = new Mat4().compose(
+    new Vec3(c.x, 0, c.z),
+    new Quat().setFromAxisAngle(new Vec3(0, 1, 0), c.facing),
+    new Vec3(c.size, c.size, c.size),
   );
   const inverse = matrix.clone().invert();
   return {
-    toWorld: (x, y, z) => new THREE.Vector3(x, y, z).applyMatrix4(matrix),
+    toWorld: (x, y, z) => new Vec3(x, y, z).applyMatrix4(matrix),
     toOwn: (point) => point.clone().applyMatrix4(inverse),
   };
 }
 
 /** A ray to send: from an eye at a point it's aimed at, and what it's for. */
-interface Sight { from: THREE.Vector3; to: THREE.Vector3; where: string }
+interface Sight { from: Vec3; to: Vec3; where: string }
 
 /** The points across the band under each long side's eave (x across, z out to that side). */
 function bandPoints(): { x: number; y: number; z: number; side: string }[] {
@@ -122,7 +122,7 @@ function sightsAt(c: Cottage): Sight[] {
 }
 
 /** Whether a point of `c`'s own frame lies on what closes the band and the slivers (`--canary` lets it through). */
-function onTheClosing(own: THREE.Vector3): boolean {
+function onTheClosing(own: Vec3): boolean {
   const { w, d, h, rise } = COTTAGE;
   const wallTop = Math.abs(Math.abs(own.z) - d / 2) < 0.06 && own.y > h - 0.01 && Math.abs(own.x) < w / 2 + 0.01;
   const oldGable = h + rise * (1 - (2 * Math.abs(own.z)) / d);
@@ -131,21 +131,21 @@ function onTheClosing(own: THREE.Vector3): boolean {
 }
 
 /** Every mesh shown, as chunks for rays. */
-function shownMeshes(): THREE.Mesh[] {
-  const meshes: THREE.Mesh[] = [];
+function shownMeshes(): Mesh[] {
+  const meshes: Mesh[] = [];
   G.scene.traverseVisible((object) => {
-    if ((object as THREE.Mesh).isMesh) meshes.push(object as THREE.Mesh);
+    if ((object as Mesh).isMesh) meshes.push(object as Mesh);
   });
   return rayChunks(meshes);
 }
 
 /** Whether `sight` goes on past its point, under the roof or out through the house: nothing stopping it within
  *  `STOPPED_PAST` past the point (`canary`: what closes the band and slivers let through). */
-function peeks(sight: Sight, meshes: THREE.Mesh[], c: Cottage, canary: boolean): boolean {
+function peeks(sight: Sight, meshes: Mesh[], c: Cottage, canary: boolean): boolean {
   const { toOwn } = frameOf(c);
   const way = sight.to.clone().sub(sight.from);
   const reach = way.length() + STOPPED_PAST * c.size;
-  const hits = new THREE.Raycaster(sight.from, way.normalize(), 0, reach).intersectObjects(meshes, false);
+  const hits = new Raycaster(sight.from, way.normalize(), 0, reach).intersectObjects(meshes, false);
   const stops = canary ? hits.filter((hit) => !onTheClosing(toOwn(hit.point))) : hits;
   return stops.length === 0;
 }
@@ -163,7 +163,7 @@ async function lookUnder(lab: Lab, view: ViewMode, end: boolean): Promise<Pictur
   await viewBy(lab, view);
   const facing = Math.atan2(target.x - at.x, target.z - at.z);
   G.player.walkTo = null;
-  G.player.place(new THREE.Vector3(at.x, groundHeight(at.x, at.z), at.z), facing);
+  G.player.place(new Vec3(at.x, groundHeight(at.x, at.z), at.z), facing);
   faceCamera(facing);
   await lab.step(LOOK, () => ({ sight: target }));
   return lab.screen(`under cottage 0's eaves from ${end ? 'its end' : 'its front'}, ${view}`, []);

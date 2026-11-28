@@ -8,7 +8,7 @@
 // hero's hits on its rivals as its own screen shows them (entities/rival.ts) and tells the struck hero's game, which
 // works each hit out as its own screen has him (his block, his ward, a blink away) and reports his life and his fall
 // as it does in any run.
-import * as THREE from 'three';
+import { Vec3 } from '../engine/api/index.ts';
 import { G } from '../state';
 import { COOP, PVP } from '../data/balance';
 import { BIOME_IDS, type BiomeId } from '../data/biomes';
@@ -231,7 +231,7 @@ const lifeOf = (d: DuelState, side: Side): number =>
 
 // --- a round ---------------------------------------------------------------------------------------
 /** The two gates the sides start from: the first, and the one furthest from it. */
-function gates(): [THREE.Vector3, THREE.Vector3][] {
+function gates(): [Vec3, Vec3][] {
   const portals = G.arena.portals, first = portals[0];
   const far = [...portals].sort((a, b) => b.pos.distanceTo(first.pos) - a.pos.distanceTo(first.pos))[0];
   return [first, far].map((gate) => [gate.pos, gate.dir]);
@@ -239,10 +239,10 @@ function gates(): [THREE.Vector3, THREE.Vector3][] {
 
 /** Where the `i`th of `of` fighters of `side` stands as a round begins, and the way he faces: in from his side's gate,
  *  two of a side abreast. */
-function standAt(side: Side, i: number, of: number): { at: THREE.Vector3; facing: number } {
+function standAt(side: Side, i: number, of: number): { at: Vec3; facing: number } {
   const [pos, dir] = gates()[side];
   const across = (i - (of - 1) / 2) * PVP.apart;
-  const at = new THREE.Vector3(pos.x + dir.x * PVP.fromGate - dir.z * across, 0, pos.z + dir.z * PVP.fromGate + dir.x * across);
+  const at = new Vec3(pos.x + dir.x * PVP.fromGate - dir.z * across, 0, pos.z + dir.z * PVP.fromGate + dir.x * across);
   resolveWorld(at, HERO_RADIUS);
   return { at, facing: Math.atan2(dir.x, dir.z) };
 }
@@ -493,7 +493,7 @@ export function duelHits(by: Player, n: number, rows: unknown): void {
       floatText(me.pos.x, 2.5, me.pos.z, 'Dodged', 'info', '#cfe8ff');
       continue;
     }
-    const from = new THREE.Vector3(fromX, 0, fromZ);
+    const from = new Vec3(fromX, 0, fromZ);
     if (amount > 0) {
       const most = me.stats.maxLife * PVP.hitMost;
       let budget = taken.get(by.slot);

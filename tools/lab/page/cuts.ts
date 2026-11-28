@@ -4,7 +4,7 @@
 // other is page/cutRows.ts. (The owner: "current dual wield attack is like touching the enemy with the middle of the
 // blade, lame"; "our attacks strike multiple targets, so that cannot appear to hit only one"; "for dual wield right
 // hand looks fine, but left is mostly off screen".)
-import * as THREE from 'three';
+import { Box3, Camera, Mesh, Node, Vec2, Vec3 } from './sceneApi.ts';
 import type { Lab } from './lab';
 import { armsLens } from './inFrame';
 import { headOf, shareShown } from './heads';
@@ -33,8 +33,8 @@ function aimAgainst(frame: CutFrame): { off: number; share: number } | null {
   const near = -frame.grip.z;
   const far = -frame.tip.z;
   if (near <= 0 || far <= 0) return null;
-  const a = new THREE.Vector2(frame.grip.x / near, frame.grip.y / near);
-  const b = new THREE.Vector2(frame.tip.x / far, frame.tip.y / far);
+  const a = new Vec2(frame.grip.x / near, frame.grip.y / near);
+  const b = new Vec2(frame.tip.x / far, frame.tip.y / far);
   const along = b.clone().sub(a);
   const length = along.length();
   if (length < 1e-6) return null;
@@ -136,13 +136,13 @@ export interface InView {
   /** how much of its head the frame shows (page/heads.ts), its head's points, the world's, and whether it has one (a
    *  blade has a point) */
   head: number;
-  headAt: THREE.Vector3[];
+  headAt: Vec3[];
   headed: boolean;
 }
 
 /** Whether `object` and everything it hangs from is shown. */
-function shown(object: THREE.Object3D): boolean {
-  for (let node: THREE.Object3D | null = object; node; node = node.parent) {
+function shown(object: Node): boolean {
+  for (let node: Node | null = object; node; node = node.parent) {
     if (!node.visible) return false;
   }
   return true;
@@ -150,8 +150,8 @@ function shown(object: THREE.Object3D): boolean {
 
 /** Each weapon the hero holds, seen, under each hand (none on a game that names no weapons' striking sides: any
  *  named joint would read as one). */
-function weaponsHeld(lab: Lab): { hand: Hand; weapon: THREE.Object3D }[] {
-  const found: { hand: Hand; weapon: THREE.Object3D }[] = [];
+function weaponsHeld(lab: Lab): { hand: Hand; weapon: Node }[] {
+  const found: { hand: Hand; weapon: Node }[] = [];
   if (!SIDES_NAMED) return found;
   for (const [hand, joint] of [['right', lab.joints.handR], ['left', lab.joints.handL]] as const) {
     joint.traverse((child) => {
@@ -169,20 +169,20 @@ export function weaponSpan(lab: Lab, hand: Hand): { from: number; to: number } |
   if (!held) return null;
   const { weapon } = held;
   const box = ownBox(weapon);
-  const middle = box.getCenter(new THREE.Vector3());
-  const grip = weapon.parent!.getWorldPosition(new THREE.Vector3());
-  const axis = new THREE.Vector3(0, 1, 0).transformDirection(weapon.matrixWorld);
-  const along = (y: number) => weapon.localToWorld(new THREE.Vector3(middle.x, y, middle.z)).sub(grip).dot(axis);
+  const middle = box.getCenter(new Vec3());
+  const grip = weapon.parent!.getWorldPosition(new Vec3());
+  const axis = new Vec3(0, 1, 0).transformDirection(weapon.matrixWorld);
+  const along = (y: number) => weapon.localToWorld(new Vec3(middle.x, y, middle.z)).sub(grip).dot(axis);
   return { from: along(box.min.y), to: along(box.max.y) };
 }
 
 /** A weapon's meshes' box in its own frame. */
-function ownBox(weapon: THREE.Object3D): THREE.Box3 {
+function ownBox(weapon: Node): Box3 {
   weapon.updateWorldMatrix(true, true);
-  const box = new THREE.Box3();
+  const box = new Box3();
   const toOwn = weapon.matrixWorld.clone().invert();
   weapon.traverse((child) => {
-    const mesh = child as THREE.Mesh;
+    const mesh = child as Mesh;
     if (!mesh.isMesh || !mesh.visible) return;
     // (once a geometry: a weapon's never change, and read again every frame through the eyes it was a tenth of a job)
     if (!mesh.geometry.boundingBox) mesh.geometry.computeBoundingBox();
@@ -193,14 +193,14 @@ function ownBox(weapon: THREE.Object3D): THREE.Box3 {
 
 /** Each held weapon's blade now (its grip's place to the far end of its meshes, in the eyes' space: `eyes` the camera
  *  they see through), by the hand holding it, as a frame before any cast. */
-export function restBlades(lab: Lab, eyes: THREE.Camera): RestBlades {
+export function restBlades(lab: Lab, eyes: Camera): RestBlades {
   lab.model.root.updateWorldMatrix(true, true);
   const blades: RestBlades = {};
   for (const { hand, weapon } of weaponsHeld(lab)) {
     const box = ownBox(weapon);
-    const middle = box.getCenter(new THREE.Vector3());
-    const end = weapon.localToWorld(new THREE.Vector3(middle.x, box.max.y, middle.z));
-    const grip = weapon.parent!.getWorldPosition(new THREE.Vector3());
+    const middle = box.getCenter(new Vec3());
+    const end = weapon.localToWorld(new Vec3(middle.x, box.max.y, middle.z));
+    const grip = weapon.parent!.getWorldPosition(new Vec3());
     blades[hand] = {
       grip: eyes.worldToLocal(grip), tip: eyes.worldToLocal(end), hand, side: null, inCast: false, frame: -1,
     };
@@ -210,17 +210,17 @@ export function restBlades(lab: Lab, eyes: THREE.Camera): RestBlades {
 
 /** Where a point of the world is in the frame as the arms are drawn (their own lens, if they have one): on the screen,
  *  in frame heights from its middle, and whether it's in the frame. */
-function onScreen(world: THREE.Vector3): { at: THREE.Vector2; in: boolean } {
+function onScreen(world: Vec3): { at: Vec2; in: boolean } {
   const lens = armsLens();
   const ahead = lens.worldToLocal(world.clone()).z < 0;
   const ndc = world.clone().project(lens);
-  const at = new THREE.Vector2((ndc.x * lens.aspect) / 2, ndc.y / 2);
+  const at = new Vec2((ndc.x * lens.aspect) / 2, ndc.y / 2);
   return { at, in: ahead && Math.abs(ndc.x) <= 1 && Math.abs(ndc.y) <= 1 };
 }
 
 /** Points along a weapon (the world's, from its butt to its far end) as the frame shows them: the share in it, and how
  *  long its part in it looks (`InView`). */
-export function seenAlong(points: THREE.Vector3[]): { share: number; length: number } {
+export function seenAlong(points: Vec3[]): { share: number; length: number } {
   const shown = points.map(onScreen).filter((point) => point.in);
   if (!shown.length) return { share: 0, length: 0 };
   return { share: shown.length / points.length, length: shown[0].at.distanceTo(shown[shown.length - 1].at) };
@@ -231,13 +231,13 @@ export type AlongView = Pick<InView, 'hand' | 'weapon' | 'share' | 'length'>;
 
 /** Each held weapon in the frame now, along its length alone: `ALONG_POINTS` points along it (its own +Y, through the
  *  middle of its box) as the frame shows them. The hero's world matrices must be up to date. */
-export function weaponsAlong(lab: Lab): (AlongView & { held: THREE.Object3D })[] {
+export function weaponsAlong(lab: Lab): (AlongView & { held: Node })[] {
   return weaponsHeld(lab).map(({ hand, weapon }) => {
     const box = ownBox(weapon);
-    const middle = box.getCenter(new THREE.Vector3());
+    const middle = box.getCenter(new Vec3());
     const points = Array.from({ length: ALONG_POINTS }, (_, i) => {
       const y = box.min.y + ((box.max.y - box.min.y) * i) / (ALONG_POINTS - 1);
-      return weapon.localToWorld(new THREE.Vector3(middle.x, y, middle.z));
+      return weapon.localToWorld(new Vec3(middle.x, y, middle.z));
     });
     return { hand, weapon: weapon.name, ...seenAlong(points), held: weapon };
   });
@@ -267,7 +267,7 @@ export function tipAtEnd(lab: Lab): string[] {
   const weapon = SIDES_NAMED ? tip?.parent?.children.find((child) => child.visible && isWeapon(child)) : undefined;
   if (!tip || !weapon) return [];
   const box = ownBox(weapon);
-  const at = weapon.worldToLocal(tip.getWorldPosition(new THREE.Vector3()));
+  const at = weapon.worldToLocal(tip.getWorldPosition(new Vec3()));
   const off = Math.abs(at.y - box.max.y) / (box.max.y - box.min.y);
   if (off <= TIP_OFF_MOST) return [];
   return [`the hero's tip is ${(off * 100).toFixed(0)}% of the ${weapon.name}'s length off its far end (at most `

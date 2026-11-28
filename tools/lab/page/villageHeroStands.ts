@@ -4,7 +4,7 @@
 // within a step's height. `heroLeftStands` reads the hero left in the hall's own row as another is picked (from play,
 // "when picking hero, the previous hero starts irish dancing for a few sec"). `canary` lifts a foot, which must be
 // found.
-import * as THREE from 'three';
+import { Vec3 } from './sceneApi.ts';
 import type { Lab } from './lab';
 import type { Player } from '../../../src/entities/player';
 import { G } from '../../../src/state';
@@ -59,7 +59,7 @@ const MOST_RISE = 0.1;
 /** how far the canary lifts a foot (m) */
 const CANARY_LIFT = 0.3;
 
-const _ankle = new THREE.Vector3();
+const _ankle = new Vec3();
 
 /** The highest either ankle stands over the plinth under him, past its height at rest (m). */
 function riseOfAnkles(hero: Player): number {
@@ -78,7 +78,7 @@ export async function heroesSeenOnApproach(lab: Lab, canary: boolean): Promise<L
   await viewBy(lab, 'third');
   const looking = async (z: number, facing: number, at = x): Promise<number> => {
     G.player.walkTo = null;
-    G.player.place(new THREE.Vector3(at, groundHeight(at, z), z), facing);
+    G.player.place(new Vec3(at, groundHeight(at, z), z), facing);
     faceCamera(facing);
     await lab.until(() => isWarm('heroes'), WARM_FRAMES, 'village: the heroes warming as he nears them');
     await lab.step(SETTLE);
@@ -122,7 +122,7 @@ async function choose(lab: Lab, id: string, waiting: number): Promise<void> {
 async function readDais(lab: Lab, worst: Map<string, number>, canary: boolean): Promise<void> {
   const x = TERRACE.x;
   const z = HALL.daisZ + BEFORE_DAIS;
-  G.player.place(new THREE.Vector3(x, groundHeight(x, z), z), Math.PI);
+  G.player.place(new Vec3(x, groundHeight(x, z), z), Math.PI);
   // (read from the first frame he stands: read after a settling, a few seconds' dance as he came went unseen)
   await lab.until(() => heroesStanding().length > 0, WARM_FRAMES, 'village: a hero coming to stand on the dais');
   await lab.step(ROUNDS * FRAMES_A_ROUND, undefined, () => {
@@ -132,7 +132,7 @@ async function readDais(lab: Lab, worst: Map<string, number>, canary: boolean): 
     }
   });
   // (back out of the hall: he's sent away to open it from anywhere)
-  G.player.place(new THREE.Vector3(0, 0, 0), 0);
+  G.player.place(new Vec3(0, 0, 0), 0);
   await lab.step(SETTLE_LOBBY);
 }
 
@@ -211,7 +211,7 @@ export async function cancelledOnHisFloor(lab: Lab, canary: boolean): Promise<Li
   if (!stand) throw new Error('lab: village: no hall of heroes to stand at');
   const [x, z] = stand;
   G.player.walkTo = null;
-  G.player.place(new THREE.Vector3(x, groundHeight(x, z), z), Math.PI);
+  G.player.place(new Vec3(x, groundHeight(x, z), z), Math.PI);
   await lab.step(SETTLE);
   const floor = G.player.obj.position.y;
   await openHall(lab);

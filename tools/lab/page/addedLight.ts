@@ -4,7 +4,7 @@
 // light as an SDR screen shows it, gamma 2.2, Rec. 709's weights), and as its glare by 0.4 or more; its glare's largest
 // patch says whether it glared as one blob. An SDR canvas only, as the lab draws; only the box is read back (the
 // whole canvas, twice a moment, was nine tenths of a measure's time).
-import * as THREE from 'three';
+import { Vec3 } from './sceneApi.ts';
 import type { Lab } from './lab';
 import { G } from '../../../src/state';
 import { canvasSize, drawFrame, type Canvas, type CanvasBox } from './light';
@@ -62,7 +62,7 @@ function boxRound(x: number, y: number): CanvasBox {
  * What `hide` takes away round `point`: the frame drawn as it is, then with `hide()` done (it returns the undoing,
  * which is done after), and the box round the point compared.
  */
-export function addedRound(lab: Lab, point: THREE.Vector3, hide: () => () => void): Added {
+export function addedRound(lab: Lab, point: Vec3, hide: () => () => void): Added {
   const ndc = point.clone().project(G.camera);
   const x = (ndc.x + 1) / 2;
   const y = (1 - ndc.y) / 2;

@@ -16,7 +16,7 @@
 // Any part of the hero can be measured so (`part`), in any view: the mage's glowing hand, its outline lit and a light
 // of its own at the palm, blew out white over the back of it in third person (the owner: "his hands glows too
 // bright", "we should never have blinding lights in our game").
-import type * as THREE from 'three';
+import type { LitMaterial, Mesh, Node } from './sceneApi.ts';
 import type { Lab, Pictured, Report, Tile } from './lab';
 import { G } from '../../../src/state';
 import * as rendererCode from '../../../src/core/renderer';
@@ -51,7 +51,7 @@ export interface HazeOptions {
  * staff, the ranger's bow). The weapons a blow is measured by are named (`isWeapon`), and those alone missed the
  * other heroes' held things: their haze said "no weapons in the frame" with the staff filling a third of it.
  */
-function isHeld(object: THREE.Object3D): boolean {
+function isHeld(object: Node): boolean {
   const joints = G.player?.model.joints;
   const parent = object.parent;
   if (!joints || !parent || (parent !== joints.handL && parent !== joints.handR)) return false;
@@ -60,11 +60,11 @@ function isHeld(object: THREE.Object3D): boolean {
 
 /** The parts the measure can take, each a test of whether an object is one (or the top of one). */
 const PARTS = {
-  weapons: (object: THREE.Object3D) => isWeapon(object) || isHeld(object),
-  hands: (object: THREE.Object3D) => object.userData.drawnHand === true,
+  weapons: (object: Node) => isWeapon(object) || isHeld(object),
+  hands: (object: Node) => object.userData.drawnHand === true,
 };
 type PartName = keyof typeof PARTS;
-type IsPart = (object: THREE.Object3D) => boolean;
+type IsPart = (object: Node) => boolean;
 
 /** The game's renderer as far as it goes: `--ab` runs this on main's game, which can't hold its adaptation off. */
 const holdAdaptation = (rendererCode as Partial<typeof rendererCode>).holdAdaptation;
@@ -169,11 +169,11 @@ function hidePart(lab: Lab, isPart: IsPart): () => void {
 
 /** The hero's part's materials lit white (the glare canary); returns the undoing. */
 function glowPart(lab: Lab, isPart: IsPart): () => void {
-  const was = new Map<THREE.MeshStandardMaterial, { emissive: number; intensity: number }>();
+  const was = new Map<LitMaterial, { emissive: number; intensity: number }>();
   lab.model.root.traverse((object) => {
     if (!isPart(object)) return;
     object.traverse((part) => {
-      const material = (part as THREE.Mesh).material as THREE.MeshStandardMaterial | undefined;
+      const material = (part as Mesh).material as LitMaterial | undefined;
       if (!material?.emissive || was.has(material)) return;
       was.set(material, { emissive: material.emissive.getHex(), intensity: material.emissiveIntensity });
     });
@@ -191,8 +191,8 @@ function glowPart(lab: Lab, isPart: IsPart): () => void {
 }
 
 /** Whether `object` is the measured part or within it. */
-function within(object: THREE.Object3D, isPart: IsPart): boolean {
-  for (let at: THREE.Object3D | null = object; at; at = at.parent) {
+function within(object: Node, isPart: IsPart): boolean {
+  for (let at: Node | null = object; at; at = at.parent) {
     if (isPart(at)) return true;
   }
   return false;

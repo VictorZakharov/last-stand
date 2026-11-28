@@ -16,7 +16,7 @@
 //   game's hero within the ring hurt hard, a shield raised towards her blocking what it blocks of any blow. It lands on the cage's place
 //   alone: a hero who got out is safe. No other hit of hers lands within `gap` s of its shut or its blow (`claimBeat`),
 //   and no branch is thrown at a hero it holds (`caged`).
-import * as THREE from 'three';
+import { Mesh, Quat, Vec3 } from '../engine/api/index.ts';
 import { G } from '../state';
 import { ROOTMOTHER } from '../data/foes/rootmother';
 import { hurtPlayer } from '../combat/damage';
@@ -46,7 +46,7 @@ const GREAT = { back: 0.42, rise: 0.8, fall: 0.32, lies: 0.6, sink: 0.6 };
 
 const foeOf = (id: number): Enemy | null => G.enemies.find((e) => e.id === id) ?? null;
 const ease = (k: number): number => k * k * (3 - 2 * k);
-const UP = new THREE.Vector3(0, 1, 0), Z = new THREE.Vector3(0, 0, 1);
+const UP = new Vec3(0, 1, 0), Z = new Vec3(0, 0, 1);
 
 // --- where the fight is simulated ---------------------------------------------------------------------------
 
@@ -121,7 +121,7 @@ export function caged(p: Player): boolean {
 // --- what every game plays (enemyAI's fx) -------------------------------------------------------------------
 
 /** One root of a cage: its mesh, where its foot stands and which way it faces in, the prop it is, and how it goes. */
-interface CageRoot { mesh: THREE.Mesh; x: number; z: number; yaw: number; prop: Prop | null; broken: number }
+interface CageRoot { mesh: Mesh; x: number; z: number; yaw: number; prop: Prop | null; broken: number }
 
 /** The cage on this game: where it stands, when it was warned of and shut, its roots, and whether it has gone. */
 export interface Cage { x: number; z: number; warnedAt: number; shutAt: number; shut: boolean; roots: CageRoot[]; gone: boolean }
@@ -153,7 +153,7 @@ export function cageWarnAt(_id: number, x: number, z: number, warn: number): voi
       if (t >= next) {
         next += 0.12;
         const a = Math.random() * Math.PI * 2, r = C.radius * (0.9 + Math.random() * 0.2);
-        const at = new THREE.Vector3(x + Math.sin(a) * r, 0, z + Math.cos(a) * r);
+        const at = new Vec3(x + Math.sin(a) * r, 0, z + Math.cos(a) * r);
         at.y = groundHeight(at.x, at.z);
         debris(at, { count: 2, speed: 1.4, size: 0.1, life: 0.6 });
         smokePuff(at, { count: 1, color: EARTH, alpha: 0.35, size: 0.5, sizeEnd: 1.2, speed: 0.4, life: 0.8 });
@@ -179,9 +179,9 @@ export function cageShutAt(id: number, x: number, z: number, _damage: number): v
     return { mesh, x: x + Math.sin(a) * C.radius, z: z + Math.cos(a) * C.radius, yaw: a - Math.PI / 2, prop: null, broken: -1 };
   });
   for (const root of cage.roots) root.prop = raiseRoot(cage, root);
-  const at = new THREE.Vector3(x, groundHeight(x, z), z);
+  const at = new Vec3(x, groundHeight(x, z), z);
   for (const root of cage.roots) {
-    const foot = new THREE.Vector3(root.x, groundHeight(root.x, root.z), root.z);
+    const foot = new Vec3(root.x, groundHeight(root.x, root.z), root.z);
     debris(foot, { count: 6, speed: 4, size: 0.16 });
     smokePuff(foot, { count: 1, color: EARTH, alpha: 0.4, size: 0.8, sizeEnd: 2, speed: 1, life: 1 });
   }
@@ -235,7 +235,7 @@ function wither(cage: Cage): void {
   }
 }
 
-const _q = new THREE.Quaternion(), _lean = new THREE.Quaternion(), _at = new THREE.Vector3();
+const _q = new Quat(), _lean = new Quat(), _at = new Vec3();
 
 /** Root `root` posed `t` s after its cage shut: up out of the earth leaning out, arched over to close, held, and once
  *  broken or withered sunk away. False once it's gone (put away). */
@@ -264,9 +264,9 @@ export function crushRiseAt(id: number, x: number, z: number, bx: number, bz: nu
   const foe = foeOf(id), pool = foe?.model.root.userData.cage as CagePool | undefined;
   if (!pool) return;
   const great = pool.great;
-  const dir = new THREE.Vector3(x - bx, 0, z - bz).normalize();
-  const axis = new THREE.Vector3().crossVectors(UP, dir).normalize();
-  const foot = new THREE.Vector3(bx, groundHeight(bx, bz), bz);
+  const dir = new Vec3(x - bx, 0, z - bz).normalize();
+  const axis = new Vec3().crossVectors(UP, dir).normalize();
+  const foot = new Vec3(bx, groundHeight(bx, bz), bz);
   debris(foot, { count: 14, speed: 4, size: 0.2 });
   smokePuff(foot, { count: 4, color: EARTH, alpha: 0.45, size: 1, sizeEnd: 2.6, speed: 1.2, life: 1.4 });
   rootSounds.creak(warn);
@@ -302,7 +302,7 @@ export function crushAt(id: number, x: number, z: number, bx: number, bz: number
   if (log) log.blowAt = G.time;
   for (let k = 0; k <= 6; k++) {
     const s = k / 6, px = bx + (x - bx) * s * 1.6, pz = bz + (z - bz) * s * 1.6;
-    const at = new THREE.Vector3(px, groundHeight(px, pz), pz);
+    const at = new Vec3(px, groundHeight(px, pz), pz);
     debris(at, { count: 6, speed: 5, size: 0.2 });
     smokePuff(at, { count: 2, color: EARTH, alpha: 0.5, size: 1.1, sizeEnd: 2.8, speed: 1.6, life: 1.3 });
   }
@@ -316,7 +316,7 @@ export function crushAt(id: number, x: number, z: number, bx: number, bz: number
   const rx = p.pos.x - x, rz = p.pos.z - z, d = Math.hypot(rx, rz);
   if (d > C.radius + w.reach) return;
   const blocked = p.shieldRaised;
-  const from = new THREE.Vector3(bx, 0, bz);
+  const from = new Vec3(bx, 0, bz);
   const hurt = hurtPlayer(p, damage * w.hurt, 'physical', from, { foe, attack: 'crush' });
   if (log) {
     log.hurt = hurt;

@@ -3,16 +3,16 @@
 // at boot from a preset with its detail capped (a preset's whole tree was 4k to 24k triangles, and 120 of them stand
 // round the clearing), its many small leaves made fewer, bigger cards carrying a cluster of leaves each, and scaled to
 // a height of 1 with its foot at the origin, for instancing.
-import * as THREE from 'three';
+import { Attribute, Box3, floats, Geometry, Vec3, type TypedArray } from '../engine/api/index.ts';
 import { Tree, TreePreset } from 'ez-tree';
 import { mulberry } from '../util';
 
 /** a tree kind: its two geometries, the bark's and the leaves', 1 high, foot at the origin */
 export interface TreeKind {
-  bark: THREE.BufferGeometry;
-  leaves: THREE.BufferGeometry;
+  bark: Geometry;
+  leaves: Geometry;
   /** its trunk alone, the bark's first branch: what an arrow meets (`world/wall.ts`; its limbs are let go) */
-  trunk: THREE.BufferGeometry;
+  trunk: Geometry;
   /** its trunk's radius at its foot (of its height of 1) */
   trunkFoot: number;
   /** how far it reaches from the trunk, over its height, in each of REACH_BANDS bands of height from its foot */
@@ -66,10 +66,10 @@ export interface Branch extends Rings { level: number }
  * 1.3 m up and every other one mirrored, and round a thin branch streaks five times as long as wide: `lab tiles`.)
  * Left as it is where the rings don't add up to the bark's vertices (an ez-tree laid out otherwise).
  */
-function barkAlongByGirth(bark: THREE.BufferGeometry, branches: Rings[]): void {
+function barkAlongByGirth(bark: Geometry, branches: Rings[]): void {
   const p = bark.attributes.position, uv = bark.attributes.uv;
   if (branches.reduce((n, b) => n + b.rings * b.round, 0) !== p.count) return;
-  const centre = new THREE.Vector3(), last = new THREE.Vector3(), at = new THREE.Vector3();
+  const centre = new Vec3(), last = new Vec3(), at = new Vec3();
   for (const { from, rings, round } of branches) {
     let v = 0, lastGirth = 0;
     for (let i = 0; i < rings; i++) {
@@ -91,7 +91,7 @@ function barkAlongByGirth(bark: THREE.BufferGeometry, branches: Rings[]): void {
 }
 
 /** The bark's triangles on `trunk`'s rings alone, as a geometry of its own (positions only). */
-function trunkOf(bark: THREE.BufferGeometry, trunk: Rings): THREE.BufferGeometry {
+function trunkOf(bark: Geometry, trunk: Rings): Geometry {
   const end = trunk.from + trunk.rings * trunk.round;
   const index = bark.index!.array, kept: number[] = [];
   for (let i = 0; i < index.length; i += 3) {
@@ -99,15 +99,15 @@ function trunkOf(bark: THREE.BufferGeometry, trunk: Rings): THREE.BufferGeometry
     if (corners.every((c) => c >= trunk.from && c < end)) kept.push(...corners.map((c) => c - trunk.from));
   }
   const positions = bark.attributes.position.array.slice(trunk.from * 3, end * 3);
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  const geo = new Geometry();
+  geo.setAttribute('position', floats(positions, 3));
   geo.setIndex(kept);
   geo.computeBoundingSphere();
   return geo;
 }
 
 /** The mean radius of `trunk`'s first ring round its middle. */
-function footOf(bark: THREE.BufferGeometry, trunk: Rings): number {
+function footOf(bark: Geometry, trunk: Rings): number {
   const p = bark.attributes.position, n = trunk.round - 1;
   let cx = 0, cz = 0, radius = 0;
   for (let j = 0; j < n; j++) {
@@ -167,10 +167,15 @@ function growAfresh(g: Grow): TreeKind {
     branches.push({ from, rings: branch.sectionCount + 1, round: branch.segmentCount + 1, level: branch.level });
   };
   tree.loadFromJson(json as never);
-  const bark = tree.branchesMesh.geometry, leaves = tree.leavesMesh.geometry;
+  const bark = ourGeometry(tree.branchesMesh.geometry), leaves = ourGeometry(tree.leavesMesh.geometry);
   barkAlongByGirth(bark, branches);
-  for (const m of [tree.branchesMesh.material, tree.leavesMesh.material]) (Array.isArray(m) ? m : [m]).forEach((x) => x.dispose());
-  const box = new THREE.Box3().setFromBufferAttribute(bark.attributes.position as THREE.BufferAttribute).union(new THREE.Box3().setFromBufferAttribute(leaves.attributes.position as THREE.BufferAttribute));
+  for (const mesh of [tree.branchesMesh, tree.leavesMesh]) {
+    // (ez-tree's own types name three's, which the game doesn't install: typed here by what's called)
+    const materials: { dispose(): void }[] = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+    for (const material of materials) material.dispose();
+  }
+  const box = new Box3().setFromBufferAttribute(bark.attributes.position)
+    .union(new Box3().setFromBufferAttribute(leaves.attributes.position));
   const h = box.max.y - box.min.y, s = 1 / h;
   for (const geo of [bark, leaves]) { geo.scale(s, s, s); geo.computeBoundingSphere(); geo.computeBoundingBox(); }
   const reach = new Array<number>(REACH_BANDS).fill(0);
@@ -184,6 +189,22 @@ function growAfresh(g: Grow): TreeKind {
   return { bark, leaves, trunk: trunkOf(bark, branches[0]), trunkFoot: footOf(bark, branches[0]), reach, branches };
 }
 
+/** What ez-tree grows a geometry as (three's, ez-tree's own dependency): its attributes' arrays and its index. */
+interface GrownGeometry {
+  attributes: Record<string, { array: ArrayLike<number>; itemSize: number; normalized: boolean }>;
+  index: { array: ArrayLike<number> } | null;
+}
+
+/** `grown` as one of the engine's geometries, its arrays shared (ez-tree's are typed arrays: the cast says so). */
+function ourGeometry(grown: GrownGeometry): Geometry {
+  const geometry = new Geometry();
+  for (const [name, attribute] of Object.entries(grown.attributes)) {
+    geometry.setAttribute(name, new Attribute(attribute.array as TypedArray, attribute.itemSize, attribute.normalized));
+  }
+  if (grown.index) geometry.setIndex(new Attribute(grown.index.array as TypedArray, 1));
+  return geometry;
+}
+
 /** A leaf card's four corners and two triangles. */
 const CARD_CORNERS = 4;
 const CARD_INDICES = 6;
@@ -191,11 +212,11 @@ const CARD_INDICES = 6;
 /** The leaves of a kind with `keep` of its cards kept, picked by `seed`, each `grow` times as wide about its middle: a
  *  card stood at the same place as the next (ez-tree's crossed pair) goes with it. Fewer layers of cards shade fewer pixels,
  *  each pixel of a card lit whether or not another hides it (a test on its alpha holds back the depth test). */
-export function thinnedLeaves(leaves: THREE.BufferGeometry, keep: number, grow: number, seed: number): THREE.BufferGeometry {
-  const position = leaves.attributes.position as THREE.BufferAttribute;
+export function thinnedLeaves(leaves: Geometry, keep: number, grow: number, seed: number): Geometry {
+  const position = leaves.attributes.position as Attribute;
   const cards = position.count / CARD_CORNERS;
-  const middle = (card: number): THREE.Vector3 => {
-    const at = new THREE.Vector3();
+  const middle = (card: number): Vec3 => {
+    const at = new Vec3();
     for (let corner = 0; corner < CARD_CORNERS; corner++) {
       at.x += position.getX(card * CARD_CORNERS + corner) / CARD_CORNERS;
       at.y += position.getY(card * CARD_CORNERS + corner) / CARD_CORNERS;
@@ -209,7 +230,7 @@ export function thinnedLeaves(leaves: THREE.BufferGeometry, keep: number, grow: 
   for (let card = 0; card < cards; card += crossed) {
     if (rng() < keep) for (let of = 0; of < crossed; of++) kept.push(card + of);
   }
-  const thin = new THREE.BufferGeometry();
+  const thin = new Geometry();
   for (const [name, attribute] of Object.entries(leaves.attributes)) {
     const size = attribute.itemSize;
     const from = attribute.array as Float32Array;
@@ -218,9 +239,9 @@ export function thinnedLeaves(leaves: THREE.BufferGeometry, keep: number, grow: 
       const start = card * CARD_CORNERS * size;
       to.set(from.subarray(start, start + CARD_CORNERS * size), at * CARD_CORNERS * size);
     });
-    thin.setAttribute(name, new THREE.BufferAttribute(to, size));
+    thin.setAttribute(name, new Attribute(to, size));
   }
-  const grown = thin.attributes.position as THREE.BufferAttribute;
+  const grown = thin.attributes.position as Attribute;
   kept.forEach((card, at) => {
     const about = middle(card);
     for (let corner = 0; corner < CARD_CORNERS; corner++) {
@@ -235,7 +256,7 @@ export function thinnedLeaves(leaves: THREE.BufferGeometry, keep: number, grow: 
   kept.forEach((_, at) => {
     first.forEach((corner, i) => { index[at * CARD_INDICES + i] = at * CARD_CORNERS + corner; });
   });
-  thin.setIndex(new THREE.BufferAttribute(index, 1));
+  thin.setIndex(new Attribute(index, 1));
   thin.computeBoundingSphere();
   thin.computeBoundingBox();
   return thin;

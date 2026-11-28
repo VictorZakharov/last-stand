@@ -7,7 +7,7 @@
 // hit is the game having judged a headshot. Through the eyes each head punch must strike and crit, each chest punch
 // strike and not; from outside the fist's line is level at the chest, so none crits, and each strikes the foe the
 // crosshair is on.
-import * as THREE from 'three';
+import { Node, Raycaster, Vec3 } from './sceneApi.ts';
 import type { Fixture, Frame, Lab, Report } from './lab';
 import type { Enemy } from '../../../src/entities/enemy';
 import type { EnemyId } from '../../../src/data/enemies';
@@ -52,7 +52,7 @@ const REACH_SLACK = 0.05;
 /** The game's way over the shoulder from his middle to what the crosshair is on (`underCrosshair` in
  *  skills/savageFists.ts), where the game has it: read by name, as an A/B copies this module into main's tree,
  *  where a named import of an export it hasn't got stops the page loading. */
-type UnderCrosshair = (player: typeof G.player, foe: Enemy, way: THREE.Vector3) => boolean;
+type UnderCrosshair = (player: typeof G.player, foe: Enemy, way: Vec3) => boolean;
 const fists = savageFists as { underCrosshair?: UnderCrosshair };
 /** how far behind the hero the fist's line begins (m: `meetsBody`'s `LINE_BACK`) */
 const LINE_BACK = 0.6;
@@ -78,9 +78,9 @@ interface Pair {
 /** A foe of `kind` risen before the hero, its edge `GAP_EYES` or `GAP_OUTSIDE` from his middle, standing in its
  *  idle pose: it thinks as the training dummy does and doesn't evade. Returns it and the spot it's put back on
  *  before each punch. */
-async function standFoe(lab: Lab, kind: EnemyId): Promise<{ foe: Enemy; spot: THREE.Vector3 }> {
+async function standFoe(lab: Lab, kind: EnemyId): Promise<{ foe: Enemy; spot: Vec3 }> {
   const hero = G.player;
-  const forward = new THREE.Vector3(Math.sin(hero.facing), 0, Math.cos(hero.facing));
+  const forward = new Vec3(Math.sin(hero.facing), 0, Math.cos(hero.facing));
   const foe = lab.spawnFoe(kind, hero.pos.clone().addScaledVector(forward, 3).setY(0));
   const gap = hero.eyes ? GAP_EYES : GAP_OUTSIDE;
   const spot = hero.pos.clone().addScaledVector(forward, foe.radius + gap);
@@ -90,7 +90,7 @@ async function standFoe(lab: Lab, kind: EnemyId): Promise<{ foe: Enemy; spot: TH
 }
 
 /** `foe` put back on `spot`, its knock spent (a punch knocks it back). */
-function putBack(foe: Enemy, spot: THREE.Vector3): void {
+function putBack(foe: Enemy, spot: Vec3): void {
   foe.knock.set(0, 0, 0);
   foe.pos.set(spot.x, foe.pos.y, spot.z);
   foe.obj.position.set(spot.x, foe.obj.position.y, spot.z);
@@ -117,15 +117,15 @@ function reachOf(foe: Enemy): number {
 /** Where the fist's line begins and the way it goes, as `meetsBody` takes it: through the eyes the crosshair's;
  *  from outside level at the foe's chest, his shoulders' at the most, towards what the crosshair is on where the
  *  game has that (`underCrosshair`), else along his facing. */
-function fistLine(foe: Enemy): { from: THREE.Vector3; way: THREE.Vector3 } {
+function fistLine(foe: Enemy): { from: Vec3; way: Vec3 } {
   const hero = G.player;
   if (hero.eyes) {
-    const from = G.camera.getWorldPosition(new THREE.Vector3());
-    return { from, way: G.camera.getWorldDirection(new THREE.Vector3()) };
+    const from = G.camera.getWorldPosition(new Vec3());
+    return { from, way: G.camera.getWorldDirection(new Vec3()) };
   }
   const height = foe.obj.position.y + Math.min(1.35, foe.height * 0.7);
-  const from = new THREE.Vector3(hero.pos.x, height, hero.pos.z);
-  const way = new THREE.Vector3(Math.sin(hero.facing), 0, Math.cos(hero.facing));
+  const from = new Vec3(hero.pos.x, height, hero.pos.z);
+  const way = new Vec3(Math.sin(hero.facing), 0, Math.cos(hero.facing));
   fists.underCrosshair?.(hero, foe, way);
   return { from, way };
 }
@@ -135,7 +135,7 @@ function fistLine(foe: Enemy): { from: THREE.Vector3; way: THREE.Vector3 } {
 function fistMet(foe: Enemy): string {
   const { from, way } = fistLine(foe);
   const start = from.clone().addScaledVector(way, -LINE_BACK);
-  const ray = new THREE.Raycaster(start, way, 0, LINE_BACK + reachOf(foe) + 1);
+  const ray = new Raycaster(start, way, 0, LINE_BACK + reachOf(foe) + 1);
   const hit = castSolid(foe.obj, ray);
   const by = `, the line ${passedBy(foe, from, way).toFixed(2)} m from its middle, ${aimSaid(foe)}`;
   if (!hit) return `nothing on its line${by}`;
@@ -145,7 +145,7 @@ function fistMet(foe: Enemy): string {
 }
 
 /** How far across the fist's line, seen from above, `foe`'s middle stands from it (m, + to its left). */
-function passedBy(foe: Enemy, from: THREE.Vector3, way: THREE.Vector3): number {
+function passedBy(foe: Enemy, from: Vec3, way: Vec3): number {
   const dx = foe.pos.x - from.x;
   const dz = foe.pos.z - from.z;
   const across = Math.hypot(way.x, way.z) || 1;
@@ -162,7 +162,7 @@ function aimSaid(foe: Enemy): string {
 /** Where the crosshair goes for a head punch: a point inside the skull the eye's line meets on the head first, as
  *  a player puts the crosshair on it. (Through the eyes the fist's line ran 10 cm under the crosshair, and with it
  *  on the husk's head's middle the fist went under the chin: on main its head punch is a body's.) */
-function headPunchAim(foe: Enemy): THREE.Vector3 | null {
+function headPunchAim(foe: Enemy): Vec3 | null {
   return headAim(foe, () => [G.camera.position]);
 }
 
@@ -172,7 +172,7 @@ function headPunchAim(foe: Enemy): THREE.Vector3 | null {
  * Twin's head and chest tower over him).
  */
 async function punchAt(
-  lab: Lab, foe: Enemy, spot: THREE.Vector3, target: () => THREE.Vector3, punched: Punched,
+  lab: Lab, foe: Enemy, spot: Vec3, target: () => Vec3, punched: Punched,
 ): Promise<Punched> {
   const hero = G.player;
   hero.cooldowns.clear();
@@ -206,7 +206,7 @@ async function punchAt(
 /** The canary's stand-in for a foe's head: the joint its whole body rides (its rig's root, the dummy's sway), so
  *  whatever of it a chest punch meets is taken for its head. (Its chest joint alone, the bow's canary's, went unseen
  *  on the Hulk, whose side-on chest punch met an arm that hangs from its spine.) */
-function canaryJoint(foe: Enemy): THREE.Object3D | null {
+function canaryJoint(foe: Enemy): Node | null {
   return foe.model.joints?.root ?? trunkJoint(foe);
 }
 

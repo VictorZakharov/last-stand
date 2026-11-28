@@ -10,7 +10,7 @@
 // in his right hand throughout, its dust let off), a row squared, the globe set turning. From play: "have him do more
 // tasks like dusting and so on".
 // Its canary holds the book he carries half a metre off his hands, which must be found.
-import * as THREE from 'three';
+import { boundsOf, Box3, Color, LitMaterial, Mat4, Maths, Mesh, Node, Quat, Triangle, Vec3 } from './sceneApi.ts';
 import type { Lab, Pictured } from './lab';
 import { G } from '../../../src/state';
 import { faceCamera, saveCamera, settleCamera } from '../../../src/core/renderer';
@@ -91,18 +91,18 @@ const HEAD = { up: 0.09, ahead: 0.01, r: 0.092 };
 /** His cowl against his neck and head now: how far into his neck a point of it goes, how far its top (its last row of
  *  points) stands off his neck at most, and how far into his head a point goes (m). */
 export function cowlClearance(s: Scholar): { intoNeck: number; gap: number; intoHead: number } {
-  const cowl = s.root.getObjectByName('scholar cowl') as THREE.Mesh;
+  const cowl = s.root.getObjectByName('scholar cowl') as Mesh;
   const neck = s.root.getObjectByName('scholar neck')!, head = s.root.getObjectByName('scholar head')!;
   s.root.updateMatrixWorld(true);
-  const a = neck.getWorldPosition(new THREE.Vector3()), b = head.getWorldPosition(new THREE.Vector3()), ab = b.clone().sub(a), len = ab.length();
+  const a = neck.getWorldPosition(new Vec3()), b = head.getWorldPosition(new Vec3()), ab = b.clone().sub(a), len = ab.length();
   ab.normalize();
-  const middle = head.localToWorld(new THREE.Vector3(0, HEAD.up, HEAD.ahead));
-  const p = cowl.geometry.attributes.position, v = new THREE.Vector3(), round = 37;
+  const middle = head.localToWorld(new Vec3(0, HEAD.up, HEAD.ahead));
+  const p = cowl.geometry.attributes.position, v = new Vec3(), round = 37;
   let intoNeck = 0, gap = 0, intoHead = 0;
   for (let i = 0; i < p.count; i++) {
     v.fromBufferAttribute(p, i).applyMatrix4(cowl.matrixWorld);
     const t = v.clone().sub(a).dot(ab), off = v.clone().sub(a).addScaledVector(ab, -t).length();
-    const r = THREE.MathUtils.lerp(NECK_R.foot, NECK_R.top, THREE.MathUtils.clamp(t / len, 0, 1));
+    const r = Maths.lerp(NECK_R.foot, NECK_R.top, Maths.clamp(t / len, 0, 1));
     if (t > 0 && t < len) intoNeck = Math.max(intoNeck, r - off);
     if (i >= p.count - round) gap = Math.max(gap, off - r);
     intoHead = Math.max(intoHead, HEAD.r - v.distanceTo(middle));
@@ -118,28 +118,28 @@ const HOOD_GAP_MOST = 0.008;
 export function hoodGap(s: Scholar): { gap: number; at: string } {
   s.root.updateMatrixWorld(true);
   // (meshes by name: his chest's joint has the chest's mesh's name)
-  const meshes: THREE.Mesh[] = [];
-  s.root.traverse((o) => { if ((o as THREE.Mesh).isMesh) meshes.push(o as THREE.Mesh); });
+  const meshes: Mesh[] = [];
+  s.root.traverse((o) => { if ((o as Mesh).isMesh) meshes.push(o as Mesh); });
   const hood = meshes.find((m) => m.name === 'scholar hood')!;
   const under = meshes.filter((m) => m.name === 'scholar chest' || m.name === 'scholar cowl');
   const pos = hood.geometry.attributes.position, n = HOOD.round + 1, rows = pos.count / n;
-  const edge: { at: THREE.Vector3; what: string }[] = [];
+  const edge: { at: Vec3; what: string }[] = [];
   for (let k = 0; k < rows; k++) for (let i = 0; i < n; i++) {
     const what = k === 0 ? 'its top' : k === rows - 1 ? 'its point' : i === 0 || i === n - 1 ? 'its side' : '';
-    if (what) edge.push({ at: new THREE.Vector3().fromBufferAttribute(pos, k * n + i).applyMatrix4(hood.matrixWorld), what });
+    if (what) edge.push({ at: new Vec3().fromBufferAttribute(pos, k * n + i).applyMatrix4(hood.matrixWorld), what });
   }
   // (each against the triangles near the hood: what it lies on)
-  const centre = new THREE.Box3().setFromObject(hood).getCenter(new THREE.Vector3());
-  const triangles: THREE.Triangle[] = [];
+  const centre = boundsOf(hood).getCenter(new Vec3());
+  const triangles: Triangle[] = [];
   for (const m of under) {
     const p = m.geometry.attributes.position, index = m.geometry.index!;
     for (let t = 0; t < index.count; t += 3) {
-      const tri = new THREE.Triangle(...[0, 1, 2].map((c) => new THREE.Vector3().fromBufferAttribute(p, index.getX(t + c)).applyMatrix4(m.matrixWorld)) as [THREE.Vector3, THREE.Vector3, THREE.Vector3]);
-      if (tri.getMidpoint(new THREE.Vector3()).distanceTo(centre) < 0.3) triangles.push(tri);
+      const tri = new Triangle(...[0, 1, 2].map((c) => new Vec3().fromBufferAttribute(p, index.getX(t + c)).applyMatrix4(m.matrixWorld)) as [Vec3, Vec3, Vec3]);
+      if (tri.getMidpoint(new Vec3()).distanceTo(centre) < 0.3) triangles.push(tri);
     }
   }
   let gap = 0, at = '';
-  const near = new THREE.Vector3();
+  const near = new Vec3();
   for (const e of edge) {
     let least = Infinity;
     for (const tri of triangles) least = Math.min(least, tri.closestPointToPoint(e.at, near).distanceTo(e.at));
@@ -166,13 +166,13 @@ const SPOTS_LEAST = 5;
 
 /** The spots at the cases he can walk to, each against the ladder as he'd stand there (`AT_A_SPOT`): the deepest into
  *  it and the margin, and where. */
-export function spotsAgainstLadder(rounds: Rounds, room: THREE.Object3D): { into: number; at: string } {
+export function spotsAgainstLadder(rounds: Rounds, room: Node): { into: number; at: string } {
   room.updateMatrixWorld(true);
   let into = 0, at = '';
   for (const spot of rounds.spots) {
     if (!spot.reachable) continue;
-    const ahead = spot.out.clone().negate(), left = new THREE.Vector3(ahead.z, 0, -ahead.x);
-    const points = AT_A_SPOT.map((p) => ({ r: p.r, at: new THREE.Vector3(spot.stand.x, p.up, spot.stand.y).addScaledVector(ahead, p.ahead).addScaledVector(left, p.left).applyMatrix4(room.matrixWorld) }));
+    const ahead = spot.out.clone().negate(), left = new Vec3(ahead.z, 0, -ahead.x);
+    const points = AT_A_SPOT.map((p) => ({ r: p.r, at: new Vec3(spot.stand.x, p.up, spot.stand.y).addScaledVector(ahead, p.ahead).addScaledVector(left, p.left).applyMatrix4(room.matrixWorld) }));
     const depth = ladderDepth(points);
     if (depth > into) { into = depth; at = `the spot at ${spot.stand.x.toFixed(2)}, ${spot.stand.y.toFixed(2)}`; }
   }
@@ -197,13 +197,13 @@ export function intoFurniture(s: Scholar, obstacles: readonly Obstacle[]): numbe
   for (const name of ['library held book', 'library open held book']) {
     const book = G.scene.getObjectByName(name);
     if (!book?.visible) continue;
-    const box = new THREE.Box3().setFromObject(book);
-    for (let k = 0; k < 8; k++) points.push(new THREE.Vector3(k & 1 ? box.max.x : box.min.x, k & 2 ? box.max.y : box.min.y, k & 4 ? box.max.z : box.min.z));
+    const box = boundsOf(book);
+    for (let k = 0; k < 8; k++) points.push(new Vec3(k & 1 ? box.max.x : box.min.x, k & 2 ? box.max.y : box.min.y, k & 4 ? box.max.z : box.min.z));
   }
   let into = 0;
-  const globe = G.scene.getObjectByName('library globe')!.getWorldPosition(new THREE.Vector3());
+  const globe = G.scene.getObjectByName('library globe')!.getWorldPosition(new Vec3());
   // (his own table and chair aside: he handles his chair, drawing it out and pushing it in)
-  const desk = s.root.parent!.getWorldPosition(new THREE.Vector3());
+  const desk = s.root.parent!.getWorldPosition(new Vec3());
   for (const o of obstacles) {
     if (o.r === CASE_R || Math.hypot(o.x - globe.x, o.z - globe.z) < 0.1 || Math.hypot(o.x - desk.x, o.z - desk.z) < OWN_DESK) continue;
     for (const p of points) if (p.y < o.h - 0.01) into = Math.max(into, o.r - Math.hypot(p.x - o.x, p.z - o.z));
@@ -212,23 +212,23 @@ export function intoFurniture(s: Scholar, obstacles: readonly Obstacle[]): numbe
 }
 
 /** what keeps the ladder's parts (the library's room, found once) */
-let ladderRoom: THREE.Object3D | undefined;
+let ladderRoom: Node | undefined;
 /** How far into the room's ladder, and the margin kept off it, he goes now (m): his body's rounds, his elbows', his palms
  *  and the corners of the book in his hands against each rail and rung (each a box, in its own frame). */
 export function intoLadder(s: Scholar): number {
   s.root.updateMatrixWorld(true);
-  const points: { at: THREE.Vector3; r: number }[] = [];
-  const feet = s.root.getWorldPosition(new THREE.Vector3());
+  const points: { at: Vec3; r: number }[] = [];
+  const feet = s.root.getWorldPosition(new Vec3());
   for (const b of BODY_ROUNDS) {
-    const at = b.joint ? s.root.getObjectByName(b.joint)!.localToWorld(new THREE.Vector3(0, b.up, 0)) : feet.clone().add(new THREE.Vector3(0, b.up, 0));
+    const at = b.joint ? s.root.getObjectByName(b.joint)!.localToWorld(new Vec3(0, b.up, 0)) : feet.clone().add(new Vec3(0, b.up, 0));
     points.push({ at, r: b.r });
   }
   for (const palm of hands(s)) points.push({ at: palm, r: 0 });
-  for (const elbow of ['scholar elbowL', 'scholar elbowR']) points.push({ at: s.root.getObjectByName(elbow)!.getWorldPosition(new THREE.Vector3()), r: ELBOW_R });
+  for (const elbow of ['scholar elbowL', 'scholar elbowR']) points.push({ at: s.root.getObjectByName(elbow)!.getWorldPosition(new Vec3()), r: ELBOW_R });
   for (const name of ['library held book', 'library open held book']) {
     const book = G.scene.getObjectByName(name);
     if (!book?.visible) continue;
-    const box = new THREE.Box3().setFromObject(book), c = new THREE.Vector3();
+    const box = boundsOf(book), c = new Vec3();
     for (let k = 0; k < 8; k++) points.push({ at: c.set(k & 1 ? box.max.x : box.min.x, k & 2 ? box.max.y : box.min.y, k & 4 ? box.max.z : box.min.z).clone(), r: 0 });
   }
   return ladderDepth(points);
@@ -236,7 +236,7 @@ export function intoLadder(s: Scholar): number {
 
 /** the ladder's rails and rungs (each a box, in its own frame, with the world into it), kept by the room as it's built:
  *  its merge takes the ladder's meshes away */
-function ladderParts(): { inverse: THREE.Matrix4; box: THREE.Box3 }[] {
+function ladderParts(): { inverse: Mat4; box: Box3 }[] {
   if (!ladderRoom?.parent) { ladderRoom = undefined; G.scene.traverse((o) => { if (o.userData.ladderParts) ladderRoom = o; }); }
   const room = ladderRoom;
   if (!room) throw new Error("the library keeps no ladder's parts");
@@ -245,11 +245,11 @@ function ladderParts(): { inverse: THREE.Matrix4; box: THREE.Box3 }[] {
 }
 
 /** How far `points` (world, each a round `r` wide, the margin added) go into the ladder's rails and rungs (m). */
-function ladderDepth(points: { at: THREE.Vector3; r: number }[]): number {
+function ladderDepth(points: { at: Vec3; r: number }[]): number {
   const parts = ladderParts();
   for (const p of points) p.r += LADDER_MARGIN;
   let into = 0;
-  const local = new THREE.Vector3(), near = new THREE.Vector3();
+  const local = new Vec3(), near = new Vec3();
   for (const p of points) {
     for (const part of parts) {
       local.copy(p.at).applyMatrix4(part.inverse);
@@ -263,20 +263,20 @@ function ladderDepth(points: { at: THREE.Vector3; r: number }[]): number {
 
 /** The book in his hands against the shelf's he took: why it isn't the very book (its model, its spine, its colour, its
  *  size, its gap on the shelf), or '' where it is. */
-function notTheShelfBook(rounds: Rounds, held: THREE.Mesh): string {
+function notTheShelfBook(rounds: Rounds, held: Mesh): string {
   const out = rounds.out;
   if (!out) return '';
-  const [cover] = held.material as THREE.MeshStandardMaterial[];
-  const shelfCover = out.mesh.material as THREE.MeshStandardMaterial;
+  const [cover] = held.material as LitMaterial[];
+  const shelfCover = out.mesh.material as LitMaterial;
   if (held.geometry.attributes.position.count !== out.mesh.geometry.attributes.position.count + out.pages.geometry.attributes.position.count) return 'another model';
   if (cover.map !== shelfCover.map) return 'another spine';
-  const colour = new THREE.Color();
+  const colour = new Color();
   out.mesh.getColorAt(out.index, colour);
   if (Math.abs(colour.r - cover.color.r) + Math.abs(colour.g - cover.color.g) + Math.abs(colour.b - cover.color.b) > 0.01) return 'another colour';
-  const size = new THREE.Vector3();
-  out.matrix.decompose(new THREE.Vector3(), new THREE.Quaternion(), size);
+  const size = new Vec3();
+  out.matrix.decompose(new Vec3(), new Quat(), size);
   if (size.distanceTo(held.scale) > 0.001) return 'another size';
-  const m = new THREE.Matrix4();
+  const m = new Mat4();
   out.mesh.getMatrixAt(out.index, m);
   if (!hiddenAt(m)) return 'its cover still on the shelf';
   out.pages.getMatrixAt(out.page, m);
@@ -286,19 +286,19 @@ function notTheShelfBook(rounds: Rounds, held: THREE.Mesh): string {
 
 /** Whether an instance's matrix hides it (scaled to nothing: its columns none long; decomposed, three reads a scale of
  *  1 from it) */
-const hiddenAt = (m: THREE.Matrix4) => Math.hypot(m.elements[0], m.elements[1], m.elements[2]) < 1e-6;
+const hiddenAt = (m: Mat4) => Math.hypot(m.elements[0], m.elements[1], m.elements[2]) < 1e-6;
 const GLOBE_TURNS = 1;
 
 /** Where the middle of each of his palms is (world): 7 cm down the hand from its joint at the wrist, the way his fingers
  *  point (the hand's -y). Measured from the wrist, a hand holding a book's edge was 8 to 10 cm off it. */
-function hands(s: Scholar): THREE.Vector3[] {
-  return ['scholar handL', 'scholar handR'].map((n) => s.root.getObjectByName(n)!.localToWorld(new THREE.Vector3(0, -0.07, 0)));
+function hands(s: Scholar): Vec3[] {
+  return ['scholar handL', 'scholar handR'].map((n) => s.root.getObjectByName(n)!.localToWorld(new Vec3(0, -0.07, 0)));
 }
 
 /** How far `hand` is from the book `book` (m): from its box's surface, 0 inside it. Its box is its geometry's at its
  *  scale (a shelf's book is a unit box scaled to its size; a stack's its own size). Measured from its middle, a hand
  *  holding a book by its edge was its half's length off. */
-function fromBook(book: THREE.Mesh, hand: THREE.Vector3): number {
+function fromBook(book: Mesh, hand: Vec3): number {
   if (!book.geometry.boundingBox) book.geometry.computeBoundingBox();
   const local = book.worldToLocal(hand.clone()), box = book.geometry.boundingBox!;
   const inside = local.clone().clamp(box.min, box.max);
@@ -338,15 +338,15 @@ const TIPS_OFF = 0.04;
  *  eyes (deg), and how far each palm is from behind its boards (m past them: in front of the pages, or out past an
  *  edge; 0 where it's behind them within their outline). */
 function readHold(s: Scholar): { tilt: number; off: number; palms: number[]; tips: number; tipsOff: number } | null {
-  let book: THREE.Object3D | undefined;
+  let book: Node | undefined;
   G.scene.traverse((o) => { if (o.name === 'library open held book' && o.visible) book = o; });
   if (!book) return null;
   book.updateMatrixWorld(true);
-  const normal = new THREE.Vector3(0, 1, 0).transformDirection(book.matrixWorld);
-  const at = book.getWorldPosition(new THREE.Vector3());
-  const eyes = s.root.getObjectByName('scholar cap')!.parent!.getWorldPosition(new THREE.Vector3());
-  const tilt = 90 - THREE.MathUtils.radToDeg(Math.asin(Math.min(1, normal.y)));
-  const off = THREE.MathUtils.radToDeg(normal.angleTo(eyes.sub(at).normalize()));
+  const normal = new Vec3(0, 1, 0).transformDirection(book.matrixWorld);
+  const at = book.getWorldPosition(new Vec3());
+  const eyes = s.root.getObjectByName('scholar cap')!.parent!.getWorldPosition(new Vec3());
+  const tilt = 90 - Maths.radToDeg(Math.asin(Math.min(1, normal.y)));
+  const off = Maths.radToDeg(normal.angleTo(eyes.sub(at).normalize()));
   // (its boards' outline in its own frame: halves along x either side of the spine, z its height, its pages +y)
   const half = { x: 0.135, z: 0.095 };
   const palms = hands(s).map((h) => {
@@ -383,25 +383,25 @@ interface Followed {
 }
 
 /** A part of him by name, or by its parents' where it has none. */
-function partName(o: THREE.Object3D): string {
+function partName(o: Node): string {
   const path: string[] = [];
-  for (let p: THREE.Object3D | null = o; p && path.length < 4; p = p.parent) path.push(p.name || `(${p.type})`);
+  for (let p: Node | null = o; p && path.length < 4; p = p.parent) path.push(p.name || `(${p.type})`);
   return path.join(' < ');
 }
 
 /** His head's way (world, level) against `way`, the way he went this frame: how far apart (deg). */
-function headOffWay(s: Scholar, way: THREE.Vector3): number {
+function headOffWay(s: Scholar, way: Vec3): number {
   const head = s.root.getObjectByName('scholar head')!;
-  const h = new THREE.Vector3(0, 0, 1).transformDirection(head.matrixWorld).setY(0).normalize();
-  return THREE.MathUtils.radToDeg(h.angleTo(way.clone().setY(0).normalize()));
+  const h = new Vec3(0, 0, 1).transformDirection(head.matrixWorld).setY(0).normalize();
+  return Maths.radToDeg(h.angleTo(way.clone().setY(0).normalize()));
 }
 
 /** How far out through his robe a point of a shoe is, the furthest (m, 0 for none): a point above the robe's hem, out
  *  past its surface at its height and side, while he's on his feet (his habit drawn wholly as the robe). The robe's
  *  points are its rows round him (`dressRobe`: 31 rows of 41, its top first, each from his left round over his front,
  *  `ROBE_FROM_SKIRT`), as his legs have pushed them out this frame: the shape the habit's drawn morphed into. */
-export function shoeThroughRobe(s: Scholar, where?: { at: THREE.Vector3; row: number }): number {
-  const robe = s.root.getObjectByName('scholar robe') as THREE.Mesh | undefined;
+export function shoeThroughRobe(s: Scholar, where?: { at: Vec3; row: number }): number {
+  const robe = s.root.getObjectByName('scholar robe') as Mesh | undefined;
   if (!robe || s.act.sit > 0) return 0;
   const pos = robe.geometry.attributes.position, N = 41, K = Math.round(pos.count / N);
   if (K * N !== pos.count) return 0;
@@ -409,11 +409,11 @@ export function shoeThroughRobe(s: Scholar, where?: { at: THREE.Vector3; row: nu
   // (the robe's radius round its middle, at row k and column i)
   const radius = (k: number, i: number) => Math.hypot(pos.getX(k * N + i), pos.getZ(k * N + i) - 0.01);
   let worst = 0;
-  const p = new THREE.Vector3(), toRobe = new THREE.Matrix4();
+  const p = new Vec3(), toRobe = new Mat4();
   robe.updateWorldMatrix(true, false);
   const inverse = robe.matrixWorld.clone().invert();
   s.root.traverse((o) => {
-    const m = o as THREE.Mesh;
+    const m = o as Mesh;
     if (!m.isMesh || m.name !== 'scholar shoe' || !m.visible) return;
     toRobe.multiplyMatrices(inverse, m.matrixWorld);
     const sp = m.geometry.attributes.position;
@@ -423,10 +423,10 @@ export function shoeThroughRobe(s: Scholar, where?: { at: THREE.Vector3; row: nu
       // (the rows above and below its height, and the columns either side of its way round)
       let k = 0;
       while (k < K - 2 && pos.getY((k + 1) * N) > p.y) k++;
-      const y0 = pos.getY(k * N), y1 = pos.getY((k + 1) * N), ty = THREE.MathUtils.clamp((y0 - p.y) / (y0 - y1 || 1), 0, 1);
+      const y0 = pos.getY(k * N), y1 = pos.getY((k + 1) * N), ty = Maths.clamp((y0 - p.y) / (y0 - y1 || 1), 0, 1);
       const u = (Math.PI / 2 - Math.atan2(p.x, p.z - 0.01)) / (Math.PI * 2), at = (u - Math.floor(u)) * (N - 1);
       const i = Math.min(N - 2, Math.floor(at)), ti = at - i;
-      const r = THREE.MathUtils.lerp(THREE.MathUtils.lerp(radius(k, i), radius(k, i + 1), ti), THREE.MathUtils.lerp(radius(k + 1, i), radius(k + 1, i + 1), ti), ty);
+      const r = Maths.lerp(Maths.lerp(radius(k, i), radius(k, i + 1), ti), Maths.lerp(radius(k + 1, i), radius(k + 1, i + 1), ti), ty);
       const out = Math.hypot(p.x, p.z - 0.01) - r;
       if (out > worst) { worst = out; if (where) { where.at.copy(p); where.row = k; } }
     }
@@ -449,25 +449,25 @@ export async function follow(lab: Lab, s: Scholar, rounds: Rounds, canary: boole
   let mouthOff = 0, mouthAt = '', linenOut = 0, linenAt = '';
   let tableInto = 0, tableAt = '', chairFloor = 0, chairInto = 0, chairAt = '', chairMoved = 0, chairHand = 0, chairHandAt = '', chairOutMost = 0, chairWas = -1;
   const cases = G.arena.obstacles.filter((o) => o.r === CASE_R);
-  const held = G.scene.getObjectByName('library held book') as THREE.Mesh;
+  const held = G.scene.getObjectByName('library held book') as Mesh;
   const obstacles = G.arena.obstacles.filter((o) => o !== rounds.body);
   const joints = jointsOf(s), before = joints.map((o) => o.quaternion.clone());
-  const at = s.root.getWorldPosition(new THREE.Vector3()), was = at.clone(), way = new THREE.Vector3();
+  const at = s.root.getWorldPosition(new Vec3()), was = at.clone(), way = new Vec3();
   // (his hips' speed and each joint's turning speed, frame to frame; the frames of `dts`' lengths, where given)
   let hipsSpeeds = 0, hipsAt = '', jointSpeeds = 0, jointAt = '', dt = 1 / 60, dtWas = dt, fresh = 0, hoodWorst = 0, hoodAt = '';
   let bookFingers = 0, bookSleeves = 0, bookAt = '', pageAway = Infinity, pageRight = Infinity, pageAt = '';
   let grabSide = Infinity, grabAt = '', grabInto = 0, grabIntoAt = '', grabFrames = 0, padsOff = 0, padsAt = '';
-  const hipsJoint = s.root.getObjectByName('scholar hips')!, hips = hipsJoint.getWorldPosition(new THREE.Vector3()), hipsWas = hips.clone();
-  const speed = new THREE.Vector3(), speedWas = new THREE.Vector3(), turn = new THREE.Quaternion();
-  const spins = joints.map(() => new THREE.Vector3()), spinsWas = joints.map(() => new THREE.Vector3());
+  const hipsJoint = s.root.getObjectByName('scholar hips')!, hips = hipsJoint.getWorldPosition(new Vec3()), hipsWas = hips.clone();
+  const speed = new Vec3(), speedWas = new Vec3(), turn = new Quat();
+  const spins = joints.map(() => new Vec3()), spinsWas = joints.map(() => new Vec3());
   const update = rounds.update;
   // (put back after: a command's page is its own, and a failure ends it)
   if (dts) rounds.update = (_dt, ...rest) => update.call(rounds, dt, ...rest);
   for (; frames < ROUND_FRAMES; frames++) {
-    const before0 = hipsJoint.getWorldPosition(new THREE.Vector3());
+    const before0 = hipsJoint.getWorldPosition(new Vec3());
     await each?.(frames);
     // (a picture's frames stepped in `each` break the run of frames: the speeds are read again from here)
-    if (hipsJoint.getWorldPosition(new THREE.Vector3()).distanceToSquared(before0) > 0) fresh = 0;
+    if (hipsJoint.getWorldPosition(new Vec3()).distanceToSquared(before0) > 0) fresh = 0;
     dtWas = dt;
     dt = dts ? dts[frames % dts.length] : 1 / 60;
     // (read from here: what `each` stepped (a picture's frames) isn't this frame's turn)
@@ -492,14 +492,14 @@ export async function follow(lab: Lab, s: Scholar, rounds: Rounds, canary: boole
       const h = speed.distanceTo(speedWas) / mid;
       if (h > hipsSpeeds) { hipsSpeeds = h; hipsAt = `${rounds.doing} (sit ${s.act.sit.toFixed(2)}, walk ${s.act.walk.toFixed(2)})`; }
       joints.forEach((o, i) => {
-        const a = THREE.MathUtils.radToDeg(spins[i].distanceTo(spinsWas[i]) / mid);
+        const a = Maths.radToDeg(spins[i].distanceTo(spinsWas[i]) / mid);
         if (a > jointSpeeds) { jointSpeeds = a; jointAt = `${partName(o)}, ${rounds.doing} (sit ${s.act.sit.toFixed(2)})`; }
       });
     }
     if (beats[beats.length - 1] !== rounds.doing) beats.push(rounds.doing);
     // (each joint's turn in the frame: getting up, sitting down, and where one beat hands on to the next)
     joints.forEach((o, i) => {
-      const deg = THREE.MathUtils.radToDeg(before[i].angleTo(o.quaternion));
+      const deg = Maths.radToDeg(before[i].angleTo(o.quaternion));
       if (deg > turned) { turned = deg; turnedAt = `${partName(o)}, ${rounds.doing} (sit ${s.act.sit.toFixed(2)})`; }
     });
     s.root.updateMatrixWorld(true);
@@ -507,8 +507,8 @@ export async function follow(lab: Lab, s: Scholar, rounds: Rounds, canary: boole
     way.subVectors(at, was);
     // (but where the hero is near: he may look at whoever stands in his way)
     if (s.act.walk > WALKING && way.length() > 0.003 && G.player.pos.distanceTo(at) > HERO_NEAR) {
-      const body = new THREE.Vector3(0, 0, 1).transformDirection(s.root.matrixWorld).setY(0).normalize();
-      if (THREE.MathUtils.radToDeg(body.angleTo(way.clone().setY(0).normalize())) < STRAIGHT) headOff = Math.max(headOff, headOffWay(s, way));
+      const body = new Vec3(0, 0, 1).transformDirection(s.root.matrixWorld).setY(0).normalize();
+      if (Maths.radToDeg(body.angleTo(way.clone().setY(0).normalize())) < STRAIGHT) headOff = Math.max(headOff, headOffWay(s, way));
     }
     if (s.act.sit < 0.5) {
       const out = shoeThroughRobe(s);
@@ -526,7 +526,7 @@ export async function follow(lab: Lab, s: Scholar, rounds: Rounds, canary: boole
     }
     // (the canary: a stand set where the shelf's book he takes stood, his hands on it as he takes it)
     if (canary && rounds.out && !lastOut) {
-      const stood = new THREE.Vector3().applyMatrix4(rounds.out.matrix).applyMatrix4(rounds.out.mesh.matrixWorld);
+      const stood = new Vec3().applyMatrix4(rounds.out.matrix).applyMatrix4(rounds.out.mesh.matrixWorld);
       obstacles.push({ x: stood.x, z: stood.z, r: 0.12, h: stood.y + 0.3 });
     }
     if (rounds.out) lastOut = rounds.out;
@@ -538,7 +538,7 @@ export async function follow(lab: Lab, s: Scholar, rounds: Rounds, canary: boole
     if (open) {
       const pushed = canary && rounds.doing === 'reading a book standing';
       const back = open.position.clone();
-      if (pushed) { open.position.add(new THREE.Vector3(0, -0.03, 0).applyQuaternion(open.quaternion)); open.updateMatrixWorld(true); }
+      if (pushed) { open.position.add(new Vec3(0, -0.03, 0).applyQuaternion(open.quaternion)); open.updateMatrixWorld(true); }
       const into = intoBook(s, open);
       if (pushed) { open.position.copy(back); open.updateMatrixWorld(true); }
       if (into.fingers > bookFingers) { bookFingers = into.fingers; bookAt = `${into.fat}, ${rounds.doing}`; }
@@ -608,11 +608,11 @@ export async function follow(lab: Lab, s: Scholar, rounds: Rounds, canary: boole
     if (carried?.visible) {
       if (canary) carried.position.y += 0.5;
       carried.updateMatrixWorld(true);
-      const near = Math.min(...hands(s).map((h) => fromBook(carried as THREE.Mesh, h)));
+      const near = Math.min(...hands(s).map((h) => fromBook(carried as Mesh, h)));
       if (s.act.grip === GRIP_SHUT && near > farthest) {
         farthest = near;
         // (and where: the book's height, and how far it is from his shoulder, his reach)
-        const book = carried.getWorldPosition(new THREE.Vector3()), shoulder = s.root.getObjectByName('scholar shoulderR')!.getWorldPosition(new THREE.Vector3());
+        const book = carried.getWorldPosition(new Vec3()), shoulder = s.root.getObjectByName('scholar shoulderR')!.getWorldPosition(new Vec3());
         farAt = `${rounds.doing} (the book ${book.y.toFixed(2)} m up, ${book.distanceTo(shoulder).toFixed(2)} m from his right shoulder)`;
       }
       if (canary) carried.position.y -= 0.5;
@@ -630,7 +630,7 @@ export async function follow(lab: Lab, s: Scholar, rounds: Rounds, canary: boole
   // (put back: the shelf's own book stood in its place again, as it stood; or, kept on his table, its gap left)
   let backInPlace = true;
   if (lastOut && !rounds.out) {
-    const m = new THREE.Matrix4();
+    const m = new Mat4();
     lastOut.mesh.getMatrixAt(lastOut.index, m);
     // (as it stood to a hair: stored as single floats, an instance's matrix is never the same double for double)
     backInPlace = m.elements.every((e, i) => Math.abs(e - lastOut!.matrix.elements[i]) < 1e-5) || hiddenAt(m);
@@ -707,7 +707,7 @@ export async function roundsChecked(lab: Lab, s: Scholar, rounds: Rounds, canary
   const lines: string[] = [], problems: string[] = [], moments: Pictured[] = [];
   const hero = G.player;
   // (in the room's front half, off the door and clear of his ways)
-  const away = new THREE.Vector3(1.6, 0, 2.5);
+  const away = new Vec3(1.6, 0, 2.5);
   hero.place(away, Math.PI);
   const programs = G.renderer.info.programs!.length;
   const sat = await frameCost(lab);
@@ -790,8 +790,8 @@ export async function roundsChecked(lab: Lab, s: Scholar, rounds: Rounds, canary
   /** him as a player sees him: the hero stood `off` m from him towards the room's middle, facing him, the game's own
    *  camera over his shoulder, a few frames drawn for it to settle; the hero put back after */
   const picture = async (label: string, note: string, off = 3) => {
-    const at = s.root.getWorldPosition(new THREE.Vector3()), was = hero.pos.clone(), wasFacing = hero.facing, restore = saveCamera();
-    const toMiddle = new THREE.Vector3(-at.x, 0, -at.z).normalize();
+    const at = s.root.getWorldPosition(new Vec3()), was = hero.pos.clone(), wasFacing = hero.facing, restore = saveCamera();
+    const toMiddle = new Vec3(-at.x, 0, -at.z).normalize();
     const stood = at.clone().addScaledVector(toMiddle, off).setY(0);
     // (the camera turned to him, a little aside: it turns as the player turns it, not with the hero, and straight at him
     // the hero's own back stood in front of him)
@@ -807,9 +807,9 @@ export async function roundsChecked(lab: Lab, s: Scholar, rounds: Rounds, canary
     hero.place(was, wasFacing);
     restore();
   };
-  let pictured = new Set<string>(), glance = 180, continued = false, stillFrom: THREE.Vector3 | null = null, moved = 0, faced = 180;
+  let pictured = new Set<string>(), glance = 180, continued = false, stillFrom: Vec3 | null = null, moved = 0, faced = 180;
   let nearAtE = '', opened = false, readTilt = [Infinity, -Infinity], readOff = 0, palmPast = 0, readFrames = 0, tipsPast = 0, tipsOff = 0;
-  let scanFrames = 0, talkFrames = 0, talked = false, walkFrames = 0, blockedAt: THREE.Vector3 | null = null, wentRound = false;
+  let scanFrames = 0, talkFrames = 0, talked = false, walkFrames = 0, blockedAt: Vec3 | null = null, wentRound = false;
   let walking = 0;
   const browse = await follow(lab, s, rounds, canary, async (f) => {
     const doing = rounds.doing;
@@ -822,14 +822,14 @@ export async function roundsChecked(lab: Lab, s: Scholar, rounds: Rounds, canary
     // (a hero stood a metre from him as he looks for a book: he goes on looking, and glances up)
     if (doing === 'looking for a book') {
       scanFrames++;
-      const me = s.root.getWorldPosition(new THREE.Vector3());
+      const me = s.root.getWorldPosition(new Vec3());
       // (before him and off to his side, where he can turn his head to: behind him, his neck can't)
       // (and where he stays: put into a case or behind a wall at a corner, the hero was pushed out to his shoulder,
       // where he can't turn to)
       if (scanFrames === 1) {
-        const q = s.root.getWorldQuaternion(new THREE.Quaternion());
+        const q = s.root.getWorldQuaternion(new Quat());
         for (const turn of [1.1, -1.1, 0.8, -0.8]) {
-          const spot = me.clone().add(new THREE.Vector3(0, 0, 1.1).applyAxisAngle(new THREE.Vector3(0, 1, 0), turn).applyQuaternion(q));
+          const spot = me.clone().add(new Vec3(0, 0, 1.1).applyAxisAngle(new Vec3(0, 1, 0), turn).applyQuaternion(q));
           hero.place(spot, 0);
           await lab.step(1);
           if (hero.pos.distanceTo(spot) < HERO_STAYS) break;
@@ -865,11 +865,11 @@ export async function roundsChecked(lab: Lab, s: Scholar, rounds: Rounds, canary
       // (the hero walked up to him where he stands and pressed E, as a player talks to him: the spot he's talked at
       // follows him; Esc ends it)
       if (talkFrames === 30) {
-        const me = s.root.getWorldPosition(new THREE.Vector3()), f = new THREE.Vector3(0, 0, 1).applyQuaternion(s.root.getWorldQuaternion(new THREE.Quaternion()));
+        const me = s.root.getWorldPosition(new Vec3()), f = new Vec3(0, 0, 1).applyQuaternion(s.root.getWorldQuaternion(new Quat()));
         // (before him, else round him, where a player can stand: put before him into the case he reads at, the hero
         // was pushed out of it, too far off to talk to him)
         for (const turn of [0, 1, -1, 1.6, -1.6, 2.4, -2.4]) {
-          const at = me.clone().addScaledVector(f.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), turn), 1.2);
+          const at = me.clone().addScaledVector(f.clone().applyAxisAngle(new Vec3(0, 1, 0), turn), 1.2);
           hero.place(at, Math.atan2(me.x - at.x, me.z - at.z));
           await lab.step(1);
           if (hero.pos.distanceTo(at) < HERO_STAYS && objectNear()?.id === 'scholar') break;
@@ -879,7 +879,7 @@ export async function roundsChecked(lab: Lab, s: Scholar, rounds: Rounds, canary
         opened = talkOpen();
         stillFrom = me;
       }
-      if (stillFrom && talkFrames < 150) moved = Math.max(moved, s.root.getWorldPosition(new THREE.Vector3()).distanceTo(stillFrom));
+      if (stillFrom && talkFrames < 150) moved = Math.max(moved, s.root.getWorldPosition(new Vec3()).distanceTo(stillFrom));
       if (talkFrames === 149) faced = offHero(s);
       if (talkFrames === 150) {
         await lab.step(1, () => ({ keys: ['escape'] }));
@@ -918,9 +918,9 @@ export async function roundsChecked(lab: Lab, s: Scholar, rounds: Rounds, canary
   const keep = await follow(lab, s, rounds, canary, () => {
     if (rounds.doing !== 'walking to a case') return;
     walkFrames++;
-    const me = s.root.getWorldPosition(new THREE.Vector3());
+    const me = s.root.getWorldPosition(new Vec3());
     if (walkFrames === 40) {
-      const ahead = new THREE.Vector3(0, 0, 0.85).applyQuaternion(s.root.getWorldQuaternion(new THREE.Quaternion()));
+      const ahead = new Vec3(0, 0, 0.85).applyQuaternion(s.root.getWorldQuaternion(new Quat()));
       blockedAt = me.clone().add(ahead);
       hero.place(blockedAt, 0);
     }
@@ -959,7 +959,7 @@ export async function roundsChecked(lab: Lab, s: Scholar, rounds: Rounds, canary
     const dust = await follow(lab, s, rounds, canary, () => {
       if (!cloth.visible || rounds.doing !== 'dusting a case') return;
       clothFrames++;
-      const palm = hands(s)[1], at = cloth.getWorldPosition(new THREE.Vector3());
+      const palm = hands(s)[1], at = cloth.getWorldPosition(new Vec3());
       clothFar = Math.max(clothFar, palm.distanceTo(at));
     });
     lines.push(lineOf('dust', dust), `his dusting cloth shown ${clothFrames} frames, at most ${clothFar.toFixed(2)} m from his right palm`);

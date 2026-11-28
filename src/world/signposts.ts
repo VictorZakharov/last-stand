@@ -9,7 +9,8 @@
 // distance... maybe bolder text, different wood grain"): painted boards, ivory, each name lettered plain and heavy in
 // dark paint, filling the board, on taller and longer arms, their faces flat (`signPaint.ts`). Their lowest arm hangs
 // over a hero's head and his staff (from Viktor: "make signs a little higher so players dont bump into them").
-import * as THREE from 'three';
+import { CanvasTexture, floats, Geometry, Material, Mesh, Node, Outline, Texture } from '../engine/api/index.ts';
+import * as shapes from '../engine/api/shapes/index.ts';
 import { SIGNPOSTS, type Signpost } from '../data/signposts';
 import { canvasOf, ctx2d, textureFromCanvas } from '../core/textures';
 import { boxWithUV } from './props';
@@ -19,7 +20,7 @@ import type { Obstacle } from '../types';
 
 /** what a signpost is made of: its post's timber, its arms' planks, its foot's stone, and the material its arms'
  *  faces are painted in (given their picture) */
-export interface SignpostMats { post: THREE.Material; board: THREE.Material; foot: THREE.Material; face(map: THREE.Texture): THREE.Material }
+export interface SignpostMats { post: Material; board: Material; foot: Material; face(map: Texture): Material }
 
 /** the post: its width, height and cap, its stone foot's (m) */
 const POST = { wide: 0.14, high: 3.45, cap: 0.22, foot: 0.34, footHigh: 0.16 };
@@ -31,7 +32,7 @@ const ARM = { high: 0.4, thick: 0.04, top: 3.2, drop: 0.44, point: 0.22, back: 0
 const FACE = { high: 0.34, px: 300 };
 /** An arm as built: its post, the name it bears, the way it points in the world (rad about y, 0 along +x toward
  *  -z: `atan2(-dz, dx)`), its height, and its group (its +x the way it points, its faces facing ±z). */
-export interface BuiltArm { post: Signpost; name: string; way: number; y: number; group: THREE.Object3D; long: number }
+export interface BuiltArm { post: Signpost; name: string; way: number; y: number; group: Node; long: number }
 
 /** where an arm's painted face starts along it, clear of the post (m from the post's middle), and the room its name
  *  leaves before the point (from the first: a face from behind the post ran its name under it and up to the point) */
@@ -50,17 +51,17 @@ const armLong = (name: string): number =>
   Math.max(ARM.least, ARM.back + FACE_FROM + name.length * ARM.perLetter + FACE_GAP + ARM.point);
 
 /** A pointed board, `long` m from its back end at x = -ARM.back to its point, its faces ±z. */
-function boardGeometry(long: number): THREE.BufferGeometry {
+function boardGeometry(long: number): Geometry {
   const h = ARM.high / 2, x0 = -ARM.back, x1 = long - ARM.back - ARM.point, x2 = long - ARM.back;
-  const shape = new THREE.Shape();
+  const shape = new Outline();
   shape.moveTo(x0, -h); shape.lineTo(x1, -h); shape.lineTo(x2, 0); shape.lineTo(x1, h); shape.lineTo(x0, h); shape.lineTo(x0, -h);
-  const g = new THREE.ExtrudeGeometry(shape, { depth: ARM.thick, bevelEnabled: false });
+  const g = shapes.extrude(shape, { depth: ARM.thick, bevelEnabled: false });
   g.translate(0, 0, -ARM.thick / 2);
   return g;
 }
 
 /** Every arm's name painted into one picture, a row each (`rows`: each one's place in it, as shares). */
-function paintAll(arms: { name: string; wide: number }[]): { map: THREE.CanvasTexture; rows: Row[]; tip: Row } {
+function paintAll(arms: { name: string; wide: number }[]): { map: CanvasTexture; rows: Row[]; tip: Row } {
   const rowH = Math.round(FACE.high * FACE.px);
   const width = Math.min(2048, Math.max(TIP_PX, ...arms.map((a) => Math.round(a.wide * FACE.px))));
   // (a row a name, and under them the points' patch)
@@ -109,12 +110,12 @@ function paintTip(c: CanvasRenderingContext2D, w: number, h: number): void {
 interface Row { v0: number; v1: number; u1: number }
 
 /** An arm's painted point on its board `long` m long, the picture's `tip` patch on it, facing +z (or -z: `back`). */
-function tipGeometry(long: number, tip: Row, back: boolean): THREE.BufferGeometry {
+function tipGeometry(long: number, tip: Row, back: boolean): Geometry {
   const base = long - ARM.back - ARM.point + TIP.into, end = long - ARM.back - TIP.short;
   const z = ARM.thick / 2 + 0.002;
-  const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.Float32BufferAttribute([base, TIP.half, z, base, -TIP.half, z, end, 0, z], 3));
-  g.setAttribute('uv', new THREE.Float32BufferAttribute([0, tip.v1, 0, tip.v0, tip.u1, (tip.v0 + tip.v1) / 2], 2));
+  const g = new Geometry();
+  g.setAttribute('position', floats([base, TIP.half, z, base, -TIP.half, z, end, 0, z], 3));
+  g.setAttribute('uv', floats([0, tip.v1, 0, tip.v0, tip.u1, (tip.v0 + tip.v1) / 2], 2));
   // (the back's mirrored through the board: mirrored, it faces -z)
   if (back) g.scale(1, 1, -1);
   g.computeVertexNormals();
@@ -122,8 +123,8 @@ function tipGeometry(long: number, tip: Row, back: boolean): THREE.BufferGeometr
 }
 
 /** A face of an arm, its picture's row on it, `wide` m along the board from its back, facing +z (or -z: `back`). */
-function faceGeometry(wide: number, row: Row, back: boolean): THREE.BufferGeometry {
-  const g = new THREE.PlaneGeometry(wide, FACE.high);
+function faceGeometry(wide: number, row: Row, back: boolean): Geometry {
+  const g = shapes.plane(wide, FACE.high);
   const uv = g.attributes.uv;
   for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * row.u1, row.v0 + uv.getY(i) * (row.v1 - row.v0));
   // (the back face turned round about its middle, so its name reads from that side too)
@@ -132,7 +133,7 @@ function faceGeometry(wide: number, row: Row, back: boolean): THREE.BufferGeomet
 }
 
 /** The village's signposts built into `scene`, each post's circle into `obstacles`. Returns every arm as built. */
-export function buildSignposts(scene: THREE.Object3D, M: SignpostMats, obstacles: Obstacle[]): BuiltArm[] {
+export function buildSignposts(scene: Node, M: SignpostMats, obstacles: Obstacle[]): BuiltArm[] {
   const all = SIGNPOSTS.flatMap((post) => post.arms.map((arm) => ({ post, arm, long: armLong(arm.name) })));
   const faceWide = (long: number): number => long - ARM.back - ARM.point + TIP.into - FACE_FROM;
   const { map, rows, tip } = paintAll(all.map(({ arm, long }) => ({ name: arm.name, wide: faceWide(long) })));
@@ -141,11 +142,11 @@ export function buildSignposts(scene: THREE.Object3D, M: SignpostMats, obstacles
   let row = 0;
   for (const post of SIGNPOSTS) {
     const [x, z] = post.at;
-    const g = new THREE.Group();
+    const g = new Node();
     g.position.set(x, groundHeight(x, z), z);
     scene.add(g);
-    const solid = (geometry: THREE.BufferGeometry, material: THREE.Material, parent: THREE.Object3D = g): THREE.Mesh => {
-      const mesh = new THREE.Mesh(geometry, material);
+    const solid = (geometry: Geometry, material: Material, parent: Node = g): Mesh => {
+      const mesh = new Mesh(geometry, material);
       mesh.castShadow = mesh.receiveShadow = true;
       parent.add(mesh);
       return mesh;
@@ -153,12 +154,12 @@ export function buildSignposts(scene: THREE.Object3D, M: SignpostMats, obstacles
     solid(boxWithUV(POST.foot, POST.footHigh, POST.foot, 0.5).translate(0, POST.footHigh / 2, 0), M.foot);
     solid(boxWithUV(POST.wide, POST.high, POST.wide, 0.5, true).translate(0, POST.high / 2, 0), M.post);
     // (its cap: a little pyramid, so rain runs off it)
-    solid(new THREE.ConeGeometry(POST.cap / Math.SQRT2, 0.12, 4).rotateY(Math.PI / 4).translate(0, POST.high + 0.06, 0), M.post);
+    solid(shapes.cone(POST.cap / Math.SQRT2, 0.12, 4).rotateY(Math.PI / 4).translate(0, POST.high + 0.06, 0), M.post);
     post.arms.forEach((arm, i) => {
       const long = armLong(arm.name);
       const way = Math.atan2(-(arm.to[1] - z), arm.to[0] - x);
       const y = ARM.top - i * ARM.drop;
-      const group = new THREE.Group();
+      const group = new Node();
       group.position.set(0, y, 0);
       group.rotation.y = way;
       g.add(group);
@@ -168,7 +169,7 @@ export function buildSignposts(scene: THREE.Object3D, M: SignpostMats, obstacles
       const aside = (i % 2 ? -1 : 1) * 0.004;
       for (const back of [false, true]) {
         for (const geometry of [faceGeometry(wide, rows[row], back), tipGeometry(long, tip, back)]) {
-          const face = new THREE.Mesh(geometry.translate(0, 0, aside), faces);
+          const face = new Mesh(geometry.translate(0, 0, aside), faces);
           face.receiveShadow = true;
           group.add(face);
         }

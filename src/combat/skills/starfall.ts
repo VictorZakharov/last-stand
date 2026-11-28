@@ -3,7 +3,10 @@
 // (light pillar, erupting crystals that later shatter, glowing cracks, debris).
 // Held, the area its first crystal strikes is shown on the floor where it would fall (red while letting go would cast
 // nothing, its cooldown counting down in it), and it's called down as the key is let go.
-import * as THREE from 'three';
+import {
+  AdditiveBlending, Color, Geometry, LitMaterial, Mesh, Node, UnlitMaterial, Vec3,
+} from '../../engine/api/index.ts';
+import * as shapes from '../../engine/api/shapes/index.ts';
 import { additive, nearGlow } from '../../core/materials';
 import { G } from '../../state';
 import { hitEnemy } from '../damage';
@@ -28,32 +31,32 @@ import { rand } from '../../util';
 
 const COLOR = 0x5dffa8, CORE = 0xd8fff0, ICE = 0x9fe6ff;
 const FALL_TIME = 0.38;
-const meteorGeo = new THREE.OctahedronGeometry(0.32, 0).scale(0.7, 1.9, 0.7);
+const meteorGeo = shapes.octahedron(0.32, 0).scale(0.7, 1.9, 0.7);
 // comet streak: wide end at the meteor (origin), tapering tail along +Y (= behind, see orientation below)
-const streakGeo = new THREE.ConeGeometry(0.28, 1, 12, 1, true).translate(0, 0.5, 0);
-let meteorMat: THREE.MeshStandardMaterial | null = null;
-const _up = new THREE.Vector3(0, 1, 0);
+const streakGeo = shapes.cone(0.28, 1, 12, 1, true).translate(0, 0.5, 0);
+let meteorMat: LitMaterial | null = null;
+const _up = new Vec3(0, 1, 0);
 
-const getMeteorMat = () => meteorMat ??= new THREE.MeshStandardMaterial({ color: 0x0b2a1c, emissive: new THREE.Color(COLOR), emissiveIntensity: 4, roughness: 0.2, flatShading: true });
-const streakMaterial = () => nearGlow(new THREE.MeshBasicMaterial({ color: new THREE.Color(COLOR).multiplyScalar(2.2), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, opacity: 0.8 }));
+const getMeteorMat = () => meteorMat ??= new LitMaterial({ color: 0x0b2a1c, emissive: new Color(COLOR), emissiveIntensity: 4, roughness: 0.2, flatShading: true });
+const streakMaterial = () => nearGlow(new UnlitMaterial({ color: new Color(COLOR).multiplyScalar(2.2), transparent: true, blending: AdditiveBlending, depthWrite: false, opacity: 0.8 }));
 
 /** A cast's crystals together: the bodies they've thrown already (each thrown once a cast), and the foes that have seen
  *  the cast coming (each judged once: entities/evade.ts) and where it's coming down, the whole of it. */
 interface Fall { blasted: Set<object>; judged: Set<Enemy>; area: Threat }
 
-function dropMeteor(player: Player, def: Def, landing: THREE.Vector3, delay: number, fall: Fall): void {
+function dropMeteor(player: Player, def: Def, landing: Vec3, delay: number, fall: Fall): void {
   const streakMat = streakMaterial();
-  const meteor = new THREE.Mesh(meteorGeo, getMeteorMat());
-  const streak = new THREE.Mesh(streakGeo, streakMat);
-  const group = new THREE.Group();
+  const meteor = new Mesh(meteorGeo, getMeteorMat());
+  const streak = new Mesh(streakGeo, streakMat);
+  const group = new Node();
   meteor.name = 'Starfall: crystal';
   streak.name = 'Starfall: streak';
   group.add(meteor, streak);
   group.visible = false;
   G.scene.add(group);
 
-  const start = new THREE.Vector3(landing.x - 6, 22, landing.z - 4);
-  const dir = new THREE.Vector3().subVectors(landing, start).normalize();
+  const start = new Vec3(landing.x - 6, 22, landing.z - 4);
+  const dir = new Vec3().subVectors(landing, start).normalize();
   // orient: group's -Y points along the fall direction, streak trails behind (towards +Y)
   group.quaternion.setFromUnitVectors(_up, dir.clone().negate());
   const marker = glyphMarker(landing, { radius: def.radius * 0.55, color: COLOR, intensity: 0.9, life: delay + FALL_TIME });
@@ -84,9 +87,9 @@ function dropMeteor(player: Player, def: Def, landing: THREE.Vector3, delay: num
 }
 
 /** A crystal's impact at `p`, one of its cast's (`fall`). */
-function impact(player: Player, def: Def, p: THREE.Vector3, fall: Fall): void {
+function impact(player: Player, def: Def, p: Vec3, fall: Fall): void {
   const { blasted, judged } = fall;
-  const at = new THREE.Vector3(p.x, p.y + 0.3, p.z);
+  const at = new Vec3(p.x, p.y + 0.3, p.z);
   // a slim pillar: a wide pale one blooms into a haze over the whole impact. Its top stays as it fades, long enough
   // that the next crystal's comes while it's lit: sinking and gone in 0.3 s, each pillar's top lit the top of the
   // over-the-shoulder view and left it before the next landed 0.14 s on, 3 flashes a second, `lab cast starfall`
@@ -132,7 +135,7 @@ function impact(player: Player, def: Def, p: THREE.Vector3, fall: Fall): void {
 }
 
 /** The point `p` kept inside the arena as far as its crystals may land (`R` in from its edge), in `out`. */
-function inArena(p: { x: number; z: number }, out: THREE.Vector3): THREE.Vector3 {
+function inArena(p: { x: number; z: number }, out: Vec3): Vec3 {
   const R = G.arena.radius - 1, len = Math.hypot(p.x, p.z);
   out.set(p.x, 0, p.z);
   if (len > R) out.multiplyScalar(R / len);
@@ -148,17 +151,17 @@ const COUNT_Y = 1.1;
 
 /** The preview's meshes, its glows each with its brightness, and its readiness. */
 interface Preview {
-  ring: THREE.Mesh; ringG: THREE.BufferGeometry; disc: THREE.Mesh; discG: THREE.BufferGeometry;
-  glows: [THREE.MeshBasicMaterial, number][]; ready: Readiness;
+  ring: Mesh; ringG: Geometry; disc: Mesh; discG: Geometry;
+  glows: [UnlitMaterial, number][]; ready: Readiness;
 }
 let preview: Preview | null = null;
-const _colour = new THREE.Color(COLOR), _at = new THREE.Vector3();
+const _colour = new Color(COLOR), _at = new Vec3();
 
 function previewFor(): Preview {
   if (preview) return preview;
   const ringG = ringGeo(), discG = discGeo();
   const ringMat = additive(COLOR, 1.5, 0.8), discMat = additive(COLOR, 1, 0.12);
-  const ring = new THREE.Mesh(ringG, ringMat), disc = new THREE.Mesh(discG, discMat);
+  const ring = new Mesh(ringG, ringMat), disc = new Mesh(discG, discMat);
   ring.frustumCulled = disc.frustumCulled = false;
   ring.name = 'starfall-preview'; disc.name = 'starfall-preview-disc';
   G.scene.add(ring, disc);
@@ -167,7 +170,7 @@ function previewFor(): Preview {
 }
 
 /** Shows the area its crystals would strike for `target` (null: nothing shown). */
-function showArea(player: Player, def: Def, target: THREE.Vector3 | null, dt: number): void {
+function showArea(player: Player, def: Def, target: Vec3 | null, dt: number): void {
   if (!target) {
     if (!preview) return;
     preview.ring.visible = preview.disc.visible = false;
@@ -192,7 +195,7 @@ const skill: InstantSkill = {
     const edge = `${Math.round(def.edge * 100)}%`;
     return [{ per: 'crystal', base: def.damage, least: def.edge, type: 'arcane', note: `${def.shards} crystals, each full on the foe it lands on, ${edge} at its edge` }];
   },
-  warm: () => [new THREE.Mesh(meteorGeo, getMeteorMat()), new THREE.Mesh(streakGeo, streakMaterial()), new THREE.Mesh(ringGeo(), additive(COLOR, 1.5, 0.8))],
+  warm: () => [new Mesh(meteorGeo, getMeteorMat()), new Mesh(streakGeo, streakMaterial()), new Mesh(ringGeo(), additive(COLOR, 1.5, 0.8))],
   aim: (player, def, target, dt) => showArea(player, def as Def, target, dt),
   cast(player, rawDef, target) {
     const def = rawDef as Def;
@@ -201,7 +204,7 @@ const skill: InstantSkill = {
     const fall: Fall = { blasted: new Set(), judged: new Set(), area };
     for (let i = 0; i < def.shards; i++) {
       const a = Math.random() * Math.PI * 2, r = i === 0 ? 0 : rand(0.6, def.scatter);
-      const land = inArena({ x: target.x + Math.cos(a) * r, z: target.z + Math.sin(a) * r }, new THREE.Vector3());
+      const land = inArena({ x: target.x + Math.cos(a) * r, z: target.z + Math.sin(a) * r }, new Vec3());
       land.y = groundHeight(land.x, land.z);
       dropMeteor(player, def, land, i * 0.14, fall);
     }

@@ -1,12 +1,12 @@
 // Entry point: boots every system, owns the main loop and the lobby (the village) <-> run flow.
-import * as THREE from 'three';
+import { Vec3 } from './engine/api/index.ts';
+import { FrameClock } from './core/clock';
 import { afterBiome, biomeReady, everyBiomeReady, readyBiome, readyEveryBiome } from './game/biomeReady';
 import { bossReady, everyBossWarm, readyEveryBoss, readyNextBoss } from './game/bossReady';
 import { G } from './state';
 import { keepBootPaceHidden } from './core/hiddenBoot';
 import { sceneReady } from './engine/pipelinesAside';
 import { rustSwitching } from './engine';
-import { pipelinesAtOnceFromNow } from './core/webgpu';
 import { initRenderer, updateCamera, render, zoomBy, orbitBy, lookBy, setZoom, setViewShift, setView, faceCamera, viewMode, viewSettled, VIEWS, type ViewMode, eyesInGlide } from './core/renderer';
 import { CAMERA, COOP } from './data/balance';
 import { START_SPOTS, YARD_DUMMIES, YARD_DUMMY_FACING, biomeOfHour, inHall, type VillageObject } from './data/village';
@@ -135,7 +135,7 @@ declare const __DEV_TOOLS__: boolean;
 import type { Profile } from './types';
 
 const $ = (s: string): HTMLElement => document.querySelector<HTMLElement>(s)!;
-const timer = new THREE.Timer();
+const timer = new FrameClock();
 let revealed = false;   // loading screen gone: the game may advance
 /** how long the loading screen waits for the fight's warm-up on WebGPU (ms) */
 const FIGHT_UNDER_LOADING = 6000;
@@ -363,7 +363,7 @@ async function boot() {
   // dev-only handle for debugging and automated screenshots (stripped from production builds)
   // (every build: the recorder's trace of now, for a harness to keep; it sends nothing, src/perf/AGENTS.md)
   Object.assign(window, { __traceNow: traceNow });
-  if (import.meta.env.DEV) Object.assign(window, { __G: G, __dev: { spawnEnemy, THREE, allWarm: () => isAllWarm() && everyBossWarm() && everyBiomeReady() && everyFolkSeated(), hurry: labHurry, holdHour, restartTraining, faceCamera,
+  if (import.meta.env.DEV) Object.assign(window, { __G: G, __dev: { spawnEnemy, allWarm: () => isAllWarm() && everyBossWarm() && everyBiomeReady() && everyFolkSeated(), hurry: labHurry, holdHour, restartTraining, faceCamera,
     village: villageReport, seen: seenShareAt } });
   // the developer mode (src/dev): a dev build's, or a PR preview's, never production's (`__DEV_TOOLS__`: vite.config.ts)
   if (import.meta.env.DEV || __DEV_TOOLS__) void loadDevMode();
@@ -428,7 +428,6 @@ async function boot() {
     revealed = true;
     recorder.revealed(!navigator.serviceWorker?.controller);
     startHeartbeat();
-    pipelinesAtOnceFromNow();
     // the overlays down the left (performance, network, the battle log) once the loading screen is gone (_perf.scss)
     void loadingLeft.then(() => $('#diag').classList.remove('booting'));
     // an invite link: straight into the friend's room (asked for a name tag first if none is kept)
@@ -527,7 +526,7 @@ function enterMenu(keepSummary = false, dummiesLater = false) {
     const dx = rack.at[0] - rack.stand[0], dz = rack.at[1] - rack.stand[1], far = Math.hypot(dx, dz) || 1;
     const aside = (G.player.slot - (COOP.maxPlayers - 1) / 2) * 0.9;
     const facing = Math.atan2(dx, dz);
-    G.player.place(new THREE.Vector3(rack.stand[0] - (dz / far) * aside, 0, rack.stand[1] + (dx / far) * aside), facing);
+    G.player.place(new Vec3(rack.stand[0] - (dz / far) * aside, 0, rack.stand[1] + (dx / far) * aside), facing);
     faceCamera(facing);
   } else if (cameThrough) {
     const exit = G.arena.village.exits[cameThrough];
@@ -550,7 +549,7 @@ function enterMenu(keepSummary = false, dummiesLater = false) {
 /** The training yard's dummies (the lobby's only foes), and the ghost by its gate (built once, with the village). */
 function spawnDummies() {
   clearEnemies();
-  for (const [x, z] of YARD_DUMMIES) spawnEnemy('dummy', new THREE.Vector3(x, 0, z), { facing: YARD_DUMMY_FACING });
+  for (const [x, z] of YARD_DUMMIES) spawnEnemy('dummy', new Vec3(x, 0, z), { facing: YARD_DUMMY_FACING });
   standGhost(G.arena.groupOf('village'));
 }
 
@@ -559,7 +558,7 @@ function spawnDummies() {
  *  dummies stand up in this task, their random numbers drawn as `spawnDummies` draws them. */
 async function spawnDummiesInSteps(): Promise<void> {
   clearEnemies();
-  for (const [x, z] of YARD_DUMMIES) spawnEnemy('dummy', new THREE.Vector3(x, 0, z), { facing: YARD_DUMMY_FACING });
+  for (const [x, z] of YARD_DUMMIES) spawnEnemy('dummy', new Vec3(x, 0, z), { facing: YARD_DUMMY_FACING });
   await standGhostInSteps(G.arena.groupOf('village'), painted);
 }
 
@@ -1006,7 +1005,7 @@ function cloudCameDown(classes: string[], useSlot: (n: number) => void): void {
 const floorUnder = (p: Player): number => p.obj.position.y;
 
 /** The floor under what the camera follows: a hero's, or the ground under a free camera. */
-function focusFloor(focus: { pos: THREE.Vector3; player?: Player | null }): number {
+function focusFloor(focus: { pos: Vec3; player?: Player | null }): number {
   if (focus.player) return floorUnder(focus.player);
   return groundHeight(focus.pos.x, focus.pos.z);
 }
@@ -1015,7 +1014,7 @@ function focusFloor(focus: { pos: THREE.Vector3; player?: Player | null }): numb
 function openAtOneOfTheStarts(): void {
   const start = START_SPOTS[Math.floor(Math.random() * START_SPOTS.length)];
   const [x, z] = start.at;
-  G.player.place(new THREE.Vector3(x, groundHeight(x, z), z), start.facing);
+  G.player.place(new Vec3(x, groundHeight(x, z), z), start.facing);
   faceCamera(start.facing);
 }
 
@@ -1174,7 +1173,7 @@ function nextView() {
 
 /** Where the camera looks: the local player, or once out of a co-op run, the partner watched or the free camera
  *  (`game/spectate.ts`; its keys while nothing is over the game). */
-function cameraFocus(dt: number): { player: Player | null; pos: THREE.Vector3; height: number } {
+function cameraFocus(dt: number): { player: Player | null; pos: Vec3; height: number } {
   const keys = !G.menuOpen && $('#summary').classList.contains('hidden');
   const watch = updateSpectate(dt, keys);
   return watch ?? { player: G.player, pos: G.player.pos, height: G.player.model.height };

@@ -8,7 +8,7 @@
 // the game did, which must be caught. Under the engine a return's boot asks for them as it ends (`want('heroes')` in
 // main.ts: a hero's warm-up there is his build and what's handed to the engine, no program of three's), so they're
 // warm before he nears the hall, and there's nothing to measure: it said "boot it --cold" of a cold boot.
-import * as THREE from 'three';
+import { Vec3 } from './sceneApi.ts';
 import type { Lab, Report } from './lab';
 import { G } from '../../../src/state';
 import { HALL, TERRACE } from '../../../src/data/village';
@@ -62,8 +62,8 @@ async function stepUntil(lab: Lab, frames: number, done: () => boolean): Promise
 
 /** Him stood on the square `FROM_DOOR` from the hall's door, toward the square's middle; where, as a line. */
 async function standNearHall(lab: Lab): Promise<string> {
-  const door = new THREE.Vector3(TERRACE.x, 0, HALL.door);
-  const away = new THREE.Vector3(0, 0, 0).sub(door).setY(0).normalize();
+  const door = new Vec3(TERRACE.x, 0, HALL.door);
+  const away = new Vec3(0, 0, 0).sub(door).setY(0).normalize();
   G.player.walkTo = null;
   G.player.pos.copy(door).addScaledVector(away, FROM_DOOR);
   await lab.step(2);

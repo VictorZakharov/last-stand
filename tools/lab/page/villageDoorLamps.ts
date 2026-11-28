@@ -4,9 +4,10 @@
 // door, they went out as he walked in and came back as he left (from play: "lights turn off when I enter the hall and
 // turn back on when I leave the hall, it should not happen"). `canary` puts a street lamp out as he goes in, which
 // must be found.
-import * as THREE from 'three';
+import { Vec3 } from './sceneApi.ts';
 import type { Lab } from './lab';
 import { G } from '../../../src/state';
+import * as lamps from '../../../src/core/lamps';
 import { holdHour } from '../../../src/game/clock';
 import { groundHeight } from '../../../src/world/ground';
 import { HALL, TERRACE } from '../../../src/data/village';
@@ -24,9 +25,10 @@ const MOST_CHANGE = 0.01;
 /** how near a pooled light must be to a street lamp to be its (m) */
 const AT_LAMP = 0.05;
 
-/** The lit shaders' list, reached through three's own uniforms it's shared from (`core/lamps.ts`), or none. */
+/** The lamps' list (`core/lamps.ts`, which the engine reads them from), or none: read off the module as a whole,
+ *  so a commit without it still loads (three's own uniforms shared it once, `ShaderLib`, gone with three). */
 function lampList(): Float32Array | undefined {
-  return THREE.ShaderLib.standard.uniforms.lamps?.value as Float32Array | undefined;
+  return (lamps as { lampList?: Float32Array }).lampList;
 }
 
 /** The street lamps' light now: each lamp's red in the list, and each pooled light's at a street lamp. */
@@ -45,7 +47,7 @@ function streetLight(list: Float32Array): number {
 /** The hero stood at (x, z) on the terrace, his walk let go. */
 function standAt(x: number, z: number): void {
   G.player.walkTo = null;
-  G.player.place(new THREE.Vector3(x, groundHeight(x, z), z), Math.PI);
+  G.player.place(new Vec3(x, groundHeight(x, z), z), Math.PI);
 }
 
 /** The street lamps at midnight as the hero goes into the hall: their light the same every frame. */

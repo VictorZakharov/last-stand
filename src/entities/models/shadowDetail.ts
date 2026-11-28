@@ -2,13 +2,13 @@
 // map holds his outline alone, softened over a few texels, yet each of its draws sent every triangle of him: 134k a
 // map on High, as many as the frame drew of him, and by night three maps (the sun's and two lamps'), whenever he moved
 // (from play, the village's frame going from 400k to 900k triangles and back as he stood by the hall; `npm run lab --
-// draws --village --moving`). So each geometry's triangles are simplified once (three's meshoptimizer: the vertices
+// draws --village --moving`). So each geometry's triangles are simplified once (meshoptimizer's own build: the vertices
 // kept as they are, an index of fewer triangles over them). A hero's take 45 to 55 ms of a desktop's CPU for each use,
 // so they're made in a worker (`simplify.worker.ts`), every triangle drawn until they're ready: made a few ms a frame on
 // the page, a piece's one call (up to 15 ms, the hair's) held the lobby's first frames 12 to 16 ms (`npm run lab --
 // lobbystart`). A harness has them made on the page, a frame's slice at a time, which its fixed clock steps the same
 // on every run (`detailWork`). `?shadowDetail=1` casts and draws every triangle, for A/B.
-import * as THREE from 'three';
+import { Attribute, Geometry } from '../../engine/api/index.ts';
 import { perfClock } from '../../core/perfClock.ts';
 import { simplifiedIndex, type Detail, type Simplifier } from './simplifyIndex.ts';
 import type { SimplifyAsked, SimplifyMade } from './simplify.worker.ts';
@@ -39,18 +39,18 @@ let whole = typeof location !== 'undefined' && /[?&]shadowDetail=1/.test(locatio
 /** counts up as what `coarseIndex` and `farIndex` give changes (the geometries asked for are ready, a harness's hold):
  *  what's made of the indices is made again when it has */
 let version = 0;
-const kept: Record<Use, WeakMap<THREE.BufferGeometry, Uint32Array | null>> = { shadow: new WeakMap(), far: new WeakMap() };
+const kept: Record<Use, WeakMap<Geometry, Uint32Array | null>> = { shadow: new WeakMap(), far: new WeakMap() };
 /** the geometries asked for and not yet simplified, in the order asked */
-const waiting: { geometry: THREE.BufferGeometry; use: Use }[] = [];
-const asked: Record<Use, WeakSet<THREE.BufferGeometry>> = { shadow: new WeakSet(), far: new WeakSet() };
+const waiting: { geometry: Geometry; use: Use }[] = [];
+const asked: Record<Use, WeakSet<Geometry>> = { shadow: new WeakSet(), far: new WeakSet() };
 let lastTurn = -Infinity;
 /** what the worker is making, by the id it was sent with */
-const sent = new Map<number, { geometry: THREE.BufferGeometry; use: Use }>();
+const sent = new Map<number, { geometry: Geometry; use: Use }>();
 let lastId = 0;
 let worker: Worker | null = null;
 
 if (typeof location !== 'undefined') {
-  void import('three/addons/libs/meshopt_simplifier.module.js').then(async ({ MeshoptSimplifier }) => {
+  void import('meshoptimizer/simplifier').then(async ({ MeshoptSimplifier }) => {
     await MeshoptSimplifier.ready;
     simplifier = MeshoptSimplifier;
     version++;
@@ -67,7 +67,7 @@ export const shadowDetailVersion = (): number => version;
  * and every hero built behind the lobby had each one already built merge his shadow again, 14 ms a frame
  * (`npm run lab -- lobbystart`).
  */
-export const detailSettled = (geometry: THREE.BufferGeometry, use: Use): boolean =>
+export const detailSettled = (geometry: Geometry, use: Use): boolean =>
   whole || (simplifier !== null && kept[use].has(geometry));
 
 /** Whether every triangle is cast and drawn (`holdShadowsWhole`, `?shadowDetail=1`). */
@@ -81,9 +81,9 @@ export function holdShadowsWhole(held: boolean): void {
 }
 
 /** `geometry`'s positions as floats, three to a vertex (an interleaved or a normalized attribute read out). */
-function positionsOf(geometry: THREE.BufferGeometry): Float32Array {
+function positionsOf(geometry: Geometry): Float32Array {
   const position = geometry.attributes.position;
-  const plain = position instanceof THREE.BufferAttribute && position.array instanceof Float32Array
+  const plain = position instanceof Attribute && position.array instanceof Float32Array
     && position.itemSize === 3;
   if (plain) return position.array as Float32Array;
   const positions = new Float32Array(position.count * 3);
@@ -97,7 +97,7 @@ function positionsOf(geometry: THREE.BufferGeometry): Float32Array {
 
 /** `geometry`'s index as its own list of corners (one made of its vertices in order where it has none), or null where
  *  it has too few triangles to be worth simplifying. */
-function indexOf(geometry: THREE.BufferGeometry): Uint32Array | null {
+function indexOf(geometry: Geometry): Uint32Array | null {
   const own = geometry.index;
   const count = own ? own.count : geometry.attributes.position.count;
   if (count < WORTH * 3) return null;
@@ -107,7 +107,7 @@ function indexOf(geometry: THREE.BufferGeometry): Uint32Array | null {
 }
 
 /** `geometry`'s triangles simplified for `use` on the page, or null where it has too few or gives up too few. */
-function simplified(simplify: Simplifier, geometry: THREE.BufferGeometry, use: Use): Uint32Array | null {
+function simplified(simplify: Simplifier, geometry: Geometry, use: Use): Uint32Array | null {
   const index = indexOf(geometry);
   return index && simplifiedIndex(simplify, index, positionsOf(geometry), DETAIL[use]);
 }
@@ -139,7 +139,7 @@ function theWorker(): Worker | null {
 
 /** `geometry` sent to the worker to simplify for `use` (copies of its index and positions, handed over), or kept as
  *  having none worth making. */
-function sendOff(to: Worker, geometry: THREE.BufferGeometry, use: Use): void {
+function sendOff(to: Worker, geometry: Geometry, use: Use): void {
   const index = indexOf(geometry);
   if (!index) {
     kept[use].set(geometry, null);
@@ -166,7 +166,7 @@ export function detailOnPage(onPage: boolean): void {
 export const detailPending = (): boolean => waiting.length > 0 || sent.size > 0;
 
 /** `geometry`'s fewer triangles for `use` if they're made, or null for its own, asked for then. */
-function indexFor(geometry: THREE.BufferGeometry, use: Use): Uint32Array | null {
+function indexFor(geometry: Geometry, use: Use): Uint32Array | null {
   if (whole || !simplifier) return null;
   const known = kept[use].get(geometry);
   if (known !== undefined) return known;
@@ -181,10 +181,10 @@ function indexFor(geometry: THREE.BufferGeometry, use: Use): Uint32Array | null 
  * The triangles `geometry`'s shadow is cast from, as an index over its own vertices, or null for its own (too few to
  * be worth it, not made yet, every triangle asked for).
  */
-export const coarseIndex = (geometry: THREE.BufferGeometry): Uint32Array | null => indexFor(geometry, 'shadow');
+export const coarseIndex = (geometry: Geometry): Uint32Array | null => indexFor(geometry, 'shadow');
 
 /** The triangles `geometry` is drawn from seen from afar (`farDetail.ts`), as `coarseIndex` gives a shadow's. */
-export const farIndex = (geometry: THREE.BufferGeometry): Uint32Array | null => indexFor(geometry, 'far');
+export const farIndex = (geometry: Geometry): Uint32Array | null => indexFor(geometry, 'far');
 
 /**
  * A frame's turn at the geometries asked for: `SLICE_MS` of them sent to the worker, or made on the page

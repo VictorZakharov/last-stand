@@ -5,42 +5,45 @@
 // camera's view are packed to the front of its instances: one draw a mesh as before, of what is in view. (Split into
 // meshes of their own, a cell each, they cut as many triangles but drew 45 to 60 times more a frame.) What casts a
 // shadow casts it from a copy of its own, drawn by the shadow map alone, of the instances in the map's box.
-import * as THREE from 'three';
+import {
+  Attribute, Camera, Color, Frustum, Geometry, InstancedMesh, Light, Mat4, Mesh, Node, OrthoCamera,
+  PointLight, Sphere, Vec3, WebGPUCoordinateSystem, World,
+} from '../engine/api/index.ts';
 import { TAU } from '../util';
 
 /** The cell an instance standing `at` (in its mesh's frame), the `i`th, is in. */
-export type CellOf = (at: THREE.Vector3, i: number) => string | number;
+export type CellOf = (at: Vec3, i: number) => string | number;
 
 /** A cell of a mesh's instances: where they start in its sorted list and how many, the sphere round them in the
  *  mesh's frame, and whether they were in view when last packed. */
-interface Cell { start: number; count: number; sphere: THREE.Sphere; shown: boolean }
+interface Cell { start: number; count: number; sphere: Sphere; shown: boolean }
 
 /** A mesh culled by its cells, with every instance's matrix and colour sorted by cell. */
-interface Culled { mesh: THREE.InstancedMesh; matrices: Float32Array; colors: Float32Array | null; cells: Cell[] }
+interface Culled { mesh: InstancedMesh; matrices: Float32Array; colors: Float32Array | null; cells: Cell[] }
 
 const culled: Culled[] = [];
 
-/** What the shadow map alone draws, hidden from every other pass and shown while it draws (`cullWhileDrawn`). */
-const shadowOnly = new Set<THREE.Mesh>();
+/** What the shadow map alone draws, hidden from every other pass (the engine draws it for its shadow alone). */
+const shadowOnly = new Set<Mesh>();
 
 /** `mesh` drawn by the shadow map alone: a shadow caster that draws nothing in the frame (drawn there, a biome's
  *  baked caster was 16k triangles a frame for nothing). */
-export function inShadowsOnly(mesh: THREE.Mesh): void {
+export function inShadowsOnly(mesh: Mesh): void {
   mesh.visible = false;
   shadowOnly.add(mesh);
 }
 
 /** Whether the shadow map alone draws `mesh` (`inShadowsOnly`). */
-export const drawnInShadowsOnly = (mesh: THREE.Mesh): boolean => shadowOnly.has(mesh);
+export const drawnInShadowsOnly = (mesh: Mesh): boolean => shadowOnly.has(mesh);
 
 /** `mesh` let go of by the shadow map (`inShadowsOnly`), as what it belonged to is disposed. */
-export function outOfShadowsOnly(mesh: THREE.Mesh): void {
+export function outOfShadowsOnly(mesh: Mesh): void {
   shadowOnly.delete(mesh);
 }
 
 /** Work done round each draw of the shadow map, as its render's matrices stand: each before it, with the render's
  *  camera, and what it returns after it (`aroundShadows`). */
-type AroundShadows = (camera: THREE.Camera) => () => void;
+type AroundShadows = (camera: Camera) => () => void;
 const aroundShadow = new Set<AroundShadows>();
 
 /** `around` run round each draw of three's shadow map; the returned function lets go of it. */
@@ -49,13 +52,13 @@ export function aroundShadows(around: AroundShadows): () => void {
   return () => aroundShadow.delete(around);
 }
 
-const _m = new THREE.Matrix4(), _c = new THREE.Color(), _sphere = new THREE.Sphere();
+const _m = new Mat4(), _c = new Color(), _sphere = new Sphere();
 
 /**
  * What to add to the scene for `mesh`, whose instances stand in cells (`_cellOf`: `eachInstance`, `ringSector`,
  * `gridCell`): the mesh itself, left whole.
  */
-export function cullInCells(mesh: THREE.InstancedMesh, _cellOf: CellOf): THREE.InstancedMesh[] {
+export function cullInCells(mesh: InstancedMesh, _cellOf: CellOf): InstancedMesh[] {
   // (the Rust engine culls an instance at a time itself, in its own view and the sun's: the mesh is left whole, as
   // built. Packed by cells here, its count stood wherever three's last render left it, as the engine runs none of
   // what hangs on three's render: the Thornwood drew without its trees)
@@ -64,7 +67,7 @@ export function cullInCells(mesh: THREE.InstancedMesh, _cellOf: CellOf): THREE.I
 
 /** Every instance of `mesh` as built, a matrix each (16 numbers): a culled mesh's own, packed by what's in view, hold
  *  only the instances the last render showed (a harness reading what stands, `lab village --only grassNotThroughProps`). */
-export function instancesAsBuilt(mesh: THREE.InstancedMesh): ArrayLike<number> {
+export function instancesAsBuilt(mesh: InstancedMesh): ArrayLike<number> {
   const entry = culled.find((c) => c.mesh === mesh);
   return entry ? entry.matrices : mesh.instanceMatrix.array.slice(0, mesh.count * 16);
 }
@@ -72,8 +75,8 @@ export function instancesAsBuilt(mesh: THREE.InstancedMesh): ArrayLike<number> {
 /** the share of a clutter mesh's instances drawn (`setClutterShare`) */
 let clutterShare = 1;
 /** the floor's clutter that isn't culled in cells (`asClutter`), and each's instances as built */
-const plainClutter = new Map<THREE.InstancedMesh, number>();
-const isClutter = (mesh: THREE.InstancedMesh): boolean => mesh.userData.clutter === true;
+const plainClutter = new Map<InstancedMesh, number>();
+const isClutter = (mesh: InstancedMesh): boolean => mesh.userData.clutter === true;
 /** whether the floor's plants are drawn (`setFloorPlants`) */
 let plantsShown = true;
 
@@ -84,7 +87,7 @@ let plantsShown = true;
  * (`setFloorPlants`). Call it after
  * `cullInCells`, which orders the instances.
  */
-export function asClutter(mesh: THREE.InstancedMesh, plant = false): void {
+export function asClutter(mesh: InstancedMesh, plant = false): void {
   mesh.userData.clutter = true;
   if (plant) mesh.userData.plant = true;
   if (!culled.some((c) => c.mesh === mesh)) plainClutter.set(mesh, mesh.count);
@@ -93,7 +96,7 @@ export function asClutter(mesh: THREE.InstancedMesh, plant = false): void {
 
 /** How many of `count` of `mesh`'s clutter instances the share draws: one at least of any, none of a plant's where
  *  the level draws none. */
-const thinned = (mesh: THREE.InstancedMesh, count: number): number =>
+const thinned = (mesh: InstancedMesh, count: number): number =>
   (!count || (!plantsShown && mesh.userData.plant === true) ? 0 : Math.max(1, Math.ceil(count * clutterShare)));
 
 /** Every clutter mesh's drawn instances made the share's. */
@@ -131,19 +134,19 @@ export function setClutterShare(share: number): void {
 /** the share of a canopy's leaf cards drawn (`setLeafShare`) */
 let leafShare = 1;
 /** the canopies whose cards a quality level thins, and each's indices as built */
-const leafCards = new Map<THREE.BufferGeometry, number>();
+const leafCards = new Map<Geometry, number>();
 /** the indices a leaf card takes (two triangles) */
 const CARD_INDICES = 6;
 
 /** A canopy's leaf cards (`canopyGeo` in world/foliage.ts, a card of each blob in turn) thinned by a quality level:
  *  the first of them drawn, every blob alike. */
-export function thinLeaves(cards: THREE.BufferGeometry): void {
+export function thinLeaves(cards: Geometry): void {
   leafCards.set(cards, cards.index ? cards.index.count : cards.attributes.position.count);
   drawLeaves(cards);
 }
 
 /** `cards` drawn as far as the share of them. */
-function drawLeaves(cards: THREE.BufferGeometry): void {
+function drawLeaves(cards: Geometry): void {
   const whole = leafCards.get(cards)!;
   const shown = Math.max(1, Math.round((whole / CARD_INDICES) * leafShare)) * CARD_INDICES;
   cards.setDrawRange(0, leafShare >= 1 ? Infinity : shown);
@@ -162,7 +165,7 @@ export function setLeafShare(share: number): void {
 }
 
 /** `attribute` sent to the GPU as far as `length` floats into it. */
-function sendUpTo(attribute: THREE.BufferAttribute, length: number): void {
+function sendUpTo(attribute: Attribute, length: number): void {
   attribute.clearUpdateRanges();
   attribute.addUpdateRange(0, length);
   attribute.needsUpdate = true;
@@ -189,29 +192,30 @@ function pack(c: Culled): void {
   if (mesh.instanceColor) sendUpTo(mesh.instanceColor, n * 3);
 }
 
-const shown = (o: THREE.Object3D | null): boolean => {
+const shown = (o: Node | null): boolean => {
   for (; o; o = o.parent) if (!o.visible) return false;
   return true;
 };
 
 /** Whether `camera` draws an instanced mesh under `mesh` that shares its instances (a ghosts' count twin). */
-const twinSeen = (mesh: THREE.InstancedMesh, camera: THREE.Camera): boolean => mesh.children.some((child) =>
-  (child as THREE.InstancedMesh).instanceMatrix === mesh.instanceMatrix && camera.layers.test(child.layers));
+const twinSeen = (mesh: InstancedMesh, camera: Camera): boolean => mesh.children.some((child) =>
+  (child as InstancedMesh).instanceMatrix === mesh.instanceMatrix && camera.layers.test(child.layers));
 
 /** What else hides a cell from the scene's camera this frame, by its sphere in the world (the hall of heroes' doorway,
  *  `doorways.ts`, registered here as it imports this module) */
-let cellHidden: ((sphere: THREE.Sphere) => boolean) | null = null;
+let cellHidden: ((sphere: Sphere) => boolean) | null = null;
 /** Cells whose sphere `test` says is hidden left out of the scene's draw too, as the frustum's are. */
-export function hideCellsWhere(test: (sphere: THREE.Sphere) => boolean): void {
+export function hideCellsWhere(test: (sphere: Sphere) => boolean): void {
   cellHidden = test;
 }
 
-const _frustum = new THREE.Frustum(), _viewProjection = new THREE.Matrix4();
+const _frustum = new Frustum(), _viewProjection = new Mat4();
 /** Each culled mesh `camera` sees packed with its cells in that camera's view, or all of them while the mesh isn't
- *  frustum-culled (the boot's warm-up draws everything). Packed again only when its cells in view change. */
-function cullFor(camera: THREE.Camera): void {
+ *  frustum-culled (the boot's warm-up draws everything). Packed again only when its cells in view change. Nothing
+ *  asks it now: three ran it before each render, and the engine culls an instance at a time itself. */
+export function cullCellsFor(camera: Camera): void {
   _viewProjection.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
-  _frustum.setFromProjectionMatrix(_viewProjection, THREE.WebGLCoordinateSystem, camera.reversedDepth);
+  _frustum.setFromProjectionMatrix(_viewProjection, WebGPUCoordinateSystem, camera.reversedDepth);
   for (const c of culled) {
     // (not for a pass that can't see it, the first person's arms: packed for their camera, packed again for the
     // world's the next frame)
@@ -230,27 +234,10 @@ function cullFor(camera: THREE.Camera): void {
   }
 }
 
-/** The shadow-only casters shown and the work round a shadow map's draw run, for a draw by `camera`; returns what
- *  puts them back. */
-function intoShadow(camera: THREE.Camera): () => void {
-  // (a biome's still shadows draw its own casters alone: a hero's shadow cast as one, shown for them, stayed in the
-  // braziers' shadow where he stood, and compiled a point light's skinned program mid-fight)
-  const casters = stillOf ? [...shadowOnly].filter((caster) => isUnder(caster, stillOf!)) : [...shadowOnly];
-  for (const caster of casters) caster.visible = true;
-  const after = stillOf ? [] : [...aroundShadow].map((around) => around(camera));
-  return () => {
-    for (const undo of after) undo();
-    for (const caster of casters) caster.visible = false;
-    // (and every one made meanwhile: a hero's shadow cast as one made again round this draw, as the hall of heroes
-    // showed his gear, stayed shown, and the frame drew it in its own basic material, a program compiled there)
-    if (!stillOf) for (const caster of shadowOnly) caster.visible = false;
-  };
-}
-
 /** The shadow map's own draw: of `lights`' maps, of `scene` as `camera`'s layers show it. */
-export type ShadowDraw = (lights: THREE.Light[], scene: THREE.Scene, camera: THREE.Camera) => void;
+export type ShadowDraw = (lights: Light[], scene: World, camera: Camera) => void;
 /** Work run after each draw of the shadow map, with that draw to draw more by (`afterShadows`). */
-type AfterShadows = (draw: ShadowDraw, scene: THREE.Scene, camera: THREE.Camera, still: boolean) => void;
+type AfterShadows = (draw: ShadowDraw, scene: World, camera: Camera, still: boolean) => void;
 const afterShadow = new Set<AfterShadows>();
 
 /** `after` run after each draw of the shadow map, still or not (`drawingStill`), inside the work round it (a hero's
@@ -262,7 +249,7 @@ export function afterShadows(after: AfterShadows): void {
 
 /** Whether the work after a shadow map's draw may be let go this time, told whether the draw is a still one
  *  (`skipAfterShadows`). */
-type SkipsAfter = (camera: THREE.Camera, still: boolean) => boolean;
+type SkipsAfter = (camera: Camera, still: boolean) => boolean;
 let skipsAfter: SkipsAfter | null = null;
 
 /** `skips` asked before each draw's work after it (`afterShadows`): true lets it go, the maps left as they stand
@@ -271,99 +258,14 @@ export function skipAfterShadows(skips: SkipsAfter): void {
   skipsAfter = skips;
 }
 
-/** Culls the meshes culled in cells as `renderer` draws `scene`: each render's camera's cells in view packed before
- *  it draws (after the scene's matrices are updated), and the shadow casters shown only while the shadow map draws. */
-export function cullWhileDrawn(scene: THREE.Scene, renderer: THREE.WebGLRenderer): void {
-  const shadows = renderer.shadowMap;
-  if (!shadows.render) {
-    shadowsAsRenders(scene);
-    return;
-  }
-  const before = scene.onBeforeRender;
-  scene.onBeforeRender = (...args) => {
-    before.apply(scene, args);
-    cullFor(args[2]);
-  };
-  const draw = shadows.render.bind(shadows);
-  shadows.render = (lights, scene, camera) => {
-    const back = intoShadow(camera);
-    // (a render that draws no shadow map, its `autoUpdate` held off (the ghosts' count's, the outline's), has no work
-    // after one: asked all the same, the count's render and the scene's each asked whether the movers had moved, the
-    // second finding they hadn't, and Low's kept maps were left in half the frames he walked, `lab village --only
-    // shadowsOnMove`; and each such render drew the movers over the maps again)
-    const draws = shadows.autoUpdate || shadows.needsUpdate;
-    try {
-      draw(lights, scene, camera);
-      if (!draws) return;
-      const still = stillOf !== null;
-      if (!skipsAfter?.(camera, still)) for (const then of afterShadow) then(draw, scene, camera, still);
-    } finally {
-      back();
-    }
-  };
-}
-
-/** Whether `camera` is a light's shadow camera in `scene`, each camera looked up once. */
-function shadowCameraTest(scene: THREE.Scene): (camera: THREE.Camera) => boolean {
-  const known = new WeakMap<THREE.Camera, boolean>();
-  return (camera) => {
-    let is = known.get(camera);
-    if (is === undefined) {
-      is = false;
-      scene.traverse((part) => {
-        const light = part as THREE.Light & { shadow?: THREE.LightShadow };
-        if (light.isLight && light.shadow?.camera === camera) is = true;
-      });
-      known.set(camera, is);
-    }
-    return is;
-  };
-}
-
-/**
- * WebGPU's renderer draws each shadow map as a render of the scene by the light's camera, nested in the frame's own,
- * with no shadow map's `render` to wrap: so the shadow-only casters are shown, and the work round a shadow's draw run,
- * between the scene's hooks round such a render. Hidden there, the biomes' baked casters and the trees' shadow
- * copies cast nothing, and each piece of a hero cast on its own (125 draws of the sun's 173 a lobby frame). The
- * cells are packed for the views alone: the culled meshes cast nothing, and packed for each shadow camera too, every
- * one was packed and sent to the GPU twice a frame.
- */
-function shadowsAsRenders(scene: THREE.Scene): void {
-  const isShadow = shadowCameraTest(scene);
-  const backs: (() => void)[] = [];
-  const before = scene.onBeforeRender;
-  scene.onBeforeRender = (...args) => {
-    before.apply(scene, args);
-    const camera = args[2];
-    if (!isShadow(camera)) {
-      cullFor(camera);
-      backs.push(NOTHING);
-      return;
-    }
-    backs.push(intoShadow(camera));
-  };
-  const after = scene.onAfterRender;
-  scene.onAfterRender = (...args) => {
-    after.apply(scene, args);
-    backs.pop()?.();
-  };
-}
-
-const NOTHING = (): void => {};
 
 /** the biome whose still shadows are being drawn (`drawingStill`) */
-let stillOf: THREE.Object3D | null = null;
-
-/** Whether `object` hangs under `root`. */
-function isUnder(object: THREE.Object3D, root: THREE.Object3D): boolean {
-  for (let at: THREE.Object3D | null = object; at; at = at.parent) if (at === root) return true;
-  return false;
-}
+let stillOf: Node | null = null;
 
 /** Which of the still shadows a still draw draws again: the point lights' cubes (the braziers', the lamps': all of
  *  them, none, or these lights' alone), the sun's map where it's kept; `face`: one face of those lights' cubes alone
  *  (0 to 5: a lamp's cube drawn a face a frame, `drawLampShadows` in `props.ts`). */
-export interface StillDrawn { lights: boolean | readonly THREE.PointLight[]; sun: boolean; face?: number }
+export interface StillDrawn { lights: boolean | readonly PointLight[]; sun: boolean; face?: number }
 /** the last face of a cube */
 const LAST_FACE = 5;
 /** every still shadow */
@@ -374,7 +276,7 @@ let stillDrawn: StillDrawn = ALL_STILL;
 /** `draw` run as `biome`'s still shadows are drawn (`drawStillShadows` in `props.ts`): the shadow map shows only the
  *  casters it alone draws that stand in the biome, and runs no work round its draw (`aroundShadows`); `drawn`: which
  *  of them it draws again. */
-export function drawingStill(biome: THREE.Object3D, draw: () => void, drawn: StillDrawn = ALL_STILL): void {
+export function drawingStill(biome: Node, draw: () => void, drawn: StillDrawn = ALL_STILL): void {
   stillOf = biome;
   stillDrawn = drawn;
   try {
@@ -398,7 +300,7 @@ export function stillChangesKeptMaps(): boolean {
 
 /** Whether the still draw under way leaves `light`'s cube whole and still, to be kept: it draws it, and all of it or
  *  the last of its faces. */
-export function stillDrawsWhole(light: THREE.PointLight): boolean {
+export function stillDrawsWhole(light: PointLight): boolean {
   const { lights, face } = stillDrawn;
   if (typeof lights === 'boolean') return lights;
   return lights.includes(light) && (face === undefined || face === LAST_FACE);
@@ -407,15 +309,15 @@ export function stillDrawsWhole(light: THREE.PointLight): boolean {
 /** Whether a biome's still shadows are being drawn (`drawingStill`). */
 export const isDrawingStill = (): boolean => stillOf !== null;
 
-const _box = new THREE.Frustum();
+const _box = new Frustum();
 /** Lets go of the instances of `group`'s shadow casters outside the box of the shadow map `camera` draws (placed for
  *  the group's biome), which cast into nothing: the ring's trees beyond the clearing, 45% of them. */
-export function trimShadowCasters(group: THREE.Group, camera: THREE.OrthographicCamera): void {
+export function trimShadowCasters(group: Node, camera: OrthoCamera): void {
   camera.updateMatrixWorld();
   _box.setFromProjectionMatrix(_m.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse));
   group.updateMatrixWorld(true);
   for (const mesh of shadowOnly) {
-    const caster = mesh as THREE.InstancedMesh;
+    const caster = mesh as InstancedMesh;
     if (!caster.isInstancedMesh || !group.getObjectById(caster.id)) continue;
     if (!caster.geometry.boundingSphere) caster.geometry.computeBoundingSphere();
     // (kept in order, each moved down over those let go)

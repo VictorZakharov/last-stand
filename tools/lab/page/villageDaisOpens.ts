@@ -8,7 +8,7 @@
 // the draw that made it. That was three's shadow pass (`castAsOne.ts`, round three's `shadowMap.render`), which the
 // engine never runs: under it the check stopped at three's shadow map. `canary` leaves another pooled light casting
 // as it opens, which must be found.
-import * as THREE from 'three';
+import { Mesh, PointLight, Vec3 } from './sceneApi.ts';
 import type { Lab } from './lab';
 import { G } from '../../../src/state';
 import { hallOpen } from '../../../src/game/hall';
@@ -39,7 +39,7 @@ const CANARY_LIGHT = 7;
 function shadowOnlyShown(): number {
   let shown = 0;
   G.scene.traverseVisible((object) => {
-    if ((object as THREE.Mesh).isMesh && drawnInShadowsOnly(object as THREE.Mesh)) shown++;
+    if ((object as Mesh).isMesh && drawnInShadowsOnly(object as Mesh)) shown++;
   });
   return shown;
 }
@@ -48,7 +48,7 @@ function shadowOnlyShown(): number {
 function castingNow(): number {
   let casting = 0;
   G.scene.traverseVisible((object) => {
-    const light = object as THREE.PointLight;
+    const light = object as PointLight;
     if (light.isPointLight && light.castShadow) casting++;
   });
   return casting;
@@ -60,7 +60,7 @@ export async function daisOpensCompileNothing(lab: Lab, canary: boolean): Promis
   const stand = villageObject('hall')?.stand;
   if (!stand) throw new Error('lab: village: no hall of heroes to stand at');
   G.player.walkTo = null;
-  G.player.place(new THREE.Vector3(stand[0], groundHeight(stand[0], stand[1]), stand[1]), Math.PI);
+  G.player.place(new Vec3(stand[0], groundHeight(stand[0], stand[1]), stand[1]), Math.PI);
   await lab.until(() => isWarm('heroes'), WARM_FRAMES, 'village: the heroes warming as he nears them');
   await lab.step(SETTLE);
   const spare = pooledLights()[CANARY_LIGHT];

@@ -4,7 +4,7 @@
 // skill that cannot be destroyed, because skills are disabled outside of training yard... lets make it possiible to
 // destroy the vines for other players by touching them"). Its places are in the yard's own frame (`yardToWorld`), so
 // they move with it. It imports only what main has too, as `--ab` plays this page on main's tree.
-import * as THREE from 'three';
+import { Vec3 } from './sceneApi.ts';
 import { G } from '../../../src/state';
 import * as village from '../../../src/data/village';
 import * as hedgeward from '../../../src/combat/skills/hedgeward';
@@ -36,7 +36,7 @@ export function coopWallTouchStand(_lab: Lab, { at }: { at: YardSpot }): void {
   const facing = Math.atan2(ax - x, az - z);
   walkingTo = null;
   G.player.walkTo = null;
-  G.player.place(new THREE.Vector3(x, groundHeight(x, z), z), facing);
+  G.player.place(new Vec3(x, groundHeight(x, z), z), facing);
   faceCamera(facing);
   settleCamera(G.player.pos);
 }
@@ -48,7 +48,7 @@ export function coopWallTouchKey(lab: Lab, { at }: { at: YardSpot }): { key: str
   G.player.cooldowns.clear();
   G.player.energy = G.player.stats.maxEnergy;
   const aim = world(at);
-  lab.aim = new THREE.Vector3(aim[0], 0, aim[1]);
+  lab.aim = new Vec3(aim[0], 0, aim[1]);
   return { key, aim };
 }
 

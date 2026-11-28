@@ -9,7 +9,7 @@
 // that left the hall's screen was heard by the village's update in the same frame, which used the hall again, and the
 // screen came back by the page's own time, after a check counting frames alone had read it gone); the canary leaves
 // that press unspent, and the hall must be found opened again.
-import * as THREE from 'three';
+import { Vec3 } from './sceneApi.ts';
 import type { Lab } from './lab';
 import { untilInRealTime } from './villageWaits';
 import { G } from '../../../src/state';
@@ -57,7 +57,7 @@ async function usedAgain(lab: Lab, o: Opened, skipSecond: boolean): Promise<stri
   if (!object) return `${o.id}: no such object`;
   const [x, z] = object.stand;
   G.player.walkTo = null;
-  G.player.place(new THREE.Vector3(x, groundHeight(x, z), z), 0);
+  G.player.place(new Vec3(x, groundHeight(x, z), z), 0);
   await lab.step(SETTLE);
   await pressE(lab, o.shows);
   if (!shown(o.shows)) return `${o.id}: E never opened it`;
@@ -77,7 +77,7 @@ async function putAwayByE(lab: Lab, o: Opened, skipPress: boolean): Promise<stri
   if (!object) return `${o.id}: no such object`;
   const [x, z] = object.stand;
   G.player.walkTo = null;
-  G.player.place(new THREE.Vector3(x, groundHeight(x, z), z), 0);
+  G.player.place(new Vec3(x, groundHeight(x, z), z), 0);
   await lab.step(SETTLE);
   await pressE(lab, o.shows);
   if (!shown(o.shows)) return `${o.id}: E never opened it`;

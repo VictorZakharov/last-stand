@@ -1,7 +1,7 @@
 // What the scene holds handed to the engine ahead of its first frame: each mesh's geometry, its materials with
 // their maps, and the pipeline each will draw with, so a place first shown, a warm-up's sample or a skill's
 // effect first cast compiles nothing in the frame it's first drawn in.
-import type * as THREE from 'three';
+import type { InstancedGeometry, Material, Mesh, Node, SkinnedMesh, World } from './api/index.ts';
 import { perfClock } from '../core/perfClock';
 import type { SeeThrough } from '../core/seeThrough';
 import type { Core } from './core';
@@ -15,14 +15,14 @@ const AHEAD_REST = 600;
 
 /** Whether `material`'s kind of see-through may be drawn as a layer of which the nearest alone is (`flagsOf` in
  *  seeKinds.ts: a roof's own layers, and a house's part under the houses' rule that isn't a column). */
-function mayLayer(material: THREE.Material): boolean {
-  const see = (material as THREE.Material & { seeThrough?: SeeThrough }).seeThrough;
+function mayLayer(material: Material): boolean {
+  const see = (material as Material & { seeThrough?: SeeThrough }).seeThrough;
   return !!see?.blended && (!!see.oneLayer || (!!see.cover && !see.reach));
 }
 
 /** Whether `material` is a column's under the houses' rule: thinned as one, drawn under the layers. */
-function standsUnder(material: THREE.Material): boolean {
-  const see = (material as THREE.Material & { seeThrough?: SeeThrough }).seeThrough;
+function standsUnder(material: Material): boolean {
+  const see = (material as Material & { seeThrough?: SeeThrough }).seeThrough;
   return !!see?.blended && !!see.cover && !!see.reach;
 }
 
@@ -33,7 +33,7 @@ function standsUnder(material: THREE.Material): boolean {
 export const ROOMS = { asked: false, ready: false };
 
 export class Ahead {
-  private stack: THREE.Object3D[] = [];
+  private stack: Node[] = [];
   private rest = 0;
   /** whether the loading screens were done with when this walk began (it asks for the rooms' pipelines then),
    *  and whether a walk has begun since they were */
@@ -50,7 +50,7 @@ export class Ahead {
    * running, and the loading screen 5.7 s (a report from play, Q8CV-74H0). Walks the whole scene a part a call, then
    * rests `AHEAD_REST` frames before looking again (the battlegrounds are built later, at Start).
    */
-  walk(scene: THREE.Scene, budget: number): void {
+  walk(scene: World, budget: number): void {
     const shown = !Number.isFinite(PIPELINES.waitLeft);
     // (the first walk after the loading screens begins at once, not after the rest of the last one's)
     if (shown && !this.begunLate && !this.stack.length) this.rest = 0;
@@ -61,39 +61,46 @@ export class Ahead {
       this.late = shown;
       this.begunLate ||= shown;
     }
+    if (!this.walkFor(budget)) return;
+    this.rest = AHEAD_REST;
+    if (this.late) ROOMS.asked = true;
+  }
+
+  /** The walk's stack met for up to `budget` ms: whether it was met whole. */
+  private walkFor(budget: number): boolean {
+    const stack = this.stack;
     const until = perfClock.now() + budget;
     let visited = 0;
     while (stack.length) {
       // (the clock read once every few objects: most are met already, and cost less than reading it)
-      if (++visited % 16 === 0 && perfClock.now() >= until) return;
+      if (++visited % 16 === 0 && perfClock.now() >= until) return false;
       const object = stack.pop()!;
-      if ((object as THREE.Mesh).isMesh) this.prepareMesh(object as THREE.Mesh);
+      if ((object as Mesh).isMesh) this.prepareMesh(object as Mesh);
       const children = object.children;
       for (let i = 0; i < children.length; i++) stack.push(children[i]);
     }
-    this.rest = AHEAD_REST;
-    if (this.late) ROOMS.asked = true;
+    return true;
   }
 
   /** `objects` and all under them handed over ahead with the pipelines they'll draw with, shown or not and in
    *  the scene or not: a warm-up's samples (core/shaders.ts), which the scene's walk never meets. A skill's
    *  effect first met as it was cast compiled its pipeline in that frame, 2 to 4 s from play. */
-  prepare(objects: readonly THREE.Object3D[]): void {
+  prepare(objects: readonly Node[]): void {
     for (const object of objects) {
-      object.traverse((part) => { if ((part as THREE.Mesh).isMesh) this.prepareMesh(part as THREE.Mesh); });
+      object.traverse((part) => { if ((part as Mesh).isMesh) this.prepareMesh(part as Mesh); });
     }
   }
 
   /** A mesh's geometry, materials and pipelines made ready, as `addMesh` would meet them. */
-  private prepareMesh(mesh: THREE.Mesh): void {
+  private prepareMesh(mesh: Mesh): void {
     if (mesh.userData.particles || mesh.name === 'dazed stars') return;
     const geometry = mesh.geometry;
     const single = Array.isArray(mesh.material) ? undefined : mesh.material;
     const look = single ? lookOf(single) : undefined;
-    const counted = (geometry as THREE.InstancedBufferGeometry).isInstancedBufferGeometry;
+    const counted = (geometry as InstancedGeometry).isInstancedGeometry;
     if (counted && !look) return;
     if (!this.geometries.geometryId(geometry, look?.position)) return;
-    const skinned = !!(mesh as THREE.SkinnedMesh).isSkinnedMesh;
+    const skinned = !!(mesh as SkinnedMesh).isSkinnedMesh;
     const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
     for (const material of materials) {
       if (!material) continue;
@@ -107,10 +114,20 @@ export class Ahead {
       // screen they were 12 pipelines more for a phone's boot to wait for. Every layer's, not the room's own
       // alone: a cottage's in view from the hall made its own at that draw, and was left out of the frame)
       const apart = this.late;
-      if (mayLayer(material)) this.core.engine.ready_material_layers(id, skinned, counted, apart);
-      // (and a column's own depth, written before the layers' ghosts while a cover is opened whole: the
-      // engine's `draw_under_depth`. With the rooms' own, after the lobby shows)
-      else if (this.late && standsUnder(material)) this.core.engine.ready_material_layers(id, skinned, counted, false);
+      // (the rooms' asked once the lobby shows are asked behind it, ahead of their need, as a warm-up's are:
+      // counted as compiled in play, they failed the tutorial's walk into the hall, 6 pipelines)
+      const wasBehind = PIPELINES.behind;
+      PIPELINES.behind ||= this.late;
+      try {
+        if (mayLayer(material)) this.core.engine.ready_material_layers(id, skinned, counted, apart);
+        // (and a column's own depth, written before the layers' ghosts while a cover is opened whole: the
+        // engine's `draw_under_depth`. With the rooms' own, after the lobby shows)
+        else if (this.late && standsUnder(material)) {
+          this.core.engine.ready_material_layers(id, skinned, counted, false);
+        }
+      } finally {
+        PIPELINES.behind = wasBehind;
+      }
     }
   }
 }

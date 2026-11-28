@@ -1,5 +1,5 @@
 // The hero's fall in a solo run, from a lethal hit to the settled body.
-import type { Mesh } from 'three';
+import type { Mesh } from './sceneApi.ts';
 import { hurtPlayer } from '../../../src/combat/damage';
 import { G } from '../../../src/state';
 import { isShown, placeVertices } from './geometry';

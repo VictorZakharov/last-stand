@@ -10,7 +10,7 @@
 // the two at a shared point turned apart (the warrior's sleeve's top ring, its normals its own faces' alone, met the
 // gambeson's, the surface's own, up to tens of degrees apart round the shoulder). So each seam's points are also read as
 // built for how far apart the pieces' normals there are turned: more than `SHADE_FROM` is a problem.
-import * as THREE from 'three';
+import { Geometry, Mat3, Maths, SkinnedMesh, Vec3 } from './sceneApi.ts';
 import { SKILL_KEYS } from '../../../src/loot/loadout';
 import { G } from '../../../src/state';
 import type { Fixture, Frame, Lab, Report } from './lab';
@@ -46,7 +46,7 @@ const SEWN = ['ranger', 'mage', 'warrior'];
 
 /** A sewn piece: a skinned mesh with points it shares with another, and where its vertices are this frame. */
 interface Piece {
-  mesh: THREE.SkinnedMesh;
+  mesh: SkinnedMesh;
   label: string;
   placed: Float32Array;
 }
@@ -71,43 +71,43 @@ interface Seam {
 const mm = (metres: number): string => (metres * 1000).toFixed(1);
 
 /** the normal of a mesh's vertex as built, in the frame it was bound in (unnormalised: summed over a piece's copies) */
-function builtNormal(mesh: THREE.SkinnedMesh, vertex: number, out: THREE.Vector3): THREE.Vector3 {
+function builtNormal(mesh: SkinnedMesh, vertex: number, out: Vec3): Vec3 {
   const normal = mesh.geometry.attributes.normal;
   if (!normal) return out.set(0, 0, 0);
-  return out.fromBufferAttribute(normal, vertex).applyMatrix3(new THREE.Matrix3().getNormalMatrix(mesh.bindMatrix)).normalize();
+  return out.fromBufferAttribute(normal, vertex).applyMatrix3(new Mat3().getNormalMatrix(mesh.bindMatrix)).normalize();
 }
 
 /** how far apart the pieces' normals at a place are turned (degrees): each geometry's copies of the point averaged,
  *  the widest angle between any two geometries' */
-function bendAt(place: number[], points: { mesh: number; vertex: number }[], meshes: THREE.SkinnedMesh[]): number {
-  const byGeometry = new Map<THREE.BufferGeometry, THREE.Vector3>();
-  const one = new THREE.Vector3();
+function bendAt(place: number[], points: { mesh: number; vertex: number }[], meshes: SkinnedMesh[]): number {
+  const byGeometry = new Map<Geometry, Vec3>();
+  const one = new Vec3();
   for (const index of place) {
     const mesh = meshes[points[index].mesh];
-    const sum = byGeometry.get(mesh.geometry) ?? new THREE.Vector3();
+    const sum = byGeometry.get(mesh.geometry) ?? new Vec3();
     sum.add(builtNormal(mesh, points[index].vertex, one));
     byGeometry.set(mesh.geometry, sum);
   }
   const normals = [...byGeometry.values()].filter((n) => n.lengthSq() > 1e-12).map((n) => n.normalize());
   let widest = 0;
   for (let a = 0; a < normals.length; a++) for (let b = a + 1; b < normals.length; b++) widest = Math.max(widest, normals[a].angleTo(normals[b]));
-  return THREE.MathUtils.radToDeg(widest);
+  return Maths.radToDeg(widest);
 }
 
 /** the hero's skinned meshes' vertices as built, in the frame they were bound in: [mesh, vertex, x, y, z] a point */
-function builtPoints(meshes: THREE.SkinnedMesh[]): { mesh: number; vertex: number; at: THREE.Vector3 }[] {
-  const points: { mesh: number; vertex: number; at: THREE.Vector3 }[] = [];
+function builtPoints(meshes: SkinnedMesh[]): { mesh: number; vertex: number; at: Vec3 }[] {
+  const points: { mesh: number; vertex: number; at: Vec3 }[] = [];
   meshes.forEach((mesh, index) => {
     const position = mesh.geometry.attributes.position;
     for (let vertex = 0; vertex < position.count; vertex++) {
-      points.push({ mesh: index, vertex, at: new THREE.Vector3().fromBufferAttribute(position, vertex).applyMatrix4(mesh.bindMatrix) });
+      points.push({ mesh: index, vertex, at: new Vec3().fromBufferAttribute(position, vertex).applyMatrix4(mesh.bindMatrix) });
     }
   });
   return points;
 }
 
 /** a vertex's joints and its share of each, as text: two vertices of one mesh with the same are carried alike */
-function carriedBy(mesh: THREE.SkinnedMesh, vertex: number): string {
+function carriedBy(mesh: SkinnedMesh, vertex: number): string {
   const { skinIndex, skinWeight } = mesh.geometry.attributes;
   const parts: string[] = [];
   for (let k = 0; k < 4; k++) {
@@ -122,9 +122,9 @@ function carriedBy(mesh: THREE.SkinnedMesh, vertex: number): string {
  * `SAME_PLACE` cells (each looked for in the cells round its own, so two either side of a cell's edge still meet).
  */
 function findSeams(lab: Lab): { seams: Seam[]; pieces: Piece[] } {
-  const meshes: THREE.SkinnedMesh[] = [];
+  const meshes: SkinnedMesh[] = [];
   lab.model.root.traverse((object) => {
-    const mesh = object as THREE.SkinnedMesh;
+    const mesh = object as SkinnedMesh;
     if (mesh.isSkinnedMesh && mesh.geometry.attributes.skinIndex) meshes.push(mesh);
   });
   const points = builtPoints(meshes);
@@ -170,7 +170,7 @@ function findSeams(lab: Lab): { seams: Seam[]; pieces: Piece[] } {
     }
     return piece;
   };
-  const feet = lab.model.root.getWorldPosition(new THREE.Vector3()).y;
+  const feet = lab.model.root.getWorldPosition(new Vec3()).y;
   const seams = new Map<string, Seam>();
   for (const place of places.values()) {
     // (a piece's own copies of a point, one for each face round it, are carried alike: one of each kept; a geometry
@@ -214,9 +214,9 @@ function gapAt(stitch: Stitch): number {
  * Moves every vertex of `mesh` by `metres` (as drawn) along x in its geometry; returns the undo. (The mesh itself
  * moved does nothing: a skinned mesh is drawn where its bones are, wherever it is.)
  */
-function plantMove(mesh: THREE.SkinnedMesh, metres: number): () => void {
+function plantMove(mesh: SkinnedMesh, metres: number): () => void {
   const position = mesh.geometry.attributes.position;
-  const shift = metres / mesh.getWorldScale(new THREE.Vector3()).x;
+  const shift = metres / mesh.getWorldScale(new Vec3()).x;
   const move = (by: number) => {
     for (let vertex = 0; vertex < position.count; vertex++) position.setX(vertex, position.getX(vertex) + by);
   };

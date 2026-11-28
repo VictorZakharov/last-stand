@@ -28,15 +28,21 @@ label shows through, which must be caught.
 `floorDespawn` (`uiStates/floorDespawn.ts`, #736): an item thrown on the lobby's floor, pictured with its name and time left (2:00), then the game's minutes run at 20 frames a second: about 59 s left after one, gone after two (its canary holds the floor's clock, the drop still there).
 `waveAfterDuel` (`uiStates/waveAfterDuel.ts`, #855: "players sometimes see the wrong wave number (often wave 1)"): the run's wave set to 7, the badge written over with "1" as a duel writes its round there (`ui/duelHud.ts`), and two frames later it must show 7 again (main's HUD skipped the write, as what it last wrote was 7, and showed 1). Its canary writes the round over it again after those frames.
 
+`barsBusy`, `barsBusyTouch`: the run's bottom bar as a fight leaves it (`page/uiBars.ts`): the health at a quarter
+and pulsing low, the energy short of every skill, a skill cooling down, the warrior's Frenzy part lit where his bar
+has it. Its lines are the page's (each fill's share, the countdown, the slots short of energy) and compare with
+main's; where the engine draws the bar (`src/ui/bottomBar.ts`), each fill as drawn is held to the page's share.
+`--canary` writes a share the drawn bar hasn't followed, which must be found.
+
 `sitHint`: the hint to sit, E Sit (`src/ui/sitHint.ts`; from play: "when pointing at object to sit on, we need to display a hint like E Sit"). The mouse is put on the lobby's seat nearest the hero that shows on the screen: the seat outlined at once, the prompt (the village's objects' own, drawn over the world) shown and within the window; then on the floor beside him, and the prompt gone (`uiSitHint.ts`). `--canary` makes the shown prompt clear, which must be caught.
 
 `talk`, `talkTouch` (`page/uiTalk.ts`): Brother Hollis's talk opened as a hero who's fought opens it, his lines shown by Enter (on touch, a tap on them; the tap that put the page in touch mode walked him to the Party Board, whose co-op dialog then opened over the talk: he's stopped where he stands), six replies offered: his portrait's picture made behind the lobby and shown in the oval, the card, his portrait and name and every reply within the window, each reply the element at its middle, on touch each a finger's 32 css px tall at least. `--canary` makes the card twice the window's height, which must be found.
 
 `ui`: the game's UI as the player sees it, in its states (`--states lobby,tooltip,glow,help,guideKeys,saves,heroes,readying,
 readyingHeroes,clicked,views,behindProps,sitHint,floorDespawn,logLobby,perfAsk,pauseLobby,coop,coopRename,bugReport,skillTipsTouch,sheetTouch,litTouch,coopTouch,autoFull,
-run,waveAfterDuel,scores,perf,perfMini,perfGraph,perfParty,decision,perfAskBreak,pause,pauseSettings,pauseAdvancedGraphics,
+run,barsBusy,waveAfterDuel,scores,perf,perfMini,perfGraph,perfParty,decision,perfAskBreak,pause,pauseSettings,pauseAdvancedGraphics,
 pauseAdvancedGraphicsTouch,pausePerformance,profiling,pauseVolume,pauseTabKept,pauseAbandon,summary,summarySkip,skillTips,log,logTouch,hudTouch,
-decisionTouch,perfAskTouch,buttonsTouch,buttonsRunTouch,bugReportTouch`, every one by default (the bug report's form,
+decisionTouch,barsBusyTouch,perfAskTouch,buttonsTouch,buttonsRunTouch,bugReportTouch`, every one by default (the bug report's form,
 `page/uiBugReport.ts`: `bugReport` opens it from the lobby's pause menu by a click on Report a bug and makes a report
 as a player does, `bugReportTouch` opens it over a run by a tap: the form within the window and not scrolling, every
 kind and control found at its middle, the picture of the game taken, not blank and under the server's 600 KB, an

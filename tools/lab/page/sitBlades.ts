@@ -3,7 +3,7 @@
 // frame the line down the middle of each hand's blade (its largest shown mesh, along its longest side), and how near
 // the two come.
 
-import * as THREE from 'three';
+import { Box3, Mesh, Node, SkinnedMesh, Vec3 } from './sceneApi.ts';
 import type { Lab } from './lab';
 import { segmentDistance } from './geometry';
 
@@ -12,18 +12,18 @@ const APART_MOST = 0.02;
 /** how long a blade must be to be a weapon's (m), not a hand's or a strap's */
 const WEAPON_FROM = 0.3;
 
-const _box = new THREE.Box3();
-const _size = new THREE.Vector3();
-const _middle = new THREE.Vector3();
+const _box = new Box3();
+const _size = new Vec3();
+const _middle = new Vec3();
 
 /** A weapon's blade: its mesh, and the ends of its middle line in the mesh's own space. */
 interface Line {
-  mesh: THREE.Mesh;
+  mesh: Mesh;
   ends: Ends;
 }
 
 /** The two lines' ends in the world. */
-type Ends = [THREE.Vector3, THREE.Vector3];
+type Ends = [Vec3, Vec3];
 
 /** Whether two lines this near are through each other. */
 export function through(distance: number): boolean {
@@ -32,9 +32,9 @@ export function through(distance: number): boolean {
 
 /** The canary: two lines crossing at a point read as through each other; a hand's width apart, they don't. */
 export function bladesCanary(): boolean {
-  const flat: Ends = [new THREE.Vector3(-1, 0, 0), new THREE.Vector3(1, 0, 0)];
-  const across: Ends = [new THREE.Vector3(0, 0, -1), new THREE.Vector3(0, 0, 1)];
-  const above: Ends = [new THREE.Vector3(0, 0.1, -1), new THREE.Vector3(0, 0.1, 1)];
+  const flat: Ends = [new Vec3(-1, 0, 0), new Vec3(1, 0, 0)];
+  const across: Ends = [new Vec3(0, 0, -1), new Vec3(0, 0, 1)];
+  const above: Ends = [new Vec3(0, 0.1, -1), new Vec3(0, 0.1, 1)];
   const crossing = segmentDistance(flat[0], flat[1], across[0], across[1]);
   const apart = segmentDistance(flat[0], flat[1], above[0], above[1]);
   return through(crossing) && !through(apart);
@@ -95,12 +95,12 @@ function linesOf(lab: Lab): [Line, Line] | null {
 }
 
 /** The largest mesh shown under `hand` that's no skin (the hand's own), along its longest side, or null if it's short. */
-function bladeOf(hand: THREE.Object3D): Line | null {
+function bladeOf(hand: Node): Line | null {
   let best: Line | null = null;
   let longest = 0;
   hand.traverseVisible((object) => {
-    const mesh = object as THREE.Mesh;
-    if (!mesh.isMesh || (mesh as THREE.SkinnedMesh).isSkinnedMesh || !mesh.geometry) return;
+    const mesh = object as Mesh;
+    if (!mesh.isMesh || (mesh as SkinnedMesh).isSkinnedMesh || !mesh.geometry) return;
     const line = lineAlong(mesh);
     const length = lengthOf(line);
     if (length <= longest) return;
@@ -111,7 +111,7 @@ function bladeOf(hand: THREE.Object3D): Line | null {
 }
 
 /** A mesh's middle line along its box's longest side, in its own space. */
-function lineAlong(mesh: THREE.Mesh): Line {
+function lineAlong(mesh: Mesh): Line {
   mesh.geometry.computeBoundingBox();
   _box.copy(mesh.geometry.boundingBox!);
   _box.getSize(_size);

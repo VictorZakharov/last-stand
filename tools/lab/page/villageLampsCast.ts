@@ -4,7 +4,7 @@
 // alone lights it. From play, "why this light is off": the lamp beside the hero lit nothing round it, its lantern
 // burning. He walks there of himself, the casting lights handed over as a player's walk hands them, and is read as he
 // arrives. `canary` puts each lamp out for both its readings at the last stop, which must be found.
-import * as THREE from 'three';
+import { Vec3 } from './sceneApi.ts';
 import type { Lab } from './lab';
 import { G } from '../../../src/state';
 import { holdHour } from '../../../src/game/clock';
@@ -32,9 +32,9 @@ const LEAST_GIVEN = 0.3;
 const AT_LAMP = 0.05;
 
 /** The mean light of the ground `PATCH` m square round `at`, in the frame drawn. */
-function lightAt(canvas: Canvas, at: THREE.Vector3): number {
+function lightAt(canvas: Canvas, at: Vec3): number {
   const middle = at.clone().project(G.camera);
-  const side = at.clone().add(new THREE.Vector3(PATCH / 2, 0, 0)).project(G.camera);
+  const side = at.clone().add(new Vec3(PATCH / 2, 0, 0)).project(G.camera);
   const x = ((middle.x + 1) / 2) * canvas.width;
   const y = ((middle.y + 1) / 2) * canvas.height;
   const half = Math.max(2, Math.abs(((side.x - middle.x) / 2) * canvas.width));
@@ -51,20 +51,20 @@ function lightAt(canvas: Canvas, at: THREE.Vector3): number {
 }
 
 /** The patches of ground round `lamp`'s foot. */
-function patchesRound(lamp: THREE.Vector3): THREE.Vector3[] {
+function patchesRound(lamp: Vec3): Vec3[] {
   return Array.from({ length: PATCHES }, (_, k) => {
     const a = (k / PATCHES) * Math.PI * 2;
-    const at = new THREE.Vector3(lamp.x + Math.sin(a) * ROUND, 0, lamp.z + Math.cos(a) * ROUND);
+    const at = new Vec3(lamp.x + Math.sin(a) * ROUND, 0, lamp.z + Math.cos(a) * ROUND);
     at.y = groundHeight(at.x, at.z);
     return at;
   });
 }
 
 /** Each patch's light round `lamp`, the frame drawn from over its foot, the game's camera given back after. */
-function readRound(lab: Lab, lamp: THREE.Vector3): number[] {
+function readRound(lab: Lab, lamp: Vec3): number[] {
   const camera = G.camera;
   const kept = { at: camera.position.clone(), turn: camera.quaternion.clone() };
-  const foot = new THREE.Vector3(lamp.x, groundHeight(lamp.x, lamp.z), lamp.z);
+  const foot = new Vec3(lamp.x, groundHeight(lamp.x, lamp.z), lamp.z);
   camera.position.set(foot.x + 0.01, foot.y + OVER, foot.z);
   camera.lookAt(foot);
   camera.updateMatrixWorld();
@@ -138,7 +138,7 @@ function givenRound(lab: Lab, index: number, canary: boolean): number {
  *  lights handed from lamp to lamp as a player walks, not set down by them. */
 async function walkBy(lab: Lab, index: number): Promise<void> {
   const lamp = G.arena.village.lanterns[index];
-  const toSquare = new THREE.Vector3(-lamp.x, 0, -lamp.z).normalize();
+  const toSquare = new Vec3(-lamp.x, 0, -lamp.z).normalize();
   const x = lamp.x + toSquare.x * STOP_OFF;
   const z = lamp.z + toSquare.z * STOP_OFF;
   goTo(x, z);

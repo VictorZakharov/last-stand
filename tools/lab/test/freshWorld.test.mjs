@@ -2,7 +2,7 @@
 // `worldToLocal` put it, to the bit: the skirt's limbs are placed so (armor.ts), and a pose must not move.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import * as THREE from 'three';
+import { Node, Vec3 } from '../../../src/engine/api/index.ts';
 import { freshLocal, freshPass, freshWorld } from '../../../src/entities/models/freshWorld.ts';
 
 /** a seeded random number in [0, 1), the same every run */
@@ -16,7 +16,7 @@ function seeded(seed) {
 
 /** an object with a place, a turn and a scale of `random`'s, under `parent` */
 function jointUnder(parent, random) {
-  const joint = new THREE.Object3D();
+  const joint = new Node();
   joint.position.set(random() - 0.5, random() * 0.4, random() - 0.5);
   joint.rotation.set(random() * 3, random() * 3, random() * 3);
   joint.scale.setScalar(0.8 + random() * 0.4);
@@ -26,7 +26,7 @@ function jointUnder(parent, random) {
 
 /** a body: a root, two chains of six joints off it (the limbs) and one of two (the skirt's space) */
 function body(random) {
-  const root = new THREE.Object3D();
+  const root = new Node();
   root.position.set(3.2, 0.1, -7.4);
   const limbs = [];
   for (let chain = 0; chain < 2; chain++) {
@@ -60,7 +60,7 @@ function sameBits(one, other) {
 test('points carried by matrices made once a pass land to the bit where three puts them', () => {
   const random = seeded(7);
   const { root, limbs, space } = body(random);
-  const points = limbs.flatMap((joint) => [[joint, new THREE.Vector3(random(), random(), random())]]);
+  const points = limbs.flatMap((joint) => [[joint, new Vec3(random(), random(), random())]]);
   // (fresh first: three's own then finds nothing stale either way)
   const fresh = asFresh(space, points);
   const three = asThree(space, points);
@@ -74,15 +74,18 @@ test('points carried by matrices made once a pass land to the bit where three pu
   assert.ok(!sameBits(movedFresh, fresh));
 });
 
-test('the canary: a joint moved within a pass is not seen until the next pass begins', () => {
+// (under three the canary was a joint moved within a pass, unseen until the next began: the pass kept three's world
+// matrices as made. The API's is made as it's read, so a move is seen at once, which the bits must show: the same
+// test that holds the two ways to one bit sees a move of a joint up the chain)
+test('the canary: a joint moved within a pass is seen at once, its world matrix made as it is read', () => {
   const random = seeded(11);
   const { limbs, space } = body(random);
-  const points = [[limbs[5], new THREE.Vector3(0.1, 0.2, 0.3)]];
+  const points = [[limbs[5], new Vec3(0.1, 0.2, 0.3)]];
   freshPass();
   const local = freshLocal(space);
   const before = points[0][1].clone().applyMatrix4(freshWorld(limbs[5])).applyMatrix4(local);
   limbs[2].rotation.y += 0.5;
-  const stale = points[0][1].clone().applyMatrix4(freshWorld(limbs[5])).applyMatrix4(local);
-  assert.ok(sameBits([stale], [before]));
-  assert.ok(!sameBits(asFresh(space, points), [before]));
+  const after = points[0][1].clone().applyMatrix4(freshWorld(limbs[5])).applyMatrix4(local);
+  assert.ok(!sameBits([after], [before]));
+  assert.ok(sameBits(asFresh(space, points), [after]));
 });

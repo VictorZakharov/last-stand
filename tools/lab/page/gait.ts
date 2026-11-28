@@ -7,7 +7,7 @@
 // only the frames the film takes (a picture every few frames throughout, kept in a ring, took the browser down). What
 // a person wouldn't do is said as such. Each frame is also judged as a body's: whether it could move so, its centre
 // of mass with its gear against the push from its planted soles (`balance.ts`), and every joint within its range.
-import * as THREE from 'three';
+import { Node, Vec2, Vec3 } from './sceneApi.ts';
 import type { Lab, Pictured, ViewName } from './lab';
 import type { LegIK } from '../../../src/entities/models/ik';
 import type { Breach } from '../../../src/entities/models/anatomy';
@@ -247,8 +247,8 @@ interface Step {
   /** whether it landed already out of the leg's reach (`f.over`) */
   landedOver: boolean;
   /** where its ankle left and landed */
-  from: THREE.Vector3;
-  to: THREE.Vector3;
+  from: Vec3;
+  to: Vec3;
   /** how far across the way the body went it landed from where the other foot last landed (m: the step's width,
    *  footprint to footprint; none for the first, or with the body hardly moving) */
   width?: number;
@@ -309,7 +309,7 @@ interface GaitRun {
   pastRange: number;
   worstBreach: { breach: Breach; frame: number } | null;
   /** each frame, the way the body last went (x, z) and how many frames it has been still */
-  lastWay: (THREE.Vector2 | null)[];
+  lastWay: (Vec2 | null)[];
   stillFor: number[];
   /** each frame's feet, as a film's note has them (`_` down, `^` up) */
   feetAt: string[];
@@ -357,10 +357,10 @@ function feetNow(legs: LegIK): string {
 }
 
 /** How far apart two ankles are across the way the body goes (m), or nothing when it hardly moves. */
-function widthApart(landed: THREE.Vector3, other: THREE.Vector3, velocity: THREE.Vector3): number | undefined {
+function widthApart(landed: Vec3, other: Vec3, velocity: Vec3): number | undefined {
   const speed = Math.hypot(velocity.x, velocity.z);
   if (speed < WIDTH_SPEED) return undefined;
-  const across = new THREE.Vector3(-velocity.z / speed, 0, velocity.x / speed);
+  const across = new Vec3(-velocity.z / speed, 0, velocity.x / speed);
   return Math.abs((landed.x - other.x) * across.x + (landed.z - other.z) * across.z);
 }
 
@@ -369,9 +369,9 @@ class StepWatch {
   private wasDown: boolean[];
   private leftAt = [-1, -1];
   private landedAt = [-1, -1];
-  private leftFrom = [new THREE.Vector3(), new THREE.Vector3()];
+  private leftFrom = [new Vec3(), new Vec3()];
   /** where each foot last landed, if it has */
-  private landedTo: (THREE.Vector3 | null)[] = [null, null];
+  private landedTo: (Vec3 | null)[] = [null, null];
   private planned = [0, 0];
   private how = ['', ''];
   private window: (number | undefined)[] = [undefined, undefined];
@@ -387,10 +387,10 @@ class StepWatch {
   observe(
     frame: number,
     legs: LegIK,
-    ankles: THREE.Vector3[],
+    ankles: Vec3[],
     seconds: number,
     run: GaitRun,
-    velocity: THREE.Vector3,
+    velocity: Vec3,
   ): boolean {
     let hopped = false;
     legs.feet.forEach((foot, side) => {
@@ -444,7 +444,7 @@ class StepWatch {
  *  the air: a landing stops it dead, as it should). */
 interface Watched {
   name: string;
-  at: THREE.Vector3;
+  at: Vec3;
   counts: boolean;
   jerk: number;
 }
@@ -452,8 +452,8 @@ interface Watched {
 /** A watched point's last place, and its last two velocities (m/s, the latest first; none over a frame it didn't
  *  count on). */
 interface Followed {
-  at: THREE.Vector3;
-  speeds: THREE.Vector3[];
+  at: Vec3;
+  speeds: Vec3[];
 }
 
 /** Follows the hips' and each ankle's speed for the jerks: a change of its change of speed in a frame past the point's
@@ -574,19 +574,19 @@ async function runScenario(
   const steps = new StepWatch(legs);
   const jerks = new JerkWatch();
   const heights: number[] = [];
-  const lastAt = new THREE.Vector3(lab.player.pos.x, 0, lab.player.pos.z);
-  const aim = scenario.aim ? new THREE.Vector3(scenario.aim[0], 0, scenario.aim[1]) : undefined;
+  const lastAt = new Vec3(lab.player.pos.x, 0, lab.player.pos.z);
+  const aim = scenario.aim ? new Vec3(scenario.aim[0], 0, scenario.aim[1]) : undefined;
   const thighs = new ThighSwings();
   const measure = () => {
     const frame = run.frames++;
     if (scenario.straight !== undefined) run.facings.push(lab.player.facing);
-    const at = new THREE.Vector3(lab.player.pos.x, 0, lab.player.pos.z);
+    const at = new Vec3(lab.player.pos.x, 0, lab.player.pos.z);
     const moved = at.distanceTo(lastAt);
     lastAt.copy(at);
     run.together.observe(frame, seconds, thighs.read(lab.joints, wayOf(lab, moved / seconds), seconds));
     run.footfalls.observe(legs, moved / seconds > MOVING_SPEED);
-    const ankles = [lab.joints.ankleL, lab.joints.ankleR].map((ankle) => ankle.getWorldPosition(new THREE.Vector3()));
-    const hips = lab.joints.hips.getWorldPosition(new THREE.Vector3());
+    const ankles = [lab.joints.ankleL, lab.joints.ankleR].map((ankle) => ankle.getWorldPosition(new Vec3()));
+    const hips = lab.joints.hips.getWorldPosition(new Vec3());
     steps.observe(frame, legs, ankles, seconds, run, lab.player.vel);
     if (film) filmShot(lab, scenario, film, frame, legs);
     tracer?.observe(frame);
@@ -643,11 +643,11 @@ function lengthened(legs: GaitLeg[], offset: number): GaitLeg[] {
 }
 
 /** The way the body goes (a unit vector along the ground), or none while it moves slower than `MOVING_SPEED`. */
-function wayOf(lab: Lab, speed: number): THREE.Vector2 | null {
+function wayOf(lab: Lab, speed: number): Vec2 | null {
   const velocity = lab.player.vel;
   const along = Math.hypot(velocity.x, velocity.z);
   if (speed <= MOVING_SPEED || along <= 0) return null;
-  return new THREE.Vector2(velocity.x / along, velocity.z / along);
+  return new Vec2(velocity.x / along, velocity.z / along);
 }
 
 /** The way the body goes this frame, or the way it last went once it stops, and how long it has been still. */
@@ -659,7 +659,7 @@ function followStill(run: GaitRun, lab: Lab): void {
   const stillBefore = frame ? run.stillFor[frame - 1] : 0;
   const wayBefore = frame ? run.lastWay[frame - 1] : null;
   run.stillFor.push(moving ? 0 : stillBefore + 1);
-  run.lastWay.push(moving ? new THREE.Vector2(velocity.x / speed, velocity.z / speed) : wayBefore);
+  run.lastWay.push(moving ? new Vec2(velocity.x / speed, velocity.z / speed) : wayBefore);
 }
 
 /** This frame of the body for the balance: its centre of mass with its gear, and the soles planted under it. */
@@ -822,10 +822,10 @@ function followSwings(run: GaitRun, lab: Lab, frame: number): void {
 }
 
 /** How far forward of the hips a joint is, in the hips' own frame (m). */
-function forwardOfHips(lab: Lab, joint: THREE.Object3D): number {
+function forwardOfHips(lab: Lab, joint: Node): number {
   const hips = lab.joints.hips;
-  const scale = hips.getWorldScale(new THREE.Vector3()).x;
-  return hips.worldToLocal(joint.getWorldPosition(new THREE.Vector3())).z * scale;
+  const scale = hips.getWorldScale(new Vec3()).x;
+  return hips.worldToLocal(joint.getWorldPosition(new Vec3())).z * scale;
 }
 
 /** each hand's swing against its ankle is judged over stretches this long, this far apart (frames: a stretch is a

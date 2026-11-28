@@ -4,7 +4,7 @@
 // It shows a measure's parts: the lab sets the run up first (the probe's options are the command's), the frames run
 // with the player's input and are measured as they would be drawn, the state measured is checked to have happened
 // (he walked), and a canary plants a fault the measure must catch (one frame's left hand moved 10 cm).
-import * as THREE from 'three';
+import { Node, Vec3 } from '../page/sceneApi.ts';
 import type { Lab, Report } from '../page/lab';
 
 const STAND_FRAMES = 60;
@@ -29,15 +29,15 @@ interface Fastest {
  * Where a joint is in the hips' frame, m: how the body moves it, not how far the body went or turned (pressing `w`,
  * he turns to the way he goes, and in the world his hands swept 23 cm in a frame).
  */
-function inHips(lab: Lab, joint: THREE.Object3D): THREE.Vector3 {
+function inHips(lab: Lab, joint: Node): Vec3 {
   const hips = lab.joints.hips;
-  const scale = hips.getWorldScale(new THREE.Vector3()).x;
-  return hips.worldToLocal(joint.getWorldPosition(new THREE.Vector3())).multiplyScalar(scale);
+  const scale = hips.getWorldScale(new Vec3()).x;
+  return hips.worldToLocal(joint.getWorldPosition(new Vec3())).multiplyScalar(scale);
 }
 
 /** Moves `joint` by `metres` in the world along its parent's x; returns the undo. */
-function plantMove(joint: THREE.Object3D, metres: number): () => void {
-  const shift = new THREE.Vector3(metres / joint.parent!.getWorldScale(new THREE.Vector3()).x, 0, 0);
+function plantMove(joint: Node, metres: number): () => void {
+  const shift = new Vec3(metres / joint.parent!.getWorldScale(new Vec3()).x, 0, 0);
   joint.position.add(shift);
   joint.updateMatrixWorld();
   return () => {
@@ -47,8 +47,8 @@ function plantMove(joint: THREE.Object3D, metres: number): () => void {
 }
 
 export default async function handSpeed(lab: Lab, options: Options): Promise<Report> {
-  const hands: Record<Side, THREE.Object3D> = { left: lab.joints.handL, right: lab.joints.handR };
-  const last: Record<Side, THREE.Vector3 | null> = { left: null, right: null };
+  const hands: Record<Side, Node> = { left: lab.joints.handL, right: lab.joints.handR };
+  const last: Record<Side, Vec3 | null> = { left: null, right: null };
   const fastest: Record<Side, Fastest> = { left: { move: 0, frame: -1 }, right: { move: 0, frame: -1 } };
   let plantedMove = 0;
   const start = lab.player.pos.clone();

@@ -3,7 +3,7 @@
 // Sit"). The mouse is put over the lobby's seat nearest the hero, as a player points at it: the seat outlined at once
 // (`SIT.look`), the prompt shown and within the window; then put on the floor beside him, and the prompt gone. The
 // canary makes the shown prompt clear (its alpha 0), which must be caught as not shown.
-import * as THREE from 'three';
+import { Vec3 } from './sceneApi.ts';
 import { G } from '../../../src/state';
 import { SIT } from '../../../src/entities/sitting';
 import { sitHintLabel } from '../../../src/ui/sitHint';
@@ -41,15 +41,15 @@ function hintVisible(): boolean {
 }
 
 /** The point of a seat the mouse is put over: its middle, on its top (a fire's a little over the floor). */
-function seatMiddle(seat: Seat): THREE.Vector3 {
+function seatMiddle(seat: Seat): Vec3 {
   const x = (seat.ax + seat.bx) / 2;
   const z = (seat.az + seat.bz) / 2;
   const y = seat.ground ? groundHeight(x, z) + FIRE_AIM : seatTopAt(seat, x, z);
-  return new THREE.Vector3(x, y, z);
+  return new Vec3(x, y, z);
 }
 
 /** Whether a point of the world shows within the window. */
-function onScreen(point: THREE.Vector3): boolean {
+function onScreen(point: Vec3): boolean {
   const ndc = point.clone().project(G.camera);
   return Math.abs(ndc.x) < 0.9 && Math.abs(ndc.y) < 0.9 && ndc.z < 1;
 }
@@ -74,7 +74,7 @@ async function standBySeat(lab: Lab): Promise<void> {
   seats.sort((a, b) => seatMiddle(a).distanceTo(from) - seatMiddle(b).distanceTo(from));
   if (!seats[0]) return;
   const { at, facing } = startOff(seats[0]);
-  G.player.place(new THREE.Vector3(at[0], groundHeight(at[0], at[1]), at[1]), facing);
+  G.player.place(new Vec3(at[0], groundHeight(at[0], at[1]), at[1]), facing);
   await lab.step(PLACED_FRAMES);
 }
 
@@ -123,7 +123,7 @@ export function sitHintShown(canary: boolean): Found {
 export async function closeSitHint(lab: Lab): Promise<void> {
   const hint = sitHintLabel();
   if (hidden && hint) hint.alpha = 1;
-  lab.aim = G.player.pos.clone().add(new THREE.Vector3(0.5, 0, 0.5));
+  lab.aim = G.player.pos.clone().add(new Vec3(0.5, 0, 0.5));
   await lab.step(LEAVE_FRAMES);
 }
 

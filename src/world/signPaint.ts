@@ -4,10 +4,8 @@
 // bloom lets it stay readable. From Viktor, of the first ones (dark boards, thin gilt letters): "signs need better
 // visibility at the distance... maybe bolder text, different wood grain", and of the houses' after the arms were
 // painted so: "labels on houses should be high contrast as well".
-import * as THREE from 'three';
+import { LitMaterial, Material } from '../engine/api/index.ts';
 import { mulberry } from '../util';
-import { tsl } from '../core/webgpu';
-import type { OwnLooks } from '../core/shaderPorts';
 
 /** the paint: the board's ivory at its top and foot, its brush streaks, and the dark its border and letters are
  *  painted in */
@@ -86,9 +84,9 @@ export const boardBand = (h: number): number => Math.max(3, h * 0.07);
 
 /** `m` painted flat: none of the planks' relief or roughness maps it was copied with, so the light lies even over the
  *  paint (the planks' grooves, at its picture's scale, rippled the light across the letters). */
-export function flatFace<M extends THREE.Material>(m: M): M {
-  const standard = m as unknown as THREE.MeshStandardMaterial;
-  if (standard.isMeshStandardMaterial) {
+export function flatFace<M extends Material>(m: M): M {
+  const standard = m as unknown as LitMaterial;
+  if (standard.isLitMaterial) {
     standard.normalMap = null;
     standard.bumpMap = null;
     standard.roughnessMap = null;
@@ -98,25 +96,11 @@ export function flatFace<M extends THREE.Material>(m: M): M {
 }
 
 /** `m` lit no brighter than `FACE_MOST`: what it gives back scaled down to that luminance where it would be more (its
- *  hue kept), on WebGL by a line after its output (its program's key told), on WebGPU by its output node. */
-export function underBloom<M extends THREE.Material>(m: M): M {
-  // (for a renderer with no hook of three's: the Rust engine holds its light to it, engine/materials.ts)
+ *  hue kept), by the engine, which holds a material's light to its `litMost` (engine/materials.ts). */
+export function underBloom<M extends Material>(m: M): M {
   m.userData.litMost = FACE_MOST;
-  const prev = m.onBeforeCompile, key = m.customProgramCacheKey();
-  const most = FACE_MOST.toFixed(3);
-  m.onBeforeCompile = (shader, renderer) => {
-    prev.call(m, shader, renderer);
-    shader.fragmentShader = shader.fragmentShader.replace('#include <opaque_fragment>', `#include <opaque_fragment>
-      { float faceLit = dot(gl_FragColor.rgb, vec3(0.2126, 0.7152, 0.0722));
-        if (faceLit > ${most}) gl_FragColor.rgb *= ${most} / faceLit; }`);
-  };
-  m.customProgramCacheKey = () => `${key}|underBloom`;
-  (m as unknown as OwnLooks).webgpuLooks = (converted) => {
-    const out = tsl.output, lit = tsl.dot(out.rgb, tsl.vec3(0.2126, 0.7152, 0.0722));
-    converted.outputNode = tsl.vec4(out.rgb.mul(tsl.min(1, tsl.float(FACE_MOST).div(tsl.max(lit, 1e-4)))), out.a);
-  };
   return m;
 }
 
 /** A painted face: `m` flat and held under the bloom. */
-export const paintedFace = <M extends THREE.Material>(m: M): M => underBloom(flatFace(m));
+export const paintedFace = <M extends Material>(m: M): M => underBloom(flatFace(m));

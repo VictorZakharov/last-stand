@@ -14,7 +14,7 @@
 //   you when coming near the bell").
 // - **Its dead**: a few raised round it every so often while it stands (`raiseInTurn`; from play, "make sure they spawn
 //   mobs once in a while").
-import * as THREE from 'three';
+import { Vec3 } from '../engine/api/index.ts';
 import { G } from '../state';
 import { BELL_WARDEN } from '../data/foes/bellwarden';
 import { CANTOR } from '../data/foes/cantor';
@@ -84,10 +84,10 @@ function raiseInTurn(e: Enemy): void {
 
 /** A spot `near` m out from a foe's body, in the arena, clear of props and 3 m from every hero, or null after a few
  *  tries. */
-function spotNear(e: Enemy, near: [number, number]): THREE.Vector3 | null {
+function spotNear(e: Enemy, near: [number, number]): Vec3 | null {
   for (let i = 0; i < 12; i++) {
     const a = Math.random() * Math.PI * 2, r = e.radius + rand(near[0], near[1]);
-    const at = new THREE.Vector3(e.pos.x + Math.cos(a) * r, 0, e.pos.z + Math.sin(a) * r);
+    const at = new Vec3(e.pos.x + Math.cos(a) * r, 0, e.pos.z + Math.sin(a) * r);
     if (Math.hypot(at.x, at.z) > ARENA.radius - 2 || inObstacle(at, 0.7)) continue;
     if (G.players.some((p) => p.active && Math.hypot(p.pos.x - at.x, p.pos.z - at.z) < 3)) continue;
     return at;
@@ -122,7 +122,7 @@ export function tollAt(id: number, x: number, z: number, damage: number): void {
       judged = true;
       if (r1 > t.stunsTo || p.airborne) return;
       const facing = angleOff(Math.atan2(x - p.pos.x, z - p.pos.z), p.facing) < BLOCK.arc;
-      hurtPlayer(p, damage * t.hurt, 'physical', new THREE.Vector3(x, 0, z), { foe, attack: 'toll' });
+      hurtPlayer(p, damage * t.hurt, 'physical', new Vec3(x, 0, z), { foe, attack: 'toll' });
       if (p.shieldRaised && facing) return;
       p.stunAfterGrace(t.stun);
     },
@@ -137,12 +137,12 @@ export function tollAt(id: number, x: number, z: number, damage: number): void {
 // --- its ghost seizing a hero (every game its own hero, as its screen shows the ghost) -----------------------
 
 /** A hero being carried off by a ghost: which, where from and to, how long it's been, and the bell he was seized by. */
-interface Seized { ghost: number; from: THREE.Vector3; to: THREE.Vector3; t: number; foe: Enemy }
+interface Seized { ghost: number; from: Vec3; to: Vec3; t: number; foe: Enemy }
 /** this game's hero's seizing, if he's being carried; each bell's ghost's rest (s); his grace after a drop */
 let seized: Seized | null = null;
 const rests = new WeakMap<Enemy, number[]>();
 let graceUntil = -Infinity;
-const _ghost = new THREE.Vector3(), _held = new THREE.Vector3();
+const _ghost = new Vec3(), _held = new Vec3();
 
 /**
  * Each frame on every game: the bell's ghost dives at this game's hero, or carries him, as this game shows the ghost,
@@ -164,7 +164,7 @@ function haunt(e: Enemy, dt: number): void {
 }
 
 /** A ghost's dive at this game's hero: rising over him as it shrieks, then swooping at where he stood. */
-interface Dive { ghost: number; t: number; from: THREE.Vector3; spot: THREE.Vector3 | null }
+interface Dive { ghost: number; t: number; from: Vec3; spot: Vec3 | null }
 const dives = new WeakMap<Enemy, Dive>();
 
 /**
@@ -194,7 +194,7 @@ function dive(e: Enemy, ghosts: GhostsSeen, rest: number[], dt: number): void {
     return;
   }
   // (then down at where he stood as it turned to swoop)
-  d.spot ??= new THREE.Vector3(p.pos.x, p.obj.position.y, p.pos.z);
+  d.spot ??= new Vec3(p.pos.x, p.obj.position.y, p.pos.z);
   const k = Math.min(1, (d.t - g.warn) / g.swoop);
   _held.set(d.spot.x, d.spot.y + g.over + (g.low - g.over) * k * k, d.spot.z);
   ghosts.hold(d.ghost, _held);
@@ -215,8 +215,8 @@ function endDive(e: Enemy, d: Dive, ghosts: GhostsSeen, rest: number[]): void {
 }
 
 /** Where a hero seized at `at` is dropped: `away` m on out from the bell, inside the arena and clear of the props. */
-function dropSpot(e: Enemy, at: THREE.Vector3): THREE.Vector3 {
-  const out = new THREE.Vector3(at.x - e.pos.x, 0, at.z - e.pos.z);
+function dropSpot(e: Enemy, at: Vec3): Vec3 {
+  const out = new Vec3(at.x - e.pos.x, 0, at.z - e.pos.z);
   if (out.lengthSq() < 1e-6) out.set(0, 0, 1);
   out.normalize().multiplyScalar(B.carry.away).add(at);
   const r = Math.hypot(out.x, out.z), most = ARENA.radius - 1.5;
@@ -245,7 +245,7 @@ function carry(s: Seized, ghosts: GhostsSeen, dt: number): void {
   p.lift = g.rise * (1 - f * f);
   if (f < 1) return;
   // (landed: hurt, a thud, dust; not seized again for a while)
-  hurtPlayer(p, s.foe.damage * g.hurt, 'physical', new THREE.Vector3(p.pos.x, 0, p.pos.z), { foe: s.foe, attack: 'grab' });
+  hurtPlayer(p, s.foe.damage * g.hurt, 'physical', new Vec3(p.pos.x, 0, p.pos.z), { foe: s.foe, attack: 'grab' });
   smokePuff({ x: p.pos.x, y: 0, z: p.pos.z }, { count: 8, color: 0x2a2620, alpha: 0.4, size: 0.6, sizeEnd: 1.8, life: 0.8, speed: 1.6 });
   addShake(0.25);
   sfx.bodyFall(1);

@@ -1,7 +1,7 @@
 // `lab live`'s spots in the village to look at by hand, for a review's pictures: `standAt(lab, x, z, facing, hour)`
 // stands the hero over the shoulder, at the hour asked, and the next `live picture --views screen` is what the player
 // sees.
-import * as THREE from 'three';
+import { Vec3 } from './sceneApi.ts';
 import type { Lab } from './lab';
 import { G } from '../../../src/state';
 import { faceCamera } from '../../../src/core/renderer';
@@ -19,7 +19,7 @@ export async function standAt(lab: Lab, x: number, z: number, facing: number, ho
   holdHour(hour);
   await viewBy(lab, 'third');
   G.player.walkTo = null;
-  G.player.place(new THREE.Vector3(x, groundHeight(x, z), z), facing);
+  G.player.place(new Vec3(x, groundHeight(x, z), z), facing);
   faceCamera(facing);
   await lab.step(SETTLE);
 }

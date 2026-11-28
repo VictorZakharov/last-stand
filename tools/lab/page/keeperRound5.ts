@@ -7,7 +7,7 @@
 // stool's top (he sits, nothing drunk) and off it (he drinks), never two E prompts at once; and his day with a hero
 // stood in each of his narrow ways and his tasks broken into, never standing still on a walk for long, never put back
 // at his stand (the canary's wall across his way in must be caught, and put him back).
-import * as THREE from 'three';
+import { Line3, Maths, Node, Quat, Vec3 } from './sceneApi.ts';
 import { G } from '../../../src/state';
 import { BAR, BAR_STOOL_X, BAR_STOOLS, KEEPER_SPOT, MUG_COUNT } from '../../../src/data/tavern';
 import { seatSpotAt } from '../../../src/world/seats';
@@ -61,8 +61,8 @@ class Worst {
 
 /** What every frame of his day must keep (round 5). */
 export class Round5Watch {
-  private readonly hands: [THREE.Vector3, THREE.Vector3] = [new THREE.Vector3(), new THREE.Vector3()];
-  private readonly v = new THREE.Vector3();
+  private readonly hands: [Vec3, Vec3] = [new Vec3(), new Vec3()];
+  private readonly v = new Vec3();
   readonly apart = new Worst();
   private readonly aparts: number[] = [];
   readonly flat = new Worst();
@@ -87,7 +87,7 @@ export class Round5Watch {
   private sinceSweep = Infinity;
   private carriedFor = 0;
 
-  read(tv: TavernKeeper, keeper: Keeper, room: THREE.Object3D, doing: string): void {
+  read(tv: TavernKeeper, keeper: Keeper, room: Node, doing: string): void {
     const step = tv.doing().step;
     keeper.hands(this.hands);
     this.readBroom(tv, keeper, room, step, doing);
@@ -96,7 +96,7 @@ export class Round5Watch {
     this.readAttend(step, room);
   }
 
-  private readBroom(tv: TavernKeeper, keeper: Keeper, room: THREE.Object3D, step: string, doing: string): void {
+  private readBroom(tv: TavernKeeper, keeper: Keeper, room: Node, step: string, doing: string): void {
     const body = room.getObjectByName('broom'), holder = body?.parent;
     const carried = !!holder && holder.parent !== room;
     const posed = tv.doing().sweepPosed;
@@ -110,16 +110,16 @@ export class Round5Watch {
     // (taken into his sweeping hands at the first stroke's place: his sweep begun)
     if (step === 'sweep' || step === 'ready broom') this.stroked = true;
     // (the handle's way, down from his top hand to the bristles: the broom's +y)
-    const down = new THREE.Vector3(0, 1, 0).applyQuaternion(body!.getWorldQuaternion(new THREE.Quaternion())).normalize();
-    const tilt = Math.acos(THREE.MathUtils.clamp(-down.y, -1, 1)) * DEG;
-    const top = holder!.getWorldPosition(new THREE.Vector3());
+    const down = new Vec3(0, 1, 0).applyQuaternion(body!.getWorldQuaternion(new Quat())).normalize();
+    const tilt = Math.acos(Maths.clamp(-down.y, -1, 1)) * DEG;
+    const top = holder!.getWorldPosition(new Vec3());
     if (posed) {
       if (!this.stroked) this.sweptEarly++;
       if (step !== 'sweep' || this.sweepFor < BLEND) return;
       this.sweepFrames++;
       // (apart along the handle, as a sweeper's hands are told apart: his grips' own points sit at different places
       // on a fist turned palm down and up)
-      const along = (hand: THREE.Vector3) => this.v.subVectors(hand, top).dot(down);
+      const along = (hand: Vec3) => this.v.subVectors(hand, top).dot(down);
       const apart = Math.abs(along(this.hands[1]) - along(this.hands[0]));
       this.apart.see(-apart, () => `his hands ${(apart * 100).toFixed(0)} cm apart along the handle, ${doing}`);
       this.aparts.push(apart);
@@ -133,18 +133,18 @@ export class Round5Watch {
     this.carriedFrames++;
     this.carryTilt.see(tilt, () => `its handle ${tilt.toFixed(0)}° from upright, ${doing}`);
     // (his other hand, the right: off the handle)
-    const line = new THREE.Line3(top, top.clone().addScaledVector(down, 1.4));
+    const line = new Line3(top, top.clone().addScaledVector(down, 1.4));
     const off = line.closestPointToPoint(this.hands[1], true, this.v).distanceTo(this.hands[1]);
     this.carryOther.see(-off, () => `his other hand ${(off * 100).toFixed(0)} cm off its handle, ${doing}`);
   }
 
-  private readRag(keeper: Keeper, room: THREE.Object3D, doing: string): void {
+  private readRag(keeper: Keeper, room: Node, doing: string): void {
     const pad = room.getObjectByName('keeper rag flat');
     const spread = !!pad && pad.scale.x > 0.5;
     if (!spread) return;
     this.padFrames++;
     if (keeper.rag.visible) this.bothShown++;
-    const middle = pad!.getWorldPosition(new THREE.Vector3()), grip = this.hands[1];
+    const middle = pad!.getWorldPosition(new Vec3()), grip = this.hands[1];
     const across = Math.hypot(grip.x - middle.x, grip.z - middle.z), over = grip.y - middle.y;
     const off = Math.max(across / PAD_UNDER_HAND, over / PAD_HAND_OVER);
     this.padOff.see(off, () => `his grip ${(across * 100).toFixed(1)} cm across and ${(over * 100).toFixed(1)} cm over the spread rag's middle, ${doing}`);
@@ -156,7 +156,7 @@ export class Round5Watch {
     this.caskHand.see(up, () => `his free hand ${(up * 100).toFixed(0)} cm over his hips, ${doing}`);
   }
 
-  private readAttend(step: string, room: THREE.Object3D): void {
+  private readAttend(step: string, room: Node): void {
     if (step !== 'attend') {
       this.attendFor = 0;
       return;
@@ -246,7 +246,7 @@ export async function tablePickups(tv: TavernKeeper, frames: (most: number, done
     forget();
     // (one at a time: each washed, dried and shelved before the next is left)
     let nearest = Infinity;
-    const keeper = tv.keeper()!, room = keeper.root.parent!, at = new THREE.Vector3();
+    const keeper = tv.keeper()!, room = keeper.root.parent!, at = new Vec3();
     const took = await frames(wait, () => {
       if (tv.doing().step === 'collect' && tv.doing().job === 'clear') {
         room.worldToLocal(keeper.root.getWorldPosition(at));
@@ -274,7 +274,7 @@ export async function caskWiped(tv: TavernKeeper, frames: (most: number, done?: 
 /** A hero putting his mug down (F) by every table's sides and the bar's front: on the nearest top, its edge on his side,
  *  a hand's width in. `myId`: this game's hero's id in the ledger. */
 export async function putDowns(tv: TavernKeeper, run: Stepper, frames: (most: number, done?: () => boolean) => Promise<number>,
-  forget: () => void, roomOf: () => THREE.Object3D, myId: string): Promise<Found> {
+  forget: () => void, roomOf: () => Node, myId: string): Promise<Found> {
   const lines: string[] = [], problems: string[] = [];
   const bar: TableTop = { name: 'bar', x: BAR.x, z: (BAR.from + BAR.to) / 2, top: BAR.top, hx: BAR.half, hz: (BAR.to - BAR.from) / 2 };
   const stands = [...aroundTables(), { top: bar, toward: { x: BAR.x - 3, z: -1.5 } }];
@@ -285,7 +285,7 @@ export async function putDowns(tv: TavernKeeper, run: Stepper, frames: (most: nu
     const out = top.hx !== undefined && top.name !== 'bar' && Math.abs(e.nx) > 0.5 ? 0.6 : 0.4;
     const standAt = { x: e.x + e.nx * out, z: e.z + e.nz * out };
     G.player.walkTo = null;
-    G.player.place(roomOf().localToWorld(new THREE.Vector3(standAt.x, 0, standAt.z)), Math.atan2(-e.nx, -e.nz));
+    G.player.place(roomOf().localToWorld(new Vec3(standAt.x, 0, standAt.z)), Math.atan2(-e.nx, -e.nz));
     await run(20, () => ({}));
     const id = tv.mugs.mugs.find((m) => m.place.at === 'shelf')?.id;
     if (id === undefined) { problems.push('round 5: no mug to put down'); break; }
@@ -329,13 +329,13 @@ export async function putDowns(tv: TavernKeeper, run: Stepper, frames: (most: nu
  *  prompts in a frame (a seat's E Sit with the drink's E). Driven from above, where the lab's mouse is the pointer:
  *  over the shoulder and through the eyes the crosshair is, which the lab doesn't turn. */
 export async function ePriority(tv: TavernKeeper, run: Stepper, frames: (most: number, done?: () => boolean, input?: () => Frame) => Promise<number>,
-  forget: () => void, roomOf: () => THREE.Object3D, myId: string, drinkShare: () => number): Promise<Found> {
+  forget: () => void, roomOf: () => Node, myId: string, drinkShare: () => number): Promise<Found> {
   const lines: string[] = [], problems: string[] = [];
   // (the stool before the keeper's stand, as a hero comes to be served)
   const stoolZ = BAR_STOOLS.reduce((a, b) => (Math.abs(b - KEEPER_SPOT.z) < Math.abs(a - KEEPER_SPOT.z) ? b : a));
-  const stoolTop = () => roomOf().localToWorld(new THREE.Vector3(BAR_STOOL_X, 0.72, stoolZ));
+  const stoolTop = () => roomOf().localToWorld(new Vec3(BAR_STOOL_X, 0.72, stoolZ));
   G.player.walkTo = null;
-  G.player.place(roomOf().localToWorld(new THREE.Vector3(BAR_STOOL_X - 0.9, 0, stoolZ + 0.6)), Math.PI / 2);
+  G.player.place(roomOf().localToWorld(new Vec3(BAR_STOOL_X - 0.9, 0, stoolZ + 0.6)), Math.PI / 2);
   await run(20, () => ({ aim: stoolTop() }));
   const id = tv.mugs.mugs.find((m) => m.place.at === 'shelf')?.id;
   if (id === undefined) return { lines, problems: ['round 5: no mug for E'] };
@@ -365,7 +365,7 @@ export async function ePriority(tv: TavernKeeper, run: Stepper, frames: (most: n
   if (sat < 0) problems.push(`round 5: E with the pointer on a stool and a mug in hand never sat him (${whyNotSat()})`);
   if (drunkSitting > 0.05) problems.push(`round 5: E with the pointer on a stool drank his ale too (${(drunkSitting * 100).toFixed(0)}%)`);
   // (sat, the pointer off the seats: E drinks)
-  const away = roomOf().localToWorld(new THREE.Vector3(BAR_STOOL_X - 2, 0, stoolZ - 1.5));
+  const away = roomOf().localToWorld(new Vec3(BAR_STOOL_X - 2, 0, stoolZ - 1.5));
   await run(10, () => ({ aim: away }));
   await run(1, () => ({ keys: ['e'], aim: away }));
   const drank = await frames(240, () => { twoE(); return drinkShare() > 0.3 || drinkShare() < 0; }, () => ({ aim: away }));
@@ -390,7 +390,7 @@ function whyNotSat(): string {
   const said = ['sits', 'glances', 'idle', 'aiming', 'aimHold', 'staggered', 'rooted', 'hitT', 'dash', 'channel']
     .map((key) => `${key} ${String(p[key])}`);
   const seat = sitting.pointedSeat as Parameters<typeof seatSpotAt>[0] | null;
-  const at = sitting.pointedAt as THREE.Vector3;
+  const at = sitting.pointedAt as Vec3;
   const spot = seat ? seatSpotAt(seat, at.x, at.z, G.player.pos, G.player.radius) : null;
   return [...said, `casting ${p.casting ? (p.casting.skill.def.ale ? 'ale' : 'other') : 'none'}`,
     `phase ${String(sitting.phase)}`, `asked ${String(sitting.asked)}`, `lit ${String(sitting.lit)}`,
@@ -400,7 +400,7 @@ function whyNotSat(): string {
 /** His day with a hero stood in each of his narrow ways in turn, and his tasks broken into at seeded random frames
  *  (ale asked, a task set): the longest he stood still on a walk, and how often he was put back at his stand. With the
  *  canary's wall across his way in behind the bar, both must show it. */
-export async function stuckRuns(tv: TavernKeeper, run: Stepper, roomOf: () => THREE.Object3D, forget: () => void,
+export async function stuckRuns(tv: TavernKeeper, run: Stepper, roomOf: () => Node, forget: () => void,
   wall: boolean): Promise<Found> {
   const lines: string[] = [], problems: string[] = [];
   const random = mulberry(704);
@@ -421,7 +421,7 @@ export async function stuckRuns(tv: TavernKeeper, run: Stepper, roomOf: () => TH
   try {
     for (const park of parks) {
       G.player.walkTo = null;
-      G.player.place(roomOf().localToWorld(new THREE.Vector3(park.at[0], 0, park.at[1])), 0);
+      G.player.place(roomOf().localToWorld(new Vec3(park.at[0], 0, park.at[1])), 0);
       // (each task in turn, so every one is walked to with a hero in a way: the cask's among them)
       tv.setTask(tasks[parks.indexOf(park) % tasks.length]);
       forget();

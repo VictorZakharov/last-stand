@@ -3,7 +3,7 @@
 // cover, read off the frame as it's drawn (the eye's rays through the screen). A rest is matched to a reference's
 // screenshots by these numbers, not by eye: handed over as matching Vermintide 2's, a rest leaning in, twice as wide
 // and with its head out of the frame failed half of what its screenshots show.
-import * as THREE from 'three';
+import { Hit, Mesh, Node, PerspectiveCamera, Raycaster, Vec2, Vec3 } from './sceneApi.ts';
 import type { Lab } from './lab';
 import { drawnSolid } from './onScreen';
 import { pickGrid } from './pickGrid';
@@ -78,17 +78,17 @@ export interface Framed {
   grid: { across: number; down: number };
 }
 
-const sight = new THREE.Raycaster();
+const sight = new Raycaster();
 
 /** The camera the hero's arms are drawn with: their own (renderer.ts `drawArms`), or the world's (an older tree's
  *  has no other). What it shows of them is where they're seen: through the world's, a weapon drawn through a
  *  narrower view of its own was measured where it isn't. */
-export function armsLens(): THREE.PerspectiveCamera {
-  return renderer.armsCamera?.() ?? (G.camera as THREE.PerspectiveCamera);
+export function armsLens(): PerspectiveCamera {
+  return renderer.armsCamera?.() ?? (G.camera as PerspectiveCamera);
 }
 
 /** Where a point of the world is on the screen, and whether it's ahead of the camera. */
-function placeOf(world: THREE.Vector3): Place & { ahead: boolean } {
+function placeOf(world: Vec3): Place & { ahead: boolean } {
   const lens = armsLens();
   const ahead = lens.worldToLocal(world.clone()).z < 0;
   const ndc = world.clone().project(lens);
@@ -99,11 +99,11 @@ const inFrame = (place: Place & { ahead: boolean }) =>
   place.ahead && place.x >= 0 && place.x <= 1 && place.y >= 0 && place.y <= 1;
 
 /** The meshes drawn in the camera's view under `root`, not under any of `besides`. */
-function drawnUnder(root: THREE.Object3D, besides: THREE.Object3D[] = []): THREE.Mesh[] {
-  const meshes: THREE.Mesh[] = [];
-  const walk = (object: THREE.Object3D): void => {
+function drawnUnder(root: Node, besides: Node[] = []): Mesh[] {
+  const meshes: Mesh[] = [];
+  const walk = (object: Node): void => {
     if (besides.includes(object)) return;
-    const mesh = object as THREE.Mesh;
+    const mesh = object as Mesh;
     if (mesh.isMesh && mesh.layers.test(armsLens().layers) && drawnSolid(mesh)) meshes.push(mesh);
     for (const child of object.children) walk(child);
   };
@@ -112,10 +112,10 @@ function drawnUnder(root: THREE.Object3D, besides: THREE.Object3D[] = []): THREE
 }
 
 /** The first of `meshes` the eye's ray through `place` meets, if any. */
-function metAt(place: Place, meshes: THREE.Mesh[]): THREE.Intersection | undefined {
+function metAt(place: Place, meshes: Mesh[]): Hit | undefined {
   const lens = armsLens();
   sight.layers.mask = lens.layers.mask;
-  sight.setFromCamera(new THREE.Vector2(place.x * 2 - 1, 1 - place.y * 2), lens);
+  sight.setFromCamera(new Vec2(place.x * 2 - 1, 1 - place.y * 2), lens);
   return sight.intersectObjects(meshes, false)[0];
 }
 
@@ -129,11 +129,11 @@ function edgeOf(place: Place): Framed['edge'] {
 }
 
 /** How wide `meshes` are drawn across the screen line `way` (aspect-corrected, normalized) at `at`. */
-function widthAt(at: Place, way: THREE.Vector2, meshes: THREE.Mesh[]): number {
+function widthAt(at: Place, way: Vec2, meshes: Mesh[]): number {
   const aspect = armsLens().aspect;
   // (square to the weapon's line on the screen, `n` a share of the frame's width; read in shares of its height, a
   // width came out the aspect times too wide)
-  const across = new THREE.Vector2(-way.y, way.x);
+  const across = new Vec2(-way.y, way.x);
   const stepOf = (n: number): Place => ({ x: at.x + across.x * n, y: at.y - across.y * n * aspect });
   let wide = 0;
   for (const side of [1, -1]) {
@@ -168,7 +168,7 @@ function widened(box: Box, i: number, j: number): void {
 
 /** The grid's cells through `weapon` and `arm` (drawn once, page/pickGrid.ts; a ray through each cell the weapon
  *  shows, for whether it's its head); `onHead` says whether a point of the weapon is on its head. */
-async function coverOf(lab: Lab, weapon: THREE.Mesh[], arm: THREE.Mesh[], onHead: (point: THREE.Vector3) => boolean):
+async function coverOf(lab: Lab, weapon: Mesh[], arm: Mesh[], onHead: (point: Vec3) => boolean):
   Promise<Cover> {
   const shows = await pickGrid(lab, armsLens(), [weapon, arm], GRID_ACROSS, GRID_DOWN);
   let onWeapon = 0;
@@ -207,9 +207,9 @@ async function coverOf(lab: Lab, weapon: THREE.Mesh[], arm: THREE.Mesh[], onHead
 }
 
 /** The end of `weapon` (its meshes, under `grip`) behind its grip: the lowest of it along the grip's length, world. */
-function buttOf(grip: THREE.Object3D, weapon: THREE.Mesh[]): THREE.Vector3 {
+function buttOf(grip: Node, weapon: Mesh[]): Vec3 {
   let lowest = 0;
-  const corner = new THREE.Vector3();
+  const corner = new Vec3();
   for (const mesh of weapon) {
     if (!mesh.geometry.boundingBox) mesh.geometry.computeBoundingBox();
     const { min, max } = mesh.geometry.boundingBox!;
@@ -218,7 +218,7 @@ function buttOf(grip: THREE.Object3D, weapon: THREE.Mesh[]): THREE.Vector3 {
       lowest = Math.min(lowest, grip.worldToLocal(mesh.localToWorld(corner)).y);
     }
   }
-  return grip.localToWorld(new THREE.Vector3(0, lowest, 0));
+  return grip.localToWorld(new Vec3(0, lowest, 0));
 }
 
 /**
@@ -237,7 +237,7 @@ export async function framed(lab: Lab): Promise<Framed | null> {
   // (nothing in the hand: the warrior's fists, #400)
   if (!weapon.length) return null;
   const from = buttOf(grip, weapon);
-  const to = tip.getWorldPosition(new THREE.Vector3());
+  const to = tip.getWorldPosition(new Vec3());
   const seen: Place[] = [];
   for (let n = 0; n <= ALONG; n++) {
     const place = placeOf(from.clone().lerp(to, n / ALONG));
@@ -247,7 +247,7 @@ export async function framed(lab: Lab): Promise<Framed | null> {
   const first = seen[0];
   const last = seen[seen.length - 1];
   const aspect = armsLens().aspect;
-  const way = new THREE.Vector2((last.x - first.x) * aspect, first.y - last.y).normalize();
+  const way = new Vec2((last.x - first.x) * aspect, first.y - last.y).normalize();
   const lean = (Math.atan2(Math.abs(way.x), way.y) * 180) / Math.PI;
   const out = Math.sign(way.x) === Math.sign(first.x - 0.5);
   const arm = drawnUnder(lab.joints.shoulderR, [grip]);
@@ -259,7 +259,7 @@ export async function framed(lab: Lab): Promise<Framed | null> {
   // (a point's share of the way from the butt end to the tip, along the grip's length)
   const butt = grip.worldToLocal(from.clone()).y;
   const length = grip.worldToLocal(to.clone()).y - butt;
-  const onHead = (point: THREE.Vector3) => (grip.worldToLocal(point.clone()).y - butt) / length >= HEAD_FROM;
+  const onHead = (point: Vec3) => (grip.worldToLocal(point.clone()).y - butt) / length >= HEAD_FROM;
   const cover = await coverOf(lab, weapon, arm, onHead);
   // (a weapon wider than a cell covers one: none is a pick that drew nothing, as one did while the lab held its draws)
   if (wide > 1 / GRID_ACROSS && cover.weapon === 0) {

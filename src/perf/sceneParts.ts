@@ -5,7 +5,7 @@
 // parts are those of the place the player stands in. The lab's `scenecost` (tools/lab/page/sceneCost.ts) keeps its own
 // parts, some changing programs (a light hidden, a shadow or the environment taken off), compiled before it times: an
 // A/B copies the lab's page modules into the other commit's tree, where this module isn't on a commit older than it.
-import * as THREE from 'three';
+import { InstancedMesh, Material, Mesh, Node, Points } from '../engine/api/index.ts';
 import { G } from '../state';
 import { QUALITY } from '../data/quality';
 import { qualityBudget, qualityLevel } from '../core/quality';
@@ -24,8 +24,8 @@ export interface ScenePart {
 }
 
 /** Every object under the scene that `wanted` picks, shown now. */
-export function shownWhere(wanted: (object: THREE.Object3D) => boolean): THREE.Object3D[] {
-  const found: THREE.Object3D[] = [];
+export function shownWhere(wanted: (object: Node) => boolean): Node[] {
+  const found: Node[] = [];
   G.scene.traverseVisible((object) => {
     if (wanted(object)) found.push(object);
   });
@@ -33,7 +33,7 @@ export function shownWhere(wanted: (object: THREE.Object3D) => boolean): THREE.O
 }
 
 /** A part that shows or hides `objects`. */
-export function shownPart(name: string, objects: THREE.Object3D[]): ScenePart {
+export function shownPart(name: string, objects: Node[]): ScenePart {
   return {
     name: `${name} (${objects.length})`,
     change: (on) => {
@@ -43,28 +43,28 @@ export function shownPart(name: string, objects: THREE.Object3D[]): ScenePart {
 }
 
 /** The materials of a mesh, as a list. */
-export function materialsOf(mesh: THREE.Mesh): THREE.Material[] {
+export function materialsOf(mesh: Mesh): Material[] {
   return Array.isArray(mesh.material) ? mesh.material : [mesh.material];
 }
 
 /** Whether a mesh draws see-through or cut out (blended, or alpha tested). */
-export function seeThrough(object: THREE.Object3D): boolean {
-  const mesh = object as THREE.Mesh;
+export function seeThrough(object: Node): boolean {
+  const mesh = object as Mesh;
   if (!mesh.isMesh) return false;
   return materialsOf(mesh).some((material) => material.transparent || material.alphaTest > 0);
 }
 
 /** Whether a mesh is cut out (alpha tested: a leaf card, a blade of grass), which a phone's GPU draws slowly: a pixel
  *  it may throw away keeps the GPU from skipping what's hidden behind it. */
-function cutOut(object: THREE.Object3D): boolean {
-  const mesh = object as THREE.Mesh;
+function cutOut(object: Node): boolean {
+  const mesh = object as Mesh;
   return Boolean(mesh.isMesh) && materialsOf(mesh).some((material) => material.alphaTest > 0);
 }
 
 /** Whether a mesh is blended over what's behind it (and not cut out), apart from the fires' flames and the
  *  particles. */
-function blended(object: THREE.Object3D): boolean {
-  const mesh = object as THREE.Mesh;
+function blended(object: Node): boolean {
+  const mesh = object as Mesh;
   if (!mesh.isMesh || cutOut(object) || mesh.userData.fireFlames || mesh.userData.particles) return false;
   return materialsOf(mesh).some((material) => material.transparent);
 }
@@ -158,7 +158,7 @@ export function frameParts(): ScenePart[] {
 function shownParts(): ScenePart[] {
   return [
     // (a particle pool: its quads, `fx/particles.ts`)
-    shownPart('the particles', shownWhere((object) => (object as THREE.Points).isPoints || object.userData.particles)),
+    shownPart('the particles', shownWhere((object) => (object as Points).isPoints || object.userData.particles)),
     shownPart('the hero', [G.player.obj]),
     // (the ground's blades and the trees, a million triangles and more of the village's frame at High)
     shownPart('the meadow\'s grass', shownWhere((object) => object.name === 'meadow')),
@@ -169,6 +169,6 @@ function shownParts(): ScenePart[] {
     // (the arrows left standing where they came down, fx/stuckArrows.ts: two instanced meshes, up to a thousand; with
     // none down they stand drawing nothing, and the part holds none of them)
     shownPart('the spent arrows', shownWhere((object) => Boolean(object.userData.spentArrows)
-      && (object as THREE.InstancedMesh).count > 0)),
+      && (object as InstancedMesh).count > 0)),
   ];
 }

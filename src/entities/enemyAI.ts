@@ -2,7 +2,7 @@
 // e.faceTo(), and starts timed actions whose events apply the effects.
 // An enemy goes for its target (e.target, the nearest player in the fight). What its attacks look
 // like goes through `fx`, which co-op guests replay: their copies of the enemies don't think.
-import * as THREE from 'three';
+import { Vec3 } from '../engine/api/index.ts';
 import { G } from '../state';
 import { DAMAGE_COLORS, partyScale } from '../data/balance';
 import { hurtPlayer, DAMAGE_TYPES } from '../combat/damage';
@@ -30,7 +30,7 @@ import type { Player } from './player';
 import type { DamageType, EnemyAIKind } from '../types';
 import { BOSS_AI, ENEMIES, type EnemyId } from '../data/enemies';
 
-const _dir = new THREE.Vector3();
+const _dir = new Vec3();
 const _way = { x: 0, z: 0 };
 
 /** Move along (dx, dz), bent round any obstacle ahead within `reach` (by default ~1s of walking). */
@@ -93,7 +93,7 @@ export function setFxSink(fn: typeof fxSink): void { fxSink = fn; }
  */
 const CORE_FX = {
   strike(x: number, z: number) {
-    burst(new THREE.Vector3(x, 1.1, z), { count: 10, color: 0xff3020, speed: 4, life: 0.35, size: 0.2 });
+    burst(new Vec3(x, 1.1, z), { count: 10, color: 0xff3020, speed: 4, life: 0.35, size: 0.2 });
   },
   /** enemy `id`'s blow at the player in `slot`, judged by that player's game where it shows the enemy (dazed there,
    *  by its own hero's blink on its way to the host, it strikes no one) */
@@ -109,7 +109,7 @@ const CORE_FX = {
   slam(x: number, z: number, radius: number, color: number, boss: number, damage = 0, type = 4, id = -1) {
     // (it wears the breakable props it lands on, as a hero's blow does: dealt where the fight is simulated alone)
     if (damage > 0) hurtPropsNear(x, z, radius, PROP_DAMAGE.swing);
-    const pos = new THREE.Vector3(x, 0, z);
+    const pos = new Vec3(x, 0, z);
     const p = G.player;
     if (damage > 0 && p.active && Math.hypot(p.pos.x - x, p.pos.z - z) < radius + p.radius) {
       hurtPlayer(p, damage, DAMAGE_TYPES[type], pos, { foe: G.enemies.find((e) => e.id === id) ?? null, attack: 'slam' });
@@ -138,7 +138,7 @@ const CORE_FX = {
       burst(proj.pos, { count: 16, color: pj.color, speed: 4, life: 0.4, size: 0.3 });
       if (pj.look === 'spore') smokePuff(proj.pos, { count: 6, color: pj.trail, alpha: 0.4, size: 0.6, sizeEnd: 1.8, life: 0.9, rise: 0.4 });
     };
-    const oy0 = Math.min(2, Math.max(0.7, oy)), pos = new THREE.Vector3(ox, oy0, oz);
+    const oy0 = Math.min(2, Math.max(0.7, oy)), pos = new Vec3(ox, oy0, oz);
     // out of the pod, then level: hits and the clear-shot check assume BOLT_Y
     const settle = (p: Projectile): void => { p.pos.y = BOLT_Y + (oy0 - BOLT_Y) * Math.max(0, 1 - Math.hypot(p.pos.x - ox, p.pos.z - oz) / SETTLE); };
     if (pj.look === 'void' || pj.look === 'magma') {
@@ -251,7 +251,7 @@ function slamAt(e: Enemy, x: number, z: number, radius: number, color = e.def.ac
 function fireBolt(e: Enemy, angleOffset = 0, lead = true): void {
   if (!e.def.projectile) return;
   const p = e.target!;
-  const origin = new THREE.Vector3();
+  const origin = new Vec3();
   if (e.model.tip) e.model.tip.getWorldPosition(origin);
   else origin.set(e.pos.x, e.height * 0.6, e.pos.z);
   const tx = p.pos.x + (lead ? p.vel.x * 0.35 : 0), tz = p.pos.z + (lead ? p.vel.z * 0.35 : 0);
@@ -426,7 +426,7 @@ export function lured(e: Enemy, l: Lure): void {
 function bossSummon(e: Enemy): void {
   for (let i = 0; i < BOSS_AI.summonCount; i++) {
     const a = Math.random() * Math.PI * 2;
-    const pos = new THREE.Vector3(e.pos.x + Math.cos(a) * BOSS_AI.summonRing, 0, e.pos.z + Math.sin(a) * BOSS_AI.summonRing);
+    const pos = new Vec3(e.pos.x + Math.cos(a) * BOSS_AI.summonRing, 0, e.pos.z + Math.sin(a) * BOSS_AI.summonRing);
     spawnEnemy((e.def.summon ?? 'imp') as EnemyId, pos, { wave: G.run?.wave ?? 1, lifeMult: partyScale(G.run?.party ?? 1).life, training: e.training });
   }
   fx('summon', e.pos.x, e.pos.z, e.def.accent ?? 0xb070ff);

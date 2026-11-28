@@ -2,7 +2,7 @@
 // draw, through a skill's cast), each moment pictured from the game's own views and close up, with how hard the pose is
 // to hold beside it.
 // A pose is judged here first, as a person would hold it, and only then measured (src/entities/models/AGENTS.md).
-import * as THREE from 'three';
+import { Maths, Vec3 } from './sceneApi.ts';
 import type { Lab, Fixture, ViewName, Tile } from './lab';
 import type { Joints } from '../../../src/entities/models/rig';
 import { HELD, armComfort, describeArm } from './comfort';
@@ -61,10 +61,10 @@ const CAST_FRAMES = 600;
 
 /** how far the left hand leads the hips along the way the hero faces (m) */
 function handLead(lab: Lab): number {
-  const hand = lab.joints.handL.getWorldPosition(new THREE.Vector3());
-  const hips = lab.joints.hips.getWorldPosition(new THREE.Vector3());
+  const hand = lab.joints.handL.getWorldPosition(new Vec3());
+  const hips = lab.joints.hips.getWorldPosition(new Vec3());
   const facing = lab.player.facing;
-  return hand.sub(hips).dot(new THREE.Vector3(Math.sin(facing), 0, Math.cos(facing)));
+  return hand.sub(hips).dot(new Vec3(Math.sin(facing), 0, Math.cos(facing)));
 }
 
 /** How far through its cast the hero is (0..1, the share the model is given), or null when he isn't casting. */
@@ -74,7 +74,7 @@ function castShare(lab: Lab): number | null {
 }
 
 /** A channel's keys are held this long (`holdFor`), and pictured at shares of that. */
-async function channelled(lab: Lab, snap: Snap, keys: Parameters<typeof pressing>[0][], aim: THREE.Vector3,
+async function channelled(lab: Lab, snap: Snap, keys: Parameters<typeof pressing>[0][], aim: Vec3,
   def: SkillDef, wanted: number[]): Promise<void> {
   const name = def.name;
   const frames = Math.round(holdFor(def) / (window.__labClock.frame / 1000));
@@ -93,7 +93,7 @@ const LOOSED_FRAMES = [4, 14, 34];
 
 /** A skill charged while its key is held (`SkillDef.draw`: the lightning staff's) is held to its full charge,
  *  pictured at shares of that, then let go and pictured as it strikes. */
-async function charged(lab: Lab, snap: Snap, key: Parameters<typeof pressing>[0], aim: THREE.Vector3,
+async function charged(lab: Lab, snap: Snap, key: Parameters<typeof pressing>[0], aim: Vec3,
   def: SkillDef, wanted: number[]): Promise<void> {
   const name = def.name;
   for (let f = 0; f < CAST_FRAMES * 4 && wanted.length > 0; f++) {
@@ -177,7 +177,7 @@ export const STATES: Record<string, State> = {
     bindKnown(named);
     const { key, def } = skillNamed(named);
     const facing = lab.player.facing;
-    const way = new THREE.Vector3(Math.sin(facing), 0, Math.cos(facing));
+    const way = new Vec3(Math.sin(facing), 0, Math.cos(facing));
     const aim = lab.player.pos.clone().addScaledVector(way, CAST_AIM);
     const wanted = [...(options.shares ?? CAST_SHARES)].sort((a, b) => a - b);
     if (def.channel) return channelled(lab, snap, [key, ...alsoHeld.map((other) => skillNamed(other).key)], aim, def, wanted);
@@ -253,10 +253,10 @@ function describeWeapon(lab: Lab): string | null {
   const tip = lab.model.tip;
   const grip = tip?.parent;
   if (!tip || !grip || grip === lab.model.root) return null;
-  const way = tip.getWorldPosition(new THREE.Vector3()).sub(grip.getWorldPosition(new THREE.Vector3())).normalize();
+  const way = tip.getWorldPosition(new Vec3()).sub(grip.getWorldPosition(new Vec3())).normalize();
   const inRoot = way.clone().transformDirection(lab.model.root.matrixWorld.clone().invert());
   const inChest = way.clone().transformDirection(lab.joints.chest.matrixWorld.clone().invert());
-  const up = degreesOf(Math.asin(THREE.MathUtils.clamp(inRoot.y, -1, 1)));
+  const up = degreesOf(Math.asin(Maths.clamp(inRoot.y, -1, 1)));
   const across = degreesOf(Math.atan2(inRoot.x, inRoot.z));
   const chest = inChest.toArray().map((value) => value.toFixed(2)).join(', ');
   return `the weapon: ${up}° up, ${across}° from ahead (in the chest's frame ${chest})`;

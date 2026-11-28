@@ -1,8 +1,10 @@
 // Iron Bellow: a war cry that hurls back nearby foes and raises three spectral shields that circle
 // the warrior as a damage-absorbing ward; each blow they soak flares them, and they shatter at the end.
-import * as THREE from 'three';
+import {
+  AdditiveBlending, Color, DoubleSide, LookMaterial, Mesh, Node, Outline, UnlitMaterial, Vec3,
+} from '../../engine/api/index.ts';
+import * as shapes from '../../engine/api/shapes/index.ts';
 import { nearGlow } from '../../core/materials';
-import { portShader } from '../../core/shaderPorts';
 import { effectLook, num, rgb, effectShader } from '../../engine/effects';
 import { G } from '../../state';
 import { hitEnemy } from '../damage';
@@ -24,14 +26,14 @@ const SHIELDS = 3;
 /** the shields' circle round the warrior: height and radius; through the eyes higher and wider, where
  *  they're seen (at the waist and close in they circle under the view) */
 const RING = { y: 1.1, r: 0.95 }, RING_EYES = { y: 1.25, r: 1.5 };
-const _w = new THREE.Vector3();
+const _w = new Vec3();
 // a thin ring of light on the floor
-const haloGeo = new THREE.RingGeometry(1.05, 1.15, 64, 1, 0, Math.PI * 2);
+const haloGeo = shapes.ring(1.05, 1.15, 64, 1, 0, Math.PI * 2);
 
 // a spectral kite shield (face along +Z): a shimmering translucent face, a bright rim and a glowing
 // emblem, all additive
-function kite(s: number): THREE.Shape {
-  const k = new THREE.Shape();
+function kite(s: number): Outline {
+  const k = new Outline();
   k.moveTo(0, 0.36 * s);
   k.quadraticCurveTo(0.3 * s, 0.36 * s, 0.29 * s, 0.08 * s);
   k.quadraticCurveTo(0.26 * s, -0.2 * s, 0, -0.42 * s);
@@ -39,40 +41,16 @@ function kite(s: number): THREE.Shape {
   k.quadraticCurveTo(-0.3 * s, 0.36 * s, 0, 0.36 * s);
   return k;
 }
-const faceGeo = new THREE.ShapeGeometry(kite(1), 12);
+const faceGeo = shapes.flat(kite(1), 12);
 const rimShape = kite(1.08);
 rimShape.holes.push(kite(0.92));
-const rimGeo = new THREE.ShapeGeometry(rimShape, 12);
-const emblemGeo = new THREE.ShapeGeometry(kite(0.34), 8);
+const rimGeo = shapes.flat(rimShape, 12);
+const emblemGeo = shapes.flat(kite(0.34), 8);
 
-function faceMaterial(): THREE.ShaderMaterial {
-  return effectLook(portShader(nearGlow(new THREE.ShaderMaterial({
-    uniforms: { uColor: { value: new THREE.Color(GOLD) }, uFade: { value: 0 }, uFlash: { value: 0 }, uTime: { value: 0 } },
-    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
-    vertexShader: /* glsl */`
-      varying vec2 vP;
-      void main(){ vP = position.xy; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
-    fragmentShader: /* glsl */`
-      varying vec2 vP;
-      uniform vec3 uColor; uniform float uFade, uFlash, uTime;
-      void main(){
-        // brighter towards the rim (distance from the centre), a band of light scanning down,
-        // fine horizontal striations, and a white flare when a blow lands
-        float edge = smoothstep(0.1, 0.4, length(vP * vec2(1.0, 0.85)));
-        float scan = exp(-pow(fract(vP.y * 1.2 - uTime * 0.9) - 0.5, 2.0) * 60.0);
-        float lines = 0.75 + 0.25 * sin(vP.y * 120.0 + uTime * 4.0);
-        float i = (0.12 + edge * 0.35 + scan * 0.35) * lines + uFlash * 0.35;
-        gl_FragColor = vec4(mix(uColor, vec3(1.0), uFlash * 0.3) * i * uFade, i * uFade);
-      }`,
-  })), ({ wgslFn, positionGeometry, varying }, u) => ({
-    fragment: wgslFn(`fn bellowFace(p: vec2f, color: vec3f, fade: f32, flash: f32, time: f32) -> vec4f {
-      let edge = smoothstep(0.1, 0.4, length(p * vec2f(1.0, 0.85)));
-      let s = fract(p.y * 1.2 - time * 0.9) - 0.5;
-      let scan = exp(-s * s * 60.0);
-      let lines = 0.75 + 0.25 * sin(p.y * 120.0 + time * 4.0);
-      let i = (0.12 + edge * 0.35 + scan * 0.35) * lines + flash * 0.35;
-      return vec4f(mix(color, vec3f(1.0), flash * 0.3) * i * fade, i * fade);
-    }`)({ p: varying(positionGeometry.xy), color: u.uColor, fade: u.uFade, flash: u.uFlash, time: u.uTime }),
+function faceMaterial(): LookMaterial {
+  return effectLook(nearGlow(new LookMaterial({
+    uniforms: { uColor: { value: new Color(GOLD) }, uFade: { value: 0 }, uFlash: { value: 0 }, uTime: { value: 0 } },
+    transparent: true, depthWrite: false, blending: AdditiveBlending, side: DoubleSide,
   })), 'bellow-face', FACE_HOOKS, {
     numbers(u, out) {
       out[0] = num(u, 'uFade'); out[1] = num(u, 'uFlash'); out[2] = num(u, 'uTime');
@@ -81,7 +59,7 @@ function faceMaterial(): THREE.ShaderMaterial {
   });
 }
 
-/** a shield's face for the Rust engine (src/engine/effects.ts): the port's WGSL above, the kite's own plane from the
+/** a shield's face for the Rust engine (src/engine/effects.ts): the kite's own plane from the
  *  vertex */
 const FACE_HOOKS = /* wgsl */ `
 fn vertex_hook(v: ptr<function, Vertex>, instance: u32) {
@@ -106,17 +84,17 @@ fn surface_hook(s: ptr<function, Surface>, in: VertexOut) -> bool {
 `;
 
 function shieldMaterials() {
-  const m = (c: number, k: number) => nearGlow(new THREE.MeshBasicMaterial({
-    color: new THREE.Color(c).multiplyScalar(k), transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide,
+  const m = (c: number, k: number) => nearGlow(new UnlitMaterial({
+    color: new Color(c).multiplyScalar(k), transparent: true, opacity: 0, blending: AdditiveBlending, depthWrite: false, side: DoubleSide,
   }));
   return { face: faceMaterial(), rim: m(0xffe2a0, 0.9), emblem: m(0xfff0c8, 1.2) };
 }
 
-function buildShield(mats: ReturnType<typeof shieldMaterials>): THREE.Group {
-  const g = new THREE.Group();
-  const emblem = new THREE.Mesh(emblemGeo, mats.emblem);
+function buildShield(mats: ReturnType<typeof shieldMaterials>): Node {
+  const g = new Node();
+  const emblem = new Mesh(emblemGeo, mats.emblem);
   emblem.position.z = 0.01;
-  g.add(new THREE.Mesh(faceGeo, mats.face), new THREE.Mesh(rimGeo, mats.rim), emblem);
+  g.add(new Mesh(faceGeo, mats.face), new Mesh(rimGeo, mats.rim), emblem);
   g.traverse((o) => { o.frustumCulled = false; });
   return g;
 }
@@ -125,7 +103,7 @@ const skill: InstantSkill = {
   anim: 'buff',
   // (its cry strikes as a blow does, whatever its own tags)
   hits: (def) => [{ per: 'foe', base: (def as Def).damage, type: 'physical', tags: ['physical'] }],
-  warm: () => [buildShield(shieldMaterials()), new THREE.Mesh(haloGeo, nearGlow(new THREE.MeshBasicMaterial({ transparent: true, blending: THREE.AdditiveBlending, depthWrite: false })))],
+  warm: () => [buildShield(shieldMaterials()), new Mesh(haloGeo, nearGlow(new UnlitMaterial({ transparent: true, blending: AdditiveBlending, depthWrite: false })))],
   cast(player, rawDef) {
     const def = rawDef as Def;
     const c = player.pos.clone();
@@ -139,7 +117,7 @@ const skill: InstantSkill = {
       const a = (i / 16) * Math.PI * 2;
       smokePuff({ x: c.x + Math.cos(a) * 1.2, y: 0, z: c.z + Math.sin(a) * 1.2 }, { count: 1, color: 0x2a241c, alpha: 0.45, size: 0.8, sizeEnd: 2.2, life: 0.9, speed: 0.4 });
     }
-    flash({ color: GOLD, intensity: 12, distance: 10, life: 0.4, pos: player.eyes ? player.lightAhead(new THREE.Vector3()) : { x: c.x, y: 2, z: c.z } });
+    flash({ color: GOLD, intensity: 12, distance: 10, life: 0.4, pos: player.eyes ? player.lightAhead(new Vec3()) : { x: c.x, y: 2, z: c.z } });
     addShake(0.3);
     sfx.bellow();
     hurtPropsIn(player, c.x, c.z, def.radius, PROP_DAMAGE.burst);
@@ -155,10 +133,10 @@ const skill: InstantSkill = {
     player.ward?.onEnd?.();
     const mats = shieldMaterials();
     const shields = Array.from({ length: SHIELDS }, () => buildShield(mats));
-    const root = new THREE.Group();
+    const root = new Node();
     root.add(...shields);
-    const haloMat = nearGlow(new THREE.MeshBasicMaterial({ color: new THREE.Color(GOLD).multiplyScalar(0.8), transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false }));
-    const halo = new THREE.Mesh(haloGeo, haloMat);
+    const haloMat = nearGlow(new UnlitMaterial({ color: new Color(GOLD).multiplyScalar(0.8), transparent: true, opacity: 0, blending: AdditiveBlending, depthWrite: false }));
+    const halo = new Mesh(haloGeo, haloMat);
     halo.rotation.x = -Math.PI / 2;
     halo.frustumCulled = false;
     G.scene.add(root, halo);
@@ -203,7 +181,7 @@ const skill: InstantSkill = {
         halo.rotation.z = t * 0.6;
         haloMat.opacity = 0.35 * grow * left;
         if (ended || !player.alive) {
-          for (const s of shields) burst(s.getWorldPosition(new THREE.Vector3()), { count: 14, color: GOLD, speed: 4, life: 0.45, size: 0.18, gravity: 3 });
+          for (const s of shields) burst(s.getWorldPosition(new Vec3()), { count: 14, color: GOLD, speed: 4, life: 0.45, size: 0.18, gravity: 3 });
           return false;
         }
         return true;

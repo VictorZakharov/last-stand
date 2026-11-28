@@ -7,7 +7,7 @@
 // else), and anything the engine newly leaves undrawn. The frame's draws with the wall standing and with its pieces
 // down. Pictured as the player sees it, numbered, from the same spot each run. `--canary` takes the wall's own break
 // away (`BREAKS.sticks`), so it breaks as a big prop, which must be caught.
-import * as THREE from 'three';
+import { InstancedMesh, Mat4, Vec3 } from './sceneApi.ts';
 import type { Lab, Pictured } from './lab';
 import { G } from '../../../src/state';
 import { RUST } from '../../../src/engine';
@@ -30,22 +30,22 @@ const WATCHED = 480, PICTURED = [0, 10, 40, 120, 300];
 
 /** What the case is handed by `hedgeward()`: how to raise a wall at an aim, the skill's key, and whether to plant. */
 export interface DebrisCase {
-  raise: (aim: THREE.Vector3) => Promise<Ward>;
+  raise: (aim: Vec3) => Promise<Ward>;
   canary: boolean;
 }
 
-const IDENTITY = new THREE.Matrix4();
+const IDENTITY = new Mat4();
 
 /** The pieces lying now: each one's thickness, length and place. */
-interface Piece { thick: number; long: number; at: THREE.Vector3; name: string }
+interface Piece { thick: number; long: number; at: Vec3; name: string }
 
 /** Every rubble instance's matrix now, by its pool's name and slot: what stood before the break (a slot the boot's
  *  warm-up left, still at the world's middle full size) isn't the break's, and is left out of `piecesNow`. */
 export function rubbleNow(): Map<string, number[]> {
   const now = new Map<string, number[]>();
-  const m = new THREE.Matrix4();
+  const m = new Mat4();
   for (const o of G.scene.children) {
-    const mesh = o as THREE.InstancedMesh;
+    const mesh = o as InstancedMesh;
     if (!mesh.isInstancedMesh || !mesh.name.startsWith('rubble:')) continue;
     for (let i = 0; i < mesh.count; i++) now.set(`${mesh.name}#${i}`, mesh.getMatrixAt(i, m).toArray());
   }
@@ -56,9 +56,9 @@ export function rubbleNow(): Map<string, number[]> {
  *  stood before the break, `before`, isn't the break's). */
 export function piecesNow(before: Map<string, number[]>): Piece[] {
   const pieces: Piece[] = [];
-  const m = new THREE.Matrix4(), at = new THREE.Vector3(), scale = new THREE.Vector3();
+  const m = new Mat4(), at = new Vec3(), scale = new Vec3();
   for (const o of G.scene.children) {
-    const mesh = o as THREE.InstancedMesh;
+    const mesh = o as InstancedMesh;
     if (!mesh.isInstancedMesh || !mesh.name.startsWith('rubble:') || !mesh.visible) continue;
     for (let i = 0; i < mesh.count; i++) {
       mesh.getMatrixAt(i, m);
@@ -82,7 +82,7 @@ export function piecesNow(before: Map<string, number[]>): Piece[] {
 }
 
 /** How far `p` is from the line a to b, on the floor. */
-function fromLine(p: THREE.Vector3, ward: Ward): number {
+function fromLine(p: Vec3, ward: Ward): number {
   const dx = ward.bx - ward.ax, dz = ward.bz - ward.az, len2 = dx * dx + dz * dz;
   const k = Math.max(0, Math.min(1, ((p.x - ward.ax) * dx + (p.z - ward.az) * dz) / len2));
   return Math.hypot(p.x - (ward.ax + dx * k), p.z - (ward.az + dz * k));
@@ -94,11 +94,11 @@ export async function debris(lab: Lab, c: DebrisCase): Promise<{ lines: string[]
   // --- the yard's spot, the wall raised a few metres before him ---
   const [x, z] = yardToWorld(0, -2);
   lab.player.walkTo = null;
-  lab.player.place(new THREE.Vector3(x, groundHeight(x, z), z), YARD.turn);
+  lab.player.place(new Vec3(x, groundHeight(x, z), z), YARD.turn);
   // (the camera behind him, as a player looking where he raises it: the same view each run, for its pictures)
   faceCamera(YARD.turn);
   await lab.step(30);
-  const ahead = new THREE.Vector3(Math.sin(YARD.turn), 0, Math.cos(YARD.turn));
+  const ahead = new Vec3(Math.sin(YARD.turn), 0, Math.cos(YARD.turn));
   const ward = await c.raise(lab.player.pos.clone().addScaledVector(ahead, 3.2));
   await lab.step(40);
   const breaks = (rubbleModule as { BREAKS?: Record<string, unknown> }).BREAKS;

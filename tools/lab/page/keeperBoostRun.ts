@@ -5,9 +5,10 @@ import { ALE_STACKS } from '../../../src/game/aleBoost';
 import { enterRoom, leaveRoom } from '../../../src/game/rooms';
 import { villageObject } from '../../../src/game/village';
 import { G } from '../../../src/state';
+import { input } from '../../../src/core/input';
 import { stand, useByE, viewAs } from './houses';
 import type { Lab, Report } from './lab';
-import { choosingAle, pickAle, takeMug, waitingMug } from './takeAle';
+import { choosingAle, lastOffer, pickAle, takeMug, waitingMug } from './takeAle';
 
 const WAIT = 900;
 const HUD_ALE = '#buffs .ale .bt';
@@ -19,6 +20,12 @@ async function click(lab: Lab, selector: string): Promise<void> {
 }
 
 async function drink(lab: Lab): Promise<void> {
+  // (the mug is taken by E with the mouse on it: a touch part before this one leaves the game in touch mode, which a
+  // mouse's move ends, as a player's picking it up does)
+  for (const share of [0.4, 0.5]) {
+    if (input.touchMode) await lab.mouseTo({ x: innerWidth * share, y: innerHeight / 2 });
+  }
+  if (input.touchMode) throw new Error('lab: ale boost: the mouse never ended touch mode');
   if (G.arena.room !== 'tavern') {
     enterRoom('tavern');
     await lab.until(() => G.arena.room === 'tavern', WAIT, 'ale boost: the tavern never opened');
@@ -32,7 +39,7 @@ async function drink(lab: Lab): Promise<void> {
   room.serveAle?.(G.player);
   await lab.until(() => waitingMug(tv) >= 0, WAIT, 'ale boost: no mug was served');
   await takeMug(lab, tv);
-  await lab.until(choosingAle, 90, 'ale boost: the mug choice never showed');
+  await lab.until(choosingAle, 90, `ale boost: the mug choice never showed (${lastOffer}, touch ${input.touchMode})`);
   await pickAle(lab, 'drink');
   await lab.until(() => !G.player.casting?.skill.def.ale, 360, 'ale boost: the drink never finished');
   await lab.step(1);

@@ -2,7 +2,7 @@
 // once it has come to rest and then dissolving. Frozen, it falls stiff and shatters where it lands; shocked, it
 // twitches and sparks as it falls; burnt, it chars, glowing in its cracks, and smokes. The skills move the fallen too:
 // a storm whirls them round it and a beam carries them along it (`addField`), a blast throws them out (`blastCorpses`).
-import * as THREE from 'three';
+import { Color, Mesh, SkinnedMesh, Vec3 } from '../engine/api/index.ts';
 import { G } from '../state';
 import { Ragdoll, type Field } from './ragdoll';
 import { groundHeight } from '../world/ground';
@@ -82,7 +82,7 @@ export function blastCorpses(at: XZ, radius: number, speed: number, shove: Shove
   }
 }
 
-const _h = new THREE.Vector3(), _p = new THREE.Vector3();
+const _h = new Vec3(), _p = new Vec3();
 
 /** A fallen foe's body, from its fall until it has dissolved. */
 export class Corpse {
@@ -109,7 +109,7 @@ export class Corpse {
       this.ragdoll.throw(v.x + k.x, 0, v.z + k.z, 0.5);
       this.ragdoll.strike(fling.vx, fling.vy, fling.vz, fling.at, fling.ox, fling.oz);
       // (its meshes leave the bounds they were measured in standing)
-      e.obj.traverse((o) => { if ((o as THREE.SkinnedMesh).isSkinnedMesh) o.frustumCulled = false; });
+      e.obj.traverse((o) => { if ((o as SkinnedMesh).isSkinnedMesh) o.frustumCulled = false; });
     }
     const u = e.model.kit.u;
     if (fling.style === 'frozen') u.uFrozen.value = 1;
@@ -153,11 +153,11 @@ export class Corpse {
   private dissolve(over: number): void {
     this.fadeAt = this.t;
     this.fade = over;
-    this.e.model.root.traverse((o) => { if ((o as THREE.Mesh).isMesh) o.castShadow = false; });
+    this.e.model.root.traverse((o) => { if ((o as Mesh).isMesh) o.castShadow = false; });
   }
 
   /** A mote of light rising off the body's middle. */
-  private mote(color: THREE.Color): void {
+  private mote(color: Color): void {
     const e = this.e, at = this.ragdoll ? this.somewhere(_p) : _p.set(e.pos.x, e.obj.position.y + rand(0.1, e.height * 0.4), e.pos.z);
     particles.glow.spawn({
       x: at.x + rand(-0.15, 0.15), y: at.y, z: at.z + rand(-0.15, 0.15), vy: rand(0.5, 1.5), life: 0.8, size: 0.15,
@@ -166,7 +166,7 @@ export class Corpse {
   }
 
   /** One of its points, at random. */
-  private somewhere(out: THREE.Vector3): THREE.Vector3 {
+  private somewhere(out: Vec3): Vec3 {
     const rd = this.ragdoll!;
     return rd.point(Math.floor(Math.random() * rd.count), out);
   }

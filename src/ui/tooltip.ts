@@ -1,5 +1,6 @@
 // Item & skill tooltips. Item tooltips can show a side-by-side comparison
 // with the item currently equipped in the same slot.
+import { shownBox } from './kit/press';
 import { SLOT_INFO, STATS } from '../data/items';
 import { rarityOf, formatStat, itemPower, statEntries, implicitsFor, isTwoHanded, fitsOffhand } from '../loot/items';
 import { G } from '../state';
@@ -141,7 +142,8 @@ export function bindTooltip(node: HTMLElement, getContent: () => TooltipContent 
     if (!input.touchMode) return;
     const c = getContent();
     if (!c) return;
-    const r = node.getBoundingClientRect();
+    // (as drawn: a slot or an item the kit draws in its page element's place)
+    const r = shownBox(node);
     show(c, { clientX: r.right - 6, clientY: r.top });
     pinned = true;
     el().classList.add('pinned');

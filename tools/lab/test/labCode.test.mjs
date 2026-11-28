@@ -7,7 +7,7 @@ import {
 
 test('the modules imported at run time, types left out', () => {
   const text = [
-    "import * as THREE from 'three';",
+    "import { MeshoptSimplifier } from 'meshoptimizer';",
     "import { a, type B } from './a';",
     "import type { C } from './c';",
     "export { d } from './d';",

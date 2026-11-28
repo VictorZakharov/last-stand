@@ -4,6 +4,7 @@
 // asking (the pause menu's Slow-game reports turns it back, or off); Not now asks no more this session, and after
 // three the game stops asking. However asked, a game sends at most 10 in any 24 hours, kept across reloads (the
 // traces server holds each address to the same). In co-op each game asks its own player about its own frames.
+import { drawnAt } from '../ui/kit/press';
 import { G } from '../state';
 import { sfx } from '../core/audio';
 import { isReadying } from '../game/warm';
@@ -96,8 +97,8 @@ export function initTraceConsent(): void {
  *  programs there: shown first in the village, a first visit's held Chrome's GPU process 0.8 s. */
 export function layOutAskAhead(on: boolean): void {
   const box = $('#perf-ask');
-  if (on) box.className = 'asking';
-  else if (!askedFor) box.className = 'hidden';
+  if (on) showAs(box, 'asking');
+  else if (!askedFor) showAs(box, 'hidden');
 }
 
 /** Each second: a waiting stretch shown (or sent) once a calm moment has lasted; hidden again if a fight starts. */
@@ -116,7 +117,7 @@ function look(): void {
   }
   calmSince ||= performance.now();
   if (performance.now() - calmSince < CALM_MS || packing || sending) return;
-  if (askedFor === slow) { if (box.classList.contains('hidden')) box.className = 'asking'; return; }
+  if (askedFor === slow) { if (box.classList.contains('hidden')) showAs(box, 'asking'); return; }
   if (!wanted()) { letGo(); return; }
   if (packed?.slow !== slow) { void pack(slow); return; }
   if (kept().consent === 'always') void send();
@@ -144,7 +145,7 @@ function ask(slow: Slow, bytes: number): void {
   askedFor = slow;
   box.querySelector('.pa-title')!.textContent = `The game ${WHERE[slow.scene]}`;
   box.querySelector('.pa-size')!.textContent = `${Math.max(1, Math.round(bytes / 1024))} KB`;
-  box.className = 'asking';
+  showAs(box, 'asking');
   place();
 }
 
@@ -156,7 +157,7 @@ async function send(): Promise<void> {
   // (counted as it's tried: a send that fails still counts, so a failing one never repeats past the day's)
   const k = kept();
   keep({ ...k, sent: [...k.sent, Date.now()] });
-  box.className = 'sending';
+  showAs(box, 'sending');
   box.querySelector('.pa-note')!.textContent = 'Sending the performance report...';
   const sent = await sendTrace(body);
   sending = false;
@@ -164,7 +165,7 @@ async function send(): Promise<void> {
   box.querySelector('.pa-note')!.innerHTML = 'code' in sent
     ? `Performance report sent, thank you. Its code: <b class="gold">${sent.code}</b>`
     : `The performance report couldn't be sent (${sent.error}).`;
-  box.className = 'sent';
+  showAs(box, 'sent');
   letGo(false);
   clearTimeout(noteTimer);
   noteTimer = window.setTimeout(hide, NOTE_MS);
@@ -178,15 +179,26 @@ function letGo(close = true): void {
   if (close) hide();
 }
 
+/** the prompt's states, each a class of its own */
+const STATES = ['hidden', 'asking', 'sending', 'sent'] as const;
+
 /** The prompt at the top of the screen, or under the choice after a wave while it shows (both stand at the top
  *  middle: the prompt hid the choice's buttons). Its top is zoomed with it, so it's given in the UI's px. */
 function place(): void {
   const choice = document.getElementById('decision');
-  const under = choice && !choice.classList.contains('hidden') ? choice.getBoundingClientRect().bottom + UNDER_GAP : 0;
+  // (the choice is drawn by the engine, its page's own out of sight: ui/decisionPanel.ts)
+  const drawn = choice && !choice.classList.contains('hidden') ? drawnAt(choice) : null;
+  const under = drawn ? drawn.y + drawn.h + UNDER_GAP : 0;
   $('#perf-ask').style.top = under > UNDER_GAP ? `calc(${Math.round(under)}px / var(--ui, 1))` : '';
 }
 
-function hide(): void { $('#perf-ask').className = 'hidden'; }
+function hide(): void { showAs($('#perf-ask'), 'hidden'); }
+
+/** The prompt's state its one class of `STATES`, its others (the kit's mirror) kept. */
+function showAs(box: HTMLElement, state: typeof STATES[number]): void {
+  box.classList.remove(...STATES);
+  box.classList.add(state);
+}
 
 /** The prompt shown now over a snapshot of the last minute, for a harness (`lab ui --states perfAsk`): nothing is
  *  sent unless a button is pressed. */

@@ -11,6 +11,8 @@
 .mc-box { width: 1040px; display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr); column-gap: 12px; row-gap: 8px;
   grid-template-areas: 'who who' 'want deal' 'give deal' 'give said' 'give row' 'give warn';
   grid-template-rows: auto auto auto auto auto 1fr; align-items: start; text-align: left; }
+// (the columns the engine lays out as flex, #973: the grid here takes their children as its own)
+.mc-cols, .mc-left, .mc-right { display: contents; }
 .mc-who { grid-area: who; display: flex; align-items: center; justify-content: center; gap: 16px; }
 .mc-face { width: 64px; height: 75px; }
 .mc-whom { display: flex; flex-direction: column; gap: 2px; }

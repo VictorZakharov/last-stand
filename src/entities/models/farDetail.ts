@@ -5,7 +5,7 @@
 // meshoptimizer: no vertex moved, so his colours, normals and skin are as they were), and its own again within
 // `FAR.back`. A swap of geometry: no program, no material. `?farDetail=0` draws every triangle at any distance, for
 // A/B.
-import * as THREE from 'three';
+import { Attribute, Geometry, InstancedMesh, Material, Mesh, Node } from '../../engine/api/index.ts';
 import { coarseIndex, detailSettled, farIndex, shadowDetailVersion, shadowsWhole, tickDetail } from './shadowDetail';
 
 /** how far from the camera he goes coarse, and how near he comes back whole (m): apart, so he never flips on a line.
@@ -26,9 +26,9 @@ export interface FarDetail {
 }
 
 /** each mesh of a hero's that goes coarse, with its own geometry, whichever it draws now */
-const wholeOf = new WeakMap<THREE.Mesh, THREE.BufferGeometry>();
+const wholeOf = new WeakMap<Mesh, Geometry>();
 /** each geometry's caster of fewer triangles (`coarseIndex`), made once */
-const casterOf = new WeakMap<THREE.BufferGeometry, THREE.BufferGeometry>();
+const casterOf = new WeakMap<Geometry, Geometry>();
 
 /**
  * The geometry a hero's `mesh` casts its shadow from under the Rust engine: its own vertices under the shadow's
@@ -37,16 +37,16 @@ const casterOf = new WeakMap<THREE.BufferGeometry, THREE.BufferGeometry>();
  * (`castAsOne.ts`, taken out with three's drawing of the scene), which the engine never ran: there each piece cast
  * every triangle of his, about 140k a hero at High, into the sun's map each frame.
  */
-export function casterGeometry(mesh: THREE.Mesh): THREE.BufferGeometry | null {
+export function casterGeometry(mesh: Mesh): Geometry | null {
   const whole = wholeOf.get(mesh);
-  if (!whole || shadowsWhole() || (mesh.material as THREE.Material).alphaTest > 0) return null;
+  if (!whole || shadowsWhole() || (mesh.material as Material).alphaTest > 0) return null;
   const known = casterOf.get(whole);
   if (known) return known;
   const index = coarseIndex(whole);
   if (!index) return null;
-  const caster = new THREE.BufferGeometry();
+  const caster = new Geometry();
   for (const name of Object.keys(whole.attributes)) caster.setAttribute(name, whole.attributes[name]);
-  caster.setIndex(new THREE.BufferAttribute(index, 1));
+  caster.setIndex(new Attribute(index, 1));
   caster.boundingSphere = whole.boundingSphere;
   caster.boundingBox = whole.boundingBox;
   caster.userData.shared = true;
@@ -55,7 +55,7 @@ export function casterGeometry(mesh: THREE.Mesh): THREE.BufferGeometry | null {
 }
 
 /** each geometry's coarse one, made once: a shared geometry (a head's) is every hero's */
-const coarseOf = new WeakMap<THREE.BufferGeometry, THREE.BufferGeometry>();
+const coarseOf = new WeakMap<Geometry, Geometry>();
 
 /** how many of a hair card's steps along it are drawn as one from afar */
 const RIBBON_RUN = 3;
@@ -70,7 +70,7 @@ const RIBBONS_UNDER = 0.8;
  * warrior's hair is 53k triangles, more than the rest of him from afar. Null where few of its triangles are
  * ribbons'.
  */
-function ribbonIndex(geometry: THREE.BufferGeometry): Uint32Array | null {
+function ribbonIndex(geometry: Geometry): Uint32Array | null {
   const own = geometry.index;
   if (!own) return null;
   const count = own.count;
@@ -100,15 +100,15 @@ function ribbonIndex(geometry: THREE.BufferGeometry): Uint32Array | null {
 }
 
 /** `geometry`'s vertices under fewer triangles, or null where it has none to spare; `cards`: cut by a picture. */
-function coarseGeometry(geometry: THREE.BufferGeometry, cards: boolean): THREE.BufferGeometry | null {
+function coarseGeometry(geometry: Geometry, cards: boolean): Geometry | null {
   const known = coarseOf.get(geometry);
   if (known) return known;
   // (none yet where its index is still being made: asked again once `shadowDetailVersion` has moved on)
   const index = cards ? ribbonIndex(geometry) : farIndex(geometry);
   if (!index) return null;
-  const coarse = new THREE.BufferGeometry();
+  const coarse = new Geometry();
   for (const name of Object.keys(geometry.attributes)) coarse.setAttribute(name, geometry.attributes[name]);
-  coarse.setIndex(new THREE.BufferAttribute(index, 1));
+  coarse.setIndex(new Attribute(index, 1));
   coarse.boundingSphere = geometry.boundingSphere;
   coarse.boundingBox = geometry.boundingBox;
   // (named and marked as its own: the lab finds a piece by them, and a hero seen from above, built afresh, drew his
@@ -120,17 +120,17 @@ function coarseGeometry(geometry: THREE.BufferGeometry, cards: boolean): THREE.B
   return coarse;
 }
 
-/** Whether `mesh` can draw from fewer triangles: one material, no morphs. */
-function goesCoarse(mesh: THREE.Mesh): boolean {
-  if (!mesh.isMesh || (mesh as THREE.InstancedMesh).isInstancedMesh || mesh.morphTargetInfluences?.length) return false;
+/** Whether `mesh` can draw from fewer triangles: one material. */
+function goesCoarse(mesh: Mesh): boolean {
+  if (!mesh.isMesh || (mesh as InstancedMesh).isInstancedMesh) return false;
   if (Array.isArray(mesh.material)) return false;
   return true;
 }
 
 /** `root`'s meshes (a hero's model) drawn coarse from afar. */
-export function farDetail(root: THREE.Object3D): FarDetail {
+export function farDetail(root: Node): FarDetail {
   /** each mesh that goes coarse, with its own geometry and its coarse one */
-  let pairs: [THREE.Mesh, THREE.BufferGeometry, THREE.BufferGeometry][] = [];
+  let pairs: [Mesh, Geometry, Geometry][] = [];
   let found = -1;
   /** whether every mesh's fewer triangles were settled as they were found (`detailSettled`), and whether every
    *  triangle was held whole then: found again at a new `shadowDetailVersion` only if not, or if that's changed */
@@ -151,10 +151,10 @@ export function farDetail(root: THREE.Object3D): FarDetail {
     settled = true;
     wasWhole = shadowsWhole();
     root.traverse((object) => {
-      const mesh = object as THREE.Mesh;
+      const mesh = object as Mesh;
       if (!goesCoarse(mesh)) return;
       wholeOf.set(mesh, mesh.geometry);
-      const cards = (mesh.material as THREE.Material).alphaTest > 0;
+      const cards = (mesh.material as Material).alphaTest > 0;
       if (!cards && !detailSettled(mesh.geometry, 'far')) settled = false;
       const fewer = coarseGeometry(mesh.geometry, cards);
       if (fewer) pairs.push([mesh, mesh.geometry, fewer]);

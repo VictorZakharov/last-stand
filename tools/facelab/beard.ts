@@ -6,7 +6,7 @@
 // body hides (buried in a cowl). Hung straight down from the jaw as cards, a beard stood out as a ruff, its sides as two
 // tails and its middle inside the robe's cowl; draped over the cowl, a thin sheet of cards read as a liquid. Run in the
 // page by facelab.mjs.
-import * as THREE from 'three';
+import { Mesh, Node, Vec3 } from '../../src/engine/api/index.ts';
 import { FACES, LOOKS, beardAt, headSDF } from '../../src/entities/models/face';
 import { HEAD_MM } from '../../src/entities/models/head';
 
@@ -30,15 +30,15 @@ export interface BeardShape {
 const X0 = -130, Y0 = -280, Z0 = -120, W = 260, H = 450, D = 340;
 
 /** Measure the beard of `who`'s model (its root posed as it is, its meshes as shown) */
-export function measureBeard(root: THREE.Object3D, who: keyof typeof FACES): BeardShape {
+export function measureBeard(root: Node, who: keyof typeof FACES): BeardShape {
   const F = FACES[who], L = LOOKS[who];
   root.updateMatrixWorld(true);
-  let face: THREE.Mesh | null = null;
-  root.traverse((o) => { if (o.name === 'face') face = o as THREE.Mesh; });
+  let face: Mesh | null = null;
+  root.traverse((o) => { if (o.name === 'face') face = o as Mesh; });
   const head = face!.parent!, Hinv = head.matrixWorld.clone().invert();
-  const shown = (o: THREE.Object3D) => { for (let q: THREE.Object3D | null = o; q; q = q.parent) if (!q.visible) return false; return true; };
-  const inHead = (o: THREE.Object3D) => { for (let q: THREE.Object3D | null = o; q; q = q.parent) if (q === head) return true; return false; };
-  const beards = head.children.filter((o) => o.name === 'beard' && o.visible) as THREE.Mesh[];
+  const shown = (o: Node) => { for (let q: Node | null = o; q; q = q.parent) if (!q.visible) return false; return true; };
+  const inHead = (o: Node) => { for (let q: Node | null = o; q; q = q.parent) if (q === head) return true; return false; };
+  const beards = head.children.filter((o) => o.name === 'beard' && o.visible) as Mesh[];
   const mk = (n: number) => new Float32Array(n).fill(-1e9);
   const fBody = mk(W * H), fFace = mk(W * H), fCard = mk(W * H), sBody = mk(D * H), sFace = mk(D * H), sCard = mk(D * H);
   const fFlag = new Uint8Array(W * H), sFlag = new Uint8Array(D * H);
@@ -57,21 +57,21 @@ export function measureBeard(root: THREE.Object3D, who: keyof typeof FACES): Bea
       if (d > buf[k]) { buf[k] = d; if (flag) flag[k] = fv; }
     }
   };
-  const v = new THREE.Vector3();
-  const mm = (o: THREE.Mesh, i: number, out: number[]) => {
+  const v = new Vec3();
+  const mm = (o: Mesh, i: number, out: number[]) => {
     o.getVertexPosition(i, v);
     v.applyMatrix4(o.matrixWorld).applyMatrix4(Hinv);
     out[0] = v.x / HEAD_MM; out[1] = v.y / HEAD_MM; out[2] = v.z / HEAD_MM + 5;
     return out;
   };
-  const each = (o: THREE.Mesh, fn: (a: number[], b: number[], c: number[]) => void) => {
+  const each = (o: Mesh, fn: (a: number[], b: number[], c: number[]) => void) => {
     const g = o.geometry, idx = g.index, n = idx ? idx.count : g.attributes.position.count, A = [0, 0, 0], B = [0, 0, 0], C = [0, 0, 0];
     for (let t = 0; t + 2 < n; t += 3) fn(mm(o, idx ? idx.getX(t) : t, A), mm(o, idx ? idx.getX(t + 1) : t + 1, B), mm(o, idx ? idx.getX(t + 2) : t + 2, C));
   };
   // (the side seen from his left, +x)
   root.traverse((o) => {
-    if (!(o as THREE.Mesh).isMesh || inHead(o) || !shown(o)) return;
-    each(o as THREE.Mesh, (a, b, c) => { tri(fBody, null, 0, W, X0, a, b, c, 0, 2); tri(sBody, null, 0, D, Z0, a, b, c, 2, 0); });
+    if (!(o as Mesh).isMesh || inHead(o) || !shown(o)) return;
+    each(o as Mesh, (a, b, c) => { tri(fBody, null, 0, W, X0, a, b, c, 0, 2); tri(sBody, null, 0, D, Z0, a, b, c, 2, 0); });
   });
   each(face!, (a, b, c) => {
     const x = (a[0] + b[0] + c[0]) / 3, y = (a[1] + b[1] + c[1]) / 3, z = (a[2] + b[2] + c[2]) / 3;

@@ -6,7 +6,7 @@
 // (`world/seats.ts`), turns his back to it and sits (`models/sit.ts` poses him); any key, a foe coming near or a hit
 // gets him up again first, and only a key still held once he's up acts. His look round goes on throughout: sat, he
 // stands idle.
-import * as THREE from 'three';
+import { Ray, Vec3 } from '../engine/api/index.ts';
 import type { SitHands, SitState, SitTurn } from '../types';
 import { G } from '../state';
 import { angleDamp } from '../util';
@@ -90,7 +90,7 @@ function turnedTo(facing: number, yaw: number, dt: number): number {
 
 /** What the sit reads of the hero and moves. */
 export interface Sitter {
-  readonly pos: THREE.Vector3;
+  readonly pos: Vec3;
   facing: number;
   readonly radius: number;
   /** his co-op slot: the field he finds his way to a seat by is his own (`world/navigation.ts`) */
@@ -108,10 +108,10 @@ export class Sitting {
    *  (`askedSeat`, where the cursor met it) without his idle's wait */
   private asked = 0;
   private askedSeat: Seat | null = null;
-  private readonly askedAt = new THREE.Vector3();
+  private readonly askedAt = new Vec3();
   /** the seat the cursor rests on, where it meets it and for how long (s), and whether it's outlined (`point`) */
   private pointedSeat: Seat | null = null;
-  private readonly pointedAt = new THREE.Vector3();
+  private readonly pointedAt = new Vec3();
   private pointedFor = 0;
   private lit = false;
   /** where the prompt to sit stands over the seat outlined (`hintAt`) */
@@ -122,12 +122,12 @@ export class Sitting {
   private noNearer = 0;
   private heldFor = 0;
   /** where he last headed for on his way (`walkGoal`) */
-  private readonly towards = new THREE.Vector3();
-  private readonly last = new THREE.Vector3();
+  private readonly towards = new Vec3();
+  private readonly last = new Vec3();
   private turnFor = 0;
   /** how far down he is (0 standing, 1 sat), and where he stood as he began to sit */
   private u = 0;
-  private readonly from = new THREE.Vector3();
+  private readonly from = new Vec3();
   /** the seat he got up from, kept off it only as far as he has left it (`relaxed`) */
   private leaving: Relaxed | null = null;
   private readonly state: SitState = { w: 0, hip: 0, foot: 0, before: 0, after: 0 };
@@ -199,7 +199,7 @@ export class Sitting {
    *  outlined white once it has rested there `SIT.look`, when E sits him on it; not one with no spot left for him on
    *  it, nor one a partner sits on (from the owner: "need to check if another player is already sitting, if yes, then
    *  cannot use an object"). */
-  point(me: Sitter, ray: THREE.Ray | null, dt: number, peace: boolean): void {
+  point(me: Sitter, ray: Ray | null, dt: number, peace: boolean): void {
     // (none while asked and not yet off, `SIT.asked`: pointed at again, the seat stood outlined as he set off for it)
     const free = this.phase === null && this.asked <= 0;
     let hit = peace && ray && free ? seatPointed(ray, G.arena.seats, me.pos, SIT.reach) : null;
@@ -276,7 +276,7 @@ export class Sitting {
   /** His walk's goal toward where he'd stand to sit, at `speed` (m/s, his own), easing in as he comes, round what
    *  stands in his way short of it: walked straight at a spot on the far side of a stone (his own side taken by
    *  another prop), he stood pressed into the stone until he gave up, "he runs up to the stone but does not sit". */
-  walkGoal(me: Sitter, speed: number, goal: THREE.Vector3): void {
+  walkGoal(me: Sitter, speed: number, goal: Vec3): void {
     const s = this.spot!;
     const d = Math.hypot(s.fx - me.pos.x, s.fz - me.pos.z) || 1;
     const v = Math.min(speed * SIT.walk, d * 2.5);

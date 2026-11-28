@@ -5,7 +5,7 @@
 // the pointer elsewhere, by a click on it within reach and from across the room (he walks to it), each put down again;
 // then carried on a walk, and lost at the door, back on the bar with every mug still counted. The crosshair's way (the
 // close views) isn't driven here: the lab moves the mouse, not the close views' look.
-import * as THREE from 'three';
+import { Vec3 } from './sceneApi.ts';
 import { G } from '../../../src/state';
 import { villageObject } from '../../../src/game/village';
 import { leaveRoom } from '../../../src/game/rooms';
@@ -36,9 +36,9 @@ export async function takeWays(lab: Lab, tv: TavernKeeper, run: Stepper,
   const mugAt = (id: number) => tv.mugAt(id);
   const placeAt = (x: number, z: number, facing: number) => {
     G.player.walkTo = null;
-    G.player.place(room.group.localToWorld(new THREE.Vector3(x, 0, z)), facing);
+    G.player.place(room.group.localToWorld(new Vec3(x, 0, z)), facing);
   };
-  const away = () => G.player.pos.clone().add(new THREE.Vector3(-3, 0, 2));
+  const away = () => G.player.pos.clone().add(new Vec3(-3, 0, 2));
   /** the choice up, then put down again (F): whether it came */
   const chosenThenDown = async (way: string): Promise<boolean> => {
     const chosen = await until(CHOSEN_IN, choosingAle);

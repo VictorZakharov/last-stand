@@ -14,7 +14,7 @@
 // - no two hits landing on him within `branch.gap` s but a bramble's ticks, and no pipeline made.
 //
 // `--canary` makes each branch's burst six metres wide: stepping aside must be struck, and the fan strike twice.
-import * as THREE from 'three';
+import { Vec3 } from './sceneApi.ts';
 import { screenArea, type Clip, type Lab, type Pictured } from './lab';
 import type { Enemy } from '../../../src/entities/enemy';
 import { G } from '../../../src/state';
@@ -83,8 +83,8 @@ async function throwCase(lab: Lab, options: BossOptions, attack: Attack, life: n
   const aim = boss.pos.clone().setY(2);
   // (stepping across her line to him, at a walk; walked out of the line's bramble along her line, away from her: the
   // line lies across it)
-  const across = new THREE.Vector3(hero.pos.z - boss.pos.z, 0, boss.pos.x - hero.pos.x).normalize();
-  const away = new THREE.Vector3(hero.pos.x - boss.pos.x, 0, hero.pos.z - boss.pos.z).normalize();
+  const across = new Vec3(hero.pos.z - boss.pos.z, 0, boss.pos.x - hero.pos.x).normalize();
+  const away = new Vec3(hero.pos.x - boss.pos.x, 0, hero.pos.z - boss.pos.z).normalize();
   let releasedAt = -1, walkedFrom = -1, outFrom = -1;
   let brambleOut = 0;
   nextIs(boss, attack);
@@ -205,10 +205,10 @@ const SEEN_REACH = 9;
 
 /** The screen round the hero, `reach` m about him on the floor and 3 m up, as the game's camera shows it. */
 function roundHero(reach: number): Clip {
-  const p = G.player.pos, points: THREE.Vector3[] = [];
+  const p = G.player.pos, points: Vec3[] = [];
   for (const dx of [-reach, reach]) {
     for (const dz of [-reach, reach]) {
-      for (const y of [0, 3]) points.push(new THREE.Vector3(p.x + dx, p.y + y, p.z + dz));
+      for (const y of [0, 3]) points.push(new Vec3(p.x + dx, p.y + y, p.z + dz));
     }
   }
   return screenArea(points);
@@ -241,7 +241,7 @@ async function strip(lab: Lab, options: BossOptions, attack: Attack, life: numbe
  *  her eruption chasing him, as the player sees them. */
 export async function branchPictures(lab: Lab, options: BossOptions, lines: string[]): Promise<Pictured[]> {
   const moments: Pictured[] = [];
-  let clip: Clip | null = null, mid: THREE.Vector3 | null = null, way: THREE.Vector3 | null = null;
+  let clip: Clip | null = null, mid: Vec3 | null = null, way: Vec3 | null = null;
   try {
     await strip(lab, options, 'branch', 1, SIDE_SHOTS, SIDE_EVERY, async (shot) => {
       clip ??= sideClip(mid!.clone().addScaledVector(way!, -7), way!, 14, 2.5, 8);
@@ -249,7 +249,7 @@ export async function branchPictures(lab: Lab, options: BossOptions, lines: stri
       moments.push(await lab.screen(`branch ${shot + 1}`, [note], clip));
     }, (boss) => {
       const hero = G.player;
-      way = new THREE.Vector3(hero.pos.x - boss.pos.x, 0, hero.pos.z - boss.pos.z).normalize();
+      way = new Vec3(hero.pos.x - boss.pos.x, 0, hero.pos.z - boss.pos.z).normalize();
       mid = boss.pos.clone().lerp(hero.pos, 0.5);
       holdSideView(sideView(mid, way, SIDE_DISTANCE, 2));
     });

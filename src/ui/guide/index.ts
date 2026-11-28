@@ -9,8 +9,9 @@ import { sfx } from '../../core/audio';
 import { foePage, foes, type Foe } from './foes';
 import { heroPage, missingNotes } from './heroes';
 import { TIPS_PAGES } from './tips';
-import { drawPortrait, hurryPortrait, hurryPortraits, portrait, portraitMade, startPortraits, type Who } from './portraits';
+import { drawPortrait, holdPortraitsAFrame, hurryPortrait, hurryPortraits, portrait, portraitMade, startPortraits, type Who } from './portraits';
 import { pic } from './parts';
+import { scrollToTop } from '../kit/drawn';
 
 export type GuideSection = 'foes' | 'bosses' | 'heroes' | 'tips';
 const SECTIONS: { id: GuideSection; label: string }[] = [
@@ -91,6 +92,8 @@ function render(): void {
   const page = $('#guide .gd-page');
   page.innerHTML = e ? e.page() : '';
   page.scrollTop = 0;
+  // (where the kit draws it too: its panel kept the last page's scroll)
+  scrollToTop(page);
   // (the list's pictures first, the page's own before them)
   hurryPortraits(list.flatMap((x) => (x.foe ? [x.foe] : [])));
   if (e?.foe) hurryPortrait(e.foe);
@@ -132,6 +135,7 @@ export function openGuide(at?: { section: GuideSection; entry?: string }, closed
   }
   onClose = closed ?? null;
   $('#guide').classList.remove('hidden');
+  holdPortraitsAFrame();
   render();
   // (its pictures queued if they aren't yet, whatever the level: ui/guide/portraits.ts; nothing is made here)
   startPortraits();

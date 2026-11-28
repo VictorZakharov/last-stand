@@ -11,7 +11,7 @@
 // as a touch screen's (the game's own press handled, a skill held as a player holds it), and the menu event a phone's
 // Chrome then fires is sent at the element under it as Chrome sends it: a touch `PointerEvent`, bubbling, cancelable.
 // Whether the browser's menu opens is whether it comes back prevented.
-import * as THREE from 'three';
+import { Vec3 } from './sceneApi.ts';
 import { realWait } from './lab';
 import type { Fixture, Lab, PagePoint, Report } from './lab';
 import { yardToWorld } from '../../../src/data/village';
@@ -171,7 +171,7 @@ async function inTheYard(lab: Lab): Promise<boolean> {
   if (!document.body.classList.contains('touch')) await lab.tap({ x: innerWidth * TAP_AT.x, y: innerHeight * TAP_AT.y });
   const [x, z] = yardToWorld(0, 0);
   lab.player.walkTo = null;
-  lab.player.place(new THREE.Vector3(x, groundHeight(x, z), z), 0);
+  lab.player.place(new Vec3(x, groundHeight(x, z), z), 0);
   await lab.step(SHOW_FRAMES);
   return true;
 }

@@ -15,7 +15,11 @@
 // (His first form, from play: "Character is bad... make him thinner, work on hair, body, clothing detail. Work on his
 // face, mouth, textures. What the hell is happening with his hands": a barrel of a man on the warrior's head, its
 // hair taken off and cards stuck on a bare shell, claws for hands, a fist through his mug.)
-import * as THREE from 'three';
+import {
+  Attribute, CanvasTexture, CatmullRom3, DoubleSide, Geometry, LitMaterial, Mat4, Material, Mesh, Node, Quat,
+  RepeatWrapping, SRGBColorSpace, Vec2, Vec3,
+} from '../../engine/api/index.ts';
+import * as shapes from '../../engine/api/shapes/index.ts';
 import { createKit } from '../../core/materials';
 import { cloth as clothMaps, oiled as oiledMaps, leather as leatherMaps, wool as woolMaps, pbrMaterialMaps } from '../../core/textures';
 import { buildHumanoid, reachArm, resetPose, type Joints } from './rig';
@@ -41,7 +45,7 @@ const RAG_R = 0.022;
 
 /** `at` moved towards `goal` a frame on a critically damped spring (`v` its speed, kept from frame to frame), lagging
  *  `HAND_LAG` and never faster than `HAND_MOST`: no overshoot, no snap. */
-function follow(at: THREE.Vector3, goal: THREE.Vector3, v: THREE.Vector3, dt: number): void {
+function follow(at: Vec3, goal: Vec3, v: Vec3, dt: number): void {
   if (dt <= 0) return;
   const omega = 2 / HAND_LAG, x = omega * dt, decay = 1 / (1 + x + 0.48 * x * x + 0.235 * x * x * x);
   const change = _off.subVectors(at, goal);
@@ -52,7 +56,7 @@ function follow(at: THREE.Vector3, goal: THREE.Vector3, v: THREE.Vector3, dt: nu
   const target = _aim.copy(at).sub(change);
   at.copy(target).add(change.add(temp).multiplyScalar(decay));
 }
-const _off = new THREE.Vector3(), _tmpV = new THREE.Vector3(), _tmpV2 = new THREE.Vector3(), _aim = new THREE.Vector3();
+const _off = new Vec3(), _tmpV = new Vec3(), _tmpV2 = new Vec3(), _aim = new Vec3();
 /** how far his arms hang out from his sides past his belly (rad, at the shoulder: their goals override it) */
 const ARMS_PAST_BELLY = 0.06;
 /** how long an arm takes to come to its goal from his walk's swing, or go back to it (s), eased in and out: eased
@@ -93,7 +97,7 @@ const STANCE_HALF = 0.11;
 const HIPS_RATE = 0.3;
 /** where his rag hangs tucked in his apron's tie at his right hip while his right hand needs no rag (the hips' frame,
  *  x to his left): in the pocket at his front's left, his right forearm crossed his belly to reach it, `lab tavern` */
-export const RAG_TUCKED = new THREE.Vector3(-0.19, -0.05, 0.12);
+export const RAG_TUCKED = new Vec3(-0.19, -0.05, 0.12);
 const TUCKED = RAG_TUCKED;
 /** the most his rag turns in his hand in a 60th of a second (rad) */
 const RAG_TURN_MOST = 0.1;
@@ -126,15 +130,15 @@ const APRON_OFF = { thigh: 0.115, shin: 0.085 };
 /** Where one of his hands goes for the frame. */
 export interface HandGoal {
   /** where it goes (world): the grip's place for a hand that holds or grips, the palm's for an open one */
-  at: THREE.Vector3;
+  at: Vec3;
   /** what it holds, a child of that hand (`Keeper.carry`): the fist closed round it, its axis along `dir` (world, up by
    *  default), `r` its radius there, the thing stood with its +y along `dir` */
-  held?: THREE.Object3D; r?: number; dir?: THREE.Vector3;
+  held?: Node; r?: number; dir?: Vec3;
   /** a fist closed round a handle it doesn't carry (the broom's foot hand, the tap's handle): along `dir`, `r` round */
   grip?: boolean;
   /** a fist closed round a thing the other hand holds, `along` m up its +y from that hand's grip (the broom's foot
    *  hand): `at` and `dir` read off it as the other hand left it */
-  on?: { thing: THREE.Object3D; along: number };
+  on?: { thing: Node; along: number };
   /** an open hand shaped to take what it reaches for, its fingers in a C (from play: "his hand is flat for a moment")
    *  rather than flat, as a hand pushing or resting is */
   cup?: boolean;
@@ -157,7 +161,7 @@ export interface KeeperPose {
   /** how far he leans over (0 upright, 1 bent over a table), and how far he crouches (0 standing, 1 down on his heels) */
   bend: number; crouch: number;
   /** what he looks at (world), or ahead */
-  look: THREE.Vector3 | null;
+  look: Vec3 | null;
   /** the velocity the brain is taking him to (m/s, his room's x and z: 0 standing), told to his legs before they
    *  move as a hero's are told it by the controls (`LegIK.intend`): his first stride planned as he sets off and his
    *  last as he stops. Untold, his legs met his walk a frame late and a planted foot was left behind as he set off,
@@ -168,14 +172,14 @@ export interface KeeperPose {
 
 export interface Keeper {
   /** his root: the brain stands it on the floor and turns it */
-  root: THREE.Group;
+  root: Node;
   /** his body posed for the frame */
   pose(dt: number, p: KeeperPose): void;
   /** a thing put in his hand (`side`), carried by it from now, or taken out of it and left in `to`'s frame where it is */
-  carry(side: 'left' | 'right', thing: THREE.Object3D): void;
-  drop(thing: THREE.Object3D, to: THREE.Object3D): void;
+  carry(side: 'left' | 'right', thing: Node): void;
+  drop(thing: Node, to: Node): void;
   /** his rag: in his right hand, or tucked in his apron's pocket (`tuckRag`) while that hand holds something else */
-  readonly rag: THREE.Object3D;
+  readonly rag: Node;
   tuckRag(tucked: boolean): void;
   /** whether the rag is in his apron's pocket */
   readonly ragTucked: boolean;
@@ -184,42 +188,42 @@ export interface Keeper {
   /** how many times he's been put somewhere at once (the lab: his feet set afresh then aren't sliding) */
   readonly placings: number;
   /** his ankles in the world (the lab reads them sliding), and whether the leg IK has each foot planted */
-  feet(out: [THREE.Vector3, THREE.Vector3]): [boolean, boolean];
+  feet(out: [Vec3, Vec3]): [boolean, boolean];
   /** his ankles, left and right (the lab reads his soles from them) */
-  readonly ankles: readonly [THREE.Object3D, THREE.Object3D];
+  readonly ankles: readonly [Node, Node];
   /** his rig's joints (the lab reads his body against the counters, his elbows' bend) */
   readonly joints: Joints;
   /** where each hand's grip is in the world, the left's and the right's (the lab reads them against their goals) */
-  hands(out: [THREE.Vector3, THREE.Vector3]): void;
+  hands(out: [Vec3, Vec3]): void;
   /** his meshes (the lab reads them) */
-  readonly parts: THREE.Mesh[];
+  readonly parts: Mesh[];
   /** the heroes' leg IK that walks him (the lab reads its feet as `lab feet` reads a hero's) */
   readonly legs: LegIK;
 }
 
-const V = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
+const V = (x: number, y: number, z: number) => new Vec3(x, y, z);
 
 /** Stripes run down a cloth (u across it) on a ground, `repeat` times across a unit of its uv. */
-function stripes(ground: string, stripe: string, bands: [number, number][], repeat: number): THREE.CanvasTexture {
+function stripes(ground: string, stripe: string, bands: [number, number][], repeat: number): CanvasTexture {
   const c = document.createElement('canvas');
   c.width = 64; c.height = 8;
   const cx = c.getContext('2d')!;
   cx.fillStyle = ground; cx.fillRect(0, 0, 64, 8);
   cx.fillStyle = stripe;
   for (const [x, w] of bands) cx.fillRect(x, 0, w, 8);
-  const t = new THREE.CanvasTexture(c);
-  t.wrapS = t.wrapT = THREE.RepeatWrapping;
-  t.colorSpace = THREE.SRGBColorSpace;
+  const t = new CanvasTexture(c);
+  t.wrapS = t.wrapT = RepeatWrapping;
+  t.colorSpace = SRGBColorSpace;
   t.repeat.set(repeat, 1);
   t.anisotropy = 4;
   return t;
 }
 
-type Add = (g: THREE.BufferGeometry, m: THREE.Material, on: THREE.Object3D, name: string, cast?: boolean) => THREE.Mesh;
+type Add = (g: Geometry, m: Material, on: Node, name: string, cast?: boolean) => Mesh;
 interface Mats {
-  shirt: THREE.Material; apron: THREE.Material; strap: THREE.Material; thread: THREE.Material; scarf: THREE.Material;
-  towel: THREE.Material; arm: THREE.Material; brass: THREE.Material; bone: THREE.Material; trousers: THREE.Material;
-  boot: THREE.Material; sole: THREE.Material;
+  shirt: Material; apron: Material; strap: Material; thread: Material; scarf: Material;
+  towel: Material; arm: Material; brass: Material; bone: Material; trousers: Material;
+  boot: Material; sole: Material;
 }
 
 /**
@@ -242,13 +246,13 @@ export function* keeperSteps(): Generator<void, Keeper, undefined> {
   // oxblood, Odo saffron and teal)
   // (laid once a repeat a unit of u: each part's UVs are set by his body, `STRIPES`)
   const shirtMap = stripes('#ece0c4', '#2c5236', [[0, 10], [17, 3]], 1);
-  const shirt = kit.rim({ color: 0xffffff, roughness: 1, ...tex(clothMaps(), 0.9), map: shirtMap, side: THREE.DoubleSide }, 0xfff0d0, 0.3);
-  const apron = kit.std({ color: 0x74503a, roughness: 0.78, ...tex(oiledMaps(), 0.45), side: THREE.DoubleSide });
+  const shirt = kit.rim({ color: 0xffffff, roughness: 1, ...tex(clothMaps(), 0.9), map: shirtMap, side: DoubleSide }, 0xfff0d0, 0.3);
+  const apron = kit.std({ color: 0x74503a, roughness: 0.78, ...tex(oiledMaps(), 0.45), side: DoubleSide });
   const strap = kit.std({ color: 0x3a2414, roughness: 0.5, ...tex(leatherMaps(), 0.7) });
   const thread = kit.std({ color: 0xc8b088, roughness: 0.9 });
-  const scarf = kit.rim({ color: 0x9a2018, roughness: 0.95, ...tex(clothMaps(), 0.8), side: THREE.DoubleSide }, 0xd04030, 0.3);
+  const scarf = kit.rim({ color: 0x9a2018, roughness: 0.95, ...tex(clothMaps(), 0.8), side: DoubleSide }, 0xd04030, 0.3);
   const towelMap = stripes('#e8decb', '#9a3a2a', [[6, 3], [11, 2]], 1);
-  const towel = kit.rim({ color: 0xffffff, roughness: 1, ...tex(clothMaps(), 1.2), map: towelMap, side: THREE.DoubleSide }, 0xfff4e0, 0.25);
+  const towel = kit.rim({ color: 0xffffff, roughness: 1, ...tex(clothMaps(), 1.2), map: towelMap, side: DoubleSide }, 0xfff4e0, 0.25);
   const brass = kit.std({ color: 0xc89a48, metalness: 0.9, roughness: 0.35 });
   const bone = kit.std({ color: 0xe6dcc6, roughness: 0.5 });
   const trousers = kit.std({ color: 0x343c4a, roughness: 1, ...tex(woolMaps(), 1) });
@@ -262,7 +266,7 @@ export function* keeperSteps(): Generator<void, Keeper, undefined> {
   // especially when he looks down")
   const j: Joints = buildHumanoid({ skin: shirt }, { chestW: 0.21, chestD: 0.14, waistW: 0.17, neckL: 0.075 });
   stripRig(j.root);
-  for (const [name, o] of Object.entries(j)) if (o instanceof THREE.Object3D && !o.name) o.name = `keeper ${name}`;
+  for (const [name, o] of Object.entries(j)) if (o instanceof Node && !o.name) o.name = `keeper ${name}`;
   const P = j.P;
   const hipY = j.hips.position.y;
 
@@ -276,12 +280,12 @@ export function* keeperSteps(): Generator<void, Keeper, undefined> {
   yield;
   const handL = buildHand(j.handL, 1, skin, skin, 1.06, skin), handR = buildHand(j.handR, -1, skin, skin, 1.06, skin);
   bare(handL, true); bare(handR, true);
-  const arm = kit.rim({ color: (skin as THREE.MeshStandardMaterial).color.clone().multiplyScalar(0.96), roughness: 0.7 }, 0xf0b0a0, 0.22);
+  const arm = kit.rim({ color: (skin as LitMaterial).color.clone().multiplyScalar(0.96), roughness: 0.7 }, 0xf0b0a0, 0.22);
 
   // --- his clothes ---
-  const parts: THREE.Mesh[] = [];
+  const parts: Mesh[] = [];
   const add: Add = (geo, mat, on, name, cast = true) => {
-    const m = new THREE.Mesh(geo, mat);
+    const m = new Mesh(geo, mat);
     m.name = `keeper ${name}`;
     m.castShadow = cast; m.receiveShadow = true;
     on.add(m);
@@ -302,7 +306,7 @@ export function* keeperSteps(): Generator<void, Keeper, undefined> {
   const body = bodyShape(j);
   for (const solid of body.solids) {
     const grown = solid.name === 'chest' ? BODY_GROWN.chest : solid.name === 'belly' ? BODY_GROWN.belly : null;
-    if (grown) solid.r.add(new THREE.Vector3(...grown));
+    if (grown) solid.r.add(new Vec3(...grown));
   }
   const trunk = body.solids.filter((solid) => ['chest', 'belly', 'neck', 'head'].includes(solid.name));
   yield;
@@ -325,73 +329,73 @@ export function* keeperSteps(): Generator<void, Keeper, undefined> {
 
   // --- his pose, a frame at a time ---
   let gaze = 0, bend = 0, crouch = 0, placings = 0, replant = true, phase = 0, walkSpeed = 0, hipsDrop = 0;
-  const movedFrom = new THREE.Vector3(), intendV = new THREE.Vector3(), intendQ = new THREE.Quaternion();
-  const footAt = new THREE.Vector3(), legPole = new THREE.Vector3(), roomQ = new THREE.Quaternion();
-  const footQ = new THREE.Quaternion(), kneeQ = new THREE.Quaternion(), X_AXIS = V(1, 0, 0);
+  const movedFrom = new Vec3(), intendV = new Vec3(), intendQ = new Quat();
+  const footAt = new Vec3(), legPole = new Vec3(), roomQ = new Quat();
+  const footQ = new Quat(), kneeQ = new Quat(), X_AXIS = V(1, 0, 0);
   /** each hand's goal eased towards where it's sent (a step's goal changes at once: the hand doesn't), and how far
    *  the arm is its goal's rather than his walk's swing */
-  const eased = [new THREE.Vector3(), new THREE.Vector3()], easedSet = [false, false], weight = [0, 0], blendOf = [0, 0];
+  const eased = [new Vec3(), new Vec3()], easedSet = [false, false], weight = [0, 0], blendOf = [0, 0];
   /** each hand's last goal, its place in his chest's frame, followed on as the arm blends back to its swing */
-  const letGo: (HandGoal | null)[] = [null, null], letGoAt = [new THREE.Vector3(), new THREE.Vector3()];
-  const easeV = [new THREE.Vector3(), new THREE.Vector3()];
+  const letGo: (HandGoal | null)[] = [null, null], letGoAt = [new Vec3(), new Vec3()];
+  const easeV = [new Vec3(), new Vec3()];
   /** each arm as last solved to its goal: what it eases back to the swing from once the goal's gone */
-  const solved = [0, 1].map(() => ({ qs: new THREE.Quaternion(), qe: new THREE.Quaternion() }));
+  const solved = [0, 1].map(() => ({ qs: new Quat(), qe: new Quat() }));
   /** how far he leans and how far his knees give to bring his hands to their goals (eased) */
   let lean = 0, knees = 0;
-  const spinQ = new THREE.Quaternion();
+  const spinQ = new Quat();
   /** each arm's last wrist goal (world), the kind of hold it was for (0 open, 1 holding, 2 a grip), and what's left of
    *  the move between two kinds still to ease out */
-  const lastWrist = [new THREE.Vector3(), new THREE.Vector3()], kindWas = [0, 0], wristSeen = [false, false];
-  const kindOff = [new THREE.Vector3(), new THREE.Vector3()], solvedWrist = new THREE.Vector3(), armPole = new THREE.Vector3();
-  const ragDir = new THREE.Vector3();
+  const lastWrist = [new Vec3(), new Vec3()], kindWas = [0, 0], wristSeen = [false, false];
+  const kindOff = [new Vec3(), new Vec3()], solvedWrist = new Vec3(), armPole = new Vec3();
+  const ragDir = new Vec3();
   /** each arm as last shown, and its hand's place in his body's frame (`capArmStep`) */
-  const armWas = [0, 1].map(() => ({ qs: new THREE.Quaternion(), qe: new THREE.Quaternion(), hand: new THREE.Vector3(), v: new THREE.Vector3(), elbow: new THREE.Vector3(), bend: 0, seen: false }));
-  const armElbow = new THREE.Vector3();
-  const armHand = new THREE.Vector3(), armMove = new THREE.Vector3(), armChange = new THREE.Vector3(), armAllowed = new THREE.Vector3();
-  const armToQs = new THREE.Quaternion(), armToQe = new THREE.Quaternion();
+  const armWas = [0, 1].map(() => ({ qs: new Quat(), qe: new Quat(), hand: new Vec3(), v: new Vec3(), elbow: new Vec3(), bend: 0, seen: false }));
+  const armElbow = new Vec3();
+  const armHand = new Vec3(), armMove = new Vec3(), armChange = new Vec3(), armAllowed = new Vec3();
+  const armToQs = new Quat(), armToQe = new Quat();
   /** a thing just taken up, where it stood, and how far into its easing into the fist (0 to 1) */
-  let seating: { thing: THREE.Object3D; from: THREE.Vector3; t: number } | null = null;
-  const seatAt = new THREE.Vector3();
+  let seating: { thing: Node; from: Vec3; t: number } | null = null;
+  const seatAt = new Vec3();
   /** each hand's turn as last shown (`easeWrist`) */
-  const wristWas = [new THREE.Quaternion(), new THREE.Quaternion()], wristSet = [false, false], wristQuick = [0, 0];
-  const wristWant = new THREE.Quaternion(), wristBy = new THREE.Quaternion();
-  const swing = { qs: new THREE.Quaternion(), qe: new THREE.Quaternion() };
+  const wristWas = [new Quat(), new Quat()], wristSet = [false, false], wristQuick = [0, 0];
+  const wristWant = new Quat(), wristBy = new Quat();
+  const swing = { qs: new Quat(), qe: new Quat() };
   const lookYaw = { v: 0 }, lookPitch = { v: 0 };
-  const tmp = new THREE.Vector3(), at = new THREE.Vector3(), headAt = new THREE.Vector3(), wrist = new THREE.Vector3();
+  const tmp = new Vec3(), at = new Vec3(), headAt = new Vec3(), wrist = new Vec3();
   // (his elbows out to his sides and a little back, as a man's reaching over a counter: down and back, an arm reaching
   // to the bar's top took its elbow under it, `lab tavern`)
   const up = V(0, 1, 0);
-  const turn = new THREE.Quaternion(), along = new THREE.Quaternion();
-  const chestLocal = (v: THREE.Vector3) => j.chest.worldToLocal(v.clone());
+  const turn = new Quat(), along = new Quat();
+  const chestLocal = (v: Vec3) => j.chest.worldToLocal(v.clone());
   const handOf = (left: boolean): Hand => (left ? handL : handR);
   /** one arm to its goal: a fist seated round what it holds (solved twice, so the grip lands where it's sent), a fist
    *  round a handle, or an open hand, flat */
   /** each arm's last turn of its elbow about the line from its shoulder to its wrist (rad: `keepOffBody`) */
   const elbowTurn = [0, 0];
   /** each hand's held thing and the way it's stood (world), as the arm last seated it */
-  const heldWay: ({ thing: THREE.Object3D; dir: THREE.Vector3; spin: number; floor?: { reach: number; level: number; touch: boolean } } | null)[] = [null, null];
-  const floorAt = new THREE.Vector3(), turnInv = new THREE.Quaternion(), lowAt = new THREE.Vector3();
+  const heldWay: ({ thing: Node; dir: Vec3; spin: number; floor?: { reach: number; level: number; touch: boolean } } | null)[] = [null, null];
+  const floorAt = new Vec3(), turnInv = new Quat(), lowAt = new Vec3();
   /** the lowest of `thing`'s meshes' points (world y) */
-  const lowestOf = (thing: THREE.Object3D): number => {
+  const lowestOf = (thing: Node): number => {
     thing.updateWorldMatrix(true, true);
     let lowest = Infinity;
     thing.traverse((o) => {
-      const mesh = o as THREE.Mesh;
+      const mesh = o as Mesh;
       if (!mesh.isMesh) return;
       const pos = mesh.geometry.attributes.position;
       for (let i = 0; i < pos.count; i++) lowest = Math.min(lowest, lowAt.fromBufferAttribute(pos, i).applyMatrix4(mesh.matrixWorld).y);
     });
     return lowest;
   };
-  const heldDir = [new THREE.Vector3(), new THREE.Vector3()];
+  const heldDir = [new Vec3(), new Vec3()];
   /** each arm's elbow pole, eased (`POLE_EASE`), and the frame's time it's eased by */
-  const poleEased = [new THREE.Vector3(), new THREE.Vector3()], poleSet = [false, false];
+  const poleEased = [new Vec3(), new Vec3()], poleSet = [false, false];
   let frameDt = 0;
-  const freeWrist = new THREE.Vector3(), freePole = new THREE.Vector3();
-  const carryAt = new THREE.Vector3(), carryDir = new THREE.Vector3(), carryQ = new THREE.Quaternion();
-  const goalLocal = new THREE.Vector3(), handWorld = new THREE.Vector3();
-  const axisL = new THREE.Vector3(), poleTry = new THREE.Vector3(), elbowW = new THREE.Vector3(), wristW = new THREE.Vector3();
-  const shoulderW = new THREE.Vector3(), tipW = new THREE.Vector3(), poleBest = new THREE.Vector3();
+  const freeWrist = new Vec3(), freePole = new Vec3();
+  const carryAt = new Vec3(), carryDir = new Vec3(), carryQ = new Quat();
+  const goalLocal = new Vec3(), handWorld = new Vec3();
+  const axisL = new Vec3(), poleTry = new Vec3(), elbowW = new Vec3(), wristW = new Vec3();
+  const shoulderW = new Vec3(), tipW = new Vec3(), poleBest = new Vec3();
   /** How far the arm as solved now goes into his trunk or head (m, 0 clear): the forearm and hand into any of them, the
    *  upper arm into his head. */
   const armInBody = (left: boolean): number => {
@@ -412,7 +416,7 @@ export function* keeperSteps(): Generator<void, Keeper, undefined> {
    *  the arm keeps out of his body, the turn nearest last frame's that does; and where none does, `wrist` (world)
    *  pushed out of his chest and belly. A goal at his side or across him took his forearm through his chest and apron
    *  (from play: "in many many animations his arm goes through his body"). */
-  const keepOffBody = (left: boolean, wrist: THREE.Vector3, pole: THREE.Vector3): void => {
+  const keepOffBody = (left: boolean, wrist: Vec3, pole: Vec3): void => {
     const i = left ? 0 : 1, [shoulder, elbow] = left ? [j.shoulderL, j.elbowL] : [j.shoulderR, j.elbowR];
     pushOutOf(wrist, P.foreR + ARM_OFF_BODY);
     const target = chestLocal(wrist);
@@ -433,7 +437,7 @@ export function* keeperSteps(): Generator<void, Keeper, undefined> {
     void poleBest;
   };
   /** `point` (world) moved out of his chest and belly, grown by `r` round it */
-  const pushOutOf = (point: THREE.Vector3, r: number): void => {
+  const pushOutOf = (point: Vec3, r: number): void => {
     for (const solid of trunk) {
       if (solid.name !== 'chest' && solid.name !== 'belly') continue;
       outOfSolid(point, solid, r);
@@ -458,7 +462,7 @@ export function* keeperSteps(): Generator<void, Keeper, undefined> {
     const pole = armPole.copy(poleEased[i]);
     if (g.on) {
       j.root.updateMatrixWorld(true);
-      g = { ...g, at: g.on.thing.localToWorld(new THREE.Vector3(0, g.on.along, 0)), dir: new THREE.Vector3(0, 1, 0).applyQuaternion(g.on.thing.getWorldQuaternion(turn)), grip: true };
+      g = { ...g, at: g.on.thing.localToWorld(new Vec3(0, g.on.along, 0)), dir: new Vec3(0, 1, 0).applyQuaternion(g.on.thing.getWorldQuaternion(turn)), grip: true };
     }
     const dir = g.dir ?? up;
     // (the wrist guessed a hand's length back towards him from the grip, then moved by how far the grip landed off)
@@ -716,7 +720,7 @@ export function* keeperSteps(): Generator<void, Keeper, undefined> {
       if (!held || !goal?.held || held.thing.parent === null) { heldWay[i] = null; continue; }
       j.root.updateMatrixWorld(true);
       held.thing.parent.getWorldQuaternion(turn).invert();
-      const stand = (way: THREE.Vector3) => {
+      const stand = (way: Vec3) => {
         held.thing.quaternion.copy(turnInv.copy(turn).multiply(along.setFromUnitVectors(up, way)).multiply(spinQ.setFromAxisAngle(up, held.spin)));
       };
       if (!held.floor) {
@@ -836,7 +840,7 @@ export function* keeperSteps(): Generator<void, Keeper, undefined> {
       // (the hand closing on it quickly, a grasp's turn: eased at an open hand's pace, the thing was turned back with it,
       // and a broom just taken up pointed back through his legs, `lab tavern`)
       wristQuick[side === 'left' ? 0 : 1] = GRASP_QUICK;
-      seating = { thing, from: thing.getWorldPosition(new THREE.Vector3()), t: 0 };
+      seating = { thing, from: thing.getWorldPosition(new Vec3()), t: 0 };
     },
     drop(thing, to) { to.attach(thing); },
     rag,
@@ -872,10 +876,10 @@ export function* keeperSteps(): Generator<void, Keeper, undefined> {
 
 /** A rag bunched in a fist and hanging from it in soft folds, its hem uneven: its origin where the fist holds it,
  *  hanging down its -y. */
-function ragGeometry(): THREE.BufferGeometry {
-  const rng = mulberry(29), rows: THREE.Vector3[][] = [], N = 24, phase = rng() * 6;
+function ragGeometry(): Geometry {
+  const rng = mulberry(29), rows: Vec3[][] = [], N = 24, phase = rng() * 6;
   for (let k = 0; k <= 8; k++) {
-    const s = k / 8, row: THREE.Vector3[] = [];
+    const s = k / 8, row: Vec3[] = [];
     for (let i = 0; i <= N; i++) {
       const a = (i / N) * Math.PI * 2;
       // (gathered tight in the fist, opening as it falls; deep folds round it, flattened front to back)
@@ -890,24 +894,24 @@ function ragGeometry(): THREE.BufferGeometry {
 
 /** His bare upper arm under the rolled sleeve, on its shoulder (hanging along -y): from inside the sleeve down to the
  *  cuff's foot, closed there in a dome, a little narrower than the cuff's ring so it never shows through the cloth. */
-function upperArmGeometry(): THREE.BufferGeometry {
-  return new THREE.LatheGeometry([
+function upperArmGeometry(): Geometry {
+  return shapes.lathe([
     [0.0005, -0.318], [0.022, -0.314], [0.04, -0.305], [0.052, -0.292], [0.058, -0.27], [0.06, -0.22], [0.062, -0.15],
-  ].map(([r, y]) => new THREE.Vector2(r, y)), 20);
+  ].map(([r, y]) => new Vec2(r, y)), 20);
 }
 
 /** A bare forearm on its elbow (hanging along -y to the wrist at `fore`): fuller below the elbow where its muscles
  *  are, narrowing to the wrist, and flatter than round, wider across than deep, more so at the wrist; a little uneven.
  *  A round lathe tapered straight to the wrist read as "a featureless cone". */
-function forearmGeometry(fore: number, seed: number): THREE.BufferGeometry {
+function forearmGeometry(fore: number, seed: number): Geometry {
   const ph = mulberry(seed)() * 6;
-  const g = new THREE.LatheGeometry([
+  const g = shapes.lathe([
     [0.026, fore - 0.012], [0.029, fore + 0.02], [0.032, fore * 0.78], [0.04, fore * 0.55], [0.049, fore * 0.3], [0.053, -0.04],
     // (closed over the elbow in a dome inside a 6 cm round of its joint: open there, a bent arm showed the cone's hollow
     // end inside the cuff's ring, "Elbow has a hole when doing animations/tasks", Kenneth's round 4; reaching 12 cm up
     // past the joint, the dome swung out through the side of the rolled cuff as the elbow bent, skin through the cloth)
     [0.052, 0.02], [0.05, 0.034], [0.04, 0.046], [0.025, 0.055], [0.0005, 0.06],
-  ].map(([r, y]) => new THREE.Vector2(r, y)), 24);
+  ].map(([r, y]) => new Vec2(r, y)), 24);
   const pos = g.attributes.position;
   for (let i = 0; i < pos.count; i++) {
     const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i), a = Math.atan2(x, z), t = clamp((y - fore) / -fore, 0, 1);
@@ -923,17 +927,17 @@ function forearmGeometry(fore: number, seed: number): THREE.BufferGeometry {
  *  neckerchief knotted at the throat; the long oiled-leather apron, a bib on his chest on straps over his shoulders
  *  and a skirt from his waist to below his knees, stitched round its edges, a pocket on its front; a striped linen
  *  towel over his left shoulder; sleeves rolled in a thick cuff above the elbow, bare forearms; trousers and boots. */
-function dressBody(j: Joints, add: Add, M: Mats): { skirt: THREE.Mesh; cols: number; sewn: THREE.Mesh[]; belly: THREE.Mesh } {
-  let skirt: THREE.Mesh | undefined, belly: THREE.Mesh | undefined;
-  const sewn: THREE.Mesh[] = [];
+function dressBody(j: Joints, add: Add, M: Mats): { skirt: Mesh; cols: number; sewn: Mesh[]; belly: Mesh } {
+  let skirt: Mesh | undefined, belly: Mesh | undefined;
+  const sewn: Mesh[] = [];
   const N = 40;
   const ring = (y: number, w: number, d: number, fold: number, belly: number, seed: number) => {
-    const row: THREE.Vector3[] = [];
+    const row: Vec3[] = [];
     for (let i = 0; i <= N; i++) {
       const a = (i / N) * Math.PI * 2;
       const [x, z] = oval(a, w, d);
       const f = 1 + fold * (Math.sin(a * 7 + seed) * 0.6 + Math.sin(a * 13 + seed * 2) * 0.4) * (0.6 + 0.4 * Math.cos(a));
-      row.push(new THREE.Vector3(x * f, y, z * f + belly * Math.max(0, Math.cos(a)) ** 2));
+      row.push(new Vec3(x * f, y, z * f + belly * Math.max(0, Math.cos(a)) ** 2));
     }
     return row;
   };
@@ -968,19 +972,19 @@ function dressBody(j: Joints, add: Add, M: Mats): { skirt: THREE.Mesh; cols: num
   /** a point on the body's front at (x, y), `lift` off it */
   const onFront = (rows: Row[], x: number, y: number, lift: number) => {
     const { w, d, b } = front(rows, y), a = Math.asin(clamp(x / (w + 0.01), -1, 1)), [, z] = oval(a, w, d);
-    return new THREE.Vector3(x, y, z + b * Math.cos(a) ** 2 + lift);
+    return new Vec3(x, y, z + b * Math.cos(a) ** 2 + lift);
   };
   // --- the shirt's placket down his chest above the bib, two bone buttons on it ---
   {
-    const rows: THREE.Vector3[][] = [];
+    const rows: Vec3[][] = [];
     for (let k = 0; k <= 4; k++) {
-      const y = lerp(0.2, 0.262, k / 4), row: THREE.Vector3[] = [];
+      const y = lerp(0.2, 0.262, k / 4), row: Vec3[] = [];
       for (let i = 0; i <= 2; i++) row.push(onFront(chestRows, lerp(-0.012, 0.012, i / 2), y, 0.004));
       rows.push(row);
     }
     stripesByAngle(add(rowsSurface(rows, 3), M.shirt, j.chest, 'shirt placket'));
     for (const y of [0.21, 0.235]) {
-      add(new THREE.CylinderGeometry(0.0055, 0.0055, 0.003, 10).rotateX(Math.PI / 2), M.bone, j.chest, 'shirt button', false)
+      add(shapes.cylinder(0.0055, 0.0055, 0.003, 10).rotateX(Math.PI / 2), M.bone, j.chest, 'shirt button', false)
         .position.copy(onFront(chestRows, 0, y, 0.007));
     }
   }
@@ -988,17 +992,17 @@ function dressBody(j: Joints, add: Add, M: Mats): { skirt: THREE.Mesh; cols: num
   // neck showed long and bare from the shirt's neckline to his hair, "slightly too long neck... especially when he
   // looks down" ---
   {
-    const rows: THREE.Vector3[][] = [];
+    const rows: Vec3[][] = [];
     // (outside his neck's base, about 6.6 cm round and set back under his skull: inside it, the collar showed nowhere at
     // his back, a loose flap at his throat's side)
     // (its foot on the shirt's shoulders, wider, so no skin shows under it)
     for (const [y, r, back] of [[0.236, 0.096, 0], [0.265, 0.083, 0.014], [0.293, 0.077, 0.03]] as const) {
-      const row: THREE.Vector3[] = [];
+      const row: Vec3[] = [];
       for (let i = 0; i <= 24; i++) {
         const a = (i / 24) * Math.PI * 2;
         // (cut low at his throat, under the knot, standing at the back and sides)
         const front = Math.max(0, Math.cos(a)) ** 3;
-        row.push(new THREE.Vector3(Math.sin(a) * r, y + back * (1 - front) - (y - 0.236) * front, Math.cos(a) * r * (Math.cos(a) < 0 ? 1.15 : 0.95) - 0.005));
+        row.push(new Vec3(Math.sin(a) * r, y + back * (1 - front) - (y - 0.236) * front, Math.cos(a) * r * (Math.cos(a) < 0 ? 1.15 : 0.95) - 0.005));
       }
       rows.push(row);
     }
@@ -1006,22 +1010,22 @@ function dressBody(j: Joints, add: Add, M: Mats): { skirt: THREE.Mesh; cols: num
   }
   // --- the neckerchief: a red band round his neck, a knot at his throat, its two ends falling as flat cloth ---
   {
-    const band: THREE.Vector3[] = [];
+    const band: Vec3[] = [];
     for (let i = 0; i < 18; i++) {
       const a = (i / 18) * Math.PI * 2, [x, z] = oval(a, 0.07, 0.07, 2);
-      band.push(new THREE.Vector3(x, 0.275 - 0.012 * Math.cos(a), z));
+      band.push(new Vec3(x, 0.275 - 0.012 * Math.cos(a), z));
     }
     add(cord(band, 0.013, true, 36), M.scarf, j.chest, 'neckerchief');
-    const knot = add(new THREE.TorusKnotGeometry(0.011, 0.006, 36, 6, 2, 3), M.scarf, j.chest, 'neckerchief knot', false);
+    const knot = add(shapes.torusKnot(0.011, 0.006, 36, 6, 2, 3), M.scarf, j.chest, 'neckerchief knot', false);
     knot.position.set(0, 0.252, 0.082);
     knot.rotation.set(0.3, 0, 0);
     // (each end a narrowing strip of the cloth, falling down his chest and a little out)
     for (const s of [1, -1]) {
-      const rows: THREE.Vector3[][] = [];
+      const rows: Vec3[][] = [];
       for (let k = 0; k <= 6; k++) {
         const q = k / 6, x = s * (0.006 + 0.03 * q), y = 0.248 - 0.085 * q, z = 0.09 + 0.022 * q - 0.012 * q * q;
         const w = lerp(0.016, 0.004, q);
-        rows.push([new THREE.Vector3(x - w, y, z), new THREE.Vector3(x + w, y, z + 0.004 * Math.sin(q * 6))]);
+        rows.push([new Vec3(x - w, y, z), new Vec3(x + w, y, z + 0.004 * Math.sin(q * 6))]);
       }
       add(rowsSurface(rows, 6), M.scarf, j.chest, 'neckerchief end', false);
     }
@@ -1029,26 +1033,26 @@ function dressBody(j: Joints, add: Add, M: Mats): { skirt: THREE.Mesh; cols: num
   // --- the apron's bib: a panel on his chest, stitched round, on straps over his shoulders crossing his back ---
   const BIB = { from: -0.1, to: 0.19, half: [0.165, 0.11] as const };
   {
-    const rows: THREE.Vector3[][] = [];
+    const rows: Vec3[][] = [];
     for (let k = 0; k <= 8; k++) {
-      const y = lerp(BIB.from, BIB.to, k / 8), half = lerp(BIB.half[0], BIB.half[1], k / 8), row: THREE.Vector3[] = [];
+      const y = lerp(BIB.from, BIB.to, k / 8), half = lerp(BIB.half[0], BIB.half[1], k / 8), row: Vec3[] = [];
       for (let i = 0; i <= 8; i++) row.push(onFront(chestRows, lerp(-half, half, i / 8), y, 0.012));
       rows.push(row);
     }
     add(rowsSurface(rows, 2), M.apron, j.chest, 'apron bib');
     // (its stitching: a line of pale thread a centimetre in from its edges)
-    const edge: THREE.Vector3[] = [];
+    const edge: Vec3[] = [];
     for (let k = 0; k <= 8; k++) edge.push(onFront(chestRows, -lerp(BIB.half[0], BIB.half[1], k / 8) + 0.01, lerp(BIB.from, BIB.to, k / 8) - 0.01, 0.0145));
     for (let i = 0; i <= 6; i++) edge.push(onFront(chestRows, lerp(-BIB.half[1] + 0.01, BIB.half[1] - 0.01, i / 6), BIB.to - 0.01, 0.0145));
     for (let k = 8; k >= 0; k--) edge.push(onFront(chestRows, lerp(BIB.half[0], BIB.half[1], k / 8) - 0.01, lerp(BIB.from, BIB.to, k / 8) - 0.01, 0.0145));
     add(cord(edge, 0.0012, false, 160), M.thread, j.chest, 'apron stitching', false);
     for (const s of [1, -1]) {
       const pts = [
-        onFront(chestRows, s * 0.095, 0.185, 0.014), new THREE.Vector3(s * 0.11, 0.245, 0.06), new THREE.Vector3(s * 0.12, 0.258, -0.02),
-        new THREE.Vector3(s * 0.1, 0.22, -0.11), new THREE.Vector3(-s * 0.04, 0.06, -0.17), new THREE.Vector3(-s * 0.13, -0.08, -0.165),
+        onFront(chestRows, s * 0.095, 0.185, 0.014), new Vec3(s * 0.11, 0.245, 0.06), new Vec3(s * 0.12, 0.258, -0.02),
+        new Vec3(s * 0.1, 0.22, -0.11), new Vec3(-s * 0.04, 0.06, -0.17), new Vec3(-s * 0.13, -0.08, -0.165),
       ];
       add(cord(pts, 0.007, false, 30), M.strap, j.chest, 'apron strap');
-      const ring = add(new THREE.TorusGeometry(0.011, 0.0028, 6, 14), M.brass, j.chest, 'apron buckle', false);
+      const ring = add(shapes.torus(0.011, 0.0028, 6, 14), M.brass, j.chest, 'apron buckle', false);
       ring.position.copy(onFront(chestRows, s * 0.095, 0.175, 0.016));
     }
   }
@@ -1058,27 +1062,27 @@ function dressBody(j: Joints, add: Add, M: Mats): { skirt: THREE.Mesh; cols: num
     const at = (t: number, i: number) => {
       const y = lerp(-0.64, 0.06, t), w = lerp(0.24, 0.21, t), d = lerp(0.2, 0.18, t), half = lerp(0.23, 0.19, t);
       const x = lerp(-half, half, i / 10), a = Math.asin(clamp(x / (w + 0.01), -1, 1)), [, z] = oval(a, w, d);
-      return new THREE.Vector3(x, y, z + lerp(0.015, 0.04, t) * Math.cos(a) ** 2 + 0.02 + 0.008 * Math.sin(i * 1.9 + t * 9) * (1 - t));
+      return new Vec3(x, y, z + lerp(0.015, 0.04, t) * Math.cos(a) ** 2 + 0.02 + 0.008 * Math.sin(i * 1.9 + t * 9) * (1 - t));
     };
-    const lap: THREE.Vector3[][] = [];
+    const lap: Vec3[][] = [];
     for (let k = 0; k <= 12; k++) {
-      const row: THREE.Vector3[] = [];
+      const row: Vec3[] = [];
       for (let i = 0; i <= 10; i++) row.push(at(k / 12, i));
       lap.push(row);
     }
     skirt = add(rowsSurface(lap, 2), M.apron, j.hips, 'apron skirt');
-    const hem: THREE.Vector3[] = [];
-    for (let i = 0; i <= 20; i++) hem.push(at(0.025, i / 2).add(new THREE.Vector3(0, 0, 0.003)));
+    const hem: Vec3[] = [];
+    for (let i = 0; i <= 20; i++) hem.push(at(0.025, i / 2).add(new Vec3(0, 0, 0.003)));
     sewn.push(add(cord(hem, 0.0012, false, 80), M.thread, j.hips, 'apron hem stitching', false));
     // (a pocket: a patch of the leather over the skirt, its sides and foot stitched)
-    const pocket: THREE.Vector3[][] = [];
+    const pocket: Vec3[][] = [];
     for (let k = 0; k <= 3; k++) {
-      const row: THREE.Vector3[] = [];
-      for (let i = 3; i <= 7; i++) row.push(at(lerp(0.45, 0.66, k / 3), i).add(new THREE.Vector3(0, 0, 0.005)));
+      const row: Vec3[] = [];
+      for (let i = 3; i <= 7; i++) row.push(at(lerp(0.45, 0.66, k / 3), i).add(new Vec3(0, 0, 0.005)));
       pocket.push(row);
     }
     sewn.push(add(rowsSurface(pocket, 2), M.apron, j.hips, 'apron pocket', false));
-    const seam = [at(0.66, 3.1), at(0.45, 3.1), at(0.45, 6.9), at(0.66, 6.9)].map((p) => p.add(new THREE.Vector3(0, 0, 0.008)));
+    const seam = [at(0.66, 3.1), at(0.45, 3.1), at(0.45, 6.9), at(0.66, 6.9)].map((p) => p.add(new Vec3(0, 0, 0.008)));
     sewn.push(add(cord(seam, 0.0012, false, 40), M.thread, j.hips, 'apron pocket stitching', false));
     add(rowsSurface([ring(-0.005, 0.212, 0.182, 0, 0.05, 0), ring(0.03, 0.21, 0.18, 0, 0.05, 0)], 2), M.strap, j.spine, 'apron tie');
   }
@@ -1086,16 +1090,16 @@ function dressBody(j: Joints, add: Add, M: Mats): { skirt: THREE.Mesh; cols: num
   // cloth folded in long creases along it ---
   {
     const path = [
-      new THREE.Vector3(0.15, 0.0, 0.17), new THREE.Vector3(0.155, 0.12, 0.155), new THREE.Vector3(0.16, 0.215, 0.105),
-      new THREE.Vector3(0.16, 0.25, 0.0), new THREE.Vector3(0.16, 0.215, -0.105), new THREE.Vector3(0.155, 0.1, -0.145),
-      new THREE.Vector3(0.15, -0.02, -0.15),
+      new Vec3(0.15, 0.0, 0.17), new Vec3(0.155, 0.12, 0.155), new Vec3(0.16, 0.215, 0.105),
+      new Vec3(0.16, 0.25, 0.0), new Vec3(0.16, 0.215, -0.105), new Vec3(0.155, 0.1, -0.145),
+      new Vec3(0.15, -0.02, -0.15),
     ];
-    const curve = new THREE.CatmullRomCurve3(path), rows: THREE.Vector3[][] = [];
+    const curve = new CatmullRom3(path), rows: Vec3[][] = [];
     for (let k = 0; k <= 20; k++) {
-      const p = curve.getPointAt(k / 20), out = p.z > 0 ? 1 : -1, row: THREE.Vector3[] = [];
+      const p = curve.getPointAt(k / 20), out = p.z > 0 ? 1 : -1, row: Vec3[] = [];
       for (let i = 0; i <= 8; i++) {
         const x = lerp(-0.05, 0.05, i / 8), crease = 0.006 * Math.sin(i * Math.PI * 0.9 + k * 0.4);
-        row.push(new THREE.Vector3(p.x + x, p.y, p.z + out * (0.012 + crease)));
+        row.push(new Vec3(p.x + x, p.y, p.z + out * (0.012 + crease)));
       }
       rows.push(row);
     }
@@ -1138,9 +1142,9 @@ function dressBody(j: Joints, add: Add, M: Mats): { skirt: THREE.Mesh; cols: num
   return { skirt: skirt!, cols: 11, sewn, belly: belly! };
 }
 
-const _solidInv = new THREE.Matrix4(), _inSolid = new THREE.Vector3();
+const _solidInv = new Mat4(), _inSolid = new Vec3();
 /** `point` (world) moved out of `solid` grown by `r`, along the line from its middle, if it's inside */
-function outOfSolid(point: THREE.Vector3, solid: Solid, r: number): void {
+function outOfSolid(point: Vec3, solid: Solid, r: number): void {
   solid.at.updateWorldMatrix(true, false);
   _solidInv.copy(solid.at.matrixWorld).invert();
   _inSolid.copy(point).applyMatrix4(_solidInv).sub(solid.c);
@@ -1162,8 +1166,8 @@ const STRIPES = { round: 14, sleeve: 6 };
 /** a ring-made part (merchant.ts `rowsSurface`, rows of `n` points from his front round, closing on itself): each
  *  point's u by its true angle round him, unwrapped along its ring (by its place in the ring, the rings being ovals of
  *  their own widths, the same place was another angle at his sides, and the stripes stepped there) */
-function stripesRound(mesh: THREE.Mesh, n: number): void {
-  const uv = mesh.geometry.attributes.uv as THREE.BufferAttribute, pos = mesh.geometry.attributes.position;
+function stripesRound(mesh: Mesh, n: number): void {
+  const uv = mesh.geometry.attributes.uv as Attribute, pos = mesh.geometry.attributes.position;
   for (let row = 0; row * n < uv.count; row++) {
     let was = 0;
     for (let i = 0; i < n; i++) {
@@ -1181,8 +1185,8 @@ function stripesRound(mesh: THREE.Mesh, n: number): void {
 }
 
 /** a patch on his front (the placket): each point's u by its angle round him, as the rings' */
-function stripesByAngle(mesh: THREE.Mesh): void {
-  const uv = mesh.geometry.attributes.uv as THREE.BufferAttribute, pos = mesh.geometry.attributes.position;
+function stripesByAngle(mesh: Mesh): void {
+  const uv = mesh.geometry.attributes.uv as Attribute, pos = mesh.geometry.attributes.position;
   for (let k = 0; k < uv.count; k++) {
     // (from -half a turn to half: the placket is on his front, where a turn's wrap would cut it)
     const a = Math.atan2(pos.getX(k), pos.getZ(k));
@@ -1192,8 +1196,8 @@ function stripesByAngle(mesh: THREE.Mesh): void {
 }
 
 /** a lathed sleeve's piece: its u round it (0 to 1) made `repeats` round, so its stripes run along it */
-function stripesAlong(mesh: THREE.Mesh, repeats: number): void {
-  const uv = mesh.geometry.attributes.uv as THREE.BufferAttribute;
+function stripesAlong(mesh: Mesh, repeats: number): void {
+  const uv = mesh.geometry.attributes.uv as Attribute;
   for (let k = 0; k < uv.count; k++) uv.setX(k, uv.getX(k) * repeats);
   uv.needsUpdate = true;
 }
@@ -1206,12 +1210,12 @@ class ShirtTwist {
   private readonly rest: Float32Array;
   private readonly low: number;
   private readonly high: number;
-  private readonly qWas = new THREE.Quaternion(0, 0, 0, 0);
+  private readonly qWas = new Quat(0, 0, 0, 0);
 
   /** `seam`: where on the spine the chest's piece ends (its whole turn reached there; at the belly's top it was 87% of it,
    *  and the stripes stepped half a stripe at the seam) */
-  constructor(private readonly mesh: THREE.Mesh, private readonly chest: THREE.Object3D, seam: number) {
-    const pos = mesh.geometry.attributes.position as THREE.BufferAttribute;
+  constructor(private readonly mesh: Mesh, private readonly chest: Node, seam: number) {
+    const pos = mesh.geometry.attributes.position as Attribute;
     this.rest = Float32Array.from(pos.array as Float32Array);
     let low = Infinity, high = -Infinity;
     for (let i = 1; i < this.rest.length; i += 3) { low = Math.min(low, this.rest[i]); high = Math.max(high, this.rest[i]); }
@@ -1226,7 +1230,7 @@ class ShirtTwist {
     if (Math.abs(q.x - this.qWas.x) + Math.abs(q.y - this.qWas.y) + Math.abs(q.z - this.qWas.z) < 1e-5) return;
     this.qWas.copy(q);
     const pivot = this.chest.position;
-    const pos = this.mesh.geometry.attributes.position as THREE.BufferAttribute, arr = pos.array as Float32Array, rest = this.rest;
+    const pos = this.mesh.geometry.attributes.position as Attribute, arr = pos.array as Float32Array, rest = this.rest;
     for (let i = 0; i < arr.length; i += 3) {
       const share = smooth(clamp((rest[i + 1] - this.low) / (this.high - this.low), 0, 1));
       _twistQ.identity().slerp(q, share);
@@ -1240,7 +1244,7 @@ class ShirtTwist {
   }
 }
 
-const _twistQ = new THREE.Quaternion(), _twistP = new THREE.Vector3();
+const _twistQ = new Quat(), _twistP = new Vec3();
 
 /** a hinge joint's bend (rad), from its turn */
-const bendOf = (q: THREE.Quaternion): number => 2 * Math.acos(Math.min(1, Math.abs(q.w)));
+const bendOf = (q: Quat): number => 2 * Math.acos(Math.min(1, Math.abs(q.w)));

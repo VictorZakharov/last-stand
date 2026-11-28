@@ -3,7 +3,8 @@
 // in their place, still and the same every frame (from play, "hall lights are completely broken and static", "these
 // lights are super lame"). Its light is a lamp of the village's (game/village.ts), never a light of its own: the
 // fire sways a light the scene never holds, whose strength the lamp is read by (`TorchFire.flicker`).
-import * as THREE from 'three';
+import { Material, Mesh, Node, PointLight, Vec2, Vec3 } from '../engine/api/index.ts';
+import * as shapes from '../engine/api/shapes/index.ts';
 import { buildFire } from './fire';
 import type { Updater } from './props';
 
@@ -23,18 +24,18 @@ const BOWL: [number, number][] = [[-BASKET_BELOW, 0.03], [0, 0.12], [0.3 - BASKE
 const GLOW = 0.8;
 
 /** A torch's fire as built: the light its puffs sway, 1 at rest, which its lamp is read by. */
-export interface TorchFire { flicker: THREE.PointLight }
+export interface TorchFire { flicker: PointLight }
 
 /** An iron basket at `at` (the middle of its bed) in `group`, its fire in `fires` (a group never thinned by a
  *  material of its own: a fire's flames are a shader of their own, `fadesWhole` would put them in a wall's). */
-export function torchFire(group: THREE.Object3D, fires: THREE.Object3D, iron: THREE.Material, at: THREE.Vector3,
+export function torchFire(group: Node, fires: Node, iron: Material, at: Vec3,
   updaters: Updater[]): TorchFire {
-  const outline = BASKET.map(([r, y]) => new THREE.Vector2(r, y));
-  const basket = new THREE.Mesh(new THREE.LatheGeometry(outline, 10), iron);
+  const outline = BASKET.map(([r, y]) => new Vec2(r, y));
+  const basket = new Mesh(shapes.lathe(outline, 10), iron);
   basket.position.set(at.x, at.y - BASKET_BELOW, at.z);
   basket.castShadow = false;
   group.add(basket);
-  const flicker = new THREE.PointLight(0xffffff, 1);
+  const flicker = new PointLight(0xffffff, 1);
   flicker.position.copy(at);
   buildFire(fires, {
     at, radius: FLAME.radius, height: FLAME.height, dish: FLAME.dish, light: flicker, intensity: 1, bowl: BOWL,

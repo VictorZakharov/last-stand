@@ -1,8 +1,10 @@
 // The tavern's dressing: the bottles on the shelves behind the bar, the bunches of herbs hung from the beam over it,
 // and what stands on the hearth's mantel (#733's follow-up). Each is one merged mesh coloured by its vertices, from a stream of its own, so the room's
 // stream draws as it did and nothing built after them moves.
-import * as THREE from 'three';
-import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import {
+  Attribute, Box3, Color, floats, Geometry, LitMaterial, mergeGeometries, Mesh, Node, Vec2, Vec3,
+} from '../engine/api/index.ts';
+import * as shapes from '../engine/api/shapes/index.ts';
 import { mulberry } from '../util';
 import { candle, tankard, type Mats } from './rooms';
 import { CLAY } from './potShelf';
@@ -85,10 +87,10 @@ const FORMS: readonly Form[] = [
 /** One bottle thrown from its form: its body's colour to its stopper, a stoneware's top dipped darker. */
 /** `form`'s outline, its body's run cut into `steps` rows (a moulding needs rows to be pressed into), and the run's
  *  first and last points in it */
-function rowsOf(form: Form, steps: number): { points: THREE.Vector2[]; from: number; to: number } {
-  const points = form.outline.map(([r, y]) => new THREE.Vector2(r, y));
+function rowsOf(form: Form, steps: number): { points: Vec2[]; from: number; to: number } {
+  const points = form.outline.map(([r, y]) => new Vec2(r, y));
   if (!form.body || steps <= 1) return { points, from: -1, to: -1 };
-  const [a, b] = form.body, rows: THREE.Vector2[] = [];
+  const [a, b] = form.body, rows: Vec2[] = [];
   for (let k = a; k < b; k++) {
     const each = Math.max(1, Math.round(steps * (points[k + 1].y - points[k].y) / (points[b].y - points[a].y)));
     for (let step = 0; step < each; step++) rows.push(points[k].clone().lerp(points[k + 1], step / each));
@@ -110,41 +112,41 @@ function pressed(moulding: Moulding, round: number, up: number): number {
 }
 
 /** A seal of glass pressed onto `form`'s shoulder facing +z, a coin of the bottle's own glass. */
-function sealOn(form: Form): THREE.BufferGeometry {
+function sealOn(form: Form): Geometry {
   const [, b] = form.body!, [r0, y0] = form.outline[b], [r1, y1] = form.outline[b + 1];
   const r = r0 + (r1 - r0) * 0.3, y = y0 + (y1 - y0) * 0.3;
   // (leant back with the shoulder's slope)
   const lean = Math.atan2(r0 - r1, y1 - y0);
-  return new THREE.CylinderGeometry(0.011, 0.012, 0.006, 12).rotateX(Math.PI / 2 - lean).translate(0, y, r);
+  return shapes.cylinder(0.011, 0.012, 0.006, 12).rotateX(Math.PI / 2 - lean).translate(0, y, r);
 }
 
 /** a geometry's every point in one colour (merged with the bottles, which have colours) */
-function coloured(geometry: THREE.BufferGeometry, colour: THREE.Color): THREE.BufferGeometry {
+function coloured(geometry: Geometry, colour: Color): Geometry {
   const colours = new Float32Array(geometry.attributes.position.count * 3);
   for (let k = 0; k < colours.length; k += 3) colour.toArray(colours, k);
-  geometry.setAttribute('color', new THREE.BufferAttribute(colours, 3));
+  geometry.setAttribute('color', new Attribute(colours, 3));
   return geometry;
 }
 
 /** The drink in a clear bottle of `form`, filled to `fill` of its body's height: its glass's outline drawn in a little,
  *  up to there, in `colour`. */
-export function drinkIn(form: Form, fill: number, colour: THREE.Color): THREE.BufferGeometry {
-  const top = form.outline[form.body![1]][1] * fill, points: THREE.Vector2[] = [];
+export function drinkIn(form: Form, fill: number, colour: Color): Geometry {
+  const top = form.outline[form.body![1]][1] * fill, points: Vec2[] = [];
   for (let k = 0; k < form.outline.length && form.outline[k][1] < top; k++) {
     const [r, y] = form.outline[k];
-    points.push(new THREE.Vector2(r * 0.86, y + 0.004));
+    points.push(new Vec2(r * 0.86, y + 0.004));
   }
   const last = points[points.length - 1];
-  points.push(new THREE.Vector2(last.x, top), new THREE.Vector2(0, top));
-  return coloured(new THREE.LatheGeometry(points, form.sides), colour);
+  points.push(new Vec2(last.x, top), new Vec2(0, top));
+  return coloured(shapes.lathe(points, form.sides), colour);
 }
 
-function bottle(form: Form, rng: () => number, moulding: Moulding = 'plain', clear = false): THREE.BufferGeometry {
+function bottle(form: Form, rng: () => number, moulding: Moulding = 'plain', clear = false): Geometry {
   const moulded = moulding === 'fluted' || moulding === 'quilted';
   const { points, from, to } = rowsOf(form, moulded ? 7 : 0);
   // (16 sides: two points a rib of its 8)
   const sides = moulded ? 16 : form.sides;
-  let geometry: THREE.BufferGeometry = new THREE.LatheGeometry(points, sides);
+  let geometry: Geometry = shapes.lathe(points, sides);
   if (moulded) {
     // (a lathe's points run up its outline, then round: point k is row k % rows, turned k / rows of the way round)
     const position = geometry.attributes.position;
@@ -159,10 +161,10 @@ function bottle(form: Form, rng: () => number, moulding: Moulding = 'plain', cle
   }
   // (a case bottle's square turned to face the room)
   if (form.sides === 4) geometry.rotateY(Math.PI / 4);
-  const body = new THREE.Color(form.bodies[Math.floor(rng() * form.bodies.length)]);
+  const body = new Color(form.bodies[Math.floor(rng() * form.bodies.length)]);
   // (clear glass tinted lighter, as thin pale glass is, the drink in it giving it its colour)
-  if (clear) body.lerp(new THREE.Color(0xd8e4d0), 0.35);
-  const stopper = new THREE.Color(STOPPERS[Math.floor(rng() * STOPPERS.length)]);
+  if (clear) body.lerp(new Color(0xd8e4d0), 0.35);
+  const stopper = new Color(STOPPERS[Math.floor(rng() * STOPPERS.length)]);
   const dip = body.clone().multiplyScalar(0.55);
   const top = form.outline[form.outline.length - 1][1];
   const colours: number[] = [];
@@ -177,7 +179,7 @@ function bottle(form: Form, rng: () => number, moulding: Moulding = 'plain', cle
     else if (form.stoneware && y > top * 0.62) colour = dip;
     colours.push(colour.r, colour.g, colour.b);
   }
-  geometry.setAttribute('color', new THREE.Float32BufferAttribute(colours, 3));
+  geometry.setAttribute('color', floats(colours, 3));
   // (stoneware's uv between the clay's two rows, `clayMaterial` in pottery.ts: a salt glaze's dull sheen. On the
   // glazed row alone it showed glass's streaks of light, from review)
   if (form.stoneware) {
@@ -211,11 +213,11 @@ export function oldBottleDraws(rng: () => number): void {
 
 /** The bottles on the bar's shelves (on the east wall's frame: along x from `from` to `to`, at each of `shelves`' tops,
  *  `out` from the wall): every form, spaced by its own width, a gap now and then, one mesh. */
-export function bottles(frame: THREE.Object3D, shelves: readonly number[], from: number, to: number,
-  out: number): THREE.Mesh[] {
-  const rng = mulberry(7341), glassMade: THREE.BufferGeometry[] = [], stonewareMade: THREE.BufferGeometry[] = [];
-  const labelsMade: THREE.BufferGeometry[] = [], matteMade: THREE.BufferGeometry[] = [];
-  const clearMade: THREE.BufferGeometry[] = [];
+export function bottles(frame: Node, shelves: readonly number[], from: number, to: number,
+  out: number): Mesh[] {
+  const rng = mulberry(7341), glassMade: Geometry[] = [], stonewareMade: Geometry[] = [];
+  const labelsMade: Geometry[] = [], matteMade: Geometry[] = [];
+  const clearMade: Geometry[] = [];
   for (const top of shelves) {
     let x = from;
     let last: Form | null = null;
@@ -232,7 +234,7 @@ export function bottles(frame: THREE.Object3D, shelves: readonly number[], from:
       const back = rng() < 0.45, depth = out + (back ? -0.05 : 0.03) + (rng() - 0.5) * 0.03;
       // (turned a little, its label toward the room)
       const turn = (rng() - 0.5) * 1.2;
-      const place = (geometry: THREE.BufferGeometry): THREE.BufferGeometry => geometry.scale(scale, scale, scale)
+      const place = (geometry: Geometry): Geometry => geometry.scale(scale, scale, scale)
         .rotateY(turn).translate(x + room / 2, top, depth);
       const mould = rng(), moulding: Moulding = !form.body || form.sides === 4 || form.stoneware ? 'plain'
         : mould < 0.18 ? 'fluted' : mould < 0.3 ? 'quilted' : mould < 0.42 ? 'seal' : 'plain';
@@ -246,7 +248,7 @@ export function bottles(frame: THREE.Object3D, shelves: readonly number[], from:
       else (finish === 'clear' ? clearMade : finish === 'matte' ? matteMade : glassMade).push(made);
       // (a clear bottle's drink in it, a third to most of the way up)
       if (finish === 'clear') {
-        const drink = new THREE.Color(DRINKS[Math.floor(rng() * DRINKS.length)]);
+        const drink = new Color(DRINKS[Math.floor(rng() * DRINKS.length)]);
         glassMade.push(place(drinkIn(form, 0.35 + rng() * 0.5, drink)));
       }
       // (most glass bottles labelled, a few bare, and few with a pattern pressed into the glass where it'd go)
@@ -264,10 +266,10 @@ export function bottles(frame: THREE.Object3D, shelves: readonly number[], from:
   }
   // (the glass a little rough: at 0.18 its facets threw star-like glints, from review)
   // (glossy glass, dulled glass, and clear glass the drink shows through, drawn after what's behind it)
-  const glass = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.16, metalness: 0.15 });
+  const glass = new LitMaterial({ vertexColors: true, roughness: 0.16, metalness: 0.15 });
   // (dull, not dead: at 0.6 it read as "fired clay or cardboard", from review)
-  const matte = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.42, metalness: 0.1 });
-  const clear = new THREE.MeshStandardMaterial({
+  const matte = new LitMaterial({ vertexColors: true, roughness: 0.42, metalness: 0.1 });
+  const clear = new LitMaterial({
     vertexColors: true, roughness: 0.06, metalness: 0.1, transparent: true, opacity: 0.3, depthWrite: false,
   });
   const meshes = [
@@ -276,7 +278,7 @@ export function bottles(frame: THREE.Object3D, shelves: readonly number[], from:
     [labelsMade, labelMaterial(), 'bottle labels'],
   ] as const;
   return meshes.filter(([geometries]) => geometries.length).map(([geometries, material, name]) => {
-    const mesh = new THREE.Mesh(mergeGeometries([...geometries]), material);
+    const mesh = new Mesh(mergeGeometries([...geometries]), material);
     mesh.name = name;
     mesh.castShadow = material !== clear;
     frame.add(mesh);
@@ -297,25 +299,25 @@ const ON_THE_MANTEL: readonly { at: number; thing: 'tallJug' | 'pitcher' | 'oak'
 ];
 
 /** The mantel's things on its top at `top`, along x from the hearth's middle `x`, `z` out from the breast. */
-export function mantel(g: THREE.Object3D, M: Mats, x: number, top: number, z: number): void {
+export function mantel(g: Node, M: Mats, x: number, top: number, z: number): void {
   const rng = mulberry(7361);
   for (const { at, thing } of ON_THE_MANTEL) {
     if (thing === 'oak' || thing === 'brass') tankard(g, M, x + at, top, z, thing === 'brass');
     else if (thing === 'candle') {
       // (in an iron dish: stood bare on the stone they read as sticks, from review; brass caught the hearth as a second flame)
       // (the lectern's dish, `candleKit.ts`: its well 6 mm up)
-      const dish = new THREE.Mesh(candleDish(), M.iron);
+      const dish = new Mesh(candleDish(), M.iron);
       dish.position.set(x + at, top, z);
       g.add(dish);
       candle(g, M, x + at, top + 0.006, z, 0.13 + rng() * 0.06);
     }
     else {
-      const jug = new THREE.Mesh(thing === 'pitcher' ? pitcher(rng) : tallJug(rng), CLAY);
+      const jug = new Mesh(thing === 'pitcher' ? pitcher(rng) : tallJug(rng), CLAY);
       jug.rotation.y = facing(rng);
       jug.castShadow = true;
       // (set down by its lowest point as it stands turned, as the shelves' are: a thrown pot leans)
       jug.updateMatrix();
-      const box = new THREE.Box3().setFromBufferAttribute(jug.geometry.attributes.position as THREE.BufferAttribute);
+      const box = new Box3().setFromBufferAttribute(jug.geometry.attributes.position as Attribute);
       jug.position.set(x + at, top - box.min.y, z);
       g.add(jug);
     }
@@ -341,8 +343,8 @@ const HERBS: readonly Herb[] = [
 ];
 
 /** A thin strip from `a` to `b`, `wide` at `a` and to a point at `b`, facing `across`; both its faces. */
-function strip(into: number[], colours: number[], a: THREE.Vector3, b: THREE.Vector3, across: THREE.Vector3,
-  wide: number, colour: THREE.Color, endWide = 0): void {
+function strip(into: number[], colours: number[], a: Vec3, b: Vec3, across: Vec3,
+  wide: number, colour: Color, endWide = 0): void {
   const left = a.clone().addScaledVector(across, wide / 2), right = a.clone().addScaledVector(across, -wide / 2);
   const endLeft = b.clone().addScaledVector(across, endWide / 2), endRight = b.clone().addScaledVector(across, -endWide / 2);
   // (both faces; a quad where it keeps a width to its end)
@@ -357,48 +359,48 @@ function strip(into: number[], colours: number[], a: THREE.Vector3, b: THREE.Vec
 
 /** One bunch hung head down from its tie at the origin: its stalks fanned out and down, leaves along them drooping,
  *  heads at their tips if it flowers, the twine round its neck. */
-function bunch(herb: Herb, rng: () => number): THREE.BufferGeometry {
+function bunch(herb: Herb, rng: () => number): Geometry {
   const at: number[] = [], colours: number[] = [];
   // (dense and gathered: a dozen sparse stalks read as a live frond, and from play as a few specks)
   const stalks = 24 + Math.floor(rng() * 8), long = 0.34 + rng() * 0.12, spread = 0.06 + rng() * 0.035;
-  const stalkColour = new THREE.Color(herb.stalk);
+  const stalkColour = new Color(herb.stalk);
   for (let s = 0; s < stalks; s++) {
     const round = rng() * Math.PI * 2, out = spread * Math.sqrt(rng()), length = long * (0.75 + rng() * 0.3);
-    const foot = new THREE.Vector3(Math.cos(round) * 0.008, -0.03, Math.sin(round) * 0.008);
-    const tip = new THREE.Vector3(Math.cos(round) * out, -0.03 - length, Math.sin(round) * out);
-    const across = new THREE.Vector3(-Math.sin(round), 0, Math.cos(round));
+    const foot = new Vec3(Math.cos(round) * 0.008, -0.03, Math.sin(round) * 0.008);
+    const tip = new Vec3(Math.cos(round) * out, -0.03 - length, Math.sin(round) * out);
+    const across = new Vec3(-Math.sin(round), 0, Math.cos(round));
     strip(at, colours, foot, tip, across, 0.006, stalkColour);
     // (leaves along it, hanging from it out and down, as they dried)
     for (let l = 0; l < 5; l++) {
       const along = 0.22 + l * 0.15 + rng() * 0.05, base = foot.clone().lerp(tip, along);
-      const outward = new THREE.Vector3(Math.cos(round + (rng() - 0.5) * 1.6), -0.9, Math.sin(round + (rng() - 0.5) * 1.6));
+      const outward = new Vec3(Math.cos(round + (rng() - 0.5) * 1.6), -0.9, Math.sin(round + (rng() - 0.5) * 1.6));
       const end = base.clone().addScaledVector(outward.normalize(), 0.04 + rng() * 0.03);
-      const leaf = new THREE.Color(herb.leaves[Math.floor(rng() * herb.leaves.length)]).multiplyScalar(0.85 + rng() * 0.3);
+      const leaf = new Color(herb.leaves[Math.floor(rng() * herb.leaves.length)]).multiplyScalar(0.85 + rng() * 0.3);
       strip(at, colours, base, end, across, 0.024, leaf);
     }
     if (herb.head !== undefined) {
       // (a spike on down the stalk's end, as wide at its end as its foot, two crossed: tapered to a point, the heads read
       // as "triangle confetti", from review)
-      const head = new THREE.Color(herb.head).multiplyScalar(0.85 + rng() * 0.3);
+      const head = new Color(herb.head).multiplyScalar(0.85 + rng() * 0.3);
       const start = foot.clone().lerp(tip, 0.88);
       const below = tip.clone().addScaledVector(tip.clone().sub(foot).normalize(), 0.028);
-      const facingOut = new THREE.Vector3(Math.cos(round), 0, Math.sin(round));
+      const facingOut = new Vec3(Math.cos(round), 0, Math.sin(round));
       strip(at, colours, start, below, across, 0.011, head, 0.008);
       strip(at, colours, start, below, facingOut, 0.011, head, 0.008);
     }
   }
-  const geometry = new THREE.BufferGeometry();
-  geometry.setAttribute('position', new THREE.Float32BufferAttribute(at, 3));
-  geometry.setAttribute('color', new THREE.Float32BufferAttribute(colours, 3));
+  const geometry = new Geometry();
+  geometry.setAttribute('position', floats(at, 3));
+  geometry.setAttribute('color', floats(colours, 3));
   geometry.computeVertexNormals();
   // (the twine round its neck and up to the beam)
   // (a bound neck of twine, wound over the stalks' ends, and the cord up to the beam)
-  const twine = new THREE.CylinderGeometry(0.02, 0.017, 0.06, 7).translate(0, -0.02, 0);
-  const cord = new THREE.CylinderGeometry(0.005, 0.005, 0.1, 4).translate(0, 0.05, 0);
+  const twine = shapes.cylinder(0.02, 0.017, 0.06, 7).translate(0, -0.02, 0);
+  const cord = shapes.cylinder(0.005, 0.005, 0.1, 4).translate(0, 0.05, 0);
   const tied = [twine, cord].map((piece) => {
     const plain = piece.toNonIndexed();
-    const twineColour = new THREE.Color(0x8a7450), count = plain.attributes.position.count;
-    plain.setAttribute('color', new THREE.Float32BufferAttribute(Array.from({ length: count }, () =>
+    const twineColour = new Color(0x8a7450), count = plain.attributes.position.count;
+    plain.setAttribute('color', floats(Array.from({ length: count }, () =>
       [twineColour.r, twineColour.g, twineColour.b]).flat(), 3));
     plain.deleteAttribute('uv');
     return plain;
@@ -408,8 +410,8 @@ function bunch(herb: Herb, rng: () => number): THREE.BufferGeometry {
 
 /** Bunches of dried herbs hung under a beam, their ties at (x, y, z) and `n` along x a third of a metre apart: one
  *  mesh, each bunch a herb of its own. */
-export function herbs(g: THREE.Object3D, x: number, y: number, z: number, n: number): THREE.Mesh {
-  const rng = mulberry(7351), made: THREE.BufferGeometry[] = [];
+export function herbs(g: Node, x: number, y: number, z: number, n: number): Mesh {
+  const rng = mulberry(7351), made: Geometry[] = [];
   for (let k = 0; k < n; k++) {
     const one = bunch(HERBS[k % HERBS.length], rng);
     one.rotateY(rng() * Math.PI * 2);
@@ -417,7 +419,7 @@ export function herbs(g: THREE.Object3D, x: number, y: number, z: number, n: num
     one.translate(x + k * 0.32 + (rng() - 0.5) * 0.06, y - 0.1, z + (rng() - 0.5) * 0.1);
     made.push(one);
   }
-  const mesh = new THREE.Mesh(mergeGeometries(made), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95 }));
+  const mesh = new Mesh(mergeGeometries(made), new LitMaterial({ vertexColors: true, roughness: 0.95 }));
   mesh.name = 'herbs';
   mesh.castShadow = true;
   g.add(mesh);

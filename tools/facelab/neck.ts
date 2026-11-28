@@ -6,7 +6,9 @@
 // the seam where the head's own skin takes over from the neck's: at each angle its height, the step between the two skins
 // there, the turn between their normals and the change of colour between their base colours (CIE76). Run in the page by
 // facelab.mjs.
-import * as THREE from 'three';
+import {
+  Hit, LitMaterial, Maths, Mesh, Node, Raycaster, SkinnedMesh, Texture, Vec3,
+} from '../../src/engine/api/index.ts';
 import type { Model } from '../../src/types';
 import { HEAD_MM } from '../../src/entities/models/head';
 
@@ -34,32 +36,32 @@ const NA = 72;
 /** `head`: the head's girth if already measured (a live model measured again and again) */
 export function measureNeck(m: Model, head0?: number): NeckShape | null {
   m.root.updateMatrixWorld(true);
-  const j = m.joints!, neck = j.neck, V = THREE.Vector3;
-  let face: THREE.Mesh | null = null;
-  m.root.traverse((o) => { if (o.name === 'face') face = o as THREE.Mesh; });
+  const j = m.joints!, neck = j.neck, V = Vec3;
+  let face: Mesh | null = null;
+  m.root.traverse((o) => { if (o.name === 'face') face = o as Mesh; });
   if (!face) return null;
-  const headG = (face as THREE.Mesh).parent!;
-  const vis = (o: THREE.Object3D) => { for (let q: THREE.Object3D | null = o; q; q = q.parent) if (!q.visible) return false; return true; };
-  const under = (o: THREE.Object3D, r: THREE.Object3D) => { for (let q: THREE.Object3D | null = o; q; q = q.parent) if (q === r) return true; return false; };
+  const headG = (face as Mesh).parent!;
+  const vis = (o: Node) => { for (let q: Node | null = o; q; q = q.parent) if (!q.visible) return false; return true; };
+  const under = (o: Node, r: Node) => { for (let q: Node | null = o; q; q = q.parent) if (q === r) return true; return false; };
   // the skins: the face, the ears (skin-coloured meshes of the head without a map), the neck (on its joint, outside the head)
-  const kind = new Map<THREE.Object3D, 'face' | 'ear' | 'neck' | 'cloth'>(), targets: THREE.Mesh[] = [];
+  const kind = new Map<Node, 'face' | 'ear' | 'neck' | 'cloth'>(), targets: Mesh[] = [];
   m.root.traverse((o) => {
-    const me = o as THREE.Mesh;
+    const me = o as Mesh;
     if (!me.isMesh || !vis(o) || o.name === 'hair' || o.name === 'beard' || (m.tip && under(o, m.tip.parent!)) || o.name === 'flask') return;
     if (o === face) kind.set(o, 'face');
-    else if (under(o, headG)) { const mt = me.material as THREE.MeshStandardMaterial; if (!mt.map && mt.color && mt.color.r > mt.color.b * 1.2 && me.geometry.attributes.color) kind.set(o, 'ear'); else return; }
+    else if (under(o, headG)) { const mt = me.material as LitMaterial; if (!mt.map && mt.color && mt.color.r > mt.color.b * 1.2 && me.geometry.attributes.color) kind.set(o, 'ear'); else return; }
     else if (o.parent === neck) kind.set(o, 'neck');
     else if (under(o, j.chest) && !under(o, j.shoulderL) && !under(o, j.shoulderR)) kind.set(o, 'cloth');
     else return;
     targets.push(me);
   });
   // (all in the neck joint's own space, the model's metres: the head's mm are HEAD_MM of them)
-  const mm = (d: number) => d / HEAD_MM, W = neck.matrixWorld, rc = new THREE.Raycaster();
+  const mm = (d: number) => d / HEAD_MM, W = neck.matrixWorld, rc = new Raycaster();
   const o = new V(), dir = new V(), nrm = new V(), loc = new V(), inv = W.clone().invert();
-  type Hit = { k: string; r: number; n: THREE.Vector3; hit: THREE.Intersection };
+  type NeckHit = { k: string; r: number; n: Vec3; hit: Hit };
   // the outermost skin (and whether clothes cover it) on each ray of a slice at height h (the neck's own metres)
   const slice = (h: number) => {
-    const out: (Hit | null)[] = [], cov: boolean[] = [], thru: boolean[] = [];
+    const out: (NeckHit | null)[] = [], cov: boolean[] = [], thru: boolean[] = [];
     for (let i = 0; i < NA; i++) {
       const a = (i / NA) * Math.PI * 2;
       o.set(Math.sin(a) * 0.3, h, Math.cos(a) * 0.3).applyMatrix4(W); dir.set(-Math.sin(a), 0, -Math.cos(a)).transformDirection(W);
@@ -74,10 +76,10 @@ export function measureNeck(m: Model, head0?: number): NeckShape | null {
       loc.copy(skinHit.point).applyMatrix4(inv);
       // (the shading's normal: the vertices' normals across the triangle; a skinned mesh's from its posed triangle, its normals
       // being the bind pose's)
-      const me = skinHit.object as THREE.Mesh, N = me.geometry.attributes.normal, f = skinHit.face!, b = skinHit.barycoord;
-      if ((me as THREE.SkinnedMesh).isSkinnedMesh && N && b) {
+      const me = skinHit.object as Mesh, N = me.geometry.attributes.normal, f = skinHit.face!, b = skinHit.barycoord;
+      if ((me as SkinnedMesh).isSkinnedMesh && N && b) {
         // (each corner's normal carried by its bones as the shader does: a point a little along it, skinned, from the corner skinned)
-        const sk = me as THREE.SkinnedMesh, P = me.geometry.attributes.position, sn = (i: number) => {
+        const sk = me as SkinnedMesh, P = me.geometry.attributes.position, sn = (i: number) => {
           const p0 = new V().fromBufferAttribute(P, i), p1 = p0.clone().addScaledVector(new V().fromBufferAttribute(N, i), 1e-3);
           return sk.applyBoneTransform(i, p1).sub(sk.applyBoneTransform(i, p0)).normalize();
         };
@@ -89,7 +91,7 @@ export function measureNeck(m: Model, head0?: number): NeckShape | null {
     }
     return { out, cov, thru };
   };
-  const girthOf = (out: (Hit | null)[], only?: (k: string) => boolean) => {
+  const girthOf = (out: (NeckHit | null)[], only?: (k: string) => boolean) => {
     const pts = out.map((x, i) => (x && (!only || only(x.k)) ? [Math.sin((i / NA) * Math.PI * 2) * x.r, Math.cos((i / NA) * Math.PI * 2) * x.r] : null));
     if (pts.some((p) => !p)) return NaN;
     let g = 0; for (let i = 0; i < NA; i++) { const a = pts[i]!, b = pts[(i + 1) % NA]!; g += Math.hypot(a[0] - b[0], a[1] - b[1]); }
@@ -101,9 +103,9 @@ export function measureNeck(m: Model, head0?: number): NeckShape | null {
   if (!head0) for (let h = headJ + 0.08; h < headJ + 0.22; h += 0.004) head = Math.max(head, girthOf(slice(h).out, (k) => k === 'face') || 0);
   // the top of the head (the face's own skin), for the C7 vertebra: 239 mm below it in a man (ANSUR II: stature less
   // cervicale height)
-  let top = -1e9; { const P = (face as THREE.Mesh).geometry.attributes.position, q = new V(); for (let i = 0; i < P.count; i++) top = Math.max(top, q.fromBufferAttribute(P, i).applyMatrix4((face as THREE.Mesh).matrixWorld).applyMatrix4(inv).y); }
+  let top = -1e9; { const P = (face as Mesh).geometry.attributes.position, q = new V(); for (let i = 0; i < P.count; i++) top = Math.max(top, q.fromBufferAttribute(P, i).applyMatrix4((face as Mesh).matrixWorld).applyMatrix4(inv).y); }
   // up the neck from below the collar to above the jaw
-  const rows: { h: number; out: (Hit | null)[]; cov: boolean[]; thru: boolean[]; g: number }[] = [];
+  const rows: { h: number; out: (NeckHit | null)[]; cov: boolean[]; thru: boolean[]; g: number }[] = [];
   for (let h = -0.06; h < headJ + 0.06; h += 5 * HEAD_MM) { const { out, cov, thru } = slice(h); rows.push({ h, out, cov, thru, g: girthOf(out) }); }
   // the collar's top at the back (the lowest height every ray behind the neck is free of clothes)
   const backFree = (r: typeof rows[number]) => r.cov.every((c, i) => !c || Math.cos((i / NA) * Math.PI * 2) > -0.5);
@@ -132,10 +134,10 @@ export function measureNeck(m: Model, head0?: number): NeckShape | null {
     for (let k = Math.max(1, iB); k < rows.length; k++) {
       const a = rows[k - 1].out[i], b = rows[k].out[i]; if (!a || !b) continue;
       if (a.k === 'neck' && b.k === 'face') {
-        seamY.push(Y(rows[k].h)); steps.push(mm(Math.abs(b.r - a.r))); turns.push(THREE.MathUtils.radToDeg(a.n.angleTo(b.n)));
+        seamY.push(Y(rows[k].h)); steps.push(mm(Math.abs(b.r - a.r))); turns.push(Maths.radToDeg(a.n.angleTo(b.n)));
         // (the face's relief and sheen over the 15 mm above it against the neck's: its normal map's tilt as drawn, its roughness)
-        for (let q = k; q < rows.length && mm(rows[q].h - rows[k].h) <= 15; q++) { const c = rows[q].out[i]; if (c && c.k === 'face') { const t = maps(c.hit); if (t) { reliefs.push(t[0]); roughs.push(t[1] - ((a.hit.object as THREE.Mesh).material as THREE.MeshStandardMaterial).roughness); } } }
-        const cf = albedo(b.hit), cn = baseColour(a.hit); if (cf && cn) { dEs.push(deltaE(cf, cn)); labF.push(lab(cf)); labN.push(lab(cn)); sect[Math.round(i / NA * 8) % 8].push([Y(rows[k].h), mm(b.r - a.r), deltaE(cf, cn), lab(cf)[0], lab(cn)[0], THREE.MathUtils.radToDeg(a.n.angleTo(b.n))]); }
+        for (let q = k; q < rows.length && mm(rows[q].h - rows[k].h) <= 15; q++) { const c = rows[q].out[i]; if (c && c.k === 'face') { const t = maps(c.hit); if (t) { reliefs.push(t[0]); roughs.push(t[1] - ((a.hit.object as Mesh).material as LitMaterial).roughness); } } }
+        const cf = albedo(b.hit), cn = baseColour(a.hit); if (cf && cn) { dEs.push(deltaE(cf, cn)); labF.push(lab(cf)); labN.push(lab(cn)); sect[Math.round(i / NA * 8) % 8].push([Y(rows[k].h), mm(b.r - a.r), deltaE(cf, cn), lab(cf)[0], lab(cn)[0], Maths.radToDeg(a.n.angleTo(b.n))]); }
         break;
       }
       if (a.k === b.k) usual.push(mm(Math.abs(b.r - a.r)));
@@ -162,8 +164,8 @@ export function measureNeck(m: Model, head0?: number): NeckShape | null {
 
 type RGB = [number, number, number];
 const lin = (c: number) => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
-function faceAlbedo(face: THREE.Mesh): (h: THREE.Intersection) => RGB | null {
-  const map = (face.material as THREE.MeshStandardMaterial).map, cv = map?.image as HTMLCanvasElement | undefined;
+function faceAlbedo(face: Mesh): (h: Hit) => RGB | null {
+  const map = (face.material as LitMaterial).map, cv = map?.image as HTMLCanvasElement | undefined;
   if (!cv || !cv.getContext) return () => null;
   const W = cv.width, H = cv.height, px = cv.getContext('2d')!.getImageData(0, 0, W, H).data;
   return (h) => {
@@ -173,25 +175,25 @@ function faceAlbedo(face: THREE.Mesh): (h: THREE.Intersection) => RGB | null {
   };
 }
 /** the face's normal map's tilt at a hit as the material draws it (degrees) and its roughness there */
-function faceMaps(face: THREE.Mesh): (h: THREE.Intersection) => [number, number] | null {
-  const mt = face.material as THREE.MeshStandardMaterial, read = (t: THREE.Texture | null) => {
+function faceMaps(face: Mesh): (h: Hit) => [number, number] | null {
+  const mt = face.material as LitMaterial, read = (t: Texture | null) => {
     const cv = t?.image as HTMLCanvasElement | undefined; if (!cv || !cv.getContext) return null;
     return { W: cv.width, H: cv.height, px: cv.getContext('2d')!.getImageData(0, 0, cv.width, cv.height).data, flip: t!.flipY };
   };
   const N = read(mt.normalMap), R = read(mt.roughnessMap), sc = mt.normalScale?.x ?? 1;
   if (!N || !R || !mt.normalMap) return () => null;
-  const at = (m: NonNullable<ReturnType<typeof read>>, h: THREE.Intersection) => { const u = ((h.uv!.x % 1) + 1) % 1, v = m.flip ? 1 - h.uv!.y : h.uv!.y; return (Math.min(m.H - 1, Math.max(0, Math.floor(v * m.H))) * m.W + Math.min(m.W - 1, Math.floor(u * m.W))) * 4; };
+  const at = (m: NonNullable<ReturnType<typeof read>>, h: Hit) => { const u = ((h.uv!.x % 1) + 1) % 1, v = m.flip ? 1 - h.uv!.y : h.uv!.y; return (Math.min(m.H - 1, Math.max(0, Math.floor(v * m.H))) * m.W + Math.min(m.W - 1, Math.floor(u * m.W))) * 4; };
   return (h) => {
     if (!h.uv) return null;
     const k = at(N, h), x = (N.px[k] / 255 * 2 - 1) * sc, y = (N.px[k + 1] / 255 * 2 - 1) * sc, z = N.px[k + 2] / 255 * 2 - 1;
-    return [THREE.MathUtils.radToDeg(Math.atan2(Math.hypot(x, y), z)), R.px[at(R, h) + 1] / 255 * mt.roughness];
+    return [Maths.radToDeg(Math.atan2(Math.hypot(x, y), z)), R.px[at(R, h) + 1] / 255 * mt.roughness];
   };
 }
-function baseColour(h: THREE.Intersection): RGB | null {
-  const me = h.object as THREE.Mesh, mt = me.material as THREE.MeshStandardMaterial, c = mt.color, col = me.geometry.attributes.color;
+function baseColour(h: Hit): RGB | null {
+  const me = h.object as Mesh, mt = me.material as LitMaterial, c = mt.color, col = me.geometry.attributes.color;
   let k: RGB = [1, 1, 1];
   if (col && h.face) {
-    const b = h.barycoord ?? new THREE.Vector3(1 / 3, 1 / 3, 1 / 3), f = h.face;
+    const b = h.barycoord ?? new Vec3(1 / 3, 1 / 3, 1 / 3), f = h.face;
     k = [0, 1, 2].map((ch) => col.getComponent(f.a, ch) * b.x + col.getComponent(f.b, ch) * b.y + col.getComponent(f.c, ch) * b.z) as RGB;
   }
   return [c.r * k[0], c.g * k[1], c.b * k[2]];

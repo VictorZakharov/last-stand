@@ -1,6 +1,6 @@
 // Twin Fangs: a weapon in each hand. An instant lunge at the aim and two quick crossing strikes, right
 // then left, each hitting hard in a narrow arc in front.
-import * as THREE from 'three';
+import { Vec3 } from '../../engine/api/index.ts';
 import { schedule } from '../../core/timers';
 import { addShake } from '../../core/renderer';
 import { sfx } from '../../core/audio';
@@ -36,7 +36,7 @@ const skill: InstantSkill = {
     const def = rawDef as Def;
     const p = player.pos;
     const dx = target.x - p.x, dz = target.z - p.z, d = Math.hypot(dx, dz);
-    const dir = d > 1e-3 ? new THREE.Vector3(dx / d, 0, dz / d) : new THREE.Vector3(Math.sin(player.facing), 0, Math.cos(player.facing));
+    const dir = d > 1e-3 ? new Vec3(dx / d, 0, dz / d) : new Vec3(Math.sin(player.facing), 0, Math.cos(player.facing));
     // closes in on the aim, but never runs past it
     const lunge = Math.min(MAX_LUNGE, Math.max(0, d - SHORT));
     sfx.fangs(FANGS.first, FANGS.apart);

@@ -5,7 +5,7 @@
 // neck's range, unhurried, with no jerk a frame, the eyes leading it; the glances must come at random times, never
 // as a loop; none may come as he moves, attacks or is seen through the eyes, nor in the hall before his showcase.
 // The canary kicks the head 3 degrees aside for a frame (a jerk), and lets him glance as he walks.
-import * as THREE from 'three';
+import { Node, Quat, Vec3 } from './sceneApi.ts';
 import * as hall from '../../../src/game/hall';
 import type { Lab, Pictured, Report } from './lab';
 import { openHall, toLobby } from './hallMoves';
@@ -62,12 +62,12 @@ interface Read {
   eyes: number;
 }
 
-const _q = new THREE.Quaternion();
-const _r = new THREE.Quaternion();
-const _forward = new THREE.Vector3();
+const _q = new Quat();
+const _r = new Quat();
+const _forward = new Vec3();
 
 /** The turn about the upright (degrees, + to +x) of `inner`'s forward seen from `outer`'s frame. */
-function turnFrom(inner: THREE.Object3D, outer: THREE.Object3D): number {
+function turnFrom(inner: Node, outer: Node): number {
   outer.getWorldQuaternion(_q).invert();
   inner.getWorldQuaternion(_r);
   _forward.set(0, 0, 1).applyQuaternion(_q.multiply(_r));
@@ -75,8 +75,8 @@ function turnFrom(inner: THREE.Object3D, outer: THREE.Object3D): number {
 }
 
 /** The hero's eyeballs (models/head.ts names them). */
-function eyesOf(lab: Lab): THREE.Object3D[] {
-  const eyes: THREE.Object3D[] = [];
+function eyesOf(lab: Lab): Node[] {
+  const eyes: Node[] = [];
   lab.joints.head.traverse((object) => {
     if (object.name === 'eye') eyes.push(object);
   });
@@ -84,7 +84,7 @@ function eyesOf(lab: Lab): THREE.Object3D[] {
 }
 
 /** This frame's turns as drawn. */
-function readNow(lab: Lab, eyes: THREE.Object3D[]): Read {
+function readNow(lab: Lab, eyes: Node[]): Read {
   const j = lab.joints;
   lab.model.root.updateMatrixWorld(true);
   const eye = eyes.length ? turnFrom(eyes[0], eyes[0].parent!) : 0;
@@ -222,7 +222,7 @@ function judgeJerks(neck: number[], canary: boolean, text: string[], problems: s
 }
 
 /** Frames until he's in the middle of a glance (the head past `GLANCE_FROM` + 5 degrees), false if none came. */
-async function untilGlancing(lab: Lab, eyes: THREE.Object3D[]): Promise<boolean> {
+async function untilGlancing(lab: Lab, eyes: Node[]): Promise<boolean> {
   for (let frame = 0; frame < WAIT_FOR; frame++) {
     await lab.step(1);
     if (Math.abs(readNow(lab, eyes).neck) > GLANCE_FROM + 5) return true;
@@ -313,7 +313,7 @@ async function attacking(lab: Lab): Promise<Report> {
   await lab.setup({ at: [14, 17], facing: 0 });
   const eyes = eyesOf(lab);
   if (!(await untilGlancing(lab, eyes))) return { text: '  attacking: no glance came to attack from', problems: [] };
-  const aim = lab.player.pos.clone().add(new THREE.Vector3(0, 0, 6));
+  const aim = lab.player.pos.clone().add(new Vec3(0, 0, 6));
   const reads = await lab.step(Math.round(ATTACK * RATE), () => ({ m0: true, aim }), () => readNow(lab, eyes));
   const problems: string[] = [];
   // (the attack's own pose turns the head: judged by the eyes alone, which only a glance turns)
@@ -361,7 +361,7 @@ async function lobbyAndHall(lab: Lab): Promise<Report> {
 /** The hall's hero in focus followed: his frames glancing until his showcase is done, and how long after it his first
  *  glance came (s; -1 none). */
 async function followShowcase(lab: Lab, hero: hall.HallHero): Promise<{ before: number; after: number }> {
-  const eyes: THREE.Object3D[] = [];
+  const eyes: Node[] = [];
   hero.player.model.joints!.head.traverse((object) => {
     if (object.name === 'eye') eyes.push(object);
   });

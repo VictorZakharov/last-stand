@@ -2,7 +2,7 @@
 // aside (`engine/pipelinesAside.ts`): a warm-up hands it what a part would draw and waits for them, before the
 // first frame that shows it. (three's own programs were pinned and listed here while three drew the scene.)
 import { AHEAD, LATE_PIPELINES, PIPELINES, pipelinesReady } from '../engine/pipelinesAside';
-import * as THREE from 'three';
+import { Camera, Material, Node, Texture, World } from '../engine/api/index.ts';
 
 let loaded = false;
 /** The engine's pipelines first asked for in play, each described, for the perf report: the engine draws the game,
@@ -32,20 +32,20 @@ type Step = () => Promise<void>;
 export interface WarmUp {
   /** added to the scene for the draw alone, and taken away after (compiled with the scene where `compile` is left
    *  out): the lobby's frames mustn't draw what isn't linked yet, as three would link it there, the frame waiting */
-  objects?: THREE.Object3D[];
+  objects?: Node[];
   /** what's compiled, as the scene lights it (a part of the fight, behind the lobby: the lobby's own are warm);
    *  left out, the whole scene and `objects` */
-  compile?: THREE.Object3D[];
+  compile?: Node[];
   /** left out of it: what the lobby doesn't show (the other biomes), warmed behind it */
-  leaveOut?: THREE.Object3D[];
+  leaveOut?: Node[];
   /** compiled with it, besides the scene's: what passes of their own draw (the outline's), its materials' links
    *  waited for with the rest */
-  also?: () => Set<THREE.Material>;
+  also?: () => Set<Material>;
   /** drawn alone, whatever the camera sees, on the warm-ups' layer (every light is on it too: their counts are the
    *  scene's, `lightThePasses` in renderer.ts), into a pixel of the target: the programs the draws make are the
    *  scene's, and its fragments none (a whole lobby drawn again for each part held its frames up); left out, the
    *  whole scene unculled */
-  drawn?: THREE.Object3D[];
+  drawn?: Node[];
   /** shown in place of `hide` for the draw alone (a biome the lobby doesn't show, for its shadows' programs, made as
    *  they're drawn: one in place of the other, so the lights counted are as many) */
   swap?: Swap;
@@ -56,7 +56,7 @@ export interface WarmUp {
    *  no foe seated draws nothing, and its pipelines were made at the draw: the fight's 2.6 s) */
   hide?: () => void;
   /** awaited before the uploads, given the textures the compiled materials draw with (their maps, still coming) */
-  before?: (textures: Set<THREE.Texture>) => Promise<void>;
+  before?: (textures: Set<Texture>) => Promise<void>;
   /** told how much of the warm-up is done, 0 to 1 (the share each step takes is a guess: the links, most) */
   progress?: (share: number) => void;
   /** awaited between its steps (each root's compile, a slice of uploads, each program's uniforms read, the draw):
@@ -76,7 +76,7 @@ export interface WarmUp {
 /** What a warm-up shows in place of what (`WarmUp.swap`). `alone`, put on as it's drawn and returning its undoing,
  *  leaves it the casting lights it will have when shown: every lit program is made for two, and more in the draw made
  *  them all afresh inside it. */
-export interface Swap { show: THREE.Object3D; hide: THREE.Object3D; alone?: () => () => void }
+export interface Swap { show: Node; hide: Node; alone?: () => () => void }
 
 /** What a warm-up took (ms): its compile and its draw (each one task, the compile with `step` in slices of a few ms,
  *  `compileStepMs` its longest), its wait for the maps it draws with (`WarmUp.before`) and their uploads, and the wait
@@ -96,7 +96,7 @@ const PIPELINES_WAIT_MOST = 15000;
  * frame. Nothing of the scene is three's to compile or draw: the engine's own pipelines are made as it boots, and it
  * takes each mesh as it's first shown (src/engine).
  */
-export async function warmUp(_renderer: THREE.WebGLRenderer, _scene: THREE.Scene, _camera: THREE.Camera, _target: THREE.WebGLRenderTarget, how: WarmUp = {}): Promise<WarmedUp> {
+export async function warmUp(_renderer: unknown, _scene: World, _camera: Camera, _target: unknown, how: WarmUp = {}): Promise<WarmedUp> {
   AHEAD.prepare?.([...(how.drawn ?? []), ...(how.objects ?? []), ...(how.swap ? [how.swap.show] : [])]);
   await pipelinesReady(PIPELINES_WAIT_MOST);
   // (left as a warm-up leaves it: what it shows to draw, hidden again)

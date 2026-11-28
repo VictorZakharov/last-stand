@@ -5,7 +5,7 @@
 // is read against the same frame with its near plane brought in to a few centimetres: what differs is what the near
 // plane cut away of what's drawn, which must be next to nothing (a column whole, a ghost or gone, never its edges
 // alone). `--canary` leaves the near plane at 0.5 m by what stands free, as it was (`farNearAtWalls`).
-import * as THREE from 'three';
+import { Vec3 } from './sceneApi.ts';
 import type { Lab, Pictured } from './lab';
 import { G } from '../../../src/state';
 import { faceCamera, farNearAtWalls, setZoom, viewMode } from '../../../src/core/renderer';
@@ -58,7 +58,7 @@ function stands(): Stand[] {
 /** The hero put at `stand`, the camera behind him at the lobby's zoom, let settle. */
 async function standAt(lab: Lab, stand: Stand): Promise<void> {
   G.player.walkTo = null;
-  G.player.place(new THREE.Vector3(stand.x, groundHeight(stand.x, stand.z), stand.z), stand.facing);
+  G.player.place(new Vec3(stand.x, groundHeight(stand.x, stand.z), stand.z), stand.facing);
   setZoom(CAMERA.lobbyZoom);
   faceCamera(stand.facing);
   await lab.step(SETTLE);
@@ -78,7 +78,7 @@ function cutShare(lab: Lab): number {
 }
 
 /** What one stand read: what was cut away, the near plane and where the camera stood. */
-interface StandRead { stand: Stand; cut: number; near: number; eye: THREE.Vector3 }
+interface StandRead { stand: Stand; cut: number; near: number; eye: Vec3 }
 
 /** Every stand read in turn. */
 async function readStands(lab: Lab): Promise<StandRead[]> {

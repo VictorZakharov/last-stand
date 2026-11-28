@@ -10,7 +10,7 @@
 // gives (the skill as the weapons held tune it), how far he moved and whether anything was cast while stunned, and
 // that he moved and cast again once free; with no stun, that he cast in the charge's hold. The canary plants a fault
 // for each: the big pack's stun cut short, the elite pack's most lifted out of reach, and the boss carried as met.
-import * as THREE from 'three';
+import { Vec3 } from './sceneApi.ts';
 import { screenArea, type Lab, type Pictured } from './lab';
 import type { Enemy } from '../../../src/entities/enemy';
 import type { HeldStyle, PushDef, RamDef } from '../../../src/types';
@@ -140,7 +140,7 @@ interface Rammed {
 
 const seconds = (value: number): string => `${value.toFixed(2)} s`;
 const metres = (value: number): string => `${value.toFixed(2)} m`;
-const flat = (from: THREE.Vector3, to: THREE.Vector3): number => Math.hypot(to.x - from.x, to.z - from.z);
+const flat = (from: Vec3, to: Vec3): number => Math.hypot(to.x - from.x, to.z - from.z);
 
 /** Whether the hero is casting or holding anything (a cast under way, or a channel). */
 function busy(): boolean {
@@ -157,7 +157,7 @@ interface Touched {
 
 /** The foes of `pack` risen before a hero at `at` facing `facing`, standing dazed, each noting when it's struck and
  *  carried. */
-async function packOf(lab: Lab, pack: Pack, at: THREE.Vector3, facing: number, touched: Touched): Promise<Enemy[]> {
+async function packOf(lab: Lab, pack: Pack, at: Vec3, facing: number, touched: Touched): Promise<Enemy[]> {
   const { forward, left } = waysOf(facing);
   const foes = pack.foes.map((placed) => {
     const spot = at.clone().addScaledVector(forward, placed.ahead).addScaledVector(left, placed.across);
@@ -248,9 +248,9 @@ async function ramThrough(lab: Lab, options: RushOptions, pack: Pack, canary: bo
   };
   const unplant = plantBefore(plant);
   done.planted = unplant !== null;
-  let stunAt: THREE.Vector3 | null = null;
-  let mostAt: THREE.Vector3 | null = null;
-  let freeAt: THREE.Vector3 | null = null;
+  let stunAt: Vec3 | null = null;
+  let mostAt: Vec3 | null = null;
+  let freeAt: Vec3 | null = null;
   let freeFrom = -1;
   const strip = [...STRIP];
   // (the crosshair of the close views onto the aim first, as the player would)

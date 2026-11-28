@@ -11,7 +11,7 @@
 // it falls too far behind where it should stand, then steps there (so he never slides, and turns on the spot in small
 // steps). Every place is in the shop's frame (`S`: the room's group, his root's parent); what his hands do is in his
 // root's frame, worked out each frame from where he stands.
-import * as THREE from 'three';
+import { Mat4, Node, Quat, Vec3 } from '../../engine/api/index.ts';
 import { clamp, damp, mulberry, smooth } from '../../util';
 
 /** A place he stands, facing `yaw` (0 faces +z, the shop's door, over his counter). */
@@ -19,14 +19,14 @@ export interface Spot { x: number; z: number; yaw: number }
 
 /** A thing he handles: lying in the shop (its parent the shop's group) or in one of his hands. */
 export interface Thing {
-  obj: THREE.Object3D;
+  obj: Node;
   /** where it belongs, and where it lies now while it isn't held (the shop's frame) */
-  home: { pos: THREE.Vector3; turn: THREE.Quaternion };
-  at: { pos: THREE.Vector3; turn: THREE.Quaternion };
+  home: { pos: Vec3; turn: Quat };
+  at: { pos: Vec3; turn: Quat };
   /** how it sits in a hand: its origin and its turn in the hand's frame */
-  grip: { pos: THREE.Vector3; turn: THREE.Quaternion };
+  grip: { pos: Vec3; turn: Quat };
   /** its turn set down on the counter, about his facing (a jar stands, a blade lies flat) */
-  laid: THREE.Quaternion;
+  laid: Quat;
   /** how far the fingers close on it (`poseHand`'s curl): round a handle a full fist, over a jar's neck less */
   curl: number;
   held: 'L' | 'R' | null;
@@ -35,13 +35,13 @@ export interface Thing {
 /** His shop as he works in it: all in its frame. */
 export interface OdoShop {
   /** the counter's top, the z of its near (his) and far edges, and where a customer stands up to it */
-  counter: { top: number; near: number; far: number; front: THREE.Vector3 };
+  counter: { top: number; near: number; far: number; front: Vec3 };
   /** where he serves from */
   desk: Spot;
   /** the scale's near pan, the ledger's middle (where he writes) */
-  pan: THREE.Vector3; ledger: THREE.Vector3;
+  pan: Vec3; ledger: Vec3;
   /** the jars on the crate, the shelf's places they go to, and where he stands between them */
-  stock: { stand: Spot; jars: Thing[]; slots: THREE.Vector3[] };
+  stock: { stand: Spot; jars: Thing[]; slots: Vec3[] };
   /** the line along the middle of the way behind the counter (z) he walks along, clear of the counter and the shelves */
   aisle: number;
   /** the duster in its pot, where he stands to take it, and where he dusts from (the shelves' front, its rows) */
@@ -54,7 +54,7 @@ export interface OdoShop {
 export interface ArmGoal {
   w: number;
   /** the wrist, and the hand's turn (his root's frame) */
-  at: THREE.Vector3; turn: THREE.Quaternion;
+  at: Vec3; turn: Quat;
   curl: number; drum: number;
   /** how far its fingers fan (0.15 as a hand rests) */
   spread: number;
@@ -68,23 +68,23 @@ export interface Doing {
   /** leaning forward (rad), lowering his hips (m), turning his chest (rad) */
   bend: number; crouch: number; twist: number;
   /** where he looks (his root's frame) */
-  look: THREE.Vector3;
+  look: Vec3;
   /** a nod (0 to 1, down and back), the coin and the quill held, his right hand in a pinch for the coin */
   nod: number; coin: boolean; quill: boolean; pinch: boolean;
   /** where the duster's feathers brush the shelf, while they do (the shop's frame: it raises the dust) */
-  dusting: THREE.Vector3 | null;
+  dusting: Vec3 | null;
 }
 
 /** What he's given each frame: where the customers in the shop stand (the shop's frame, on the floor), and whether a
  *  trade is open. */
-export interface OdoScene { customers: readonly THREE.Vector3[]; trading: boolean; t: number }
+export interface OdoScene { customers: readonly Vec3[]; trading: boolean; t: number }
 
 export type OdoTask = 'stock' | 'dust' | 'inspect' | 'weigh' | 'write';
 /** the ways he waits at his desk */
 export type Waiting = 'rest' | 'lean' | 'belt' | 'square';
 const TASKS: readonly OdoTask[] = ['write', 'stock', 'weigh', 'dust', 'inspect'];
 
-const V = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
+const V = (x: number, y: number, z: number) => new Vec3(x, y, z);
 /** 0 outside [a, b], 1 inside it, eased in and out over `rise` at each end */
 export const span = (t: number, a: number, b: number, rise: number): number =>
   smooth(clamp((t - a) / rise, 0, 1)) * (1 - smooth(clamp((t - (b - rise)) / rise, 0, 1)));
@@ -92,9 +92,9 @@ export const span = (t: number, a: number, b: number, rise: number): number =>
 export const along = (t: number, a: number, b: number): number => clamp((t - a) / (b - a), 0, 1);
 const wrap = (a: number): number => Math.atan2(Math.sin(a), Math.cos(a));
 
-const fx = new THREE.Vector3(), fy = new THREE.Vector3(), fz = new THREE.Vector3(), basis = new THREE.Matrix4();
+const fx = new Vec3(), fy = new Vec3(), fz = new Vec3(), basis = new Mat4();
 /** A hand's turn (his root's frame): its fingers along `fingers`, its palm facing `palm`. */
-export function handTurn(fingers: THREE.Vector3, palm: THREE.Vector3, out: THREE.Quaternion): THREE.Quaternion {
+export function handTurn(fingers: Vec3, palm: Vec3, out: Quat): Quat {
   fy.copy(fingers).normalize().negate();
   fz.copy(palm).negate();
   fz.addScaledVector(fy, -fz.dot(fy)).normalize();
@@ -265,8 +265,8 @@ interface Me { dt: number; d: Doing }
 type Act = Generator<void, void, void>;
 
 /** How a thing is held: from a hand's turn and where the thing then is (his root's frame), its grip in the hand's frame. */
-export function gripOf(fingers: THREE.Vector3, palm: THREE.Vector3, thingAt: THREE.Vector3, thingTurn: THREE.Quaternion): Thing['grip'] {
-  const qh = handTurn(fingers, palm, new THREE.Quaternion()), inv = qh.clone().invert();
+export function gripOf(fingers: Vec3, palm: Vec3, thingAt: Vec3, thingTurn: Quat): Thing['grip'] {
+  const qh = handTurn(fingers, palm, new Quat()), inv = qh.clone().invert();
   return { pos: thingAt.clone().applyQuaternion(inv), turn: inv.multiply(thingTurn) };
 }
 
@@ -281,9 +281,9 @@ export class OdoLife {
   now: OdoTask | 'serve' | 'tidy' = 'write';
   /** where the pen's nib is in his writing hand's frame, as merchant.ts holds it (a tripod grip): the hand is placed
    *  so the nib is on the page */
-  penNib = new THREE.Vector3(0, -0.12, -0.03);
+  penNib = new Vec3(0, -0.12, -0.03);
   /** where a pinched coin is in his right hand's frame (merchant.ts's coin grip) */
-  coinPinch = new THREE.Vector3(0, -0.13, -0.02);
+  coinPinch = new Vec3(0, -0.13, -0.02);
   /** set by the lab: the next task he takes up */
   asked: OdoTask | null = null;
   /** whether a customer is being served, and whether he's glancing at one now */
@@ -296,7 +296,7 @@ export class OdoLife {
   private stocked = false;
   private lastTask: OdoTask | null = null;
   private nextGlance = 4;
-  private glanceAt = new THREE.Vector3();
+  private glanceAt = new Vec3();
   private customersBefore = 0;
   private farSince = 0;
   /** when he goes to a customer who called him (his clock), or -1 */
@@ -305,7 +305,7 @@ export class OdoLife {
 
   constructor(readonly shop: OdoShop, seed = 5) {
     this.walker = new Walker(shop.desk);
-    const arm = (): ArmGoal => ({ w: 0, at: new THREE.Vector3(), turn: new THREE.Quaternion(), curl: 0.15, drum: 0, spread: 0.15 });
+    const arm = (): ArmGoal => ({ w: 0, at: new Vec3(), turn: new Quat(), curl: 0.15, drum: 0, spread: 0.15 });
     this.doing = { L: arm(), R: arm(), onCounter: false, bend: 0, crouch: 0, twist: 0, look: V(0, 1.4, 2), nod: 0, coin: false, quill: false, pinch: false, dusting: null };
     this.me = { dt: 0, d: this.doing };
     this.rng = mulberry(seed);
@@ -314,22 +314,22 @@ export class OdoLife {
   // --- where things are, his root's frame ---
 
   /** a point of the shop's frame in his root's */
-  toMe(p: THREE.Vector3, out = new THREE.Vector3()): THREE.Vector3 {
+  toMe(p: Vec3, out = new Vec3()): Vec3 {
     const w = this.walker, c = Math.cos(w.yaw), s = Math.sin(w.yaw), x = p.x - w.x, z = p.z - w.z;
     return out.set(x * c - z * s, p.y, x * s + z * c);
   }
   /** a point of his root's frame in the shop's */
-  toShop(p: THREE.Vector3, out = new THREE.Vector3()): THREE.Vector3 {
+  toShop(p: Vec3, out = new Vec3()): Vec3 {
     const w = this.walker, c = Math.cos(w.yaw), s = Math.sin(w.yaw);
     return out.set(p.x * c + p.z * s + w.x, p.y, -p.x * s + p.z * c + w.z);
   }
   /** his facing as a turn, and a turn of the shop's frame in his root's */
-  private yawTurn(out = new THREE.Quaternion()): THREE.Quaternion { return out.setFromAxisAngle(UP, this.walker.yaw); }
-  turnToMe(q: THREE.Quaternion, out = new THREE.Quaternion()): THREE.Quaternion { return this.yawTurn(out).invert().multiply(q); }
-  turnToShop(q: THREE.Quaternion, out = new THREE.Quaternion()): THREE.Quaternion { return this.yawTurn(out).multiply(q); }
+  private yawTurn(out = new Quat()): Quat { return out.setFromAxisAngle(UP, this.walker.yaw); }
+  turnToMe(q: Quat, out = new Quat()): Quat { return this.yawTurn(out).invert().multiply(q); }
+  turnToShop(q: Quat, out = new Quat()): Quat { return this.yawTurn(out).multiply(q); }
 
   /** an arm set to hold `thing` at `pos` turned `turn` (his root's frame) */
-  private hold(arm: ArmGoal, thing: Thing, pos: THREE.Vector3, turn: THREE.Quaternion, w = 1): void {
+  private hold(arm: ArmGoal, thing: Thing, pos: Vec3, turn: Quat, w = 1): void {
     arm.turn.copy(turn).multiply(_q.copy(thing.grip.turn).invert());
     arm.at.copy(thing.grip.pos).applyQuaternion(arm.turn).negate().add(pos);
     arm.w = w;
@@ -340,11 +340,11 @@ export class OdoLife {
     this.hold(arm, thing, this.toMe(thing.at.pos, _p), this.turnToMe(thing.at.turn, _q2), w);
     arm.curl = 0.15 + (thing.curl - 0.15) * clamp((w - 0.85) / 0.15, 0, 1);
   }
-  private aim(arm: ArmGoal, at: THREE.Vector3, fingers: THREE.Vector3, palm: THREE.Vector3, w = 1, curl = 0.2): void {
+  private aim(arm: ArmGoal, at: Vec3, fingers: Vec3, palm: Vec3, w = 1, curl = 0.2): void {
     arm.at.copy(at); handTurn(fingers, palm, arm.turn); arm.w = w; arm.curl = curl;
   }
   private take(thing: Thing, hand: 'L' | 'R'): void { thing.held = hand; }
-  private put(thing: Thing, pos: THREE.Vector3, turn: THREE.Quaternion): void {
+  private put(thing: Thing, pos: Vec3, turn: Quat): void {
     thing.held = null;
     thing.at.pos.copy(pos); thing.at.turn.copy(turn);
   }
@@ -392,7 +392,7 @@ export class OdoLife {
     resetDoing(d);
     // --- whether a customer wants him at his desk ---
     const front = this.shop.counter.front;
-    const off = (c: THREE.Vector3) => Math.hypot(c.x - front.x, c.z - front.z);
+    const off = (c: Vec3) => Math.hypot(c.x - front.x, c.z - front.z);
     const atCounter = scene.trading || scene.customers.some((c) => off(c) < SERVE.near);
     const cameIn = scene.customers.length > this.customersBefore;
     this.customersBefore = scene.customers.length;
@@ -432,8 +432,8 @@ export class OdoLife {
   }
   private scene: OdoScene = { customers: [], trading: false, t: 0 };
 
-  private nearest(scene: OdoScene): THREE.Vector3 | null {
-    let best: THREE.Vector3 | null = null, bd = Infinity;
+  private nearest(scene: OdoScene): Vec3 | null {
+    let best: Vec3 | null = null, bd = Infinity;
     for (const c of scene.customers) {
       const dd = Math.hypot(c.x - this.walker.x, c.z - this.walker.z);
       if (dd < bd) { bd = dd; best = c; }
@@ -638,11 +638,11 @@ export class OdoLife {
     this.take(dagger, 'R');
     // (palm down, fingers ahead and a little in: the blade out of his thumb's side across to his left, its flat up)
     const fingers = V(0.15, -0.1, 1).normalize();
-    const flat = handTurn(fingers, V(0, -1, 0.05), new THREE.Quaternion());
-    const before = V(-0.08, 1.2, 0.36), roll = new THREE.Quaternion();
+    const flat = handTurn(fingers, V(0, -1, 0.05), new Quat());
+    const before = V(-0.08, 1.2, 0.36), roll = new Quat();
     const lifted = this.toMe(dagger.home.pos).add(V(0, 0.04, -0.03));
     /** the blade's way and a point along it from his fist (his root's frame) */
-    const along = (out: THREE.Vector3, from: number) =>
+    const along = (out: Vec3, from: number) =>
       out.set(1, 0, 0).applyQuaternion(d.R.turn).multiplyScalar(from).add(d.R.at);
     yield* this.over(0.9, (k) => {
       const e = smooth(k);
@@ -693,10 +693,10 @@ export class OdoLife {
     yield* this.walk(desk);
     // (palm down over the pan, fingers toward it; at his eye, the hand up on its side, fingers up and in, the coin
     // between him and the candle's light)
-    const down = handTurn(V(0.15, -0.75, 0.6), V(0, -1, 0.1), new THREE.Quaternion());
+    const down = handTurn(V(0.15, -0.75, 0.6), V(0, -1, 0.1), new Quat());
     const fingersUp = V(0.25, 0.85, 0.35).normalize();
-    const up = handTurn(fingersUp, V(0.75, -0.1, -0.65), new THREE.Quaternion());
-    const eye = V(-0.05, 1.5, 0.32), roll = new THREE.Quaternion();
+    const up = handTurn(fingersUp, V(0.75, -0.1, -0.65), new Quat());
+    const eye = V(-0.05, 1.5, 0.32), roll = new Quat();
     yield* this.over(8, (k) => {
       d.onCounter = true;
       const reach = span(k, 0, 1, 0.12), lift = span(k, 0.2, 0.86, 0.13);
@@ -722,7 +722,7 @@ export class OdoLife {
     yield* this.walk(desk);
     // (his left hand rolled onto its little finger's side, its fingers toward the page and his right, the pen sloping
     // back over the web of his hand)
-    const writing = handTurn(V(-0.3, -0.55, 0.78), V(-0.5, -0.85, 0.15), new THREE.Quaternion());
+    const writing = handTurn(V(-0.3, -0.55, 0.78), V(-0.5, -0.85, 0.15), new Quat());
     yield* this.over(9, (k) => {
       d.onCounter = true;
       const write = span(k, 0, 1, 0.13), line = along(k, 0.1, 0.85);
@@ -807,14 +807,14 @@ export class OdoLife {
     // side, its blade along before him. Carried as his hand happened to hold it when called, mid-reach, his wrist
     // turned and his forearm went into his belly as he walked; the dagger, held across him, came to his left hand)
     const heldNow = isDagger ? V(-0.22, 1.02, 0.36) : isDuster ? V(-0.25, 1.08, 0.33) : V(0.24, 0.92, 0.38);
-    const turnNow = isDagger ? new THREE.Quaternion().setFromUnitVectors(Y, V(0.15, -0.35, 1).normalize())
-      : isDuster ? new THREE.Quaternion().setFromAxisAngle(X, 0.25) : new THREE.Quaternion();
+    const turnNow = isDagger ? new Quat().setFromUnitVectors(Y, V(0.15, -0.35, 1).normalize())
+      : isDuster ? new Quat().setFromAxisAngle(X, 0.25) : new Quat();
     yield* this.walk(spot, () => this.hold(arm, held, heldNow, turnNow));
     const on = home ? held.home.pos.clone() : V(this.walker.x + 0.16 * s, this.shop.counter.top + 0.014, this.shop.counter.near + 0.14);
     // (laid with its length toward the hand that takes it up again: the duster laid with its handle to his left, his
     // right hand reached across his chest to it, from the lab)
-    const toward = new THREE.Quaternion().setFromAxisAngle(UP, s < 0 ? Math.PI : 0);
-    const laid = home ? held.home.turn.clone() : this.turnToShop(toward.multiply(held.laid), new THREE.Quaternion());
+    const toward = new Quat().setFromAxisAngle(UP, s < 0 ? Math.PI : 0);
+    const laid = home ? held.home.turn.clone() : this.turnToShop(toward.multiply(held.laid), new Quat());
     yield* this.over(0.9, (k) => {
       const there = this.toMe(on, _p6), turn = this.turnToMe(laid, _q3);
       this.hold(arm, held, _p5.copy(heldNow).lerp(there, smooth(clamp(k / 0.6, 0, 1))), _q4.copy(turnNow).slerp(turn, smooth(clamp(k / 0.6, 0, 1))));
@@ -901,13 +901,13 @@ export class OdoLife {
   waiting: Waiting = 'rest';
 
   /** where a held thing is now and its turn, as its hand last put it (the shop's frame): the pose layer keeps these */
-  handGuess(thing: Thing): THREE.Vector3 { return thing.obj.parent ? thing.obj.getWorldPosition(new THREE.Vector3()).applyMatrix4(_m.copy(this.shopWorld).invert()) : thing.at.pos.clone(); }
-  handTurnGuess(thing: Thing): THREE.Quaternion {
-    const q = thing.obj.getWorldQuaternion(new THREE.Quaternion());
+  handGuess(thing: Thing): Vec3 { return thing.obj.parent ? thing.obj.getWorldPosition(new Vec3()).applyMatrix4(_m.copy(this.shopWorld).invert()) : thing.at.pos.clone(); }
+  handTurnGuess(thing: Thing): Quat {
+    const q = thing.obj.getWorldQuaternion(new Quat());
     return _q5.setFromRotationMatrix(this.shopWorld).invert().multiply(q);
   }
   /** the shop group's world matrix (merchant.ts keeps it) */
-  shopWorld = new THREE.Matrix4();
+  shopWorld = new Mat4();
 }
 
 /** the doing's defaults each frame: arms at rest, standing straight, looking ahead */
@@ -917,9 +917,9 @@ function resetDoing(d: Doing): void {
   d.look.set(0, 1.35, 2.2);
 }
 
-const UP = new THREE.Vector3(0, 1, 0), X = new THREE.Vector3(1, 0, 0), Y = UP, Z = new THREE.Vector3(0, 0, 1);
-const _p = new THREE.Vector3(), _p2 = new THREE.Vector3(), _p3 = new THREE.Vector3(), _p4 = new THREE.Vector3();
-const _p5 = new THREE.Vector3(), _p6 = new THREE.Vector3(), _p7 = new THREE.Vector3();
-const _q = new THREE.Quaternion(), _q2 = new THREE.Quaternion(), _q3 = new THREE.Quaternion(), _q4 = new THREE.Quaternion();
-const _q5 = new THREE.Quaternion(), _m = new THREE.Matrix4();
+const UP = new Vec3(0, 1, 0), X = new Vec3(1, 0, 0), Y = UP, Z = new Vec3(0, 0, 1);
+const _p = new Vec3(), _p2 = new Vec3(), _p3 = new Vec3(), _p4 = new Vec3();
+const _p5 = new Vec3(), _p6 = new Vec3(), _p7 = new Vec3();
+const _q = new Quat(), _q2 = new Quat(), _q3 = new Quat(), _q4 = new Quat();
+const _q5 = new Quat(), _m = new Mat4();
 void damp;

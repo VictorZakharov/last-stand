@@ -1,4 +1,7 @@
-// Range dragging and select lists for the Alt cursor, without opening an OS popup or releasing mouse look.
+// Range dragging and select lists for the Alt cursor, without opening an OS popup or releasing mouse look; the range's
+// dragging is also a slider's the kit draws (`kit/forward.ts`), where it's drawn.
+import { shownBox } from './kit/press';
+import { uiScales } from './scale';
 interface Point { x: number; y: number }
 let range: { input: HTMLInputElement; initial: string } | null = null;
 let picker: { select: HTMLSelectElement; menu: HTMLElement; active: number } | null = null;
@@ -13,11 +16,14 @@ export function beginAltRange(target: Element | null, at: Point): boolean {
 
 export function dragAltRange(at: Point): void {
   if (!range) return;
-  const field = range.input, box = field.getBoundingClientRect(), style = getComputedStyle(field);
+  const field = range.input, box = shownBox(field), style = getComputedStyle(field);
   const vertical = style.writingMode.startsWith('vertical');
   const size = vertical ? box.height : box.width;
   // Native range thumbs are 16 CSS px; account for the UI's zoom when measuring their travel.
-  const inset = Math.min(size / 2, 8 * size / Math.max(1, vertical ? field.offsetHeight : field.offsetWidth));
+  // (one the kit draws is at the lobby's scale: `kit/formControls.ts`'s thumb)
+  const zoom = field.closest('.kit-mirror') ? uiScales.ui
+    : size / Math.max(1, vertical ? field.offsetHeight : field.offsetWidth);
+  const inset = Math.min(size / 2, 8 * zoom);
   let share = Math.max(0, Math.min(1, ((vertical ? at.y - box.top : at.x - box.left) - inset) / Math.max(1, size - inset * 2)));
   if (style.direction === 'rtl') share = 1 - share;
   const min = Number(field.min) || 0, max = field.max === '' ? 100 : Number(field.max);

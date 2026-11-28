@@ -276,10 +276,14 @@ function plantOldStyle(): () => void {
   line.textContent = DIGITS;
   Object.assign(line.style, { position: 'fixed', left: '0', bottom: '0', zIndex: '2147483647', pointerEvents: 'none' });
   document.body.append(line);
-  for (const face of [...document.fonts]) {
-    if (face.featureSettings.includes('lnum')) document.fonts.delete(face);
-  }
-  return () => line.remove();
+  const taken = [...document.fonts].filter((face) => face.featureSettings.includes('lnum'));
+  for (const face of taken) document.fonts.delete(face);
+  // (the fonts put back with the line: left out, every state after it in the page painted its labels without them,
+  // and the choice after a wave drawn by the engine lost a chip)
+  return () => {
+    line.remove();
+    for (const face of taken) document.fonts.add(face);
+  };
 }
 
 /** The digits shown in this state, on the page and over the world, each look and font of them on its line. */

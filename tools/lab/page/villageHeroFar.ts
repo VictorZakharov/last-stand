@@ -3,7 +3,7 @@
 // High at any distance). From above he must be drawn coarse, and the frame drawn so and whole at one moment must be
 // the same to the eye: the share of its pixels apart, and by how much. Over the shoulder he must be whole. `canary`
 // holds the coarse geometries off, which must be found.
-import type * as THREE from 'three';
+import type { Mesh } from './sceneApi.ts';
 import type { Lab, Pictured } from './lab';
 import { G } from '../../../src/state';
 import { holdHour } from '../../../src/game/clock';
@@ -26,7 +26,7 @@ const SETTLE = 40;
 function heroTriangles(): number {
   let triangles = 0;
   G.player.model.root.traverse((object) => {
-    const mesh = object as THREE.Mesh;
+    const mesh = object as Mesh;
     if (!mesh.isMesh || !mesh.visible) return;
     const geometry = mesh.geometry;
     triangles += (geometry.index ? geometry.index.count : geometry.attributes.position.count) / 3;

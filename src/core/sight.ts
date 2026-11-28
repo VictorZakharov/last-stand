@@ -5,7 +5,10 @@
 // world read from the frame's depth. One program, for every renderer; a wall is a line on the floor, so nothing else in
 // the scene compiles or draws more. Through the eyes and over the shoulder the camera stands where he does, and walls hide
 // what they hide.
-import * as THREE from 'three';
+import {
+  Camera, ClampToEdgeWrapping, DataTexture, fromHalfFloat, HalfFloatType, LinearFilter, Mat4, Maths, NearestFilter,
+  RedFormat, RepeatWrapping, RGBAFormat, Texture, toHalfFloat, UnsignedByteType, Vec2, Vec4,
+} from '../engine/api/index.ts';
 import { onWholeView, wholeView } from './wholeView';
 
 /** A wall as a line on the floor, from (x0, z0) to (x1, z1). */
@@ -37,7 +40,7 @@ const FADES_OVER = 0.22;
  *  its reach as last cast, settled (the hall's sight cone's, `seeSeenFrom` in seeThrough.ts); his in the first row, the
  *  door's he sees through in the second (`DOOR_ROW`) */
 const strip = new Uint16Array(RAYS * 4 * 2);
-const sightTexture = new THREE.DataTexture(strip, RAYS, 2, THREE.RGBAFormat, THREE.HalfFloatType);
+const sightTexture = new DataTexture(strip, RAYS, 2, RGBAFormat, HalfFloatType);
 /** where each row is read, as a texture's v: his rays and the door's */
 export const HIS_ROW = 0.25;
 export const DOOR_ROW = 0.75;
@@ -55,9 +58,9 @@ const WEDGE_FROM = 0.3;
  *  portico's column before him cleared with it (`lab village --only columnsStayGhosts`) */
 const DOOR_ASIDE = 0.25;
 // (each ray read alone: filtered, two rays' bands in the middle of their own fades met as a third that neither was)
-sightTexture.minFilter = sightTexture.magFilter = THREE.NearestFilter;
-sightTexture.wrapS = THREE.RepeatWrapping;
-sightTexture.wrapT = THREE.ClampToEdgeWrapping;
+sightTexture.minFilter = sightTexture.magFilter = NearestFilter;
+sightTexture.wrapS = RepeatWrapping;
+sightTexture.wrapT = ClampToEdgeWrapping;
 sightTexture.needsUpdate = true;
 
 /** each ray's reach before its last jump, its reach as last cast, and how far it has faded from the one to the other */
@@ -72,8 +75,8 @@ export const ROOFS_HALF = 64;
 /** how far past its walls a roof reaches (m), and how far it's soft (the eaves) */
 const ROOF_EAVES = 1.1;
 const roofMap = new Uint8Array(ROOFS_TEXELS * ROOFS_TEXELS);
-const roofTexture = new THREE.DataTexture(roofMap, ROOFS_TEXELS, ROOFS_TEXELS, THREE.RedFormat, THREE.UnsignedByteType);
-roofTexture.minFilter = roofTexture.magFilter = THREE.LinearFilter;
+const roofTexture = new DataTexture(roofMap, ROOFS_TEXELS, ROOFS_TEXELS, RedFormat, UnsignedByteType);
+roofTexture.minFilter = roofTexture.magFilter = LinearFilter;
 roofTexture.needsUpdate = true;
 
 /** what the map holds within a house's walls, and under its eaves past them: a roof's alpha lets the fog off what's under
@@ -129,15 +132,15 @@ function paintRoofs(roofs: readonly SightRoof[]): void {
 
 /** The uniforms of the frame's sight, the same objects in WebGL's pass and WebGPU's nodes. */
 export const SIGHT = {
-  tSight: { value: sightTexture as THREE.Texture },
-  tSightRoofs: { value: roofTexture as THREE.Texture },
+  tSight: { value: sightTexture as Texture },
+  tSightRoofs: { value: roofTexture as Texture },
   /** how much of the fog is on: 0 where it's off, eased in as the view comes down from above */
   uSightOn: { value: 0 },
-  uSightFrom: { value: new THREE.Vector2() },
-  uSightInverse: { value: new THREE.Matrix4() },
+  uSightFrom: { value: new Vec2() },
+  uSightInverse: { value: new Mat4() },
   /** the building that may be shut to him (least x, least z, most x, most z), and how shut it is: eased as he walks in
    *  and out of it */
-  uSightSealed: { value: new THREE.Vector4(1, 1, 0, 0) },
+  uSightSealed: { value: new Vec4(1, 1, 0, 0) },
   uSightShut: { value: 0 },
   /** whether the ground seen through a roof away from him is taken as unseen whatever the rays say (`seenColour`):
    *  0, or 1 under a harness, as it was */
@@ -146,7 +149,7 @@ export const SIGHT = {
   uSightHueLetOff: { value: 0 },
   /** the door he sees through, where its rays are cast from and the way into its room (x, z, nx, nz), and how much of
    *  what they see counts: eased in as he comes to see through it and out as he stops */
-  uSightDoor: { value: new THREE.Vector4(0, 0, 0, 1) },
+  uSightDoor: { value: new Vec4(0, 0, 0, 1) },
   uSightDoorOn: { value: 0 },
 };
 
@@ -172,7 +175,7 @@ export const SIGHT_LOOK = {
 
 let walls: readonly SightWall[] = [];
 let doors: readonly SightDoor[] = [];
-let building: THREE.Vector4 | null = null;
+let building: Vec4 | null = null;
 let castFrom: { x: number; z: number } | null = null;
 /** the door whose rays the second row holds, and whether a harness has the doors left out, as they were */
 let doorCast: SightDoor | null = null;
@@ -189,7 +192,7 @@ let heldSharp = false;
  *  roofs over what they stand round. */
 export function sightWalls(
   lines: readonly SightWall[],
-  sealedBuilding: THREE.Vector4 | null,
+  sealedBuilding: Vec4 | null,
   roofs: readonly SightRoof[],
   doorways: readonly SightDoor[] = [],
 ): void {
@@ -298,10 +301,10 @@ function showRays(moved: boolean, by: number): void {
   if (!any) return;
   for (let i = 0; i < RAYS; i++) {
     const growing = to[i] > from[i];
-    strip[i * 4] = THREE.DataUtils.toHalfFloat(growing ? from[i] : to[i]);
-    strip[i * 4 + 1] = THREE.DataUtils.toHalfFloat(growing ? to[i] : from[i]);
-    strip[i * 4 + 2] = THREE.DataUtils.toHalfFloat(growing ? faded[i] : 1 - faded[i]);
-    strip[i * 4 + 3] = THREE.DataUtils.toHalfFloat(to[i]);
+    strip[i * 4] = toHalfFloat(growing ? from[i] : to[i]);
+    strip[i * 4 + 1] = toHalfFloat(growing ? to[i] : from[i]);
+    strip[i * 4 + 2] = toHalfFloat(growing ? faded[i] : 1 - faded[i]);
+    strip[i * 4 + 3] = toHalfFloat(to[i]);
   }
   sightTexture.needsUpdate = true;
 }
@@ -393,10 +396,10 @@ function castDoor(door: SightDoor, hx: number, hz: number): void {
     const dx = Math.cos(angle);
     const dz = Math.sin(angle);
     const seen = Math.min(rayReach(x, z, dx, dz), wedged ? wedgeReach(door, ax, az, x, z, dx, dz, withDepth) : FAR);
-    const reach = THREE.DataUtils.toHalfFloat(seen);
+    const reach = toHalfFloat(seen);
     strip[row + i * 4] = reach;
     strip[row + i * 4 + 1] = reach;
-    strip[row + i * 4 + 2] = THREE.DataUtils.toHalfFloat(1);
+    strip[row + i * 4 + 2] = toHalfFloat(1);
     strip[row + i * 4 + 3] = reach;
   }
   SIGHT.uSightDoor.value.set(x, z, door.nx, door.nz);
@@ -489,7 +492,7 @@ function seenThroughDoorAt(x: number, z: number): number {
   if (on <= 0) return 0;
   const dx = x - door.x;
   const dz = z - door.y;
-  const past = THREE.MathUtils.smoothstep(dx * door.z + dz * door.w, -DOOR_SOFT, 0);
+  const past = Maths.smoothstep(dx * door.z + dz * door.w, -DOOR_SOFT, 0);
   return past > 0 ? seenAround(dx, dz, 1) * past * on : 0;
 }
 
@@ -502,9 +505,9 @@ function seenAlongRay(across: number, away: number, row: number): number {
     const past = Math.min(1, Math.max(0, (away - reach - SIGHT_LOOK.wallFrom) / span));
     return 1 - past * past * (3 - 2 * past);
   };
-  const nearer = seenPast(THREE.DataUtils.fromHalfFloat(strip[ray * 4]));
-  const further = seenPast(THREE.DataUtils.fromHalfFloat(strip[ray * 4 + 1]));
-  return nearer + (further - nearer) * THREE.DataUtils.fromHalfFloat(strip[ray * 4 + 2]);
+  const nearer = seenPast(fromHalfFloat(strip[ray * 4]));
+  const further = seenPast(fromHalfFloat(strip[ray * 4 + 1]));
+  return nearer + (further - nearer) * fromHalfFloat(strip[ray * 4 + 2]);
 }
 
 /** For a harness (tools/lab): how far (x, z) is seen now, 0 to 1, as `SIGHT_GLSL` reads it off the rays (a harness can't
@@ -555,7 +558,7 @@ export function seesIntoRoom(room: readonly [number, number, number, number]): b
 }
 
 /** The frame's camera told to the fog, as it's about to be drawn. */
-export function aimSight(camera: THREE.Camera): void {
+export function aimSight(camera: Camera): void {
   if (SIGHT.uSightOn.value <= 0) return;
   camera.updateMatrixWorld();
   SIGHT.uSightInverse.value.multiplyMatrices(camera.matrixWorld, camera.projectionMatrixInverse);

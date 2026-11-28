@@ -5,7 +5,7 @@
 // screen after it. Then the host opens the hall of heroes (Change hero) as the others cast in their lobbies: no partner
 // may show in it, nor cast there (four in a room stood among the hall's heroes, a warrior's ward glowing over a
 // plinth).
-import * as THREE from 'three';
+import { Vec3 } from './sceneApi.ts';
 import { G } from '../../../src/state';
 import * as village_ from '../../../src/data/village';
 import { groundHeight } from '../../../src/world/ground';
@@ -17,14 +17,14 @@ import { SKILL_KEYS } from '../../../src/loot/loadout';
 import type { SkillKey } from '../../../src/types';
 import { ABANDON_HOLD_MS, showPause, toggleMenuStowed } from '../../../src/ui/menus';
 import { askForHeroes } from './uiHeroes';
-import { realWait, type Frame, type Lab } from './lab';
+import { boxOf, realWait, type Frame, type Lab } from './lab';
 
 /** how much longer than its hold Leave the run is held (ms): its timer runs on the browser's clock */
 const HOLD_SLACK_MS = 300;
 
 /** The middle of `element` on the page (css px). */
 function middleOf(element: Element): { x: number; y: number } {
-  const box = element.getBoundingClientRect();
+  const box = boxOf(element);
   return { x: box.left + box.width / 2, y: box.top + box.height / 2 };
 }
 
@@ -58,7 +58,7 @@ export function practiseInTheYard(): void {
   if (G.arena.place !== 'village' || !village.yardToWorld) return;
   const [x, z] = village.yardToWorld(0, 0);
   G.player.walkTo = null;
-  G.player.place(new THREE.Vector3(x, groundHeight(x, z), z), 0);
+  G.player.place(new Vec3(x, groundHeight(x, z), z), 0);
 }
 
 /** The lobby practised in again after the run (`practiseInTheYard`). */
@@ -123,7 +123,7 @@ function keyHeldInput(key: SkillKey): Frame {
   const village = village_ as { yardToWorld?: (x: number, z: number) => [number, number] };
   const ahead = village.yardToWorld ? village.yardToWorld(0, 2) : [G.player.pos.x, G.player.pos.z + 2];
   const [x, z] = heldAt ?? ahead;
-  const aim = new THREE.Vector3(x, 0, z);
+  const aim = new Vec3(x, 0, z);
   if (key === 'mouse0') return { m0: true, aim };
   if (key === 'mouse2') return { m2: true, aim };
   return { keys: [key], aim };
@@ -136,7 +136,7 @@ function everySkillInput(frame: number): Frame {
   const holding = frame % (EACH_HELD + EACH_APART) < EACH_HELD;
   const village = village_ as { yardToWorld?: (x: number, z: number) => [number, number] };
   const [x, z] = village.yardToWorld ? village.yardToWorld(0, 2) : [G.player.pos.x, G.player.pos.z + 2];
-  const aim = new THREE.Vector3(x, 0, z);
+  const aim = new Vec3(x, 0, z);
   if (!holding) return { aim };
   if (key === 'mouse0') return { m0: true, aim };
   if (key === 'mouse2') return { m2: true, aim };
@@ -220,7 +220,7 @@ export function coopHallSeen(): HallSeen {
 function shows(selector: string): boolean {
   const element = document.querySelector<HTMLElement>(selector);
   if (!element?.checkVisibility({ opacityProperty: true, visibilityProperty: true })) return false;
-  const box = element.getBoundingClientRect();
+  const box = boxOf(element);
   return box.width >= 1 && box.height >= 1;
 }
 

@@ -7,21 +7,30 @@ export interface Shadow { x: number; y: number; blur: number; color: string }
 
 /** How a run of text is drawn. */
 export interface TextStyle {
-  /** 'display' (Cinzel) or 'body' (Alegreya Sans) */
-  face: 'display' | 'body';
+  /** 'display' (Cinzel), 'body' (Alegreya Sans) or 'mono' (the system's monospaced face: the overlays down the
+   *  left's) */
+  face: 'display' | 'body' | 'mono';
   size: number;
   weight?: number;
+  /** slanted (CSS's `font-style: italic`) */
+  italic?: boolean;
+  /** a line under it (CSS's `text-decoration: underline`) */
+  underline?: boolean;
   color: string;
   shadows?: Shadow[];
   /** px between letters */
   spacing?: number;
   upper?: boolean;
+  /** its line's height, times its size, where a panel lays it out (CSS's `line-height`; none: the face's own box) */
+  line?: number;
 }
 
 /** the page's text shadow for labels over the world (`$outline` in the theme) */
 export const OUTLINE: Shadow[] = [{ x: 0, y: 1, blur: 2, color: '#000' }, { x: 0, y: 0, blur: 6, color: '#000' }];
 
 let faces: Record<TextStyle['face'], string> | null = null;
+/** the overlays down the left's face (`_perf.scss`) */
+const MONO = "ui-monospace, 'SF Mono', Menlo, Consolas, monospace";
 /** The page's font stacks, as its stylesheet sets them (`--font-display`, `--font-body`), the body's lining twin
  *  first (until it has loaded, the canvas paints in the next). */
 function fontFaces(): Record<TextStyle['face'], string> {
@@ -31,7 +40,7 @@ function fontFaces(): Record<TextStyle['face'], string> {
   const body = css.getPropertyValue('--font-body').trim() || "'Alegreya Sans', 'Segoe UI', sans-serif";
   const family = body.split(',')[0].replace(/['"]/g, '').trim();
   lining = loadLining(family).catch(() => undefined);
-  faces = { display, body: `'${family}${LINING}', ${body}` };
+  faces = { display, body: `'${family}${LINING}', ${body}`, mono: MONO };
   return faces;
 }
 
@@ -89,7 +98,8 @@ export function liningLoaded(): Promise<void> {
 }
 
 /** The canvas font for `s`. */
-export const fontOf = (s: TextStyle): string => `${s.weight ?? 400} ${s.size}px ${fontFaces()[s.face]}`;
+export const fontOf = (s: TextStyle): string =>
+  `${s.italic ? 'italic ' : ''}${s.weight ?? 400} ${s.size}px ${fontFaces()[s.face]}`;
 
 let measurer: CanvasRenderingContext2D | null = null;
 /** A context to measure text with (never drawn). */
@@ -108,16 +118,29 @@ export function shadowReach(s: TextStyle): number {
 /** A run of text laid out: its width and the height of its line box (px), the font's ascent within it. */
 export interface Measured { text: string; w: number; h: number; ascent: number }
 
+/** each text measured, by its font, spacing and words: forgotten as a font loads (its measures change) and past
+ *  `MEASURES_KEPT` (a guide's page measured each of its 2,000 words twice, 90 ms of its first frame, `lab guide`) */
+const measured = new Map<string, Measured>();
+const MEASURES_KEPT = 20000;
+if (typeof document !== 'undefined') document.fonts?.addEventListener('loadingdone', () => measured.clear());
+
 /** Lays `text` out in style `s`: as wide as the page sets it, a line box of the font's size. */
 export function measure(text: string, s: TextStyle): Measured {
+  const font = fontOf(s);
+  const key = `${font}|${s.spacing ?? 0}|${s.upper ? 1 : 0}|${text}`;
+  const known = measured.get(key);
+  if (known) return known;
   const c = measuring();
   const shown = s.upper ? text.toUpperCase() : text;
-  c.font = fontOf(s);
+  c.font = font;
   setSpacing(c, s.spacing ?? 0);
   const m = c.measureText(shown);
   const ascent = m.fontBoundingBoxAscent ?? s.size * 0.8;
   const descent = m.fontBoundingBoxDescent ?? s.size * 0.25;
-  return { text: shown, w: m.width, h: ascent + descent, ascent };
+  const laid = { text: shown, w: m.width, h: ascent + descent, ascent };
+  if (measured.size >= MEASURES_KEPT) measured.clear();
+  measured.set(key, laid);
+  return laid;
 }
 
 /** Sets the context's letter spacing where the browser has it (Chrome, Firefox, Safari 17+). */
@@ -148,6 +171,8 @@ export function drawText(c: CanvasRenderingContext2D, t: Measured, x: number, y:
   c.shadowColor = 'transparent';
   c.shadowBlur = c.shadowOffsetX = c.shadowOffsetY = 0;
   c.fillText(t.text, x, baseline);
+  // (as the browser draws one: a tenth of the size under the baseline, a fourteenth of it thick)
+  if (s.underline) c.fillRect(x, baseline + s.size * 0.1, t.w, Math.max(1 / scale, s.size / 14));
 }
 
 /** A vertical gradient over a box (`stops` top to bottom, evenly). */

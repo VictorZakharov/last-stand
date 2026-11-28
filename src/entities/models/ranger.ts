@@ -6,7 +6,8 @@
 // tips forward in the loose fist; then the hand takes the next arrow from the quiver over his right shoulder and nocks
 // it. Between shots he carries the bow in his fist at his side, an arrow nocked, his draw hand free; a fan of arrows is
 // shot with the bow laid over flat, the arrows lying across its top.
-import * as THREE from 'three';
+import { DoubleSide, Geometry, Mat4, Material, Mesh, Node, Quat, Vec3 } from '../../engine/api/index.ts';
+import * as shapes from '../../engine/api/shapes/index.ts';
 import { createKit } from '../../core/materials';
 import { leather, oiled, wool as woolMaps, felt as feltMaps, wood, bowWood as bowWoodMaps, pbrMaterialMaps } from '../../core/textures';
 import { SKIRT_TUCK, WRIST_INSIDE, floorUnder, freeHands, onFloor, restHands, satBy, sitPose, type RestTurn } from './sit';
@@ -51,7 +52,7 @@ const BOW_SIT = tunable('rangerBowSit', { lap: [0.95, 0.07], floor: [0.55, 0, 0.
 /** the broadhead's middle, back from the arrow's point (m) */
 const HEAD_MIDDLE = 0.035;
 
-const V = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
+const V = (x: number, y: number, z: number) => new Vec3(x, y, z);
 /** the felt hat (the face's mm, from his reference sheet): the band's foot and top over the eyes, the crown's top over
  *  them, how far the crown stands off the skull at the band (the hair under it), the brim's width and how far its edge is
  *  turned down, each at the front, the sides and the back, and the leather's thickness */
@@ -265,18 +266,18 @@ const drawnAt = (k: number): number => (pullAt(k) + smooth(clamp(k, 0, 1))) / 2;
 /** the coat's share of the arm round each armhole (`ArmBlend`; less above `topY`, under the baldric) */
 const ARM_K: ArmBlend = { seam: 0.5, reach: 0.09, top: 0.05, topY: 0.235, join: 0.1, joinIn: 0.05, around: 96, bulk: 0.35 };
 
-const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _c = new THREE.Vector3(), _d = new THREE.Vector3(), _e = new THREE.Vector3();
-const _u = new THREE.Vector3(), _left = new THREE.Vector3(), _y = new THREE.Vector3(), _z = new THREE.Vector3(), _x = new THREE.Vector3();
-const _q = new THREE.Quaternion(), _q2 = new THREE.Quaternion(), _q3 = new THREE.Quaternion(), _m = new THREE.Matrix4(), _m2 = new THREE.Matrix4(), _s = new THREE.Vector3();
-const _ra = new THREE.Vector3(), _gq = new THREE.Quaternion(), _rx = new THREE.Vector3(), _qt = new THREE.Quaternion();
+const _a = new Vec3(), _b = new Vec3(), _c = new Vec3(), _d = new Vec3(), _e = new Vec3();
+const _u = new Vec3(), _left = new Vec3(), _y = new Vec3(), _z = new Vec3(), _x = new Vec3();
+const _q = new Quat(), _q2 = new Quat(), _q3 = new Quat(), _m = new Mat4(), _m2 = new Mat4(), _s = new Vec3();
+const _ra = new Vec3(), _gq = new Quat(), _rx = new Vec3(), _qt = new Quat();
 /** the right hand's turn on its forearm as it hangs (the forearm turned neither over nor back: the thumb up) */
-const HANG_R = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), -Math.PI / 2);
+const HANG_R = new Quat().setFromAxisAngle(new Vec3(0, 1, 0), -Math.PI / 2);
 
 /** a pose of the bow in the world: its grip's pivot and its frame */
-interface BowPose { p: THREE.Vector3; q: THREE.Quaternion }
-const pose = (): BowPose => ({ p: new THREE.Vector3(), q: new THREE.Quaternion() });
+interface BowPose { p: Vec3; q: Quat }
+const pose = (): BowPose => ({ p: new Vec3(), q: new Quat() });
 /** the bow's frame with its back along `z` and its limbs `up`, canted `cant` over to the right */
-function frame(z: THREE.Vector3, cant: number, out: THREE.Quaternion, up = UP): THREE.Quaternion {
+function frame(z: Vec3, cant: number, out: Quat, up = UP): Quat {
   _left.crossVectors(up, z).normalize();
   _y.crossVectors(z, _left).normalize().multiplyScalar(Math.cos(cant)).addScaledVector(_left, -Math.sin(cant)).normalize();
   _x.crossVectors(_y, z).normalize();
@@ -301,27 +302,27 @@ function hook(h: Hand, k: number, pinch: number): void {
 
 /** a point on a Catmull-Rom curve through `pts` reached at the times `ts` (0..1, rising), at `t` */
 /** the times (0..`end`) at the points of a way through `pts`, by its length: an even pace */
-function lengthTimes(pts: THREE.Vector3[], end: number): number[] {
+function lengthTimes(pts: Vec3[], end: number): number[] {
   const ts = [0]; let total = 0;
   for (let i = 1; i < pts.length; i++) ts.push(total += pts[i].distanceTo(pts[i - 1]));
   return ts.map((x) => x / (total || 1) * end);
 }
 
 /** the direction `t` of the way round from `a` to `b` (unit vectors), into `out` */
-const _sq = new THREE.Quaternion(), _sq2 = new THREE.Quaternion();
-function slerpDir(a: THREE.Vector3, b: THREE.Vector3, t: number, out: THREE.Vector3): THREE.Vector3 {
+const _sq = new Quat(), _sq2 = new Quat();
+function slerpDir(a: Vec3, b: Vec3, t: number, out: Vec3): Vec3 {
   _sq.setFromUnitVectors(a, b); _sq2.identity().slerp(_sq, t);
   return out.copy(a).applyQuaternion(_sq2);
 }
 
-const _m0 = new THREE.Vector3(), _m1 = new THREE.Vector3();
-function through(pts: THREE.Vector3[], ts: number[], t: number, out: THREE.Vector3): THREE.Vector3 {
+const _m0 = new Vec3(), _m1 = new Vec3();
+function through(pts: Vec3[], ts: number[], t: number, out: Vec3): Vec3 {
   let i = 0;
   while (i < ts.length - 2 && t > ts[i + 1]) i++;
   // (each point's tangent in time, from its neighbours and their times: with one curve per segment however long it takes,
   // the speed jumped at every point by the ratio of the times either side, and the elbow with it)
   const h = Math.max(1e-6, ts[i + 1] - ts[i]), f = clamp((t - ts[i]) / h, 0, 1);
-  const tangent = (k: number, o: THREE.Vector3) => { const a = Math.max(0, k - 1), b = Math.min(pts.length - 1, k + 1); return o.subVectors(pts[b], pts[a]).multiplyScalar(h / Math.max(1e-6, ts[b] - ts[a])); };
+  const tangent = (k: number, o: Vec3) => { const a = Math.max(0, k - 1), b = Math.min(pts.length - 1, k + 1); return o.subVectors(pts[b], pts[a]).multiplyScalar(h / Math.max(1e-6, ts[b] - ts[a])); };
   tangent(i, _m0); tangent(i + 1, _m1);
   const f2 = f * f, f3 = f2 * f;
   return out.copy(pts[i]).multiplyScalar(2 * f3 - 3 * f2 + 1).addScaledVector(_m0, f3 - 2 * f2 + f)
@@ -331,7 +332,7 @@ function through(pts: THREE.Vector3[], ts: number[], t: number, out: THREE.Vecto
 /** The felt hat on `cap` (the head group's frame): a crown rising from a leather band round the head, its sides near
  *  upright and its top a dome, and a wide leather brim turned down to a stitched edge. The hair stays on under it and shows
  *  below the band, as short hair does. */
-function buildHat(head: Head, cap: THREE.Object3D, felt: THREE.Material, leather: THREE.Material, edge: THREE.Material): void {
+function buildHat(head: Head, cap: Node, felt: Material, leather: Material, edge: Material): void {
   const N = 48, yB = toGroup(0, EYE.y + HAT.band[0], 0).y, mm = HEAD_MM;
   // the skull's section at the band's foot (each way round, the ray's elevation that meets it found by bisection)
   let x0 = 1, x1 = -1, z0 = 1, z1 = -1;
@@ -344,22 +345,22 @@ function buildHat(head: Head, cap: THREE.Object3D, felt: THREE.Material, leather
   const cx = (x0 + x1) / 2, cz = (z0 + z1) / 2, A = (x1 - x0) / 2 + HAT.gap * mm, B = (z1 - z0) / 2 + HAT.gap * mm, H = (HAT.top - HAT.band[0]) * mm;
   /** round the crown's foot towards `a` (0 the front, +x the left), `k` its share of the way out (a superellipse, squarer
    *  than an ellipse, as a felt crown is) */
-  const foot = (a: number, k: number, out: THREE.Vector3) => { const s = Math.sin(a), c = Math.cos(a); return out.set(cx + Math.sign(s) * Math.abs(s) ** 0.85 * A * k, yB, cz + Math.sign(c) * Math.abs(c) ** 0.85 * B * k); };
+  const foot = (a: number, k: number, out: Vec3) => { const s = Math.sin(a), c = Math.cos(a); return out.set(cx + Math.sign(s) * Math.abs(s) ** 0.85 * A * k, yB, cz + Math.sign(c) * Math.abs(c) ** 0.85 * B * k); };
   // (a superellipse's quarter up the crown: its sides rise near upright from the band, its top a full dome)
-  const crown = (u: number, v: number, out: THREE.Vector3) => { const f = v * Math.PI / 2; foot(u * TAU + Math.PI, Math.cos(f) ** (2 / 2.6), out); out.y = yB + H * Math.sin(f) ** (2 / 2.6); return out; };
-  const inside = new THREE.Vector3(cx, yB + H * 0.4, cz);
+  const crown = (u: number, v: number, out: Vec3) => { const f = v * Math.PI / 2; foot(u * TAU + Math.PI, Math.cos(f) ** (2 / 2.6), out); out.y = yB + H * Math.sin(f) ** (2 / 2.6); return out; };
+  const inside = new Vec3(cx, yB + H * 0.4, cz);
   part(plate(crown, N, 14, 0, undefined, inside), felt, cap);
-  const band = (u: number, v: number, out: THREE.Vector3) => { foot(u * TAU + Math.PI, 1.03, out); out.y = yB + v * (HAT.band[1] - HAT.band[0]) * mm; return out; };
+  const band = (u: number, v: number, out: Vec3) => { foot(u * TAU + Math.PI, 1.03, out); out.y = yB + v * (HAT.band[1] - HAT.band[0]) * mm; return out; };
   part(plate(band, N, 2, 0.003, undefined, inside), leather, cap);
   // the brim: out from the band's foot, widest in front, turned down most at the back (the ends blended through the sides)
   const by3 = (v3: number[], a: number) => { const c = Math.cos(a); return c >= 0 ? lerp(v3[1], v3[0], c) : lerp(v3[1], v3[2], -c); };
-  const _f = new THREE.Vector3();
-  const brim = (u: number, v: number, out: THREE.Vector3) => {
+  const _f = new Vec3();
+  const brim = (u: number, v: number, out: Vec3) => {
     // (u from the back: its seam behind)
     const a = u * TAU + Math.PI; foot(a, 1.02, out); _f.set(out.x - cx, 0, out.z - cz).normalize();
     out.addScaledVector(_f, by3(HAT.brim, a) * mm * v); out.y = yB - by3(HAT.droop, a) * mm * v ** 1.6; return out;
   };
-  part(plate(brim, N, 5, HAT.thick * mm, undefined, new THREE.Vector3(cx, yB + 0.2, cz)), leather, cap);
+  part(plate(brim, N, 5, HAT.thick * mm, undefined, new Vec3(cx, yB + 0.2, cz)), leather, cap);
   part(edgeTube(brim, 'v1', 2.6 * mm, N), edge, cap);
 }
 
@@ -402,7 +403,7 @@ export function* rangerSteps(look: HeadSpec = headFor('ranger')): ModelSteps {
   const cord = kit.std({ color: 0xe0d6bc, roughness: 0.85 });
   yield;
   // (double-sided: the feathers are single sheets)
-  const fletched = kit.std({ vertexColors: true, roughness: 0.75, metalness: 0.1, side: THREE.DoubleSide });
+  const fletched = kit.std({ vertexColors: true, roughness: 0.75, metalness: 0.1, side: DoubleSide });
   const j = buildHumanoid({ skin: coat }, { chestW: 0.17, chestD: 0.14, shoulderW: 0.2, shoulderY: 0.45, upperR: 0.06, foreR: 0.05, shinL: 0.41 });
   stripRig(j.root);
   const S = new Sculpt();
@@ -414,7 +415,7 @@ export function* rangerSteps(look: HeadSpec = headFor('ranger')): ModelSteps {
   // whole coat: raised, it came out of the cloth over the shoulder as a tube stuck into the body, and with the coat over the
   // deltoid blended straight from the chest to the arm, the cloth between folded in on the joint in a lip round it)
   const sets = new SetInShoulders(j, ARM_K, lod(ARM_K.around, 48)), around = sets.around;
-  const chainOf = (s: number) => sets.chainOf(s), withArm = (g: THREE.BufferGeometry, s: number) => sets.withArm(g, s);
+  const chainOf = (s: number) => sets.chainOf(s), withArm = (g: Geometry, s: number) => sets.withArm(g, s);
   yield;
   {
     const [L, R] = yield* tunicCutSteps(around, lod(22, 12));
@@ -434,7 +435,7 @@ export function* rangerSteps(look: HeadSpec = headFor('ranger')): ModelSteps {
     S.add(g, coat, j.chest);
   }
   for (const sx of [1, -1]) S.add(taperTube([0.326, 0.27, 0.235].map((y) => y > 0.3 ? V(sx * 0.005, y, 0.0635 + COLLAR_EASE * 0.935) : tunicFront(sx * 0.005, y, 0.001)), () => 0.0022, 8, 5), dark, j.chest);
-  for (const y of [0.29, 0.258]) S.add(new THREE.SphereGeometry(0.0055, 8, 6), brass, j.chest, tunicFront(0, y, 0.003).toArray());
+  for (const y of [0.29, 0.258]) S.add(shapes.sphere(0.0055, 8, 6), brass, j.chest, tunicFront(0, y, 0.003).toArray());
   yield;
   // the seams, stitched in a lighter thread: round the collar's top and foot, down both sides of the slit and on down the
   // front, over each shoulder from the neck to the sleeve, and down each side
@@ -474,14 +475,14 @@ export function* rangerSteps(look: HeadSpec = headFor('ranger')): ModelSteps {
   // flared out below it)
   const tunic = new Skirt({ r0: 0.16, r1: 0.25, len: 0.375, depth: 0.68, folds: 13, foldAmp: 0.028, push: 1.25, flare: 0.5, rows: 10, radial: 64, trim: 0.035,
     hem: (a) => -0.12 * Math.max(0, -Math.cos(a)) - 0.4 * Math.exp(-(((Math.abs(Math.sin(a)) - 1) / 0.006) ** 2)) });
-  const hem = new THREE.Mesh(tunic.geo, [coat, coatHem]); hem.castShadow = hem.receiveShadow = true; j.hips.add(hem); hem.position.y = 0.06 + BELT_Y - 0.025;
+  const hem = new Mesh(tunic.geo, [coat, coatHem]); hem.castShadow = hem.receiveShadow = true; j.hips.add(hem); hem.position.y = 0.06 + BELT_Y - 0.025;
   hem.name = 'tunic hem';
   yield;
   // a broad belt of oiled leather, stitched along both edges, its brass buckle square and its tail through a keeper
   S.add(belt(0.172, 0.146, BELT_Y, 0.05, 0.009, 0, 40), strapLeather, j.spine);
   for (const dy of [-0.021, 0.021]) S.add(stitches(Array.from({ length: 40 }, (_, i) => { const a = i / 40 * TAU; return V(Math.sin(a) * 0.1775, BELT_Y + dy, Math.cos(a) * 0.1515); }), 0.004, 0.003, 0.0009, true), thread, j.spine);
   S.add(buckle(0.05, 0.05, 0.008), brass, j.spine, [0, BELT_Y, 0.16]);
-  S.add(new THREE.BoxGeometry(0.012, 0.056, 0.012), strapLeather, j.spine, [0.06, BELT_Y, 0.152], [0, 0.38, 0]);
+  S.add(shapes.box(0.012, 0.056, 0.012), strapLeather, j.spine, [0.06, BELT_Y, 0.152], [0, 0.38, 0]);
   yield;
   // the baldric the quiver hangs from: over the right shoulder, across the chest and the back to the left hip, buckled on
   // the chest
@@ -527,8 +528,8 @@ export function* rangerSteps(look: HeadSpec = headFor('ranger')): ModelSteps {
   buildNeck(j.neck, kit, look.who, j.P.neckL, j.head);
   yield;
   // (on the lips, under the moustache: at the others' height he drank at his nose)
-  const mouth = new THREE.Object3D(); mouth.name = 'mouth'; head.group.add(mouth); toGroup(0, 44, 112, mouth.position);
-  const anchor = new THREE.Object3D(); anchor.name = 'anchor'; head.group.add(anchor); anchor.position.copy(ANCHOR);
+  const mouth = new Node(); mouth.name = 'mouth'; head.group.add(mouth); toGroup(0, 44, 112, mouth.position);
+  const anchor = new Node(); anchor.name = 'anchor'; head.group.add(anchor); anchor.position.copy(ANCHOR);
   const cap = joint(head.group); cap.name = 'cap'; cap.visible = false;
   buildHat(head, cap, felt, boot, strapLeather);
   const handL = buildHand(j.handL, 1, hide, skin), handR = buildHand(j.handR, -1, hide, skin);
@@ -548,11 +549,11 @@ export function* rangerSteps(look: HeadSpec = headFor('ranger')): ModelSteps {
   quiver.userData.worn = true;
   S.add(lathe([[0.02, -0.52], [0.05, -0.5], [0.052, 0.14], [0.057, 0.16]], 18), boot, quiver);
   S.add(lathe([[0.045, -0.525], [0.055, -0.51], [0.056, -0.45]], 18), strapLeather, quiver);
-  for (const y of [-0.36, -0.08, 0.12]) { S.add(belt(0.056, 0.056, y, 0.02, 0.005), strapLeather, quiver); for (const a of [0.6, 1.8, 3, 4.2]) S.add(new THREE.SphereGeometry(0.004, 6, 4), brass, quiver, [Math.sin(a) * 0.061, y, Math.cos(a) * 0.061]); }
+  for (const y of [-0.36, -0.08, 0.12]) { S.add(belt(0.056, 0.056, y, 0.02, 0.005), strapLeather, quiver); for (const a of [0.6, 1.8, 3, 4.2]) S.add(shapes.sphere(0.004, 6, 4), brass, quiver, [Math.sin(a) * 0.061, y, Math.cos(a) * 0.061]); }
   for (let i = 0; i < 6; i++) {
     const x = Math.sin(i * 2.4) * 0.042, z = Math.cos(i * 2.4) * 0.042;
-    S.add(new THREE.CylinderGeometry(0.004, 0.004, 0.5, 5), bowWood, quiver, [x, 0.19, z]);
-    S.add(new THREE.BoxGeometry(0.026, 0.09, 0.004), stowedVane, quiver, [x, 0.385, z]);
+    S.add(shapes.cylinder(0.004, 0.004, 0.5, 5), bowWood, quiver, [x, 0.19, z]);
+    S.add(shapes.box(0.026, 0.09, 0.004), stowedVane, quiver, [x, 0.385, z]);
     yield;
   }
   S.build();
@@ -569,25 +570,25 @@ export function* rangerSteps(look: HeadSpec = headFor('ranger')): ModelSteps {
     .add('hands', [j.elbowL, j.elbowR], { only: (m) => drawnIn(m, [hide]) })
     .add('hands', [handL.glove, handR.glove], { inPlace: true });
   // (its grip's middle, the handle `Model.fists` reads the left fist round)
-  const bowGrip = new THREE.Object3D();
+  const bowGrip = new Node();
   bowGrip.position.copy(GRIP);
   bow.group.add(bowGrip);
   // (the carried bow's frame in the hero's, standing: its arrow along CARRY_ARROW, its top limb CARRY_TOP made square to it)
   const carryTop = CARRY_TOP.clone().addScaledVector(CARRY_ARROW, -CARRY_TOP.dot(CARRY_ARROW)).normalize();
-  const carryQ = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(V(0, 0, 0).crossVectors(carryTop, CARRY_ARROW), carryTop, CARRY_ARROW));
+  const carryQ = new Quat().setFromRotationMatrix(new Mat4().makeBasis(V(0, 0, 0).crossVectors(carryTop, CARRY_ARROW), carryTop, CARRY_ARROW));
   yield;
   // what the coat's skirt is draped over, in its own space: the trousers' thighs and the boots' shafts from inside, the hands,
   // the forearms' cuffs and the bow's string and lower limb from outside, with the cloth's gap (swung by the thighs alone, it
   // let the carried bow's string through its front over the stepping thigh at every stride, and the nock into it as the bow
   // came in before the chest)
-  const legBodies = new SkirtLimbs(), handBodies = new SkirtLimbs(), bowBodies = new SkirtLimbs(), GAP = 0.018, HAND_GAP = 0.012, O = () => new THREE.Vector3();
+  const legBodies = new SkirtLimbs(), handBodies = new SkirtLimbs(), bowBodies = new SkirtLimbs(), GAP = 0.018, HAND_GAP = 0.012, O = () => new Vec3();
   for (const [th, kn, an] of [[j.thighL, j.kneeL, j.ankleL], [j.thighR, j.kneeR, j.ankleR]] as const) {
     legBodies.add([th, O()], [kn, O()], 0.09 + GAP, 0.084 + GAP);
     legBodies.add([kn, O()], [an, O()], 0.085 + GAP, 0.06 + GAP);
     yield;
   }
-  for (const hd of [j.handL, j.handR]) handBodies.add([hd, O()], [hd, new THREE.Vector3(0, -0.09, 0)], 0.045 + HAND_GAP);
-  for (const [el, hd] of [[j.elbowL, j.handL], [j.elbowR, j.handR]] as const) handBodies.add([el, new THREE.Vector3(0, -0.5 * j.P.foreL, 0)], [hd, O()], 0.06 + HAND_GAP, 0.05 + HAND_GAP);
+  for (const hd of [j.handL, j.handR]) handBodies.add([hd, O()], [hd, new Vec3(0, -0.09, 0)], 0.045 + HAND_GAP);
+  for (const [el, hd] of [[j.elbowL, j.handL], [j.elbowR, j.handR]] as const) handBodies.add([el, new Vec3(0, -0.5 * j.P.foreL, 0)], [hd, O()], 0.06 + HAND_GAP, 0.05 + HAND_GAP);
   for (const tip of [bow.tipL, bow.tipU]) bowBodies.add([bow.group, bow.nock], [bow.group, tip], 0.006 + HAND_GAP);
   bowBodies.add([bow.group, bow.lowerLimb[0]], [bow.group, bow.lowerLimb[1]], 0.02 + HAND_GAP, 0.016 + HAND_GAP);
   bowBodies.add([bow.group, bow.lowerLimb[1]], [bow.group, bow.lowerLimb[2]], 0.016 + HAND_GAP, 0.01 + HAND_GAP);
@@ -596,23 +597,23 @@ export function* rangerSteps(look: HeadSpec = headFor('ranger')): ModelSteps {
   // (and the arrow on the string, pointing down past the hem in the carry: draped behind the string alone, the cloth lay over
   // the arrow's upper half and it went in under the coat on a third of a walk's frames)
   const arrowBodies = new SkirtLimbs();
-  arrowBodies.add([bow.arrows[0], new THREE.Vector3(0, 0, -ARROW / 2)], [bow.arrows[0], new THREE.Vector3(0, 0, ARROW / 2)], 0.005 + HAND_GAP);
+  arrowBodies.add([bow.arrows[0], new Vec3(0, 0, -ARROW / 2)], [bow.arrows[0], new Vec3(0, 0, ARROW / 2)], 0.005 + HAND_GAP);
   const outsideNocked = [...outside, ...arrowBodies.list];
   yield;
   // (the bow arm swung out at the shoulder just enough to keep the string off the thigh and the coat over it, as an archer
   // holds it off his coat: armOffThigh, by points along the string; the skirt between them was draped in behind the string
   // and out again by the thigh, which has the last word, and the string ran through the coat's side by up to 15 cm on most
   // frames of a walk; the points a few cm apart: 13 cm apart, each lay just clear while the string between them didn't)
-  const STRING_PTS = 16, stringPts = Array.from({ length: STRING_PTS * 2 + 1 }, (): [JointPoint, number] => [[bow.group, new THREE.Vector3()], 0.006]);
+  const STRING_PTS = 16, stringPts = Array.from({ length: STRING_PTS * 2 + 1 }, (): [JointPoint, number] => [[bow.group, new Vec3()], 0.006]);
   yield;
   // (and the nocked arrow's, pointing down past the hem: kept off the thigh by the string alone, it went through the thigh
   // and into the coat's hem once a stride, the arm swinging against its leg)
-  const ARROW_PTS = 8, arrowPts = Array.from({ length: ARROW_PTS + 1 }, (_, i): [JointPoint, number] => [[bow.arrows[0], new THREE.Vector3(0, 0, (i / ARROW_PTS - 0.5) * ARROW)], 0.005]);
+  const ARROW_PTS = 8, arrowPts = Array.from({ length: ARROW_PTS + 1 }, (_, i): [JointPoint, number] => [[bow.arrows[0], new Vec3(0, 0, (i / ARROW_PTS - 0.5) * ARROW)], 0.005]);
   yield;
   // (and the lower limb's, as it swings past the thigh setting off)
   const LIMB_PTS = 6, limbPts = Array.from({ length: LIMB_PTS * 2 + 1 }, (_, i): [JointPoint, number] => {
     const [a, b] = i <= LIMB_PTS ? [bow.lowerLimb[0], bow.lowerLimb[1]] : [bow.lowerLimb[1], bow.lowerLimb[2]];
-    return [[bow.group, new THREE.Vector3().lerpVectors(a, b, i <= LIMB_PTS ? i / LIMB_PTS : i / LIMB_PTS - 1)], 0.018];
+    return [[bow.group, new Vec3().lerpVectors(a, b, i <= LIMB_PTS ? i / LIMB_PTS : i / LIMB_PTS - 1)], 0.018];
   });
   const stringAndArrowPts = [...stringPts, ...arrowPts, ...limbPts], stringAndLimbPts = [...stringPts, ...limbPts];
   /** how far the bow arm is swung out at its shoulder to keep the string off the thigh, as last held (rad) */
@@ -632,10 +633,10 @@ export function* rangerSteps(look: HeadSpec = headFor('ranger')): ModelSteps {
   // (in pieces: only what's out of the quiver shows as it's drawn out, the rest still in it; drawn whole, an arrow as long
   // as the draw pivoting at the quiver's mouth swung its head out through the quiver's side into the hips). As many as a
   // fan lacks on the string are taken out together, side by side between the fingers as they'll lie on it
-  const held = new THREE.Group(); held.visible = false; held.name = 'heldArrow'; j.handR.add(held);
+  const held = new Node(); held.visible = false; held.name = 'heldArrow'; j.handR.add(held);
   const pieces = arrowPieces(), heldArrows = [0, 1, 2, 3, 4].map(() => {
-    const g = new THREE.Group(), shaft = new THREE.Mesh(pieces.shaft, fletched), head = new THREE.Mesh(pieces.head, fletched);
-    for (const m of [new THREE.Mesh(pieces.rear, fletched), shaft, head]) { m.castShadow = false; g.add(m); }
+    const g = new Node(), shaft = new Mesh(pieces.shaft, fletched), head = new Mesh(pieces.head, fletched);
+    for (const m of [new Mesh(pieces.rear, fletched), shaft, head]) { m.castShadow = false; g.add(m); }
     held.add(g);
     return { g, shaft, head };
   });
@@ -650,7 +651,7 @@ export function* rangerSteps(look: HeadSpec = headFor('ranger')): ModelSteps {
   yield;
   // where the string sits in the hooked fingers (the hand's frame): between the index and the middle finger's last joints
   hook(handR, 1, 0); root.updateMatrixWorld(true);
-  const stringAt = j.handR.worldToLocal(handR.f[0].j[2].getWorldPosition(new THREE.Vector3()).add(handR.f[1].j[2].getWorldPosition(new THREE.Vector3())).multiplyScalar(0.5));
+  const stringAt = j.handR.worldToLocal(handR.f[0].j[2].getWorldPosition(new Vec3()).add(handR.f[1].j[2].getWorldPosition(new Vec3())).multiplyScalar(0.5));
   /** when the hand reaches the quiver and has the arrow out of it, this frame (see FOLLOW) */
   let QUIVER = 0.5, OUT = 0.7;
   let yawOff = 0;
@@ -679,7 +680,7 @@ export function* rangerSteps(look: HeadSpec = headFor('ranger')): ModelSteps {
    *  a fan queued behind a shot takes the rest of its arrows from there, the hand on the string (set off from where the arm
    *  hangs, it jumped there from the string, 137 px in a frame; from the wrist with the hand on the string, a fan queued
    *  behind a fan jumped 15 cm. Off the string, the wrist where it ended up: through the eyes the arm is posed again after) */
-  const lastHandC = new THREE.Vector3(), lastAtC = new THREE.Vector3(), fetchAtC = new THREE.Vector3();
+  const lastHandC = new Vec3(), lastAtC = new Vec3(), fetchAtC = new Vec3();
   let lastOnW = 0, fetchOn0 = 0;
   /** up for the draw hand on the string: the world's, or through the eyes the view's (the world's tilts in the view as the
    *  eyes look up or down, and the hand turned with it) */
@@ -696,15 +697,15 @@ export function* rangerSteps(look: HeadSpec = headFor('ranger')): ModelSteps {
   let pullNow = 0, letFrom = -1, letT = 0;
   /** where the string was in the fingers last frame, and at the release (the head's frame, taken while it's posed: here at
    *  the top of `animate` the head is back at rest, and worldToLocal brings its matrix up to that): the follow-through starts there */
-  const lastNock = new THREE.Vector3(), loosedAt = new THREE.Vector3();
-  const ready = pose(), set = pose(), line = pose(), shown = pose(), nockW = new THREE.Vector3(), anchorW = new THREE.Vector3();
+  const lastNock = new Vec3(), loosedAt = new Vec3();
+  const ready = pose(), set = pose(), line = pose(), shown = pose(), nockW = new Vec3(), anchorW = new Vec3();
   const sc = () => root.scale.x;
 
   /** the bow placed at `bp` (world), in the left hand, its grip in the fist, the elbow towards `elbowTo` (world): the arm
    *  within a body's ranges (armIK.ts), the fist turning about the grip as far as it needs (the knuckles angled, as an
    *  archer holds a bow) and holding it diagonally if the wrist needs; `bp` becomes where the bow went */
   let dtNow = 0;
-  const placeBow = (bp: BowPose, elbowTo: THREE.Vector3) => {
+  const placeBow = (bp: BowPose, elbowTo: Vec3) => {
     const s = sc();
     _y.set(0, 1, 0).applyQuaternion(bp.q);
     // the wrist where the fist round the grip has it, the hand's length running back towards the shoulder
@@ -735,7 +736,7 @@ export function* rangerSteps(look: HeadSpec = headFor('ranger')): ModelSteps {
   };
   /** the bow as he sits, eased in by `w`: across his thighs, flat, its upper limb to his right, its grip on his left
    *  thigh (`placeBow` fits his hand to it there) */
-  const _lapQ = new THREE.Quaternion(), _lapAt = new THREE.Vector3(), _lapY = new THREE.Vector3();
+  const _lapQ = new Quat(), _lapAt = new Vec3(), _lapY = new Vec3();
   const lapBow = (bp: BowPose, w: number) => {
     const s = sc();
     root.updateMatrixWorld(true);
@@ -747,10 +748,10 @@ export function* rangerSteps(look: HeadSpec = headFor('ranger')): ModelSteps {
     bp.q.slerp(_lapQ, w);
   };
   /** the bow as `placeBow` last had it in the fist (the hand's frame) */
-  const heldBow = { p: new THREE.Vector3(), q: new THREE.Quaternion(), s: new THREE.Vector3(1, 1, 1) };
+  const heldBow = { p: new Vec3(), q: new Quat(), s: new Vec3(1, 1, 1) };
   /** where its grip is set down by a fire (world, into `out`): beside his left hip (`BOW_SIT.floor`: out, ahead, over
    *  the floor, rig units) */
-  const floorAt = (out: THREE.Vector3) => {
+  const floorAt = (out: Vec3) => {
     const [side, ahead, over] = BOW_SIT.floor;
     root.updateMatrixWorld(true);
     root.localToWorld(out.set(side, 0, ahead));
@@ -764,13 +765,13 @@ export function* rangerSteps(look: HeadSpec = headFor('ranger')): ModelSteps {
    *  down with the forearm level on the floor, and the wrist went 40 to 85 degrees past its range; eased out of his
    *  hand while the hand went to his knee, nothing carried it, "ranger uses force pull to grab his bow from seated
    *  near fire", 1.2 m in a frame as he stood) */
-  const _restL = [new THREE.Quaternion(), new THREE.Quaternion(), new THREE.Quaternion()];
-  const _laidS = new THREE.Vector3(), _gripW = new THREE.Vector3(), _dirW = new THREE.Vector3(), _visWas = new THREE.Quaternion();
-  const _edgeQ = new THREE.Quaternion(), _tipQ = new THREE.Quaternion(), _edgeAt = new THREE.Vector3(), _down = new THREE.Vector3();
+  const _restL = [new Quat(), new Quat(), new Quat()];
+  const _laidS = new Vec3(), _gripW = new Vec3(), _dirW = new Vec3(), _visWas = new Quat();
+  const _edgeQ = new Quat(), _tipQ = new Quat(), _edgeAt = new Vec3(), _down = new Vec3();
   /** The left hand `w` of the way from where the arm has it now to where it rests on his knee (`_restL`'s arm), on an
    *  arc `BOW_SIT.arc` up (rig units), the arm solved to it within the body's ranges and out of his legs. */
-  const _fromAt = new THREE.Vector3(), _fromQ = new THREE.Quaternion(), _kneeAt = new THREE.Vector3(), _kneeQ = new THREE.Quaternion();
-  const towardKnee = (w: number, elbowTo: THREE.Vector3) => {
+  const _fromAt = new Vec3(), _fromQ = new Quat(), _kneeAt = new Vec3(), _kneeQ = new Quat();
+  const towardKnee = (w: number, elbowTo: Vec3) => {
     const arm = [j.shoulderL, j.elbowL, j.handL];
     root.updateMatrixWorld(true);
     j.handL.getWorldPosition(_fromAt);
@@ -787,15 +788,15 @@ export function* rangerSteps(look: HeadSpec = headFor('ranger')): ModelSteps {
     // (and as it rests there, the arm as it rests)
     if (w >= 1) arm.forEach((joint, i) => joint.quaternion.copy(_restL[i]));
   };
-  const _keyL = [new THREE.Quaternion(), new THREE.Quaternion(), new THREE.Quaternion()];
-  const _layPole = new THREE.Vector3();
+  const _keyL = [new Quat(), new Quat(), new Quat()];
+  const _layPole = new Vec3();
   /** the bow in the fist (the hand's frame) as he begins to lay it down by a fire, which it's carried in */
-  const inFist: BowPose = { p: new THREE.Vector3(), q: new THREE.Quaternion() };
+  const inFist: BowPose = { p: new Vec3(), q: new Quat() };
   /** the face it's laid on by a fire: its own +x up (1) or down (-1) */
   let tipFace = 1;
   /** what the standing hold's solves remembered as the lay began, for it to take up again (`recall`) */
   let holdMemory: ArmMemory | null = null;
-  const layBow = (bp: BowPose, down: number, free: number, elbowTo: THREE.Vector3) => {
+  const layBow = (bp: BowPose, down: number, free: number, elbowTo: Vec3) => {
     const arm = [j.shoulderL, j.elbowL, j.handL];
     arm.forEach((joint, i) => _restL[i].copy(joint.quaternion));
     if (down <= 0) {
@@ -875,7 +876,7 @@ export function* rangerSteps(look: HeadSpec = headFor('ranger')): ModelSteps {
   /** the draw hand's turn hooked on the string of a bow posed `q` (world, into `out`): its fingers forward along the arrow
    *  and the string across them, the palm to the face, the index finger on top, the hand coming down a little to it from
    *  the elbow above */
-  const stringTurn = (q: THREE.Quaternion, out: THREE.Quaternion) => {
+  const stringTurn = (q: Quat, out: Quat) => {
     // (the hand's -y down its fingers, -z out of its palm)
     _y.set(0, 0, -1).applyQuaternion(q).addScaledVector(handUp, 0.3).normalize();
     _z.set(-1, 0, 0).applyQuaternion(q);
@@ -890,7 +891,7 @@ export function* rangerSteps(look: HeadSpec = headFor('ranger')): ModelSteps {
    *  the back and the hand into the head). (Eased on the forearm, whichever the elbow: eased towards the hanging arm's
    *  turn in the world, half a turn off a raised one's, the forearm flipped from one end of its turn to the other; towards
    *  last frame's forearm, the wrist moved with it and the arm shook) */
-  const drawHand = (at: THREE.Vector3, q: THREE.Quaternion, w: number, pole: THREE.Vector3, dt = 0, tilt = 0, girdle = true, v = ELBOW_V) => {
+  const drawHand = (at: Vec3, q: Quat, w: number, pole: Vec3, dt = 0, tilt = 0, girdle = true, v = ELBOW_V) => {
     const s = sc();
     lastOnW = w; j.chest.worldToLocal(lastAtC.copy(at));
     stringTurn(q, _q2);
@@ -914,8 +915,8 @@ export function* rangerSteps(look: HeadSpec = headFor('ranger')): ModelSteps {
    *  touching, and spread out as `w` brings them to the string, each to where it will lie on it, turned about its length
    *  as it lies there (in a row across the fingers all the way, the outer ones went through the forearm and the shoulder
    *  coming out of the quiver; turned any other way, the feathers flipped as they were laid on) */
-  const _hx = new THREE.Vector3(), _hy = new THREE.Vector3(), _hm = new THREE.Matrix4();
-  const holdArrow = (mouthW: THREE.Vector3, w: number, toward: THREE.Vector3, from = 0, count = 1) => {
+  const _hx = new Vec3(), _hy = new Vec3(), _hm = new Mat4();
+  const holdArrow = (mouthW: Vec3, w: number, toward: Vec3, from = 0, count = 1) => {
     const s = sc();
     held.visible = hasBow;
     const nk = j.handR.localToWorld(_e.copy(stringAt));
@@ -1085,9 +1086,9 @@ export function* rangerSteps(look: HeadSpec = headFor('ranger')): ModelSteps {
     line.p.copy(anchorW).addScaledVector(u, D).addScaledVector(_y, -restY * s);
     // (through the eyes: the grip still in the view and the shot's line through it, upright as the view is, the nock the
     // draw length back along it; the model is placed in view after the pose, so the line is posed as the eyes see it)
-    const eyeUp = fp ? dirFromEyes(root, EYE_UP, new THREE.Vector3()) : UP;
+    const eyeUp = fp ? dirFromEyes(root, EYE_UP, new Vec3()) : UP;
     handUp.copy(eyeUp);
-    const uEye = fp ? toEyes(u, new THREE.Vector3()) : _a;
+    const uEye = fp ? toEyes(u, new Vec3()) : _a;
     if (fp) {
       const el = Math.atan2(uEye.y, Math.hypot(uEye.x, uEye.z)), cl = clamp(el, FP_PITCH[0], FP_PITCH[1]), h = Math.hypot(uEye.x, uEye.z) || 1;
       if (cl !== el) uEye.set(uEye.x / h * Math.cos(cl), Math.sin(cl), uEye.z / h * Math.cos(cl));
@@ -1097,7 +1098,7 @@ export function* rangerSteps(look: HeadSpec = headFor('ranger')): ModelSteps {
       const lobQ = _qt.setFromAxisAngle(_rx.set(1, 0, 0), fpLob * FP_LOB);
       uEye.applyQuaternion(lobQ);
       dirFromEyes(root, uEye, _a);
-      const upL = dirFromEyes(root, _d.copy(EYE_UP).applyQuaternion(lobQ), new THREE.Vector3());
+      const upL = dirFromEyes(root, _d.copy(EYE_UP).applyQuaternion(lobQ), new Vec3());
       frame(_a, lerp(FP_CANT, FLAT, fanK), line.q, upL); _y.set(0, 1, 0).applyQuaternion(line.q);
       _e.lerpVectors(FP_GRIP, FP_FAN, fanK).applyQuaternion(lobQ);
       fromEyes(root, j.neck, _e, line.p);
@@ -1114,7 +1115,7 @@ export function* rangerSteps(look: HeadSpec = headFor('ranger')): ModelSteps {
     frame(_a, SET_TIP[1], set.q);
     j.chest.localToWorld(set.p.copy(NOCK_AT)).sub(_e.set(0, restY, -bow.brace).multiplyScalar(s).applyQuaternion(set.q));
     // carried: in the fist at the side, held as the hand holds it whichever way the arm swings (its top forward and out, an arrow nocked along it)
-    const wristFK = j.handL.getWorldPosition(new THREE.Vector3()), elbowFK = j.elbowL.getWorldPosition(new THREE.Vector3());
+    const wristFK = j.handL.getWorldPosition(new Vec3()), elbowFK = j.elbowL.getWorldPosition(new Vec3());
     const elbowPoleFK = elbowFK.clone().sub(j.shoulderL.getWorldPosition(_d));
     root.getWorldQuaternion(_q3);
     _a.copy(wristFK).sub(elbowFK).applyQuaternion(_q2.copy(_q3).invert());
@@ -1210,8 +1211,8 @@ export function* rangerSteps(look: HeadSpec = headFor('ranger')): ModelSteps {
     const loose = free;
     // (where the pose has the wrist: taking the string, the hand goes from there to it, the arm solved within a body's
     // ranges all the way; blending the joints between the two poses put the hand through the head)
-    const fkAt = j.handR.getWorldPosition(new THREE.Vector3());
-    const fkPole = j.elbowR.getWorldPosition(new THREE.Vector3()).sub(j.shoulderR.getWorldPosition(_d));
+    const fkAt = j.handR.getWorldPosition(new Vec3());
+    const fkPole = j.elbowR.getWorldPosition(new Vec3()).sub(j.shoulderR.getWorldPosition(_d));
     // (the archer's left across the shot, level: the bow's own left is up when it's laid flat for a fan)
     _left.crossVectors(UP, u).normalize();
     // the draw elbow at full draw: in line behind the hand along the arrow from above, a little over it, so behind the head,
@@ -1262,7 +1263,7 @@ export function* rangerSteps(look: HeadSpec = headFor('ranger')): ModelSteps {
       // (from where the hand was as it set off: at the side, or on the string for a fan's other arrows, coming off it)
       const pts = [j.chest.localToWorld(fetchAtC.clone()), sideUp, lift, q0, rise, pull, nockW], ts = lengthTimes(pts, FETCHED);
       e = FETCHED * smooth(clamp(fetchE / FETCHED, 0, 1));
-      const at = through(pts, ts, e, new THREE.Vector3());
+      const at = through(pts, ts, e, new Vec3());
       const on = Math.max(fetchOn0 * (1 - smooth(clamp(e / ts[1], 0, 1))), smooth(clamp((e - ts[5]) / (FETCHED - ts[5]), 0, 1)));
       drawHand(at, onString, on, setPole.clone().lerp(reloadPole, 1 - on), dt, 0, true, FETCH_V);
       if (e >= ts[3] && fetchE < FETCHED) { holdArrow(mouthW, smooth(clamp((e - ts[5]) / (FETCHED - ts[5]), 0, 1)), lineDir, fetchFrom, n - fetchFrom); pinch = 1; hk = 0.2; }
@@ -1277,7 +1278,7 @@ export function* rangerSteps(look: HeadSpec = headFor('ranger')): ModelSteps {
       const pts = [fkAt.clone(), nockW, pull, rise, drop, lift, sideUp, fkAt.clone()], ts = lengthTimes(pts, 1);
       stowTake = ts[1];
       e = stowWay(stowE);
-      const at = through(pts, ts, e, new THREE.Vector3());
+      const at = through(pts, ts, e, new Vec3());
       const on = e < ts[1] ? smooth(clamp(e / ts[1], 0, 1)) : 1 - smooth(clamp((e - ts[1]) / (ts[2] - ts[1]), 0, 1));
       drawHand(at, onString, on, setPole.clone().lerp(stowPole, 1 - on), dt, 0, true, FETCH_V);
       // (turned up over the top as the hand goes up and forward with it, and down into the quiver only as the hand comes
@@ -1325,7 +1326,7 @@ export function* rangerSteps(look: HeadSpec = headFor('ranger')): ModelSteps {
       QUIVER = ts[3]; OUT = ts[5];
       // (one ease over the way from the follow-through to the string: it sets off and arrives at rest, never stopping between)
       e = after < FOLLOW ? after : FOLLOW + (NOCKED - FOLLOW) * smooth((after - FOLLOW) / (NOCKED - FOLLOW));
-      const at = through(pts, ts, Math.min(e, NOCKED), new THREE.Vector3());
+      const at = through(pts, ts, Math.min(e, NOCKED), new Vec3());
       // (the string's turn eased off as the hand leaves it and back on as it lays the arrow on it; the elbow likewise)
       const on = Math.max(1 - smooth(clamp((after - 0.06) / 0.3, 0, 1)), smooth(clamp((e - OUT) / (NOCKED - OUT), 0, 1)));
       // (from where the shot left it to there, and from there to before the shoulder, where the next draw starts)

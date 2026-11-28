@@ -5,7 +5,7 @@
 // of a party are heroes built as a room builds them (net/session.ts `makePlayer`) and stood where the shot wants
 // them: one page, no room, so nothing here says anything of the link. A picture is for showing, not a measure: each
 // shot says what it posed, and its only problem is a state that never came.
-import * as THREE from 'three';
+import { Vec3 } from './sceneApi.ts';
 import { G } from '../../../src/state';
 import * as renderer from '../../../src/core/renderer';
 import type { BiomeId } from '../../../src/data/biomes';
@@ -96,7 +96,7 @@ export async function standInVillage(
   lab: Lab, [x, z]: readonly number[], facing: number, look = facing,
 ): Promise<void> {
   G.player.walkTo = null;
-  G.player.place(new THREE.Vector3(x, groundHeight(x, z), z), facing);
+  G.player.place(new Vec3(x, groundHeight(x, z), z), facing);
   await overTheShoulder(lab, look);
   await lab.step(SETTLE);
 }
@@ -201,7 +201,7 @@ async function stash(lab: Lab): Promise<Pictured> {
   }));
   menus.renderMenu();
   await standInVillage(lab, chest.stand, NORTH);
-  showPanels('chest');
+  await showPanels(lab, 'chest');
   await lab.step(SETTLE);
   const pictured = await lab.screen('stash', ['the chest: equipment and a stash of every rarity']);
   G.profile.stash = kept.stash;
@@ -228,7 +228,7 @@ export interface Fight {
 }
 
 /** The way the hero faces, as a step of 1 m. */
-const ahead = (): THREE.Vector3 => new THREE.Vector3(Math.sin(G.player.facing), 0, Math.cos(G.player.facing));
+const ahead = (): Vec3 => new Vec3(Math.sin(G.player.facing), 0, Math.cos(G.player.facing));
 
 /** The local hero's skill pressed and held for `held` frames, aimed `reach` m ahead of him, then let go for `after`
  *  more (a skill aimed by holding casts as it's let go). */
@@ -330,7 +330,7 @@ async function partyScene(lab: Lab, foes: number, zoom: number): Promise<Player[
   const partners = joinParty();
   const hero = G.player;
   const forward = ahead();
-  const right = new THREE.Vector3(-forward.z, 0, forward.x);
+  const right = new Vec3(-forward.z, 0, forward.x);
   partners.forEach((partner, index) => {
     const [across, along] = PARTY_PLACES[index];
     const at = hero.pos.clone().addScaledVector(right, across).addScaledVector(forward, along);

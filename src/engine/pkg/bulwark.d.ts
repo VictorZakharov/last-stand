@@ -13,9 +13,18 @@ export class Engine {
     add_material(params: Float32Array | number[], maps: Uint32Array | number[], key: number): number;
     add_mesh(positions: Float32Array | number[], normals: Float32Array | number[], uvs: Float32Array | number[], colors: Float32Array | number[], color_size: number, indices: Uint32Array | number[], joints: Uint16Array | number[], weights: Float32Array | number[]): number;
     /**
+     * A node under `parent` (`u32::MAX`: under nothing), for what moves (nodes.rs): its place, turn and size
+     * written by the page into `node_locals`, ten floats a node by its id, and whether it's shown into `node_shown`.
+     */
+    add_node(parent: number): number;
+    /**
      * A shader of the page's: WGSL for the lit shader's two hooks (lit/*.wgsl). Its id.
      */
     add_shader(hooks: string): number;
+    /**
+     * A skin whose bones follow the nodes `joints`, each bound with its inverse in `inverses`, 16 floats a bone.
+     */
+    add_skin(joints: Uint32Array | number[], inverses: Float32Array | number[]): number;
     /**
      * A map from its RGBA bytes; 0 if they don't fit its size.
      */
@@ -61,6 +70,12 @@ export class Engine {
      * The engine drawing to `canvas`, at the canvas's own size.
      */
     static create(canvas: HTMLCanvasElement): Promise<Engine>;
+    /**
+     * A record drawn on a node every frame it's seen: `record` as the page writes one, its matrix the node's after
+     * `offset` (16 floats) where `placed`, else `offset` alone; on `skin`'s bones (`u32::MAX`: none); culled by a
+     * sphere `reach` round the node (0: not here).
+     */
+    draw_on_node(node: number, record: Float32Array | number[], offset: Float32Array | number[], placed: boolean, skin: number, reach: number): number;
     drop_instances(id: number): void;
     /**
      * A run of kept records let go.
@@ -72,6 +87,18 @@ export class Engine {
     drop_lights(): void;
     drop_material(id: number): void;
     drop_mesh(id: number): void;
+    /**
+     * A node let go.
+     */
+    drop_node(id: number): void;
+    /**
+     * A record drawn on a node let go.
+     */
+    drop_node_drawn(id: number): void;
+    /**
+     * A skin let go.
+     */
+    drop_skin(id: number): void;
     drop_texture(id: number): void;
     /**
      * Where the page writes the frame's globals (`Globals` in common.wgsl).
@@ -97,6 +124,55 @@ export class Engine {
      * How many records the engine keeps.
      */
     kept(): number;
+    /**
+     * No outline from the next frame on.
+     */
+    no_outline(): void;
+    /**
+     * Where the page writes the nodes' numbers, ten floats a node by its id. Adding a node may move it.
+     */
+    node_locals(): number;
+    /**
+     * Where every node's matrix under its parent is, 16 floats a node by its id, as last placed.
+     */
+    node_matrices(): number;
+    /**
+     * Where the page writes each node's own numbers, 8 floats a node by its id, handed to every record drawn on it
+     * (`plan::OWN`). Adding a node may move it.
+     */
+    node_own(): number;
+    /**
+     * Where the page writes whether each node is shown, a byte a node by its id. Adding a node may move it.
+     */
+    node_shown(): number;
+    /**
+     * Where every node's matrix is, 16 floats a node by its id, as last placed. Adding a node may move it.
+     */
+    node_worlds(): number;
+    /**
+     * What the last frame drew of the nodes: their records, their bones' floats, how many were out of view, and
+     * how many nodes are held.
+     */
+    nodes_drawn(): Float32Array;
+    /**
+     * The overlay's atlas made `side` pixels square, cleared, if it isn't so already.
+     */
+    overlay_atlas(side: number): void;
+    /**
+     * The `width` by `height` pixels of a canvas of the page's from `from_x`, `from_y` copied into the atlas at `x`,
+     * `y`, its colours premultiplied by its alpha (as the overlay draws them); false for a source it can't take.
+     * (Read where the page painted them: copied to a canvas's top left first, each run was drawn twice on the CPU.)
+     */
+    overlay_paint(source: any, from_x: number, from_y: number, width: number, height: number, x: number, y: number): boolean;
+    /**
+     * The overlay's rows from the next frame on (`ROW_FLOATS` each: a box of the screen in its pixels, its slot's
+     * corners' uv, its share), over a screen of `width` by `height` pixels; none, nothing laid over it.
+     */
+    overlay_rows(rows: Float32Array | number[], width: number, height: number): void;
+    /**
+     * Every node's matrix made now, ahead of the frame, for the page to read back (`node_worlds`).
+     */
+    place_nodes(): void;
     /**
      * The frame's time read if it has come back, with no frame drawn (`stats` says when it has).
      */
@@ -183,6 +259,20 @@ export class Engine {
      */
     set_mesh_vertices(id: number, positions: Float32Array | number[], normals: Float32Array | number[], uvs: Float32Array | number[], colors: Float32Array | number[], color_size: number): boolean;
     /**
+     * A record drawn on a node given other flags.
+     */
+    set_node_drawn_flags(id: number, flags: number): void;
+    /**
+     * A node moved under another.
+     */
+    set_node_parent(id: number, parent: number): void;
+    /**
+     * An outline from the next frame on round the records the page flags `OUTLINED`: in `red`, `green`, `blue`
+     * (as the screen shows them) at `strength`, its line `line` screen pixels wide and its glow reaching `glow`,
+     * drawn within the box `x`, `y`, `width`, `height` (screen pixels from the top left).
+     */
+    set_outline(red: number, green: number, blue: number, strength: number, line: number, glow: number, x: number, y: number, width: number, height: number): void;
+    /**
      * The scene drawn by the lit shaders made for the plain levels alone, or not (`Gpu::set_plain_only`).
      */
     set_plain_only(on: boolean): void;
@@ -217,7 +307,49 @@ export class Engine {
      * counted (a few frames late).
      */
     stats(): Float32Array;
+    /**
+     * A panel's picture `width` by `height` of the UI's pixels (a negative width: none).
+     */
+    ui_content(id: number, width: number, height: number): void;
+    /**
+     * The topmost panel that takes the pointer at `x`, `y` (the UI's pixels), or -1.
+     */
+    ui_hit(x: number, y: number): number;
+    /**
+     * A panel made with the page's id `id` inside `parent` (-1: the screen), before its child `before` (-1: at
+     * its end), laid out by `style` (`ui/style.rs`'s numbers) and painted by `look` (`ui/look.rs`'s).
+     */
+    ui_make(id: number, parent: number, before: number, style: Float32Array | number[], look: Float32Array | number[]): void;
+    /**
+     * A panel's box as last laid out (x, y, width, height in the UI's pixels); empty if it isn't shown.
+     */
+    ui_rect(id: number): Float32Array;
+    ui_relook(id: number, look: Float32Array | number[]): void;
+    /**
+     * A panel taken away, with all inside it.
+     */
+    ui_remove(id: number): void;
+    ui_restyle(id: number, style: Float32Array | number[]): void;
+    /**
+     * How many rows the panels' pass draws.
+     */
+    ui_rows(): number;
+    /**
+     * The panels' screen: `width` by `height` of the UI's pixels, `scale` of the screen's pixels each.
+     */
+    ui_screen(width: number, height: number, scale: number): void;
+    /**
+     * The panels laid out now, if anything changed (the frame does it too): so a box is read as it will be drawn.
+     */
+    ui_update(): void;
 }
+
+/**
+ * Cloth hung from a waist draped over a body's limbs, in place (cloth.rs): `points` three floats each, `cols` a row
+ * and its first row the waist; `down` and `round` each point's length to the one above and the next round, as cut;
+ * `limbs` eight floats each (an axis's two ends, its radius at each), the hands' `hands` first, then the legs'.
+ */
+export function drape_cloth(points: Float32Array, down: Float32Array | number[], round: Float32Array | number[], limbs: Float64Array | number[], hands: number, cols: number, layer: number, slit: boolean, tucked: boolean, angles: Float32Array | number[], passes: number): void;
 
 export function start(): void;
 
@@ -226,10 +358,13 @@ export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembl
 export interface InitOutput {
     readonly memory: WebAssembly.Memory;
     readonly __wbg_engine_free: (a: number, b: number) => void;
+    readonly drape_cloth: (a: number, b: number, c: any, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: number, n: number, o: number, p: number, q: number) => void;
     readonly engine_add_custom_material: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number) => number;
     readonly engine_add_material: (a: number, b: number, c: number, d: number, e: number, f: number) => number;
     readonly engine_add_mesh: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: number, n: number, o: number, p: number) => number;
+    readonly engine_add_node: (a: number, b: number) => number;
     readonly engine_add_shader: (a: number, b: number, c: number) => number;
+    readonly engine_add_skin: (a: number, b: number, c: number, d: number, e: number) => number;
     readonly engine_add_texture: (a: number, b: number, c: number, d: number, e: number, f: number) => number;
     readonly engine_add_texture_from: (a: number, b: any, c: number, d: number) => number;
     readonly engine_add_volume: (a: number, b: number, c: number, d: number, e: number, f: number) => number;
@@ -240,17 +375,32 @@ export interface InitOutput {
     readonly engine_breakdown_by_shader: (a: number, b: number) => void;
     readonly engine_breakdown_names: (a: number, b: number) => void;
     readonly engine_create: (a: any) => any;
+    readonly engine_draw_on_node: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number) => number;
     readonly engine_drop_instances: (a: number, b: number) => void;
     readonly engine_drop_kept: (a: number, b: number, c: number) => void;
     readonly engine_drop_lights: (a: number) => void;
     readonly engine_drop_material: (a: number, b: number) => void;
     readonly engine_drop_mesh: (a: number, b: number) => void;
+    readonly engine_drop_node: (a: number, b: number) => void;
+    readonly engine_drop_node_drawn: (a: number, b: number) => void;
+    readonly engine_drop_skin: (a: number, b: number) => void;
     readonly engine_drop_texture: (a: number, b: number) => void;
     readonly engine_globals: (a: number) => number;
     readonly engine_hold_shadow: (a: number, b: number) => void;
     readonly engine_join_shaders: (a: number, b: number, c: number) => number;
     readonly engine_keep: (a: number, b: number, c: number) => number;
     readonly engine_kept: (a: number) => number;
+    readonly engine_no_outline: (a: number) => void;
+    readonly engine_node_locals: (a: number) => number;
+    readonly engine_node_matrices: (a: number) => number;
+    readonly engine_node_own: (a: number) => number;
+    readonly engine_node_shown: (a: number) => number;
+    readonly engine_node_worlds: (a: number) => number;
+    readonly engine_nodes_drawn: (a: number, b: number) => void;
+    readonly engine_overlay_atlas: (a: number, b: number) => void;
+    readonly engine_overlay_paint: (a: number, b: any, c: number, d: number, e: number, f: number, g: number, h: number) => number;
+    readonly engine_overlay_rows: (a: number, b: number, c: number, d: number, e: number) => void;
+    readonly engine_place_nodes: (a: number) => void;
     readonly engine_poll_clock: (a: number) => void;
     readonly engine_ready_material: (a: number, b: number, c: number, d: number) => void;
     readonly engine_ready_material_layers: (a: number, b: number, c: number, d: number, e: number) => void;
@@ -274,6 +424,9 @@ export interface InitOutput {
     readonly engine_set_material_custom: (a: number, b: number, c: number, d: number) => void;
     readonly engine_set_material_params: (a: number, b: number, c: number, d: number) => void;
     readonly engine_set_mesh_vertices: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number) => number;
+    readonly engine_set_node_drawn_flags: (a: number, b: number, c: number) => void;
+    readonly engine_set_node_parent: (a: number, b: number, c: number) => void;
+    readonly engine_set_outline: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number) => void;
     readonly engine_set_plain_only: (a: number, b: number) => void;
     readonly engine_set_quality: (a: number, b: number, c: number) => void;
     readonly engine_set_sight: (a: number, b: number, c: number, d: number, e: number) => void;
@@ -282,13 +435,23 @@ export interface InitOutput {
     readonly engine_set_volume: (a: number, b: number, c: number, d: number) => void;
     readonly engine_show_kept: (a: number, b: number, c: number, d: number) => void;
     readonly engine_stats: (a: number, b: number) => void;
+    readonly engine_ui_content: (a: number, b: number, c: number, d: number) => void;
+    readonly engine_ui_hit: (a: number, b: number, c: number) => number;
+    readonly engine_ui_make: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => void;
+    readonly engine_ui_rect: (a: number, b: number, c: number) => void;
+    readonly engine_ui_relook: (a: number, b: number, c: number, d: number) => void;
+    readonly engine_ui_remove: (a: number, b: number) => void;
+    readonly engine_ui_restyle: (a: number, b: number, c: number, d: number) => void;
+    readonly engine_ui_rows: (a: number) => number;
+    readonly engine_ui_screen: (a: number, b: number, c: number, d: number) => void;
+    readonly engine_ui_update: (a: number) => void;
     readonly start: () => void;
-    readonly __wasm_bindgen_func_elem_1801: (a: number, b: number, c: number, d: any) => void;
-    readonly __wasm_bindgen_func_elem_1826: (a: number, b: number, c: any, d: any) => void;
-    readonly __wasm_bindgen_func_elem_675: (a: number, b: number, c: number, d: any) => void;
-    readonly __wasm_bindgen_func_elem_675_61: (a: number, b: number, c: number, d: any) => void;
-    readonly __wasm_bindgen_func_elem_675_62: (a: number, b: number, c: number, d: any) => void;
-    readonly __wasm_bindgen_func_elem_677: (a: number, b: number, c: any) => void;
+    readonly __wasm_bindgen_func_elem_1911: (a: number, b: number, c: number, d: any) => void;
+    readonly __wasm_bindgen_func_elem_1936: (a: number, b: number, c: any, d: any) => void;
+    readonly __wasm_bindgen_func_elem_785: (a: number, b: number, c: number, d: any) => void;
+    readonly __wasm_bindgen_func_elem_785_92: (a: number, b: number, c: number, d: any) => void;
+    readonly __wasm_bindgen_func_elem_785_93: (a: number, b: number, c: number, d: any) => void;
+    readonly __wasm_bindgen_func_elem_787: (a: number, b: number, c: any) => void;
     readonly __wbindgen_export: (a: number, b: number) => number;
     readonly __wbindgen_export2: (a: number, b: number, c: number, d: number) => number;
     readonly __wbindgen_export3: (a: number, b: number, c: number) => void;

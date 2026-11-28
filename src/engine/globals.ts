@@ -1,6 +1,9 @@
 // The frame's globals as the engine reads them (`Globals` in its common.wgsl): where each part begins, what's tuned
 // by hand, the camera's projection, and the camera, sun, sky, fog and grade written for a frame.
-import * as THREE from 'three';
+import {
+  Color, DirectionalLight, Fog, FogExp2, Mat3, Mat4, OrthoCamera, PerspectiveCamera, Texture, Vec3,
+  WebGPUCoordinateSystem, World,
+} from './api/index.ts';
 import { tunable } from '../core/tuning';
 import { holeNow } from '../core/seeThrough';
 
@@ -16,7 +19,7 @@ export const GLOBALS = {
 /** the sun's shadow map, a side, where the game has no sun to say (`SHADOW_SIZE` in the engine's gpu.rs) */
 const SHADOW_SIZE = 2048;
 /** The sun's shadow map's side as the game's quality level has it (core/quality.ts sets the sun's own). */
-export const shadowSizeOf = (sun: THREE.DirectionalLight | null): number => sun?.shadow.mapSize.x || SHADOW_SIZE;
+export const shadowSizeOf = (sun: DirectionalLight | null): number => sun?.shadow.mapSize.x || SHADOW_SIZE;
 
 /** What's tuned by hand against three's picture (`window.__rust.tune`). */
 export const TUNE = tunable('rust', {
@@ -171,8 +174,8 @@ export const TUNE = tunable('rust', {
   scene: 1,
 });
 
-const scratchMatrix = new THREE.Matrix4(), viewProj = new THREE.Matrix4(), projection = new THREE.Matrix4();
-const v3 = new THREE.Vector3(), target3 = new THREE.Vector3();
+const scratchMatrix = new Mat4(), viewProj = new Mat4(), projection = new Mat4();
+const v3 = new Vec3(), target3 = new Vec3();
 
 /**
  * A camera's projection with clip depth from 0 to 1, whatever convention three keeps its own in: the camera's own
@@ -181,10 +184,10 @@ const v3 = new THREE.Vector3(), target3 = new THREE.Vector3();
  * draws the hall to one side of its panel), and the engine's heroes stood a hero's width off the outline three
  * draws round the one in focus (from play: "bug with outline from before, still there").
  */
-export function projectionOf(camera: THREE.PerspectiveCamera | THREE.OrthographicCamera, out: THREE.Matrix4):
-  THREE.Matrix4 {
+export function projectionOf(camera: PerspectiveCamera | OrthoCamera, out: Mat4):
+  Mat4 {
   out.copy(camera.projectionMatrix);
-  if (camera.coordinateSystem === THREE.WebGPUCoordinateSystem) return out;
+  if (camera.coordinateSystem === WebGPUCoordinateSystem) return out;
   // (z from -w..w to 0..w: half of z and w's rows added)
   const e = out.elements;
   for (let column = 0; column < 4; column++) e[column * 4 + 2] = (e[column * 4 + 2] + e[column * 4 + 3]) / 2;
@@ -204,7 +207,7 @@ export interface Grade {
   samples?: number;
   /** the camera the hero's arms are drawn through while he's seen through his eyes (core/renderer.ts
    *  `drawArms`: narrower than the world's), none while the world's draws them */
-  arms?: THREE.PerspectiveCamera | null;
+  arms?: PerspectiveCamera | null;
   /** whether this frame leaves the sun's shadow as it was last drawn (the game draws it in turns:
    *  core/renderer.ts `sunShadowInTurns`) */
   shadowHeld?: boolean;
@@ -215,11 +218,11 @@ export interface Grade {
    *  the game's own */
   look?: {
     on: boolean; exposure: number; contrast: number; saturation: number;
-    filterLo: THREE.Matrix3; filterHi: THREE.Matrix3; filterMix: number;
+    filterLo: Mat3; filterHi: Mat3; filterMix: number;
     blur: number; focusY: number; focusBand: number; bloom: number;
   };
   /** the blood round the screen's edges at low health (core/bloodEdges.ts): its mask, and how far it has come */
-  edges?: { mask: THREE.Texture | null; reach: number };
+  edges?: { mask: Texture | null; reach: number };
   /** a level of plain lit shading (the game's `plainLit`: Low and Very low) */
   lite?: boolean;
   /** the least a still thing is across to cast the sun's shadow at this level (m: the game's `minCasterRadius`) */
@@ -230,7 +233,7 @@ export const PLAIN_GRADE: Grade = { small: 1e4, large: 1e4, cap: 1, vignette: 1.
 /** What of a frame's lights its globals are written from: how many point lights it has, and its sun. */
 export interface Lit {
   points: number;
-  sun: THREE.DirectionalLight | null;
+  sun: DirectionalLight | null;
 }
 
 /**
@@ -238,7 +241,7 @@ export interface Lit {
  * `g` (the lights' own floats and the kinds of see-through are written before it: `lights.ts`, `seeKinds.ts`).
  * Returns the colour the frame is cleared to.
  */
-export function writeGlobals(g: Float32Array, scene: THREE.Scene, camera: THREE.PerspectiveCamera, time: number,
+export function writeGlobals(g: Float32Array, scene: World, camera: PerspectiveCamera, time: number,
   lit: Lit, grade: Grade): [number, number, number] {
   viewProj.multiplyMatrices(projectionOf(camera, projection), camera.matrixWorldInverse).toArray(g, GLOBALS.viewProj);
   v3.setFromMatrixPosition(camera.matrixWorld).toArray(g, GLOBALS.camPos);
@@ -280,9 +283,9 @@ export function writeGlobals(g: Float32Array, scene: THREE.Scene, camera: THREE.
       g[GLOBALS.fogColor + 3] = 1;
     }
   }
-  const fog = scene.fog as (THREE.Fog & THREE.FogExp2) | null;
-  const background = scene.background as THREE.Color | null;
-  let clear: THREE.Color | null = background?.isColor ? background : null;
+  const fog = scene.fog as (Fog & FogExp2) | null;
+  const background = scene.background as Color | null;
+  let clear: Color | null = background?.isColor ? background : null;
   if (fog) {
     g[GLOBALS.ambient + 3] = fog.isFogExp2 ? 2 : 1;
     g[GLOBALS.hemiSky + 3] = fog.isFogExp2 ? fog.density : fog.near;

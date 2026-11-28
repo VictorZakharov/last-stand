@@ -1,5 +1,5 @@
-// The village's paving under the Rust engine: `unrepeatedNodes` (world/villageNodes.ts) as WGSL for the engine's
-// surface hook, written line for line. Every map is read twice, shifted by one of six offsets and the next as a slow
+// The village's paving under the Rust engine: once three's node material (`unrepeatedNodes`, gone with three, #973),
+// as WGSL for the engine's surface hook. Every map is read twice, shifted by one of six offsets and the next as a slow
 // noise over the world picks them, and blended over a narrow band; broad patches of shade and stain lie over it.
 // With the maps read as they repeat, the square's stones came round every metre and a half in rows (from play, "too
 // obvious texture pieces (tiling is visible)", #819).

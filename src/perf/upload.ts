@@ -4,7 +4,7 @@
 // co-op relay (server/traces). The service worker never sees it: it only answers GETs of the game's own files.
 import { framesUncapped } from '../core/frameLoop';
 import { keyboardLockState } from '../ui/autoFullScreen';
-import * as THREE from 'three';
+import { Vec2 } from '../engine/api/index.ts';
 import { G } from '../state';
 import { qualityBudget, qualityLevel, qualitySetting } from '../core/quality';
 import { QUALITY } from '../data/quality';
@@ -54,7 +54,7 @@ export function device(): Record<string, number | string | boolean> {
 /** How the game is set to draw now, as a trace's header has it (a bug report's too). */
 export function settings(): Record<string, number | string | boolean> {
   const level = qualityLevel();
-  const scene = sceneSize(new THREE.Vector2());
+  const scene = sceneSize(new Vec2());
   return {
     quality: level,
     setting: qualitySetting(),

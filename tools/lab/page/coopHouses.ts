@@ -1,7 +1,7 @@
 // `lab coop --scenarios houses`' side on each page (node/coopHouses.mjs): a partner gone into one of the village's
 // houses shown to the others outside (`src/ui/houseMarks.ts`): his name over the house's door, a dot on the minimap and
 // his name under the house's on the village's map; gone again as he comes out.
-import * as THREE from 'three';
+import { Vec3 } from './sceneApi.ts';
 import { G } from '../../../src/state';
 import { outsideOf, type RoomId } from '../../../src/data/houses';
 import { enterRoom, holdVillageKept, leaveRoom } from '../../../src/game/rooms';
@@ -38,7 +38,7 @@ export function coopFaceHouse(_lab: Lab, { id }: { id: RoomId }): void {
   const x = out.x + Math.sin(out.facing) * LOOK_FROM, z = out.z + Math.cos(out.facing) * LOOK_FROM;
   const facing = out.facing + Math.PI;
   G.player.walkTo = null;
-  G.player.place(new THREE.Vector3(x, groundHeight(x, z), z), facing);
+  G.player.place(new Vec3(x, groundHeight(x, z), z), facing);
   faceCamera(facing);
   settleCamera(G.player.pos);
 }

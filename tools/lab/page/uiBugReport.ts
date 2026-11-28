@@ -16,7 +16,7 @@
 // Its canaries: the form's box twice the window's height, which must be found here; a panel laid over the touch
 // state's form, found too; and the report's picture taken out on its way to the service, which the node side's
 // read-back must find.
-import { middleOf, realWait } from './lab';
+import { boxOf, elementUnder, middleOf, realWait, revealOf, scrollMoreOf, seenOf } from './lab';
 import { BUG_REPORT_CANARY, BUG_REPORT_COVER_CANARY } from './uiReportCanaries';
 import type { Lab, Pictured } from './lab';
 import { G } from '../../../src/state';
@@ -25,6 +25,7 @@ import { input } from '../../../src/core/input';
 import { bugReportOpen, bugReportServer, bugReportShot, closeBugReport } from '../../../src/ui/bugReport';
 import { showPause } from '../../../src/ui/menus';
 import { touchMode } from './uiTouch';
+import { uiScales } from '../../../src/ui/scale';
 
 /** What a state found besides its boxes: lines for its report, and its problems. */
 export interface BugReportFound {
@@ -62,7 +63,9 @@ const SHOT_FRAMES = 240;
 /** a picture under this many bytes is a blank canvas's (1280x720 of black is 6 KB as a JPEG) */
 const BLANK_BYTES = 12_000;
 /** frames run for the form to open and its picture to be asked of one */
-const OPEN_FRAMES = 2;
+const OPEN_FRAMES = 3;
+/** frames for the UI kit to draw what a press changed */
+const PRESS_FRAMES = 2;
 /** how many rounds of a frame and 5 ms of the browser's time a send may take to answer */
 const SEND_ROUNDS = 1000;
 /** the path a report is posted to (src/ui/bugReportSend.ts) */
@@ -140,10 +143,11 @@ function standOut(): void {
 
 /** `element` pressed as the state's player presses: the mouse's click, or a finger's tap. */
 async function pressOn(lab: Lab, state: State, element: HTMLElement): Promise<void> {
-  element.scrollIntoView({ block: 'nearest' });
+  revealOf(element);
+  await lab.step(1);
   if (state === 'bugReport') await lab.click(middleOf(element));
   else await lab.tap(middleOf(element));
-  await lab.step(1);
+  await lab.step(PRESS_FRAMES);
 }
 
 /** `text` typed into the focused field as a keyboard types it (the lab's keys carry no text of their own). */
@@ -223,13 +227,15 @@ export const bugReportPictures = (): Pictured[] => pictures;
 
 /** Whether `element` is what a press at its middle lands on, and its box inside the window. */
 function reachable(element: HTMLElement | null, name: string, state: State): string[] {
-  if (!element?.checkVisibility()) return [`${state}: no ${name} shown`];
-  const box = element.getBoundingClientRect();
+  if (!element || !seenOf(element)) return [`${state}: no ${name} shown`];
+  const box = boxOf(element);
   if (box.left < 0 || box.top < 0 || box.right > innerWidth || box.bottom > innerHeight) {
     return [`${state}: ${name} lies past the window's edge`];
   }
-  const hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
-  if (!hit || !(hit === element || element.contains(hit) || hit.contains(element))) return [`${state}: something lies over ${name}`];
+  const hit = elementUnder(box.left + box.width / 2, box.top + box.height / 2);
+  if (!hit || !(hit === element || element.contains(hit) || hit.contains(element))) {
+    return [`${state}: ${hit ? nameOf(hit) : 'nothing found'} lies over ${name}`];
+  }
   return [];
 }
 
@@ -244,7 +250,7 @@ function coversOf(box: DOMRect): string[] {
   const bottom = Math.min(innerHeight, box.bottom);
   for (let x = left; x < right; x += COVER_STEP) {
     for (let y = top; y < bottom; y += COVER_STEP) {
-      const hit = document.elementFromPoint(x, y);
+      const hit = elementUnder(x, y);
       if (hit && !root().contains(hit)) covers.add(nameOf(hit));
     }
   }
@@ -253,26 +259,29 @@ function coversOf(box: DOMRect): string[] {
 
 /** What lies over the form's box now, as problems (what comes up over it after it opened too). */
 function coveredForm(state: State): string[] {
-  const covers = coversOf(part('.br-box').getBoundingClientRect());
+  const covers = coversOf(boxOf(part('.br-box')));
   return covers.length ? [`${state}: ${covers.join(', ')} ${BUG_REPORT_COVER_CANARY.name}`] : [];
 }
 
 /** An element as a report names it: the id nearest it, or its tag. */
 function nameOf(element: Element): string {
+  if (element.id) return `#${element.id}`;
+  const classes = [...element.classList].map((name) => `.${name}`).join('');
   const named = element.closest('[id]');
-  return named ? `#${named.id}` : element.tagName.toLowerCase();
+  return `${element.tagName.toLowerCase()}${classes}${named ? ` in #${named.id}` : ''}`;
 }
 
 /** The form's box against the window, and its controls each found. */
 function formFound(state: State): BugReportFound {
   if (!bugReportOpen()) return { lines: [], problems: [`${state}: the form didn't open`] };
   const box = part('.br-box');
-  const at = box.getBoundingClientRect();
+  const at = boxOf(box);
   const problems: string[] = [];
   const past = at.left < 0 || at.top < 0 || at.right > innerWidth || at.bottom > innerHeight;
   if (past) problems.push(`${state}: the form ${BUG_REPORT_CANARY.name}`);
-  const scrolls = box.scrollHeight > box.clientHeight + 1;
-  if (scrolls) problems.push(`${state}: the form scrolls (${box.scrollHeight} px of content in ${box.clientHeight})`);
+  const more = scrollMoreOf(box);
+  const scrolls = more > 1;
+  if (scrolls) problems.push(`${state}: the form scrolls (${more.toFixed(1)} px more than it shows)`);
   problems.push(...coveredForm(state));
   for (const kind of REPORT_KINDS) problems.push(...reachable(kindButton(kind.id), `the kind ${kind.label}`, state));
   for (const [selector, name] of CONTROLS) problems.push(...reachable(root().querySelector<HTMLElement>(selector), name, state));
@@ -293,14 +302,16 @@ function formFound(state: State): BugReportFound {
 /** How many real css px a px of the form's zoomed box is. */
 function boxScale(): number {
   const box = part('.br-box');
+  // (drawn by the UI kit in the page's place, at the lobby's scale)
+  if (box.closest('.kit-mirror')) return uiScales.ui;
   return box.offsetHeight ? box.getBoundingClientRect().height / box.offsetHeight : 1;
 }
 
 /** On touch: every kind and button a finger's height, every field's text large enough not to be zoomed into. */
 function fingerSizes(state: State): BugReportFound {
   const problems: string[] = [];
-  const kinds = REPORT_KINDS.map((kind) => kindButton(kind.id).getBoundingClientRect().height);
-  const buttons = ['#br-cancel', '#br-copy', '#br-send'].map((s) => part(s).getBoundingClientRect().height);
+  const kinds = REPORT_KINDS.map((kind) => boxOf(kindButton(kind.id)).height);
+  const buttons = ['#br-cancel', '#br-copy', '#br-send'].map((s) => boxOf(part(s)).height);
   const texts = ['#br-text', '#br-expected'].map((s) => parseFloat(getComputedStyle(part(s)).fontSize) * boxScale());
   if (Math.min(...kinds) < FINGER.kind - 0.5) problems.push(`${state}: a kind is ${Math.min(...kinds).toFixed(1)} css px tall, under ${FINGER.kind}`);
   if (Math.min(...buttons) < FINGER.button - 0.5) problems.push(`${state}: a button is ${Math.min(...buttons).toFixed(1)} css px tall, under ${FINGER.button}`);
@@ -340,7 +351,7 @@ async function wholeReport(lab: Lab, state: State, label: string | null): Promis
   const text = part('.br-sent pre').textContent ?? '';
   if (label) pictures.push(await lab.screen(label, ['the report shown whole before it leaves'], '#bug-report .br-box'));
   part<HTMLDetailsElement>('.br-sent').open = false;
-  await lab.step(1);
+  await lab.step(PRESS_FRAMES);
   return text;
 }
 
@@ -405,6 +416,8 @@ async function reportMade(lab: Lab, canary: boolean): Promise<BugReportFound> {
   const sending = await sendTwice(lab, state);
   problems.push(...sending.problems);
   if (opened.length) problems.push(`${state}: the form opened ${opened.join(', ')}`);
+  // (the last page drawn by the UI kit once it shows)
+  await lab.step(PRESS_FRAMES);
   problems.push(...reachable(part('#br-close'), 'Done', state));
   // (the code is the service's random one: shown as a placeholder for the picture, so a run's pictures repeat)
   const doneText = part('.br-done-text');
@@ -454,7 +467,7 @@ async function reportByTouch(lab: Lab, canary: boolean): Promise<BugReportFound>
   // (the field let go: a phone's keyboard put away, the form whole again for its picture)
   part('#br-text').blur();
   root().classList.remove('typing');
-  await lab.step(1);
+  await lab.step(PRESS_FRAMES);
   pictures.push(await lab.screen('bugReportTouch-filled', ['over a run on touch: a kind tapped, what happened typed'], '#bug-report .br-box'));
   const text = await wholeReport(lab, state, null);
   const problems = [...found.problems, ...sizes.problems, ...filled.problems];

@@ -1,4 +1,6 @@
-// In-run HUD: bars, hotbar, score, target frame, minimap, spoils, decision panel.
+// In-run HUD: bars, hotbar, score, minimap, spoils, the choice after a wave. The bottom bar (bars, hotbar, Frenzy),
+// the wave's badge and the choice are the page's out of sight: the engine draws them from what this writes there
+// (bottomBar.ts, waveBadge.ts, decisionPanel.ts).
 import { duelObjective } from './duelHud';
 import { G } from '../state';
 import { input } from '../core/input';
@@ -15,6 +17,8 @@ import { choiceTaught } from './choiceLesson';
 import { isCoop, readying } from '../net/role';
 import { skillArt } from './skillArt';
 import { drawVillageOnMinimap, villageMinimapScale } from './villageMinimap';
+import { initMinimapColumn } from './minimapColumn';
+import { initTrainingPanel } from './trainingPanel';
 
 import { SKILL_KEYS } from '../loot/loadout';
 import { FRENZY } from '../data/balance';
@@ -24,6 +28,35 @@ import type { Enemy } from '../entities/enemy';
 import type { Item, SkillDef, SkillKey } from '../types';
 import { aleBoost } from '../game/aleBoost';
 import { ALE_BOOST } from '../data/tavern';
+import { showTarget } from './targetFrame';
+import { drawWaveBadge } from './waveBadge';
+import { drawBanner } from './bannerPanel';
+import { drawAimMarks } from './aimMarks';
+import { drawBuffs } from './buffsPanel';
+import { drawDuelPanels } from './duelPanels';
+import { drawParty } from './partyPanel';
+import { drawDownedPanels } from './downedPanels';
+import { drawDiag } from './diagPanels';
+import { drawChat } from './chatPanels';
+import { drawTouch } from './touchPanels';
+import { drawVillageCard } from './villageCardPanel';
+import { drawLobbyPanels } from './lobbyPanels';
+import { drawTooltip } from './tooltipPanel';
+import { drawItemSheet } from './itemSheetPanel';
+import { drawSummary } from './summaryPanel';
+import { drawToasts } from './toastSheet';
+import { drawPause } from './pauseSheet';
+import { drawDialogs } from './dialogsSheet';
+import { drawCoop } from './coopSheet';
+import { drawSaves } from './savesSheet';
+import { drawHeroes } from './heroesSheet';
+import { drawDrink } from './screens/drink/drinkSheet';
+import { drawTrade } from './screens/trade/tradeSheet';
+import { drawMerchant } from './screens/merchant/merchantSheet';
+import { drawVillageMap } from './villageMapSheet';
+import { drawGuide } from './guide/guideSheet';
+import { drawDecision } from './decisionPanel';
+import { drawBottomBar } from './bottomBar';
 
 /** querySelector that asserts the element exists (HUD markup is static). */
 const $ = <T extends Element = HTMLElement>(s: string, root: ParentNode = document): T => root.querySelector<T>(s)!;
@@ -34,11 +67,46 @@ let slots: HotbarSlot[] = [];
 /** the hero the hotbar was built for */
 let builtFor: Player | null = null;
 let bannerTimer: ReturnType<typeof setTimeout> | undefined;
+/** how many times the banner was shown: the engine's begins again at each (`bannerPanel.ts`) */
+let bannersShown = 0;
 let mmCtx: CanvasRenderingContext2D;
 /** how much larger the hero's arrow is on the village's minimap, which is drawn smaller than a fight's */
 const VILLAGE_ARROW = 1.4;
 
 export function initHud(): void {
+  // (the choice first: the badge is drawn over it, as its z-index had it)
+  drawDecision();
+  drawWaveBadge();
+  drawBanner();
+  drawAimMarks();
+  drawBuffs();
+  drawDuelPanels();
+  drawParty();
+  drawDownedPanels();
+  drawDiag();
+  drawChat();
+  drawTouch();
+  drawLobbyPanels();
+  drawVillageCard();
+  // (the tooltip last: over the modals, as its z-index stood it)
+  drawSummary();
+  drawToasts();
+  drawHeroes();
+  drawSaves();
+  drawPause();
+  drawDialogs();
+  drawCoop();
+  drawDrink();
+  drawTrade();
+  drawMerchant();
+  drawVillageMap();
+  drawGuide();
+  drawItemSheet();
+  drawTooltip();
+  drawBottomBar();
+  // (the minimap's column, the training's tracker in it)
+  initMinimapColumn();
+  initTrainingPanel();
   mmCtx = $<HTMLCanvasElement>('#minimap').getContext('2d')!;
   on('lootGained', renderSpoils);
   on('waveStarted', () => renderSpoils());
@@ -49,6 +117,8 @@ export function showHud(v: boolean, lobby = false, practice = false): void {
   $('#hud').classList.toggle('hidden', !v);
   $('#hud').classList.toggle('lobby', lobby);
   $('#hud').classList.toggle('practice', practice);
+  // (the target frame is the engine's, not the page's: hidden with the HUD and in the lobby)
+  if (!v || lobby) showTarget(null, false);
   $('.mm-title').textContent = lobby ? 'Wardenhollow' : 'The Last Stand';
   if (!lobby) minimapOut(true);
 }
@@ -154,6 +224,7 @@ export function banner(title: string, sub = ''): void {
   else for (const animation of b.getAnimations()) { animation.cancel(); animation.play(); }
   $('.b-title', b).textContent = title;
   $('.b-sub', b).textContent = sub;
+  b.dataset.shown = String(++bannersShown);
   // gone as its fade ends (its end follows the animation wherever it's taken: the lab ends it before a picture, and
   // left to a timer of its own it hid by the browser's clock, so a picture had it on the page or not, the HUD's
   // layers laid out another way); the timer only where no fade runs
@@ -406,7 +477,6 @@ export function updateHud(): void {
 }
 
 function updateTarget() {
-  const box = h('#target');
   // (an encounter's main boss, never one of its guards: from play, the bar named a guard "The Bell-Warden" at the
   // Ossuary Cantor's wave; each guard's own bar is over it in the world)
   let e = G.enemies.find((x) => x.boss && !x.guard && x.alive);
@@ -418,16 +488,16 @@ function updateTarget() {
       if (d < best) { best = d; e = x; }
     }
   }
-  if (!e) { box.classList.add('hidden'); return; }
-  box.classList.remove('hidden');
-  // (a guard aimed at is a target as any foe is, named a guard: no boss's bar of its own)
-  box.classList.toggle('boss', e.boss && !e.guard);
-  // (a pair sharing one life named as the pair while both stand: data/enemies.ts `pair`)
-  setText(h('#target .t-name'), e.def.pair && partnerOf(e) ? e.def.pair : e.name);
-  setText(h('#target .t-sub'), e.guard ? 'Guard' : e.boss ? bossLine(e) : e.hero ? 'Hero' : '');
-  const k = pct(e.life / e.maxLife);
-  setStyle(h('#target .t-fill'), 'width', k);
-  setStyle(h('#target .t-ghost'), 'width', k);
+  const duel = h('#hud').classList.contains('duel');
+  if (!e) { showTarget(null, duel); return; }
+  showTarget({
+    // (a pair sharing one life named as the pair while both stand: data/enemies.ts `pair`)
+    name: e.def.pair && partnerOf(e) ? e.def.pair : e.name,
+    sub: e.guard ? 'Guard' : e.boss ? bossLine(e) : e.hero ? 'Hero' : '',
+    life: e.life / e.maxLife,
+    // (a guard aimed at is a target as any foe is, named a guard: no boss's bar of its own)
+    boss: e.boss && !e.guard,
+  }, duel);
 }
 
 /** A boss's line under its name: warded, and by how many guards still standing, while its guards stand (so the
@@ -445,7 +515,13 @@ const minimapHooks: ((c: CanvasRenderingContext2D, S: number) => void)[] = [];
 /** Runs `draw` each time the minimap is drawn, in its turned frame (`S` px a metre, its middle the arena's). */
 export function onMinimap(draw: (c: CanvasRenderingContext2D, S: number) => void): void { minimapHooks.push(draw); }
 
+/** how many times the minimap has been drawn (its picture on the engine's panel is painted again as it changes:
+ *  `minimapColumn.ts`) */
+let draws = 0;
+export const minimapDraws = (): number => draws;
+
 function drawMinimap() {
+  draws++;
   const c = mmCtx, W = 200, inRun = G.mode === 'run';
   const S = inRun ? W / MINIMAP_METRES : villageMinimapScale(W); // world units -> px
   c.clearRect(0, 0, W, W);

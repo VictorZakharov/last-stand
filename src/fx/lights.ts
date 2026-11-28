@@ -1,15 +1,15 @@
 // Fixed-size pool of dynamic point lights. The count never changes, so the
 // renderer never recompiles shaders; unused lights sit at intensity 0.
-import * as THREE from 'three';
+import { ColorRepresentation, PointLight, Vec3, World } from '../engine/api/index.ts';
 
 const POOL = 8;
 
 type Vec3Like = { x: number; y?: number; z: number };
 /** Something the light tracks: an object with a position, or a function returning one. */
-export type LightFollow = { position: THREE.Vector3 } | (() => THREE.Vector3);
+export type LightFollow = { position: Vec3 } | (() => Vec3);
 
 export interface LightSlot {
-  light: THREE.PointLight;
+  light: PointLight;
   life: number;
   maxLife: number;
   peak: number;
@@ -20,9 +20,9 @@ export interface LightSlot {
 
 const lights: LightSlot[] = [];
 
-export function initLights(scene: THREE.Scene): void {
+export function initLights(scene: World): void {
   for (let i = 0; i < POOL; i++) {
-    const l = new THREE.PointLight(0xffffff, 0, 10, 2);
+    const l = new PointLight(0xffffff, 0, 10, 2);
     l.castShadow = false;
     scene.add(l);
     lights.push({ light: l, life: 0, maxLife: 1, peak: 0, follow: null, born: 0, hold: 0 });
@@ -30,7 +30,7 @@ export function initLights(scene: THREE.Scene): void {
 }
 
 export interface FlashOpts {
-  color?: THREE.ColorRepresentation;
+  color?: ColorRepresentation;
   intensity?: number;
   distance?: number;
   life?: number;
@@ -66,7 +66,7 @@ export function flashFree(o: FlashOpts): LightSlot | null {
 }
 
 /** The pool's lights (tools/lab reads them: `lab village`'s steady lamps). */
-export const pooledLights = (): readonly THREE.PointLight[] => lights.map((s) => s.light);
+export const pooledLights = (): readonly PointLight[] => lights.map((s) => s.light);
 
 export function release(slot: LightSlot | null | undefined): void { if (slot) slot.life = 0; }
 

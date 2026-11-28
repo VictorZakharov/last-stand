@@ -15,7 +15,7 @@
 //   must be caught.
 // - `stagStridePictures` (asked for alone): its charge from its side every few frames through a stride and more, and
 //   as the player sees it; its walk from its side.
-import * as THREE from 'three';
+import { Node, Vec3 } from './sceneApi.ts';
 import type { Clip, Lab, Pictured } from './lab';
 import type { Enemy } from '../../../src/entities/enemy';
 import { G } from '../../../src/state';
@@ -53,7 +53,7 @@ const STANDS = 0.05;
 
 /** The model's hold on its stride (models/stag.ts `stride`). */
 interface Stride {
-  hooves: { joint: THREE.Object3D; foot: THREE.Vector3 }[];
+  hooves: { joint: Node; foot: Vec3 }[];
   carried: boolean;
   /** each leg's quick steps so far, its planted hoof out of its reach */
   stretched?: number[];
@@ -131,13 +131,13 @@ function reading(what: string): StrideReading {
 
 /** Reads a stag's hooves frame after frame into a reading. */
 class HoofReader {
-  private readonly was: THREE.Vector3[];
+  private readonly was: Vec3[];
   private readonly onFloor: boolean[];
   private readonly stay: number[];
   private readonly stayFrom: number[];
   private readonly stayFrames: string[][];
-  private last: THREE.Vector3;
-  private readonly now = new THREE.Vector3();
+  private last: Vec3;
+  private readonly now = new Vec3();
   private doing = '';
   /** the frames before this one, as `bearingBefore` keeps them */
   private readonly recent: string[] = [];
@@ -147,7 +147,7 @@ class HoofReader {
 
   constructor(private readonly boss: Enemy, private readonly stride: Stride, readonly result: StrideReading) {
     const count = stride.hooves.length;
-    this.was = Array.from({ length: count }, () => new THREE.Vector3());
+    this.was = Array.from({ length: count }, () => new Vec3());
     this.onFloor = new Array<boolean>(count).fill(false);
     this.stay = new Array<number>(count).fill(0);
     this.stayFrom = new Array<number>(count).fill(-1);
@@ -265,7 +265,7 @@ async function walkRead(lab: Lab, options: BossOptions,
   const reader = stride ? new HoofReader(boss, stride, result) : null;
   const hero = G.player;
   const back = boss.facing + SLANT;
-  const off = new THREE.Vector3(Math.sin(back), 0, Math.cos(back));
+  const off = new Vec3(Math.sin(back), 0, Math.cos(back));
   const quick = quickSteps(stride);
   boss.dazed = 0;
   for (let frame = 0; frame < WALK_FRAMES; frame++) {
@@ -435,12 +435,12 @@ const WALK_SIDE = 10;
 export async function stagStridePictures(lab: Lab, options: BossOptions, lines: string[]): Promise<Pictured[]> {
   const moments: Pictured[] = [];
   try {
-    let first = -1, chargeClip: Clip | null = null, way: THREE.Vector3 | null = null, from: THREE.Vector3 | null = null;
+    let first = -1, chargeClip: Clip | null = null, way: Vec3 | null = null, from: Vec3 | null = null;
     await chargeRead(lab, { ...options, canary: false }, true, async (frame, boss) => {
       if (first < 0 && RUNS.has(boss)) {
         first = frame;
         moments.push(await lab.screen('charge (the game\'s view)', ['its charge as the player sees it']));
-        way = new THREE.Vector3(Math.sin(boss.facing), 0, Math.cos(boss.facing));
+        way = new Vec3(Math.sin(boss.facing), 0, Math.cos(boss.facing));
         from = boss.pos.clone().addScaledVector(way, CHARGE_LEAD);
         holdSideView(sideView(from.clone().addScaledVector(way, CHARGE_SPAN / 2), way, CHARGE_SIDE, ITS_BODY));
       }
@@ -453,10 +453,10 @@ export async function stagStridePictures(lab: Lab, options: BossOptions, lines: 
       }
     });
     endSideView();
-    let walkClip: Clip | null = null, walkWay: THREE.Vector3 | null = null, walkFrom: THREE.Vector3 | null = null;
+    let walkClip: Clip | null = null, walkWay: Vec3 | null = null, walkFrom: Vec3 | null = null;
     await walkRead(lab, { ...options, canary: false }, async (frame, boss) => {
       if (frame === WALK_FROM - 1) {
-        walkWay = new THREE.Vector3(Math.sin(boss.facing), 0, Math.cos(boss.facing));
+        walkWay = new Vec3(Math.sin(boss.facing), 0, Math.cos(boss.facing));
         walkFrom = boss.pos.clone();
         holdSideView(sideView(walkFrom.clone().addScaledVector(walkWay, WALK_SPAN / 2), walkWay, WALK_SIDE, ITS_BODY));
       }

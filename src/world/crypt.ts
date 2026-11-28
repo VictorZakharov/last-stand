@@ -4,10 +4,12 @@
 // sarcophagi and gravestones break up the floor; a ruined necropolis and dead trees stand beyond.
 import { rustLook } from '../engine/custom';
 import { beaconLook, dampLook, outsideLook } from '../engine/looks/crypt';
-import * as THREE from 'three';
-import { portShader, seeKept, seeUniforms, wgslNoise } from '../core/shaderPorts';
-import { dampNodes, outsideOutputNode } from './cryptNodes';
-import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import {
+  AdditiveBlending, Attribute, Bezier3Curve3, CatmullRom3, Color, DataTexture, DoubleSide, Euler, floats, Geometry,
+  InstancedMesh, LinearFilter, LinearMipmapLinearFilter, LitMaterial, LookMaterial, Mat4, Material, mergeGeometries,
+  Mesh, Node, Outline, PointLight, Quat, RepeatWrapping, UnlitMaterial, Vec2, Vec3,
+} from '../engine/api/index.ts';
+import * as shapes from '../engine/api/shapes/index.ts';
 import { ARENA } from '../data/balance';
 import { cobblestone, soil, ashlar, granite, limestone, marble, slate, bark, bannerCloth, pbrMaterialMaps, runeCircle } from '../core/textures';
 import { particles, col } from '../fx/particles';
@@ -32,7 +34,7 @@ import { growTree, type Grow, type TreeKind } from './ezTrees';
 import { restartsAt, runPhase } from './runPhase';
 
 /** where the wall's parts are made: in the arena's frame */
-const IDENTITY = new THREE.Matrix4();
+const IDENTITY = new Mat4();
 
 const GATES = [0, 1, 2, 3].map((k) => (k / 4) * TAU);
 /** angular distance from `a` to the nearest spawn gate */
@@ -65,19 +67,17 @@ function barkTop(kind: TreeKind): number {
 
 const FOG = 0x1a2034;
 /** where the painted moon hangs in the sky (the shadow-casting light stays overhead for readable shadows) */
-const MOON_DIR = new THREE.Vector3(-0.74, 0.3, 0.6).normalize();
+const MOON_DIR = new Vec3(-0.74, 0.3, 0.6).normalize();
 
 /**
  * Beyond the wall, the ground, tombs and trees darken in the top-down view (`outside` eases to 1),
  * so the eye stays on the arena; the close views look out at the full skyline.
  */
 const outside = restartsAt({ value: 0 }, { value: 1 });
-/** how far past the wall it darkens, and by how much (the nodes: `outsideOutputNode`) */
+/** how far past the wall it darkens, and by how much (its look: `outsideLook`) */
 const OUTSIDE = { from: WALL_R + 1.5, to: WALL_R + 7, most: 0.8 };
-function outsideDim<M extends THREE.Material>(m: M): M {
-  (m as M & { outputNode: unknown }).outputNode = outsideOutputNode(outside, OUTSIDE);
-  rustLook(m, outsideLook(outside, OUTSIDE));
-  return m;
+function outsideDim<M extends Material>(m: M): M {
+  return rustLook(m, outsideLook(outside, OUTSIDE));
 }
 
 /** World span (m) of one tile of the damp map; it repeats beyond, deep in the fog. */
@@ -89,7 +89,7 @@ const DAMP_SPAN = 128;
  * Channels: r = damp amount, g = brightness drift, b = moss. Each noise has a whole number of
  * cells per tile, so the map repeats without a seam.
  */
-function dampMap(size = 512): THREE.DataTexture {
+function dampMap(size = 512): DataTexture {
   const noise = (freq: number, seed: number) => {
     const n = Math.max(1, Math.round(freq * DAMP_SPAN)), rng = mulberry(seed), lat = Float32Array.from({ length: n * n }, rng);
     const at = (i: number, j: number) => lat[((j % n) * n) + (i % n)];
@@ -110,10 +110,10 @@ function dampMap(size = 512): THREE.DataTexture {
     data[k + 2] = 255 * smooth(0.35, 0.7, moss(u, v));
     data[k + 3] = 255;
   }
-  const t = new THREE.DataTexture(data, size, size);
-  t.wrapS = t.wrapT = THREE.RepeatWrapping;
-  t.magFilter = THREE.LinearFilter;
-  t.minFilter = THREE.LinearMipmapLinearFilter;
+  const t = new DataTexture(data, size, size);
+  t.wrapS = t.wrapT = RepeatWrapping;
+  t.magFilter = LinearFilter;
+  t.minFilter = LinearMipmapLinearFilter;
   t.generateMipmaps = true;
   t.needsUpdate = true;
   return t;
@@ -139,19 +139,14 @@ const EARTH = { reach: 1.4, ragged: 0.45, tile: 3, stones: 0.4, washed: [0.25, 0
  * up out of their grout (core/parallax.ts). Round each of `earth`'s spots (x, z, reach; filled once the trees are
  * placed) the cobbles give way to the earth a tree grows from: stood on the stones, a dead tree's trunk rose out of
  * them as a post set in a pavement ("they need to grow from ground, not from stone"). */
-function dampGround<M extends THREE.MeshStandardMaterial>(m: M, earth: THREE.Vector3[]): M {
+function dampGround<M extends LitMaterial>(m: M, earth: Vec3[]): M {
   const damp = { value: dampMap() };
   const litter = pbrMaterialMaps(soil(), 1);
   const laid = {
     map: damp.value, span: DAMP_SPAN, earth, ragged: EARTH.ragged, stones: EARTH.stones, washed: EARTH.washed,
     tile: EARTH.tile, soil: litter,
   };
-  const nodes = dampNodes(m, laid);
   rustLook(m, dampLook(laid, outside, OUTSIDE, COBBLE_RELIEF));
-  Object.assign(m, {
-    colorNode: nodes.color, roughnessNode: nodes.roughness, normalNode: nodes.normal,
-    outputNode: outsideOutputNode(outside, OUTSIDE),
-  });
   reliefContext(m, COBBLE_RELIEF);
   return m;
 }
@@ -170,58 +165,58 @@ export const buildCrypt: BiomeBuilder = (scene) => {
   const cob = cobblestone();
   // the ground reaches past the fog's far end, so its edge melts into the sky's horizon
   // (the earth round the small dead trees' feet, one a tree: set as they're placed)
-  const earth = Array.from({ length: SMALL_TREES.n }, () => new THREE.Vector3());
-  const groundMat = dampGround(new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(cob, COBBLE_REPEAT, 1.1), color: 0xd0d4e0 }), earth);
+  const earth = Array.from({ length: SMALL_TREES.n }, () => new Vec3());
+  const groundMat = dampGround(new LitMaterial({ ...pbrMaterialMaps(cob, COBBLE_REPEAT, 1.1), color: 0xd0d4e0 }), earth);
   const wallMaps = ashlar(21, 6, 3);
-  const wallMat = new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(wallMaps, 1, 1.2), color: 0xb4b8c6 });
+  const wallMat = new LitMaterial({ ...pbrMaterialMaps(wallMaps, 1, 1.2), color: 0xb4b8c6 });
   // the dais in riven slate; the paths to them in pale marble, lighter than the cobbles
-  const daisMat = new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(slate(33, 2, 2), 1, 1.2), color: 0xb8b8c0 });
+  const daisMat = new LitMaterial({ ...pbrMaterialMaps(slate(33, 2, 2), 1, 1.2), color: 0xb8b8c0 });
   // (the braziers' plinths in honed granite: in slate's strata their steps read as planks)
-  const graniteMat = new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(granite(7), 2, 0.8), color: 0xd0d0d8 });
-  const walkMat = new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(marble(33, 5), 1, 1.2), color: 0xb8b8c0 });
-  const darkStone = new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(wallMaps, 1, 1), color: 0x7a7e8a });
+  const graniteMat = new LitMaterial({ ...pbrMaterialMaps(granite(7), 2, 0.8), color: 0xd0d0d8 });
+  const walkMat = new LitMaterial({ ...pbrMaterialMaps(marble(33, 5), 1, 1.2), color: 0xb8b8c0 });
+  const darkStone = new LitMaterial({ ...pbrMaterialMaps(wallMaps, 1, 1), color: 0x7a7e8a });
   // (weathered limestone, pitted and streaked: in a plain grunge the columns read flat, painted grey)
-  const carved = new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(limestone(11), 2, 1.6), color: 0x8a8c92 });
-  const iron = new THREE.MeshStandardMaterial({ color: 0x2a2a2e, metalness: 0.9, roughness: 0.45 });
+  const carved = new LitMaterial({ ...pbrMaterialMaps(limestone(11), 2, 1.6), color: 0x8a8c92 });
+  const iron = new LitMaterial({ color: 0x2a2a2e, metalness: 0.9, roughness: 0.45 });
   // (its vertex colours darken a skull's sockets: `skullGeometry`)
-  const boneMat = new THREE.MeshStandardMaterial({ color: 0x8a8272, roughness: 0.8, vertexColors: true });
+  const boneMat = new LitMaterial({ color: 0x8a8272, roughness: 0.8, vertexColors: true });
   // (grey, weathered: the forest's oak bark, its tiles square on ez-tree's trunks as on the forest's trees)
-  const deadWood = outsideDim(new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(bark(), DEAD_BARK, 1.4), color: 0x7a7670 }));
+  const deadWood = outsideDim(new LitMaterial({ ...pbrMaterialMaps(bark(), DEAD_BARK, 1.4), color: 0x7a7670 }));
   // (velvet, as sdf-harness's: matte, with a sheen of its own colour at grazing angles; its gold sigil embroidered)
   const cloth = bannerCloth();
-  const banner = new THREE.MeshPhysicalMaterial({
-    map: cloth, roughness: 0.9, sheen: 1, sheenColorMap: cloth, sheenColor: new THREE.Color(1.8, 1.8, 1.8),
-    sheenRoughness: 0.4, side: THREE.DoubleSide,
+  const banner = new LitMaterial({
+    map: cloth, roughness: 0.9, sheen: 1, sheenColorMap: cloth, sheenColor: new Color(1.8, 1.8, 1.8),
+    sheenRoughness: 0.4, side: DoubleSide,
   });
-  const gold = new THREE.MeshStandardMaterial({ color: 0x8a6a30, metalness: 0.8, roughness: 0.4 });
-  const weedMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9, side: THREE.DoubleSide });
-  const wax = new THREE.MeshStandardMaterial({ color: 0xd8ceb4, roughness: 0.6, emissive: 0x3a2008 });
-  const flameMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(0xffa040).multiplyScalar(3) });
+  const gold = new LitMaterial({ color: 0x8a6a30, metalness: 0.8, roughness: 0.4 });
+  const weedMat = new LitMaterial({ vertexColors: true, roughness: 0.9, side: DoubleSide });
+  const wax = new LitMaterial({ color: 0xd8ceb4, roughness: 0.6, emissive: 0x3a2008 });
+  const flameMat = new UnlitMaterial({ color: new Color(0xffa040).multiplyScalar(3) });
   // window openings: dark recesses
-  const nicheMat = new THREE.MeshStandardMaterial({ color: 0x06070a, roughness: 1 });
+  const nicheMat = new LitMaterial({ color: 0x06070a, roughness: 1 });
 
   // --- Sky: a horizon glow, a painted moon and stars ------------------------------
   scene.add(buildSky(FOG, MOON_DIR));
 
   // --- Ground ---------------------------------------------------------------
-  const ground = new THREE.Mesh(new THREE.CircleGeometry(110, 128).rotateX(-Math.PI / 2), groundMat);
+  const ground = new Mesh(shapes.circle(110, 128).rotateX(-Math.PI / 2), groundMat);
   ground.receiveShadow = true;
   scene.add(ground);
 
   // --- Central dais -----------------------------------------------------------
   // (a 2 m tile: its slabs a metre long; at 2.4 and 2 tiles a metre they were 8 cm and read as speckle)
   const lower = boxWithUV(2 * (h + 0.7), 0.18, 2 * (h + 0.7), 0.5);
-  const lowerM = new THREE.Mesh(lower, daisMat); lowerM.position.y = 0.09;
+  const lowerM = new Mesh(lower, daisMat); lowerM.position.y = 0.09;
   const upper = boxWithUV(2 * h, 0.35, 2 * h, 0.5);
-  const upperM = new THREE.Mesh(upper, daisMat); upperM.position.y = 0.175;
+  const upperM = new Mesh(upper, daisMat); upperM.position.y = 0.175;
   for (const m of [lowerM, upperM]) { m.receiveShadow = true; m.castShadow = true; scene.add(m); }
 
   // rune circle in the center of the dais
-  const runeMat = new THREE.MeshBasicMaterial({
-    map: runeCircle(7), color: new THREE.Color(0x40d0ff).multiplyScalar(0.8),
-    transparent: true, blending: THREE.AdditiveBlending, depthWrite: false,
+  const runeMat = new UnlitMaterial({
+    map: runeCircle(7), color: new Color(0x40d0ff).multiplyScalar(0.8),
+    transparent: true, blending: AdditiveBlending, depthWrite: false,
   });
-  const rune = new THREE.Mesh(new THREE.PlaneGeometry(8, 8).rotateX(-Math.PI / 2), runeMat);
+  const rune = new Mesh(shapes.plane(8, 8).rotateX(-Math.PI / 2), runeMat);
   rune.position.y = ARENA.daisHeight + 0.02;
   scene.add(rune);
   const eased = runPhase({ calm: 0 });
@@ -237,19 +232,19 @@ export const buildCrypt: BiomeBuilder = (scene) => {
 
   // obelisks at the dais corners
   const obeliskGeo = buildObeliskGeo();
-  const glyphMat = new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0x3ab8ff, emissiveIntensity: 2.2 });
+  const glyphMat = new LitMaterial({ color: 0x000000, emissive: 0x3ab8ff, emissiveIntensity: 2.2 });
   // the props and walls dissolve between the camera and the player in the close views (the camera never pulls in)
   for (const m of [wallMat, darkStone, carved, iron, boneMat, deadWood, banner, gold, weedMat, wax, flameMat, nicheMat, glyphMat]) seeThrough(m, 'prop');
   for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
-    const x = sx * (h - 0.5), z = sz * (h - 0.5), g = new THREE.Group();
+    const x = sx * (h - 0.5), z = sz * (h - 0.5), g = new Node();
     scene.add(g);
-    const ob = new THREE.Mesh(obeliskGeo, darkStone);
+    const ob = new Mesh(obeliskGeo, darkStone);
     ob.position.set(x, ARENA.daisHeight, z);
     ob.castShadow = ob.receiveShadow = true;
     g.add(ob);
     // glowing glyph strips on the two outward faces
     for (const [fx, fz] of [[sx, 0], [0, sz]]) {
-      const strip = new THREE.Mesh(new THREE.BoxGeometry(fx ? 0.02 : 0.12, 1.6, fz ? 0.02 : 0.12), glyphMat);
+      const strip = new Mesh(shapes.box(fx ? 0.02 : 0.12, 1.6, fz ? 0.02 : 0.12), glyphMat);
       strip.position.set(x + fx * 0.5, ARENA.daisHeight + 2.0, z + fz * 0.5);
       g.add(strip);
     }
@@ -258,7 +253,7 @@ export const buildCrypt: BiomeBuilder = (scene) => {
   }
 
   // --- Flagstone paths from the gates to the dais, and a ring walk ---------------------
-  const walkParts: THREE.BufferGeometry[] = [];
+  const walkParts: Geometry[] = [];
   for (const a of GATES) {
     const len = WALL_R - (h + 0.7);
     const g = boxWithUV(3.2, 0.02, len, 0.25);
@@ -266,18 +261,18 @@ export const buildCrypt: BiomeBuilder = (scene) => {
     walkParts.push(g.toNonIndexed());
   }
   walkParts.push(ringWalk(17.4, 19.6, 0.25));
-  const walks = new THREE.Mesh(mergeGeometries(walkParts), walkMat);
+  const walks = new Mesh(mergeGeometries(walkParts), walkMat);
   walks.name = 'crypt walks';
   walks.receiveShadow = true;
   scene.add(walks);
 
   // --- Octagonal wall with gates, lancet windows and banners -------------------------
   const portals: Portal[] = [];
-  const wallParts: THREE.BufferGeometry[] = [];
-  const crenParts: THREE.BufferGeometry[] = [];
-  const windowParts: THREE.BufferGeometry[] = [];
-  const bannerParts: THREE.BufferGeometry[] = [];
-  const rodParts: THREE.BufferGeometry[] = [];
+  const wallParts: Geometry[] = [];
+  const crenParts: Geometry[] = [];
+  const windowParts: Geometry[] = [];
+  const bannerParts: Geometry[] = [];
+  const rodParts: Geometry[] = [];
   const lancet = lancetGeo(0.5, 1.25);
   for (let k = 0; k < 8; k++) {
     const a = (k / 8) * TAU;
@@ -298,7 +293,7 @@ export const buildCrypt: BiomeBuilder = (scene) => {
           // standing 10cm proud of the wall's face (flush faces z-fight)
           const b = boxWithUV(0.9, 3.6, 2.2, 0.3); b.translate(u, 1.8, 0.2);
           crenParts.push(orient(b, a));
-          const cap = new THREE.ConeGeometry(0.62, 1.1, 4).rotateY(Math.PI / 4); cap.translate(u, 4.15, 0.2);
+          const cap = shapes.cone(0.62, 1.1, 4).rotateY(Math.PI / 4); cap.translate(u, 4.15, 0.2);
           crenParts.push(orient(cap, a));
         }
         // a window niche in most bays, a banner on every other inner buttress of the solid sides
@@ -308,18 +303,18 @@ export const buildCrypt: BiomeBuilder = (scene) => {
         }
         if (!isGate && i > 0 && i < n && i % 2 === 1) {
           bannerParts.push(orient(bannerGeo(rng).translate(u, 3.35, -0.98), a));
-          rodParts.push(orient(new THREE.CylinderGeometry(0.03, 0.03, 1.1, 6).rotateZ(Math.PI / 2).translate(u, 3.4, -1.0), a));
+          rodParts.push(orient(shapes.cylinder(0.03, 0.03, 1.1, 6).rotateZ(Math.PI / 2).translate(u, 3.4, -1.0), a));
         }
       }
     }
     if (isGate) portals.push(buildGate(scene, wall, a, darkStone, iron, updaters));
   }
-  const walls = new THREE.Mesh(mergeGeometries(wallParts), wallMat);
-  const crens = new THREE.Mesh(mergeGeometries(crenParts), darkStone);
-  const banners = new THREE.Mesh(mergeGeometries(bannerParts), banner);
-  const rods = new THREE.Mesh(mergeGeometries(rodParts), gold);
+  const walls = new Mesh(mergeGeometries(wallParts), wallMat);
+  const crens = new Mesh(mergeGeometries(crenParts), darkStone);
+  const banners = new Mesh(mergeGeometries(bannerParts), banner);
+  const rods = new Mesh(mergeGeometries(rodParts), gold);
   for (const m of [walls, crens, banners, rods]) { m.castShadow = m.receiveShadow = true; scene.add(m); }
-  scene.add(new THREE.Mesh(mergeGeometries(windowParts), nicheMat));
+  scene.add(new Mesh(mergeGeometries(windowParts), nicheMat));
   for (const part of [...wallParts, ...crenParts]) wall.addGeometry(part, IDENTITY, true);
   // (the banners hang a hand in front of the buttresses, their hems at a head's height)
   for (const part of bannerParts) wall.addGeometry(part, IDENTITY, false);
@@ -328,7 +323,7 @@ export const buildCrypt: BiomeBuilder = (scene) => {
   const beaconSpots = [[-11, -11], [11, -11], [-11, 11], [11, 11]];
   const beaconFlame = beaconFlameMat(updaters);
   for (const [x, z] of beaconSpots) {
-    const g = new THREE.Group(), u0 = updaters.length;
+    const g = new Node(), u0 = updaters.length;
     scene.add(g);
     buildBeacon(g, x, z, darkStone, iron, beaconFlame, updaters);
     obstacles.push({ x, z, r: 0.65, h: 2.2 });
@@ -337,7 +332,7 @@ export const buildCrypt: BiomeBuilder = (scene) => {
   // on stepped plinths in the middle of two opposite solid (non-gate) wall sides
   for (const a of [Math.PI / 4, (5 * Math.PI) / 4]) {
     const [x, z] = polar(WALL_R - 2.4, a);
-    const g = new THREE.Group(), u0 = updaters.length;
+    const g = new Node(), u0 = updaters.length;
     g.name = 'brazier';
     scene.add(g);
     buildBrazier(g, x, z, a, iron, graniteMat, updaters);
@@ -354,7 +349,7 @@ export const buildCrypt: BiomeBuilder = (scene) => {
   const candleSpots: [number, number, number][] = [];
   colSpots.forEach(([rr, a]) => {
     const [x, z] = polar(rr, a);
-    const mesh = new THREE.Mesh(undefined, carved);
+    const mesh = new Mesh(undefined, carved);
     mesh.position.set(x, 0, z);
     // (the old instances' turn still drawn from the stream: every prop placed after them would move)
     mesh.rotation.y = r(0, TAU);
@@ -370,9 +365,9 @@ export const buildCrypt: BiomeBuilder = (scene) => {
   rollColumns(columns, BOOT_ROLL);
 
   // fallen columns: a shaft lying across the floor and a couple of loose drums
-  const drumGeo = new THREE.CylinderGeometry(0.44, 0.44, 1, FLUTED_SEGMENTS, 4).rotateZ(Math.PI / 2);
+  const drumGeo = shapes.cylinder(0.44, 0.44, 1, FLUTED_SEGMENTS, 4).rotateZ(Math.PI / 2);
   fluted(drumGeo, 'x');
-  const drums = new THREE.InstancedMesh(drumGeo, carved, 8);
+  const drums = new InstancedMesh(drumGeo, carved, 8);
   let di = 0;
   for (const [rr, a, rot] of [[22, 1.3, 0.5], [21.5, 5.0, -0.6], [11.5, 2.3, 1.1]]) {
     const [x, z] = polar(rr, a), yaw = a + rot;
@@ -398,11 +393,11 @@ export const buildCrypt: BiomeBuilder = (scene) => {
   const sarcGeo = buildSarcophagusGeo();
   sarcSpots.forEach(([rr, a], i) => {
     const [x, z] = polar(rr, a), yaw = -a;   // lying along the ring
-    const s = new THREE.Mesh(i === 2 ? sarcGeo.open : sarcGeo.body, carved);
+    const s = new Mesh(i === 2 ? sarcGeo.open : sarcGeo.body, carved);
     s.position.set(x, 0, z); s.rotation.y = yaw;
     s.castShadow = s.receiveShadow = true;
     scene.add(s);
-    const lid = new THREE.Mesh(sarcGeo.lid, carved);
+    const lid = new Mesh(sarcGeo.lid, carved);
     lid.position.set(x, 1.0, z); lid.rotation.y = yaw;
     // one lid pushed half off, sideways
     // (turned on it, so a wedge of the hollow body shows at one end: pushed straight it hid all but a slot)
@@ -417,7 +412,7 @@ export const buildCrypt: BiomeBuilder = (scene) => {
 
   // gravestones: short rows of two or three along the wall, like family plots, all facing inwards
   const stoneGeo = buildHeadstoneGeo(), crossGeo = buildCrossGeo();
-  const heads = new THREE.InstancedMesh(stoneGeo, carved, 24), crosses = new THREE.InstancedMesh(crossGeo, carved, 8);
+  const heads = new InstancedMesh(stoneGeo, carved, 24), crosses = new InstancedMesh(crossGeo, carved, 8);
   let hi = 0, ci = 0;
   for (const [rr, a] of [[24, 0.3], [23.5, 1.2], [24, 2.0], [23.5, 2.85], [24, 3.45], [23.5, 4.45], [24, 5.3], [24, 6.0]]) {
     const n = rng() < 0.5 ? 2 : 3, tx = -Math.sin(a), tz = Math.cos(a), yaw = Math.atan2(-Math.cos(a), -Math.sin(a));
@@ -445,7 +440,7 @@ export const buildCrypt: BiomeBuilder = (scene) => {
 
   // --- Weeds along the wall and round the props ------------------------------------------
   const free = (x: number, z: number, pad: number) => Math.max(Math.abs(x), Math.abs(z)) > h + 0.9 && obstacles.every((o) => Math.hypot(x - o.x, z - o.z) > o.r + pad);
-  const weeds = new THREE.InstancedMesh(buildGrassGeo(rng, [0.02, 0.025, 0.018], [0.09, 0.1, 0.05]), weedMat, 700);
+  const weeds = new InstancedMesh(buildGrassGeo(rng, [0.02, 0.025, 0.018], [0.09, 0.1, 0.05]), weedMat, 700);
   let wi = 0;
   for (let tries = 0, drawn = 0; drawn < weeds.count && tries < 12000; tries++) {
     const byWall = rng() < 0.55;
@@ -471,13 +466,13 @@ export const buildCrypt: BiomeBuilder = (scene) => {
   const smallTreeSpots = treeSpots(mulberry(2718), SMALL_TREES, gateGap, obstacles,
     (x, z) => Math.max(Math.abs(x), Math.abs(z)) < h + 2 || Math.abs(Math.hypot(x, z) - 18.5) < 2);
   const small = growTree(SMALL_DEAD);
-  const smallTrees = new THREE.InstancedMesh(small.bark, deadWood, smallTreeSpots.length);
+  const smallTrees = new InstancedMesh(small.bark, deadWood, smallTreeSpots.length);
   const treeRng = mulberry(1618);
   // (as tall as the forest's young oaks, to the top of its bark: scaled by its height alone, its limbs as grown stood
   // under 4 m)
   const smallTop = barkTop(small);
   // (each grown from the earth: its foot flared and rooted into it, its own stream's roots, `TREE_FOOT`)
-  const feet = new THREE.InstancedMesh(buildTreeFootGeo(mulberry(4402)), deadWood, smallTreeSpots.length);
+  const feet = new InstancedMesh(buildTreeFootGeo(mulberry(4402)), deadWood, smallTreeSpots.length);
   smallTreeSpots.forEach(([x, z], i) => {
     const ht = 4.5 + treeRng() * 1.5, s = ht / smallTop, turn = treeRng() * TAU;
     setInstance(smallTrees, i, x, -0.1, z, 0, turn, 0, s);
@@ -546,7 +541,7 @@ export const buildCrypt: BiomeBuilder = (scene) => {
 // ---------------------------------------------------------------------------
 // helpers
 
-function orient(geo: THREE.BufferGeometry, angle: number): THREE.BufferGeometry {
+function orient(geo: Geometry, angle: number): Geometry {
   // local -Z faces arena center; place on the octagon side at `angle`
   geo.translate(0, 0, WALL_R + 0.8);
   geo.rotateY(-angle + Math.PI / 2);
@@ -562,7 +557,7 @@ const FLUTED_SEGMENTS = FLUTES * 8;
 /** Flute a column along `axis` ('y' upright, 'x' lying): concave grooves round the shaft with a narrow flat
  *  between them, and its surface worn unevenly (a few cm in and out, as weather takes a soft stone). (12 grooves
  *  5% deep on 24 segments drew no groove at all: the shaft read as a smooth grey tube.) */
-function fluted(g: THREE.BufferGeometry, axis: 'x' | 'y'): void {
+function fluted(g: Geometry, axis: 'x' | 'y'): void {
   const pos = g.attributes.position;
   for (let i = 0; i < pos.count; i++) {
     const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
@@ -580,8 +575,8 @@ function fluted(g: THREE.BufferGeometry, axis: 'x' | 'y'): void {
 }
 
 /** Flat ring of flagstones between radii r0 and r1, the slabs following the ring. */
-function ringWalk(r0: number, r1: number, texel: number): THREE.BufferGeometry {
-  const segs = 128, g = new THREE.RingGeometry(r0, r1, segs, 1).rotateX(-Math.PI / 2);
+function ringWalk(r0: number, r1: number, texel: number): Geometry {
+  const segs = 128, g = shapes.ring(r0, r1, segs, 1).rotateX(-Math.PI / 2);
   const uv = g.attributes.uv, around = TAU * ((r0 + r1) / 2) * texel;
   for (let j = 0; j <= 1; j++) for (let i = 0; i <= segs; i++) uv.setXY(j * (segs + 1) + i, (i / segs) * Math.round(around), j * (r1 - r0) * texel);
   g.translate(0, 0.012, 0);
@@ -589,27 +584,27 @@ function ringWalk(r0: number, r1: number, texel: number): THREE.BufferGeometry {
 }
 
 /** A pointed-arch window pane (w wide, ht tall), facing -Z. */
-function lancetGeo(w: number, ht: number): THREE.BufferGeometry {
-  const s = new THREE.Shape(), hw = w / 2, spring = ht - w * 0.8;
+function lancetGeo(w: number, ht: number): Geometry {
+  const s = new Outline(), hw = w / 2, spring = ht - w * 0.8;
   s.moveTo(-hw, 0); s.lineTo(hw, 0); s.lineTo(hw, spring);
   s.quadraticCurveTo(hw, ht - w * 0.25, 0, ht);
   s.quadraticCurveTo(-hw, ht - w * 0.25, -hw, spring);
   s.lineTo(-hw, 0);
-  return new THREE.ShapeGeometry(s, 6).rotateY(Math.PI);
+  return shapes.flat(s, 6).rotateY(Math.PI);
 }
 
 /** how long a banner's cloth is drawn (m: its longest tails' end) */
 const BANNER_CLOTH = 2.65;
 
 /** A tattered hanging banner, 1m wide, top edge at y = 0, facing -Z. */
-export function bannerGeo(rng: () => number): THREE.BufferGeometry {
-  const s = new THREE.Shape(), len = 1.9 + rng() * 0.5;
+export function bannerGeo(rng: () => number): Geometry {
+  const s = new Outline(), len = 1.9 + rng() * 0.5;
   s.moveTo(-0.45, 0); s.lineTo(0.45, 0); s.lineTo(0.45, -len + 0.25);
   // ragged tails, each tip below the notches either side of it (a tip drawn above them crossed the outline over
   // itself, and its triangles, turned over, showed black: "black jagged spikes" under every banner)
   for (let i = 1; i <= 6; i++) { const x = 0.45 - (i * 0.9) / 6; s.lineTo(x + 0.075, -len - rng() * 0.25 + (i % 2) * 0.12); s.lineTo(x, -len + 0.15 + rng() * 0.1); }
   s.lineTo(-0.45, 0);
-  const g = new THREE.ShapeGeometry(s, 1);
+  const g = shapes.flat(s, 1);
   // hang slightly away from the wall towards the bottom; its cloth across it and down from its top (`bannerCloth`)
   const pos = g.attributes.position, uv = g.attributes.uv;
   for (let i = 0; i < pos.count; i++) {
@@ -620,28 +615,28 @@ export function bannerGeo(rng: () => number): THREE.BufferGeometry {
   return g.rotateY(Math.PI);
 }
 
-function buildObeliskGeo(): THREE.BufferGeometry {
+function buildObeliskGeo(): Geometry {
   const base = boxWithUV(1.7, 0.5, 1.7, 0.6); base.translate(0, 0.25, 0);
   const plinth = boxWithUV(1.3, 0.35, 1.3, 0.6); plinth.translate(0, 0.67, 0);
-  const shaft = new THREE.CylinderGeometry(0.5, 0.72, 4.2, 4, 1).rotateY(Math.PI / 4); shaft.translate(0, 2.95, 0);
-  const cap = new THREE.ConeGeometry(0.55, 0.9, 4).rotateY(Math.PI / 4); cap.translate(0, 5.5, 0);
+  const shaft = shapes.cylinder(0.5, 0.72, 4.2, 4, 1).rotateY(Math.PI / 4); shaft.translate(0, 2.95, 0);
+  const cap = shapes.cone(0.55, 0.9, 4).rotateY(Math.PI / 4); cap.translate(0, 5.5, 0);
   return mergeGeometries([base, plinth, shaft, cap].map((g) => g.toNonIndexed()));
 }
 
 /** A column's base's mouldings over its plinth, from the plinth's top (m): a torus, a hollow under a fillet, and a
  *  smaller torus up to the shaft's foot. */
-function columnBase(): THREE.Vector2[] {
-  const points: THREE.Vector2[] = [new THREE.Vector2(0, 0), new THREE.Vector2(0.6, 0)];
+function columnBase(): Vec2[] {
+  const points: Vec2[] = [new Vec2(0, 0), new Vec2(0.6, 0)];
   const torus = (y: number, height: number, from: number, out: number) => {
     for (let k = 1; k <= 8; k++) {
       const a = (k / 8) * Math.PI;
-      points.push(new THREE.Vector2(from + out * Math.sin(a), y + height * (1 - Math.cos(a)) / 2));
+      points.push(new Vec2(from + out * Math.sin(a), y + height * (1 - Math.cos(a)) / 2));
     }
   };
   torus(0, 0.12, 0.6, 0.05);
-  points.push(new THREE.Vector2(0.55, 0.13), new THREE.Vector2(0.5, 0.16), new THREE.Vector2(0.52, 0.18));
+  points.push(new Vec2(0.55, 0.13), new Vec2(0.5, 0.16), new Vec2(0.52, 0.18));
   torus(0.18, 0.06, 0.52, 0.03);
-  points.push(new THREE.Vector2(0.48, 0.24), new THREE.Vector2(0, 0.24));
+  points.push(new Vec2(0.48, 0.24), new Vec2(0, 0.24));
   return points;
 }
 
@@ -669,7 +664,7 @@ const SHAFT_SPARE = 0.3;
 
 /** A column standing in the crypt: its mesh and its circle, both rolled anew for a run. */
 interface Column {
-  mesh: THREE.Mesh;
+  mesh: Mesh;
   circle: Obstacle;
 }
 
@@ -710,7 +705,7 @@ function breaksOf(columns: Column[], seed: number): Break[] {
 }
 
 /** a run's columns built ahead (`columnsAhead`): their seed, breaks and the geometries made so far */
-let ahead: { seed: number; breaks: Break[]; geometries: THREE.BufferGeometry[] } | null = null;
+let ahead: { seed: number; breaks: Break[]; geometries: Geometry[] } | null = null;
 
 /** The ahead's geometries let go (another seed came, or none will). */
 function dropAhead(): void {
@@ -771,20 +766,20 @@ const breakTopmost = (broken: Break): number =>
  * spikes, a sheet of paper's edge, not stone's ("difficult to break concrete like it is"); closed by a cylinder's own
  * cap, its face was a clean fan, an umbrella over the stump.
  */
-function breakTop(shaft: THREE.BufferGeometry, radial: number, broken: Break): THREE.BufferGeometry {
+function breakTop(shaft: Geometry, radial: number, broken: Break): Geometry {
   const pos = shaft.attributes.position;
   for (let i = 0; i < pos.count; i++) {
     const top = breakAt(broken, pos.getX(i), pos.getZ(i));
     if (pos.getY(i) > top) pos.setY(i, top);
   }
   // (a cylinder's top row of its side is its first: one vertex round it a segment, and the seam's again)
-  const rim = Array.from({ length: radial + 1 }, (_, j) => new THREE.Vector2(pos.getX(j), pos.getZ(j)));
+  const rim = Array.from({ length: radial + 1 }, (_, j) => new Vec2(pos.getX(j), pos.getZ(j)));
   return fractureFace(rim, broken);
 }
 
 /** The broken top's face inside its rim (the shaft's top row, as broken): rings in to the middle, each point at the
  *  break's height and roughened as split stone is, but not on the rim, where it meets the shaft. */
-function fractureFace(rim: THREE.Vector2[], broken: Break): THREE.BufferGeometry {
+function fractureFace(rim: Vec2[], broken: Break): Geometry {
   const positions: number[] = [], uvs: number[] = [], index: number[] = [];
   for (const edge of rim) {
     for (let k = 0; k <= FACE_RINGS; k++) {
@@ -802,9 +797,9 @@ function fractureFace(rim: THREE.Vector2[], broken: Break): THREE.BufferGeometry
       index.push(a, b, a + 1, b, b + 1, a + 1);
     }
   }
-  const face = new THREE.BufferGeometry();
-  face.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-  face.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+  const face = new Geometry();
+  face.setAttribute('position', floats(positions, 3));
+  face.setAttribute('uv', floats(uvs, 2));
   face.setIndex(index);
   face.computeVertexNormals();
   return face;
@@ -822,21 +817,21 @@ function bothLook(a: PropLook, b: PropLook): PropLook {
 
 /** A dead tree's foot, its trunk's radius 1: the trunk flaring out into the earth, and roots leaving it round the
  *  flare, arching over the ground and sinking into it. Its bark's tiles as square as the trunk's (`DEAD_BARK`). */
-function buildTreeFootGeo(rng: () => number): THREE.BufferGeometry {
+function buildTreeFootGeo(rng: () => number): Geometry {
   const { flare, flareUp, roots, reach, girth } = TREE_FOOT;
   const profile = Array.from({ length: 9 }, (_, k) => {
     const up = k / 8;
     // (wide at the ground, narrowing fast into the trunk, a little under it at the top so the bark covers it)
-    return new THREE.Vector2(0.8 + (flare - 0.8) * (1 - up) ** 2.5, -0.15 + up * (flareUp + 0.15));
+    return new Vec2(0.8 + (flare - 0.8) * (1 - up) ** 2.5, -0.15 + up * (flareUp + 0.15));
   });
-  const collar = new THREE.LatheGeometry(profile, 16);
+  const collar = shapes.lathe(profile, 16);
   const uv = collar.attributes.uv;
   for (let i = 0; i < uv.count; i++) uv.setY(i, uv.getY(i) * (flareUp / TAU));
-  const parts: THREE.BufferGeometry[] = [collar];
+  const parts: Geometry[] = [collar];
   for (let k = 0; k < roots; k++) {
     const a = ((k + 0.2 + rng() * 0.6) / roots) * TAU, out = reach[0] + rng() * (reach[1] - reach[0]);
-    const at = (r: number, y: number) => new THREE.Vector3(Math.cos(a) * r, y, Math.sin(a) * r);
-    const curve = new THREE.CatmullRomCurve3([at(0.6, 0.9), at(1.3, 0.35), at(out * 0.6, 0.12), at(out, -0.25)]);
+    const at = (r: number, y: number) => new Vec3(Math.cos(a) * r, y, Math.sin(a) * r);
+    const curve = new CatmullRom3([at(0.6, 0.9), at(1.3, 0.35), at(out * 0.6, 0.12), at(out, -0.25)]);
     const root = taperedTube(curve, girth, 0.08);
     const rootUv = root.attributes.uv;
     // (v along it in turns of its girth, as the bark's is)
@@ -849,14 +844,14 @@ function buildTreeFootGeo(rng: () => number): THREE.BufferGeometry {
 }
 
 /** A fluted column on a square base, snapped off at `broken`'s jagged top. */
-function buildColumnGeo(broken: Break): THREE.BufferGeometry {
+function buildColumnGeo(broken: Break): Geometry {
   const base = boxWithUV(1.3, 0.3, 1.3, 0.6).translate(0, 0.15, 0);
   // its base's mouldings: a torus, a hollow and a smaller torus up to the shaft (a plain drum read as a box)
-  const torus = new THREE.LatheGeometry(columnBase(), 48).translate(0, 0.3, 0);
+  const torus = shapes.lathe(columnBase(), 48).translate(0, 0.3, 0);
   // (open: its top closed by the fracture's face; fluted before it's broken, so the face meets its grooves)
   const length = breakTopmost(broken) + SHAFT_SPARE - SHAFT_FOOT;
   const rows = Math.max(8, Math.round(length * 7));
-  const shaft = new THREE.CylinderGeometry(SHAFT_TOP, 0.48, length, FLUTED_SEGMENTS, rows, true)
+  const shaft = shapes.cylinder(SHAFT_TOP, 0.48, length, FLUTED_SEGMENTS, rows, true)
     .translate(0, SHAFT_FOOT + length / 2, 0);
   fluted(shaft, 'y');
   const face = breakTop(shaft, FLUTED_SEGMENTS, broken);
@@ -867,14 +862,14 @@ function buildColumnGeo(broken: Break): THREE.BufferGeometry {
 /** A stone coffin on a plinth, and its lid (origin at the lid's centre) with a carved figure. */
 /** A sarcophagus: its body (`open`: hollow, for the one whose lid is pushed half off: its walls and floor, the band
  *  round its top a frame round the opening; solid inside, it showed stone where the lid had slid) and its lid. */
-function buildSarcophagusGeo(): { body: THREE.BufferGeometry; open: THREE.BufferGeometry; lid: THREE.BufferGeometry } {
-  const flat = (gs: THREE.BufferGeometry[]) => mergeGeometries(gs.map((g) => (g.index ? g.toNonIndexed() : g)));
+function buildSarcophagusGeo(): { body: Geometry; open: Geometry; lid: Geometry } {
+  const flat = (gs: Geometry[]) => mergeGeometries(gs.map((g) => (g.index ? g.toNonIndexed() : g)));
   const plinth = boxWithUV(1.45, 0.16, 2.65, 0.6).translate(0, 0.08, 0);
   const body = boxWithUV(1.1, 0.76, 2.3, 0.6).translate(0, 0.54, 0);
   const band = boxWithUV(1.18, 0.1, 2.38, 0.6).translate(0, 0.86, 0);
   const slab = boxWithUV(1.25, 0.16, 2.45, 0.6);
-  const figure = lumpy(new THREE.CapsuleGeometry(0.24, 1.4, 4, 10).rotateX(Math.PI / 2).scale(1, 0.55, 1), 0.05, 5).translate(0, 0.13, -0.05);
-  const head = new THREE.SphereGeometry(0.17, 10, 8).scale(1, 0.8, 1).translate(0, 0.16, 0.92);
+  const figure = lumpy(shapes.capsule(0.24, 1.4, 4, 10).rotateX(Math.PI / 2).scale(1, 0.55, 1), 0.05, 5).translate(0, 0.13, -0.05);
+  const head = shapes.sphere(0.17, 10, 8).scale(1, 0.8, 1).translate(0, 0.16, 0.92);
   const wall = 0.1, inX = 0.55 - wall, inZ = 1.15 - wall;
   const walls = [
     ...[-1, 1].map((sx) => boxWithUV(wall, 0.76, 2.3, 0.6).translate(sx * (0.55 - wall / 2), 0.54, 0)),
@@ -888,18 +883,18 @@ function buildSarcophagusGeo(): { body: THREE.BufferGeometry; open: THREE.Buffer
   return { body: flat([plinth, body, band]), open: flat([plinth.clone(), ...walls, ...frame]), lid: flat([slab, figure, head]) };
 }
 
-function buildHeadstoneGeo(): THREE.BufferGeometry {
+function buildHeadstoneGeo(): Geometry {
   const base = boxWithUV(0.72, 0.12, 0.3, 1).translate(0, 0.06, 0);
   // the slab and its rounded top one outline, its foot sunk in the base: a half disc set on a box split the face where
   // they met, `lumpy` moving the disc's corner in the middle of the box's edge and not the edge (#287)
   const half = 0.275, foot = 0.1, shoulder = 0.82, thick = 0.14;
-  const outline = new THREE.Shape().moveTo(-half, foot).lineTo(half, foot).lineTo(half, shoulder)
+  const outline = new Outline().moveTo(-half, foot).lineTo(half, foot).lineTo(half, shoulder)
     .absarc(0, shoulder, half, 0, Math.PI, false).lineTo(-half, foot);
-  const slab = new THREE.ExtrudeGeometry(outline, { depth: thick, bevelEnabled: false, curveSegments: 14 });
+  const slab = shapes.extrude(outline, { depth: thick, bevelEnabled: false, curveSegments: 14 });
   return lumpy(mergeGeometries([base.toNonIndexed(), slab.translate(0, 0, -thick / 2)]), 0.015, 9);
 }
 
-function buildCrossGeo(): THREE.BufferGeometry {
+function buildCrossGeo(): Geometry {
   const post = boxWithUV(0.14, 1.15, 0.12, 1).translate(0, 0.575, 0);
   const arm = boxWithUV(0.62, 0.13, 0.12, 1).translate(0, 0.82, 0);
   const foot = boxWithUV(0.4, 0.14, 0.3, 1).translate(0, 0.07, 0);
@@ -907,18 +902,18 @@ function buildCrossGeo(): THREE.BufferGeometry {
 }
 
 /** A triangular prism roof, `w` wide and `ht` tall, running `len` along Z. */
-function gable(w: number, ht: number, len: number): THREE.BufferGeometry {
-  const s = new THREE.Shape();
+function gable(w: number, ht: number, len: number): Geometry {
+  const s = new Outline();
   s.moveTo(-w / 2, 0); s.lineTo(w / 2, 0); s.lineTo(0, ht); s.lineTo(-w / 2, 0);
-  return new THREE.ExtrudeGeometry(s, { depth: len, bevelEnabled: false }).translate(0, 0, -len / 2);
+  return shapes.extrude(s, { depth: len, bevelEnabled: false }).translate(0, 0, -len / 2);
 }
 
 /** Tombs, chapels and towers standing in the fog beyond the wall, with dark window openings,
  * among dead trees. Mostly outside the shadow camera: only the nearest trees cast. */
-function buildNecropolis(scene: THREE.Object3D, wall: Wall, rng: () => number, stone: THREE.Material, niche: THREE.Material, wood: THREE.Material): void {
+function buildNecropolis(scene: Node, wall: Wall, rng: () => number, stone: Material, niche: Material, wood: Material): void {
   const r = (a: number, b: number) => a + rng() * (b - a);
-  const parts: THREE.BufferGeometry[] = [], holes: THREE.BufferGeometry[] = [];
-  const place = (g: THREE.BufferGeometry, x: number, z: number, yaw: number) => g.rotateY(yaw).translate(x, 0, z);
+  const parts: Geometry[] = [], holes: Geometry[] = [];
+  const place = (g: Geometry, x: number, z: number, yaw: number) => g.rotateY(yaw).translate(x, 0, z);
   const pane = (x: number, y: number, face: number, w: number, ht: number) => lancetGeo(w, ht).translate(x, y, face);
   const spots: [number, number][] = [];
   for (let tries = 0; spots.length < 14 && tries < 400; tries++) {
@@ -929,13 +924,13 @@ function buildNecropolis(scene: THREE.Object3D, wall: Wall, rng: () => number, s
     spots.push([x, z]);
   }
   spots.forEach(([x, z], i) => {
-    const yaw = Math.atan2(x, z), kind = i % 3, g: THREE.BufferGeometry[] = [], l: THREE.BufferGeometry[] = [];
+    const yaw = Math.atan2(x, z), kind = i % 3, g: Geometry[] = [], l: Geometry[] = [];
     if (kind === 0) {
       // bell tower: a tall shaft, a belfry opening, a steep spire with pinnacles
       const w = r(3, 4.2), H = r(11, 17);
       g.push(boxWithUV(w, H, w, 0.3).translate(0, H / 2, 0), boxWithUV(w + 0.5, 0.5, w + 0.5, 0.3).translate(0, H, 0));
-      g.push(new THREE.ConeGeometry(w * 0.72, H * 0.6, 4).rotateY(Math.PI / 4).translate(0, H + H * 0.3, 0));
-      for (const [px, pz] of [[1, 1], [1, -1], [-1, 1], [-1, -1]]) g.push(new THREE.ConeGeometry(0.28, 1.8, 4).translate(px * w * 0.5, H + 1.1, pz * w * 0.5));
+      g.push(shapes.cone(w * 0.72, H * 0.6, 4).rotateY(Math.PI / 4).translate(0, H + H * 0.3, 0));
+      for (const [px, pz] of [[1, 1], [1, -1], [-1, 1], [-1, -1]]) g.push(shapes.cone(0.28, 1.8, 4).translate(px * w * 0.5, H + 1.1, pz * w * 0.5));
       l.push(pane(0, H * 0.72, -w / 2 - 0.02, w * 0.35, w * 0.6));
       if (rng() < 0.6) l.push(pane(0, H * 0.35, -w / 2 - 0.02, 0.4, 1.0));
     } else if (kind === 1) {
@@ -943,7 +938,7 @@ function buildNecropolis(scene: THREE.Object3D, wall: Wall, rng: () => number, s
       const w = r(5, 7), L = r(8, 12), H = r(5, 7);
       g.push(boxWithUV(w, H, L, 0.3).translate(0, H / 2, 0));
       g.push(gable(w + 0.6, w * 0.7, L + 0.4).translate(0, H, 0));
-      g.push(new THREE.ConeGeometry(0.5, 4, 4).translate(0, H + w * 0.7 + 1.2, -L / 2 + 0.3));
+      g.push(shapes.cone(0.5, 4, 4).translate(0, H + w * 0.7 + 1.2, -L / 2 + 0.3));
       for (const s of [-1, 1]) l.push(pane(s * w * 0.14, H * 0.3, -L / 2 - 0.02, w * 0.14, H * 0.55));
       for (const s of [-1, 1]) g.push(boxWithUV(0.8, H * 0.9, 1.2, 0.3).translate(s * (w / 2 + 0.3), H * 0.45, -L / 2 + 1));
     } else {
@@ -951,8 +946,8 @@ function buildNecropolis(scene: THREE.Object3D, wall: Wall, rng: () => number, s
       const w = r(4, 5.5), H = r(3.2, 4.2);
       g.push(boxWithUV(w + 1, 0.5, w + 1.6, 0.3).translate(0, 0.25, 0), boxWithUV(w, H, w, 0.3).translate(0, 0.5 + H / 2, 0.5));
       g.push(boxWithUV(w + 0.6, 0.3, w + 1.2, 0.3).translate(0, 0.65 + H, 0.2), gable(w + 0.6, w * 0.3, w + 1.2).translate(0, 0.8 + H, 0.2));
-      for (const s of [-1.5, -0.5, 0.5, 1.5]) g.push(new THREE.CylinderGeometry(0.18, 0.2, H, 8).translate(s * w * 0.28, 0.5 + H / 2, -w / 2));
-      l.push(new THREE.PlaneGeometry(w * 0.3, H * 0.6).rotateY(Math.PI).translate(0, 0.5 + H * 0.3, -w / 2 + 0.49));
+      for (const s of [-1.5, -0.5, 0.5, 1.5]) g.push(shapes.cylinder(0.18, 0.2, H, 8).translate(s * w * 0.28, 0.5 + H / 2, -w / 2));
+      l.push(shapes.plane(w * 0.3, H * 0.6).rotateY(Math.PI).translate(0, 0.5 + H * 0.3, -w / 2 + 0.49));
     }
     // face the arena (local -Z towards the centre)
     for (const p of g) parts.push(place(p.index ? p.toNonIndexed() : p, x, z, yaw));
@@ -960,8 +955,8 @@ function buildNecropolis(scene: THREE.Object3D, wall: Wall, rng: () => number, s
     wall.addGeometry(mergeGeometries(parts.slice(-g.length)), IDENTITY, true, 'beyond');
     for (const p of l) holes.push(place(p.index ? p.toNonIndexed() : p, x, z, yaw));
   });
-  scene.add(new THREE.Mesh(mergeGeometries(parts), stone));
-  scene.add(new THREE.Mesh(mergeGeometries(holes), niche));
+  scene.add(new Mesh(mergeGeometries(parts), stone));
+  scene.add(new Mesh(mergeGeometries(holes), niche));
 
   // dead trees between the wall and the tombs, and a few among them
   const treeN = 46;
@@ -969,9 +964,9 @@ function buildNecropolis(scene: THREE.Object3D, wall: Wall, rng: () => number, s
   // every tree and the clutter placed after it moved)
   for (let i = 0; i < OLD_DEAD_TREE_DRAWS; i++) rng();
   const kinds = DEAD_TREES.map(growTree), tops = kinds.map(barkTop);
-  const trees = kinds.map((k) => new THREE.InstancedMesh(k.bark, wood, treeN));
+  const trees = kinds.map((k) => new InstancedMesh(k.bark, wood, treeN));
   const used = kinds.map(() => 0);
-  const at = new THREE.Matrix4();
+  const at = new Mat4();
   for (let tries = 0, ti = 0; ti < treeN && tries < 2000; tries++) {
     const a = r(0, TAU), rr = 33 + Math.pow(r(0, 1), 1.3) * 26;
     if (rr < 42 && gateGap(a) < 0.12) continue;
@@ -986,7 +981,8 @@ function buildNecropolis(scene: THREE.Object3D, wall: Wall, rng: () => number, s
     // (sunk a little: a trunk is an open tube at its foot)
     setInstance(trees[k], used[k], x, -0.2, z, r(-0.08, 0.08), r(0, TAU), r(-0.08, 0.08), w, s, w);
     // (what an arrow over the wall meets: each tree's trunk, its limbs let go, as the forest's)
-    wall.addGeometry(kinds[k].trunk, trees[k].getMatrixAt(used[k]++, at), false, 'beyond');
+    trees[k].getMatrixAt(used[k]++, at);
+    wall.addGeometry(kinds[k].trunk, at, false, 'beyond');
   }
   trees.forEach((mesh, k) => {
     mesh.count = used[k];
@@ -999,29 +995,29 @@ function buildNecropolis(scene: THREE.Object3D, wall: Wall, rng: () => number, s
 
 /** A gate of the crypt's: two pillars, an arch and a lintel, a raised portcullis, its portal's membrane (`place`:
  *  stood there, not in the wall at `angle`: the village's). */
-export function buildGate(scene: THREE.Object3D, wall: Wall, angle: number, stone: THREE.Material, iron: THREE.Material, updaters: Updater[],
+export function buildGate(scene: Node, wall: Wall, angle: number, stone: Material, iron: Material, updaters: Updater[],
   place?: GatePlace): Portal {
-  const g = new THREE.Group();
+  const g = new Node();
   const pillarGeo = boxWithUV(1.3, 5.2, 1.9, 0.35);
   for (const s of [-1, 1]) {
-    const p = new THREE.Mesh(pillarGeo, stone);
+    const p = new Mesh(pillarGeo, stone);
     p.position.set(s * (GATE_W / 2 + 0.5), 2.6, 0);
     p.castShadow = p.receiveShadow = true;
     g.add(p);
-    const spike = new THREE.Mesh(new THREE.ConeGeometry(0.75, 1.6, 4).rotateY(Math.PI / 4), stone);
+    const spike = new Mesh(shapes.cone(0.75, 1.6, 4).rotateY(Math.PI / 4), stone);
     spike.position.set(s * (GATE_W / 2 + 0.5), 6.0, 0);
     spike.castShadow = true;
     g.add(spike);
   }
-  const arch = new THREE.Mesh(new THREE.TorusGeometry(GATE_W / 2 + 0.2, 0.45, 8, 24, Math.PI), stone);
+  const arch = new Mesh(shapes.torus(GATE_W / 2 + 0.2, 0.45, 8, 24, Math.PI), stone);
   arch.position.y = 4.1; arch.castShadow = true;
   g.add(arch);
-  const lintel = new THREE.Mesh(boxWithUV(GATE_W + 2.4, 0.6, 2.0, 0.4), stone);
+  const lintel = new Mesh(boxWithUV(GATE_W + 2.4, 0.6, 2.0, 0.4), stone);
   lintel.position.y = 5.0; lintel.castShadow = true;
   g.add(lintel);
   // a raised portcullis: its teeth hang under the lintel
-  const bars = new THREE.Mesh(mergeGeometries(Array.from({ length: 7 }, (_, i) =>
-    new THREE.ConeGeometry(0.06, 0.7, 4).rotateX(Math.PI).translate((i - 3) * 0.6, 4.35, 0.9).toNonIndexed())), iron);
+  const bars = new Mesh(mergeGeometries(Array.from({ length: 7 }, (_, i) =>
+    shapes.cone(0.06, 0.7, 4).rotateX(Math.PI).translate((i - 3) * 0.6, 4.35, 0.9).toNonIndexed())), iron);
   bars.castShadow = true;
   g.add(bars);
 
@@ -1034,36 +1030,36 @@ export function buildGate(scene: THREE.Object3D, wall: Wall, angle: number, ston
 
 /** A spirit beacon: a carved pedestal whose iron prongs cradle a cold flame (a teardrop with
  * rising noise bands and a bright rim round a white-hot core), circled by two rune rings. */
-function buildBeacon(scene: THREE.Object3D, x: number, z: number, stone: THREE.Material, iron: THREE.Material, flameMat: THREE.ShaderMaterial, updaters: Updater[]): void {
-  const plinth = new THREE.Mesh(boxWithUV(1.3, 0.14, 1.3, 0.6), stone);
+function buildBeacon(scene: Node, x: number, z: number, stone: Material, iron: Material, flameMat: LookMaterial, updaters: Updater[]): void {
+  const plinth = new Mesh(boxWithUV(1.3, 0.14, 1.3, 0.6), stone);
   plinth.position.set(x, 0.07, z); plinth.rotation.y = Math.PI / 4;
   const pts = [[0.6, 0.14], [0.6, 0.22], [0.48, 0.26], [0.48, 0.32], [0.34, 0.38], [0.24, 0.46], [0.2, 0.66], [0.27, 0.7], [0.27, 0.75], [0.2, 0.79],
-    [0.18, 0.92], [0.26, 0.97], [0.42, 1.05], [0.5, 1.13], [0.52, 1.18], [0.44, 1.18], [0.3, 1.11], [0, 1.08]].map(([a, b]) => new THREE.Vector2(a, b));
-  const ped = new THREE.Mesh(new THREE.LatheGeometry(pts, 16), stone);
+    [0.18, 0.92], [0.26, 0.97], [0.42, 1.05], [0.5, 1.13], [0.52, 1.18], [0.44, 1.18], [0.3, 1.11], [0, 1.08]].map(([a, b]) => new Vec2(a, b));
+  const ped = new Mesh(shapes.lathe(pts, 16), stone);
   ped.position.set(x, 0, z);
   // four iron prongs rising from the bowl's rim and curling in over the flame
-  const prongs = new THREE.Mesh(mergeGeometries([0, 1, 2, 3].map((k) => {
+  const prongs = new Mesh(mergeGeometries([0, 1, 2, 3].map((k) => {
     const a = (k / 4) * TAU + Math.PI / 4, c = Math.cos(a), s = Math.sin(a);
-    const curve = new THREE.CubicBezierCurve3(new THREE.Vector3(c * 0.46, 1.16, s * 0.46), new THREE.Vector3(c * 0.62, 1.5, s * 0.62),
-      new THREE.Vector3(c * 0.5, 2.0, s * 0.5), new THREE.Vector3(c * 0.2, 2.15, s * 0.2));
-    return new THREE.TubeGeometry(curve, 12, 0.03, 5, false).toNonIndexed();
+    const curve = new Bezier3Curve3(new Vec3(c * 0.46, 1.16, s * 0.46), new Vec3(c * 0.62, 1.5, s * 0.62),
+      new Vec3(c * 0.5, 2.0, s * 0.5), new Vec3(c * 0.2, 2.15, s * 0.2));
+    return shapes.tube(curve, 12, 0.03, 5, false).toNonIndexed();
   })), iron);
   prongs.position.set(x, 0, z);
   for (const m of [plinth, ped, prongs]) { m.castShadow = m.receiveShadow = true; scene.add(m); }
 
-  const flame = new THREE.Mesh(teardropGeo(), flameMat);
+  const flame = new Mesh(teardropGeo(), flameMat);
   flame.position.set(x, 1.12, z);
-  const core = new THREE.Mesh(new THREE.SphereGeometry(0.1, 12, 8), seeThrough(new THREE.MeshBasicMaterial({ color: new THREE.Color(0xc8e8ff).multiplyScalar(2.2) }), 'prop'));
+  const core = new Mesh(shapes.sphere(0.1, 12, 8), seeThrough(new UnlitMaterial({ color: new Color(0xc8e8ff).multiplyScalar(2.2) }), 'prop'));
   core.position.set(x, 1.42, z);
-  const ringMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(0x5ab0ff).multiplyScalar(1.6), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false });
+  const ringMat = new UnlitMaterial({ color: new Color(0x5ab0ff).multiplyScalar(1.6), transparent: true, blending: AdditiveBlending, depthWrite: false });
   const rings = [0.5, 0.36].map((rad) => {
-    const ring = new THREE.Mesh(runeRingGeo(rad), ringMat);
+    const ring = new Mesh(runeRingGeo(rad), ringMat);
     ring.position.set(x, 1.5, z);
     scene.add(ring);
     return ring;
   });
   scene.add(flame, core);
-  const light = new THREE.PointLight(0x5aa8ff, 6, 12, 2);
+  const light = new PointLight(0x5aa8ff, 6, 12, 2);
   light.position.set(x, 2.0, z);
   scene.add(light);
   const due = runPhase({ acc: 0 });
@@ -1094,75 +1090,30 @@ function buildBeacon(scene: THREE.Object3D, x: number, z: number, stone: THREE.M
 }
 
 /** A unit teardrop (y 0..1) for the beacon flames. */
-function teardropGeo(): THREE.BufferGeometry {
-  const pts: THREE.Vector2[] = [];
-  for (let i = 0; i <= 20; i++) { const y = i / 20; pts.push(new THREE.Vector2(0.3 * Math.sin(Math.PI * Math.pow(y, 0.55)) * (1 - y * 0.35), y * 1.05)); }
-  return new THREE.LatheGeometry(pts, 20);
+function teardropGeo(): Geometry {
+  const pts: Vec2[] = [];
+  for (let i = 0; i <= 20; i++) { const y = i / 20; pts.push(new Vec2(0.3 * Math.sin(Math.PI * Math.pow(y, 0.55)) * (1 - y * 0.35), y * 1.05)); }
+  return shapes.lathe(pts, 20);
 }
 
 /** A thin ring studded with small rune blocks. */
-function runeRingGeo(rad: number): THREE.BufferGeometry {
-  const parts = [new THREE.TorusGeometry(rad, 0.008, 4, 64).rotateX(Math.PI / 2).toNonIndexed()];
+function runeRingGeo(rad: number): Geometry {
+  const parts = [shapes.torus(rad, 0.008, 4, 64).rotateX(Math.PI / 2).toNonIndexed()];
   for (let i = 0; i < 12; i++) {
     const a = (i / 12) * TAU, w = i % 3 === 0 ? 0.07 : 0.035;
-    parts.push(new THREE.BoxGeometry(w, 0.012, 0.02).rotateY(-a).translate(Math.cos(a) * rad, 0, Math.sin(a) * rad).toNonIndexed());
+    parts.push(shapes.box(w, 0.012, 0.02).rotateY(-a).translate(Math.cos(a) * rad, 0, Math.sin(a) * rad).toNonIndexed());
   }
   return mergeGeometries(parts);
 }
 
 /** The beacons' cold flame: a flickering, noise-banded teardrop, brighter at the rim and the base. */
-function beaconFlameMat(updaters: Updater[]): THREE.ShaderMaterial {
-  const mat = new THREE.ShaderMaterial({
+function beaconFlameMat(updaters: Updater[]): LookMaterial {
+  const mat = new LookMaterial({
     uniforms: { uTime: { value: 0 } },
-    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
-    vertexShader: `
-      uniform float uTime; varying vec3 vP; varying vec3 vN; varying vec3 vV;
-      void main(){
-        vec3 p = position;
-        float w = sin(uTime * 7.0 + p.y * 9.0) * 0.06 + sin(uTime * 11.0 - p.y * 5.0) * 0.04;
-        p.xz *= 1.0 + w * p.y;
-        p.x += sin(uTime * 3.0 + p.y * 4.0) * 0.05 * p.y * p.y;
-        vP = p;
-        vec4 mv = modelViewMatrix * vec4(p, 1.0);
-        vN = normalize(normalMatrix * normal); vV = normalize(-mv.xyz);
-        gl_Position = projectionMatrix * mv;
-      }`,
-    fragmentShader: `
-      uniform float uTime; varying vec3 vP; varying vec3 vN; varying vec3 vV;
-      float h(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
-      float n(vec2 p){ vec2 i = floor(p), f = fract(p); f = f*f*(3.0-2.0*f);
-        return mix(mix(h(i), h(i+vec2(1,0)), f.x), mix(h(i+vec2(0,1)), h(i+vec2(1,1)), f.x), f.y); }
-      void main(){
-        float rim = pow(1.0 - abs(dot(normalize(vN), vV)), 1.6);
-        float bands = n(vec2(vP.x * 6.0 + vP.z * 4.0, vP.y * 5.0 - uTime * 3.2)) * 0.6 + n(vec2(vP.z * 11.0 - vP.x * 3.0, vP.y * 9.0 - uTime * 5.0)) * 0.4;
-        float fade = 1.0 - smoothstep(0.45, 1.05, vP.y + bands * 0.25);
-        vec3 c = mix(vec3(0.1, 0.35, 1.0), vec3(0.75, 0.9, 1.0), rim * 0.6 + (1.0 - vP.y) * 0.3);
-        gl_FragColor = vec4(c * (0.25 + rim * 1.2) * (0.55 + bands * 0.9) * fade * (1.0 - seeFade()), 1.0);
-      }`,
+    transparent: true, depthWrite: false, blending: AdditiveBlending,
   });
   // (it fades as the beacon under it dissolves, not left burning in the air)
   seeThroughFade(mat, 'prop');
-  portShader(mat, ({ wgslFn, positionGeometry, normalView, positionViewDirection, varying, vec4 }, u) => {
-    const moved = wgslFn(`fn beaconPosition(pos: vec3f, time: f32) -> vec3f {
-      var p = pos;
-      let w = sin(time * 7.0 + p.y * 9.0) * 0.06 + sin(time * 11.0 - p.y * 5.0) * 0.04;
-      p = vec3f(p.x * (1.0 + w * p.y), p.y, p.z * (1.0 + w * p.y));
-      p.x += sin(time * 3.0 + p.y * 4.0) * 0.05 * p.y * p.y;
-      return p;
-    }`)({ pos: positionGeometry, time: u.uTime });
-    const kept = seeKept(seeUniforms(mat.uniforms));
-    return {
-      position: moved,
-      fragment: vec4(kept, kept, kept, 1).mul(wgslFn(`fn beaconFlame(p: vec3f, nrm: vec3f, v: vec3f, time: f32) -> vec4f {
-        let rim = pow(max(1.0 - abs(dot(normalize(nrm), v)), 0.0), 1.6);
-        let bands = noise2(vec2f(p.x * 6.0 + p.z * 4.0, p.y * 5.0 - time * 3.2)) * 0.6
-          + noise2(vec2f(p.z * 11.0 - p.x * 3.0, p.y * 9.0 - time * 5.0)) * 0.4;
-        let fade = 1.0 - smoothstep(0.45, 1.05, p.y + bands * 0.25);
-        let c = mix(vec3f(0.1, 0.35, 1.0), vec3f(0.75, 0.9, 1.0), rim * 0.6 + (1.0 - p.y) * 0.3);
-        return vec4f(c * (0.25 + rim * 1.2) * (0.55 + bands * 0.9) * fade, 1.0);
-      }`, [wgslNoise().noise2])({ p: varying(moved), nrm: normalView, v: positionViewDirection, time: u.uTime })),
-    };
-  });
   updaters.push((_dt, t) => { mat.uniforms.uTime.value = t; });
   rustLook(mat, { ...beaconLook(mat.uniforms.uTime), fades: seeValue('prop') });
   return mat;
@@ -1171,26 +1122,26 @@ function beaconFlameMat(updaters: Updater[]): THREE.ShaderMaterial {
 /** A brazier on two stepped slabs, its fire's light casting the still shadows; `y0` the floor it stands on (the hall
  *  of heroes' stage: world/heroHall.ts), `slabs` how wide its slabs are against the crypt's (the village's hall's dais
  *  leaves less room). */
-export function buildBrazier(scene: THREE.Object3D, x: number, z: number, a: number, iron: THREE.Material, stone: THREE.Material, updaters: Updater[], y0 = 0, glow = 15, flames = 1, slabs = 1): THREE.PointLight {
+export function buildBrazier(scene: Node, x: number, z: number, a: number, iron: Material, stone: Material, updaters: Updater[], y0 = 0, glow = 15, flames = 1, slabs = 1): PointLight {
   // two stepped slabs lift the fire
   for (const [w, y] of [[2.4 * slabs, 0.14], [1.7 * slabs, 0.4]]) {
-    const step = new THREE.Mesh(boxWithUV(w, 0.28, w, 0.5), stone);
+    const step = new Mesh(boxWithUV(w, 0.28, w, 0.5), stone);
     step.position.set(x, y0 + y, z); step.rotation.y = Math.PI / 2 - a;   // square to the wall
     step.castShadow = step.receiveShadow = true;
     scene.add(step);
   }
   const lift = y0 + 0.54;
-  const pts = [[0.2, 0], [0.12, 0.1], [0.1, 0.8], [0.25, 0.9], [0.6, 1.1], [0.65, 1.25], [0.5, 1.2], [0, 1.05]].map(([a, b]) => new THREE.Vector2(a, b));
-  const bowl = new THREE.Mesh(new THREE.LatheGeometry(pts, 12), iron);
+  const pts = [[0.2, 0], [0.12, 0.1], [0.1, 0.8], [0.25, 0.9], [0.6, 1.1], [0.65, 1.25], [0.5, 1.2], [0, 1.05]].map(([a, b]) => new Vec2(a, b));
+  const bowl = new Mesh(shapes.lathe(pts, 12), iron);
   bowl.position.set(x, lift, z); bowl.castShadow = true;
   scene.add(bowl);
-  const light = new THREE.PointLight(0xff7a30, glow, 15, 2);
+  const light = new PointLight(0xff7a30, glow, 15, 2);
   light.position.set(x, lift + 2.1, z);
   staticShadow(light);
   scene.add(light);
   // a heap of coals in the bowl, burning thin and dark
   buildFire(scene, {
-    at: new THREE.Vector3(x, lift + 1.06, z), radius: 0.5, height: 1.05, dish: 0.14, light, intensity: glow,
+    at: new Vec3(x, lift + 1.06, z), radius: 0.5, height: 1.05, dish: 0.14, light, intensity: glow,
     // (the bowl's outside from the bed's middle, as its lathe draws it: its foot, its belly and its rim)
     bowl: [[-0.16, 0.25], [0.04, 0.6], [0.19, 0.65]],
     smoke: 2.5, smokeColour: 0x2c2a28, embers: 8, glow: flames,
@@ -1199,10 +1150,10 @@ export function buildBrazier(scene: THREE.Object3D, x: number, z: number, a: num
 }
 
 /** Clusters of candles of different heights, their flames swaying, now and then giving off a spark. */
-function buildCandles(scene: THREE.Object3D, spots: [number, number, number][], rng: () => number, wax: THREE.Material, flame: THREE.Material, updaters: Updater[]): void {
+function buildCandles(scene: Node, spots: [number, number, number][], rng: () => number, wax: Material, flame: Material, updaters: Updater[]): void {
   const n = spots.length * 5;
-  const sticks = new THREE.InstancedMesh(new THREE.CylinderGeometry(1, 1, 1, 8).translate(0, 0.5, 0), wax, n);
-  const flames = new THREE.InstancedMesh(new THREE.SphereGeometry(1, 8, 6).scale(1, 2.2, 1), flame, n);
+  const sticks = new InstancedMesh(shapes.cylinder(1, 1, 1, 8).translate(0, 0.5, 0), wax, n);
+  const flames = new InstancedMesh(shapes.sphere(1, 8, 6).scale(1, 2.2, 1), flame, n);
   const tips: [number, number, number, number][] = [];
   let i = 0;
   for (const [cx, cz, y0] of spots) {
@@ -1240,12 +1191,12 @@ function buildCandles(scene: THREE.Object3D, spots: [number, number, number][], 
  *  were 104k triangles a pass (4356 each), over half of them outside the top view (`lab draws`) */
 const CLUTTER_CELLS = gridCell(8);
 
-function scatterClutter(scene: THREE.Object3D, rng: () => number, stone: THREE.Material, bone: THREE.Material, iron: THREE.Material): void {
+function scatterClutter(scene: Node, rng: () => number, stone: Material, bone: Material, iron: Material): void {
   const r = (a: number, b: number) => a + rng() * (b - a);
   // rubble: on the dais, heaped along the wall, and round the columns' feet
-  const rockGeo = new THREE.DodecahedronGeometry(0.2, 0);
-  const rocks = new THREE.InstancedMesh(rockGeo, stone, 300);
-  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), s = new THREE.Vector3(), p = new THREE.Vector3();
+  const rockGeo = shapes.dodecahedron(0.2, 0);
+  const rocks = new InstancedMesh(rockGeo, stone, 300);
+  const m = new Mat4(), q = new Quat(), e = new Euler(), s = new Vec3(), p = new Vec3();
   for (let i = 0; i < rocks.count; i++) {
     let x, z;
     if (i < 60) { x = r(-ARENA.daisHalf + 0.3, ARENA.daisHalf - 0.3); z = r(-ARENA.daisHalf + 0.3, ARENA.daisHalf - 0.3); if (Math.hypot(x, z) < 3.8) { x *= 1.6; z *= 1.6; } }
@@ -1261,11 +1212,11 @@ function scatterClutter(scene: THREE.Object3D, rng: () => number, stone: THREE.M
 
   // bones (a shaft with knobbed ends) & skulls
   const boneGeo = mergeGeometries([
-    new THREE.CylinderGeometry(0.025, 0.025, 0.34, 6).rotateZ(Math.PI / 2),
-    ...[-0.17, 0.17].flatMap((x) => [-0.025, 0.025].map((z) => new THREE.SphereGeometry(0.03, 6, 4).translate(x, 0, z))),
+    shapes.cylinder(0.025, 0.025, 0.34, 6).rotateZ(Math.PI / 2),
+    ...[-0.17, 0.17].flatMap((x) => [-0.025, 0.025].map((z) => shapes.sphere(0.03, 6, 4).translate(x, 0, z))),
   ].map((g) => g.toNonIndexed()));
-  boneGeo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(boneGeo.attributes.position.count * 3).fill(1), 3));
-  const bones = new THREE.InstancedMesh(boneGeo, bone, 70);
+  boneGeo.setAttribute('color', new Attribute(new Float32Array(boneGeo.attributes.position.count * 3).fill(1), 3));
+  const bones = new InstancedMesh(boneGeo, bone, 70);
   for (let i = 0; i < bones.count; i++) {
     const a = r(0, TAU), rr = i < 12 ? r(1.5, ARENA.daisHalf) : r(6, 27);
     const x = Math.cos(a) * rr, z = Math.sin(a) * rr;
@@ -1277,7 +1228,7 @@ function scatterClutter(scene: THREE.Object3D, rng: () => number, stone: THREE.M
   scene.add(...cullInCells(bones, CLUTTER_CELLS));
   asClutter(bones);
   const skullGeo = skullGeometry();
-  const skulls = new THREE.InstancedMesh(skullGeo, bone, 24);
+  const skulls = new InstancedMesh(skullGeo, bone, 24);
   for (let i = 0; i < skulls.count; i++) {
     const a = r(0, TAU), rr = r(2, 27);
     const x = Math.cos(a) * rr, z = Math.sin(a) * rr;

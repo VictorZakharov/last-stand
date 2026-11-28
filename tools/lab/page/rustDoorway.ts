@@ -10,6 +10,7 @@ import type { Lab, Pictured } from './lab';
 import { type Checked, failed, passed } from './rustPixels';
 import { type Shot, settledAt, shotAfter, show, showHouses } from './rustHouseRule';
 import { RUST } from '../../../src/engine';
+import { TUNE } from '../../../src/engine/globals';
 
 /** the name `lab houserule --only` runs this by */
 export const DOORWAY_VIEW_NAME = 'the doorway from in the hall, as played';
@@ -50,7 +51,11 @@ function doorwayLeft(played: Shot, whole: Shot, bare: Shot): { left: number; pix
 /** The doorway read as the game stands, and the frame as played. */
 async function readDoorway(lab: Lab): Promise<[{ left: number; pixels: number }, Pictured]> {
   const settled = await settledAt(lab, DOORWAY_VIEW);
+  const shadows = TUNE.shadows;
   try {
+    // (the sun's shadows out of all three: a thinned part casts as a solid one, and the frame's shadow on the hall's
+    // floor, the same gone or not, read as 13% of the doorway left with the doorway gone)
+    TUNE.shadows = 0;
     // (lit as played: in the plain colours the houses are read by, the leaves' planks are the paving's own grey)
     RUST.tune.debug = 0;
     // (the houses' own parts out of all three frames: with nothing thinned the hall's roof is whole over him)
@@ -70,6 +75,7 @@ async function readDoorway(lab: Lab): Promise<[{ left: number; pixels: number },
     show(['hallColumn'], true, false);
     showHouses(true);
     RUST.tune.housesWhole = 0;
+    TUNE.shadows = shadows;
     await settled.done();
   }
 }

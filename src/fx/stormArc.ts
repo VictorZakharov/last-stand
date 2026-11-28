@@ -5,7 +5,7 @@
 // core in a wider glow of its colour, forks branching off it as the head passes them, sparks thrown off along it.
 // Ribbons turned to the camera each frame, as fx/effects.ts's `lightning`; it eases out and never blinks (a thin
 // thing, but one that stays is held to the root's Bright effects all the same).
-import * as THREE from 'three';
+import { Attribute, ColorRepresentation, Geometry, Mesh, Node, Vec3 } from '../engine/api/index.ts';
 import { G } from '../state';
 import { additive } from '../core/materials';
 import { addEffect } from './effects';
@@ -14,7 +14,7 @@ import { rand } from '../util';
 import type { Effect } from '../types';
 
 export interface StormArcOpts {
-  color: THREE.ColorRepresentation;
+  color: ColorRepresentation;
   /** its core's half width (m); the glow round it is `GLOW_WIDE` times that */
   width?: number;
   /** the head's speed (m/s), and the least and most it takes to arrive (s) */
@@ -46,38 +46,38 @@ const CRAWL = { by: 0.35, rate: 17 };
 
 interface Strand {
   /** its points at rest, and each one's own phase for the crawl */
-  rest: THREE.Vector3[];
+  rest: Vec3[];
   phase: number[];
   /** where along the main arc it leaves (0..1: the head must have passed it) and how soon it fades (a share of the linger) */
   from: number;
   fade: number;
   wide: number;
-  core: THREE.Mesh;
-  glow: THREE.Mesh;
+  core: Mesh;
+  glow: Mesh;
 }
 
-const _view = new THREE.Vector3(), _side = new THREE.Vector3(), _p = new THREE.Vector3(), _q = new THREE.Vector3(), _r = new THREE.Vector3(), _o = new THREE.Vector3();
+const _view = new Vec3(), _side = new Vec3(), _p = new Vec3(), _q = new Vec3(), _r = new Vec3(), _o = new Vec3();
 
 /** A jagged path from `a` to `b`, its ends in place. */
-function path(a: THREE.Vector3, b: THREE.Vector3, wander: number): THREE.Vector3[] {
+function path(a: Vec3, b: Vec3, wander: number): Vec3[] {
   // (a short arc wanders less: a few metres long, jags meant for a long one folded it back on itself)
   const jag = Math.min(wander, a.distanceTo(b) * 0.1);
   const n = Math.min(POINTS.most, Math.max(POINTS.least, Math.round(a.distanceTo(b) / STEP)));
-  const pts: THREE.Vector3[] = [];
+  const pts: Vec3[] = [];
   for (let i = 0; i <= n; i++) {
     const k = i / n, p = a.clone().lerp(b, k);
     // (wandering most at its middle, a slow bend under the quick jags)
     const mid = Math.sin(k * Math.PI);
-    if (i > 0 && i < n) p.add(new THREE.Vector3(rand(-jag, jag), rand(-jag, jag) * 0.6, rand(-jag, jag)).multiplyScalar(0.45 + 0.55 * mid));
+    if (i > 0 && i < n) p.add(new Vec3(rand(-jag, jag), rand(-jag, jag) * 0.6, rand(-jag, jag)).multiplyScalar(0.45 + 0.55 * mid));
     pts.push(p);
   }
   return pts;
 }
 
 /** A ribbon's geometry for `count` points, placed each frame by `lay`. */
-function ribbon(count: number): THREE.BufferGeometry {
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(count * 2 * 3), 3));
+function ribbon(count: number): Geometry {
+  const geo = new Geometry();
+  geo.setAttribute('position', new Attribute(new Float32Array(count * 2 * 3), 3));
   const index: number[] = [];
   for (let i = 0; i < count - 1; i++) { const k = i * 2; index.push(k, k + 1, k + 2, k + 1, k + 3, k + 2); }
   geo.setIndex(index);
@@ -86,9 +86,9 @@ function ribbon(count: number): THREE.BufferGeometry {
 
 /** The strand's points this frame (crawled about their rest by `crawl`), laid as a ribbon `wide` across turned to the
  *  camera, drawn as far as `shown` of its length. */
-function lay(strand: Strand, mesh: THREE.Mesh, wide: number, shown: number, t: number, crawl: number): void {
-  const pos = mesh.geometry.attributes.position as THREE.BufferAttribute, pts = strand.rest, n = pts.length;
-  const at = (i: number, out: THREE.Vector3): THREE.Vector3 => {
+function lay(strand: Strand, mesh: Mesh, wide: number, shown: number, t: number, crawl: number): void {
+  const pos = mesh.geometry.attributes.position as Attribute, pts = strand.rest, n = pts.length;
+  const at = (i: number, out: Vec3): Vec3 => {
     const ph = strand.phase[i], ends = i === 0 || i === n - 1 ? 0 : 1;
     return out.copy(pts[i]).add(_o.set(Math.sin(t * CRAWL.rate + ph), Math.sin(t * CRAWL.rate * 0.8 + ph * 1.7) * 0.6, Math.cos(t * CRAWL.rate * 1.1 + ph * 0.6)).multiplyScalar(crawl * ends));
   };
@@ -107,17 +107,17 @@ function lay(strand: Strand, mesh: THREE.Mesh, wide: number, shown: number, t: n
 }
 
 /** An arc from `from` to `to`: travelling there, then staying. */
-export function stormArc(from: THREE.Vector3, to: THREE.Vector3, opts: StormArcOpts): Effect {
+export function stormArc(from: Vec3, to: Vec3, opts: StormArcOpts): Effect {
   const { color, width = 0.05, speed = 30, linger = 0.6, jag = 0.4, forks = 2, intensity = 3 } = opts;
   const arrive = Math.min(ARRIVE.most, Math.max(ARRIVE.least, from.distanceTo(to) / speed));
   const coreMat = additive(0xffffff, intensity), glowMat = additive(color, intensity * 0.4, 0.5);
   coreMat.depthWrite = glowMat.depthWrite = false;
-  const group = new THREE.Group();
+  const group = new Node();
   group.name = 'Storm arc';
   const strands: Strand[] = [];
-  const strand = (a: THREE.Vector3, b: THREE.Vector3, bend: number, wide: number, leaves: number, fade: number): Strand => {
+  const strand = (a: Vec3, b: Vec3, bend: number, wide: number, leaves: number, fade: number): Strand => {
     const rest = path(a, b, bend);
-    const core = new THREE.Mesh(ribbon(rest.length), coreMat), glow = new THREE.Mesh(ribbon(rest.length), glowMat);
+    const core = new Mesh(ribbon(rest.length), coreMat), glow = new Mesh(ribbon(rest.length), glowMat);
     core.frustumCulled = glow.frustumCulled = false;
     group.add(glow, core);
     const made = { rest, phase: rest.map(() => rand(0, 6.28)), from: leaves, fade, wide, core, glow };
@@ -129,7 +129,7 @@ export function stormArc(from: THREE.Vector3, to: THREE.Vector3, opts: StormArcO
     // (a fork leaves a point of the arc and runs on a way, bent off its line)
     const k = rand(0.2, 0.85), at = main.rest[Math.round(k * (main.rest.length - 1))];
     const on = _p.subVectors(to, from).normalize().multiplyScalar(rand(0.8, 1.8));
-    const end = at.clone().add(on).add(new THREE.Vector3(rand(-1, 1), rand(-0.6, 0.5), rand(-1, 1)));
+    const end = at.clone().add(on).add(new Vec3(rand(-1, 1), rand(-0.6, 0.5), rand(-1, 1)));
     strand(at.clone(), end, jag * 0.6, width * 0.5, k, rand(0.35, 0.6));
   }
   G.scene.add(group);

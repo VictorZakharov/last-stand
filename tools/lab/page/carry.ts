@@ -5,7 +5,7 @@
 // so what lies between two crossings isn't the measure, the crossings are. Beside them: the bow arm's clearance of
 // the string (its forearm and upper arm as capsules), its elbow's side of the bow's plane, and its joints past their
 // ranges.
-import * as THREE from 'three';
+import { Mesh, Node, Sphere, Vec3 } from './sceneApi.ts';
 import type { Lab } from './lab';
 import type { Bow } from '../../../src/entities/models/bow';
 import { measureBody, breaches } from '../../../src/entities/models/anatomy';
@@ -39,11 +39,11 @@ const UPPER_ARM_RADIUS = 0.073;
 const DRAW_HAND = /^handR\//;
 
 /** a nocked arrow's ends in its own frame: the nock behind the string, the head (m) */
-const ARROW_NOCK = new THREE.Vector3(0, 0, -0.44);
-const ARROW_HEAD = new THREE.Vector3(0, 0, 0.48);
+const ARROW_NOCK = new Vec3(0, 0, -0.44);
+const ARROW_HEAD = new Vec3(0, 0, 0.48);
 
 /** a line measured against the body, its two ends in the world */
-type Segment = [THREE.Vector3, THREE.Vector3];
+type Segment = [Vec3, Vec3];
 
 /** One frame's measure. */
 interface FrameMeasure {
@@ -105,8 +105,8 @@ export interface CarryOptions {
 const centimetres = (metres: number) => Number((metres * 100).toFixed(1));
 
 /** true when a held arrow (the one in the draw hand) is the object or among its parents */
-function isHeldArrow(object: THREE.Object3D): boolean {
-  for (let node: THREE.Object3D | null = object; node; node = node.parent) {
+function isHeldArrow(object: Node): boolean {
+  for (let node: Node | null = object; node; node = node.parent) {
     if (node.name === 'heldArrow') return true;
   }
   return false;
@@ -117,7 +117,7 @@ class CarryMeasure {
   private readonly body: BakedBody;
 
   constructor(private readonly lab: Lab, private readonly bow: Bow) {
-    const away = (mesh: THREE.Mesh) => isUnder(mesh, bow.group) || isHeldArrow(mesh);
+    const away = (mesh: Mesh) => isUnder(mesh, bow.group) || isHeldArrow(mesh);
     this.body = new BakedBody(lab.model.root, lab.joints, (mesh) => !away(mesh));
   }
 
@@ -125,7 +125,7 @@ class CarryMeasure {
     const { lab, bow } = this;
     const joints = lab.joints;
     lab.model.root.updateMatrixWorld(true);
-    const world = (local: THREE.Vector3) => bow.group.localToWorld(local.clone());
+    const world = (local: Vec3) => bow.group.localToWorld(local.clone());
 
     // the string: from the top tip to the stretch the fingers hold, that stretch, and on to the bottom tip
     const nockTop = world(bow.nock.clone().setY(bow.nock.y + bow.hold));
@@ -148,7 +148,7 @@ class CarryMeasure {
 
     // (only the meshes that may reach the lines are baked: most of the body is nowhere near the bow)
     const ends = [...strings, ...limbLines, ...arrowLines].flat();
-    const meshes = this.body.bake(new THREE.Sphere().setFromPoints(ends));
+    const meshes = this.body.bake(new Sphere().setFromPoints(ends));
     const crossingsOf = (segments: Segment[], skip?: RegExp) => {
       const total = new Map<string, Crossing>();
       for (const [a, b] of segments) addCrossings(total, crossingsAlong(meshes, a, b, skip));
@@ -158,11 +158,11 @@ class CarryMeasure {
     const limbs = crossingsOf(limbLines);
     const arrows = crossingsOf(arrowLines, DRAW_HAND);
 
-    const at = (joint: THREE.Object3D) => joint.getWorldPosition(new THREE.Vector3());
+    const at = (joint: Node) => joint.getWorldPosition(new Vec3());
     const shoulder = at(joints.shoulderL);
     const elbow = at(joints.elbowL);
     const wrist = at(joints.handL);
-    const clearance = (a: THREE.Vector3, b: THREE.Vector3, radius: number) => {
+    const clearance = (a: Vec3, b: Vec3, radius: number) => {
       const nearest = Math.min(...strings.map(([p, q]) => segmentDistance(a, b, p, q)));
       return centimetres(nearest - radius);
     };
@@ -199,7 +199,7 @@ class Canary {
   plant(frame: number, phase: string): (() => void) | null {
     if (!this.on || frame % 50 !== 25 || (phase !== 'stand' && phase !== 'walk')) return null;
     const group = this.bow.group;
-    const hips = this.lab.joints.hips.getWorldPosition(new THREE.Vector3());
+    const hips = this.lab.joints.hips.getWorldPosition(new Vec3());
     const move = group.parent!.worldToLocal(hips).sub(group.position);
     group.position.add(move);
     group.updateMatrixWorld(true);

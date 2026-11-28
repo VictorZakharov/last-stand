@@ -7,7 +7,7 @@
 // shoulder and from above, each way, and each place close up from its front and three-quarters. On a tree without the
 // places (main, under `--ab`), the counts and the pictures of the room alone. `--canary` shows a trophy whose boss is
 // unbeaten and sets another 5 cm off its place, both of which must be caught.
-import * as THREE from 'three';
+import { Node, Raycaster, Vec3 } from './sceneApi.ts';
 import type { Lab, Pictured, Report } from './lab';
 import { G } from '../../../src/state';
 import { BIOME_IDS, bossesOf, rungBoss } from '../../../src/data/biomes';
@@ -68,21 +68,21 @@ const OWN_MODELS = Object.keys(import.meta.glob('../../../src/world/trophies/*.t
 async function standIn(lab: Lab, at: [number, number], facing: number, view: ViewMode): Promise<void> {
   if (viewMode() !== view) await viewBy(lab, view);
   G.player.walkTo = null;
-  G.player.place(new THREE.Vector3(at[0], groundHeight(at[0], at[1]), at[1]), facing);
+  G.player.place(new Vec3(at[0], groundHeight(at[0], at[1]), at[1]), facing);
   // (the camera turned with him: the close views keep their own turn as he's placed)
   faceCamera(facing);
   await lab.step(SETTLE);
 }
 
 /** Whether `object` and all over it are shown. */
-function shownAll(object: THREE.Object3D): boolean {
-  for (let o: THREE.Object3D | null = object; o; o = o.parent) if (!o.visible) return false;
+function shownAll(object: Node): boolean {
+  for (let o: Node | null = object; o; o = o.parent) if (!o.visible) return false;
   return true;
 }
 
 /** Whether `object` is `group` or within it. */
-function within(object: THREE.Object3D, group: THREE.Object3D | undefined): boolean {
-  for (let o: THREE.Object3D | null = object; o; o = o.parent) if (o === group) return true;
+function within(object: Node, group: Node | undefined): boolean {
+  for (let o: Node | null = object; o; o = o.parent) if (o === group) return true;
   return false;
 }
 
@@ -94,9 +94,9 @@ function metAt(place: TrophyPlaceShown): { met: 'trophy' | 'mount' | 'nothing'; 
   const wall = place.kind === 'wall';
   const from = wall
     ? place.at.clone().addScaledVector(place.out, WALL_RAY)
-    : place.at.clone().add(new THREE.Vector3(0, STAND_RAY, 0));
-  const way = wall ? place.out.clone().negate() : new THREE.Vector3(0, -1, 0);
-  const ray = new THREE.Raycaster(from, way, 0, wall ? WALL_REACH : STAND_REACH);
+    : place.at.clone().add(new Vec3(0, STAND_RAY, 0));
+  const way = wall ? place.out.clone().negate() : new Vec3(0, -1, 0);
+  const ray = new Raycaster(from, way, 0, wall ? WALL_REACH : STAND_REACH);
   const hit = ray.intersectObject(room, true).find((h) => shownAll(h.object));
   if (!hit) return { met: 'nothing', what: 'nothing' };
   const what = `${hit.object.name || hit.object.parent?.name || 'a part'} at ${hit.distance.toFixed(2)} m`;
@@ -109,7 +109,7 @@ function placesRead(places: TrophyPlaceShown[], beaten: boolean): { lines: strin
   const problems: string[] = [];
   for (const place of places) {
     const { met, what } = metAt(place);
-    const off = place.trophy ? place.trophy.getWorldPosition(new THREE.Vector3()).distanceTo(place.at) : 0;
+    const off = place.trophy ? place.trophy.getWorldPosition(new Vec3()).distanceTo(place.at) : 0;
     lines.push(`${place.place} (${place.kind}): ${place.boss ?? 'no boss yet'}, ${place.shown ? 'shown' : 'hidden'}, `
       + `a ray meets its ${met} (${what})${place.trophy ? `, ${(off * 100).toFixed(1)} cm off its place` : ''}`);
     const want = beaten && place.boss ? 'trophy' : 'mount';
@@ -149,7 +149,7 @@ function closeUps(lab: Lab, places: TrophyPlaceShown[], moments: Pictured[], sta
   for (const place of places) {
     if (!place.boss && state === 'beaten') continue;
     const facing = Math.atan2(place.out.x, place.out.z);
-    const at = place.kind === 'cabinet' ? place.at.clone().add(new THREE.Vector3(0, 0.15, 0)) : place.at;
+    const at = place.kind === 'cabinet' ? place.at.clone().add(new Vec3(0, 0.15, 0)) : place.at;
     for (const [turn, label] of [[0, 'front'], [THREE_QUARTERS, 'three-quarters']] as const) {
       G.player.facing = facing + turn;
       const notes = [`${place.place}: ${place.boss ?? 'no boss yet'}, ${state}`];
@@ -170,7 +170,7 @@ async function earnedTrophy(lab: Lab, canary: boolean): Promise<Report> {
     throw new Error('lab: the trophy check needs a fresh chronicle');
   }
   await readyBoss('crypt', 5);
-  const foe = lab.spawnFoe(boss, lab.player.pos.clone().add(new THREE.Vector3(-8, 0, 0)), { wave: 5 });
+  const foe = lab.spawnFoe(boss, lab.player.pos.clone().add(new Vec3(-8, 0, 0)), { wave: 5 });
   await lab.until(() => !foe.invulnerable, 180, 'the Colossus never became targetable');
   const hero = lab.player;
   hitEnemy(foe, 1e9, { by: hero, skill: hero.cls.skills[0], unnumbered: true });
@@ -249,8 +249,8 @@ export async function trophies(lab: Lab, options: TrophiesOptions): Promise<Repo
     moments.push(lab.picture('trophies-cabinet-plan', ['plan'], [], { at: shelf.at, distance: 6 }));
     G.player.facing = Math.atan2(shelf.out.x, shelf.out.z);
     const middle = shelf.at.clone().addScaledVector(shelf.out, -0.1);
-    const across = new THREE.Vector3(0, 1, 0).cross(shelf.out).normalize();
-    middle.addScaledVector(across, 0.31).add(new THREE.Vector3(0, 0.25, 0));
+    const across = new Vec3(0, 1, 0).cross(shelf.out).normalize();
+    middle.addScaledVector(across, 0.31).add(new Vec3(0, 0.25, 0));
     moments.push(lab.picture('trophies-cabinet-whole', ['front'], [], { at: middle, distance: 4.2 }));
   }
   if (read()) closeUps(lab, read()!, moments, 'unbeaten');

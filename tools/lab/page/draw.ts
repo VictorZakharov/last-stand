@@ -7,7 +7,7 @@
 // and not bright. As glow particles they fade out within 3.5 m of the camera, and through the eyes nothing of them
 // showed; a star of light on the arrowhead was seen in every view, and was too bright. In the close views the
 // crosshair is read too (page/crosshair.ts): bold held at full draw alone, swelling into it once.
-import * as THREE from 'three';
+import { Node, Vec3 } from './sceneApi.ts';
 import type { Fixture, Frame, Lab, Pictured, Report } from './lab';
 import { screenArea } from './lab';
 import type { SkillKey } from '../../../src/types';
@@ -85,21 +85,21 @@ function drawnShots(): DrawnShot[] {
 }
 
 /** The frame's input holding the skill key `key` over `aim`: a mouse button's, or a key's. */
-function holding(key: SkillKey, aim: THREE.Vector3): Frame {
+function holding(key: SkillKey, aim: Vec3): Frame {
   if (key === 'mouse0') return { m0: true, aim };
   if (key === 'mouse2') return { m2: true, aim };
   return { keys: [key], aim };
 }
 
 /** Where `hero`'s arrowhead is: the model's own, or half an arrow ahead of where the shot leaves (an older tree). */
-function arrowHeadOf(hero: Player, out = new THREE.Vector3()): THREE.Vector3 {
+function arrowHeadOf(hero: Player, out = new Vec3()): Vec3 {
   const head = hero.model.arrowHead;
   if (head) return head.getWorldPosition(out);
-  const facing = new THREE.Vector3(Math.sin(hero.facing), 0, Math.cos(hero.facing));
+  const facing = new Vec3(Math.sin(hero.facing), 0, Math.cos(hero.facing));
   return out.copy(hero.castPoint).addScaledVector(facing, ARROW * 0.45);
 }
 
-const head = new THREE.Vector3();
+const head = new Vec3();
 
 /** Whether `hero`'s arrowhead glints this frame: its motes showing. */
 const glinting = (hero: Player): boolean => glintShown(hero) > SHOWN;
@@ -112,8 +112,8 @@ function drawnShare(hero: Player): number {
 }
 
 /** The glint's motes in the scene. */
-function motes(): THREE.Object3D[] {
-  const found: THREE.Object3D[] = [];
+function motes(): Node[] {
+  const found: Node[] = [];
   G.scene.traverse((object) => {
     if (object.name === MOTES) found.push(object);
   });
@@ -173,7 +173,7 @@ async function drawToFull(
   const hero = G.player;
   hero.cooldowns.clear();
   hero.energy = hero.stats.maxEnergy;
-  const ahead = new THREE.Vector3(Math.sin(hero.facing), 0, Math.cos(hero.facing));
+  const ahead = new Vec3(Math.sin(hero.facing), 0, Math.cos(hero.facing));
   const aim = hero.pos.clone().addScaledVector(ahead, AIM_AHEAD);
   const drawn: Drawn = {
     idleGlinting: 0, idleLit: 0, fullLit: 0, drawingFrames: 0, drawingGlinting: 0, fullFrames: 0, fullGlinting: 0,

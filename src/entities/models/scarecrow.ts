@@ -3,13 +3,16 @@
 // the hem, a stuffed sack for a head with a stitched smile, under a frayed straw hat with a red band. Its geometry and
 // materials are made once and shared by every cast: a cast is five meshes on them (the body's wood, cloth and straw;
 // the head's cloth and straw, on a joint of its own so it lolls under a blow).
-import * as THREE from 'three';
-import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import {
+  Attribute, CatmullRom3, Color, DoubleSide, Euler, floats, Geometry, LitMaterial, Mat4, Material, Maths,
+  mergeGeometries, Mesh, Node, Quat, Vec2, Vec3,
+} from '../../engine/api/index.ts';
+import * as shapes from '../../engine/api/shapes/index.ts';
 import { burlap, pbrMaterialMaps, wood } from '../../core/textures';
 import { mulberry } from '../../util';
 
 type RGB = readonly [number, number, number];
-const rgb = (hex: number): RGB => new THREE.Color(hex).toArray() as unknown as RGB;
+const rgb = (hex: number): RGB => new Color(hex).toArray() as unknown as RGB;
 /** the burlap's own colour (core/pbr.ts, about its mean): a cloth's colour is given as what it reads over it */
 const BURLAP = rgb(0x7e6641);
 const dyed = (hex: number): RGB => { const c = rgb(hex); return [c[0] / BURLAP[0], c[1] / BURLAP[1], c[2] / BURLAP[2]]; };
@@ -24,21 +27,21 @@ const HEAD_Y = 1.66, HEAD_R = 0.172, HEAD_DEEP = 0.93;
 /** the cross arm's height, and where a sleeve is tied off along it */
 const ARM_Y = 1.36, CUFF = 0.517;
 
-const UP = new THREE.Vector3(0, 1, 0), FORWARD = new THREE.Vector3(0, 0, 1);
-const _dir = new THREE.Vector3(), _turn = new THREE.Quaternion();
+const UP = new Vec3(0, 1, 0), FORWARD = new Vec3(0, 0, 1);
+const _dir = new Vec3(), _turn = new Quat();
 
 /** `g` in `colour`, each vertex a shade of its own within `vary` of it. */
-function paint(g: THREE.BufferGeometry, colour: RGB, rng: () => number, vary = 0.06): THREE.BufferGeometry {
+function paint(g: Geometry, colour: RGB, rng: () => number, vary = 0.06): Geometry {
   const n = g.attributes.position.count, a = new Float32Array(n * 3);
   for (let i = 0; i < n; i++) {
     const k = 1 - vary + rng() * vary * 2;
     a[i * 3] = colour[0] * k; a[i * 3 + 1] = colour[1] * k; a[i * 3 + 2] = colour[2] * k;
   }
-  return g.setAttribute('color', new THREE.BufferAttribute(a, 3));
+  return g.setAttribute('color', new Attribute(a, 3));
 }
 
 /** A skin over `rings`, each a loop of as many points (its seam's point given twice), its weave `across` by `along`. */
-function skin(rings: THREE.Vector3[][], across: number, along: number): THREE.BufferGeometry {
+function skin(rings: Vec3[][], across: number, along: number): Geometry {
   const n = rings[0].length, position: number[] = [], uv: number[] = [], index: number[] = [];
   rings.forEach((ring, j) => ring.forEach((p, i) => {
     position.push(p.x, p.y, p.z);
@@ -50,21 +53,21 @@ function skin(rings: THREE.Vector3[][], across: number, along: number): THREE.Bu
       index.push(a, b, a + 1, a + 1, b, b + 1);
     }
   }
-  const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.Float32BufferAttribute(position, 3));
-  g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  const g = new Geometry();
+  g.setAttribute('position', floats(position, 3));
+  g.setAttribute('uv', floats(uv, 2));
   g.setIndex(index);
   g.computeVertexNormals();
   return g;
 }
 
 /** One straw from `from` along `dir`, tapering, its own shade of straw. */
-function straw(rng: () => number, from: THREE.Vector3, dir: THREE.Vector3, length: number): THREE.BufferGeometry {
-  const g = new THREE.CylinderGeometry(0.002, 0.0055, length, 3, 1, true).translate(0, length / 2, 0);
+function straw(rng: () => number, from: Vec3, dir: Vec3, length: number): Geometry {
+  const g = shapes.cylinder(0.002, 0.0055, length, 3, 1, true).translate(0, length / 2, 0);
   g.applyQuaternion(_turn.setFromUnitVectors(UP, _dir.copy(dir).normalize())).translate(from.x, from.y, from.z);
   // (most of it gold, a stalk in five gone grey or green)
-  const c = new THREE.Color(STRAW).multiplyScalar(0.62 + 0.5 * rng()), odd = rng();
-  if (odd < 0.1) c.lerp(new THREE.Color(0x8c8a5a), 0.6); else if (odd < 0.2) c.lerp(new THREE.Color(0x9c7a44), 0.6);
+  const c = new Color(STRAW).multiplyScalar(0.62 + 0.5 * rng()), odd = rng();
+  if (odd < 0.1) c.lerp(new Color(0x8c8a5a), 0.6); else if (odd < 0.2) c.lerp(new Color(0x9c7a44), 0.6);
   return paint(g, c.toArray() as unknown as RGB, rng, 0);
 }
 
@@ -73,8 +76,8 @@ function straw(rng: () => number, from: THREE.Vector3, dir: THREE.Vector3, lengt
  * leaning out `splay` (rad) the further out each stands (the training dummy's bundle, `dummy.ts`, in thicker stalks
  * of their own colours: this one is seen from the fight's camera).
  */
-function sheaf(rng: () => number, count: number, radius: number, length: [number, number], splay: number): THREE.BufferGeometry {
-  const straws: THREE.BufferGeometry[] = [], from = new THREE.Vector3(), dir = new THREE.Vector3();
+function sheaf(rng: () => number, count: number, radius: number, length: [number, number], splay: number): Geometry {
+  const straws: Geometry[] = [], from = new Vec3(), dir = new Vec3();
   for (let i = 0; i < count; i++) {
     const a = rng() * Math.PI * 2, out = Math.sqrt(rng()), lean = splay * out + (rng() - 0.5) * 0.2;
     from.set(Math.cos(a) * radius * out, 0, Math.sin(a) * radius * out);
@@ -89,8 +92,8 @@ function sheaf(rng: () => number, count: number, radius: number, length: [number
  * up (past a quarter turn it hangs), none within `gap` (rad) of its front.
  */
 function fringe(rng: () => number, count: number, y: number, rx: number, rz: number, lean: number, length: [number, number],
-  gap = 0): THREE.BufferGeometry {
-  const straws: THREE.BufferGeometry[] = [], from = new THREE.Vector3(), dir = new THREE.Vector3();
+  gap = 0): Geometry {
+  const straws: Geometry[] = [], from = new Vec3(), dir = new Vec3();
   for (let i = 0; i < count; i++) {
     const a = gap + (i + rng()) / count * (Math.PI - gap) * 2, l = lean + (rng() - 0.5) * 0.5, round = a + (rng() - 0.5) * 0.5;
     from.set(Math.sin(a) * rx, y + (rng() - 0.5) * 0.03, Math.cos(a) * rz);
@@ -109,8 +112,8 @@ function brimEdge(a: number): { out: number; y: number } {
 /** The brim's fray: `count` short straws rooted just inside its edge where the edge is at each one's angle, leaning
  *  out past it and a little down. Laid on a flat ring, they hung under the brim where it waved up or was bitten and
  *  poked up through its top where it waved down. */
-function brimFray(rng: () => number, count: number, brim: number): THREE.BufferGeometry {
-  const straws: THREE.BufferGeometry[] = [], from = new THREE.Vector3(), dir = new THREE.Vector3();
+function brimFray(rng: () => number, count: number, brim: number): Geometry {
+  const straws: Geometry[] = [], from = new Vec3(), dir = new Vec3();
   for (let i = 0; i < count; i++) {
     const a = -Math.PI + (i + rng()) / count * Math.PI * 2, edge = brimEdge(a), r = brim * edge.out - 0.006;
     const lean = 1.62 + (rng() - 0.5) * 0.3;
@@ -128,13 +131,13 @@ const COAT_RINGS: readonly (readonly [number, number, number])[] = [
 ];
 
 /** The coat's surface `a` round it (rad, 0 its front) at height `y`, `off` m out from the cloth. */
-function coatAt(a: number, y: number, off = 0, to = new THREE.Vector3()): THREE.Vector3 {
+function coatAt(a: number, y: number, off = 0, to = new Vec3()): Vec3 {
   let j = 0;
   while (j + 2 < COAT_RINGS.length && COAT_RINGS[j + 1][0] > y) j++;
   const [y0, x0, z0] = COAT_RINGS[j], [y1, x1, z1] = COAT_RINGS[j + 1];
-  const t = THREE.MathUtils.clamp((y0 - y) / (y0 - y1), 0, 1);
+  const t = Maths.clamp((y0 - y) / (y0 - y1), 0, 1);
   // stuffed unevenly, and hanging in folds below the belt
-  const folds = THREE.MathUtils.clamp((1 - y) / 0.25, 0, 1);
+  const folds = Maths.clamp((1 - y) / 0.25, 0, 1);
   const k = 1 + 0.045 * Math.sin(a * 3 + y * 7) * Math.sin(a * 2 - y * 11 + 1) + folds * 0.085 * Math.sin(a * 7 + 0.6);
   const rx = (x0 + (x1 - x0) * t) * k + off, rz = (z0 + (z1 - z0) * t) * k + off;
   return to.set(Math.sin(a) * rx, y, Math.cos(a) * rz);
@@ -147,7 +150,7 @@ const SACK_PROFILE: readonly (readonly [number, number])[] = [
 ];
 
 /** A piece `g` laid on the face `x` across and `y` up from the head's joint, turned `roll` in the face's plane. */
-function onFace(g: THREE.BufferGeometry, x: number, y: number, roll = 0, off = 0.006): THREE.BufferGeometry {
+function onFace(g: Geometry, x: number, y: number, roll = 0, off = 0.006): Geometry {
   let j = 0;
   while (j + 2 < SACK_PROFILE.length && SACK_PROFILE[j + 1][1] < y) j++;
   const [r0, y0] = SACK_PROFILE[j], [r1, y1] = SACK_PROFILE[j + 1];
@@ -158,26 +161,26 @@ function onFace(g: THREE.BufferGeometry, x: number, y: number, roll = 0, off = 0
 }
 
 interface Parts {
-  wood: THREE.BufferGeometry; cloth: THREE.BufferGeometry; straw: THREE.BufferGeometry;
-  headCloth: THREE.BufferGeometry; headStraw: THREE.BufferGeometry;
+  wood: Geometry; cloth: Geometry; straw: Geometry;
+  headCloth: Geometry; headStraw: Geometry;
   /** its solid shapes alone as one piece, for the glow of where it would stand */
-  outline: THREE.BufferGeometry;
-  woodMat: THREE.Material; clothMat: THREE.Material; strawMat: THREE.Material;
+  outline: Geometry;
+  woodMat: Material; clothMat: Material; strawMat: Material;
 }
 let parts: Parts | null = null;
 
 /** Its pieces merged into one geometry (every piece has a position, a normal, a uv and a colour). */
-const merged = (pieces: THREE.BufferGeometry[]): THREE.BufferGeometry =>
+const merged = (pieces: Geometry[]): Geometry =>
   mergeGeometries(pieces.map((g) => (g.index ? g.toNonIndexed() : g)));
 
 function build(): Parts {
   const rng = mulberry(7);
-  const woods: THREE.BufferGeometry[] = [], cloths: THREE.BufferGeometry[] = [], straws: THREE.BufferGeometry[] = [];
-  const headCloths: THREE.BufferGeometry[] = [], headStraws: THREE.BufferGeometry[] = [];
+  const woods: Geometry[] = [], cloths: Geometry[] = [], straws: Geometry[] = [];
+  const headCloths: Geometry[] = [], headStraws: Geometry[] = [];
   const TAU = Math.PI * 2;
 
   // the frame: a post and a cross arm, roughly cut (no two of their sides alike), two stakes bracing the post's foot
-  const rough = (g: THREE.BufferGeometry, by: number) => {
+  const rough = (g: Geometry, by: number) => {
     const p = g.attributes.position;
     for (let i = 0; i < p.count; i++) {
       const k = 1 + by * Math.sin(p.getY(i) * 9 + Math.atan2(p.getZ(i), p.getX(i)) * 2);
@@ -186,13 +189,13 @@ function build(): Parts {
     g.computeVertexNormals();
     return g;
   };
-  woods.push(paint(rough(new THREE.CylinderGeometry(0.05, 0.066, 1.85, 7, 6), 0.1).translate(0, 0.725, 0), WOOD, rng, 0.12));
-  woods.push(paint(rough(new THREE.CylinderGeometry(0.034, 0.042, 1.5, 6, 4), 0.1).rotateZ(Math.PI / 2 + 0.03).translate(0, ARM_Y, -0.01), WOOD, rng, 0.12));
+  woods.push(paint(rough(shapes.cylinder(0.05, 0.066, 1.85, 7, 6), 0.1).translate(0, 0.725, 0), WOOD, rng, 0.12));
+  woods.push(paint(rough(shapes.cylinder(0.034, 0.042, 1.5, 6, 4), 0.1).rotateZ(Math.PI / 2 + 0.03).translate(0, ARM_Y, -0.01), WOOD, rng, 0.12));
   for (const s of [1, -1]) {
-    woods.push(paint(new THREE.CylinderGeometry(0.02, 0.03, 0.56, 5).rotateX(s * 0.55).rotateY(0.5).translate(-s * 0.075, 0.18, -s * 0.125), WOOD, rng, 0.15));
+    woods.push(paint(shapes.cylinder(0.02, 0.03, 0.56, 5).rotateX(s * 0.55).rotateY(0.5).translate(-s * 0.075, 0.18, -s * 0.125), WOOD, rng, 0.15));
   }
-  straws.push(paint(new THREE.TorusGeometry(0.068, 0.013, 5, 12).rotateX(Math.PI / 2 + 0.12).translate(0, 0.37, 0), ROPE, rng, 0.15));
-  straws.push(paint(new THREE.TorusGeometry(0.067, 0.013, 5, 12).rotateX(Math.PI / 2 - 0.1).translate(0, 0.4, 0), ROPE, rng, 0.15));
+  straws.push(paint(shapes.torus(0.068, 0.013, 5, 12).rotateX(Math.PI / 2 + 0.12).translate(0, 0.37, 0), ROPE, rng, 0.15));
+  straws.push(paint(shapes.torus(0.067, 0.013, 5, 12).rotateX(Math.PI / 2 - 0.1).translate(0, 0.4, 0), ROPE, rng, 0.15));
 
   // the coat: stuffed, belted in, its hem torn
   const SEG = 24;
@@ -205,8 +208,8 @@ function build(): Parts {
   for (const s of [1, -1]) {
     const lapel = [[0.35, 1.47], [1.25, 1.44], [0.9, 1.36], [0.5, 1.37], [0.3, 1.25], [0.12, 1.36]]
       .map(([a, y]) => coatAt(s * a, y, 0.012 + (1.47 - y) * 0.08));
-    const g = new THREE.BufferGeometry().setFromPoints(lapel);
-    g.setAttribute('uv', new THREE.Float32BufferAttribute(lapel.flatMap((p) => [p.x * 3, p.y * 3]), 2));
+    const g = new Geometry().setFromPoints(lapel);
+    g.setAttribute('uv', floats(lapel.flatMap((p) => [p.x * 3, p.y * 3]), 2));
     g.setIndex([0, 3, 5, 0, 1, 3, 1, 2, 3, 3, 4, 5]);
     g.computeVertexNormals();
     cloths.push(paint(g, LINING, rng, 0.06));
@@ -223,7 +226,7 @@ function build(): Parts {
       // (round its edge: along the top and bottom, then up the sides)
       const side = k < 6 ? [(k % 3 + 0.5) / 3, k < 3 ? 0.04 : 0.96] : [k < 8 ? 0.04 : 0.96, (k % 2 + 0.5) / 2];
       const p = at(side[0], side[1], 0.011);
-      const stitch = new THREE.BoxGeometry(0.008, 0.034, 0.006).rotateZ(k < 6 ? 0.25 : Math.PI / 2 - 0.25);
+      const stitch = shapes.box(0.008, 0.034, 0.006).rotateZ(k < 6 ? 0.25 : Math.PI / 2 - 0.25);
       stitch.applyQuaternion(_turn.setFromUnitVectors(FORWARD, _dir.set(p.x, 0, p.z).normalize())).translate(p.x, p.y, p.z);
       straws.push(paint(stitch, THREAD, rng, 0));
     }
@@ -231,16 +234,16 @@ function build(): Parts {
   // buttons down its front (one lost)
   for (const y of [1.27, 1.16, 0.9]) {
     const p = coatAt(0, y, 0.008);
-    straws.push(paint(new THREE.CylinderGeometry(0.02, 0.02, 0.01, 8).rotateX(Math.PI / 2).translate(p.x, p.y, p.z), rgb(0x3a2a1c), rng, 0.1));
+    straws.push(paint(shapes.cylinder(0.02, 0.02, 0.01, 8).rotateX(Math.PI / 2).translate(p.x, p.y, p.z), rgb(0x3a2a1c), rng, 0.1));
   }
   // a rope for a belt, knotted in front with its ends hanging
-  const belt = new THREE.CatmullRomCurve3(Array.from({ length: 20 }, (_, i) => coatAt(i / 20 * TAU, 1.005 + 0.012 * Math.sin(i / 20 * TAU * 2), 0.012)), true);
-  straws.push(paint(new THREE.TubeGeometry(belt, 40, 0.014, 5, true), ROPE, rng, 0.18));
+  const belt = new CatmullRom3(Array.from({ length: 20 }, (_, i) => coatAt(i / 20 * TAU, 1.005 + 0.012 * Math.sin(i / 20 * TAU * 2), 0.012)), true);
+  straws.push(paint(shapes.tube(belt, 40, 0.014, 5, true), ROPE, rng, 0.18));
   const knot = coatAt(0.35, 1.0, 0.02);
-  straws.push(paint(new THREE.SphereGeometry(0.026, 7, 5).translate(knot.x, knot.y, knot.z), ROPE, rng, 0.18));
+  straws.push(paint(shapes.sphere(0.026, 7, 5).translate(knot.x, knot.y, knot.z), ROPE, rng, 0.18));
   for (const [dx, drop] of [[0.02, 0.2], [-0.035, 0.15]]) {
-    const end = new THREE.CatmullRomCurve3([knot.clone(), coatAt(0.35 + dx * 3, 1.0 - drop * 0.5, 0.03), coatAt(0.35 + dx * 5, 1.0 - drop, 0.022)]);
-    straws.push(paint(new THREE.TubeGeometry(end, 6, 0.012, 5), ROPE, rng, 0.18));
+    const end = new CatmullRom3([knot.clone(), coatAt(0.35 + dx * 3, 1.0 - drop * 0.5, 0.03), coatAt(0.35 + dx * 5, 1.0 - drop, 0.022)]);
+    straws.push(paint(shapes.tube(end, 6, 0.012, 5), ROPE, rng, 0.18));
   }
 
   // the sleeves along the cross arm, sagging under it, each tied off at the cuff with the straw bursting out past it
@@ -251,13 +254,13 @@ function build(): Parts {
     const rings = SLEEVE.map(([x, r, sag], j) => Array.from({ length: 13 }, (_, i) => {
       const b = i % 12 / 12 * TAU, fold = 1 + 0.07 * Math.sin(b * 5 + x * 22 + s);
       const torn = j === SLEEVE.length - 1 ? (rng() - 0.5) * 0.03 : 0;
-      return new THREE.Vector3(s * (x + torn), ARM_Y + Math.cos(b) * r * fold + Math.min(0, Math.cos(b)) * sag, s * Math.sin(b) * r * fold);
+      return new Vec3(s * (x + torn), ARM_Y + Math.cos(b) * r * fold + Math.min(0, Math.cos(b)) * sag, s * Math.sin(b) * r * fold);
     }));
     const last = rings[rings.length - 1]; last[12].copy(last[0]);
     cloths.push(paint(skin(rings, 2, 1.6), COAT, rng, 0.07));
-    straws.push(paint(new THREE.TorusGeometry(0.047, 0.012, 5, 12).rotateY(Math.PI / 2).translate(s * (CUFF + 0.003), ARM_Y, 0), ROPE, rng, 0.15));
+    straws.push(paint(shapes.torus(0.047, 0.012, 5, 12).rotateY(Math.PI / 2).translate(s * (CUFF + 0.003), ARM_Y, 0), ROPE, rng, 0.15));
     // (a solid heart to the sheaf, so it reads as a bundle from the fight's camera)
-    straws.push(paint(new THREE.CylinderGeometry(0.028, 0.05, 0.15, 8, 1, true).rotateZ(-s * Math.PI / 2).translate(s * (CUFF + 0.085), ARM_Y, 0), rgb(0xa8914e), rng, 0.2));
+    straws.push(paint(shapes.cylinder(0.028, 0.05, 0.15, 8, 1, true).rotateZ(-s * Math.PI / 2).translate(s * (CUFF + 0.085), ARM_Y, 0), rgb(0xa8914e), rng, 0.2));
     straws.push(sheaf(rng, 110, 0.045, [0.1, 0.24], 0.38).rotateZ(-s * Math.PI / 2).translate(s * (CUFF + 0.01), ARM_Y, 0));
   }
 
@@ -265,7 +268,7 @@ function build(): Parts {
   // a tuft out of the collar
   const butt = Array.from({ length: 3 }, (_, j) => Array.from({ length: 13 }, (_, i) => {
     const a = i % 12 / 12 * TAU, r = [0.2, 0.16, 0.11][j] * (1 + 0.12 * Math.sin(a * 5 + j));
-    return new THREE.Vector3(Math.sin(a) * r, [0.82, 0.68, 0.56][j] + (j === 2 ? 0.05 * Math.sin(a * 4) : 0), Math.cos(a) * r * 0.8);
+    return new Vec3(Math.sin(a) * r, [0.82, 0.68, 0.56][j] + (j === 2 ? 0.05 * Math.sin(a * 4) : 0), Math.cos(a) * r * 0.8);
   }));
   straws.push(paint(skin(butt, 1, 1), rgb(0x9c8647), rng, 0.2));
   straws.push(fringe(rng, 170, 0.76, 0.24, 0.18, 2.85, [0.12, 0.3]));
@@ -276,7 +279,7 @@ function build(): Parts {
   straws.push(sheaf(rng, 30, 0.03, [0.07, 0.14], 0.7).rotateX(0.95).translate(0, 1.46, 0.055));
 
   // the head: a stuffed sack tied at the neck, lumpy, its mouth ragged over the collar
-  const sack = new THREE.LatheGeometry(SACK_PROFILE.map(([r, y]) => new THREE.Vector2(r, y)), 18).scale(1, 1, HEAD_DEEP);
+  const sack = shapes.lathe(SACK_PROFILE.map(([r, y]) => new Vec2(r, y)), 18).scale(1, 1, HEAD_DEEP);
   const sp = sack.attributes.position, suv = sack.attributes.uv;
   for (let i = 0; i < sp.count; i++) {
     const x = sp.getX(i), y = sp.getY(i), z = sp.getZ(i);
@@ -287,32 +290,32 @@ function build(): Parts {
   }
   sack.computeVertexNormals();
   headCloths.push(paint(sack, SACK, rng, 0.06));
-  headStraws.push(paint(new THREE.TorusGeometry(0.066, 0.015, 5, 14).rotateX(Math.PI / 2).translate(0, -0.182, 0), ROPE, rng, 0.15));
+  headStraws.push(paint(shapes.torus(0.066, 0.015, 5, 14).rotateX(Math.PI / 2).translate(0, -0.182, 0), ROPE, rng, 0.15));
   // its face: one eye a button sewn on with a cross, the other only the cross, and a wide stitched smile
-  const thread = (g: THREE.BufferGeometry, x: number, y: number, roll: number, off?: number) => headStraws.push(paint(onFace(g, x, y, roll, off), THREAD, rng, 0));
-  headStraws.push(paint(onFace(new THREE.CylinderGeometry(0.034, 0.034, 0.012, 10).rotateX(Math.PI / 2), 0.066, 0.005), rgb(0x3a2a1c), rng, 0.08));
+  const thread = (g: Geometry, x: number, y: number, roll: number, off?: number) => headStraws.push(paint(onFace(g, x, y, roll, off), THREAD, rng, 0));
+  headStraws.push(paint(onFace(shapes.cylinder(0.034, 0.034, 0.012, 10).rotateX(Math.PI / 2), 0.066, 0.005), rgb(0x3a2a1c), rng, 0.08));
   for (const roll of [0.7, -0.7]) {
-    headStraws.push(paint(onFace(new THREE.BoxGeometry(0.04, 0.008, 0.006), 0.066, 0.005, roll, 0.014), rgb(0xb9a273), rng, 0));
-    thread(new THREE.BoxGeometry(0.075, 0.015, 0.008), -0.064, 0, roll);
+    headStraws.push(paint(onFace(shapes.box(0.04, 0.008, 0.006), 0.066, 0.005, roll, 0.014), rgb(0xb9a273), rng, 0));
+    thread(shapes.box(0.075, 0.015, 0.008), -0.064, 0, roll);
   }
   const smile = (x: number) => -0.108 + 0.05 * (x / 0.1) ** 2;
   for (let i = 0; i < 8; i++) {
     const x0 = -0.1 + i * 0.025, x1 = x0 + 0.025, xm = (x0 + x1) / 2;
-    thread(new THREE.BoxGeometry(0.034, 0.013, 0.008), xm, (smile(x0) + smile(x1)) / 2, Math.atan2(smile(x1) - smile(x0), 0.025));
-    if (i > 0) thread(new THREE.BoxGeometry(0.01, 0.042, 0.008), x0, smile(x0), Math.atan2(smile(x1) - smile(x0), 0.025) * 0.6);
+    thread(shapes.box(0.034, 0.013, 0.008), xm, (smile(x0) + smile(x1)) / 2, Math.atan2(smile(x1) - smile(x0), 0.025));
+    if (i > 0) thread(shapes.box(0.01, 0.042, 0.008), x0, smile(x0), Math.atan2(smile(x1) - smile(x0), 0.025) * 0.6);
   }
   // straw for hair under the hat
   headStraws.push(fringe(rng, 70, 0.075, 0.15, 0.14, 2.3, [0.07, 0.15], 1.1));
 
   // the hat: woven straw, its crown slumped to one side, its brim wavy and frayed, a red band round it; worn nearly level
-  const hat: THREE.BufferGeometry[] = [], hatStraw: THREE.BufferGeometry[] = [];
+  const hat: Geometry[] = [], hatStraw: Geometry[] = [];
   const BRIM = 0.34;
-  const shape = new THREE.LatheGeometry([[BRIM, -0.03], [0.29, -0.012], [0.22, 0], [0.172, 0.01], [0.165, 0.03], [0.155, 0.1], [0.122, 0.175], [0.066, 0.222], [0.001, 0.238]]
-    .map(([r, y]) => new THREE.Vector2(r, y)), 20);
+  const shape = shapes.lathe([[BRIM, -0.03], [0.29, -0.012], [0.22, 0], [0.172, 0.01], [0.165, 0.03], [0.155, 0.1], [0.122, 0.175], [0.066, 0.222], [0.001, 0.238]]
+    .map(([r, y]) => new Vec2(r, y)), 20);
   const hp = shape.attributes.position, huv = shape.attributes.uv;
   for (let i = 0; i < hp.count; i++) {
     const x = hp.getX(i), y = hp.getY(i), z = hp.getZ(i), r = Math.hypot(x, z), a = Math.atan2(x, z);
-    const out = THREE.MathUtils.clamp((r - 0.17) / (BRIM - 0.17), 0, 1), up = THREE.MathUtils.clamp((y - 0.08) / 0.16, 0, 1);
+    const out = Maths.clamp((r - 0.17) / (BRIM - 0.17), 0, 1), up = Maths.clamp((y - 0.08) / 0.16, 0, 1);
     // (the brim's edge: in and out, a bite gone from it)
     const brim = brimEdge(a), edge = y < 0.02 ? 1 + out * out * (brim.out - 1) : 1;
     hp.setXYZ(i, x * edge + 0.06 * up * up, y + (y < 0.02 ? out * (brim.y + 0.03) : -0.02 * up * up), z * edge + 0.02 * up * up);
@@ -320,16 +323,16 @@ function build(): Parts {
   }
   shape.computeVertexNormals();
   hat.push(paint(shape, HAT, rng, 0.1));
-  hat.push(paint(new THREE.CylinderGeometry(0.162, 0.171, 0.05, 20, 1, true).translate(0, 0.055, 0), BAND, rng, 0.06));
+  hat.push(paint(shapes.cylinder(0.162, 0.171, 0.05, 20, 1, true).translate(0, 0.055, 0), BAND, rng, 0.06));
   hatStraw.push(brimFray(rng, 60, BRIM));
-  const worn = new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(0.13, 0, 0.05)).setPosition(0, 0.125, -0.02);
+  const worn = new Mat4().makeRotationFromEuler(new Euler(0.13, 0, 0.05)).setPosition(0, 0.125, -0.02);
   for (const g of hat) headCloths.push(g.applyMatrix4(worn));
   for (const g of hatStraw) headStraws.push(g.applyMatrix4(worn));
 
-  const clothMat = new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(burlap(), 1, 1.4), vertexColors: true, roughness: 1, side: THREE.DoubleSide });
+  const clothMat = new LitMaterial({ ...pbrMaterialMaps(burlap(), 1, 1.4), vertexColors: true, roughness: 1, side: DoubleSide });
   // (drawn from both sides as the cloth is, so the two are one program)
-  const woodMat = new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(wood(), [1, 2], 1.2), vertexColors: true, roughness: 1, side: THREE.DoubleSide });
-  const strawMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85, metalness: 0 });
+  const woodMat = new LitMaterial({ ...pbrMaterialMaps(wood(), [1, 2], 1.2), vertexColors: true, roughness: 1, side: DoubleSide });
+  const strawMat = new LitMaterial({ vertexColors: true, roughness: 0.85, metalness: 0 });
   const made = {
     wood: merged(woods), cloth: merged(cloths), straw: merged(straws), headCloth: merged(headCloths), headStraw: merged(headStraws),
   };
@@ -338,25 +341,25 @@ function build(): Parts {
 }
 
 /** The glow of where it would stand: its wood and cloth as one piece (its straws, each a glow, added up to a glare). */
-export function scarecrowOutline(): THREE.BufferGeometry {
+export function scarecrowOutline(): Geometry {
   return (parts ??= build()).outline;
 }
 
 export interface Scarecrow {
   /** standing on the ground at its origin, facing +z */
-  root: THREE.Group;
+  root: Node;
   /** its head's joint, on the post's top */
-  head: THREE.Group;
+  head: Node;
 }
 
 /** A scarecrow: new meshes on the geometries and materials every one shares (nothing of it is to be disposed). */
 export function buildScarecrow(): Scarecrow {
   const p = parts ??= build();
-  const root = new THREE.Group(), head = new THREE.Group();
+  const root = new Node(), head = new Node();
   root.name = 'strawman';
   head.position.y = HEAD_Y;
-  const mesh = (name: string, g: THREE.BufferGeometry, m: THREE.Material, on: THREE.Object3D, casts: boolean) => {
-    const made = new THREE.Mesh(g, m);
+  const mesh = (name: string, g: Geometry, m: Material, on: Node, casts: boolean) => {
+    const made = new Mesh(g, m);
     made.name = `strawman-${name}`; made.castShadow = casts;
     on.add(made);
   };

@@ -10,7 +10,7 @@
 // and how long he lasts (up to `SURVIVE` s).
 //
 // `--canary` takes her damage away: every row must read nothing landing, and the part says so.
-import * as THREE from 'three';
+import { Vec3 } from './sceneApi.ts';
 import type { Frame, Lab } from './lab';
 import type { Enemy } from '../../../src/entities/enemy';
 import { G } from '../../../src/state';
@@ -52,8 +52,8 @@ function stickToward(x: number, z: number): [number, number] {
 
 /** A hero's steering through a case: each frame the way the stick is pushed (none for standing). */
 export class Steer {
-  private readonly start: THREE.Vector3;
-  private readonly line: THREE.Vector3;
+  private readonly start: Vec3;
+  private readonly line: Vec3;
   private forth = 1;
   private leg = 1;
   private legFrom = 0;
@@ -62,7 +62,7 @@ export class Steer {
     const hero = G.player.pos;
     this.start = hero.clone();
     // (his straight run's line: across hers to him)
-    this.line = new THREE.Vector3(hero.z - boss.pos.z, 0, boss.pos.x - hero.x).normalize();
+    this.line = new Vec3(hero.z - boss.pos.z, 0, boss.pos.x - hero.x).normalize();
     this.legFrom = G.time;
   }
 
@@ -76,11 +76,11 @@ export class Steer {
       if (along < -RUN_HALF) this.forth = 1;
       return { stick: stickToward(this.line.x * this.forth, this.line.z * this.forth) };
     }
-    const out = new THREE.Vector3(hero.x - this.boss.pos.x, 0, hero.z - this.boss.pos.z);
+    const out = new Vec3(hero.x - this.boss.pos.x, 0, hero.z - this.boss.pos.z);
     const off = out.length();
     out.normalize();
     // (round her, kept at his distance from her body)
-    const round = new THREE.Vector3(out.z, 0, -out.x);
+    const round = new Vec3(out.z, 0, -out.x);
     const keep = Math.max(-1, Math.min(1, (this.away + this.boss.radius - off) * KEEP));
     let way = round.clone().addScaledVector(out, keep);
     if (this.move === 'zigzag') {

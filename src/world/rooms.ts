@@ -8,7 +8,11 @@
 // barrels, banners, boards written on). The walls and the ceiling the camera stands outside of aren't drawn
 // (`cutAway`): from above the room is seen as a dollhouse, and over the shoulder the camera's boom stops at the walls
 // (`Room.wall`).
-import * as THREE from 'three';
+import {
+  AdditiveBlending, CanvasTexture, Color, DoubleSide, Euler, InstancedMesh, Light, LitMaterial, Mat4, Material, Mesh,
+  Node, PointLight, Quat, Texture, UnlitMaterial, Vec3,
+} from '../engine/api/index.ts';
+import * as shapes from '../engine/api/shapes/index.ts';
 import type { TavernKeeper } from './tavernKeeper';
 import type { Keeper } from '../entities/models/keeper';
 import type { Player } from '../entities/player';
@@ -48,20 +52,20 @@ export interface RecordsShown {
  *  (circles), its floor, and its frame's step. */
 /** A trophy place of the house of records as it stands (`Room.trophyPlaces`). */
 export interface TrophyPlaceShown {
-  place: TrophyPlace; kind: TrophyKind; boss?: EnemyId; shown: boolean; at: THREE.Vector3; out: THREE.Vector3;
-  trophy?: THREE.Group;
+  place: TrophyPlace; kind: TrophyKind; boss?: EnemyId; shown: boolean; at: Vec3; out: Vec3;
+  trophy?: Node;
 }
 
 export interface Room {
   id: RoomId;
-  group: THREE.Group;
+  group: Node;
   look: BiomeLook;
   wall: Wall;
   obstacles: Obstacle[];
   relief: Relief;
   update(dt: number, t: number): void;
   /** the walls and the ceiling the camera at `eye` stands outside of left out of the frame */
-  cutAway(eye: THREE.Vector3): void;
+  cutAway(eye: Vec3): void;
   /** which are cut away now: of 'back', 'front', 'west', 'east' and 'ceiling' (tools/lab `houses`) */
   cutNow(): string[];
   /** every part shown, the cut away walls and the trophies not yet won among them (a warm-up's draw: a hidden mesh
@@ -103,7 +107,7 @@ export interface Room {
  * outlines and sits on, what the lab reads by name. `within`: it stands still but is shown and hidden as one (a cut
  * away wall, a trophy), so it's merged within itself and kept apart.
  */
-export function keepApart(object: THREE.Object3D, within = false): void {
+export function keepApart(object: Node, within = false): void {
   object.traverse((part) => { part.userData.noMerge = true; });
   if (within) object.userData.mergeWithin = true;
 }
@@ -114,12 +118,12 @@ export function keepApart(object: THREE.Object3D, within = false): void {
  * outside (`lab village --only sweepWithinBudgets`). Frozen first (`matrixAutoUpdate` off, which the merge takes as
  * standing still), but for what's kept apart (`keepApart`) and not merged within.
  */
-export function mergeRoom(group: THREE.Group): void {
+export function mergeRoom(group: Node): void {
   group.updateMatrixWorld(true);
-  const freeze = (object: THREE.Object3D, inWhole: boolean): void => {
+  const freeze = (object: Node, inWhole: boolean): void => {
     const whole = inWhole || !!object.userData.mergeWithin;
     if (object.userData.noMerge && !whole) return;
-    if ((object as THREE.Mesh).isMesh) object.matrixAutoUpdate = false;
+    if ((object as Mesh).isMesh) object.matrixAutoUpdate = false;
     for (const child of object.children) freeze(child, whole);
   };
   freeze(group, false);
@@ -152,46 +156,46 @@ const LANTERN_OUT = 0.75;
 
 /** what a room's materials are */
 export interface Mats {
-  floor: THREE.MeshStandardMaterial; plaster: THREE.MeshStandardMaterial; timber: THREE.MeshStandardMaterial;
-  panel: THREE.MeshStandardMaterial; oak: THREE.MeshStandardMaterial; stone: THREE.MeshStandardMaterial;
-  hearthStone: THREE.MeshStandardMaterial; iron: THREE.MeshStandardMaterial; brass: THREE.MeshStandardMaterial;
-  wax: THREE.MeshStandardMaterial; flame: THREE.MeshStandardMaterial; tongue: THREE.MeshBasicMaterial;
-  glow: THREE.MeshBasicMaterial;
-  glass: THREE.MeshStandardMaterial; paper: THREE.MeshStandardMaterial; leather: THREE.MeshStandardMaterial;
-  rug: THREE.MeshStandardMaterial; dark: THREE.MeshStandardMaterial;
+  floor: LitMaterial; plaster: LitMaterial; timber: LitMaterial;
+  panel: LitMaterial; oak: LitMaterial; stone: LitMaterial;
+  hearthStone: LitMaterial; iron: LitMaterial; brass: LitMaterial;
+  wax: LitMaterial; flame: LitMaterial; tongue: UnlitMaterial;
+  glow: UnlitMaterial;
+  glass: LitMaterial; paper: LitMaterial; leather: LitMaterial;
+  rug: LitMaterial; dark: LitMaterial;
 }
 
 function makeMats(): Mats {
   return {
-    floor: new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(boards(), 1, 0.8), color: 0x9a7452 }),
-    plaster: new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(grunge(), 1, 0.5), color: 0xe0c8a4 }),
-    timber: new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(wood(), 1, 1), color: 0x4a3222 }),
-    panel: new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(wood(), 1, 1), color: 0x6e4a2e }),
-    oak: new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(wood(), 1, 1), color: 0x8a6440 }),
-    stone: new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(ashlar(21, 6, 3), 1, 1.1), color: 0xb0a090 }),
-    hearthStone: new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(flagstone(47, 5), 1, 1), color: 0x807468 }),
-    iron: new THREE.MeshStandardMaterial({ color: 0x222024, metalness: 0.85, roughness: 0.6 }),
-    brass: new THREE.MeshStandardMaterial({ color: 0xc89a4a, metalness: 0.9, roughness: 0.38 }),
-    wax: new THREE.MeshStandardMaterial({ color: 0xf2e6c8, roughness: 0.7 }),
+    floor: new LitMaterial({ ...pbrMaterialMaps(boards(), 1, 0.8), color: 0x9a7452 }),
+    plaster: new LitMaterial({ ...pbrMaterialMaps(grunge(), 1, 0.5), color: 0xe0c8a4 }),
+    timber: new LitMaterial({ ...pbrMaterialMaps(wood(), 1, 1), color: 0x4a3222 }),
+    panel: new LitMaterial({ ...pbrMaterialMaps(wood(), 1, 1), color: 0x6e4a2e }),
+    oak: new LitMaterial({ ...pbrMaterialMaps(wood(), 1, 1), color: 0x8a6440 }),
+    stone: new LitMaterial({ ...pbrMaterialMaps(ashlar(21, 6, 3), 1, 1.1), color: 0xb0a090 }),
+    hearthStone: new LitMaterial({ ...pbrMaterialMaps(flagstone(47, 5), 1, 1), color: 0x807468 }),
+    iron: new LitMaterial({ color: 0x222024, metalness: 0.85, roughness: 0.6 }),
+    brass: new LitMaterial({ color: 0xc89a4a, metalness: 0.9, roughness: 0.38 }),
+    wax: new LitMaterial({ color: 0xf2e6c8, roughness: 0.7 }),
     // (a candle's flame as the chronicle's lectern's is, `candleFlame` in village.ts: a pale core, its programs the
     // torches', in a see-through orange tongue)
-    flame: new THREE.MeshStandardMaterial({ color: 0x2a2014, roughness: 0.3, emissive: 0xffe6a0, emissiveIntensity: 2.4 }),
-    tongue: new THREE.MeshBasicMaterial({ color: 0xff7a20, transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false }),
-    glow: new THREE.MeshBasicMaterial({ color: 0xff8a30, transparent: true, opacity: 0.2, blending: THREE.AdditiveBlending, depthWrite: false }),
+    flame: new LitMaterial({ color: 0x2a2014, roughness: 0.3, emissive: 0xffe6a0, emissiveIntensity: 2.4 }),
+    tongue: new UnlitMaterial({ color: 0xff7a20, transparent: true, opacity: 0.85, blending: AdditiveBlending, depthWrite: false }),
+    glow: new UnlitMaterial({ color: 0xff8a30, transparent: true, opacity: 0.2, blending: AdditiveBlending, depthWrite: false }),
     // (night outside: a deep blue pane, a little lit)
-    glass: new THREE.MeshStandardMaterial({ color: 0x0c1424, roughness: 0.2, metalness: 0.1, emissive: 0x1a2c50, emissiveIntensity: 0.35 }),
-    paper: new THREE.MeshStandardMaterial({ color: 0xe8d8b0, roughness: 0.9 }),
+    glass: new LitMaterial({ color: 0x0c1424, roughness: 0.2, metalness: 0.1, emissive: 0x1a2c50, emissiveIntensity: 0.35 }),
+    paper: new LitMaterial({ color: 0xe8d8b0, roughness: 0.9 }),
     // (named: a harness tells a book of the old kind, a leather box, by it)
-    leather: new THREE.MeshStandardMaterial({ color: 0x5a2a1a, roughness: 0.65, name: 'room leather' }),
-    rug: new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.95 }),
-    dark: new THREE.MeshStandardMaterial({ color: 0x120c08, roughness: 0.9 }),
+    leather: new LitMaterial({ color: 0x5a2a1a, roughness: 0.65, name: 'room leather' }),
+    rug: new LitMaterial({ color: 0xffffff, roughness: 0.95 }),
+    dark: new LitMaterial({ color: 0x120c08, roughness: 0.9 }),
   };
 }
 
 /** A box `w` x `h` x `d` standing on (x, y, z) (its foot's middle), casting and taking shadows, added to `g`. */
-export function box(g: THREE.Object3D, w: number, h: number, d: number, x: number, y: number, z: number, m: THREE.Material,
-  grained = true): THREE.Mesh {
-  const mesh = new THREE.Mesh(boxWithUV(w, h, d, 0.5, grained), m);
+export function box(g: Node, w: number, h: number, d: number, x: number, y: number, z: number, m: Material,
+  grained = true): Mesh {
+  const mesh = new Mesh(boxWithUV(w, h, d, 0.5, grained), m);
   mesh.position.set(x, y + h / 2, z);
   mesh.castShadow = mesh.receiveShadow = true;
   g.add(mesh);
@@ -199,9 +203,9 @@ export function box(g: THREE.Object3D, w: number, h: number, d: number, x: numbe
 }
 
 /** A cylinder standing on (x, y, z), added to `g`. */
-export function drum(g: THREE.Object3D, rTop: number, rFoot: number, h: number, x: number, y: number, z: number, m: THREE.Material,
-  sides = 14): THREE.Mesh {
-  const mesh = new THREE.Mesh(new THREE.CylinderGeometry(rTop, rFoot, h, sides), m);
+export function drum(g: Node, rTop: number, rFoot: number, h: number, x: number, y: number, z: number, m: Material,
+  sides = 14): Mesh {
+  const mesh = new Mesh(shapes.cylinder(rTop, rFoot, h, sides), m);
   mesh.position.set(x, y + h / 2, z);
   mesh.castShadow = mesh.receiveShadow = true;
   g.add(mesh);
@@ -221,9 +225,9 @@ const ROOM_FLAME = 0.75;
  *  run down it, its wick, its flame (a tongue round a core) and the glow round it; and its light, if it has one (one of
  *  the room's ten). The room makes its flames waver as it's finished (`liveFlames` in candleFlames.ts), and its light
  *  breathe with them: the light the tongue it returns names (`userData.light`). */
-export function candle(g: THREE.Object3D, M: Mats, x: number, y: number, z: number, high = 0.16,
-  light?: typeof CANDLE): THREE.Mesh {
-  const stick = new THREE.Group();
+export function candle(g: Node, M: Mats, x: number, y: number, z: number, high = 0.16,
+  light?: typeof CANDLE): Mesh {
+  const stick = new Node();
   stick.position.set(x, y, z);
   g.add(stick);
   taperWax(stick, M.wax, high, false, 'room');
@@ -231,11 +235,11 @@ export function candle(g: THREE.Object3D, M: Mats, x: number, y: number, z: numb
   const foot = y + high + CANDLE_FLAME.over;
   // (a room's flames three quarters of the lectern's, which stands alone where the player looks at it close: at its
   // size on a mantel's taper the flame read as "a torch tip", from review)
-  const tongue = new THREE.Mesh(TONGUE, M.tongue);
+  const tongue = new Mesh(TONGUE, M.tongue);
   tongue.position.set(x, foot, z);
-  const core = new THREE.Mesh(CORE, M.flame);
+  const core = new Mesh(CORE, M.flame);
   core.position.set(x, foot + CANDLE_FLAME.coreOver * ROOM_FLAME, z);
-  const halo = new THREE.Mesh(HALO, M.glow);
+  const halo = new Mesh(HALO, M.glow);
   halo.position.set(x, y + high - 0.01, z);
   for (const part of [tongue, core]) part.scale.setScalar(ROOM_FLAME);
   // (its glow half the lectern's: wider, it sat on the taper as "a wide brown-orange cone skirt", from review)
@@ -245,7 +249,7 @@ export function candle(g: THREE.Object3D, M: Mats, x: number, y: number, z: numb
   halo.userData.candleFlame = 'halo';
   g.add(tongue, core, halo);
   if (!light) return tongue;
-  const l = new THREE.PointLight(light.color, light.intensity, light.reach, 2 + LAMP_SOFT * 0.25);
+  const l = new PointLight(light.color, light.intensity, light.reach, 2 + LAMP_SOFT * 0.25);
   l.position.set(x, y + high + 0.12, z);
   tongue.userData.light = l;
   g.add(l);
@@ -253,17 +257,17 @@ export function candle(g: THREE.Object3D, M: Mats, x: number, y: number, z: numb
 }
 
 /** A wall lantern on the wall at (x, y, z), its arm out along (dx, dz): an iron frame round a glowing pane, its light. */
-export function lantern(g: THREE.Object3D, M: Mats, x: number, y: number, z: number, dx: number, dz: number, lit = LANTERN): void {
+export function lantern(g: Node, M: Mats, x: number, y: number, z: number, dx: number, dz: number, lit = LANTERN): void {
   box(g, Math.abs(dz) > 0 ? 0.08 : 0.04, 0.3, Math.abs(dx) > 0 ? 0.08 : 0.04, x, y - 0.15, z, M.iron).castShadow = false;
   box(g, Math.abs(dx) * 0.32 + 0.04, 0.04, Math.abs(dz) * 0.32 + 0.04, x + dx * 0.16, y + 0.05, z + dz * 0.16, M.iron).castShadow = false;
-  const at = new THREE.Vector3(x + dx * 0.32, y - 0.2, z + dz * 0.32);
+  const at = new Vec3(x + dx * 0.32, y - 0.2, z + dz * 0.32);
   box(g, 0.2, 0.03, 0.2, at.x, at.y - 0.02, at.z, M.iron).castShadow = false;
   box(g, 0.22, 0.05, 0.22, at.x, at.y + 0.28, at.z, M.iron).castShadow = false;
   for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
     box(g, 0.02, 0.28, 0.02, at.x + sx * 0.09, at.y, at.z + sz * 0.09, M.iron).castShadow = false;
   }
   const flame = candle(g, M, at.x, at.y + 0.01, at.z, 0.1);
-  const l = new THREE.PointLight(lit.color, lit.intensity, lit.reach, 2 + LAMP_SOFT * 0.5);
+  const l = new PointLight(lit.color, lit.intensity, lit.reach, 2 + LAMP_SOFT * 0.5);
   // (swayed by its candle's flame)
   flame.userData.light = l;
   // (well out from its wall: 0.47 m off it, its light fell on the plaster at some 30 times the room's and blew out
@@ -285,22 +289,22 @@ export const CHANDELIER_DROP = 0.2;
 
 /** A chandelier hung at (x, high, z): an iron wheel on chains, candles round it, its light (casting). Its four chains
  *  meet at `hook` over its middle (the ceiling's, `high`, unless it hangs from a beam's underside). */
-export function chandelier(room: THREE.Object3D, M: Mats, x: number, high: number, z: number, hook = high): THREE.PointLight {
+export function chandelier(room: Node, M: Mats, x: number, high: number, z: number, hook = high): PointLight {
   const y = high - 0.65;
   // (its parts in a group of their own, named, for `lab houses` to hold them clear of the ceiling's beams)
-  const g = new THREE.Group();
+  const g = new Node();
   g.name = 'chandelier';
   room.add(g);
   keepApart(g, true);
-  const ring = new THREE.Mesh(new THREE.TorusGeometry(0.55, 0.03, 6, 28).rotateX(Math.PI / 2), M.iron);
+  const ring = new Mesh(shapes.torus(0.55, 0.03, 6, 28).rotateX(Math.PI / 2), M.iron);
   ring.position.set(x, y, z);
   g.add(ring);
-  const top = new THREE.Vector3(x, hook, z);
+  const top = new Vec3(x, hook, z);
   for (let k = 0; k < 4; k++) {
     const a = (k / 4) * Math.PI * 2 + Math.PI / 4;
-    const foot = new THREE.Vector3(x + Math.cos(a) * 0.55, y, z + Math.sin(a) * 0.55);
+    const foot = new Vec3(x + Math.cos(a) * 0.55, y, z + Math.sin(a) * 0.55);
     // (each chain from its point on the wheel to the hook, as long as that is)
-    const chain = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, foot.distanceTo(top), 4), M.iron);
+    const chain = new Mesh(shapes.cylinder(0.008, 0.008, foot.distanceTo(top), 4), M.iron);
     chain.position.copy(foot).add(top).multiplyScalar(0.5);
     chain.lookAt(top);
     chain.rotateX(Math.PI / 2);
@@ -310,7 +314,7 @@ export function chandelier(room: THREE.Object3D, M: Mats, x: number, high: numbe
     const a = (k / 8) * Math.PI * 2;
     candle(g, M, x + Math.cos(a) * 0.55, y + 0.02, z + Math.sin(a) * 0.55, 0.13);
   }
-  const l = new THREE.PointLight(CHANDELIER.color, CHANDELIER.intensity, CHANDELIER.reach, 2 + LAMP_SOFT * 0.5);
+  const l = new PointLight(CHANDELIER.color, CHANDELIER.intensity, CHANDELIER.reach, 2 + LAMP_SOFT * 0.5);
   l.position.set(x, y + 0.25, z);
   staticShadow(l);
   // (the light on the room itself, as it was: only the meshes are the group's)
@@ -321,24 +325,24 @@ export function chandelier(room: THREE.Object3D, M: Mats, x: number, high: numbe
 /** The room's shell: the floor, the walls (plaster over a panelled wainscot between timber posts, a door in the front,
  *  windows either side of it), the ceiling's planks on beams. Each wall and the ceiling in a group of its own (the
  *  cut away's), each added to the room's wall. */
-function shell(g: THREE.Group, M: Mats, id: RoomId, wall: Wall): { sides: { group: THREE.Group; outside: (e: THREE.Vector3) => boolean }[]; door: Door } {
+function shell(g: Node, M: Mats, id: RoomId, wall: Wall): { sides: { group: Node; outside: (e: Vec3) => boolean }[]; door: Door } {
   const [hx, hz] = HOUSES[id].half, high = HOUSES[id].high;
-  const floor = new THREE.Mesh(new THREE.PlaneGeometry(hx * 2 + 0.2, hz * 2 + 0.2).rotateX(-Math.PI / 2), M.floor);
+  const floor = new Mesh(shapes.plane(hx * 2 + 0.2, hz * 2 + 0.2).rotateX(-Math.PI / 2), M.floor);
   const uv = floor.geometry.attributes.uv;
   for (let k = 0; k < uv.count; k++) uv.setXY(k, uv.getX(k) * (hx * 2) * 0.5, uv.getY(k) * (hz * 2) * 0.5);
   floor.receiveShadow = true;
   g.add(floor);
-  const sides: { group: THREE.Group; outside: (e: THREE.Vector3) => boolean }[] = [];
+  const sides: { group: Node; outside: (e: Vec3) => boolean }[] = [];
   // each wall in its own frame: x along it, its inner face at z = 0, facing +z (into the room)
   let door: Door | null = null;
-  const walls: { length: number; at: THREE.Vector3; turn: number; door: boolean; windows: number[]; outside: (e: THREE.Vector3) => boolean }[] = [
-    { length: hx * 2, at: new THREE.Vector3(0, 0, -hz), turn: 0, door: false, windows: [], outside: (e) => e.z < -hz - OUTSIDE },
-    { length: hx * 2, at: new THREE.Vector3(0, 0, hz), turn: Math.PI, door: true, windows: [-hx * 0.55, hx * 0.55], outside: (e) => e.z > hz + OUTSIDE },
-    { length: hz * 2, at: new THREE.Vector3(-hx, 0, 0), turn: Math.PI / 2, door: false, windows: [], outside: (e) => e.x < -hx - OUTSIDE },
-    { length: hz * 2, at: new THREE.Vector3(hx, 0, 0), turn: -Math.PI / 2, door: false, windows: [], outside: (e) => e.x > hx + OUTSIDE },
+  const walls: { length: number; at: Vec3; turn: number; door: boolean; windows: number[]; outside: (e: Vec3) => boolean }[] = [
+    { length: hx * 2, at: new Vec3(0, 0, -hz), turn: 0, door: false, windows: [], outside: (e) => e.z < -hz - OUTSIDE },
+    { length: hx * 2, at: new Vec3(0, 0, hz), turn: Math.PI, door: true, windows: [-hx * 0.55, hx * 0.55], outside: (e) => e.z > hz + OUTSIDE },
+    { length: hz * 2, at: new Vec3(-hx, 0, 0), turn: Math.PI / 2, door: false, windows: [], outside: (e) => e.x < -hx - OUTSIDE },
+    { length: hz * 2, at: new Vec3(hx, 0, 0), turn: -Math.PI / 2, door: false, windows: [], outside: (e) => e.x > hx + OUTSIDE },
   ];
   for (const [i, w] of walls.entries()) {
-    const side = new THREE.Group();
+    const side = new Node();
     side.position.copy(w.at);
     side.rotation.y = w.turn;
     g.add(side);
@@ -362,7 +366,7 @@ function shell(g: THREE.Group, M: Mats, id: RoomId, wall: Wall): { sides: { grou
     // (stopped under the door's frame, which stands out past them all: ended in it a hand in, the skirting's face lay
     // in one plane with the frame's and flickered)
     const runs = w.door ? [[-w.length / 2, -DOOR.half - 0.1], [DOOR.half + 0.1, w.length / 2]] : [[-w.length / 2, w.length / 2]];
-    const run = (a: number, b: number, depth: number, h: number, y: number, z: number, m: THREE.Material): void => {
+    const run = (a: number, b: number, depth: number, h: number, y: number, z: number, m: Material): void => {
       const from = a + (a <= -w.length / 2 ? short(depth) : 0), to = b - (b >= w.length / 2 ? short(depth) : 0);
       box(side, to - from, h, depth, (from + to) / 2, y, z, m);
     };
@@ -403,7 +407,7 @@ function shell(g: THREE.Group, M: Mats, id: RoomId, wall: Wall): { sides: { grou
   }
   if (!door) throw new Error(`room ${id} has no door`);
   // the ceiling: planks over beams across the room, a ridge beam along it
-  const ceiling = new THREE.Group();
+  const ceiling = new Node();
   ceiling.name = 'ceiling';
   g.add(ceiling);
   box(ceiling, hx * 2 + 0.6, 0.08, hz * 2 + 0.6, 0, high, 0, M.panel);
@@ -416,9 +420,9 @@ function shell(g: THREE.Group, M: Mats, id: RoomId, wall: Wall): { sides: { grou
 
 /** A hearth in the middle of a wall (the wall's frame: `side`, 0 its middle, facing +z): a stone chimney breast, its
  *  opening, logs on firedogs, its fire, a mantel; the fire's light (casting). Its circle into `obstacles`. */
-export function hearth(g: THREE.Group, M: Mats, at: THREE.Vector3, turn: number, high: number, updaters: Updater[],
+export function hearth(g: Node, M: Mats, at: Vec3, turn: number, high: number, updaters: Updater[],
   obstacles: Obstacle[]): void {
-  const h = new THREE.Group();
+  const h = new Node();
   h.position.copy(at);
   h.rotation.y = turn;
   g.add(h);
@@ -432,7 +436,7 @@ export function hearth(g: THREE.Group, M: Mats, at: THREE.Vector3, turn: number,
   box(h, W + 0.3, 0.1, 0.32, 0, open.high + 0.35, D + 0.06, M.timber);
   for (const sx of [-1, 1]) box(h, 0.12, 0.3, 0.2, sx * (W / 2 + 0.05), open.high + 0.05, D + 0.02, M.timber);
   // firedogs and logs
-  const world = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z).applyAxisAngle(new THREE.Vector3(0, 1, 0), turn).add(at);
+  const world = (x: number, y: number, z: number) => new Vec3(x, y, z).applyAxisAngle(new Vec3(0, 1, 0), turn).add(at);
   for (const sx of [-1, 1]) box(h, 0.04, 0.22, 0.4, sx * 0.32, 0, 0.4, M.iron);
   const logs: FireLog[] = [];
   const char = emberMat(world(0, 0.15, 0.4), 0.5);
@@ -441,14 +445,14 @@ export function hearth(g: THREE.Group, M: Mats, at: THREE.Vector3, turn: number,
     const from = world(x0, y0, z0), to = world(x1, y1, z1);
     logs.push({ from, to, radius: r * 0.9 });
     const len = from.distanceTo(to);
-    const log = new THREE.Mesh(new THREE.CylinderGeometry(r, r, len, 8), char);
-    log.position.copy(from).add(to).multiplyScalar(0.5).sub(at).applyAxisAngle(new THREE.Vector3(0, 1, 0), -turn);
-    log.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), to.clone().sub(from).normalize()
-      .applyAxisAngle(new THREE.Vector3(0, 1, 0), -turn));
+    const log = new Mesh(shapes.cylinder(r, r, len, 8), char);
+    log.position.copy(from).add(to).multiplyScalar(0.5).sub(at).applyAxisAngle(new Vec3(0, 1, 0), -turn);
+    log.quaternion.setFromUnitVectors(new Vec3(0, 1, 0), to.clone().sub(from).normalize()
+      .applyAxisAngle(new Vec3(0, 1, 0), -turn));
     log.castShadow = true;
     h.add(log);
   }
-  const light = new THREE.PointLight(HEARTH.color, HEARTH.intensity, HEARTH.reach, 2 + HEARTH.soft);
+  const light = new PointLight(HEARTH.color, HEARTH.intensity, HEARTH.reach, 2 + HEARTH.soft);
   light.position.copy(world(0, 0.75, 1.1));
   staticShadow(light);
   g.add(light);
@@ -461,7 +465,7 @@ export function hearth(g: THREE.Group, M: Mats, at: THREE.Vector3, turn: number,
 }
 
 /** A rug laid on the floor at (x, z), `w` by `d`, in a woven pattern of `colours`. */
-export function rug(g: THREE.Object3D, M: Mats, x: number, z: number, w: number, d: number, colours: readonly string[], seed: number): void {
+export function rug(g: Node, M: Mats, x: number, z: number, w: number, d: number, colours: readonly string[], seed: number): void {
   const c = canvasOf(256, 256 * (d / w) | 0), cx = ctx2d(c), rng = mulberry(seed);
   const W = c.width, H = c.height;
   cx.fillStyle = colours[0]; cx.fillRect(0, 0, W, H);
@@ -481,20 +485,20 @@ export function rug(g: THREE.Object3D, M: Mats, x: number, z: number, w: number,
   }
   const m = M.rug.clone();
   m.map = textureFromCanvas(c);
-  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(w, d).rotateX(-Math.PI / 2), m);
+  const mesh = new Mesh(shapes.plane(w, d).rotateX(-Math.PI / 2), m);
   mesh.position.set(x, 0.006, z);
   mesh.receiveShadow = true;
   g.add(mesh);
 }
 
 /** A surface written on: a canvas `w` by `h` px on a plane `pw` by `ph` m, its material and how to write it. */
-export interface Writing { mesh: THREE.Mesh; write(draw: (cx: CanvasRenderingContext2D, w: number, h: number) => void): void }
+export interface Writing { mesh: Mesh; write(draw: (cx: CanvasRenderingContext2D, w: number, h: number) => void): void }
 export function writing(M: Mats, w: number, h: number, pw: number, ph: number): Writing {
   const c = canvasOf(w, h), texture = textureFromCanvas(c);
   texture.anisotropy = 4;
   const m = M.paper.clone();
   m.map = texture;
-  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(pw, ph), m);
+  const mesh = new Mesh(shapes.plane(pw, ph), m);
   mesh.receiveShadow = true;
   return {
     mesh,
@@ -522,15 +526,15 @@ export function parchment(cx: CanvasRenderingContext2D, w: number, h: number, se
 }
 
 /** A frame of dark timber round a board hung on a wall (in the wall's frame, facing +z): its board's middle at (x, y). */
-export function framed(g: THREE.Object3D, M: Mats, writing: Writing, x: number, y: number, pw: number, ph: number): void {
+export function framed(g: Node, M: Mats, writing: Writing, x: number, y: number, pw: number, ph: number): void {
   box(g, pw + 0.16, ph + 0.16, 0.05, x, y - ph / 2 - 0.08, 0.025, M.timber);
   writing.mesh.position.set(x, y, 0.052);
   g.add(writing.mesh);
 }
 
 /** A wall's frame in the room: x along it from its middle, its inner face at z = 0, facing into the room. */
-export function onWall(g: THREE.Group, id: RoomId, side: WallSide, along = 0): THREE.Group {
-  const [hx, hz] = HOUSES[id].half, frame = new THREE.Group();
+export function onWall(g: Node, id: RoomId, side: WallSide, along = 0): Node {
+  const [hx, hz] = HOUSES[id].half, frame = new Node();
   // (what's put on it goes with its wall as the camera cuts that away, `finish`'s `cutAway`)
   againstWall(frame, side);
   if (side === 'back') { frame.position.set(along, 0, -hz); }
@@ -546,13 +550,13 @@ export type WallSide = 'back' | 'front' | 'west' | 'east';
 
 /** `object` stands against wall `side`: shown and hidden with it as the camera cuts it away (#748: from above, a
  *  wall cut away left its bookcases standing, tall dark slabs over the room). Added to the room's group, in its space. */
-export function againstWall(object: THREE.Object3D, side: WallSide): void {
+export function againstWall(object: Node, side: WallSide): void {
   object.userData.againstWall = side;
 }
 
 /** A bookcase against a wall (its frame, facing +z) at x, `w` wide: its carcass, shelves, and books of every colour
  *  and height on them, one instanced mesh, some leaning. */
-export function bookcase(g: THREE.Object3D, M: Mats, x: number, w: number, high: number, rng: () => number): void {
+export function bookcase(g: Node, M: Mats, x: number, w: number, high: number, rng: () => number): void {
   const D = 0.38, shelves = 5;
   for (const sx of [-1, 1]) box(g, 0.06, high, D, x + sx * (w / 2 - 0.03), 0, D / 2, M.panel);
   box(g, w, 0.06, D, x, high - 0.06, D / 2, M.panel);
@@ -564,7 +568,7 @@ export function bookcase(g: THREE.Object3D, M: Mats, x: number, w: number, high:
     box(g, w - 0.1, 0.035, D - 0.02, x, y, D / 2, M.panel);
     rows.push(y + 0.035);
   }
-  const books: THREE.Matrix4[] = [], colours: THREE.Color[] = [];
+  const books: Mat4[] = [], colours: Color[] = [];
   const palette = [0x6a1a14, 0x1e3a24, 0x23304e, 0x5a3a14, 0x3a1830, 0x7a5a20, 0x2a2a2a, 0x4a1a0a, 0x284a4a];
   const shelfH = (high - 0.2) / shelves;
   for (const y of rows) {
@@ -573,20 +577,20 @@ export function bookcase(g: THREE.Object3D, M: Mats, x: number, w: number, high:
       const thick = 0.03 + rng() * 0.04, tall = Math.min(shelfH - 0.06, 0.18 + rng() * 0.14), deep = 0.18 + rng() * 0.08;
       if (rng() < 0.06) { at += 0.06; continue; }
       const lean = rng() < 0.08 ? 0.25 : 0;
-      books.push(new THREE.Matrix4().compose(new THREE.Vector3(at + thick / 2 + lean * 0.05, y + tall / 2, deep / 2 + 0.04),
-        new THREE.Quaternion().setFromEuler(new THREE.Euler(0, 0, -lean)), new THREE.Vector3(thick, tall, deep)));
-      colours.push(new THREE.Color(palette[(rng() * palette.length) | 0]).multiplyScalar(0.7 + rng() * 0.5));
+      books.push(new Mat4().compose(new Vec3(at + thick / 2 + lean * 0.05, y + tall / 2, deep / 2 + 0.04),
+        new Quat().setFromEuler(new Euler(0, 0, -lean)), new Vec3(thick, tall, deep)));
+      colours.push(new Color(palette[(rng() * palette.length) | 0]).multiplyScalar(0.7 + rng() * 0.5));
       at += thick + 0.004;
     }
   }
-  const mesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), M.leather, books.length);
+  const mesh = new InstancedMesh(shapes.box(1, 1, 1), M.leather, books.length);
   books.forEach((m, i) => { mesh.setMatrixAt(i, m); mesh.setColorAt(i, colours[i]); });
   mesh.castShadow = mesh.receiveShadow = true;
   g.add(mesh);
 }
 
 /** A table on its legs at (x, z), `w` by `d` and `high`, its top oak. Its circles into `obstacles`. */
-export function table(g: THREE.Object3D, M: Mats, x: number, z: number, w: number, d: number, obstacles: Obstacle[], high = 0.76,
+export function table(g: Node, M: Mats, x: number, z: number, w: number, d: number, obstacles: Obstacle[], high = 0.76,
   round = false): void {
   if (round) {
     drum(g, w / 2, w / 2, 0.06, x, high - 0.06, z, M.oak, 24);
@@ -606,11 +610,11 @@ export function table(g: THREE.Object3D, M: Mats, x: number, z: number, w: numbe
 }
 
 /** A piece of furniture as built: all of it (outlined as a seat), and its top (what a body sits on). */
-export interface Furniture { group: THREE.Group; top: THREE.Mesh }
+export interface Furniture { group: Node; top: Mesh }
 
 /** A bench at (x, z), `w` long along x (turned `turn`). */
-export function bench(g: THREE.Object3D, M: Mats, x: number, z: number, w: number, turn = 0): Furniture {
-  const b = new THREE.Group();
+export function bench(g: Node, M: Mats, x: number, z: number, w: number, turn = 0): Furniture {
+  const b = new Node();
   b.position.set(x, 0, z);
   b.rotation.y = turn;
   g.add(b);
@@ -644,26 +648,26 @@ export function stoolSeatOf(f: Furniture, x: number, z: number): Seat {
 export { barrel } from './barrel';
 
 /** A tankard at (x, y, z). */
-export function tankard(g: THREE.Object3D, M: Mats, x: number, y: number, z: number, metal = false): void {
+export function tankard(g: Node, M: Mats, x: number, y: number, z: number, metal = false): void {
   drum(g, 0.045, 0.05, 0.13, x, y, z, metal ? M.brass : M.oak, 10).castShadow = false;
-  const handle = new THREE.Mesh(new THREE.TorusGeometry(0.035, 0.009, 4, 10, Math.PI), metal ? M.brass : M.iron);
+  const handle = new Mesh(shapes.torus(0.035, 0.009, 4, 10, Math.PI), metal ? M.brass : M.iron);
   handle.position.set(x + 0.05, y + 0.07, z);
   handle.rotation.z = -Math.PI / 2;
   g.add(handle);
 }
 
 /** A banner hung from an iron rod at (x, top) on a wall (its frame), in `base` velvet. */
-export function banner(g: THREE.Object3D, M: Mats, x: number, top: number, base: readonly number[], rng: () => number, scale = 0.8): void {
+export function banner(g: Node, M: Mats, x: number, top: number, base: readonly number[], rng: () => number, scale = 0.8): void {
   const cloth = bannerCloth(256, 512, base);
-  const velvet = new THREE.MeshPhysicalMaterial({
-    map: cloth, roughness: 0.9, sheen: 1, sheenColorMap: cloth, sheenColor: new THREE.Color(1.6, 1.6, 1.6),
-    sheenRoughness: 0.4, side: THREE.DoubleSide,
+  const velvet = new LitMaterial({
+    map: cloth, roughness: 0.9, sheen: 1, sheenColorMap: cloth, sheenColor: new Color(1.6, 1.6, 1.6),
+    sheenRoughness: 0.4, side: DoubleSide,
   });
-  const hung = new THREE.Mesh(bannerGeo(rng).rotateY(Math.PI).scale(scale, scale, scale), velvet);
+  const hung = new Mesh(bannerGeo(rng).rotateY(Math.PI).scale(scale, scale, scale), velvet);
   hung.position.set(x, top, 0.12);
   hung.castShadow = hung.receiveShadow = true;
   g.add(hung);
-  const rod = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.9 * scale + 0.2, 8).rotateZ(Math.PI / 2), M.iron);
+  const rod = new Mesh(shapes.cylinder(0.02, 0.02, 0.9 * scale + 0.2, 8).rotateZ(Math.PI / 2), M.iron);
   rod.position.set(x, top + 0.03, 0.12);
   g.add(rod);
 }
@@ -725,8 +729,8 @@ export function inkedPage(cx: CanvasRenderingContext2D, w: number, h: number, in
 const PAGE_CELL = { w: 192, h: 256, across: 4 };
 /** every page an open book may show, drawn once into one canvas: each of `PAGE_MARKS`, its first page (the mark's) and
  *  its facing one, each laid out by its own seed. Made the first time a book asks for a page. */
-let pageAtlas: THREE.CanvasTexture | null = null;
-function pagesAtlas(): THREE.CanvasTexture {
+let pageAtlas: CanvasTexture | null = null;
+function pagesAtlas(): CanvasTexture {
   if (pageAtlas) return pageAtlas;
   const { w, h, across } = PAGE_CELL, rows = Math.ceil((PAGE_MARKS.length * 2) / across);
   const c = canvasOf(w * across, h * rows), cx = ctx2d(c);
@@ -746,14 +750,14 @@ function pagesAtlas(): THREE.CanvasTexture {
 }
 /** `page` (a clone of the page atlas) set to show book `variant`'s first page (`initial`) or its facing one: the atlas's
  *  cell picked by the texture's offset and repeat, a uniform, its image one for every book */
-export function showPage(page: THREE.Texture, initial: boolean, variant: number): void {
+export function showPage(page: Texture, initial: boolean, variant: number): void {
   const { across } = PAGE_CELL, rows = Math.ceil((PAGE_MARKS.length * 2) / across);
   const cell = (((variant % PAGE_MARKS.length) + PAGE_MARKS.length) % PAGE_MARKS.length) * 2 + (initial ? 0 : 1);
   page.repeat.set(1 / across, 1 / rows);
   page.offset.set((cell % across) / across, 1 - (Math.floor(cell / across) + 1) / rows);
 }
 /** An open book's page's texture: the page atlas (`pagesAtlas`), its image shared, showing book `variant`'s page. */
-export function pageTexture(initial: boolean, variant: number): THREE.Texture {
+export function pageTexture(initial: boolean, variant: number): Texture {
   const page = pagesAtlas().clone();
   showPage(page, initial, variant);
   return page;
@@ -762,7 +766,7 @@ export function pageTexture(initial: boolean, variant: number): THREE.Texture {
 export const pageVariant = (n: number): number => (Math.imul(n + 1, 0x9e3779b1) >>> 0) % PAGE_MARKS.length;
 
 /** A painted sign hung on a wall (its frame) at (x, y): the house's name in gold on dark boards. */
-export function sign(g: THREE.Object3D, M: Mats, x: number, y: number, words: string, sub: string): void {
+export function sign(g: Node, M: Mats, x: number, y: number, words: string, sub: string): void {
   const board = writing(M, 768, 192, 2.2, 0.55);
   board.write((cx, w, h) => {
     const wood = cx.createLinearGradient(0, 0, 0, h);
@@ -787,10 +791,10 @@ export function sign(g: THREE.Object3D, M: Mats, x: number, y: number, words: st
 const SIDE_NAMES = ['back', 'front', 'west', 'east', 'ceiling'] as const;
 
 /** What both rooms share as they're built. */
-export interface Build { g: THREE.Group; M: Mats; wall: Wall; obstacles: Obstacle[]; updaters: Updater[]; rng: () => number;
-  sides: { group: THREE.Group; outside: (e: THREE.Vector3) => boolean }[]; door: Door; seats: Seat[] }
+export interface Build { g: Node; M: Mats; wall: Wall; obstacles: Obstacle[]; updaters: Updater[]; rng: () => number;
+  sides: { group: Node; outside: (e: Vec3) => boolean }[]; door: Door; seats: Seat[] }
 
-export function begin(id: RoomId, group: THREE.Group, seed: number): Build {
+export function begin(id: RoomId, group: Node, seed: number): Build {
   const M = makeMats(), wall = new Wall('village');
   const { sides, door } = shell(group, M, id, wall);
   return { g: group, M, wall, obstacles: [], updaters: [], rng: mulberry(seed), sides, door, seats: [] };
@@ -807,7 +811,7 @@ export function finish(id: RoomId, b: Build, extra: Partial<Room> = {}): Room {
   const against = SIDE_NAMES.map((name) => {
     const objects = b.g.children.filter((child) => child.userData.againstWall === name);
     if (!objects.length) return [];
-    const holder = new THREE.Group();
+    const holder = new Node();
     holder.name = `against the ${name} wall`;
     b.g.add(holder);
     for (const object of objects) holder.attach(object);
@@ -818,8 +822,8 @@ export function finish(id: RoomId, b: Build, extra: Partial<Room> = {}): Room {
   // frame's meshes alone hidden with the wall; a light hidden with them would leave the room darker from above)
   for (const objects of against) {
     for (const object of objects) {
-      const lights: THREE.Light[] = [];
-      object.traverse((part) => { if ((part as THREE.Light).isLight) lights.push(part as THREE.Light); });
+      const lights: Light[] = [];
+      object.traverse((part) => { if ((part as Light).isLight) lights.push(part as Light); });
       for (const light of lights) b.g.attach(light);
     }
   }

@@ -6,7 +6,7 @@
 // and aren't problems. A mesh drawn by its back faces (a sky dome) is seen from inside on purpose and isn't judged.
 // A mirrored mesh needs nothing of its own: three turns its front-face test round, so its geometry's winding decides.
 // `--canary` plants a box wound inside out, one sided, in the first biome: it must be found.
-import * as THREE from 'three';
+import { BackSide, DoubleSide, Geometry, LitMaterial, Material, Mesh, Node, shapes, Vec3 } from './sceneApi.ts';
 import type { Lab, Report } from './lab';
 import { BIOME_IDS, type BiomeId } from '../../../src/data/biomes';
 import { G } from '../../../src/state';
@@ -45,16 +45,16 @@ interface Read {
 
 /** A mesh's name: its own, else its material's kind and colour and the name up its parents (a creature's merged
  *  meshes have none of their own). */
-function nameOf(mesh: THREE.Mesh, material: THREE.Material): string {
+function nameOf(mesh: Mesh, material: Material): string {
   if (mesh.name) return mesh.name;
-  const colour = (material as THREE.MeshStandardMaterial).color;
+  const colour = (material as LitMaterial).color;
   const look = `${material.type}${colour ? ` #${colour.getHexString()}` : ''}`;
   for (let at = mesh.parent; at; at = at.parent) if (at.name) return `${look} in ${at.name}`;
   return look;
 }
 
 /** The material that draws triangle `triangle` of `mesh`. */
-function materialAt(mesh: THREE.Mesh, triangle: number): THREE.Material {
+function materialAt(mesh: Mesh, triangle: number): Material {
   if (!Array.isArray(mesh.material)) return mesh.material;
   const at = triangle * 3;
   const group = mesh.geometry.groups.find((each) => at >= each.start && at < each.start + each.count);
@@ -62,27 +62,27 @@ function materialAt(mesh: THREE.Mesh, triangle: number): THREE.Material {
 }
 
 /** `subject`'s meshes read, each geometry once. */
-function readOf(subject: THREE.Object3D): Read {
+function readOf(subject: Node): Read {
   const read: Read = { judged: 0, open: 0, wrong: [] };
   subject.updateMatrixWorld(true);
   const toSubject = subject.matrixWorld.clone().invert();
-  const seen = new Set<THREE.BufferGeometry>();
+  const seen = new Set<Geometry>();
   subject.traverse((object) => {
-    const mesh = object as THREE.Mesh;
+    const mesh = object as Mesh;
     if (!mesh.isMesh || !mesh.geometry.attributes.position || seen.has(mesh.geometry)) return;
     seen.add(mesh.geometry);
     const index = mesh.geometry.index;
     for (const part of partsOf(mesh.geometry.attributes.position.array, index ? index.array : null)) {
       const facing = facingOf(part);
       const material = materialAt(mesh, part.first);
-      if (facing === 'open' || material.side === THREE.BackSide) {
+      if (facing === 'open' || material.side === BackSide) {
         read.open++;
         continue;
       }
       read.judged++;
       if (facing !== 'in') continue;
-      const shown = material.side !== THREE.DoubleSide;
-      const at = new THREE.Vector3().fromArray(part.middle).applyMatrix4(mesh.matrixWorld).applyMatrix4(toSubject);
+      const shown = material.side !== DoubleSide;
+      const at = new Vec3().fromArray(part.middle).applyMatrix4(mesh.matrixWorld).applyMatrix4(toSubject);
       const where = at.toArray().map((value) => value.toFixed(2)).join(', ');
       read.wrong.push({ mesh: nameOf(mesh, material), triangles: part.triangles, at: where, shown });
     }
@@ -115,15 +115,15 @@ function tally(names: string[]): string {
 }
 
 /** A box wound inside out, drawn one sided: the canary's. */
-function canaryBox(): THREE.Mesh {
-  const geometry = new THREE.BoxGeometry(1, 1, 1);
+function canaryBox(): Mesh {
+  const geometry = shapes.box(1, 1, 1);
   const index = geometry.index!;
   for (let i = 0; i < index.count; i += 3) {
     const second = index.getX(i + 1);
     index.setX(i + 1, index.getX(i + 2));
     index.setX(i + 2, second);
   }
-  const box = new THREE.Mesh(geometry, new THREE.MeshStandardMaterial());
+  const box = new Mesh(geometry, new LitMaterial());
   box.name = CANARY_NAME;
   return box;
 }

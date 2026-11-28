@@ -5,7 +5,7 @@
 // its own meshes, not the trail's points) in his own frame, and the quads between its places are drawn on the screen as
 // the camera that draws his arms sees them now, with a margin round them for the glow. The trail must be lit through
 // every blow, its newest end on the blade, and nothing lit while the weapons are still.
-import * as THREE from 'three';
+import { Camera, Line3, Mesh, Node, PerspectiveCamera, Vec3 } from './sceneApi.ts';
 import type { Fixture, Lab, Pictured, Report, Tile } from './lab';
 import type { WeaponStyle } from '../../../src/loot/loadout';
 import type { ViewMode } from '../../../src/core/renderer';
@@ -84,22 +84,22 @@ const TRAIL_NAME = 'swing trail';
 
 /** A weapon in the hero's hands: the grip it's held by and how far along it (its +Y) the weapon's meshes reach. */
 interface Held {
-  grip: THREE.Object3D;
-  weapon: THREE.Object3D;
+  grip: Node;
+  weapon: Node;
   far: number;
 }
 
-const farEnds = new WeakMap<THREE.Object3D, number>();
+const farEnds = new WeakMap<Node, number>();
 
 /** How far along `grip` (its +Y) `weapon`'s meshes reach. */
-function farEndOf(grip: THREE.Object3D, weapon: THREE.Object3D): number {
+function farEndOf(grip: Node, weapon: Node): number {
   const known = farEnds.get(weapon);
   if (known !== undefined) return known;
   weapon.updateWorldMatrix(true, true);
   const toGrip = grip.matrixWorld.clone().invert();
   let far = 0;
   weapon.traverse((object) => {
-    const mesh = object as THREE.Mesh;
+    const mesh = object as Mesh;
     if (!mesh.isMesh) return;
     if (!mesh.geometry.boundingBox) mesh.geometry.computeBoundingBox();
     const inGrip = toGrip.clone().multiply(mesh.matrixWorld);
@@ -123,31 +123,31 @@ function weaponsHeld(lab: Lab): Held[] {
 
 /** A weapon's place in a frame, in the hero's own frame (his model's root's space): its grip and its far end. */
 interface Place {
-  near: THREE.Vector3;
-  far: THREE.Vector3;
+  near: Vec3;
+  far: Vec3;
 }
 
 /** A frame's places of the weapons, by weapon, and when it was (s from the press). */
 interface Placed {
   at: number;
-  places: Map<THREE.Object3D, Place>;
+  places: Map<Node, Place>;
 }
 
 /** Where each weapon in the hero's hands is now, in his own frame. */
-function placesNow(lab: Lab): Map<THREE.Object3D, Place> {
+function placesNow(lab: Lab): Map<Node, Place> {
   const root = lab.model.root;
-  const places = new Map<THREE.Object3D, Place>();
+  const places = new Map<Node, Place>();
   for (const { grip, weapon, far } of weaponsHeld(lab)) {
-    const near = root.worldToLocal(grip.getWorldPosition(new THREE.Vector3()));
-    const end = root.worldToLocal(grip.localToWorld(new THREE.Vector3(0, far, 0)));
+    const near = root.worldToLocal(grip.getWorldPosition(new Vec3()));
+    const end = root.worldToLocal(grip.localToWorld(new Vec3(0, far, 0)));
     places.set(weapon, { near, far: end });
   }
   return places;
 }
 
 /** How fast each weapon's far end moved from `last` to `now` (m/s, in the hero's frame), by weapon. */
-function speedsOf(now: Placed, last: Placed | undefined, scale: number): Map<THREE.Object3D, number> {
-  const speeds = new Map<THREE.Object3D, number>();
+function speedsOf(now: Placed, last: Placed | undefined, scale: number): Map<Node, number> {
+  const speeds = new Map<Node, number>();
   if (!last) return speeds;
   const dt = now.at - last.at;
   for (const [weapon, place] of now.places) {
@@ -164,19 +164,19 @@ interface Screen {
 }
 
 /** A point of the hero's frame in the camera's space, as `lens` is now. */
-function inCamera(point: THREE.Vector3, root: THREE.Object3D, lens: THREE.Camera): Point {
+function inCamera(point: Vec3, root: Node, lens: Camera): Point {
   const seen = point.clone().applyMatrix4(root.matrixWorld).applyMatrix4(lens.matrixWorldInverse);
   return { x: seen.x, y: seen.y, z: seen.z };
 }
 
 /** A point of the camera's space on the screen (the drawing buffer's pixels, down from its top). */
-function onScreen(point: Point, lens: THREE.PerspectiveCamera, screen: Screen): [number, number] {
-  const ndc = new THREE.Vector3(point.x, point.y, point.z).applyMatrix4(lens.projectionMatrix);
+function onScreen(point: Point, lens: PerspectiveCamera, screen: Screen): [number, number] {
+  const ndc = new Vec3(point.x, point.y, point.z).applyMatrix4(lens.projectionMatrix);
   return [(ndc.x + 1) / 2 * screen.width, (1 - ndc.y) / 2 * screen.height];
 }
 
 /** `polygon` of the hero's frame on the screen, cut to what is ahead of `lens`: none if it's all behind. */
-function drawnShape(polygon: THREE.Vector3[], root: THREE.Object3D, lens: THREE.PerspectiveCamera, screen: Screen):
+function drawnShape(polygon: Vec3[], root: Node, lens: PerspectiveCamera, screen: Screen):
   [number, number][] {
   const ahead = clipNear(polygon.map((point) => inCamera(point, root, lens)), lens.near);
   return ahead.map((point) => onScreen(point, lens, screen));
@@ -184,7 +184,7 @@ function drawnShape(polygon: THREE.Vector3[], root: THREE.Object3D, lens: THREE.
 
 /** A weapon's places in the four frames round a gap (the frames before and after it standing in for those it lacks),
  *  if it was held in the two frames either side of it. */
-function placesRound(placed: Placed[], i: number, weapon: THREE.Object3D): Place[] | null {
+function placesRound(placed: Placed[], i: number, weapon: Node): Place[] | null {
   const before = placed[i - 1]?.places.get(weapon);
   const after = placed[i]?.places.get(weapon);
   if (!before || !after) return null;
@@ -195,7 +195,7 @@ function placesRound(placed: Placed[], i: number, weapon: THREE.Object3D): Place
 function placeAcross(round: Place[], u: number): Place {
   const near = curveAt(round[0].near, round[1].near, round[2].near, round[3].near, u);
   const far = curveAt(round[0].far, round[1].far, round[2].far, round[3].far, u);
-  return { near: new THREE.Vector3(near.x, near.y, near.z), far: new THREE.Vector3(far.x, far.y, far.z) };
+  return { near: new Vec3(near.x, near.y, near.z), far: new Vec3(far.x, far.y, far.z) };
 }
 
 /**
@@ -203,7 +203,7 @@ function placeAcross(round: Place[], u: number): Place {
  * place in each frame, and the triangles between its places across each gap from the frame before, along the curve
  * through its places round it, as a weapon swung round goes (`STEPS` a gap).
  */
-function sweptShapes(placed: Placed[], from: number, root: THREE.Object3D, lens: THREE.PerspectiveCamera,
+function sweptShapes(placed: Placed[], from: number, root: Node, lens: PerspectiveCamera,
   screen: Screen): [number, number][][] {
   const shapes: [number, number][][] = [];
   for (let i = from; i < placed.length; i++) {
@@ -271,7 +271,7 @@ class SweptMask {
 // --- the trail's pixels
 
 /** The trail's meshes in the scene (none in a game without one). */
-function trailMeshes(): THREE.Object3D[] {
+function trailMeshes(): Node[] {
   return G.scene.children.filter((object) => object.name === TRAIL_NAME);
 }
 
@@ -455,14 +455,14 @@ function seeFrame(lab: Lab, placed: Placed[], mask: SweptMask, screen: Screen): 
 }
 
 /** The newest column of each trail shown, as its geometry has it (the hero's frame): its two ends. */
-function newestColumns(root: THREE.Object3D): THREE.Vector3[][] {
-  const columns: THREE.Vector3[][] = [];
+function newestColumns(root: Node): Vec3[][] {
+  const columns: Vec3[][] = [];
   for (const object of trailMeshes()) {
-    const mesh = object as THREE.Mesh;
+    const mesh = object as Mesh;
     if (!mesh.visible) continue;
     const position = mesh.geometry.getAttribute('position');
     const last = mesh.geometry.drawRange.count / 6;
-    const end = (vertex: number) => root.worldToLocal(new THREE.Vector3().fromBufferAttribute(position, vertex)
+    const end = (vertex: number) => root.worldToLocal(new Vec3().fromBufferAttribute(position, vertex)
       .applyMatrix4(mesh.matrixWorld));
     columns.push([end(last * 2), end(last * 2 + 1)]);
   }
@@ -471,18 +471,18 @@ function newestColumns(root: THREE.Object3D): THREE.Vector3[][] {
 
 /** How far the trails' newest columns are from the weapons as they are now (m, in the hero's frame): the worst
  *  column's, its further end from the weapon nearest it; none while no trail is shown. */
-function newestOff(now: Placed, root: THREE.Object3D): number | null {
+function newestOff(now: Placed, root: Node): number | null {
   const columns = newestColumns(root);
   if (!columns.length) return null;
-  const blades = [...now.places.values()].map((place) => new THREE.Line3(place.near, place.far));
-  const offBlade = (point: THREE.Vector3) => Math.min(...blades.map((blade) => blade.closestPointToPoint(point, true,
-    new THREE.Vector3()).distanceTo(point)));
+  const blades = [...now.places.values()].map((place) => new Line3(place.near, place.far));
+  const offBlade = (point: Vec3) => Math.min(...blades.map((blade) => blade.closestPointToPoint(point, true,
+    new Vec3()).distanceTo(point)));
   const scale = root.scale.x;
   return Math.max(...columns.map((column) => Math.max(...column.map(offBlade)) * scale));
 }
 
 /** Whether a point of the hero's frame is in the frame `lens` draws, ahead of it. */
-function isFramed(point: THREE.Vector3, root: THREE.Object3D, lens: THREE.PerspectiveCamera): boolean {
+function isFramed(point: Vec3, root: Node, lens: PerspectiveCamera): boolean {
   const seen = point.clone().applyMatrix4(root.matrixWorld);
   if (lens.worldToLocal(seen.clone()).z >= 0) return false;
   const ndc = seen.project(lens);
@@ -509,7 +509,7 @@ async function followStrike(lab: Lab, options: TrailOptions, strike: Strike, vie
   Promise<StrikeRun> {
   const skill = await setUp(lab, options, strike, view, plant);
   const hero = lab.player;
-  const way = new THREE.Vector3(Math.sin(hero.facing), 0, Math.cos(hero.facing));
+  const way = new Vec3(Math.sin(hero.facing), 0, Math.cos(hero.facing));
   const aim = hero.pos.clone().addScaledVector(way, AIM_AHEAD);
   const frameTime = window.__labClock.frame / 1000;
   const held = holdFrames(skill, frameTime);

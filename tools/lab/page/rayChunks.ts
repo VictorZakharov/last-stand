@@ -5,7 +5,7 @@
 // a mesh of the same material and matrix over the same vertices, with the triangles of one cell of a grid and a
 // bounding box and sphere of its own, so three's own test throws out the chunks a ray passes by, and what a ray
 // meets is what it met in the whole mesh: the same faces, points and distances, by three's own triangle test.
-import * as THREE from 'three';
+import { Attribute, Box3, Geometry, Material, Mesh, Sphere, Vec3 } from './sceneApi.ts';
 
 /** a mesh with fewer triangles than this is left whole: a chunk's own tests would cost what they save */
 const LEAST_TRIANGLES = 600;
@@ -13,14 +13,14 @@ const LEAST_TRIANGLES = 600;
 const CELLS_ALONG = 12;
 
 /** the chunks made of each mesh, kept while its geometry and material are the same */
-const kept = new WeakMap<THREE.Mesh, { of: THREE.BufferGeometry; material: THREE.Material; chunks: THREE.Mesh[] }>();
+const kept = new WeakMap<Mesh, { of: Geometry; material: Material; chunks: Mesh[] }>();
 
 /** Whether `mesh` is one a chunk can stand for: plain, of one material, its triangles its geometry's own. */
-function plain(mesh: THREE.Mesh): boolean {
-  const special = mesh as THREE.Mesh & { isInstancedMesh?: boolean; isSkinnedMesh?: boolean; isBatchedMesh?: boolean };
+function plain(mesh: Mesh): boolean {
+  const special = mesh as Mesh & { isInstancedMesh?: boolean; isSkinnedMesh?: boolean; isBatchedMesh?: boolean };
   if (special.isInstancedMesh || special.isSkinnedMesh || special.isBatchedMesh) return false;
   // (a mesh with a ray test of its own, one the game takes out of its picking among them: its test stays its own)
-  if (mesh.raycast !== THREE.Mesh.prototype.raycast) return false;
+  if (mesh.raycast !== Mesh.prototype.raycast) return false;
   if (Array.isArray(mesh.material)) return false;
   const geometry = mesh.geometry;
   if (!geometry?.getAttribute('position') || geometry.morphAttributes.position?.length) return false;
@@ -28,7 +28,7 @@ function plain(mesh: THREE.Mesh): boolean {
 }
 
 /** The corners of each triangle `geometry` draws, three a triangle, by its index or its vertices' order. */
-function trianglesOf(geometry: THREE.BufferGeometry): Uint32Array {
+function trianglesOf(geometry: Geometry): Uint32Array {
   const index = geometry.getIndex();
   const count = index ? index.count : geometry.getAttribute('position').count;
   const from = Math.max(0, geometry.drawRange.start);
@@ -39,41 +39,42 @@ function trianglesOf(geometry: THREE.BufferGeometry): Uint32Array {
 }
 
 /** A chunk of `mesh`: its `corners` alone over its vertices, placed and drawn as it is, bounded by `box`. */
-function chunkOf(mesh: THREE.Mesh, corners: number[], box: THREE.Box3): THREE.Mesh {
-  const geometry = new THREE.BufferGeometry();
+function chunkOf(mesh: Mesh, corners: number[], box: Box3): Mesh {
+  const geometry = new Geometry();
   for (const [name, attribute] of Object.entries(mesh.geometry.attributes)) geometry.setAttribute(name, attribute);
-  geometry.setIndex(new THREE.BufferAttribute(Uint32Array.from(corners), 1));
+  geometry.setIndex(new Attribute(Uint32Array.from(corners), 1));
   // (its own bounds: three's would be all the vertices', the whole mesh's again)
   geometry.boundingBox = box;
-  geometry.boundingSphere = box.getBoundingSphere(new THREE.Sphere());
-  const chunk = new THREE.Mesh(geometry, mesh.material);
+  geometry.boundingSphere = box.getBoundingSphere(new Sphere());
+  const chunk = new Mesh(geometry, mesh.material);
   chunk.matrixAutoUpdate = false;
-  // (the mesh's own matrix, not a copy: it follows the mesh)
-  chunk.matrixWorld = mesh.matrixWorld;
+  // (the mesh's own matrix, not a copy: it follows the mesh; the API's is made as it's read, a getter, so the chunk's
+  // is one of its own that reads the mesh's)
+  Object.defineProperty(chunk, 'matrixWorld', { get: () => mesh.matrixWorld });
   chunk.layers.mask = mesh.layers.mask;
   chunk.userData.chunkOf = mesh;
   return chunk;
 }
 
 /** `mesh` cut into chunks by the cell each triangle's middle lies in. */
-function cut(mesh: THREE.Mesh): THREE.Mesh[] {
+function cut(mesh: Mesh): Mesh[] {
   const position = mesh.geometry.getAttribute('position');
   const corners = trianglesOf(mesh.geometry);
   if (corners.length / 3 < LEAST_TRIANGLES) return [mesh];
-  const whole = new THREE.Box3();
-  const point = new THREE.Vector3();
+  const whole = new Box3();
+  const point = new Vec3();
   for (const corner of corners) whole.expandByPoint(point.fromBufferAttribute(position, corner));
-  const size = whole.getSize(new THREE.Vector3());
+  const size = whole.getSize(new Vec3());
   const cell = Math.max(size.x, size.y, size.z) / CELLS_ALONG || 1;
-  const cells = new Map<string, { corners: number[]; box: THREE.Box3 }>();
-  const middle = new THREE.Vector3();
+  const cells = new Map<string, { corners: number[]; box: Box3 }>();
+  const middle = new Vec3();
   for (let at = 0; at < corners.length; at += 3) {
     const own = [corners[at], corners[at + 1], corners[at + 2]];
     middle.set(0, 0, 0);
     for (const corner of own) middle.add(point.fromBufferAttribute(position, corner));
     middle.divideScalar(3).sub(whole.min).divideScalar(cell).floor();
     const key = `${middle.x},${middle.y},${middle.z}`;
-    const into = cells.get(key) ?? { corners: [], box: new THREE.Box3() };
+    const into = cells.get(key) ?? { corners: [], box: new Box3() };
     into.corners.push(...own);
     for (const corner of own) into.box.expandByPoint(point.fromBufferAttribute(position, corner));
     cells.set(key, into);
@@ -87,13 +88,13 @@ function cut(mesh: THREE.Mesh): THREE.Mesh[] {
  * is the chunk, of the mesh's material, matrix and vertices (`userData.chunkOf` the mesh), which has no parent: see
  * to what the mesh's place in the scene says (whether it's shown) before cutting. Kept from call to call.
  */
-export function rayChunks(meshes: THREE.Mesh[]): THREE.Mesh[] {
+export function rayChunks(meshes: Mesh[]): Mesh[] {
   return meshes.flatMap((mesh) => {
     if (!plain(mesh)) return [mesh];
     const before = kept.get(mesh);
     if (before && before.of === mesh.geometry && before.material === mesh.material) return before.chunks;
     const chunks = cut(mesh);
-    kept.set(mesh, { of: mesh.geometry, material: mesh.material as THREE.Material, chunks });
+    kept.set(mesh, { of: mesh.geometry, material: mesh.material as Material, chunks });
     return chunks;
   });
 }

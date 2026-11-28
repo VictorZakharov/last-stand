@@ -1,7 +1,7 @@
 // tools/lab fire's cost: what a fire's flames take of the GPU close up, where they fill much of the screen (the top-down
 // view's few pixels of them cost less than the timer's noise), the frame timed with the flames drawn and without, in
 // turns (`gpuTurns.ts`). Its canary draws the flames four times over, which must read as more.
-import * as THREE from 'three';
+import { Node } from './sceneApi.ts';
 import { costInTurns } from './gpuTurns';
 
 /** The frame's median time on the GPU (ms) with the flames drawn and without. */
@@ -32,7 +32,7 @@ export async function turnCost(turn: (on: boolean) => void, draw: () => void):
 
 /** What `parts` take of the GPU as `draw` renders the frame, drawn and not in turns; null where the browser times
  *  nothing. `draw` renders the frame as it stands, its camera on the flames. */
-export function flameCost(parts: THREE.Object3D[], draw: () => void):
+export function flameCost(parts: Node[], draw: () => void):
   Promise<FlameCost | null> {
   const show = (on: boolean): void => {
     for (const part of parts) part.visible = on;
@@ -42,7 +42,7 @@ export function flameCost(parts: THREE.Object3D[], draw: () => void):
 
 /** The canary's flames: `parts` drawn `CANARY_TIMES` over (copies sharing their geometry and material, so nothing
  *  compiles), timed as `flameCost` times them; what they took over the frame without them, or null. */
-export async function canaryCost(parts: THREE.Object3D[], draw: () => void):
+export async function canaryCost(parts: Node[], draw: () => void):
   Promise<number | null> {
   const copies = parts.flatMap((part) => Array.from({ length: CANARY_TIMES - 1 }, () => {
     const copy = part.clone();

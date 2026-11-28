@@ -6,7 +6,7 @@
 // plays no frame of its flames, one he can does (`canary` holds the fog off). `leavesInFog`: stood by the hall's
 // walls at noon, all but the door's cone unseen, the fog takes the frame's green (`canary` holds the fog off). The
 // fog under the cottages' roofs and eaves is `villageFogRoofs.ts`.
-import * as THREE from 'three';
+import { LookMaterial, Vec3 } from './sceneApi.ts';
 import type { Lab } from './lab';
 import { G } from '../../../src/state';
 import { CAMPFIRE, COTTAGES, HALL, TERRACE } from '../../../src/data/village';
@@ -39,7 +39,7 @@ const OFF_WALLS = 1;
 /** The hero stood at (x, z) facing `facing`, the camera behind him, let settle. */
 export async function standAt(lab: Lab, x: number, z: number, facing: number): Promise<void> {
   G.player.walkTo = null;
-  G.player.place(new THREE.Vector3(x, groundHeight(x, z), z), facing);
+  G.player.place(new Vec3(x, groundHeight(x, z), z), facing);
   faceCamera(facing);
   await lab.step(SETTLE);
 }
@@ -129,8 +129,8 @@ function flamesNear(x: number, z: number): Flames {
   let found: Flames | null = null;
   let nearest = 3;
   G.scene.traverse((object) => {
-    const uniforms = object.userData.flames as THREE.ShaderMaterial['uniforms'] | undefined;
-    const centre = uniforms?.uCentre?.value as THREE.Vector3 | undefined;
+    const uniforms = object.userData.flames as LookMaterial['uniforms'] | undefined;
+    const centre = uniforms?.uCentre?.value as Vec3 | undefined;
     if (!uniforms?.uFrame || !centre) return;
     const away = Math.hypot(centre.x - x, centre.z - z);
     if (away < nearest) {

@@ -18,6 +18,7 @@ import { SKILL_KEYS } from '../loot/loadout';
 import { sfx } from '../core/audio';
 import { input } from '../core/input';
 import { KEY_LABEL } from './hud';
+import { shownBox } from './kit/press';
 import type { SkillKey } from '../types';
 
 /** a key said in words in a step (the mouse's buttons by name: "LMB" meant nothing to a new player) */
@@ -180,7 +181,7 @@ function markedNow(): HTMLElement | null {
     const selector = mark.replace(/\{key:(\w+)\}/g, (_, impl: string) => SKILL_KEYS.find((k) => G.player.skillAt(k)?.def.impl === impl) ?? 'none');
     const el = document.querySelector<HTMLElement>(selector);
     if (!el || el.classList.contains('active') || !el.checkVisibility(SHOWN)) continue;
-    const box = el.getBoundingClientRect();
+    const box = shownBox(el);
     if (box.width >= 1 && box.height >= 1 && box.bottom > 0 && box.top < innerHeight) return el;
   }
   return null;
@@ -193,11 +194,11 @@ function markedNow(): HTMLElement | null {
  *  offset is written divided by its own zoom, which scales it. */
 function placeAfloat(): void {
   if (SHORT.matches) { root.style.right = ''; return; }
-  const shown = (el: Element): boolean => (el as HTMLElement).checkVisibility(SHOWN) && el.getBoundingClientRect().width >= 1;
+  const shown = (el: Element): boolean => (el as HTMLElement).checkVisibility(SHOWN) && shownBox(el).width >= 1;
   // (the bag's panels down the right alone: the skill bar's along the foot is no wall to stand beside)
   const panels = [...document.querySelectorAll('#menu .panel:not(#lobby-rail)')]
-    .filter((p) => shown(p) && p.getBoundingClientRect().top < innerHeight / 3 && p.getBoundingClientRect().right > innerWidth / 2);
-  const beside = panels.length ? Math.min(...panels.map((p) => p.getBoundingClientRect().left)) : innerWidth;
+    .filter((p) => shown(p) && shownBox(p).top < innerHeight / 3 && shownBox(p).right > innerWidth / 2);
+  const beside = panels.length ? Math.min(...panels.map((p) => shownBox(p).left)) : innerWidth;
   const zoom = parseFloat(getComputedStyle(root).zoom) || 1;
   const right = `${Math.round((innerWidth - beside + AFLOAT_GAP) / zoom)}px`;
   if (root.style.right !== right) root.style.right = right;
@@ -205,7 +206,7 @@ function placeAfloat(): void {
 
 /** The ring put round `el` (none: hidden), written only when where it stands changes. */
 function placeRing(el: HTMLElement | null): void {
-  const box = el?.getBoundingClientRect();
+  const box = el ? shownBox(el) : undefined;
   const at = box ? [box.left - RING_PAD, box.top - RING_PAD, box.width + 2 * RING_PAD, box.height + 2 * RING_PAD].map(Math.round).join(',') : '';
   if (at === ringAt) return;
   ringAt = at;

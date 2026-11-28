@@ -18,7 +18,7 @@
 // `--canary` makes the roots too thin to hold him: walking at them he gets out, and the part says so.
 //
 // `rootCagePictures` (asked for by name, no verdict): the cage for the eye, the same cases pictured as they run.
-import * as THREE from 'three';
+import { Vec3 } from './sceneApi.ts';
 import { screenArea, type Clip, type Frame, type Lab, type Pictured } from './lab';
 import type { Enemy } from '../../../src/entities/enemy';
 import type { SkillKey } from '../../../src/types';
@@ -157,7 +157,7 @@ async function oneCase(lab: Lab, options: { fixture: object; canary?: boolean },
   before?.(boss);
   const made = PIPELINES.made;
   const began = G.time;
-  const way = new THREE.Vector3(hero.pos.x - boss.pos.x, 0, hero.pos.z - boss.pos.z).normalize();
+  const way = new Vec3(hero.pos.x - boss.pos.x, 0, hero.pos.z - boss.pos.z).normalize();
   let frame = 0, cut: Root | null = null, blinked = -1, placedOut = false;
   const input = (): Frame => cageInput();
   const cageInput = (): Frame => {
@@ -188,11 +188,11 @@ async function oneCase(lab: Lab, options: { fixture: object; canary?: boolean },
     if (!root) return {};
     if (!placedOut) {
       placedOut = true;
-      const out = new THREE.Vector3(root.x - log.x, 0, root.z - log.z).normalize();
-      hero.place(new THREE.Vector3(root.x, 0, root.z).addScaledVector(out, OUTSIDE), hero.facing);
+      const out = new Vec3(root.x - log.x, 0, root.z - log.z).normalize();
+      hero.place(new Vec3(root.x, 0, root.z).addScaledVector(out, OUTSIDE), hero.facing);
     }
     if (root.prop?.broken) return {};
-    return shootAt(new THREE.Vector3(root.x, 1, root.z));
+    return shootAt(new Vec3(root.x, 1, root.z));
   };
   /** Walking out through the gap between two roots nearest his way out (the line most likely to let him by). */
   const pushing = (log: CageLog): Frame => {
@@ -215,8 +215,8 @@ async function oneCase(lab: Lab, options: { fixture: object; canary?: boolean },
     cut ??= nearestRoot(log.x + way.x * C.radius, log.z + way.z * C.radius);
     const root = cut;
     if (!root) return {};
-    const at = new THREE.Vector3(root.x, 1, root.z);
-    const past = at.clone().add(new THREE.Vector3(root.x - log.x, 0, root.z - log.z).normalize().multiplyScalar(BLINK_PAST));
+    const at = new Vec3(root.x, 1, root.z);
+    const past = at.clone().add(new Vec3(root.x - log.x, 0, root.z - log.z).normalize().multiplyScalar(BLINK_PAST));
     if (root.prop?.broken || blinked >= 0 && frame > blinked + BLINK_HOLD + 30) {
       return { stick: stickToward(past.x - hero.pos.x, past.z - hero.pos.z) };
     }
@@ -237,7 +237,7 @@ async function oneCase(lab: Lab, options: { fixture: object; canary?: boolean },
   };
   /** A frame of his basic attack at `at`, as fast as he can: held down (a press while he's busy is queued), let go
    *  as his draw reaches its least. */
-  const shootAt = (at: THREE.Vector3): Frame => {
+  const shootAt = (at: Vec3): Frame => {
     hero.facing = Math.atan2(at.x - hero.pos.x, at.z - hero.pos.z);
     const cast = hero.casting;
     const drawn = cast?.drawT && !cast.fired ? (cast.t - (cast.nockT ?? 0)) / cast.drawT : 0;
@@ -296,9 +296,9 @@ function gapToward(way: number): number {
 }
 
 /** A spot `BLINK_PAST` m out past the ring through root `root`'s place (the way out through its gap). */
-function throughGap(log: CageLog, root: Root): THREE.Vector3 {
-  const out = new THREE.Vector3(root.x - log.x, 0, root.z - log.z).normalize();
-  return new THREE.Vector3(root.x, 1, root.z).addScaledVector(out, BLINK_PAST);
+function throughGap(log: CageLog, root: Root): Vec3 {
+  const out = new Vec3(root.x - log.x, 0, root.z - log.z).normalize();
+  return new Vec3(root.x, 1, root.z).addScaledVector(out, BLINK_PAST);
 }
 
 /** The hero's skill bound by behaviour `impl`, or null. */
@@ -420,8 +420,8 @@ const SEEN_REACH = 4.5;
 
 /** The screen over the line from her to the cage at `centre` (`way` from her), `SIDE_SPAN` m towards her and the
  *  ring past it, as high as her great root stands, as the camera now shows it. */
-function alongLine(centre: THREE.Vector3, way: THREE.Vector3): Clip {
-  const points: THREE.Vector3[] = [];
+function alongLine(centre: Vec3, way: Vec3): Clip {
+  const points: Vec3[] = [];
   for (const along of [-SIDE_SPAN, C.radius + 1]) {
     for (const y of [0, SIDE_HIGH]) points.push(centre.clone().addScaledVector(way, along).setY(y));
   }
@@ -430,10 +430,10 @@ function alongLine(centre: THREE.Vector3, way: THREE.Vector3): Clip {
 
 /** The screen round the cage at (x, z), `reach` m about it on the floor and 3 m up, as the game's camera shows it. */
 function roundCage(x: number, z: number, reach: number): Clip {
-  const points: THREE.Vector3[] = [];
+  const points: Vec3[] = [];
   for (const dx of [-reach, reach]) {
     for (const dz of [-reach, reach]) {
-      for (const y of [0, 3]) points.push(new THREE.Vector3(x + dx, y, z + dz));
+      for (const y of [0, 3]) points.push(new Vec3(x + dx, y, z + dz));
     }
   }
   return screenArea(points);
@@ -463,13 +463,13 @@ export async function rootCagePictures(lab: Lab, options: { fixture: object }, l
   // (the side strip: the roots bursting and closing from the shut, then her great root rising and falling)
   try {
     let shot = 0, blowShot = 0, clip: Clip | null = null;
-    let line: { centre: THREE.Vector3; way: THREE.Vector3 } | null = null;
+    let line: { centre: Vec3; way: Vec3 } | null = null;
     await oneCase(lab, options, 'standing', async (log, boss) => {
       if (!log) return false;
       // (looking across the line from her to the cage, her great root falling along it; set as it warns)
       if (!line) {
-        const centre = new THREE.Vector3(log.x, 0, log.z);
-        line = { centre, way: new THREE.Vector3(log.x - boss.pos.x, 0, log.z - boss.pos.z).normalize() };
+        const centre = new Vec3(log.x, 0, log.z);
+        line = { centre, way: new Vec3(log.x - boss.pos.x, 0, log.z - boss.pos.z).normalize() };
         holdSideView(sideView(centre, line.way, SIDE_OFF, C.radius + 0.5));
         return false;
       }

@@ -29,7 +29,7 @@
 // unless caught. `--pictures` takes the wall
 // from round it alone (front, three-quarter, side, above), and in the forest and the crypt from the game's views:
 // standing, its preview held, and a blow on it with its bar.
-import * as THREE from 'three';
+import { Maths, Mesh, Node, shapes, Vec3 } from './sceneApi.ts';
 import type { Fixture, Lab, Pictured, Report } from './lab';
 import type { Enemy } from '../../../src/entities/enemy';
 import type { Ward } from '../../../src/world/wards';
@@ -142,8 +142,8 @@ function roomAt(x: number, z: number, r: number): boolean {
 
 /** Whether the way along `way` from `from` has room for the cases: the line out to past where the boss stands, and
  *  the wall's ends at each distance it's raised. */
-function roomAlong(from: THREE.Vector3, way: THREE.Vector3): boolean {
-  const across = new THREE.Vector3(way.z, 0, -way.x);
+function roomAlong(from: Vec3, way: Vec3): boolean {
+  const across = new Vec3(way.z, 0, -way.x);
   for (let d = 1; d <= ROOM_OUT; d += 0.5) {
     const at = from.clone().addScaledVector(way, d);
     if (!roomAt(at.x, at.z, LINE_ROOM)) return false;
@@ -157,11 +157,11 @@ function roomAlong(from: THREE.Vector3, way: THREE.Vector3): boolean {
 
 /** A way along the floor from him with room for the cases (the first of `WAYS` round him from the camera's ahead),
  *  or null. */
-function wayWithRoom(from: THREE.Vector3): THREE.Vector3 | null {
+function wayWithRoom(from: Vec3): Vec3 | null {
   const ahead = cameraAhead();
   for (let i = 0; i < WAYS; i++) {
     const turn = (i % 2 ? 1 : -1) * Math.ceil(i / 2) * (Math.PI * 2 / WAYS);
-    const way = ahead.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), turn);
+    const way = ahead.clone().applyAxisAngle(new Vec3(0, 1, 0), turn);
     if (roomAlong(from, way)) return way;
   }
   return null;
@@ -169,7 +169,7 @@ function wayWithRoom(from: THREE.Vector3): THREE.Vector3 | null {
 
 /** The run set up afresh, every cooldown over and the energy full, the hero at the first of the spots (the
  *  fixture's, else `SPOTS`) with a way that has room for the cases, and that way. */
-async function setUp(lab: Lab, fixture: Fixture): Promise<{ way: THREE.Vector3; skill: BoundSkill }> {
+async function setUp(lab: Lab, fixture: Fixture): Promise<{ way: Vec3; skill: BoundSkill }> {
   const spots: ([number, number] | undefined)[] = fixture.at ? [fixture.at] : SPOTS;
   for (const at of spots) {
     G.arena.restoreProps();
@@ -186,7 +186,7 @@ async function setUp(lab: Lab, fixture: Fixture): Promise<{ way: THREE.Vector3; 
 }
 
 /** The wall held at `aim` and let go, as the player does: the wall it raised (throws if none rose). */
-async function raiseAt(lab: Lab, skill: BoundSkill, aim: THREE.Vector3): Promise<Ward> {
+async function raiseAt(lab: Lab, skill: BoundSkill, aim: Vec3): Promise<Ward> {
   const before = new Set(wards);
   const risen = (): Ward | undefined => wards.find((ward) => !before.has(ward));
   await lab.step(HOLD_FRAMES, () => pressing(skill.key, aim, true));
@@ -195,9 +195,9 @@ async function raiseAt(lab: Lab, skill: BoundSkill, aim: THREE.Vector3): Promise
 }
 
 /** The middle of a wall's line, and its way along (unit). */
-function lineOf(ward: Ward): { middle: THREE.Vector3; along: THREE.Vector3 } {
-  const middle = new THREE.Vector3((ward.ax + ward.bx) / 2, 0, (ward.az + ward.bz) / 2);
-  const along = new THREE.Vector3(ward.bx - ward.ax, 0, ward.bz - ward.az).normalize();
+function lineOf(ward: Ward): { middle: Vec3; along: Vec3 } {
+  const middle = new Vec3((ward.ax + ward.bx) / 2, 0, (ward.az + ward.bz) / 2);
+  const along = new Vec3(ward.bx - ward.ax, 0, ward.bz - ward.az).normalize();
   return { middle, along };
 }
 
@@ -229,7 +229,7 @@ function pin(lab: Lab, foe: Enemy, still: (foe: Enemy) => void = () => undefined
 }
 
 /** The wall's root in the scene as raised last (its look), if any. */
-const wallRoot = (): THREE.Object3D | undefined => G.scene.children.filter((o) => o.name === 'hedgeward').at(-1);
+const wallRoot = (): Node | undefined => G.scene.children.filter((o) => o.name === 'hedgeward').at(-1);
 
 /** placed: raised where it was aimed, across his line to it, its front away from him. */
 async function placed(lab: Lab, options: HedgewardOptions): Promise<Outcome> {
@@ -242,7 +242,7 @@ async function placed(lab: Lab, options: HedgewardOptions): Promise<Outcome> {
   const skew = Math.abs(along.dot(way));
   const skewDegrees = Math.asin(Math.min(1, skew)) * 180 / Math.PI;
   const root = wallRoot();
-  const front = root ? new THREE.Vector3(0, 0, 1).applyQuaternion(root.quaternion).setY(0).normalize() : null;
+  const front = root ? new Vec3(0, 0, 1).applyQuaternion(root.quaternion).setY(0).normalize() : null;
   const facesOut = front ? front.dot(way) : -1;
   const problems: string[] = [];
   if (off > PLACED_NEAR) problems.push(`placed: ${metres(off)} off where it was aimed`);
@@ -261,7 +261,7 @@ async function placed(lab: Lab, options: HedgewardOptions): Promise<Outcome> {
 function plantAsProp(ward: Ward): () => void {
   // (drawn as a tall slab along its line, never in the scene: the wall's own low look an arrow flies over)
   const { middle, along } = lineOf(ward), length = Math.hypot(ward.bx - ward.ax, ward.bz - ward.az);
-  const slab = new THREE.Mesh(new THREE.BoxGeometry(length, PROP_TALL, ward.prop.parts[0].r * 2));
+  const slab = new Mesh(shapes.box(length, PROP_TALL, ward.prop.parts[0].r * 2));
   slab.position.set(middle.x, PROP_TALL / 2, middle.z);
   slab.rotation.y = Math.atan2(-along.z, along.x);
   slab.updateMatrixWorld(true);
@@ -284,7 +284,7 @@ async function bolts(lab: Lab, options: HedgewardOptions): Promise<Outcome> {
   const lines: string[] = [], problems: string[] = [];
   const { middle } = lineOf(ward);
   // (how far past the wall's line towards him: the boss stands on its other side)
-  const pastLine = (p: THREE.Vector3): number => -p.clone().sub(middle).dot(way);
+  const pastLine = (p: Vec3): number => -p.clone().sub(middle).dot(way);
   try {
     for (let fired = 1; fired <= BOLTS; fired++) {
       const bolt = fireAt(boss, way, hero.pos);
@@ -308,8 +308,8 @@ async function bolts(lab: Lab, options: HedgewardOptions): Promise<Outcome> {
 
 /** A bolt of `boss`'s fired at `at` from just before it along `way` back to him, as its volley fires one: the
  *  game's own bolt (enemyAI's `fx`), its projectile returned. */
-function fireAt(boss: Enemy, way: THREE.Vector3, at: THREE.Vector3): Projectile {
-  const origin = new THREE.Vector3(boss.pos.x, 1.6, boss.pos.z).addScaledVector(way, -boss.radius);
+function fireAt(boss: Enemy, way: Vec3, at: Vec3): Projectile {
+  const origin = new Vec3(boss.pos.x, 1.6, boss.pos.z).addScaledVector(way, -boss.radius);
   const angle = Math.atan2(at.x - origin.x, at.z - origin.z);
   fx('bolt', boss.id, origin.x, origin.z, angle, boss.damage, origin.y);
   return G.projectiles.at(-1)!;
@@ -374,8 +374,8 @@ async function round(lab: Lab, options: HedgewardOptions, canary: boolean): Prom
     }
     return result;
   };
-  function sideOf(p: THREE.Vector3): number {
-    const out = new THREE.Vector3(along.z, 0, -along.x);
+  function sideOf(p: Vec3): number {
+    const out = new Vec3(along.z, 0, -along.x);
     return Math.sign(p.clone().sub(middle).dot(out));
   }
   try {
@@ -423,7 +423,7 @@ const RELOAD = 60;
  * ended. Pressed again within the reload, a shot looses nothing, and counted as one it read as an arrow through the
  * wall dealing nothing.
  */
-async function loose(lab: Lab, shot: BoundSkill, aim: THREE.Vector3, draw = ARROW_DRAW): Promise<Projectile> {
+async function loose(lab: Lab, shot: BoundSkill, aim: Vec3, draw = ARROW_DRAW): Promise<Projectile> {
   const before = new Set(G.projectiles);
   const ownNew = (): Projectile | undefined => G.projectiles.find((p) => !before.has(p) && p.by === lab.player);
   await lab.step(draw, () => pressing(shot.key, aim, true));
@@ -435,9 +435,9 @@ async function loose(lab: Lab, shot: BoundSkill, aim: THREE.Vector3, draw = ARRO
 }
 
 /** The points the arrows are aimed at on `ward`, in turn: across its width, up its height. */
-function arrowAims(ward: Ward): THREE.Vector3[] {
+function arrowAims(ward: Ward): Vec3[] {
   const { middle, along } = lineOf(ward);
-  const aims: THREE.Vector3[] = [];
+  const aims: Vec3[] = [];
   for (const across of ARROWS_ACROSS) {
     for (const up of ARROWS_UP) aims.push(middle.clone().addScaledVector(along, across).setY(up));
   }
@@ -513,9 +513,9 @@ const PLAYED_AIMS: { across: number; up: number }[] = [
 const BEFORE_LINE = 0.8;
 
 /** One stand's place before `ward`: `out` from its middle, `off` round from square on his side of it. */
-function standBefore(ward: Ward, toward: THREE.Vector3, stand: { out: number; off: number }): THREE.Vector3 {
+function standBefore(ward: Ward, toward: Vec3, stand: { out: number; off: number }): Vec3 {
   const { middle } = lineOf(ward);
-  const way = toward.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), stand.off);
+  const way = toward.clone().applyAxisAngle(new Vec3(0, 1, 0), stand.off);
   return middle.clone().addScaledVector(way, stand.out);
 }
 
@@ -560,7 +560,7 @@ async function playedWith(lab: Lab, options: HedgewardOptions, name: string,
 type PlayedShot = { kind: 'worn' } | { kind: 'short' } | { kind: 'through'; how: string };
 
 /** A shot of `played`: him stood at `at` facing the wall, its life set back, an arrow loosed at `aim` on it. */
-async function playedShot(lab: Lab, ward: Ward, toward: THREE.Vector3, at: THREE.Vector3, aim: THREE.Vector3,
+async function playedShot(lab: Lab, ward: Ward, toward: Vec3, at: Vec3, aim: Vec3,
   drawFrames: number): Promise<PlayedShot> {
   const hero = G.player;
   hero.place(at.clone(), Math.atan2(-toward.x, -toward.z));
@@ -579,7 +579,7 @@ async function playedShot(lab: Lab, ward: Ward, toward: THREE.Vector3, at: THREE
 }
 
 /** `played`'s arrows under `name`, its wall raised `way` from where he stands. */
-async function playedFrom(lab: Lab, skill: BoundSkill, way: THREE.Vector3, name: string): Promise<Outcome> {
+async function playedFrom(lab: Lab, skill: BoundSkill, way: Vec3, name: string): Promise<Outcome> {
   const ward = await raiseAt(lab, skill, G.player.pos.clone().addScaledVector(way, ARROW_OUT));
   const toward = way.clone().negate();
   const { middle, along } = lineOf(ward);
@@ -588,7 +588,7 @@ async function playedFrom(lab: Lab, skill: BoundSkill, way: THREE.Vector3, name:
   let short = 0;
   for (const stand of PLAYED_STANDS) {
     const at = standBefore(ward, toward, stand);
-    const standName = `${stand.out} m out ${Math.round(THREE.MathUtils.radToDeg(stand.off))}°`;
+    const standName = `${stand.out} m out ${Math.round(Maths.radToDeg(stand.off))}°`;
     for (const draw of PLAYED_DRAWS) {
       for (const { across, up } of PLAYED_AIMS) {
         const aim = middle.clone().addScaledVector(along, across).setY(up);
@@ -613,7 +613,7 @@ async function playedFrom(lab: Lab, skill: BoundSkill, way: THREE.Vector3, name:
  *  still standing. */
 async function walled(lab: Lab, options: HedgewardOptions, canary: boolean): Promise<Outcome> {
   const { way, skill } = await setUp(lab, options.fixture);
-  const hero = G.player, from = hero.pos.clone(), across = new THREE.Vector3(way.z, 0, -way.x);
+  const hero = G.player, from = hero.pos.clone(), across = new Vec3(way.z, 0, -way.x);
   const box: Ward[] = [], problems: string[] = [];
   let worstOff = 0;
   for (const dir of [way, across, way.clone().negate(), across.clone().negate()]) {
@@ -721,9 +721,9 @@ async function trampled(lab: Lab, options: HedgewardOptions, canary: boolean): P
 async function stays(lab: Lab, options: HedgewardOptions): Promise<Outcome> {
   const { way, skill } = await setUp(lab, options.fixture);
   const lines: string[] = [], problems: string[] = [];
-  const out = (dir: THREE.Vector3, metresOut: number): THREE.Vector3 =>
+  const out = (dir: Vec3, metresOut: number): Vec3 =>
     G.player.pos.clone().addScaledVector(dir, metresOut);
-  const again = async (dir: THREE.Vector3, metresOut: number): Promise<Ward> => {
+  const again = async (dir: Vec3, metresOut: number): Promise<Ward> => {
     G.player.cooldowns.clear();
     G.player.energy = G.player.stats.maxEnergy;
     return raiseAt(lab, skill, out(dir, metresOut));
@@ -740,7 +740,7 @@ async function stays(lab: Lab, options: HedgewardOptions): Promise<Outcome> {
   lines.push(`stays: struck to 0 life, ${broken ? 'broken at once' : 'STILL STANDING'}`);
   if (!broken) problems.push('stays: struck to 0 life, it still stood');
   // (four raised round him, a way each: no limit, every one stands; one way has no room for four within his reach)
-  const across = new THREE.Vector3(way.z, 0, -way.x);
+  const across = new Vec3(way.z, 0, -way.x);
   const raised: Ward[] = [];
   for (const dir of [way, across, way.clone().negate(), across.clone().negate()]) {
     raised.push(await again(dir, AIM_OUT));

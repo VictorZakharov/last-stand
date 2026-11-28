@@ -1,11 +1,12 @@
-// The renderer (three's, the host of our engine, `src/engine`), the frame's grade values and the camera rig: top-down,
-// over the shoulder or first person. The engine draws the scene; three's canvas lies over the engine's for the
-// world's overlays.
-import * as THREE from 'three';
-import { lightTheLamps } from './lamps';
+// The frame: the page's canvas (the engine's, core/screen.ts: three's renderer is gone, #973), the frame's grade
+// values handed to the engine (`src/engine`), and the camera rig: top-down, over the shoulder or first person.
+import {
+  Color, floats, Geometry, Light, Mat3, Maths, Node, OrthoCamera, PerspectiveCamera, Quat,
+  Texture, Vec2, Vec3, World,
+} from '../engine/api/index.ts';
 import { aimSight } from './sight';
 import { setWholeView, wholeView } from './wholeView';
-import { clearOverFrame, countOverPass, holdSceneTarget, makeWebGPURenderer, overFrameUncleared } from './webgpu';
+import { GameScreen } from './screen';
 import { G } from '../state';
 import { bootRust, drawRust, rustFrame, rustPlain, rustSamples, RUST } from '../engine';
 import { perfClock } from './perfClock';
@@ -15,16 +16,17 @@ import { groundHeight } from '../world/ground';
 import { keepOffPosts, postsReach } from './nearPosts';
 import { CAMERA } from '../data/balance';
 import { clamp, damp } from '../util';
-import { blendedBuiltFirst, sortBlendedFrom, updateSeeThrough } from './seeThrough';
+import { sortBlendedFrom, updateSeeThrough } from './seeThrough';
 import { builtOpening, fenceOpened, holeOpening, propsHideHim, propsOpening } from './heroHidden';
 import type { QualityPreset } from '../data/quality';
 import { hdrLevels } from './hdr';
 import { bloodMask, fitBloodMask } from './bloodEdges';
 import { ARMS_LAYER, WARM_LAYER, GHOST_COUNT_LAYER } from './layers';
-import { takePorts } from './shaderPorts';
-import { BOUNDS_TEST, declarePointBounds } from './lightBounds';
-import type { WebGPURenderer } from 'three/webgpu';
-import { glFence, gpuFence, setFrameFence } from './frameLoop';
+import { gpuFence, setFrameFence } from './frameLoop';
+import { engineWorkDone } from '../engine/pipelinesAside';
+import { overlayRows } from '../engine/overlay';
+import { sendPainted } from '../ui/overlay/atlas';
+import { outlineForEngine } from '../engine/outlined';
 
 /** Final colour: above HI_KNEE the brightest channel eases towards HI_CAP (hue kept); in HDR towards as much more
  *  as the peak has room over the paper white (`uCap`), so the highlights it grows aren't all held at SDR's. */
@@ -99,36 +101,36 @@ const grade = {
     uTime: { value: 0 },
     uHurt: { value: 0 },
     uVignette: { value: 1.05 },
-    uLow: { value: 0 }, uBeat: { value: 0 }, tBlood: { value: null as THREE.Texture | null },
+    uLow: { value: 0 }, uBeat: { value: 0 }, tBlood: { value: null as Texture | null },
     uSmall: { value: ADAPT.top[0] as number }, uLarge: { value: ADAPT.top[1] as number },
     uCap: { value: HI_CAP - HI_KNEE },
     uHdr: { value: 0 }, uPaper: { value: 1 }, uPeak: { value: 1 },
     // photo mode's look (core/photoLook.ts), read only while it's on (`uPhoto`): neutral and left out otherwise
     uPhoto: { value: 0 }, uExposure: { value: 1 }, uContrast: { value: 1 }, uSaturation: { value: 1 },
-    uFilterLo: { value: new THREE.Matrix3() }, uFilterHi: { value: new THREE.Matrix3() }, uFilterMix: { value: 0 },
+    uFilterLo: { value: new Mat3() }, uFilterHi: { value: new Mat3() }, uFilterMix: { value: 0 },
     uBlur: { value: 0 }, uFocusY: { value: 0.5 }, uFocusBand: { value: 0.1 },
   },
 };
 /** The grade's values (`grade`): photo mode's look sets them. */
 export const gradeUniforms = (): typeof grade.uniforms => grade.uniforms;
 
-let gl: THREE.WebGLRenderer, sceneRT: THREE.WebGLRenderTarget;
+/** The scene's size and samples, as three's render target for it held them: nothing is drawn into it (the scene is
+ *  the engine's); what a warm-up is handed and what sizes points by. */
+export interface SceneTarget { width: number; height: number; samples: number }
 
-/** What is drawn straight onto the canvas (`onScreen`: the overlay's) compiled now, ahead of its first draw. */
-export function compilePasses(onScreen: THREE.Scene[]): void {
-  for (const scene of onScreen) gl.compile(scene, passCamera);
-}
+let gl: GameScreen;
+const sceneRT: SceneTarget = { width: 1, height: 1, samples: 4 };
 
 /** A pass's full-screen triangle as three's full-screen quad has it, to compile a pass's material on: positions and
  *  uvs alone, as normals would make another program. Seen through `passCamera`. */
-export function passTriangle(): THREE.BufferGeometry {
-  const quad = new THREE.BufferGeometry();
-  quad.setAttribute('position', new THREE.Float32BufferAttribute([-1, 3, 0, -1, -1, 0, 3, -1, 0], 3));
-  quad.setAttribute('uv', new THREE.Float32BufferAttribute([0, 2, 0, 0, 2, 0], 2));
+export function passTriangle(): Geometry {
+  const quad = new Geometry();
+  quad.setAttribute('position', floats([-1, 3, 0, -1, -1, 0, 3, -1, 0], 3));
+  quad.setAttribute('uv', floats([0, 2, 0, 0, 2, 0], 2));
   return quad;
 }
 /** what a pass's triangle is seen through, as three's full-screen quad's */
-export const passCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+export const passCamera = new OrthoCamera(-1, 1, 1, -1, 0, 1);
 
 const rig = {
   /** the floor the view from above looks at, eased as he climbs */
@@ -142,7 +144,7 @@ const rig = {
   roll: 0, rollTo: 0,
   /** the eyes' lift (liftView, m) and the view's tip down (tipView, rad), and what each eases to this frame */
   lift: 0, liftTo: 0, tip: 0, tipTo: 0,
-  focus: new THREE.Vector3(),
+  focus: new Vec3(),
   hurt: 0,
   yaw: 0,          // rotation around the focus; 0 looks toward -Z
   targetYaw: 0,
@@ -155,8 +157,8 @@ const rig = {
   targetBoom: CAMERA.third.boom,
   /** a view switch glides from the pose the camera had (blend 0) to the new view's (1) */
   blend: 1,
-  fromPos: new THREE.Vector3(),
-  fromQuat: new THREE.Quaternion(),
+  fromPos: new Vec3(),
+  fromQuat: new Quat(),
   fromFov: CAMERA.fov,
 };
 
@@ -169,7 +171,7 @@ const ARMS_NEAR = 0.03, ARMS_FAR = 6;
  * frame's edge leaned in towards the middle, and a fist near the camera looked huge. The world's lights light them
  * too: every light is on their layer as well (`lightThePasses`).
  */
-const armsCam = new THREE.PerspectiveCamera();
+const armsCam = new PerspectiveCamera();
 armsCam.layers.set(ARMS_LAYER);
 /** the arms camera's field of view (vertical, degrees) while it draws them, none while the world's camera does */
 let armsFov: number | null = null;
@@ -180,9 +182,9 @@ let armsFov: number | null = null;
  * were first drawn, a hero built afresh by a class switch brought his own light in after, and his arms compiled
  * mid-run: #268.)
  */
-function lightThePasses(scene: THREE.Scene): void {
-  const onPasses = (o: THREE.Object3D) => {
-    if (!(o as THREE.Light).isLight) return;
+function lightThePasses(scene: World): void {
+  const onPasses = (o: Node) => {
+    if (!(o as Light).isLight) return;
     o.layers.enable(ARMS_LAYER);
     o.layers.enable(WARM_LAYER);
     // (the count of ghosts too: three keys even an unlit program by the lights in view, and one counted with none
@@ -190,7 +192,8 @@ function lightThePasses(scene: THREE.Scene): void {
     o.layers.enable(GHOST_COUNT_LAYER);
   };
   scene.traverse(onPasses);
-  scene.addEventListener('childadded', ({ child }) => child.traverse(onPasses));
+  // (the event's child is a node: the world's own events are typed loosely)
+  scene.addEventListener('childadded', ({ child }) => (child as Node).traverse(onPasses));
 }
 
 /** The arms layer drawn by its own camera at `fov` (vertical, degrees) from this frame on, or no longer (null). */
@@ -199,8 +202,8 @@ export function drawArms(fov: number | null): void {
 }
 
 /** The camera the arms are seen through this frame: their own while it draws them, else the world's. */
-export function armsCamera(): THREE.PerspectiveCamera {
-  if (armsFov === null) return G.camera as THREE.PerspectiveCamera;
+export function armsCamera(): PerspectiveCamera {
+  if (armsFov === null) return G.camera as PerspectiveCamera;
   placeArmsCamera();
   return armsCam;
 }
@@ -209,10 +212,10 @@ export function armsCamera(): THREE.PerspectiveCamera {
  *  camera it shows where the world's shows a point as far ahead and as far across the view by the views' widths, so
  *  what leaves from it (a skill cast from the weapon's tip) leaves where the weapon is seen. The point itself while the
  *  world's camera draws the arms. */
-export function seenFromArms(p: THREE.Vector3, out: THREE.Vector3): THREE.Vector3 {
+export function seenFromArms(p: Vec3, out: Vec3): Vec3 {
   if (armsFov === null) return out.copy(p);
   placeArmsCamera();
-  const cam = G.camera as THREE.PerspectiveCamera;
+  const cam = G.camera as PerspectiveCamera;
   const k = Math.tan((cam.fov * Math.PI) / 360) / Math.tan((armsCam.fov * Math.PI) / 360);
   const local = armsCam.worldToLocal(out.copy(p));
   local.x *= k;
@@ -224,13 +227,13 @@ export function seenFromArms(p: THREE.Vector3, out: THREE.Vector3): THREE.Vector
  *  depth (1 while the world's camera draws the arms): what is sized against the hand in view takes it. */
 export function armsScale(): number {
   if (armsFov === null) return 1;
-  const cam = G.camera as THREE.PerspectiveCamera;
+  const cam = G.camera as PerspectiveCamera;
   return Math.tan((cam.fov * Math.PI) / 360) / Math.tan((armsFov * Math.PI) / 360);
 }
 
 /** The arms camera where the world's is, looking as it looks, its own view. */
 function placeArmsCamera(): void {
-  const cam = G.camera as THREE.PerspectiveCamera;
+  const cam = G.camera as PerspectiveCamera;
   cam.updateMatrixWorld();
   armsCam.position.copy(cam.position);
   armsCam.quaternion.copy(cam.quaternion);
@@ -283,184 +286,32 @@ function sunShadowInTurns(): void {
 export type ViewMode = 'top' | 'third' | 'first';
 export const VIEWS: ViewMode[] = ['top', 'third', 'first'];
 
-/** three's point lights, as its lit shaders begin them: the block `loopPointLights` lights in a loop */
-const POINT_LIGHTS_IF = '#if ( NUM_POINT_LIGHTS > 0 ) && defined( RE_Direct )';
-/** the end of its written-out loop, the block's last line before its `#endif` */
-const POINT_LIGHTS_END = '#pragma unroll_loop_end';
-/** the shadowed point lights (three puts them first) written out, each with its shadow map, the rest in a loop; each
- *  lit (and its shadow looked up) only where its colour isn't 0, out of its reach or idle in the pool (three lights
- *  every one at every pixel, adding nothing) */
-const POINT_LIGHTS_LOOPED = [
-  POINT_LIGHTS_IF,
-  '\tPointLight pointLight;',
-  '\t#if defined( USE_SHADOWMAP ) && NUM_POINT_LIGHT_SHADOWS > 0',
-  '\tPointLightShadow pointLightShadow;',
-  '\t#pragma unroll_loop_start',
-  '\tfor ( int i = 0; i < NUM_POINT_LIGHT_SHADOWS; i ++ ) {',
-  '\t\tpointLight = pointLights[ i ];',
-  '\t\tgetPointLightInfo( pointLight, geometryPosition, directLight );',
-  '\t\tif ( directLight.visible ) {',
-  '\t\t#if defined( SHADOWMAP_TYPE_PCF ) || defined( SHADOWMAP_TYPE_BASIC )',
-  '\t\tpointLightShadow = pointLightShadows[ i ];',
-  '\t\tdirectLight.color *= receiveShadow ? getPointShadow( pointShadowMap[ i ], '
-    + 'pointLightShadow.shadowMapSize, pointLightShadow.shadowIntensity, pointLightShadow.shadowBias, '
-    + 'pointLightShadow.shadowRadius, vPointShadowCoord[ i ], pointLightShadow.shadowCameraNear, '
-    + 'pointLightShadow.shadowCameraFar ) : 1.0;',
-  '\t\t#endif',
-  '\t\tRE_Direct( directLight, geometryPosition, geometryNormal, geometryViewDir, geometryClearcoatNormal, material, reflectedLight );',
-  '\t\t}',
-  '\t}',
-  '\t#pragma unroll_loop_end',
-  '\tconst int unshadowedFrom = NUM_POINT_LIGHT_SHADOWS;',
-  '\t#else',
-  '\tconst int unshadowedFrom = 0;',
-  '\t#endif',
-  '\tvec3 toLight;',
-  '\tfor ( int i = unshadowedFrom; i < NUM_POINT_LIGHTS; i ++ ) {',
-  // (a light out of reach, or unlit, passed over on its packed bounds before it's read: `lightBounds.ts`)
-  ...BOUNDS_TEST,
-  '\t\tpointLight = pointLights[ i ];',
-  // (an idle light, or a point past a light's reach, where three's attenuation comes out 0, passed over on a test of
-  // the distance's square alone)
-  '\t\ttoLight = pointLight.position - geometryPosition;',
-  '\t\tif ( pointLight.color == vec3( 0.0 ) || ( pointLight.distance > 0.0 '
-    + '&& dot( toLight, toLight ) >= pointLight.distance * pointLight.distance ) ) continue;',
-  '\t\tgetPointLightInfo( pointLight, geometryPosition, directLight );',
-  '\t\tif ( directLight.visible ) RE_Direct( directLight, geometryPosition, geometryNormal, geometryViewDir, '
-    + 'geometryClearcoatNormal, material, reflectedLight );',
-  '\t}',
-].join('\n');
+/** the side of the largest texture the overlays' atlas is sized within (WebGPU's least limit is 8192) */
+const MOST_TEXTURE_SIDE = 8192;
 
-/**
- * The point lights lit in a loop, not written out once a light as three writes them (`#pragma unroll_loop_start`,
- * which a light's shadow map needs): with 16 point lights a lit shader was 85 kB, and on a first visit ANGLE's D3D
- * compiler spent half a second on each, 36 of the 40 s the boot's programs cost (`lab programs --cost`). Only the
- * lights that cast (each biome's two warmest, `staticShadow` in `world/props.ts`) are written out; with one casting,
- * three wrote every point light out again.
- */
-function loopPointLights(): void {
-  const chunk = THREE.ShaderChunk.lights_fragment_begin;
-  const at = chunk.indexOf(POINT_LIGHTS_IF);
-  const end = at < 0 ? -1 : chunk.indexOf(POINT_LIGHTS_END, at);
-  if (end < 0) {
-    console.error('loopPointLights: three\'s lights_fragment_begin has changed: its point lights stay written out');
-    return;
-  }
-  const looped = declarePointBounds() ? POINT_LIGHTS_LOOPED : POINT_LIGHTS_LOOPED.replace(BOUNDS_TEST.join('\n'), '');
-  THREE.ShaderChunk.lights_fragment_begin = chunk.slice(0, at) + looped
-    + chunk.slice(end + POINT_LIGHTS_END.length);
-}
-
-/** where three's point shadow begins its five soft taps (the only shadow whose taps are spread by this line) */
-const POINT_SHADOW_TAPS = 'float texelSize = shadowRadius / shadowMapSize.x;';
-/** a tap as three reads it, and read at the map's one level */
-const POINT_SHADOW_TAP = 'texture( shadowMap, vec4( direction, dp ) )';
-const POINT_SHADOW_TAP_LEVEL = 'textureGrad( shadowMap, vec4( direction, dp ), vec3( 0.0 ), vec3( 0.0 ) )';
-
-/**
- * A point light's shadow read only in its light's reach. three reads it in five taps, each a read that takes the
- * screen's gradients, and no branch can leave such a read out (the compiler works it out at every pixel, then picks):
- * the loop's `directLight.visible` kept the result and paid for the ten reads at every lit pixel, 1.3 ms of the
- * crypt's 5.7 ms scene pass at 20.7 Mpx on a 4080 laptop (`lab scenecost`). Read at the map's one level (it has no
- * other, so the pixels are the same) the branch leaves them out: 0.4 ms.
- */
-function pointShadowInReach(): void {
-  const chunk = THREE.ShaderChunk.shadowmap_pars_fragment;
-  const at = chunk.indexOf(POINT_SHADOW_TAPS);
-  const tap = at < 0 ? -1 : chunk.indexOf(POINT_SHADOW_TAP, at);
-  if (tap < 0) {
-    console.error('pointShadowInReach: three\'s shadowmap_pars_fragment has changed: a point shadow is read at every pixel');
-    return;
-  }
-  THREE.ShaderChunk.shadowmap_pars_fragment = chunk.slice(0, tap) + POINT_SHADOW_TAP_LEVEL
-    + chunk.slice(tap + POINT_SHADOW_TAP.length);
-}
-
-/** three's sun's (the moon's) shadow on a lit point, as its lit shaders take it in their directional lights' loop */
-const SUN_SHADOW = 'directLight.color *= ( directLight.visible && receiveShadow ) ? getShadow( directionalShadowMap[ i ], '
-  + 'directionalLightShadow.shadowMapSize, directionalLightShadow.shadowIntensity, directionalLightShadow.shadowBias, '
-  + 'directionalLightShadow.shadowRadius, vDirectionalShadowCoord[ i ] ) : 1.0;';
-const SUN_SHADOW_KEPT = SUN_SHADOW.replace('directLight.color *= ', 'shadowSeen = ')
-  + ' directLight.color *= shadowSeen; sunShadow = min( sunShadow, shadowSeen );';
-/** the share of the environment's reflection, and of the ambient light (the sky's, the environment's), left in the
- *  sun's shadow */
-const ENV_IN_SHADOW = 0.25;
-const AMBIENT_IN_SHADOW = 0.5;
-const ENV_SPECULAR = 'RE_IndirectSpecular( radiance,';
-const AMBIENT = '#if defined( RE_IndirectDiffuse )\n';
-
-/**
- * The ambient light and the environment's reflection darkened in the sun's shadow. three lights a surface by the sky
- * and its reflection of the environment whatever stands between it and the sky, and each biome's environment has one
- * bright panel where the sun stands. The crypt's pale marble walks are lit mostly by the sky (with the moon off, as
- * bright as with it), so a column's or a tree's shadow stopped at a walk's edge, the cobbles beside it dark. (Kept:
- * the share of the sky a point in shadow still sees, `AMBIENT_IN_SHADOW`, `ENV_IN_SHADOW`.)
- */
-function shadeEnvironment(): void {
-  const begin = THREE.ShaderChunk.lights_fragment_begin, end = THREE.ShaderChunk.lights_fragment_end;
-  if (!begin.includes(SUN_SHADOW) || !end.includes(ENV_SPECULAR) || !end.includes(AMBIENT)) {
-    console.error('shadeEnvironment: three\'s lit shaders have changed: the ambient light ignores shadows');
-    return;
-  }
-  // (declared once ahead of the loop: three writes its body out once a light, in one scope)
-  THREE.ShaderChunk.lights_fragment_begin = 'float sunShadow = 1.0, shadowSeen;\n'
-    + begin.replace(SUN_SHADOW, SUN_SHADOW_KEPT);
-  // (the environment's light on a physical surface is `iblIrradiance`, taken in its indirect specular)
-  const ambient = `\tfloat ambientSeen = mix( ${AMBIENT_IN_SHADOW.toFixed(2)}, 1.0, sunShadow );\n`
-    + '\tirradiance *= ambientSeen;\n\tiblIrradiance *= ambientSeen;\n';
-  THREE.ShaderChunk.lights_fragment_end = end.replace(AMBIENT, AMBIENT + ambient).replace(ENV_SPECULAR,
-    `radiance *= mix( ${ENV_IN_SHADOW.toFixed(2)}, 1.0, sunShadow );\n\t${ENV_SPECULAR}`);
-}
-
-/** Each uncapped frame's GPU work fenced (`core/frameLoop.ts`), so the frames never queue ahead of the GPU. */
-function fenceFrames(renderer: THREE.WebGLRenderer): void {
-  // (where WebGPURenderer found no WebGPU device it has a WebGL 2 context instead)
-  const backend = (renderer as unknown as { backend: { device?: GPUDevice; gl?: WebGL2RenderingContext } }).backend;
-  if (backend.device) setFrameFence(gpuFence(backend.device.queue));
-  else if (backend.gl) setFrameFence(glFence(backend.gl));
-}
-
-/** The renderer made in `container`; `hdrAllowed`, whether the quality level the boot starts at lets HDR show
- *  (WebGPU makes its canvas in HDR or not once, `initHdrForWebGPU`). */
-export async function initRenderer(container: HTMLElement, hdrAllowed: boolean) {
-  loopPointLights();
-  pointShadowInReach();
-  shadeEnvironment();
-  // (the village's lamps in every lit shader, and its lights' soft falloff)
-  lightTheLamps();
-  const renderer = gl = await makeWebGPURenderer(hdrAllowed);
-  takePorts(renderer as unknown as WebGPURenderer);
+/** The engine made on the page's canvas in `container`, and the scene and camera the game is drawn from. (Its
+ *  `_hdrAllowed` is unread: the engine's frame is SDR, core/AGENTS.md's HDR output.) */
+export async function initRenderer(container: HTMLElement, _hdrAllowed: boolean) {
+  const canvas = await bootRust(container);
+  const renderer = gl = new GameScreen(canvas, MOST_TEXTURE_SIDE);
   const cr = canvasRatio();
   const cw = window.innerWidth, ch = window.innerHeight;
   renderer.setPixelRatio(cr);
   renderer.setSize(cw, ch);
   canvasFitted.w = cw; canvasFitted.h = ch; canvasFitted.pr = cr;
-  renderer.setTransparentSort(blendedBuiltFirst as never);
-  renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = THREE.PCFShadowMap;
-  renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.05;
-  renderer.outputColorSpace = THREE.SRGBColorSpace;
-  // three's checks of a program as it's first used are round trips to the GPU's process, one after another for
-  // each of the boot's programs: a production build checks them all once after the reveal (`checkPrograms`)
-  renderer.debug.checkShaderErrors = import.meta.env.DEV;
-  // asked now, while the GPU's process is idle: three asks it as the first texture is uploaded and keeps it, and a
-  // round trip waits for everything sent before it (a first visit's lobby warm-up waited 0.45 s there, behind its
-  // programs)
-  renderer.capabilities.getMaxAnisotropy();
-  container.appendChild(renderer.domElement);
-  await bootRust(renderer.domElement);
-  fenceFrames(renderer);
+  // (each uncapped frame waits for the GPU to be done with all but the last frame: the engine's queue, which draws
+  // it. Fenced on three's own device, the fence waited for the overlays' canvas alone, never the engine's frame.)
+  setFrameFence(gpuFence({ onSubmittedWorkDone: engineWorkDone }));
 
-  const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x030307);
+  const scene = new World();
+  scene.background = new Color(0x030307);
   lightThePasses(scene);
-  const camera = new THREE.PerspectiveCamera(CAMERA.fov, window.innerWidth / window.innerHeight, 0.5, 300);
+  const camera = new PerspectiveCamera(CAMERA.fov, window.innerWidth / window.innerHeight, 0.5, 300);
 
-  const size = sceneSize(new THREE.Vector2());
+  const size = sceneSize(new Vec2());
   // (never drawn into: it holds the scene's size and samples for what reads them, `pointScale`, `sceneSamples`)
-  sceneRT = new THREE.WebGLRenderTarget(size.x, size.y, { type: THREE.HalfFloatType, samples: 4 });
-  holdSceneTarget(sceneRT);
+  sceneRT.width = size.x;
+  sceneRT.height = size.y;
   grade.uniforms.tBlood.value = bloodMask;
   G.scene = scene; G.camera = camera; G.renderer = renderer;
   window.addEventListener('resize', fitViewport);
@@ -477,15 +328,12 @@ const fitted = { w: 0, h: 0, dpr: 0, cw: 0, ch: 0 };
 /** the CSS size and pixel ratio the backing canvas was last allocated at */
 const canvasFitted = { w: 0, h: 0, pr: 0 };
 
-/** The frame's box within three's canvas, in physical pixels. */
+/** The frame's box on the screen, in physical pixels: the window's whole. */
 export function frameRect(): FrameRect {
-  const dom = gl.domElement;
   const pr = gl.getPixelRatio();
-  const w = fitted.w || window.innerWidth;
-  const h = fitted.h || window.innerHeight;
-  const width = Math.min(dom.width, Math.floor(w * pr));
-  const height = Math.min(dom.height, Math.floor(h * pr));
-  return { left: 0, top: 0, bottom: dom.height - height, width, height };
+  const width = Math.floor((fitted.w || window.innerWidth) * pr);
+  const height = Math.floor((fitted.h || window.innerHeight) * pr);
+  return { left: 0, top: 0, bottom: 0, width, height };
 }
 
 /** For `lab resize`: the canvas and the viewport fitted again now. (The canvas is the window's own on this renderer,
@@ -511,10 +359,7 @@ function samplesOn(asked: number, ratio: number): number {
 /** Sets the scene's MSAA to the level's samples on this screen: the engine's. */
 function fitSamples(): void {
   const samples = samplesOn(askedSamples, canvasRatio());
-  if (sceneRT.samples !== samples) {
-    sceneRT.samples = samples;
-    sceneRT.dispose();
-  }
+  sceneRT.samples = samples;
   rustSamples(samples);
 }
 /** The MSAA samples the scene renders with now. */
@@ -562,7 +407,7 @@ export function setResolutionShare(share: number): void {
 /** The scene's pixels per css px (the last pass scales it up to the canvas). */
 export const sceneRatio = (): number => screenRatio() * sceneShare();
 /** The scene's render size in pixels (the canvas's at the scene's own ratio). */
-export function sceneSize(out: THREE.Vector2): THREE.Vector2 {
+export function sceneSize(out: Vec2): Vec2 {
   const r = sceneRatio();
   return out.set(Math.floor(window.innerWidth * r), Math.floor(window.innerHeight * r));
 }
@@ -593,13 +438,13 @@ function fitViewport(): boolean {
 
 /** The target that holds the scene's size and samples (what a warm-up is handed): nothing is drawn into it, the
  *  scene being the engine's. */
-export const sceneTarget = (): THREE.WebGLRenderTarget => sceneRT;
+export const sceneTarget = (): SceneTarget => sceneRT;
 
 /** What a point's size (m) over its distance is multiplied by for its size in the scene's pixels: the scene's
  *  target's height over the view's height 1 m out. (Sized by the canvas's height, a point was as many times too
  *  wide as the canvas has more pixels than the scene, wherever the quality caps the scene's: 3 times as wide on
  *  #243's phone, 9 times the pixels to fill.) */
-export const pointScale = (): number => sceneRT.height / (2 * Math.tan(THREE.MathUtils.degToRad(G.camera.fov) / 2));
+export const pointScale = (): number => sceneRT.height / (2 * Math.tan(Maths.degToRad(G.camera.fov) / 2));
 
 /** the scene's ratio its target was last sized at */
 let appliedSceneRatio = 0;
@@ -611,10 +456,11 @@ function applySceneRatio(): boolean {
   return true;
 }
 
-const _size = new THREE.Vector2();
+const _size = new Vec2();
 function fitSceneTarget(): void {
   sceneSize(_size);
-  sceneRT.setSize(_size.x, _size.y);
+  sceneRT.width = _size.x;
+  sceneRT.height = _size.y;
 }
 
 /** whether the level in use has the plain lit shading (Low and Very low: `plainLit`), for the Rust engine's */
@@ -769,7 +615,7 @@ export function setViewShift(x: number, y: number): void { shift.tx = x; shift.t
 /** The camera's follow, zoom, turn and shake brought to rest at once, on `focus`: tools/lab sets a run up again with
  *  the camera where it would have come to rest, whatever ran before it (the aim follows the camera: gliding back
  *  from where the last run ended, it left a run's arms a frame or two elsewhere past a range). */
-export function settleCamera(focus: THREE.Vector3): void {
+export function settleCamera(focus: Vec3): void {
   rig.focus.set(focus.x, 0, focus.z);
   rig.zoom = rig.targetZoom; rig.yaw = rig.targetYaw; rig.boom = rig.targetBoom;
   rig.shake = rig.kick = rig.kickTo = rig.roll = rig.rollTo = rig.hurt = 0;
@@ -779,9 +625,9 @@ export function settleCamera(focus: THREE.Vector3): void {
 
 /** A staged shot (the hero selection screen, game/hall.ts): where the camera stands and what it looks at, and how
  *  fast it glides there (`damp`'s rate: `STAGE_GLIDE` if left out; a drag's, faster, to keep up with the finger). */
-export interface Shot { pos: THREE.Vector3; look: THREE.Vector3; fov: number; glide?: number }
+export interface Shot { pos: Vec3; look: Vec3; fov: number; glide?: number }
 /** the shot asked for (null: the views have the camera), and the camera's glide to it */
-const stage = { shot: null as Shot | null, pos: new THREE.Vector3(), look: new THREE.Vector3(), fov: CAMERA.fov };
+const stage = { shot: null as Shot | null, pos: new Vec3(), look: new Vec3(), fov: CAMERA.fov };
 /** how fast the camera glides to a new shot (`damp`'s rate: most of the way in about a second) */
 const STAGE_GLIDE = 2.6;
 
@@ -805,7 +651,7 @@ export function stageCamera(shot: Shot | null, cut = false): void {
 }
 
 /** The camera on its staged shot, gliding there. */
-function onStage(cam: THREE.PerspectiveCamera, shot: Shot, dt: number): void {
+function onStage(cam: PerspectiveCamera, shot: Shot, dt: number): void {
   const k = 1 - Math.exp(-(shot.glide ?? STAGE_GLIDE) * dt);
   stage.pos.lerp(shot.pos, k);
   stage.look.lerp(shot.look, k);
@@ -818,9 +664,9 @@ function onStage(cam: THREE.PerspectiveCamera, shot: Shot, dt: number): void {
   cam.updateMatrixWorld();
 }
 
-const _boomAt = new THREE.Vector3();
-const _boomFrom = new THREE.Vector3();
-const _boomHit = { point: new THREE.Vector3(), normal: new THREE.Vector3(), t: 0, stone: false, name: '' };
+const _boomAt = new Vec3();
+const _boomFrom = new Vec3();
+const _boomHit = { point: new Vec3(), normal: new Vec3(), t: 0, stone: false, name: '' };
 /** how far the camera's boom is, clear of what's built (m), that far when it comes off a wall, how far it stands off a wall
  *  (m), how close it comes to the shoulder (m), and how fast it goes out again */
 let boomNow = 0;
@@ -871,7 +717,7 @@ function cameraFloorAt(x: number, z: number): number {
 }
 
 /** Share of `from -> to` before crossing within `clear` m of any elevated floor below; 1 if clear all the way. */
-function floorReach(from: THREE.Vector3, to: THREE.Vector3, clear = CAMERA_FLOOR_CLEAR): number {
+function floorReach(from: Vec3, to: Vec3, clear = CAMERA_FLOOR_CLEAR): number {
   const steps = Math.max(1, Math.ceil(from.distanceTo(to) / FLOOR_STEP));
   let prev = 0;
   for (let step = 0; step <= steps; step++) {
@@ -899,7 +745,7 @@ function floorReach(from: THREE.Vector3, to: THREE.Vector3, clear = CAMERA_FLOOR
 
 /** `pivot` brought back toward (x, z) short of a wall or elevated floor between: beside a wall or stair edge the
  *  shoulder stood through it, and the boom, read from there, never met it. */
-function shoulderClear(pivot: THREE.Vector3, x: number, z: number): void {
+function shoulderClear(pivot: Vec3, x: number, z: number): void {
   const wall = !boomThrough && G.arena?.place === 'village' ? G.arena.wall : null;
   if (wall && wall.cast(_boomAt.set(x, pivot.y, z), pivot, _boomHit)) {
     const reach = Math.max(0, _boomHit.point.distanceTo(_boomAt) - BOOM_OFF);
@@ -912,7 +758,7 @@ function shoulderClear(pivot: THREE.Vector3, x: number, z: number): void {
 }
 
 /** The boom back from `pivot` along the view, short of the first wall or elevated floor the line to the camera meets. */
-function boomClear(pivot: THREE.Vector3, x: number, chest: number, z: number, dt: number): number {
+function boomClear(pivot: Vec3, x: number, chest: number, z: number, dt: number): number {
   const wall = !boomThrough && G.arena?.place === 'village' ? G.arena.wall : null;
   let most = rig.boom;
   if (wall && wall.cast(pivot, _boomAt.copy(pivot).addScaledVector(_fwd, -rig.boom), _boomHit)) {
@@ -938,7 +784,7 @@ function boomClear(pivot: THREE.Vector3, x: number, chest: number, z: number, dt
 
 /** The camera brought back on his side of a wall or elevated floor it stands past: the boom's least, pressed against
  *  a wall or ledge, put it inside the obstacle, whose far side then showed through. */
-function cameraClear(camera: THREE.Vector3, x: number, chest: number, z: number): void {
+function cameraClear(camera: Vec3, x: number, chest: number, z: number): void {
   const wall = !boomThrough && G.arena?.place === 'village' ? G.arena.wall : null;
   if (wall && wall.cast(_boomFrom.set(x, chest, z), camera, _boomHit)) {
     const reach = Math.max(0, _boomHit.point.distanceTo(_boomFrom) - CAMERA_OFF_WALL);
@@ -963,7 +809,7 @@ export function cameraClearsHead(on: boolean): void { headKept = on; }
 
 /** The camera lifted over his head, short of what's over it: whatever brought it in, it looks over him there, out of
  *  a dome round his head's middle (so it lifts smoothly as it comes in). */
-function headClear(camera: THREE.Vector3, x: number, head: number, z: number): void {
+function headClear(camera: Vec3, x: number, head: number, z: number): void {
   const across = Math.hypot(camera.x - x, camera.z - z);
   if (!headKept || across >= HEAD_CLEAR) return;
   let up = head + HEAD_RISE * Math.sqrt(1 - (across / HEAD_CLEAR) ** 2);
@@ -987,7 +833,7 @@ const POST_ROOM = 0.2;
 const NEAR_HELD = BOOM_NEAR / (FAR_NEAR * 0.85) + 0.02;
 /** the plane's corners and middle, in the frame's own -1 to 1 */
 const NEAR_POINTS: readonly (readonly [number, number])[] = [[-1, -1], [1, -1], [-1, 1], [1, 1], [0, 0]];
-const _nearRight = new THREE.Vector3(), _nearUp = new THREE.Vector3(), _nearWay = new THREE.Vector3();
+const _nearRight = new Vec3(), _nearUp = new Vec3(), _nearWay = new Vec3();
 let farNearKept = false;
 /** For a harness (tools/lab): the near plane left as far as it was, by a wall or a column beside the camera, and the
  *  camera let stand by a column (`keepOffPosts`). */
@@ -999,9 +845,9 @@ export function farNearAtWalls(on: boolean): void { farNearKept = on; }
  * "I should not able to see through walls like this").
  */
 /** the way the camera looks, for the order of what blends */
-const _sortToward = new THREE.Vector3();
+const _sortToward = new Vec3();
 
-function nearClear(camera: THREE.Vector3, sy: number, cy: number, fov: number): number {
+function nearClear(camera: Vec3, sy: number, cy: number, fov: number): number {
   const wall = !boomThrough && G.arena?.place === 'village' ? G.arena.wall : null;
   const checkFloor = !boomThrough && !floorHeroOnly;
   if ((!wall && !checkFloor) || farNearKept) return FAR_NEAR;
@@ -1017,7 +863,7 @@ function nearClear(camera: THREE.Vector3, sy: number, cy: number, fov: number): 
     }
   }
   _nearUp.crossVectors(_nearRight, _fwd);
-  const high = Math.tan(THREE.MathUtils.degToRad(fov / 2));
+  const high = Math.tan(Maths.degToRad(fov / 2));
   const wide = high * G.camera.aspect;
   let share = 1;
   for (const [x, y] of NEAR_POINTS) {
@@ -1054,7 +900,7 @@ export function holdTopOnGround(held: boolean): void {
 /** `height`: the character's, for the close views' shoulder and eye level, over `floor`: the ground he stands on (his
  *  body's height, `obj.position.y`: the player's `pos.y` is always 0, and over it, through the eyes up the village's
  *  stair, the eyes stayed at the square's level, "in 1st person cannot walk up the stairs"). */
-export function updateCamera(dt: number, focus: THREE.Vector3, height: number, floor = 0): void {
+export function updateCamera(dt: number, focus: Vec3, height: number, floor = 0): void {
   const cam = G.camera;
   shift.x = damp(shift.x, shift.tx, 6, dt);
   shift.y = damp(shift.y, shift.ty, 6, dt);
@@ -1173,32 +1019,19 @@ export function updateCamera(dt: number, focus: THREE.Vector3, height: number, f
 }
 
 const ease = (t: number): number => t * t * (3 - 2 * t);
-const _fwd = new THREE.Vector3(), _pivot = new THREE.Vector3(), _look = new THREE.Vector3(), _quat = new THREE.Quaternion(), _quat2 = new THREE.Quaternion();
-/** What is drawn over the finished frame, on the canvas at its own pixel ratio: the world's overlays (ui/overlay). */
-export const overFrame = { draw: (): void => {}, empty: (): boolean => false };
-/** whether three's canvas is left out of the page's frame under the Rust engine: nothing is drawn over the
- *  engine's (`leaveOverOut`) */
-let overLeftOut = false;
-/**
- * Under the Rust engine three's canvas lies over the engine's for the world's overlays alone (the labels, the
- * outline). Cleared and shown every frame, the browser laid a second canvas of the screen's every pixel over the
- * first each frame, whatever was on it: on a phone 4.5 million pixels blended for nothing in most of the
- * village's frames. With nothing to draw it's left as it is and given no opacity, which the browser's
- * compositor leaves out, and still takes the pointer; `out` false: drawn again from this frame on.
- */
-function leaveOverOut(out: boolean): void {
-  if (out === overLeftOut) return;
-  overLeftOut = out;
-  gl.domElement.style.opacity = out ? '0' : '';
-}
-/** three's canvas cleared by a pass of its own, now. */
-function clearOverNow(): void {
-  overFrameUncleared();
-  gl.clear(true, true, false);
-  countOverPass();
-}
-/** For a harness: whether three's canvas is left out of the page's frame now. */
-export const overCanvasLeftOut = (): boolean => overLeftOut;
+const _fwd = new Vec3(), _pivot = new Vec3(), _look = new Vec3(), _quat = new Quat(), _quat2 = new Quat();
+/** What is drawn over the finished frame: the world's labels and the outline (`labels`; ui/overlay) and the UI's
+ *  panels (`panels`; ui/kit), handed to the engine for its frame, each frame before it's drawn, `shown` false for
+ *  none (photo mode). */
+export const overFrame = {
+  labels: (_shown: boolean): void => {},
+  panels: (_shown: boolean): void => {},
+  /** the panels hidden for a draw apart, none of the kit's animations stepped (`sceneApart`) */
+  hidePanels: (): void => {},
+};
+/** For a harness: whether a canvas of three's lies over the engine's: none, there is one canvas (the lab's checks of
+ *  the overlays ask it of this tree and of main's). */
+export const overCanvasLeftOut = (): boolean => true;
 /** whether the world's overlays are drawn over the frame (photo mode leaves them out: `showOverlays`) */
 let overlaysShown = true;
 /** The world's overlays (labels, names, bars, damage numbers) drawn over the frame, or left out (photo mode). */
@@ -1226,7 +1059,7 @@ function shotTaken(from: HTMLCanvasElement): void {
  * scene... think we have a bug").
  */
 export const frameApart = {
-  take: null as { camera: THREE.PerspectiveCamera; taken(canvas: HTMLCanvasElement): void } | null,
+  take: null as { camera: PerspectiveCamera; taken(canvas: HTMLCanvasElement): void } | null,
 };
 /** The scene drawn from the camera of the picture asked for, and handed over; the game's own view set back. */
 function drawApart(width: number, height: number, graded: Parameters<typeof drawRust>[6] & object): void {
@@ -1245,12 +1078,34 @@ function drawApart(width: number, height: number, graded: Parameters<typeof draw
   };
   try {
     drawRust(G.scene, ask.camera, G.time, width, height, gl, plain);
-    const frame = rustFrame(gl.domElement, false);
+    const frame = rustFrame(frameRect().width, frameRect().height);
     if (frame) ask.taken(frame);
   } finally {
     setWholeView(whole);
     aimSight(G.camera);
   }
+}
+
+/**
+ * A scene of its own drawn apart before the frame (the guide's portraits, ui/guide/portraits.ts), handed the
+ * frame's size and grade (drawn with another level's samples or bloom, every pipeline and target the engine has is
+ * made again, twice a frame: 80,941 pipelines in a minute, and the GPU ran out of memory): called once in the frame's task, with nothing laid over what it draws (no labels, outline or
+ * panels: the frame's own sends them again after it), and set again by it for the next frame if it must be.
+ */
+export const sceneApart = {
+  take: null as ((width: number, height: number, graded: Parameters<typeof drawRust>[6] & object) => void) | null,
+};
+/** no rows: the labels left out of a draw apart */
+const NO_ROWS = new Float32Array(0);
+/** `sceneApart`'s draw, the labels, the outline and the panels taken off the engine's frame first. */
+function drawSceneApart(width: number, height: number, graded: Parameters<typeof drawRust>[6] & object): void {
+  const take = sceneApart.take;
+  if (!take) return;
+  sceneApart.take = null;
+  overlayRows(NO_ROWS, 0, width, height);
+  outlineForEngine(null);
+  overFrame.hidePanels();
+  take(width, height, graded);
 }
 
 /** what marks each of the render's passes as a part of the frame (`markPassesWith`; none until the game sets it) */
@@ -1316,25 +1171,16 @@ export function render(): void {
   };
   // (a picture asked for from another camera: drawn first, the frame's own draw after it is what the page shows)
   if (frameApart.take) drawApart(pixels.width, pixels.height, graded);
+  if (sceneApart.take) drawSceneApart(pixels.width, pixels.height, graded);
+  overFrame.labels(overlaysShown);
+  overFrame.panels(!document.body.classList.contains('photo'));
+  // (the labels and panels' texts painted this frame, sent to the atlas in a copy a run)
+  sendPainted();
   drawRust(G.scene, G.camera, G.time, pixels.width, pixels.height, gl, graded);
-  // (a photo's picture: the engine's frame, taken before anything is drawn over it)
+  // (a photo's picture: the engine's frame, the labels in it as photo mode leaves them out)
   if (frameShot.take) {
-    const frame = rustFrame(gl.domElement, false);
+    const frame = rustFrame(frameRect().width, frameRect().height);
     if (frame) shotTaken(frame);
-  }
-  // (three's canvas over the engine's: clear, but for the world's overlays; left out with none to draw)
-  const none = !overlaysShown || overFrame.empty();
-  leaveOverOut(none);
-  if (!none) {
-    // (cleared by the first of the overlays' draws, as its pass begins: `clearOverFrame`; by a pass of its
-    // own only where none drew, or with the switch off, as it was: a profile's, to time the two)
-    gl.setRenderTarget(null);
-    gl.setClearColor(0x000000, 0);
-    const asItWas = RUST.tune.overCleared <= 0;
-    clearOverFrame();
-    if (asItWas) clearOverNow();
-    overFrame.draw();
-    if (overFrameUncleared()) clearOverNow();
   }
   framePart('render: drawn (Rust)');
   RUST.renderMs = perfClock.now() - renderBegan;

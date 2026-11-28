@@ -3,7 +3,7 @@
 // lags a swinging arm, sags below a raised forearm, swings on and settles. Position-based dynamics on the
 // main thread (a few hundred particles per sleeve, about a tenth of a millisecond a frame), collided with
 // the forearm so it never sinks into the arm it hangs from (verlet, distance constraints, capsule colliders).
-import * as THREE from 'three';
+import { Attribute, DynamicDrawUsage, Geometry, Mat4, Material, Mesh, Node, Vec3 } from '../../engine/api/index.ts';
 
 /** `?cloth=0` holds every sleeve at its animated shape (the old rigid bell), for A/B comparison */
 const CLOTH = typeof location === 'undefined' || !/[?&]cloth=0/.test(location.search);
@@ -19,50 +19,50 @@ const DAMP = 0.94, GRAVITY = 9.8;
 /** the share of the animation's own motion (the body running, the arm swinging) the free cloth is carried along with, so it trails less like a flag: a shift of
  *  position and previous position together, so it adds no speed and no spring */
 const CARRY = 0.6;
-const _m = new THREE.Matrix4(), _inv = new THREE.Matrix4(), _p = new THREE.Vector3(), _q = new THREE.Vector3(), _a = new THREE.Vector3(), _b = new THREE.Vector3(), _n = new THREE.Vector3();
+const _m = new Mat4(), _inv = new Mat4(), _p = new Vec3(), _q = new Vec3(), _a = new Vec3(), _b = new Vec3(), _n = new Vec3();
 
 export interface BellOptions {
   /** the sleeve's joint: its top ring is pinned to it (the sleeve's meshes become its children) */
-  joint: THREE.Object3D;
+  joint: Node;
   /** the forearm's ends, which the cloth stays outside: the joint's own origin to `hand` */
-  hand: THREE.Object3D;
+  hand: Node;
   /** the sleeve at rest in the joint's space: a tube of NR rings of NC + 1 vertices (the seam repeated), top first */
-  shape: THREE.BufferGeometry;
-  outer: THREE.Material;
-  lining: THREE.Material;
-  rim: THREE.Material;
+  shape: Geometry;
+  outer: Material;
+  lining: Material;
+  rim: Material;
   /** radius the cloth keeps from the forearm's axis */
   armRadius: number;
   /** the body the cloth must not sink into: vertical capsules on a joint (from `y0` to `y1` in its space), elliptical with radii `rx`, `rz` */
-  bodies?: { joint: THREE.Object3D; y0: number; y1: number; rx: number; rz: number }[];
+  bodies?: { joint: Node; y0: number; y1: number; rx: number; rz: number }[];
   /** skirts the cloth hangs outside of, as they lie (draped over the legs, after their update): `mesh` the skirt's, `gap` how far out */
-  skirts?: { mesh: THREE.Object3D; skirt: { pushOut(p: THREE.Vector3, gap: number): boolean }; gap: number }[];
+  skirts?: { mesh: Node; skirt: { pushOut(p: Vec3, gap: number): boolean }; gap: number }[];
   rimRadius: number;
 }
 
 export class BellCloth {
-  readonly meshes: THREE.Mesh[] = [];
+  readonly meshes: Mesh[] = [];
   private readonly pos = new Float32Array(N * 3);
   private readonly prev = new Float32Array(N * 3);
   private readonly tgt = new Float32Array(N * 3);
   private readonly lastTgt = new Float32Array(N * 3);
   private readonly rest: Float32Array;
-  private readonly outer: THREE.BufferGeometry;
-  private readonly inner: THREE.BufferGeometry;
-  private readonly rim: THREE.BufferGeometry;
+  private readonly outer: Geometry;
+  private readonly inner: Geometry;
+  private readonly rim: Geometry;
   private readonly pairs: [number, number][] = [];
   private readonly len: Float32Array;
   /** how far each particle may be from its column's top ring: the cloth's length down to it, which fast running would otherwise stretch */
   private readonly tether = new Float32Array(N);
   /** how far each particle may be from the forearm's axis: the radius it was cut to, so the sleeve stays a tube round the arm and never lets it out */
   private readonly envelope = new Float32Array(N);
-  private readonly bodyInv: THREE.Matrix4[] = [];
+  private readonly bodyInv: Mat4[] = [];
   private readonly stiff: Float32Array;
   private readonly local = new Float32Array(N * 3);
   private readonly flip: number;
   private acc = 0;
   private needsReset = true;
-  private readonly last = new THREE.Vector3();
+  private readonly last = new Vec3();
 
   constructor(private readonly o: BellOptions) {
     const src = o.shape.attributes.position;
@@ -89,13 +89,13 @@ export class BellCloth {
     this.inner = o.shape.clone();
     const uv = this.inner.attributes.uv;   // (the lining's texture was always sampled at three times the outside's)
     for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * 3, uv.getY(i));
-    for (const g of [this.outer, this.inner]) (g.attributes.position as THREE.BufferAttribute).setUsage(THREE.DynamicDrawUsage);
+    for (const g of [this.outer, this.inner]) (g.attributes.position as Attribute).setUsage(DynamicDrawUsage);
     this.rim = rimGeometry(NC * 2, 6);
     // which way the grid's cross product points, so the normals face out as the sleeve's own did
     this.flip = 1;
     this.flip = this.normalAt(this.rest, 3, 0, 1) .dot(_p.set(this.rest[(3 * NC) * 3], 0, this.rest[(3 * NC) * 3 + 2])) >= 0 ? 1 : -1;
-    const add = (g: THREE.BufferGeometry, m: THREE.Material, shadow: boolean): void => {
-      const mesh = new THREE.Mesh(g, m);
+    const add = (g: Geometry, m: Material, shadow: boolean): void => {
+      const mesh = new Mesh(g, m);
       mesh.castShadow = shadow; mesh.receiveShadow = true;
       mesh.frustumCulled = false;   // it moves off its bind bounds
       o.joint.add(mesh);
@@ -107,7 +107,7 @@ export class BellCloth {
   }
 
   /** the surface normal at a particle of `p` (ring c of row r), by differences over its neighbours, pointing out */
-  private normalAt(p: Float32Array, r: number, c: number, sign = this.flip): THREE.Vector3 {
+  private normalAt(p: Float32Array, r: number, c: number, sign = this.flip): Vec3 {
     const r0 = Math.max(0, r - 1), r1 = Math.min(NR - 1, r + 1), c0 = (c + NC - 1) % NC, c1 = (c + 1) % NC;
     _a.set(p[(r * NC + c1) * 3] - p[(r * NC + c0) * 3], p[(r * NC + c1) * 3 + 1] - p[(r * NC + c0) * 3 + 1], p[(r * NC + c1) * 3 + 2] - p[(r * NC + c0) * 3 + 2]);
     _b.set(p[(r1 * NC + c) * 3] - p[(r0 * NC + c) * 3], p[(r1 * NC + c) * 3 + 1] - p[(r0 * NC + c) * 3 + 1], p[(r1 * NC + c) * 3 + 2] - p[(r0 * NC + c) * 3 + 2]);
@@ -183,7 +183,7 @@ export class BellCloth {
       this.envelope[i] = Math.sqrt(px * px + py * py + pz * pz) * 1.06 + 0.006 * sc;
     }
     const bodies = this.o.bodies ?? [];
-    for (let b = 0; b < bodies.length; b++) (this.bodyInv[b] ??= new THREE.Matrix4()).copy(bodies[b].joint.matrixWorld).invert();
+    for (let b = 0; b < bodies.length; b++) (this.bodyInv[b] ??= new Mat4()).copy(bodies[b].joint.matrixWorld).invert();
     for (let it = 0; it < ITER; it++) {
       for (let k = 0; k < this.pairs.length; k++) {
         const [a, b] = this.pairs[k], ia = a * 3, ib = b * 3;
@@ -259,7 +259,7 @@ export class BellCloth {
   }
 
   /** the middle of the hem as it hangs (world) */
-  hem(out: THREE.Vector3): THREE.Vector3 {
+  hem(out: Vec3): Vec3 {
     out.set(0, 0, 0);
     for (let c = 0, i = (NR - 1) * NC * 3; c < NC; c++, i += 3) out.set(out.x + this.pos[i], out.y + this.pos[i + 1], out.z + this.pos[i + 2]);
     return out.multiplyScalar(1 / NC);
@@ -273,8 +273,8 @@ export class BellCloth {
       _p.set(this.pos[i * 3], this.pos[i * 3 + 1], this.pos[i * 3 + 2]).applyMatrix4(_inv);
       local[i * 3] = _p.x; local[i * 3 + 1] = _p.y; local[i * 3 + 2] = _p.z;
     }
-    const po = this.outer.attributes.position as THREE.BufferAttribute, no = this.outer.attributes.normal as THREE.BufferAttribute;
-    const pi = this.inner.attributes.position as THREE.BufferAttribute, ni = this.inner.attributes.normal as THREE.BufferAttribute;
+    const po = this.outer.attributes.position as Attribute, no = this.outer.attributes.normal as Attribute;
+    const pi = this.inner.attributes.position as Attribute, ni = this.inner.attributes.normal as Attribute;
     for (let r = 0; r < NR; r++) {
       // the ring's centre, for the lining's slightly narrower ring
       let cx = 0, cy = 0, cz = 0;
@@ -295,11 +295,11 @@ export class BellCloth {
 }
 
 /** a tube of `n` points round a closed ring with `radial` sides (a placeholder, filled by `writeRim`) */
-function rimGeometry(n: number, radial: number): THREE.BufferGeometry {
-  const g = new THREE.BufferGeometry(), idx: number[] = [];
-  g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(n * (radial + 1) * 3), 3).setUsage(THREE.DynamicDrawUsage));
-  g.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(n * (radial + 1) * 3), 3).setUsage(THREE.DynamicDrawUsage));
-  g.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(n * (radial + 1) * 2), 2));
+function rimGeometry(n: number, radial: number): Geometry {
+  const g = new Geometry(), idx: number[] = [];
+  g.setAttribute('position', new Attribute(new Float32Array(n * (radial + 1) * 3), 3).setUsage(DynamicDrawUsage));
+  g.setAttribute('normal', new Attribute(new Float32Array(n * (radial + 1) * 3), 3).setUsage(DynamicDrawUsage));
+  g.setAttribute('uv', new Attribute(new Float32Array(n * (radial + 1) * 2), 2));
   for (let i = 0; i < n; i++) for (let k = 0; k < radial; k++) {
     const a = i * (radial + 1) + k, b = ((i + 1) % n) * (radial + 1) + k;
     idx.push(a, b, a + 1, b, b + 1, a + 1);
@@ -309,11 +309,11 @@ function rimGeometry(n: number, radial: number): THREE.BufferGeometry {
 }
 
 const RIM_COS = Array.from({ length: 7 }, (_, k) => Math.cos((k / 6) * Math.PI * 2)), RIM_SIN = Array.from({ length: 7 }, (_, k) => Math.sin((k / 6) * Math.PI * 2));
-const _c = new THREE.Vector3(), _t = new THREE.Vector3(), _o = new THREE.Vector3(), _bi = new THREE.Vector3();
+const _c = new Vec3(), _t = new Vec3(), _o = new Vec3(), _bi = new Vec3();
 /** the hem's gold tube along the sleeve's last ring (`from`: its first particle in `p`, `count` of them) */
-function writeRim(g: THREE.BufferGeometry, p: Float32Array, from: number, count: number, radius: number): void {
-  const pos = g.attributes.position as THREE.BufferAttribute, nor = g.attributes.normal as THREE.BufferAttribute, n = count * 2, radial = 6;
-  const at = (i: number, out: THREE.Vector3): THREE.Vector3 => {
+function writeRim(g: Geometry, p: Float32Array, from: number, count: number, radius: number): void {
+  const pos = g.attributes.position as Attribute, nor = g.attributes.normal as Attribute, n = count * 2, radial = 6;
+  const at = (i: number, out: Vec3): Vec3 => {
     const a = Math.floor(i / 2) % count, b = (a + 1) % count, f = (i % 2) * 0.5;
     return out.set(
       p[(from + a) * 3] * (1 - f) + p[(from + b) * 3] * f, p[(from + a) * 3 + 1] * (1 - f) + p[(from + b) * 3 + 1] * f, p[(from + a) * 3 + 2] * (1 - f) + p[(from + b) * 3 + 2] * f);

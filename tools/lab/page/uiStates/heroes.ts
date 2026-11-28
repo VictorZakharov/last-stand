@@ -7,7 +7,7 @@ import type { Found, Steps } from '../uiKit';
 
 /** what the canary plants, for the report */
 const PLANTED = 'Back over the heroes\' names, a card\'s traits moved, the choice off the hero, a glow by the '
-  + 'hidden hero\'s hand, an item of his draggable and the save slot letting a click through';
+  + 'hidden hero\'s hand, an item of his draggable and the save slot held off';
 
 /** The canary's plants looked for, all of them, where the tree has the hero selection screen. */
 function heroesCanary(found: Found, state: string): Found {

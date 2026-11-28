@@ -5,7 +5,7 @@
 // him: the share met first by something standing over a man's height (an arch, a lintel, a roof). He's stood as
 // `enterMenu` in main.ts stands him (the lab's runs begin at no portal, so their end stands him on the square).
 // `canary` stands him where the exits were, which must be found.
-import * as THREE from 'three';
+import { Mesh, Node, Raycaster, Vec3 } from './sceneApi.ts';
 import type { Lab, Pictured } from './lab';
 import { G } from '../../../src/state';
 import { BIOME_IDS, type BiomeId } from '../../../src/data/biomes';
@@ -33,21 +33,21 @@ const OLD_OUT = 3.3;
 const percent = (share: number): string => `${(share * 100).toFixed(0)}%`;
 
 /** Whether `object` and everything over it is drawn in the frame, and not the hero's. */
-function drawnScenery(object: THREE.Object3D): boolean {
-  for (let o: THREE.Object3D | null = object; o; o = o.parent) {
+function drawnScenery(object: Node): boolean {
+  for (let o: Node | null = object; o; o = o.parent) {
     if (o === G.player.obj || o === G.arena.village!.meadow) return false;
-    if (!o.visible || drawnInShadowsOnly(o as THREE.Mesh)) return false;
+    if (!o.visible || drawnInShadowsOnly(o as Mesh)) return false;
   }
-  return (object as THREE.Mesh).isMesh === true;
+  return (object as Mesh).isMesh === true;
 }
 
 /** Whether the line from the camera to the ground at (x, z) first meets something over a man's height. */
 function covered(x: number, z: number): boolean {
-  const ground = new THREE.Vector3(x, groundHeight(x, z), z);
-  const from = G.camera.getWorldPosition(new THREE.Vector3());
+  const ground = new Vec3(x, groundHeight(x, z), z);
+  const from = G.camera.getWorldPosition(new Vec3());
   const way = ground.clone().sub(from);
   const far = way.length();
-  const ray = new THREE.Raycaster(from, way.normalize(), 0, far - 0.3);
+  const ray = new Raycaster(from, way.normalize(), 0, far - 0.3);
   const hit = ray.intersectObject(G.arena.groupOf('village'), true).find((h) => drawnScenery(h.object));
   if (!hit) return false;
   return hit.point.y - groundHeight(hit.point.x, hit.point.z) > OVER_A_MAN;
@@ -73,7 +73,7 @@ async function standBack(lab: Lab, biome: BiomeId, old: boolean): Promise<void> 
   const exit = G.arena.village!.exits[biome];
   const portal = portalPlace(biome);
   const at = old
-    ? new THREE.Vector3(portal.x + Math.sin(portal.facing) * OLD_OUT, 0, portal.z + Math.cos(portal.facing) * OLD_OUT)
+    ? new Vec3(portal.x + Math.sin(portal.facing) * OLD_OUT, 0, portal.z + Math.cos(portal.facing) * OLD_OUT)
     : exit.at.clone();
   at.y = groundHeight(at.x, at.z);
   G.player.walkTo = null;

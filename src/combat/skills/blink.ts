@@ -5,7 +5,8 @@
 // comes apart until he starts to form again, and the foes round where he vanished are left dazed (`Enemy.daze`),
 // standing there a moment while the rest come on. Every game shows it; his own game moves him and judges the daze, as
 // it judges his hits (`dazeEnemy`).
-import * as THREE from 'three';
+import { Attribute, Color, Geometry, Mesh, UnlitMaterial, Vec3 } from '../../engine/api/index.ts';
+import * as shapes from '../../engine/api/shapes/index.ts';
 import { G } from '../../state';
 import { addEffect, shockwave } from '../../fx/effects';
 import { particles, col } from '../../fx/particles';
@@ -39,7 +40,7 @@ const RING_R = 0.62, COLUMN_R = 0.34, COLUMN_H = 1.9;
 /** how high in the column of light the seconds of its cooldown count down (m) */
 const COUNT_Y = 1.1;
 
-const _reported = new THREE.Vector3();
+const _reported = new Vec3();
 
 /** The share of the way covered by `u` of the dash: nothing while he comes apart, then eased out and in. */
 function crossing(still: number): (u: number) => number {
@@ -54,12 +55,12 @@ function crossing(still: number): (u: number) => number {
  * Where he comes out for an aim at `target` from `from`: towards the aim as far as it or his reach, inside the arena,
  * and back along the way from there to the first spot no prop stands on (his own spot at worst).
  */
-function landAt(from: THREE.Vector3, radius: number, def: Def, target: THREE.Vector3): THREE.Vector3 {
-  const way = new THREE.Vector3(target.x - from.x, 0, target.z - from.z);
+function landAt(from: Vec3, radius: number, def: Def, target: Vec3): Vec3 {
+  const way = new Vec3(target.x - from.x, 0, target.z - from.z);
   const reach = Math.min(def.range, way.length());
   if (reach > 1e-3) way.divideScalar(way.length());
   const edge = G.arena.radius - radius - 0.1;
-  const spot = new THREE.Vector3();
+  const spot = new Vec3();
   for (let d = reach; d > 0; d -= SEARCH_STEP) {
     spot.set(from.x + way.x * d, 0, from.z + way.z * d);
     if (Math.hypot(spot.x, spot.z) <= edge && !inObstacle(spot, radius + 0.05)) return spot;
@@ -70,14 +71,14 @@ function landAt(from: THREE.Vector3, radius: number, def: Def, target: THREE.Vec
 /** the preview's glow: a ring and a faint disc on the floor, and a column of light fading upwards */
 const ringGeo = () => floorPatch(0.8, 1, 1, 48);
 const discGeo = () => floorPatch(0, 1, 1, 32);
-let columnGeo: THREE.BufferGeometry | null = null;
-function column(): THREE.BufferGeometry {
+let columnGeo: Geometry | null = null;
+function column(): Geometry {
   if (columnGeo) return columnGeo;
-  const g = new THREE.CylinderGeometry(COLUMN_R, COLUMN_R, COLUMN_H, 28, 4, true).translate(0, COLUMN_H / 2, 0);
+  const g = shapes.cylinder(COLUMN_R, COLUMN_R, COLUMN_H, 28, 4, true).translate(0, COLUMN_H / 2, 0);
   // (light at its foot, none at its top: added light, so black is nothing)
   const p = g.attributes.position, c = new Float32Array(p.count * 3);
   for (let i = 0; i < p.count; i++) c.fill((1 - p.getY(i) / COLUMN_H) ** 1.6, i * 3, i * 3 + 3);
-  g.setAttribute('color', new THREE.BufferAttribute(c, 3));
+  g.setAttribute('color', new Attribute(c, 3));
   columnGeo = g;
   return g;
 }
@@ -86,21 +87,21 @@ const columnMat = () => { const m = additive(GREEN, 0.9, 0.5); m.vertexColors = 
 /** The preview's meshes, its glows each with its brightness, and its readiness (red and counting down while letting
  *  go would cast nothing). */
 interface Preview {
-  ring: THREE.Mesh; ringG: THREE.BufferGeometry; disc: THREE.Mesh; discG: THREE.BufferGeometry; column: THREE.Mesh;
-  mat: THREE.MeshBasicMaterial; glows: [THREE.MeshBasicMaterial, number][]; ready: Readiness; t: number;
+  ring: Mesh; ringG: Geometry; disc: Mesh; discG: Geometry; column: Mesh;
+  mat: UnlitMaterial; glows: [UnlitMaterial, number][]; ready: Readiness; t: number;
 }
 let preview: Preview | null = null;
-const _green = new THREE.Color(GREEN);
+const _green = new Color(GREEN);
 
 function previewFor(): Preview {
   if (preview) return preview;
   const ringG = ringGeo(), discG = discGeo();
   const ringMat = additive(GREEN, 1.6, 0.85), discMat = additive(GREEN, 1, 0.16), mat = columnMat();
-  const ring = new THREE.Mesh(ringG, ringMat), disc = new THREE.Mesh(discG, discMat), col = new THREE.Mesh(column(), mat);
+  const ring = new Mesh(ringG, ringMat), disc = new Mesh(discG, discMat), col = new Mesh(column(), mat);
   ring.frustumCulled = disc.frustumCulled = col.frustumCulled = false;
   ring.name = 'blink-preview'; disc.name = 'blink-preview-disc'; col.name = 'blink-preview-column';
   G.scene.add(ring, disc, col);
-  const glows: [THREE.MeshBasicMaterial, number][] = [[ringMat, 1.6], [discMat, 1], [mat, 0.9]];
+  const glows: [UnlitMaterial, number][] = [[ringMat, 1.6], [discMat, 1], [mat, 0.9]];
   preview = { ring, ringG, disc, discG, column: col, mat, glows, ready: new Readiness('blink'), t: 0 };
   return preview;
 }
@@ -110,7 +111,7 @@ function previewFor(): Preview {
  * to his green as it would, so it can be held through the cooldown and let go once green. The ring keeps the second
  * its countdown shows (`userData.countdown`, null for none) for what measures it.
  */
-function showLanding(player: Player, def: Def, target: THREE.Vector3 | null, dt: number): void {
+function showLanding(player: Player, def: Def, target: Vec3 | null, dt: number): void {
   if (!target) {
     if (!preview) return;
     preview.ring.visible = preview.disc.visible = preview.column.visible = false;
@@ -142,7 +143,7 @@ function mote(x: number, y: number, z: number, vx: number, vy: number, vz: numbe
 }
 
 /** Coming apart: motes drawn in from all over the body to his middle, and a ring on the floor. */
-function comeApart(at: THREE.Vector3, floor: number): void {
+function comeApart(at: Vec3, floor: number): void {
   for (let i = 0; i < 46; i++) {
     const a = Math.random() * Math.PI * 2, r = rand(0.15, 0.55), y = rand(0.1, 1.85);
     const x = at.x + Math.cos(a) * r, z = at.z + Math.sin(a) * r;
@@ -154,7 +155,7 @@ function comeApart(at: THREE.Vector3, floor: number): void {
 
 /** Crossing, at `p` on the way: a bright head and a trail of motes left behind it, and through the eyes streaks of light
  *  rushing at them. */
-function streak(player: Player, p: THREE.Vector3, dir: THREE.Vector3): void {
+function streak(player: Player, p: Vec3, dir: Vec3): void {
   const y = player.obj.position.y + 1.05;
   // (seen from the top-down camera's 30 m and more: a head the size of a fist and a green trail as wide as a body)
   mote(p.x, y, p.z, 0, 0, 0, rand(0.7, 0.9), 0.08, 3);
@@ -176,7 +177,7 @@ function streak(player: Player, p: THREE.Vector3, dir: THREE.Vector3): void {
 }
 
 /** Put together again: motes gathering in on his body from round it, and a ring spreading out from his feet. */
-function formAgain(at: THREE.Vector3, floor: number): void {
+function formAgain(at: Vec3, floor: number): void {
   for (let i = 0; i < 46; i++) {
     const a = Math.random() * Math.PI * 2, r = rand(0.8, 1.3), y = rand(0.1, 2);
     const x = at.x + Math.cos(a) * r, z = at.z + Math.sin(a) * r, k = rand(0.15, 0.22);
@@ -196,12 +197,12 @@ function dissolve(player: Player, k: number): void {
 const skill: InstantSkill = {
   anim: null,
   dashes: true,
-  warm: () => [new THREE.Mesh(ringGeo(), additive(GREEN, 1.6, 0.85)), new THREE.Mesh(column(), columnMat())],
+  warm: () => [new Mesh(ringGeo(), additive(GREEN, 1.6, 0.85)), new Mesh(column(), columnMat())],
   aim: (player, def, target, dt) => showLanding(player, def as Def, target, dt),
   cast(player, rawDef, target) {
     const def = rawDef as Def;
     const from = player.pos.clone(), to = landAt(from, player.radius, def, target);
-    const dir = new THREE.Vector3(to.x - from.x, 0, to.z - from.z);
+    const dir = new Vec3(to.x - from.x, 0, to.z - from.z);
     const dist = dir.length();
     // (on the spot: he comes apart and forms again facing as he was)
     if (dist > 1e-3) dir.divideScalar(dist);
@@ -216,7 +217,7 @@ const skill: InstantSkill = {
     flash({ color: GREEN, intensity: 9, distance: 6, life: 0.25, pos: { x: from.x, y: player.obj.position.y + 1.1, z: from.z } });
     sfx.veilstep(dur);
     let formed = false;
-    const pace = crossing(VANISH / dur), at = new THREE.Vector3();
+    const pace = crossing(VANISH / dur), at = new Vec3();
     player.startDash(dir, dist / dur, dur, { hold: FORM, anim: 'cast', through: true, pace, step: () => {
       const d = player.dash;
       if (!d) return;

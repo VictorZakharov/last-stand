@@ -1,6 +1,6 @@
 // `lab coop --scenarios tavern`' side on each page (node/coopTavern.mjs): the tavern's keeper and his mugs as two games
 // share them: a hero stood at the bar and asking for ale, and what this game shows of the mugs and the drinks.
-import * as THREE from 'three';
+import { Vec3 } from './sceneApi.ts';
 import { G } from '../../../src/state';
 import { villageObject } from '../../../src/game/village';
 import { leaveRoom as leaveParty, partnersInTavern, selfId } from '../../../src/net/session';
@@ -15,7 +15,7 @@ export function coopTavernStand(_lab: Lab, { side }: { side: number }): void {
   const him = villageObject('keeper')!;
   const x = him.stand[0], z = him.stand[1] + side;
   G.player.walkTo = null;
-  G.player.place(new THREE.Vector3(x, 0, z), Math.PI / 2);
+  G.player.place(new Vec3(x, 0, z), Math.PI / 2);
 }
 
 /** This game's hero stood at (x, z) of the tavern's own floor (room m), facing `facing`: by a table to put his mug
@@ -23,7 +23,7 @@ export function coopTavernStand(_lab: Lab, { side }: { side: number }): void {
 export function coopTavernStandAt(_lab: Lab, { x, z, facing }: { x: number; z: number; facing: number }): void {
   const room = G.arena.rooms!.tavern.group;
   G.player.walkTo = null;
-  G.player.place(room.localToWorld(new THREE.Vector3(x, 0, z)), facing);
+  G.player.place(room.localToWorld(new Vec3(x, 0, z)), facing);
 }
 
 /** This game's hero puts the mug in his hand down by F, its choice answered (Kenneth's round 5: on the nearest top). */

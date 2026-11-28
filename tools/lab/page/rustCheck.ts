@@ -8,11 +8,13 @@ import { blankCanvas, lookTakesItsMapAgain, mapPaintedLate } from './rustMaps';
 import { grassPlacedOnce } from './rustFields';
 import { goneWholeLeftOut } from './rustGone';
 import { houseRuleHolds } from './rustHouseRule';
-import { doorwaysLeaveTheFrame, keptSameFrame } from './rustKept';
+import { doorwaysLeaveTheFrame, stillSameFrame } from './rustStill';
 import { brokenDownSameFrame } from './rustPartsCheck';
 import { levelSwitchLeavesNothingOut, plainShaderSameFrame } from './rustPlain';
 import { sceneWaitsItsPipelines } from './rustReveal';
 import { overCanvasCleared } from './rustOver';
+import { labelsByTheEngine } from './rustLabels';
+import { flamesAtFewerPixels } from './rustFlames';
 import { type Checked, failed, passed } from './rustPixels';
 import { frames, THREE_DRAWS_MOST } from './rustFrames';
 import { hallFromAbove, house, lampShadows, lightCache, shelter, sunShadowInTurns } from './rustVillageChecks';
@@ -20,14 +22,15 @@ import { glowGoneInTheFog } from './rustSight';
 import { sunCastsShadows } from './rustSun';
 import { bloodAtLowHealth, frameShotHoldsTheFrame, photoLookDrawn } from './rustLook';
 import { grassBandsEdgeToEdge, grassDrawnByItsRings } from './rustGrass';
-import * as THREE from 'three';
+import { bodiesAsOne, drawnFor } from './rustAsOne';
+import { DirectionalLight, Mat4, Node, PerspectiveCamera, Vec2, Vec3 } from './sceneApi.ts';
 import type { Lab, Report } from './lab';
 import type { BiomeId } from '../../../src/data/biomes';
 import { G } from '../../../src/state';
 import { RUST } from '../../../src/engine';
 import type { Bridge } from '../../../src/engine/bridge';
 import {
-  bloomShareNow, overCanvasLeftOut, sceneSamples, sceneSize, showOverlays,
+  bloomShareNow, sceneSamples, sceneSize, showOverlays,
 } from '../../../src/core/renderer';
 import { drawnLabels } from '../../../src/ui/overlay/layer';
 import { outlineShown } from '../../../src/ui/overlay/outline';
@@ -70,21 +73,32 @@ function playersPage(): Checked {
   return passed('the plain address draws by the engine, the pause menu has no renderer to choose');
 }
 
+/** An object by its name and its parents', nearest first, up to the scene: what a list of the misplaced names. */
+function pathOf(object: Node): string {
+  const names: string[] = [];
+  for (let at: Node | null = object; at && at !== G.scene; at = at.parent) {
+    names.push(at.name || at.type);
+  }
+  return names.join(' < ');
+}
+
 /** Every shown object stands where its own position, turn and scale put it under its parent. */
 function placedRight(where: string): Checked {
-  const expected = new THREE.Matrix4();
-  const local = new THREE.Matrix4();
+  const expected = new Mat4();
+  const local = new Mat4();
   const off: string[] = [];
   let checked = 0;
-  const visit = (object: THREE.Object3D): void => {
+  const visit = (object: Node): void => {
     if (!object.visible) return;
+    // (a piece of a foe drawn as one is left unplaced unseen, placed where it's read: `models/bodyAsOne.ts`)
+    if (object.userData.unplaced) return;
     if (object.parent && object.matrixAutoUpdate && object.matrixWorldAutoUpdate) {
       local.compose(object.position, object.quaternion, object.scale);
       expected.multiplyMatrices(object.parent.matrixWorld, local);
       const now = object.matrixWorld.elements;
       const apart = Math.max(...expected.elements.map((value, index) => Math.abs(value - now[index])));
       checked++;
-      if (apart > PLACED_WITHIN) off.push(`${object.name || object.type} ${apart.toFixed(3)} m`);
+      if (apart > PLACED_WITHIN) off.push(`${pathOf(object)} ${apart.toFixed(3)} m`);
     }
     object.children.forEach(visit);
   };
@@ -97,7 +111,7 @@ function placedRight(where: string): Checked {
  *  samples and 2048 whatever the level, a phone at Very low held 35 to 40 frames a second (from play). */
 function quality(bridge: Bridge): Checked {
   const asked = sceneSamples() >= 4 ? 4 : 1;
-  const sun = G.scene.getObjectByProperty('isDirectionalLight', true) as THREE.DirectionalLight | undefined;
+  const sun = G.scene.getObjectByProperty('isDirectionalLight', true) as DirectionalLight | undefined;
   const { samples, shadowSize, bloomShare } = bridge.levels.now();
   // (and its bloom at the level's share of the pixels: whole at every level, Very low drew a bloom the game
   // draws none of, 4 ms of a phone's 47 ms frame)
@@ -108,7 +122,7 @@ function quality(bridge: Bridge): Checked {
   if (engineSamples !== asked) return failed(`the engine draws ${samples} samples a pixel, the level asks for ${sceneSamples()}`);
   // (and at the level's pixels: sized by three's own target, it drew the screen's every pixel at every level)
   const canvas = document.getElementById('rust-canvas') as HTMLCanvasElement;
-  const wanted = sceneSize(new THREE.Vector2());
+  const wanted = sceneSize(new Vec2());
   if (canvas.width !== wanted.x || canvas.height !== wanted.y) {
     return failed(`the engine draws ${canvas.width}x${canvas.height}, the level's scene is ${wanted.x}x${wanted.y}`);
   }
@@ -123,10 +137,10 @@ function quality(bridge: Bridge): Checked {
  *  selection screen draws the hall to one side of its panel (a view offset), and worked out from the field of
  *  view alone the engine's heroes stood a hero's width off the outline drawn round the one in focus. */
 function viewOffsetKept(): Checked {
-  const camera = new THREE.PerspectiveCamera(50, 16 / 9, 0.1, 100);
+  const camera = new PerspectiveCamera(50, 16 / 9, 0.1, 100);
   camera.setViewOffset(1600, 900, 300, 0, 1600, 900);
   camera.updateProjectionMatrix();
-  const offset = projectionOf(camera, new THREE.Matrix4()).elements[8];
+  const offset = projectionOf(camera, new Mat4()).elements[8];
   if (Math.abs(offset) < 0.1) return failed('a camera\'s view offset is lost on the engine: its frame stands off three\'s overlays');
   return passed('the engine\'s view keeps a camera\'s view offset (the hero selection screen\'s)');
 }
@@ -176,61 +190,51 @@ async function solidAndCoarse(lab: Lab, bridge: Bridge): Promise<Checked> {
 }
 
 /**
- * three's canvas lies over the engine's for the world's labels and the outline alone: with none to draw it's left
- * out of the page's frame (no opacity: the browser lays no second canvas of the screen's pixels over the first),
- * and it's back the frame one is. The overlays hidden, as the profiler hides them, stand for none to draw.
+ * The page's game has one canvas, the engine's, and it takes the pointer (#973: three's renderer, whose canvas lay
+ * over the engine's for the world's labels and the outline, is gone; the engine draws them). Its canary: a canvas of
+ * three's laid over it, as there was, is found.
  */
 async function overCanvas(lab: Lab): Promise<Checked> {
   const drawing = lab.drawing;
   lab.drawing = true;
   try {
     await lab.step(3);
-    const none = drawnLabels().length === 0 && !outlineShown();
+    const wrong = canvasWrong();
+    const planted = plantedCanvas();
+    const caught = canvasWrong();
+    planted.remove();
     const shown = `${drawnLabels().length} labels${outlineShown() ? ' and an outline' : ''}`;
-    if (overCanvasLeftOut() !== none) {
-      return failed(`with ${shown} to draw, three's canvas is ${overCanvasLeftOut() ? 'left out' : 'laid over the frame'}`);
-    }
-    showOverlays(false);
-    await lab.step(2);
-    const hidden = overCanvasLeftOut() && G.renderer.domElement.style.opacity === '0';
-    showOverlays(true);
-    await lab.step(2);
-    if (!hidden) return failed('with no overlay to draw three\'s canvas is still laid over the engine\'s each frame');
-    if (overCanvasLeftOut() !== none) return failed('three\'s canvas didn\'t come back as the overlays did');
-    return passed(`three's canvas left out of the page's frame with no overlay to draw, back with one (${shown} now)`);
+    if (wrong) return failed(wrong);
+    if (!caught) return failed('canary: a canvas laid over the engine\'s went unseen');
+    return passed(`one canvas, the engine's, taking the pointer (${shown} drawn by it; the canary: ${caught})`);
   } finally {
-    showOverlays(true);
     lab.drawing = drawing;
   }
 }
 
-/**
- * In the hall, its braziers' flames in view: drawn by the engine's pass at a quarter of the scene's pixels
- * (what costs by its pixels, a volume marched at each: 7 ms of a phone's frame at full size). The canary: with
- * the switch off they're drawn with the scene.
- */
-async function flamesAtFewerPixels(lab: Lab, bridge: Bridge): Promise<Checked> {
-  if (bridge.levels.now().samples >= 4) return passed('at four samples a pixel the flames are drawn with the scene');
-  const drawing = lab.drawing;
-  lab.drawing = true;
-  try {
-    await lab.step(3);
-    const low = bridge.stats.lowDraws;
-    RUST.tune.lowRes = 0;
-    await lab.step(2);
-    const whole = bridge.stats.lowDraws;
-    if (!low) return failed('no flame is drawn at fewer pixels: each marched at every pixel of the scene\'s it covers');
-    if (whole) return failed(`with the switch off ${whole} draws are still at fewer pixels`);
-    return passed(`${low} draws of the flames at a quarter of the scene's pixels, laid over it`);
-  } finally {
-    RUST.tune.lowRes = 1;
-    lab.drawing = drawing;
-  }
+/** What's wrong with the game's canvases, or null: one, the engine's, the game's input taking it, and the
+ *  pointer at the screen's middle meeting it or the page's UI over it. */
+function canvasWrong(): string | null {
+  const engine = document.getElementById('rust-canvas');
+  const others = [...document.querySelectorAll('#game canvas')].filter((canvas) => canvas !== engine);
+  if (!engine) return 'no engine canvas on the page';
+  if (G.renderer.domElement !== engine) return 'the game\'s input takes another canvas than the engine\'s';
+  if (others.length) return `${others.length} more canvas${others.length > 1 ? 'es' : ''} over the game`;
+  const middle = document.elementFromPoint(innerWidth / 2, innerHeight / 2);
+  if (middle instanceof HTMLCanvasElement && middle !== engine) return 'the pointer meets another canvas';
+  return null;
 }
 
+/** The canary's canvas: one laid over the game's, as three's was. */
+function plantedCanvas(): HTMLCanvasElement {
+  const canvas = document.createElement('canvas');
+  canvas.style.cssText = 'position:absolute;inset:0;width:100%;height:100%';
+  document.getElementById('game')!.appendChild(canvas);
+  return canvas;
+}
 
-/** Every foe of the fight is handed to the engine, and three draws none of the scene. */
-async function fight(lab: Lab, bridge: Bridge, foes: number): Promise<Checked> {
+/** Every foe of the fight is handed to the engine, and three draws none of the scene; each drawn as one. */
+async function fight(lab: Lab, bridge: Bridge, foes: number): Promise<Checked[]> {
   const spots = crowdPlaces(foes, G.player.pos, G.player.facing);
   const standing = await foesAt(lab, spots, spots.map(() => 1));
   const drawing = lab.drawing;
@@ -244,14 +248,11 @@ async function fight(lab: Lab, bridge: Bridge, foes: number): Promise<Checked> {
   }
   const watched = bridge.watched;
   bridge.watched = null;
-  const hidden = standing.filter((foe) => {
-    let drawn = false;
-    foe.obj.traverse((part) => { drawn ||= watched.has(part); });
-    return !drawn;
-  });
-  if (hidden.length) return failed(`${hidden.length} of ${standing.length} foes aren't drawn by the engine (${hidden[0].type})`);
-  if (three > THREE_DRAWS_MOST) return failed(`in the fight three drew ${three} things of its own in a frame`);
-  return passed(`all ${standing.length} foes drawn by the engine, ${bridge.stats.draws} draws; three's own ${three}`);
+  const hidden = standing.filter((foe) => !drawnFor(foe, watched));
+  const asOne = await bodiesAsOne(standing);
+  if (hidden.length) return [failed(`${hidden.length} of ${standing.length} foes aren't drawn by the engine (${hidden[0].type})`), asOne];
+  if (three > THREE_DRAWS_MOST) return [failed(`in the fight three drew ${three} things of its own in a frame`), asOne];
+  return [passed(`all ${standing.length} foes drawn by the engine, ${bridge.stats.draws} draws; three's own ${three}`), asOne];
 }
 
 /** Each skill on the hero's keys held in turn: nothing of it left undrawn. */
@@ -264,7 +265,7 @@ async function casts(lab: Lab, bridge: Bridge): Promise<Checked[]> {
     for (const key of SKILL_KEYS) {
       const def = hero.skillAt(key)?.def;
       if (!def) continue;
-      const ahead = new THREE.Vector3(Math.sin(hero.facing), 0, Math.cos(hero.facing)).multiplyScalar(CAST_AHEAD);
+      const ahead = new Vec3(Math.sin(hero.facing), 0, Math.cos(hero.facing)).multiplyScalar(CAST_AHEAD);
       const aim = hero.pos.clone().add(ahead);
       const undrawn = new Map<string, number>();
       const made = RUST.pipelines.made;
@@ -326,13 +327,14 @@ export async function rustCheck(lab: Lab, command: RustCheckCommand): Promise<Re
       checks.push(await sunShadowInTurns(lab, bridge));
       checks.push(await overCanvas(lab));
       checks.push(await overCanvasCleared(lab));
+      checks.push(await labelsByTheEngine(lab));
       checks.push(await house(lab, bridge, command.room as RoomId));
       checks.push(await blankCanvas(lab, bridge));
       checks.push(await mapPaintedLate(lab, bridge));
       checks.push(await levelSwitchLeavesNothingOut(lab));
       checks.push(await plainShaderSameFrame(lab));
       checks.push(await sceneWaitsItsPipelines(lab));
-      checks.push(await keptSameFrame(lab, bridge));
+      checks.push(await stillSameFrame(lab));
       checks.push(await brokenDownSameFrame(lab, bridge));
       checks.push(await doorwaysLeaveTheFrame(lab, bridge));
       checks.push(await goneWholeLeftOut(lab, bridge));
@@ -344,7 +346,7 @@ export async function rustCheck(lab: Lab, command: RustCheckCommand): Promise<Re
       checks.push(shelter(bridge, `the ${command.biome}`, false));
       // (in a run: the lobby shows no low-Health look)
       checks.push(await bloodAtLowHealth(lab));
-      checks.push(await fight(lab, bridge, command.foes));
+      checks.push(...await fight(lab, bridge, command.foes));
       checks.push(...await casts(lab, bridge));
       checks.push(await armsThroughTheEyes(lab, bridge, command.biome));
     }

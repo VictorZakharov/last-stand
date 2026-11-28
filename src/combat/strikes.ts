@@ -3,12 +3,12 @@
 // arms or crown flew on through it, and one aimed past a small foe's shoulder at the boss behind struck the small foe
 // it went by. (A column within its circle as well struck imps where nothing of them is drawn.) What it met tells a
 // headshot from a body's hit (`Struck`, `onHead`).
-import * as THREE from 'three';
+import { Hit, Node, Raycaster, Vec3 } from '../engine/api/index.ts';
 import type { Enemy } from '../entities/enemy';
 import type { HullHit } from '../entities/models/hulls';
 import { castSolid } from '../fx/stuckArrows';
 
-const ray = new THREE.Raycaster(), _dir = new THREE.Vector3();
+const ray = new Raycaster(), _dir = new Vec3();
 
 /** What a shot met of a body, filled in by `strikesBody` as it finds where: whether it was the head. */
 export interface Struck { head: boolean }
@@ -19,10 +19,10 @@ export interface Struck { head: boolean }
  * most. Read off the part, not the height: the Brute's, the Mossback's and the Hulks' heads hang low and forward
  * between their shoulders, under a hump or horns that a share of the height would have taken for one.
  */
-export function onHead(e: Enemy, hit: THREE.Intersection): boolean {
+export function onHead(e: Enemy, hit: Hit): boolean {
   const head = e.model.joints?.head ?? e.model.head;
   if (!head) return false;
-  for (let o: THREE.Object3D | null = (hit as Partial<HullHit>).joint ?? hit.object; o && o !== e.obj; o = o.parent) {
+  for (let o: Node | null = (hit as Partial<HullHit>).joint ?? hit.object; o && o !== e.obj; o = o.parent) {
     if (o === head) return true;
   }
   return false;
@@ -45,7 +45,7 @@ export function entry(ax: number, az: number, dx: number, dz: number, cx: number
  * (m) of what's left of it (the shot's own size). `struck` is told what it met: its head or not (a ducked foe's cap
  * is no head).
  */
-export function strikesBody(e: Enemy, a: THREE.Vector3, b: THREE.Vector3, around = 0, struck?: Struck): number {
+export function strikesBody(e: Enemy, a: Vec3, b: Vec3, around = 0, struck?: Struck): number {
   if (struck) struck.head = false;
   const top = e.duckedTop;
   if (top !== null) return strikesDucked(e, top, a, b, around);
@@ -67,7 +67,7 @@ export function strikesBody(e: Enemy, a: THREE.Vector3, b: THREE.Vector3, around
  * under `top`, what's left of it over the ground (a cap over its body). Its body is met by the hulls of its skinned
  * limbs, which leave a cap's top out: aimed at a ducked Sporecaller's cap, at its feet, an arrow flew on through it.
  */
-function strikesDucked(e: Enemy, top: number, a: THREE.Vector3, b: THREE.Vector3, around: number): number {
+function strikesDucked(e: Enemy, top: number, a: Vec3, b: Vec3, around: number): number {
   const t = entry(a.x, a.z, b.x - a.x, b.z - a.z, e.pos.x, e.pos.z, e.radius + around);
   if (t < 0) return -1;
   return a.y + (b.y - a.y) * t < top + around ? t : -1;

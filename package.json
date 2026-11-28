@@ -9,7 +9,8 @@
     "build": "tsc --noEmit && vite build",
     "typecheck": "tsc --noEmit",
     "check:engine": "node scripts/engine-pkg.mjs",
-    "check:hubs":"node scripts/hubs.mjs",
+    "check:three": "node scripts/three-imports.mjs",
+    "check:hubs": "node scripts/hubs.mjs",
     "check:pages": "node scripts/check-pages-build.mjs",
     "check:sorted": "node scripts/sorted.mjs",
     "preview": "vite preview",
@@ -24,6 +25,8 @@
     "handref": "node tools/handref/run.mjs",
     "fire-bake": "node tools/lab/node/fireBakeSheet.mjs",
     "lab:test": "node --test \"tools/lab/test/*.test.mjs\"",
+    "api:test": "node --test \"src/engine/api/**/*.test.ts\"",
+    "api:typecheck": "tsc --noEmit -p src/engine/api/tsconfig.json",
     "stalls": "node tools/stalls/stalls.mjs",
     "stalls:test": "node --test \"tools/stalls/test/*.test.mjs\"",
     "traces:build": "npm --prefix server/traces/web run build",
@@ -36,12 +39,11 @@
   },
   "dependencies": {
     "@dgreenheck/ez-tree": "^1.1.0",
-    "three": "0.187.0"
+    "meshoptimizer": "1.1.1"
   },
   "devDependencies": {
     "@resvg/resvg-js": "^2.6.2",
     "@types/node": "^26.6.2",
-    "@types/three": "0.187.0",
     "playwright-core": "^1.61.1",
     "sass": "^1.105.0",
     "typescript": "6.0.2",

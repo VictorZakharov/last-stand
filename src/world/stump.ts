@@ -7,7 +7,7 @@
 // by a worker while the game loads (`preloadStump`: on the page it took 0.2 s a stump), and here only if that failed.
 // The worker sculpts a pool of them (`POOL`), each its own girth, break, slant and splinters (`rollShape`), which the
 // forest deals out to its stumps anew for every run.
-import * as THREE from 'three';
+import { Attribute, Box3, Geometry, Vec3 } from '../engine/api/index.ts';
 import { fieldOf, IDENTITY, type Part, type Shape } from '../entities/models/sdf';
 import { surfaceNets } from '../entities/models/surfaceNets';
 import { valueNoise3 } from '../core/patterns';
@@ -87,10 +87,10 @@ function trunk(shape: StumpShape, salt: number): Shape {
 }
 
 /** A root from `a` to `b`, its radius `r0` to `r1`, gnarled. */
-function root(a: THREE.Vector3, b: THREE.Vector3, r0: number, r1: number, salt: number): Shape {
-  const ab = new THREE.Vector3().subVectors(b, a);
+function root(a: Vec3, b: Vec3, r0: number, r1: number, salt: number): Shape {
+  const ab = new Vec3().subVectors(b, a);
   const length2 = ab.lengthSq();
-  const mid = new THREE.Vector3().addVectors(a, b).multiplyScalar(0.5);
+  const mid = new Vec3().addVectors(a, b).multiplyScalar(0.5);
   return {
     distance: (x, y, z) => {
       const t = clamp(((x - a.x) * ab.x + (y - a.y) * ab.y + (z - a.z) * ab.z) / length2, 0, 1);
@@ -138,8 +138,8 @@ function stumpParts(shape: StumpShape, rng: () => number): Part[] {
   for (let i = 0; i < ROOTS; i++) {
     const a = (i / ROOTS) * TAU + (rng() - 0.5) * 0.5;
     const reach = ROOT_REACH[0] + rng() * (ROOT_REACH[1] - ROOT_REACH[0]);
-    const from = new THREE.Vector3(Math.cos(a) * shape.trunk * 0.6, 0.45, Math.sin(a) * shape.trunk * 0.6);
-    const to = new THREE.Vector3(Math.cos(a) * reach, -SUNK * 0.6, Math.sin(a) * reach);
+    const from = new Vec3(Math.cos(a) * shape.trunk * 0.6, 0.45, Math.sin(a) * shape.trunk * 0.6);
+    const to = new Vec3(Math.cos(a) * reach, -SUNK * 0.6, Math.sin(a) * reach);
     join(root(from, to, ROOT_FROM, ROOT_TO, rng() * 100), ROOT_BLEND);
   }
   cut(overBreak(shape, rng), 0.02);
@@ -174,7 +174,7 @@ export interface PackedStump {
 export function sculptStump(k: number): PackedStump {
   const rng = mulberry(SEED + k);
   const shape = rollShape(rng);
-  const box = new THREE.Box3(new THREE.Vector3(-1.7, -SUNK - 0.05, -1.7), new THREE.Vector3(1.7, 1.75, 1.7));
+  const box = new Box3(new Vec3(-1.7, -SUNK - 0.05, -1.7), new Vec3(1.7, 1.75, 1.7));
   const net = surfaceNets(fieldOf(stumpParts(shape, rng)), box, CELL);
   const groups: [number[], number[]] = [[], []];
   for (let i = 0; i < net.index.length; i += 3) {
@@ -210,11 +210,11 @@ export function sculptStump(k: number): PackedStump {
 }
 
 /** The stump's geometry from its arrays: its wood (group 0), then its bark. */
-function geometryOf(stump: PackedStump): THREE.BufferGeometry {
-  const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.BufferAttribute(stump.positions, 3));
-  g.setAttribute('normal', new THREE.BufferAttribute(stump.normals, 3));
-  g.setAttribute('uv', new THREE.BufferAttribute(stump.uvs, 2));
+function geometryOf(stump: PackedStump): Geometry {
+  const g = new Geometry();
+  g.setAttribute('position', new Attribute(stump.positions, 3));
+  g.setAttribute('normal', new Attribute(stump.normals, 3));
+  g.setAttribute('uv', new Attribute(stump.uvs, 2));
   g.normalizeNormals();
   g.addGroup(0, stump.wood, 0);
   g.addGroup(stump.wood, stump.positions.length / 3 - stump.wood, 1);
@@ -253,7 +253,7 @@ export function preloadStump(): void {
 export const stumpPreloaded = (): Promise<void> => preloaded;
 
 /** The pool's geometries: the worker's, else sculpted here. */
-export const buildStumpGeos = (): THREE.BufferGeometry[] =>
+export const buildStumpGeos = (): Geometry[] =>
   (sculpted ?? Array.from({ length: POOL }, (_, k) => sculptStump(k))).map(geometryOf);
 
 /** A triangle's uvs made whole across the seam where the turn round the middle starts again (coordinate `axis`,

@@ -5,7 +5,7 @@
 // piece a frame, his plinth empty meanwhile. Each frame's update is timed by the browser's own clock, against a hero
 // built whole on the same machine in the same run (a lent PC builds one 2.5 times slower than the owner's). `canary`
 // builds a hero whole in one of the frames, as it was.
-import * as THREE from 'three';
+import { Vec3 } from './sceneApi.ts';
 import type { Lab } from './lab';
 import { G } from '../../../src/state';
 import { Player } from '../../../src/entities/player';
@@ -36,7 +36,7 @@ function realNow(): number {
 /** The hero stood at (x, z). */
 function standAt(x: number, z: number): void {
   G.player.walkTo = null;
-  G.player.place(new THREE.Vector3(x, groundHeight(x, z), z), Math.PI);
+  G.player.place(new Vec3(x, groundHeight(x, z), z), Math.PI);
 }
 
 /** A hero of another class built whole now and let go (the canary's held frame, and what a frame is held to):

@@ -6,6 +6,7 @@
 // was asked, and how many times they've talked, is kept in the hero's profile (`Profile.talk`): a first meeting and
 // a visit after start differently, and a node asked again may be answered otherwise. It's stepped by the game's frame
 // (`stepTalk`), so a harness's fixed clock reveals it as a player's does.
+import { scrollToEnd } from '../../kit/drawn';
 import { said, SPEAKERS, type Speaker, type TalkAct, type TalkContext, type TalkReply } from '../../../data/talk';
 import { sfx } from '../../../core/audio';
 import { wasPressed } from '../../../core/input';
@@ -167,6 +168,7 @@ function show(n: number): void {
   }
   spoke();
   says.scrollTop = says.scrollHeight;
+  scrollToEnd(says);
   if (shown >= lines.length) offer();
 }
 

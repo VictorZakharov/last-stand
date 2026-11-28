@@ -1,5 +1,5 @@
 // Healing Draught.
-import * as THREE from 'three';
+import { Vec3 } from '../../engine/api/index.ts';
 import { particles, col } from '../../fx/particles';
 import { flash } from '../../fx/lights';
 import { sfx } from '../../core/audio';
@@ -9,7 +9,7 @@ import { rand } from '../../util';
 import { G } from '../../state';
 import { PVP } from '../../data/balance';
 
-const _ahead = new THREE.Vector3();
+const _ahead = new Vec3();
 
 const skill: InstantSkill = {
   anim: 'drink',

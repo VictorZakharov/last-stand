@@ -344,77 +344,9 @@ body.touch {
   #coop-search, .coop-field input, .coop-pass-ask input, #coop-room-pass, .coop-foot .coop-join input { font-size: calc(16px / var(--ui, 1)); }
 }
 
-/* the partners' frames, top left (below the bars on touch) */
-#party { position: absolute; top: hud(14px); left: calc(#{hud(14px)} + env(safe-area-inset-left, 0px)); display: flex; flex-direction: column; gap: 6px; scale: var(--hud, 1); transform-origin: left top; }
-body.touch #party { top: touch(104px); left: $touch-beside; scale: var(--touch, 1); }
-.pf { width: 200px; padding: 5px 8px 6px; background: rgba(8,8,12,.72); border: 1px solid rgba($ally, .4); border-radius: 3px; }
-.pf-heading { display: flex; justify-content: space-between; align-items: baseline; gap: 6px;
-  font-family: var(--font-display); font-size: 13px; }
-.pf-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #cfe6ff; }
-.pf-class { flex: none; color: var(--class-colour); }
-.pf-bar { height: 8px; margin-top: 3px; background: rgba(0,0,0,.8); box-shadow: 0 0 0 1px rgba($frame, .35); }
-.pf-fill { height: 100%; background: linear-gradient(#ff5a4a, #8a0c10); transition: width .15s linear; }
-.pf-state { font-size: 12px; color: var(--ink-dim); min-height: 0; }
-.pf-state:empty { display: none; }
-.pf.down { border-color: var(--danger); animation: lowpulse .6s infinite alternate; }
-.pf.out { opacity: .55; }
-/* a partner being healed (a draught, a healing staff's beam): a green + over the frame's corner, breathing, and a
-   green light over their bar. Each drawn once and only faded or scaled: a loop of a layer's opacity or transform
-   paints nothing (the frames are few: the partners') */
-.pf { position: relative; }
-.pf-bar { position: relative; }
-.pf-mend { position: absolute; inset: 0; background: linear-gradient(90deg, transparent, rgba($heal, .85), transparent); opacity: 0; will-change: opacity; pointer-events: none; }
-.pf-plus { position: absolute; top: -7px; right: -7px; width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center;
-  font: 700 19px/1 var(--font-display); color: #eafff0; background: radial-gradient(circle, $heal 0 45%, rgba($heal, .35) 70%, transparent 72%);
-  text-shadow: 0 0 4px #063; opacity: 0; scale: .6; transition: opacity .2s, scale .2s; will-change: opacity, transform; pointer-events: none; }
-.pf.healed { border-color: rgba($heal, .8); }
-/* (on the portrait's corner where the frame shows one) */
-.pf-portrait:not([hidden]) ~ .pf-plus { right: auto; left: 32px; top: -4px; }
-.pf.healed .pf-plus { opacity: 1; scale: 1; animation: pf-plus .9s ease-in-out infinite alternate; }
-.pf.healed .pf-mend { animation: pf-mend .9s ease-in-out infinite alternate; }
-@keyframes pf-plus { from { transform: scale(.9); } to { transform: scale(1.15); } }
-@keyframes pf-mend { from { opacity: .15; } to { opacity: .6; } }
-@media (prefers-reduced-motion: reduce) { .pf.healed .pf-plus { animation: none; } .pf.healed .pf-mend { animation: none; opacity: .4; } }
-// a downed partner in reach: the key to hold, low in the middle of the screen, and the revive filling under it
-.rvprompt { position: absolute; left: 50%; bottom: hud(150px); transform: translateX(-50%); display: flex; flex-direction: column; align-items: center;
-  gap: hud(6px); padding: hud(10px) hud(18px); border-radius: hud(6px); background: rgba(10,6,4,.78); border: 1px solid rgba(#ffe6a0, .45);
-  box-shadow: 0 0 hud(18px) rgba(#ffe6a0, .25); pointer-events: none; white-space: nowrap; }
-.rp-line { display: flex; align-items: center; gap: hud(12px); }
-.rp-line kbd { display: inline-flex; align-items: center; justify-content: center; min-width: hud(40px); height: hud(40px); border-radius: hud(6px);
-  font-family: var(--font-display); font-size: hud(24px); color: #1a1208; background: linear-gradient(#fff4d0, #e8c878); border: 1px solid #fff8e0;
-  box-shadow: 0 hud(3px) 0 #8a6a2a, 0 0 hud(12px) rgba(#ffe6a0, .6); }
-.rp-line span { font-family: var(--font-display); font-size: hud(22px); color: #ffe6a0; text-shadow: $outline; }
-.rp-bar { width: hud(260px); height: hud(6px); background: rgba(0,0,0,.7); border-radius: hud(3px); overflow: hidden; }
-.rp-bar div { height: 100%; width: 0; background: #ffe6a0; }
-#down-note { position: absolute; left: 50%; top: 32%; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 4px; text-align: center;
-  scale: var(--hud, 1); transform-origin: left top; text-shadow: 0 2px 4px #000; }
-#down-note b { font-family: var(--font-display); font-size: 34px; color: #ff5040; letter-spacing: 2px; }
-#down-note span { font-size: 17px; color: var(--ink); }
-.dn-bar { width: 220px; height: 6px; background: rgba(0,0,0,.7); }
-.dn-bar div { height: 100%; background: #ffe6a0; }
-#spectate { position: absolute; left: 50%; top: hud(86px); transform: translateX(-50%); display: flex; flex-direction: column;
-  align-items: center; gap: hud(5px); padding: hud(6px) hud(10px); border-radius: 4px; font-size: hud(15px);
-  background: rgba(8,8,14,.72); color: #cfe6ff; white-space: nowrap; }
-// (the watching bar, game/spectate.ts: each button the touch path of a key; on touch two fingers twisted turn. Its
-// buttons a finger's size whatever the pointer, in one row: sized and laid out for touch alone, the first tap on a
-// screen that has a mouse too put the page in touch mode as it went down, the bar was laid out again under the
-// finger, and its click landed on another button)
-.sp-row { display: flex; align-items: center; gap: hud(6px); }
-.sp-name { min-width: hud(150px); text-align: center; }
-.sp-btn { display: flex; align-items: center; justify-content: center; min-width: max(40px, hud(30px));
-  height: max(40px, hud(28px)); padding: 0 hud(8px);
-  font: inherit; color: inherit; background: rgba(255,255,255,.08); border: 1px solid rgba(207,230,255,.25); border-radius: 4px;
-  cursor: $cursor-hand; touch-action: none; user-select: none; }
-.sp-btn:hover { background: rgba(255,255,255,.16); }
-.sp-btn svg { width: max(24px, hud(20px)); height: max(24px, hud(20px)); fill: none; stroke: currentColor;
-  stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
-.sp-keys { font-size: hud(12px); color: rgba(207,230,255,.7); }
-body.touch .sp-keys { display: none; }
-#btn-revive { position: absolute; right: calc(290px * var(--touch, 1) + env(safe-area-inset-right, 0px)); bottom: touch(24px); width: 84px; height: 84px; border-radius: 50%;
-  font-family: var(--font-display); font-size: 16px; color: #ffe6a0; background: radial-gradient(circle at 50% 40%, #5a4a20, #1a140a 75%); border: 2px solid var(--highlight);
-  box-shadow: 0 0 16px rgba($highlight, .5); touch-action: none; pointer-events: auto; }
-.dc-party { color: $ally-text; font-size: 15px; margin: -4px 0 10px; }
-.dc-buttons .cont:disabled { cursor: $cursor; filter: grayscale(.5) brightness(.85); }
+/* the partners' frames are drawn by the engine (ui/partyPanel.ts): `#party` out of sight (`.kit-mirror`) */
+/* the downed note, the revive prompt and button and the watching bar are drawn by the engine
+   (ui/downedPanels.ts): the page's out of sight (`.kit-mirror`) */
 .sm-note { color: $ally-text; }
 .sm-note:empty { display: none; }
 #hud.watching #bottombar, #hud.watching #buffs, #hud.watching #spoils, #hud.watching #crosshair { display: none; }
@@ -422,11 +354,6 @@ body.touch .sp-keys { display: none; }
 // Portraits are optional downloads, displayed only in party lists and the explicit picker.
 .party-portrait { display: block; width: 36px; height: 36px; flex: none; object-fit: cover;
   border: 1px solid rgba($frame, .65); border-radius: 3px; }
-.pf { display: flex; align-items: center; gap: 7px; }
-.pf-content { min-width: 0; flex: 1; }
-.pf-portrait { position: relative; flex: none; }
-.pf-portrait.host::after { content: '★'; position: absolute; left: 1px; bottom: 0;
-  font-size: 14px; line-height: 1; color: var(--highlight); text-shadow: $outline; pointer-events: none; }
 .coop-list li { display: flex; align-items: center; gap: 6px; }
 .coop-list .coop-dot { flex: none; margin-right: 0; }
 .portrait-picker { width: 100%; max-width: 360px; }
@@ -442,15 +369,6 @@ body.touch .sp-keys { display: none; }
 
 .portrait-picker summary::after { content: ""; width: 6px; height: 6px; margin-left: 4px; border-right: 1px solid currentColor; border-bottom: 1px solid currentColor; transform: rotate(45deg); }
 .portrait-picker[open] summary::after { transform: rotate(225deg); }
-
-.pf.self { border: 0; border-left: 3px solid var(--highlight); }
-@media (max-height: 520px) {
-  body.touch #party .pf { padding: 4px 6px; }
-  body.touch #party .party-portrait { width: 28px; height: 28px; }
-  body.touch #party .pf-heading { font-size: 12px; line-height: 1.1; }
-  body.touch #party .pf-bar { height: 6px; margin-top: 2px; }
-  body.touch #party .pf-state { font-size: 11px; }
-}
 
 // Five pictures form one row; None is a separate control and never takes a portrait cell.
 .portrait-clear { display: flex; justify-content: flex-end; margin-top: 6px; }

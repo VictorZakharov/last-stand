@@ -1,11 +1,11 @@
 // Lures: something standing in the arena that draws foes off the players for a while (the ranger's Strawman). Where the
 // fight is simulated, an enemy lured by one goes for it instead of its target and strikes at it with its own attack
 // (enemyAI's `lured`); the blows show on every game through enemyAI's fx. Elites and bosses are never lured.
-import type * as THREE from 'three';
+import type { Vec3 } from '../engine/api/index.ts';
 import type { Enemy } from '../entities/enemy';
 
 export interface Lure {
-  readonly pos: THREE.Vector3;
+  readonly pos: Vec3;
   /** its body's radius on the floor (the blows land from just outside it) */
   readonly radius: number;
   /** game time it stops drawing foes */

@@ -22,7 +22,11 @@
 // bombs, their eyes a hot orange; Reliquary's poison, a sickly green), a hand unhooking one, drawing it back over its
 // shoulder and throwing it (the `bomb` and `poison` actions); the one left standing at half wears its brother's too.
 // Drawn in their crowds (models/crowd.ts): every change is a joint's place or a glow's strength.
-import * as THREE from 'three';
+import {
+  Color, DoubleSide, Euler, Geometry, InstancedMesh, LitMaterial, Mat4, Material, Maths, Node, Outline, Quat, Vec2,
+  Vec3,
+} from '../../engine/api/index.ts';
+import * as shapes from '../../engine/api/shapes/index.ts';
 import { additive, createKit } from '../../core/materials';
 import { grunge, pbrMaterialMaps, veins } from '../../core/textures';
 import { joint, ramp } from './rig';
@@ -34,9 +38,9 @@ import {
 import { BELT_K, beltSkullMesh, HOOK_TOP, SKULL_DROP, type SkullKind } from './beltSkull';
 import type { AnimState, MaterialKit, Model } from '../../types';
 
-const V = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
-const NONE = new THREE.BufferGeometry();
-const made = (f: () => THREE.BufferGeometry): THREE.BufferGeometry => (skipping() ? NONE : f());
+const V = (x: number, y: number, z: number) => new Vec3(x, y, z);
+const NONE = new Geometry();
+const made = (f: () => Geometry): Geometry => (skipping() ? NONE : f());
 const CHAIN = 0xffd890, EMBER = 0xffb060, COLD = 0x8fe8ff;
 type P3 = [number, number, number];
 
@@ -52,20 +56,20 @@ interface Frame {
 
 /** What both twins are made of: the materials, and a body's joints. */
 interface Body {
-  root: THREE.Group; body: THREE.Group; chest: THREE.Group; neck: THREE.Group; skull: THREE.Group; jaw: THREE.Group;
-  thigh: THREE.Group[]; shin: THREE.Group[]; shoulder: THREE.Group[]; elbow: THREE.Group[]; hand: THREE.Group[];
-  bone: THREE.MeshStandardMaterial; dark: THREE.MeshStandardMaterial; cloth: THREE.Material; rune: THREE.MeshStandardMaterial;
-  eye: THREE.MeshStandardMaterial; S: Sculpt;
+  root: Node; body: Node; chest: Node; neck: Node; skull: Node; jaw: Node;
+  thigh: Node[]; shin: Node[]; shoulder: Node[]; elbow: Node[]; hand: Node[];
+  bone: LitMaterial; dark: LitMaterial; cloth: Material; rune: LitMaterial;
+  eye: LitMaterial; S: Sculpt;
   /** where its chest's parts are (m, in the chest's space): the spine's depth, the ribcage's front at the breastbone's
    *  top and foot, the belt's height and radius (in the body's) */
   spineZ: number; beltY: number; beltR: number; hipX: number;
 }
 
 /** Adds `g` on `parent` (where `s` is 1) or its mirror image on the other side (-1), at `pos` mirrored with it. */
-function sided(S: Sculpt, g: () => THREE.BufferGeometry, mat: THREE.Material, parent: THREE.Object3D, s: number,
+function sided(S: Sculpt, g: () => Geometry, mat: Material, parent: Node, s: number,
   pos: P3 = [0, 0, 0], rot: P3 = [0, 0, 0], scale: number | P3 = 1): void {
-  const placed = (): THREE.BufferGeometry => {
-    const m = new THREE.Matrix4().compose(V(...pos), new THREE.Quaternion().setFromEuler(new THREE.Euler(...rot)),
+  const placed = (): Geometry => {
+    const m = new Mat4().compose(V(...pos), new Quat().setFromEuler(new Euler(...rot)),
       typeof scale === 'number' ? V(scale, scale, scale) : V(...scale));
     const geo = g();
     const out = (geo.index ? geo.toNonIndexed() : geo.clone()).applyMatrix4(m);
@@ -76,8 +80,8 @@ function sided(S: Sculpt, g: () => THREE.BufferGeometry, mat: THREE.Material, pa
 }
 
 /** A man's skull and jaw meshed once a grid, shared by every twin and every skull round them (each piece a copy). */
-const meshed = new Map<string, THREE.BufferGeometry>();
-function kept(key: string, f: () => THREE.BufferGeometry): THREE.BufferGeometry {
+const meshed = new Map<string, Geometry>();
+function kept(key: string, f: () => Geometry): Geometry {
   let g = meshed.get(key);
   if (!g) meshed.set(key, (g = f()));
   return g.clone();
@@ -85,25 +89,25 @@ function kept(key: string, f: () => THREE.BufferGeometry): THREE.BufferGeometry 
 
 /** A skull with its jaw shut on `parent`, `k` times a man's, facing +z turned by `rot`, glowing eyes in its sockets:
  *  the small skulls of a mantle or an orbit. */
-function smallSkull(b: Body, parent: THREE.Object3D, at: P3, rot: P3, k: number,
+function smallSkull(b: Body, parent: Node, at: P3, rot: P3, k: number,
   [skullCell, jawCell]: [number, number] = [SMALL_SKULL_CELL, SMALL_JAW_CELL]): void {
-  const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(...rot));
+  const q = new Quat().setFromEuler(new Euler(...rot));
   const off = V(...SKULL_NECK).multiplyScalar(-k).applyQuaternion(q);
   const pos: P3 = [at[0] + off.x, at[1] + off.y, at[2] + off.z];
   b.S.add(made(() => kept(`skull ${skullCell}`, () => skull(skullCell))), b.bone, parent, pos, rot, k);
   b.S.add(made(() => kept(`jaw ${jawCell}`, () => jaw(jawCell))), b.bone, parent, pos, rot, k);
   for (const s of [-1, 1]) {
     const eye = V(s * SKULL_EYE[0], SKULL_EYE[1], SKULL_EYE[2] - 0.012).multiplyScalar(k).applyQuaternion(q);
-    b.S.add(made(() => new THREE.SphereGeometry(0.009 * k, 6, 4)), b.eye, parent, [pos[0] + eye.x, pos[1] + eye.y, pos[2] + eye.z]);
+    b.S.add(made(() => shapes.sphere(0.009 * k, 6, 4)), b.eye, parent, [pos[0] + eye.x, pos[1] + eye.y, pos[2] + eye.z]);
   }
 }
 
 /** A hand's bones from the wrist (its joint) for the left side, palm to +z: the wrist's small bones, four metacarpals
  *  fanning to the knuckles, each finger's three phalanges curled by `curl` a joint, and the thumb set forward. */
-function handBones(len: number, wide: number, curl: number): THREE.BufferGeometry[] {
-  const out: THREE.BufferGeometry[] = [];
+function handBones(len: number, wide: number, curl: number): Geometry[] {
+  const out: Geometry[] = [];
   const r = len * 0.034 * wide;
-  out.push(toned(organic(new THREE.SphereGeometry(1, 10, 7), 0.12, 6, 3).scale(0.13 * len * wide, 0.09 * len, 0.06 * len).translate(0, -0.08 * len, 0), 0.85));
+  out.push(toned(organic(shapes.sphere(1, 10, 7), 0.12, 6, 3).scale(0.13 * len * wide, 0.09 * len, 0.06 * len).translate(0, -0.08 * len, 0), 0.85));
   for (let k = 0; k < 4; k++) {
     const x = (k - 1.5) * 0.072 * len * wide;
     const knuckle = V(x, -0.42 * len, 0.015 * len);
@@ -120,10 +124,10 @@ function handBones(len: number, wide: number, curl: number): THREE.BufferGeometr
 
 /** A foot's bones under the ankle for the left side, toes to +z, standing on y 0 of its own: the ankle's bone, the heel,
  *  the arch's small bones, five metatarsals and their toes, the great toe inside (-x). */
-function footBones(h: number, wide: number): THREE.BufferGeometry[] {
-  const out: THREE.BufferGeometry[] = [];
-  const blob = (x: number, y: number, z: number, rx: number, ry: number, rz: number, seed: number): THREE.BufferGeometry =>
-    toned(organic(new THREE.SphereGeometry(1, 10, 7), 0.1, 5, seed).scale(rx * h, ry * h, rz * h).translate(x * h, y * h, z * h), 0.9);
+function footBones(h: number, wide: number): Geometry[] {
+  const out: Geometry[] = [];
+  const blob = (x: number, y: number, z: number, rx: number, ry: number, rz: number, seed: number): Geometry =>
+    toned(organic(shapes.sphere(1, 10, 7), 0.1, 5, seed).scale(rx * h, ry * h, rz * h).translate(x * h, y * h, z * h), 0.9);
   out.push(blob(0, 0.78, 0.02, 0.5 * wide, 0.36, 0.55, 1), blob(0.05, 0.38, -0.45, 0.42 * wide, 0.4, 0.62, 2), blob(0, 0.52, 0.55, 0.58 * wide, 0.3, 0.45, 3));
   for (let k = 0; k < 5; k++) {
     const x = (k - 1.6) * 0.21 * h * wide, r = h * (k === 0 ? 0.13 : 0.085) * wide;
@@ -141,34 +145,34 @@ function boneFigure(kind: string, kit: MaterialKit, f: Frame, light: number, see
   // (bone shaded by its vertex colours: each sculpted bone's hollows, the cartilage darker; one material for all)
   const bone = kit.std({
     color: 0xe0d4b2, roughness: 0.78, map: g.map, roughnessMap: g.roughnessMap, normalMap: g.normalMap, vertexColors: true,
-    normalScale: new THREE.Vector2(1.0, 1.0), emissive: new THREE.Color(light), emissiveMap: veins(seed, 5), emissiveIntensity: 0.15,
+    normalScale: new Vec2(1.0, 1.0), emissive: new Color(light), emissiveMap: veins(seed, 5), emissiveIntensity: 0.15,
   });
   const dark = kit.std({ color: 0x5e5240, roughness: 0.9, map: g.map, normalMap: g.normalMap });
   // grave cloth, linen gone grey-brown, a rim of the grave light along its folds (a dark cloth read as a hole in the
   // crypt's night)
   const cloth = kit.rim({
-    color: 0x5a5244, roughness: 0.95, map: g.map, normalMap: g.normalMap, normalScale: new THREE.Vector2(1.5, 1.5), side: THREE.DoubleSide,
+    color: 0x5a5244, roughness: 0.95, map: g.map, normalMap: g.normalMap, normalScale: new Vec2(1.5, 1.5), side: DoubleSide,
   }, light, 0.35);
   const rune = kit.std({
-    color: 0x6a6252, roughness: 0.9, map: g.map, normalMap: g.normalMap, side: THREE.DoubleSide,
-    emissive: new THREE.Color(light), emissiveMap: veins(seed + 7, 4), emissiveIntensity: 0.6,
+    color: 0x6a6252, roughness: 0.9, map: g.map, normalMap: g.normalMap, side: DoubleSide,
+    emissive: new Color(light), emissiveMap: veins(seed + 7, 4), emissiveIntensity: 0.6,
   });
   const eye = kit.glow(light, 6);
   const S = new Sculpt(kind).glow(eye);
-  const root = new THREE.Group();
+  const root = new Node();
   const body = joint(root, 0, 0, 0);
   const W = f.wide, T = f.thick, wide = Math.sqrt(W);
   const hipX = 0.32 * W, len = f.hip / 2;
 
   // --- legs: a thighbone on its ball, a shinbone and its fibula, a kneecap, a foot of bones -----------------------
-  const thigh: THREE.Group[] = [], shin: THREE.Group[] = [];
+  const thigh: Node[] = [], shin: Node[] = [];
   const legR = T * 0.55, shinLen = len - f.foot * 0.9;
   for (const [i, s] of [[0, 1], [1, -1]] as const) {
     const th = joint(body, s * hipX, f.hip, 0);
     sided(S, () => femur(len, legR), bone, th, s);
     const sh = joint(th, 0, -len, 0);
     sided(S, () => tibia(shinLen, legR * 0.95), bone, sh, s);
-    S.add(made(() => toned(organic(new THREE.SphereGeometry(1, 10, 8), 0.06, 5, seed + 4), 0.92)), bone, sh, [0, 0.35 * legR, 1.75 * legR], [0.2, 0, 0], [legR * 1.1, legR * 1.35, legR * 0.55]);
+    S.add(made(() => toned(organic(shapes.sphere(1, 10, 8), 0.06, 5, seed + 4), 0.92)), bone, sh, [0, 0.35 * legR, 1.75 * legR], [0.2, 0, 0], [legR * 1.1, legR * 1.35, legR * 0.55]);
     for (const piece of footBones(f.foot, wide)) sided(S, () => piece, bone, sh, s, [0, -len, 0]);
     thigh[i] = th;
     shin[i] = sh;
@@ -186,12 +190,12 @@ function boneFigure(kind: string, kit: MaterialKit, f: Frame, light: number, see
     const y = -0.32 * hipX + (i + 0.5) * (span * 0.27 + 0.32 * hipX) / lumbar, z = -0.42 * hipX + (spineZ + 0.42 * hipX) * (i / lumbar);
     const r = T * 0.62, h = (span * 0.27 + 0.32 * hipX) / lumbar * 0.72;
     for (const piece of vertebra(r, h)) S.add(made(() => piece), bone, chest, [0, y, z]);
-    S.add(made(() => new THREE.CylinderGeometry(r * 0.95, r * 0.95, h * 0.35, 9)), dark, chest, [0, y + h * 0.68, z]);
+    S.add(made(() => shapes.cylinder(r * 0.95, r * 0.95, h * 0.35, 9)), dark, chest, [0, y + h * 0.68, z]);
   }
   for (let i = 0; i < thoracic; i++) {
     const y = span * (0.29 + i * 0.056), r = T * (0.44 - i * 0.008), h = span * 0.04;
     for (const piece of vertebra(r, h)) S.add(made(() => piece), bone, chest, [0, y, spineZ]);
-    S.add(made(() => new THREE.CylinderGeometry(r * 0.95, r * 0.95, span * 0.016, 9)), dark, chest, [0, y + span * 0.028, spineZ]);
+    S.add(made(() => shapes.cylinder(r * 0.95, r * 0.95, span * 0.016, 9)), dark, chest, [0, y + span * 0.028, spineZ]);
   }
   // the ribs: ten pairs, each from its vertebra back round its angle and forward, dropping to the front; the first
   // seven on their cartilage to the breastbone, the next two to the cartilage above, the last floating
@@ -199,12 +203,12 @@ function boneFigure(kind: string, kit: MaterialKit, f: Frame, light: number, see
   const ribA = (i: number): number => W * (0.25 + 0.26 * Math.sin(Math.min(1, (i + 1) / 7.5) * Math.PI / 2));
   const ribB = (i: number): number => W * (0.2 + 0.15 * Math.sin(Math.min(1, (i + 1) / 7.5) * Math.PI / 2));
   const front = (i: number): number => spineZ - 0.04 * W + 2 * ribB(i);
-  const sternZ = (y: number): number => front(0) + (front(6) - front(0)) * THREE.MathUtils.clamp((sternTop - y) / sternLen, 0, 1);
+  const sternZ = (y: number): number => front(0) + (front(6) - front(0)) * Maths.clamp((sternTop - y) / sternLen, 0, 1);
   const ribR = 0.028 * W;
   for (let i = 0; i < 10; i++) {
     const a = ribA(i), bb = ribB(i), zc = spineZ - 0.04 * W + bb, y0 = span * (0.9 - 0.068 * i), drop = span * (0.17 - 0.004 * i);
     const from = -Math.PI / 2 + 0.2, to = i < 7 ? Math.PI / 2 - 0.62 + 0.02 * i : i < 9 ? Math.PI / 2 - 0.8 : -0.15;
-    const at = (phi: number, s: number): THREE.Vector3 => {
+    const at = (phi: number, s: number): Vec3 => {
       const t = (phi - from) / (Math.PI - 0.4);
       const back = 0.05 * W * Math.exp(-(((phi + Math.PI / 2 - 0.55) / 0.3) ** 2));
       return V(s * a * Math.cos(phi), y0 + 0.035 * span * Math.sin(Math.min(1, t * 2.2) * Math.PI) - drop * Math.pow(Math.max(0, t), 1.4), zc + bb * Math.sin(phi) - back);
@@ -242,17 +246,17 @@ function boneFigure(kind: string, kit: MaterialKit, f: Frame, light: number, see
   const head = joint(neck, 0, skullUp, 0.06);
   S.add(made(() => kept(`${f.look} skull ${SKULL_CELL}`, () => twinSkull(SKULL_CELL, f.look))), bone, head, [-SKULL_NECK[0] * k, -SKULL_NECK[1] * k, -SKULL_NECK[2] * k], [0, 0, 0], k);
   if (f.look === 'long') {
-    S.add(made(() => new THREE.SphereGeometry(0.006 * k, 8, 6)), eye, head, [0, (THIRD_EYE[1] - SKULL_NECK[1]) * k, (THIRD_EYE[2] - 0.006 - SKULL_NECK[2]) * k]);
+    S.add(made(() => shapes.sphere(0.006 * k, 8, 6)), eye, head, [0, (THIRD_EYE[1] - SKULL_NECK[1]) * k, (THIRD_EYE[2] - 0.006 - SKULL_NECK[2]) * k]);
   }
   for (const s of [-1, 1]) {
     // (small and deep in its socket: as large as the socket the glow filled it, a disc where the hollow should read)
-    S.add(made(() => new THREE.SphereGeometry(0.0068 * k, 8, 6)), eye, head, [s * SKULL_EYE[0] * k, (SKULL_EYE[1] - SKULL_NECK[1]) * k, (SKULL_EYE[2] - 0.012 - SKULL_NECK[2]) * k]);
+    S.add(made(() => shapes.sphere(0.0068 * k, 8, 6)), eye, head, [s * SKULL_EYE[0] * k, (SKULL_EYE[1] - SKULL_NECK[1]) * k, (SKULL_EYE[2] - 0.012 - SKULL_NECK[2]) * k]);
   }
   const jw = joint(head, 0, (JAW_HINGE[1] - SKULL_NECK[1]) * k, (JAW_HINGE[2] - SKULL_NECK[2]) * k);
   S.add(made(() => kept(`jaw ${JAW_CELL}`, () => jaw(JAW_CELL))), bone, jw, [0, -JAW_HINGE[1] * k, -JAW_HINGE[2] * k], [0, 0, 0], k);
 
   // --- arms: the upper arm's bone on its head, the forearm's two, a hand of jointed bones ---------------------------
-  const shoulder: THREE.Group[] = [], elbow: THREE.Group[] = [], hand: THREE.Group[] = [];
+  const shoulder: Node[] = [], elbow: Node[] = [], hand: Node[] = [];
   const armR = T * 0.48;
   for (const [i, s] of [[0, 1], [1, -1]] as const) {
     const sh = joint(chest, s * 0.6 * W, span - 0.05, 0);
@@ -278,7 +282,7 @@ function hands(b: Body, f: Frame, curls: [number, number]): void {
 }
 
 /** A loop of rope wound round a limb at `at` on `parent`, `r` m out, `turns` times over `len` m. */
-function bound(b: Body, parent: THREE.Object3D, at: P3, r: number, len: number, turns: number, thick: number, phase: number): void {
+function bound(b: Body, parent: Node, at: P3, r: number, len: number, turns: number, thick: number, phase: number): void {
   b.S.add(made(() => twist(len, r, thick, turns, phase)), b.cloth, parent, at);
 }
 
@@ -298,14 +302,14 @@ function walkAndFall(b: Body, st: AnimState, hip: number, stoop: number): void {
  *  the elbow's hinge across the arm's plane, the elbow bent by the angle between the two bones. */
 /** the most of its whole length an arm reaches (`reach`): never quite straight */
 const REACH_MOST = 0.97;
-const _sh = new THREE.Vector3(), _d = new THREE.Vector3(), _e = new THREE.Vector3(), _u = new THREE.Vector3();
-const _f = new THREE.Vector3(), _x = new THREE.Vector3(), _y = new THREE.Vector3(), _z = new THREE.Vector3(), _m = new THREE.Matrix4();
-function reach(sh: THREE.Object3D, el: THREE.Object3D, to: THREE.Vector3, pole: THREE.Vector3, upper: number, fore: number): void {
+const _sh = new Vec3(), _d = new Vec3(), _e = new Vec3(), _u = new Vec3();
+const _f = new Vec3(), _x = new Vec3(), _y = new Vec3(), _z = new Vec3(), _m = new Mat4();
+function reach(sh: Node, el: Node, to: Vec3, pole: Vec3, upper: number, fore: number): void {
   _sh.copy(sh.position);
   _d.subVectors(to, _sh);
   // (never quite straight: a straight arm's forearm lies along its upper arm, the axis across them below is none, and
   // the shoulder's turn made from it was NaN, the whole twin drawn nowhere: a throw reaching past the arm did it)
-  const d = THREE.MathUtils.clamp(_d.length(), Math.abs(upper - fore) + 1e-3, (upper + fore) * REACH_MOST);
+  const d = Maths.clamp(_d.length(), Math.abs(upper - fore) + 1e-3, (upper + fore) * REACH_MOST);
   _d.normalize();
   // (the elbow on the circle where the two bones meet, on its side towards the pole)
   const along = (upper * upper - fore * fore + d * d) / (2 * d), out = Math.sqrt(Math.max(0, upper * upper - along * along));
@@ -321,7 +325,7 @@ function reach(sh: THREE.Object3D, el: THREE.Object3D, to: THREE.Vector3, pole: 
   _z.normalize();
   _x.crossVectors(_y, _z);
   sh.quaternion.setFromRotationMatrix(_m.makeBasis(_x, _y, _z));
-  el.rotation.set(-Math.acos(THREE.MathUtils.clamp(_u.dot(_f), -1, 1)), 0, 0);
+  el.rotation.set(-Math.acos(Maths.clamp(_u.dot(_f), -1, 1)), 0, 0);
 }
 
 /** a pulse eased toward `to` at `rate` a second */
@@ -334,14 +338,14 @@ const LINKS = 26, SAG = 1.6;
 
 /** The chain of bone from Slab's belt to his brother: its own instanced mesh of added light, hidden while there's no
  *  brother; laid by `lay(to, taut)` with `to` in the world, from `start` on his belt. */
-function boneChain(root: THREE.Group, start: THREE.Vector3): { mesh: THREE.InstancedMesh; lay: (to: THREE.Vector3 | null, taut: number) => void } {
-  const geo = new THREE.TorusGeometry(0.16, 0.05, 5, 10).scale(1, 1.7, 1);
-  const mesh = new THREE.InstancedMesh(geo, additive(CHAIN, 1.4, 0.75), LINKS);
+function boneChain(root: Node, start: Vec3): { mesh: InstancedMesh; lay: (to: Vec3 | null, taut: number) => void } {
+  const geo = shapes.torus(0.16, 0.05, 5, 10).scale(1, 1.7, 1);
+  const mesh = new InstancedMesh(geo, additive(CHAIN, 1.4, 0.75), LINKS);
   mesh.frustumCulled = false;
   root.add(mesh);
-  const from = start.clone(), to = new THREE.Vector3(), a = new THREE.Vector3(), b = new THREE.Vector3(), dir = new THREE.Vector3();
-  const q = new THREE.Quaternion(), twistQ = new THREE.Quaternion(), m = new THREE.Matrix4(), one = V(1, 1, 1), up = V(0, 1, 0), c = new THREE.Color();
-  const at = (k: number, taut: number, out: THREE.Vector3): THREE.Vector3 =>
+  const from = start.clone(), to = new Vec3(), a = new Vec3(), b = new Vec3(), dir = new Vec3();
+  const q = new Quat(), twistQ = new Quat(), m = new Mat4(), one = V(1, 1, 1), up = V(0, 1, 0), c = new Color();
+  const at = (k: number, taut: number, out: Vec3): Vec3 =>
     out.lerpVectors(from, to, k).setY(from.y + (to.y - from.y) * k - SAG * (1 - taut) * 4 * k * (1 - k));
   function layLocal(taut: number): void {
     for (let i = 0; i < LINKS; i++) {
@@ -375,27 +379,27 @@ function boneChain(root: THREE.Group, start: THREE.Vector3): { mesh: THREE.Insta
 }
 
 /** Rivets round an arc of `n` at radius `r` from `phi0` to `phi1` at height `y` (in a piece's own space), each `size`. */
-function rivets(n: number, r: number, y: number, phi0: number, phi1: number, size: number): THREE.BufferGeometry[] {
-  const out: THREE.BufferGeometry[] = [];
+function rivets(n: number, r: number, y: number, phi0: number, phi1: number, size: number): Geometry[] {
+  const out: Geometry[] = [];
   for (let i = 0; i < n; i++) {
     const phi = phi0 + (phi1 - phi0) * (i + 0.5) / n;
-    out.push(new THREE.SphereGeometry(size, 5, 3).translate(Math.sin(phi) * r, y, Math.cos(phi) * r));
+    out.push(shapes.sphere(size, 5, 3).translate(Math.sin(phi) * r, y, Math.cos(phi) * r));
   }
   return out;
 }
 
 /** A pauldron on a shoulder (its left one, the outside +x): three lames of battered iron, each lapping over the one
  *  below and flaring out, a rolled edge along each one's foot and a row of rivets above it. */
-function pauldron(R: number, seed: number): { plates: THREE.BufferGeometry[]; studs: THREE.BufferGeometry[] } {
-  const plates: THREE.BufferGeometry[] = [], studs: THREE.BufferGeometry[] = [];
+function pauldron(R: number, seed: number): { plates: Geometry[]; studs: Geometry[] } {
+  const plates: Geometry[] = [], studs: Geometry[] = [];
   const bands = [[0, 0.44], [0.4, 0.58], [0.54, 0.71]];
   bands.forEach(([t0, t1], i) => {
     const r = R * (1 + i * 0.09), arc = Math.PI * (1.05 + i * 0.1), phi0 = -arc / 2 + Math.PI / 2;
     // (a sphere's shell round the outside of the shoulder: three's sphere's phi from -x round by +z, so the outside
     // half, +x, is about phi pi)
-    plates.push(organic(new THREE.SphereGeometry(r, 18, 5, Math.PI - arc / 2, arc, Math.PI * t0, Math.PI * (t1 - t0)), 0.025, 3.2, seed + i));
+    plates.push(organic(shapes.sphere(r, 18, 5, Math.PI - arc / 2, arc, Math.PI * t0, Math.PI * (t1 - t0)), 0.025, 3.2, seed + i));
     const foot = Math.PI * t1, rimY = r * Math.cos(foot), rimR = r * Math.sin(foot) + 0.012;
-    const rim: THREE.Vector3[] = [];
+    const rim: Vec3[] = [];
     for (let k = 0; k <= 12; k++) {
       const phi = Math.PI - arc / 2 + arc * k / 12;
       rim.push(V(-Math.cos(phi) * rimR, rimY, Math.sin(phi) * rimR));
@@ -407,8 +411,8 @@ function pauldron(R: number, seed: number): { plates: THREE.BufferGeometry[]; st
 }
 
 /** The tombstone's outline: a slab with a rounded top, a chip out of one shoulder, its foot broken off jagged. */
-function tombstoneShape(w: number, h: number): THREE.Shape {
-  const shape = new THREE.Shape();
+function tombstoneShape(w: number, h: number): Outline {
+  const shape = new Outline();
   const half = w / 2, arch = h - half;
   const foot = [[-half, 0.02], [-half * 0.55, 0.1], [-half * 0.2, -0.03], [half * 0.15, 0.08], [half * 0.5, -0.02], [half, 0.06]];
   shape.moveTo(foot[0][0], foot[0][1]);
@@ -443,12 +447,12 @@ interface Belts {
   /** swings the hung skulls on their cords at time `t` as the twin walks at `move` m/s */
   swing(t: number, move: number): void;
   /** where the hand reaches to unhook one, in the body's space */
-  hook: THREE.Vector3;
+  hook: Vec3;
   /** the hand's skull (`userData.throwHand`: where a throw leaves from) */
-  inHand: THREE.Object3D;
+  inHand: Node;
   /** each kind's skulls on its rope, and in the hand (`userData.beltSkulls`: what the lab counts as drawn) */
-  skulls: Record<SkullKind, THREE.Object3D[]>;
-  held: Record<SkullKind, THREE.Object3D>;
+  skulls: Record<SkullKind, Node[]>;
+  held: Record<SkullKind, Node>;
 }
 
 /**
@@ -456,15 +460,15 @@ interface Belts {
  * `top` and radius `r`, its throwing hand `hand`. Each skull is the one a throw flies and lays on the floor
  * (models/beltSkull.ts: meshes of their own on the rope's knots, in materials of their own, not merged into the twin).
  */
-function belts(b: Body, own: SkullKind, s: number, top: number, r: number, hand: THREE.Object3D, handLen: number): Belts {
+function belts(b: Body, own: SkullKind, s: number, top: number, r: number, hand: Node, handLen: number): Belts {
   const other: SkullKind = own === 'bomb' ? 'poison' : 'bomb';
-  const skulls = { bomb: [] as THREE.Group[], poison: [] as THREE.Group[] };
-  const ropes = {} as Record<SkullKind, THREE.Group>;
-  const along = (k: number): THREE.Vector3 => V(s * 0.06 * Math.sin(k * Math.PI), -ROPE_SAG * Math.sin(k * Math.PI), (k - 0.5) * ROPE_LONG);
+  const skulls = { bomb: [] as Node[], poison: [] as Node[] };
+  const ropes = {} as Record<SkullKind, Node>;
+  const along = (k: number): Vec3 => V(s * 0.06 * Math.sin(k * Math.PI), -ROPE_SAG * Math.sin(k * Math.PI), (k - 0.5) * ROPE_LONG);
   for (const [kind, z] of [[own, 0.36], [other, -0.36]] as const) {
     // (a rope from the belt at its side, hanging in a loop along the hip, a skull on a cord from each of four knots)
     const rope = joint(b.body, s * r * 0.97, top - 0.06, z * r);
-    const loop: THREE.Vector3[] = [];
+    const loop: Vec3[] = [];
     for (let i = 0; i <= 8; i++) loop.push(along(i / 8));
     b.S.add(made(() => taperTube(loop, () => 0.03, 8, 4)), b.dark, rope);
     for (let i = 0; i < BELT_SKULLS; i++) {
@@ -482,7 +486,7 @@ function belts(b: Body, own: SkullKind, s: number, top: number, r: number, hand:
   }
   // (a skull of each kind in the hand, in its palm, shown while one is held)
   const held = joint(hand, 0, -handLen * 0.62, 0.14);
-  const inHand = {} as Record<SkullKind, THREE.Group>;
+  const inHand = {} as Record<SkullKind, Node>;
   for (const kind of ['bomb', 'poison'] as const) {
     inHand[kind] = joint(held, 0, IN_HAND, 0);
     inHand[kind].add(beltSkullMesh(kind));
@@ -517,16 +521,16 @@ function belts(b: Body, own: SkullKind, s: number, top: number, r: number, hand:
 
 /** A throw's moments as shares of its action (`hit` its release): the hand reaching down to the rope, the skull
  *  unhooked, drawn back over the shoulder, thrown, and the arm come back to where its pose has it. */
-interface ThrowArm { weight: number; target: THREE.Vector3; holding: boolean }
-const _throwAt = new THREE.Vector3(), _hookAt = new THREE.Vector3(), _back = new THREE.Vector3(), _out = new THREE.Vector3();
-const _inv = new THREE.Matrix4();
+interface ThrowArm { weight: number; target: Vec3; holding: boolean }
+const _throwAt = new Vec3(), _hookAt = new Vec3(), _back = new Vec3(), _out = new Vec3();
+const _inv = new Mat4();
 
 /**
  * Where a throwing arm's hand is through action `a` (`bomb` or `poison`), in the chest's space: from `rest` (where the
  * pose has it) down to the rope's hook, back over its shoulder on its side `s`, forward to its release at `a.hit`, and
  * back; `weight` how much of it the arm takes from the pose, `holding` whether a skull is in the hand.
  */
-function throwArm(b: Body, a: AnimState['action'], s: number, span: number, hook: THREE.Vector3, rest: THREE.Vector3): ThrowArm | null {
+function throwArm(b: Body, a: AnimState['action'], s: number, span: number, hook: Vec3, rest: Vec3): ThrowArm | null {
   if (!a || (a.name !== 'bomb' && a.name !== 'poison')) return null;
   const h = a.hit ?? 0.6, t = a.t;
   b.chest.updateMatrix();
@@ -544,7 +548,7 @@ function throwArm(b: Body, a: AnimState['action'], s: number, span: number, hook
 }
 
 /** The hand of the arm from `sh` through `el` to `hd` as its joints are now, in the chest's space. */
-function handInChest(sh: THREE.Object3D, el: THREE.Object3D, hd: THREE.Object3D, out: THREE.Vector3): THREE.Vector3 {
+function handInChest(sh: Node, el: Node, hd: Node, out: Vec3): Vec3 {
   sh.updateMatrix();
   el.updateMatrix();
   return out.copy(hd.position).applyMatrix4(el.matrix).applyMatrix4(sh.matrix);
@@ -559,12 +563,12 @@ export function buildTwinSlab(): Model {
   const stone = kit.std({
     // (pale weathered stone: a darker grey was lost against the crypt's night)
     color: 0xa8a294, roughness: 0.92, map: grit.map, normalMap: grit.normalMap,
-    normalScale: new THREE.Vector2(2, 2), emissive: new THREE.Color(EMBER), emissiveMap: veins(67, 9), emissiveIntensity: 0.9,
+    normalScale: new Vec2(2, 2), emissive: new Color(EMBER), emissiveMap: veins(67, 9), emissiveIntensity: 0.9,
   });
   const iron = kit.std({
     // (worn pale at its edges: a darker, more metallic iron drew black against the crypt's night, no sky to mirror)
-    color: 0x9a958a, metalness: 0.3, roughness: 0.55, map: grit.map, normalMap: grit.normalMap, normalScale: new THREE.Vector2(1.4, 1.4),
-    side: THREE.DoubleSide,
+    color: 0x9a958a, metalness: 0.3, roughness: 0.55, map: grit.map, normalMap: grit.normalMap, normalScale: new Vec2(1.4, 1.4),
+    side: DoubleSide,
   });
   hands(b, f, [0.75, 0.42]);
   const span = f.shoulder - f.hip - 0.35, W = f.wide;
@@ -575,15 +579,15 @@ export function buildTwinSlab(): Model {
     for (const plate of plates) sided(S, () => plate, iron, b.shoulder[i], s, [0.05, 0.08, 0]);
     for (const stud of studs) sided(S, () => stud, iron, b.shoulder[i], s, [0.05, 0.08, 0]);
     // a buckled strap of leather round the upper arm under it
-    S.add(made(() => organic(new THREE.TorusGeometry(f.thick * 1.35, 0.035, 5, 14).rotateX(Math.PI / 2), 0.01, 8, 74 + i)), dark, b.shoulder[i], [0, -0.42, 0]);
+    S.add(made(() => organic(shapes.torus(f.thick * 1.35, 0.035, 5, 14).rotateX(Math.PI / 2), 0.01, 8, 74 + i)), dark, b.shoulder[i], [0, -0.42, 0]);
     // a bracer of iron round the forearm: a flared band, rolled at both ends, riveted
-    sided(S, () => organic(new THREE.LatheGeometry([V(0.2, -0.36, 0), V(0.18, -0.2, 0), V(0.185, 0, 0), V(0.22, 0.16, 0)].map((p) => new THREE.Vector2(p.x, p.y)), 14), 0.012, 6, 75 + i), iron, b.elbow[i], s, [0.03, -f.fore * 0.5, 0]);
-    for (const y of [-0.36, 0.16]) sided(S, () => new THREE.TorusGeometry(y > 0 ? 0.22 : 0.2, 0.022, 5, 14).rotateX(Math.PI / 2), iron, b.elbow[i], s, [0.03, -f.fore * 0.5 + y, 0]);
+    sided(S, () => organic(shapes.lathe([V(0.2, -0.36, 0), V(0.18, -0.2, 0), V(0.185, 0, 0), V(0.22, 0.16, 0)].map((p) => new Vec2(p.x, p.y)), 14), 0.012, 6, 75 + i), iron, b.elbow[i], s, [0.03, -f.fore * 0.5, 0]);
+    for (const y of [-0.36, 0.16]) sided(S, () => shapes.torus(y > 0 ? 0.22 : 0.2, 0.022, 5, 14).rotateX(Math.PI / 2), iron, b.elbow[i], s, [0.03, -f.fore * 0.5 + y, 0]);
     for (const stud of rivets(8, 0.19, 0, 0, Math.PI * 2, 0.02)) sided(S, () => stud, iron, b.elbow[i], s, [0.03, -f.fore * 0.5 - 0.05, 0]);
     // a knee cop: a dented dome over the knee, its wing round the outside, strapped behind
-    sided(S, () => organic(new THREE.SphereGeometry(0.2, 12, 6, 0, Math.PI * 2, 0, Math.PI * 0.42), 0.02, 4, 76 + i).rotateX(Math.PI / 2), iron, b.shin[i], s, [0, 0.0, 0.17]);
-    sided(S, () => organic(new THREE.SphereGeometry(0.24, 10, 5, Math.PI * 0.75, Math.PI * 0.6, Math.PI * 0.32, Math.PI * 0.32), 0.015, 4, 78 + i), iron, b.shin[i], s, [0, 0.0, 0.05]);
-    S.add(made(() => organic(new THREE.TorusGeometry(0.17, 0.028, 5, 14).rotateX(Math.PI / 2), 0.01, 8, 80 + i)), dark, b.shin[i], [0.02, -0.12, 0.02]);
+    sided(S, () => organic(shapes.sphere(0.2, 12, 6, 0, Math.PI * 2, 0, Math.PI * 0.42), 0.02, 4, 76 + i).rotateX(Math.PI / 2), iron, b.shin[i], s, [0, 0.0, 0.17]);
+    sided(S, () => organic(shapes.sphere(0.24, 10, 5, Math.PI * 0.75, Math.PI * 0.6, Math.PI * 0.32, Math.PI * 0.32), 0.015, 4, 78 + i), iron, b.shin[i], s, [0, 0.0, 0.05]);
+    S.add(made(() => organic(shapes.torus(0.17, 0.028, 5, 14).rotateX(Math.PI / 2), 0.01, 8, 80 + i)), dark, b.shin[i], [0.02, -0.12, 0.02]);
     for (const stud of rivets(5, 0.205, 0.0, -1.1, 1.1, 0.02)) sided(S, () => stud.rotateX(Math.PI / 2), iron, b.shin[i], s, [0, 0, 0.12]);
     // rope bound round the thighbone and the shin
     bound(b, b.thigh[i], [s * 0.1, -0.5, 0.03], 0.2, 0.32, 2.2, 0.03, i);
@@ -592,7 +596,7 @@ export function buildTwinSlab(): Model {
 
   // a yoke of bone across the upper back, five skulls wired to it looking out behind him
   const yokeY = span + 0.12, yokeZ = b.spineZ - 0.06;
-  const yoke: THREE.Vector3[] = [];
+  const yoke: Vec3[] = [];
   for (let i = 0; i <= 8; i++) {
     const a = (i / 8 - 0.5) * 2.0;
     yoke.push(V(Math.sin(a) * 0.5 * W, yokeY + Math.cos(a) * 0.05, yokeZ - Math.cos(a) * 0.08 * W));
@@ -609,10 +613,10 @@ export function buildTwinSlab(): Model {
   // his belt of knotted cloth over the pelvis's crests, and what hangs from it: aprons layered before and behind,
   // tongues at his sides, all of grave cloth, a band of runes on the shorter front one; an iron buckle; a ring of bone
   const top = b.beltY, r = b.beltR;
-  S.add(made(() => organic(new THREE.TorusGeometry(r, 0.075, 6, 30).rotateX(Math.PI / 2), 0.03, 7, 82)), dark, b.body, [0, top, 0], [0, 0, 0], [1, 1, 0.82]);
-  S.add(made(() => organic(new THREE.TorusGeometry(r * 1.02, 0.04, 5, 30).rotateX(Math.PI / 2), 0.02, 9, 84)), cloth, b.body, [0, top - 0.09, 0], [0, 0, 0], [1, 1, 0.84]);
-  S.add(made(() => organic(new THREE.BoxGeometry(0.22, 0.2, 0.06), 0.01, 6, 85)), iron, b.body, [0.1, top, r * 0.84]);
-  const hung = (o: Parameters<typeof drape>[0], mat: THREE.Material): void => {
+  S.add(made(() => organic(shapes.torus(r, 0.075, 6, 30).rotateX(Math.PI / 2), 0.03, 7, 82)), dark, b.body, [0, top, 0], [0, 0, 0], [1, 1, 0.82]);
+  S.add(made(() => organic(shapes.torus(r * 1.02, 0.04, 5, 30).rotateX(Math.PI / 2), 0.02, 9, 84)), cloth, b.body, [0, top - 0.09, 0], [0, 0, 0], [1, 1, 0.84]);
+  S.add(made(() => organic(shapes.box(0.22, 0.2, 0.06), 0.01, 6, 85)), iron, b.body, [0.1, top, r * 0.84]);
+  const hung = (o: Parameters<typeof drape>[0], mat: Material): void => {
     S.add(made(() => drape(o).scale(1, 1, 0.84)), mat, b.body, [0, top - 0.04, 0]);
   };
   hung({ r: r + 0.04, at: 0, width: 1.1, h: 1.45, tear: 0.4, flare: 0.25, seed: 86 }, cloth);
@@ -622,27 +626,27 @@ export function buildTwinSlab(): Model {
     hung({ r: r + 0.02, at, width: 0.38, h, tear: 0.3, flare: 0.14, seed: sd, cols: 5, rows: 6 }, cloth);
   }
   const ring = V(0.48, top - 0.12, r * 0.8);
-  S.add(made(() => toned(new THREE.TorusGeometry(0.13, 0.045, 6, 12), 0.85)), bone, b.body, [ring.x, ring.y, ring.z]);
+  S.add(made(() => toned(shapes.torus(0.13, 0.045, 6, 12), 0.85)), bone, b.body, [ring.x, ring.y, ring.z]);
 
   // the tombstone in his right hand: a tall slab with a rounded top, its shoulder chipped, its foot broken off,
   // chamfered at its edges; carved with a ringed cross and lines of runes, cracked; an iron band where he grips it
   const slab = joint(b.hand[0], 0.15, -0.3, 0.1);
   S.add(made(() => {
-    const g = new THREE.ExtrudeGeometry(tombstoneShape(1.1, 1.85), {
+    const g = shapes.extrude(tombstoneShape(1.1, 1.85), {
       depth: 0.2, bevelEnabled: true, bevelThickness: 0.045, bevelSize: 0.045, bevelSegments: 2, curveSegments: 10, steps: 1,
     });
     return organic(g.translate(0, -1.15, -0.1), 0.02, 3, 80);
   }), stone, slab, [0, 0, 0.35]);
   const face = 0.35 + 0.1 + 0.05;
-  S.add(made(() => new THREE.BoxGeometry(0.08, 0.74, 0.03)), rune, slab, [0, 0.05, face]);
-  S.add(made(() => new THREE.BoxGeometry(0.5, 0.08, 0.03)), rune, slab, [0, 0.22, face]);
-  S.add(made(() => new THREE.TorusGeometry(0.2, 0.022, 5, 24)), rune, slab, [0, 0.22, face]);
-  for (const [y, w] of [[-0.45, 0.8], [-0.6, 0.62], [-0.74, 0.7]]) S.add(made(() => new THREE.BoxGeometry(w, 0.045, 0.025)), rune, slab, [0, y, face]);
+  S.add(made(() => shapes.box(0.08, 0.74, 0.03)), rune, slab, [0, 0.05, face]);
+  S.add(made(() => shapes.box(0.5, 0.08, 0.03)), rune, slab, [0, 0.22, face]);
+  S.add(made(() => shapes.torus(0.2, 0.022, 5, 24)), rune, slab, [0, 0.22, face]);
+  for (const [y, w] of [[-0.45, 0.8], [-0.6, 0.62], [-0.74, 0.7]]) S.add(made(() => shapes.box(w, 0.045, 0.025)), rune, slab, [0, y, face]);
   for (const [x, y, a, l] of [[0.32, 0.45, 0.5, 0.42], [0.3, 0.2, -0.4, 0.3], [-0.38, -0.25, 0.9, 0.36]]) {
-    S.add(made(() => new THREE.BoxGeometry(0.018, l, 0.012)), dark, slab, [x, y, face + 0.005], [0, 0, a]);
+    S.add(made(() => shapes.box(0.018, l, 0.012)), dark, slab, [x, y, face + 0.005], [0, 0, a]);
   }
-  S.add(made(() => organic(new THREE.BoxGeometry(1.2, 0.12, 0.38), 0.01, 6, 93)), iron, slab, [0, -0.08, 0.35]);
-  for (const x of [-0.42, -0.14, 0.14, 0.42]) S.add(made(() => new THREE.SphereGeometry(0.025, 6, 4)), iron, slab, [x, -0.08, 0.545]);
+  S.add(made(() => organic(shapes.box(1.2, 0.12, 0.38), 0.01, 6, 93)), iron, slab, [0, -0.08, 0.35]);
+  for (const x of [-0.42, -0.14, 0.14, 0.42]) S.add(made(() => shapes.sphere(0.025, 6, 4)), iron, slab, [x, -0.08, 0.545]);
   const belt = belts(b, 'bomb', -1, top, r, b.hand[1], f.hand);
   S.build();
   const chain = boneChain(b.root, ring);
@@ -651,7 +655,7 @@ export function buildTwinSlab(): Model {
   b.root.userData.belt = (bomb: number, poison: number) => { shown.bomb = bomb; shown.poison = poison; };
   b.root.userData.throwHand = belt.inHand;
   b.root.userData.beltSkulls = { rope: belt.skulls, hand: belt.held };
-  const restHand = new THREE.Vector3();
+  const restHand = new Vec3();
 
   let burn = 0;
   function animate(st: AnimState): void {
@@ -698,7 +702,7 @@ export function buildTwinSlab(): Model {
   return {
     root: b.root, kit, animate, head: b.skull, height: 5.3,
     reset() { burn = 0; shown.bomb = BELT_SKULLS; shown.poison = 0; },
-    dispose() { kit.dispose(); chain.mesh.geometry.dispose(); (chain.mesh.material as THREE.Material).dispose(); },
+    dispose() { kit.dispose(); chain.mesh.geometry.dispose(); (chain.mesh.material as Material).dispose(); },
   };
 }
 
@@ -706,7 +710,7 @@ export function buildTwinSlab(): Model {
 
 /** the skulls circling the casket, how far out (m); where its hands grip it, out from its middle (m) */
 const SKULLS = 5, ORBIT = 0.75, GRIP_X = 0.4;
-const grip = new THREE.Vector3(), pole = new THREE.Vector3(), _rest = new THREE.Vector3();
+const grip = new Vec3(), pole = new Vec3(), _rest = new Vec3();
 
 export function buildTwinReliquary(): Model {
   const kit = createKit(0x40a0c0);
@@ -715,7 +719,7 @@ export function buildTwinReliquary(): Model {
   const { S, bone, dark, cloth, rune } = b;
   const bronze = kit.std({
     color: 0x8a6a34, metalness: 0.55, roughness: 0.45, normalMap: pbrMaterialMaps(grunge(), 2, 1).normalMap,
-    emissive: new THREE.Color(COLD), emissiveMap: veins(77, 6), emissiveIntensity: 0.6,
+    emissive: new Color(COLD), emissiveMap: veins(77, 6), emissiveIntensity: 0.6,
   });
   const casketGlow = kit.glow(COLD, 3);
   hands(b, f, [0.5, 0.5]);
@@ -728,7 +732,7 @@ export function buildTwinReliquary(): Model {
     cloth, b.body, [0, top, 0]);
   S.add(made(() => drape({ r: r + 0.08, at: Math.PI, width: Math.PI * 2 * (r + 0.08) - 1.2, h: (top - 0.45) * 0.5, tear: 0.3, flare: 0.2, seed: 91, cols: 22, rows: 6 })),
     rune, b.body, [0, top - 0.02, 0]);
-  S.add(made(() => organic(new THREE.TorusGeometry(r + 0.1, 0.045, 5, 28).rotateX(Math.PI / 2), 0.02, 8, 92)), dark, b.body, [0, top + 0.02, 0]);
+  S.add(made(() => organic(shapes.torus(r + 0.1, 0.045, 5, 28).rotateX(Math.PI / 2), 0.02, 8, 92)), dark, b.body, [0, top + 0.02, 0]);
   for (const s of [1, -1]) {
     S.add(made(() => taperTube([V(s * 0.12, 0, 0), V(s * 0.16, -0.4, 0.04), V(s * 0.12, -0.9, 0.02)], (t) => 0.035 * (1 - t * 0.3), 8, 5)), dark, b.body, [0, top, r + 0.1]);
   }
@@ -736,7 +740,7 @@ export function buildTwinReliquary(): Model {
   // a capelet of grave cloth over its shoulders, open at the front, its hem in tongues; a bronze clasp at its throat
   S.add(made(() => drape({ r: 0.66 * W, at: Math.PI, width: Math.PI * 2 * 0.66 * W - 0.85, h: span * 0.42, tear: 0.22, flare: 0.22, seed: 93, cols: 24, rows: 6 })),
     cloth, b.chest, [0, span + 0.14, 0.02]);
-  S.add(made(() => organic(new THREE.SphereGeometry(1, 10, 8), 0.05, 5, 94)), bronze, b.chest, [0, span + 0.02, 0.18], [0, 0, 0], [0.09, 0.09, 0.04]);
+  S.add(made(() => organic(shapes.sphere(1, 10, 8), 0.05, 5, 94)), bronze, b.chest, [0, span + 0.02, 0.18], [0, 0, 0], [0.09, 0.09, 0.04]);
   // torn sleeves: the upper arm's narrow, the forearm's a long bell hanging past the wrist
   for (const [i, s] of [[0, 1], [1, -1]] as const) {
     sided(S, () => drape({ r: 0.2, at: 0, width: Math.PI * 2 * 0.2, h: f.upper * 0.85, tear: 0.15, flare: 0.08, seed: 95 + i, cols: 12, rows: 5 }), cloth, b.shoulder[i], s, [0, 0.12, 0]);
@@ -744,12 +748,12 @@ export function buildTwinReliquary(): Model {
   }
 
   // the hood, up over the skull but open before its face: a cowl peaked behind, its foot spreading over the neck
-  const hood = (): THREE.BufferGeometry => {
-    const g = new THREE.SphereGeometry(0.128, 22, 12, Math.PI / 2 + 0.95, Math.PI * 2 - 1.9, 0, Math.PI * 0.7);
+  const hood = (): Geometry => {
+    const g = shapes.sphere(0.128, 22, 12, Math.PI / 2 + 0.95, Math.PI * 2 - 1.9, 0, Math.PI * 0.7);
     const p = g.attributes.position;
     for (let i = 0; i < p.count; i++) {
       const x = p.getX(i), y = p.getY(i), z = p.getZ(i);
-      const low = THREE.MathUtils.clamp(-y / 0.128, 0, 1), peak = THREE.MathUtils.clamp((y / 0.128 - 0.6) / 0.4, 0, 1) * THREE.MathUtils.clamp(-z / 0.128 + 0.2, 0, 1);
+      const low = Maths.clamp(-y / 0.128, 0, 1), peak = Maths.clamp((y / 0.128 - 0.6) / 0.4, 0, 1) * Maths.clamp(-z / 0.128 + 0.2, 0, 1);
       // (folds falling down it from the crown, deepening to its foot)
       const fold = 0.05 * Math.sin(Math.atan2(z, x) * 9) * (0.2 + low);
       const out = 1 + 0.12 + low * low * 0.55 + fold;
@@ -760,7 +764,7 @@ export function buildTwinReliquary(): Model {
   };
   S.add(made(hood), cloth, b.skull, [0, (0.1 - SKULL_NECK[1]) * k, (-0.02 - SKULL_NECK[2]) * k], [0, 0, 0], k);
   // a bronze circlet over its brow
-  S.add(made(() => organic(new THREE.TorusGeometry(0.075, 0.006, 5, 28).rotateX(Math.PI / 2), 0.002, 30, 100)), bronze, b.skull,
+  S.add(made(() => organic(shapes.torus(0.075, 0.006, 5, 28).rotateX(Math.PI / 2), 0.002, 30, 100)), bronze, b.skull,
     [0, (0.11 - SKULL_NECK[1]) * k, (0.0 - SKULL_NECK[2]) * k], [0.25, 0, 0], k);
   // a string of vertebrae for prayer beads, hung round its neck down over its breastbone
   for (let i = 0; i < 13; i++) {
@@ -773,27 +777,27 @@ export function buildTwinReliquary(): Model {
   // box on four feet, bone posts at its corners, a peaked lid with finials and bands, a grille over its glowing
   // window and a skull behind the grille
   const casket = joint(b.chest, 0, 1.0, 0.85);
-  S.add(made(() => organic(new THREE.BoxGeometry(0.62, 0.4, 0.42, 2, 2, 2), 0.012, 6, 101)), bronze, casket);
+  S.add(made(() => organic(shapes.box(0.62, 0.4, 0.42, 2, 2, 2), 0.012, 6, 101)), bronze, casket);
   S.add(made(() => {
-    const roof = new THREE.Shape([new THREE.Vector2(-0.24, 0), new THREE.Vector2(0.24, 0), new THREE.Vector2(0, 0.2)]);
-    return new THREE.ExtrudeGeometry(roof, { depth: 0.68, bevelEnabled: true, bevelThickness: 0.012, bevelSize: 0.012, bevelSegments: 1 })
+    const roof = new Outline([new Vec2(-0.24, 0), new Vec2(0.24, 0), new Vec2(0, 0.2)]);
+    return shapes.extrude(roof, { depth: 0.68, bevelEnabled: true, bevelThickness: 0.012, bevelSize: 0.012, bevelSegments: 1 })
       .rotateY(Math.PI / 2).translate(-0.34, 0.2, 0);
   }), bronze, casket);
-  for (const x of [-0.36, 0.36]) S.add(made(() => new THREE.ConeGeometry(0.035, 0.12, 6)), bronze, casket, [x, 0.46, 0]);
-  for (const x of [-0.18, 0.18]) S.add(made(() => new THREE.BoxGeometry(0.035, 0.03, 0.46)), bronze, casket, [x, 0.21, 0]);
+  for (const x of [-0.36, 0.36]) S.add(made(() => shapes.cone(0.035, 0.12, 6)), bronze, casket, [x, 0.46, 0]);
+  for (const x of [-0.18, 0.18]) S.add(made(() => shapes.box(0.035, 0.03, 0.46)), bronze, casket, [x, 0.21, 0]);
   for (const x of [-0.31, 0.31]) {
     for (const z of [-0.21, 0.21]) {
-      S.add(made(() => toned(new THREE.CylinderGeometry(0.03, 0.035, 0.5, 6), 0.9)), bone, casket, [x, 0, z]);
-      S.add(made(() => new THREE.SphereGeometry(0.04, 6, 5)), bronze, casket, [x, -0.25, z]);
+      S.add(made(() => toned(shapes.cylinder(0.03, 0.035, 0.5, 6), 0.9)), bone, casket, [x, 0, z]);
+      S.add(made(() => shapes.sphere(0.04, 6, 5)), bronze, casket, [x, -0.25, z]);
     }
   }
-  S.add(made(() => new THREE.BoxGeometry(0.42, 0.24, 0.02)), casketGlow, casket, [0, 0, 0.2]);
+  S.add(made(() => shapes.box(0.42, 0.24, 0.02)), casketGlow, casket, [0, 0, 0.2]);
   smallSkull(b, casket, [0, -0.1, 0.17], [0, 0, 0], 0.7);
-  for (const x of [-0.15, -0.075, 0, 0.075, 0.15]) S.add(made(() => new THREE.BoxGeometry(0.012, 0.26, 0.012)), bronze, casket, [x, 0, 0.255]);
-  for (const y of [-0.06, 0.06]) S.add(made(() => new THREE.BoxGeometry(0.44, 0.012, 0.012)), bronze, casket, [0, y, 0.255]);
+  for (const x of [-0.15, -0.075, 0, 0.075, 0.15]) S.add(made(() => shapes.box(0.012, 0.26, 0.012)), bronze, casket, [x, 0, 0.255]);
+  for (const y of [-0.06, 0.06]) S.add(made(() => shapes.box(0.44, 0.012, 0.012)), bronze, casket, [0, y, 0.255]);
   // the skulls circling it, each on its joint of a ring that turns (`orbit`)
   const orbit = joint(casket, 0, 0.15, 0);
-  const skulls: THREE.Group[] = [];
+  const skulls: Node[] = [];
   for (let i = 0; i < SKULLS; i++) {
     const a = (i / SKULLS) * Math.PI * 2, sk = joint(orbit, Math.sin(a) * ORBIT, 0, Math.cos(a) * ORBIT);
     smallSkull(b, sk, [0, -0.08, 0], [0, 0, 0], 1.25);

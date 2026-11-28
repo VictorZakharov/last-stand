@@ -10,7 +10,7 @@
 // more. A third way, the glow's code taken out of three's programs, was three's alone: the engine's kit shader is
 // one (`engine/looks/kit.ts`). From play: "we also need to disable clothing shader effect,
 // for rarity -- measure how much it would impact the performance".
-import * as THREE from 'three';
+import { Color, Material, Mesh, Node, Vec2, Vec3 } from './sceneApi.ts';
 import type { Lab, Pictured, Report } from './lab';
 import { G } from '../../../src/state';
 import * as renderer from '../../../src/core/renderer';
@@ -86,34 +86,35 @@ function gearAt(gear: Gear, rarity: RarityId | null): Gear {
 }
 
 /** The materials of a mesh, as a list. */
-function materialsOf(mesh: THREE.Mesh): THREE.Material[] {
+function materialsOf(mesh: Mesh): Material[] {
   return Array.isArray(mesh.material) ? mesh.material : [mesh.material];
 }
 
 /** A kit material's looks, as far as the glow goes: its own glow's colour. */
-type Glowing = THREE.Material & { kitLooks?: { aura: { value: THREE.Color } } };
+type Glowing = Material & { kitLooks?: { aura: { value: Color }; shade?: object } };
 
 /**
  * The heroes' glow copies (`kitCopy`: a material an item's parts draw in, the kit's own but for its glow's colour)
  * swapped for the materials they copy, and back: the hero as he'd draw with no glow to tell his items apart by. A
- * copy shares its original's hook, and the original is the one made first, its id the lowest; a copy's glow colour
+ * copy shares its original's mark (`kitLooks.shade`, models/kitTwin.ts: under three, its shader hook said so), and
+ * the original is the one made first, its id the lowest; a copy's glow colour
  * is its own. Only right while no gear glows (plain, or the setting off): the frame's pixels say so.
  */
 class OwnMaterials {
-  private readonly swaps: { mesh: THREE.Mesh; with_: THREE.Material | THREE.Material[]; without: THREE.Material | THREE.Material[] }[] = [];
-  readonly copies = new Set<THREE.Material>();
+  private readonly swaps: { mesh: Mesh; with_: Material | Material[]; without: Material | Material[] }[] = [];
+  readonly copies = new Set<Material>();
 
-  constructor(roots: THREE.Object3D[]) {
-    const meshes: THREE.Mesh[] = [];
-    for (const root of roots) root.traverse((object) => { if ((object as THREE.Mesh).isMesh) meshes.push(object as THREE.Mesh); });
+  constructor(roots: Node[]) {
+    const meshes: Mesh[] = [];
+    for (const root of roots) root.traverse((object) => { if ((object as Mesh).isMesh) meshes.push(object as Mesh); });
     const first = new Map<unknown, Glowing>();
     for (const material of meshes.flatMap(materialsOf) as Glowing[]) {
       if (!material.kitLooks) continue;
-      const known = first.get(material.onBeforeCompile);
-      if (!known || material.id < known.id) first.set(material.onBeforeCompile, material);
+      const known = first.get(material.kitLooks.shade);
+      if (!known || material.id < known.id) first.set(material.kitLooks.shade, material);
     }
-    const own = (material: Glowing): THREE.Material => {
-      const original = material.kitLooks ? first.get(material.onBeforeCompile)! : material;
+    const own = (material: Glowing): Material => {
+      const original = material.kitLooks ? first.get(material.kitLooks.shade)! : material;
       if (original === material || original.kitLooks!.aura === material.kitLooks!.aura) return material;
       this.copies.add(material);
       return original;
@@ -138,14 +139,14 @@ class OwnMaterials {
  * (`setGear`), a hero's weapon and coat were built anew at every turn, and nothing the lab had swapped held.
  */
 class Glows {
-  private readonly lit: { colour: THREE.Color; worn: THREE.Color }[] = [];
+  private readonly lit: { colour: Color; worn: Color }[] = [];
 
-  constructor(roots: THREE.Object3D[]) {
-    const seen = new Set<THREE.Color>();
+  constructor(roots: Node[]) {
+    const seen = new Set<Color>();
     for (const root of roots) {
       root.traverse((object) => {
-        if (!(object as THREE.Mesh).isMesh) return;
-        for (const material of materialsOf(object as THREE.Mesh) as Glowing[]) {
+        if (!(object as Mesh).isMesh) return;
+        for (const material of materialsOf(object as Mesh) as Glowing[]) {
           const colour = material.kitLooks?.aura.value;
           if (!colour || seen.has(colour) || colour.getHex() === 0 && colour.r + colour.g + colour.b === 0) continue;
           seen.add(colour);
@@ -174,8 +175,8 @@ interface Staged {
 /** Three partners of the other classes stood before the hero, facing him, as a party stands close up. */
 function partyOf(lab: Lab): Staged {
   const hero = lab.player;
-  const ahead = new THREE.Vector3(Math.sin(hero.facing), 0, Math.cos(hero.facing));
-  const aside = new THREE.Vector3(ahead.z, 0, -ahead.x);
+  const ahead = new Vec3(Math.sin(hero.facing), 0, Math.cos(hero.facing));
+  const aside = new Vec3(ahead.z, 0, -ahead.x);
   const others = [...CLASS_IDS.filter((id) => id !== hero.cls.id), hero.cls.id].slice(0, 3);
   const partners = others.map((id, index) => {
     const partner = new Player(id, loadProfile(id).equipped, false);
@@ -195,7 +196,7 @@ function fightRound(lab: Lab, biome: BiomeId): Staged {
   for (let foe = 0; foe < FOES.count; foe++) {
     const turn = (foe / FOES.count) * Math.PI * 2;
     const reach = FOES.near + (FOES.far - FOES.near) * ((foe * 7) % FOES.count) / FOES.count;
-    const at = lab.player.pos.clone().add(new THREE.Vector3(Math.sin(turn) * reach, 0, Math.cos(turn) * reach));
+    const at = lab.player.pos.clone().add(new Vec3(Math.sin(turn) * reach, 0, Math.cos(turn) * reach));
     lab.spawnFoe(pool[foe % pool.length][0], at);
   }
   return { heroes: [{ model: lab.player.model, gear: lab.player.gear }], leave: () => {} };
@@ -262,9 +263,9 @@ function drawsOf(): { calls: number; triangles: number; materials: number } {
   const stats = RUST.bridge!.stats;
   const calls = stats.draws;
   const triangles = stats.triangles;
-  const materials = new Set<THREE.Material>();
+  const materials = new Set<Material>();
   G.scene.traverseVisible((object) => {
-    if ((object as THREE.Mesh).isMesh) for (const material of materialsOf(object as THREE.Mesh)) materials.add(material);
+    if ((object as Mesh).isMesh) for (const material of materialsOf(object as Mesh)) materials.add(material);
   });
   return { calls, triangles, materials: materials.size };
 }
@@ -320,7 +321,7 @@ export async function glowCost(lab: Lab, command: GlowCostOptions): Promise<Repo
   const { scene, biome, level, rarity } = command;
   useQuality(level);
   const staged = await stage(lab, command);
-  const size = renderer.sceneSize(new THREE.Vector2());
+  const size = renderer.sceneSize(new Vec2());
   const name = `${scene} (${biome}, ${QUALITY[level].label}, ${staged.heroes.length} hero${staged.heroes.length > 1 ? 'es' : ''} `
     + `in ${rarity} gear, the scene ${size.x}x${size.y}, ${(size.x * size.y / 1e6).toFixed(2)} Mpx)`;
   const dress = (worn: RarityId | null): void => {

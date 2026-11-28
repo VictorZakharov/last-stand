@@ -6,6 +6,7 @@
 // Space chooses, Esc opens pause; 1, 2, 3 pick each hero); the name or number of the hero in focus, again, chooses him. The choice stands on the hero in focus, shown as the mouse comes over him (on touch,
 // always). Every class's card is laid over the others in one cell, the one in focus shown, so
 // the panel is the largest's size and nothing moves as the focus does.
+import { shownBox } from './kit/press';
 import { G } from '../state';
 import { CLASSES, CLASS_IDS } from '../data/classes/index';
 import { saveSlot } from '../loot/saveSlots';
@@ -91,7 +92,8 @@ export function initHeroSelect(h: HeroSelectHooks): void {
   for (const el of [$('.hs-shade')]) {
     el.addEventListener('pointerdown', (e) => {
       if (!hallOpen() || press) return;
-      el.setPointerCapture(e.pointerId);
+      // (the kit tells it the press as the browser would, its pointer still the one pressed)
+      try { el.setPointerCapture(e.pointerId); } catch { /* not a pointer of the page's now */ }
       const now = performance.now();
       press = { x: e.clientX, y: e.clientY, along: hallAlong(), dragging: false, v: 0, lastX: e.clientX, lastT: now };
     });
@@ -329,6 +331,9 @@ function onScreen(i: number): { x: number; top: number; bottom: number } | null 
  */
 export function placeChoice(): void {
   if (!heroSelectOpen() || !hallOpen()) return;
+  // (the kit lays its panel out a frame or two after the page changes: the camera framed again as it does)
+  const r = panelBox();
+  if (r.width > 0 && `${r.left} ${r.top} ${r.width} ${r.height}` !== laidOutBy) layOut();
   const at = onScreen(labelled());
   if (!at) return;
   const y = at.bottom - (at.bottom - at.top) * CHOICE_UP;
@@ -451,9 +456,16 @@ export function heroSelectKeys(): void {
  *  it on an upright one (`setViewShift`'s px). */
 export const heroSelectShift = (): { x: number; y: number } => shift;
 
+/** the panel's box as last laid out (css px): the screen laid out again as the kit draws it elsewhere */
+let laidOutBy = '';
+
+/** The panel's box as it's shown (css px): where the kit draws it (`heroesSheet.ts`), else the page's. */
+const panelBox = (): DOMRect => shownBox($('.hs-panel'));
+
 function layOut(): void {
   if (!heroSelectOpen()) return;
-  const r = $('.hs-panel').getBoundingClientRect();
+  const r = panelBox();
+  laidOutBy = `${r.left} ${r.top} ${r.width} ${r.height}`;
   const beside = r.top < innerHeight * 0.4;
   shift = beside ? { x: -(innerWidth - r.left) / 2, y: 0 } : { x: 0, y: -(innerHeight - r.top) / 2 };
   // (above an upright screen's panel he'd stand taller than the room: the camera further back)

@@ -5,7 +5,7 @@
 // nothing thinned, and with the houses' parts hidden. Where a house covers ground, how much of its cover is left
 // over each block of the frame is read from the three, and set against whether he sees the ground the sight
 // through that block ends on (`seenShareAt`, the fog's own answer, a door he sees in through too).
-import * as THREE from 'three';
+import { boundsOf, Material, Mesh, Vec2, Vec3 } from './sceneApi.ts';
 import type { Lab, Pictured } from './lab';
 import { type Checked, failed, passed } from './rustPixels';
 import { STRIP_MOST, type StripRead, stripsPastRoom } from './rustRoomStrips';
@@ -165,9 +165,9 @@ const GROUND_HALVINGS = 6;
 /** Where the sight through a point of the screen (-1 to 1 each way) ends on the ground, or null over the sky: on the
  *  ground as it lies there (the terrace's top, a dais, the meadow under them), the first place along the sight that
  *  lies under it. Found by guessing a height and reading the ground there, it leapt past a step in the floor. */
-function groundThrough(x: number, y: number): THREE.Vector2 | null {
-  const eye = G.camera.getWorldPosition(new THREE.Vector3());
-  const toward = new THREE.Vector3(x, y, 0.5).unproject(G.camera).sub(eye).normalize();
+function groundThrough(x: number, y: number): Vec2 | null {
+  const eye = G.camera.getWorldPosition(new Vec3());
+  const toward = new Vec3(x, y, 0.5).unproject(G.camera).sub(eye).normalize();
   if (toward.y > -1e-4) return null;
   const over = (along: number): number => eye.y + toward.y * along - groundHeight(eye.x + toward.x * along, eye.z + toward.z * along);
   let far = GROUND_STEP;
@@ -179,11 +179,11 @@ function groundThrough(x: number, y: number): THREE.Vector2 | null {
     if (over(middle) > 0) near = middle;
     else far = middle;
   }
-  return new THREE.Vector2(eye.x + toward.x * far, eye.z + toward.z * far);
+  return new Vec2(eye.x + toward.x * far, eye.z + toward.z * far);
 }
 
 /** How he sees the ground at `place`: 1 seen and 0 unseen all round it, null on the edge of his sight. */
-function seenClearly(place: THREE.Vector2): number | null {
+function seenClearly(place: Vec2): number | null {
   const shares = [[0, 0], [CLEAR, 0], [-CLEAR, 0], [0, CLEAR], [0, -CLEAR]]
     .map(([dx, dz]) => seenShareAt(place.x + dx, place.y + dz));
   if (shares.every((share) => share > 0.9)) return 1;
@@ -196,9 +196,9 @@ function seenClearly(place: THREE.Vector2): number | null {
 const STANDS_LEAST = 0.5;
 
 /** Whether `mesh` stands over the ground, as a wall or a roof does. */
-function stands(mesh: THREE.Mesh): boolean {
-  const box = new THREE.Box3().setFromObject(mesh);
-  const middle = box.getCenter(new THREE.Vector3());
+function stands(mesh: Mesh): boolean {
+  const box = boundsOf(mesh);
+  const middle = box.getCenter(new Vec3());
   return box.max.y - groundHeight(middle.x, middle.z) > STANDS_LEAST;
 }
 
@@ -206,11 +206,11 @@ function stands(mesh: THREE.Mesh): boolean {
 export function show(kinds: readonly Parameters<typeof seeValue>[0][], shown: boolean, standing: boolean): void {
   const wanted = new Set<SeeThrough>(kinds.map((kind) => seeValue(kind)));
   G.scene.traverse((object) => {
-    const mesh = object as THREE.Mesh;
+    const mesh = object as Mesh;
     if (!mesh.isMesh) return;
     const materials = [mesh.material].flat();
     const ofKind = materials.some((material) => {
-      const see = (material as THREE.Material & { seeThrough?: SeeThrough }).seeThrough;
+      const see = (material as Material & { seeThrough?: SeeThrough }).seeThrough;
       return see !== undefined && wanted.has(see);
     });
     if (!ofKind || (standing && !stands(mesh))) return;
@@ -311,7 +311,7 @@ const WITHIN_INSET = 0.5;
 const WITHIN_OPEN = 0.08;
 
 /** Whether a place on the ground lies within a cottage's walls, `WITHIN_INSET` in from them. */
-function inCottage(place: THREE.Vector2): boolean {
+function inCottage(place: Vec2): boolean {
   return COTTAGES.some((cottage) => {
     const dx = place.x - cottage.x;
     const dz = place.y - cottage.z;
@@ -333,7 +333,7 @@ function readBlocks(view: RuleView, played: Float32Array, whole: Float32Array, b
   const within = { blocks: 0, opened: 0 };
   const covered: number[] = [];
   const opened: number[] = [];
-  const places = new Map<number, THREE.Vector2>();
+  const places = new Map<number, Vec2>();
   const inside = inHall(view.at[0], view.at[1]);
   const placeOf = (blocks: number[]): string => {
     const place = places.get(blocks[Math.floor(blocks.length / 2)]);

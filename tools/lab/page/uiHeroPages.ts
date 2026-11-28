@@ -14,7 +14,7 @@ import { CLASSES } from '../../../src/data/classes/index';
 import { HAIR_COLOURS, looksOf } from '../../../src/data/heroLooks';
 import { addHeroPicture } from './uiHeroes';
 import { closeHeroSelect, openHeroSelect } from '../../../src/ui/heroSelect';
-import type { Lab } from './lab';
+import { boxOf, seenOf, type Lab } from './lab';
 
 /** frames run after a tab is clicked or the screen opened again */
 const PAGE_FRAMES = 2;
@@ -25,7 +25,8 @@ interface Found {
   problems: string[];
 }
 
-const shown = (element: Element | null): boolean => !!element?.checkVisibility({ visibilityProperty: true });
+/** whether `element` is shown: where the kit draws it, its panel seen */
+const shown = (element: Element | null): boolean => !!element && seenOf(element);
 
 /** The panel's tab for page `page`, and its page. */
 function tabOf(screen: HTMLElement, page: string): { tab: HTMLElement | null; body: HTMLElement | null } {
@@ -54,9 +55,9 @@ async function openPage(lab: Lab, screen: HTMLElement, page: string, problems: s
   return true;
 }
 
-/** The middle of `element` (css px). */
+/** The middle of `element` where it's drawn (css px). */
 function middleOf(element: Element): { x: number; y: number } {
-  const box = element.getBoundingClientRect();
+  const box = boxOf(element);
   return { x: (box.left + box.right) / 2, y: (box.top + box.bottom) / 2 };
 }
 
@@ -169,14 +170,14 @@ async function lookPage(lab: Lab, screen: HTMLElement): Promise<Found> {
   const swatches = [...page.querySelectorAll<HTMLElement>('.hl-swatch')];
   if (presets.length !== looks.length) problems.push(`heroes: the look page shows ${presets.length} looks, the ${hero.id} has ${looks.length}`);
   if (swatches.length !== HAIR_COLOURS.length + 1) problems.push(`heroes: the look page shows ${swatches.length} hair colours`);
-  const panel = screen.querySelector('.hs-panel')!.getBoundingClientRect();
+  const panel = boxOf(screen.querySelector('.hs-panel')!);
   const outside = [...presets, ...swatches].filter((button) => {
-    const box = button.getBoundingClientRect();
+    const box = boxOf(button);
     return box.left < panel.left - 1 || box.right > panel.right + 1;
   });
   if (outside.length) problems.push(`heroes: ${outside.length} of the look page's buttons reach past the panel`);
   const touch = document.body.classList.contains('touch');
-  const small = touch ? swatches.filter((swatch) => swatch.getBoundingClientRect().width < FINGER - 0.5).length : 0;
+  const small = touch ? swatches.filter((swatch) => boxOf(swatch).width < FINGER - 0.5).length : 0;
   if (small) problems.push(`heroes: ${small} hair swatches under a finger's ${FINGER} px on touch`);
   const was = { ...hero.player.heroLook };
   const other = presets.find((button) => button.dataset.look !== was.preset);

@@ -6,7 +6,7 @@
 // rivets and edges, polished as they were. (The 6 mm gaps between its planks were tried too: closed up they changed
 // no reading here, with the iron as it was or dulled, and stay.) Pictured at the worst of each door. `canary` hangs
 // four white slivers 6 mm wide down the first door, which must be found.
-import * as THREE from 'three';
+import { Mesh, shapes, UnlitMaterial, Vec3 } from './sceneApi.ts';
 import { screenArea, type Lab, type Pictured } from './lab';
 import { G } from '../../../src/state';
 import { holdHour } from '../../../src/game/clock';
@@ -43,22 +43,22 @@ const SLIVERS = { count: 4, wide: 0.006, off: 0.12 };
 interface Read { id: RoomId; hour: number; aside: number; flown: Flown; found: StandsOut }
 
 /** The corners of house `id`'s leaf in the world, and the way out of its door. */
-function leafOf(id: RoomId): { corners: THREE.Vector3[]; middle: THREE.Vector3; out: THREE.Vector3 } {
+function leafOf(id: RoomId): { corners: Vec3[]; middle: Vec3; out: Vec3 } {
   const door = houseDoor(id);
-  const out = new THREE.Vector3(Math.sin(door.facing), 0, Math.cos(door.facing));
-  const along = new THREE.Vector3(out.z, 0, -out.x);
+  const out = new Vec3(Math.sin(door.facing), 0, Math.cos(door.facing));
+  const along = new Vec3(out.z, 0, -out.x);
   const ground = groundHeight(door.x, door.z);
-  const corner = (side: number, up: number): THREE.Vector3 =>
-    new THREE.Vector3(door.x, ground + up, door.z).addScaledVector(along, side * LEAF.half);
+  const corner = (side: number, up: number): Vec3 =>
+    new Vec3(door.x, ground + up, door.z).addScaledVector(along, side * LEAF.half);
   const corners = [corner(-1, LEAF.foot), corner(1, LEAF.foot), corner(1, LEAF.foot + LEAF.high), corner(-1, LEAF.foot + LEAF.high)];
-  const middle = new THREE.Vector3(door.x, ground + LEAF.foot + LEAF.high / 2, door.z);
+  const middle = new Vec3(door.x, ground + LEAF.foot + LEAF.high / 2, door.z);
   return { corners, middle, out };
 }
 
 /** Where house `id`'s door is looked at from, `aside` of square on. */
 function viewOf(id: RoomId, aside: number): Flown {
   const { middle, out } = leafOf(id);
-  const way = out.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), aside);
+  const way = out.clone().applyAxisAngle(new Vec3(0, 1, 0), aside);
   const pos = middle.clone().addScaledVector(way, FROM.out);
   pos.y = middle.y + FROM.up;
   const look = middle.clone().sub(pos).normalize();
@@ -84,7 +84,7 @@ function within(quad: [number, number][], x: number, y: number): boolean {
 /** Each pixel's light within the patch of `frame` that `corners` (round it in order) take on the screen: the patch
  *  itself, not the box round it, which from aside takes in the jamb beside the leaf (the frame reads from its bottom
  *  row up). */
-function patchLights(frame: Canvas, corners: THREE.Vector3[]): Float32Array {
+function patchLights(frame: Canvas, corners: Vec3[]): Float32Array {
   const quad = corners.map((corner): [number, number] => {
     const ndc = corner.clone().project(G.camera);
     return [(ndc.x + 1) / 2 * frame.width, (ndc.y + 1) / 2 * frame.height];
@@ -122,11 +122,11 @@ async function readDoor(lab: Lab, id: RoomId, hour: number, aside: number): Prom
 /** White slivers hung down house `id`'s leaf, before it; returns what takes them away. */
 function hangSlivers(id: RoomId): () => void {
   const { middle, out } = leafOf(id);
-  const along = new THREE.Vector3(out.z, 0, -out.x);
-  const material = new THREE.MeshBasicMaterial({ color: 0xffffff });
-  const geometry = new THREE.BoxGeometry(SLIVERS.wide, LEAF.high, SLIVERS.wide);
+  const along = new Vec3(out.z, 0, -out.x);
+  const material = new UnlitMaterial({ color: 0xffffff });
+  const geometry = shapes.box(SLIVERS.wide, LEAF.high, SLIVERS.wide);
   const slivers = Array.from({ length: SLIVERS.count }, (_, at) => {
-    const sliver = new THREE.Mesh(geometry, material);
+    const sliver = new Mesh(geometry, material);
     sliver.name = 'canary sliver';
     const side = ((at + 0.5) / SLIVERS.count - 0.5) * 2 * LEAF.half;
     sliver.position.copy(middle).addScaledVector(along, side).addScaledVector(out, SLIVERS.off);

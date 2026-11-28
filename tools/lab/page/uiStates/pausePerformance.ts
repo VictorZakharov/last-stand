@@ -10,7 +10,7 @@ const STATE: Steps = {
   inRun: true,
   open: () => openPauseProfiled(asked.canary),
   close: closePauseProfiled,
-  check: () => pauseShown('performance'),
+  check: (_canary, lab) => pauseShown(lab, 'performance'),
   canary: caught(PAUSE_CANARY),
 };
 export default STATE;

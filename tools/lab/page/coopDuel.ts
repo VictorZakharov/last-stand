@@ -2,7 +2,7 @@
 // menu as a player sets it up (its own buttons), readied by the guest and begun by the host, then fought: each round
 // the two heroes stand a few strides apart, one of them down to a little life (its own game's to say) and the other
 // striking at it with its first skill, aimed where its own screen shows its rival.
-import * as THREE from 'three';
+import { Vec3 } from './sceneApi.ts';
 import { G } from '../../../src/state';
 import { VILLAGE_OBJECTS } from '../../../src/data/village';
 import { showVillageCard } from '../../../src/ui/villageCard';
@@ -10,6 +10,7 @@ import { nameOf } from '../../../src/ui/coop';
 import * as balance from '../../../src/data/balance';
 import { mine } from '../../../src/game/stats';
 import type { Frame, Lab } from './lab';
+import { shownBox } from '../../../src/ui/kit/press';
 
 /** the game's duel, where the tree has one (an older tree has none) */
 type DuelModule = typeof import('../../../src/game/duel');
@@ -114,7 +115,7 @@ async function pressAs(lab: Lab, element: HTMLElement, by: 'click' | 'tap'): Pro
     await lab.clickOn(element);
     return;
   }
-  const box = element.getBoundingClientRect();
+  const box = shownBox(element);
   await lab.tap({ x: box.left + box.width / 2, y: box.top + box.height / 2 });
   touched = true;
 }
@@ -178,10 +179,10 @@ export async function coopDuelFit(lab: Lab, set: { screen: DuelScreen; canary?: 
     if (set.canary) ask.style.marginTop = '400vh';
     await lab.showOn(set.screen);
     openMenu();
-    await lab.step(2);
+    await lab.step(DRAWN_FRAMES);
     const open = fitHere(ask, card, true);
     showVillageCard(null);
-    await lab.step(2);
+    await lab.step(DRAWN_FRAMES);
     const shut = fitHere(ask, card, false);
     return { line: `${open.line}; shut: ${shut.line}`, problems: [...open.problems, ...shut.problems] };
   } finally {
@@ -192,6 +193,10 @@ export async function coopDuelFit(lab: Lab, set: { screen: DuelScreen; canary?: 
     await lab.showOn(own);
   }
 }
+
+/** frames for the kit to draw the card and the prompt as they now stand (the prompt moved into the card or out of it,
+ *  the screen's size changed): read sooner, the prompt's box was the card page's round it */
+const DRAWN_FRAMES = 4;
 
 /** Whether a box lies within another (the window if none), a pixel's rounding allowed. */
 function within(box: DOMRect, outer?: DOMRect): boolean {
@@ -205,18 +210,19 @@ function fitHere(ask: HTMLElement, card: HTMLElement, open: boolean): DuelFit {
   const size = `${window.innerWidth}x${window.innerHeight}`;
   const screen = `${size}, the card ${open ? 'open' : 'shut'}`;
   const problems: string[] = [];
-  const askBox = ask.getBoundingClientRect(), cardBox = card.getBoundingClientRect();
+  const askBox = shownBox(ask), cardBox = shownBox(card);
   if (ask.classList.contains('hidden') || !askBox.height) problems.push(`${screen}: the ask's prompt isn't shown`);
   if (!within(askBox)) problems.push(`${screen}: the ask's prompt runs past the window`);
   if (open) {
     if (!within(cardBox)) problems.push(`${screen}: the rack's card runs past the window`);
     if (!within(askBox, cardBox)) problems.push(`${screen}: the ask's prompt isn't within the open card`);
     for (const place of card.querySelectorAll<HTMLElement>('.pvp-place')) {
-      if (!within(place.getBoundingClientRect(), cardBox)) problems.push(`${screen}: a place runs out of the card`);
+      if (!within(shownBox(place), cardBox)) problems.push(`${screen}: a place runs out of the card`);
     }
   }
   const touch = document.body.classList.contains('touch');
-  const boxOf = (box: DOMRect) => `${Math.round(box.width)}x${Math.round(box.height)}`;
+  const boxOf = (box: DOMRect) =>
+    `${Math.round(box.width)}x${Math.round(box.height)} at ${Math.round(box.left)},${Math.round(box.top)}`;
   const boxes = open ? `the card ${boxOf(cardBox)}, the prompt ${boxOf(askBox)} in it` : `the prompt ${boxOf(askBox)}`;
   return { line: `${size}${touch ? ' (touch)' : ''}: ${boxes}`, problems };
 }
@@ -299,7 +305,7 @@ export function coopDuelRound(lab: Lab, set: {
 }): void {
   const [x, z] = set.spot ?? SPOTS[set.role], [rx, rz] = set.faces ?? SPOTS[set.role === 'host' ? 'guest' : 'host'];
   const facing = Math.atan2(rx - x, rz - z) + (set.faceAway ? Math.PI : 0);
-  G.player.place(new THREE.Vector3(x, 0, z), facing);
+  G.player.place(new Vec3(x, 0, z), facing);
   if (set.weak) G.player.life = LITTLE_LIFE;
   play.strikes = set.strikes;
   play.heldWhole = !!set.heldWhole;
@@ -341,7 +347,7 @@ export function duelInput(frame: number): Frame | null {
   if (!duel) return null;
   if (!play.strikes || duel.phase !== 'fight' || !G.player.alive) return {};
   // (the nearest rival still standing, as this game has them among its foes: in a party the others are not all rivals)
-  const far = (foe: { pos: THREE.Vector3 }): number => foe.pos.distanceTo(G.player.pos);
+  const far = (foe: { pos: Vec3 }): number => foe.pos.distanceTo(G.player.pos);
   const rival = G.enemies.filter((foe) => (foe as { standIn?: boolean }).standIn && foe.alive).sort((a, b) => far(a) - far(b))[0];
   if (!rival) return {};
   const aim = rival.pos.clone();

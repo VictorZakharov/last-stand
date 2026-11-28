@@ -3,7 +3,7 @@
 // facing, one crop for the whole strip, so a hoof planted on the earth stays on its pixels while the body moves over
 // it) and as the player sees it (the game's own view from above). Victor judges whether an animal could move so
 // ("would not be possible irl"); Kenneth asked that its close attack bend down to reach the hero, not strike the air.
-import * as THREE from 'three';
+import { Vec3 } from './sceneApi.ts';
 import type { Clip, Lab, Pictured } from './lab';
 import type { Enemy } from '../../../src/entities/enemy';
 import { G } from '../../../src/state';
@@ -59,13 +59,13 @@ const ATTACKS: StagAttack[] = [
 /** The Stag risen on an open lane facing the hero `away` m past its body and his, left to make its next close attack
  *  (`name` its gore or its stamp, as it chooses by where he stands), its charge held off. */
 async function facing(lab: Lab, options: BossOptions, attack: StagAttack):
-  Promise<{ boss: Enemy; way: THREE.Vector3 }> {
+  Promise<{ boss: Enemy; way: Vec3 }> {
   await standIn(lab, options.fixture, 'forest');
   const lane = openLane();
   const boss = await onLane(lab, options, lane);
   const hero = G.player;
   const d = boss.radius + hero.radius + attack.away, a = Math.atan2(lane.way.x, lane.way.z) + attack.off;
-  const at = new THREE.Vector3(boss.pos.x + Math.sin(a) * d, 0, boss.pos.z + Math.cos(a) * d);
+  const at = new Vec3(boss.pos.x + Math.sin(a) * d, 0, boss.pos.z + Math.cos(a) * d);
   hero.place(at, a + Math.PI);
   boss.brain.closeN = 0;
   // (its later attacks: its life taken under its second phase's share, its antlers shed first)
@@ -149,8 +149,8 @@ async function burningWood(lab: Lab, options: BossOptions): Promise<Pictured[]> 
     .filter((o) => o.prop?.kind === 'wood' && !o.prop.broken)
     .sort((a, b) => Math.hypot(a.x - hero.pos.x, a.z - hero.pos.z) - Math.hypot(b.x - hero.pos.x, b.z - hero.pos.z))[0];
   if (!wood) return [];
-  const toward = new THREE.Vector3(hero.pos.x - wood.x, 0, hero.pos.z - wood.z).normalize();
-  const stand = new THREE.Vector3(wood.x, 0, wood.z).addScaledVector(toward, wood.r + 2.5);
+  const toward = new Vec3(hero.pos.x - wood.x, 0, hero.pos.z - wood.z).normalize();
+  const stand = new Vec3(wood.x, 0, wood.z).addScaledVector(toward, wood.r + 2.5);
   hero.place(stand, Math.atan2(-toward.x, -toward.z));
   fx('woodFire', boss.id, wood.x, wood.z, 0);
   const moments: Pictured[] = [];

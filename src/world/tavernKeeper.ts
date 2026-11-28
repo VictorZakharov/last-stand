@@ -19,8 +19,10 @@
 // - In co-op the host's game runs him and the ledger (`tv`: the ledger as it changes and his body ten times a second),
 //   and a guest's asks go to it (`tv?`: ale, a mug taken up, a mug set down): two heroes can't take one mug.
 // Everything that comes and goes is drawn at no size when it isn't there, never hidden: the room's warm-up draws it.
-import * as THREE from 'three';
-import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import {
+  Color, DoubleSide, floats, Geometry, LitMaterial, mergeGeometries, Mesh, Node, Vec3,
+} from '../engine/api/index.ts';
+import * as shapes from '../engine/api/shapes/index.ts';
 import { G } from '../state';
 import { createKit } from '../core/materials';
 import { sfx } from '../core/audio';
@@ -40,7 +42,7 @@ import { MugLedger, type Mug, type MugPlace } from '../game/mugs';
 import { isGuest, isHost } from '../net/role';
 import { tavernLink } from '../net/tavernLink';
 import { onMessages } from '../net/messages';
-import { cursorRay, input, spendPress, wasPressed } from '../core/input';
+import { cursorRay, input, overPanels, spendPress, wasPressed } from '../core/input';
 import { outline } from '../ui/overlay/outline';
 import { claimPointWhen, objectNearAt, objectPointed, takeClickWhen, takeKeyWhen } from '../game/keyTakers';
 import { drinkChoice, type DrinkPick } from '../game/drinkChoice';
@@ -119,7 +121,7 @@ const tableTop = (name: keyof typeof TABLES): Top => ({ ...TABLES[name], y: TABL
  *  turned) */
 const PAD_INSIDE = 0.19;
 /** `at` (room) brought within `top`, the rag's half width inside its edge */
-function onTop(at: THREE.Vector3, top: Top): THREE.Vector3 {
+function onTop(at: Vec3, top: Top): Vec3 {
   const out = at.clone();
   if (top.r !== undefined) {
     const dx = out.x - top.x, dz = out.z - top.z, d = Math.hypot(dx, dz), most = top.r - PAD_INSIDE;
@@ -135,10 +137,10 @@ function onTop(at: THREE.Vector3, top: Top): THREE.Vector3 {
 }
 /** the way down a broom's handle from its upper hand at `grip` (world) so a point `reach` along it meets the floor,
  *  towards `toward` across the floor */
-function broomDown(grip: THREE.Vector3, toward: THREE.Vector3, reach: number): THREE.Vector3 {
+function broomDown(grip: Vec3, toward: Vec3, reach: number): Vec3 {
   const drop = Math.min(grip.y, reach * 0.999), out = Math.sqrt(reach * reach - drop * drop);
-  const way = new THREE.Vector3(toward.x - grip.x, 0, toward.z - grip.z).normalize();
-  return way.multiplyScalar(out).add(new THREE.Vector3(0, -drop, 0)).normalize();
+  const way = new Vec3(toward.x - grip.x, 0, toward.z - grip.z).normalize();
+  return way.multiplyScalar(out).add(new Vec3(0, -drop, 0)).normalize();
 }
 /** how far under his palm the flat rag lies (m: the palm's place is 2.6 cm over the top, the cloth 4 mm on it) */
 const PAD_UNDER = 0.022;
@@ -147,8 +149,8 @@ const PAD_UNDER = 0.022;
 const RAG_LAY = { high: 0.14, takes: 0.4, lay: 0.045, keep: 0.05, across: 0.1 };
 /** his rag spread on a top: a cloth twice a hand across, its edges round his fingers from any view, rumpled, one
  *  corner turned over (seeded) */
-function padGeometry(): THREE.BufferGeometry {
-  const geo = new THREE.PlaneGeometry(0.3, 0.22, 12, 9).rotateX(-Math.PI / 2);
+function padGeometry(): Geometry {
+  const geo = shapes.plane(0.3, 0.22, 12, 9).rotateX(-Math.PI / 2);
   const pos = geo.attributes.position;
   for (let i = 0; i < pos.count; i++) {
     const x = pos.getX(i), z = pos.getZ(i);
@@ -170,17 +172,17 @@ const TUB_SHAPE = { rim: 1, foot: 0.85, inRim: 0.9, inFoot: 0.78, high: 0.15 };
 const TUB_INSIDE_AT_WATER = TUB_SHAPE.inFoot + (TUB_SHAPE.inRim - TUB_SHAPE.inFoot) * (TUB.water / TUB_SHAPE.high);
 
 /** The wash tub of radius `r`, open (its foot at 0): its outside, its inside (facing in) and the ring of its rim. */
-function tubGeometry(r: number): THREE.BufferGeometry[] {
+function tubGeometry(r: number): Geometry[] {
   const { rim, foot, inRim, inFoot, high } = TUB_SHAPE;
-  const outside = new THREE.CylinderGeometry(r * rim, r * foot, high, 18, 1, true).translate(0, high / 2, 0);
-  const inside = facingIn(new THREE.CylinderGeometry(r * inRim, r * inFoot, high, 18, 1, true).translate(0, high / 2, 0));
-  const top = new THREE.RingGeometry(r * inRim, r * rim, 18).rotateX(-Math.PI / 2).translate(0, high, 0);
-  const floor = new THREE.CircleGeometry(r * inFoot, 18).rotateX(-Math.PI / 2).translate(0, 0.005, 0);
+  const outside = shapes.cylinder(r * rim, r * foot, high, 18, 1, true).translate(0, high / 2, 0);
+  const inside = facingIn(shapes.cylinder(r * inRim, r * inFoot, high, 18, 1, true).translate(0, high / 2, 0));
+  const top = shapes.ring(r * inRim, r * rim, 18).rotateX(-Math.PI / 2).translate(0, high, 0);
+  const floor = shapes.circle(r * inFoot, 18).rotateX(-Math.PI / 2).translate(0, 0.005, 0);
   return [outside, inside, top, floor];
 }
 
 /** `geo` turned inside out: its faces wound the other way and its normals reversed, so it's seen from within. */
-function facingIn(geo: THREE.BufferGeometry): THREE.BufferGeometry {
+function facingIn(geo: Geometry): Geometry {
   const index = geo.index!;
   for (let i = 0; i < index.count; i += 3) {
     const a = index.getX(i + 1);
@@ -196,13 +198,13 @@ function facingIn(geo: THREE.BufferGeometry): THREE.BufferGeometry {
  *  and not as a hole (the room's lamps are warm and low, and the counter's top shades it) */
 const WATER_GLOW = 0.22;
 /** the tub's water's colours: under the tub's wall, its open middle, and the sheen of the lamps laid across it */
-const WATER_SHADE = new THREE.Color(0x56675f), WATER_OPEN = new THREE.Color(0x9fb3ab), WATER_SHEEN = new THREE.Color(0xdde8e2);
+const WATER_SHADE = new Color(0x56675f), WATER_OPEN = new Color(0x9fb3ab), WATER_SHEEN = new Color(0xdde8e2);
 
 /** The tub's water, a disc of radius `r` (its middle at 0) in rings, coloured by them: darker toward its rim where
  *  the tub's wall shades it, paler in the open, and a soft sheen off-middle where a lamp catches it. */
-function waterGeometry(r: number): THREE.BufferGeometry {
-  const geo = new THREE.RingGeometry(r * 0.02, r, 28, 6).rotateX(-Math.PI / 2);
-  const pos = geo.attributes.position, colours: number[] = [], colour = new THREE.Color();
+function waterGeometry(r: number): Geometry {
+  const geo = shapes.ring(r * 0.02, r, 28, 6).rotateX(-Math.PI / 2);
+  const pos = geo.attributes.position, colours: number[] = [], colour = new Color();
   for (let i = 0; i < pos.count; i++) {
     const x = pos.getX(i) / r, z = pos.getZ(i) / r;
     const out = Math.hypot(x, z);
@@ -211,17 +213,17 @@ function waterGeometry(r: number): THREE.BufferGeometry {
     colour.lerp(WATER_SHEEN, sheen * 0.8);
     colours.push(colour.r, colour.g, colour.b);
   }
-  geo.setAttribute('color', new THREE.Float32BufferAttribute(colours, 3));
+  geo.setAttribute('color', floats(colours, 3));
   return geo;
 }
 
 /** the suds on the tub's water: a ring of small heaps round its rim and a few clumps on it (its middle at 0, its
  *  radius `r`, seeded) */
-function sudsGeometry(r: number): THREE.BufferGeometry {
-  const parts: THREE.BufferGeometry[] = [];
+function sudsGeometry(r: number): Geometry {
+  const parts: Geometry[] = [];
   let seed = 11;
   const random = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
-  const heap = (x: number, z: number, size: number) => parts.push(new THREE.SphereGeometry(size, 7, 4, 0, Math.PI * 2, 0, Math.PI / 2).scale(1, 0.55, 1).translate(x, 0, z));
+  const heap = (x: number, z: number, size: number) => parts.push(shapes.sphere(size, 7, 4, 0, Math.PI * 2, 0, Math.PI / 2).scale(1, 0.55, 1).translate(x, 0, z));
   for (let i = 0; i < 26; i++) {
     const a = (i / 26) * Math.PI * 2 + random() * 0.2;
     heap(Math.cos(a) * r * (0.84 + random() * 0.1), Math.sin(a) * r * (0.84 + random() * 0.1), 0.014 + random() * 0.012);
@@ -324,7 +326,7 @@ interface Step {
   at?: [number, () => void][];
   /** where his left hand must be for what happens at its middle (a mug taken up or set down): held there, leaning
    *  and stepping in, till it is */
-  reachFor?: () => THREE.Vector3;
+  reachFor?: () => Vec3;
 }
 
 /** The tavern's keeper as the room holds him. */
@@ -351,8 +353,8 @@ export interface TavernKeeper {
   /** what his body was last asked (the lab reads his hands against it) */
   body(): KeeperPose;
   /** where a mug is drawn now (world), and its mesh, for the lab */
-  mugAt(id: number): THREE.Vector3;
-  mugMesh(id: number): THREE.Object3D;
+  mugAt(id: number): Vec3;
+  mugMesh(id: number): Node;
   /** the next of his idle tasks set (the lab's pictures of each) */
   setTask(name: string): void;
   /** the way he'd walk from `from` to `to` (room m: the lab's paths against the furniture) */
@@ -365,10 +367,10 @@ export interface TavernKeeper {
 export function tavernKeeper(b: Build, talking: () => boolean): TavernKeeper {
   const { g, M } = b;
   const kit = createKit(0xffc27a);
-  const V = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
+  const V = (x: number, y: number, z: number) => new Vec3(x, y, z);
   /** a point of the room (its own metres) in the world */
-  const W = (x: number, y: number, z: number) => g.localToWorld(new THREE.Vector3(x, y, z));
-  const room = (v: THREE.Vector3) => g.worldToLocal(v.clone());
+  const W = (x: number, y: number, z: number) => g.localToWorld(new Vec3(x, y, z));
+  const room = (v: Vec3) => g.worldToLocal(v.clone());
 
   // --- the cask on the bar at his left as he stands at the tap: lying across the bar, iron-hooped, its brass tap at his end ---
   const near = BAR.x + BAR.half, tap = V(near - 0.12, BAR.top + 0.22, PLACES.tap.z + 0.34);
@@ -377,18 +379,18 @@ export function tavernKeeper(b: Build, talking: () => boolean): TavernKeeper {
     cask.rotation.z = Math.PI / 2;
     cask.position.set(near - 0.38, BAR.top + 0.17, tap.z);
     for (const dx of [0.25, 0.38, 0.51]) {
-      const hoop = new THREE.Mesh(new THREE.TorusGeometry(0.153, 0.006, 5, 24).rotateY(Math.PI / 2), M.iron);
+      const hoop = new Mesh(shapes.torus(0.153, 0.006, 5, 24).rotateY(Math.PI / 2), M.iron);
       hoop.position.set(near - dx, BAR.top + 0.17, tap.z);
       g.add(hoop);
     }
     for (const dx of [0.26, 0.5]) box(g, 0.05, 0.05, 0.3, near - dx, BAR.top, tap.z, M.timber);
-    const spout = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.014, 0.08, 10).rotateZ(Math.PI / 2), M.brass);
+    const spout = new Mesh(shapes.cylinder(0.012, 0.014, 0.08, 10).rotateZ(Math.PI / 2), M.brass);
     spout.position.set(near - 0.16, tap.y + 0.012, tap.z);
     g.add(spout);
-    const nozzle = new THREE.Mesh(new THREE.CylinderGeometry(0.009, 0.011, 0.04, 8), M.brass);
+    const nozzle = new Mesh(shapes.cylinder(0.009, 0.011, 0.04, 8), M.brass);
     nozzle.position.set(tap.x, tap.y - 0.008, tap.z);
     g.add(nozzle);
-    const handle = new THREE.Mesh(new THREE.BoxGeometry(0.016, 0.07, 0.016), M.brass);
+    const handle = new Mesh(shapes.box(0.016, 0.07, 0.016), M.brass);
     handle.position.set(tap.x + 0.01, tap.y + 0.05, tap.z);
     g.add(handle);
     b.obstacles.push({ x: near - 0.38, z: tap.z, r: 0.2, h: BAR.top + 0.33 });
@@ -399,13 +401,13 @@ export function tavernKeeper(b: Build, talking: () => boolean): TavernKeeper {
   box(g, BACK.wall - BACK.front + 0.04, 0.04, BACK.to - BACK.from + 0.04, backX, BACK.top - 0.04, (BACK.from + BACK.to) / 2, M.oak);
   // (open: a closed drum's oak lid stood 5 cm over the water and was the dark disc seen in the tub, Kenneth's round 4)
   for (const wall of tubGeometry(TUB.r)) {
-    const mesh = new THREE.Mesh(wall, M.oak);
+    const mesh = new Mesh(wall, M.oak);
     mesh.position.set(backX, BACK.top, TUB.z);
     mesh.castShadow = mesh.receiveShadow = true;
     g.add(mesh);
   }
   for (const y of [0.03, 0.12]) {
-    const hoop = new THREE.Mesh(new THREE.TorusGeometry(TUB.r * (0.88 + y * 0.8), 0.005, 5, 24).rotateX(Math.PI / 2), M.iron);
+    const hoop = new Mesh(shapes.torus(TUB.r * (0.88 + y * 0.8), 0.005, 5, 24).rotateX(Math.PI / 2), M.iron);
     hoop.position.set(backX, BACK.top + y, TUB.z);
     g.add(hoop);
   }
@@ -414,17 +416,17 @@ export function tavernKeeper(b: Build, talking: () => boolean): TavernKeeper {
   // there", Kenneth's round 4; round 3's lid he lifted to wash is gone)
   // (a pale soapy grey-green, shaded darker under the tub's wall and lit by a sheen off the bar's lamps: a glossy dark
   // disc mirrors nothing here, the engine giving the room no sky to mirror, and read as a hole in the tub)
-  const water = new THREE.Mesh(waterGeometry(TUB.r * TUB_INSIDE_AT_WATER), kit.std({
+  const water = new Mesh(waterGeometry(TUB.r * TUB_INSIDE_AT_WATER), kit.std({
     color: 0xffffff, vertexColors: true, roughness: 0.32, metalness: 0,
     emissive: 0x6f8c84, emissiveIntensity: WATER_GLOW,
   }));
   water.position.set(backX, BACK.top + TUB.water, TUB.z);
-  const suds = new THREE.Mesh(sudsGeometry(TUB.r * TUB_INSIDE_AT_WATER), kit.std({ color: 0xe8ecea, roughness: 0.35 }));
+  const suds = new Mesh(sudsGeometry(TUB.r * TUB_INSIDE_AT_WATER), kit.std({ color: 0xe8ecea, roughness: 0.35 }));
   suds.position.copy(water.position);
   /** how stirred the water is (1 as he scrubs, settling after), and its clock */
   let stirred = 0, waterT = 0;
   /** the water rippling while it's stirred, calm once it settles: its surface rocked and its suds turned a little */
-  const waterLook = water.material as THREE.MeshStandardMaterial, waterWas = waterLook.color.getHex();
+  const waterLook = water.material as LitMaterial, waterWas = waterLook.color.getHex();
   const rippleWater = (dt: number) => {
     // (the canary's: the water dark as it was, a disc read as the tub's lid)
     waterLook.color.setHex(KEEPER_WAYS5.darkWater ? 0x2a3230 : waterWas);
@@ -440,14 +442,14 @@ export function tavernKeeper(b: Build, talking: () => boolean): TavernKeeper {
   /** his rag flat on a top as he wipes it, shown where the frame's pose asked (`padAt`, world) */
   // (a pale linen against the dark wood, and drawn from the first: hidden by its size, as a mug in a hand is, so its
   // pipeline is made with the room's)
-  const pad = new THREE.Mesh(padGeometry(), kit.std({ color: 0xf2eadb, roughness: 0.95, side: THREE.DoubleSide }));
+  const pad = new Mesh(padGeometry(), kit.std({ color: 0xf2eadb, roughness: 0.95, side: DoubleSide }));
   pad.name = 'keeper rag flat';
   pad.scale.setScalar(0.0001);
-  let padAt: THREE.Vector3 | null = null, padTurn = 0;
+  let padAt: Vec3 | null = null, padTurn = 0;
   /** the top this frame's pose wipes and where its palm goes on it (world), how far his hand has come down to it (0 to
    *  1), and whether the cloth lay spread under it last frame */
-  let padWanted: { top: Top; at: THREE.Vector3 } | null = null, layShare = 0, padLaid = false;
-  const padHands: [THREE.Vector3, THREE.Vector3] = [new THREE.Vector3(), new THREE.Vector3()];
+  let padWanted: { top: Top; at: Vec3 } | null = null, layShare = 0, padLaid = false;
+  const padHands: [Vec3, Vec3] = [new Vec3(), new Vec3()];
   // --- the broom leaning by the bar's end, the poker against the hearth ---
   const wood = kit.std({ color: 0x6a4a2a, roughness: 0.75 });
   const straw = kit.std({ color: 0xb89a58, roughness: 1 });
@@ -459,28 +461,28 @@ export function tavernKeeper(b: Build, talking: () => boolean): TavernKeeper {
     twine: kit.std({ color: 0x5a4430, roughness: 0.95 }),
   });
   /** the poker: its origin at its grip, its point out along +y */
-  const poker = new THREE.Group();
+  const poker = new Node();
   poker.name = 'poker';
   {
-    const rod = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.006, 0.78, 6).translate(0, 0.36, 0), iron);
-    const hook = new THREE.Mesh(new THREE.TorusGeometry(0.03, 0.005, 5, 10, Math.PI).translate(0.03, 0.75, 0), iron);
-    const grip = new THREE.Mesh(new THREE.TorusGeometry(0.025, 0.006, 5, 12).translate(0, -0.05, 0), iron);
+    const rod = new Mesh(shapes.cylinder(0.006, 0.006, 0.78, 6).translate(0, 0.36, 0), iron);
+    const hook = new Mesh(shapes.torus(0.03, 0.005, 5, 10, Math.PI).translate(0.03, 0.75, 0), iron);
+    const grip = new Mesh(shapes.torus(0.025, 0.006, 5, 12).translate(0, -0.05, 0), iron);
     poker.add(rod, hook, grip);
   }
-  const stand = (thing: THREE.Object3D, foot: { x: number; z: number }, top: THREE.Vector3, length: number) => {
+  const stand = (thing: Node, foot: { x: number; z: number }, top: Vec3, length: number) => {
     // (leaning: its far end on the floor at `foot`, its near end against `top`; its origin `length` back from its foot)
-    const down = new THREE.Vector3(foot.x, 0, foot.z).sub(top).normalize();
+    const down = new Vec3(foot.x, 0, foot.z).sub(top).normalize();
     thing.quaternion.setFromUnitVectors(V(0, 1, 0), down);
     thing.position.set(foot.x, 0, foot.z).addScaledVector(down, -length);
   };
   /** the way a tool leans in its corner, its +y down to its foot (world) */
-  const leanOf = (tool: 'broom' | 'poker'): THREE.Vector3 => {
+  const leanOf = (tool: 'broom' | 'poker'): Vec3 => {
     const [foot, top] = tool === 'broom' ? [V(BROOM_AT.x - 0.18, 0, BROOM_AT.z), V(BROOM_AT.x + 0.06, 1.42, BROOM_AT.z)] : [V(POKER_AT.x, 0, POKER_AT.z + 0.12), V(POKER_AT.x, 0.86, POKER_AT.z - 0.12)];
     return W(...foot.toArray()).sub(W(...top.toArray())).normalize();
   };
   /** the broom as his hand holds it: the broom itself within, slid along its handle so his fist is at its top as he
    *  sweeps and near its middle as he carries it (`broomGrip`, eased), and leaning in its corner at its top */
-  const broom = new THREE.Group();
+  const broom = new Node();
   broom.name = 'broom grip';
   broom.add(broomBody);
   let broomGrip = 0, broomHeldFor = 0;
@@ -516,7 +518,7 @@ export function tavernKeeper(b: Build, talking: () => boolean): TavernKeeper {
     sweepPosed = true;
     const grip = together ? ahead(0.45, 1.12, 0.16) : ahead(topAhead, topHigh, topAside - SWEEP_HOLD.draw * swing);
     const head = together ? ahead(0.85, 0, 0.26 * swing) : ahead(headAhead, 0, headAside + SWEEP_HOLD.across * swing);
-    const fist = holding === 'broom' ? broom.getWorldPosition(new THREE.Vector3()) : grip;
+    const fist = holding === 'broom' ? broom.getWorldPosition(new Vec3()) : grip;
     const dir = broomDown(fist, head, BROOM_REACH - broomGrip);
     const floor = { reach: BROOM_REACH - broomGrip, level: W(0, 0, 0).y - BROOM_TOUCH - (KEEPER_WIPES.broomDip ? 0.06 : 0), touch: true };
     const apart = together ? 0.12 : SWEEP_HOLD.apart;
@@ -533,7 +535,7 @@ export function tavernKeeper(b: Build, talking: () => boolean): TavernKeeper {
   const leanPoker = () => stand(poker, { x: POKER_AT.x, z: POKER_AT.z + 0.12 }, V(POKER_AT.x, 0.86, POKER_AT.z - 0.12), 0.78);
   // --- the ale running from the tap as he fills a mug: a thin amber stream ---
   const ale = kit.std({ color: 0xc07a18, emissive: 0x3a1c00, emissiveIntensity: 0.4, roughness: 0.2 });
-  const stream = new THREE.Mesh(new THREE.CylinderGeometry(0.005, 0.006, 0.12, 8).translate(0, -0.06, 0), ale);
+  const stream = new Mesh(shapes.cylinder(0.005, 0.006, 0.12, 8).translate(0, -0.06, 0), ale);
   stream.position.set(tap.x, tap.y - 0.025, tap.z);
   stream.scale.setScalar(0.001);
   // --- the mugs: one mesh each for the ledger's six ---
@@ -559,8 +561,8 @@ export function tavernKeeper(b: Build, talking: () => boolean): TavernKeeper {
   /** a step's way along (sweeping, the bar wiped as he goes): its velocity this frame */
   const alongV = { x: 0, z: 0 };
   /** mugs a hero has just set down, carried from his hand (room m) to their place, and for how long so far (s) */
-  const settling = new Map<number, { from: THREE.Vector3; t: number }>();
-  let inHand = -1, sliding: { id: number; from: THREE.Vector3; to: THREE.Vector3; t: number; dur: number; for: string } | null = null;
+  const settling = new Map<number, { from: Vec3; t: number }>();
+  let inHand = -1, sliding: { id: number; from: Vec3; to: Vec3; t: number; dur: number; for: string } | null = null;
   /** a mug on the bar drawn in across its top under his hand, where it is now (room m) */
   let drawing: { id: number; x: number; z: number } | null = null;
   let holding: 'broom' | 'poker' | null = null, attendFor = 0, saidAt = -99, clock = 0;
@@ -610,17 +612,17 @@ export function tavernKeeper(b: Build, talking: () => boolean): TavernKeeper {
   };
   const towards = (from: { x: number; z: number }, to: { x: number; z: number }) => Math.atan2(to.x - from.x, to.z - from.z);
   /** a way in the world from his own facing: `fwd` ahead, `up`, `side` to his left */
-  const dirAhead = (fwd: number, up: number, side: number): THREE.Vector3 => {
+  const dirAhead = (fwd: number, up: number, side: number): Vec3 => {
     const f = me.facing;
     return W(Math.sin(f) * fwd + Math.cos(f) * side, up, Math.cos(f) * fwd - Math.sin(f) * side).sub(W(0, 0, 0)).normalize();
   };
   // (along the bar's whole length behind it: held to the back counter's, a mug near the bar's far end lay at his right
   // and his left hand crossed his belly for it, `lab tavern`)
   const behindBar = (z: number, x: number = PLACES.tap.x): Spot => ({ x, z: clamp(z, BEHIND_BAR_FROM, BAR.to + 0.1), facing: -Math.PI / 2 });
-  const mugHold = (at: THREE.Vector3): HandGoal => ({ at, held: meshes[inHand], r: MUG.gripR });
+  const mugHold = (at: Vec3): HandGoal => ({ at, held: meshes[inHand], r: MUG.gripR });
   /** a hand closing round a mug it hasn't taken yet, as it will hold it (at its middle, world) */
-  const mugGrip = (at: THREE.Vector3): HandGoal => ({ at, grip: true, r: MUG.gripR });
-  const ragHold = (at: THREE.Vector3, dir?: THREE.Vector3): HandGoal => ({ at, held: keeper!.rag, r: 0.022, dir });
+  const mugGrip = (at: Vec3): HandGoal => ({ at, grip: true, r: MUG.gripR });
+  const ragHold = (at: Vec3, dir?: Vec3): HandGoal => ({ at, held: keeper!.rag, r: 0.022, dir });
   /** his rag pressed under his palm, his fist over it knuckles forward (its axis across him): wiping */
   /** his rag laid flat under his palm on a top he wipes (`at`, world, the palm's place), its bunch in his fist hidden
    *  meanwhile: held bunched, it went into the top out of sight ("the cloth visible", Kenneth's round 3) */
@@ -628,7 +630,7 @@ export function tavernKeeper(b: Build, talking: () => boolean): TavernKeeper {
   // on it, and lifted off with it as his hand leaves: shown flat at once where his hand was going, it was on the table
   // before he'd put it there, "he should be the one placing the cloth on the table, not it just appearing", Kenneth's
   // round 5)
-  const wiping = (at: THREE.Vector3, top: Top): HandGoal => {
+  const wiping = (at: Vec3, top: Top): HandGoal => {
     // (the canary's wipe past the table left where it reaches)
     const on = KEEPER_WIPES.offTop ? room(at) : onTop(room(at), top);
     on.y = top.y + PAD_UNDER + PAD_ON;
@@ -648,7 +650,7 @@ export function tavernKeeper(b: Build, talking: () => boolean): TavernKeeper {
   /** his broom and poker carried as he walks: his hand at his side, the thing angled ahead and out past his leg, its
    *  end clear of the floor (the broom hung straight down before his thigh, its stick through his legs as he walked) */
   /** in his chest's frame (x to his left, y up, z ahead: keeper.ts `HandGoal.carried`), as a hero's weapon is held */
-  const onChest = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
+  const onChest = (x: number, y: number, z: number) => new Vec3(x, y, z);
   const CARRY = {
     // (upright at his side, its handle's top in his fist by his shoulder and its head just off the floor beside his foot,
     // as a broom is carried: held out before him down to the floor it was a cane, "Thats not how you carry a broom",
@@ -798,7 +800,7 @@ export function tavernKeeper(b: Build, talking: () => boolean): TavernKeeper {
     name: 'dry', spot: PLACES.tub, dur: TASK.dry,
     pose: (_k, t) => {
       const held = ahead(0.36, 1.12, 0.05), rub = Math.sin(t * 5), side = -0.7 + 0.5 * rub, reach = MUG.rimR + 0.026;
-      return { bend: 0.1, look: held, left: mugHold(held), right: ragHold(held.clone().add(new THREE.Vector3(Math.sin(side) * reach, 0.03 * Math.sin(t * 2.4), -Math.cos(side) * reach).applyAxisAngle(V(0, 1, 0), me.facing))) };
+      return { bend: 0.1, look: held, left: mugHold(held), right: ragHold(held.clone().add(new Vec3(Math.sin(side) * reach, 0.03 * Math.sin(t * 2.4), -Math.cos(side) * reach).applyAxisAngle(V(0, 1, 0), me.facing))) };
     },
   }];
   /** A mug washed in the tub (`k` the share of the step, `t` its time): lowered into the water, scrubbed inside with
@@ -845,7 +847,7 @@ export function tavernKeeper(b: Build, talking: () => boolean): TavernKeeper {
   }
   /** A drop of water off the mug at `at` (room), falling back into the tub, now and then (`chance` a frame): only while
    *  the tavern is shown. */
-  function drip(at: THREE.Vector3, chance: number): void {
+  function drip(at: Vec3, chance: number): void {
     if (G.arena.room !== 'tavern' || Math.random() > chance) return;
     const w = W(at.x + (Math.random() - 0.5) * 0.06, at.y - 0.06, at.z + (Math.random() - 0.5) * 0.06);
     particles.smoke.spawn({
@@ -1462,7 +1464,7 @@ export function tavernKeeper(b: Build, talking: () => boolean): TavernKeeper {
     stepT += dt;
     // (what happens at its middle waits for his hand to be there: he leans in, and past a moment steps in towards it)
     if (s.reachFor && stepT >= s.dur / 2 && !fired.has(0) && keeper) {
-      const target = s.reachFor(), hands: [THREE.Vector3, THREE.Vector3] = [new THREE.Vector3(), new THREE.Vector3()];
+      const target = s.reachFor(), hands: [Vec3, Vec3] = [new Vec3(), new Vec3()];
       keeper.hands(hands);
       if (hands[0].distanceTo(target) > HAND_AT && reaching < REACH_LONGEST) {
         reaching += dt;
@@ -1580,7 +1582,7 @@ export function tavernKeeper(b: Build, talking: () => boolean): TavernKeeper {
       return;
     }
     if (drinking >= 0 && k >= ALE_BEATS.setDown && ledger.get(drinking).place.at === 'hero') {
-      const mug = drinking, hand = hero!.model.root.getObjectByName('mug')?.getWorldPosition(new THREE.Vector3()) ?? hero!.pos.clone();
+      const mug = drinking, hand = hero!.model.root.getObjectByName('mug')?.getWorldPosition(new Vec3()) ?? hero!.pos.clone();
       const at = room(hand), down = setDownAt(at, room(hero!.pos));
       drinking = -2;
       tell({ t: 'tv?', a: 'down', id: mug, ...down }, () => ledger.move(mug, down.y === BAR.top ? { at: 'bar', x: down.x, z: down.z } : { at: 'table', ...down }, { full: 0.03, dirty: true }));
@@ -1607,7 +1609,7 @@ export function tavernKeeper(b: Build, talking: () => boolean): TavernKeeper {
     const id = drinking, full = ledger.get(id).full;
     // (back where he took it from: he stands still holding it, so it's within his reach; set where his hand was, it
     // jumped half a metre along the bar in a frame, `lab tavern`)
-    const hand = hero.model.root.getObjectByName('mug')?.getWorldPosition(new THREE.Vector3()) ?? hero.pos.clone();
+    const hand = hero.model.root.getObjectByName('mug')?.getWorldPosition(new Vec3()) ?? hero.pos.clone();
     // (on the top nearest him, at his side of it, a hand's width in from its edge, set down from his hand: put back
     // where he took it, it went back on the counter across the room, "it should be placed not back on the counter but
     // at the nearest table (to the closest side you are to it)", Kenneth's round 5. Out of the door, where he took it:
@@ -1631,10 +1633,10 @@ export function tavernKeeper(b: Build, talking: () => boolean): TavernKeeper {
   // --- a full mug waiting on a top: outlined as the pointer is on it within his reach, taken up by E ---
   /** the mug E takes up now (-1: none), the one outlined, and where his hand took it from (world) */
   let offerSaid = '';
-  let offered = -1, outlinedMug = -1, takenFrom: THREE.Vector3 | null = null;
+  let offered = -1, outlinedMug = -1, takenFrom: Vec3 | null = null;
   /** the top and spot he took it from (room m), where it's put down again */
   let takenPlace: { x: number; z: number; y: number } | null = null;
-  const onScreen = new THREE.Vector3();
+  const onScreen = new Vec3();
   /** how far from the pointer mug `id` is drawn (css px at its rim's height), or Infinity past `MUG_PICK` (a share of
    *  the window's height: a fingertip round the mug as drawn, which is a few px across from above) */
   const fromPointer = (id: number, px: number, py: number): number => {
@@ -1705,7 +1707,7 @@ export function tavernKeeper(b: Build, talking: () => boolean): TavernKeeper {
   /** mug `id` taken up: asked of the host, who rules who took it first (`takeFor`) */
   function takeMug(id: number): void {
     const who = myId();
-    takenFrom = meshes[id].getWorldPosition(new THREE.Vector3());
+    takenFrom = meshes[id].getWorldPosition(new Vec3());
     const was = ledger.get(id).place as { at: string; x: number; z: number; y?: number };
     takenPlace = { x: was.x, z: was.z, y: was.at === 'bar' ? BAR.top : was.y ?? TABLES.smallTable.top };
     tell({ t: 'tv?', a: 'took', id }, () => takeFor(id, who));
@@ -1741,6 +1743,7 @@ export function tavernKeeper(b: Build, talking: () => boolean): TavernKeeper {
   });
   addEventListener('pointerdown', (e) => {
     if (e.button !== 0 || !keeper || !KEEPER_TAKE.click || !takeFree() || e.target !== G.renderer.domElement) return;
+    if (overPanels.at(e.clientX, e.clientY)) return;
     const press = pressAt(e.clientX, e.clientY);
     const id = mugAt(press.x, press.y, waitingNow(), POINTED_MOST);
     if (id < 0) return;
@@ -1764,7 +1767,7 @@ export function tavernKeeper(b: Build, talking: () => boolean): TavernKeeper {
     if (hint || id < 0) return;
     hint = anchorLabel(ORDER.tag, () => {
       if (hintFor < 0 || G.arena.room !== 'tavern') return null;
-      const top = meshes[hintFor].getWorldPosition(new THREE.Vector3());
+      const top = meshes[hintFor].getWorldPosition(new Vec3());
       return { x: top.x, y: top.y + 0.18, z: top.z };
     }, true);
     hint.ay = 0.5;
@@ -1847,7 +1850,7 @@ export function tavernKeeper(b: Build, talking: () => boolean): TavernKeeper {
     return !!p && objectPointed(p.x, p.y);
   }
   /** where an empty mug goes down: on the bar before him if he stands by it, else on the nearest table */
-  function setDownAt(hand: THREE.Vector3, feet: THREE.Vector3): { x: number; z: number; y: number } {
+  function setDownAt(hand: Vec3, feet: Vec3): { x: number; z: number; y: number } {
     const fromBar = BAR.x - BAR.half - feet.x;
     if (fromBar < SET_DOWN_WITHIN && feet.z > BAR.from - 0.3 && feet.z < BAR.to + 0.3) {
       // (set over the bar's middle, as far as his arm puts it: the keeper reaches it from his side)
@@ -1919,9 +1922,9 @@ export function tavernKeeper(b: Build, talking: () => boolean): TavernKeeper {
   /** where his body was last posed, and the time since: posed only while the tavern is seen, his root kept with the
    *  brain every frame (posed then from where it last stood, a frame unposed read as his body jumping and a planted
    *  foot sliding) */
-  const posedAt = new THREE.Vector3();
+  const posedAt = new Vec3();
   let unposed = 0, ragFetch = 0;
-  const ragHands: [THREE.Vector3, THREE.Vector3] = [new THREE.Vector3(), new THREE.Vector3()];
+  const ragHands: [Vec3, Vec3] = [new Vec3(), new Vec3()];
   /** His rag in his right hand only while the pose works with it, else tucked in his apron's tie at his hip, his hand
    *  putting it there or taking it out (from Kenneth's round 3: "no wipe in hand when pouring", "into his apron"; kept
    *  in his free hand, it was tucked as each pour began and his hand's way from his hip to the tap crossed his belly,
@@ -2011,11 +2014,11 @@ export function tavernKeeper(b: Build, talking: () => boolean): TavernKeeper {
     doing: () => ({
       job, step: step?.name ?? '', jumped, offered: `${offered} (${offerSaid})`, sweepPosed, walking: !!step?.walk, speed: me.speed,
       goal: step?.walk ? [step.spot.x, step.spot.z] : null, wayLeft: stuck.left, downSaid,
-      broom: `held ${broomGrip.toFixed(2)} m down from its top, his fist ${broom.getWorldPosition(new THREE.Vector3()).y.toFixed(2)} m up`,
+      broom: `held ${broomGrip.toFixed(2)} m down from its top, his fist ${broom.getWorldPosition(new Vec3()).y.toFixed(2)} m up`,
       where: `at ${me.x.toFixed(2)}, ${me.z.toFixed(2)} facing ${me.facing.toFixed(2)}, pace ${pace.toFixed(2)}, step to ${step ? `${step.spot.x.toFixed(2)}, ${step.spot.z.toFixed(2)} facing ${step.spot.facing.toFixed(2)}` : '-'}, way ${route.map((p) => p.map((v) => v.toFixed(2)).join(',')).join(' ')} (at ${routeAt})`,
     }),
     body: () => body,
-    mugAt: (id) => meshes[id].getWorldPosition(new THREE.Vector3()),
+    mugAt: (id) => meshes[id].getWorldPosition(new Vec3()),
     mugMesh: (id) => meshes[id],
     mute() { muted = true; },
     setTask(name) { forced.push(name); plan = []; step = null; attendFor = 0; },

@@ -3,7 +3,7 @@
 // its locks end round the head (one level hem all round is a bob; combed back, they end at the nape), and how much of the
 // ears it covers. The mage's old swept hair, a cap standing 6 mm off within 16 mm of the hairline and locks hung straight
 // down from where they left the head to about the jaw, read as a wig. Run in the page by facelab.mjs.
-import * as THREE from 'three';
+import { LitMaterial, Mesh, Node, Vec3 } from '../../src/engine/api/index.ts';
 import { FACES, LOOKS, headSDF, hairline } from '../../src/entities/models/face';
 import { HEAD_MM } from '../../src/entities/models/head';
 
@@ -17,20 +17,20 @@ export interface HairShape {
   ears: number;
 }
 
-export function measureHair(root: THREE.Object3D, who: keyof typeof FACES): HairShape | null {
+export function measureHair(root: Node, who: keyof typeof FACES): HairShape | null {
   const F = FACES[who], L = LOOKS[who];
   root.updateMatrixWorld(true);
-  let face: THREE.Mesh | null = null;
-  root.traverse((o) => { if (o.name === 'face') face = o as THREE.Mesh; });
+  let face: Mesh | null = null;
+  root.traverse((o) => { if (o.name === 'face') face = o as Mesh; });
   const head = face!.parent!, Hinv = head.matrixWorld.clone().invert();
-  const hair = head.children.filter((o) => o.name === 'hair' && o.visible) as THREE.Mesh[];
+  const hair = head.children.filter((o) => o.name === 'hair' && o.visible) as Mesh[];
   if (!hair.length) return null;
-  const v = new THREE.Vector3(), mm = (o: THREE.Mesh, i: number) => { o.getVertexPosition(i, v); v.applyMatrix4(o.matrixWorld).applyMatrix4(Hinv); return [v.x / HEAD_MM, v.y / HEAD_MM, v.z / HEAD_MM + 5]; };
+  const v = new Vec3(), mm = (o: Mesh, i: number) => { o.getVertexPosition(i, v); v.applyMatrix4(o.matrixWorld).applyMatrix4(Hinv); return [v.x / HEAD_MM, v.y / HEAD_MM, v.z / HEAD_MM + 5]; };
   const front: number[] = [], temple: number[] = [], side: number[] = [], back: number[] = [];
   // the ears seen from each side (1 mm cells, y 50..160, z -70..40): which of their cells hair lies outside of
-  const ears = head.children.filter((o) => (o as THREE.Mesh).isMesh && o.name !== 'face' && o.name !== 'hair' && o.name !== 'beard' && (o as THREE.Mesh).geometry.attributes.color && !((o as THREE.Mesh).material as THREE.MeshStandardMaterial).map) as THREE.Mesh[];
+  const ears = head.children.filter((o) => (o as Mesh).isMesh && o.name !== 'face' && o.name !== 'hair' && o.name !== 'beard' && (o as Mesh).geometry.attributes.color && !((o as Mesh).material as LitMaterial).map) as Mesh[];
   const EW = 110, EH = 110, earX = [new Float32Array(EW * EH).fill(NaN), new Float32Array(EW * EH).fill(NaN)], hairX = [new Float32Array(EW * EH).fill(-1e9), new Float32Array(EW * EH).fill(-1e9)];
-  const raster = (o: THREE.Mesh, into: Float32Array[], keep: (cur: number, x: number) => boolean) => {
+  const raster = (o: Mesh, into: Float32Array[], keep: (cur: number, x: number) => boolean) => {
     const g = o.geometry, idx = g.index, n = idx ? idx.count : g.attributes.position.count;
     for (let t = 0; t + 2 < n; t += 3) {
       const T = [0, 1, 2].map((k) => mm(o, idx ? idx.getX(t + k) : t + k));

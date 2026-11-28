@@ -22,6 +22,7 @@ import { bindTooltip, hideTooltip, itemTooltip, itemTooltipHTML } from '../../to
 import { renderMenu } from '../../menus';
 import type { Item } from '../../../types';
 import { FolkFace } from '../../folkFace';
+import { scrollToTop } from '../../kit/drawn';
 
 const $ = <T extends HTMLElement = HTMLElement>(s: string, root: ParentNode = document): T => root.querySelector<T>(s)!;
 
@@ -48,6 +49,7 @@ function initMerchant(onClose: () => void): void {
     render();
     // (what it picked shown: the best pieces head the stash, which may be scrolled down past them)
     $('#merchant .mc-stash').scrollTop = 0;
+    scrollToTop($('#merchant .mc-stash'));
   };
   $('#merchant .mc-trade').onclick = () => {
     if (!wanted) return;

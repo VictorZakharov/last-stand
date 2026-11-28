@@ -1,7 +1,7 @@
 // Tools for the heroes' authored motion: keyframed curves (a move written as keys over its progress, with a
 // smooth monotone cubic between them, so it eases in and out of each key without overshooting what isn't
 // keyed) and a pose crossfade that hides every cut between poses (an action starting, restarting or ending).
-import * as THREE from 'three';
+import { Node, Quat, Vec3 } from '../../engine/api/index.ts';
 import type { Joints } from './rig';
 
 /** a keyframed curve: [progress, value] pairs, progress rising; held flat before the first and after the last */
@@ -43,14 +43,14 @@ const LEGS: readonly string[] = ['thighL', 'thighR', 'kneeL', 'kneeR', 'ankleL',
  * and before the leg IK (whatever the IK and the hands do afterwards stays exact).
  */
 export class PoseFade {
-  private readonly js: THREE.Object3D[];
+  private readonly js: Node[];
   /** which of them are the legs, and whether the fade under way leaves them be */
   private readonly legs: boolean[];
   private legsKept = false;
-  private readonly shown: THREE.Quaternion[];
-  private readonly from: THREE.Quaternion[];
-  private readonly shownP = new THREE.Vector3();
-  private readonly fromP = new THREE.Vector3();
+  private readonly shown: Quat[];
+  private readonly from: Quat[];
+  private readonly shownP = new Vec3();
+  private readonly fromP = new Vec3();
   private w = 0;
   private dur = 0.2;
   private primed = false;
@@ -58,8 +58,8 @@ export class PoseFade {
   constructor(private readonly j: Joints) {
     this.js = JOINTS.map((k) => j[k]);
     this.legs = JOINTS.map((k) => LEGS.includes(k));
-    this.shown = this.js.map(() => new THREE.Quaternion());
-    this.from = this.js.map(() => new THREE.Quaternion());
+    this.shown = this.js.map(() => new Quat());
+    this.from = this.js.map(() => new Quat());
   }
 
   /** start a fade from the pose shown last frame (a cut), over `dur` seconds; `legs` false leaves the legs out of it,

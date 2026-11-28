@@ -13,9 +13,11 @@
 // facing the hall from the square, its room and heroes 128 of 429 draws whatever the doorway showed of them): a new
 // building walked into declares its doorway (`addDoorway`) and is culled with no code of its own, held to the frame
 // drawn whole from every stand by `lab village --only sweepWithinBudgets` (`registerCull` below).
-import * as THREE from 'three';
+import {
+  Box3, boundsOf, Camera, InstancedMesh, Light, Mesh, Node, Plane, Sphere, Vec3, World,
+} from '../engine/api/index.ts';
 import { blendedSolid } from '../core/seeThrough';
-import { aroundShadows, hideCellsWhere, isDrawingStill } from './culling';
+import { hideCellsWhere, isDrawingStill } from './culling';
 import { registerCull } from './culls';
 import { G } from '../state';
 
@@ -28,9 +30,9 @@ export interface Doorway {
   /** its name, for the lab */
   name: string;
   /** the middle of the opening's foot, in the wall's outer face (m) */
-  sill: THREE.Vector3;
+  sill: Vec3;
   /** the way out through it, level and of unit length */
-  out: THREE.Vector3;
+  out: Vec3;
   /** how far either side of its middle the opening reaches, and how high (m) */
   half: number;
   high: number;
@@ -38,11 +40,11 @@ export interface Doorway {
   depth: number;
   /** the building whole, its walls and roof with it: a part meeting it is never culled from inside (what's merged
    *  spans the village) */
-  box: THREE.Box3;
+  box: Box3;
   /** between its walls' inner faces, as an eye inside it is told (its height not read) */
-  room: THREE.Box3;
+  room: Box3;
   /** what lies wholly in this is seen from outside through the doorway alone */
-  inside: THREE.Box3;
+  inside: Box3;
   /** whether its walls and roof are drawn whole now (cut away over the hero, or thinned to a ghost, what's beyond them
    *  shows, and nothing may be culled by the doorway) */
   whole(): boolean;
@@ -55,7 +57,7 @@ export interface Doorway {
 
 /** An opening in a building's wall other than its doorway: the middle of its foot in the wall's outer face, the way
  *  out through it (level, of unit length), how far either side of its middle it reaches and how high (m). */
-export interface Opening { sill: THREE.Vector3; out: THREE.Vector3; half: number; high: number }
+export interface Opening { sill: Vec3; out: Vec3; half: number; high: number }
 
 /** how far past the doorway's own edges the cone reaches (m): the camera's matrices stand as the frame's, and a
  *  part's bounds are its box's sphere, so this is only for what moves in it (a dummy struck, the fountain's foam) */
@@ -80,14 +82,14 @@ registerCull('what doorways hide', (off) => setDoorCull(off ? 'off' : 'door'));
 
 /** How a part is culled: by its sphere, not at all (meeting the building's box, empty, or kept always), or part by
  *  part under it (it holds what's kept always beside what isn't: a brazier's light, a cottage's lit lamp). */
-type Culled = THREE.Sphere | 'never' | 'children';
+type Culled = Sphere | 'never' | 'children';
 
 /** A doorway as the cull keeps it: how each part outside is culled, and what lies inside, found as first needed
  *  (what the village builds stands still). */
 interface Kept {
   door: Doorway;
-  culled: WeakMap<THREE.Object3D, Culled>;
-  inside: { part: THREE.Object3D; round: THREE.Sphere }[] | null;
+  culled: WeakMap<Node, Culled>;
+  inside: { part: Node; round: Sphere }[] | null;
 }
 const doorways: Kept[] = [];
 
@@ -97,31 +99,31 @@ export function addDoorway(door: Doorway): void {
 }
 
 /** a cone's four sides through an opening's edges, each facing in */
-type Cone = THREE.Plane[];
+type Cone = Plane[];
 /** the cones through each opening this frame is drawn by (the doorway's, and a window's where it has them), as many
  *  set as `conesSet` says */
 const cones: Cone[] = [];
 let conesSet = 0;
 /** the parts left out of this frame's draw */
-const hidden: THREE.Object3D[] = [];
+const hidden: Node[] = [];
 /** the doorway this frame is drawn looking out through (its cone set), if one */
 let lookingOutOf: Kept | null = null;
 
-const _box = new THREE.Box3(), _eye = new THREE.Vector3(), _middle = new THREE.Vector3(), _across = new THREE.Vector3();
-const _corners = Array.from({ length: 4 }, () => new THREE.Vector3());
-const _foe = new THREE.Sphere();
-const _fromSill = new THREE.Vector3();
+const _box = new Box3(), _eye = new Vec3(), _middle = new Vec3(), _across = new Vec3();
+const _corners = Array.from({ length: 4 }, () => new Vec3());
+const _foe = new Sphere();
+const _fromSill = new Vec3();
 
 /** Whether `object` itself must always be drawn: a light (hidden, the frame's lights would change and every lit
  *  program with them), or a mesh whose bounds aren't where it draws (instanced, or unculled: the meadow's tiles). */
-function keptAlways(object: THREE.Object3D): boolean {
-  const mesh = object as THREE.Mesh;
-  if ((object as THREE.Light).isLight || (object as THREE.InstancedMesh).isInstancedMesh) return true;
+function keptAlways(object: Node): boolean {
+  const mesh = object as Mesh;
+  if ((object as Light).isLight || (object as InstancedMesh).isInstancedMesh) return true;
   return mesh.isMesh === true && !mesh.frustumCulled;
 }
 
 /** Whether anything under `part`, itself with it, must always be drawn. */
-function holdsKept(part: THREE.Object3D): boolean {
+function holdsKept(part: Node): boolean {
   let kept = false;
   part.traverse((object) => {
     if (keptAlways(object)) kept = true;
@@ -130,15 +132,15 @@ function holdsKept(part: THREE.Object3D): boolean {
 }
 
 /** How `part` is culled from inside `kept`'s building, made as it's first read. */
-function cullOf(kept: Kept, part: THREE.Object3D): Culled {
+function cullOf(kept: Kept, part: Node): Culled {
   let how = kept.culled.get(part);
   if (how !== undefined) return how;
   how = 'never';
   if (keptAlways(part)) how = 'never';
   else if (holdsKept(part)) how = 'children';
   else {
-    _box.setFromObject(part, true);
-    if (!_box.isEmpty() && !_box.intersectsBox(kept.door.box)) how = _box.getBoundingSphere(new THREE.Sphere());
+    boundsOf(part, _box, true);
+    if (!_box.isEmpty() && !_box.intersectsBox(kept.door.box)) how = _box.getBoundingSphere(new Sphere());
   }
   kept.culled.set(part, how);
   return how;
@@ -146,7 +148,7 @@ function cullOf(kept: Kept, part: THREE.Object3D): Culled {
 
 /** Where `eye` stands from `door`'s sill: along the wall (its `x`), up (its `y`) and out through the doorway (its
  *  `z`, negative inside). */
-function fromSill(door: Opening, eye: THREE.Vector3): THREE.Vector3 {
+function fromSill(door: Opening, eye: Vec3): Vec3 {
   const offset = _fromSill.copy(eye).sub(door.sill);
   const along = offset.x * -door.out.z + offset.z * door.out.x;
   const out = offset.x * door.out.x + offset.z * door.out.z;
@@ -157,13 +159,13 @@ function fromSill(door: Opening, eye: THREE.Vector3): THREE.Vector3 {
  *  4.5 m and stood there for his first steps, and with nothing culled the grass, the trees and the village behind the
  *  hall's walls were drawn and lit unseen (the meadow 35 ms of the 4080's 63 at 20.7 Mpx, from a perf report "village
  *  needs to be 144 fps"). From there too the village is seen through the door alone. */
-function inDoorway(door: Doorway, eye: THREE.Vector3): boolean {
+function inDoorway(door: Doorway, eye: Vec3): boolean {
   const at = fromSill(door, eye);
   return Math.abs(at.x) < door.half && at.y < door.high && at.z >= -door.depth && at.z < -DOORWAY_SPARE;
 }
 
 /** Whether `eye` stands inside `door`'s walls, under its roof. */
-function eyeInside(door: Doorway, eye: THREE.Vector3): boolean {
+function eyeInside(door: Doorway, eye: Vec3): boolean {
   const room = door.room;
   const inRoom = eye.x > room.min.x && eye.x < room.max.x && eye.z > room.min.z && eye.z < room.max.z;
   return inRoom || inDoorway(door, eye);
@@ -171,8 +173,8 @@ function eyeInside(door: Doorway, eye: THREE.Vector3): boolean {
 
 /** The next cone's sides set from `eye` through `door`'s edges, each facing the opening's middle (`inward`: the eye
  *  outside, the cone opening into the building). */
-function coneFrom(door: Opening, eye: THREE.Vector3, inward = false): void {
-  if (conesSet === cones.length) cones.push(Array.from({ length: 4 }, () => new THREE.Plane()));
+function coneFrom(door: Opening, eye: Vec3, inward = false): void {
+  if (conesSet === cones.length) cones.push(Array.from({ length: 4 }, () => new Plane()));
   const sides = cones[conesSet++];
   const across = _across.set(-door.out.z, 0, door.out.x).multiplyScalar(door.half + DOOR_MARGIN);
   const low = door.sill.y - DOOR_MARGIN, top = door.sill.y + door.high + DOOR_MARGIN;
@@ -189,7 +191,7 @@ function coneFrom(door: Opening, eye: THREE.Vector3, inward = false): void {
 }
 
 /** Whether `sphere` meets one of the cones through the building's openings. */
-function seenThroughDoor(sphere: THREE.Sphere): boolean {
+function seenThroughDoor(sphere: Sphere): boolean {
   if (mode === 'all') return false;
   for (let k = 0; k < conesSet; k++) {
     if (cones[k].every((side) => side.distanceToPoint(sphere.center) >= -sphere.radius)) return true;
@@ -199,7 +201,7 @@ function seenThroughDoor(sphere: THREE.Sphere): boolean {
 
 /** The cones set from `eye` through `door`'s doorway and each window it sees out through (inside) or in through
  *  (outside, before it: `inward`). */
-function conesFrom(door: Doorway, eye: THREE.Vector3, inward: boolean): void {
+function conesFrom(door: Doorway, eye: Vec3, inward: boolean): void {
   conesSet = 0;
   coneFrom(door, eye, inward);
   for (const window of door.windows ?? []) {
@@ -208,11 +210,11 @@ function conesFrom(door: Doorway, eye: THREE.Vector3, inward: boolean): void {
   }
 }
 
-const _boxCorner = new THREE.Vector3();
+const _boxCorner = new Vec3();
 
 /** Whether `box` meets one of the cones through the building's openings, each side tested by the box's corner
  *  furthest along it: a flat tile's sphere, some 6 m across, met a window's cone where the tile lay below it. */
-function boxThroughDoor(box: THREE.Box3): boolean {
+function boxThroughDoor(box: Box3): boolean {
   if (mode === 'all') return false;
   for (let k = 0; k < conesSet; k++) {
     const inside = cones[k].every((side) => {
@@ -233,27 +235,27 @@ function boxThroughDoor(box: THREE.Box3): boolean {
  *  as any other: no grass grows in it, so what of it the doorway doesn't show is behind the walls (kept as the merged
  *  parts are, the tiles along the hall's walls were a fifth of the grass of a frame looking in from its doorway, all
  *  of it unseen). */
-export function hiddenByDoorway(box: THREE.Box3): boolean {
+export function hiddenByDoorway(box: Box3): boolean {
   return lookingOutOf !== null && !boxThroughDoor(box);
 }
 
 /** Whether a cell of an instanced mesh outside the building (`sphere`, in the world) is out of this frame's sight,
  *  the doorway showing none of it (`culling.ts`'s cells: the trees round the village, instanced, were never culled by
  *  the hall's doorway, and their leaves cut out behind its walls were 3.8 ms of the 4080's scene pass at 20.7 Mpx). */
-function cellHiddenByDoor(sphere: THREE.Sphere): boolean {
+function cellHiddenByDoor(sphere: Sphere): boolean {
   return lookingOutOf !== null && !lookingOutOf.door.box.intersectsSphere(sphere) && !seenThroughDoor(sphere);
 }
 
 /** Whether the frame drawn by `camera` can be culled by a doorway at all: the game's camera, the village shown,
  *  the still shadows not being drawn, and the cull on. */
-function cullable(camera: THREE.Camera, village: THREE.Object3D): boolean {
+function cullable(camera: Camera, village: Node): boolean {
   return mode !== 'off' && camera === G.camera && village.visible && !isDrawingStill();
 }
 
 /** Why the frame `camera` draws now is or isn't culled by a doorway, each of the conditions it takes in turn (the lab
  *  says it where it read no draw culled: `lab village --only hallCulledByDoor`). */
-export function doorwayReport(camera: THREE.Camera, village: THREE.Object3D): string {
-  const eye = camera.getWorldPosition(new THREE.Vector3());
+export function doorwayReport(camera: Camera, village: Node): string {
+  const eye = camera.getWorldPosition(new Vec3());
   const said = [`mode ${mode}`, `the game's camera ${camera === G.camera}`, `the village shown ${village.visible}`,
     `still shadows being drawn ${isDrawingStill()}`];
   for (const { door } of doorways) {
@@ -264,27 +266,27 @@ export function doorwayReport(camera: THREE.Camera, village: THREE.Object3D): st
 }
 
 /** Whether the eye at `eye` looks out of `door`'s building through its doorway alone: inside it, its walls whole. */
-const lookingOut = (door: Doorway, eye: THREE.Vector3): boolean => door.whole() && eyeInside(door, eye);
+const lookingOut = (door: Doorway, eye: Vec3): boolean => door.whole() && eyeInside(door, eye);
 
 /** Whether the eye at `eye` looks into `door`'s building through its doorway alone: before it, its walls whole and
  *  nothing that blends thinning (a wall thinned, a hole round him, shows what's past it). */
-function lookingIn(door: Doorway, eye: THREE.Vector3): boolean {
+function lookingIn(door: Doorway, eye: Vec3): boolean {
   if (!door.whole() || !blendedSolid()) return false;
   return fromSill(door, eye).z > DOORWAY_SPARE && !eyeInside(door, eye);
 }
 
 /** The village's parts wholly inside `door`'s building, down to its groups' groups, each with its sphere (a part
  *  holding a light never, as hidden the frame's lights would change). */
-function insideOf(door: Doorway, village: THREE.Object3D): { part: THREE.Object3D; round: THREE.Sphere }[] {
-  const found: { part: THREE.Object3D; round: THREE.Sphere }[] = [];
-  const visit = (group: THREE.Object3D, deep: number): void => {
+function insideOf(door: Doorway, village: Node): { part: Node; round: Sphere }[] {
+  const found: { part: Node; round: Sphere }[] = [];
+  const visit = (group: Node, deep: number): void => {
     for (const part of group.children) {
       if (keptAlways(part)) continue;
-      _box.setFromObject(part, true);
+      boundsOf(part, _box, true);
       if (_box.isEmpty()) continue;
       if (door.inside.containsBox(_box) && !holdsKept(part)) {
-        found.push({ part, round: _box.getBoundingSphere(new THREE.Sphere()) });
-      } else if (deep < INSIDE_DEPTH && !(part as THREE.Mesh).isMesh && _box.intersectsBox(door.inside)) {
+        found.push({ part, round: _box.getBoundingSphere(new Sphere()) });
+      } else if (deep < INSIDE_DEPTH && !(part as Mesh).isMesh && _box.intersectsBox(door.inside)) {
         visit(part, deep + 1);
       }
     }
@@ -294,14 +296,14 @@ function insideOf(door: Doorway, village: THREE.Object3D): { part: THREE.Object3
 }
 
 /** `part` left out of this frame's draw. */
-function hide(part: THREE.Object3D): void {
+function hide(part: Node): void {
   part.visible = false;
   hidden.push(part);
 }
 
 /** Leaves out of the frame's draw what stands inside `kept`'s building and isn't seen through its doorway: the
  *  village's parts there, and what stands on its floor of the scene's own (a sphere round each one's feet). */
-function hideInside(kept: Kept, scene: THREE.Scene, village: THREE.Object3D): void {
+function hideInside(kept: Kept, scene: World, village: Node): void {
   kept.inside ??= insideOf(kept.door, village);
   for (const { part, round } of kept.inside) {
     if (part.visible && !seenThroughDoor(round)) hide(part);
@@ -318,7 +320,7 @@ function hideInside(kept: Kept, scene: THREE.Scene, village: THREE.Object3D): vo
 
 /** `parts` left out of the frame's draw where they stand outside `kept`'s building and aren't seen through its
  *  doorway. */
-function hideParts(kept: Kept, parts: readonly THREE.Object3D[]): void {
+function hideParts(kept: Kept, parts: readonly Node[]): void {
   for (const part of parts) {
     if (!part.visible) continue;
     const how = cullOf(kept, part);
@@ -329,7 +331,7 @@ function hideParts(kept: Kept, parts: readonly THREE.Object3D[]): void {
 }
 
 /** Leaves out of the frame's draw what stands outside `kept`'s building and isn't seen through its doorway. */
-function hideOutside(kept: Kept, village: THREE.Object3D): void {
+function hideOutside(kept: Kept, village: Node): void {
   hideParts(kept, village.children);
   for (const foe of G.enemies) {
     if (!foe.obj.visible) continue;
@@ -346,7 +348,7 @@ function showHidden(on: boolean): void {
 
 /** The frame about to be drawn by `camera` culled by the first doorway it looks out of, else by the first it looks
  *  into. */
-function cullFrame(camera: THREE.Camera, scene: THREE.Scene, village: THREE.Object3D): void {
+function cullFrame(camera: Camera, scene: World, village: Node): void {
   if (!cullable(camera, village)) return;
   const eye = camera.getWorldPosition(_eye);
   const out = doorways.find((kept) => lookingOut(kept.door, eye));
@@ -364,7 +366,7 @@ function cullFrame(camera: THREE.Camera, scene: THREE.Scene, village: THREE.Obje
 }
 
 /** the scene and the village the doorways cull (`cullByDoorways`) */
-let culled: { scene: THREE.Scene; village: THREE.Object3D } | null = null;
+let culled: { scene: World; village: Node } | null = null;
 
 /**
  * The frame the Rust engine is about to draw by `camera` culled by the doorways, and what to call once it's drawn
@@ -373,7 +375,7 @@ let culled: { scene: THREE.Scene; village: THREE.Object3D } | null = null;
  * a frame's 558 records from the square, and the whole village was written looking out of the hall. What's left
  * out casts no shadow in the engine's frame: its one walk makes the frame's list and the sun's.
  */
-export function cullForEngine(camera: THREE.Camera): () => void {
+export function cullForEngine(camera: Camera): () => void {
   if (culled) cullFrame(camera, culled.scene, culled.village);
   return () => {
     showHidden(true);
@@ -384,27 +386,9 @@ export function cullForEngine(camera: THREE.Camera): () => void {
 }
 
 /** Culls `village`'s parts, the foes and what stands in a building of the scene's own by every doorway added
- *  (`addDoorway`) as `scene` is drawn. */
-export function cullByDoorways(scene: THREE.Scene, village: THREE.Object3D): void {
+ *  (`addDoorway`) as `scene` is drawn: by the engine round its frame (`cullForEngine`), and the culled cells by the
+ *  doorway too. */
+export function cullByDoorways(scene: World, village: Node): void {
   hideCellsWhere(cellHiddenByDoor);
   culled = { scene, village };
-  const before = scene.onBeforeRender;
-  scene.onBeforeRender = (...args) => {
-    // (the cone set before the cells are culled, `cullWhileDrawn`'s, which runs in `before`)
-    cullFrame(args[2], scene, village);
-    before.apply(scene, args);
-  };
-  const after = scene.onAfterRender;
-  scene.onAfterRender = (...args) => {
-    after.apply(scene, args);
-    showHidden(true);
-    hidden.length = 0;
-    lookingOutOf = null;
-    conesSet = 0;
-  };
-  // (their shadows drawn as ever: the shadow maps are drawn after the frame's list is made)
-  aroundShadows(() => {
-    showHidden(true);
-    return () => showHidden(false);
-  });
 }

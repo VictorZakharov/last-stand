@@ -3,7 +3,7 @@
 // shake and the follow carry on underneath and come back as they were when it's let go. The hero stands idle while it
 // flies (WASD is the camera's), and the page's own pieces that follow the world (the labels) are left off unless
 // asked for, as they're placed by the game's camera, not this one.
-import * as THREE from 'three';
+import { Euler, Maths, Vec3 } from '../engine/api/index.ts';
 import { G } from '../state';
 import { isDown } from '../core/input';
 import { overFrame } from '../core/renderer';
@@ -19,7 +19,7 @@ const FOV = 60, NEAR = 0.05;
 
 const state = {
   on: false,
-  pos: new THREE.Vector3(),
+  pos: new Vec3(),
   yaw: 0,
   pitch: 0,
   speed: SPEED.start,
@@ -28,9 +28,9 @@ const state = {
   /** the buttons held on the touch pad: forward, back, left, right, up, down */
   held: new Set<string>(),
 };
-const _euler = new THREE.Euler(0, 0, 0, 'YXZ'), _move = new THREE.Vector3();
+const _euler = new Euler(0, 0, 0, 'YXZ'), _move = new Vec3();
 /** the overlays' draw, kept while the free camera leaves it out */
-let drawOverlays: (() => void) | null = null;
+let drawOverlays: { labels: (shown: boolean) => void } | null = null;
 
 export const freeCamOn = (): boolean => state.on;
 export const freeCamSpeed = (): number => state.speed;
@@ -61,19 +61,27 @@ export function setFreeCamLabels(on: boolean): void {
 }
 
 function showLabels(on: boolean): void {
-  if (on && drawOverlays) { overFrame.draw = drawOverlays; drawOverlays = null; }
-  if (!on && !drawOverlays) { drawOverlays = overFrame.draw; overFrame.draw = () => {}; }
+  if (on && drawOverlays) {
+    overFrame.labels = drawOverlays.labels;
+    drawOverlays = null;
+  }
+  if (!on && !drawOverlays) {
+    const labels = overFrame.labels;
+    drawOverlays = { labels };
+    // (handed over as none, every frame: the engine keeps the last rows it was given)
+    overFrame.labels = () => labels(false);
+  }
 }
 
 /** Turned by a drag of `dx`, `dy` px (right turns right, down looks down). */
 export function turnFreeCam(dx: number, dy: number): void {
   state.yaw -= dx * TURN_PER_PX;
-  state.pitch = THREE.MathUtils.clamp(state.pitch - dy * TURN_PER_PX, -PITCH_MOST, PITCH_MOST);
+  state.pitch = Maths.clamp(state.pitch - dy * TURN_PER_PX, -PITCH_MOST, PITCH_MOST);
 }
 
 /** The speed stepped up (positive notches) or down. */
 export function speedFreeCam(notches: number): void {
-  state.speed = THREE.MathUtils.clamp(state.speed * SPEED.step ** notches, SPEED.least, SPEED.most);
+  state.speed = Maths.clamp(state.speed * SPEED.step ** notches, SPEED.least, SPEED.most);
 }
 
 /** A touch pad's button held (`on`) or let go: forward, back, left, right, up, down. */
@@ -91,10 +99,10 @@ export function freeCamToHero(): void {
 }
 
 /** Put at `pos` looking `yaw` round and `pitch` up (rad): a harness's flight (tools/lab's `perf --village --fly`). */
-export function placeFreeCam(pos: THREE.Vector3, yaw: number, pitch: number): void {
+export function placeFreeCam(pos: Vec3, yaw: number, pitch: number): void {
   state.pos.copy(pos);
   state.yaw = yaw;
-  state.pitch = THREE.MathUtils.clamp(pitch, -PITCH_MOST, PITCH_MOST);
+  state.pitch = Maths.clamp(pitch, -PITCH_MOST, PITCH_MOST);
 }
 
 /** A frame of flight (`dt`: the browser's own, so it flies with the game frozen), the camera put where it is. */

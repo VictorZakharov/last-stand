@@ -6,7 +6,7 @@
 // round the dais (bossEncounter.ts `film`): a toll from its start, the bell swinging back through its warning,
 // striking, swaying out.
 // What the movement measures is `swing` (bossSwing.ts): this part judges nothing but that its moments happened.
-import * as THREE from 'three';
+import { Hit, Material, Mesh, Node, Raycaster, Vec3 } from './sceneApi.ts';
 import type { Lab, Pictured } from './lab';
 import type { Enemy } from '../../../src/entities/enemy';
 import { G } from '../../../src/state';
@@ -51,20 +51,20 @@ export async function bellFilm({ lab, boss, lines, problems }: FilmMeasure): Pro
  *  either side from which the fewest sight rays meet something before the bell (by the lab's spot near the
  *  gravestones, a column and an obelisk stood before the lens). */
 function sideOf(boss: Enemy): ClearView {
-  const axis = new THREE.Vector3(Math.cos(boss.facing), 0, -Math.sin(boss.facing));
+  const axis = new Vec3(Math.cos(boss.facing), 0, -Math.sin(boss.facing));
   return clearView(boss, [axis, axis.clone().negate()], DISTANCES);
 }
 
 /** A camera's place off a body found by `clearView`: its offset, how many sight rays met something, and each tried. */
 export interface ClearView {
-  offset: THREE.Vector3;
+  offset: Vec3;
   hidden: number;
   tried: string[];
 }
 
 /** The camera's place off `body` along one of `ways` (level, unit), at the first of `distances` from which the fewest
  *  sight rays meet something before it (the first tried on a tie). */
-export function clearView(body: Enemy, ways: THREE.Vector3[], distances: number[], heights = SIGHT_HEIGHTS): ClearView {
+export function clearView(body: Enemy, ways: Vec3[], distances: number[], heights = SIGHT_HEIGHTS): ClearView {
   let best = ways[0].clone().multiplyScalar(distances[0]);
   let fewest = Infinity;
   const tried: string[] = [];
@@ -85,13 +85,13 @@ export function clearView(body: Enemy, ways: THREE.Vector3[], distances: number[
 /** How many of the sight rays from the camera at `offset` off the boss meet something drawn before the bell: rays to
  *  the bell at each of `heights`, and to the ground between (`GROUND_SIGHTS`: what fills the frame's foot, a
  *  gravestone a step off the lens). The floor and the bell's own body don't count. */
-function hiddenFrom(boss: Enemy, offset: THREE.Vector3, heights: number[]): number {
+function hiddenFrom(boss: Enemy, offset: Vec3, heights: number[]): number {
   const eye = boss.pos.clone().add(offset).setY(EYE);
   const targets = heights.map((height) => boss.pos.clone().setY(height));
   for (const share of GROUND_SIGHTS) targets.push(eye.clone().lerp(boss.pos, share).setY(GROUND_SIGHT_HEIGHT));
   return targets.filter((target) => {
     const way = target.clone().sub(eye);
-    const ray = new THREE.Raycaster(eye, way.clone().normalize(), 0.3, way.length());
+    const ray = new Raycaster(eye, way.clone().normalize(), 0.3, way.length());
     // (every layer: a prop drawn on a layer of its own hides the bell as well)
     ray.layers.enableAll();
     return ray.intersectObject(G.scene, true).some((hit) => blocks(hit, boss));
@@ -99,18 +99,18 @@ function hiddenFrom(boss: Enemy, offset: THREE.Vector3, heights: number[]): numb
 }
 
 /** Whether a sight ray's hit hides the bell: something solid and shown, off the floor and off the bell's body. */
-function blocks(hit: THREE.Intersection, boss: Enemy): boolean {
+function blocks(hit: Hit, boss: Enemy): boolean {
   const object = hit.object;
-  if (!(object instanceof THREE.Mesh) || hit.point.y < FLOOR_SLACK) return false;
+  if (!(object instanceof Mesh) || hit.point.y < FLOOR_SLACK) return false;
   if (Math.hypot(hit.point.x - boss.pos.x, hit.point.z - boss.pos.z) < boss.radius + 1) return false;
-  for (let at: THREE.Object3D | null = object; at; at = at.parent) if (!at.visible) return false;
-  const material = object.material as THREE.Material;
+  for (let at: Node | null = object; at; at = at.parent) if (!at.visible) return false;
+  const material = object.material as Material;
   return !material.transparent;
 }
 
 /** A toll from its start, a frame every `TOLL_EVERY`. */
 async function tollFilm(
-  lab: Lab, boss: Enemy, side: THREE.Vector3, lines: string[], problems: string[],
+  lab: Lab, boss: Enemy, side: Vec3, lines: string[], problems: string[],
 ): Promise<Pictured[]> {
   const hero = G.player;
   const keep = (): Record<string, never> => {
@@ -137,7 +137,7 @@ async function tollFilm(
 
 /** This frame as the game draws it from the camera `side` off `boss`, at eye height, the page's UI set aside. */
 export async function filmed(
-  lab: Lab, boss: Enemy, side: THREE.Vector3, label: string, note: string,
+  lab: Lab, boss: Enemy, side: Vec3, label: string, note: string,
 ): Promise<Pictured> {
   const at = boss.pos.clone().add(side).setY(EYE);
   return filmedFrom(lab, at, boss.pos.clone().setY(LOOK_AT), label, note);
@@ -145,7 +145,7 @@ export async function filmed(
 
 /** This frame as the game draws it from `at` looking at `target`, the page's UI set aside. */
 export async function filmedFrom(
-  lab: Lab, at: THREE.Vector3, target: THREE.Vector3, label: string, note: string,
+  lab: Lab, at: Vec3, target: Vec3, label: string, note: string,
 ): Promise<Pictured> {
   const camera = G.camera;
   camera.position.copy(at);

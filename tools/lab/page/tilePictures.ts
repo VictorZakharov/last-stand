@@ -4,7 +4,7 @@
 // surface gives it (a tile of 0.4 m some five times across the frame). What's cut out or seen through is left out of
 // the picture: round the clearing ferns, leaf cards and a gate's membrane stood in front of every surface. (Looked at
 // along its normal, a gate's roots, splaying along the wall, were pictured from inside the thicket's bushes.)
-import * as THREE from 'three';
+import { InstancedMesh, Mat3, Mat4, Material, Mesh, Node, Raycaster, Vec3 } from './sceneApi.ts';
 import type { Lab, Pictured } from './lab';
 import * as renderer from '../../../src/core/renderer';
 
@@ -30,16 +30,16 @@ const UNSEEN_LAYER = 31;
 /** A point of a surface and the way it's looked at from: towards the arena's middle, as the hero faces (rad, 0 along
  *  +z). */
 interface Facing {
-  at: THREE.Vector3;
+  at: Vec3;
   facing: number;
 }
 
 /** The world matrices `mesh` is drawn at: its own, or each of its first `most` instances' within it. */
-export function placesOf(mesh: THREE.Mesh, most = Infinity): THREE.Matrix4[] {
-  const instanced = mesh as THREE.InstancedMesh;
+export function placesOf(mesh: Mesh, most = Infinity): Mat4[] {
+  const instanced = mesh as InstancedMesh;
   if (!instanced.isInstancedMesh) return [mesh.matrixWorld.clone()];
   return Array.from({ length: Math.min(instanced.count, most) }, (_, i) => {
-    const place = new THREE.Matrix4();
+    const place = new Mat4();
     instanced.getMatrixAt(i, place);
     return place.premultiply(mesh.matrixWorld);
   });
@@ -47,16 +47,16 @@ export function placesOf(mesh: THREE.Mesh, most = Infinity): THREE.Matrix4[] {
 
 /** Whether a surface whose normal is `normal` at `at` faces its camera, level from it towards the arena's middle, by
  *  `FACING_CAMERA` at least. */
-function facesCamera(normal: THREE.Vector3, at: THREE.Vector3): boolean {
+function facesCamera(normal: Vec3, at: Vec3): boolean {
   const towardsMiddle = -(normal.x * at.x + normal.z * at.z) / Math.hypot(at.x, at.z);
   return towardsMiddle >= FACING_CAMERA * normal.length();
 }
 
 /** The points of `meshes` from `LOWEST` to `HIGHEST` up that face their cameras, the nearest the middle first, each
  *  `SPACING` m from those before it, `CANDIDATES` of them at most, each looked at from the middle. */
-function nearestPoints(meshes: THREE.Mesh[]): Facing[] {
+function nearestPoints(meshes: Mesh[]): Facing[] {
   const found: Array<Facing & { distance: number }> = [];
-  const at = new THREE.Vector3(), normal = new THREE.Vector3(), normals = new THREE.Matrix3();
+  const at = new Vec3(), normal = new Vec3(), normals = new Mat3();
   for (const mesh of meshes) {
     const position = mesh.geometry.attributes.position, normalOf = mesh.geometry.attributes.normal;
     for (const place of placesOf(mesh)) {
@@ -81,41 +81,41 @@ function nearestPoints(meshes: THREE.Mesh[]): Facing[] {
 }
 
 /** The camera's place for `point`: `distance` m out along the way it faces. */
-const cameraFor = (point: Facing, distance: number): THREE.Vector3 =>
-  point.at.clone().add(new THREE.Vector3(Math.sin(point.facing), 0, Math.cos(point.facing)).multiplyScalar(distance));
+const cameraFor = (point: Facing, distance: number): Vec3 =>
+  point.at.clone().add(new Vec3(Math.sin(point.facing), 0, Math.cos(point.facing)).multiplyScalar(distance));
 
 /** Whether `point` is in view from its camera `DISTANCE` m out: the first thing of `group` a ray from the camera
  *  meets is one of `meshes`, at the point (a gate's roots run under its boulder, where a camera saw the rock), and the
  *  camera stands in the open (`inTheOpen`). */
-function inView(point: Facing, meshes: THREE.Mesh[], group: THREE.Object3D): boolean {
+function inView(point: Facing, meshes: Mesh[], group: Node): boolean {
   const camera = cameraFor(point, DISTANCE);
   const way = point.at.clone().sub(camera).normalize();
-  const hit = new THREE.Raycaster(camera, way, 0, DISTANCE + SHORT_OF).intersectObject(group, true)[0];
-  const own = hit !== undefined && meshes.some((m) => m.geometry === (hit.object as THREE.Mesh).geometry);
+  const hit = new Raycaster(camera, way, 0, DISTANCE + SHORT_OF).intersectObject(group, true)[0];
+  const own = hit !== undefined && meshes.some((m) => m.geometry === (hit.object as Mesh).geometry);
   return own && hit.distance > DISTANCE - SPACING && inTheOpen(point, camera, group);
 }
 
 /** Whether nothing of `group` stands round `camera`: a ray from `point` out to it meets nothing on the way. (A ray
  *  from inside a mesh meets none of its faces, all turned away: a boulder's camera stood inside a standing stone's
  *  plinth, and saw the stone's underside edge on, a smear of streaks.) */
-function inTheOpen(point: Facing, camera: THREE.Vector3, group: THREE.Object3D): boolean {
+function inTheOpen(point: Facing, camera: Vec3, group: Node): boolean {
   const way = camera.clone().sub(point.at).normalize();
   const from = point.at.clone().addScaledVector(way, SHORT_OF);
-  return new THREE.Raycaster(from, way, 0, DISTANCE - SHORT_OF).intersectObject(group, true).length === 0;
+  return new Raycaster(from, way, 0, DISTANCE - SHORT_OF).intersectObject(group, true).length === 0;
 }
 
 /** Whether a material is cut out or seen through: a leaf card's, a fern's, the grass's, a gate's membrane. */
-function cutOut(material: THREE.Material | THREE.Material[]): boolean {
+function cutOut(material: Material | Material[]): boolean {
   return (Array.isArray(material) ? material : [material]).some((m) => m.alphaTest > 0 || m.transparent);
 }
 
 /** `group`'s cut-out and see-through meshes, which stand in front of the surfaces round the clearing (ferns, leaves,
  *  grass), put on a layer no camera draws; it puts them back. (By their layers, not hidden: culling shows them again
  *  as it draws.) */
-function withoutCutOuts(group: THREE.Object3D): () => void {
-  const moved: Array<[THREE.Object3D, number]> = [];
+function withoutCutOuts(group: Node): () => void {
+  const moved: Array<[Node, number]> = [];
   group.traverse((o) => {
-    const mesh = o as THREE.Mesh;
+    const mesh = o as Mesh;
     if (!mesh.isMesh || !cutOut(mesh.material)) return;
     moved.push([mesh, mesh.layers.mask]);
     mesh.layers.set(UNSEEN_LAYER);
@@ -128,9 +128,9 @@ function withoutCutOuts(group: THREE.Object3D): () => void {
 /** How far out from `point` a camera stands along the way it faces: `DISTANCE`, or short of what of `group` is in the
  *  way (the gate's roots splay under its boulder, and a camera 2 m out stood inside it). A ray tests layers as a
  *  camera does, so the cut-outs moved aside are passed through. */
-function clearDistance(point: Facing, group: THREE.Object3D): number {
-  const way = new THREE.Vector3(Math.sin(point.facing), 0, Math.cos(point.facing));
-  const ray = new THREE.Raycaster(point.at.clone().addScaledVector(way, 0.05), way, 0, DISTANCE);
+function clearDistance(point: Facing, group: Node): number {
+  const way = new Vec3(Math.sin(point.facing), 0, Math.cos(point.facing));
+  const ray = new Raycaster(point.at.clone().addScaledVector(way, 0.05), way, 0, DISTANCE);
   const hit = ray.intersectObject(group, true)[0];
   return hit ? Math.max(NEAREST, hit.distance - SHORT_OF) : DISTANCE;
 }
@@ -139,10 +139,10 @@ function clearDistance(point: Facing, group: THREE.Object3D): number {
  *  is drawn with, and every one of a mesh not frustum-culled, so a frame is drawn with none frustum-culled (a ray met
  *  only the rocks the last frame drew, and the picture's frame drew another in front of the roots). It puts them back,
  *  for the picture's frame to cull as the game does. */
-function everyInstancePacked(lab: Lab, group: THREE.Object3D): () => void {
-  const culled: THREE.Object3D[] = [];
+function everyInstancePacked(lab: Lab, group: Node): () => void {
+  const culled: Node[] = [];
   group.traverse((o) => {
-    if (!(o as THREE.InstancedMesh).isInstancedMesh || !o.frustumCulled) return;
+    if (!(o as InstancedMesh).isInstancedMesh || !o.frustumCulled) return;
     culled.push(o);
     o.frustumCulled = false;
   });
@@ -159,7 +159,7 @@ function everyInstancePacked(lab: Lab, group: THREE.Object3D): () => void {
 }
 
 /** The first of `points` in view (`inView`), every instance of `group` packed for the rays to meet. */
-function firstInView(lab: Lab, points: Facing[], meshes: THREE.Mesh[], group: THREE.Object3D): Facing | undefined {
+function firstInView(lab: Lab, points: Facing[], meshes: Mesh[], group: Node): Facing | undefined {
   const cullAgain = everyInstancePacked(lab, group);
   try {
     return points.find((point) => inView(point, meshes, group));
@@ -173,8 +173,8 @@ function firstInView(lab: Lab, points: Facing[], meshes: THREE.Mesh[], group: TH
 export function surfacePicture(
   lab: Lab,
   label: string,
-  meshes: THREE.Mesh[],
-  group: THREE.Object3D,
+  meshes: Mesh[],
+  group: Node,
   notes: string[],
 ): Pictured | undefined {
   const points = nearestPoints(meshes);

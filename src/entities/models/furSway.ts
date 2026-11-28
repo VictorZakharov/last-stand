@@ -1,45 +1,30 @@
 // Fur that moves: each fur mesh (a collar, a cuff) gets a damped spring that lags the acceleration of the
-// joint it rides, plus a light flutter, both applied in the vertex shader so the tufts (a static merged mesh)
-// cost nothing extra to draw. A tuft's weight along its length is its uv's v (0 at the root, 1 at the tip:
-// `furTufts` scales it by three), so roots stay put and tips swing. One material copy per mesh, because a
-// uniform is only uploaded when the material changes, and the meshes each have their own lag.
-import * as THREE from 'three';
+// joint it rides, plus a light flutter, both applied in the vertex shader (the engine's kit look: engine/looks/kit.ts
+// reads `userData.fur`) so the tufts (a static merged mesh) cost nothing extra to draw. A tuft's weight along its
+// length is its uv's v (0 at the root, 1 at the tip: `furTufts` scales it by three), so roots stay put and tips swing.
+// One material copy per mesh: the meshes each have their own lag.
+import { Material, Mesh, Quat, Vec3 } from '../../engine/api/index.ts';
 import { sameLooks } from '../../core/materials';
-import type { OwnLooks } from '../../core/shaderPorts';
-import { tsl } from '../../core/webgpu';
 
 /** `?fur=0` keeps the fur still, for A/B comparison */
 const FUR = typeof location === 'undefined' || !/[?&]fur=0/.test(location.search);
 const F = 3.2, ZETA = 0.22, MAX = 0.05, GAIN = 0.9;
-const _w = new THREE.Vector3(), _q = new THREE.Quaternion(), _s = new THREE.Vector3(), _l = new THREE.Vector3();
+const _w = new Vec3(), _q = new Quat(), _s = new Vec3(), _l = new Vec3();
 
 export class FurSway {
-  readonly material: THREE.Material;
-  private readonly lag = { value: new THREE.Vector3() };
+  readonly material: Material;
+  private readonly lag = { value: new Vec3() };
   private readonly time = { value: 0 };
-  private readonly x = new THREE.Vector3();   // the spring's displacement (world), and its speed
-  private readonly v = new THREE.Vector3();
-  private readonly pos = new THREE.Vector3();
-  private readonly vel = new THREE.Vector3();
-  private readonly centre = new THREE.Vector3();
+  private readonly x = new Vec3();   // the spring's displacement (world), and its speed
+  private readonly v = new Vec3();
+  private readonly pos = new Vec3();
+  private readonly vel = new Vec3();
+  private readonly centre = new Vec3();
   private fresh = true;
 
-  constructor(private readonly mesh: THREE.Mesh, base: THREE.Material) {
+  constructor(private readonly mesh: Mesh, base: Material) {
     const m = this.material = base.clone();
-    const obc = base.onBeforeCompile, key = base.customProgramCacheKey.bind(base);
-    m.onBeforeCompile = (sh, r) => {
-      obc(sh, r);
-      sh.uniforms.uFurLag = this.lag; sh.uniforms.uFurT = this.time;
-      sh.vertexShader = sh.vertexShader
-        .replace('#include <common>', '#include <common>\nuniform vec3 uFurLag; uniform float uFurT;')
-        .replace('#include <begin_vertex>', `#include <begin_vertex>
-          float fw = uv.y / 3.0; fw *= fw;
-          float fph = dot(position, vec3(127.1, 311.7, 74.7));
-          transformed += (uFurLag + vec3(sin(uFurT * 5.1 + fph), sin(uFurT * 4.3 + fph * 1.7) * 0.4, sin(uFurT * 4.7 + fph * 0.6)) * 0.0035) * fw;`);
-    };
-    m.customProgramCacheKey = () => key() + '-fur';
     sameLooks(m, base);
-    (m as unknown as OwnLooks).webgpuLooks = (node) => this.swayNodes(node);
     // (each mesh's lag its own: a merge of the hero's parts would take it still)
     mesh.userData.drawsAlone = true;
     mesh.material = m;
@@ -48,18 +33,6 @@ export class FurSway {
     m.userData.fur = { lag: this.lag, time: this.time };
     mesh.geometry.computeBoundingSphere();
     this.centre.copy(mesh.geometry.boundingSphere!.center);
-  }
-
-  /** The sway on WebGPU, where the GLSL above is WebGL's alone. */
-  private swayNodes(node: { positionNode: unknown }): void {
-    const { positionGeometry, reference, sin, uv, vec3, dot } = tsl as any; // eslint-disable-line @typescript-eslint/no-explicit-any
-    const along = uv().y.div(3);
-    const phase = dot(positionGeometry, vec3(127.1, 311.7, 74.7));
-    const time = reference('value', 'float', this.time);
-    const flutter = vec3(sin(time.mul(5.1).add(phase)), sin(time.mul(4.3).add(phase.mul(1.7))).mul(0.4),
-      sin(time.mul(4.7).add(phase.mul(0.6))));
-    const sway = reference('value', 'vec3', this.lag).add(flutter.mul(0.0035)).mul(along).mul(along);
-    node.positionNode = positionGeometry.add(sway);
   }
 
   /** after the pose, the mesh's world matrix current */

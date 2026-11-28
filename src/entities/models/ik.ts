@@ -13,7 +13,7 @@
 // (`dropPelvis`), and each leg solved onto its target (`solveLeg`). What the steps share is the frame's `GaitFrame`.
 //
 // `LookAt` turns the neck and head onto a point of interest, within limits.
-import * as THREE from 'three';
+import { Bone, Euler, Geometry, Mat4, Mesh, Node, Quat, SkinnedMesh, Vec2, Vec3 } from '../../engine/api/index.ts';
 import type { Joints } from './rig';
 import { reachArm, updateJoints } from './rig';
 import { groundHeight } from '../../world/ground';
@@ -39,22 +39,22 @@ export interface FootShape {
 
 /** How a foot's sole hangs below its ankle, and how far it reaches ahead of it and behind it (rig units), from the
  *  bounds of the meshes on its ankle and of the skinned vertices the ankle owns. */
-export function footShape(ankle: THREE.Object3D, root: THREE.Object3D): FootShape {
+export function footShape(ankle: Node, root: Node): FootShape {
   const bounds = { sole: 0, toe: 0, heel: 0, any: false };
-  const point = new THREE.Vector3();
-  const take = (p: THREE.Vector3): void => {
+  const point = new Vec3();
+  const take = (p: Vec3): void => {
     bounds.sole = Math.max(bounds.sole, -p.y);
     bounds.toe = Math.max(bounds.toe, p.z);
     bounds.heel = Math.max(bounds.heel, -p.z);
     bounds.any = true;
   };
   ankle.updateMatrix();
-  const walk = (parent: THREE.Object3D, matrix: THREE.Matrix4): void => {
+  const walk = (parent: Node, matrix: Mat4): void => {
     for (const child of parent.children) {
       child.updateMatrix();
       const childMatrix = matrix.clone().multiply(child.matrix);
-      const geometry = (child as THREE.Mesh).geometry as THREE.BufferGeometry | undefined;
-      if (geometry && (child as THREE.Mesh).isMesh && child.visible) {
+      const geometry = (child as Mesh).geometry as Geometry | undefined;
+      if (geometry && (child as Mesh).isMesh && child.visible) {
         const positions = geometry.attributes.position;
         for (let i = 0; i < positions.count; i++) {
           take(point.fromBufferAttribute(positions, i).applyMatrix4(childMatrix));
@@ -63,14 +63,14 @@ export function footShape(ankle: THREE.Object3D, root: THREE.Object3D): FootShap
       walk(child, childMatrix);
     }
   };
-  walk(ankle, new THREE.Matrix4());
+  walk(ankle, new Mat4());
   // skinned pieces (a shin ending below the ankle): the vertices this bone owns, in the bone's own space at the bind
   // pose
-  const bind = new THREE.Matrix4();
+  const bind = new Mat4();
   root.traverse((o) => {
-    const mesh = o as THREE.SkinnedMesh;
+    const mesh = o as SkinnedMesh;
     if (!mesh.isSkinnedMesh || !mesh.visible) return;
-    const bone = mesh.skeleton.bones.indexOf(ankle as THREE.Bone);
+    const bone = mesh.skeleton.bones.indexOf(ankle as Bone);
     if (bone < 0) return;
     const { position, skinIndex, skinWeight } = mesh.geometry.attributes;
     if (!skinIndex || !skinWeight) return;
@@ -351,7 +351,7 @@ const legU = (phase: number, i: number): number => ((phase / TAU + (1 - i) * 0.5
 
 /** Sets `out` (on the ground) to the point `length` along a curve from `from` (x, z) heading `yaw`, turning `curve`
  *  a metre (+ towards +x from +z). */
-function alongCurve(out: THREE.Vector3, from: THREE.Vector3, yaw: number, curve: number, length: number): void {
+function alongCurve(out: Vec3, from: Vec3, yaw: number, curve: number, length: number): void {
   const turn = curve * length;
   if (Math.abs(turn) < 1e-4) {
     out.set(from.x + Math.sin(yaw) * length, 0, from.z + Math.cos(yaw) * length);
@@ -431,7 +431,7 @@ function dutyAt(speed: number, leg: number): number {
 export const gaitRate = (speed: number, leg: number): number => IK ? Math.PI / stepLength(speed, leg) : 2.1;
 
 /** a model's leg length in world metres (its thigh and shin at the root's scale), 0.9 for one with no skeleton */
-export function legLength(m: { joints?: Joints; root: THREE.Object3D }): number {
+export function legLength(m: { joints?: Joints; root: Node }): number {
   return m.joints ? (m.joints.P.thighL + m.joints.P.shinL) * m.root.scale.x : 0.9;
 }
 
@@ -441,10 +441,10 @@ type State = 'plant' | 'swing' | 'timed';
 class Foot {
   state: State = 'plant';
   /** where it is planted: the ankle's spot on the floor (x, z) and the level it stands on (y) */
-  P = new THREE.Vector3();
+  P = new Vec3();
   /** where the current step began, and where it will land */
-  A = new THREE.Vector3();
-  B = new THREE.Vector3();
+  A = new Vec3();
+  B = new Vec3();
   /** the way it is turned planted, and the way it was turned as its step began */
   yaw = 0;
   yawA = 0;
@@ -458,7 +458,7 @@ class Foot {
   /** how far ahead of its hip (along the way it travels) the foot was when its swing began */
   rel0 = 0;
   /** the ankle's target this frame, in the world */
-  pos = new THREE.Vector3();
+  pos = new Vec3();
   pitch = 0;
   /** the ankle's pitch as last shown, and as the step began; and the height over the ground the step began with: a
    *  step eases from them, so stopping mid-stride never snaps */
@@ -486,13 +486,13 @@ class Foot {
   landOff = 0;
   strokeK = 1;
   /** the leg as the pose had it, for the blend */
-  fk = { thigh: new THREE.Quaternion(), knee: new THREE.Quaternion(), ankle: new THREE.Quaternion() };
+  fk = { thigh: new Quat(), knee: new Quat(), ankle: new Quat() };
   /** this leg's own blend over the pose (`update`'s `legW`), smoothed, and whether the pose owned it last frame */
   lw = 1;
   own = false;
   /** where a standing body wants this foot (`LegIK.stance`): in the root's own frame, and turned out by `syaw`; null
    *  under its hip */
-  stand: THREE.Vector3 | null = null;
+  stand: Vec3 | null = null;
   syaw = 0;
   /** how far ahead of its spot (rig units, along the way the body faces) and across it a standing foot stays, as the
    *  body stopped with it there (`keepSplit`), and how far it stays turned off its stance's turn (rad) */
@@ -500,7 +500,7 @@ class Foot {
   splitAcross = 0;
   splitTurn = 0;
   /** where the ankle's target was last frame, if it was the gait's */
-  last = new THREE.Vector3();
+  last = new Vec3();
   seen = false;
   /** where in its window (0..1) the swing began: its arc runs over what was left of the window */
   tw0 = 0;
@@ -512,7 +512,7 @@ class Foot {
   air = 0;
   /** the way the stride is drawn along: turning towards the way the body goes, not snapping to it (the foot would
    *  whip across) */
-  dir = new THREE.Vector3();
+  dir = new Vec3();
   dirYaw = 0;
   /** the body went out of its reach last frame: a planted foot steps at once */
   over = false;
@@ -533,9 +533,9 @@ class Foot {
 
 /** A leg's joints, hip down. */
 interface LegJoints {
-  thigh: THREE.Object3D;
-  knee: THREE.Object3D;
-  ankle: THREE.Object3D;
+  thigh: Node;
+  knee: Node;
+  ankle: Node;
 }
 
 /** What a frame of the gait works from, worked out at its start and shared by its steps (one, reused: a crowd runs
@@ -544,7 +544,7 @@ class GaitFrame {
   dt = 0;
   phase = 0;
   /** the root's world matrix and scale, and where it stands on the ground */
-  rootMatrix = new THREE.Matrix4();
+  rootMatrix = new Mat4();
   scale = 1;
   rootX = 0;
   rootZ = 0;
@@ -556,11 +556,11 @@ class GaitFrame {
   facing = 0;
   pelvisYaw = 0;
   /** the pelvis's side axis (towards +x when it faces +z) and its middle, in the world */
-  readonly pelvisSide = new THREE.Vector3();
-  readonly pelvisAt = new THREE.Vector3();
+  readonly pelvisSide = new Vec3();
+  readonly pelvisAt = new Vec3();
   /** the ground speed (smoothed) and the way the body travels (a unit vector, or none) */
   speed = 0;
-  readonly travel = new THREE.Vector3();
+  readonly travel = new Vec3();
   /** how much the way it travels turns a metre (1/m, + towards +x from +z, smoothed): the curve it is on */
   curve = 0;
   /** the share of the cycle a foot is on the ground, half the share it swings, and the cycle's length (s) */
@@ -571,27 +571,27 @@ class GaitFrame {
   landAhead = 0;
   slip = 0;
   /** the leg being stepped: its hip joint in the world, and its side of the pelvis's middle (1 or -1) */
-  readonly hip = new THREE.Vector3();
+  readonly hip = new Vec3();
   legSide = 1;
 }
 
-const _rootAt = new THREE.Vector3(), _rootScale = new THREE.Vector3(), _facing = new THREE.Vector3();
-const _runSwing = new THREE.Vector2(), _runLeft = new THREE.Vector2(), _runLands = new THREE.Vector2();
-const _runNow = new THREE.Vector2();
-const _velocity = new THREE.Vector3(), _spot = new THREE.Vector3(), _ankleAt = new THREE.Vector3();
-const _point = new THREE.Vector3(), _target = new THREE.Vector3(), _toFoot = new THREE.Vector3();
-const _airAt = new THREE.Vector3(), _peelAt = new THREE.Vector3(), _candidate = new THREE.Vector3();
-const _hipsForward = new THREE.Vector3();
-const _hipsAt = new THREE.Vector3(), _hipsScale = new THREE.Vector3(), _hipsTurn = new THREE.Quaternion();
-const _hipsInverse = new THREE.Matrix4();
-const _q = new THREE.Quaternion(), _q2 = new THREE.Quaternion(), _handTurn = new THREE.Quaternion();
-const _pole = new THREE.Vector3(), _e = new THREE.Euler(), _thighDown = new THREE.Vector3();
-const _leavesAt = new THREE.Vector3(), _hipAt = new THREE.Vector3();
-const _hipForward = new THREE.Vector3(0, 0, 1), _toes = new THREE.Vector3(), _ankleHeld = new THREE.Quaternion();
-const _shinTurn = new THREE.Quaternion(), _shinDown = new THREE.Vector3(), _trackAhead = new THREE.Vector3();
-const _heelUp = new THREE.Vector3(), _landWas = new THREE.Vector3(), _drift = new THREE.Vector3();
-const _kneeAt = new THREE.Vector3(), _restSpot = new THREE.Vector3(), _braking = new THREE.Vector3();
-const _rest = new THREE.Vector3(), _local = new THREE.Vector3(), _rootInverse = new THREE.Matrix4();
+const _rootAt = new Vec3(), _rootScale = new Vec3(), _facing = new Vec3();
+const _runSwing = new Vec2(), _runLeft = new Vec2(), _runLands = new Vec2();
+const _runNow = new Vec2();
+const _velocity = new Vec3(), _spot = new Vec3(), _ankleAt = new Vec3();
+const _point = new Vec3(), _target = new Vec3(), _toFoot = new Vec3();
+const _airAt = new Vec3(), _peelAt = new Vec3(), _candidate = new Vec3();
+const _hipsForward = new Vec3();
+const _hipsAt = new Vec3(), _hipsScale = new Vec3(), _hipsTurn = new Quat();
+const _hipsInverse = new Mat4();
+const _q = new Quat(), _q2 = new Quat(), _handTurn = new Quat();
+const _pole = new Vec3(), _e = new Euler(), _thighDown = new Vec3();
+const _leavesAt = new Vec3(), _hipAt = new Vec3();
+const _hipForward = new Vec3(0, 0, 1), _toes = new Vec3(), _ankleHeld = new Quat();
+const _shinTurn = new Quat(), _shinDown = new Vec3(), _trackAhead = new Vec3();
+const _heelUp = new Vec3(), _landWas = new Vec3(), _drift = new Vec3();
+const _kneeAt = new Vec3(), _restSpot = new Vec3(), _braking = new Vec3();
+const _rest = new Vec3(), _local = new Vec3(), _rootInverse = new Mat4();
 const _predicted = { at: { x: 0, z: 0 } as Flat, v: { x: 0, z: 0 } as Flat };
 const _stepped: Flat = { x: 0, z: 0 }, _slowedAt: Flat = { x: 0, z: 0 };
 /** the prediction's frame (s), the furthest it looks ahead for a stop (s), and the speed a body has come to rest at */
@@ -599,7 +599,7 @@ const PREDICT_DT = 1 / 60, PREDICT_MOST = 2, RESTED_SPEED = 0.02;
 /** along the foot and across it, both ways: where a standing foot's ball must have its level round it
  *  (`EDGE_MARGIN`) */
 const MARGIN_DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1]] as const;
-const UP = new THREE.Vector3(0, 1, 0);
+const UP = new Vec3(0, 1, 0);
 
 export interface LegOpts {
   /** 0 = the walk cycle's own legs, 1 = fully IK; a fixed share, or (state) a per-frame one */
@@ -614,8 +614,8 @@ export class LegIK {
   private readonly legs: LegJoints[];
   private readonly frame = new GaitFrame();
   /** where the root stood last frame, and its velocity, smoothed */
-  private readonly last = new THREE.Vector3();
-  private readonly v = new THREE.Vector3();
+  private readonly last = new Vec3();
+  private readonly v = new Vec3();
   /** the ground speed, smoothed as a number (the vector's length collapses when the direction flips), and as a vector
    *  along the way it travels */
   private sp = 0;
@@ -625,7 +625,7 @@ export class LegIK {
    *  thigh points forward (`thighForward`) */
   private readonly feetAhead: [number, number] = [0, 0];
   private readonly thighsForward: [number, number] = [0, 0];
-  private readonly gv = new THREE.Vector3();
+  private readonly gv = new Vec3();
   /** the walk cycle's phase last frame, its rate (smoothed), and how far it moved this frame (a share of a cycle) */
   private lastPhase = 0;
   private dphase = 0;
@@ -658,18 +658,18 @@ export class LegIK {
   private leanX = 0;
   private leanZ = 0;
   /** the body's velocity this frame, from its move (m/s) */
-  private readonly vNow = new THREE.Vector3();
+  private readonly vNow = new Vec3();
   /** the velocity the game eases the body towards and how quickly (`intend`), and whether it said so this frame */
-  private readonly goal = new THREE.Vector3();
+  private readonly goal = new Vec3();
   /** the body turns to face the way it goes (`intend`): it walks forwards through a turn round, never backpedals */
   private facesWay = false;
   /** the goal as the landings follow it (`GOAL_FOLLOW`) */
-  private readonly goalSeen = new THREE.Vector3();
+  private readonly goalSeen = new Vec3();
   private goalSaid = false;
   /** how far ahead of the hip along its way the stride last aimed at its neutral point lands (m, `neutralPoint`) */
   private neutralAhead = 0;
   /** where a stopping body rests, from where it is (m), for the motion it was worked out from (`restingAt`) */
-  private readonly restFound = new THREE.Vector3();
+  private readonly restFound = new Vec3();
   private readonly restFor = { vx: NaN, vz: NaN, gx: NaN, gz: NaN };
   private intended = false;
   /** the speed a stop began at (m/s; 0 while the body isn't being stopped), and whether the body stopped moving this
@@ -693,7 +693,7 @@ export class LegIK {
   private curve = 0;
   private shape: FootShape[] | null = null;
   /** the hands' world turn as the pose left it (`captureArms`) */
-  private readonly hq = [new THREE.Quaternion(), new THREE.Quaternion()];
+  private readonly hq = [new Quat(), new Quat()];
   private armsCaptured = false;
   /** the smoothed blend over the walk cycle's legs */
   private w = 0;
@@ -714,7 +714,7 @@ export class LegIK {
    * comes to rest (read from the body's own slowing, a co-op copy's, it is known only a few frames later: the last
    * stride landed where the body would have been at speed, 40 to 60 cm past where it stopped).
    */
-  intend(goal: THREE.Vector3, facesWay = false): void {
+  intend(goal: Vec3, facesWay = false): void {
     this.goal.set(goal.x, 0, goal.z);
     this.goalSaid = true;
     this.facesWay = facesWay;
@@ -849,7 +849,7 @@ export class LegIK {
     // (a spot the pose moves is stood on as it says: a split kept from a stop is for the stance it stopped in)
     const moved = !f.stand || Math.abs(f.stand.x - x) > 0.01 || Math.abs(f.stand.z - z) > 0.01 || f.syaw !== yaw;
     if (moved) f.split = f.splitAcross = f.splitTurn = 0;
-    (f.stand ??= new THREE.Vector3()).set(x, 0, z);
+    (f.stand ??= new Vec3()).set(x, 0, z);
     f.syaw = yaw;
   }
 
@@ -1036,7 +1036,7 @@ export class LegIK {
   // --- the body ----------------------------------------------------------------------------------------------------
 
   /** The frame's start: the root's matrix, scale and place, the legs' lengths and the way the body faces. */
-  private readBody(dt: number, phase: number, rootAt: THREE.Vector3): GaitFrame {
+  private readBody(dt: number, phase: number, rootAt: Vec3): GaitFrame {
     const j = this.j, g = this.frame;
     g.dt = dt;
     g.phase = phase;
@@ -1642,7 +1642,7 @@ export class LegIK {
 
   /** Where a planted foot should be: standing, the stance's spot (off any edge, onto the body's level); else under
    *  the hip. */
-  private spotFor(g: GaitFrame, f: Foot, i: number, footYaw: number): THREE.Vector3 {
+  private spotFor(g: GaitFrame, f: Foot, i: number, footYaw: number): Vec3 {
     const spot = !this.moving && f.stand ? this.standSpot(g, f, _spot) : _spot.copy(g.hip);
     if (!this.moving) this.onBodyLevel(spot, i, footYaw, g.scale, g.rootX, g.rootZ, true);
     return spot;
@@ -1650,7 +1650,7 @@ export class LegIK {
 
   /** A standing foot's stance spot in the world (`out`), as far ahead of it as the body stopped with it
    *  (`keepSplit`). */
-  private standSpot(g: GaitFrame, f: Foot, out: THREE.Vector3): THREE.Vector3 {
+  private standSpot(g: GaitFrame, f: Foot, out: Vec3): Vec3 {
     out.copy(f.stand!);
     out.z += f.split;
     out.x += f.splitAcross;
@@ -1674,7 +1674,7 @@ export class LegIK {
   }
 
   /** A timed step to `spot` (`dev` away), a quick one at a run. */
-  private beginStep(g: GaitFrame, f: Foot, spot: THREE.Vector3, dev: number): void {
+  private beginStep(g: GaitFrame, f: Foot, spot: Vec3, dev: number): void {
     f.state = 'timed';
     f.splitTurn = 0;
     f.t = 0;
@@ -1896,7 +1896,7 @@ export class LegIK {
 
   /** Moves a moving stride's landing `out` by where the body will be in `time` (s) as the game eases its velocity
    *  towards its goal (`intend`, the goal followed smoothly: `goalSeen`), beyond where its velocity now would take it. */
-  private easedOff(out: THREE.Vector3, time: number): void {
+  private easedOff(out: Vec3, time: number): void {
     if (!this.intended) return;
     predictMotion(this.vNow, this.goalSeen, time, _predicted);
     out.x += _predicted.at.x - this.vNow.x * time;
@@ -1904,7 +1904,7 @@ export class LegIK {
   }
 
   /** The game's braking of the body this frame (m/s², `out`), as it moves it. */
-  private brakingNow(out: THREE.Vector3): THREE.Vector3 {
+  private brakingNow(out: Vec3): Vec3 {
     _stepped.x = this.vNow.x;
     _stepped.z = this.vNow.z;
     stepVelocity(_stepped, this.goal, PREDICT_DT);
@@ -1963,7 +1963,7 @@ export class LegIK {
   /** Whether the game is bringing a moving body to a stop (`intend`), and if so where it comes to rest from where it
    *  is now (`out`, m over the ground). (Standing still is no stop: held as one, a foot the draw's lean left out of
    *  reach stayed, and the bow arm drew through the string.) */
-  private restingAt(out: THREE.Vector3): boolean {
+  private restingAt(out: Vec3): boolean {
     if (!this.intended || !this.moving || this.goal.lengthSq() > STOP_GOAL * STOP_GOAL) return false;
     // (worked out once for the motion it is asked for: it is asked several times a frame)
     const seen = this.restFor;
@@ -1982,7 +1982,7 @@ export class LegIK {
 
   /** Where foot `i` will stand once a stopping body rests `rest` from where it is now: its stance's spot (else under
    *  its hip) round there, on the level the body rests on (`out`). */
-  private spotAtRest(g: GaitFrame, f: Foot, i: number, rest: THREE.Vector3, yaw: number, out: THREE.Vector3): void {
+  private spotAtRest(g: GaitFrame, f: Foot, i: number, rest: Vec3, yaw: number, out: Vec3): void {
     if (f.stand) {
       out.copy(f.stand).applyMatrix4(g.rootMatrix);
     } else {
@@ -2055,7 +2055,7 @@ export class LegIK {
   }
 
   /** Moves a landing `B` back towards where it was last frame (`_landWas`) across the way the body goes, by `share`. */
-  private settleSideways(B: THREE.Vector3, travel: THREE.Vector3, share: number): void {
+  private settleSideways(B: Vec3, travel: Vec3, share: number): void {
     _drift.subVectors(_landWas, B);
     const along = _drift.x * travel.x + _drift.z * travel.z;
     B.x += (_drift.x - travel.x * along) * share;
@@ -2112,7 +2112,7 @@ export class LegIK {
   /** Where a runner's ankle is `f.t` through a swing, at this body's lengths (`out`): along the stride's way from the
    *  hip (m), its ends moved onto where the foot left and where it lands, and how high over the line between its
    *  heights as it left and as it lands (m). */
-  private runnersSwing(g: GaitFrame, f: Foot, out: THREE.Vector2): void {
+  private runnersSwing(g: GaitFrame, f: Foot, out: Vec2): void {
     const asAMan = g.speed * 0.9 / Math.max(0.1, g.legReach);
     const fast = Math.min(1, Math.max(0, (asAMan - RUN_SWING_JOG) / (RUN_SWING_FAST - RUN_SWING_JOG)));
     const s = Math.min(1, Math.max(0, f.t));
@@ -2126,7 +2126,7 @@ export class LegIK {
 
   /** A runner's ankle `s` through a swing, from the hip in the leg's own plane (`out`: along the way forward, and up;
    *  m at this body's lengths), at `fast` of the way from a jog's swing to a fast run's. */
-  private runnersAnkle(g: GaitFrame, fast: number, s: number, out: THREE.Vector2): THREE.Vector2 {
+  private runnersAnkle(g: GaitFrame, fast: number, s: number, out: Vec2): Vec2 {
     const jogThigh = curve(RUN_SWING_THIGH_JOG, s), fastThigh = curve(RUN_SWING_THIGH_FAST, s);
     const jogKnee = curve(RUN_SWING_KNEE_JOG, s), fastKnee = curve(RUN_SWING_KNEE_FAST, s);
     const thigh = (jogThigh + (fastThigh - jogThigh) * fast) * DEG;
@@ -2165,7 +2165,7 @@ export class LegIK {
   }
 
   /** How far `q` is out from the pelvis's middle on the side of the leg being stepped (m; under 0 across it). */
-  private lateral(q: THREE.Vector3): number {
+  private lateral(q: Vec3): number {
     const g = this.frame;
     return ((q.x - g.pelvisAt.x) * g.pelvisSide.x + (q.z - g.pelvisAt.z) * g.pelvisSide.z) * g.legSide;
   }
@@ -2173,7 +2173,7 @@ export class LegIK {
   /** Moves a moving foot's landing `q` in towards the pelvis's middle to a walk's or a run's track, if it is further
    *  out, as far as the body goes the way it faces (sideways, a person's feet aren't in a line: drawn in strafing
    *  with a shot drawn, a foot landed by the middle was across it once the pelvis turned, and went again early). */
-  private drawToTrack(g: GaitFrame, q: THREE.Vector3): void {
+  private drawToTrack(g: GaitFrame, q: Vec3): void {
     const track = (WALK_TRACK + (RUN_TRACK - WALK_TRACK) * runShare(g.speed, g.legReach)) * g.scale;
     const ahead = _trackAhead.set(0, 0, 1).transformDirection(g.rootMatrix);
     const facing = Math.max(0, ahead.x * g.travel.x + ahead.z * g.travel.z);
@@ -2185,7 +2185,7 @@ export class LegIK {
   }
 
   /** Moves `q` out to `gap` from the pelvis's middle on the side of the leg being stepped, if it is nearer. */
-  private keepToSide(q: THREE.Vector3, share = 1, gap = GAP): void {
+  private keepToSide(q: Vec3, share = 1, gap = GAP): void {
     const g = this.frame, short = (gap * g.scale - this.lateral(q)) * share;
     if (short > 0) {
       q.x += g.pelvisSide.x * g.legSide * short;
@@ -2268,7 +2268,7 @@ export class LegIK {
    *  flat, a runner's foot was out of reach 0.4 leg lengths behind the hip and left after two thirds of its stance:
    *  the stance came out short, the feet churned and each left the ground bent under the hips, with no push off. */
   private pushReach(
-    g: GaitFrame, f: Foot, i: number, hip: THREE.Vector3, dx: number, dz: number, most: number,
+    g: GaitFrame, f: Foot, i: number, hip: Vec3, dx: number, dz: number, most: number,
   ): number {
     const push = this.runPush(g);
     if (!this.moving || !this.shape || push <= 0 || dx * g.travel.x + dz * g.travel.z >= 0) return 0;
@@ -2320,7 +2320,7 @@ export class LegIK {
    *  hip than it lands nor behind it. Its leg eases into its stretch as it trails off the ground and as it reaches out
    *  before pawing back to land, and the hips don't sink for either: sunk for them, they came down 7 to 9 cm in each
    *  flight of a run, and every foot landed under them with its knee bent 45 degrees, a runner's 20. */
-  private airReach(g: GaitFrame, i: number): THREE.Vector3 {
+  private airReach(g: GaitFrame, i: number): Vec3 {
     const f = this.feet[i];
     _hipAt.copy(this.legs[i].thigh.position).applyMatrix4(this.j.hips.matrixWorld);
     const along = (f.pos.x - _hipAt.x) * g.travel.x + (f.pos.z - _hipAt.z) * g.travel.z;
@@ -2331,7 +2331,7 @@ export class LegIK {
   /** Where a foot is reached from, for how far the pelvis sinks: its ankle, or for a planted foot behind its hip, its
    *  ankle with the heel up as far as a push off lifts it (`peel` lifts it as far as the leg needs). Sunk for the foot
    *  flat, the hips fell 12 cm at the end of each stance of a walk strafing drawn and came back up as it left. */
-  private reachedAt(g: GaitFrame, i: number): THREE.Vector3 {
+  private reachedAt(g: GaitFrame, i: number): Vec3 {
     const f = this.feet[i];
     if (f.state !== 'plant' || !this.moving || !this.shape) return f.pos;
     _hipAt.copy(this.legs[i].thigh.position).applyMatrix4(this.j.hips.matrixWorld);
@@ -2490,7 +2490,7 @@ export class LegIK {
 
   /** A foot in the air keeps its hip within its ranges: its thigh is swung in or out to within the hip's abduction,
    *  then its knee folds until the thigh is within its extension. `target` is in the hips' frame. */
-  private holdHip(g: GaitFrame, f: Foot, i: number, target: THREE.Vector3): void {
+  private holdHip(g: GaitFrame, f: Foot, i: number, target: Vec3): void {
     const swung = this.holdHipSide(g, i, target);
     const folded = this.holdHipBack(g, f, i, target);
     if (swung || folded) f.pos.copy(target).applyMatrix4(this.j.hips.matrixWorld);
@@ -2499,7 +2499,7 @@ export class LegIK {
   /** A foot in the air whose thigh the solve took further across the body or out to its side than a hip goes swings
    *  in or out about the hip until it is within (a running reversal flung the warrior's foot 2 degrees past across
    *  the body, the mage's 1 past out). True if it moved the foot. */
-  private holdHipSide(g: GaitFrame, i: number, target: THREE.Vector3): boolean {
+  private holdHipSide(g: GaitFrame, i: number, target: Vec3): boolean {
     const { thigh, knee } = this.legs[i], left = i === 0;
     const side = this.hipOut(i);
     const off = side < HIP_IN ? HIP_IN - side : side > HIP_OUT ? HIP_OUT - side : 0;
@@ -2513,7 +2513,7 @@ export class LegIK {
    *  the hip along its line, the knee folding further, until it is within (a leg left behind as the body sets off the
    *  other way kicks its heel up: reaching back for where the swing had it, a mage's tapping reversal took the hip 7
    *  degrees past). True if it moved the foot. */
-  private holdHipBack(g: GaitFrame, f: Foot, i: number, target: THREE.Vector3): boolean {
+  private holdHipBack(g: GaitFrame, f: Foot, i: number, target: Vec3): boolean {
     const { thigh, knee } = this.legs[i];
     const past = HIP_BACK - this.hipFlexion(i);
     // (eased in and out: all at once, a foot leaving from behind a hip past its extension jumped 34 cm up as it rose)
@@ -2568,7 +2568,7 @@ export class LegIK {
    *  stretch (a knee snapping straight and stopping dead reads as a jerk); a planted one the body has pulled out of
    *  reach rises onto its toes, which stay put, rather than sliding after it, or is dragged after the body if even
    *  that won't do. */
-  private reachFor(g: GaitFrame, f: Foot, i: number): THREE.Vector3 {
+  private reachFor(g: GaitFrame, f: Foot, i: number): Vec3 {
     const thigh = this.legs[i].thigh, hipsMatrix = this.j.hips.matrixWorld;
     const target = _target.copy(f.pos).applyMatrix4(_hipsInverse);
     _toFoot.copy(target).sub(thigh.position);
@@ -2613,7 +2613,7 @@ export class LegIK {
 
   /** A planted foot out of the leg's reach `rmax` from the hip (`hip`, the hips' own frame) lifts its heel, pivoting on
    *  its toes, as far as it must (up to ~65 deg): its ankle's target and pitch are set; false if even that won't do. */
-  private peel(f: Foot, i: number, hip: THREE.Vector3, rmax: number, sc: number): boolean {
+  private peel(f: Foot, i: number, hip: Vec3, rmax: number, sc: number): boolean {
     const shape = this.shape![i], level = f.P.y;
     for (let pitch = Math.max(0, f.pitch); pitch <= 1.15; pitch += 0.05) {
       const r = this.roll(shape, pitch) * sc;
@@ -2694,7 +2694,7 @@ export class LegIK {
    * spot again and again.)
    */
   private onBodyLevel(
-    p: THREE.Vector3, i: number, yaw: number, sc: number, bx: number, bz: number, keepSide: boolean,
+    p: Vec3, i: number, yaw: number, sc: number, bx: number, bz: number, keepSide: boolean,
   ): void {
     const shape = this.shape?.[i];
     if (!shape) return;
@@ -2825,7 +2825,7 @@ export class LookAt {
 
   /** `from` the body's spot (x, ground y, z) and `facing`; `target` a world point, or null to look ahead; `weight`
    *  0..1; `idle`: standing with nothing cast or aimed, when with no target he glances round now and then */
-  update(dt: number, from: THREE.Vector3, facing: number, target: THREE.Vector3 | null, weight = 1, idle = false): void {
+  update(dt: number, from: Vec3, facing: number, target: Vec3 | null, weight = 1, idle = false): void {
     if (!IK || dt <= 0) return;
     this.glance?.update(dt, idle && !target);
     const j = this.j, sc = j.root.scale.x;

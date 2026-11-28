@@ -3,7 +3,7 @@
 // roll where it's tucked into the boot, a welted seam down the outside). Skinned down the leg's chain, hips to ankle,
 // so nothing opens at a joint. (Two round-topped tubes hung from the hip joints, with no pelvis between them, were
 // "logs", and the world showed between their tops under the belt: #520, #346.)
-import * as THREE from 'three';
+import { Attribute, Geometry, Material, Vec3 } from '../../engine/api/index.ts';
 import { strap, lod, heroDetail, TILE } from './armor';
 import { curve, type Keys } from './motion';
 import { clamp, lerp } from '../../util';
@@ -60,7 +60,7 @@ class Leg {
 
   /** The point at angle `a` round the leg (0 its outside, a quarter turn its front) and height `y`, `off` out of
    *  the surface, in the hips' frame. */
-  at(a: number, y: number, out: THREE.Vector3, off = 0): THREE.Vector3 {
+  at(a: number, y: number, out: Vec3, off = 0): Vec3 {
     const c = this.cut, ca = Math.cos(a), sa = Math.sin(a);
     // the leg's own section: an ellipse, deeper ahead or behind
     const r = (sa > 0 ? curve(this.rFront, y) : curve(this.rBack, y)) + this.cloth(a, y) + off, rs = curve(this.rSide, y) + this.cloth(a, y) + off;
@@ -108,10 +108,10 @@ class Leg {
   }
 
   /** `geo` (in the hips' frame, lying on the leg) given each point's share of the chain */
-  weigh(geo: THREE.BufferGeometry): THREE.BufferGeometry {
+  weigh(geo: Geometry): Geometry {
     const p = geo.attributes.position, k = new Float32Array(p.count);
     for (let i = 0; i < p.count; i++) k[i] = this.share(p.getX(i), p.getY(i));
-    geo.setAttribute('skinK', new THREE.BufferAttribute(k, 1));
+    geo.setAttribute('skinK', new Attribute(k, 1));
     return geo;
   }
 
@@ -130,8 +130,8 @@ class Leg {
   }
 
   /** the surface: a grid round the leg and down it, facing out, its seam down the inside */
-  surface(): THREE.BufferGeometry {
-    const segs = lod(20, 12), ys = this.rows(), nu = segs + 1, p = new THREE.Vector3();
+  surface(): Geometry {
+    const segs = lod(20, 12), ys = this.rows(), nu = segs + 1, p = new Vec3();
     const pos = new Float32Array(nu * ys.length * 3), uv = new Float32Array(nu * ys.length * 2), index: number[] = [];
     for (let r = 0; r < ys.length; r++) for (let q = 0; q < nu; q++) {
       const i = r * nu + q;
@@ -142,15 +142,15 @@ class Leg {
       const a = r * nu + q, b = a + 1, d = a + nu, e = d + 1;
       if (this.side > 0) index.push(a, b, d, b, e, d); else index.push(a, d, b, b, d, e);
     }
-    const g = new THREE.BufferGeometry();
-    g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-    g.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+    const g = new Geometry();
+    g.setAttribute('position', new Attribute(pos, 3));
+    g.setAttribute('uv', new Attribute(uv, 2));
     g.setIndex(index);
     g.computeVertexNormals();
     // the grid's two edges are one line down the inside of the leg: one normal for both. And where the two legs
     // are one body, the line they meet on (the body's middle, ahead and behind) points straight ahead or back:
     // each half's own normal there leans in towards the other, a groove down the middle
-    const n = g.attributes.normal as THREE.BufferAttribute, m = new THREE.Vector3(), o = new THREE.Vector3();
+    const n = g.attributes.normal as Attribute, m = new Vec3(), o = new Vec3();
     const quarter = segs / 4;
     for (let r = 0; r < ys.length; r++) {
       const a = r * nu, b = a + segs;
@@ -166,10 +166,10 @@ class Leg {
   }
 
   /** a welted seam down the outside of the leg, from the hip to the knee's folds and on to the boot or the ankle */
-  seam(): THREE.BufferGeometry {
+  seam(): Geometry {
     const c = this.cut, to = c.tuck === undefined ? this.ankleY + 0.04 : this.kneeY - c.tuck + 0.05, from = this.hy + 0.02, n = lod(22, 8);
-    const pts = Array.from({ length: n + 1 }, (_, i) => this.at(-0.12, lerp(from, to, i / n), new THREE.Vector3(), -0.0012));
-    const out = (_: THREE.Vector3, o: THREE.Vector3) => o.set(this.side, 0, -0.12).normalize();
+    const pts = Array.from({ length: n + 1 }, (_, i) => this.at(-0.12, lerp(from, to, i / n), new Vec3(), -0.0012));
+    const out = (_: Vec3, o: Vec3) => o.set(this.side, 0, -0.12).normalize();
     return this.weigh(strap(pts, 0.009, 0.0034, false, out, n));
   }
 }
@@ -178,7 +178,7 @@ class Leg {
  * The trousers built on a rig's hips and legs: `cloth` each leg's surface, `welt` the seams down their outsides.
  * Each leg is one piece skinned from the hips to its ankle.
  */
-export function buildTrousers(S: Sculpt, j: Joints, cut: TrouserCut, cloth: THREE.Material, welt: THREE.Material = cloth): void {
+export function buildTrousers(S: Sculpt, j: Joints, cut: TrouserCut, cloth: Material, welt: Material = cloth): void {
   for (const [side, th, kn, an] of [[1, j.thighL, j.kneeL, j.ankleL], [-1, j.thighR, j.kneeR, j.ankleR]] as const) {
     const leg = new Leg(j, cut, side), chain = [j.hips, th, kn, an];
     S.skinChain(leg.surface(), cloth, j.hips, chain);

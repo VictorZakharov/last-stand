@@ -5,7 +5,7 @@
 // spine out along x, from the cover up to the page's top, across its depth). From play: "fingers go through the book"
 // (his fingertips up through the pages by the gutter, and his forearm's linen lying along the gutter: his palms were
 // aimed inside the cover); the round 2 check read one point a hand, a fixed way down it, which missed it.
-import * as THREE from 'three';
+import { Maths, Mesh, Node, Quat, Vec3 } from './sceneApi.ts';
 import type { Scholar } from '../../../src/entities/models/scholar';
 import { bookShape, pageHeight } from '../../../src/entities/models/book';
 import { G } from '../../../src/state';
@@ -18,13 +18,13 @@ export const INTO_BOOK_MOST = 0.002, SLEEVES_INTO_BOOK_MOST = 0.015;
 const SLEEVES = /^scholar (sleeve|bell|lining|trim cuff|undersleeve)( standing)?$/;
 
 /** The open book's solids: each a mesh and how deep a point is in it (m; less than 0 outside it). */
-interface Solid { mesh: THREE.Mesh; depth(local: THREE.Vector3, scale: THREE.Vector3): number }
+interface Solid { mesh: Mesh; depth(local: Vec3, scale: Vec3): number }
 
 /** `book`'s cover and halves as solids. */
-function solidsOf(book: THREE.Object3D): Solid[] {
+function solidsOf(book: Node): Solid[] {
   const solids: Solid[] = [];
   book.traverse((o) => {
-    const m = o as THREE.Mesh;
+    const m = o as Mesh;
     if (!m.isMesh) return;
     if (!m.geometry.boundingBox) m.geometry.computeBoundingBox();
     const box = m.geometry.boundingBox!;
@@ -33,8 +33,8 @@ function solidsOf(book: THREE.Object3D): Solid[] {
     } else if (m.name === 'open book half') {
       const shape = bookShape(box.max.x / 0.49), half = box.max.x;
       solids.push({ mesh: m, depth: (p, s) => {
-        const top = pageHeight(shape, THREE.MathUtils.clamp(p.x / half, 0, 1));
-        return boxDepth(p, new THREE.Vector3(0, 0, -shape.depth / 2), new THREE.Vector3(half, top, shape.depth / 2), s);
+        const top = pageHeight(shape, Maths.clamp(p.x / half, 0, 1));
+        return boxDepth(p, new Vec3(0, 0, -shape.depth / 2), new Vec3(half, top, shape.depth / 2), s);
       } });
     }
   });
@@ -43,22 +43,22 @@ function solidsOf(book: THREE.Object3D): Solid[] {
 
 /** How deep `p` is in the box `min`..`max` (its frame, scaled by `s` into the world's metres): its least way out
  *  inside it, less than 0 by its furthest way off outside. */
-export function boxDepth(p: THREE.Vector3, min: THREE.Vector3, max: THREE.Vector3, s: THREE.Vector3): number {
+export function boxDepth(p: Vec3, min: Vec3, max: Vec3, s: Vec3): number {
   const ins = [(p.x - min.x) * s.x, (max.x - p.x) * s.x, (p.y - min.y) * s.y, (max.y - p.y) * s.y, (p.z - min.z) * s.z, (max.z - p.z) * s.z];
   const least = Math.min(...ins);
   return least >= 0 ? least : -Math.max(...ins.map((d) => -d));
 }
 
 /** His knuckles and fingertips (world), each with its finger's thickness. */
-export function fingerPoints(s: Scholar): { at: THREE.Vector3; r: number; what: string }[] {
-  const points: { at: THREE.Vector3; r: number; what: string }[] = [];
+export function fingerPoints(s: Scholar): { at: Vec3; r: number; what: string }[] {
+  const points: { at: Vec3; r: number; what: string }[] = [];
   s.hands.forEach((hand, h) => {
     for (const [k, digit] of [...hand.f, hand.thumb].entries()) {
-      const at = digit.j.map((j) => j.getWorldPosition(new THREE.Vector3()));
+      const at = digit.j.map((j) => j.getWorldPosition(new Vec3()));
       // (its tip: its last bone's length on from its last knuckle, the way that knuckle turns it, as each bone runs
       // down its joint's -y. Taken the way the bone before points, a thumb bent at its last joint to lie along a book's
       // board read 25 mm off it)
-      at.push(digit.j[digit.j.length - 1].localToWorld(new THREE.Vector3(0, -digit.len[digit.len.length - 1], 0)));
+      at.push(digit.j[digit.j.length - 1].localToWorld(new Vec3(0, -digit.len[digit.len.length - 1], 0)));
       const what = `${h ? 'right' : 'left'} ${k === hand.f.length ? 'thumb' : `finger ${k + 1}`}`;
       at.forEach((p, i) => points.push({ at: p, r: digit.r, what: i === at.length - 1 ? `${what}'s tip` : `${what}'s knuckle ${i + 1}` }));
     }
@@ -67,28 +67,28 @@ export function fingerPoints(s: Scholar): { at: THREE.Vector3; r: number; what: 
 }
 
 /** His sleeves' points (world): every few of each sleeve's mesh's points. */
-function sleevePoints(s: Scholar): { at: THREE.Vector3; r: number; what: string }[] {
-  const points: { at: THREE.Vector3; r: number; what: string }[] = [];
+function sleevePoints(s: Scholar): { at: Vec3; r: number; what: string }[] {
+  const points: { at: Vec3; r: number; what: string }[] = [];
   s.root.traverse((o) => {
-    const m = o as THREE.Mesh;
+    const m = o as Mesh;
     if (!m.isMesh || !m.visible || !SLEEVES.test(m.name)) return;
     const pos = m.geometry.attributes.position;
-    for (let i = 0; i < pos.count; i += 3) points.push({ at: new THREE.Vector3().fromBufferAttribute(pos, i).applyMatrix4(m.matrixWorld), r: 0, what: m.name.replace('scholar ', 'his ') });
+    for (let i = 0; i < pos.count; i += 3) points.push({ at: new Vec3().fromBufferAttribute(pos, i).applyMatrix4(m.matrixWorld), r: 0, what: m.name.replace('scholar ', 'his ') });
   });
   return points;
 }
 
 /** How far his fingers and his sleeves go into `book`'s solids now (m), and what of each went deepest. */
-export function intoBook(s: Scholar, book: THREE.Object3D): { fingers: number; sleeves: number; fat: string; sat: string } {
+export function intoBook(s: Scholar, book: Node): { fingers: number; sleeves: number; fat: string; sat: string } {
   s.root.updateMatrixWorld(true);
   book.updateMatrixWorld(true);
   const solids = solidsOf(book).map((solid) => {
-    const scale = new THREE.Vector3();
-    solid.mesh.matrixWorld.decompose(new THREE.Vector3(), new THREE.Quaternion(), scale);
+    const scale = new Vec3();
+    solid.mesh.matrixWorld.decompose(new Vec3(), new Quat(), scale);
     return { ...solid, inverse: solid.mesh.matrixWorld.clone().invert(), scale };
   });
-  const local = new THREE.Vector3();
-  const deepest = (points: { at: THREE.Vector3; r: number; what: string }[]) => {
+  const local = new Vec3();
+  const deepest = (points: { at: Vec3; r: number; what: string }[]) => {
     let into = 0, at = '';
     for (const p of points) for (const solid of solids) {
       const d = solid.depth(local.copy(p.at).applyMatrix4(solid.inverse), solid.scale) + p.r;
@@ -101,7 +101,7 @@ export function intoBook(s: Scholar, book: THREE.Object3D): { fingers: number; s
 }
 
 /** The book he reads now: the open one in his hands while it's shown, else the one on his table. */
-export function bookRead(s: Scholar, standing: boolean): THREE.Object3D | null {
+export function bookRead(s: Scholar, standing: boolean): Node | null {
   if (!standing) return s.book.blocks[0]?.parent ?? null;
   const open = G.scene.getObjectByName('library open held book');
   return open?.visible ? open : null;
@@ -114,17 +114,17 @@ export const GRAB = { spine: 0.4, into: 0.003 };
 
 /** His right hand on the shut book `held` (a unit box scaled to its size: thick x, tall y, deep z, its spine +z): how
  *  near its spine his palm is (`GRAB.spine`'s share), and how far his fingers go into it (m) and which. */
-export function grabRead(s: Scholar, held: THREE.Object3D): { side: number; into: number; at: string } {
+export function grabRead(s: Scholar, held: Node): { side: number; into: number; at: string } {
   s.root.updateMatrixWorld(true);
   held.updateMatrixWorld(true);
-  const inverse = held.matrixWorld.clone().invert(), scale = new THREE.Vector3();
-  held.matrixWorld.decompose(new THREE.Vector3(), new THREE.Quaternion(), scale);
+  const inverse = held.matrixWorld.clone().invert(), scale = new Vec3();
+  held.matrixWorld.decompose(new Vec3(), new Quat(), scale);
   const hand = s.hands[1];
   // (his palm: a little down from his wrist, among his fingers' first knuckles)
-  const palm = hand.f.reduce((sum, d) => sum.add(d.j[0].getWorldPosition(new THREE.Vector3())), new THREE.Vector3()).divideScalar(hand.f.length);
+  const palm = hand.f.reduce((sum, d) => sum.add(d.j[0].getWorldPosition(new Vec3())), new Vec3()).divideScalar(hand.f.length);
   const side = palm.clone().applyMatrix4(inverse).z / 0.5;
   let into = 0, at = '';
-  const min = new THREE.Vector3(-0.5, -0.5, -0.5), max = new THREE.Vector3(0.5, 0.5, 0.5);
+  const min = new Vec3(-0.5, -0.5, -0.5), max = new Vec3(0.5, 0.5, 0.5);
   for (const p of fingerPoints(s)) {
     if (!p.what.startsWith('right')) continue;
     const d = boxDepth(p.at.clone().applyMatrix4(inverse), min, max, scale) + p.r;
@@ -139,12 +139,12 @@ export const PADS_MOST = 0.002;
 
 /** His right hand's pads on the shut book `held` (a unit box scaled to its size): the furthest of his fingertips and his
  *  thumb's tip off its surface or into it (m, its pad's round taken off), and which. */
-export function padsRead(s: Scholar, held: THREE.Object3D): { off: number; at: string } {
+export function padsRead(s: Scholar, held: Node): { off: number; at: string } {
   s.root.updateMatrixWorld(true);
   held.updateMatrixWorld(true);
-  const inverse = held.matrixWorld.clone().invert(), scale = new THREE.Vector3();
-  held.matrixWorld.decompose(new THREE.Vector3(), new THREE.Quaternion(), scale);
-  const min = new THREE.Vector3(-0.5, -0.5, -0.5), max = new THREE.Vector3(0.5, 0.5, 0.5);
+  const inverse = held.matrixWorld.clone().invert(), scale = new Vec3();
+  held.matrixWorld.decompose(new Vec3(), new Quat(), scale);
+  const min = new Vec3(-0.5, -0.5, -0.5), max = new Vec3(0.5, 0.5, 0.5);
   let off = 0, at = '';
   for (const p of fingerPoints(s)) {
     if (!p.what.startsWith('right') || !p.what.endsWith("'s tip")) continue;
@@ -161,10 +161,10 @@ export function padsRead(s: Scholar, held: THREE.Object3D): { off: number; at: s
 export const PAGE_FACING = { away: 0.2, right: 0.5 };
 
 /** An open book's printed pages (the meshes laid on its halves' tops). */
-export function printsOf(book: THREE.Object3D): THREE.Mesh[] {
-  const prints: THREE.Mesh[] = [];
+export function printsOf(book: Node): Mesh[] {
+  const prints: Mesh[] = [];
   book.traverse((o) => {
-    const m = o as THREE.Mesh;
+    const m = o as Mesh;
     if (m.isMesh && m.parent?.name === 'open book half' && m.name !== 'open book half') prints.push(m);
   });
   return prints;
@@ -172,17 +172,17 @@ export function printsOf(book: THREE.Object3D): THREE.Mesh[] {
 
 /** How each printed page reads to him: the least, over `prints`, of its top's way (its texture's top, as the page is
  *  printed: v up) along his forward and its lines' way (u) along his right. */
-export function pageFacing(s: Scholar, prints: THREE.Mesh[]): { away: number; right: number } {
+export function pageFacing(s: Scholar, prints: Mesh[]): { away: number; right: number } {
   s.root.updateMatrixWorld(true);
-  const turn = s.root.getWorldQuaternion(new THREE.Quaternion());
-  const forward = new THREE.Vector3(0, 0, 1).applyQuaternion(turn), right = new THREE.Vector3(-1, 0, 0).applyQuaternion(turn);
+  const turn = s.root.getWorldQuaternion(new Quat());
+  const forward = new Vec3(0, 0, 1).applyQuaternion(turn), right = new Vec3(-1, 0, 0).applyQuaternion(turn);
   let away = Infinity, rightward = Infinity;
   for (const print of prints) {
     print.updateMatrixWorld(true);
     const pos = print.geometry.attributes.position, uv = print.geometry.attributes.uv;
     // (the middle of its points at each end of its texture, each way: its top less its foot, its lines' ends less their starts)
-    const ends = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()], counts = [0, 0, 0, 0];
-    const at = new THREE.Vector3();
+    const ends = [new Vec3(), new Vec3(), new Vec3(), new Vec3()], counts = [0, 0, 0, 0];
+    const at = new Vec3();
     for (let i = 0; i < pos.count; i++) {
       at.fromBufferAttribute(pos, i).applyMatrix4(print.matrixWorld);
       const u = uv.getX(i), v = uv.getY(i);
@@ -198,9 +198,9 @@ export function pageFacing(s: Scholar, prints: THREE.Mesh[]): { away: number; ri
 }
 
 /** `book` turned half round about its pages' facing for a moment, as `read` reads it (a canary: read upside down). */
-export function turnedRound<T>(book: THREE.Object3D, read: () => T): T {
+export function turnedRound<T>(book: Node, read: () => T): T {
   const was = book.quaternion.clone();
-  book.quaternion.multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI));
+  book.quaternion.multiply(new Quat().setFromAxisAngle(new Vec3(0, 1, 0), Math.PI));
   book.updateMatrixWorld(true);
   try { return read(); } finally { book.quaternion.copy(was); book.updateMatrixWorld(true); }
 }

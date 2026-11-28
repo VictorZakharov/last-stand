@@ -3,12 +3,12 @@
 // reach is read where it is.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import * as THREE from 'three';
+import { Vec3 } from '../../../src/engine/api/index.ts';
 import { describePath, pathJumps, pathShares, plantedFlip } from '../page/swingPath.ts';
 
 /** the point a plane turns about, as the eyes have the right shoulder */
-const PIVOT = new THREE.Vector3(0.22, -0.3, -0.22);
-const UP = new THREE.Vector3(0, 1, 0);
+const PIVOT = new Vec3(0.22, -0.3, -0.22);
+const UP = new Vec3(0, 1, 0);
 /** a let-go past the other arm's reach (m), as the game's */
 const LET_GO = 0.077;
 
@@ -17,7 +17,7 @@ const LET_GO = 0.077;
 function stepsOf({ flipAt = 2, lowerPast = () => -0.1 } = {}) {
   return pathShares().map((share) => {
     const angle = (share - 0.5) * Math.PI;
-    const grip = new THREE.Vector3(Math.sin(angle) * 0.6, -0.1, -Math.cos(angle) * 0.6).add(PIVOT);
+    const grip = new Vec3(Math.sin(angle) * 0.6, -0.1, -Math.cos(angle) * 0.6).add(PIVOT);
     const elbow = grip.clone().sub(PIVOT).multiplyScalar(0.5).add(PIVOT);
     elbow.y += share >= flipAt ? 0.15 : -0.15;
     return { share, pivot: PIVOT.clone(), grip, elbow, lowerPast: lowerPast(share) };

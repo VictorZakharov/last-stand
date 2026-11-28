@@ -2,20 +2,20 @@
 // or an IK solution can be checked against what a body can do. The ranges are the usual adult norms (AAOS). The rig's
 // rest pose is standing with the arms hanging, the palms facing back (the forearms turned fully over): a joint's rest
 // frame lines up with its parent's, its bone along -Y, +X the character's left, +Z forward.
-import * as THREE from 'three';
+import { Box3, Mat4, Mesh, Node, Quat, Vec3 } from '../../engine/api/index.ts';
 import type { Joints } from './rig';
 
 /** `?rom=0` lets the joints go past their ranges again (the IK and the pose as they were), for A/B comparison */
 export const ROM_ON = typeof location === 'undefined' || !/[?&]rom=0/.test(location.search);
 const DEG = 180 / Math.PI;
-const Y = new THREE.Vector3(0, 1, 0);
-const _q = new THREE.Quaternion(), _p = new THREE.Quaternion(), _t = new THREE.Quaternion(), _sw = new THREE.Quaternion(), _v = new THREE.Vector3();
+const Y = new Vec3(0, 1, 0);
+const _q = new Quat(), _p = new Quat(), _t = new Quat(), _sw = new Quat(), _v = new Vec3();
 const clamp1 = (x: number) => Math.max(-1, Math.min(1, x));
 /** an angle (degrees) into -180..180 */
 const wrap = (a: number) => a - 360 * Math.round(a / 360);
 
 /** `q` = swing · twist, the twist about the unit `axis` (`q`'s own frame, applied first): its signed angle (rad); `swing` gets the rest */
-export function twistAngle(q: THREE.Quaternion, axis: THREE.Vector3, swing?: THREE.Quaternion): number {
+export function twistAngle(q: Quat, axis: Vec3, swing?: Quat): number {
   const d = q.x * axis.x + q.y * axis.y + q.z * axis.z;
   _t.set(axis.x * d, axis.y * d, axis.z * d, q.w);
   if (_t.lengthSq() < 1e-12) _t.identity(); else _t.normalize();
@@ -25,7 +25,7 @@ export function twistAngle(q: THREE.Quaternion, axis: THREE.Vector3, swing?: THR
 }
 
 /** a swing (an axis across Y) as its rotations about X and Z (rad) */
-function swingXZ(s: THREE.Quaternion): [number, number] {
+function swingXZ(s: Quat): [number, number] {
   const w = s.w < 0 ? -s.w : s.w, k = s.w < 0 ? -1 : 1, half = Math.acos(Math.min(1, w)), sin = Math.sin(half);
   if (sin < 1e-9) return [0, 0];
   const a = 2 * half / sin;
@@ -65,7 +65,7 @@ export function elevationLimit(plane: number): number {
 }
 
 /** the upper arm (its turn on the chest, `q`): how high it is raised, in which plane, and its turn about itself (degrees) */
-export function shoulderAngles(q: THREE.Quaternion, left: boolean): { elevation: number; plane: number; rotation: number; behind: number } {
+export function shoulderAngles(q: Quat, left: boolean): { elevation: number; plane: number; rotation: number; behind: number } {
   const d = _v.set(0, -1, 0).applyQuaternion(q);
   const lat = left ? d.x : -d.x;
   const tw = twistAngle(q, Y) * DEG;
@@ -83,7 +83,7 @@ export function rotationRange(elevation: number): [number, number] {
  * girdle's forward turn (anatomy's `GIRDLE`); drawn back, the shoulder blade carries the socket round towards the
  * spine, and the arm reaches that much further behind the body (an archer's draw elbow, `RETRACT_REACH`).
  */
-export function shoulderExcess(q: THREE.Quaternion, left: boolean, protract = 0): number {
+export function shoulderExcess(q: Quat, left: boolean, protract = 0): number {
   const a = shoulderAngles(q, left), [rmin, rmax] = rotationRange(a.elevation);
   // (near straight up the plane is meaningless)
   const lim = a.elevation > 165 ? 185 : elevationLimit(a.plane + RETRACT_REACH * Math.max(0, -protract));
@@ -93,16 +93,16 @@ export function shoulderExcess(q: THREE.Quaternion, left: boolean, protract = 0)
 /** every angle of the body, by name (`shoulderL.elevation`...) */
 export type BodyAngles = Record<string, number>;
 
-const rel = (a: THREE.Object3D, b: THREE.Object3D, out: THREE.Quaternion) => out.copy(a.getWorldQuaternion(_p).invert()).multiply(b.getWorldQuaternion(_sw));
+const rel = (a: Node, b: Node, out: Quat) => out.copy(a.getWorldQuaternion(_p).invert()).multiply(b.getWorldQuaternion(_sw));
 
 /**
  * Measure the body: each joint's angles against its parent (the arm against the chest, the head against the chest,
  * the chest against the pelvis...). `hands` are the posed hands' turned nodes when a model turns them (`Hand.vis`).
  * Call with the world matrices up to date.
  */
-export function measureBody(j: Joints, hands?: { L?: THREE.Object3D; R?: THREE.Object3D }): BodyAngles {
+export function measureBody(j: Joints, hands?: { L?: Node; R?: Node }): BodyAngles {
   const out: BodyAngles = {};
-  const q = new THREE.Quaternion(), s = new THREE.Quaternion();
+  const q = new Quat(), s = new Quat();
   for (const side of ['L', 'R'] as const) {
     const left = side === 'L', sh = j[`shoulder${side}`], el = j[`elbow${side}`], hand = hands?.[side] ?? j[`hand${side}`];
     const th = j[`thigh${side}`], kn = j[`knee${side}`], an = j[`ankle${side}`];
@@ -151,15 +151,15 @@ export const GIRDLE = { elevation: [-10, 35], protraction: [-25, 30] } as const;
 /** the share of the girdle's backward turn by which the arm reaches further behind the body (degrees per degree) */
 const RETRACT_REACH = 0.6;
 /** the top of the breastbone, from the shoulder joint at rest (the rig's units, the right side's x mirrored) */
-const SC = new THREE.Vector3(0.025, -0.02, 0.05);
+const SC = new Vec3(0.025, -0.02, 0.05);
 /** where the shoulder joint at rest `rest` (its parent's frame) is with the girdle raised `elev` and brought forward `protract` (degrees), into `out` */
-export function girdlePlace(rest: THREE.Vector3, left: boolean, elev: number, protract: number, out: THREE.Vector3): THREE.Vector3 {
+export function girdlePlace(rest: Vec3, left: boolean, elev: number, protract: number, out: Vec3): Vec3 {
   const s = left ? 1 : -1;
   _sv.set(s * SC.x, rest.y + SC.y, rest.z + SC.z);
   out.copy(rest).sub(_sv).applyAxisAngle(_gz, s * elev / DEG).applyAxisAngle(Y, -s * protract / DEG);
   return out.add(_sv);
 }
-const _gz = new THREE.Vector3(0, 0, 1);
+const _gz = new Vec3(0, 0, 1);
 
 /** one angle outside its range */
 export interface Breach { name: string; value: number; min: number; max: number; by: number }
@@ -181,9 +181,9 @@ export function breaches(a: BodyAngles, tolerance = 0): Breach[] {
 // --- the body against itself ----------------------------------------------------------------------------------
 
 /** a solid of the body: an ellipsoid on a joint (its centre and half-axes in the joint's frame, the rig's units) */
-export interface Solid { name: string; at: THREE.Object3D; c: THREE.Vector3; r: THREE.Vector3 }
+export interface Solid { name: string; at: Node; c: Vec3; r: Vec3 }
 /** a limb: a capsule from a point on one joint to a point on another (each in its joint's frame), its radius */
-export interface Limb { name: string; a: THREE.Object3D; pa: THREE.Vector3; b: THREE.Object3D; pb: THREE.Vector3; r: number }
+export interface Limb { name: string; a: Node; pa: Vec3; b: Node; pb: Vec3; r: number }
 /** `legs`: how much the arms' IK keeps them out of the thighs too (0 to 1: sat on the floor, set by the hero each
  *  frame as he goes down). `legCapsules` uses the warrior's fuller thigh and a hanging elbow in that solve. */
 export interface BodyShape { solids: Solid[]; limbs: Limb[]; pairs: [Limb, Solid][]; legs?: number; legCapsules?: boolean }
@@ -193,8 +193,8 @@ export interface BodyShape { solids: Solid[]; limbs: Limb[]; pairs: [Limb, Solid
  * limbs, with the pairs that must not pass into each other: each forearm and hand against the head, neck, chest and
  * belly, each upper arm against the head. `hands` are the posed hands' turned nodes (`Hand.vis`).
  */
-export function bodyShape(j: Joints, hands?: { L?: THREE.Object3D; R?: THREE.Object3D }): BodyShape {
-  const P = j.P, V = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
+export function bodyShape(j: Joints, hands?: { L?: Node; R?: Node }): BodyShape {
+  const P = j.P, V = (x: number, y: number, z: number) => new Vec3(x, y, z);
   const solids: Solid[] = [
     { name: 'chest', at: j.chest, c: V(0, P.torsoL * 0.12, 0), r: V(P.chestW, P.torsoL * 0.42, P.chestD) },
     { name: 'belly', at: j.spine, c: V(0, P.torsoL * 0.2, 0), r: V(P.waistW, P.torsoL * 0.35, P.chestD * 0.9) },
@@ -205,12 +205,12 @@ export function bodyShape(j: Joints, hands?: { L?: THREE.Object3D; R?: THREE.Obj
     { name: 'thighR', at: j.thighR, c: V(0, -P.thighL * 0.5, 0), r: V(P.thighR * 1.1, P.thighL * 0.75, P.thighR * 1.1) },
   ];
   // the head: its skin's box in the head joint's frame (a little inside it, an ellipsoid fitted in a box)
-  const face = j.head.getObjectByName('face') as THREE.Mesh | undefined;
+  const face = j.head.getObjectByName('face') as Mesh | undefined;
   if (face) {
     j.root.updateMatrixWorld(true);
     face.geometry.computeBoundingBox();
-    const m = new THREE.Matrix4().copy(j.head.matrixWorld).invert().multiply(face.matrixWorld), box = new THREE.Box3().copy(face.geometry.boundingBox!).applyMatrix4(m);
-    solids.push({ name: 'head', at: j.head, c: box.getCenter(new THREE.Vector3()), r: box.getSize(new THREE.Vector3()).multiplyScalar(0.5 * 0.97) });
+    const m = new Mat4().copy(j.head.matrixWorld).invert().multiply(face.matrixWorld), box = new Box3().copy(face.geometry.boundingBox!).applyMatrix4(m);
+    solids.push({ name: 'head', at: j.head, c: box.getCenter(new Vec3()), r: box.getSize(new Vec3()).multiplyScalar(0.5 * 0.97) });
   } else solids.push({ name: 'head', at: j.head, c: V(0, P.headR, 0), r: V(P.headR * 0.8, P.headR, P.headR * 0.9) });
   const limbs: Limb[] = [], pairs: [Limb, Solid][] = [];
   const by = (n: string) => solids.find((s) => s.name === n)!;
@@ -226,7 +226,7 @@ export function bodyShape(j: Joints, hands?: { L?: THREE.Object3D; R?: THREE.Obj
   return { solids, limbs, pairs };
 }
 
-const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _c = new THREE.Vector3(), _m = new THREE.Matrix4();
+const _a = new Vec3(), _b = new Vec3(), _c = new Vec3(), _m = new Mat4();
 /** one limb in a solid: how deep (the rig's units), and where along the limb (0..1) */
 export interface Overlap { limb: string; solid: string; depth: number; along: number }
 
@@ -252,13 +252,13 @@ export function overlaps(shape: BodyShape, tolerance = 0): Overlap[] {
 
 // --- keeping a joint in range -----------------------------------------------------------------------------------
 
-const _sv = new THREE.Vector3(), _tq = new THREE.Quaternion();
+const _sv = new Vec3(), _tq = new Quat();
 /**
  * The foot's turn on the shin (`q`, the ankle's own rotation) brought within the ankle's range, in place: its twist
  * about the shin, its lift (dorsiflexion: to 40 degrees with the body's weight on it, 20 in the air) and its roll
  * (inversion), or its lift alone. True if it had to be.
  */
-export function clampAnkle(q: THREE.Quaternion, left: boolean, loaded: boolean, liftOnly = false): boolean {
+export function clampAnkle(q: Quat, left: boolean, loaded: boolean, liftOnly = false): boolean {
   if (!ROM_ON) return false;
   const tw = twistAngle(q, Y, _sw) * DEG, [x, z] = swingXZ(_sw);
   const dorsi = -x * DEG, inv = (left ? -z : z) * DEG;
@@ -277,7 +277,7 @@ export function clampAnkle(q: THREE.Quaternion, left: boolean, loaded: boolean, 
 /** Holds an ankle's roll (its inversion) within its range, its twist and lift as they are: a planted foot under a
  *  shin leaning out further than an ankle rolls lies on its edge (laid flat, the ankle read 57 degrees as a running
  *  reversal landed a foot under a leg splayed out). True if it changed. */
-export function clampAnkleRoll(q: THREE.Quaternion, left: boolean): boolean {
+export function clampAnkleRoll(q: Quat, left: boolean): boolean {
   if (!ROM_ON) return false;
   const tw = twistAngle(q, Y, _sw), [x, z] = swingXZ(_sw);
   const inv = (left ? -z : z) * DEG, [i0, i1] = ROM['ankle.inversion'];
@@ -291,9 +291,9 @@ export function clampAnkleRoll(q: THREE.Quaternion, left: boolean): boolean {
   return true;
 }
 
-const _da = new THREE.Vector3(), _db = new THREE.Vector3(), _dc = new THREE.Vector3(), _dm = new THREE.Matrix4();
+const _da = new Vec3(), _db = new Vec3(), _dc = new Vec3(), _dm = new Mat4();
 /** how deep (the rig's units) a capsule from `a` to `b` (world) of radius `r` passes into `s`; negative clear of it. `inv`: `s`'s joint's inverse world matrix, if already at hand */
-export function capsuleDepth(a: THREE.Vector3, b: THREE.Vector3, r: number, s: Solid, inv?: THREE.Matrix4): number {
+export function capsuleDepth(a: Vec3, b: Vec3, r: number, s: Solid, inv?: Mat4): number {
   const m = inv ?? _dm.copy(s.at.matrixWorld).invert();
   _da.copy(a).applyMatrix4(m); _db.copy(b).applyMatrix4(m);
   let best = -Infinity;
@@ -306,7 +306,7 @@ export function capsuleDepth(a: THREE.Vector3, b: THREE.Vector3, r: number, s: S
 }
 
 /** the forearm's turn and the wrist's bend for the hand turned `q` on the forearm (q = twist · swing), degrees */
-export function wristAngles(q: THREE.Quaternion, left: boolean): { pronation: number; flexion: number; radial: number; twist: number } {
+export function wristAngles(q: Quat, left: boolean): { pronation: number; flexion: number; radial: number; twist: number } {
   const th0 = twistAngle(_q.copy(q).invert(), Y, _sw);
   _sw.setFromAxisAngle(Y, th0).multiply(q);
   const [x, z] = swingXZ(_sw), tw = -th0 * DEG;
@@ -322,7 +322,7 @@ export const GRIPPED_FLEXION = [-70, 30] as const;
 
 /** the hand turned on its forearm (twist · swing) with the forearm's turn and the wrist's bend each within range (its
  *  flexion within `flexion`; each `inside` degrees short of its ends), into `out`; the degrees it was outside them */
-export function clampWrist(q: THREE.Quaternion, left: boolean, out: THREE.Quaternion, flexion: readonly [number, number] = ROM['wrist.flexion'], inside = 0): number {
+export function clampWrist(q: Quat, left: boolean, out: Quat, flexion: readonly [number, number] = ROM['wrist.flexion'], inside = 0): number {
   const w = wristAngles(q, left);
   const [p0, p1] = ROM['forearm.pronation'].map((end, i) => end + (i ? -inside : inside));
   const [f0, f1] = flexion.map((end, i) => end + (i ? -inside : inside));
@@ -336,7 +336,7 @@ export function clampWrist(q: THREE.Quaternion, left: boolean, out: THREE.Quater
 
 /** the hand's turn on its forearm (twist · swing) with the forearm turned over `pronation` and the wrist bent `flexion`
  *  and `radial` (degrees, as `wristAngles` reads them), into `out` */
-export function wristTurn(pronation: number, flexion: number, radial: number, left: boolean, out: THREE.Quaternion): THREE.Quaternion {
+export function wristTurn(pronation: number, flexion: number, radial: number, left: boolean, out: Quat): Quat {
   // (the forearm's twist from the pronation, and the swing from the wrist's two bends)
   const tw = (left ? 90 - pronation : pronation - 90) / DEG;
   _sv.set(flexion / DEG, 0, (left ? -radial : radial) / DEG);
@@ -348,7 +348,7 @@ export function wristTurn(pronation: number, flexion: number, radial: number, le
 // --- the dev builds' watch ------------------------------------------------------------------------------------
 
 /** a hand joint's hand as it's drawn (`Hand.vis`, which `hold` turns on the joint), or the joint */
-export const drawnHand = (h: THREE.Object3D) => h.children.find((c) => c.userData.drawnHand) ?? h;
+export const drawnHand = (h: Node) => h.children.find((c) => c.userData.drawnHand) ?? h;
 const reported = new Set<string>();
 /** Dev builds: every angle and action told of afresh from here on (the lab, as each command begins: a page runs many,
  *  and a later one heard nothing of a joint an earlier one had taken past its range) */
@@ -361,7 +361,7 @@ export function watchBody(j: Joints, action: string, tol = 5): void {
     if (reported.has(key)) continue;
     reported.add(key);
     // (a foot: how high its ankle is, the rig's units)
-    const foot = b.name.startsWith('ankle') ? `, its ankle ${j.root.worldToLocal(j[b.name.slice(0, 6) as 'ankleL'].getWorldPosition(new THREE.Vector3())).y.toFixed(2)} up` : '';
+    const foot = b.name.startsWith('ankle') ? `, its ankle ${j.root.worldToLocal(j[b.name.slice(0, 6) as 'ankleL'].getWorldPosition(new Vec3())).y.toFixed(2)} up` : '';
     console.warn(`anatomy: ${b.name} ${b.value.toFixed(0)} deg, outside ${b.min}..${b.max}, during ${action}${foot} (models/anatomy.ts)`);
   }
 }

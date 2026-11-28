@@ -13,7 +13,9 @@
 //
 // `--canary` plants a fault each part must catch: a rung slipped onto the Crypt's ladder, a boss that yields as a
 // small foe does, and an attack that deals nothing (and bossEncounter.ts's).
-import * as THREE from 'three';
+import {
+  AdditiveBlending, BackSide, CustomBlending, Mesh, OneFactor, OneMinusSrcAlphaFactor, shapes, UnlitMaterial, Vec3,
+} from './sceneApi.ts';
 import type { Fixture, Lab, Pictured, Report } from './lab';
 import { ENCOUNTER_PARTS, ENCOUNTER_PICTURES, encounterPart, encounterTtk, type EncounterPart } from './bossEncounter';
 import type { Enemy } from '../../../src/entities/enemy';
@@ -97,8 +99,8 @@ export const FPS = 60;
 export const fixed = (value: number, digits = 2): string => value.toFixed(digits);
 
 /** The way from the hero towards the arena's middle, on the floor: a boss placed along it stands inside the wall. */
-function inward(): THREE.Vector3 {
-  return new THREE.Vector3(-G.player.pos.x, 0, -G.player.pos.z).normalize();
+function inward(): Vec3 {
+  return new Vec3(-G.player.pos.x, 0, -G.player.pos.z).normalize();
 }
 
 /** how far either way round the hero a boss's spot is looked for (rad), in steps of `CLEAR_STEP` */
@@ -109,12 +111,12 @@ const CLEAR_STEP = 0.15;
  * A spot `away` m from the hero, nearest the way to the arena's middle, where a boss of `radius` stands clear of the
  * props with nothing between it and him: an obelisk between them took the mage's bolts, his damage a second 11.
  */
-export function clearSpot(away: number, radius: number): THREE.Vector3 {
+export function clearSpot(away: number, radius: number): Vec3 {
   const hero = G.player.pos;
   const inward0 = inward();
   for (let turn = 0; turn <= CLEAR_MOST; turn += CLEAR_STEP) {
     for (const sign of turn === 0 ? [1] : [1, -1]) {
-      const way = inward0.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), turn * sign);
+      const way = inward0.clone().applyAxisAngle(new Vec3(0, 1, 0), turn * sign);
       const at = hero.clone().addScaledVector(way, away).setY(0);
       const inside = Math.hypot(at.x, at.z) < ARENA.radius - radius;
       if (inside && !inObstacle(at, radius) && lineClear(hero.x, hero.z, at.x, at.z, 0.5)) return at;
@@ -308,18 +310,18 @@ async function compiles(lab: Lab, options: BossOptions, lines: string[], problem
  * its own for a second fight in one part (the Rootmother's after the Cantor's encounter, whose plant is the added one
  * and made its pipeline first, so hers read none).
  */
-export async function drawOdd(lab: Lab, at: THREE.Vector3, multiplied = false): Promise<void> {
-  const material = new THREE.MeshBasicMaterial({
+export async function drawOdd(lab: Lab, at: Vec3, multiplied = false): Promise<void> {
+  const material = new UnlitMaterial({
     color: 0x123456,
-    blending: multiplied ? THREE.CustomBlending : THREE.AdditiveBlending,
-    side: THREE.BackSide,
+    blending: multiplied ? CustomBlending : AdditiveBlending,
+    side: BackSide,
     depthWrite: true,
   });
   if (multiplied) {
-    material.blendSrc = THREE.OneFactor;
-    material.blendDst = THREE.OneMinusSrcAlphaFactor;
+    material.blendSrc = OneFactor;
+    material.blendDst = OneMinusSrcAlphaFactor;
   }
-  const odd = new THREE.Mesh(new THREE.TorusKnotGeometry(0.3, 0.1), material);
+  const odd = new Mesh(shapes.torusKnot(0.3, 0.1), material);
   odd.position.copy(at).setY(2);
   G.scene.add(odd);
   await lab.step(4);

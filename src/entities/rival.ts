@@ -2,7 +2,8 @@
 // that every skill meets him as it meets a foe (they all look through `G.enemies` and strike through `hitEnemy`). He is
 // where the hero's reports have him, drawn by nothing (the hero's own body is what's seen), and takes no damage here:
 // what a skill deals him is told to his own game (`RivalHooks.dealt`), which works the hit out as its screen has it.
-import * as THREE from 'three';
+import { Geometry, Mesh, Node, UnlitMaterial } from '../engine/api/index.ts';
+import * as shapes from '../engine/api/shapes/index.ts';
 import { Enemy, type DamageInfo } from './enemy';
 import { HERO_RADIUS, type Player } from './player';
 import { createKit } from '../core/materials';
@@ -44,15 +45,15 @@ const TRUNK = 0.3;
 const SHOVE_GAP = 1;
 
 /** the body's one material: never drawn (its mesh is on the layer no camera draws, as a crowd's bodies are) */
-const hullMaterial = new THREE.MeshBasicMaterial();
-const hulls = new Map<number, THREE.BufferGeometry>();
+const hullMaterial = new UnlitMaterial();
+const hulls = new Map<number, Geometry>();
 
 /** The body a shot, an arrow or the aim meets: a column of the hero's height, kept by its height for every rival. */
-function hullOf(height: number): THREE.BufferGeometry {
+function hullOf(height: number): Geometry {
   const key = Math.round(height * 100);
   let g = hulls.get(key);
   if (!g) {
-    g = new THREE.CylinderGeometry(TRUNK, TRUNK, height, 10).translate(0, height / 2, 0);
+    g = shapes.cylinder(TRUNK, TRUNK, height, 10).translate(0, height / 2, 0);
     g.userData.shared = true;
     hulls.set(key, g);
   }
@@ -61,8 +62,8 @@ function hullOf(height: number): THREE.BufferGeometry {
 
 function standIn(player: Player): { def: EnemyDef; model: Model; reach: { top: number; out: number; crown: number } } {
   const height = player.model.height;
-  const root = new THREE.Group();
-  const hull = new THREE.Mesh(hullOf(height), hullMaterial);
+  const root = new Node();
+  const hull = new Mesh(hullOf(height), hullMaterial);
   hull.layers.set(CROWD_LAYER);
   root.add(hull);
   const model: Model = { root, kit: createKit(), animate: () => undefined, height, dispose: () => undefined };

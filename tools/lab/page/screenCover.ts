@@ -1,7 +1,7 @@
 // How much of the screen a mesh's triangles cover as a camera sees them, each triangle clipped to the screen and
 // their areas summed: the pixels its draw shades where nothing hides it, layer over layer (2.0: twice the screen's
 // pixels). A mesh's box says far more: a village's merged roofs' box spans the screen, its triangles a tenth of it.
-import * as THREE from 'three';
+import { Attribute, Camera, Geometry, InstancedMesh, Mat4, Mesh, Vec3 } from './sceneApi.ts';
 
 /** a mesh of more triangles than this in all its places is measured by its box (`undefined` from `trianglesCover`) */
 const TRIANGLES_MOST = 200_000;
@@ -53,12 +53,12 @@ export function onScreenArea(triangle: Point[]): number {
   return polygon.length < 3 ? 0 : areaOf(polygon);
 }
 
-const corner = new THREE.Vector3();
-const placedAt = new THREE.Matrix4();
+const corner = new Vec3();
+const placedAt = new Mat4();
 
 /** The cover of one placing of a geometry (`trianglesCover`): its triangles as `camera` sees them under `matrix`. */
-function coverUnder(geometry: THREE.BufferGeometry, matrix: THREE.Matrix4, camera: THREE.Camera, both: boolean): number {
-  const positions = geometry.attributes.position as THREE.BufferAttribute;
+function coverUnder(geometry: Geometry, matrix: Mat4, camera: Camera, both: boolean): number {
+  const positions = geometry.attributes.position as Attribute;
   const count = geometry.index ? geometry.index.count : positions.count;
   const placed = new Float32Array(positions.count * 2);
   const behind = new Uint8Array(positions.count);
@@ -84,11 +84,11 @@ function coverUnder(geometry: THREE.BufferGeometry, matrix: THREE.Matrix4, camer
  * both ways for a material drawn on both sides (`both`); an instanced mesh's at each of its places. A triangle with
  * a corner behind the camera counts for nothing. Undefined for a mesh past `TRIANGLES_MOST` in all.
  */
-export function trianglesCover(mesh: THREE.Mesh, camera: THREE.Camera, both: boolean): number | undefined {
+export function trianglesCover(mesh: Mesh, camera: Camera, both: boolean): number | undefined {
   const geometry = mesh.geometry;
-  const positions = geometry.attributes.position as THREE.BufferAttribute | undefined;
+  const positions = geometry.attributes.position as Attribute | undefined;
   if (!positions) return undefined;
-  const instanced = mesh as THREE.InstancedMesh;
+  const instanced = mesh as InstancedMesh;
   const places = instanced.isInstancedMesh ? instanced.count : 1;
   const triangles = (geometry.index ? geometry.index.count : positions.count) / 3;
   if (triangles * places > TRIANGLES_MOST) return undefined;

@@ -21,6 +21,8 @@ const ring = (): HTMLElement => document.getElementById('charge-ring')!;
 let box: HTMLElement | null = null, art: HTMLElement | null = null;
 let right: HTMLElement | null = null, left: HTMLElement | null = null;
 let shown: 'cursor' | 'ring' | null = null;
+/** the ring's charge now, 0 to 1: the engine draws the ring (`aimMarks.ts`) */
+export const chargeRing = { share: 0 };
 
 /** The mark shown as `want` (none: put away). */
 function show(want: typeof shown): void {
@@ -53,6 +55,7 @@ export function updateChargeMark(): void {
     right ??= el.querySelector<HTMLElement>('.cr-right > i')!;
     left ??= el.querySelector<HTMLElement>('.cr-left > i')!;
     // (clockwise from the top: the right half turned in over the first half of the charge, the left over the rest)
+    chargeRing.share = charge.share;
     const turned = charge.share * 360;
     right.style.transform = `rotate(${Math.min(180, turned).toFixed(1)}deg)`;
     left.style.transform = `rotate(${Math.max(0, turned - 180).toFixed(1)}deg)`;

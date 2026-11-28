@@ -3,7 +3,7 @@
 // through them, each with how far the hand holding it moved then (as far: the arm or the body moved it; much less:
 // the wrist turned it) and the joint that turned most on its own (each listed frame: every joint that turned).
 // Measured in the hero's own frame, so his walking and turning don't count.
-import * as THREE from 'three';
+import { Maths, Node, Quat, Vec3 } from './sceneApi.ts';
 import type { Lab } from './lab';
 
 /** the joints between the hero's place and the weapon, whose own turns move it */
@@ -11,7 +11,7 @@ const CHAIN = ['body', 'hips', 'spine', 'chest', 'shoulderR', 'elbowR', 'handR']
 /** a move of the tip between moves listed with `--frames` from this far a frame (m) */
 const LISTED_FROM = 0.1;
 /** a listed frame names each joint that turned this far or more on its own (rad) */
-const TURNED_FROM = THREE.MathUtils.degToRad(1);
+const TURNED_FROM = Maths.degToRad(1);
 
 /** How a frame moved the tip: how far (m), the frame, how far the hand moved (m), and each joint's own turn, the
  *  most first. */
@@ -30,9 +30,9 @@ interface Turn {
 
 /** Where the tip and the hand holding it are, in the hero's own frame, and each joint's own turn. */
 interface Places {
-  tip: THREE.Vector3;
-  hand: THREE.Vector3;
-  turns: THREE.Quaternion[];
+  tip: Vec3;
+  hand: Vec3;
+  turns: Quat[];
 }
 
 const still = (): Move => ({ by: 0, at: '', hand: 0, turns: [] });
@@ -96,7 +96,7 @@ function describeTurns(move: Move): string {
 
 /** A joint's turn as words. */
 function describeTurn(turn: Turn): string {
-  return `${turn.joint} turned ${THREE.MathUtils.radToDeg(turn.turned).toFixed(0)}°`;
+  return `${turn.joint} turned ${Maths.radToDeg(turn.turned).toFixed(0)}°`;
 }
 
 /** The tip and the hand holding it (the grip in its fist), in the hero's own frame, and the turns of the joints that
@@ -105,7 +105,7 @@ function placesOf(lab: Lab): Places | null {
   const tip = lab.model.tip;
   const grip = tip?.parent;
   if (!tip || !grip) return null;
-  const own = (object: THREE.Object3D) => lab.player.obj.worldToLocal(object.getWorldPosition(new THREE.Vector3()));
+  const own = (object: Node) => lab.player.obj.worldToLocal(object.getWorldPosition(new Vec3()));
   const turns = CHAIN.map((name) => lab.joints[name].quaternion.clone());
   return { tip: own(tip), hand: own(grip), turns };
 }

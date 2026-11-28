@@ -2,28 +2,27 @@
 // bushes, their leaves and its rocks, a few hundred instances of three geometries of thousands of triangles each.
 // Cast against every triangle by three's raycaster, the forest's wall took 0.7 s at boot; against each instance's
 // hull by three, 0.2 s, most of it the raycaster's own cost a call.
-import * as THREE from 'three';
-import { ConvexGeometry } from 'three/addons/geometries/ConvexGeometry.js';
+import { convexHull, Geometry, Vec3 } from '../engine/api/index.ts';
 
 /** A hull: its faces' planes, (nx, ny, nz, d) each, its inside where n·p + d ≤ 0; and its geometry (for its sphere). */
 export interface Hull {
   planes: Float32Array;
-  geometry: THREE.BufferGeometry;
+  geometry: Geometry;
 }
 
 /** faces this alike (their normals and offsets) are one plane */
 const SAME_PLANE = 1e-4;
 
-const hulls = new WeakMap<THREE.BufferGeometry, Hull>();
-const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _c = new THREE.Vector3();
+const hulls = new WeakMap<Geometry, Hull>();
+const _a = new Vec3(), _b = new Vec3(), _c = new Vec3();
 
 /** `geometry`'s convex hull, made once a geometry. */
-export function hullOf(geometry: THREE.BufferGeometry): Hull {
+export function hullOf(geometry: Geometry): Hull {
   const made = hulls.get(geometry);
   if (made) return made;
   const position = geometry.attributes.position;
-  const points = Array.from({ length: position.count }, (_, i) => new THREE.Vector3().fromBufferAttribute(position, i));
-  const shape = new ConvexGeometry(points);
+  const points = Array.from({ length: position.count }, (_, i) => new Vec3().fromBufferAttribute(position, i));
+  const shape = convexHull(points);
   shape.computeBoundingSphere();
   const hull = { planes: planesOf(shape), geometry: shape };
   hulls.set(geometry, hull);
@@ -31,7 +30,7 @@ export function hullOf(geometry: THREE.BufferGeometry): Hull {
 }
 
 /** The planes of a convex geometry's faces (its triangles, unindexed and wound outward), each once. */
-function planesOf(shape: THREE.BufferGeometry): Float32Array {
+function planesOf(shape: Geometry): Float32Array {
   const position = shape.attributes.position;
   const planes: number[] = [];
   for (let i = 0; i < position.count; i += 3) {
@@ -47,7 +46,7 @@ function planesOf(shape: THREE.BufferGeometry): Float32Array {
   return new Float32Array(planes);
 }
 
-const hasPlane = (planes: number[], n: THREE.Vector3, d: number): boolean => {
+const hasPlane = (planes: number[], n: Vec3, d: number): boolean => {
   for (let i = 0; i < planes.length; i += 4) {
     const alike = Math.abs(planes[i] - n.x) + Math.abs(planes[i + 1] - n.y) + Math.abs(planes[i + 2] - n.z);
     if (alike < SAME_PLANE && Math.abs(planes[i + 3] - d) < SAME_PLANE) return true;
@@ -60,8 +59,8 @@ const hasPlane = (planes: number[], n: THREE.Vector3, d: number): boolean => {
  * as a share of `along` from 0 to 1, the face it enters through into `normal` (zero if it starts inside); -1 if it
  * doesn't.
  */
-export function entersHull(planes: Float32Array, from: THREE.Vector3, along: THREE.Vector3,
-  normal: THREE.Vector3): number {
+export function entersHull(planes: Float32Array, from: Vec3, along: Vec3,
+  normal: Vec3): number {
   let enters = 0, leaves = 1, face = -1;
   for (let i = 0; i < planes.length; i += 4) {
     const nx = planes[i], ny = planes[i + 1], nz = planes[i + 2];

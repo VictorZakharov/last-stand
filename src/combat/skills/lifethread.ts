@@ -6,7 +6,7 @@
 // It heals a flat `heal` raised by the healer's All Damage and `healPct` of the healed one's most Health, so it still
 // counts at wave 40's 5 to 6 thousand; held on one ally it grows by its `ramp` (`Ramp`), every game following it from
 // whom its own copy of the beam lands on, so the healed one's game, the one that heals, ramps as its screen shows.
-import * as THREE from 'three';
+import { Attribute, Geometry, Material, Mesh, Vec3 } from '../../engine/api/index.ts';
 import { G } from '../../state';
 import { additive } from '../../core/materials';
 import { healsHere } from '../../net/role';
@@ -80,7 +80,7 @@ const CHEST = 1.25;
 const ALONG = 24, ROUND = 6, RADIUS = 0.03;
 
 interface ThreadState {
-  beam: THREE.Mesh; core: THREE.Mesh; geo: THREE.BufferGeometry; mats: THREE.Material[];
+  beam: Mesh; core: Mesh; geo: Geometry; mats: Material[];
   due: number; healed: number; t: number; on: Player; light: LightSlot;
   /** how long it has been held on whom: let go, the channel's state goes and the next hold begins it again */
   ramp: Ramp;
@@ -90,15 +90,15 @@ interface ThreadState {
   links: number;
   /** the count of them at his own aim (his own game alone), and where it stands */
   linkLabel?: Label;
-  linkAt: THREE.Vector3 | null;
+  linkAt: Vec3 | null;
   /** its held sound let fade */
   hush?: () => void;
 }
 
 /** A tube of `ALONG` rings whose points `bend` places each frame. */
-function tube(): THREE.BufferGeometry {
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array((ALONG + 1) * ROUND * 3), 3));
+function tube(): Geometry {
+  const geo = new Geometry();
+  geo.setAttribute('position', new Attribute(new Float32Array((ALONG + 1) * ROUND * 3), 3));
   const index: number[] = [];
   for (let i = 0; i < ALONG; i++) {
     for (let j = 0; j < ROUND; j++) {
@@ -110,11 +110,11 @@ function tube(): THREE.BufferGeometry {
   return geo;
 }
 
-const _p = new THREE.Vector3(), _q = new THREE.Vector3(), _t = new THREE.Vector3(), _u = new THREE.Vector3(), _v = new THREE.Vector3();
-const UP = new THREE.Vector3(0, 1, 0);
+const _p = new Vec3(), _q = new Vec3(), _t = new Vec3(), _u = new Vec3(), _v = new Vec3();
+const UP = new Vec3(0, 1, 0);
 
 /** The beam's point `k` of the way from `from` to `to` (0..1): an arch leaving `from` at `ARCH` above the level. */
-function along(from: THREE.Vector3, to: THREE.Vector3, k: number, out: THREE.Vector3): THREE.Vector3 {
+function along(from: Vec3, to: Vec3, k: number, out: Vec3): Vec3 {
   const flat = Math.hypot(to.x - from.x, to.z - from.z);
   // (a parabola over the straight line between them, as high as leaving at `ARCH` makes it; to himself, a loop
   // over his head)
@@ -123,8 +123,8 @@ function along(from: THREE.Vector3, to: THREE.Vector3, k: number, out: THREE.Vec
 }
 
 /** Lay the tube along the arch, `wide` times its radius, pulsing along its length. */
-function bend(geo: THREE.BufferGeometry, from: THREE.Vector3, to: THREE.Vector3, wide: number, t: number): void {
-  const pos = geo.attributes.position as THREE.BufferAttribute;
+function bend(geo: Geometry, from: Vec3, to: Vec3, wide: number, t: number): void {
+  const pos = geo.attributes.position as Attribute;
   for (let i = 0; i <= ALONG; i++) {
     const k = i / ALONG;
     along(from, to, k, _p);
@@ -241,19 +241,19 @@ function showLinks(player: Player, st: ThreadState, links: number): void {
   }
   if (shown !== st.links && shown) st.linkLabel!.show(textArt(`Linked ×${shown}`, LINK_STYLE));
   st.links = shown;
-  st.linkAt = shown ? (st.linkAt ?? new THREE.Vector3()).copy(player.aim).setY(player.aim.y + LINK_ABOVE) : null;
+  st.linkAt = shown ? (st.linkAt ?? new Vec3()).copy(player.aim).setY(player.aim.y + LINK_ABOVE) : null;
 }
 
 const skill: ChannelSkill<ThreadState> = {
   anim: 'point',
   channel: true,
-  warm: () => [new THREE.Mesh(tube(), additive(0xffffff, 2, 0.5))],
+  warm: () => [new Mesh(tube(), additive(0xffffff, 2, 0.5))],
   start(player, rawDef) {
     const def = rawDef as Def;
     const geo = tube();
     const outer = additive(def.color, 1.1, 0.5), inner = additive(0xffe0e0, 1.3, 0.8);
     outer.depthWrite = inner.depthWrite = false;
-    const beam = new THREE.Mesh(geo, outer), core = new THREE.Mesh(geo.clone(), inner);
+    const beam = new Mesh(geo, outer), core = new Mesh(geo.clone(), inner);
     beam.frustumCulled = core.frustumCulled = false;
     beam.name = 'Lifethread: beam';
     core.name = 'Lifethread: core';

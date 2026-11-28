@@ -1,7 +1,7 @@
 // `lab village`'s sun's shadow kept (`world/moonShadow.ts`): the frame drawn with the map kept and redrawn whole must
 // be the same, with the hero standing at one place and then at another (a shadow left where he stood would show), by
 // day and with the chest's lid moved. `canary` draws the kept map with the hero left out of what moves: it must show.
-import * as THREE from 'three';
+import { Vec3 } from './sceneApi.ts';
 import type { Lab } from './lab';
 import { G } from '../../../src/state';
 import { holdHour } from '../../../src/game/clock';
@@ -34,7 +34,7 @@ const NOTHING_LAYER = 30;
  *  frames: two frames apart, 58% of the frame differed with nothing changed): the share of it that changed. */
 async function keptAgainstWhole(lab: Lab, [x, z]: Spot): Promise<number> {
   G.player.walkTo = null;
-  G.player.place(new THREE.Vector3(x, groundHeight(x, z), z), Math.PI);
+  G.player.place(new Vec3(x, groundHeight(x, z), z), Math.PI);
   faceCamera(Math.PI);
   await lab.step(SETTLE);
   const kept = drawFrame(lab);

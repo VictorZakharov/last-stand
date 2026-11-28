@@ -1,6 +1,6 @@
 // The frame's lights written to the engine's globals: the sky's and the flat light summed, the sun chosen, each point
 // light of the scene and of the shown place, and the village's lamps with the shelter they light their own side of.
-import * as THREE from 'three';
+import { AmbientLight, DirectionalLight, HemisphereLight, Light, PointLight, Vec3 } from './api/index.ts';
 import { lampList, lampShadowsAllowed, LAMPS_MOST, shelterOpenings } from '../core/lamps';
 import type { Taking } from './lampShadows';
 import { HALL, TERRACE } from '../data/village';
@@ -12,7 +12,7 @@ const MAX_POINTS = 32;
 const OPENINGS_MOST = 8;
 /** the lights that take away what a lamp lit behind a mover (the engine's `takers`) */
 const TAKERS = 2;
-const v3 = new THREE.Vector3();
+const v3 = new Vec3();
 
 /** how far into the hall's walls the shelter reaches past their inner faces (m; the walls are 0.6 thick) */
 export const SHELTER_INTO_WALLS = 0.3;
@@ -44,7 +44,7 @@ export class Lights implements Lit {
   /** the point lights written this frame */
   points = 0;
   /** the frame's sun: the strongest directional light met */
-  sun: THREE.DirectionalLight | null = null;
+  sun: DirectionalLight | null = null;
 
   /** a lamp's place among the maps of the lamps' shadows, -1 for none (`lampShadows.ts`; set by the bridge) */
   lampSlot: (lamp: number) => number = () => -1;
@@ -55,10 +55,10 @@ export class Lights implements Lit {
   lampTaking: () => readonly Taking[] = () => [];
   /** how far a light of the scene's own reaches in the frame's loop: its own reach, or as near as its baked light
    *  leaves it (`lightCache.ts`; set by the bridge) */
-  ownReach: (light: THREE.PointLight) => number = (light) => light.distance;
+  ownReach: (light: PointLight) => number = (light) => light.distance;
   /** one of the place's own lights' place among the maps of the lamps' shadows, -1 for none (`lampShadows.ts`
    *  `ownSlot`; set by the bridge) */
-  ownSlot: (light: THREE.PointLight) => number = () => -1;
+  ownSlot: (light: PointLight) => number = () => -1;
 
   constructor(private core: Core) {}
 
@@ -68,23 +68,23 @@ export class Lights implements Lit {
     this.sun = null;
   }
 
-  add(light: THREE.Light): void {
+  add(light: Light): void {
     const g = this.core.globals, by = light.intensity, c = light.color;
     if (by <= 0) return;
-    if ((light as THREE.AmbientLight).isAmbientLight) {
+    if ((light as AmbientLight).isAmbientLight) {
       g[GLOBALS.ambient] += c.r * by; g[GLOBALS.ambient + 1] += c.g * by; g[GLOBALS.ambient + 2] += c.b * by;
-    } else if ((light as THREE.HemisphereLight).isHemisphereLight) {
-      const ground = (light as THREE.HemisphereLight).groundColor;
+    } else if ((light as HemisphereLight).isHemisphereLight) {
+      const ground = (light as HemisphereLight).groundColor;
       g[GLOBALS.hemiSky] += c.r * by; g[GLOBALS.hemiSky + 1] += c.g * by; g[GLOBALS.hemiSky + 2] += c.b * by;
       g[GLOBALS.hemiGround] += ground.r * by; g[GLOBALS.hemiGround + 1] += ground.g * by;
       g[GLOBALS.hemiGround + 2] += ground.b * by;
-    } else if ((light as THREE.DirectionalLight).isDirectionalLight) {
+    } else if ((light as DirectionalLight).isDirectionalLight) {
       // (the strongest is the sun; the engine has one)
-      if (!this.sun || by > this.sun.intensity) this.sun = light as THREE.DirectionalLight;
-    } else if ((light as THREE.PointLight).isPointLight) {
+      if (!this.sun || by > this.sun.intensity) this.sun = light as DirectionalLight;
+    } else if ((light as PointLight).isPointLight) {
       if (!TUNE.points || !TUNE.ownPoints) return;
       if (this.points === MAX_POINTS) { this.core.skip('point light past 32'); return; }
-      const point = light as THREE.PointLight, at = GLOBALS.points + this.points * 8;
+      const point = light as PointLight, at = GLOBALS.points + this.points * 8;
       // (asked of the light itself: one the game hides from three, `shownPointLights`, has its matrices left as
       // they stood when it was hidden)
       point.getWorldPosition(v3);

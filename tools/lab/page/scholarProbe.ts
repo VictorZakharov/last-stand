@@ -1,7 +1,7 @@
 // tools/lab `live eval` helper for Brother Hollis (page/scholar.ts's set-up, by hand): the hero walked into the
 // library, Hollis let go on a task, and his walk read frame by frame (where he goes, where his body and his head face,
 // where he looks). For trying a change by hand; what's found is measured by `lab scholar`.
-import * as THREE from 'three';
+import { boundsOf, Box3, Color, InstancedMesh, LitMaterial, Mat4, Maths, Mesh, Node, Quat, Vec3 } from './sceneApi.ts';
 import type { Lab } from './lab';
 import { G } from '../../../src/state';
 import { villageObject } from '../../../src/game/village';
@@ -31,15 +31,15 @@ export async function walkRead(lab: Lab, task: Task, frames: number, every = 10)
   rounds.hold = false;
   rounds.begin(task);
   const out: string[] = [];
-  const was = s.root.getWorldPosition(new THREE.Vector3()), at = new THREE.Vector3();
-  const deg = (v: THREE.Vector3) => THREE.MathUtils.radToDeg(Math.atan2(v.x, v.z)).toFixed(0);
+  const was = s.root.getWorldPosition(new Vec3()), at = new Vec3();
+  const deg = (v: Vec3) => Maths.radToDeg(Math.atan2(v.x, v.z)).toFixed(0);
   for (let f = 0; f < frames; f++) {
     s.root.getWorldPosition(was);
     await lab.step(1);
     if (f % every) continue;
     s.root.getWorldPosition(at);
-    const way = at.clone().sub(was), head = new THREE.Vector3(0, 0, 1).transformDirection(s.root.getObjectByName('scholar head')!.matrixWorld);
-    const body = new THREE.Vector3(0, 0, 1).transformDirection(s.root.matrixWorld);
+    const way = at.clone().sub(was), head = new Vec3(0, 0, 1).transformDirection(s.root.getObjectByName('scholar head')!.matrixWorld);
+    const body = new Vec3(0, 0, 1).transformDirection(s.root.matrixWorld);
     const look = s.act.look ? s.act.look.clone().sub(at) : null;
     out.push(`${f} ${rounds.doing} walk ${s.act.walk.toFixed(2)} speed ${(way.length() * 60).toFixed(2)} way ${deg(way)} body ${deg(body)} head ${deg(head)} look ${look ? deg(look) : '-'}`);
   }
@@ -55,11 +55,11 @@ export async function jumpsRead(lab: Lab, task: Task, frames: number, joint = 's
   const o = s.root.getObjectByName(joint)!;
   rounds.hold = false;
   rounds.begin(task);
-  const out: string[] = [], was = new THREE.Quaternion();
+  const out: string[] = [], was = new Quat();
   for (let f = 0; f < frames; f++) {
     was.copy(o.quaternion);
     await lab.step(1);
-    const d = THREE.MathUtils.radToDeg(was.angleTo(o.quaternion));
+    const d = Maths.radToDeg(was.angleTo(o.quaternion));
     if (d > most) out.push(`${f} ${rounds.doing}: ${d.toFixed(1)} deg, reach ${s.act.reachL.toFixed(2)}/${s.act.reachR.toFixed(2)} grip ${s.act.grip.toFixed(2)} sit ${s.act.sit.toFixed(2)}`);
   }
   rounds.hold = true;
@@ -71,8 +71,8 @@ export async function jumpsRead(lab: Lab, task: Task, frames: number, joint = 's
 export async function allJumps(lab: Lab, task: Task, frames: number, most = 15): Promise<string[]> {
   const room = G.arena.rooms!.library!;
   const s = room.folk!()!, rounds = room.rounds!()!;
-  const joints: THREE.Object3D[] = [];
-  s.root.traverse((o) => { if (!(o as THREE.Mesh).isMesh) joints.push(o); });
+  const joints: Node[] = [];
+  s.root.traverse((o) => { if (!(o as Mesh).isMesh) joints.push(o); });
   const before = joints.map((o) => o.quaternion.clone());
   rounds.hold = false;
   rounds.begin(task);
@@ -80,7 +80,7 @@ export async function allJumps(lab: Lab, task: Task, frames: number, most = 15):
   for (let f = 0; f < frames; f++) {
     joints.forEach((o, i) => before[i].copy(o.quaternion));
     await lab.step(1);
-    const moved = joints.map((o, i) => [o.name || `(${o.parent?.name})`, THREE.MathUtils.radToDeg(before[i].angleTo(o.quaternion))] as const)
+    const moved = joints.map((o, i) => [o.name || `(${o.parent?.name})`, Maths.radToDeg(before[i].angleTo(o.quaternion))] as const)
       .filter(([, d]) => d > most);
     if (moved.length) out.push(`${f} ${rounds.doing}: ${moved.map(([n, d]) => `${n} ${d.toFixed(0)}`).join(', ')}; reachR ${s.act.reachR.toFixed(2)}`);
   }
@@ -95,19 +95,19 @@ export async function headRead(lab: Lab, task: Task, frames: number, most = 12, 
   const s = room.folk!()!, rounds = room.rounds!()!;
   rounds.hold = false;
   rounds.begin(task);
-  const out: string[] = [], was = new THREE.Vector3(), at = new THREE.Vector3();
-  const flat = (v: THREE.Vector3) => v.setY(0).normalize();
+  const out: string[] = [], was = new Vec3(), at = new Vec3();
+  const flat = (v: Vec3) => v.setY(0).normalize();
   for (let f = 0; f < frames; f++) {
     s.root.getWorldPosition(was);
     await lab.step(1);
     s.root.getWorldPosition(at);
     const way = flat(at.clone().sub(was));
     if (s.act.walk < 0.45) continue;
-    const body = flat(new THREE.Vector3(0, 0, 1).transformDirection(s.root.matrixWorld));
-    const head = flat(new THREE.Vector3(0, 0, 1).transformDirection(s.root.getObjectByName('scholar head')!.matrixWorld));
-    const off = THREE.MathUtils.radToDeg(head.angleTo(way)), bodyOff = THREE.MathUtils.radToDeg(body.angleTo(way));
+    const body = flat(new Vec3(0, 0, 1).transformDirection(s.root.matrixWorld));
+    const head = flat(new Vec3(0, 0, 1).transformDirection(s.root.getObjectByName('scholar head')!.matrixWorld));
+    const off = Maths.radToDeg(head.angleTo(way)), bodyOff = Maths.radToDeg(body.angleTo(way));
     const look = s.act.look ? flat(s.act.look.clone().sub(at)) : null;
-    if (bodyOff < straight && off > most) out.push(`${f} ${rounds.doing}: head ${off.toFixed(0)} off, body ${bodyOff.toFixed(0)}, look ${look ? THREE.MathUtils.radToDeg(look.angleTo(way)).toFixed(0) : '-'} off, walk ${s.act.walk.toFixed(2)}`);
+    if (bodyOff < straight && off > most) out.push(`${f} ${rounds.doing}: head ${off.toFixed(0)} off, body ${bodyOff.toFixed(0)}, look ${look ? Maths.radToDeg(look.angleTo(way)).toFixed(0) : '-'} off, walk ${s.act.walk.toFixed(2)}`);
   }
   rounds.hold = true;
   return out;
@@ -118,16 +118,16 @@ export async function headRead(lab: Lab, task: Task, frames: number, most = 12, 
 export async function handJumps(lab: Lab, times: number, most = 12): Promise<string[]> {
   const room = G.arena.rooms!.library!;
   const s = room.folk!()!, rounds = room.rounds!()!, hand = s.root.getObjectByName('scholar handR')!;
-  const out: string[] = [], was = new THREE.Quaternion();
-  const v = (p: THREE.Vector3) => `${p.x.toFixed(2)},${p.y.toFixed(2)},${p.z.toFixed(2)}`;
+  const out: string[] = [], was = new Quat();
+  const v = (p: Vec3) => `${p.x.toFixed(2)},${p.y.toFixed(2)},${p.z.toFixed(2)}`;
   for (let n = 0; n < times; n++) {
     rounds.hold = false;
     rounds.begin('browse');
     for (let f = 0; f < 3000; f++) {
       was.copy(hand.quaternion);
       await lab.step(1);
-      const d = THREE.MathUtils.radToDeg(was.angleTo(hand.quaternion)), a = s.act.handR;
-      const inv = s.root.matrixWorld.clone().invert(), rot = new THREE.Matrix4().extractRotation(inv);
+      const d = Maths.radToDeg(was.angleTo(hand.quaternion)), a = s.act.handR;
+      const inv = s.root.matrixWorld.clone().invert(), rot = new Mat4().extractRotation(inv);
       if (d > most) out.push(`${n}/${f} ${rounds.doing}: ${d.toFixed(0)} deg; reach ${s.act.reachR.toFixed(2)}; aim ${a ? `${v(a.at.clone().applyMatrix4(inv))} palm ${v(a.palm.clone().applyMatrix4(rot))} fingers ${v(a.fingers.clone().applyMatrix4(rot))}` : '-'}`);
       if (f > 30 && rounds.doing === 'reading at his table' && s.act.sit >= 1) break;
     }
@@ -144,7 +144,7 @@ export async function shoeRead(lab: Lab, task: Task, frames: number): Promise<st
   const s = room.folk!()!, rounds = room.rounds!()!;
   rounds.hold = false;
   rounds.begin(task);
-  const out: string[] = [], where = { at: new THREE.Vector3(), row: 0 };
+  const out: string[] = [], where = { at: new Vec3(), row: 0 };
   for (let f = 0; f < frames; f++) {
     await lab.step(1);
     if (s.act.sit >= 0.5) continue;
@@ -193,29 +193,29 @@ export async function toBeat(lab: Lab, task: Task | null, beat: string, after = 
     into++;
     if (sit >= 0 ? Math.abs(s.act.sit - sit) < 0.03 : into >= after) break;
   }
-  const at = s.root.getWorldPosition(new THREE.Vector3()).add(new THREE.Vector3(0, 1.0, 0));
-  const f = new THREE.Vector3(0, 0, 1).applyQuaternion(s.root.getWorldQuaternion(new THREE.Quaternion())).setY(0).normalize();
-  G.player.place(new THREE.Vector3(1.6, 0, 2.5).applyMatrix4(room.group.matrixWorld), Math.atan2(f.x, f.z));
+  const at = s.root.getWorldPosition(new Vec3()).add(new Vec3(0, 1.0, 0));
+  const f = new Vec3(0, 0, 1).applyQuaternion(s.root.getWorldQuaternion(new Quat())).setY(0).normalize();
+  G.player.place(new Vec3(1.6, 0, 2.5).applyMatrix4(room.group.matrixWorld), Math.atan2(f.x, f.z));
   return `${rounds.doing} (sit ${s.act.sit.toFixed(2)}): --on ${at.x.toFixed(2)},${at.y.toFixed(2)},${at.z.toFixed(2)}`;
 }
 
 /** what `studio` hid, to show again */
-let hidden: THREE.Object3D[] = [];
+let hidden: Node[] = [];
 /** The room around him hidden for a close picture (its cases and walls stood between the lab's close views and him),
  *  but for him, what he holds and the floor (a flat mesh as wide as the room); `studio(lab, false)` shows it again. */
 export function studio(lab: Lab, on = true): string {
   void lab;
   if (!on) { for (const o of hidden) o.visible = true; const n = hidden.length; hidden = []; return `shown again: ${n}`; }
   const room = G.arena.rooms!.library!, s = room.folk!()!;
-  const keep = new Set<THREE.Object3D>();
+  const keep = new Set<Node>();
   s.root.traverse((o) => keep.add(o));
-  for (let p: THREE.Object3D | null = s.root; p; p = p.parent) keep.add(p);
+  for (let p: Node | null = s.root; p; p = p.parent) keep.add(p);
   for (const name of ['library held book', 'library open held book', 'library dusting cloth']) room.group.getObjectByName(name)?.traverse((o) => keep.add(o));
-  const box = new THREE.Box3(), size = new THREE.Vector3();
+  const box = new Box3(), size = new Vec3();
   room.group.traverse((o) => {
-    const m = o as THREE.Mesh;
+    const m = o as Mesh;
     if (!m.isMesh || keep.has(m) || !m.visible) return;
-    box.setFromObject(m).getSize(size);
+    boundsOf(m, box).getSize(size);
     if (size.y < 0.08 && size.x > 3 && size.z > 3) return;
     m.visible = false;
     hidden.push(m);
@@ -228,9 +228,9 @@ export function studio(lab: Lab, on = true): string {
 export async function eyesOn(lab: Lab, ahead: number, aside: number, high = 1.0): Promise<string> {
   const room = G.arena.rooms!.library!, s = room.folk!()!;
   await viewAs(lab, 'first');
-  const at = s.root.getWorldPosition(new THREE.Vector3());
-  const q = s.root.getWorldQuaternion(new THREE.Quaternion());
-  const f = new THREE.Vector3(0, 0, 1).applyQuaternion(q).setY(0).normalize(), l = new THREE.Vector3(f.z, 0, -f.x);
+  const at = s.root.getWorldPosition(new Vec3());
+  const q = s.root.getWorldQuaternion(new Quat());
+  const f = new Vec3(0, 0, 1).applyQuaternion(q).setY(0).normalize(), l = new Vec3(f.z, 0, -f.x);
   const stood = at.clone().addScaledVector(f, ahead).addScaledVector(l, aside).setY(0);
   const facing = Math.atan2(at.x - stood.x, at.z - stood.z);
   G.player.place(stood, facing);
@@ -253,7 +253,7 @@ export async function eyesOn(lab: Lab, ahead: number, aside: number, high = 1.0)
 export async function roomCost(lab: Lab): Promise<string> {
   const room = G.arena.rooms!.library!;
   await viewAs(lab, 'third');
-  G.player.place(new THREE.Vector3(1.6, 0, 2.5).applyMatrix4(room.group.matrixWorld), Math.PI);
+  G.player.place(new Vec3(1.6, 0, 2.5).applyMatrix4(room.group.matrixWorld), Math.PI);
   const drawing = lab.drawing;
   lab.drawing = true;
   const info = G.renderer.info as unknown as { autoReset: boolean; reset(): void; render: { calls: number; triangles: number } };
@@ -267,9 +267,9 @@ export async function roomCost(lab: Lab): Promise<string> {
   lab.drawing = drawing;
   let books = 0, tris = 0, meshes = 0;
   room.group.traverse((o) => {
-    const m = o as THREE.InstancedMesh;
+    const m = o as InstancedMesh;
     if (m.isInstancedMesh && m.name.startsWith('library books')) books += m.count;
-    if (!(m as THREE.Mesh).isMesh || !m.visible) return;
+    if (!(m as Mesh).isMesh || !m.visible) return;
     // (its triangles, each instance's: the renderer's own count reads none on this engine)
     const g = m.geometry, one = (g.index ? g.index.count : g.attributes.position.count) / 3;
     tris += one * (m.isInstancedMesh ? m.count : 1);
@@ -284,11 +284,11 @@ export function outRead(lab: Lab): string {
   void lab;
   const room = G.arena.rooms!.library!, rounds = room.rounds!()!, out = rounds.out;
   if (!out) return 'nothing out';
-  const m = new THREE.Matrix4(), size = new THREE.Vector3(), c = new THREE.Color();
+  const m = new Mat4(), size = new Vec3(), c = new Color();
   out.mesh.getMatrixAt(out.index, m);
-  m.decompose(new THREE.Vector3(), new THREE.Quaternion(), size);
+  m.decompose(new Vec3(), new Quat(), size);
   out.mesh.getColorAt(out.index, c);
-  const held = G.scene.getObjectByName('library held book') as THREE.Mesh, [cover] = held.material as THREE.MeshStandardMaterial[];
+  const held = G.scene.getObjectByName('library held book') as Mesh, [cover] = held.material as LitMaterial[];
   return `instance ${out.index} of ${out.mesh.name} (count ${out.mesh.count}): scale ${size.toArray().map((v) => v.toFixed(3))}, matrix[0..3] ${Array.from(m.elements.slice(0, 4)).map((v) => v.toFixed(3))}; `
-    + `colour ${c.getHexString()} held ${cover.color.getHexString()}; map same ${cover.map === (out.mesh.material as THREE.MeshStandardMaterial).map}`;
+    + `colour ${c.getHexString()} held ${cover.color.getHexString()}; map same ${cover.map === (out.mesh.material as LitMaterial).map}`;
 }

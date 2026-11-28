@@ -5,7 +5,7 @@
 // the frame with the sky through the windows (`rust.openingSky`) against the frame without it, at one moment. The
 // share of the frame they brighten, and the light they add pictured alone beside the frame as played. `canary` holds
 // the windows' sky off in both frames.
-import * as THREE from 'three';
+import { Vec3 } from './sceneApi.ts';
 import type { Lab, Pictured, Tile } from './lab';
 import { G } from '../../../src/state';
 import { RUST } from '../../../src/engine';
@@ -18,7 +18,7 @@ import { viewBy } from './villageHallCull';
 import type { LightsChecked } from './villageLights';
 
 /** where he stands (the hall's middle) and the way he faces (the dais) */
-const STAND = new THREE.Vector3(TERRACE.x, TERRACE.high, -24);
+const STAND = new Vec3(TERRACE.x, TERRACE.high, -24);
 const FACING = Math.PI;
 const SETTLE = 60;
 /** the hours read, and the views */

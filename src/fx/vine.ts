@@ -6,8 +6,9 @@
 // quality, one program), the sap in its grooves its only glow.
 // Every vertex knows how far along its piece it is (`aAlong`): a piece is grown to `grow` metres (`uGrow`), each part
 // swelling from nothing as the growth passes it, and withers back (`uWither`).
-import * as THREE from 'three';
-import { portShader, type Port, type Tsl } from '../core/shaderPorts';
+import {
+  Attribute, Color, DoubleSide, floats, Geometry, LookMaterial, Maths, Mesh, Vec3,
+} from '../engine/api/index.ts';
 import { effectLook, num, rgb, effectShader } from '../engine/effects';
 import { groundHeight } from '../world/ground';
 
@@ -30,89 +31,7 @@ const CURL = { every: 1.1, length: 0.8, turns: 1.6, radius: 0.025, lag: 0.7 };
 /** what a vertex is part of (`aKind`), each shaded its own way */
 const KIND = { strand: 0, leaf: 1, curl: 2 };
 
-const VERT = /* glsl */`attribute vec3 aOff; attribute vec3 aFan; attribute float aAlong; attribute float aKind;
-  uniform float uGrow; uniform float uWither; uniform float uTime; uniform float uRise; uniform float uHead;
-  uniform vec3 uSide;
-  varying vec3 vN; varying float vAlong; varying float vKind; varying float vHead;
-  void main(){
-    float d = uGrow - aAlong;
-    float k = clamp(d / ${TIP.toFixed(2)}, 0.0, 1.0) * (1.0 - uWither);
-    float head = 1.0 - clamp(d / ${HEAD.length.toFixed(2)}, 0.0, 1.0);
-    head *= head * uHead;
-    vec3 p = position + aFan * (1.0 + ${HEAD.splay.toFixed(2)} * head) + aOff * sqrt(k);
-    p.y += uRise * head * ${HEAD.rise.toFixed(2)};
-    p += uSide * uRise * head * sin(uTime * 9.0 - aAlong * 5.0) * ${HEAD.weave.toFixed(2)};
-    vN = normalize(mat3(modelMatrix) * normal);
-    vAlong = aAlong;
-    vKind = aKind;
-    vHead = head;
-    gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);
-  }`;
-const FRAG = /* glsl */`uniform vec3 uBark; uniform vec3 uSap; uniform float uTime;
-  varying vec3 vN; varying float vAlong; varying float vKind; varying float vHead;
-  void main(){
-    vec3 n = normalize(vN);
-    // lit from above, as the scene's moon or sun would mostly light a thing on the floor (a leaf from either side)
-    float facing = dot(n, normalize(vec3(0.3, 0.9, 0.2)));
-    float lit = 0.3 + 0.7 * (vKind > 0.5 && vKind < 1.5 ? abs(facing) : max(facing, 0.0));
-    float pulse = 0.6 + 0.4 * sin(vAlong * 2.2 - uTime * 6.0);
-    if (vKind > 0.5 && vKind < 1.5) {
-      vec3 leaf = mix(vec3(0.025, 0.06, 0.012), vec3(0.07, 0.16, 0.03), lit);
-      gl_FragColor = vec4(leaf * (0.5 + 0.5 * lit) + uSap * 0.04, 1.0);
-      return;
-    }
-    float groove = 0.5 + 0.5 * sin(vAlong * 23.0 + n.x * 3.0 + n.z * 2.0);
-    vec3 c = uBark * lit * (0.7 + 0.4 * groove) * (vKind > 1.5 ? 1.2 : 1.0);
-    // the sap runs in the grooves, pulses out towards the head and glows in it
-    float vein = pow(max(0.0, 1.0 - groove * 7.0), 2.0);
-    gl_FragColor = vec4(c + uSap * (0.02 + vein * pulse * 0.8 + vHead * 0.45), 1.0);
-  }`;
-
-/** `VERT` and `FRAG` on WebGPU (core/shaderPorts.ts), in WGSL */
-function vinePort({ wgslFn, attribute, positionGeometry, normalLocal, modelWorldMatrix, vec4, varying }: Tsl,
-  u: Tsl): Port {
-  const along = attribute('aAlong', 'float');
-  const head = wgslFn(`fn vineHead(along: f32, grow: f32, headK: f32) -> f32 {
-    let h = 1.0 - clamp((grow - along) / ${HEAD.length.toFixed(2)}, 0.0, 1.0);
-    return h * h * headK;
-  }`)({ along, grow: u.uGrow, headK: u.uHead });
-  const position = wgslFn(`fn vinePosition(pos: vec3f, off: vec3f, fan: vec3f, along: f32, head: f32, grow: f32,
-    wither: f32, time: f32, rise: f32, side: vec3f) -> vec3f {
-    let k = clamp((grow - along) / ${TIP.toFixed(2)}, 0.0, 1.0) * (1.0 - wither);
-    var p = pos + fan * (1.0 + ${HEAD.splay.toFixed(2)} * head) + off * sqrt(k);
-    p.y += rise * head * ${HEAD.rise.toFixed(2)};
-    p += side * rise * head * sin(time * 9.0 - along * 5.0) * ${HEAD.weave.toFixed(2)};
-    return p;
-  }`)({
-    pos: positionGeometry, off: attribute('aOff', 'vec3'), fan: attribute('aFan', 'vec3'), along, head,
-    grow: u.uGrow, wither: u.uWither, time: u.uTime, rise: u.uRise, side: u.uSide,
-  });
-  const colour = wgslFn(`fn vineColour(nIn: vec3f, along: f32, kind: f32, head: f32, bark: vec3f, sap: vec3f,
-    time: f32) -> vec4f {
-    let n = normalize(nIn);
-    let facing = dot(n, normalize(vec3f(0.3, 0.9, 0.2)));
-    let isLeaf = kind > 0.5 && kind < 1.5;
-    let lit = 0.3 + 0.7 * select(max(facing, 0.0), abs(facing), isLeaf);
-    let pulse = 0.6 + 0.4 * sin(along * 2.2 - time * 6.0);
-    if (isLeaf) {
-      let leaf = mix(vec3f(0.025, 0.06, 0.012), vec3f(0.07, 0.16, 0.03), lit);
-      return vec4f(leaf * (0.5 + 0.5 * lit) + sap * 0.04, 1.0);
-    }
-    let groove = 0.5 + 0.5 * sin(along * 23.0 + n.x * 3.0 + n.z * 2.0);
-    let c = bark * lit * (0.7 + 0.4 * groove) * select(1.0, 1.2, kind > 1.5);
-    let vein = pow(max(0.0, 1.0 - groove * 7.0), 2.0);
-    return vec4f(c + sap * (0.02 + vein * pulse * 0.8 + head * 0.45), 1.0);
-  }`);
-  return {
-    position,
-    fragment: colour({
-      nIn: varying(modelWorldMatrix.mul(vec4(normalLocal, 0)).xyz), along: varying(along),
-      kind: varying(attribute('aKind', 'float')), head: varying(head), bark: u.uBark, sap: u.uSap, time: u.uTime,
-    }),
-  };
-}
-
-// The vine for the Rust engine (src/engine/effects.ts): the port's WGSL above. The engine hands a hook a vertex's
+// The vine for the Rust engine (src/engine/effects.ts). The engine hands a hook a vertex's
 // place, normal, uv and colour and no attribute of the vine's own, so under it a piece's geometry carries them in
 // those two (`Parts.packed`): its colour the strand's winding (`aFan`) and how far along it is with what it's part of
 // (`aAlong` + `PACK.kind` * `aKind`), its uv the swelling (`aOff`), two of its numbers in one float.
@@ -177,7 +96,7 @@ fn surface_hook(s: ptr<function, Surface>, in: VertexOut) -> bool {
 
 /** One piece of vine: its mesh, grown to `grow` metres and withered by `wither` (0 to 1) each frame. */
 export interface Vine {
-  mesh: THREE.Mesh;
+  mesh: Mesh;
   grow: number;
   wither: number;
   /** its length grown in full (m) */
@@ -201,7 +120,7 @@ class Parts {
   }
 
   /** A vertex at `at` (its growth's place), out by `fan` (the head splays it) and `off` (it swells to it). */
-  vertex(at: THREE.Vector3, fan: THREE.Vector3, off: THREE.Vector3, normal: THREE.Vector3, along: number,
+  vertex(at: Vec3, fan: Vec3, off: Vec3, normal: Vec3, along: number,
     kind: number): void {
     this.pos.push(at.x, at.y, at.z);
     this.fan.push(fan.x, fan.y, fan.z);
@@ -211,14 +130,14 @@ class Parts {
     this.kind.push(kind);
   }
 
-  geometry(): THREE.BufferGeometry {
-    const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.Float32BufferAttribute(this.pos, 3));
-    geo.setAttribute('normal', new THREE.Float32BufferAttribute(this.normal, 3));
-    geo.setAttribute('aOff', new THREE.Float32BufferAttribute(this.off, 3));
-    geo.setAttribute('aFan', new THREE.Float32BufferAttribute(this.fan, 3));
-    geo.setAttribute('aAlong', new THREE.Float32BufferAttribute(this.along, 1));
-    geo.setAttribute('aKind', new THREE.Float32BufferAttribute(this.kind, 1));
+  geometry(): Geometry {
+    const geo = new Geometry();
+    geo.setAttribute('position', floats(this.pos, 3));
+    geo.setAttribute('normal', floats(this.normal, 3));
+    geo.setAttribute('aOff', floats(this.off, 3));
+    geo.setAttribute('aFan', floats(this.fan, 3));
+    geo.setAttribute('aAlong', floats(this.along, 1));
+    geo.setAttribute('aKind', floats(this.kind, 1));
     this.packed(geo);
     geo.setIndex(this.index);
     geo.computeBoundingSphere();
@@ -228,10 +147,10 @@ class Parts {
   }
 
   /** The vine's own attributes again in `geo`'s uv and colour, where the Rust engine's hooks read them (`PACK`). */
-  private packed(geo: THREE.BufferGeometry): void {
+  private packed(geo: Geometry): void {
     const count = this.count, uv = new Float32Array(count * 2), colour = new Float32Array(count * 4);
     const step = (v: number): number => {
-      const share = THREE.MathUtils.clamp(v / (2 * PACK.reach) + 0.5, 0, 1);
+      const share = Maths.clamp(v / (2 * PACK.reach) + 0.5, 0, 1);
       return Math.round(share * PACK.steps);
     };
     for (let i = 0; i < count; i++) {
@@ -240,18 +159,18 @@ class Parts {
       colour.set([this.fan[i * 3], this.fan[i * 3 + 1], this.fan[i * 3 + 2]], i * 4);
       colour[i * 4 + 3] = this.along[i] + PACK.kind * this.kind[i];
     }
-    geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
-    geo.setAttribute('color', new THREE.BufferAttribute(colour, 4));
+    geo.setAttribute('uv', new Attribute(uv, 2));
+    geo.setAttribute('color', new Attribute(colour, 4));
   }
 }
 
 /** A strand's place `along` m along its piece: where its growth is (`at`) and how far out of it it winds (`fan`). */
-type Strand = (along: number, at: THREE.Vector3, fan: THREE.Vector3) => void;
+type Strand = (along: number, at: Vec3, fan: Vec3) => void;
 
-const _a = new THREE.Vector3(), _f = new THREE.Vector3(), _a2 = new THREE.Vector3(), _f2 = new THREE.Vector3();
-const _t = new THREE.Vector3(), _n = new THREE.Vector3(), _b = new THREE.Vector3(), _o = new THREE.Vector3();
-const _p = new THREE.Vector3(), UP = new THREE.Vector3(0, 1, 0), SIDE = new THREE.Vector3(1, 0, 0);
-const ZERO = new THREE.Vector3();
+const _a = new Vec3(), _f = new Vec3(), _a2 = new Vec3(), _f2 = new Vec3();
+const _t = new Vec3(), _n = new Vec3(), _b = new Vec3(), _o = new Vec3();
+const _p = new Vec3(), UP = new Vec3(0, 1, 0), SIDE = new Vec3(1, 0, 0);
+const ZERO = new Vec3();
 
 /** A tube round `strand` from `from` to `to` m along it, `radius` thick there, into `parts`; its growth placed `lag` m
  *  further along than the strand. */
@@ -284,7 +203,7 @@ function tube(parts: Parts, strand: Strand, from: number, to: number, radius: (u
 
 /** A leaf on `strand` at `u` m, pointing `out` (a unit way, tipped up a little): an oval drawn to a point, raised
  *  along its rib. */
-function leaf(parts: Parts, strand: Strand, u: number, out: THREE.Vector3): void {
+function leaf(parts: Parts, strand: Strand, u: number, out: Vec3): void {
   strand(u, _a, _f);
   const across = _b.crossVectors(out, UP).normalize();
   const normal = _n.crossVectors(across, out).normalize();
@@ -301,29 +220,26 @@ function leaf(parts: Parts, strand: Strand, u: number, out: THREE.Vector3): void
 }
 
 /** A material of the vine's for `bark` and `sap`, its head rearing by `rise` (0: none) and weaving along `side`. */
-function material(bark: number, sap: number, rise: number, side: THREE.Vector3) {
+function material(bark: number, sap: number, rise: number, side: Vec3) {
   const uniforms = {
     uGrow: { value: 0 }, uWither: { value: 0 }, uTime: { value: 0 }, uRise: { value: rise }, uHead: { value: 1 },
-    uSide: { value: side.clone() }, uBark: { value: new THREE.Color(bark) }, uSap: { value: new THREE.Color(sap) },
+    uSide: { value: side.clone() }, uBark: { value: new Color(bark) }, uSap: { value: new Color(sap) },
   };
-  const mat = effectLook(
-    portShader(new THREE.ShaderMaterial({ uniforms, vertexShader: VERT, fragmentShader: FRAG, side: THREE.DoubleSide }),
-      vinePort),
-    'vine', VINE_HOOKS, {
-      numbers(u, out) {
-        out[0] = num(u, 'uGrow'); out[1] = num(u, 'uWither'); out[2] = num(u, 'uTime'); out[3] = num(u, 'uRise');
-        out[4] = num(u, 'uHead');
-        rgb(u, 'uSide', out, 8);
-        rgb(u, 'uBark', out, 12);
-        rgb(u, 'uSap', out, 16);
-      },
-    });
+  const mat = effectLook(new LookMaterial({ uniforms, side: DoubleSide }), 'vine', VINE_HOOKS, {
+    numbers(u, out) {
+      out[0] = num(u, 'uGrow'); out[1] = num(u, 'uWither'); out[2] = num(u, 'uTime'); out[3] = num(u, 'uRise');
+      out[4] = num(u, 'uHead');
+      rgb(u, 'uSide', out, 8);
+      rgb(u, 'uBark', out, 12);
+      rgb(u, 'uSap', out, 16);
+    },
+  });
   return { mat, uniforms };
 }
 
 function vineOf(parts: Parts, length: number, look: ReturnType<typeof material>, name: string): Vine {
   const geo = parts.geometry();
-  const mesh = new THREE.Mesh(geo, look.mat);
+  const mesh = new Mesh(geo, look.mat);
   mesh.name = name;
   // (the head rears, splays and glows while the piece grows, and settles once it's grown)
   let growing = -Infinity;
@@ -350,9 +266,9 @@ function vineOf(parts: Parts, length: number, look: ReturnType<typeof material>,
  *  tendrils off it. In world space. */
 export function groundVine(x: number, z: number, dx: number, dz: number, length: number, bark: number,
   sap: number): Vine {
-  const side = new THREE.Vector3(-dz, 0, dx), ahead = new THREE.Vector3(dx, 0, dz);
+  const side = new Vec3(-dz, 0, dx), ahead = new Vec3(dx, 0, dz);
   const wander = (u: number): number => Math.sin(u * 1.3) * 0.12 + Math.sin(u * 3.1 + 1) * 0.05;
-  const middle = (u: number, out: THREE.Vector3): THREE.Vector3 => {
+  const middle = (u: number, out: Vec3): Vec3 => {
     const px = x + dx * u - dz * wander(u), pz = z + dz * u + dx * wander(u);
     return out.set(px, groundHeight(px, pz) + BRAID.base, pz);
   };
@@ -379,9 +295,9 @@ export function groundVine(x: number, z: number, dx: number, dz: number, length:
 
 /** A tendril curling off the vine at `u` m to one side (`sign`), as a strand of its own: its growth runs from 0 at
  *  the vine out to its curled end, a spiral drawn in tighter as it goes and lifting off the floor. */
-function curlOff(middle: (u: number, out: THREE.Vector3) => THREE.Vector3, side: THREE.Vector3, ahead: THREE.Vector3,
+function curlOff(middle: (u: number, out: Vec3) => Vec3, side: Vec3, ahead: Vec3,
   u: number, sign: number): Strand {
-  const base = middle(u, new THREE.Vector3());
+  const base = middle(u, new Vec3());
   const reach = 0.24;
   const centre = base.clone().addScaledVector(side, sign * reach);
   return (s, at, fan) => {
@@ -421,7 +337,7 @@ export function coils(high: number, bark: number, sap: number): Vine {
 }
 
 /** A short vine, for the warm-up to compile its program. */
-export function vineSamples(): THREE.Mesh[] {
+export function vineSamples(): Mesh[] {
   const vine = groundVine(0, 0, 1, 0, 2, 0x2a3a18, 0x9cff3a);
   vine.grow = 2;
   vine.update(0);

@@ -2,7 +2,7 @@
 // that killed it and falling under gravity onto the floor, onto and against the props and against the arena's wall.
 // Each frame the rig's joints are posed from the points, so whatever the body wears falls with it. Every foe but the
 // training dummy is built on the shared rig (models/rig.ts), so one body serves them all.
-import * as THREE from 'three';
+import { Mat4, Quat, Vec3 } from '../engine/api/index.ts';
 import { G } from '../state';
 import { groundHeight, groundUnder } from '../world/ground';
 import type { Joints } from './models/rig';
@@ -10,7 +10,7 @@ import type { Obstacle } from '../types';
 
 /** Something moving the fallen while it lasts (a storm's whirl, a beam's push): adds the acceleration it gives a point
  *  at `p` moving at `v` into `out` (m/s²), and says whether it reached it. */
-export interface Field { accel(p: THREE.Vector3, v: THREE.Vector3, out: THREE.Vector3): boolean }
+export interface Field { accel(p: Vec3, v: Vec3, out: Vec3): boolean }
 
 /** the rig's joints the points are at, in this order (the head's is its middle, above its joint). The trunk bends off
  *  the pelvis at the spine's joint, as the rig does: the pelvis is the spine's point and the thighs', held at their
@@ -98,17 +98,17 @@ interface Join { a: number; b: number; min: number; max: number }
 /** The bones' points by name, for what measures the body (tools/lab `death`: how far each is stretched). */
 export const RAGDOLL_BONES: readonly (readonly [Point, Point])[] = BONES;
 
-const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _c = new THREE.Vector3(), _d = new THREE.Vector3();
-const _v = new THREE.Vector3(), _acc = new THREE.Vector3(), _p = new THREE.Vector3();
-const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _s = new THREE.Quaternion();
-const _x = new THREE.Vector3(), _y = new THREE.Vector3(), _z = new THREE.Vector3(), _f = new THREE.Vector3();
+const _a = new Vec3(), _b = new Vec3(), _c = new Vec3(), _d = new Vec3();
+const _v = new Vec3(), _acc = new Vec3(), _p = new Vec3();
+const _m = new Mat4(), _q = new Quat(), _s = new Quat();
+const _x = new Vec3(), _y = new Vec3(), _z = new Vec3(), _f = new Vec3();
 
 /** Lengths, as `Math.hypot` gives them, for what runs for every point every pass (hypot is several times slower). */
 const length2 = (x: number, z: number): number => Math.sqrt(x * x + z * z);
 const length3 = (x: number, y: number, z: number): number => Math.sqrt(x * x + y * y + z * z);
 
 /** The rotation of a frame whose up is `up` and whose left (+x, the rig's) is `left` as near as square to it. */
-function frameOf(up: THREE.Vector3, left: THREE.Vector3, out: THREE.Quaternion): THREE.Quaternion {
+function frameOf(up: Vec3, left: Vec3, out: Quat): Quat {
   _y.copy(up).normalize();
   _x.copy(left).addScaledVector(_y, -left.dot(_y));
   if (_x.lengthSq() < 1e-10) _x.set(1, 0, 0).addScaledVector(_y, -_y.x);
@@ -118,7 +118,7 @@ function frameOf(up: THREE.Vector3, left: THREE.Vector3, out: THREE.Quaternion):
 }
 
 /** The rotation of a frame whose left (+x) is `left` and whose up is `up` as near as square to it. */
-function frameAcross(left: THREE.Vector3, up: THREE.Vector3, out: THREE.Quaternion): THREE.Quaternion {
+function frameAcross(left: Vec3, up: Vec3, out: Quat): Quat {
   _x.copy(left).normalize();
   _y.copy(up).addScaledVector(_x, -up.dot(_x));
   if (_y.lengthSq() < 1e-10) _y.set(0, 1, 0).addScaledVector(_x, -_x.y);
@@ -153,31 +153,31 @@ export class Ragdoll {
   private kneesApart = 0;
   private hipFold: { thigh: number; min: number }[] = [];
   /** the joints' turn in the world as it fell, the trunk's frames then and each limb's way then */
-  private readonly q0 = new Map<Posed, THREE.Quaternion>();
-  private readonly hips0Inv = new THREE.Quaternion();
-  private readonly chest0Inv = new THREE.Quaternion();
-  private readonly way0 = new Map<Posed, THREE.Vector3>();
+  private readonly q0 = new Map<Posed, Quat>();
+  private readonly hips0Inv = new Quat();
+  private readonly chest0Inv = new Quat();
+  private readonly way0 = new Map<Posed, Vec3>();
   /** each posed joint's parent among the posed (none for the hips, whose parent is the body) */
   private readonly parentOf = new Map<Posed, Posed | undefined>();
   /** the joints' turn in the world this frame, the trunk's turns since the fall, a limb's and the root's */
-  private readonly world = new Map<Posed, THREE.Quaternion>();
-  private readonly dHips = new THREE.Quaternion();
-  private readonly dChest = new THREE.Quaternion();
+  private readonly world = new Map<Posed, Quat>();
+  private readonly dHips = new Quat();
+  private readonly dChest = new Quat();
   /** where the hips' joint was from the middle between the thighs' points at the fall, and the spine's joint from it
    *  and the chest's from that (the world's axes) */
-  private readonly hipsFromMiddle = new THREE.Vector3();
-  private readonly spineFromHips = new THREE.Vector3();
-  private readonly chestFromSpine = new THREE.Vector3();
+  private readonly hipsFromMiddle = new Vec3();
+  private readonly spineFromHips = new Vec3();
+  private readonly chestFromSpine = new Vec3();
   /** each shoulder's point from the chest's at the fall (the world's axes, left then right), and each arm's bones'
    *  lengths (the upper arm, the forearm) */
-  private readonly shoulderFromChest = [new THREE.Vector3(), new THREE.Vector3()];
+  private readonly shoulderFromChest = [new Vec3(), new Vec3()];
   private readonly armLengths: [number, number][] = [];
   /** the chest's joint, a shoulder's and an elbow's as drawn this frame (`pose`) */
-  private readonly chestAt = new THREE.Vector3();
-  private readonly jointAt = new THREE.Vector3();
-  private readonly turn = new THREE.Quaternion();
-  private readonly rootTurn = new THREE.Quaternion();
-  private readonly hipsAt = new THREE.Vector3();
+  private readonly chestAt = new Vec3();
+  private readonly jointAt = new Vec3();
+  private readonly turn = new Quat();
+  private readonly rootTurn = new Quat();
+  private readonly hipsAt = new Vec3();
   private left = 0;
   private stillFor = 0;
   /** whether its trunk struck something this step (it lies, and its limbs go limp) */
@@ -220,15 +220,15 @@ export class Ragdoll {
       this.r[i] = Math.max(0.03, size[name] * scale);
     }
     for (const name of POSED) {
-      this.q0.set(name, j[name].getWorldQuaternion(new THREE.Quaternion()));
-      this.world.set(name, new THREE.Quaternion());
+      this.q0.set(name, j[name].getWorldQuaternion(new Quat()));
+      this.world.set(name, new Quat());
       this.parentOf.set(name, POSED.find((other) => j[other] === j[name].parent));
     }
     this.trunkFrames(this.hips0Inv, this.chest0Inv);
     this.hips0Inv.invert();
     this.chest0Inv.invert();
-    const spine = j.spine.getWorldPosition(new THREE.Vector3());
-    const hipsJoint = j.hips.getWorldPosition(new THREE.Vector3());
+    const spine = j.spine.getWorldPosition(new Vec3());
+    const hipsJoint = j.hips.getWorldPosition(new Vec3());
     this.hipsFromMiddle.copy(hipsJoint).sub(this.middleOfHips(_b));
     this.spineFromHips.copy(spine).sub(hipsJoint);
     this.chestFromSpine.copy(this.point(I.chest, _a)).sub(spine);
@@ -241,7 +241,7 @@ export class Ragdoll {
       ['thighR', 'thighR', 'kneeR'], ['kneeR', 'kneeR', 'ankleR'], ['shoulderL', 'shoulderL', 'elbowL'],
       ['elbowL', 'elbowL', 'handL'], ['shoulderR', 'shoulderR', 'elbowR'], ['elbowR', 'elbowR', 'handR'],
     ];
-    for (const [joint, from, to] of ways) this.way0.set(joint, this.between(I[from], I[to], new THREE.Vector3()));
+    for (const [joint, from, to] of ways) this.way0.set(joint, this.between(I[from], I[to], new Vec3()));
     this.joinUp(opts.stiff ?? false);
     this.framed.set(this.p);
     let low = Infinity, high = -Infinity;
@@ -275,19 +275,19 @@ export class Ragdoll {
     }
   }
 
-  private set(i: number, v: THREE.Vector3): void { this.p[i * 3] = v.x; this.p[i * 3 + 1] = v.y; this.p[i * 3 + 2] = v.z; }
+  private set(i: number, v: Vec3): void { this.p[i * 3] = v.x; this.p[i * 3 + 1] = v.y; this.p[i * 3 + 2] = v.z; }
   /** where point `i` is */
-  point(i: number, out: THREE.Vector3): THREE.Vector3 { return out.set(this.p[i * 3], this.p[i * 3 + 1], this.p[i * 3 + 2]); }
+  point(i: number, out: Vec3): Vec3 { return out.set(this.p[i * 3], this.p[i * 3 + 1], this.p[i * 3 + 2]); }
   /** point `i`'s velocity (m/s) */
-  velocity(i: number, out: THREE.Vector3): THREE.Vector3 {
+  velocity(i: number, out: Vec3): Vec3 {
     return out.set(this.p[i * 3] - this.q[i * 3], this.p[i * 3 + 1] - this.q[i * 3 + 1], this.p[i * 3 + 2] - this.q[i * 3 + 2]).divideScalar(STEP);
   }
-  private between(a: number, b: number, out: THREE.Vector3): THREE.Vector3 {
+  private between(a: number, b: number, out: Vec3): Vec3 {
     return out.set(this.p[b * 3] - this.p[a * 3], this.p[b * 3 + 1] - this.p[a * 3 + 1], this.p[b * 3 + 2] - this.p[a * 3 + 2]);
   }
   get count(): number { return N; }
   /** where the hips are (between the thighs' points), which the body is placed by */
-  hips(out: THREE.Vector3): THREE.Vector3 { return this.middleOfHips(out); }
+  hips(out: Vec3): Vec3 { return this.middleOfHips(out); }
   /** the size of point `i` (m) */
   radius(i: number): number { return this.r[i]; }
 
@@ -439,7 +439,7 @@ export class Ragdoll {
   }
 
   /** The middle between the thighs' points (their sockets). */
-  private middleOfHips(out: THREE.Vector3): THREE.Vector3 {
+  private middleOfHips(out: Vec3): Vec3 {
     this.point(I.thighL, out);
     return out.add(this.point(I.thighR, _p)).multiplyScalar(0.5);
   }
@@ -496,7 +496,7 @@ export class Ragdoll {
 
   /** A knee bends forward only (`forward`, the pelvis's): put back in front of the line from its hip to its ankle when
    *  it has gone behind it. */
-  private hinge(hip: number, knee: number, ankle: number, forward: THREE.Vector3): void {
+  private hinge(hip: number, knee: number, ankle: number, forward: Vec3): void {
     this.between(hip, ankle, _a);
     const len = _a.length();
     if (len < 1e-4) return;
@@ -516,7 +516,7 @@ export class Ragdoll {
   }
 
   /** Point `i` moved `by` along `way`, where it was a step ago too (so the move gives it no speed). */
-  private shift(i: number, way: THREE.Vector3, by: number): void {
+  private shift(i: number, way: Vec3, by: number): void {
     const p = this.p, q = this.q, k = i * 3, x = way.x * by, y = way.y * by, z = way.z * by;
     p[k] += x; p[k + 1] += y; p[k + 2] += z;
     q[k] += x; q[k + 1] += y; q[k + 2] += z;
@@ -609,7 +609,7 @@ export class Ragdoll {
   /** The pelvis's frame (left across its thighs, up to its spine) and the chest's (up its neck, left across its
    *  shoulders), from the points. (Up first, with its left squared to it, the hips tilted off the line between the
    *  thighs' points as the trunk bent to the side, and the legs hung 6 cm off theirs.) */
-  private trunkFrames(hips: THREE.Quaternion, chest: THREE.Quaternion): void {
+  private trunkFrames(hips: Quat, chest: Quat): void {
     frameAcross(this.between(I.thighR, I.thighL, _b), this.point(I.spine, _a).sub(this.middleOfHips(_c)), hips);
     frameOf(this.between(I.chest, I.neck, _a), this.between(I.shoulderR, I.shoulderL, _b), chest);
   }
@@ -659,7 +659,7 @@ export class Ragdoll {
   /** A limb's joints (`upper`, then `lower`) turned in the world: each swung from its way at the fall (turned on by
    *  its parent's turn since) onto its way now, the next carrying that on, and its `end` (the hand, the foot, the
    *  head) turned with the last. */
-  private limb(parentTurn: THREE.Quaternion, upper: Link, lower: Link | null, end: Posed): void {
+  private limb(parentTurn: Quat, upper: Link, lower: Link | null, end: Posed): void {
     const turn = this.turn.copy(parentTurn);
     this.swing(turn, upper);
     if (lower) this.swing(turn, lower);
@@ -668,7 +668,7 @@ export class Ragdoll {
 
   /** `turn` carried on through a link: swung from the link's way at the fall, as `turn` has it now, onto its way now
    *  (from its first point to its next, or from `at`, where its joint is drawn, to its next, `length` along: `arm`). */
-  private swing(turn: THREE.Quaternion, [joint, from, to]: Link, at?: THREE.Vector3, length = 0): void {
+  private swing(turn: Quat, [joint, from, to]: Link, at?: Vec3, length = 0): void {
     const was = _a.copy(this.way0.get(joint)!).applyQuaternion(turn).normalize();
     const now = at ? this.aimFrom(at, I[to], length, _b) : this.between(I[from], I[to], _b).normalize();
     turn.premultiply(_s.setFromUnitVectors(was, now));
@@ -678,7 +678,7 @@ export class Ragdoll {
   /** The way from `at` to point `to`, raised so the end of a bone `length` long along it lies no lower than the point
    *  (into `out`, a unit vector): a point lying on the floor, its arm drawn from a shoulder a few centimetres off its
    *  own point, drew its elbow 2 to 4 cm under the floor (`lab death`, Briarflight's and Rending Cleave's kills). */
-  private aimFrom(at: THREE.Vector3, to: number, length: number, out: THREE.Vector3): THREE.Vector3 {
+  private aimFrom(at: Vec3, to: number, length: number, out: Vec3): Vec3 {
     const point = this.point(to, _c);
     const target = _d.copy(point);
     for (let i = 0; i < AIM_LIFTS; i++) {
@@ -695,7 +695,7 @@ export class Ragdoll {
    *  upper trunk's points a little, and with each bone swung onto the way between its points, the drawn shoulder's
    *  place off its point carried down the whole arm: an elbow or a hand lay 4 to 5 cm in the floor or a step's riser,
    *  the pose 3 to 6 cm off its points (`lab death`, every hero's kills). */
-  private arm(chestTurn: THREE.Quaternion, side: 0 | 1): void {
+  private arm(chestTurn: Quat, side: 0 | 1): void {
     const [shoulder, elbow, hand] = ARMS[side];
     const [upper, forearm] = this.armLengths[side];
     const at = this.jointAt.copy(this.shoulderFromChest[side]).applyQuaternion(this.dChest).add(this.chestAt);

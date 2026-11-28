@@ -1,11 +1,11 @@
-// A kit material's looks under the Rust engine (`core/shaderPorts.ts` `kitNodes`, the foes' and the heroes'): the
+// A kit material's looks under the Rust engine (the foes' and the heroes', once three's `kitNodes`): the
 // dissolve (its pixels dropped by the noise, an edge glowing round the hole), frost and char over its colour, its
 // glow dimmed near the camera, a rim of light at glancing angles, the char's embers and a hit's flash. Found on a
 // material by its `kitLooks`, and shared by what it holds, so a kind's bodies still batch; a painted face's hair in
 // another colour, a worn item's glow in its rarity's colour, the hood's shade, the fur's sway
 // (entities/models/furSway.ts), and a hand's maps read triplanar (entities/models/triplanar.ts). A held blade's highlights through the eyes are held to a most (`kit.u.uShine`).
-import type * as THREE from 'three';
-import { NEAR_GLOW, itemGlowUniforms, type KitLooks } from '../../core/materials';
+import type { LitMaterial, Material, Vec3 } from '../api/index.ts';
+import { ITEM_GLOW, NEAR_GLOW, itemGlowUniforms, type KitLooks } from '../../core/materials';
 import { rustLook, rustShader, type RustLook, type RustShader } from '../custom';
 
 /** how many of the look's numbers tell two materials apart (past them: the clocks, and the glow's shape) */
@@ -14,7 +14,7 @@ const NUMBERS = 32;
 const AT = { shade: 16, aura: 20, hairTinted: 23, hair: 24, fur: 27, lag: 28, triplanar: 31, auraClock: 32, furTime: 33, shape: 36,
   loop: 40 };
 /** the fur's sway on a material (entities/models/furSway.ts): its lag and its clock */
-interface Fur { lag: { value: THREE.Vector3 }; time: { value: number } }
+interface Fur { lag: { value: Vec3 }; time: { value: number } }
 
 const KIT: RustShader = rustShader({
   name: 'kit',
@@ -34,7 +34,7 @@ fn kit_noise3(x: vec3f) -> f32 {
       mix(kit_hash(i + vec3f(0.0, 1.0, 1.0)), kit_hash(i + vec3f(1.0, 1.0, 1.0)), f.x), f.y), f.z);
 }
 
-// a worn item's glow (core/shaderPorts.ts auraTendrils, line for line): tendrils of light on its surface, drifting
+// a worn item's glow (three's auraTendrils once, line for line): tendrils of light on its surface, drifting
 // up on a loop
 fn aura_wrap(x: f32, per: f32) -> f32 { return x - per * floor(x / per); }
 fn aura_hash(start: vec3f, per: f32) -> f32 { return kit_hash(vec3f(start.x, aura_wrap(start.y, per), start.z)); }
@@ -116,10 +116,11 @@ fn surface_hook(s: ptr<function, Surface>, in: VertexOut) -> bool {
         + mapped_normal(face, in.world, along_z, textureSample(t_normal, samp, along_z).xyz) * share.z);
     }
   }
-  let dissolve = m.c[0].x;
-  let frozen = m.c[0].y;
-  let char = m.c[0].z;
-  let hit = m.c[0].w;
+  // (the kit's own, its thing's alone: ownNumbers.ts)
+  let dissolve = in.own0.x;
+  let frozen = in.own0.y;
+  let char = in.own0.z;
+  let hit = in.own0.w;
   let at = in.c0.xyz;
   var dn = 0.0;
   if (max(dissolve, char) > 0.0) { dn = kit_noise3(at * 7.0) * 0.65 + kit_noise3(at * 19.0) * 0.35; }
@@ -136,16 +137,17 @@ fn surface_hook(s: ptr<function, Surface>, in: VertexOut) -> bool {
   if (dissolve > 0.0) { edge = 1.0 - smoothstep(dissolve, dissolve + 0.09, dn); }
   let facing = clamp(dot((*s).normal, normalize(g.cam_pos.xyz - in.world)), 0.0, 1.0);
   let near = clamp(pow(in.depth / ${NEAR_GLOW.ref.toFixed(1)}, ${NEAR_GLOW.pow.toFixed(2)}), ${NEAR_GLOW.min.toFixed(2)}, 1.0);
-  (*s).emissive = ((*s).emissive * mix(1.0, near, m.c[1].x) + m.c[2].rgb * pow(1.0 - facing, 3.0) + m.c[3].rgb * edge * 3.0
+  (*s).emissive = ((*s).emissive * mix(1.0, near, m.c[1].x) + m.c[2].rgb * pow(1.0 - facing, 3.0) + in.own1.rgb * edge * 3.0
       + vec3f(0.25, 0.55, 0.9) * frozen * 0.35) * (1.0 - 0.7 * char)
     + vec3f(1.0, 0.32, 0.06) * char * smoothstep(0.6, 0.78, dn) * 1.6 * near
     + vec3f(1.0, 0.9, 0.85) * hit * 0.45 * near;
   // (the most a highlight on it gives: a blade held before the eyes)
-  (*s).shine_most = m.c[1].y;
+  (*s).shine_most = in.own1.w;
   // (a worn item's glow in its rarity's colour, black for none)
   let aura = m.c[5].xyz;
   if (aura.r + aura.g + aura.b > 0.0) {
-    (*s).emissive += aura * m.c[10].w * aura_tendrils(at, m.c[8].x, m.c[9], m.c[10]);
+    // (its clock the frame's time over its cycle: every glow at one moment, none of them described again for it)
+    (*s).emissive += aura * m.c[10].w * aura_tendrils(at, fract(g.cam_pos.w * m.c[8].x), m.c[9], m.c[10]);
   }
   // (in a hood's shade, all its light dimmed: x how deep, y where up the mesh it's full, z where it's gone, w how
   // much more aside)
@@ -158,11 +160,11 @@ fn surface_hook(s: ptr<function, Surface>, in: VertexOut) -> bool {
 `,
 });
 
-function kitLook(kit: KitLooks, material: THREE.MeshStandardMaterial): RustLook {
-  // (what the material showed by when it was last described: the kit's numbers, and what the game changes on a
-  // foe's material itself)
-  const was = new Float64Array(35).fill(NaN);
-  const now = new Float64Array(35);
+function kitLook(kit: KitLooks, material: LitMaterial): RustLook {
+  // (what the material showed by when it was last described: what the game changes on the material itself. The
+  // kit's own numbers aren't the material's: they're its thing's, `ownNumbers.ts`)
+  const was = new Float64Array(17).fill(NaN);
+  const now = new Float64Array(17);
   // (a copy of a fur's material holds a copy of its numbers, which nothing moves: three copies `userData` as JSON)
   const fur = (): Fur | undefined => {
     const sway = material.userData.fur as Fur | undefined;
@@ -175,37 +177,29 @@ function kitLook(kit: KitLooks, material: THREE.MeshStandardMaterial): RustLook 
     shared: NUMBERS,
     numbersUsed: AT.loop + 4,
     moved() {
-      const u = kit.u, edge = u.uEdge.value;
-      now[0] = u.uDissolve.value; now[1] = u.uFrozen.value; now[2] = u.uChar.value; now[3] = u.uHit.value;
-      now[4] = edge.r; now[5] = edge.g; now[6] = edge.b;
-      now[7] = material.emissiveIntensity; now[8] = material.opacity; now[9] = material.version;
-      now[10] = (material.transparent ? 1 : 0) + (material.depthWrite ? 2 : 0) + (material.visible ? 4 : 0);
-      now[11] = kit.near.value;
-      const tint = material.color, glow = material.emissive;
-      now[12] = tint.r; now[13] = tint.g; now[14] = tint.b; now[15] = glow.r; now[16] = glow.g; now[17] = glow.b;
-      kit.shade.value.toArray(now, 18);
-      kit.aura.value.toArray(now, 22);
-      kit.hair.value.toArray(now, 25);
-      // (its clocks, while it has what they move: a glow, a fur's sway)
-      now[28] = glows() ? itemGlowUniforms.clock.value : 0;
+      // (its opacity, flags and colours by its version alone: each moves it as it changes)
+      now[0] = material.version;
+      now[1] = 0;
+      now[2] = itemGlowUniforms.loop.value.w;
       const sway = fur();
-      now[29] = sway ? sway.time.value : 0;
-      if (sway) sway.lag.value.toArray(now, 30);
-      now[33] = itemGlowUniforms.loop.value.w;
-      now[34] = u.uShine.value;
+      now[3] = sway ? sway.time.value : 0;
+      if (sway) sway.lag.value.toArray(now, 4);
+      kit.aura.value.toArray(now, 7);
+      kit.shade.value.toArray(now, 10);
+      kit.hair.value.toArray(now, 14);
       let moved = false;
-      for (let at = 0; at < 35; at++) {
+      for (let at = 0; at < now.length; at++) {
         if (now[at] !== was[at]) { was[at] = now[at]; moved = true; }
       }
       return moved;
     },
     numbers(out) {
-      const u = kit.u;
-      out[0] = u.uDissolve.value; out[1] = u.uFrozen.value; out[2] = u.uChar.value; out[3] = u.uHit.value;
+      // (the dissolve, frost, char, flash, edge and shine are its thing's, not the material's: `ownNumbers.ts`)
+      out.fill(0, 0, 4);
       out[4] = kit.near.value;
-      out[5] = u.uShine.value;
+      out[5] = 0;
       kit.rim.value.toArray(out, 8);
-      u.uEdge.value.toArray(out, 12);
+      out.fill(0, 12, 15);
       kit.shade.value.toArray(out, AT.shade);
       kit.aura.value.toArray(out, AT.aura);
       out[AT.hairTinted] = kit.hairTinted ? 1 : 0;
@@ -216,7 +210,7 @@ function kitLook(kit: KitLooks, material: THREE.MeshStandardMaterial): RustLook 
       else out.fill(0, AT.lag, AT.lag + 3);
       const tile = material.userData.triplanar as number | undefined;
       out[AT.triplanar] = tile ? 1 / tile : 0;
-      out[AT.auraClock] = glows() ? itemGlowUniforms.clock.value : 0;
+      out[AT.auraClock] = glows() ? 1 / ITEM_GLOW.cycle : 0;
       out[AT.furTime] = sway ? sway.time.value : 0;
       itemGlowUniforms.shape.value.toArray(out, AT.shape);
       itemGlowUniforms.loop.value.toArray(out, AT.loop);
@@ -225,10 +219,10 @@ function kitLook(kit: KitLooks, material: THREE.MeshStandardMaterial): RustLook 
 }
 
 /** A kit material's look, made the first time it's asked for; none for a material that isn't a kit's. */
-export function kitLookOf(material: THREE.Material): RustLook | undefined {
+export function kitLookOf(material: Material): RustLook | undefined {
   const kit = (material as { kitLooks?: KitLooks }).kitLooks;
   if (!kit) return undefined;
-  const look = kitLook(kit, material as THREE.MeshStandardMaterial);
+  const look = kitLook(kit, material as LitMaterial);
   rustLook(material, look);
   return look;
 }

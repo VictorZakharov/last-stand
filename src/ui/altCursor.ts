@@ -4,6 +4,7 @@
 // this cursor instead; what it does over the page goes to what lies under it, as the browser's own would: hover (the
 // hotbar's tooltips), clicks and the wheel (the log's list scrolled). The world under it takes none of it: a click
 // missing a button doesn't attack.
+import { standsForAt } from './kit/press';
 import { input, isDown, pointerLocked } from '../core/input';
 import { altSelectKey, beginAltRange, closeAltSelect, dragAltRange, endAltRange, openAltSelect, outsideAltSelect } from './altForms';
 
@@ -23,9 +24,11 @@ let activating = false;
 /** Alt held while the pointer is locked for mouse look: the mouse moves the drawn cursor. */
 export const altCursorOn = (): boolean => !input.touchMode && pointerLocked() && (isDown('altleft') || isDown('altright'));
 
-/** What the cursor is over: an element of the page, or null over the world (the canvas, where nothing else is). */
+/** What the cursor is over: an element of the page, or what a panel the engine draws there stands for (ui/kit), or
+ *  null over the world (the canvas, where nothing else is). */
 function under(): Element | null {
-  const found = document.elementFromPoint(at.x, at.y);
+  let found = document.elementFromPoint(at.x, at.y);
+  if (found === canvas) found = standsForAt(at.x, at.y) ?? found;
   return found && found !== canvas && found !== document.body && found !== document.documentElement ? found : null;
 }
 

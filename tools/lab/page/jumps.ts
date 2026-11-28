@@ -74,7 +74,7 @@ export function jumpsIn(moves: readonly Move[], least: number): Jump[] {
   return jumps;
 }
 
-/** A place (m; a `THREE.Vector3`). */
+/** A place (m; a `Vec3`). */
 interface Place {
   x: number;
   y: number;

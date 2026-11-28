@@ -11,7 +11,10 @@
 // turns with the camera. The plants reaching over it as the top-down view draws them (`fireClear.ts`). Pictured from
 // beside it at three moments, its own light alone, from above, its flames from round it, and in the game's views
 // with the hero standing before it.
-import * as THREE from 'three';
+import {
+  AdditiveBlending, boundsOf, Box3, Color, Light, Line, LookMaterial, Material, Maths, Mesh, Node, PointLight,
+  Points, Sprite, type Uniform, UnlitMaterial, Vec2, Vec3,
+} from './sceneApi.ts';
 import type { Lab, Pictured, Report, Tile } from './lab';
 import { screenArea } from './lab';
 import { G } from '../../../src/state';
@@ -52,9 +55,9 @@ export interface FireOptions {
 
 /** A fire of the biome's: its light, where that is, and what it draws of its own light near it. */
 interface Fire {
-  light: THREE.PointLight;
-  at: THREE.Vector3;
-  parts: THREE.Object3D[];
+  light: PointLight;
+  at: Vec3;
+  parts: Node[];
   /** the lowest of its parts (m): the bed it burns on */
   base: number;
 }
@@ -62,7 +65,7 @@ interface Fire {
 /** A camera of the fire's pictures: the side it looks from (from the fire, its length 1), and how far off. */
 interface Shot {
   name: string;
-  from: THREE.Vector3;
+  from: Vec3;
   distance: number;
   /** how far over the fire's base it looks (m) */
   rise: number;
@@ -112,59 +115,59 @@ const PLANT_HEIGHT = 2.5;
 const counted = (count: number, thing: string): string => `${count} ${thing}${count === 1 ? '' : 's'}`;
 
 /** Whether `colour` (linear) is a fire's: red, with little green and less blue. */
-const fireColour = (colour: THREE.Color): boolean =>
+const fireColour = (colour: Color): boolean =>
   colour.r > 0.8 && colour.g < 0.6 * colour.r && colour.b < 0.3 * colour.r;
 
 /** Whether `material` draws its own light: unlit, a shader of the game's own, or added light. */
-function glows(material: THREE.Material): boolean {
-  if (material.blending === THREE.AdditiveBlending) return true;
-  return (material as THREE.ShaderMaterial).isShaderMaterial === true
-    || (material as THREE.MeshBasicMaterial).isMeshBasicMaterial === true;
+function glows(material: Material): boolean {
+  if (material.blending === AdditiveBlending) return true;
+  return (material as LookMaterial).isLookMaterial === true
+    || (material as UnlitMaterial).isUnlitMaterial === true;
 }
 
 /** Whether `object` is drawn with a material that draws its own light. */
-function drawsGlow(object: THREE.Object3D): boolean {
-  const drawn = object as THREE.Mesh;
-  if (!drawn.isMesh && !(object as THREE.Points).isPoints) return false;
+function drawsGlow(object: Node): boolean {
+  const drawn = object as Mesh;
+  if (!drawn.isMesh && !(object as Points).isPoints) return false;
   const materials = Array.isArray(drawn.material) ? drawn.material : [drawn.material];
   return materials.some(glows);
 }
 
 /** The parts of `group` near `at` (across) that draw their own light. */
-function glowsNear(group: THREE.Object3D, at: THREE.Vector3): THREE.Object3D[] {
-  const parts: THREE.Object3D[] = [];
-  const centre = new THREE.Vector3();
+function glowsNear(group: Node, at: Vec3): Node[] {
+  const parts: Node[] = [];
+  const centre = new Vec3();
   group.traverse((object) => {
     if (!drawsGlow(object)) return;
-    new THREE.Box3().setFromObject(object).getCenter(centre);
+    boundsOf(object).getCenter(centre);
     if (Math.hypot(centre.x - at.x, centre.z - at.z) <= FIRE_REACH) parts.push(object);
   });
   return parts;
 }
 
 /** The lowest point of `parts` (m), or `fallback` with none. */
-function lowestOf(parts: THREE.Object3D[], fallback: number): number {
-  const lows = parts.map((part) => new THREE.Box3().setFromObject(part).min.y).filter(Number.isFinite);
+function lowestOf(parts: Node[], fallback: number): number {
+  const lows = parts.map((part) => boundsOf(part).min.y).filter(Number.isFinite);
   return lows.length ? Math.min(...lows) : fallback;
 }
 
 /** The biome's fires, by its warm lights. */
 function firesIn(biome: BiomeId): Fire[] {
   const group = G.arena.groupOf(biome);
-  const lights: THREE.PointLight[] = [];
+  const lights: PointLight[] = [];
   group.traverse((object) => {
-    const light = object as THREE.PointLight;
+    const light = object as PointLight;
     if (light.isPointLight && fireColour(light.color)) lights.push(light);
   });
   return lights.map((light) => {
-    const at = light.getWorldPosition(new THREE.Vector3());
+    const at = light.getWorldPosition(new Vec3());
     const parts = glowsNear(group, at);
     return { light, at, parts, base: lowestOf(parts, at.y - 1) };
   });
 }
 
 /** The way from `fire` to the arena's middle, across (its length 1). */
-const towardMiddle = (fire: Fire): THREE.Vector3 => new THREE.Vector3(-fire.at.x, 0, -fire.at.z).normalize();
+const towardMiddle = (fire: Fire): Vec3 => new Vec3(-fire.at.x, 0, -fire.at.z).normalize();
 
 /** The fire's pictures from beside it (from the arena's side, a little above) and from above. */
 function shotsOf(fire: Fire): { beside: Shot; above: Shot } {
@@ -186,7 +189,7 @@ function aim(fire: Fire, shot: Shot): () => void {
   const camera = G.camera;
   const kept = { position: camera.position.clone(), quaternion: camera.quaternion.clone(), fov: camera.fov,
     near: camera.near };
-  const centre = new THREE.Vector3(fire.at.x, fire.base + shot.rise, fire.at.z);
+  const centre = new Vec3(fire.at.x, fire.base + shot.rise, fire.at.z);
   camera.position.copy(centre).addScaledVector(shot.from, shot.distance);
   camera.fov = shot.fov ?? FOV;
   camera.near = 0.05;
@@ -257,20 +260,20 @@ function overLogsShot(fire: Fire): Shot {
 }
 
 /** The meshes of the logs in the fire (the game names them so), near its middle across. */
-function logsIn(group: THREE.Object3D, fire: Fire): THREE.Mesh[] {
-  const logs: THREE.Mesh[] = [];
-  const box = new THREE.Box3();
-  const centre = new THREE.Vector3();
+function logsIn(group: Node, fire: Fire): Mesh[] {
+  const logs: Mesh[] = [];
+  const box = new Box3();
+  const centre = new Vec3();
   group.traverse((object) => {
-    if (!(object as THREE.Mesh).isMesh || !object.name.includes('logs')) return;
-    box.setFromObject(object).getCenter(centre);
-    if (Math.hypot(centre.x - fire.at.x, centre.z - fire.at.z) <= FIRE_REACH / 2) logs.push(object as THREE.Mesh);
+    if (!(object as Mesh).isMesh || !object.name.includes('logs')) return;
+    boundsOf(object, box).getCenter(centre);
+    if (Math.hypot(centre.x - fire.at.x, centre.z - fire.at.z) <= FIRE_REACH / 2) logs.push(object as Mesh);
   });
   return logs;
 }
 
 /** `fire` read from above its logs (its light shown, as the player sees it). */
-async function readFromAbove(lab: Lab, fire: Fire, flames: THREE.Mesh, logs: THREE.Mesh[], canary: boolean):
+async function readFromAbove(lab: Lab, fire: Fire, flames: Mesh, logs: Mesh[], canary: boolean):
   Promise<LogsReading> {
   const restore = aim(fire, overLogsShot(fire));
   try {
@@ -288,8 +291,8 @@ async function readFromAbove(lab: Lab, fire: Fire, flames: THREE.Mesh, logs: THR
  *  half-width `reach` either side along the view), so the fire fades not at all, and before, its near side alone (a
  *  partial fade, even, read uneven through the bloom and the grade's curve). Halfway between the box's nearest corner
  *  and the nearest of those points; none if the box stands no nearer than they do from here (seen face-on). */
-function holeEndShort(middle: THREE.Vector3, reach: number): number | null {
-  const camera = G.camera.getWorldPosition(new THREE.Vector3());
+function holeEndShort(middle: Vec3, reach: number): number | null {
+  const camera = G.camera.getWorldPosition(new Vec3());
   const way = middle.clone().sub(camera).setY(0).normalize();
   const nearest = reach * (Math.abs(way.x) + Math.abs(way.z));
   return nearest > reach * 1.1 ? (nearest + reach) / 2 : null;
@@ -297,26 +300,29 @@ function holeEndShort(middle: THREE.Vector3, reach: number): number | null {
 
 /** The point the see-through hole is made round, for the hole's end to stand `short` of the flames' `middle`: on the
  *  line from the camera through their middle. */
-function focusShort(middle: THREE.Vector3, short: number): THREE.Vector3 {
-  const camera = G.camera.getWorldPosition(new THREE.Vector3());
+function focusShort(middle: Vec3, short: number): Vec3 {
+  const camera = G.camera.getWorldPosition(new Vec3());
   const way = middle.clone().sub(camera).normalize();
   return middle.clone().addScaledVector(way, seeHoleEnd() - short);
 }
 
 /** The flames' box's half-width across (m), as their shader has it. */
-const reachOf = (flames: THREE.Mesh): number =>
-  ((flames.material as THREE.ShaderMaterial).uniforms.uBox.value as THREE.Vector3).x;
+const reachOf = (flames: Mesh): number =>
+  ((flames.material as LookMaterial).uniforms.uBox.value as Vec3).x;
+
+/** what the flames' look reads that this measure reads too: their middle at the foot, and their height (m) */
+type FlameUniforms = { uCentre: Uniform<Vec3>; uHeight: Uniform<number> };
 
 /** `fire`'s flames alone from beside them, with the see-through hole's end across them, without the hole, and none
  *  of it drawn (the grade's adaptation held off, as `readFlames` holds it). */
-function fadeFrames(lab: Lab, fire: Fire, flames: THREE.Mesh): FadeFrames | null {
+function fadeFrames(lab: Lab, fire: Fire, flames: Mesh): FadeFrames | null {
   const restore = aim(fire, shotsOf(fire).beside);
   const shown = hideAllBut([flames]);
   renderer.holdAdaptation(true);
   try {
-    const material = flames.material as THREE.ShaderMaterial;
-    const middle = material.uniforms.uCentre.value.clone().setY(
-      material.uniforms.uCentre.value.y + material.uniforms.uHeight.value / 2);
+    const material = flames.material as LookMaterial<FlameUniforms>;
+    const centre = material.uniforms.uCentre.value;
+    const middle = centre.clone().setY(centre.y + material.uniforms.uHeight.value / 2);
     const short = holeEndShort(middle, reachOf(flames));
     if (short === null) return null;
     const focus = focusShort(middle, short);
@@ -336,9 +342,9 @@ function fadeFrames(lab: Lab, fire: Fire, flames: THREE.Mesh): FadeFrames | null
 }
 
 /** The fire's flames' volume: the part its shader marches from the bed's middle (`uCentre`), if it has one. */
-function flamesOf(fire: Fire): THREE.Mesh | undefined {
-  return fire.parts.find((part): part is THREE.Mesh => {
-    const material = (part as THREE.Mesh).material as THREE.ShaderMaterial | undefined;
+function flamesOf(fire: Fire): Mesh | undefined {
+  return fire.parts.find((part): part is Mesh => {
+    const material = (part as Mesh).material as LookMaterial | undefined;
     return !!material?.uniforms?.uCentre;
   });
 }
@@ -347,31 +353,31 @@ function flamesOf(fire: Fire): THREE.Mesh | undefined {
 const BOWL_DEPTH = 0.3;
 
 /** Whether `solids` round the fire's bed hold it in a bowl: one rises past the bed from well under it. */
-function inBowl(solids: THREE.Mesh[], fire: Fire): boolean {
-  const box = new THREE.Box3();
+function inBowl(solids: Mesh[], fire: Fire): boolean {
+  const box = new Box3();
   return solids.some((solid) => {
-    box.setFromObject(solid);
+    boundsOf(solid, box);
     return box.min.y < fire.base - BOWL_DEPTH && box.max.y > fire.base;
   });
 }
 
 /** The solid parts round the fire's bed (its bowl and stand: drawn by no light of their own, no higher than its bed
  *  and a little over, within its reach across). */
-function solidsUnder(group: THREE.Object3D, fire: Fire): THREE.Mesh[] {
-  const solids: THREE.Mesh[] = [];
-  const box = new THREE.Box3();
-  const centre = new THREE.Vector3();
+function solidsUnder(group: Node, fire: Fire): Mesh[] {
+  const solids: Mesh[] = [];
+  const box = new Box3();
+  const centre = new Vec3();
   group.traverse((object) => {
-    if (!(object as THREE.Mesh).isMesh || drawsGlow(object)) return;
-    box.setFromObject(object).getCenter(centre);
+    if (!(object as Mesh).isMesh || drawsGlow(object)) return;
+    boundsOf(object, box).getCenter(centre);
     const near = Math.hypot(centre.x - fire.at.x, centre.z - fire.at.z) <= FIRE_REACH / 2;
-    if (near && box.max.y <= fire.base + 0.4 && box.min.y < fire.base) solids.push(object as THREE.Mesh);
+    if (near && box.max.y <= fire.base + 0.4 && box.min.y < fire.base) solids.push(object as Mesh);
   });
   return solids;
 }
 
 /** Which pixels of `area` `meshes` cover as drawn now (1 where they do), rows from the top. */
-function coverOf(lab: Lab, meshes: THREE.Mesh[], area: Area): Uint8Array {
+function coverOf(lab: Lab, meshes: Mesh[], area: Area): Uint8Array {
   const drawing = lab.drawing;
   lab.drawing = true;
   try {
@@ -384,12 +390,12 @@ function coverOf(lab: Lab, meshes: THREE.Mesh[], area: Area): Uint8Array {
 }
 
 /** `fire` read from under its bowl (its light shown, as the player sees it). */
-async function readFromBelow(lab: Lab, fire: Fire, flames: THREE.Mesh, solids: THREE.Mesh[], canary: boolean):
+async function readFromBelow(lab: Lab, fire: Fire, flames: Mesh, solids: Mesh[], canary: boolean):
   Promise<BelowReading> {
   const restore = aim(fire, belowShot(fire));
   try {
     await readyLook('parts', solids);
-    const glows = [...fire.parts.filter((part) => part !== flames && !(part as THREE.Light).isLight),
+    const glows = [...fire.parts.filter((part) => part !== flames && !(part as Light).isLight),
       particles.glow.points];
     const solidsDrawn = () => coverOf(lab, solids, closeArea());
     return readBelow({ draw: () => drawnNow(lab, closeArea()), solidsDrawn, flames, glows, canary });
@@ -481,7 +487,7 @@ function strobed(lights: number[][]): number[][] {
 /** The metres a pixel spans at `shot`'s distance, at the drawing buffer's pixels. */
 function metresPerPixel(shot: Shot): number {
   const height = renderer.frameRect().height;
-  return 2 * shot.distance * Math.tan(THREE.MathUtils.degToRad(FOV / 2)) / height;
+  return 2 * shot.distance * Math.tan(Maths.degToRad(FOV / 2)) / height;
 }
 
 /** The fire's size from `shot` over the reading (m), the moments' median. */
@@ -560,14 +566,14 @@ function readingCanaries(lab: Lab, fire: Fire, shot: Shot, reading: Reading): st
 }
 
 /** Whether `object` is drawn: a mesh, points, a line or a sprite. */
-function drawable(object: THREE.Object3D): boolean {
-  return (object as THREE.Mesh).isMesh === true || (object as THREE.Points).isPoints === true
-    || (object as THREE.Line).isLine === true || (object as THREE.Sprite).isSprite === true;
+function drawable(object: Node): boolean {
+  return (object as Mesh).isMesh === true || (object as Points).isPoints === true
+    || (object as Line).isLine === true || (object as Sprite).isSprite === true;
 }
 
 /** The materials `object` is drawn with. */
-function materialsOf(object: THREE.Object3D): THREE.Material[] {
-  const material = (object as THREE.Mesh).material;
+function materialsOf(object: Node): Material[] {
+  const material = (object as Mesh).material;
   if (!material) return [];
   return Array.isArray(material) ? material : [material];
 }
@@ -575,9 +581,9 @@ function materialsOf(object: THREE.Object3D): THREE.Material[] {
 /** Everything the scene draws hidden but `kept`, by its materials (the culled plants show themselves again as they
  *  are packed for each render, `world/culling.ts`: hidden by their meshes, the forest's thicket stood between the fire
  *  and the camera; the lights stay, their count is in every lit program); returns what shows it again. */
-function hideAllBut(kept: THREE.Object3D[]): () => void {
+function hideAllBut(kept: Node[]): () => void {
   const keep = new Set(kept.flatMap(materialsOf));
-  const hidden = new Set<THREE.Material>();
+  const hidden = new Set<Material>();
   G.scene.traverse((object) => {
     if (!drawable(object)) return;
     for (const material of materialsOf(object)) {
@@ -593,7 +599,7 @@ function hideAllBut(kept: THREE.Object3D[]): () => void {
 
 /** The flames' shot from `side` degrees round them from the arena's middle, level with their `height`'s middle. */
 function turnShot(fire: Fire, side: number, height: number): Shot {
-  const from = towardMiddle(fire).applyAxisAngle(new THREE.Vector3(0, 1, 0), THREE.MathUtils.degToRad(side));
+  const from = towardMiddle(fire).applyAxisAngle(new Vec3(0, 1, 0), Maths.degToRad(side));
   return { name: `from ${side}°`, from, distance: TURN_DISTANCE, rise: height / 2, fov: TURN_FOV };
 }
 
@@ -667,7 +673,7 @@ function plantsLine(reaching: Reaching[], column: Column): string {
 
 /** The turning's and the plants' canaries: the far side's flames its near side's as they are, and a plant grown in
  *  the fire's middle; a problem each it missed. */
-function roundCanaries(turned: TurnReading, group: THREE.Object3D, column: Column): string[] {
+function roundCanaries(turned: TurnReading, group: Node, column: Column): string[] {
   const missed: string[] = [];
   // (flames too even to tell say nothing of a face shown twice either)
   const sameFace = turningOf(turned.alone[0], turned.alone[0], turned.width);
@@ -717,7 +723,7 @@ function costLine(cost: FlameCost | null, where: string): string {
 
 /** What the flames take of the GPU as the game shows them, over the shoulder with the hero before the fire, drawn and
  *  not in turns. */
-async function gameViewCost(lab: Lab, biome: BiomeId, fire: Fire, at: THREE.Vector2, facing: number):
+async function gameViewCost(lab: Lab, biome: BiomeId, fire: Fire, at: Vec2, facing: number):
   Promise<FlameCost | null> {
   await standIn(lab, { biome, view: 'third', facing, at: [at.x, at.y] });
   const drawing = lab.drawing;
@@ -772,9 +778,9 @@ async function costCanary(lab: Lab, fire: Fire, shot: Shot, cost: FlameCost): Pr
 }
 
 /** The game's views of the fire with the hero before it, each as the player sees it, round the fire. */
-async function viewsOf(lab: Lab, biome: BiomeId, fire: Fire, at: THREE.Vector2, facing: number): Promise<Pictured[]> {
+async function viewsOf(lab: Lab, biome: BiomeId, fire: Fire, at: Vec2, facing: number): Promise<Pictured[]> {
   const corners = [-1, 1].flatMap((side) => [0, 1.8].map((rise) => {
-    const across = new THREE.Vector3(-towardMiddle(fire).z, 0, towardMiddle(fire).x).multiplyScalar(side);
+    const across = new Vec3(-towardMiddle(fire).z, 0, towardMiddle(fire).x).multiplyScalar(side);
     return fire.at.clone().setY(fire.base + rise).add(across);
   }));
   const pictured: Pictured[] = [];
@@ -799,9 +805,9 @@ export async function fire(lab: Lab, options: FireOptions): Promise<Report> {
   const fires = firesIn(biome);
   if (!fires.length) return { text: `${biome}: no fire`, problems: [`${biome}: no warm light, no fire found`] };
   const found = fires[0];
-  const stand = new THREE.Vector2(found.at.x, found.at.z).addScaledVector(
-    new THREE.Vector2(towardMiddle(found).x, towardMiddle(found).z), HERO_OFF);
-  const facing = THREE.MathUtils.radToDeg(Math.atan2(found.at.x - stand.x, found.at.z - stand.y));
+  const stand = new Vec2(found.at.x, found.at.z).addScaledVector(
+    new Vec2(towardMiddle(found).x, towardMiddle(found).z), HERO_OFF);
+  const facing = Maths.radToDeg(Math.atan2(found.at.x - stand.x, found.at.z - stand.y));
   await standIn(lab, { biome, view: 'top', facing, at: [stand.x, stand.y] });
   await lab.step(SETTLE_FRAMES);
   const fire = found;

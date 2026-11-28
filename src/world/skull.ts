@@ -2,7 +2,7 @@
 // the brow, the cheekbones and the upper jaw with its teeth, the eye sockets and the nose cut out of them. Its
 // hollows are darkened in its vertex colours (the field asked along each normal: a socket's walls close in), as the
 // game's light leaves a socket as pale as the brow round it. Faces +z, its lowest point at y 0.
-import * as THREE from 'three';
+import { Attribute, Box3, Geometry, Mesh, Quat, Vec3 } from '../engine/api/index.ts';
 import { ellipsoid, fieldOf, IDENTITY, type Part, type Shape } from '../entities/models/sdf';
 import { surfaceNets } from '../entities/models/surfaceNets';
 
@@ -56,10 +56,10 @@ export function skullParts(): Part[] {
 }
 
 /** the box the skull's sculpt is meshed in (m) */
-export const SKULL_BOX = new THREE.Box3(new THREE.Vector3(-0.09, -0.01, -0.12), new THREE.Vector3(0.09, 0.18, 0.13));
+export const SKULL_BOX = new Box3(new Vec3(-0.09, -0.01, -0.12), new Vec3(0.09, 0.18, 0.13));
 
 /** The skull's geometry (positions, normals, vertex colours), made once. */
-export function skullGeometry(cell = CELL): THREE.BufferGeometry {
+export function skullGeometry(cell = CELL): Geometry {
   const g = netGeometry(fieldOf(skullParts()), SKULL_BOX, cell);
   g.computeBoundingBox();
   g.translate(0, -g.boundingBox!.min.y, 0).scale(SIZE, SIZE, SIZE);
@@ -69,19 +69,19 @@ export function skullGeometry(cell = CELL): THREE.BufferGeometry {
 
 /** The surface of `field` within `box` meshed on a grid of `cell` (m), its hollows darkened in its vertex colours
  *  (asked along each normal at steps of `step`), in the field's own space. */
-export function netGeometry(field: (x: number, y: number, z: number) => number, box: THREE.Box3, cell: number,
-  step = OCCLUSION_STEP): THREE.BufferGeometry {
+export function netGeometry(field: (x: number, y: number, z: number) => number, box: Box3, cell: number,
+  step = OCCLUSION_STEP): Geometry {
   const net = surfaceNets(field, box, cell);
   const colours = new Float32Array(net.positions.length);
   for (let v = 0; v < net.positions.length; v += 3) {
     const shade = 1 - DARKEST * occlusion(field, net.positions, net.normals, v, step);
     colours.set([shade, shade, shade], v);
   }
-  const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.BufferAttribute(net.positions, 3));
-  g.setAttribute('normal', new THREE.BufferAttribute(net.normals, 3));
-  g.setAttribute('color', new THREE.BufferAttribute(colours, 3));
-  g.setIndex(new THREE.BufferAttribute(net.index, 1));
+  const g = new Geometry();
+  g.setAttribute('position', new Attribute(net.positions, 3));
+  g.setAttribute('normal', new Attribute(net.normals, 3));
+  g.setAttribute('color', new Attribute(colours, 3));
+  g.setIndex(new Attribute(net.index, 1));
   g.normalizeNormals();
   g.computeBoundingSphere();
   return g;
@@ -89,9 +89,9 @@ export function netGeometry(field: (x: number, y: number, z: number) => number, 
 
 /** How high `g` must be lifted, turned by `q` and scaled by `scale`, to rest on the ground: its lowest point's depth
  *  below its origin. */
-export function restingLift(g: THREE.BufferGeometry, q: THREE.Quaternion, scale: number): number {
+export function restingLift(g: Geometry, q: Quat, scale: number): number {
   const pos = g.attributes.position;
-  const v = new THREE.Vector3();
+  const v = new Vec3();
   let lowest = Infinity;
   for (let i = 0; i < pos.count; i++) lowest = Math.min(lowest, v.fromBufferAttribute(pos, i).applyQuaternion(q).y);
   return -lowest * scale;
@@ -117,9 +117,9 @@ function occlusion(field: (x: number, y: number, z: number) => number, p: Float3
 
 /** The skulls drawn, each with its two geometries, swapped by the quality level (`setSkullDetail`). */
 interface Drawn {
-  meshes: THREE.Mesh[];
-  full: THREE.BufferGeometry;
-  coarse: THREE.BufferGeometry;
+  meshes: Mesh[];
+  full: Geometry;
+  coarse: Geometry;
 }
 const drawn: Drawn[] = [];
 /** whether the level wants the coarse skulls (Low's `coarseProps`) */
@@ -127,7 +127,7 @@ let coarseWanted = false;
 
 /** Shows `meshes` (a mesh and its shadow's copy) at `full`'s detail or `coarse`'s as the level has it. The swap is
  *  a geometry's alone, of the same attributes: no program changes. */
-export function skullsDrawn(meshes: THREE.Mesh[], full: THREE.BufferGeometry, coarse: THREE.BufferGeometry): void {
+export function skullsDrawn(meshes: Mesh[], full: Geometry, coarse: Geometry): void {
   drawn.push({ meshes, full, coarse });
   setSkullDetail(coarseWanted);
 }

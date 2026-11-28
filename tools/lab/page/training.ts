@@ -1,6 +1,7 @@
 // Training grounds (#405): exercise the lobby and controller against a real normal-run damage control. The
 // village's way in is the ghost by the training yard's gate (`src/game/ghost.ts`): talked to by E, its card picks
 // a battleground and a wave reached.
+import { Vec3 } from './sceneApi.ts';
 import type { Lab, Report, Pictured } from './lab';
 import { G } from '../../../src/state';
 import { BIOME_IDS, type BiomeId } from '../../../src/data/biomes';
@@ -82,7 +83,7 @@ async function talkToGhost(lab: Lab): Promise<void> {
   if (!ghost) throw new Error('lab: training: the village has no ghost');
   const [x, z] = ghost.stand;
   lab.player.walkTo = null;
-  lab.player.place(new lab.THREE.Vector3(x, groundHeight(x, z), z), 0);
+  lab.player.place(new Vec3(x, groundHeight(x, z), z), 0);
   await lab.step(15);
   await lab.step(1, () => ({ keys: ['e'] }));
   await lab.step(15);
@@ -180,7 +181,7 @@ export async function training(lab: Lab, options: TrainingOptions): Promise<Repo
   }
 
   // Real enemy spawn/kill events exercise both loot paths and the crowd uniforms.
-  const foe = lab.spawnFoe('husk', new lab.THREE.Vector3(4, 0, 4));
+  const foe = lab.spawnFoe('husk', new Vec3(4, 0, 4));
   const isProjection = (): boolean => foe.model.kit.u.uDissolve.value >= 0.28
     && foe.model.kit.u.uFrozen.value > 0.3;
   check(isProjection(), 'newly spawned enemy appeared normal before its first update');

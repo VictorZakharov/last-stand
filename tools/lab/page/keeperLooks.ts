@@ -3,7 +3,7 @@
 // his broom, the hearth, the counter wiped, the ale poured, his shoulders' tops, his neck from behind as he looks down),
 // each at the moment of the task it shows, the hero hidden while it's taken. Pictures alone, for a look before and
 // after a change (the measure in full is `page/tavern.ts`).
-import * as THREE from 'three';
+import { Vec3 } from './sceneApi.ts';
 import type { Lab, Pictured, ViewName } from './lab';
 import { G } from '../../../src/state';
 import type { TavernKeeper } from '../../../src/world/tavernKeeper';
@@ -141,7 +141,7 @@ interface Seen {
   /** the hero's place in the room (its own x, z) and his facing */
   at?: () => [number, number, number];
   /** a close picture besides, framed on this point and from this far, the hero hidden */
-  close?: () => { at: THREE.Vector3; distance: number };
+  close?: () => { at: Vec3; distance: number };
 }
 
 /** the moments seen as the player sees them */
@@ -284,12 +284,12 @@ async function heroMoments(lab: Lab, tv: TavernKeeper, problems: string[], befor
   };
   // (by the small table: F, the mug on its way down, then down)
   G.player.walkTo = null;
-  G.player.place(room.localToWorld(new THREE.Vector3(0.3 + 0.95, 0, -0.2 + 0.2)), -Math.PI / 2);
+  G.player.place(room.localToWorld(new Vec3(0.3 + 0.95, 0, -0.2 + 0.2)), -Math.PI / 2);
   await lab.step(20);
   const id = await give();
   if (id < 0) problems.push('looks: no mug to put down');
   else {
-    const table = room.localToWorld(new THREE.Vector3(0.3 + 0.35, 0.76, -0.2 + 0.1));
+    const table = room.localToWorld(new Vec3(0.3 + 0.35, 0.76, -0.2 + 0.1));
     await lab.step(1, () => ({ keys: ['f'] }));
     await lab.step(6);
     moments.push(lab.picture('27-put-down', ['above', 'left'], [`his mug put down by the small table, on its way from his hand (round 5, note 8)${before ? ', as it was' : ''}`], { at: table, distance: 2.4 }));
@@ -298,10 +298,10 @@ async function heroMoments(lab: Lab, tv: TavernKeeper, problems: string[], befor
     tv.mugs.move(id, { at: 'shelf', slot: id }, { full: 0, dirty: false, held: false });
   }
   // (a mug in hand, the pointer on a bar stool)
-  G.player.place(room.localToWorld(new THREE.Vector3(BAR_STOOL_X - 0.9, 0, BAR_STOOLS[3] + 0.6)), Math.PI / 2);
+  G.player.place(room.localToWorld(new Vec3(BAR_STOOL_X - 0.9, 0, BAR_STOOLS[3] + 0.6)), Math.PI / 2);
   await lab.step(20);
   const held = await give();
-  const stool = room.localToWorld(new THREE.Vector3(BAR_STOOL_X, 0.72, BAR_STOOLS[3]));
+  const stool = room.localToWorld(new Vec3(BAR_STOOL_X, 0.72, BAR_STOOLS[3]));
   for (let f = 0; f < 40; f++) await lab.step(1, () => ({ aim: stool }));
   moments.push(await lab.screen('28-e-on-a-stool', [`a mug in hand, the pointer on a bar stool: one E (round 5, note 9)${before ? ', as it was' : ''}`]));
   if (held >= 0) {
@@ -313,9 +313,9 @@ async function heroMoments(lab: Lab, tv: TavernKeeper, problems: string[], befor
 }
 
 /** the tub's middle in the world, on its water */
-function tubAt(): THREE.Vector3 {
+function tubAt(): Vec3 {
   const room = G.arena.rooms!.tavern;
-  return room.group.localToWorld(new THREE.Vector3((BACK.front + BACK.wall) / 2, BACK.top + TUB.water, TUB.z));
+  return room.group.localToWorld(new Vec3((BACK.front + BACK.wall) / 2, BACK.top + TUB.water, TUB.z));
 }
 
 /** The hero stood before the tap at the bar, facing the keeper's stand there: his facing. */
@@ -323,7 +323,7 @@ function standAtBar(): number {
   const him = villageObject('keeper')!;
   const facing = Math.atan2(him.at[0] - him.stand[0], him.at[1] - him.stand[1]);
   G.player.walkTo = null;
-  G.player.place(new THREE.Vector3(him.stand[0], 0, him.stand[1]), facing);
+  G.player.place(new Vec3(him.stand[0], 0, him.stand[1]), facing);
   return facing;
 }
 
@@ -336,14 +336,14 @@ function standToSee(keeper: Keeper, seen: Seen): number {
   if (seen.at) {
     const [x, z, facing] = seen.at();
     const room = G.arena.rooms!.tavern;
-    G.player.place(room.group.localToWorld(new THREE.Vector3(x, 0, z)), facing);
+    G.player.place(room.group.localToWorld(new Vec3(x, 0, z)), facing);
     return facing;
   }
   const [across, ahead] = seen.from!;
-  const him = keeper.root.getWorldPosition(new THREE.Vector3());
+  const him = keeper.root.getWorldPosition(new Vec3());
   const yaw = keeper.root.rotation.y;
-  const forward = new THREE.Vector3(Math.sin(yaw), 0, Math.cos(yaw));
-  const right = new THREE.Vector3(-forward.z, 0, forward.x);
+  const forward = new Vec3(Math.sin(yaw), 0, Math.cos(yaw));
+  const right = new Vec3(-forward.z, 0, forward.x);
   const at = him.clone().addScaledVector(right, across).addScaledVector(forward, ahead);
   const facing = Math.atan2(him.x - at.x, him.z - at.z);
   G.player.place(at, facing);
@@ -353,8 +353,8 @@ function standToSee(keeper: Keeper, seen: Seen): number {
 /** `look` taken now: framed on his body, from his own facing's sides, the hero hidden and turned back after. */
 function shoot(lab: Lab, keeper: Keeper, look: Look): Pictured {
   const at = look.joint
-    ? keeper.joints[look.joint as 'neck'].getWorldPosition(new THREE.Vector3())
-    : keeper.root.getWorldPosition(new THREE.Vector3()).setY(look.y);
+    ? keeper.joints[look.joint as 'neck'].getWorldPosition(new Vec3())
+    : keeper.root.getWorldPosition(new Vec3()).setY(look.y);
   const facing = G.player.facing;
   G.player.facing = keeper.root.rotation.y;
   lab.model.root.visible = false;

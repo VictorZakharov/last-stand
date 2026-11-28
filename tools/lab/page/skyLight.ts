@@ -1,6 +1,6 @@
 // The camera turned to the sky's key light (the village's sun by day, its moon by night), for a picture of its disc
 // and what's round it: `lab rust --skylight`. From play on the Rust engine: "also no sun/moon on the sky I think".
-import * as THREE from 'three';
+import { DirectionalLight, Vec3 } from './sceneApi.ts';
 import type { Clip, Lab } from './lab';
 import { G } from '../../../src/state';
 import { lookBy, turnBy } from '../../../src/core/renderer';
@@ -23,25 +23,25 @@ export interface SkyLight {
 }
 
 /** The way to the scene's key light, from what it lights (the arena's one directional light). */
-function wayToLight(): THREE.Vector3 | null {
-  let way: THREE.Vector3 | null = null;
+function wayToLight(): Vec3 | null {
+  let way: Vec3 | null = null;
   G.scene.traverse((object) => {
-    const light = object as THREE.DirectionalLight;
+    const light = object as DirectionalLight;
     if (!light.isDirectionalLight || !light.visible || way) return;
-    const from = light.target.getWorldPosition(new THREE.Vector3());
-    way = light.getWorldPosition(new THREE.Vector3()).sub(from).normalize();
+    const from = light.target.getWorldPosition(new Vec3());
+    way = light.getWorldPosition(new Vec3()).sub(from).normalize();
   });
   return way;
 }
 
-const heading = (way: THREE.Vector3): number => Math.atan2(way.x, way.z);
+const heading = (way: Vec3): number => Math.atan2(way.x, way.z);
 const wrapped = (angle: number): number => Math.atan2(Math.sin(angle), Math.cos(angle));
 
 /** The close view's camera turned until the key light is in the middle of it; null where the scene has none. */
 export async function turnToSkyLight(lab: Lab): Promise<SkyLight | null> {
   const way = wayToLight();
   if (!way) return null;
-  const ahead = new THREE.Vector3();
+  const ahead = new Vec3();
   let off = Infinity;
   for (let round = 0; round < ROUNDS; round++) {
     await lab.step(SETTLE);

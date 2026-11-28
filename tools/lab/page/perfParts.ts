@@ -4,7 +4,7 @@
 // "low fps at night": the GPU at 12 ms of the frame, the phases' lines telling only scene and shadow. Its canary times
 // the meadow drawn four times over, which must read as more than it does once. The hero is first turned all round: the
 // report's GPU was 12 ms one way and 6 another, so the parts are timed turned the dearest way.
-import * as THREE from 'three';
+import { InstancedGeometry, InstancedMesh, LitMaterial, Mesh, Node } from './sceneApi.ts';
 import { G } from '../../../src/state';
 import * as renderer from '../../../src/core/renderer';
 import { lampsHeldOut, lampShadowsOn, setLampShadows } from '../../../src/core/lamps';
@@ -55,27 +55,27 @@ async function dearestWay(lab: Lab, lines: string[]): Promise<void> {
 /** What's timed: its name and the meshes hidden together. */
 interface Part {
   name: string;
-  meshes: THREE.Mesh[];
+  meshes: Mesh[];
 }
 
 /** How many triangles `mesh` draws, every instance counted. */
-function trianglesOf(mesh: THREE.Mesh): number {
-  const geometry = mesh.geometry as THREE.InstancedBufferGeometry;
+function trianglesOf(mesh: Mesh): number {
+  const geometry = mesh.geometry as InstancedGeometry;
   const corners = geometry.index ? geometry.index.count : geometry.attributes.position?.count ?? 0;
-  const instanced = mesh as THREE.InstancedMesh;
+  const instanced = mesh as InstancedMesh;
   const instances = instanced.isInstancedMesh ? instanced.count : geometry.instanceCount ?? 1;
   return (corners / 3) * (Number.isFinite(instances) ? instances : 1);
 }
 
 /** How far `mesh` spreads (m): its bounding sphere's radius. */
-function reachOf(mesh: THREE.Mesh): number {
+function reachOf(mesh: Mesh): number {
   if (!mesh.geometry.boundingSphere) mesh.geometry.computeBoundingSphere();
   return mesh.geometry.boundingSphere?.radius ?? 0;
 }
 
 /** A mesh's name: its own or its parent's, and what it's drawn in. */
-function nameOf(mesh: THREE.Mesh): string {
-  const material = (Array.isArray(mesh.material) ? mesh.material[0] : mesh.material) as THREE.MeshStandardMaterial;
+function nameOf(mesh: Mesh): string {
+  const material = (Array.isArray(mesh.material) ? mesh.material[0] : mesh.material) as LitMaterial;
   const colour = material.color ? `#${material.color.getHexString()}` : '';
   const name = mesh.name || mesh.parent?.name || 'unnamed';
   const thousands = (trianglesOf(mesh) / 1000).toFixed(0);
@@ -83,8 +83,8 @@ function nameOf(mesh: THREE.Mesh): string {
 }
 
 /** Whether `mesh` stands under the group called `name`. */
-function under(mesh: THREE.Object3D, name: string): boolean {
-  for (let at: THREE.Object3D | null = mesh; at; at = at.parent) {
+function under(mesh: Node, name: string): boolean {
+  for (let at: Node | null = mesh; at; at = at.parent) {
     if (at.name === name) return true;
   }
   return false;
@@ -94,10 +94,10 @@ function under(mesh: THREE.Object3D, name: string): boolean {
 const SKY = 200;
 
 /** The meshes shown that hold nothing under them. */
-function shownMeshes(): THREE.Mesh[] {
-  const meshes: THREE.Mesh[] = [];
+function shownMeshes(): Mesh[] {
+  const meshes: Mesh[] = [];
   G.scene.traverseVisible((object) => {
-    const mesh = object as THREE.Mesh;
+    const mesh = object as Mesh;
     if (mesh.isMesh && mesh.children.length === 0) meshes.push(mesh);
   });
   return meshes;
@@ -108,7 +108,7 @@ function partsShown(): Part[] {
   const meshes = shownMeshes();
   const whole = WHOLE.map((name) => ({ name, meshes: meshes.filter((mesh) => under(mesh, name)) }));
   const rest = meshes.filter((mesh) => !WHOLE.some((name) => under(mesh, name)));
-  const top = (score: (mesh: THREE.Mesh) => number, count: number): THREE.Mesh[] => [...rest]
+  const top = (score: (mesh: Mesh) => number, count: number): Mesh[] => [...rest]
     .sort((a, b) => score(b) - score(a))
     .slice(0, count);
   const singles = new Set([...top(trianglesOf, BY_TRIANGLES), ...top(reachOf, BY_REACH)]);
@@ -159,18 +159,18 @@ async function switchCosts(draw: () => void): Promise<string[]> {
 }
 
 /** The heroes standing about the scene other than the player's own (the hall's, on its dais). */
-function standingHeroes(): THREE.Object3D[] {
+function standingHeroes(): Node[] {
   return G.scene.children.filter((o) => o !== G.player.obj && o.visible && o.name.startsWith('hero '));
 }
 
 /** `objects` shown or hidden. */
-const shownAll = (objects: THREE.Object3D[]) => (on: boolean): void => {
+const shownAll = (objects: Node[]) => (on: boolean): void => {
   for (const object of objects) object.visible = on;
 };
 
 /** The hero's meshes that cast a shadow, cast or not. */
 function heroShadows(): (on: boolean) => void {
-  const casters: THREE.Object3D[] = [];
+  const casters: Node[] = [];
   G.player.obj.traverse((o) => { if (o.castShadow) casters.push(o); });
   return (on) => { for (const caster of casters) caster.castShadow = on; };
 }

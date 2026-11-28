@@ -4,7 +4,7 @@
 // `HeldAloft` reads each frame he stands in a sit's hands stage: his weapon off the floor and off his shoulder must
 // have his left fist closed on it too.
 
-import * as THREE from 'three';
+import { boundsOf, Box3, Line3, Mat4, Mesh, Node, Vec3 } from './sceneApi.ts';
 import { groundHeight } from '../../../src/world/ground';
 import type { Fist, LowerGrip } from '../../../src/types';
 import type { Lab } from './lab';
@@ -28,13 +28,13 @@ const HEAD_UNDER_MOST = 0.1;
  *  review, "both fists are bunched at the butt end of the haft ... nobody lifts a heavy axe that way" */
 const APART_LEAST = 0.3;
 
-const _grip = new THREE.Vector3();
-const _way = new THREE.Vector3();
-const _end = new THREE.Vector3();
-const _shoulder = new THREE.Vector3();
-const _point = new THREE.Vector3();
-const _box = new THREE.Box3();
-const _inverse = new THREE.Matrix4();
+const _grip = new Vec3();
+const _way = new Vec3();
+const _end = new Vec3();
+const _shoulder = new Vec3();
+const _point = new Vec3();
+const _box = new Box3();
+const _inverse = new Mat4();
 
 /** Where a weapon reaches along its grip's own up, each way from the grip (m, in the grip's space). */
 interface Reach {
@@ -206,7 +206,7 @@ export class HeldAloft {
     this.headDown.at = frame;
   }
 
-  private holdsOf(lab: Lab, grip: THREE.Object3D): Holds {
+  private holdsOf(lab: Lab, grip: Node): Holds {
     lab.model.root.updateMatrixWorld(true);
     const reach = (this.reach ??= reachOf(grip));
     grip.getWorldPosition(_grip);
@@ -215,7 +215,7 @@ export class HeldAloft {
     const ends = [reach.down, reach.up].map((along) => _end.copy(_grip).addScaledVector(_way, along * scale).clone());
     const over = lowestOver(grip);
     lab.joints.shoulderR.getWorldPosition(_shoulder);
-    const line = new THREE.Line3(ends[0], ends[1]);
+    const line = new Line3(ends[0], ends[1]);
     const shoulder = line.closestPointToPoint(_shoulder, true, _point).distanceTo(_shoulder);
     const fists = lab.model.fists ?? [];
     const headUnder = _grip.y - ends[1].y;
@@ -227,15 +227,15 @@ export class HeldAloft {
 
 /** How far the lowest point of the weapon hung from `grip` is over the floor under it, read from its vertices as drawn
  *  (its handle's ends alone, a maul lying on the floor read 10 cm up, held there by its head). */
-function lowestOver(grip: THREE.Object3D): number {
-  _box.setFromObject(grip, true);
+function lowestOver(grip: Node): number {
+  boundsOf(grip, _box, true);
   _box.getCenter(_point);
   return _box.min.y - groundHeight(_point.x, _point.z);
 }
 
 /** The weapon's handle's two ends in the world as it's drawn now (its butt, and its far end past the grip), or none
  *  without one. */
-export function handleOf(lab: Lab): { butt: THREE.Vector3; far: THREE.Vector3 } | null {
+export function handleOf(lab: Lab): { butt: Vec3; far: Vec3 } | null {
   const grip = lab.model.tip?.parent;
   if (!grip) return null;
   lab.model.root.updateMatrixWorld(true);
@@ -257,9 +257,9 @@ export function fistsUpHandle(lab: Lab): [number, number] | null {
 }
 
 /** How far up the line from `butt` to `far` the place nearest `hand`'s wrist is (m). */
-function upFrom(butt: THREE.Vector3, far: THREE.Vector3, hand: THREE.Object3D): number {
+function upFrom(butt: Vec3, far: Vec3, hand: Node): number {
   hand.getWorldPosition(_point);
-  const line = new THREE.Line3(butt, far);
+  const line = new Line3(butt, far);
   return line.closestPointToPointParameter(_point, true) * line.distance();
 }
 
@@ -270,11 +270,11 @@ function leftOn(fists: readonly Fist[]): boolean {
 }
 
 /** How far the weapon hung from `grip` reaches along its up each way, read once from its meshes. */
-function reachOf(grip: THREE.Object3D): Reach {
+function reachOf(grip: Node): Reach {
   const reach: Reach = { down: 0, up: 0 };
   _inverse.copy(grip.matrixWorld).invert();
   grip.traverse((object) => {
-    const mesh = object as THREE.Mesh;
+    const mesh = object as Mesh;
     if (!mesh.isMesh || !mesh.geometry) return;
     mesh.geometry.computeBoundingBox();
     _box.copy(mesh.geometry.boundingBox!).applyMatrix4(mesh.matrixWorld).applyMatrix4(_inverse);

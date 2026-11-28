@@ -7,11 +7,12 @@
 // at 1024x700 and on a tablet, and went unseen there, #468). Abandon run acts only once held 2 s (`pauseAbandon`):
 // clicked it says to hold and stays, held a second and let go it stays, held through it leaves the run; its canary makes the hold 0 ms, and the
 // click must be caught abandoning.
-import type { Lab } from './lab';
+import { boxOf, elementUnder, middleOf, scrollMoreOf, seenOf, type Lab } from './lab';
 import { ABANDON_HOLD_MS, PAUSE_TAB_COOKIE, pauseTab, showPause, type PauseTab } from '../../../src/ui/menus';
 import { audioContext, musicOutput, setVolumes } from '../../../src/core/audio';
 import { readCookie, removeCookie, writeCookie } from '../../../src/core/cookies';
 import { G } from '../../../src/state';
+import { uiScales } from '../../../src/ui/scale';
 import * as colourData from '../../../src/data/heroColours';
 import { savedColour } from '../../../src/net/heroColour';
 import * as colourSession from '../../../src/net/session';
@@ -38,6 +39,8 @@ let planted: HTMLElement | null = null;
 /** How much the pause box is scaled on the screen (its zoom, `--ui`): a css px of it is this many of the window's. */
 function boxScale(): number {
   const box = document.querySelector<HTMLElement>('#pause .pause-box');
+  // (drawn by the UI kit, its px are the lobby's scale's: its page box out of sight is 1 px)
+  if (box?.closest('.kit-mirror')) return uiScales.ui;
   if (!box?.offsetHeight) return 1;
   return box.getBoundingClientRect().height / box.offsetHeight;
 }
@@ -233,8 +236,8 @@ export function closePauseVolume(): void {
 export async function pauseVolumeChecked(lab: Lab): Promise<PauseFound> {
   const problems: string[] = [];
   const slider = document.querySelector<HTMLInputElement>('#opt-volume [data-volume="music"]');
-  if (!slider?.checkVisibility()) return { lines: [], problems: ['pauseVolume: no Music slider shown'] };
-  const box = slider.getBoundingClientRect();
+  if (!slider || !seenOf(slider)) return { lines: [], problems: ['pauseVolume: no Music slider shown'] };
+  const box = boxOf(slider);
   await lab.click({ x: box.left + box.width * VOLUME_CLICK, y: box.top + box.height / 2 });
   if (volumeCanary) writeCookie(VOLUME_COOKIE, '1,1,1');
   if (!(await audioRanFor(VOLUME_EASE_S))) problems.push('pauseVolume: the game\'s audio never ran after the click');
@@ -267,11 +270,6 @@ async function audioRanFor(seconds: number): Promise<boolean> {
   return false;
 }
 
-function middleOf(element: Element): { x: number; y: number } {
-  const box = element.getBoundingClientRect();
-  return { x: box.left + box.width / 2, y: box.top + box.height / 2 };
-}
-
 const share = (part: number, whole: number): string => ((100 * part) / whole).toFixed(1);
 
 /** developer mode's help on the Controls page (src/dev: previews and dev builds alone, the lab's among them), 240 px
@@ -280,15 +278,20 @@ const DEV_ONLY = '#pause .dv-help';
 
 /** The tab shown, the box's height as a share of the window's, and whether it scrolls or leaves the window: the menu
  *  as production has it, developer mode's help set aside. */
-export function pauseShown(tab: PauseTab): PauseFound {
+export async function pauseShown(lab: Lab, tab: PauseTab): Promise<PauseFound> {
   const devOnly = [...document.querySelectorAll<HTMLElement>(DEV_ONLY)];
   for (const part of devOnly) part.style.display = 'none';
   try {
+    // (the UI kit lays the menu out again in its next frames: read at once, the help was still in it)
+    await lab.step(KIT_FRAMES);
     return playersPauseShown(tab);
   } finally {
     for (const part of devOnly) part.style.display = '';
   }
 }
+
+/** frames for the UI kit to lay the menu out again once developer mode's help is set aside */
+const KIT_FRAMES = 3;
 
 function playersPauseShown(tab: PauseTab): PauseFound {
   const box = document.querySelector<HTMLElement>('#pause .pause-box');
@@ -301,16 +304,16 @@ function playersPauseShown(tab: PauseTab): PauseFound {
   // (the pages scroll in a cell of their own, the box round it never: read alone, the box hid a page too tall,
   // and the canary's row went unseen)
   const pages = box.querySelector<HTMLElement>('.pb-pages');
-  const inPages = pages ? pages.scrollHeight - pages.clientHeight : 0;
-  const scroll = Math.max(box.scrollHeight - box.clientHeight, inPages);
+  const inPages = pages ? scrollMoreOf(pages) : 0;
+  const scroll = Math.max(scrollMoreOf(box), inPages);
   if (scroll > ROUNDING_PX) problems.push(`pause, ${tab}: the menu scrolls (${scroll} px more than it shows)`);
-  const rect = box.getBoundingClientRect();
+  const rect = boxOf(box);
   const outside = rect.top < 0 || rect.left < 0 || rect.bottom > innerHeight || rect.right > innerWidth;
   if (outside) problems.push(`pause, ${tab}: the menu reaches past the window`);
   for (const selector of INSIDE) {
     const part = box.querySelector<HTMLElement>(selector);
-    if (!part?.checkVisibility()) continue;
-    const at = part.getBoundingClientRect();
+    if (!part || !seenOf(part)) continue;
+    const at = boxOf(part);
     const past = at.left < rect.left || at.right > rect.right || at.top < rect.top || at.bottom > rect.bottom;
     if (past) problems.push(`pause, ${tab}: ${selector} reaches past the menu's edge`);
   }
@@ -333,12 +336,13 @@ async function wheelPicked(lab: Lab, picker: HTMLElement, found: PauseFound): Pr
   const touch = document.body.classList.contains('touch');
   if (touch) await lab.tap(middleOf(open));
   else await lab.clickOn(open);
+  await lab.step(KIT_FRAMES);
   const disc = picker.querySelector<HTMLCanvasElement>('.cc-wheel canvas');
-  if (!disc?.checkVisibility()) {
+  if (!disc || !seenOf(disc)) {
     found.problems.push('settings: the colour wheel did not open');
     return;
   }
-  const box = disc.getBoundingClientRect();
+  const box = boxOf(disc);
   const at = { x: box.left + box.width / 2 * (1 + WHEEL_OUT), y: box.top + box.height / 2 };
   if (touch) await lab.tap(at);
   else await lab.click(at);
@@ -346,8 +350,9 @@ async function wheelPicked(lab: Lab, picker: HTMLElement, found: PauseFound): Pr
   const wheels = typeof worn === 'string' && worn.startsWith('#');
   if (!wheels || G.player.colour !== worn) found.problems.push(`settings: the wheel's pick was not saved and worn (${worn})`);
   if (!open.classList.contains('cc-worn')) found.problems.push('settings: the wheel button not lit with its colour');
-  const menu = picker.closest<HTMLElement>('.modal-box')?.getBoundingClientRect();
-  const panel = picker.querySelector<HTMLElement>('.cc-wheel')!.getBoundingClientRect();
+  const shell = picker.closest<HTMLElement>('.modal-box');
+  const menu = shell ? boxOf(shell) : undefined;
+  const panel = boxOf(picker.querySelector<HTMLElement>('.cc-wheel')!);
   if (menu && (panel.bottom > menu.bottom || panel.right > menu.right)) {
     found.problems.push('settings: the colour wheel reaches past the menu');
   }
@@ -358,15 +363,15 @@ async function wheelPicked(lab: Lab, picker: HTMLElement, found: PauseFound): Pr
 
 /** Single-player colour controls are reachable in Settings, saved and applied to the actual hero. */
 export async function pauseColourChecked(lab: Lab): Promise<PauseFound> {
-  const found = pauseShown('settings');
+  const found = await pauseShown(lab, 'settings');
   const picker = document.getElementById('hero-colour-settings');
   if (!picker) return { ...found, problems: [...found.problems, 'settings: no solo colour picker in this tree'] };
   const swatches = [...picker.querySelectorAll<HTMLButtonElement>('.cc-swatch')];
   const shown = colourData.HERO_COLOURS.length;
   if (swatches.length !== shown + 1) found.problems.push(`settings: expected ${shown} colours and Any`);
   for (const button of swatches) {
-    const box = button.getBoundingClientRect();
-    const hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+    const box = boxOf(button);
+    const hit = elementUnder(box.left + box.width / 2, box.top + box.height / 2);
     if (hit !== button) found.problems.push(`settings: ${button.title} swatch is not reachable`);
     if (document.body.classList.contains('touch') && (box.width < 39.5 || box.height < 39.5)) {
       found.problems.push(`settings: ${button.title} touch swatch is smaller than 40 px`);
@@ -404,8 +409,9 @@ export async function pauseTabKept(lab: Lab, canary: boolean): Promise<PauseFoun
   try {
     for (const tab of ['settings', 'controls'] as const) {
       showPause(true);
+      await lab.step(KIT_FRAMES);
       const button = document.querySelector<HTMLElement>(`[data-pause-tab="${tab}"]`);
-      if (!button?.checkVisibility()) return { lines, problems: [`pauseTabKept: no ${tab} tab shown`] };
+      if (!button || !seenOf(button)) return { lines, problems: [`pauseTabKept: no ${tab} tab shown`] };
       await lab.click(middleOf(button));
       showPause(false);
       if (canary) removeCookie(PAUSE_TAB_COOKIE);

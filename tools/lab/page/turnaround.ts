@@ -5,7 +5,7 @@
 // hero is rebuilt against such a sheet (the mage's, Codex's realistic render of him), judged part by part beside it
 // from the same side, where in a biome the forest's ferns and its light hid what he wore. Each picture says how many
 // triangles and meshes he is drawn with.
-import * as THREE from 'three';
+import { boundsOf, Box3, LitMaterial, Material, Mesh, Node, Vec3, Vec3Tuple, World } from './sceneApi.ts';
 import type { Lab, Fixture, Report, Pictured, Tile } from './lab';
 import { cameraOn, countsOf, shoot, studio, type Shot } from './studio';
 
@@ -21,8 +21,8 @@ export interface TurnaroundOptions {
 }
 
 /** The joint a mesh hangs from: the nearest of its ancestors that is one of the hero's joints, by its name there. */
-function jointOf(mesh: THREE.Object3D, names: Map<THREE.Object3D, string>): string {
-  for (let o: THREE.Object3D | null = mesh.parent; o; o = o.parent) {
+function jointOf(mesh: Node, names: Map<Node, string>): string {
+  for (let o: Node | null = mesh.parent; o; o = o.parent) {
     const name = names.get(o);
     if (name) return name;
   }
@@ -30,20 +30,20 @@ function jointOf(mesh: THREE.Object3D, names: Map<THREE.Object3D, string>): stri
 }
 
 /** What a material is called: its name, else its kind and colour. */
-function materialName(material: THREE.Material | undefined): string {
+function materialName(material: Material | undefined): string {
   if (!material) return '?';
   if (material.name) return material.name;
-  const colour = (material as THREE.MeshStandardMaterial).color;
+  const colour = (material as LitMaterial).color;
   return `${material.type.replace(/^Mesh|Material$/g, '')}${colour ? ` #${colour.getHexString()}` : ''}`;
 }
 
 /** His shown triangles by part, most first: each row a joint and a material, with its share of the whole. */
-function partsOf(lab: Lab, root: THREE.Object3D, total: number): string[] {
-  const joints = lab.joints as unknown as Record<string, THREE.Object3D>;
+function partsOf(lab: Lab, root: Node, total: number): string[] {
+  const joints = lab.joints as unknown as Record<string, Node>;
   const names = new Map(lab.jointNames().map((name) => [joints[name], name] as const));
   const rows = new Map<string, { triangles: number; meshes: number }>();
   root.traverseVisible((child) => {
-    const mesh = child as THREE.Mesh;
+    const mesh = child as Mesh;
     if (!mesh.isMesh) return;
     const geometry = mesh.geometry;
     const triangles = (geometry.index ? geometry.index.count : geometry.attributes.position.count) / 3;
@@ -63,7 +63,7 @@ function partsOf(lab: Lab, root: THREE.Object3D, total: number): string[] {
 /** A side the studio's camera looks at him from (the hero facing +z, his left +x), and what it frames. */
 interface View {
   name: string;
-  from: THREE.Vector3Tuple;
+  from: Vec3Tuple;
   frames: 'body' | 'head';
 }
 
@@ -84,7 +84,7 @@ const HEAD_FRAME = { across: 0.16, below: 0.14, above: 0.26 };
 const LEAST_DRAWN = 0.02;
 
 /** The hero's model taken out of the world into `scene`, standing at its middle facing +z; `back` puts it back. */
-function intoStudio(lab: Lab, scene: THREE.Scene): { root: THREE.Object3D; back: () => void } {
+function intoStudio(lab: Lab, scene: World): { root: Node; back: () => void } {
   const root = lab.model.root;
   const parent = root.parent;
   // (his own place under the player's object, which carries where he stands and his facing, is kept)
@@ -100,12 +100,12 @@ function intoStudio(lab: Lab, scene: THREE.Scene): { root: THREE.Object3D; back:
 }
 
 /** The box a view frames: his whole figure (the staff or the bow with it), or round his head. */
-function frameOf(lab: Lab, root: THREE.Object3D, view: View): THREE.Box3 {
-  if (view.frames === 'body') return new THREE.Box3().setFromObject(root);
-  const head = lab.joints.head.getWorldPosition(new THREE.Vector3());
-  return new THREE.Box3(
-    new THREE.Vector3(head.x - HEAD_FRAME.across, head.y - HEAD_FRAME.below, head.z - HEAD_FRAME.across),
-    new THREE.Vector3(head.x + HEAD_FRAME.across, head.y + HEAD_FRAME.above, head.z + HEAD_FRAME.across),
+function frameOf(lab: Lab, root: Node, view: View): Box3 {
+  if (view.frames === 'body') return boundsOf(root);
+  const head = lab.joints.head.getWorldPosition(new Vec3());
+  return new Box3(
+    new Vec3(head.x - HEAD_FRAME.across, head.y - HEAD_FRAME.below, head.z - HEAD_FRAME.across),
+    new Vec3(head.x + HEAD_FRAME.across, head.y + HEAD_FRAME.above, head.z + HEAD_FRAME.across),
   );
 }
 

@@ -1,7 +1,8 @@
 // The tavern's room, the Ember & Oak (data/houses/tavern.ts: its cottage, its size, what's used in it): the hearth, the
 // bar with its shelves of bottles and kegs, the party's round table with the village's map on it and the party board.
 // Built of the rooms' kit (world/rooms.ts) and found by world/houses.ts with every other house's room in this folder.
-import * as THREE from 'three';
+import { LitMaterial, Mesh, Node, Outline, Vec3 } from '../../engine/api/index.ts';
+import * as shapes from '../../engine/api/shapes/index.ts';
 import { HOUSES, type RoomId } from '../../data/houses';
 import { boards, pbrMaterialMaps, wood } from '../../core/textures';
 import {
@@ -19,31 +20,31 @@ import { TOP_THINGS } from '../tavernTables';
 import { BAR_STOOL_HIGH, BAR_STOOL_RUNG, BAR_STOOL_X, BAR_STOOLS } from '../../data/tavern';
 
 /** Two axes crossed behind a round shield on a wall (its frame, facing +z), centred at (x, y). */
-function crossedAxes(g: THREE.Object3D, M: Mats, x: number, y: number): void {
+function crossedAxes(g: Node, M: Mats, x: number, y: number): void {
   for (const d of [-1, 1]) {
-    const axe = new THREE.Group();
+    const axe = new Node();
     axe.position.set(x, y, 0.08);
     axe.rotation.z = d * 0.75;
     g.add(axe);
-    const haft = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.026, 1.1, 8), M.oak);
+    const haft = new Mesh(shapes.cylinder(0.022, 0.026, 1.1, 8), M.oak);
     haft.castShadow = true;
     axe.add(haft);
-    const head = new THREE.Shape();
+    const head = new Outline();
     head.moveTo(0, -0.06); head.lineTo(0.12, -0.12); head.quadraticCurveTo(0.2, 0, 0.12, 0.12); head.lineTo(0, 0.06);
-    const blade = new THREE.Mesh(new THREE.ExtrudeGeometry(head, { depth: 0.02, bevelEnabled: false }), M.iron);
+    const blade = new Mesh(shapes.extrude(head, { depth: 0.02, bevelEnabled: false }), M.iron);
     blade.position.set(d * 0.02, 0.45, -0.01);
     blade.scale.x = d;
     blade.castShadow = true;
     axe.add(blade);
   }
-  const shield = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.32, 0.05, 24).rotateX(Math.PI / 2), M.panel);
+  const shield = new Mesh(shapes.cylinder(0.32, 0.32, 0.05, 24).rotateX(Math.PI / 2), M.panel);
   shield.position.set(x, y, 0.13);
   shield.castShadow = true;
   g.add(shield);
-  const rim = new THREE.Mesh(new THREE.TorusGeometry(0.32, 0.02, 6, 24), M.iron);
+  const rim = new Mesh(shapes.torus(0.32, 0.02, 6, 24), M.iron);
   rim.position.set(x, y, 0.16);
   g.add(rim);
-  const boss = new THREE.Mesh(new THREE.SphereGeometry(0.07, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2).rotateX(Math.PI / 2), M.brass);
+  const boss = new Mesh(shapes.sphere(0.07, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2).rotateX(Math.PI / 2), M.brass);
   boss.position.set(x, y, 0.16);
   g.add(boss);
 }
@@ -55,15 +56,15 @@ const MANTEL_TOP = 1.45;
 
 /** The tavern: the hearth in the back wall, the bar down the east wall with its shelves of bottles and kegs, the party's
  *  round table by the hearth with its map, a long table and benches, barrels by the door, the party board beside it. */
-export function build(group: THREE.Group): Room {
+export function build(group: Node): Room {
   const id: RoomId = 'tavern', b = begin(id, group, 4711), { g, M, obstacles, rng } = b;
   const [hx, hz] = HOUSES[id].half, high = HOUSES[id].high;
   // (its tables and seats in a wood of their own: in the floor's dark oak they read as one with it, from play, "tables
   // should stand out from the floor"; a ruddy rim and legs nearly black, a pale top worn by the tankards, its grain
   // finer: the oak's and the floor's maps and programs, other colours and repeats)
-  const legs = new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(wood(), 1, 1), color: 0x1c100a });
-  const rim = new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(wood(), 1, 1), color: 0xa8461a });
-  const worn = new THREE.MeshStandardMaterial({ ...pbrMaterialMaps(boards(), [1, 2], 0.5), color: 0xfff0d8, roughness: 0.6 });
+  const legs = new LitMaterial({ ...pbrMaterialMaps(wood(), 1, 1), color: 0x1c100a });
+  const rim = new LitMaterial({ ...pbrMaterialMaps(wood(), 1, 1), color: 0xa8461a });
+  const worn = new LitMaterial({ ...pbrMaterialMaps(boards(), [1, 2], 0.5), color: 0xfff0d8, roughness: 0.6 });
   const T: Mats = { ...M, oak: rim, timber: legs };
   /** a table in the tavern's wood: its top a hair over the rim, at the height the cups stand */
   const inn = (x: number, z: number, w: number, d: number, round = false): void => {
@@ -71,7 +72,7 @@ export function build(group: THREE.Group): Room {
     if (round) drum(g, w / 2 - 0.05, w / 2 - 0.05, WORN, x, TOP - WORN, z, worn, 24).castShadow = false;
     else box(g, w - 0.08, WORN, d - 0.08, x, TOP - WORN, z, worn).castShadow = false;
   };
-  hearth(g, M, new THREE.Vector3(0.6, 0, -hz), 0, high, b.updaters, obstacles);
+  hearth(g, M, new Vec3(0.6, 0, -hz), 0, high, b.updaters, obstacles);
   // (tankards and a pot on the mantel)
   // (on its top at 1.45, jugs, tankards and candles: five tankards alike stood a centimetre over it)
   mantel(g, M, 0.6, MANTEL_TOP, -hz + 0.8);
@@ -160,7 +161,7 @@ export function build(group: THREE.Group): Room {
   const west = onWall(g, id, 'west');
   lantern(west, M, -0.6, 2.4, 0, 0, 1);
   banner(west, M, 2.9, high - 0.35, [0.36, 0.18, 0.04], rng, 0.7);
-  const tavernSign = new THREE.Group();
+  const tavernSign = new Node();
   tavernSign.name = 'tavern-sign';
   west.add(tavernSign);
   // (at 1.0 its backing ran through the ridge beam at 0; at 1.4 its nearest edge, 0.22, clears the beam's 0.13)

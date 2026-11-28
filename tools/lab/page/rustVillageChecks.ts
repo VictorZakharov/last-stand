@@ -1,7 +1,7 @@
 // `lab rustcheck`'s checks of the village under the Rust engine: its lamps' shadows drawn, its light cache, the
 // hall's shelter and its roof from above, the sun's shadow in turns, a house walked into lit by its own lights.
 import { heroLights } from '../../../src/entities/player';
-import * as THREE from 'three';
+import { LitMaterial, Mesh, Node, Vec3 } from './sceneApi.ts';
 import type { Lab } from './lab';
 import { G } from '../../../src/state';
 import { RUST } from '../../../src/engine';
@@ -90,20 +90,20 @@ export function shelter(bridge: Bridge, where: string, wanted: boolean): Checked
  *  by its material and place. From play's pictures: its columns' iron bands and its torches' brackets weren't drawn
  *  from above, where WebGL draws them. */
 function hiddenInHall(): string[] {
-  const at = new THREE.Vector3();
+  const at = new Vec3();
   const unseen: string[] = [];
-  const shown = (object: THREE.Object3D): boolean => {
-    for (let o: THREE.Object3D | null = object; o && o !== G.scene; o = o.parent) if (!o.visible) return false;
+  const shown = (object: Node): boolean => {
+    for (let o: Node | null = object; o && o !== G.scene; o = o.parent) if (!o.visible) return false;
     return true;
   };
   G.arena.shownGroup().traverse((object) => {
-    const mesh = object as THREE.Mesh;
+    const mesh = object as Mesh;
     if (!mesh.isMesh || shown(mesh)) return;
     mesh.getWorldPosition(at);
     const inside = Math.abs(at.x - TERRACE.x) < HALL.inHalf && at.z < HALL.inFront - 1 && at.z > HALL.columnZ[3]
       && at.y > TERRACE.high && at.y < TERRACE.high + HALL.wallHigh - 0.5;
     if (!inside) return;
-    const material = (Array.isArray(mesh.material) ? mesh.material[0] : mesh.material) as THREE.MeshStandardMaterial;
+    const material = (Array.isArray(mesh.material) ? mesh.material[0] : mesh.material) as LitMaterial;
     const place = `${at.x.toFixed(1)}, ${at.y.toFixed(1)}, ${at.z.toFixed(1)}`;
     unseen.push(`${mesh.name || mesh.geometry.type} in #${material.color?.getHexString() ?? '?'} at ${place}`);
   });
@@ -112,7 +112,7 @@ function hiddenInHall(): string[] {
 
 /** Stood inside the hall, seen from above: what stands over him thins, by the game's own kinds, none left out. */
 export async function hallFromAbove(lab: Lab, bridge: Bridge): Promise<Checked> {
-  G.player.place(new THREE.Vector3(TERRACE.x, TERRACE.high, HALL.columnZ[1]), Math.PI);
+  G.player.place(new Vec3(TERRACE.x, TERRACE.high, HALL.columnZ[1]), Math.PI);
   await lab.step(90);
   const { held, thinning } = bridge.seeKindsNow();
   const past = [...bridge.skipped].filter(([kind]) => kind.startsWith('see-through'));

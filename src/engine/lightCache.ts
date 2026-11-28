@@ -14,7 +14,7 @@
 // out at every pixel: the point lights were 5.8 ms of a phone's 25 ms frame by the braziers at Very low (a
 // report from play, QJ5A-BD6Q). The campfire isn't: it dims by the hour on its own, and one strength reads all
 // that's no lamp.
-import * as THREE from 'three';
+import { Mesh, PointLight, Vec3 } from './api/index.ts';
 import { lampList, lampStill, LAMPS_MOST } from '../core/lamps';
 import { perfClock } from '../core/perfClock';
 import type { Core } from './core';
@@ -28,7 +28,7 @@ import { shownPointLights } from '../core/webgpu';
 export interface StillLight { side: 'inside' | 'apart'; full: number }
 
 /** `light`'s word that it's still, if the game gave one. */
-const stillOf = (light: THREE.PointLight): StillLight | undefined => light.userData.still as StillLight | undefined;
+const stillOf = (light: PointLight): StillLight | undefined => light.userData.still as StillLight | undefined;
 
 /** a baked light's decay as the bake reads it: a lamp of the shelter's side falling as a light that's no lamp
  *  (the engine's bake.wgsl: a code of 4 or more), or its own decay, what's no lamp's */
@@ -48,17 +48,17 @@ const BELOW = 8, ABOVE = 6;
  *  (a phone's frame drew black the day the cache was wired in) */
 const OFF = new URLSearchParams(location.search).get('lightCache') === '0';
 
-const at = new THREE.Vector3();
+const at = new Vec3();
 
 export class LightCache {
   /** what casts into the lamps' shadows (the game's own choice, as the lamps' maps have) */
-  private casters: THREE.Mesh[] = [];
+  private casters: Mesh[] = [];
   /** what the volume was baked of: the lamps' places, reaches and fullest lights */
   private key = '';
   /** the lamps in the volume */
   private baked = new Set<number>();
   /** the scene's own lights in it */
-  private own = new Set<THREE.PointLight>();
+  private own = new Set<PointLight>();
   /** the last bake: its cells, a cell's side (m), and what it took on the page (ms) */
   private last = { cells: 0, cell: 0, ms: 0, bakes: 0 };
   /** how bright the volume was last told to be read: out in the open, and under the shelter */
@@ -67,7 +67,7 @@ export class LightCache {
   constructor(private core: Core) {}
 
   /** The lamps' light asked for, hidden by `casters` as they stand. */
-  ask(casters: THREE.Mesh[]): void {
+  ask(casters: Mesh[]): void {
     this.casters = casters;
     this.key = '';
   }
@@ -78,12 +78,12 @@ export class LightCache {
   }
 
   /** where each of the scene's own still lights was first met */
-  private places = new WeakMap<THREE.PointLight, THREE.Vector3>();
+  private places = new WeakMap<PointLight, Vec3>();
 
   /** Where a still light of the scene's own is baked: where it was first met, while it stays within `SWAY` of
    *  there. A fire's light sways with its flame, a third of a millimetre a frame, and baked where it is now the
    *  volume was made again every frame (367 bakes over one stand in the hall). */
-  private placeOf(light: THREE.PointLight): THREE.Vector3 {
+  private placeOf(light: PointLight): Vec3 {
     light.getWorldPosition(at);
     const met = this.places.get(light);
     if (met && met.distanceTo(at) < SWAY) return met;
@@ -94,7 +94,7 @@ export class LightCache {
 
   /** How far a light of the scene's own reaches in the frame's loop: its own reach, or `NEAR` once it's in the
    *  volume. */
-  ownReach(light: THREE.PointLight): number {
+  ownReach(light: PointLight): number {
     return this.own.has(light) ? Math.min(light.distance || NEAR, NEAR) : light.distance;
   }
 
@@ -111,7 +111,7 @@ export class LightCache {
    * frame's walk would (the frame's own are written after, over these). Whether the lamps in it changed: their
    * shadows' maps in the frame's loop are to be drawn again, as far as each reaches there now.
    */
-  step(record: (mesh: THREE.Mesh) => void): boolean {
+  step(record: (mesh: Mesh) => void): boolean {
     const core = this.core;
     const lights: number[] = [], lamps: number[] = [];
     if (!OFF && TUNE.lightCache > 0 && this.casters.length) {
@@ -125,7 +125,7 @@ export class LightCache {
       }
     }
     // (the scene's own, with the lamps alone: a place with none has none of this volume's casters either)
-    const own: THREE.PointLight[] = [];
+    const own: PointLight[] = [];
     for (const light of lamps.length && TUNE.cacheOwn > 0 ? shownPointLights() : []) {
       const still = stillOf(light);
       if (!still || !(light.distance > NEAR)) continue;
@@ -197,9 +197,9 @@ export class LightCache {
     // flames and dims by the hour, a portal's pulses, and read as one each took on the other's)
     let apart = 0, apartOf = 0;
     const shown = this.own.size ? new Set(shownPointLights()) : null;
-    const now = (light: THREE.PointLight): number => (shown?.has(light) ? light.intensity / stillOf(light)!.full : 0);
+    const now = (light: PointLight): number => (shown?.has(light) ? light.intensity / stillOf(light)!.full : 0);
     const apartLights = [...this.own].filter((light) => stillOf(light)?.side === 'apart');
-    const furthest = apartLights.reduce<THREE.PointLight | null>(
+    const furthest = apartLights.reduce<PointLight | null>(
       (best, light) => (!best || light.distance > best.distance ? light : best), null);
     for (const light of apartLights) {
       if (light === furthest) continue;

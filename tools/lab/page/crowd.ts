@@ -4,7 +4,7 @@
 // (entities/corpse.ts) apart, against the frames before the kill with the crowd standing: at the CPU's own speed and
 // slowed as a low-end device's (`lab.throttle`), at 60 frames a second and at 30 (a device already slow steps each
 // body twice as far a frame).
-import type * as THREE from 'three';
+import type { Vec3 } from './sceneApi.ts';
 import type { Fixture, Frame, Lab, Report } from './lab';
 import { Enemy } from '../../../src/entities/enemy';
 import { G } from '../../../src/state';
@@ -142,10 +142,10 @@ function spreadOf(values: number[]): Spread {
 }
 
 /** The crowd's places: rows before the hero at `at` facing `facing` (rad), the middle of each row straight ahead. */
-export function crowdPlaces(count: number, at: THREE.Vector3, facing: number): THREE.Vector3[] {
+export function crowdPlaces(count: number, at: Vec3, facing: number): Vec3[] {
   const forward = { x: Math.sin(facing), z: Math.cos(facing) };
   const left = { x: Math.cos(facing), z: -Math.sin(facing) };
-  const spots: THREE.Vector3[] = [];
+  const spots: Vec3[] = [];
   for (let i = 0; i < count; i++) {
     const row = Math.floor(i / ROW);
     const aside = ((i % ROW) - (ROW - 1) / 2) * APART;
@@ -158,7 +158,7 @@ export function crowdPlaces(count: number, at: THREE.Vector3, facing: number): T
 }
 
 /** How the crowd is killed: a blow each from the hero, or a cast of a skill at the crowd's middle. */
-type Killing = { skill: BoundSkill; aim: THREE.Vector3 } | null;
+type Killing = { skill: BoundSkill; aim: Vec3 } | null;
 
 /** Frame `frame` of the kill at `rate` frames a second: on the first, each foe struck by a blow from the hero; or the
  *  skill pressed for as long as it's held. */

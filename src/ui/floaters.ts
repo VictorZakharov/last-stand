@@ -1,6 +1,6 @@
 // World-anchored overlays: damage numbers and floating words, and labels over a point of the world (foes' bars, the
 // props' gauges, the dummies' meters, the partners' tags), drawn over the frame by the renderer (ui/overlay).
-import * as THREE from 'three';
+import { Color, Maths, PerspectiveCamera, Vec3 } from '../engine/api/index.ts';
 import { G } from '../state';
 import { Label, ORDER, layoutLabels } from './overlay/layer';
 import { drawText, measure, roundRect, type Shadow, type TextStyle } from './overlay/paint';
@@ -19,7 +19,7 @@ const floats: Floater[] = [];
  *  atlas, which grows with the canvas's ratio: 250 of a heavy fight's take a third to a half of it at any ratio) */
 const MAX_FLOATS = 250;
 const anchored = new Map<Label, Anchored>();
-const v = new THREE.Vector3();
+const v = new Vec3();
 
 export function project(x: number, y: number, z: number): { x: number; y: number; behind: boolean } {
   v.set(x, y, z).project(G.camera);
@@ -140,7 +140,7 @@ export function promptArt(key: string, text: string, s: TextStyle, fill?: number
 }
 
 export function floatText(x: number, y: number, z: number, text: string | number, kind: FloatKind = 'dmg', color: number | string = 0xffffff): void {
-  const col = typeof color === 'number' ? '#' + new THREE.Color(color).getHexString() : color;
+  const col = typeof color === 'number' ? '#' + new Color(color).getHexString() : color;
   const label = new Label(ORDER.float);
   const style = { ...FLOAT_STYLE[kind], color: col };
   label.show(kind === 'head' ? headshotArt(`${text}!`, style) : textArt(kind === 'crit' ? `${text}!` : String(text), style));
@@ -196,7 +196,7 @@ const HEAD_TOP = 0.3;
 /** the joints his outline is taken from */
 const BODY_JOINTS = ['head', 'neck', 'shoulderL', 'shoulderR', 'elbowL', 'elbowR', 'handL', 'handR', 'hips', 'kneeL',
   'kneeR', 'ankleL', 'ankleR'] as const;
-const jointAt = new THREE.Vector3();
+const jointAt = new Vec3();
 
 /** A box on the screen (css px). */
 interface ScreenBox { left: number; top: number; right: number; bottom: number }
@@ -210,12 +210,12 @@ function labelBox(label: Label, x: number, y: number): ScreenBox {
 
 /** `hero`'s outline on the screen from his joints, each `BODY_ROUND` round and his head's top over it (null: none
  *  of it before the camera). What he holds, a staff's crystal over his head, isn't him. */
-function heroOutline(hero: Player, camera: THREE.PerspectiveCamera): ScreenBox | null {
+function heroOutline(hero: Player, camera: PerspectiveCamera): ScreenBox | null {
   const joints = hero.model.joints;
   if (!joints) return null;
   const box = { left: Infinity, top: Infinity, right: -Infinity, bottom: -Infinity };
-  const tan = Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2);
-  const add = (point: THREE.Vector3, round: number) => {
+  const tan = Math.tan(Maths.degToRad(camera.fov) / 2);
+  const add = (point: Vec3, round: number) => {
     const distance = point.distanceTo(camera.position);
     const p = project(point.x, point.y, point.z);
     if (p.behind || distance < 1e-3) return;
@@ -236,7 +236,7 @@ function heroOutline(hero: Player, camera: THREE.PerspectiveCamera): ScreenBox |
  * over the mage's hood). A hero hidden, fallen or round the camera (his own eyes) doesn't.
  */
 export function behindHero(label: Label, to: WorldPos, x: number, y: number): boolean {
-  const camera = G.camera as THREE.PerspectiveCamera, from = camera.position;
+  const camera = G.camera as PerspectiveCamera, from = camera.position;
   const far = Math.hypot(to.x - from.x, to.z - from.z);
   const box = labelBox(label, x, y);
   for (const hero of G.players) {

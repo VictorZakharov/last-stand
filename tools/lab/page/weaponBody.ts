@@ -3,7 +3,7 @@
 // anatomy's own solids), and the deepest. Every corner of its surface is read, as `weaponFloor.ts` reads them. The
 // arms aren't parts here: the hands hold it. A two-handed blow ending in the floor before him put the haft through
 // his thigh, and no measure said so (from play: "main problem here is axe shaft going through leg").
-import * as THREE from 'three';
+import { Mesh, Node, Vec3 } from './sceneApi.ts';
 import type { Lab } from './lab';
 import { distinctCorners } from './corners';
 import { bodyShape } from '../../../src/entities/models/anatomy';
@@ -30,19 +30,19 @@ interface Into {
 /** a part of the body the weapon is read against */
 interface Part {
   name: string;
-  depthAt(point: THREE.Vector3): number;
+  depthAt(point: Vec3): number;
 }
 
-const _corner = new THREE.Vector3();
-const _local = new THREE.Vector3();
-const _gripAt = new THREE.Vector3();
-const _gripWay = new THREE.Vector3();
-const _from = new THREE.Vector3();
-const _to = new THREE.Vector3();
+const _corner = new Vec3();
+const _local = new Vec3();
+const _gripAt = new Vec3();
+const _gripWay = new Vec3();
+const _from = new Vec3();
+const _to = new Vec3();
 
 /** What the weapon is read from: the piece in the hand whose parts are read, its grip the frame `along` is
  *  measured from (the main hand's grip, `Model.tip`'s parent, by default). */
-export type PieceOf = (lab: Lab) => THREE.Object3D | null | undefined;
+export type PieceOf = (lab: Lab) => Node | null | undefined;
 
 const mainGrip: PieceOf = (lab) => lab.model.tip?.parent;
 
@@ -133,18 +133,18 @@ function partsOf(lab: Lab): Part[] {
   const parts: Part[] = [];
   for (const side of ['L', 'R'] as const) {
     const left = side === 'L' ? 'left' : 'right';
-    const hip = j[`thigh${side}`].getWorldPosition(new THREE.Vector3());
-    const knee = j[`knee${side}`].getWorldPosition(new THREE.Vector3());
-    const ankle = j[`ankle${side}`].getWorldPosition(new THREE.Vector3());
+    const hip = j[`thigh${side}`].getWorldPosition(new Vec3());
+    const knee = j[`knee${side}`].getWorldPosition(new Vec3());
+    const ankle = j[`ankle${side}`].getWorldPosition(new Vec3());
     parts.push({ name: `${left} thigh`, depthAt: (point) => capsuleDepth(point, hip, knee, j.P.thighR * scale) });
     parts.push({ name: `${left} shin`, depthAt: (point) => capsuleDepth(point, knee, ankle, j.P.shinR * scale) });
-    const toes = j[`ankle${side}`].localToWorld(new THREE.Vector3(0, -FOOT.down, FOOT.toe));
-    const heel = j[`ankle${side}`].localToWorld(new THREE.Vector3(0, -FOOT.down, -FOOT.heel));
+    const toes = j[`ankle${side}`].localToWorld(new Vec3(0, -FOOT.down, FOOT.toe));
+    const heel = j[`ankle${side}`].localToWorld(new Vec3(0, -FOOT.down, -FOOT.heel));
     parts.push({ name: `${left} foot`, depthAt: (point) => capsuleDepth(point, heel, toes, FOOT.radius * scale) });
   }
   for (const solid of bodyShape(j).solids.filter((each) => each.name === 'belly' || each.name === 'chest')) {
     const toSolid = solid.at.matrixWorld.clone().invert();
-    const depthAt = (point: THREE.Vector3) => {
+    const depthAt = (point: Vec3) => {
       _local.copy(point).applyMatrix4(toSolid).sub(solid.c);
       return ellipsoidDepth(_local, solid.r) * scale;
     };
@@ -163,7 +163,7 @@ function deepestInto(lab: Lab, at: string, grip = mainGrip(lab)): Into | null {
   const parts = partsOf(lab);
   let deepest: Into | null = null;
   grip.traverseVisible((object) => {
-    const mesh = object as THREE.Mesh;
+    const mesh = object as Mesh;
     if (!mesh.isMesh) return;
     const corners = mesh.geometry.attributes.position;
     for (const i of distinctCorners(corners)) {

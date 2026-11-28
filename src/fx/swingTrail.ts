@@ -6,10 +6,11 @@
 // wind-up and a walk's swing of the arm leave none. Each frame's place of the weapon is a point of a curve through
 // them (centripetal Catmull-Rom), cut into steps a few centimetres long, so a swing a frame crosses half a metre in
 // stays round. Light adds up: added white, dimmed with distance (`nearGlow`), a thin edge over a faint band.
-import * as THREE from 'three';
+import {
+  AdditiveBlending, Attribute, DoubleSide, DynamicDrawUsage, Geometry, LookMaterial, Mesh, Node, Vec3,
+} from '../engine/api/index.ts';
 import { G } from '../state';
 import { nearGlow } from '../core/materials';
-import { portShader } from '../core/shaderPorts';
 import { tunable } from '../core/tuning';
 import { effectLook, num, effectShader } from '../engine/effects';
 import { armsLayerOf } from '../entities/viewModel';
@@ -27,7 +28,7 @@ const COLUMNS = SAMPLES * STEPS_MOST + 1;
 /** the least distance between two points of the curve counted (m): one frame's place twice */
 const EPS = 1e-4;
 
-/** the trail for the Rust engine (src/engine/effects.ts): the port's WGSL below. The engine hands a vertex its
+/** the trail for the Rust engine (src/engine/effects.ts). The engine hands a vertex its
  *  position, normal, uv and colour alone, so there the trail's three numbers ride as its normal (`trailGeometry`). */
 const TRAIL_HOOKS = /* wgsl */ `
 fn vertex_hook(v: ptr<function, Vertex>, instance: u32) {
@@ -48,42 +49,20 @@ fn surface_hook(s: ptr<function, Surface>, in: VertexOut) -> bool {
 }
 `;
 
-const material = effectLook(portShader(nearGlow(new THREE.ShaderMaterial({
+const material = effectLook(nearGlow(new LookMaterial({
   uniforms: { uGlow: { value: TRAIL.glow }, uBand: { value: TRAIL.band } },
-  transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
-  vertexShader: /* glsl */`
-    attribute vec3 trail;
-    varying vec3 vT;
-    void main(){ vT = trail; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
-  fragmentShader: /* glsl */`
-    uniform float uGlow, uBand;
-    varying vec3 vT;
-    void main(){
-      // vT: how old (0 now .. 1 at the end of its life), how far out along the striking part (0 nearest the hand ..
-      // 1 its edge), and how fast it was swung there (0 too slow to leave a trail .. 1)
-      float fade = (1.0 - vT.x) * (1.0 - vT.x);
-      float edge = pow(vT.y, 6.0);
-      float i = vT.z * fade * (edge + uBand * vT.y) * uGlow;
-      gl_FragColor = vec4(vec3(i), i);
-    }`,
-})), ({ wgslFn, attribute, varying }, u) => ({
-  fragment: wgslFn(`fn swingTrail(t: vec3f, glow: f32, band: f32) -> vec4f {
-    let fade = (1.0 - t.x) * (1.0 - t.x);
-    let edge = pow(t.y, 6.0);
-    let i = t.z * fade * (edge + band * t.y) * glow;
-    return vec4f(vec3f(i), i);
-  }`)({ t: varying(attribute('trail', 'vec3')), glow: u.uGlow, band: u.uBand }),
+  transparent: true, depthWrite: false, blending: AdditiveBlending, side: DoubleSide,
 })), 'swing-trail', TRAIL_HOOKS, {
   numbers(u, out) { out[0] = num(u, 'uGlow'); out[1] = num(u, 'uBand'); },
 });
 
 /** A frame's place of the striking part (the model's root's space) and when, how fast its edge moved there (m/s), and
  *  how fast it was swung (0..1: `add`) */
-interface Sample { from: THREE.Vector3; to: THREE.Vector3; t: number; v: number; w: number }
+interface Sample { from: Vec3; to: Vec3; t: number; v: number; w: number }
 
-type V3 = THREE.Vector3;
-const _a1 = new THREE.Vector3(), _a2 = new THREE.Vector3(), _a3 = new THREE.Vector3();
-const _b1 = new THREE.Vector3(), _b2 = new THREE.Vector3(), _p = new THREE.Vector3();
+type V3 = Vec3;
+const _a1 = new Vec3(), _a2 = new Vec3(), _a3 = new Vec3();
+const _b1 = new Vec3(), _b2 = new Vec3(), _p = new Vec3();
 
 /** `out` set to `a` and `b` weighed by how far `t` is from `ta` to `tb` (Barry and Goldman's step). */
 function between(a: V3, b: V3, ta: number, tb: number, t: number, out: V3): V3 {
@@ -111,10 +90,10 @@ const smooth = (a: number, b: number, x: number): number => {
 
 /** The geometry of a trail as long as it can be: a column of two points (nearest the hand, the edge) a step, the
  *  steps' quads indexed once. */
-function trailGeometry(columns: number): THREE.BufferGeometry {
-  const g = new THREE.BufferGeometry();
+function trailGeometry(columns: number): Geometry {
+  const g = new Geometry();
   for (const name of ['position', 'trail']) {
-    g.setAttribute(name, new THREE.BufferAttribute(new Float32Array(columns * 6), 3).setUsage(THREE.DynamicDrawUsage));
+    g.setAttribute(name, new Attribute(new Float32Array(columns * 6), 3).setUsage(DynamicDrawUsage));
   }
   // (the Rust engine's vertex has no attribute of the trail's own: it reads these numbers as its normal)
   g.setAttribute('normal', g.getAttribute('trail'));
@@ -129,9 +108,9 @@ function trailGeometry(columns: number): THREE.BufferGeometry {
 
 /** One weapon's trail. */
 class Trail {
-  readonly mesh = new THREE.Mesh(trailGeometry(COLUMNS), material);
+  readonly mesh = new Mesh(trailGeometry(COLUMNS), material);
   private readonly ring: Sample[] = Array.from({ length: SAMPLES }, () => ({
-    from: new THREE.Vector3(), to: new THREE.Vector3(), t: 0, v: 0, w: 0,
+    from: new Vec3(), to: new Vec3(), t: 0, v: 0, w: 0,
   }));
   private first = 0;
   private count = 0;
@@ -150,14 +129,14 @@ class Trail {
 
   /** The frame's place of `blade` added if a strike swings it (`swinging`), the old ones let go, and the trail drawn
    *  in `root`'s space on `layer`. */
-  update(root: THREE.Object3D, blade: Blade, swinging: boolean, now: number, layer: number): void {
+  update(root: Node, blade: Blade, swinging: boolean, now: number, layer: number): void {
     while (this.count && now - this.at(0).t > TRAIL.life) { this.first = (this.first + 1) % SAMPLES; this.count--; }
     if (swinging) this.add(root, blade, now);
     else this.following = false;
     this.draw(root, now, layer);
   }
 
-  private add(root: THREE.Object3D, blade: Blade, now: number): void {
+  private add(root: Node, blade: Blade, now: number): void {
     // (a strike begun again after a pause starts a trail of its own: joined to the last one's end, a band crossed
     // the gap between them)
     if (!this.following) this.count = 0;
@@ -181,7 +160,7 @@ class Trail {
     this.following = true;
   }
 
-  private draw(root: THREE.Object3D, now: number, layer: number): void {
+  private draw(root: Node, now: number, layer: number): void {
     const mesh = this.mesh;
     let swept = 0;
     for (let i = 0; i < this.count; i++) swept = Math.max(swept, this.at(i).w);
@@ -191,7 +170,7 @@ class Trail {
     const g = mesh.geometry;
     g.setDrawRange(0, (columns - 1) * 6);
     for (const name of ['position', 'trail']) {
-      const attribute = g.getAttribute(name) as THREE.BufferAttribute;
+      const attribute = g.getAttribute(name) as Attribute;
       attribute.clearUpdateRanges();
       attribute.addUpdateRange(0, columns * 6);
       attribute.needsUpdate = true;
@@ -219,8 +198,8 @@ class Trail {
   /** Column `c`, `u` of the way from `p1` to `p2`; returns the next column's number. */
   private column(c: number, p0: Sample, p1: Sample, p2: Sample, p3: Sample, u: number, now: number): number {
     const g = this.mesh.geometry;
-    const position = g.getAttribute('position') as THREE.BufferAttribute;
-    const trail = g.getAttribute('trail') as THREE.BufferAttribute;
+    const position = g.getAttribute('position') as Attribute;
+    const trail = g.getAttribute('trail') as Attribute;
     const age = Math.min(1, (now - (p1.t + (p2.t - p1.t) * u)) / TRAIL.life), w = p1.w + (p2.w - p1.w) * u;
     curveAt(p0.from, p1.from, p2.from, p3.from, u, _p);
     position.setXYZ(c * 2, _p.x, _p.y, _p.z);
@@ -261,16 +240,16 @@ export function updateSwingTrails(): void {
 }
 
 /** The meshes `model`'s trails draw, in the scene though they're his (through the eyes on his arms' layer). */
-export function swingTrailsOf(model: Model): THREE.Object3D[] {
+export function swingTrailsOf(model: Model): Node[] {
   return [...(followed.get(model)?.values() ?? [])].map((trail) => trail.mesh);
 }
 
 /** A trail's material on a quad, for the boot's warm-up (game/warmup.ts). */
-export function swingTrailSamples(): THREE.Object3D[] {
+export function swingTrailSamples(): Node[] {
   const g = trailGeometry(2);
-  (g.getAttribute('position') as THREE.BufferAttribute).set([0, 0, 0, 0, 1, 0, 1, 0, 0, 1, 1, 0]);
-  (g.getAttribute('trail') as THREE.BufferAttribute).set([0, 0, 1, 0, 1, 1, 0, 0, 1, 0, 1, 1]);
-  return [new THREE.Mesh(g, material)];
+  (g.getAttribute('position') as Attribute).set([0, 0, 0, 0, 1, 0, 1, 0, 0, 1, 1, 0]);
+  (g.getAttribute('trail') as Attribute).set([0, 0, 1, 0, 1, 1, 0, 0, 1, 0, 1, 1]);
+  return [new Mesh(g, material)];
 }
 
 // (its effect's shader listed for the engine as this module loads: joined with the other effects')
