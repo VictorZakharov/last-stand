@@ -49,7 +49,7 @@ export interface RustLook {
   /** whether anything its material shows by has changed since this was last asked (its numbers, its colour,
    *  its glow): with it, a material that hasn't is drawn as it was, not described again (a fight's foes are a
    *  thousand materials a frame) */
-  moved?(): boolean;
+  moved?(frame: number): boolean;
   /** its meshes' `onBeforeRender` is run before each is recorded (it lists what's drawn, sets the numbers) */
   before?: boolean;
   /** its draw's list, as it is this frame: floats its vertex hook reads by `bones[(*v).list + row]`, 16 a row

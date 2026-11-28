@@ -3,6 +3,7 @@
 // changed (`needsUpdate = true`): what the stage reads to send it again, the whole or the ranges it was told.
 import type { Mat3, Mat4 } from '../math/index.ts';
 import { Vec3 } from '../math/index.ts';
+import { noteChanged } from '../changes.ts';
 
 /** every typed array an attribute may hold */
 export type TypedArray =
@@ -77,7 +78,9 @@ export class Attribute<A extends TypedArray = TypedArray> {
 
   /** Told it changed: `true` moves `version`, so the stage sends it again. */
   set needsUpdate(value: boolean) {
-    if (value) this.version++;
+    if (!value) return;
+    this.version++;
+    noteChanged(this);
   }
 
   /** Says how often it's rewritten. */

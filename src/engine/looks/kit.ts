@@ -158,11 +158,59 @@ fn surface_hook(s: ptr<function, Surface>, in: VertexOut) -> bool {
 `,
 });
 
+/** how many of the kit's own numbers `kitMoves` reads */
+const KIT_NUMBERS = 24;
+
+/** A kit's own numbers as last read, the frame they were read on, and how many times they've moved. */
+interface KitState {
+  frame: number;
+  moves: number;
+  was: Float64Array;
+  now: Float64Array;
+}
+
+const kitStates = new WeakMap<KitLooks, KitState>();
+
+/**
+ * How many times `kit`'s own numbers (its foe's dissolve, frost, char, hit, edge, shade, aura, hair, shine, and the
+ * gear's glow clock while it glows) have moved, read once a frame (`frame`): a foe's every material shares its kit, and
+ * each read them all, nine times a foe a frame at wave 36.
+ */
+function kitMoves(kit: KitLooks, frame: number): number {
+  let state = kitStates.get(kit);
+  if (!state) {
+    state = { frame: NaN, moves: 0, was: new Float64Array(KIT_NUMBERS).fill(NaN), now: new Float64Array(KIT_NUMBERS) };
+    kitStates.set(kit, state);
+  }
+  if (state.frame === frame) return state.moves;
+  state.frame = frame;
+  const now = state.now, u = kit.u, edge = u.uEdge.value;
+  now[0] = u.uDissolve.value; now[1] = u.uFrozen.value; now[2] = u.uChar.value; now[3] = u.uHit.value;
+  now[4] = edge.r; now[5] = edge.g; now[6] = edge.b;
+  now[7] = kit.near.value;
+  kit.shade.value.toArray(now, 8);
+  kit.aura.value.toArray(now, 12);
+  kit.hair.value.toArray(now, 15);
+  const aura = kit.aura.value;
+  now[18] = aura.r + aura.g + aura.b > 0 ? itemGlowUniforms.clock.value : 0;
+  now[19] = itemGlowUniforms.loop.value.w;
+  now[20] = u.uShine.value;
+  let moved = false;
+  for (let at = 0; at < KIT_NUMBERS; at++) {
+    if (now[at] !== state.was[at]) {
+      state.was[at] = now[at];
+      moved = true;
+    }
+  }
+  if (moved) state.moves++;
+  return state.moves;
+}
+
 function kitLook(kit: KitLooks, material: LitMaterial): RustLook {
-  // (what the material showed by when it was last described: the kit's numbers, and what the game changes on a
-  // foe's material itself)
-  const was = new Float64Array(35).fill(NaN);
-  const now = new Float64Array(35);
+  // (what the material showed by when it was last described: its kit's moves (`kitMoves`), and what the game changes
+  // on a foe's material itself)
+  const was = new Float64Array(6).fill(NaN);
+  const now = new Float64Array(6);
   // (a copy of a fur's material holds a copy of its numbers, which nothing moves: three copies `userData` as JSON)
   const fur = (): Fur | undefined => {
     const sway = material.userData.fur as Fur | undefined;
@@ -174,26 +222,15 @@ function kitLook(kit: KitLooks, material: LitMaterial): RustLook {
     casts: true,
     shared: NUMBERS,
     numbersUsed: AT.loop + 4,
-    moved() {
-      const u = kit.u, edge = u.uEdge.value;
-      now[0] = u.uDissolve.value; now[1] = u.uFrozen.value; now[2] = u.uChar.value; now[3] = u.uHit.value;
-      now[4] = edge.r; now[5] = edge.g; now[6] = edge.b;
-      // (its glow, opacity, flags and colours by its version alone: each moves it as it changes, and read field by
-      // field through their accessors, a wave's foes' looks were a sixth of the materials' time)
-      now[9] = material.version;
-      now[11] = kit.near.value;
-      kit.shade.value.toArray(now, 18);
-      kit.aura.value.toArray(now, 22);
-      kit.hair.value.toArray(now, 25);
-      // (its clocks, while it has what they move: a glow, a fur's sway)
-      now[28] = glows() ? itemGlowUniforms.clock.value : 0;
+    moved(frame: number) {
+      // (its glow, opacity, flags and colours by its version alone: each moves it as it changes)
+      now[0] = kitMoves(kit, frame);
+      now[1] = material.version;
       const sway = fur();
-      now[29] = sway ? sway.time.value : 0;
-      if (sway) sway.lag.value.toArray(now, 30);
-      now[33] = itemGlowUniforms.loop.value.w;
-      now[34] = u.uShine.value;
+      now[2] = sway ? sway.time.value : 0;
+      if (sway) sway.lag.value.toArray(now, 3);
       let moved = false;
-      for (let at = 0; at < 35; at++) {
+      for (let at = 0; at < now.length; at++) {
         if (now[at] !== was[at]) { was[at] = now[at]; moved = true; }
       }
       return moved;

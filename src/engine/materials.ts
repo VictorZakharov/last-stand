@@ -193,9 +193,9 @@ export class Materials {
     // (not once a map of its own has changed, by its version or its picture's size: it's handed over again and its
     // old one dropped, and a look that stood still was never asked its maps again and kept drawing with it, the village's ground and its grass white with nothing to read; from play, "village loaded
     // with white ground", "same problem on desktop")
-    const stamp = look ? mapsStamp(material, look) : 0;
+    const stamp = look ? this.lookMapsStamp(material, look, entry) : 0;
     const mapsKept = entry?.mapsAt === stamp || !TUNE.looksByMaps;
-    if (TUNE.still && look?.moved && entry?.id && mapsKept && !look.moved()) {
+    if (TUNE.still && look?.moved && entry?.id && mapsKept && !look.moved(frame)) {
       entry.seen = frame;
       return entry.id;
     }
@@ -273,6 +273,17 @@ export class Materials {
     this.scratchParams.set(entry.params);
     this.scratchMaps.set(entry.maps);
     return entry.key & ~CASTS_AS_PLACED;
+  }
+
+  /** A look's every map's stamp added up (`mapsStamp`): its material's maps read from the list kept as it was last
+   *  described where its version stands (each map field is an accessor, and a wave's foes read seven each a frame). */
+  private lookMapsStamp(material: AnyMaterial, look: RustLook, entry: MaterialEntry | undefined): number {
+    if (!entry?.textures || entry.version !== material.version) return mapsStamp(material, look);
+    let sum = 0;
+    for (const texture of entry.textures) sum += mapStamp(texture);
+    const own = look.maps;
+    if (own) for (let slot = 0; slot < own.length; slot++) sum += mapStamp(own[slot]);
+    return sum;
   }
 
   /** What `stillPlain` compares a plain material by, kept as it's described. */

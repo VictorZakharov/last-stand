@@ -6,7 +6,7 @@ import {
   ClampToEdgeWrapping, LinearFilter, LinearMipmapLinearFilter, NearestFilter, NoColorSpace, RGBAFormat,
   UnsignedByteType, type ColorSpace, type PixelFormat, type TextureDataType, type TextureFilter, type Wrapping,
 } from './constants.ts';
-import { copyUserData, counter, DisposeHooks, nextUuid } from './fields.ts';
+import { copyUserData, counter, DisposeHooks, nextUuid, noteChanged } from './fields.ts';
 
 /** A picture the GPU copies by itself. */
 export type PictureImage = HTMLCanvasElement | OffscreenCanvas | HTMLImageElement | ImageBitmap;
@@ -98,7 +98,9 @@ export class Texture<I extends TextureImage = TextureImage> {
 
   /** true: its picture has changed, and is handed to the engine again (its version moves) */
   set needsUpdate(value: boolean) {
-    if (value) this.version++;
+    if (!value) return;
+    this.version++;
+    noteChanged(this);
   }
 
   /** A texture of its class sharing this one's picture, with everything else of it copied. */

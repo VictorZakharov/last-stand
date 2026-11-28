@@ -1,6 +1,6 @@
 // The materials, the textures and their constants: data the engine reads (`../AGENTS.md`'s Materials and textures).
 export * from './constants.ts';
-export { DisposeHooks, FIELDS, type Watching } from './fields.ts';
+export { DisposeHooks, FIELDS, noteChanged, takeChanged, type Watching } from './fields.ts';
 export { LitMaterial, type LitFields, type LitParameters } from './lit.ts';
 export {
   copyUniforms, LookMaterial, type Define, type LookParameters, type Uniform, type Uniforms,

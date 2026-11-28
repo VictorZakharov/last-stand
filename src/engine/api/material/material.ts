@@ -6,7 +6,7 @@ import {
   AddEquation, FrontSide, NormalBlending, OneMinusSrcAlphaFactor, SrcAlphaFactor,
   type Blending, type BlendingEquation, type BlendingFactor, type Side,
 } from './constants.ts';
-import { copyUserData, counter, DisposeHooks, FIELDS, nextUuid, watchFields } from './fields.ts';
+import { copyUserData, counter, DisposeHooks, FIELDS, nextUuid, noteChanged, watchFields } from './fields.ts';
 import type { Texture } from './texture.ts';
 import { setColour, WatchedColor, type ColorValue } from './watched.ts';
 
@@ -119,12 +119,15 @@ export class Material {
 
   /** true: sent to the engine again (its version moved), whatever changed */
   set needsUpdate(value: boolean) {
-    if (value) this.version++;
+    if (!value) return;
+    this.version++;
+    noteChanged(this);
   }
 
   /** Told by its watched colours and vectors that one changed: its version moves. */
   touched(): void {
     this.version++;
+    noteChanged(this);
   }
 
   /** `params` set over its fields: a colour from a number or a string (sRGB) or a `Color` (copied), a vector

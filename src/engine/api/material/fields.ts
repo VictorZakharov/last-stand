@@ -1,5 +1,8 @@
 // What materials and textures share: their ids, their uuids, the fields that move a material's version as they
 // change, and the hooks run as one is disposed.
+import { noteChanged } from '../changes.ts';
+
+export { noteChanged, takeChanged } from '../changes.ts';
 
 /** a material's or a texture's store of its watched fields, by name */
 export const FIELDS: unique symbol = Symbol('fields');
@@ -25,6 +28,7 @@ export function watchFields(prototype: object, names: readonly string[]): void {
         if (store[name] === value) return;
         store[name] = value;
         this.version++;
+        noteChanged(this);
       },
     });
   }

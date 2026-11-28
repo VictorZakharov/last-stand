@@ -7,6 +7,7 @@ import { Box3, Mat3, Mat4, Maths, Sphere, Vec3 } from '../math/index.ts';
 import { Attribute, indexOf } from './attribute.ts';
 import { normals, unitNormals } from './normals.ts';
 import { unindexed } from './ops.ts';
+import { noteChanged } from '../changes.ts';
 
 /** A stretch of the index (or of the vertices, unindexed) drawn with one of a mesh's materials. */
 export interface Group {
@@ -95,6 +96,7 @@ export class Geometry {
   setIndex(index: Attribute | ArrayLike<number> | null): this {
     this.index = index === null || index instanceof Attribute ? index : indexOf(index);
     this.version++;
+    noteChanged(this);
     return this;
   }
 
@@ -108,6 +110,7 @@ export class Geometry {
   setAttribute(name: string, attribute: Attribute): this {
     this.attributes[name] = attribute;
     this.version++;
+    noteChanged(this);
     return this;
   }
 
@@ -115,6 +118,7 @@ export class Geometry {
   deleteAttribute(name: string): this {
     delete this.attributes[name];
     this.version++;
+    noteChanged(this);
     return this;
   }
 
@@ -279,6 +283,7 @@ export class Geometry {
     this.drawRange.count = source.drawRange.count;
     this.userData = source.userData;
     this.version++;
+    noteChanged(this);
     this.rangeVersion++;
     return this;
   }

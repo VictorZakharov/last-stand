@@ -6,12 +6,13 @@
 // again. What has to be made each frame (a look run before its draw, or listing its own rows) is written into the
 // frame's records each frame, as the walk wrote every mesh.
 import {
-  AttachedBindMode, Camera, Geometry, InstancedGeometry, InstancedMesh, Mat4, Mesh, NONE, Node, Skeleton, SkinnedMesh,
+  AttachedBindMode, Camera, Geometry, takeChanged, InstancedGeometry, InstancedMesh, Mat4, Mesh, NONE, Node, Skeleton, SkinnedMesh,
 } from './api/index.ts';
 import { RECORD, type Core } from './core';
 import { lookOf } from './custom';
 import { TUNE, type Grade } from './globals';
 import type { Geometries } from './geometry';
+import { watchGeometries, watchMaterials } from './watchRules';
 import type { AnyMaterial, Materials } from './materials';
 import { SEE_FLAGS, type SeeKinds } from './seeKinds';
 import { casterGeometry } from '../entities/models/farDetail';
@@ -61,6 +62,9 @@ export class Draws {
   private pending = new Set<Mesh>();
   private eachFrame = new Set<Entry>();
   private materialUse = new Map<AnyMaterial, Use>();
+  /** which of the materials and geometries in use the frame looks at (`useWatch.ts`) */
+  private materialWatch = watchMaterials();
+  private geometryWatch = watchGeometries();
   private geometryUse = new Map<Geometry, Use>();
   private instanced = new Map<InstancedMesh, number>();
   /** the frame's key every record reads (the casting switches, the views' layers): all written again as it moves */
@@ -126,6 +130,8 @@ export class Draws {
     this.skins.clear();
     for (const use of this.materialUse.values()) use.stamp = NaN;
     for (const use of this.geometryUse.values()) use.stamp = NaN;
+    this.materialWatch.lookAtAll();
+    this.geometryWatch.lookAtAll();
   }
 
   /** The frame's views, before anything of it is written. */
@@ -167,13 +173,18 @@ export class Draws {
         this.pending.add(mesh);
       }
     }
-    for (const [material, use] of this.materialUse) {
+    const changed = takeChanged();
+    for (const material of this.materialWatch.toVisit(changed)) {
+      const use = this.materialUse.get(material);
+      if (!use) continue;
       const stamp = this.materialStamp(material);
       if (stamp === use.stamp) continue;
       use.stamp = stamp;
       for (const mesh of use.meshes) this.pending.add(mesh);
     }
-    for (const [geometry, use] of this.geometryUse) {
+    for (const geometry of this.geometryWatch.toVisit(changed)) {
+      const use = this.geometryUse.get(geometry);
+      if (!use) continue;
       const stamp = geometryStamp(geometry);
       if (stamp === use.stamp) continue;
       use.stamp = stamp;
@@ -281,15 +292,25 @@ export class Draws {
       this.unlist(entry);
       entry.materials = materials.slice();
       entry.geometry = mesh.geometry;
-      for (const material of entry.materials) useOf(this.materialUse, material, this.materialStamp(material)).add(mesh);
+      for (const material of entry.materials) {
+        useOf(this.materialUse, material, this.materialStamp(material)).add(mesh);
+        this.materialWatch.add(material);
+      }
       useOf(this.geometryUse, mesh.geometry, geometryStamp(mesh.geometry)).add(mesh);
+      this.geometryWatch.add(mesh.geometry);
     }
   }
 
   /** `entry` off the materials and geometry it was listed under. */
   private unlist(entry: Entry): void {
-    for (const material of entry.materials) dropUse(this.materialUse, material, entry.mesh);
-    if (entry.geometry) dropUse(this.geometryUse, entry.geometry, entry.mesh);
+    for (const material of entry.materials) {
+      dropUse(this.materialUse, material, entry.mesh);
+      if (!this.materialUse.has(material)) this.materialWatch.drop(material);
+    }
+    if (entry.geometry) {
+      dropUse(this.geometryUse, entry.geometry, entry.mesh);
+      if (!this.geometryUse.has(entry.geometry)) this.geometryWatch.drop(entry.geometry);
+    }
     entry.materials = [];
     entry.geometry = null;
   }

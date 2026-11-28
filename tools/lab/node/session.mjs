@@ -16,7 +16,7 @@ import { OUT, REPO } from './paths.mjs';
 import { priorityNow } from './priority.mjs';
 import { describePictureDifferences } from './pictures.mjs';
 import { probeFiles } from './probeFiles.mjs';
-import { keepProfile, profiled, scriptsIn, summarize } from './profile.mjs';
+import { comparedProfiles, keepProfile, profiled, scriptsIn, summarize, totalsByFunction } from './profile.mjs';
 import { layersDiffer, summarizeLayers } from './layers.mjs';
 import { placedTally, randomsDiffer, scriptsOfTally, summarizeRandoms, tallied } from './randoms.mjs';
 import { bootOf, bootText, CONTEXT_OPTIONS, LAB_BOOT, layered, Side } from './side.mjs';
@@ -132,6 +132,8 @@ export class LabSession {
     const resultOf = new Map();
     const randomsOf = new Map();
     const layersOf = new Map();
+    /** each side's profile's time by function, laid side by side after (`comparedProfiles`) */
+    const profileTotalsOf = new Map();
     for (const turn of turns) {
       const side = turn.side;
       // (every set-up building the hero afresh, a check's: `afresh` in check.mjs `jobOf`)
@@ -187,6 +189,7 @@ export class LabSession {
         const sourceOf = await side.sourceLocator(scriptsIn(profile));
         const within = typeof options.profile === 'string' ? options.profile : null;
         notes.push(`${turn.name}: ${summarize(profile, sourceOf, within)}`);
+        profileTotalsOf.set(turn, totalsByFunction(profile, sourceOf, within));
         // (kept whole too, its samples with their times: DevTools' Performance panel loads it)
         notes.push(`${turn.name}: the profile whole: ${keepProfile(command, turn.name, profile)}`);
       } else {
@@ -229,6 +232,10 @@ export class LabSession {
     const results = shown.map((turn) => [turn, resultOf.get(turn)]);
     if (randomsOf.size === 2) notes.push(randomsDiffer(randomsOf.get(turns[0]), randomsOf.get(turns[1])));
     if (layersOf.size === 2) notes.push(layersDiffer(layersOf.get(turns[0]), layersOf.get(turns[1])));
+    if (profileTotalsOf.size === 2) {
+      const [mine, theirs] = turns;
+      notes.push(comparedProfiles([mine.name, profileTotalsOf.get(mine)], [theirs.name, profileTotalsOf.get(theirs)]));
+    }
     const textOf = handler.textOf ?? String;
     const text = handler.finish
       ? await handler.finish(results, options, this)

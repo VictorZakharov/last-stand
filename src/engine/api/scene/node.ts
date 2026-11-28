@@ -36,9 +36,6 @@ interface DrawFlags {
   renderOrder: number;
 }
 
-/** every node's moves counted together: a world matrix made since the last of them is made (`Node.makeWorld`) */
-let worldMoves = 0;
-
 /** A thing in the world. */
 export class Node implements LayersOwner {
   /** what every node says it is */
@@ -77,16 +74,14 @@ export class Node implements LayersOwner {
   private _matrixAutoUpdate = true;
   private _matrixWorldAutoUpdate = true;
   private _world = new Mat4();
-  /** its own moves, counted, and the count its world matrix was made at */
-  private moves = 0;
-  private builtAt = -1;
-  /** the world's count of moves when its world matrix was last made or found made (`worldMoves`) */
-  private checkedAt = -1;
-  /** its parent's world as its own was made from it: which parent, and that parent's count of makes */
-  private builtUnder: Node | null = null;
-  private builtUnderMakes = -1;
-  /** how many times its world matrix was made (what its children compare) */
-  private makes = 0;
+  /**
+   * Whether its world matrix is to be made again before it's read: set as it or a node over it moves, pushed down to
+   * everything under it (and never past a node already set: whatever is under a set node is set too), cleared as
+   * it's made. A clean node's read is its matrix as it stands; checked by walking up to the root on every read, a
+   * rig's IK, which reads and writes its joints in turn, was half again three's time (`lab perf --wave 36
+   * --throttle 4 --ab --profile="animate mage.ts"`).
+   */
+  private worldDirty = true;
   /** which of its two turns was written last and the other not made again since */
   private quaternionStale = false;
   private rotationStale = false;
@@ -141,8 +136,7 @@ export class Node implements LayersOwner {
 
   /** Its place, turn, size or matrix changed: its world matrix is made again when next read, and the stage told. */
   moved(): void {
-    this.moves++;
-    worldMoves++;
+    this.dirtyWorld();
     this.link?.moved(this);
   }
 
@@ -204,29 +198,24 @@ export class Node implements LayersOwner {
     return this._world;
   }
 
-  /** Its world matrix made, its parent's first, where either changed since it was last made. */
+  /** Its world matrix and everything's under it to be made again before they're read (`worldDirty`). */
+  private dirtyWorld(): void {
+    if (this.worldDirty) return;
+    this.worldDirty = true;
+    const children = this.children;
+    for (let i = 0; i < children.length; i++) children[i].dirtyWorld();
+  }
+
+  /** Its world matrix made, its parent's first, where either moved since it was last made. */
   private makeWorld(): void {
-    // (nothing anywhere moved since it was last made or found made: as it was. Walked up to the root on every read,
-    // an update of a rig's every node was a walk up from each, 1.7 s of a slowed CPU's wave 36, `lab perf --wave 36
-    // --throttle 4 --profile=update`)
-    if (this.checkedAt === worldMoves) return;
-    this.checkedAt = worldMoves;
+    if (!this.worldDirty) return;
     const parent = this.parent;
-    let parentMakes = -1;
-    if (parent) {
-      parent.makeWorld();
-      parentMakes = parent.makes;
-    }
+    if (parent) parent.makeWorld();
+    this.worldDirty = false;
     if (!this._matrixWorldAutoUpdate) return;
-    const same = this.builtAt === this.moves && this.builtUnder === parent && this.builtUnderMakes === parentMakes;
-    if (same) return;
     if (this._matrixAutoUpdate) this.matrix.compose(this.position, this.quaternion, this.scale);
     if (parent) this._world.multiplyMatrices(parent._world, this.matrix);
     else this._world.copy(this.matrix);
-    this.builtAt = this.moves;
-    this.builtUnder = parent;
-    this.builtUnderMakes = parentMakes;
-    this.makes++;
   }
 
   /** Its matrix written by the game was changed (three's `matrixWorldNeedsUpdate = true`). */

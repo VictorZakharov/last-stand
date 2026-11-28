@@ -1,7 +1,7 @@
 // Where a command's time went (node/profile.mjs): a sampled profile summarized.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { longestStretches, summarize } from '../node/profile.mjs';
+import { comparedProfiles, longestStretches, summarize, totalsByFunction } from '../node/profile.mjs';
 
 const frame = (functionName, url, lineNumber) => ({ functionName, url, lineNumber });
 
@@ -75,4 +75,19 @@ test("the longest busy stretches, longest first, each naming the game's function
   const said = within.slice(within.indexOf('the longest busy stretches (20 ms or more)') + 1);
   assert.equal(said.length, 2);
   assert.ok(said.every((line) => line.includes('between frames: warm')));
+});
+
+test("two sides' profiles compared by function, lines left out, the largest difference first", () => {
+  const mine = totalsByFunction(PROFILE);
+  // (bake by its name and file alone: two commits' lines differ)
+  assert.equal(mine.get('bake geometry.ts'), 3);
+  assert.equal(mine.get('run carry.ts'), 5);
+  assert.ok(!mine.has('(root) (native)'));
+  const theirs = new Map([['run carry.ts', 80], ['bake geometry.ts', 3], ['walk bridge.ts', 40]]);
+  const lines = comparedProfiles(['this tree', mine], ['main', theirs]).split('\n');
+  assert.equal(lines[0], 'the profiles compared, this tree against main (total time, with what each called):');
+  assert.match(lines[1], /^\s+-75 ms\s+5 against\s+80 {2}run carry\.ts$/);
+  assert.match(lines[2], /^\s+-40 ms\s+0 against\s+40 {2}walk bridge\.ts$/);
+  // (a difference under 20 ms isn't listed)
+  assert.equal(lines.length, 3);
 });

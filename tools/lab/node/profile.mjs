@@ -177,6 +177,59 @@ export function longestStretches(profile, sourceOf = () => null, within = null) 
   return longest.map((stretch) => stretch.line());
 }
 
+/** how many functions the comparison of two sides' profiles lists, and the least difference it names (ms) */
+const COMPARED_SHOWN = 20;
+const COMPARED_LEAST_MS = 20;
+
+/** A function's place without its line (`animate ranger.ts`): two commits' lines differ. */
+const unlined = (place) => place.replace(/:\d+$/, '');
+
+/**
+ * Each function's total time in `profile` (ms, with what it called; each once per sample's stack), by its name and
+ * file without its line, so two commits' profiles can be laid side by side (`comparedProfiles`). With `within`, only
+ * the time in that function.
+ */
+export function totalsByFunction(profile, sourceOf = () => null, within = null) {
+  const nodes = new Map(profile.nodes.map((node) => [node.id, node]));
+  const parentOf = new Map();
+  for (const node of profile.nodes) {
+    for (const child of node.children ?? []) parentOf.set(child, node.id);
+  }
+  const totals = new Map();
+  profile.samples.forEach((id, index) => {
+    const ms = (profile.timeDeltas[index] ?? 0) / 1000;
+    const stack = stackOf(id, nodes, parentOf, sourceOf, within);
+    if (!stack) return;
+    for (const place of new Set(stack.map(unlined))) totals.set(place, (totals.get(place) ?? 0) + ms);
+  });
+  for (const place of IDLE) totals.delete(unlined(place));
+  return totals;
+}
+
+/** One row of the comparison: a function's time on each side and the difference. */
+function comparedRow(place, mine, theirs) {
+  const difference = mine - theirs;
+  const signed = `${difference >= 0 ? '+' : ''}${difference.toFixed(0)}`.padStart(7);
+  return `  ${signed} ms  ${mine.toFixed(0).padStart(6)} against ${theirs.toFixed(0).padStart(6)}  ${place}`;
+}
+
+/**
+ * The functions whose total time differs most between two sides' profiles (`totalsByFunction`), the first side's
+ * time against the second's: where an A/B's difference in time went, which two lists of each side's busiest leave to
+ * be read off by eye (a function busy on one side alone is in one list).
+ */
+export function comparedProfiles([firstName, first], [secondName, second]) {
+  const places = new Set([...first.keys(), ...second.keys()]);
+  const rows = [...places]
+    .map((place) => ({ place, mine: first.get(place) ?? 0, theirs: second.get(place) ?? 0 }))
+    .filter((row) => Math.abs(row.mine - row.theirs) >= COMPARED_LEAST_MS)
+    .sort((a, b) => Math.abs(b.mine - b.theirs) - Math.abs(a.mine - a.theirs))
+    .slice(0, COMPARED_SHOWN)
+    .map((row) => comparedRow(row.place, row.mine, row.theirs));
+  const head = `the profiles compared, ${firstName} against ${secondName} (total time, with what each called):`;
+  return rows.length ? [head, ...rows].join('\n') : `${head} no function differs by ${COMPARED_LEAST_MS} ms`;
+}
+
 /**
  * The profile's busiest functions: by self time, and by total time (each function once per sample's stack), each
  * placed by `sourceOf` (see `placeOf`; by where it ran when not given). With `within` (a function's name, or its
