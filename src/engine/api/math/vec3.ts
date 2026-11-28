@@ -49,6 +49,11 @@ export class Vec3 {
     return true;
   }
 
+  /** `{ x, y, z }`, as JSON writes three's vector (its own fields are `_x`... and its owner) */
+  toJSON(): { x: number; y: number; z: number } {
+    return { x: this._x, y: this._y, z: this._z };
+  }
+
   /** sets all three, its owner told once */
   set(x: number, y: number, z: number): this {
     this._x = x;
