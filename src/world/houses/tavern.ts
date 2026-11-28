@@ -6,10 +6,12 @@ import { HOUSES, type RoomId } from '../../data/houses';
 import { boards, pbrMaterialMaps, wood } from '../../core/textures';
 import {
   banner, barrel, begin, bench, BENCH_SAT, BODY, box, CANDLE, candle, chandelier, CHANDELIER_DROP, DISPLAY, drum, finish,
-  framed, hearth, lantern, type Mats, onWall, parchment, RIDGE_UNDER, type Room, rug, sign, stool, stoolSeatOf, table, tankard,
+  framed, hearth, keepApart, lantern, type Mats, onWall, parchment, RIDGE_UNDER, type Room, rug, sign, stool, stoolSeatOf, table, tankard,
   writing,
 } from '../rooms';
+import { keepPotteryApart, plateShelf, potteryOn } from '../potShelf';
 import { lengthSeat } from '../seats';
+import { mulberry } from '../../util';
 import { keeperTalk, tavernKeeper } from '../tavernKeeper';
 import { TOP_THINGS } from '../tavernTables';
 import { BAR_STOOL_HIGH, BAR_STOOL_RUNG, BAR_STOOL_X, BAR_STOOLS } from '../../data/tavern';
@@ -42,30 +44,6 @@ function crossedAxes(g: THREE.Object3D, M: Mats, x: number, y: number): void {
   const boss = new THREE.Mesh(new THREE.SphereGeometry(0.07, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2).rotateX(Math.PI / 2), M.brass);
   boss.position.set(x, y, 0.16);
   g.add(boss);
-}
-
-/** A shelf on a wall (its frame) at (x, y), `w` long: plates stood on edge against the wall, jugs and cups between. */
-function plateShelf(g: THREE.Object3D, M: Mats, x: number, y: number, w: number, rng: () => number): void {
-  box(g, w, 0.04, 0.24, x, y, 0.12, M.oak);
-  for (const sx of [-1, 1]) box(g, 0.04, 0.16, 0.2, x + sx * (w / 2 - 0.1), y - 0.16, 0.1, M.timber);
-  const clay = new THREE.MeshStandardMaterial({ color: 0xb87a4a, roughness: 0.7 });
-  const pewter = new THREE.MeshStandardMaterial({ color: 0x9a9890, metalness: 0.7, roughness: 0.45 });
-  for (let at = x - w / 2 + 0.16; at < x + w / 2 - 0.12;) {
-    if (rng() < 0.55) {
-      const plate = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.11, 0.02, 20).rotateX(Math.PI / 2 - 0.15), rng() < 0.5 ? pewter : clay);
-      plate.position.set(at + 0.07, y + 0.17, 0.05);
-      plate.castShadow = true;
-      g.add(plate);
-      at += 0.3;
-    } else {
-      const outline = [[0.0, 0], [0.06, 0], [0.075, 0.06], [0.065, 0.14], [0.035, 0.19], [0.04, 0.22], [0, 0.22]].map(([r, h]) => new THREE.Vector2(r, h));
-      const jug = new THREE.Mesh(new THREE.LatheGeometry(outline, 12), clay);
-      jug.position.set(at + 0.06, y + 0.04, 0.12);
-      jug.castShadow = true;
-      g.add(jug);
-      at += 0.2;
-    }
-  }
 }
 
 /** Bunches of dried herbs hung from a beam at (x, y, z), `n` of them along x. */
@@ -210,13 +188,22 @@ export function build(group: THREE.Group): Room {
   const west = onWall(g, id, 'west');
   lantern(west, M, -0.6, 2.4, 0, 0, 1);
   banner(west, M, 2.9, high - 0.35, [0.36, 0.18, 0.04], rng, 0.7);
-  sign(west, M, 1.0, 2.55, 'THE EMBER & OAK', 'Hearth, ale and good company');
+  const tavernSign = new THREE.Group();
+  tavernSign.name = 'tavern-sign';
+  west.add(tavernSign);
+  // (at 1.0 its backing ran through the ridge beam at 0; at 1.4 its nearest edge, 0.22, clears the beam's 0.13)
+  sign(tavernSign, M, 1.4, 2.55, 'THE EMBER & OAK', 'Hearth, ale and good company');
+  // (marked once it's built: `keepApart` marks the meshes there as it's called, and called first it marked none)
+  keepApart(tavernSign, true);
   // (the back wall: crossed axes and a shield beside the hearth, a shelf of plates and jugs the other side)
   const back = onWall(g, id, 'back');
   crossedAxes(back, M, -2.6, 2.0);
-  plateShelf(back, M, -4.3, 1.75, 1.4, rng);
-  plateShelf(back, M, -4.3, 2.35, 1.4, rng);
-  plateShelf(back, M, 3.0, 1.95, 1.6, rng);
+  // (the pottery from a stream of its own: what's built after it, the herbs, stays put however the shelves fill)
+  const potter = mulberry(733), pottery = potteryOn(back);
+  plateShelf(back, pottery, M, -4.3, 1.75, 1.4, potter);
+  plateShelf(back, pottery, M, -4.3, 2.35, 1.4, potter);
+  plateShelf(back, pottery, M, 3.0, 1.95, 1.6, potter);
+  keepPotteryApart(pottery);
   // (dried herbs from the beams)
   // (over the bar alone: over the long table they hung before the sign)
   herbs(g, barX - 0.5, high - 0.26, -2.2, 6, rng);

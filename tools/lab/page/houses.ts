@@ -31,6 +31,8 @@ import type { Enemy } from '../../../src/entities/enemy';
  *  inside. */
 export interface HousesOptions {
   canary: boolean;
+  /** the houses visited (every house when none are named) */
+  rooms?: RoomId[];
 }
 
 /** the frames a stand settles for, the most frames a door may take to open (a warm-up's bar), and a walk's frames */
@@ -347,6 +349,16 @@ async function visit(lab: Lab, id: RoomId, view: ViewMode, canary: boolean, mome
   lines.push(`${id} in ${view}: in at ${G.player.pos.x.toFixed(2)},${G.player.pos.z.toFixed(2)}; cut away: `
     + `${cutAway(id).join(', ') || 'none'}; pipelines made ${compiled}`);
   moments.push(await lab.screen(`houses-${id}-${view}`));
+  if (id === 'tavern' && view === 'third') {
+    // (the shelf pottery and the sign's clearance from the ridge, close enough to judge what the player met in #733)
+    moments.push(lab.picture('houses-tavern-pottery', ['back'], [], {
+      at: new THREE.Vector3(-4.3, 2.05, -3.85), distance: 5,
+    }));
+    // (wide enough to show the ridge beam where it meets the wall beside the sign)
+    moments.push(lab.picture('houses-tavern-sign', ['right'], [], {
+      at: new THREE.Vector3(-5.35, 2.3, -1.0), distance: 10,
+    }));
+  }
   // (from above, the wheel turned out and in as far as it goes, before any card opens over the room: the zoom kept to the room's)
   const zoomed = view === 'top' ? await zoomInRoom(lab, id, moments, canary) : null;
   if (zoomed) {
@@ -428,7 +440,7 @@ const shrunk = (box: THREE.Box3, by: number): THREE.Box3 =>
 /** The box of each part under `object`, in the world: its meshes', and those of the meshes a merge of what stands
  *  still took from under it (`mergedParts`, kept by `mergeStill` in dev builds: merged, a chandelier and the ceiling's
  *  beams are no meshes of their own, and read by its meshes alone this check passed with nothing read). */
-function partBoxes(object: THREE.Object3D): THREE.Box3[] {
+export function partBoxes(object: THREE.Object3D): THREE.Box3[] {
   const boxes: THREE.Box3[] = [];
   object.traverse((o) => {
     // (a merge itself is no part: its box is round every part merged into it, the ceiling's timbers' the whole ceiling)
@@ -464,7 +476,24 @@ function fixturesClear(canary: boolean): { lines: string[]; problems: string[]; 
     if (lifted) caught = through > 0;
     else if (through) problems.push(`fixtures: the ${id}'s chandelier runs into the ceiling's beams (${through} parts)`);
   }
-  return { lines, problems, caught };
+  // (the tavern's sign against the same beams: absent on a commit before it was named, so an A/B's main side skips it)
+  const sign = G.arena.rooms.tavern.group.getObjectByName('tavern-sign');
+  let signCaught = true;
+  if (sign) {
+    sign.updateMatrixWorld(true);
+    const parts = partBoxes(sign);
+    if (!parts.length) throw new Error('lab: houses: the tavern sign has no parts to read');
+    // (back to #733's place: west-wall local x 1.4 to 1.0 is +0.4 m in world z; its group is already merged)
+    if (canary) for (const part of parts) part.translate(new THREE.Vector3(0, 0, 0.4));
+    const ceiling = G.arena.rooms.tavern.group.getObjectByName('ceiling')!;
+    const beams = partBoxes(ceiling).map((box) => shrunk(box, TOUCH));
+    const through = parts.filter((part) => beams.some((beam) => beam.intersectsBox(part))).length;
+    lines.push(`fixtures: the tavern's sign, ${through} part(s) into the ceiling's beams`
+      + `${canary ? ' (old place: the canary)' : ''}`);
+    if (canary) signCaught = through > 0;
+    else if (through) problems.push(`fixtures: the tavern's sign runs into the ceiling's beams (${through} parts)`);
+  } else if (canary) signCaught = false;
+  return { lines, problems, caught: caught && signCaught };
 }
 
 export async function houses(lab: Lab, options: HousesOptions): Promise<Report> {
@@ -476,14 +505,16 @@ export async function houses(lab: Lab, options: HousesOptions): Promise<Report> 
   lab.drawing = true;
   const moments: Pictured[] = [];
   const visits: Visit[] = [];
-  for (const [i, { id, view }] of VISITS.entries()) {
+  // (a part of the visits for a change to one room: the canary's runs visit them all, its plants in the first)
+  const wanted = VISITS.filter(({ id }) => !options.rooms || options.rooms.includes(id));
+  for (const [i, { id, view }] of wanted.entries()) {
     // (the canary's other fault: the scholar's talk card made wider than the window, in the library's first visit)
     const plantTalk = options.canary && id === 'library' && view === 'third';
     visits.push(await visit(lab, id, view, options.canary && i === 0, moments, plantTalk));
   }
   moments.push(await yardPicture(lab));
   const fixtures = fixturesClear(options.canary);
-  const lines = [`houses: ${ROOM_IDS.join(', ')}`, ...fixtures.lines, ...visits.flatMap((v) => v.lines)];
+  const lines = [`houses: ${options.rooms ? options.rooms.join(', ') : ROOM_IDS.join(', ')}`, ...fixtures.lines, ...visits.flatMap((v) => v.lines)];
   const problems = [...fixtures.problems, ...visits.flatMap((v) => v.problems)];
   if (!options.canary) return { text: lines.join('\n'), problems, moments };
   const talked = visits.find((v, i) => VISITS[i].id === 'library' && VISITS[i].view === 'third');
@@ -492,6 +523,6 @@ export async function houses(lab: Lab, options: HousesOptions): Promise<Report> 
     + 'walls, the room left drawn going out, a tap through a door made a press, a sheet in the door frame, the zoom '
     + `let go in a room: ${visits[0].caught ? 'found' : 'unseen'}; `
     + `the scholar's talk card wider than the window: ${talked?.caught ? 'found' : 'unseen'}; `
-    + `a chandelier lifted into its beams: ${fixtures.caught ? 'found' : 'unseen'})`);
+    + `a chandelier lifted and the tavern sign returned into their beams: ${fixtures.caught ? 'found' : 'unseen'})`);
   return { text: lines.join('\n'), problems: caught ? [] : ['canary: a planted fault went unseen'], moments };
 }
