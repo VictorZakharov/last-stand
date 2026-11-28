@@ -2,7 +2,7 @@
 // each thing on a shelf read against its board (standing on it, clear of the things beside it), what the pottery costs
 // the room's frame (the frame drawn with it and without it, counted by the engine), and pictured close up and as the
 // player sees it. `--canary` lifts one thing off its board and slides the next into it, both of which must be found.
-import * as THREE from 'three';
+import { Box3, LitMaterial, Mesh, Node, Vec3 } from './sceneApi.ts';
 import type { Lab, Pictured, Report } from './lab';
 import { G } from '../../../src/state';
 import { enterRoom } from '../../../src/game/rooms';
@@ -47,24 +47,24 @@ const STANDS: readonly { label: string; at: readonly [number, number]; facing: n
 /** A shelf's board: its top and its extent along the wall and out from it. */
 interface Board {
   top: number;
-  box: THREE.Box3;
+  box: Box3;
 }
 
 /** A thing on a shelf (a plate, a jug, bowls stacked, beakers), boxed as its parts stand. */
 interface Thing {
   kind: string;
-  box: THREE.Box3;
+  box: Box3;
   /** each of its parts' boxes as the merge kept them (a pair of plates: two) */
-  parts: THREE.Box3[];
+  parts: Box3[];
 }
 
 /** The boards of each plate shelf in the room: a box 4 cm thick and over a metre long among each shelf's parts. */
-function boardsIn(room: THREE.Object3D): Board[] {
+function boardsIn(room: Node): Board[] {
   const boards: Board[] = [];
   room.traverse((object) => {
     if (object.name !== PLATE_SHELF) return;
     for (const box of partBoxes(object)) {
-      const size = box.getSize(new THREE.Vector3());
+      const size = box.getSize(new Vec3());
       if (Math.abs(size.y - 0.04) < 0.002 && Math.max(size.x, size.z) > 1) boards.push({ top: box.max.y, box });
     }
   });
@@ -72,9 +72,9 @@ function boardsIn(room: THREE.Object3D): Board[] {
 }
 
 /** Each thing in the pottery, its parts' boxes joined. */
-function thingsIn(pottery: THREE.Object3D): Thing[] {
+function thingsIn(pottery: Node): Thing[] {
   return pottery.children.filter((child) => child.name.startsWith('pot ')).map((child) => {
-    const box = new THREE.Box3();
+    const box = new Box3();
     const parts = partBoxes(child);
     for (const part of parts) box.union(part);
     return { kind: child.name.slice(4), box, parts };
@@ -83,21 +83,21 @@ function thingsIn(pottery: THREE.Object3D): Thing[] {
 
 /** The board under a thing: the one whose top it's nearest over, with its middle over the board. */
 function boardUnder(thing: Thing, boards: readonly Board[]): Board | undefined {
-  const middle = thing.box.getCenter(new THREE.Vector3());
+  const middle = thing.box.getCenter(new Vec3());
   const under = boards.filter((board) => middle.x >= board.box.min.x && middle.x <= board.box.max.x
     && middle.z >= board.box.min.z - 0.05 && middle.z <= board.box.max.z + 0.05);
   return under.sort((a, b) => Math.abs(thing.box.min.y - a.top) - Math.abs(thing.box.min.y - b.top))[0];
 }
 
 /** Every point of the pottery as drawn, in the world: its merged meshes' vertices. */
-function pointsOf(pottery: THREE.Object3D): THREE.Vector3[] {
-  const points: THREE.Vector3[] = [];
+function pointsOf(pottery: Node): Vec3[] {
+  const points: Vec3[] = [];
   pottery.traverse((object) => {
-    const mesh = object as THREE.Mesh;
+    const mesh = object as Mesh;
     if (!mesh.isMesh) return;
     const position = mesh.geometry.attributes.position;
     for (let k = 0; k < position.count; k++) {
-      points.push(new THREE.Vector3().fromBufferAttribute(position, k).applyMatrix4(mesh.matrixWorld));
+      points.push(new Vec3().fromBufferAttribute(position, k).applyMatrix4(mesh.matrixWorld));
     }
   });
   return points;
@@ -105,7 +105,7 @@ function pointsOf(pottery: THREE.Object3D): THREE.Vector3[] {
 
 /** A thing's foot: the lowest of the pottery's points within its box. Its box alone is loose round what's turned (a
  *  plate leant back reached 1.7 cm below where it stands), its points are where it's drawn. */
-function footOf(thing: Thing, points: readonly THREE.Vector3[]): number {
+function footOf(thing: Thing, points: readonly Vec3[]): number {
   const within = thing.box.clone().expandByScalar(0.001);
   let foot = Infinity;
   for (const point of points) if (within.containsPoint(point)) foot = Math.min(foot, point.y);
@@ -129,7 +129,7 @@ function readPairs(things: readonly Thing[], lines: string[], problems: string[]
 }
 
 /** Each thing on its board and clear of the next along it: what's wrong, and the most found of each. */
-function readShelves(things: readonly Thing[], boards: readonly Board[], points: readonly THREE.Vector3[],
+function readShelves(things: readonly Thing[], boards: readonly Board[], points: readonly Vec3[],
   lines: string[], problems: string[]): void {
   let highest = -Infinity;
   let lowest = Infinity;
@@ -159,7 +159,7 @@ function readShelves(things: readonly Thing[], boards: readonly Board[], points:
 }
 
 /** The room's frame with the pottery and without it: what it adds, against its budget. */
-function costSaid(lab: Lab, pottery: THREE.Object3D, lines: string[], problems: string[]): void {
+function costSaid(lab: Lab, pottery: Node, lines: string[], problems: string[]): void {
   const whole = countedFrame(lab);
   pottery.visible = false;
   try {
@@ -177,10 +177,10 @@ function costSaid(lab: Lab, pottery: THREE.Object3D, lines: string[], problems: 
 }
 
 /** the widest of the slipware's map now (px): the designs' atlas, or Very low's plain few pixels */
-function slipwareWidth(pottery: THREE.Object3D): number {
+function slipwareWidth(pottery: Node): number {
   let widest = 0;
   pottery.traverse((object) => {
-    const material = (object as THREE.Mesh).material as THREE.MeshStandardMaterial | undefined;
+    const material = (object as Mesh).material as LitMaterial | undefined;
     const image = material?.map?.image as { width?: number } | undefined;
     widest = Math.max(widest, image?.width ?? 0);
   });
@@ -188,7 +188,7 @@ function slipwareWidth(pottery: THREE.Object3D): number {
 }
 
 /** The plates on Very low: their designs' map swapped for a plain one (`plainSlipware`), pictured, and back. */
-async function plainOnVeryLow(lab: Lab, pottery: THREE.Object3D, lines: string[],
+async function plainOnVeryLow(lab: Lab, pottery: Node, lines: string[],
   problems: string[]): Promise<Pictured[]> {
   const booted = qualityLevel();
   const designs = slipwareWidth(pottery);
@@ -200,7 +200,7 @@ async function plainOnVeryLow(lab: Lab, pottery: THREE.Object3D, lines: string[]
     if (designs < 256) problems.push(`the slipware's designs are ${designs} px wide at ${booted}`);
     if (plain > 16) problems.push(`the slipware keeps a map ${plain} px wide at verylow, not a plain one`);
     return [lab.picture('pottery-left-low-verylow', ['back'], [], {
-      at: new THREE.Vector3(-4.3, 1.9, -3.85), distance: 1.7,
+      at: new Vec3(-4.3, 1.9, -3.85), distance: 1.7,
     })];
   } finally {
     useQuality(booted);
@@ -211,12 +211,12 @@ async function plainOnVeryLow(lab: Lab, pottery: THREE.Object3D, lines: string[]
 /** Plant the canary's two faults in the boxes read: the first thing lifted, the second slid into it. */
 function plant(things: Thing[]): void {
   if (things.length < 2) throw new Error('lab: pottery: under two things on the shelves to plant in');
-  things[0].box.translate(new THREE.Vector3(0, LIFT, 0));
-  things[1].box.translate(new THREE.Vector3(-SLIDE, 0, 0));
+  things[0].box.translate(new Vec3(0, LIFT, 0));
+  things[1].box.translate(new Vec3(-SLIDE, 0, 0));
   const pair = things.find((thing) => thing.kind === 'plates');
   if (!pair) throw new Error('lab: pottery: no pair of plates to plant in');
   const front = [...pair.parts].sort((a, b) => b.min.z - a.min.z)[0];
-  front.translate(new THREE.Vector3(0, 0, -PUSH));
+  front.translate(new Vec3(0, 0, -PUSH));
 }
 
 /** The pottery pictured: each shelf close, the wall's shelves whole, and the room as the player stands in it. */
@@ -224,10 +224,10 @@ async function pictured(lab: Lab): Promise<Pictured[]> {
   // (the close-ups turn with the hero's facing: taken with him facing the wall square on)
   await stand(lab, [0, -1], Math.PI);
   const moments = [
-    lab.picture('pottery-left', ['back'], [], { at: new THREE.Vector3(-4.3, 2.5, -3.85), distance: 1.7 }),
-    lab.picture('pottery-left-low', ['back'], [], { at: new THREE.Vector3(-4.3, 1.9, -3.85), distance: 1.7 }),
-    lab.picture('pottery-right', ['back'], [], { at: new THREE.Vector3(4.0, 2.1, -3.85), distance: 1.7 }),
-    lab.picture('pottery-wall', ['back'], [], { at: new THREE.Vector3(-4.3, 2.05, -3.85), distance: 5 }),
+    lab.picture('pottery-left', ['back'], [], { at: new Vec3(-4.3, 2.5, -3.85), distance: 1.7 }),
+    lab.picture('pottery-left-low', ['back'], [], { at: new Vec3(-4.3, 1.9, -3.85), distance: 1.7 }),
+    lab.picture('pottery-right', ['back'], [], { at: new Vec3(4.0, 2.1, -3.85), distance: 1.7 }),
+    lab.picture('pottery-wall', ['back'], [], { at: new Vec3(-4.3, 2.05, -3.85), distance: 5 }),
   ];
   for (const { label, at, facing } of STANDS) {
     await stand(lab, at, facing);

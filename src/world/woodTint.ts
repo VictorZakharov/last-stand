@@ -3,12 +3,12 @@
 // close to the floor's boards and the panelling's, so a thing made of them sank into the room. A tint is the room's
 // wood material copied with another colour (and roughness), its maps shared: no texture made, one material a tint,
 // made once and shared by every thing in it.
-import * as THREE from 'three';
+import { LitMaterial } from '../engine/api/index.ts';
 
-const made = new WeakMap<THREE.MeshStandardMaterial, Map<string, THREE.MeshStandardMaterial>>();
+const made = new WeakMap<LitMaterial, Map<string, LitMaterial>>();
 
 /** `wood` in `colour` (its maps shared), at `roughness` if given; one material a wood, colour and roughness. */
-export function woodTint(wood: THREE.MeshStandardMaterial, colour: number, roughness?: number): THREE.MeshStandardMaterial {
+export function woodTint(wood: LitMaterial, colour: number, roughness?: number): LitMaterial {
   if (!made.has(wood)) made.set(wood, new Map());
   const tints = made.get(wood)!, key = `${colour}:${roughness ?? ''}`;
   let tint = tints.get(key);

@@ -3,7 +3,7 @@
 // wavering as a hand trails it, raised (a darker edge below it), the ground darker in the well where the glaze pools,
 // the rim's edge dark with the glaze broken pale over it, a speckle of iron in the clay. Painted by the vertices they
 // were as soft as the lathe's points were apart, a centimetre (from the owner: "this looks washed to me").
-import * as THREE from 'three';
+import { CanvasTexture, LitMaterial, SRGBColorSpace, Texture } from '../engine/api/index.ts';
 import { canvasOf, ctx2d } from '../core/textures';
 import { mulberry } from '../util';
 
@@ -185,7 +185,7 @@ function ground(context: CanvasRenderingContext2D, rng: () => number): void {
 }
 
 /** The atlas's map: each design in its cell, painted once. */
-function atlas(): THREE.CanvasTexture {
+function atlas(): CanvasTexture {
   const canvas = canvasOf(SIZE), context = ctx2d(canvas), rng = mulberry(1733);
   PAINTERS.forEach((paint, k) => {
     context.save();
@@ -194,33 +194,33 @@ function atlas(): THREE.CanvasTexture {
     paint(context, rng);
     context.restore();
   });
-  const map = new THREE.CanvasTexture(canvas);
-  map.colorSpace = THREE.SRGBColorSpace;
+  const map = new CanvasTexture(canvas);
+  map.colorSpace = SRGBColorSpace;
   map.anisotropy = 4;
   return map;
 }
 
 /** Very low's map: the ground's colour alone, a few pixels (a map still, so the material's pipeline is the same) */
-function plainMap(): THREE.CanvasTexture {
+function plainMap(): CanvasTexture {
   const canvas = canvasOf(4), context = ctx2d(canvas);
   context.fillStyle = PLAIN;
   context.fillRect(0, 0, 4, 4);
-  const map = new THREE.CanvasTexture(canvas);
-  map.colorSpace = THREE.SRGBColorSpace;
+  const map = new CanvasTexture(canvas);
+  map.colorSpace = SRGBColorSpace;
   return map;
 }
 
 /** the slipware's material and its two maps, made as the first plate is */
-let made: { material: THREE.MeshStandardMaterial; designs: THREE.Texture; plain: THREE.Texture } | null = null;
+let made: { material: LitMaterial; designs: Texture; plain: Texture } | null = null;
 /** whether the plates are plain (Very low's), as the level last said */
 let plain = false;
 
 /** The slipware's material, one for every plate: the atlas under the vertices' colours (the glaze broken over the
  *  rim, its shadow in the well), a lead glaze's soft sheen. */
-export function slipwareMaterial(): THREE.MeshStandardMaterial {
+export function slipwareMaterial(): LitMaterial {
   if (!made) {
     const designs = atlas(), plainOne = plainMap();
-    const material = new THREE.MeshStandardMaterial({ map: plain ? plainOne : designs, vertexColors: true, roughness: 0.42 });
+    const material = new LitMaterial({ map: plain ? plainOne : designs, vertexColors: true, roughness: 0.42 });
     made = { material, designs, plain: plainOne };
   }
   return made.material;

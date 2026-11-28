@@ -3,7 +3,7 @@
 // group kept apart (`POTTERY`, merged within itself: a draw for the clay and one for the pewter, as merged with the room
 // they were), each thing on a shelf a group of its own (`pot <kind>`), and each shelf's boards one (`plate shelf`), so
 // `lab pottery` finds them by name, counts what they cost and reads each thing against its board.
-import * as THREE from 'three';
+import { Geometry, LitMaterial, Material, Mesh, Node, Vec3 } from '../engine/api/index.ts';
 import { beaker, bowl, charger, facing, pitcher, slipPlate, tallJug } from './potForms';
 import { clayMaterial } from './pottery';
 import { slipwareMaterial } from './slipware';
@@ -18,7 +18,7 @@ export const PLATE_SHELF = 'plate shelf';
 export const CLAY = clayMaterial();
 // (a soft metal's sheen: at 0.7 metal and 0.45 rough it read as grey card, at 0.85 near black, with little bright
 // round it to give back)
-const PEWTER = new THREE.MeshStandardMaterial({ color: 0xaaa79e, metalness: 0.6, roughness: 0.35 });
+const PEWTER = new LitMaterial({ color: 0xaaa79e, metalness: 0.6, roughness: 0.35 });
 const CHARGER = charger();
 
 /** What stands on a plate shelf, with the room along it each takes (m). */
@@ -36,8 +36,8 @@ const SMALLEST: readonly ShelfThing[] = ['beakers', 'tallJug', 'bowls'];
 const GAP = 0.008;
 
 /** A room's pottery group on a wall (its frame): kept apart once its shelves are filled (`keepPotteryApart`). */
-export function potteryOn(wall: THREE.Object3D): THREE.Group {
-  const pottery = new THREE.Group();
+export function potteryOn(wall: Node): Node {
+  const pottery = new Node();
   pottery.name = POTTERY;
   wall.add(pottery);
   return pottery;
@@ -45,7 +45,7 @@ export function potteryOn(wall: THREE.Object3D): THREE.Group {
 
 /** The filled pottery kept apart from the room's merge and merged within itself: `keepApart` marks the meshes there
  *  as it's called, so it's called once they're all in (called first, they were merged with the room's). */
-export function keepPotteryApart(pottery: THREE.Object3D): void {
+export function keepPotteryApart(pottery: Node): void {
   keepApart(pottery, true);
 }
 
@@ -64,22 +64,22 @@ function pickThing(rng: () => number, last: ShelfThing | null): ShelfThing {
 }
 
 /** A pot in its thing's group, in the clay or pewter, casting its shadow. */
-function pot(thing: THREE.Object3D, geometry: THREE.BufferGeometry, material: THREE.Material): THREE.Mesh {
-  const mesh = new THREE.Mesh(geometry, material);
+function pot(thing: Node, geometry: Geometry, material: Material): Mesh {
+  const mesh = new Mesh(geometry, material);
   mesh.castShadow = true;
   thing.add(mesh);
   return mesh;
 }
 
 /** the lowest a mesh's vertices stand along `axis` in its frame, as it's turned and placed now */
-function lowest(mesh: THREE.Mesh, axis: 'y' | 'z'): number {
+function lowest(mesh: Mesh, axis: 'y' | 'z'): number {
   return -furthest(mesh, axis, -1);
 }
 
 /** the furthest a mesh's vertices stand along `axis` (times `sign`) in its frame, as it's turned and placed now */
-function furthest(mesh: THREE.Mesh, axis: 'y' | 'z', sign: 1 | -1): number {
+function furthest(mesh: Mesh, axis: 'y' | 'z', sign: 1 | -1): number {
   mesh.updateMatrix();
-  const position = mesh.geometry.attributes.position, point = new THREE.Vector3();
+  const position = mesh.geometry.attributes.position, point = new Vec3();
   let most = -Infinity;
   for (let k = 0; k < position.count; k++) {
     most = Math.max(most, sign * point.fromBufferAttribute(position, k).applyMatrix4(mesh.matrix)[axis]);
@@ -89,8 +89,8 @@ function furthest(mesh: THREE.Mesh, axis: 'y' | 'z', sign: 1 | -1): number {
 
 /** A plate (slipware or pewter) stood on edge, leant back `lean` against what's behind it at `behind` (m out from the
  *  wall), turned a little about its own middle as it was put back, its foot on the board. */
-function leantPlate(thing: THREE.Object3D, at: number, top: number, behind: number, lean: number,
-  rng: () => number, size = 1): THREE.Mesh {
+function leantPlate(thing: Node, at: number, top: number, behind: number, lean: number,
+  rng: () => number, size = 1): Mesh {
   const pewter = rng() < 0.35;
   const plate = pot(thing, pewter ? CHARGER : slipPlate(rng), pewter ? PEWTER : slipwareMaterial());
   plate.scale.setScalar(size);
@@ -106,7 +106,7 @@ function leantPlate(thing: THREE.Object3D, at: number, top: number, behind: numb
 
 /** A jug, bowls stacked, beakers, or plates leant on the wall (one or two, the front one on the back one), centred
  *  `at` along a shelf whose top is `top`. */
-function shelfThing(thing: THREE.Object3D, kind: ShelfThing, at: number, top: number, rng: () => number): void {
+function shelfThing(thing: Node, kind: ShelfThing, at: number, top: number, rng: () => number): void {
   if (kind === 'plate' || kind === 'plates') {
     // (leant back a quarter of a radian: at 0.15 it stood bolt upright as seen from the room)
     // (two: the back one to one side, the front one 7 to 10 cm to the other, each its own disc; near centred on
@@ -145,9 +145,9 @@ function shelfThing(thing: THREE.Object3D, kind: ShelfThing, at: number, top: nu
  * A shelf on a wall (its frame) at (x, y), `w` long, its boards on the wall and its pottery in `pottery` (both in the
  * wall's frame): plates leant on the wall, jugs, bowls and cups, behind a rail.
  */
-export function plateShelf(wall: THREE.Object3D, pottery: THREE.Object3D, M: Mats, x: number, y: number, w: number,
+export function plateShelf(wall: Node, pottery: Node, M: Mats, x: number, y: number, w: number,
   rng: () => number): void {
-  const shelf = new THREE.Group();
+  const shelf = new Node();
   shelf.name = PLATE_SHELF;
   wall.add(shelf);
   box(shelf, w, 0.04, 0.24, x, y, 0.12, M.oak);
@@ -164,7 +164,7 @@ export function plateShelf(wall: THREE.Object3D, pottery: THREE.Object3D, M: Mat
     const kind = at + ROOM_FOR[chosen] <= end ? chosen : SMALLEST.find((small) => at + ROOM_FOR[small] <= end);
     if (!kind) break;
     const room = ROOM_FOR[kind];
-    const thing = new THREE.Group();
+    const thing = new Node();
     thing.name = `pot ${kind}`;
     pottery.add(thing);
     shelfThing(thing, kind, at + room / 2, top, rng);

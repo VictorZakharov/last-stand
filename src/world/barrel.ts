@@ -5,8 +5,8 @@
 // boards set in from its rims, the rims' end grain round them; a lying keg a bung in its belly and a brass tap in its
 // head. Each barrel's look is its own by where it stands, the room's stream untouched. Its size is the old one's (0.62
 // m across at its belly, 0.8 tall), so the obstacles and what stands on a barrel stay.
-import * as THREE from 'three';
-import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { Geometry, Material, mergeGeometries, Mesh, Node, Vec2 } from '../engine/api/index.ts';
+import * as shapes from '../engine/api/shapes/index.ts';
 import { mulberry } from '../util';
 import type { Mats } from './rooms';
 import { woodTint } from './woodTint';
@@ -44,15 +44,15 @@ function seedAt(x: number, y: number, z: number): number {
 }
 
 /** The staves, grouped by the wood each is: pale honey oak, some a shade deeper or paler. */
-function staves(M: Mats, rng: () => number): Map<THREE.Material, THREE.BufferGeometry[]> {
+function staves(M: Mats, rng: () => number): Map<Material, Geometry[]> {
   const woods = STAVE_TONES.map((tone) => woodTint(M.oak, tone));
-  const byWood = new Map<THREE.Material, THREE.BufferGeometry[]>();
+  const byWood = new Map<Material, Geometry[]>();
   const each = (Math.PI * 2) / STAVES;
   for (let k = 0; k < STAVES; k++) {
     // (each board a little proud or sunk, as staves are bent and set by hand)
     const out = 1 + (rng() - 0.5) * 0.02;
-    const points = OUTLINE.map(([r, y]) => new THREE.Vector2(r * out, y));
-    const stave = new THREE.LatheGeometry(points, 2, k * each, each * BOARD);
+    const points = OUTLINE.map(([r, y]) => new Vec2(r * out, y));
+    const stave = shapes.lathe(points, 2, k * each, each * BOARD);
     // (its slice of the wood's map round the barrel, as the one lathe it was had it: each stave the whole map across its
     // 6 cm, the grain blurred to a flat dark)
     const uv = stave.attributes.uv;
@@ -65,69 +65,69 @@ function staves(M: Mats, rng: () => number): Map<THREE.Material, THREE.BufferGeo
 }
 
 /** the dark between the staves: the barrel's outline a little in, a lathe of its own */
-function between(): THREE.BufferGeometry {
-  return new THREE.LatheGeometry(OUTLINE.map(([r, y]) => new THREE.Vector2(r - 0.006, y)), STAVES);
+function between(): Geometry {
+  return shapes.lathe(OUTLINE.map(([r, y]) => new Vec2(r - 0.006, y)), STAVES);
 }
 
 /** a hoop at `y`: a flat iron band over the staves, as wide as `HOOP_WIDE`, following the bulge */
-function hoop(y: number): THREE.BufferGeometry {
+function hoop(y: number): Geometry {
   const below = radiusAt(y - HOOP_WIDE / 2) + 0.006, above = radiusAt(y + HOOP_WIDE / 2) + 0.006;
-  return new THREE.CylinderGeometry(above, below, HOOP_WIDE, STAVES, 1, true).translate(0, y, 0);
+  return shapes.cylinder(above, below, HOOP_WIDE, STAVES, 1, true).translate(0, y, 0);
 }
 
 /** a head at the end `end` (1 up, -1 down): a disc set in from the rim, the joints of its boards across it */
-function head(end: number): { boards: THREE.BufferGeometry; joints: THREE.BufferGeometry[] } {
+function head(end: number): { boards: Geometry; joints: Geometry[] } {
   const y = end * (HALF - CHIME), r = radiusAt(y) - 0.004;
-  const boards = new THREE.CircleGeometry(r, 18).rotateX(-end * Math.PI / 2).translate(0, y, 0);
+  const boards = shapes.circle(r, 18).rotateX(-end * Math.PI / 2).translate(0, y, 0);
   const joints = [-0.08, 0.08].map((across) => {
     const long = 2 * Math.sqrt(r * r - across * across);
-    return new THREE.BoxGeometry(0.005, 0.002, long).translate(across, y + end * 0.001, 0);
+    return shapes.box(0.005, 0.002, long).translate(across, y + end * 0.001, 0);
   });
   return { boards, joints };
 }
 
 /** the rims' end grain: a ring round each end, the staves' thickness seen from above */
-function rims(): THREE.BufferGeometry[] {
+function rims(): Geometry[] {
   return [-1, 1].map((end) => {
     const r = radiusAt(end * HALF) - 0.009;
-    return new THREE.TorusGeometry(r, 0.011, 3, STAVES).rotateX(Math.PI / 2).translate(0, end * (HALF - 0.004), 0);
+    return shapes.torus(r, 0.011, 3, STAVES).rotateX(Math.PI / 2).translate(0, end * (HALF - 0.004), 0);
   });
 }
 
 /** a lying keg's fittings: a bung in its belly (at -z: up, as it's laid by a quarter turn about x) and a brass tap low
  *  in its head (`y` up, toward +z: down as it lies) */
-function fittings(): { bung: THREE.BufferGeometry; tap: THREE.BufferGeometry[] } {
+function fittings(): { bung: Geometry; tap: Geometry[] } {
   const belly = radiusAt(0);
-  const bung = new THREE.CylinderGeometry(0.022, 0.026, 0.02, 10).rotateX(Math.PI / 2).translate(0, 0, -belly);
-  const headY = HALF - CHIME, spout = new THREE.CylinderGeometry(0.014, 0.016, 0.1, 10).translate(0, headY + 0.05, 0.1);
-  const mouth = new THREE.CylinderGeometry(0.011, 0.014, 0.05, 8).rotateX(Math.PI / 2).translate(0, headY + 0.095, 0.12);
-  const key = new THREE.BoxGeometry(0.06, 0.012, 0.012).translate(0, headY + 0.07, 0.1);
+  const bung = shapes.cylinder(0.022, 0.026, 0.02, 10).rotateX(Math.PI / 2).translate(0, 0, -belly);
+  const headY = HALF - CHIME, spout = shapes.cylinder(0.014, 0.016, 0.1, 10).translate(0, headY + 0.05, 0.1);
+  const mouth = shapes.cylinder(0.011, 0.014, 0.05, 8).rotateX(Math.PI / 2).translate(0, headY + 0.095, 0.12);
+  const key = shapes.box(0.06, 0.012, 0.012).translate(0, headY + 0.07, 0.1);
   return { bung, tap: [spout, mouth, key] };
 }
 
 /** One mesh of `parts` merged, casting and taking shadows, added to `into`. */
-function addMerged(into: THREE.Object3D, parts: THREE.BufferGeometry[], material: THREE.Material): void {
+function addMerged(into: Node, parts: Geometry[], material: Material): void {
   // (each part's own attributes: merged, a lathe's and a box's must match)
   const plain = parts.map((part) => (part.index ? part.toNonIndexed() : part));
   for (const part of plain) for (const name of Object.keys(part.attributes)) {
     if (name !== 'position' && name !== 'normal' && name !== 'uv') part.deleteAttribute(name);
   }
-  const mesh = new THREE.Mesh(mergeGeometries(plain), material);
+  const mesh = new Mesh(mergeGeometries(plain), material);
   mesh.castShadow = mesh.receiveShadow = true;
   into.add(mesh);
 }
 
 /** A barrel on its side or standing at (x, y, z): staves of the rooms' woods, iron hoops, heads of boards; a lying
  *  one a bung and a tap. */
-export function barrel(g: THREE.Object3D, M: Mats, x: number, y: number, z: number, lying = false, turn = 0): void {
-  const b = new THREE.Group();
+export function barrel(g: Node, M: Mats, x: number, y: number, z: number, lying = false, turn = 0): void {
+  const b = new Node();
   b.position.set(x, y, z);
   b.rotation.set(lying ? Math.PI / 2 : 0, turn, 0);
   if (lying) b.position.y += 0.3;
   g.add(b);
   const rng = mulberry(seedAt(x, y, z));
   // (each barrel turned on its own about its axis, so its staves' tones and its heads' joints aren't all alike)
-  const own = new THREE.Group();
+  const own = new Node();
   own.rotation.y = rng() * Math.PI * 2;
   b.add(own);
   for (const [wood, parts] of staves(M, rng)) addMerged(own, parts, wood);

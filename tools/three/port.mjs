@@ -247,7 +247,9 @@ function main(paths, check, into) {
 function readArgs(args) {
   const at = args.indexOf('--into');
   const into = at < 0 ? undefined : args[at + 1];
-  const paths = args.filter((arg, index) => arg !== '--check' && index !== at && index !== at + 1);
+  // (without `--into`, `at` is -1: `at + 1` would drop the first path)
+  const isInto = (index) => at >= 0 && (index === at || index === at + 1);
+  const paths = args.filter((arg, index) => arg !== '--check' && !isInto(index));
   return { paths, check: args.includes('--check'), into };
 }
 

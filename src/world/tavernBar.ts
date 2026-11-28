@@ -3,7 +3,8 @@
 // each bay's raised field set back in it), the end toward the door framed the same, a thick top overhanging its front
 // with a rounded nosing along it and a moulding under it, and a brass foot rail on brackets along its foot. Its footprint is the
 // box's: the keeper's walks, the obstacles and the stools read `BAR` (data/tavern.ts), and its top stands where it did.
-import * as THREE from 'three';
+import { Material, Mesh, Node } from '../engine/api/index.ts';
+import * as shapes from '../engine/api/shapes/index.ts';
 import { box, type Mats } from './rooms';
 import { woodTint } from './woodTint';
 import { boxWithUV } from './props';
@@ -18,8 +19,8 @@ const FIELD_ROUGH = 0.7;
 /** the counter's top: the tavern's tables' own, a pale worn top on a ruddy rim (from play, "can we make countertop of
  *  same material as table top nearby ?") */
 export interface Top {
-  worn: THREE.Material;
-  rim: THREE.Material;
+  worn: Material;
+  rim: Material;
 }
 
 /** the counter's body (m: across, from its back) and its top's height */
@@ -54,16 +55,16 @@ const RAIL_ROUGH = 0.6;
 const FIELD_GRAIN = 2.5;
 
 /** A field: a box as `box` in rooms.ts stands one, its grain finer. */
-function fieldBox(g: THREE.Object3D, w: number, h: number, d: number, x: number, y: number, z: number,
-  material: THREE.Material): void {
-  const mesh = new THREE.Mesh(boxWithUV(w, h, d, FIELD_GRAIN, true), material);
+function fieldBox(g: Node, w: number, h: number, d: number, x: number, y: number, z: number,
+  material: Material): void {
+  const mesh = new Mesh(boxWithUV(w, h, d, FIELD_GRAIN, true), material);
   mesh.position.set(x, y + h / 2, z);
   mesh.castShadow = mesh.receiveShadow = true;
   g.add(mesh);
 }
 
 /** A bar counter down the room (along z, from `from` to `to`) with its back at `x + DEEP / 2`, its front toward -x. */
-export function barCounter(g: THREE.Object3D, M: Mats, x: number, from: number, to: number, top: Top): void {
+export function barCounter(g: Node, M: Mats, x: number, from: number, to: number, top: Top): void {
   const long = to - from, middle = (from + to) / 2, front = x - DEEP / 2;
   const frame = woodTint(M.timber, FRAME_TONE), field = woodTint(M.oak, FIELD_TONE, FIELD_ROUGH);
   // (the body, behind its front)
@@ -103,7 +104,7 @@ export function barCounter(g: THREE.Object3D, M: Mats, x: number, from: number, 
   box(g, topWide, TOP_THICK - 0.004, topLong, x + NOSING / 2, topY, middle, top.rim);
   box(g, topWide - 0.01, 0.004, topLong - 0.02, x + NOSING / 2, topY + TOP_THICK - 0.004, middle, top.worn)
     .castShadow = false;
-  const nosing = new THREE.Mesh(new THREE.CylinderGeometry(NOSING, NOSING, topLong, 10).rotateX(Math.PI / 2), top.rim);
+  const nosing = new Mesh(shapes.cylinder(NOSING, NOSING, topLong, 10).rotateX(Math.PI / 2), top.rim);
   nosing.position.set(topFront + NOSING, topY + TOP_THICK - NOSING, middle);
   nosing.castShadow = nosing.receiveShadow = true;
   g.add(nosing);
@@ -113,22 +114,22 @@ export function barCounter(g: THREE.Object3D, M: Mats, x: number, from: number, 
   // (a worn brass, duller than the room's polished fittings: in theirs the rail glowed "like a hot neon tube" along
   // its length, from review)
   const brass = woodTint(M.brass, RAIL_BRASS, RAIL_ROUGH);
-  const rail = new THREE.Mesh(new THREE.CylinderGeometry(RAIL_R, RAIL_R, railLong, 12).rotateX(Math.PI / 2), brass);
+  const rail = new Mesh(shapes.cylinder(RAIL_R, RAIL_R, railLong, 12).rotateX(Math.PI / 2), brass);
   rail.position.set(front - RAIL_OUT, RAIL_Y, (railFrom + railTo) / 2);
   rail.castShadow = true;
   g.add(rail);
   const brackets = Math.ceil(railLong / BRACKETS);
   for (let k = 0; k <= brackets; k++) {
     const z = railFrom + (k / brackets) * railLong;
-    const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.009, 0.012, RAIL_OUT, 8).rotateZ(Math.PI / 2), brass);
+    const arm = new Mesh(shapes.cylinder(0.009, 0.012, RAIL_OUT, 8).rotateZ(Math.PI / 2), brass);
     arm.position.set(front - RAIL_OUT / 2, RAIL_Y, z);
     g.add(arm);
-    const plate = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.028, 0.008, 12).rotateZ(Math.PI / 2), brass);
+    const plate = new Mesh(shapes.cylinder(0.028, 0.028, 0.008, 12).rotateZ(Math.PI / 2), brass);
     plate.position.set(front - FRAME_OUT - 0.004, RAIL_Y, z);
     g.add(plate);
   }
   for (const z of [railFrom, railTo]) {
-    const cap = new THREE.Mesh(new THREE.SphereGeometry(RAIL_R * 1.4, 10, 8), brass);
+    const cap = new Mesh(shapes.sphere(RAIL_R * 1.4, 10, 8), brass);
     cap.position.set(front - RAIL_OUT, RAIL_Y, z);
     g.add(cap);
   }
