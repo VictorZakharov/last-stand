@@ -12,6 +12,7 @@ import { input } from '../core/input';
 import type { TextStyle } from './overlay/paint';
 import { minimapDraws } from './hud';
 import { shownOnPage } from './kit/shownOnPage';
+import { holdLayout } from '../engine/ui';
 
 const INK = '#e6dcc8';
 const INK_DIM = '#9a8f7c';
@@ -200,7 +201,9 @@ function follow(): void {
   if (!shown) return;
   c.title.show(fit.told && shows(page.title));
   c.title.say(page.title.textContent ?? '', zoomed(TITLE, z));
-  const inner = c.map.rect();
+  // (its box as last laid out: asked as the frame's panels follow their elements, every one after it was laid out
+  // again first, the whole tree, once more a frame)
+  const inner = holdLayout(() => c.map.rect());
   if (inner && shows(page.canvas)) {
     const w = fit.disk - 2 * fit.bezel;
     c.map.picture(`minimap ${minimapDraws()} ${w}`, w * z, w * z, paintMap(page.canvas, w * z));

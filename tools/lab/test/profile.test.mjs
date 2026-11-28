@@ -1,7 +1,7 @@
 // Where a command's time went (node/profile.mjs): a sampled profile summarized.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { comparedProfiles, longestStretches, summarize, totalsByFunction } from '../node/profile.mjs';
+import { callersOf, comparedProfiles, longestStretches, summarize, totalsByFunction } from '../node/profile.mjs';
 
 const frame = (functionName, url, lineNumber) => ({ functionName, url, lineNumber });
 
@@ -90,4 +90,11 @@ test("two sides' profiles compared by function, lines left out, the largest diff
   assert.match(lines[2], /^\s+-40 ms\s+0 against\s+40 {2}walk bridge\.ts$/);
   // (a difference under 20 ms isn't listed)
   assert.equal(lines.length, 3);
+});
+
+test('who calls a function, by its time under each, a call of itself passed over', () => {
+  const lines = callersOf(PROFILE, 'bake').split('\n');
+  assert.equal(lines[0], '3 ms in bake, by its callers:');
+  assert.match(lines[1], /^\s+3 ms {2}run carry\.ts:10$/);
+  assert.equal(lines.length, 2);
 });

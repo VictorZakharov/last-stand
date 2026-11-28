@@ -206,6 +206,41 @@ export function totalsByFunction(profile, sourceOf = () => null, within = null) 
   return totals;
 }
 
+/** the callers said at most */
+const CALLERS_SHOWN = 16;
+
+/**
+ * Who calls `callee` (a function's name, or its name and file), by the time spent in it under each: its own time
+ * and what it called, each sample counted once for the nearest caller that isn't `callee` itself. A function called
+ * from many places (a field's getter) is made cheaper by its busiest caller asking it less.
+ */
+export function callersOf(profile, callee, sourceOf = () => null) {
+  const nodes = new Map(profile.nodes.map((node) => [node.id, node]));
+  const parentOf = new Map();
+  for (const node of profile.nodes) {
+    for (const child of node.children ?? []) parentOf.set(child, node.id);
+  }
+  const byCaller = new Map();
+  let inCallee = 0;
+  profile.samples.forEach((id, index) => {
+    const stack = stackOf(id, nodes, parentOf, sourceOf, null);
+    const at = stack.findIndex((place) => isNamed(place, callee));
+    if (at < 0) return;
+    const ms = (profile.timeDeltas[index] ?? 0) / 1000;
+    inCallee += ms;
+    let caller = at + 1;
+    while (caller < stack.length && isNamed(stack[caller], callee)) caller++;
+    const place = stack[caller] ?? '(none)';
+    byCaller.set(place, (byCaller.get(place) ?? 0) + ms);
+  });
+  const head = `${inCallee.toFixed(0)} ms in ${callee}, by its callers:`;
+  const rows = [...byCaller]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, CALLERS_SHOWN)
+    .map(([place, ms]) => `  ${ms.toFixed(0).padStart(6)} ms  ${place}`);
+  return [head, ...rows].join('\n');
+}
+
 /** One row of the comparison: a function's time on each side and the difference. */
 function comparedRow(place, mine, theirs) {
   const difference = mine - theirs;

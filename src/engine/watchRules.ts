@@ -38,11 +38,12 @@ function awaitsPaint(material: AnyMaterial): boolean {
 /** Whether `material` is looked at every frame: a look of its own whose numbers follow the game's, a see-through
  *  kind's, or one whose map is still to be painted. */
 function polledEachFrame(material: AnyMaterial): boolean {
-  if (awaitsPaint(material)) return true;
+  // (its maps asked last: asked first, every polled material's seven maps were read each frame, the most of the
+  // fields' reads in a wave)
   const looks = (material as { kitLooks?: KitLooks }).kitLooks;
-  if (looks) return kitMoves(material, looks) || !!material.seeThrough;
-  if (lookOf(material)) return true;
-  return !!material.seeThrough;
+  if (looks && kitMoves(material, looks)) return true;
+  if (!looks && lookOf(material)) return true;
+  return !!material.seeThrough || awaitsPaint(material);
 }
 
 /** The maps `material` draws with (`describe` in materials.ts reads these). */

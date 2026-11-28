@@ -19,7 +19,7 @@ function readKept(path) {
 export default {
   summary: 'a profile `--profile` kept (`tools/lab/out/profile/<command>-<side>.cpuprofile`) read again: its busiest '
     + 'functions, `--within` one function alone, `--against` another kept profile laid beside it function by '
-    + 'function; in a second, where asking again of a run took the run again (places by where they ran: no source '
+    + 'function, `--callers` who calls a function, by its time under each; in a second, where asking again of a run took the run again (places by where they ran: no source '
     + 'maps)',
   help: 'a kept profile read again, with no page: `--within <function>` its time in that function alone, '
     + '`--against <file>` the two profiles\' totals compared, function by function',
@@ -27,12 +27,17 @@ export default {
   options: {
     within: { kind: 'text', usage: 'function', help: 'only the time in that function (`solveArm`, `animate enemy.ts`)' },
     against: { kind: 'text', usage: 'file', help: 'another kept profile, laid beside this one' },
+    callers: { kind: 'text', usage: 'function', help: 'who calls that function, by its time under each caller' },
   },
   async run(options) {
-    const { summarize, totalsByFunction, comparedProfiles } = await import('../profile.mjs');
+    const { summarize, totalsByFunction, comparedProfiles, callersOf } = await import('../profile.mjs');
     const [path] = options._;
     const profile = readKept(path);
     const within = options.within ?? null;
+    if (options.callers) {
+      console.log(callersOf(profile, options.callers));
+      return 0;
+    }
     console.log(summarize(profile, () => null, within));
     if (options.against) {
       const other = readKept(options.against);
