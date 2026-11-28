@@ -102,7 +102,11 @@ export async function bodyCensus(lab: Lab): Promise<BodyCensus> {
     for (const material of materialsOf(object as Mesh)) count.materials.add(material);
   }
   const stats = bridge.stats;
-  const { looked, described } = bridge.materialsLooked;
+  // (a commit before the count has none: an A/B's other side)
+  const counted = (bridge as { materialsLooked?: { looked: Map<string, number>; described: Map<string, number> } })
+    .materialsLooked;
+  const looked = counted?.looked ?? new Map<string, number>();
+  const described = counted?.described ?? new Map<string, number>();
   return {
     kinds, rest, records: stats.records, draws: stats.draws, objects: stats.objects,
     looked: new Map(looked), described: new Map(described),
