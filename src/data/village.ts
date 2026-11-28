@@ -90,6 +90,14 @@ export function worldToYard(x: number, z: number): Spot {
   return [dx * c - dz * s, dx * s + dz * c];
 }
 
+/** how far into the yard the hero must stand to cast (m in from its fence) */
+const YARD_IN = 0.2;
+/** Whether a point is in the training yard, far enough in from its fence to cast (and where foes are shades). */
+export function inYard(x: number, z: number): boolean {
+  const [across, along] = worldToYard(x, z);
+  return Math.abs(across) < YARD.halfX - YARD_IN && Math.abs(along) < YARD.halfZ - YARD_IN;
+}
+
 /** The ghost by the yard's gate, outside its fence (a foe of a first wave as the training grounds show one, game/ghost.ts):
  *  where it stands and the way it faces (rad about y: 0 faces +z), out of the yard toward the road that comes to the
  *  gate. Talked to, it opens the training grounds (from play: "lets add a ghost enemy near training place in village

@@ -4,10 +4,10 @@
 // what a skill deals him is told to his own game (`RivalHooks.dealt`), which works the hit out as its screen has it.
 import * as THREE from 'three';
 import { Enemy, type DamageInfo } from './enemy';
-import { HERO_RADIUS, type Player } from './player';
+import type { Player } from './player';
 import { createKit } from '../core/materials';
 import { CROWD_LAYER } from '../core/layers';
-import { PVP } from '../data/balance';
+import { HERO_RADIUS, PVP } from '../data/balance';
 import { G } from '../state';
 import type { DamageType, EnemyDef, Model, XZ } from '../types';
 
