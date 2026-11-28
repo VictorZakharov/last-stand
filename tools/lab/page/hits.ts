@@ -45,6 +45,10 @@ const ROW_HOLD = 1.2;
 const BLOW_FRAMES = 1;
 /** where foes stand for a skill `death` doesn't stand them for */
 const NEAR: Stand = { count: 3, ahead: 2, across: 0.8 };
+/** the foes of a skill that strikes none of them, by its behaviour, where it isn't kept from being cast (out of
+ *  `death`'s list, which casts each skill in it): Hedgeward rises before foes, never on them, within 3 m of him, and
+ *  with them stood `NEAR`, on every spot it could rise, it was refused and `tooltips` read a wall of none */
+const CLEAR_OF: Record<string, Stand> = { hedgeward: { count: 3, ahead: 6, across: 1 } };
 /** with the canary: the late blow, this long after the first (s; past any skill's gap and the basic attack's) */
 const LATE = 1;
 
@@ -184,20 +188,23 @@ function frenzyFor(skill: BoundSkill): number {
 
 /** `wanted` cast at its foes (each with `lives` of life) on a fresh set-up as `fixture` says, its key held as long as
  *  `holding` says for it (s; a frame at least), followed until the hero is free again (and `plant` has planted), and
- *  for `lasting` s from the press at least (an effect that strikes on after it: a zone's ticks). */
+ *  for `lasting` s from the press at least (an effect that strikes on after it: a zone's ticks). `prepare` is run on
+ *  the hero as the cast's set-up built him, before anything is cast: a set-up builds him afresh (#852), so stats set
+ *  on him before `castAt` are gone by the cast. */
 export async function castAt(
   lab: Lab, fixture: Fixture, wanted: string, holding: (skill: BoundSkill) => number, plant: Planting | null,
-  lives = LIVING, lasting = 0,
+  lives = LIVING, lasting = 0, prepare?: () => void,
 ): Promise<Cast> {
   G.arena.restoreProps();
   const set = await clearSetup(lab, fixture);
+  prepare?.();
   bindKnown(wanted);
   const skill = skillNamed(wanted);
   const hold = holding(skill);
   const hero = G.player;
   hero.cooldowns.clear();
   hero.energy = hero.stats.maxEnergy;
-  const stand = STANDS[skill.def.impl] ?? NEAR;
+  const stand = STANDS[skill.def.impl] ?? CLEAR_OF[skill.def.impl] ?? NEAR;
   const { spots, aim } = placesFor(stand, hero.pos, set.facing ?? hero.facing);
   const foes = await foesAt(lab, spots, spots.map(() => lives));
   let frame = 0;

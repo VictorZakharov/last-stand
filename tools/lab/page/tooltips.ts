@@ -250,7 +250,9 @@ async function gearRound(
     const builds = BUILDS[def.impl];
     const holding = (skill: BoundSkill) => builds ?? holdFor(skill.def);
     const planting = builds ? heldUp(options.canary, builds) : plant;
-    const cast = await castAt(lab, fixture, def.name, holding, planting, undefined, lasting);
+    // (his modifiers set again on the hero the cast's set-up builds afresh: set on this one alone, every hit was dealt
+    // and every crit rolled at his own stats, under the figures read with them)
+    const cast = await castAt(lab, fixture, def.name, holding, planting, undefined, lasting, setModifiers);
     const name = gear ? `${def.name} (${gear})` : def.name;
     const judgedCast = judged(name, read, cast);
     found.lines.push(`  ${def.name}`, ...judgedCast.lines);
@@ -345,13 +347,37 @@ function catchHeals(canary: boolean): () => boolean {
   };
 }
 
+/** A wall the cast raised: its life as it first stood (0: none rose), and the frame it rose on. */
+interface WallSeen {
+  life: number;
+  frame: number;
+}
+
+/** A plant: `plant`'s, and with `wall`, the life of the wall standing last (`life`) once one rises, noted in `seen`;
+ *  planted once both are (a plant is asked again only until it says it's planted: `castAt`, so a watch that said so
+ *  at once never saw the wall rise). */
+function watchingWalls(plant: () => boolean, wall: boolean, life: () => number, seen: WallSeen): Planting {
+  let planted = false;
+  return (frame) => {
+    planted ||= plant();
+    const now = wall ? life() : 0;
+    if (now > 0 && !seen.life) Object.assign(seen, { life: now, frame });
+    return planted && (!wall || seen.life > 0);
+  };
+}
+
+/** The life of the wall standing last (0: none), through the lab's own module of the walls, loaded only for a wall:
+ *  one importing the game's walls itself wouldn't load in an A/B's commit from before them, and one put together by
+ *  hand is a second copy of them, never raised. */
+async function wallLife(): Promise<() => number> {
+  return (await import('./hedgeward')).lastWallLife;
+}
+
 /** What a skill gave the hero as its `what` once cast: the Health it restored, the ward it raised, or the life of the
- *  wall it raised (the Hedgeward's: its module loaded only for it, so a tree without walls still runs the rest). */
-async function gaveOf(what: Given['what']): Promise<number> {
+ *  wall it raised (`seen`, read as it rose). */
+function gaveOf(what: Given['what'], seen: WallSeen): number {
   if (what === 'heal') return healed.reduce((sum, amount) => sum + amount, 0);
-  // (through the lab's own module of the walls, loaded only here: one importing the game's walls itself wouldn't load
-  // in an A/B's commit from before them, and one put together by hand is a second copy of them, never raised)
-  if (what === 'wall') return (await import('./hedgeward')).lastWallLife();
+  if (what === 'wall') return seen.life;
   return G.player.ward?.amount ?? 0;
 }
 
@@ -367,11 +393,23 @@ async function givenRound(lab: Lab, options: TooltipsOptions): Promise<Found> {
   const named = (def: SkillDef) => [def.key, def.impl, def.name].some((name) => options.skills.includes(name));
   for (const def of usable.filter((each) => !options.skills.length || named(each))) {
     setModifiers();
-    const given = givenIn(def);
-    if (!given) continue;
-    await castAt(lab, fixture, def.name, (skill) => holdFor(skill.def), catchHeals(options.canary));
-    const gave = await gaveOf(given.what);
-    found.lines.push(`  ${def.name}: states a ${given.what} of ${given.figure}, gave ${whole(gave)}`);
+    const first = givenIn(def);
+    if (!first) continue;
+    // (its figure read on the hero the cast's own set-up builds, before the canary's raise: read on the one before,
+    // the last cast's canary had raised his most Health already, the figure with it, and the raise went unseen)
+    let given = first;
+    const readFresh = (): void => {
+      setModifiers();
+      given = givenIn(def) ?? given;
+    };
+    const seen: WallSeen = { life: 0, frame: -1 };
+    const wall = given.what === 'wall';
+    const life = wall ? await wallLife() : () => 0;
+    const plant = watchingWalls(catchHeals(options.canary), wall, life, seen);
+    await castAt(lab, fixture, def.name, (skill) => holdFor(skill.def), plant, undefined, 0, readFresh);
+    const gave = gaveOf(given.what, seen);
+    const stood = wall ? (seen.life ? ` (risen on the cast's frame ${seen.frame})` : ' (none rose)') : '';
+    found.lines.push(`  ${def.name}: states a ${given.what} of ${given.figure}, gave ${whole(gave)}${stood}`);
     if (Math.abs(gave - given.figure) > ROUNDING) {
       found.problems.push(`${def.name}: gave a ${given.what} of ${whole(gave)}, not the ${given.figure} it states`);
     }
