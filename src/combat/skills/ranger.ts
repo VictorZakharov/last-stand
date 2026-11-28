@@ -367,7 +367,7 @@ export function reloadSound(player: Player, after: number): void {
   if (player.local && !player.quiet) sfx.nock(after / (1 + player.stats.castSpeed / 100) * RELOADED_AT);
 }
 
-/** a drawn shot's damage drawn less than full: the square of the draw (`cast`) */
+/** a drawn shot's damage drawn less than full: the square of the draw, or in step with it (`cast`, `drawCurve`) */
 const SHORT_DRAW = 'less drawn short';
 
 export const bowShot: InstantSkill = {
@@ -386,8 +386,9 @@ export const bowShot: InstantSkill = {
   cast(player, rawDef, target, power) {
     const def = rawDef as BowDef, origin = loosedFrom(player).clone(), pull = pullAt(power), v = arrowSpeed(def, power);
     drawnTo.delete(player);
-    // (the string gives the arrow the energy the bow stored, which goes with the square of the draw: that is its blow)
-    const damage = def.damage * pull * pull, knock = (def.knock ?? 0) * pull;
+    // (the string gives the arrow the energy the bow stored, which goes with the square of the draw: that is its blow;
+    // a skill may take it in step with the draw instead, `drawCurve`, so a quick shot is worth loosing)
+    const damage = def.damage * pull ** (def.drawCurve ?? 2), knock = (def.knock ?? 0) * pull;
     const { yaw, pitch } = releaseAngles(player, origin, target, v);
     // (a volley seen coming as one: entities/evade.ts)
     const judged = new Set<Enemy>();

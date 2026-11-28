@@ -227,7 +227,7 @@ export const CLASS_NOTES: Record<string, ClassNote> = {
       'Casters dodge or duck single arrows they see coming: hit them from the side or from above.',
     ],
     skills: {
-      nockShot: 'Your bread and butter: draw to full on tough foes, loose early on weak ones.',
+      nockShot: 'Your bread and butter: draw to full on tough foes, or tap it for quick arrows on weak ones and while you back away.',
       fanShot: 'Up close, every arrow of the fan can hit the same big foe.',
       piercingShot: 'Line foes up: it goes through all of them.',
       arrowRain: 'Arrows fall at random across the area: best on a packed group. It never comes down close by, so it is no help against the foes at your side: shoot those, or step away first.',
