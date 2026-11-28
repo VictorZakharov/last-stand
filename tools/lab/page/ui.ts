@@ -184,6 +184,8 @@ export async function ui(lab: Lab, options: UiOptions): Promise<Report> {
   asked.canary = canary;
   asked.reports = options.reports;
   await steps.open(lab);
+  // (the kit makes a big screen a few frames' worth at a time: its boxes read once it's whole)
+  await lab.madeWhole();
   const pictured = await pictureState(lab, state, steps.held ?? {});
   // (timed as the state stands, before its check moves anything)
   const cost = options.cost ? kitCost(state, canary) : { lines: [], problems: [] };

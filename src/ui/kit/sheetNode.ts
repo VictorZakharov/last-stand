@@ -9,6 +9,7 @@ import { INK, alpha } from './theme';
 import type { Field, FieldInput } from './field';
 import type { Control } from './formControls';
 import type { KeptText } from './keptText';
+import type { NodeFlow } from './sheetFlow';
 import { accent } from '../diagFrame';
 import { BODY, type Gathered, type Rule } from './sheetRules';
 import { makeBrackets, type Moving } from './sheetParts';
@@ -39,7 +40,13 @@ export interface Node {
   /** whether it takes the pointer, by its rules or what's round it */
   hits: boolean;
   /** whether it was made to scroll */
-  scrolling: boolean;
+  scrolling: boolean | 'across';
+  /** whether it was ever followed (a scrolling panel's first build goes a few frames' worth at a time) */
+  followed?: boolean;
+  /** the kit's frame it was first followed in */
+  firstAt?: number;
+  /** its place in a block's flow, its margins collapsed (inside a panel whose rule says `blocks`) */
+  flow?: NodeFlow;
   /** a `pre`'s lines, a panel each */
   kept: KeptText | null;
   /** its opacity and shift in their transition */

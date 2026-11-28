@@ -1,6 +1,7 @@
 // The atlas the world's overlays are drawn from (ui/overlay): one texture, every label painted into a slot of its
-// own, and a slot uploaded alone when its label changes (its region, straight from the canvas it was painted on).
-import { overlayAtlas, overlayPaint } from '../../engine/overlay';
+// own when it changes, and the slots painted in a frame sent together as it's drawn (`atlasRows.ts`).
+import { overlayAtlas } from '../../engine/overlay';
+import { AtlasRows } from './atlasRows';
 
 /** the atlas's side, px, for each canvas pixel a px of a label's art takes (the canvas's ratio times the UI's scale;
  *  rounded up to a multiple of `SIDE_STEP`, at least `SIDE_MIN`): a label's pixels go with that ratio's square, and
@@ -19,6 +20,10 @@ const HEIGHTS = [16, 24, 32, 48, 64, 96, 128, 192, 256, 384, 512, 768, 1024];
  *  slots given back, under a quarter of the atlas, and the next label didn't fit (#973) */
 const REPACK_SPARE = 0.25;
 const REPACK_WANTED = 2;
+/** a full atlas is packed again too when what's painted in it now would fill no more than this share of it packed:
+ *  a scrolled page's words given back left slots of their own widths, which the words scrolled in fitted none of, and
+ *  the guide's pages filled it with half of it free (#973) */
+const REPACK_LIVE = 0.6;
 /** a slot's width rounds up to a multiple of this (px) */
 const WIDTH_STEP = 16;
 /** a slot holds a label of up to this many times its size, and this many px more (more would waste it) */
@@ -41,12 +46,13 @@ let nextY = 0;
 let side = SIDE_MIN;
 /** the area of the slots given back, px, and whether a slot was asked for that didn't fit */
 let spareArea = 0;
+/** the area of every slot placed on a shelf (px): less the spare, what's painted in the atlas now */
+let placedArea = 0;
 let full = false;
 /** the area of the last slot asked for that didn't fit (px) */
 let wantedArea = 0;
-/** what the labels are painted on before their slot is uploaded */
-let canvas: HTMLCanvasElement | null = null;
-let ctx: CanvasRenderingContext2D | null = null;
+/** the rows labels are painted on, sent to the atlas as the frame is drawn */
+let rows = new AtlasRows(side, GUTTER);
 let warned = false;
 
 /** The atlas's side, px. */
@@ -102,12 +108,13 @@ export function takeSlot(w: number, h: number): Slot | null {
   }
   const slot = { x: shelf.used, y: shelf.y, w: size.w, h: size.h };
   shelf.used += size.w + GUTTER;
+  placedArea += size.w * size.h;
   return slot;
 }
 
 /** Whether the atlas is full of slots given back, and so worth packing again. */
-const crowded = (): boolean => full
-  && (spareArea >= REPACK_SPARE * side * side || spareArea >= REPACK_WANTED * wantedArea);
+const crowded = (): boolean => full && (spareArea >= REPACK_SPARE * side * side
+  || spareArea >= REPACK_WANTED * wantedArea || placedArea - spareArea <= REPACK_LIVE * side * side);
 
 /** Whether the atlas should be emptied for every label shown to be painted again: full of slots given back. */
 export const atlasCrowded = crowded;
@@ -127,12 +134,14 @@ export function clearAtlas(ratio: number): void {
   const wanted = sideFor(ratio);
   if (wanted !== side) {
     side = wanted;
-    canvas = null;
+    rows = new AtlasRows(side, GUTTER);
   }
   shelves.length = 0;
   spare.clear();
+  rows.forget();
   nextY = 0;
   spareArea = 0;
+  placedArea = 0;
   full = false;
   wantedArea = 0;
   warned = false;
@@ -149,22 +158,21 @@ export function freeSlot(slot: Slot): void {
   spareArea += slot.w * slot.h;
 }
 
-/** The canvas a label is painted on, cleared over a slot's size, and its context (unscaled, px). */
-export function paintCanvas(slot: Slot): CanvasRenderingContext2D {
-  if (!canvas) {
-    canvas = document.createElement('canvas');
-    canvas.width = side;
-    canvas.height = HEIGHTS[HEIGHTS.length - 1];
-    ctx = canvas.getContext('2d', { willReadFrequently: false })!;
-  }
-  const c = ctx!;
-  c.setTransform(1, 0, 0, 1, 0, 0);
-  c.clearRect(0, 0, slot.w, slot.h);
-  return c;
+/** The context a label is painted on, cleared over its slot and held to it, and how far along it the slot starts
+ *  (px: the art's own place). */
+export function paintAt(slot: Slot): { c: CanvasRenderingContext2D; x: number } {
+  return rows.paint(slot);
 }
 
-/** Uploads what was painted (the paint canvas's top left, a slot's size) into the slot: false where it
- *  can't be yet (the engine not started), the label to be painted again. */
+/** The label painted on `slot` done, sent with the frame (`sendPainted`): false where it can't be yet (the engine
+ *  not started), the label to be painted again. */
 export function uploadSlot(slot: Slot): boolean {
-  return atlasReady() && overlayPaint(canvas!, slot.w, slot.h, slot.x, slot.y);
+  rows.painted(slot);
+  return atlasReady();
+}
+
+/** The slots painted since the last frame sent to the atlas, a copy a run of them side by side: before the engine
+ *  draws the frame. */
+export function sendPainted(): void {
+  rows.send();
 }

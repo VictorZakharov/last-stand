@@ -16,7 +16,8 @@
 //
 // From #973 to its fix the pictures were drawn by nothing (three's WebGL renderer gone, the engine not drawing them yet),
 // and every foe's place showed its glyph (from play, "mob pics dont show in guide, like ever").
-import type { Node, PerspectiveCamera, World } from '../../engine/api/index.ts';
+import type { Mesh, Node, PerspectiveCamera, World } from '../../engine/api/index.ts';
+import { AHEAD } from '../../engine/pipelinesAside';
 import { frameRect, sceneApart } from '../../core/renderer';
 import { drawnNow, SIZE, staged } from './portraitDraw';
 import { PLAIN_GRADE, type Grade } from '../../engine/globals';
@@ -36,6 +37,9 @@ import { FOLK, folkStaged, isFolk, type FolkId } from './folkPortraits';
 const FOLK_WAIT = 600;
 /** the build's key behind the lobby */
 const JOB = 'guide portraits';
+/** a picture's meshes handed to the engine ahead of its draw, this many a frame: handed over by its draw, a foe's
+ *  whole model was 100 to 280 ms of the frame that drew it (`lab guide`, #973) */
+const HANDED_A_FRAME = 6;
 
 /** how much of a frame the pictures may take while the guide is open (ms, and the most pieces): made only behind the
  *  lobby, 2 ms a frame after the heroes and never while the fight's warm-up ran, a first visit's guide showed one
@@ -168,9 +172,23 @@ export function forgetPortrait(id: Who): void {
  *  while it waits for it. */
 export function stepPortraits(all = true): void {
   if (portraitPlant.notWhileOpen) return;
+  if (heldAFrame) {
+    heldAFrame = false;
+    return;
+  }
   // (all of them once the guide is opened; while the talk's card waits for his picture, his alone, already queued)
   if (all) startPortraits();
   buildOnly(JOB, WHILE_OPEN);
+}
+
+/** whether the next frame makes no picture (the guide's opening: its page is the frame's) */
+let heldAFrame = false;
+
+/** The pictures' making held for the next frame, the one the guide opens in: a first piece and the engine's draw
+ *  of the first picture's meshes were 40 ms of that frame (`lab guide`, #973), the page already the most a frame
+ *  takes. */
+export function holdPortraitsAFrame(): void {
+  heldAFrame = true;
 }
 
 /** `ids`' pictures made before the others (the entries the guide's list shows), in their order. */
@@ -218,6 +236,8 @@ interface Making {
   fov: number;
   /** the frames it was drawn with a pipeline still compiling, its draws left out */
   tries: number;
+  /** drawn, its snapshots on their way to be matted */
+  drawing?: boolean;
 }
 /** the picture being made (one at a time: each is two draws of the engine's in a frame of the game's) */
 let making: Making[] = [];
@@ -250,25 +270,35 @@ function drawApart(width: number, height: number, graded: Grade): void {
   const m = making[0];
   sceneApart.take = null;
   if (!m) return;
-  let pic: HTMLCanvasElement | null = null;
+  let drawn: Promise<HTMLCanvasElement> | null = null;
   try {
-    pic = piece(`${m.id}: drawn`, () => drawnNow(m, width, height, graded));
+    drawn = piece(`${m.id}: drawn`, () => drawnNow(m, width, height, graded));
   } catch (err) {
     console.warn(`guide: no portrait of ${m.id}`, err);
     finished(m, null);
     return;
   }
-  if (!pic) {
+  if (!drawn) {
     if (++m.tries < MOST_TRIES) sceneApart.take = drawApart;
     else finished(m, null);
     return;
   }
-  const at = perfClock.now();
-  portraitTimes.set(m.id, { compiled: at, sent: at, onCard: at, drawn: at });
-  // (kept for a later visit, encoded off the page's thread: nothing waits on it)
-  if (CACHE.on && !portraitPlant.allAtOnce) pic.toBlob((blob) => { if (blob) keep(m.id, blob); }, 'image/png');
-  finished(m, pic);
-  requeue();
+  matting(m, drawn);
+}
+
+/** `m`'s picture settled once its snapshots are matted (none if that failed). */
+function matting(m: Making, drawn: Promise<HTMLCanvasElement>): void {
+  m.drawing = true;
+  drawn.then((pic) => {
+    const at = perfClock.now();
+    portraitTimes.set(m.id, { compiled: at, sent: at, onCard: at, drawn: at });
+    // (kept for a later visit, encoded off the page's thread: nothing waits on it)
+    if (CACHE.on && !portraitPlant.allAtOnce) pic.toBlob((blob) => { if (blob) keep(m.id, blob); }, 'image/png');
+    finished(m, pic);
+  }, (err) => {
+    console.warn(`guide: no portrait of ${m.id}`, err);
+    finished(m, null);
+  }).finally(requeue);
 }
 
 /** `next`'s model built and staged, a piece a frame: one of the folk on his room's sitter, else the foe's or hero's. */
@@ -299,7 +329,20 @@ function* stagedSteps(next: Who): Generator<void, Making, undefined> {
     root = model.root;
     ({ scene, camera } = piece(`${next}: staged and framed`, () => staged(model)));
   }
+  yield* handedOver(next, root);
   return { id: next, root, scene, camera, fov: camera.fov, tries: 0 };
+}
+
+/** `root`'s meshes handed to the engine ahead of the picture's draw (their geometry, materials and pipelines), a
+ *  few a frame. */
+function* handedOver(id: Who, root: Node): Generator<void, void, undefined> {
+  const meshes: Mesh[] = [];
+  root.traverse((part) => { if ((part as Mesh).isMesh) meshes.push(part as Mesh); });
+  for (let at = 0; at < meshes.length; at += HANDED_A_FRAME) {
+    const some = meshes.slice(at, at + HANDED_A_FRAME);
+    piece(`${id}: handed over`, () => AHEAD.prepare?.(some));
+    yield;
+  }
 }
 
 /**
@@ -312,10 +355,12 @@ function* steps(): Generator<void, void, undefined> {
   while (pending.length || making.length) {
     if (making.length) {
       // (a harness's canary: drawn at once, in this task, whatever its pipelines)
-      if (portraitPlant.allAtOnce) {
+      if (portraitPlant.allAtOnce && !making[0].drawing) {
         const frame = frameRect();
         const m = making[0];
-        finished(m, drawnNow(m, frame.width, frame.height, lastGrade ?? PLAIN_GRADE));
+        const drawn = drawnNow(m, frame.width, frame.height, lastGrade ?? PLAIN_GRADE);
+        if (drawn) matting(m, drawn);
+        else finished(m, null);
         continue;
       }
       // (being drawn by the frames: looked at again next frame)

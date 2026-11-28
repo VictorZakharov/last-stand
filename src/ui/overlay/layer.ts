@@ -9,7 +9,7 @@ import { OVERLAY_ROW, overlayRows } from '../../engine/overlay';
 import { uiScales } from '../scale';
 import { sendOutline } from './outline';
 import {
-  atlasCrowded, atlasSide, clearAtlas, fits, freeSlot, paintCanvas, takeSlot, uploadSlot, type Slot,
+  atlasCrowded, atlasSide, clearAtlas, fits, freeSlot, paintAt, takeSlot, uploadSlot, type Slot,
 } from './atlas';
 
 /**
@@ -87,8 +87,8 @@ export class Label {
     // (with no room in the atlas, painted next frame it's shown: marked painted, a co-op partner's tag that found the
     // atlas full of a fight's numbers wasn't drawn until its art next changed, its bar a step down)
     if (!this.slot) return;
-    const c = paintCanvas(this.slot);
-    c.setTransform(ratio, 0, 0, ratio, 0, 0);
+    const { c, x } = paintAt(this.slot);
+    c.setTransform(ratio, 0, 0, ratio, x, 0);
     art.paint(c, ratio);
     // (painted only once it's in the engine's atlas: before the engine has started, painted again next frame)
     if (!uploadSlot(this.slot)) return;

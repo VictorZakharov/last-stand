@@ -118,16 +118,29 @@ export function shadowReach(s: TextStyle): number {
 /** A run of text laid out: its width and the height of its line box (px), the font's ascent within it. */
 export interface Measured { text: string; w: number; h: number; ascent: number }
 
+/** each text measured, by its font, spacing and words: forgotten as a font loads (its measures change) and past
+ *  `MEASURES_KEPT` (a guide's page measured each of its 2,000 words twice, 90 ms of its first frame, `lab guide`) */
+const measured = new Map<string, Measured>();
+const MEASURES_KEPT = 20000;
+if (typeof document !== 'undefined') document.fonts?.addEventListener('loadingdone', () => measured.clear());
+
 /** Lays `text` out in style `s`: as wide as the page sets it, a line box of the font's size. */
 export function measure(text: string, s: TextStyle): Measured {
+  const font = fontOf(s);
+  const key = `${font}|${s.spacing ?? 0}|${s.upper ? 1 : 0}|${text}`;
+  const known = measured.get(key);
+  if (known) return known;
   const c = measuring();
   const shown = s.upper ? text.toUpperCase() : text;
-  c.font = fontOf(s);
+  c.font = font;
   setSpacing(c, s.spacing ?? 0);
   const m = c.measureText(shown);
   const ascent = m.fontBoundingBoxAscent ?? s.size * 0.8;
   const descent = m.fontBoundingBoxDescent ?? s.size * 0.25;
-  return { text: shown, w: m.width, h: ascent + descent, ascent };
+  const laid = { text: shown, w: m.width, h: ascent + descent, ascent };
+  if (measured.size >= MEASURES_KEPT) measured.clear();
+  measured.set(key, laid);
+  return laid;
 }
 
 /** Sets the context's letter spacing where the browser has it (Chrome, Firefox, Safari 17+). */

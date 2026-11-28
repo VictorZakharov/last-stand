@@ -9,7 +9,7 @@
 import { uiHit } from '../../engine/ui';
 import { engineCanvas } from '../../engine/index';
 import { overPanels } from '../../core/input';
-import type { Panel } from './panel';
+import { panelsRemoved, type Panel } from './panel';
 import { pressDragged } from './scroll';
 
 /** How a pressable panel shows the pointer: not on it, over it, or pressing it. */
@@ -148,11 +148,18 @@ export function untipped(panel: Panel): void {
 
 /** Every panel taken away forgotten: its presses, its tip, what it stood for (a rebuilt bar's old panels). */
 function forgetGone(): void {
+  // (swept only once more panels were taken away: a guide's page stands in some 2,000, and swept at each read of a
+  // box drawn in an element's place its rules' reads took 26 ms of a page's first frame, `lab guide`)
+  if (panelsRemoved() === swept) return;
+  swept = panelsRemoved();
   for (const [id, p] of pressables) if (p.panel.gone) pressables.delete(id);
   for (const panel of tipped.keys()) if (panel.gone) tipped.delete(panel);
   for (const [element, panel] of standIns) if (panel.gone) standIns.delete(element);
   if (tipOver?.gone) tipOver = null;
 }
+
+/** how many panels were taken away when the lists were last swept of them */
+let swept = -1;
 
 /** The tipped panel shown under (`x`, `y`) css px, if any (the last laid over the others). */
 function tippedAt(x: number, y: number): Panel | null {
@@ -226,6 +233,12 @@ export function drawnSeen(element: Element): boolean {
 /** The panel drawn in place of `element`: its own, else the nearest round it (a slot's before its bar's). */
 export function drawnFor(element: Element): Panel | null {
   forgetGone();
+  // (drawn in its own place: nothing round it is nearer, and a page's thousands of stand-ins aren't looked through)
+  const own = standIns.get(element);
+  if (own) {
+    for (const p of pressables.values()) if (p.mirror === element) return p.panel;
+    return own;
+  }
   let nearest: { panel: Panel; depth: number } | null = null;
   const consider = (shown: Element, panel: Panel) => {
     if (shown !== element && !shown.contains(element)) return;

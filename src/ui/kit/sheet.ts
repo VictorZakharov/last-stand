@@ -12,8 +12,9 @@
 // cascade is the sheet's order: a later rule wins, so a port lists its rules as the SCSS's specificity orders them.
 import { KeptText } from './keptText';
 import { decorate, dimmed, drawPicture, isField, markNode, stopFields, type Node } from './sheetNode';
-import { environmentChanged, takeMutations, watchTree } from './sheetDirty';
-import { Panel, kitSent, onFrame, type Scaled } from './panel';
+import { RuleIndex } from './ruleIndex';
+import { environmentChanged, takeMutations, takeUnlaid, watchTree } from './sheetDirty';
+import { Panel, kitFrame, kitSent, onFrame, type Scaled } from './panel';
 import { standIn } from './press';
 import { forwards, unforward, type Forwarded } from './forward';
 import { engineCanvas } from '../../engine/index';
@@ -21,17 +22,28 @@ import { RunLine, runsOf, type RunStyle } from './runs';
 import { textField, type FieldInput } from './field';
 import { isSlider, isTicked, slider, tickBox } from './formControls';
 import { scrolls } from './scroll';
+import { collapseFlow, fitText, flowOf } from './sheetFlow';
 import { uiScales } from '../scale';
 import { BODY, SKIPPED, aroundKey, isText, now, ownKey, whole, type Gathered, type Rule, type Sheet,
   type SheetText } from './sheetRules';
 import { gather, step } from './sheetParts';
-import type { PanelStyle } from '../../engine/ui';
+import { holdLayout, type PanelStyle } from '../../engine/ui';
 import type { TextStyle } from '../overlay/paint';
 
 export type { Dyn, Painted, Rule, Sheet, SheetText } from './sheetRules';
 
 
 /** A screen of the page's drawn by the kit, following its element each frame. */
+/** the nodes inside a panel made in steps (`inSteps`) followed for the first time in a frame, the rest left for the frames after:
+ *  a guide's hero page is some 1,900 elements, each 0.1 ms or so to follow the first time, and made in one frame it
+ *  held the page 300 ms (`lab guide`, #973); its top, which shows, is made first */
+const FIRST_A_FRAME = 80;
+
+/** the trees whose first build was left for the frames after (`FIRST_A_FRAME`) */
+const UNFINISHED = new Set<SheetTree>();
+/** Whether some tree's first build is still going on (the lab's, before it pictures the screen). */
+export const treesUnfinished = (): boolean => UNFINISHED.size > 0;
+
 export class SheetTree implements Forwarded {
   readonly root: Node;
   /** the panel over the whole screen a lifted node stands in, made after the root's so drawn over it */
@@ -46,12 +58,25 @@ export class SheetTree implements Forwarded {
   private readonly forget: () => void;
   /** its nodes with a box ticked or a slider, followed every frame (code sets `checked` and `value` unannounced) */
   private readonly controlled = new Set<Node>();
+  /** its rules by what their selectors' last parts name: an element tested against those alone */
+  private readonly index: RuleIndex;
+  /** its rules that keep an element apart from its parent's boxes (`apart`) */
+  private readonly apart: Rule[];
+  /** the nodes inside a panel made in steps followed for the first time this frame, and whether some were left for the
+   *  next (`FIRST_A_FRAME`) */
+  private firstFollows = 0;
+  private unfinished = false;
+  /** how many panels made in steps (`inSteps`), and laid out as blocks (`blocks`), the node followed is inside */
+  private stepsDepth = 0;
+  private blocksDepth = 0;
 
   /** `element` (kept out of sight) drawn by `sheet` in a panel inside `parent` (none: on the screen), its px those
    *  of `scaled`; `base` the text it starts from. */
   constructor(element: Element, private readonly sheet: Sheet, private readonly scaled: Scaled,
     parent: Panel | null = null, private readonly base: TextStyle = BODY) {
     this.styled = sheet.some((rule) => rule.at.includes('[style'));
+    this.index = new RuleIndex(sheet);
+    this.apart = sheet.filter((rule) => rule.apart);
     const room = parent ?? new Panel(null, { position: 'absolute', inset: 0 }, {}, scaled);
     this.root = this.make(element, room);
     // (after the root in its room, so drawn over it)
@@ -71,9 +96,14 @@ export class SheetTree implements Forwarded {
       return;
     }
     this.dirty = false;
+    this.firstFollows = 0;
+    this.unfinished = false;
     const before = kitSent();
-    this.follow(this.root, this.base, aroundKey(this.root.element), false, null);
-    if (kitSent() !== before) this.dirty = true;
+    takeUnlaid();
+    holdLayout(() => this.follow(this.root, this.base, aroundKey(this.root.element), false, null));
+    if (this.unfinished || takeUnlaid() || kitSent() !== before) this.dirty = true;
+    if (this.unfinished) UNFINISHED.add(this);
+    else UNFINISHED.delete(this);
   }
 
   /** The deepest element taking the pointer drawn under (`x`, `y`) css px (the last drawn of those that meet). */
@@ -132,6 +162,7 @@ export class SheetTree implements Forwarded {
 
   /** Taken away, the page's element left as it is. */
   remove(): void {
+    UNFINISHED.delete(this);
     this.stop();
     this.forget();
     this.uncontrol(this.root);
@@ -166,7 +197,7 @@ export class SheetTree implements Forwarded {
   /** The rules matching `node`'s element, found again only as its key (its and its ancestors') changes. */
   private rulesOf(node: Node, key: string): Rule[] {
     if (node.matched?.key === key) return node.matched.rules;
-    const rules = this.sheet.filter((rule) => node.element.matches(rule.at));
+    const rules = this.index.matching(node.element);
     node.matched = { key, rules };
     return rules;
   }
@@ -182,9 +213,9 @@ export class SheetTree implements Forwarded {
     const key = `${parentKey}>${ownKey(element, this.styled)}`;
     const style = gather(this.rulesOf(node, key), element, round?.panel ?? null, node.state, around);
     node.hits = style.hits ?? hitsRound;
-    if (style.scrolls && !node.scrolling) {
-      node.scrolling = true;
-      scrolls(node.panel);
+    if (style.scrolls && node.scrolling !== style.scrolls) {
+      node.scrolling = style.scrolls;
+      scrolls(node.panel, style.scrolls === 'across');
     }
     // (said each frame, shown too: a style keeps the fields it isn't given, and a card hidden once stayed hidden)
     const hidden = (element as HTMLElement).hidden || element.classList.contains('hidden')
@@ -197,6 +228,8 @@ export class SheetTree implements Forwarded {
     this.move(node, style);
     if (style.lift) this.lift(node, round, style.box.display !== 'none');
     if (node.hits) style.look.hits = true;
+    if (isText(element) && !(style.flex && element.children.length)) fitText(node, style.box);
+    if (this.blocksDepth > 0 || style.blocks) flowOf(node, style.box, !!style.scrolls);
     node.panel.style(whole(style.box, node.given.box));
     node.panel.look(whole(style.look, node.given.look));
     node.given = { box: Object.keys(style.box), look: Object.keys(style.look) };
@@ -212,8 +245,30 @@ export class SheetTree implements Forwarded {
     else if (element.tagName === 'PRE') this.sayKept(node, style.text);
     else if (isText(element) && !(style.flex && element.children.length)) this.sayText(node, style.text, style.after,
       style.before, style.says);
-    else this.followKids(node, style.text, key, node.hits);
+    else this.followKidsOf(node, style, key);
     markNode(node, style.marks);
+  }
+
+  /** Its children followed, made in steps where its rule says so, laid out as blocks where it or a panel round it
+   *  says so (their margins collapsed once they're followed). */
+  private followKidsOf(node: Node, style: Gathered, key: string): void {
+    // (a panel made in steps begins the frame after its own first: the screen round it, made that frame, is the most
+    // a frame takes; the guide's first opening held 100 to 160 ms with its page's first steps in it, `lab guide`)
+    if (style.inSteps && node.firstAt === kitFrame()) {
+      this.unfinished = true;
+      return;
+    }
+    const steps = style.inSteps ? 1 : 0;
+    const blocks = style.blocks ? 1 : 0;
+    this.stepsDepth += steps;
+    this.blocksDepth += blocks;
+    try {
+      this.followKids(node, style.text, key, node.hits);
+    } finally {
+      this.stepsDepth -= steps;
+      this.blocksDepth -= blocks;
+    }
+    if (node.flow) collapseFlow(node);
   }
 
   /** Its text field, made the first time it shows, its words in `text` (its placeholder dimmed) where its rules
@@ -277,7 +332,7 @@ export class SheetTree implements Forwarded {
     const key = `${node.matched?.key ?? ''}>${ownKey(inline, this.styled)}`;
     const kept = this.inlineMatched.get(inline);
     if (kept?.key === key) return kept.rules;
-    const rules = this.sheet.filter((rule) => rule.text && inline.matches(rule.at));
+    const rules = this.index.candidates(inline).filter((rule) => rule.text && inline.matches(rule.at));
     this.inlineMatched.set(inline, { key, rules });
     return rules;
   }
@@ -297,9 +352,8 @@ export class SheetTree implements Forwarded {
     });
     if (after) runs.push({ text: after.says, style: { ...text, ...after.text } });
     if (before) runs.unshift({ text: before.says, style: { ...text, ...before.text } });
+    node.line.justify(text.align === 'center' ? 'center' : text.align === 'end' ? 'end' : 'start');
     node.line.set(runs);
-    const align = text.align === 'center' ? 'center' : text.align === 'end' ? 'end' : 'start';
-    node.line.panel.style({ justify: align });
   }
 
   /** Its controls and those inside it no longer followed (taken away). */
@@ -314,7 +368,7 @@ export class SheetTree implements Forwarded {
     const elements = [...node.element.childNodes].filter((child): child is Element | Text => child instanceof Text
       ? !!child.textContent?.trim()
       : child instanceof Element && !SKIPPED.has(child.tagName.toUpperCase())
-        && !this.sheet.some((rule) => rule.apart && child.matches(rule.at)));
+        && !this.apart.some((rule) => child.matches(rule.at)));
     const same = elements.length === node.kids.length
       && elements.every((child, at) => (node.kids[at].words ?? node.kids[at].element) === child);
     if (!same) {
@@ -328,6 +382,23 @@ export class SheetTree implements Forwarded {
       // (its marks made again after them, to stay over them)
       for (const mark of node.marks.splice(0)) mark.remove();
     }
-    for (const kid of node.kids) this.follow(kid, text, key, hits, node);
+    for (const kid of node.kids) {
+      if (!this.firstFollowed(kid)) continue;
+      this.follow(kid, text, key, hits, node);
+    }
+  }
+
+  /** Whether `kid` is followed this frame: one inside a panel made in steps followed for the first time waits for the
+   *  next frame past `FIRST_A_FRAME` of them, the page made from its top a few frames' worth at a time. */
+  private firstFollowed(kid: Node): boolean {
+    if (kid.followed) return true;
+    if (this.stepsDepth > 0 && this.firstFollows >= FIRST_A_FRAME) {
+      this.unfinished = true;
+      return false;
+    }
+    if (this.stepsDepth > 0) this.firstFollows++;
+    kid.followed = true;
+    kid.firstAt = kitFrame();
+    return true;
   }
 }

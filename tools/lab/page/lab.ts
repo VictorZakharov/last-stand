@@ -157,10 +157,10 @@ export function scrollMoreOf(element: Element): number {
   return KIT_DRAWN ? KIT_DRAWN.scrollMore(element) : element.scrollHeight - element.clientHeight;
 }
 
-/** `element` scrolled into view (centred) where the UI kit draws it, else on the page. */
-export function revealOf(element: Element): void {
-  if (KIT_DRAWN) KIT_DRAWN.reveal(element);
-  else element.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'instant' });
+/** `element` scrolled into view (centred, or at the top: `block`) where the UI kit draws it, else on the page. */
+export function revealOf(element: Element, block: 'center' | 'start' = 'center'): void {
+  if (KIT_DRAWN) KIT_DRAWN.reveal(element, block);
+  else element.scrollIntoView({ block, inline: 'nearest', behavior: 'instant' });
 }
 
 /** The page's element under (`x`, `y`) css px taking the pointer: one the UI kit draws there, else the page's own. */
@@ -202,6 +202,8 @@ const KEY_EVENTS: Record<KeyType, string[]> = {
 const INPUT_WAIT_MS = 10000;
 /** frames for what the kit draws to be laid out where it's drawn before it's clicked (`clickOn`) */
 const KIT_FRAMES = 3;
+/** the most frames waited for the kit to make what it shows (a hero's page of the guide takes some 8) */
+const MOST_MAKING_FRAMES = 60;
 
 /** An input's events as the page gets them: their names, which of them are this input's, and what it is (`touch`). */
 interface InputEvents {
@@ -282,10 +284,12 @@ const KIT_PRESS = Object.values(import.meta.glob<KitPress>('../../../src/ui/kit/
 /** what the UI kit draws read as the page's (src/ui/kit/drawn.ts), where the tree has it */
 interface KitDrawn {
   scrollMore(element: Element): number;
-  reveal(element: Element): void;
+  reveal(element: Element, block?: 'center' | 'start'): void;
   elementUnder(x: number, y: number): Element | null;
   /** once the kit's pictures asked for have loaded; whether any was loading (a tree from before it has none) */
   picturesLoaded?(): Promise<boolean>;
+  /** whether it's still making what it shows a few frames' worth at a time (a tree from before it makes it whole) */
+  stillMaking?(): boolean;
 }
 const KIT_DRAWN = Object.values(import.meta.glob<KitDrawn>('../../../src/ui/kit/drawn.ts', { eager: true }))[0];
 const RUN_PHASES = Object.values(import.meta.glob<RunPhaseModule>('../../../src/world/runPhase.ts', { eager: true }));
@@ -980,6 +984,14 @@ export class Lab {
     return { label, tiles: this.capture(views, options), notes };
   }
 
+  /** The frames stepped till the kit has made what it shows whole (a page's first build and its texts' paints go a
+   *  few frames' worth at a time), `MOST_MAKING_FRAMES` at most. */
+  async madeWhole(): Promise<void> {
+    // (a frame first: a screen opened this frame is begun by the kit's next)
+    await this.step(1);
+    for (let frame = 0; frame < MOST_MAKING_FRAMES && KIT_DRAWN?.stillMaking?.(); frame++) await this.step(1);
+  }
+
   /**
    * This moment as the player sees it, under `label` with `notes` beside it: the frame drawn by the game's own camera
    * with the page's UI over it (the HUD, a menu, a tooltip), pictured by the browser, whole or clipped round the
@@ -993,6 +1005,7 @@ export class Lab {
     const clip = around === undefined ? undefined : clipOf(around);
     // (the kit's pictures load on the browser's time: drawn once they have)
     if (await KIT_DRAWN?.picturesLoaded?.()) await this.step(KIT_FRAMES);
+    await this.madeWhole();
     const drawing = this.drawing;
     this.drawing = true;
     try {

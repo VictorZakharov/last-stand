@@ -51,8 +51,16 @@ export interface Rule {
   /** it and all in it take the pointer (CSS's `pointer-events: auto` on a box the page's `.kit-mirror` turns off):
    *  the pointer's events over them are the page's elements' (`forward.ts`), none of the world's */
   hits?: boolean;
-  /** what's in it scrolls (`overflow-y: auto`): the wheel and a finger's drag move it (`scroll.ts`) */
-  scrolls?: boolean;
+  /** what's in it scrolls (`overflow-y: auto`), or scrolls across (`'across'`: `overflow-x: auto`, a row longer
+   *  than its box): the wheel and a finger's drag move it (`scroll.ts`) */
+  scrolls?: boolean | 'across';
+  /** what's in it is made a few frames' worth at a time the first time, its top first (`FIRST_A_FRAME` in
+   *  `sheet.ts`): a long page's thousands of elements, whose first frame held the page. Only where what's above it
+   *  doesn't move as it fills: a box centred on its contents (the pause menu) moved for three frames */
+  inSteps?: boolean;
+  /** what's in it is laid out as CSS's blocks are, their margins collapsed (`sheetFlow.ts`): a page of paragraphs,
+   *  lists and headings, each margin as the page's SCSS has it */
+  blocks?: boolean;
   /** words after its own (CSS's `::after` with `content`), in their style */
   after?: { says: string; text?: SheetText };
   /** words before its own (CSS's `::before`, a `summary`'s marker), in their style */
@@ -178,7 +186,9 @@ export interface Gathered {
   before?: Rule['before'];
   says?: string;
   hits?: boolean;
-  scrolls: boolean;
+  scrolls: boolean | 'across';
+  inSteps: boolean;
+  blocks: boolean;
   ease: number;
   shift: [number, number];
   pulse?: Rule['pulse'];

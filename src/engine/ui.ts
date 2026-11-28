@@ -215,11 +215,27 @@ export function uiHit(x: number, y: number): number | null {
   return id < 0 ? null : id;
 }
 
-/** A panel's box (css px) as it will be drawn next, if it's shown. */
+/** how many holds of the layout are open (`holdLayout`) */
+let layoutHeld = 0;
+
+/** `work` done with the layout held: a box read in it is as last laid out, never laid out again for it. A sheet
+ *  following its page reads its boxes so (a width a child's share is made from): each read after a change laid the
+ *  whole tree out again, a guide page's first frame 143 ms of layouts (`lab guide`, #973), and the tree follows again
+ *  the frame after one that changed anything, reading them laid out. */
+export function holdLayout<T>(work: () => T): T {
+  layoutHeld++;
+  try {
+    return work();
+  } finally {
+    layoutHeld--;
+  }
+}
+
+/** A panel's box (css px) as it will be drawn next, if it's shown (as last laid out, inside `holdLayout`). */
 export function uiRect(id: number): { x: number; y: number; w: number; h: number } | null {
   const handle = engine();
   if (!handle) return null;
-  handle.ui_update();
+  if (!layoutHeld) handle.ui_update();
   const r = handle.ui_rect(id);
   return r.length === 4 ? { x: r[0], y: r[1], w: r[2], h: r[3] } : null;
 }

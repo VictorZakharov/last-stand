@@ -53,6 +53,7 @@ import { drawDrink } from './screens/drink/drinkSheet';
 import { drawTrade } from './screens/trade/tradeSheet';
 import { drawMerchant } from './screens/merchant/merchantSheet';
 import { drawVillageMap } from './villageMapSheet';
+import { drawGuide } from './guide/guideSheet';
 import { drawDecision } from './decisionPanel';
 import { drawBottomBar } from './bottomBar';
 
@@ -97,6 +98,7 @@ export function initHud(): void {
   drawTrade();
   drawMerchant();
   drawVillageMap();
+  drawGuide();
   drawItemSheet();
   drawTooltip();
   drawBottomBar();

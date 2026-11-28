@@ -610,5 +610,13 @@ the SCSS. In the order they're taken: the kit's own pieces first, then what show
   touch (its `--ab` can't load main's side: the lab's scene is the engine's API there, `sceneApi.ts`).
 - [x] Odo's trade (`screens/merchant/merchantSheet.ts`, his face `folkFaceSheet.ts`): `lab merchant --ab` at
   1920x1080, 844x390@3, 820x1180@2 and 1024x700@1, the lines the same and the pictures alike; its canary caught.
-- [ ] The guide's pages.
+- [x] The guide (`ui/guide/guideSheet.ts`, its pages `guidePageSheet.ts`, a hero's `guideHeroSheet.ts`, its paints
+  `guidePaint.ts`, its room's lengths `guideRoom.ts`): `lab ui --states guideKeys,guideBoss,guideTips --ab`, its
+  close button within a tenth of a percent of main's, the legend's page 560 px tall to main's 556 (629 before its
+  margins collapsed as CSS's do, `marginCollapse.ts`); a phone's and an upright tablet's pages with nothing past
+  them. Its cost: a hero's page is some 1,900 elements, made in steps (`inSteps`, 80 a frame, its top first) and
+  its words laid as one picture a line (`runLayout.ts`), the labels sent a row at a time (`overlay/atlasRows.ts`)
+  and at most 150 painted a frame. G's frame is 66 ms of script here (main's whole frame 35), the page's first
+  steps and the pictures beginning the frame after; `lab guide` reads 103 to 117 ms for its longest moments on the
+  shared PC loaded at 70 to 90% by other work (its bound is 100), from 194 to 850 ms a page before.
 - [ ] The loading screen (styled before any script runs: the last, if at all).

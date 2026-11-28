@@ -96,13 +96,23 @@ function withoutParticles(draw: () => void): void {
   }
 }
 
-/** The square in the middle of the engine's frame, `width` by `height`, copied into a canvas of the pictures' size. */
-function middleSquare(engine: HTMLCanvasElement, width: number, height: number): HTMLCanvasElement {
+/** The square in the middle of the engine's frame, `width` by `height`, snapshot at the pictures' size: a copy on
+ *  the GPU, read back once it's done (`pixelsOf`). Drawn into a canvas and read at once, each picture's two reads
+ *  waited for the card to finish the frame, 100 to 240 ms a picture (`lab guide`, #973). */
+function middleSquare(engine: HTMLCanvasElement, width: number, height: number): Promise<ImageBitmap> {
   const side = Math.min(width, height);
+  return createImageBitmap(engine, (width - side) / 2, (height - side) / 2, side, side,
+    { resizeWidth: SIZE, resizeHeight: SIZE });
+}
+
+/** A snapshot's pixels, read off a canvas kept on the CPU. */
+function pixelsOf(snapshot: ImageBitmap): ImageData {
   const pic = document.createElement('canvas');
   pic.width = pic.height = SIZE;
-  pic.getContext('2d')?.drawImage(engine, (width - side) / 2, (height - side) / 2, side, side, 0, 0, SIZE, SIZE);
-  return pic;
+  const c = pic.getContext('2d', { willReadFrequently: true })!;
+  c.drawImage(snapshot, 0, 0);
+  snapshot.close();
+  return c.getImageData(0, 0, SIZE, SIZE);
 }
 
 /** under this share of the backdrop showing through a pixel is solid; over `1 - SOLID`, the backdrop alone */
@@ -113,9 +123,9 @@ const SOLID = 0.03;
  * backdrop shows through, by as much as they differ against how far apart the backdrops were drawn (read at a
  * corner, as the grade drew them). A pixel's colour is what's left of it on black with the backdrop taken out.
  */
-function matted(onBlack: HTMLCanvasElement, onWhite: HTMLCanvasElement): HTMLCanvasElement {
-  const black = onBlack.getContext('2d')!.getImageData(0, 0, SIZE, SIZE);
-  const white = onWhite.getContext('2d')!.getImageData(0, 0, SIZE, SIZE).data;
+function matted(onBlack: ImageBitmap, onWhite: ImageBitmap): HTMLCanvasElement {
+  const black = pixelsOf(onBlack);
+  const white = pixelsOf(onWhite).data;
   const dark = black.data;
   const apart = [0, 1, 2].map((channel) => Math.max(1, white[channel] - dark[channel]));
   for (let at = 0; at < dark.length; at += 4) {
@@ -137,9 +147,9 @@ function matted(onBlack: HTMLCanvasElement, onWhite: HTMLCanvasElement): HTMLCan
   return pic;
 }
 
-/** `m` drawn by the engine against `backdrop` at the frame's `width` by `height`, its middle square copied. */
+/** `m` drawn by the engine against `backdrop` at the frame's `width` by `height`, its middle square snapshot. */
 function drawnAgainst(m: Framed, backdrop: Color, width: number, height: number,
-  grade: Grade): HTMLCanvasElement | null {
+  grade: Grade): Promise<ImageBitmap> | null {
   const engine = engineCanvas();
   if (!engine) return null;
   m.scene.background = backdrop;
@@ -158,15 +168,20 @@ function framedFor(m: Framed, width: number, height: number): void {
 
 /**
  * `m`'s picture drawn by the engine, in the frame's own task before the frame itself (`sceneApart`): against black
- * and white at the frame's size, and matted. Null while a draw was left out for a pipeline still compiling (the
- * engine makes a material's pipelines aside on the browser's time: drawn again next frame), or where it can't be.
+ * and white at the frame's size, snapshot, and matted once the snapshots are done (the promise's). Null while a draw
+ * was left out for a pipeline still compiling (the engine makes a material's pipelines aside on the browser's time:
+ * drawn again next frame), or where it can't be.
  */
-export function drawnNow(m: Framed, width: number, height: number, graded: Grade): HTMLCanvasElement | null {
+export function drawnNow(m: Framed, width: number, height: number,
+  graded: Grade): Promise<HTMLCanvasElement> | null {
   framedFor(m, width, height);
   const grade = portraitGrade(graded);
   const unready = PIPELINES.unready;
   const onBlack = drawnAgainst(m, BLACK, width, height, grade);
   const onWhite = drawnAgainst(m, WHITE, width, height, grade);
-  if (!onBlack || !onWhite || PIPELINES.unready > unready) return null;
-  return matted(onBlack, onWhite);
+  if (!onBlack || !onWhite || PIPELINES.unready > unready) {
+    void Promise.all([onBlack, onWhite]).then((shots) => shots.forEach((shot) => shot?.close()), () => undefined);
+    return null;
+  }
+  return Promise.all([onBlack, onWhite]).then(([black, white]) => matted(black, white));
 }

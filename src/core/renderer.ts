@@ -25,6 +25,7 @@ import { ARMS_LAYER, WARM_LAYER, GHOST_COUNT_LAYER } from './layers';
 import { gpuFence, setFrameFence } from './frameLoop';
 import { engineWorkDone } from '../engine/pipelinesAside';
 import { overlayRows } from '../engine/overlay';
+import { sendPainted } from '../ui/overlay/atlas';
 import { outlineForEngine } from '../engine/outlined';
 
 /** Final colour: above HI_KNEE the brightest channel eases towards HI_CAP (hue kept); in HDR towards as much more
@@ -1173,6 +1174,8 @@ export function render(): void {
   if (sceneApart.take) drawSceneApart(pixels.width, pixels.height, graded);
   overFrame.labels(overlaysShown);
   overFrame.panels(!document.body.classList.contains('photo'));
+  // (the labels and panels' texts painted this frame, sent to the atlas in a copy a run)
+  sendPainted();
   drawRust(G.scene, G.camera, G.time, pixels.width, pixels.height, gl, graded);
   // (a photo's picture: the engine's frame, the labels in it as photo mode leaves them out)
   if (frameShot.take) {

@@ -1,9 +1,11 @@
 // A line of styled runs (#973: the page's inline markup, a bold name or a coloured number in a line of plain words):
-// each word a text panel of its own in a row that wraps, as CSS breaks a paragraph at its spaces. `runsOf` reads the
-// runs off an element of the page's, each inline element's style given by the port (as its SCSS gives it).
+// one panel whose picture is its runs laid out at its width (`runLayout.ts`), broken as CSS breaks a paragraph at its
+// spaces. `runsOf` reads the runs off an element of the page's, each inline element's style given by the port (as
+// its SCSS gives it).
 import { Panel } from './panel';
 import type { PanelStyle } from '../../engine/ui';
 import type { TextStyle } from '../overlay/paint';
+import type { TextAlign } from './wrap';
 
 /** A run's style: its text's, and whether it's never broken (CSS's `white-space: nowrap`). */
 export interface RunStyle extends TextStyle {
@@ -19,7 +21,7 @@ export interface RunStyle extends TextStyle {
 const LINE_BREAK = '​';
 
 /** a word standing for a run's line break */
-const BREAK = '\n';
+export const BREAK = '\n';
 
 /** A run of text in one style. */
 export interface Run { text: string; style: RunStyle }
@@ -62,7 +64,7 @@ function collapsed(runs: Run[]): Run[] {
 }
 
 /** The words of `runs`, each with the space after it, in its run's style (a run kept whole, one piece). */
-function wordsOf(runs: Run[]): Run[] {
+export function wordsOf(runs: Run[]): Run[] {
   return runs.flatMap((run) => {
     const breaks = run.style.anywhere ? /(?<=[ .@_-])/ : /(?<= )/;
     const words = (run.style.whole ? [run] : run.text.split(breaks))
@@ -71,35 +73,54 @@ function wordsOf(runs: Run[]): Run[] {
   });
 }
 
-/** A row of words that wraps at its width: set from runs, its panels made or taken away as their count changes. */
+/** How a line's words stand along it, from a flex row's `justify` (CSS's `text-align` on a line of words). */
+function alignOf(justify: PanelStyle['justify']): TextAlign {
+  if (justify === 'center') return 'center';
+  if (justify === 'end') return 'right';
+  return 'left';
+}
+
+/** A line of runs that wraps at its width (none where its style says `wrap: false`), its words standing as its
+ *  `justify` says: one panel, its picture the runs laid out at its width (`Panel.sayRuns`). */
 export class RunLine {
   readonly panel: Panel;
-  private words: Panel[] = [];
-  private said = '';
+  private runs: Run[] = [];
+  private align: TextAlign;
+  private readonly wraps: boolean;
+  /** whether it narrows no further than its widest word (none where its style gives a least width of its own) */
+  private readonly holdsWords: boolean;
 
   constructor(parent: Panel, style: PanelStyle = {}) {
-    this.panel = new Panel(parent, { direction: 'row', wrap: true, alignItems: 'baseline', ...style });
+    const { justify, wrap, ...rest } = style;
+    this.panel = new Panel(parent, rest);
+    this.align = alignOf(justify);
+    this.wraps = wrap !== false;
+    this.holdsWords = style.minWidth === undefined;
   }
 
   /** The line saying `runs` (nothing done where it says them already). */
   set(runs: Run[]): this {
-    const said = JSON.stringify(runs);
-    if (said === this.said) return this;
-    this.said = said;
-    const words = wordsOf(runs);
-    while (this.words.length > words.length) this.words.pop()!.remove();
-    while (this.words.length < words.length) this.words.push(new Panel(this.panel, { shrink: 0 }));
-    words.forEach((word, at) => {
-      const broken = word.text === BREAK;
-      // (a break is a row's whole width and no height, so the next word starts a line of its own)
-      this.words[at].style({ basis: broken ? '100%' : undefined, height: broken ? 0 : undefined });
-      this.words[at].say(broken ? '' : word.text, word.style);
-    });
+    this.runs = runs;
+    this.panel.sayRuns(runs, this.align, this.wraps, this.holdsWords);
     return this;
+  }
+
+  /** Its words standing as a flex row's `justify` says (CSS's `text-align`). */
+  justify(justify: PanelStyle['justify']): this {
+    const align = alignOf(justify);
+    if (align === this.align) return this;
+    this.align = align;
+    this.panel.sayRuns(this.runs, align, this.wraps, this.holdsWords);
+    return this;
+  }
+
+  /** The least width it takes (its widest word where it wraps, else all of it). */
+  get least(): number {
+    return this.panel.leastWidth;
   }
 
   /** The line's words' text, as one string. */
   get text(): string {
-    return (JSON.parse(this.said || '[]') as Run[]).map((run) => run.text).join('');
+    return this.runs.map((run) => run.text).join('');
   }
 }

@@ -28,6 +28,24 @@ let lastEnvironment = '';
 let readAt = -1;
 let changedNow = false;
 
+/** whether a rule read a box not yet laid out, in the tree being followed now */
+let unsettled = false;
+
+/** A rule read a box not laid out yet (made this frame): the tree it's in follows again next frame, sent anything or
+ *  not. The engine lays a new panel out as it draws, so its width is there a frame after it's made; read as none
+ *  on a page's first opening, the guide's tiles' widths made from it sent nothing new, and the tree at rest kept
+ *  them 0 px wide. */
+export function readUnlaid(): void {
+  unsettled = true;
+}
+
+/** Whether a rule read a box not laid out since this was last asked (`readUnlaid`). */
+export function takeUnlaid(): boolean {
+  const was = unsettled;
+  unsettled = false;
+  return was;
+}
+
 /** Every tree told to follow again. */
 export function followAll(): void {
   for (const tree of followed) tree.again();

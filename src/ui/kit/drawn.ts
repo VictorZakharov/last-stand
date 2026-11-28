@@ -6,6 +6,8 @@ import { onFrame, type Panel } from './panel';
 import { elementAt, seenThrough } from './forward';
 import { scrollRoom, scrollTo } from './scroll';
 export { picturesLoaded } from './svgArt';
+import { labelsWaiting } from './panel';
+import { treesUnfinished } from './sheet';
 import { uiScales } from '../scale';
 import { engineCanvas } from '../../engine/index';
 
@@ -16,12 +18,12 @@ export function scrollMore(element: Element): number {
   return scrollRoom(panel) * uiScales[panel.scaled];
 }
 
-/** `element` scrolled into view in the scrolling panel round it (the page's `scrollIntoView`, `block: 'center'`),
- *  where the kit draws it; the page's own scrolled where it doesn't. */
-export function reveal(element: Element): void {
+/** `element` scrolled into view in the scrolling panel round it (the page's `scrollIntoView`, its `block`), where
+ *  the kit draws it; the page's own scrolled where it doesn't. */
+export function reveal(element: Element, block: 'center' | 'start' = 'center'): void {
   const panel = element.closest('.kit-mirror') ? drawnFor(element) : null;
   if (!panel) {
-    element.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'instant' });
+    element.scrollIntoView({ block, inline: 'nearest', behavior: 'instant' });
     return;
   }
   let round = panel.parent;
@@ -30,7 +32,7 @@ export function reveal(element: Element): void {
   const view = round?.rect();
   if (!round || !box || !view) return;
   const k = uiScales[round.scaled];
-  const off = (box.y + box.h / 2 - (view.y + view.h / 2)) / k;
+  const off = block === 'start' ? (box.y - view.y) / k : (box.y + box.h / 2 - (view.y + view.h / 2)) / k;
   scrollTo(round, round.scrolled + off);
 }
 
@@ -69,3 +71,7 @@ function holdScroll(element: Element, at: (panel: Panel) => number): void {
     if (--left <= 0) stop();
   });
 }
+
+/** Whether the kit is still making what it shows a few frames' worth at a time: a page's first build, its texts'
+ *  paints (the lab steps frames till it isn't, before it pictures the screen). */
+export const stillMaking = (): boolean => labelsWaiting() || treesUnfinished();

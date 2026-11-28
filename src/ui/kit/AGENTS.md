@@ -190,6 +190,36 @@ The rules across the game are the [root AGENTS.md](../../../AGENTS.md).
   with the atlas's empty pixels, so a panel's picture bleeds a pixel of its own edge past its box.
 - **A canary of a style the game writes each frame refuses the write** (`uiVillageMap.ts`): a lab step runs the
   game's frame and the kit's in one task, and an observer that took the write away never ran between them.
+- **A line of runs is one panel and one picture** (`RunLine`, `runLayout.ts`): its words broken at its width as CSS
+  breaks a paragraph, each in its run's style, drawn as one label. A panel a word, a guide's hero page was 2,000
+  panels and labels, its first frame 300 to 500 ms. The line asks its one line's width (CSS's max-content) and holds
+  its widest word (min-content); the sheet gives the text's own box `maxWidth: '100%'` and its line's least width
+  plus its padding and border (`acrossOf` in `sheet.ts`), or a column centring it never narrowed it (the talk's
+  name plate) and a row never shrank it (a guide entry's words), and a tab shrank into its padding. A line is as tall
+  as its line height, never its font's box (the name plate's two lines stood 4 px apart too far).
+- **Margins collapse where a rule says `blocks`** (`sheetFlow.ts`, `marginCollapse.ts`, unit tests in
+  `tools/lab/test`): the kit lays a block out as a flex column, whose margins add, and a guide page of paragraphs
+  stood a sixth taller than main's. Inside such a panel each element's CSS display is read once off the page
+  (`getComputedStyle`), siblings stand the larger margin apart and a first or last child's goes through a block
+  nothing keeps it in. Its collapsed margins are given before the frame's style is sent, so a frame that changes
+  nothing sends nothing. Only the guide's page asks for it: the other screens were ported with their margins as
+  their flex layout adds them.
+- **A long page is made in steps where its rule says `inSteps`** (`FIRST_A_FRAME` in `sheet.ts`, 80 elements a
+  frame, its top first, beginning the frame after the panel's own first): only where what's above doesn't move as
+  it fills. Over every scrolling panel, the pause menu, centred on its contents, moved for three frames as it
+  filled. **At most 150 texts are painted a frame** (`PAINTS_A_FRAME` in `kitCounts.ts`), the rest the frames
+  after; the lab waits for both before it reads a screen (`lab.madeWhole`, `stillMaking` in `drawn.ts`): read
+  mid-build, the pause menu's buttons stood 26 px off where they're drawn.
+- **A sheet's rules are found by an index** (`ruleIndex.ts`): by the last part of each selector (its id, a class,
+  its tag), so an element is tested against the rules that could match it alone; the same rules as testing every
+  one over 13,216 elements. A box read while a tree follows its page is as last laid out (`holdLayout` in
+  `engine/ui.ts`): each read after a change laid the whole tree out again, 143 ms of a guide page's first frame.
+- **A page's box not laid out yet is asked for again** (`readUnlaid`, `takeUnlaid` in `sheetDirty.ts`): a width
+  read off a box the engine hasn't laid out is 0, and the tree follows again the next frame (the guide's tiles stood
+  0 px wide after a page opened).
+- **An SVG's paint is written on its clone, each element's as computed, but a gradient's** (`paintOn` in
+  `svgArt.ts`): computed, `url(#id)` names the page's whole address, which an image drawn alone can't reach, and the
+  pause menu's title lost its steel, its glow drawn alone.
 - **Check a panel against main's page with `npm run lab -- ui --states <state> --ab`**: its box's lines and its
   pictures beside main's (`ui --states target`: the frame's box 384x52 at 113 on both, its name and line read off
   the engine's frame where the tree has it, off `#target` on main's).

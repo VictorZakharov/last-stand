@@ -10,9 +10,18 @@ import { atlasSide } from '../overlay/atlas';
 import { Label } from '../overlay/layer';
 import { drawText, measure, shadowReach, type TextStyle } from '../overlay/paint';
 import { normalLine } from './lineHeight';
-import { drawWrapped, wrapText, wrappedHeight, type TextAlign, type Wrapped } from './wrap';
+import { drawWrapped, wrapText, wrappedHeight, type TextAlign } from './wrap';
+import { drawRuns, layRuns, runsReach, runsWidths } from './runLayout';
+import { contentOf, type Text } from './panelText';
+import type { Run } from './runs';
 import { engineCanvas } from '../../engine/index';
+import { scrolledOut } from './scrolledOut';
+import { differs, sameStyle } from './panelCompare';
 import { overFrame } from '../../core/renderer';
+import { LAYERS, layer, makingScreen, placedBefore, screenNow } from './panelLayers';
+export { LAYERS, everyLayer, layer } from './panelLayers';
+import { beginFrame, beginPaints, countRemoved, countSent, mayPaint } from './kitCounts';
+export { frameTicks, kitFrame, kitSent, labelsWaiting, onFrame, panelsRemoved } from './kitCounts';
 import {
   four, lookFloats, styleFloats, uiContent, uiMake, uiRect, uiRelook, uiRemove, uiRestyle, uiScreen,
   type Length, type PanelLook, type PanelStyle,
@@ -21,26 +30,12 @@ import {
 /** The UI's scale a panel is drawn at. */
 export type Scaled = 'hud' | 'ui' | 'touch' | 'panes';
 
-/** A line of text a panel shows: what it says and how, and how far its line's box reaches past the face's own each
- *  side (px: negative where its line height is shorter, as CSS's half-leading); or a picture (no style), `text` the
- *  key it's painted again by. */
-interface Text {
-  text: string;
-  style: TextStyle | null;
-  label: Label;
-  w: number;
-  h: number;
-  reach: number;
-  lead: number;
-  /** how its lines stand where it wraps at its panel's width, and the lines it was last broken into */
-  align: TextAlign | null;
-  wrapped: Wrapped | null;
-}
-
 /** How a picture is painted: its top left at the origin, `scale` the canvas's pixels per px of it. */
 export type Paint = (c: CanvasRenderingContext2D, scale: number) => void;
 
 const panels = new Set<Panel>();
+/** the panels far out of a scrolling panel's view this frame, their texts' slots given back (`scrolledOut.ts`) */
+let outOfView: Set<Panel> = new Set();
 let nextId = 0;
 /** the ids given back, for the next panel made */
 const freeIds: number[] = [];
@@ -62,13 +57,17 @@ export class Panel {
   constructor(parent: Panel | null, style: PanelStyle = {}, look: PanelLook = {},
     readonly scaled: Scaled = parent?.scaled ?? 'hud') {
     this.id = freeIds.pop() ?? nextId++;
-    this.parent = parent === null && !making ? layer(LAYERS.hud) : parent;
+    // (a panel made is a change: a tree that made one follows again the next frame, its layout read back then. Not
+    // counted, a page written afresh had its boxes sized off a layout not yet made, and the tree settled with the
+    // guide's tiles 0 px wide)
+    countSent();
+    this.parent = parent === null && !makingScreen() ? layer(LAYERS.hud) : parent;
     this.styleNow = style;
     this.lookNow = look;
     this.parent?.children.add(this);
     panels.add(this);
     const k = this.scale();
-    const before = placeBefore?.id ?? null;
+    const before = placedBefore()?.id ?? null;
     uiMake(this.id, this.parent?.id ?? null, before, styleFloats(style, k), lookFloats(this.fullLook(), k));
     this.writtenAt = k;
   }
@@ -76,7 +75,7 @@ export class Panel {
   /** Its layout changed: `style`'s fields over those it had (nothing sent where none differs). */
   style(style: PanelStyle): this {
     if (!differs(this.styleNow, style)) return this;
-    sent++;
+    countSent();
     this.styleNow = { ...this.styleNow, ...style };
     uiRestyle(this.id, this.styleFloats());
     return this;
@@ -85,7 +84,7 @@ export class Panel {
   /** Its look changed: `look`'s fields over those it had (nothing sent where none differs). */
   look(look: PanelLook): this {
     if (!differs(this.lookNow, look)) return this;
-    sent++;
+    countSent();
     this.lookNow = { ...this.lookNow, ...look };
     uiRelook(this.id, lookFloats(this.fullLook(), this.scale()));
     return this;
@@ -106,7 +105,7 @@ export class Panel {
     // (by value: a sheet gives a new style each time it follows, and every text was measured and painted again)
     const same = this.text && this.text.text === text && sameStyle(this.text.style, style);
     if (same && this.text!.align === wrap) return this;
-    sent++;
+    countSent();
     if (wrap) return this.sayWrapped(text, style, wrap);
     const label = this.text?.label ?? new Label(0);
     const measured = measure(text, style);
@@ -123,6 +122,37 @@ export class Panel {
     this.paintedAt = 0;
     if (restyle) uiRestyle(this.id, this.styleFloats());
     return this;
+  }
+
+  /** It says `runs`, each word in its run's style, laid out at its width as one picture (`runLayout.ts`): broken
+   *  into lines there where it `wraps`, standing as `align` says. It asks its one line's width of its layout and
+   *  shrinks to its widest word where it wraps and `holdsWords` (CSS's max- and min-content), as tall as its lines
+   *  at its width. */
+  sayRuns(runs: Run[], align: TextAlign, wraps: boolean, holdsWords = true): this {
+    if (!runs.length) return this.silence();
+    const key = `${align} ${wraps} ${JSON.stringify(runs)}`;
+    if (this.text?.runs && this.text.text === key) return this;
+    countSent();
+    const label = this.text?.label ?? new Label(0);
+    label.sizedBy = this.scaled;
+    const restyle = (this.text?.lead ?? 0) !== 0;
+    const width = this.text?.wrapped?.width ?? 0;
+    const { most, least } = runsWidths(runs);
+    this.text = { text: key, style: runs[0].style, label, w: 0, h: 0, reach: runsReach(runs), lead: 0, align,
+      wrapped: null, runs: { list: runs, wraps, most, least: wraps ? least : most } };
+    this.wrapAt(width > 0 ? width : most);
+    if (wraps && holdsWords && this.styleNow.minWidth !== least) this.style({ minWidth: least });
+    // (no wider than its parent, as CSS fits a wrapping line to its box: its one line's width asked as a fixed size,
+    // a column centring it never narrowed it, and the talk's name plate's "Brother Hollis" stood on one line past it)
+    if (wraps && this.styleNow.maxWidth === undefined) this.style({ maxWidth: '100%' });
+    if (restyle) uiRestyle(this.id, this.styleFloats());
+    return this;
+  }
+
+  /** The least width its runs take (CSS's min-content: its widest word where it wraps, else all of it), px of the
+   *  reference layout; 0 where it says none. */
+  get leastWidth(): number {
+    return this.text?.runs?.least ?? 0;
   }
 
   /** The width its wrapped text was last broken at (px of the reference layout; 0 before it's laid out). */
@@ -147,14 +177,22 @@ export class Panel {
     const text = this.text;
     if (!text?.style || !text.align) return;
     const style = text.style;
-    const wrapped = wrapText(text.text, style, width, text.align);
     const reach = text.reach;
-    text.wrapped = wrapped;
+    text.wrapped = { width };
     text.w = width;
-    text.h = wrappedHeight(wrapped);
+    let paint: Paint;
+    if (text.runs) {
+      const laid = layRuns(text.runs.list, width, text.align, text.runs.wraps);
+      text.h = laid.height;
+      paint = (c, s) => drawRuns(c, laid, reach, reach, s);
+    } else {
+      const wrapped = wrapText(text.text, style, width, text.align);
+      text.h = wrappedHeight(wrapped);
+      paint = (c, s) => drawWrapped(c, wrapped, reach, reach, style, s);
+    }
     const w = Math.ceil(width + reach * 2);
     const h = Math.ceil(text.h + reach * 2);
-    text.label.show({ w, h, paint: (c, s) => drawWrapped(c, wrapped, reach, reach, style, s) });
+    text.label.show({ w, h, paint });
     this.paintedAt = 0;
   }
 
@@ -176,7 +214,7 @@ export class Panel {
    *  `key` changes (a skill's icon in a state: `key` names both). */
   picture(key: string, w: number, h: number, paint: Paint): this {
     if (this.text && this.text.style === null && this.text.text === key) return this;
-    sent++;
+    countSent();
     const label = this.text?.label ?? new Label(0);
     label.sizedBy = this.scaled;
     label.show({ w, h, paint });
@@ -269,6 +307,7 @@ export class Panel {
 
   private forget(): void {
     this.removed = true;
+    countRemoved();
     for (const child of [...this.children]) child.forget();
     this.text?.label.remove();
     this.parent?.children.delete(this);
@@ -297,9 +336,25 @@ export class Panel {
    *  gives its slot of the atlas back (painted, the pause menu's hidden tabs and every screen put away held their
    *  texts' slots, and opening the bug report twice filled the atlas: #973). */
   refreshTree(ratio: number, seenRound: boolean): void {
-    const seen = seenRound && (this.lookNow.opacity ?? 1) > 0 && this.styleNow.display !== 'none';
+    const seen = this.seenIn(seenRound);
     this.refresh(ratio, seen);
     for (const child of this.children) child.refreshTree(ratio, seen);
+  }
+
+  /** Its texts not seen give their slots back, and those of every panel inside it: done for the whole screen before
+   *  any is painted, so a page scrolled paints what came into view into the slots of what left it. */
+  releaseTree(seenRound: boolean): void {
+    const seen = this.seenIn(seenRound);
+    if (!seen && this.text?.label.slot) {
+      this.text.label.release();
+      this.paintedAt = 0;
+    }
+    for (const child of this.children) child.releaseTree(seen);
+  }
+
+  /** Whether it's seen, `seenRound` whether what's round it is: shown, with some opacity, near its scroll's view. */
+  private seenIn(seenRound: boolean): boolean {
+    return seenRound && (this.lookNow.opacity ?? 1) > 0 && this.styleNow.display !== 'none' && !outOfView.has(this);
   }
 
   private refresh(ratio: number, seen: boolean): void {
@@ -314,7 +369,7 @@ export class Panel {
     if (text && seen) {
       const paint = ratio * k;
       const label = text.label;
-      if (label.painted !== paint || !label.slot) {
+      if ((label.painted !== paint || !label.slot) && mayPaint()) {
         label.paint(paint);
         if (label.painted === paint) {
           this.paintedAt = paint;
@@ -333,100 +388,7 @@ export class Panel {
   }
 }
 
-/** The size a panel's text asks of its layout (px of the screen): a wrapped text asks for no width (its panel's is
- *  given it, and a width asked would hold the panel from narrowing as the window does), only its lines' height. */
-function contentOf(text: Text, k: number): { w: number; h: number } {
-  return { w: text.align ? 0 : text.w * k, h: text.h * k };
-}
 
-/** Whether any of `change`'s fields differs from `now`'s (a list or an object by its parts as text). */
-/** Whether two texts' styles are alike field for field (their shadows by value). */
-function sameStyle(a: TextStyle | null, b: TextStyle): boolean {
-  if (a === b) return true;
-  if (!a) return false;
-  const keys = new Set([...Object.keys(a), ...Object.keys(b)]) as Set<keyof TextStyle>;
-  for (const key of keys) {
-    const [was, now] = [a[key], b[key]];
-    if (was === now) continue;
-    if (Array.isArray(was) && Array.isArray(now) && JSON.stringify(was) === JSON.stringify(now)) continue;
-    return false;
-  }
-  return true;
-}
-
-function differs<T extends object>(now: T, change: Partial<T>): boolean {
-  for (const key of Object.keys(change) as (keyof T)[]) {
-    const a = now[key];
-    const b = change[key];
-    if (a === b) continue;
-    if (typeof a !== 'object' || typeof b !== 'object' || JSON.stringify(a) !== JSON.stringify(b)) return true;
-  }
-  return false;
-}
-
-/** the panel the screen is, every other inside it (shown or not as a whole: photo mode leaves them out) */
-let screen: Panel | null = null;
-/** whether the screen's panel is being made (it alone is made on the engine's own screen) */
-let making = false;
-
-function screenPanel(): Panel {
-  if (!screen) {
-    making = true;
-    screen = new Panel(null, { width: '100%', height: '100%', position: 'relative' });
-    making = false;
-  }
-  return screen;
-}
-
-/** the layers' z of what's drawn in them, as the page's z-indices stood their elements: the touch controls under the
- *  HUD, the lobby's panels and the village's card over it, the modals over those, the tooltip over every one, and a
- *  dragged item's picture over all */
-export const LAYERS = { touch: 8, hud: 10, lobby: 20, modal: 40, tooltip: 50, drag: 150 } as const;
-
-/** the screen's layers by their z: what's in a higher one is drawn over what's in a lower, whenever it was made */
-const layers = new Map<number, Panel>();
-/** the sibling the panel being made goes before (a layer placed among the others), or none: at its parent's end */
-let placeBefore: Panel | null = null;
-
-/**
- * The screen's layer at `z` (CSS's z-index of what's in it: the HUD's 0, the lobby's 20, the modals' 40, the
- * tooltip's 50: `LAYERS`), made the first time it's asked for, among the others by its z. A panel made with no
- * parent goes in the HUD's. The screen's own children were drawn in the order they were made, and the HUD's bars, made again as a run
- * began, were drawn over the summary's backdrop.
- */
-export function layer(z: number): Panel {
-  const found = layers.get(z);
-  if (found) return found;
-  const above = [...layers.keys()].filter((other) => other > z).sort((a, b) => a - b)[0];
-  placeBefore = above === undefined ? null : layers.get(above)!;
-  // (as large as the screen, and laid out as it is: what was the screen's own child is the layer's alike)
-  const made = new Panel(screenPanel(), { position: 'absolute', inset: 0 });
-  placeBefore = null;
-  layers.set(z, made);
-  return made;
-}
-
-/** Every layer made so far, with its z. */
-export const everyLayer = (): [number, Panel][] => [...layers.entries()];
-
-const everyFrame = new Set<() => void>();
-/** the frames the panels were brought up to date for */
-let frames = 0;
-/** how many changes panels have sent the engine (a style, a look, a text or a picture) */
-let sent = 0;
-/** How many changes panels have sent the engine so far: a tree that sent none in a frame has settled. */
-export const kitSent = (): number => sent;
-/** Which frame the panels are being brought up to date for: what's read once a frame is keyed by it. */
-export const kitFrame = (): number => frames;
-/** `tick` run before each frame's panels are brought up to date (an animation's step), until `stop` is called. */
-export function onFrame(tick: () => void): () => void {
-  everyFrame.add(tick);
-  return () => everyFrame.delete(tick);
-}
-
-/** The ticks run before each frame, and how many panels there are: what the kit does each frame, for the lab's
- *  measure of its cost (`lab ui --cost`). */
-export const frameTicks = (): ReadonlySet<() => void> => everyFrame;
 export const panelCount = (): number => panels.size;
 
 /** Every panel brought up to date before the engine's frame (the screen's size and ratio, each text painted), all
@@ -434,16 +396,18 @@ export const panelCount = (): number => panels.size;
 function refreshPanels(shown: boolean): void {
   const canvas = engineCanvas();
   if (!canvas) return;
-  frames++;
   // (an animation's step may make the first panel, and the screen's with it)
-  for (const tick of everyFrame) tick();
+  beginFrame();
+  const screen = screenNow();
   if (!screen) return;
   uiScreen(innerWidth, innerHeight, canvas.width / Math.max(1, innerWidth));
   screen.show(shown);
   const ratio = G.renderer.getPixelRatio();
-  for (const panel of panels) {
-    if (!panel.parent) panel.refreshTree(ratio, true);
-  }
+  outOfView = scrolledOut(panels);
+  const roots = [...panels].filter((panel) => !panel.parent);
+  for (const panel of roots) panel.releaseTree(true);
+  beginPaints();
+  for (const panel of roots) panel.refreshTree(ratio, true);
 }
 overFrame.panels = refreshPanels;
-overFrame.hidePanels = () => { screen?.show(false); };
+overFrame.hidePanels = () => { screenNow()?.show(false); };

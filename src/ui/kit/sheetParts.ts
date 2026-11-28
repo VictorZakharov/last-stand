@@ -15,7 +15,7 @@ export function gather(rules: Rule[], element: Element, round: Panel | null, sta
   const box: PanelStyle = button ? { direction: 'row', alignItems: 'center', justify: 'center' }
     : { direction: 'column' };
   const out: Gathered = { box, look: {}, text: { ...around }, brackets: false, marks: [], turn: 0, flex: false,
-    scrolls: false, ease: 0, shift: [0, 0], lift: false };
+    scrolls: false, inSteps: false, blocks: false, ease: 0, shift: [0, 0], lift: false };
   for (const rule of rules) {
     if (rule.when && !rule.when()) continue;
     if (rule.box) Object.assign(out.box, now(rule.box, element, round));
@@ -32,7 +32,9 @@ export function gather(rules: Rule[], element: Element, round: Panel | null, sta
     if (rule.marks) out.marks = [...out.marks, ...now(rule.marks, element, round)];
     if (rule.turn !== undefined) out.turn = rule.turn;
     if (rule.paint) out.paint = rule.paint;
-    if (rule.scrolls) out.scrolls = true;
+    if (rule.scrolls) out.scrolls = rule.scrolls;
+    if (rule.inSteps) out.inSteps = true;
+    if (rule.blocks) out.blocks = true;
     if (rule.ease !== undefined) out.ease = rule.ease;
     if (rule.shift) out.shift = rule.shift;
     if (rule.pulse) out.pulse = rule.pulse;
