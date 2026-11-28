@@ -100,7 +100,17 @@ function pruneExports(base, keep) {
     .map((name) => join(base, name))
     .filter((path) => path !== keep && statSync(path).isDirectory())
     .sort((a, b) => statSync(b).mtimeMs - statSync(a).mtimeMs);
-  for (const old of others.slice(EXPORTS_KEPT - 1)) rmSync(old, { recursive: true, force: true });
+  for (const old of others.slice(EXPORTS_KEPT - 1)) removeUnlessHeld(old);
+}
+
+/** Deletes an old export, or leaves it for a later prune while a page or a Vite server still holds a file of it
+ *  (Windows refuses with EPERM or EBUSY): the A/B that asked for a new export failed on it before. */
+function removeUnlessHeld(path) {
+  try {
+    rmSync(path, { recursive: true, force: true });
+  } catch (error) {
+    if (error.code !== 'EPERM' && error.code !== 'EBUSY') throw error;
+  }
 }
 
 /** The lab's stand-ins for the scene API's modules, by the path sceneApi.ts imports each by, for a tree from before
