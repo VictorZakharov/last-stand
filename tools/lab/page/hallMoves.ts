@@ -19,7 +19,7 @@ import { sfx } from '../../../src/core/audio';
 import { makeItem } from '../../../src/loot/items';
 import type { WeaponStyle } from '../../../src/loot/loadout';
 import type { Model } from '../../../src/types';
-import { realWait, type Lab, type Pictured, type Report } from './lab';
+import { middleOf, realWait, type Lab, type Pictured, type Report } from './lab';
 import { ABANDON_HOLD_MS } from '../../../src/ui/menus';
 import { OpenTones } from './soundsLeft';
 import * as heroesUi from './uiHeroes';
@@ -128,8 +128,8 @@ const HOLD_SLACK_MS = 300;
 
 /** `element` pressed at its middle with the mouse's left button and held for `ms` of the browser's clock. */
 async function holdDown(lab: Lab, element: Element, ms: number): Promise<void> {
-  const box = element.getBoundingClientRect();
-  const at = { x: box.left + box.width / 2, y: box.top + box.height / 2 };
+  // (where the kit draws it: its page's box is a mirror out of sight, and pressed there the press reached nothing)
+  const at = middleOf(element);
   await lab.mouseDown(at);
   await realWait(ms);
   await lab.mouseUp(at);
