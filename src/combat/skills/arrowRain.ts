@@ -6,7 +6,9 @@
 // falls on, if any, for `damage`: a foe may take several or none (hit as a whole area, it didn't matter where they
 // fell), and stays in it; one that comes down on a prop goes into its top (off it, if it's stone), the rest into the
 // floor (off it on stone: fx/stuckArrows). The area follows the aim at a walk, and what's in the air when the key is let
-// go still comes down.
+// go still comes down. It never comes nearer the ranger than `minRange` (aimed closer, it goes out along the aim), so
+// it can't be brought down on him or on the foes striking at him (from the owner: "should not be possible to cast on
+// himself or any foes currently attacking him").
 import * as THREE from 'three';
 import { G } from '../../state';
 import { hitEnemy } from '../damage';
@@ -26,7 +28,7 @@ import type { Enemy } from '../../entities/enemy';
 import type { Player } from '../../entities/player';
 import type { ChannelSkill, Needs } from './types';
 
-type Def = Needs<'damage' | 'radius' | 'range' | 'missiles'>;
+type Def = Needs<'damage' | 'radius' | 'range' | 'minRange' | 'missiles'>;
 
 const LEAF = 0xb4cc7b;
 /** a falling arrow strikes a foe its point comes down through within this of its body (m) */
@@ -77,15 +79,36 @@ const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _d = new THREE.Vector3
 /** The volley's time at the hero's cast speed. */
 const pace = (p: Player): number => 1 + p.stats.castSpeed / 100;
 
-/** Where the area goes: the aim, no further than the skill's range, inside the arena. */
-function aimOf(p: Player, def: Def, out: THREE.Vector3): THREE.Vector3 {
-  out.set(p.aim.x - p.pos.x, 0, p.aim.z - p.pos.z);
-  if (out.length() > def.range) out.setLength(def.range);
-  out.add(p.pos); out.y = 0;
+/** Where the area goes for an aim at `x`, `z`: along the aim from the ranger, no nearer than `minRange` (on top of him,
+ *  the way he faces) and no further than `range`, inside the arena. At the wall, where the aim's way has no room that
+ *  far out, it goes round the near circle to the nearest spot that fits: drawn in by the wall, it came onto him. A spot
+ *  already within all of these is its own. */
+export function areaAt(p: Player, def: Def, x: number, z: number, out: THREE.Vector3): THREE.Vector3 {
+  let dx = x - p.pos.x, dz = z - p.pos.z, d = Math.hypot(dx, dz);
+  if (d < 1e-3) { dx = Math.sin(p.facing); dz = Math.cos(p.facing); d = 1; }
+  const far = clamp(d, def.minRange, def.range);
+  out.set(p.pos.x + dx / d * far, 0, p.pos.z + dz / d * far);
   const R = G.arena.radius - 1, r = Math.hypot(out.x, out.z);
-  if (r > R) { out.x *= R / r; out.z *= R / r; }
-  return out;
+  if (r <= R) return out;
+  out.x *= R / r; out.z *= R / r;
+  if (Math.hypot(out.x - p.pos.x, out.z - p.pos.z) >= def.minRange) return out;
+  return roundTheNear(p, def.minRange, R, dx / d, dz / d, out);
 }
+
+/** The spot `m` from the ranger, within `R` of the arena's middle, whose way from him is nearest the aim's (`ux`, `uz`):
+ *  turned from straight out (away from the middle) just as far as the wall allows, on the aim's side. */
+function roundTheNear(p: Player, m: number, R: number, ux: number, uz: number, out: THREE.Vector3): THREE.Vector3 {
+  const q = Math.hypot(p.pos.x, p.pos.z);
+  if (q < 1e-3) return out;
+  const ox = p.pos.x / q, oz = p.pos.z / q;
+  // (|P + m v|² ≤ R² is cos(v, out) ≤ k)
+  const k = (R * R - q * q - m * m) / (2 * q * m), turn = Math.acos(clamp(k, -1, 1));
+  const side = ox * uz - oz * ux >= 0 ? 1 : -1, c = Math.cos(turn), s = Math.sin(turn) * side;
+  return out.set(p.pos.x + m * (ox * c - oz * s), 0, p.pos.z + m * (oz * c + ox * s));
+}
+
+/** Where the area goes: as the aim has it (`areaAt`). */
+const aimOf = (p: Player, def: Def, out: THREE.Vector3): THREE.Vector3 => areaAt(p, def, p.aim.x, p.aim.z, out);
 
 /** A volley loosed: its arrow up off the bow towards where it splits over the area. */
 function loose(s: RainState): void {
@@ -247,6 +270,8 @@ const skill: ChannelSkill<RainState> = {
     // the area follows the aim at a walk
     const to = aimOf(player, rawDef as Def, _b), dx = to.x - s.center.x, dz = to.z - s.center.z, d = Math.hypot(dx, dz);
     if (d > 1e-3) { const k = Math.min(1, FOLLOW * dt / d); s.center.x += dx * k; s.center.z += dz * k; }
+    // (its way there kept as far out from him: straight across past him, it went over his head)
+    areaAt(player, rawDef as Def, s.center.x, s.center.z, s.center);
     // volley after volley: (the first arrow from the quiver,) drawn, loosed, the next one taken and nocked
     const sp = pace(player), D = DRAW / sp, A = AFTER / sp;
     s.cyc += dt;

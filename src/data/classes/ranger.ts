@@ -44,10 +44,15 @@ const ranger: ClassDef = {
     },
     {
       key: '2', impl: 'arrowRain', name: 'Hailfletch',
-      desc: 'Hold to stand and shoot arrow after arrow high over the target area, each splitting into a shower of 24 that comes down at random across it: each arrow strikes the foe it falls on. The area follows your aim at a walk. You cannot move while you shoot.', tags: ['physical'],
+      desc: 'Hold to stand and shoot arrow after arrow high over the target area, each splitting into a shower of 24 that comes down at random across it: each arrow strikes the foe it falls on. The area follows your aim at a walk, and never comes nearer than 9.5 m: aimed closer, it falls that far out along your aim, beyond the foes at your side. You cannot move while you shoot.', tags: ['physical'],
       // (energy a second, and damage an arrow; the volleys are an archer's, drawn, loosed and the next taken from the quiver)
       cost: 22, cooldown: 0, castTime: 0, channel: true, moveMult: 0,
-      damage: 170, missiles: 24, radius: 4.2, range: 18,
+      // (`minRange`, from the owner: "should not be possible to cast on himself or any foes currently attacking him".
+      // The longest blow of a foe that isn't a boss is a Cinder Brute's or a Barkhide Hulk's, landing within its
+      // `range` 3 + the hero's 0.45 + 0.3 (enemyAI's `melee`); an arrow strikes a foe within its radius 1 + 0.3
+      // (`STRIKE`), and falls within the area's 4.2: 3.75 + 1.3 + 4.2 = 9.25, and a quarter metre to spare.
+      // `lab rainreach` holds it against every foe's numbers.)
+      damage: 170, missiles: 24, radius: 4.2, range: 18, minRange: 9.5,
       icon: { glyph: '⇊', color: '#6f9bff' },
     },
     {
