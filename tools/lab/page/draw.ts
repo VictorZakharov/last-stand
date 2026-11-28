@@ -57,6 +57,11 @@ const CANARY_FROM = 0.5;
  *  of light on the arrowhead glared in one blob of 0.64 to 3.6 in 10,000 and was too bright, and motes bright enough
  *  to bloom merged into blobs of 0.9 to 1.6; the motes' specks are 0.41 at most) */
 const SEEN_LEAST = 0.35e-4;
+/** shots seen less in a view of their own, by their skill's `impl` and the view: the fan's bow is held flat, and over
+ *  the shoulder his sleeve and bow fist stand before half its arrowhead's motes (0.2 in 10,000 at their least since
+ *  the engine draws the game, 48 pixels); the owner chose to keep the look as it is, so the bar is lowered there
+ *  alone */
+const SEEN_LEAST_IN: Record<string, Record<string, number>> = { fanShot: { third: 0.15e-4 } };
 const BLOB_MOST = 0.55e-4;
 /** the frames into the hold at full draw at which the glint is judged as the player sees it, every few over a cycle of
  *  its motes and more (they move: at one frame, as many as three times more of them showed for one shot as for
@@ -72,6 +77,8 @@ const CLOSE = 140;
 interface DrawnShot {
   key: SkillKey;
   name: string;
+  /** its skill's behaviour (`SkillDef.impl`) */
+  impl: string;
 }
 
 /** The hero's drawn shots, in his bar's order. */
@@ -79,7 +86,7 @@ function drawnShots(): DrawnShot[] {
   const shots: DrawnShot[] = [];
   for (const key of SKILL_KEYS) {
     const def = G.player.skillAt(key)?.def;
-    if (def?.draw && !def.channel) shots.push({ key, name: def.name });
+    if (def?.draw && !def.channel) shots.push({ key, name: def.name, impl: def.impl });
   }
   return shots;
 }
@@ -317,9 +324,10 @@ function drawnProblems(shot: DrawnShot, drawn: Drawn, view: string): string[] {
   }
   if (drawn.longestGap > LONGEST_GAP) say(`${drawn.longestGap} frames without a glint held at full draw`);
   const seen = drawn.seen;
-  if (seen?.onScreen && seen.share < SEEN_LEAST) {
+  const least = SEEN_LEAST_IN[shot.impl]?.[view] ?? SEEN_LEAST;
+  if (seen?.onScreen && seen.share < least) {
     say(`hardly seen held at full draw: ${seen.pixels} pixels lit (${(seen.share * 1e4).toFixed(1)} in 10,000, `
-      + `${(SEEN_LEAST * 1e4).toFixed(1)} at least)`);
+      + `${(least * 1e4).toFixed(1)} at least)`);
   }
   if (seen?.onScreen && seen.blob > BLOB_MOST) {
     say(`too bright held at full draw: a patch of glare on ${(seen.blob * 1e4).toFixed(2)} in 10,000 of the frame's `
