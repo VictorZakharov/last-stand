@@ -67,7 +67,7 @@ export function typedAbove(id: string): Sheet {
 export function drawModal(id: string, sheet: Sheet): SheetTree | null {
   const page = document.getElementById(id);
   if (!page) return null;
-  page.classList.add('kit-mirror');
+  page.classList.toggle('kit-mirror', true);
   const room = new Panel(layer(LAYERS.modal), { position: 'absolute', inset: 0 }, {}, 'ui');
   return new SheetTree(page, [...MODAL, ...sheet], 'ui', room);
 }

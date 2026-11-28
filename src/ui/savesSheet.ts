@@ -213,7 +213,7 @@ export function drawSaves(): void {
   if (tree) return;
   const page = document.getElementById('saves');
   if (!page) return;
-  page.classList.add('kit-mirror');
+  page.classList.toggle('kit-mirror', true);
   const room = new Panel(layer(SCREEN_LAYER), { position: 'absolute', inset: 0 }, {}, 'panes');
   tree = new SheetTree(page, SHEET, 'panes', room);
 }

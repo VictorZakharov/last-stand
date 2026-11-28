@@ -11,6 +11,7 @@ import { standIn } from './kit/press';
 import { input } from '../core/input';
 import type { TextStyle } from './overlay/paint';
 import { minimapDraws } from './hud';
+import { shownOnPage } from './kit/shownOnPage';
 
 const INK = '#e6dcc8';
 const INK_DIM = '#9a8f7c';
@@ -160,7 +161,7 @@ export function zoomed(style: TextStyle, zoom: number): TextStyle {
 }
 
 /** Whether the page's `el` shows, as its own rules have it (the column's elements are out of sight, not hidden). */
-const shows = (el: Element): boolean => (el as HTMLElement).checkVisibility();
+const shows = (el: Element): boolean => shownOnPage(el);
 
 /** The spoils' list as the page has it: each rarity's count and colour. */
 function chipsOf(list: HTMLElement): { text: string; color: string }[] {
@@ -225,7 +226,7 @@ export function initMinimapColumn(): void {
   };
   // (the column whole, as the lab reads it and the pause button stands beside it; the tracker is out of sight on its
   // own, as it leaves the column with the bag open)
-  for (const el of [wrap, page.title, page.canvas, page.objectives, page.spoils]) el.classList.add('kit-mirror');
+  for (const el of [wrap, page.title, page.canvas, page.objectives, page.spoils]) el.classList.toggle('kit-mirror', true);
   onFrame(follow);
   follow();
 }

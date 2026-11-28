@@ -1328,13 +1328,15 @@ function nearestDowned(others: Player[]): Player | undefined {
 /** The run's co-op bits taken off as the lobby is entered: `updateCoopHud` runs in a run alone, and the HUD kept its
  *  watching look (its bars and skills hidden) through the lobby's practice after a run the player left. */
 export function hideRunBits(): void {
-  $('#hud').classList.remove('watching');
+  // (`toggle` with its state: `add` and `remove` write the attribute whether or not it changes, and run every frame
+  // these dirtied the page's styles each frame, every panel's ask of the page laying them out again)
+  $('#hud').classList.toggle('watching', false);
 
-  $('#down-note').classList.add('hidden');
-  $('#spectate').classList.add('hidden');
-  $('#btn-revive').classList.add('hidden');
+  $('#down-note').classList.toggle('hidden', true);
+  $('#spectate').classList.toggle('hidden', true);
+  $('#btn-revive').classList.toggle('hidden', true);
   marked = null;
-  raisePrompt?.classList.add('hidden');
+  raisePrompt?.classList.toggle('hidden', true);
   shownSecond = -1;
 }
 

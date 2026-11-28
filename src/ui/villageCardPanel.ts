@@ -176,7 +176,7 @@ function placeRoom(): void {
 export function drawVillageCard(): void {
   const page = document.getElementById('vcard');
   if (!page || card) return;
-  page.classList.add('kit-mirror');
+  page.classList.toggle('kit-mirror', true);
   room = new Panel(layer(LAYERS.lobby), { position: 'absolute', inset: 0, direction: 'column', justify: 'end',
     alignItems: 'center' },
     {}, 'ui');

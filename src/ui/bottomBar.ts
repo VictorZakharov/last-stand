@@ -15,6 +15,7 @@ import type { TextStyle } from './overlay/paint';
 import type { Length } from '../engine/ui';
 import { HOTBAR_HEIGHT, followHotbar, hotbarWidth, makeHotbar, type Hotbar } from './hotbarPanel';
 import { FRENZY_BLEED, frenzyKey, frenzyOf, frenzySize, paintFrenzy } from './frenzyPips';
+import { shownOnPage } from './kit/shownOnPage';
 
 const FRAME = '#a07c46';
 const FRAME_DARK = '#4a3620';
@@ -255,7 +256,7 @@ function followFrenzy(panel: Panel, page: HTMLElement | null): void {
 
 /** Whether the page shows its bottom bar now (the run's, the lobby's practice: not the lobby's, nor watching). */
 function pageShows(page: HTMLElement): boolean {
-  return page.checkVisibility();
+  return shownOnPage(page);
 }
 
 /** The bottom bar brought up to the page's each frame: made for the desktop or touch, shown as it is. */
@@ -301,6 +302,6 @@ export function drawnShares(): { life: number; energy: number } | null {
 
 /** The bottom bar drawn by the engine from now on, the page's kept out of sight. */
 export function drawBottomBar(): void {
-  document.getElementById('bottombar')?.classList.add('kit-mirror');
+  document.getElementById('bottombar')?.classList.toggle('kit-mirror', true);
   onFrame(follow);
 }

@@ -195,6 +195,6 @@ function follow(): void {
 
 /** The overlays down the left drawn by the engine from now on, the page's own out of sight. */
 export function drawDiag(): void {
-  for (const id of ['perf', 'net', 'blog']) document.getElementById(id)?.classList.add('kit-mirror');
+  for (const id of ['perf', 'net', 'blog']) document.getElementById(id)?.classList.toggle('kit-mirror', true);
   onFrame(follow);
 }

@@ -124,7 +124,7 @@ export function drawTrade(): void {
   for (const id of ['trade-ask', 'trade-note']) {
     const page = document.getElementById(id);
     if (!page) continue;
-    page.classList.add('kit-mirror');
+    page.classList.toggle('kit-mirror', true);
     const room = new Panel(layer(ASK_LAYER),
       { position: 'absolute', inset: 0, direction: 'column', alignItems: 'center', justify: 'start' }, {}, 'ui');
     asks.push(new SheetTree(page, ASK, 'ui', room));

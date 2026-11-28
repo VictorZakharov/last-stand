@@ -310,7 +310,7 @@ export function drawHeroes(): void {
   if (tree) return;
   const page = document.getElementById('heroes');
   if (!page) return;
-  for (const part of page.children) if (!part.classList.contains('hs-choose')) part.classList.add('kit-mirror');
+  for (const part of page.children) if (!part.classList.contains('hs-choose')) part.classList.toggle('kit-mirror', true);
   // (a room of the lobby's scale: the layer's own is the HUD's, which an upright tablet's is not)
   const room = new Panel(layer(SCREEN_LAYER), { position: 'absolute', inset: 0 }, {}, 'ui');
   tree = new SheetTree(page, SHEET, 'ui', room);

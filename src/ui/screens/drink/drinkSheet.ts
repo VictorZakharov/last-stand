@@ -62,7 +62,7 @@ export function drawDrink(): void {
   for (const [id, sheet, at] of parts) {
     const page = document.getElementById(id);
     if (!page) continue;
-    page.classList.add('kit-mirror');
+    page.classList.toggle('kit-mirror', true);
     trees.push(new SheetTree(page, sheet, 'ui', room(at)));
   }
 }

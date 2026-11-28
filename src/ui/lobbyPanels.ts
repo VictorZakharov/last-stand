@@ -24,7 +24,7 @@ let lobby: SheetTree | null = null;
 export function drawLobbyPanels(): void {
   const menu = document.getElementById('menu');
   if (!menu || lobby) return;
-  for (const selector of DRAWN) menu.querySelector(selector)?.classList.add('kit-mirror');
+  for (const selector of DRAWN) menu.querySelector(selector)?.classList.toggle('kit-mirror', true);
   lobby = new SheetTree(menu, SHEET, 'ui', layer(LAYERS.lobby));
 }
 

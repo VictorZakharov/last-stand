@@ -5,6 +5,7 @@
 // filter, so their opacity still says whether they show): each panel here stands where its element is laid out,
 // read each frame, and shows what it shows.
 import { Panel, onFrame, LAYERS, layer } from './kit/panel';
+import { kitFrame } from './kit/kitCounts';
 import { standIn } from './kit/press';
 import { svgArt } from './kit/svgArt';
 import { uiScales } from './scale';
@@ -12,6 +13,7 @@ import { accent, faded } from './diagFrame';
 import { faceOf } from './hotbarPanel';
 import { FACE, artLoaded, faceKey, paintFace } from './slotFace';
 import type { TextStyle } from './overlay/paint';
+import { shownOnPage } from './kit/shownOnPage';
 
 const ROUND_FILL = 'rgba(10,9,11,.75)';
 const ROUND_LINE = 'rgba(160,124,70,.6)';
@@ -79,7 +81,7 @@ let stick: Stick | null = null;
 
 function followStick(): void {
   const page = document.getElementById('touch-stick');
-  const shown = !!page?.classList.contains('on') && page.checkVisibility();
+  const shown = !!page?.classList.contains('on') && shownOnPage(page);
   stick ??= makeStick();
   stick.base.show(shown);
   if (!shown) return;
@@ -196,9 +198,18 @@ function followPills(): void {
   for (const pill of pills) followPill(pill);
 }
 
+/** the frames between two looks for the page's controls to mark as ghosts (one made later is found then) */
+const GHOSTS_EVERY = 60;
+
+/** The page's touch controls marked as ghosts (taking the fingers, painting nothing): `toggle`, which writes the
+ *  attribute only if it changes. Queried and added to every frame, they dirtied the page's styles each frame. */
+function markGhosts(): void {
+  for (const ghost of document.querySelectorAll(GHOSTS)) ghost.classList.toggle('kit-ghost', true);
+}
+
 /** The touch controls brought up to the page's. */
 function follow(): void {
-  for (const ghost of document.querySelectorAll(GHOSTS)) ghost.classList.add('kit-ghost');
+  if (kitFrame() % GHOSTS_EVERY === 0) markGhosts();
   const touch = document.body.classList.contains('touch');
   if (!root && !touch) return;
   rootOf().show(touch);
@@ -218,5 +229,6 @@ function follow(): void {
 
 /** The touch controls drawn by the engine from now on, their page elements taking the fingers and painting nothing. */
 export function drawTouch(): void {
+  markGhosts();
   onFrame(follow);
 }

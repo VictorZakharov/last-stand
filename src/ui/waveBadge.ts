@@ -113,7 +113,7 @@ function flareNow(): number {
 
 /** The badge drawn by the engine from now on, its page's own put out of sight. */
 export function drawWaveBadge(): void {
-  document.getElementById('wavebadge')?.classList.add('kit-mirror');
+  document.getElementById('wavebadge')?.classList.toggle('kit-mirror', true);
   onFrame(follow);
 }
 

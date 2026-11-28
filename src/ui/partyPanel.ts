@@ -9,6 +9,7 @@ import { input } from '../core/input';
 import { uiScales } from './scale';
 import { now, reducedMotion } from './kit/motion';
 import type { TextStyle } from './overlay/paint';
+import { shownOnPage } from './kit/shownOnPage';
 
 const FRAME_RGB = '160,124,70';
 const ALLY_BORDER = 'rgba(106,184,255,.4)';
@@ -181,7 +182,7 @@ function follow(): void {
   const page = document.getElementById('party');
   if (!page) return;
   const all = cardsOf(page);
-  const shows = page.checkVisibility() && all.length > 0;
+  const shows = shownOnPage(page) && all.length > 0;
   if (!root && !shows) return;
   const touch = input.touchMode;
   const fit = touch && innerHeight <= SHORT_PX ? TIGHT : ROOMY;
@@ -236,6 +237,6 @@ export function partyCardsDrawn(): CardDrawn[] {
 
 /** The party's frames drawn by the engine from now on, the page's own out of sight. */
 export function drawParty(): void {
-  document.getElementById('party')?.classList.add('kit-mirror');
+  document.getElementById('party')?.classList.toggle('kit-mirror', true);
   onFrame(follow);
 }

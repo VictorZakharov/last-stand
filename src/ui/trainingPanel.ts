@@ -11,6 +11,7 @@ import { input } from '../core/input';
 import { minimapColumnPanels, minimapZoom, zoomed } from './minimapColumn';
 import { uiScales } from './scale';
 import type { Shadow, TextStyle } from './overlay/paint';
+import { shownOnPage } from './kit/shownOnPage';
 
 const HIGHLIGHT = '#f0c860';
 const ACCENT = '#e2c07e';
@@ -189,7 +190,7 @@ function followSteps(d: Drawn, steps: Step[], short: boolean): void {
 function follow(): void {
   if (!page) return;
   const root = page.root;
-  const shown = root.checkVisibility();
+  const shown = shownOnPage(root);
   const place = placeNow(root);
   const tour = root.classList.contains('tour');
   // (in the minimap's column, its zoom: the shortest screen's)
@@ -231,6 +232,6 @@ export function initTrainingPanel(): void {
     root, title: root.querySelector<HTMLElement>('.tr-title')!, steps: root.querySelector<HTMLElement>('.tr-steps')!,
     finished: root.querySelector<HTMLElement>('.tr-finished')!, skip: root.querySelector<HTMLButtonElement>('.tr-skip')!,
   };
-  root.classList.add('kit-mirror');
+  root.classList.toggle('kit-mirror', true);
   onFrame(follow);
 }

@@ -12,6 +12,7 @@ import { uiScales } from './scale';
 import { input } from '../core/input';
 import { holdRevive } from './coop';
 import type { Shadow, TextStyle } from './overlay/paint';
+import { shownOnPage } from './kit/shownOnPage';
 
 const INK = '#e6dcc8';
 const GOLD = '#ffe6a0';
@@ -83,7 +84,7 @@ function makeNote(page: HTMLElement): Note {
 function followNote(): void {
   const page = document.getElementById('down-note');
   if (!page) return;
-  const shows = page.checkVisibility();
+  const shows = shownOnPage(page);
   if (!note && !shows) return;
   note ??= makeNote(page);
   note.root.show(shows);
@@ -119,8 +120,8 @@ function makePrompt(page: HTMLElement): Prompt {
 function followPrompt(): void {
   const page = document.querySelector<HTMLElement>('#hud .rvprompt');
   if (!page) return;
-  page.classList.add('kit-mirror');
-  const shows = page.checkVisibility();
+  page.classList.toggle('kit-mirror', true);
+  const shows = shownOnPage(page);
   if (!prompt && !shows) return;
   prompt ??= makePrompt(page);
   if (prompt.page !== page) {
@@ -196,7 +197,7 @@ function makeWatch(page: HTMLElement): Watch {
 function followWatch(): void {
   const page = document.getElementById('spectate');
   if (!page) return;
-  const shows = page.checkVisibility();
+  const shows = shownOnPage(page);
   if (!watch && !shows) return;
   watch ??= makeWatch(page);
   watch.root.show(shows);
@@ -237,7 +238,7 @@ function makeRevive(page: HTMLButtonElement): Revive {
 function followRevive(): void {
   const page = document.getElementById('btn-revive') as HTMLButtonElement | null;
   if (!page) return;
-  const shows = page.checkVisibility();
+  const shows = shownOnPage(page);
   if (!revive && !shows) return;
   revive ??= makeRevive(page);
   revive.root.show(shows);
@@ -254,7 +255,7 @@ function followRevive(): void {
 
 /** The downed and watching UI drawn by the engine from now on, the page's own out of sight. */
 export function drawDownedPanels(): void {
-  for (const id of ['down-note', 'spectate', 'btn-revive']) document.getElementById(id)?.classList.add('kit-mirror');
+  for (const id of ['down-note', 'spectate', 'btn-revive']) document.getElementById(id)?.classList.toggle('kit-mirror', true);
   onFrame(() => {
     followNote();
     followPrompt();

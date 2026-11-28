@@ -201,7 +201,7 @@ let tree: SheetTree | null = null;
 export function drawVillageMap(): void {
   const page = document.getElementById('vmap');
   if (!page || tree) return;
-  page.classList.add('kit-mirror');
+  page.classList.toggle('kit-mirror', true);
   const room = new Panel(layer(MAP_LAYER), { position: 'absolute', inset: 0 }, {}, 'ui');
   tree = new SheetTree(page, MAP, 'ui', room);
 }

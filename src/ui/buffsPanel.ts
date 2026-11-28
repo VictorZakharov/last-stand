@@ -8,6 +8,7 @@ import { input } from '../core/input';
 import { uiScales } from './scale';
 import type { TextStyle } from './overlay/paint';
 import type { Length } from '../engine/ui';
+import { shownOnPage } from './kit/shownOnPage';
 
 const FRAME = '#a07c46';
 /** a box's side, the gap between boxes, its glyph's size, its words' (px) */
@@ -71,7 +72,7 @@ function placeNow(): [Length, Length, Length, Length] {
 function follow(): void {
   const page = document.getElementById('buffs');
   if (!page) return;
-  const shows = page.checkVisibility() && page.children.length > 0;
+  const shows = shownOnPage(page) && page.children.length > 0;
   if (!root && !shows) return;
   if (!root) {
     root = new Panel(null, { position: 'absolute', direction: 'row', gap: GAP });
@@ -91,6 +92,6 @@ function follow(): void {
 
 /** The buffs drawn by the engine from now on, the page's own out of sight. */
 export function drawBuffs(): void {
-  document.getElementById('buffs')?.classList.add('kit-mirror');
+  document.getElementById('buffs')?.classList.toggle('kit-mirror', true);
   onFrame(follow);
 }

@@ -226,7 +226,7 @@ function followButton(): void {
 /** The chat drawn by the engine from now on, the page's own out of sight. */
 export function drawChat(): void {
   onFrame(() => {
-    for (const id of ['chat', 'btn-chat']) document.getElementById(id)?.classList.add('kit-mirror');
+    for (const id of ['chat', 'btn-chat']) document.getElementById(id)?.classList.toggle('kit-mirror', true);
     followChat();
     followButton();
   });

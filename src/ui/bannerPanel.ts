@@ -7,6 +7,7 @@ import { Panel, onFrame } from './kit/panel';
 import { standIn } from './kit/press';
 import { along, ease, keyframed, now } from './kit/motion';
 import type { TextStyle } from './overlay/paint';
+import { shownOnPage } from './kit/shownOnPage';
 
 const TITLE: TextStyle = {
   face: 'display', size: 54, weight: 900, spacing: 4, color: '#f3e1b0', shadows: [
@@ -50,7 +51,7 @@ function make(page: HTMLElement): Banner {
 function follow(): void {
   const page = document.getElementById('banner');
   if (!page) return;
-  const shows = page.checkVisibility();
+  const shows = shownOnPage(page);
   if (!drawn && !shows) return;
   drawn ??= make(page);
   const count = page.dataset.shown ?? '';
@@ -70,6 +71,6 @@ function follow(): void {
 
 /** The banner drawn by the engine from now on, the page's own out of sight. */
 export function drawBanner(): void {
-  document.getElementById('banner')?.classList.add('kit-mirror');
+  document.getElementById('banner')?.classList.toggle('kit-mirror', true);
   onFrame(follow);
 }

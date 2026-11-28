@@ -353,7 +353,7 @@ function animate(c: Choice): void {
 
 /** The choice drawn by the engine from now on, its page's own put out of sight. */
 export function drawDecision(): void {
-  document.getElementById('decision')?.classList.add('kit-mirror');
+  document.getElementById('decision')?.classList.toggle('kit-mirror', true);
   onFrame(follow);
 }
 

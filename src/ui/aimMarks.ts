@@ -10,6 +10,7 @@ import { chargeRing } from './chargeMark';
 import type { TextStyle } from './overlay/paint';
 import type { Length } from '../engine/ui';
 import { uiScales } from './scale';
+import { shownIf, shownOnPage } from './kit/shownOnPage';
 
 /** the crosshair's box and its bars' width, at rest and at full draw (px); its colour so */
 const CROSS = 22;
@@ -127,7 +128,7 @@ function paintRing(share: number, ink: string) {
 }
 
 /** Whether the page's `id` shows, as its own rules have it. */
-const shows = (id: string): boolean => !!document.getElementById(id)?.checkVisibility();
+const shows = (id: string): boolean => shownIf(document.getElementById(id));
 
 /** The marks brought up to the page's: each frame, and when the lab reads them as the page stands now. */
 export function followAimMarks(): void {
@@ -169,6 +170,6 @@ export function finishBeat(): void {
 
 /** The marks drawn by the engine from now on, the page's own out of sight. */
 export function drawAimMarks(): void {
-  for (const id of ['crosshair', 'charge-ring', 'look-hint']) document.getElementById(id)?.classList.add('kit-mirror');
+  for (const id of ['crosshair', 'charge-ring', 'look-hint']) document.getElementById(id)?.classList.toggle('kit-mirror', true);
   onFrame(followAimMarks);
 }

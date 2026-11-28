@@ -43,8 +43,8 @@ export class Quat {
     return this;
   }
 
-  /** writes all four without telling: the methods' one way in */
-  private put(x: number, y: number, z: number, w: number): void {
+  /** writes all four without telling: the methods' one way in (a node's own writes them and tells it once) */
+  protected put(x: number, y: number, z: number, w: number): void {
     this.x = x;
     this.y = y;
     this.z = z;

@@ -45,7 +45,7 @@ export interface Toast {
 export function drawToast(toast: Toast): void {
   const page = document.getElementById(toast.id);
   if (!page) return;
-  page.classList.add('kit-mirror');
+  page.classList.toggle('kit-mirror', true);
   const room = new Panel(layer(toast.z), { position: 'absolute', inset: 0, direction: 'column', alignItems: 'center' },
     {}, 'ui');
   const sheet = [...TOAST, ...toast.sheet];

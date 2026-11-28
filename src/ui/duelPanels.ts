@@ -8,6 +8,7 @@ import { Panel, onFrame } from './kit/panel';
 import { standIn } from './kit/press';
 import { uiScales } from './scale';
 import type { Shadow, TextStyle } from './overlay/paint';
+import { shownOnPage } from './kit/shownOnPage';
 
 const FRAME = '#a07c46';
 const INK = '#e6dcc8';
@@ -91,7 +92,7 @@ function makeResult(page: HTMLElement): Result {
 function followScore(): void {
   const page = document.getElementById('duel-score');
   if (!page) return;
-  const shows = page.checkVisibility();
+  const shows = shownOnPage(page);
   if (!score && !shows) return;
   score ??= makeScore(page);
   score.root.show(shows);
@@ -108,7 +109,7 @@ function followScore(): void {
 function followResult(): void {
   const page = document.getElementById('duel-result');
   if (!page) return;
-  const shows = page.checkVisibility();
+  const shows = shownOnPage(page);
   if (!result && !shows) return;
   result ??= makeResult(page);
   result.root.show(shows);
@@ -128,7 +129,7 @@ function followResult(): void {
 
 /** The duel's score and result drawn by the engine from now on, the page's own out of sight. */
 export function drawDuelPanels(): void {
-  for (const id of ['duel-score', 'duel-result']) document.getElementById(id)?.classList.add('kit-mirror');
+  for (const id of ['duel-score', 'duel-result']) document.getElementById(id)?.classList.toggle('kit-mirror', true);
   onFrame(() => {
     followScore();
     followResult();

@@ -48,7 +48,7 @@ export class Euler {
   }
 
   /** writes all four without telling: the methods' one way in */
-  private put(x: number, y: number, z: number, order: EulerOrder): void {
+  protected put(x: number, y: number, z: number, order: EulerOrder): void {
     this.x = x;
     this.y = y;
     this.z = z;

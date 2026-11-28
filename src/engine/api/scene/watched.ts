@@ -48,6 +48,16 @@ export class WatchedVec3 extends Vec3 {
     this._z = value;
     this.owner?.touched();
   }
+
+  /** All three written, its node told once: the maths' every write of all three comes through `set` (`copy`, `add`,
+   *  `lerp`...), which through the accessors told it three times. */
+  override set(x: number, y: number, z: number): this {
+    this._x = x;
+    this._y = y;
+    this._z = z;
+    this.owner?.touched();
+    return this;
+  }
 }
 
 /** A node's turn as a quaternion. */
@@ -62,6 +72,17 @@ export class WatchedQuat extends Quat {
   constructor(owner: Mover) {
     super();
     this.owner = owner;
+  }
+
+  /** All four written by a method of the maths (`Quat.put`), its node told once: through the four accessors, each
+   *  write asked whether it was fresh and told its node it moved, four times a slerp or a multiply. */
+  protected override put(x: number, y: number, z: number, w: number): void {
+    this.owner?.fresh();
+    this._qx = x;
+    this._qy = y;
+    this._qz = z;
+    this._qw = w;
+    this.owner?.touched();
   }
 
   /** Its four numbers stored as they are, telling nobody: the node keeping it in step with its angles. */
@@ -126,6 +147,17 @@ export class WatchedEuler extends Euler {
   constructor(owner: Mover) {
     super();
     this.owner = owner;
+  }
+
+  /** All three angles and the order written by a method of the maths (`Euler.put`: `set`, `copy`...), its node told
+   *  once: a bone's `rotation.set` went through four accessors, each telling it. */
+  protected override put(x: number, y: number, z: number, order: Euler['order']): void {
+    this.owner?.fresh();
+    this._ex = x;
+    this._ey = y;
+    this._ez = z;
+    this._order = order;
+    this.owner?.touched();
   }
 
   /** Its angles stored as they are, telling nobody: the node keeping them in step with its quaternion. */
