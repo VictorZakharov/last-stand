@@ -26,6 +26,7 @@ import { buildFire, emberMat, type FireLog } from './fire';
 import { boxWithUV, mergeStill, staticShadow, type BiomeLook, type Updater } from './props';
 import { Wall } from './wall';
 import { buildDoor, type Door } from './door';
+import { liveFlames } from './candleFlames';
 import type { Relief } from './ground';
 import type { Obstacle } from '../types';
 import { lengthSeat, stoolSeat, type Seat } from './seats';
@@ -214,18 +215,27 @@ function flameGeometry(r: number, h: number): THREE.BufferGeometry {
 }
 const FLAME = flameGeometry(0.014, 0.06), HALO = flameGeometry(0.03, 0.11);
 
-/** A candle on (x, y, z): wax, a flame and its glow; and its light, if it has one (one of the room's ten). */
-export function candle(g: THREE.Object3D, M: Mats, x: number, y: number, z: number, high = 0.16, light?: typeof CANDLE): void {
+/** A candle on (x, y, z): wax, a flame and its glow; and its light, if it has one (one of the room's ten). Its flame
+ *  is returned: the room burns it as a fire as it's finished (`liveFlames` in candleFlames.ts), swaying the light its
+ *  `userData.light` names. */
+export function candle(g: THREE.Object3D, M: Mats, x: number, y: number, z: number, high = 0.16,
+  light?: typeof CANDLE): THREE.Mesh {
   drum(g, 0.022, 0.025, high, x, y, z, M.wax, 8).castShadow = false;
   const flame = new THREE.Mesh(FLAME, M.flame);
   flame.position.set(x, y + high + 0.004, z);
   const halo = new THREE.Mesh(HALO, M.glow);
   halo.position.set(x, y + high - 0.01, z);
+  // (burnt as a fire by the room as it's finished, `liveFlames` in candleFlames.ts)
+  flame.userData.candleFlame = 'flame';
+  halo.userData.candleFlame = 'halo';
   g.add(flame, halo);
-  if (!light) return;
+  if (!light) return flame;
   const l = new THREE.PointLight(light.color, light.intensity, light.reach, 2 + LAMP_SOFT * 0.25);
   l.position.set(x, y + high + 0.12, z);
+  // (swayed by its flame's puffs)
+  flame.userData.light = l;
   g.add(l);
+  return flame;
 }
 
 /** A wall lantern on the wall at (x, y, z), its arm out along (dx, dz): an iron frame round a glowing pane, its light. */
@@ -238,8 +248,10 @@ export function lantern(g: THREE.Object3D, M: Mats, x: number, y: number, z: num
   for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
     box(g, 0.02, 0.28, 0.02, at.x + sx * 0.09, at.y, at.z + sz * 0.09, M.iron).castShadow = false;
   }
-  candle(g, M, at.x, at.y + 0.01, at.z, 0.1);
+  const flame = candle(g, M, at.x, at.y + 0.01, at.z, 0.1);
   const l = new THREE.PointLight(lit.color, lit.intensity, lit.reach, 2 + LAMP_SOFT * 0.5);
+  // (swayed by its candle's flame)
+  flame.userData.light = l;
   // (well out from its wall: 0.47 m off it, its light fell on the plaster at some 30 times the room's and blew out
   // to a flat orange disc round every lantern, from play "we need to fix the overglow"; the room's light is the same)
   l.position.set(at.x + dx * LANTERN_OUT, at.y + 0.18, at.z + dz * LANTERN_OUT);
@@ -825,6 +837,8 @@ export function finish(id: RoomId, b: Build, extra: Partial<Room> = {}): Room {
       for (const light of lights) b.g.attach(light);
     }
   }
+  // (the candles' flames burnt as fires, each hidden with the wall it's on as that's cut away)
+  liveFlames(b.g, new Set([...b.sides.map((s) => s.group), ...against.flat()]), b.updaters);
   for (const seat of b.seats) {
     for (const target of seat.outline) keepApart(target.root);
     for (const mesh of seat.meshes) keepApart(mesh);

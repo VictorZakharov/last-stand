@@ -226,7 +226,7 @@ async function pictured(lab: Lab): Promise<Pictured[]> {
   const moments = [
     lab.picture('pottery-left', ['back'], [], { at: new THREE.Vector3(-4.3, 2.5, -3.85), distance: 1.7 }),
     lab.picture('pottery-left-low', ['back'], [], { at: new THREE.Vector3(-4.3, 1.9, -3.85), distance: 1.7 }),
-    lab.picture('pottery-right', ['back'], [], { at: new THREE.Vector3(3.0, 2.1, -3.85), distance: 1.7 }),
+    lab.picture('pottery-right', ['back'], [], { at: new THREE.Vector3(4.0, 2.1, -3.85), distance: 1.7 }),
     lab.picture('pottery-wall', ['back'], [], { at: new THREE.Vector3(-4.3, 2.05, -3.85), distance: 5 }),
   ];
   for (const { label, at, facing } of STANDS) {
