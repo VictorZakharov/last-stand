@@ -21,12 +21,14 @@ import { ashlar, bannerCloth, boards, ctx2d, canvasOf, flagstone, grunge, pbrMat
 import { LAMP_SOFT } from '../core/lamps';
 import { particles, col } from '../fx/particles';
 import { mulberry, rand } from '../util';
+import { joinParts, seatWoods, STOOL_R } from './stool';
 import { bannerGeo, CRYPT_ENV } from './crypt';
 import { buildFire, emberMat, type FireLog } from './fire';
 import { boxWithUV, mergeStill, staticShadow, type BiomeLook, type Updater } from './props';
 import { Wall } from './wall';
 import { buildDoor, type Door } from './door';
 import { liveFlames } from './candleFlames';
+import { CANDLE_FLAME, flameGeometry, taperWax, taperWick } from './candleKit';
 import type { Relief } from './ground';
 import type { Obstacle } from '../types';
 import { lengthSeat, stoolSeat, type Seat } from './seats';
@@ -153,7 +155,8 @@ export interface Mats {
   floor: THREE.MeshStandardMaterial; plaster: THREE.MeshStandardMaterial; timber: THREE.MeshStandardMaterial;
   panel: THREE.MeshStandardMaterial; oak: THREE.MeshStandardMaterial; stone: THREE.MeshStandardMaterial;
   hearthStone: THREE.MeshStandardMaterial; iron: THREE.MeshStandardMaterial; brass: THREE.MeshStandardMaterial;
-  wax: THREE.MeshStandardMaterial; flame: THREE.MeshStandardMaterial; glow: THREE.MeshBasicMaterial;
+  wax: THREE.MeshStandardMaterial; flame: THREE.MeshStandardMaterial; tongue: THREE.MeshBasicMaterial;
+  glow: THREE.MeshBasicMaterial;
   glass: THREE.MeshStandardMaterial; paper: THREE.MeshStandardMaterial; leather: THREE.MeshStandardMaterial;
   rug: THREE.MeshStandardMaterial; dark: THREE.MeshStandardMaterial;
 }
@@ -170,8 +173,10 @@ function makeMats(): Mats {
     iron: new THREE.MeshStandardMaterial({ color: 0x222024, metalness: 0.85, roughness: 0.6 }),
     brass: new THREE.MeshStandardMaterial({ color: 0xc89a4a, metalness: 0.9, roughness: 0.38 }),
     wax: new THREE.MeshStandardMaterial({ color: 0xf2e6c8, roughness: 0.7 }),
-    // (a flame is its fire, not a lit egg: the village's torches' look)
-    flame: new THREE.MeshStandardMaterial({ color: 0x2a2014, roughness: 0.3, emissive: 0xffc070, emissiveIntensity: 1.1 }),
+    // (a candle's flame as the chronicle's lectern's is, `candleFlame` in village.ts: a pale core, its programs the
+    // torches', in a see-through orange tongue)
+    flame: new THREE.MeshStandardMaterial({ color: 0x2a2014, roughness: 0.3, emissive: 0xffe6a0, emissiveIntensity: 2.4 }),
+    tongue: new THREE.MeshBasicMaterial({ color: 0xff7a20, transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false }),
     glow: new THREE.MeshBasicMaterial({ color: 0xff8a30, transparent: true, opacity: 0.2, blending: THREE.AdditiveBlending, depthWrite: false }),
     // (night outside: a deep blue pane, a little lit)
     glass: new THREE.MeshStandardMaterial({ color: 0x0c1424, roughness: 0.2, metalness: 0.1, emissive: 0x1a2c50, emissiveIntensity: 0.35 }),
@@ -203,39 +208,48 @@ export function drum(g: THREE.Object3D, rTop: number, rFoot: number, h: number, 
   return mesh;
 }
 
-/** A pointed tongue of flame, `r` round and `h` tall (the village's torches' shape). */
-function flameGeometry(r: number, h: number): THREE.BufferGeometry {
-  const outline: THREE.Vector2[] = [];
-  for (let k = 0; k <= 10; k++) {
-    const t = k / 10;
-    const wide = t < 0.2 ? Math.sin((t / 0.2) * Math.PI / 2) : Math.pow(1 - (t - 0.2) / 0.8, 1.6);
-    outline.push(new THREE.Vector2(Math.max(r * wide, 0.0005), h * t));
-  }
-  return new THREE.LatheGeometry(outline, 8);
-}
-const FLAME = flameGeometry(0.014, 0.06), HALO = flameGeometry(0.03, 0.11);
+/** a candle's flame's parts, the chronicle's lectern's (`candleKit.ts`), and the soft glow round it */
+// (in fewer rows and sides than the lectern's 12 and 10: a room's dozens of candles, mostly a chandelier's, were 720
+// triangles a flame, `lab village --only sweepWithinBudgets`)
+const TONGUE = flameGeometry(CANDLE_FLAME.tongue.r, CANDLE_FLAME.tongue.h, CANDLE_FLAME.tongue.lean, 7, 8);
+const CORE = flameGeometry(CANDLE_FLAME.core.r, CANDLE_FLAME.core.h, CANDLE_FLAME.core.lean, 5, 6);
+const HALO = flameGeometry(0.03, 0.11, 0, 5, 6);
+/** a room candle's flame against the lectern's */
+const ROOM_FLAME = 0.75;
 
-/** A candle on (x, y, z): wax, a flame and its glow; and its light, if it has one (one of the room's ten). Its flame
- *  is returned: the room burns it as a fire as it's finished (`liveFlames` in candleFlames.ts), swaying the light its
- *  `userData.light` names. */
+/** A candle on (x, y, z), as the chronicle's lectern's is (`candleKit.ts`): a taper melted hollow at its top with wax
+ *  run down it, its wick, its flame (a tongue round a core) and the glow round it; and its light, if it has one (one of
+ *  the room's ten). The room makes its flames waver as it's finished (`liveFlames` in candleFlames.ts), and its light
+ *  breathe with them: the light the tongue it returns names (`userData.light`). */
 export function candle(g: THREE.Object3D, M: Mats, x: number, y: number, z: number, high = 0.16,
   light?: typeof CANDLE): THREE.Mesh {
-  drum(g, 0.022, 0.025, high, x, y, z, M.wax, 8).castShadow = false;
-  const flame = new THREE.Mesh(FLAME, M.flame);
-  flame.position.set(x, y + high + 0.004, z);
+  const stick = new THREE.Group();
+  stick.position.set(x, y, z);
+  g.add(stick);
+  taperWax(stick, M.wax, high, false, 'room');
+  taperWick(stick, M.iron, high);
+  const foot = y + high + CANDLE_FLAME.over;
+  // (a room's flames three quarters of the lectern's, which stands alone where the player looks at it close: at its
+  // size on a mantel's taper the flame read as "a torch tip", from review)
+  const tongue = new THREE.Mesh(TONGUE, M.tongue);
+  tongue.position.set(x, foot, z);
+  const core = new THREE.Mesh(CORE, M.flame);
+  core.position.set(x, foot + CANDLE_FLAME.coreOver * ROOM_FLAME, z);
   const halo = new THREE.Mesh(HALO, M.glow);
   halo.position.set(x, y + high - 0.01, z);
-  // (burnt as a fire by the room as it's finished, `liveFlames` in candleFlames.ts)
-  flame.userData.candleFlame = 'flame';
+  for (const part of [tongue, core]) part.scale.setScalar(ROOM_FLAME);
+  // (its glow half the lectern's: wider, it sat on the taper as "a wide brown-orange cone skirt", from review)
+  halo.scale.setScalar(ROOM_FLAME * 0.6);
+  tongue.userData.candleFlame = 'tongue';
+  core.userData.candleFlame = 'core';
   halo.userData.candleFlame = 'halo';
-  g.add(flame, halo);
-  if (!light) return flame;
+  g.add(tongue, core, halo);
+  if (!light) return tongue;
   const l = new THREE.PointLight(light.color, light.intensity, light.reach, 2 + LAMP_SOFT * 0.25);
   l.position.set(x, y + high + 0.12, z);
-  // (swayed by its flame's puffs)
-  flame.userData.light = l;
+  tongue.userData.light = l;
   g.add(l);
-  return flame;
+  return tongue;
 }
 
 /** A wall lantern on the wall at (x, y, z), its arm out along (dx, dz): an iron frame round a glowing pane, its light. */
@@ -600,62 +614,34 @@ export function bench(g: THREE.Object3D, M: Mats, x: number, z: number, w: numbe
   b.position.set(x, 0, z);
   b.rotation.y = turn;
   g.add(b);
-  const top = box(b, w, 0.06, 0.32, 0, 0.42, 0, M.oak);
-  for (const sx of [-1, 1]) box(b, 0.06, 0.42, 0.28, sx * (w / 2 - 0.15), 0, 0, M.timber);
+  // (a trestle bench, as a joiner builds one (from play, "they will break on first day of service"): its two ends
+  // joined by a stretcher through them, wedged outside each, and an apron along each side under its top; in the
+  // seats' woods, `seatWoods` in stool.ts)
+  const { seat, frame } = seatWoods(M), end = w / 2 - 0.15;
+  const top = box(b, w, 0.06, 0.32, 0, 0.42, 0, seat);
+  for (const sx of [-1, 1]) {
+    box(b, 0.06, 0.42, 0.28, sx * end, 0, 0, frame);
+    box(b, 0.03, 0.05, 0.025, sx * (end + 0.045), 0.12, 0, frame);
+    box(b, w - 0.24, 0.06, 0.022, 0, 0.36, sx * 0.13, frame);
+  }
+  box(b, end * 2 + 0.12, 0.07, 0.045, 0, 0.1, 0, frame);
+  joinParts(b, [top]);
   return { group: b, top };
 }
 
 /** how far either way of a tavern bench's middle a body sits along it (m) */
 export const BENCH_SAT = 0.7;
 
-/** A stool's top's radius (m). */
-const STOOL_R = 0.17;
-
-/** A stool at (x, z). */
-export function stool(g: THREE.Object3D, M: Mats, x: number, z: number, high = 0.5): Furniture {
-  const s = new THREE.Group();
-  g.add(s);
-  const top = drum(s, STOOL_R, STOOL_R, 0.05, x, high - 0.05, z, M.oak, 12);
-  for (let k = 0; k < 3; k++) {
-    const a = (k / 3) * Math.PI * 2;
-    const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.025, high - 0.05, 5), M.timber);
-    leg.position.set(x + Math.cos(a) * 0.11, (high - 0.05) / 2, z + Math.sin(a) * 0.11);
-    leg.rotation.set(Math.sin(a) * 0.12, 0, -Math.cos(a) * 0.12);
-    leg.castShadow = true;
-    s.add(leg);
-  }
-  return { group: s, top };
-}
+/** A stool (`stool.ts`): built there, named here with the kit's other furniture. */
+export { stool } from './stool';
 
 /** A stool sat on, where it stands (`x`, `z`, as built). */
 export function stoolSeatOf(f: Furniture, x: number, z: number): Seat {
   return stoolSeat(x, z, STOOL_R, [f.top], [{ root: f.group }]);
 }
 
-/** A barrel on its side or standing at (x, y, z): staves and iron hoops. */
-export function barrel(g: THREE.Object3D, M: Mats, x: number, y: number, z: number, lying = false, turn = 0): void {
-  const b = new THREE.Group();
-  b.position.set(x, y, z);
-  b.rotation.set(lying ? Math.PI / 2 : 0, turn, 0);
-  if (lying) b.position.y += 0.3;
-  g.add(b);
-  const outline = [[0.24, -0.4], [0.29, -0.2], [0.31, 0], [0.29, 0.2], [0.24, 0.4]].map(([r, yy]) => new THREE.Vector2(r, yy));
-  const staves = new THREE.Mesh(new THREE.LatheGeometry(outline, 16), M.oak);
-  staves.castShadow = staves.receiveShadow = true;
-  b.add(staves);
-  for (const yy of [-0.39, 0.39]) {
-    const head = new THREE.Mesh(new THREE.CircleGeometry(0.24, 16).rotateX(yy > 0 ? -Math.PI / 2 : Math.PI / 2), M.panel);
-    head.position.y = yy;
-    b.add(head);
-  }
-  for (const yy of [-0.3, -0.12, 0.12, 0.3]) {
-    const r = 0.24 + (0.31 - 0.24) * (1 - Math.abs(yy) / 0.4) + 0.005;
-    const hoop = new THREE.Mesh(new THREE.TorusGeometry(r, 0.012, 4, 20).rotateX(Math.PI / 2), M.iron);
-    hoop.position.y = yy;
-    b.add(hoop);
-  }
-  if (!lying) b.position.y += 0.4;
-}
+/** A barrel (`barrel.ts`): built there, named here with the kit's other furniture. */
+export { barrel } from './barrel';
 
 /** A tankard at (x, y, z). */
 export function tankard(g: THREE.Object3D, M: Mats, x: number, y: number, z: number, metal = false): void {

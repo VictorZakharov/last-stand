@@ -1,9 +1,9 @@
 // `lab dressing`: what dresses the tavern's walls and beams, the hero put straight into the room (no door, no
-// village):
-// its mantel's cups, the herbs hung over the bar, the bar's bottles, its lanterns, and its shelves against the wall's
-// posts, pictured close up and as the player stands in the room. Read: each shelf's board clear of the wall's posts,
-// what stands on the mantel standing on its top, and the candles' flames moving. `--canary` slides a board onto a
-// post, lifts a thing off the mantel and reads the flames from one frame twice, each of which must be found.
+// village): its mantel's cups, the herbs hung over the bar, the bar's bottles, its counter, its barrels, its stools,
+// its lanterns, and its shelves against the wall's posts, pictured close up and as the player stands in the room.
+// Read: each shelf's board clear of the wall's posts, what stands on the mantel standing on its top, and the candles'
+// flames moving. `--canary` slides a board onto a post, lifts a thing off the mantel and reads the flames from one
+// frame twice, each of which must be found.
 import * as THREE from 'three';
 import type { Lab, Pictured, Report } from './lab';
 import { G } from '../../../src/state';
@@ -27,11 +27,19 @@ interface CloseUp {
 /** the close-ups, taken with the hero facing the back wall square on (they turn with his facing) */
 const CLOSE_UPS: readonly CloseUp[] = [
   { label: 'dressing-mantel', view: 'back', at: [0.6, 1.6, -3.2], distance: 4.2 },
-  { label: 'dressing-mantel-candle', view: 'back', at: [0.3, 1.66, -3.2], distance: 1.0 },
+  { label: 'dressing-mantel-candle', view: 'back', at: [1.22, 1.62, -3.2], distance: 1.0 },
   { label: 'dressing-shelf-by-the-post', view: 'back', at: [3.6, 2.1, -3.85], distance: 5.5 },
   { label: 'dressing-herbs', view: 'back', at: [4.4, 2.5, -2.2], distance: 3.2 },
   { label: 'dressing-bottles', view: 'left', at: [5.2, 1.7, -1.0], distance: 2.8 },
+  { label: 'dressing-bottles-close', view: 'left', at: [5.2, 1.95, -1.3], distance: 1.1 },
+  { label: 'dressing-bottles-low', view: 'left', at: [5.2, 1.45, -0.9], distance: 1.4 },
   { label: 'dressing-lantern', view: 'left', at: [5.1, 2.45, -2.6], distance: 1.2 },
+  { label: 'dressing-bar', view: 'left', at: [3.7, 0.7, -0.9], distance: 3.4 },
+  { label: 'dressing-bar-end', view: 'back', at: [4.1, 0.7, 1.0], distance: 4.5 },
+  { label: 'dressing-barrels', view: 'right', at: [-4.6, 0.7, 3.3], distance: 5.0 },
+  { label: 'dressing-bar-stools', view: 'left', at: [2.95, 0.45, -1.2], distance: 2.6 },
+  { label: 'dressing-table-stools', view: 'left', at: [0.92, 0.35, 0.22], distance: 1.8 },
+  { label: 'dressing-bar-front', view: 'left', at: [5.0, 0.7, -2.6], distance: 4.5 },
 ];
 
 /** the frames between the lantern's two pictures */

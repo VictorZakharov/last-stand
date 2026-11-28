@@ -45,9 +45,6 @@ export interface FireSpec {
   /** its flames' light, a share of a fire's own (1 by default): seen from low and near, as the hall of heroes' camera
    *  sees its braziers, a ray through their foot crosses the most of them, and at a fire's own it burned white there */
   glow?: number;
-  /** whether it burns on a bed of coals (true by default): a candle's burns on its wick, and a bed a candle was a draw
-   *  more for each */
-  bed?: boolean;
 }
 
 /** A log in a fire, from end to end, its thickness its radius (m): a cylinder with flat ends. */
@@ -603,15 +600,10 @@ function streamAt(at: THREE.Vector3): () => number {
 export function buildFire(scene: THREE.Object3D, spec: FireSpec, updaters: Updater[]): void {
   const { at, radius, height, light } = spec;
   const rng = streamAt(at);
-  // (its coals' numbers drawn whether or not it has them, so a fire's flames are the same either way)
-  const coalsShape = coalsGeo(radius, spec.dish, rng);
-  if (spec.bed ?? true) {
-    const coals = new THREE.Mesh(coalsShape, emberMat(at, radius, BED_HEAT));
-    coals.position.copy(at);
-    scene.add(coals);
-  } else {
-    coalsShape.dispose();
-  }
+  const bed = emberMat(at, radius, BED_HEAT);
+  const coals = new THREE.Mesh(coalsGeo(radius, spec.dish, rng), bed);
+  coals.position.copy(at);
+  scene.add(coals);
   const seed = rng();
   const flames = flameMat(radius, height, seed);
   // (the shader, the embers and the smoke read the world: laid out in a group turned and moved, as the yard's torches

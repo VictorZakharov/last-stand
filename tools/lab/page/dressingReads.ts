@@ -1,14 +1,15 @@
 // What `lab dressing` reads of the tavern as it's built (its parts' boxes as the room's merge kept them,
 // `mergedParts`):
 // the shelves against its walls clear of the walls' posts, what stands on the mantel standing on its top, and the
-// candles burning as fires, each from frame to frame.
+// candles' flames wavering from frame to frame.
 import * as THREE from 'three';
 import { partBoxes } from './houses';
 
-/** what a fire's flames are named (`buildFire` in world/fire.ts) */
-const FLAMES = 'flames';
-/** the fewest fires the tavern burns with its candles as fires: its hearth and its 18 candles (main: its hearth) */
-const FIRES_LEAST = 15;
+/** the candles' flames' mesh's name (`FLAME_NAMES.tongue` in world/candleFlames.ts): spelt here, not
+ *  imported, so a commit before it (an A/B's main) still loads this */
+const FLAMES = 'candle flames';
+/** the fewest candles' flames the tavern shows from the room's middle (it has 18) */
+const FLAMES_LEAST = 15;
 /** the mantel shelf's size (m: `hearth` in world/rooms.ts, its width 2.3, 0.1 thick, 0.32 deep) */
 const MANTEL = new THREE.Vector3(2.3, 0.1, 0.32);
 /** how near a part's foot must be the mantel's top to be read as standing on it, and how far off it may stand (m) */
@@ -108,24 +109,40 @@ export function readMantel(mantel: THREE.Box3, things: readonly THREE.Box3[], li
   lines.push(`${things.length} things on the mantel, the furthest off its top ${(most * 100).toFixed(1)} cm`);
 }
 
-/** A fire's moment now: its loop's frame and its puff, as its flames' shader is given them. */
-type FireMoment = [number, number];
-
-/** Each fire's moment in the room now, its hearth's and its candles' (`buildFire`'s flames, named `flames`). */
-export function flamesNow(room: THREE.Object3D): FireMoment[] {
-  const moments: FireMoment[] = [];
-  room.traverse((object) => {
-    const uniforms = object.userData.flames as Record<string, { value: number }> | undefined;
-    if (object.name === FLAMES && uniforms) moments.push([uniforms.uFrame.value, uniforms.uPuff.value]);
-  });
-  return moments;
+/** The candles' flames' points now, and how many points a flame has (none: the room's flames are still meshes merged
+ *  with it, as main's). */
+export function flamesNow(room: THREE.Object3D): { at: Float32Array; points: number } | null {
+  const flames = room.getObjectByName(FLAMES) as THREE.Mesh | undefined;
+  const points = flames?.userData.flamePoints as number | undefined;
+  if (!flames || !points) return null;
+  return { at: (flames.geometry.attributes.position.array as Float32Array).slice(), points };
 }
 
-/** The room's fires: enough of them that its candles burn as fires, each burning on between `before` and `after`. */
-export function readFlames(before: readonly FireMoment[], after: readonly FireMoment[], lines: string[],
+/** whether a flame's points (from `from`, `count` floats) are all at one point: drawn in, its wall cut away */
+function drawnIn(at: Float32Array, from: number, count: number): boolean {
+  for (let k = from + 3; k < from + count; k++) if (at[k] !== at[from + (k - from) % 3]) return false;
+  return true;
+}
+
+/** How many of the candles' flames shown (not drawn in to nothing, on a wall cut away) moved between `before` and
+ *  `after`: every one must, and there must be the tavern's candles' worth. */
+export function readFlames(before: ReturnType<typeof flamesNow>, after: ReturnType<typeof flamesNow>, lines: string[],
   problems: string[]): void {
-  const still = before.filter(([frame, puff], k) => frame === after[k]?.[0] && puff === after[k]?.[1]).length;
-  lines.push(`${before.length} fires in the room, ${before.length - still} burning on over the frames read`);
-  if (before.length < FIRES_LEAST) problems.push(`${before.length} fires in the room: its candles burn none`);
-  if (still) problems.push(`${still} of the room's ${before.length} fires stood still`);
+  if (!before || !after) {
+    problems.push('the candles\' flames are no mesh of their own: they stand still, merged with the room');
+    return;
+  }
+  const each = before.points * 3;
+  let shown = 0;
+  let moved = 0;
+  for (let from = 0; from < before.at.length; from += each) {
+    if (drawnIn(before.at, from, each)) continue;
+    shown++;
+    const flame = before.at.subarray(from, from + each);
+    const still = flame.every((value, k) => Math.abs(value - after.at[from + k]) < 1e-5);
+    if (!still) moved++;
+  }
+  lines.push(`the candles' flames: ${moved} of ${shown} shown moved over the frames read`);
+  if (shown < FLAMES_LEAST) problems.push(`${shown} candles' flames shown: the tavern has ${FLAMES_LEAST} at least`);
+  if (moved < shown) problems.push(`${shown - moved} of the candles' ${shown} flames stood still`);
 }

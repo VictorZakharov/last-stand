@@ -11,6 +11,7 @@ import {
 } from '../rooms';
 import { keepPotteryApart, plateShelf, potteryOn } from '../potShelf';
 import { bottles, herbs, mantel, oldBottleDraws } from '../tavernDressing';
+import { barCounter } from '../tavernBar';
 import { lengthSeat } from '../seats';
 import { mulberry } from '../../util';
 import { keeperTalk, tavernKeeper } from '../tavernKeeper';
@@ -75,11 +76,9 @@ export function build(group: THREE.Group): Room {
   // (on its top at 1.45, jugs, tankards and candles: five tankards alike stood a centimetre over it)
   mantel(g, M, 0.6, MANTEL_TOP, -hz + 0.8);
   // --- the bar: a counter down the east wall, a shelf of bottles behind it, kegs on a rack ---
-  const barX = hx - 1.3, barFrom = -hz + 0.9, barTo = 1.0, barLong = barTo - barFrom;
-  box(g, 0.55, 1.0, barLong, barX, 0, (barFrom + barTo) / 2, M.panel);
-  box(g, 0.7, 0.07, barLong + 0.1, barX, 1.0, (barFrom + barTo) / 2, M.oak);
-  box(g, 0.6, 0.08, 0.06, barX, 0.08, barTo + 0.05, M.timber);
-  for (let z = barFrom + 0.4; z < barTo; z += 0.75) box(g, 0.04, 0.85, 0.08, barX - 0.29, 0.08, z, M.timber);
+  const barX = hx - 1.3, barFrom = -hz + 0.9, barTo = 1.0;
+  // (framed and fielded, a thick top with its nosing, a brass foot rail: world/tavernBar.ts)
+  barCounter(g, M, barX, barFrom, barTo, { worn, rim });
   for (let z = barFrom + 0.3; z < barTo - 0.2; z += 0.8) obstacles.push({ x: barX, z, r: 0.42, h: 1.07 });
   obstacles.push({ x: barX, z: barTo - 0.2, r: 0.42, h: 1.07 });
   // (the keeper's place clear: his cask stands at his left, his mug slides across before him)
@@ -88,11 +87,7 @@ export function build(group: THREE.Group): Room {
   // his legs near straight, as a man stood, from review; lower, his knees bend as a man's on a high stool, "the hero can
   // sit on the bar stools", Kenneth's round 3)
   for (const z of BAR_STOOLS) {
-    const barStool = stool(g, T, BAR_STOOL_X, z, BAR_STOOL_HIGH);
-    const rung = new THREE.Mesh(new THREE.TorusGeometry(0.118, 0.011, 6, 20).rotateX(Math.PI / 2), T.timber);
-    rung.position.set(BAR_STOOL_X, BAR_STOOL_RUNG, z);
-    rung.castShadow = true;
-    barStool.group.add(rung);
+    const barStool = stool(g, T, BAR_STOOL_X, z, BAR_STOOL_HIGH, BAR_STOOL_RUNG);
     // (sat on facing the bar, whichever side he comes from: his back to the bar, he looked out at the room, "should sit
     // the other way, facing the counter", Kenneth's round 4)
     // (come close to to sit, as the bar's keep-out stands between it and the bar)
@@ -184,7 +179,8 @@ export function build(group: THREE.Group): Room {
   keepPotteryApart(pottery);
   // (dried herbs from the beams)
   // (over the bar alone: over the long table they hung before the sign)
-  herbs(g, barX - 0.5, high - 0.26, -2.2, 6);
+  // (five, the last 0.4 m short of the east wall's lantern: a sixth hung in its frame as the player saw it)
+  herbs(g, barX - 0.75, high - 0.26, -2.2, 5);
   // (a pair of antlers over the west wall, and sacks of grain)
   lantern(west, M, -(hz - 0.6), 2.3, 0, 0, 1);
   lantern(east, M, hz - 0.4, 2.4, 0, 0, 1);
