@@ -15,6 +15,7 @@ import type { Geometries } from './geometry';
 import { watchGeometries, watchMaterials } from './watchRules';
 import type { AnyMaterial, Materials } from './materials';
 import { SEE_FLAGS, type SeeKinds } from './seeKinds';
+import { OWN, OwnNumbers, kitOf, writeKit } from './ownNumbers';
 import { casterGeometry } from '../entities/models/farDetail';
 
 /** a record's flags (plan.rs) */
@@ -52,6 +53,8 @@ interface Entry {
   /** the materials and geometry it's listed under, as last written */
   materials: AnyMaterial[];
   geometry: Geometry | null;
+  /** the node it holds its kit's numbers on (`OwnNumbers`), if any */
+  ownOn: number;
 }
 
 /** A material or geometry in use: what it was last seen as, and the meshes drawn by it. */
@@ -84,9 +87,13 @@ export class Draws {
   private counting = false;
   /** whether the records being made are written whatever the mesh's layers (`recordNow`) */
   private anyLayer = false;
+  /** the kits' numbers on the nodes their records are drawn on */
+  private readonly own: OwnNumbers;
 
   constructor(private core: Core, private materials: Materials, private geometries: Geometries,
-    private seeKinds: SeeKinds) {}
+    private seeKinds: SeeKinds) {
+    this.own = new OwnNumbers(core);
+  }
 
   /** How many meshes are drawn on nodes, and how many of them each frame. */
   get count(): { meshes: number; eachFrame: number } {
@@ -97,6 +104,7 @@ export class Draws {
   add(mesh: Mesh): void {
     const entry: Entry = {
       mesh, drawn: [], skin: NONE, under: [], solid: 0, casters: 0, eachFrame: false, materials: [], geometry: null,
+      ownOn: NONE,
     };
     this.entries.set(mesh, entry);
     this.pending.add(mesh);
@@ -204,6 +212,7 @@ export class Draws {
       if (entry) this.write(entry);
     }
     for (const entry of this.eachFrame) if (seen(entry.mesh)) this.recordInto(entry.mesh, true);
+    this.own.write();
   }
 
   /** `entry`'s records written again where what they're written under changed. */
@@ -259,6 +268,14 @@ export class Draws {
       entry.drawn.push(engine.draw_on_node(node, record, placing, placed, skin, reach));
     }
     this.core.freshViews();
+    // (its kit's numbers on the node, written each frame: `ownNumbers.ts`)
+    for (const material of entry.materials) {
+      const kit = kitOf(material);
+      if (!kit) continue;
+      this.own.hold(node, kit);
+      entry.ownOn = node;
+      break;
+    }
   }
 
   /** How far `mesh` reaches from its node's place, at its node's size: what the engine culls it by (0: never). */
@@ -278,6 +295,8 @@ export class Draws {
     const engine = this.core.engine;
     for (const id of entry.drawn) engine.drop_node_drawn(id);
     entry.drawn.length = 0;
+    if (entry.ownOn !== NONE) this.own.release(entry.ownOn);
+    entry.ownOn = NONE;
     entry.under = [];
     this.solid -= entry.solid;
     this.casters -= entry.casters;
@@ -459,6 +478,8 @@ export class Draws {
     if (role === 'arms' && cast !== 'only') flags = ARMS | NEVER_CULLED;
     r[at + 6] = flags;
     r[at + RAW_INSTANCES] = raw;
+    // (kept on a node, the engine writes its node's in their place)
+    writeKit(kitOf(material), r, at + OWN);
     const skinned = mesh as SkinnedMesh;
     if (skinned.isSkinnedMesh && frame && skinned.bindMode === AttachedBindMode) {
       // (bound where it stands: its world after its world's inverse, as three keeps an attached bind's inverse. By

@@ -116,10 +116,11 @@ fn surface_hook(s: ptr<function, Surface>, in: VertexOut) -> bool {
         + mapped_normal(face, in.world, along_z, textureSample(t_normal, samp, along_z).xyz) * share.z);
     }
   }
-  let dissolve = m.c[0].x;
-  let frozen = m.c[0].y;
-  let char = m.c[0].z;
-  let hit = m.c[0].w;
+  // (the kit's own, its thing's alone: ownNumbers.ts)
+  let dissolve = in.own0.x;
+  let frozen = in.own0.y;
+  let char = in.own0.z;
+  let hit = in.own0.w;
   let at = in.c0.xyz;
   var dn = 0.0;
   if (max(dissolve, char) > 0.0) { dn = kit_noise3(at * 7.0) * 0.65 + kit_noise3(at * 19.0) * 0.35; }
@@ -136,12 +137,12 @@ fn surface_hook(s: ptr<function, Surface>, in: VertexOut) -> bool {
   if (dissolve > 0.0) { edge = 1.0 - smoothstep(dissolve, dissolve + 0.09, dn); }
   let facing = clamp(dot((*s).normal, normalize(g.cam_pos.xyz - in.world)), 0.0, 1.0);
   let near = clamp(pow(in.depth / ${NEAR_GLOW.ref.toFixed(1)}, ${NEAR_GLOW.pow.toFixed(2)}), ${NEAR_GLOW.min.toFixed(2)}, 1.0);
-  (*s).emissive = ((*s).emissive * mix(1.0, near, m.c[1].x) + m.c[2].rgb * pow(1.0 - facing, 3.0) + m.c[3].rgb * edge * 3.0
+  (*s).emissive = ((*s).emissive * mix(1.0, near, m.c[1].x) + m.c[2].rgb * pow(1.0 - facing, 3.0) + in.own1.rgb * edge * 3.0
       + vec3f(0.25, 0.55, 0.9) * frozen * 0.35) * (1.0 - 0.7 * char)
     + vec3f(1.0, 0.32, 0.06) * char * smoothstep(0.6, 0.78, dn) * 1.6 * near
     + vec3f(1.0, 0.9, 0.85) * hit * 0.45 * near;
   // (the most a highlight on it gives: a blade held before the eyes)
-  (*s).shine_most = m.c[1].y;
+  (*s).shine_most = in.own1.w;
   // (a worn item's glow in its rarity's colour, black for none)
   let aura = m.c[5].xyz;
   if (aura.r + aura.g + aura.b > 0.0) {
@@ -158,59 +159,11 @@ fn surface_hook(s: ptr<function, Surface>, in: VertexOut) -> bool {
 `,
 });
 
-/** how many of the kit's own numbers `kitMoves` reads */
-const KIT_NUMBERS = 24;
-
-/** A kit's own numbers as last read, the frame they were read on, and how many times they've moved. */
-interface KitState {
-  frame: number;
-  moves: number;
-  was: Float64Array;
-  now: Float64Array;
-}
-
-const kitStates = new WeakMap<KitLooks, KitState>();
-
-/**
- * How many times `kit`'s own numbers (its foe's dissolve, frost, char, hit, edge, shade, aura, hair, shine, and the
- * gear's glow clock while it glows) have moved, read once a frame (`frame`): a foe's every material shares its kit, and
- * each read them all, nine times a foe a frame at wave 36.
- */
-function kitMoves(kit: KitLooks, frame: number): number {
-  let state = kitStates.get(kit);
-  if (!state) {
-    state = { frame: NaN, moves: 0, was: new Float64Array(KIT_NUMBERS).fill(NaN), now: new Float64Array(KIT_NUMBERS) };
-    kitStates.set(kit, state);
-  }
-  if (state.frame === frame) return state.moves;
-  state.frame = frame;
-  const now = state.now, u = kit.u, edge = u.uEdge.value;
-  now[0] = u.uDissolve.value; now[1] = u.uFrozen.value; now[2] = u.uChar.value; now[3] = u.uHit.value;
-  now[4] = edge.r; now[5] = edge.g; now[6] = edge.b;
-  now[7] = kit.near.value;
-  kit.shade.value.toArray(now, 8);
-  kit.aura.value.toArray(now, 12);
-  kit.hair.value.toArray(now, 15);
-  const aura = kit.aura.value;
-  now[18] = aura.r + aura.g + aura.b > 0 ? itemGlowUniforms.clock.value : 0;
-  now[19] = itemGlowUniforms.loop.value.w;
-  now[20] = u.uShine.value;
-  let moved = false;
-  for (let at = 0; at < KIT_NUMBERS; at++) {
-    if (now[at] !== state.was[at]) {
-      state.was[at] = now[at];
-      moved = true;
-    }
-  }
-  if (moved) state.moves++;
-  return state.moves;
-}
-
 function kitLook(kit: KitLooks, material: LitMaterial): RustLook {
-  // (what the material showed by when it was last described: its kit's moves (`kitMoves`), and what the game changes
-  // on a foe's material itself)
-  const was = new Float64Array(6).fill(NaN);
-  const now = new Float64Array(6);
+  // (what the material showed by when it was last described: what the game changes on the material itself. The
+  // kit's own numbers aren't the material's: they're its thing's, `ownNumbers.ts`)
+  const was = new Float64Array(17).fill(NaN);
+  const now = new Float64Array(17);
   // (a copy of a fur's material holds a copy of its numbers, which nothing moves: three copies `userData` as JSON)
   const fur = (): Fur | undefined => {
     const sway = material.userData.fur as Fur | undefined;
@@ -222,13 +175,17 @@ function kitLook(kit: KitLooks, material: LitMaterial): RustLook {
     casts: true,
     shared: NUMBERS,
     numbersUsed: AT.loop + 4,
-    moved(frame: number) {
-      // (its glow, opacity, flags and colours by its version alone: each moves it as it changes)
-      now[0] = kitMoves(kit, frame);
-      now[1] = material.version;
+    moved() {
+      // (its opacity, flags and colours by its version alone: each moves it as it changes)
+      now[0] = material.version;
+      now[1] = glows() ? itemGlowUniforms.clock.value : 0;
+      now[2] = itemGlowUniforms.loop.value.w;
       const sway = fur();
-      now[2] = sway ? sway.time.value : 0;
-      if (sway) sway.lag.value.toArray(now, 3);
+      now[3] = sway ? sway.time.value : 0;
+      if (sway) sway.lag.value.toArray(now, 4);
+      kit.aura.value.toArray(now, 7);
+      kit.shade.value.toArray(now, 10);
+      kit.hair.value.toArray(now, 14);
       let moved = false;
       for (let at = 0; at < now.length; at++) {
         if (now[at] !== was[at]) { was[at] = now[at]; moved = true; }
@@ -236,12 +193,12 @@ function kitLook(kit: KitLooks, material: LitMaterial): RustLook {
       return moved;
     },
     numbers(out) {
-      const u = kit.u;
-      out[0] = u.uDissolve.value; out[1] = u.uFrozen.value; out[2] = u.uChar.value; out[3] = u.uHit.value;
+      // (the dissolve, frost, char, flash, edge and shine are its thing's, not the material's: `ownNumbers.ts`)
+      out.fill(0, 0, 4);
       out[4] = kit.near.value;
-      out[5] = u.uShine.value;
+      out[5] = 0;
       kit.rim.value.toArray(out, 8);
-      u.uEdge.value.toArray(out, 12);
+      out.fill(0, 12, 15);
       kit.shade.value.toArray(out, AT.shade);
       kit.aura.value.toArray(out, AT.aura);
       out[AT.hairTinted] = kit.hairTinted ? 1 : 0;
