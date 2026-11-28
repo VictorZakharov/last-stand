@@ -21,10 +21,13 @@ const ranger: ClassDef = {
   skills: [
     {
       key: 'mouse0', impl: 'nockShot', name: 'Nockshot',
-      desc: 'Hold to draw an arrow, release to loose it: the further it is drawn, the faster and harder it flies. Costs no Energy.', tags: ['physical'],
+      desc: 'Hold to draw an arrow, release to loose it: the further it is drawn, the faster and harder it flies. Tap it to loose quick arrows. Costs no Energy.', tags: ['physical'],
       // (drawn to full in `draw` s, loosed no sooner than `minDraw` of that; then the follow-through and the next arrow, `castTime`:
-      // an archer's pace, about a second each; drawn in 0.7 s and reloaded in 0.45, it was a blur)
-      cost: 0, cooldown: 0, castTime: 0.9, draw: 1.1, minDraw: 0.5,
+      // an archer's pace; drawn in 0.7 s and reloaded in 0.45, it was a blur. From the owner, "we need to shorten the
+      // draw, to allow quick arrows": 0.8 s to full, loosed from 0.24 s, the next arrow in 0.6 s, and its damage in step
+      // with the pull (`drawCurve` 1: a quick arrow 51% of a full one, 26% as the square), so tapping while
+      // kiting is worth it; drawn to 1.1 s, loosed from 0.55 and reloaded in 0.9 before)
+      cost: 0, cooldown: 0, castTime: 0.6, draw: 0.8, minDraw: 0.3, drawCurve: 1,
       damage: 340, missiles: 1, spread: 0, speed: 60, range: 26, knock: 0.8,
       icon: { glyph: '➶', color: '#dfce99' },
     },

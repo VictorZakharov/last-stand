@@ -82,6 +82,9 @@ export interface SkillDef {
    *  the full draw's speed, `power`), never less than `minDraw` */
   draw?: number;
   minDraw?: number;
+  /** a drawn shot's damage goes with its pull to this power (2 by default: the energy the bow stored; 1, a shot loosed
+   *  early still strikes in step with how far it was drawn) */
+  drawCurve?: number;
   /** aimed while its key is held, where it would land shown (`InstantSkill.aim`), and cast as the key is let go (touch
    *  casts its buttons' skills on release already) */
   aimed?: boolean;
