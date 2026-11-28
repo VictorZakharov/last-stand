@@ -628,3 +628,36 @@ the SCSS. In the order they're taken: the kit's own pieces first, then what show
   steps and the pictures beginning the frame after; `lab guide` reads 103 to 117 ms for its longest moments on the
   shared PC loaded at 70 to 90% by other work (its bound is 100), from 194 to 850 ms a page before.
 - [ ] The loading screen (styled before any script runs: the last, if at all).
+
+## 2026-11-28: against main, and what's left in the update (#973)
+
+`npm run lab -- perf voidLance --class mage --biome crypt --wave 36 --screen 1440x778@2 --quality verylow@1120320
+--throttle 4 --ab=c0db18979`, three rounds of 88d45788d (main's side kept from one), the median frame in ms:
+
+| | main | this branch |
+| --- | --- | --- |
+| standing: the frame | 59.2 | 52.0 to 53.4 |
+| standing: the update | 11.7 to 12.4 | 13.0 to 13.7 |
+| standing: the render | 21.3 | 15.0 to 15.9 |
+| casting: the frame | 65.5 | 55.6 to 56.8 |
+| casting: the page's work | 35.2 | 30.1 to 30.7 |
+
+Unslowed, the frame is 13.5 against 17.5 standing and 14.1 against 23.0 casting. The build's code is 4.29 MB
+(1.53 gzipped) against main's 5.69 (1.86).
+
+- The update is still 5 to 17% over main's. Part of it is a move: world matrices made as they're read are paid for by
+  the poses and the IK that read them, where main made every one in its render.
+- The rest is a node's watched vectors: its position, quaternion and rotation are a second hidden class beside the
+  plain maths, and V8's maths call sites see both (`.tmp/shapes-bench.ts`: 13.5 ms a round plain alone, 21.2 with
+  watched ones mixed in).
+- Two ways out were tried and reverted (`src/engine/api/AGENTS.md`).
+- Taken out of the update today:
+  - the foes' clearance grid patched where a prop breaks, not made whole (06e6f0e3d, `lab navgrid`);
+  - the kit's roots and scrolling panels kept as sets, not found by a walk each frame (9c2b93cd5);
+  - a whole write of a node's turn no longer making the other turn fresh first, only to overwrite it (aa7e96a7d:
+    `resetPose` ran at twice main's cost, within the noise after).
+- rustcheck's two regressions from the material watch fixed (8a08363a0):
+  - a material is polled while a map of its is a blank placeholder (the village's white ground on a loaded PC);
+  - the see-through switches are in the frame's key (unseen meshes kept their solid flags).
+- [ ] The update at or under main's: the shape of a node's vectors is what's left, and needs a design that keeps
+  reads as cheap as a plain field's.

@@ -125,6 +125,13 @@ Data the engine reads, nothing compiled on the page.
   them now. Freezing a node (`matrixAutoUpdate`, `matrixWorldAutoUpdate` set false) makes its matrix (and its world
   matrix) as it stands first: frozen unmade, the parts `standStill` froze stood at the world's middle
   (`node.test.ts`). The engine makes its own matrices for drawing (`place_nodes`); nothing is read back each frame.
+- **A node's watched vectors are a second shape to V8, and the two ways round it were worse** (#973, 2026-11-28):
+  a maths call site that meets a node's `position` beside a plain `Vec3` goes polymorphic, 1.5 times slower in a
+  microbenchmark. Accessors on every vector, one shape for all (b6bf0b6df), made the IK twice as slow. Plain vectors
+  with moves found by comparing a node's numbers as it's read (f06a65e23) made `makeWorld` 7 times slower. Both were
+  reverted: measure a new design with `lab perf --wave 36 --throttle 4 --ab --profile=update` before keeping it. A
+  method writing every field of a watched turn skips making it fresh first (`put` in `watched.ts`): the node's
+  `touched` drops that side's staleness.
 - **A node is in the engine while it's under a shown world** (`World.shown`, the stage's): added under one, it and
   everything under it get nodes and draws; taken out, they're let go. A node elsewhere (a template a model clones,
   a warm-up's sample not yet shown) costs the engine nothing.
